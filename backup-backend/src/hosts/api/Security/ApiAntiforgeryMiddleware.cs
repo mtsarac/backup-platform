@@ -6,7 +6,7 @@ public sealed class ApiAntiforgeryMiddleware(RequestDelegate next)
 {
     public async Task InvokeAsync(HttpContext context, IAntiforgery antiforgery)
     {
-        if (RequiresValidation(context.Request))
+        if (RequiresValidation(context))
         {
             try
             {
@@ -22,9 +22,11 @@ public sealed class ApiAntiforgeryMiddleware(RequestDelegate next)
         await next(context);
     }
 
-    private static bool RequiresValidation(HttpRequest request) => request.Path.StartsWithSegments("/api")
-        && !HttpMethods.IsGet(request.Method)
-        && !HttpMethods.IsHead(request.Method)
-        && !HttpMethods.IsOptions(request.Method)
-        && !HttpMethods.IsTrace(request.Method);
+    /// <summary>Agent API routes never accept a browser session (they authenticate with their own header scheme), so cookie CSRF cannot apply.</summary>
+    private static bool RequiresValidation(HttpContext context) => context.Request.Path.StartsWithSegments("/api")
+        && context.GetEndpoint()?.Metadata.GetMetadata<AgentApiEndpoint>() is null
+        && !HttpMethods.IsGet(context.Request.Method)
+        && !HttpMethods.IsHead(context.Request.Method)
+        && !HttpMethods.IsOptions(context.Request.Method)
+        && !HttpMethods.IsTrace(context.Request.Method);
 }

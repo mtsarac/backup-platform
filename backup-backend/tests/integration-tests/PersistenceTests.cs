@@ -357,8 +357,13 @@ public sealed class PersistenceTests(PostgreSqlFixture fixture) : IClassFixture<
         await using (var context = platformBypass ? fixture.CreatePlatformContext() : fixture.CreateContext(first.TenantId))
         {
             var agent = await context.Agents.SingleAsync(row => row.Id == first.AgentId);
-            context.Entry(agent).Property(row => row.TenantId).CurrentValue = second.TenantId;
-            await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());
+            // Agent.TenantId is now part of an alternate key (agent credentials reference it), so EF itself rejects
+            // the reassignment before SaveChanges; the SaveChanges tenant-ownership guard remains the second layer.
+            await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            {
+                context.Entry(agent).Property(row => row.TenantId).CurrentValue = second.TenantId;
+                await context.SaveChangesAsync();
+            });
         }
         await using var verification = fixture.CreatePlatformContext();
         Assert.Equal(first.TenantId, (await verification.Agents.SingleAsync(row => row.Id == first.AgentId)).TenantId);

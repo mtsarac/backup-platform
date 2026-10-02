@@ -22,6 +22,173 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("BackupPlatform.Agents.Credentials.AgentCredential", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ActivatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("AgentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Generation")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("IssuedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("RevocationReason")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<byte[]>("SecretHash")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentId", "TenantId");
+
+                    b.HasIndex(new[] { "AgentId" }, "ux_agent_credentials_one_active")
+                        .IsUnique()
+                        .HasDatabaseName("ux_agent_credentials_one_active")
+                        .HasFilter("\"Status\" = 2");
+
+                    b.HasIndex(new[] { "AgentId" }, "ux_agent_credentials_one_pending")
+                        .IsUnique()
+                        .HasDatabaseName("ux_agent_credentials_one_pending")
+                        .HasFilter("\"Status\" = 1");
+
+                    b.ToTable("agent_credentials", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_agent_credentials_generation", "\"Generation\" >= 1");
+
+                            t.HasCheckConstraint("ck_agent_credentials_hash", "octet_length(\"SecretHash\") = 32");
+
+                            t.HasCheckConstraint("ck_agent_credentials_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_agent_credentials_state", "(\"Status\" = 1 AND \"ExpiresAt\" IS NOT NULL AND \"ActivatedAt\" IS NULL AND \"RevokedAt\" IS NULL AND \"RevocationReason\" IS NULL)\nOR (\"Status\" = 2 AND \"ExpiresAt\" IS NULL AND \"ActivatedAt\" IS NOT NULL AND \"RevokedAt\" IS NULL AND \"RevocationReason\" IS NULL)\nOR (\"Status\" = 3 AND \"RevokedAt\" IS NOT NULL AND \"RevocationReason\" BETWEEN 1 AND 3)");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Agents.Enrollment.EnrollmentToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ConsumedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ConsumedByAgentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RevokedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("SecretHash")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<Guid>("TenantId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedBy");
+
+                    b.HasIndex("RevokedBy");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("ConsumedByAgentId", "TenantId");
+
+                    b.ToTable("agent_enrollment_tokens", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_agent_enrollment_tokens_consumption", "(\"ConsumedAt\" IS NULL) = (\"ConsumedByAgentId\" IS NULL)");
+
+                            t.HasCheckConstraint("ck_agent_enrollment_tokens_expiry", "\"ExpiresAt\" > \"CreatedAt\"");
+
+                            t.HasCheckConstraint("ck_agent_enrollment_tokens_hash", "octet_length(\"SecretHash\") = 32");
+
+                            t.HasCheckConstraint("ck_agent_enrollment_tokens_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_agent_enrollment_tokens_revocation", "(\"RevokedAt\" IS NULL) = (\"RevokedBy\" IS NULL)");
+
+                            t.HasCheckConstraint("ck_agent_enrollment_tokens_tenant_id", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_agent_enrollment_tokens_terminal", "\"ConsumedAt\" IS NULL OR \"RevokedAt\" IS NULL");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Agents.Enrollment.TenantAgentEnrollmentPolicy", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ChangedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("TenantId");
+
+                    b.HasIndex("ChangedBy");
+
+                    b.ToTable("tenant_agent_enrollment_policies", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_tenant_agent_enrollment_policies_tenant_id", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+                        });
+                });
+
             modelBuilder.Entity("BackupPlatform.Domain.Agents.Agent", b =>
                 {
                     b.Property<Guid>("Id")
@@ -29,6 +196,13 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("CredentialGeneration")
                         .HasColumnType("integer");
+
+                    b.Property<string>("HostName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<Guid?>("InstallationId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Software")
                         .IsRequired()
@@ -49,13 +223,25 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasAlternateKey("Id", "TenantId")
+                        .HasName("ak_agents_id_tenant_id");
+
                     b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "InstallationId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_agents_tenant_installation_live")
+                        .HasFilter("\"InstallationId\" IS NOT NULL AND \"Status\" <> 4");
 
                     b.ToTable("agents", null, t =>
                         {
                             t.HasCheckConstraint("ck_agents_credential_generation", "(\"Status\" = 1 AND \"CredentialGeneration\" = 0)\nOR (\"Status\" IN (2, 3) AND \"CredentialGeneration\" >= 1)\nOR (\"Status\" = 4 AND \"CredentialGeneration\" >= 0)");
 
+                            t.HasCheckConstraint("ck_agents_host_name", "\"HostName\" IS NULL OR \"HostName\" ~ '[^[:space:]]'");
+
                             t.HasCheckConstraint("ck_agents_id_nonempty", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_agents_installation_id", "\"InstallationId\" IS NULL OR \"InstallationId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
 
                             t.HasCheckConstraint("ck_agents_status", "\"Status\" BETWEEN 1 AND 4");
 
@@ -221,6 +407,57 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_user_sessions_user_id", "\"UserId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
                         });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Agents.Credentials.AgentCredential", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Agents.Agent", null)
+                        .WithMany()
+                        .HasForeignKey("AgentId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.Agents.Enrollment.EnrollmentToken", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Tenancy.User", null)
+                        .WithMany()
+                        .HasForeignKey("RevokedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Agents.Agent", null)
+                        .WithMany()
+                        .HasForeignKey("ConsumedByAgentId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("BackupPlatform.Agents.Enrollment.TenantAgentEnrollmentPolicy", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.User", null)
+                        .WithMany()
+                        .HasForeignKey("ChangedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("BackupPlatform.Domain.Agents.Agent", b =>

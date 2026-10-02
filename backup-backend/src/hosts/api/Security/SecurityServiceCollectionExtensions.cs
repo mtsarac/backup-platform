@@ -1,7 +1,13 @@
+using BackupPlatform.Agents;
+using BackupPlatform.Agents.Credentials;
+using BackupPlatform.Agents.Enrollment;
+using BackupPlatform.Agents.Management;
+using BackupPlatform.Application.Agents;
 using BackupPlatform.Application.Identity;
 using BackupPlatform.Application.Tenancy;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Identity;
+using BackupPlatform.Infrastructure.Agents;
 using BackupPlatform.Infrastructure.Identity;
 using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.Tenancy;
@@ -28,6 +34,7 @@ public static class SecurityServiceCollectionExtensions
         services.AddScoped<TenantResolutionService>();
         services.AddScoped<BrowserCookieEvents>();
         AddBrowserAuthentication(services);
+        AddAgentSecurity(services);
         AddPolicies(services);
         services.AddAntiforgery(options =>
         {
@@ -84,7 +91,20 @@ public static class SecurityServiceCollectionExtensions
             options.ExpireTimeSpan = TimeSpan.FromHours(8);
             options.SlidingExpiration = false;
             options.EventsType = typeof(BrowserCookieEvents);
-        });
+        }).AddScheme<AgentAuthenticationOptions, AgentAuthenticationHandler>(AgentAuthentication.Scheme, _ => { });
+    }
+
+    /// <summary>Agent identity services; deliberately shares no types or storage with user password authentication.</summary>
+    private static void AddAgentSecurity(IServiceCollection services)
+    {
+        services.TryAddSingleton(new AgentSecurityOptions());
+        services.AddScoped<IAgentEnrollmentStore, PostgreSqlAgentEnrollmentStore>();
+        services.AddScoped<IAgentRegistryStore, PostgreSqlAgentRegistryStore>();
+        services.AddScoped<EnrollmentAdministrationService>();
+        services.AddScoped<AgentEnrollmentService>();
+        services.AddScoped<AgentCredentialService>();
+        services.AddScoped<AgentManagementService>();
+        services.AddScoped<ICurrentAgent, HttpCurrentAgent>();
     }
 
     private static void AddPolicies(IServiceCollection services)
@@ -104,6 +124,8 @@ public static class SecurityServiceCollectionExtensions
                 policy.AddAuthenticationSchemes(BrowserAuthentication.Scheme).RequireAuthenticatedUser().AddRequirements(new TenantRoleRequirement(TenantRole.Viewer)));
             options.AddPolicy(AuthorizationPolicies.PlatformAdmin, policy =>
                 policy.AddAuthenticationSchemes(BrowserAuthentication.Scheme).RequireAuthenticatedUser().AddRequirements(new PlatformAdminRequirement()));
+            options.AddPolicy(AuthorizationPolicies.Agent, policy =>
+                policy.AddAuthenticationSchemes(AgentAuthentication.Scheme).RequireAuthenticatedUser());
         });
     }
 }

@@ -20,6 +20,8 @@ if (isBootstrap)
 app.UsePlatformSecurity();
 app.MapAuthenticationEndpoints();
 app.MapUserEndpoints();
+app.MapAgentEndpoints();
+app.MapAgentAdministrationEndpoints();
 
 app.Run();
 

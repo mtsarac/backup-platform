@@ -17,7 +17,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace BackupPlatform.IntegrationTests;
 
-internal sealed class AuthApiFactory(string connectionString) : WebApplicationFactory<Program>
+internal sealed class AuthApiFactory(string connectionString, TimeProvider? timeProvider = null, BackupPlatform.Agents.AgentSecurityOptions? agentOptions = null) : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -29,6 +29,16 @@ internal sealed class AuthApiFactory(string connectionString) : WebApplicationFa
             services.RemoveAll<DbContextOptions<PlatformDbContext>>();
             services.AddSingleton(new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(connectionString).Options);
             services.AddTransient<IStartupFilter>(_ => new AuthProbeStartupFilter());
+            if (timeProvider is not null)
+            {
+                services.RemoveAll<TimeProvider>();
+                services.AddSingleton(timeProvider);
+            }
+            if (agentOptions is not null)
+            {
+                services.RemoveAll<BackupPlatform.Agents.AgentSecurityOptions>();
+                services.AddSingleton(agentOptions);
+            }
         });
     }
 

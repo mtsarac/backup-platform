@@ -4,6 +4,7 @@
     <ProjectReference Include="..\domain\BackupPlatform.Domain.csproj" />
     <ProjectReference Include="..\application\BackupPlatform.Application.csproj" />
     <ProjectReference Include="..\..\modules\identity\BackupPlatform.Identity.csproj" />
+    <ProjectReference Include="..\..\modules\agents\BackupPlatform.Agents.csproj" />
     <ProjectReference Include="..\..\providers\secret\abstractions\BackupPlatform.SecretProviders.Abstractions.csproj" />
     <ProjectReference Include="..\..\providers\storage\abstractions\BackupPlatform.StorageProviders.Abstractions.csproj" />
   </ItemGroup>

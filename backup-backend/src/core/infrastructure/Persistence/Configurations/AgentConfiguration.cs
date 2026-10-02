@@ -25,6 +25,8 @@ internal sealed class AgentConfiguration : IEntityTypeConfiguration<Agent>
                 OR ("Status" IN (2, 3) AND "CredentialGeneration" >= 1)
                 OR ("Status" = 4 AND "CredentialGeneration" >= 0)
                 """);
+            table.HasCheckConstraint("ck_agents_host_name", "\"HostName\" IS NULL OR \"HostName\" ~ '[^[:space:]]'");
+            table.HasCheckConstraint("ck_agents_installation_id", "\"InstallationId\" IS NULL OR \"InstallationId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
         });
         builder.HasKey(agent => agent.Id);
         builder.Property(agent => agent.Id)
@@ -44,11 +46,18 @@ internal sealed class AgentConfiguration : IEntityTypeConfiguration<Agent>
             .IsRequired();
         builder.Property(agent => agent.Status).HasConversion<int>().IsRequired();
         builder.Property(agent => agent.CredentialGeneration).IsRequired();
+        builder.Property(agent => agent.HostName).HasMaxLength(Agent.MaximumHostNameLength);
+        builder.Property(agent => agent.InstallationId).HasColumnType("uuid");
         builder.Ignore(agent => agent.Capabilities);
         builder.HasOne<Tenant>().WithMany()
             .HasForeignKey(agent => agent.TenantId)
             .OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(agent => agent.TenantId);
+        builder.HasAlternateKey(agent => new { agent.Id, agent.TenantId }).HasName("ak_agents_id_tenant_id");
+        builder.HasIndex(agent => new { agent.TenantId, agent.InstallationId })
+            .IsUnique()
+            .HasDatabaseName("ux_agents_tenant_installation_live")
+            .HasFilter("\"InstallationId\" IS NOT NULL AND \"Status\" <> 4");
         builder.Property<uint>("xmin").IsRowVersion();
     }
 }

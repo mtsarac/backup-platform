@@ -33,4 +33,24 @@ public sealed record ProtocolVersion : IComparable<ProtocolVersion>
     }
 
     public override string ToString() => string.Create(CultureInfo.InvariantCulture, $"{Major}.{Minor}");
+
+    /// <summary>Strictly parses the <see cref="ToString"/> form: <c>major.minor</c>, ASCII digits only, major at least 1.</summary>
+    public static bool TryParse(string? value, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ProtocolVersion? version)
+    {
+        version = null;
+        if (value is null)
+        {
+            return false;
+        }
+        var separator = value.IndexOf('.', StringComparison.Ordinal);
+        if (separator <= 0
+            || !int.TryParse(value.AsSpan(0, separator), NumberStyles.None, CultureInfo.InvariantCulture, out var major)
+            || !int.TryParse(value.AsSpan(separator + 1), NumberStyles.None, CultureInfo.InvariantCulture, out var minor)
+            || major < 1)
+        {
+            return false;
+        }
+        version = new ProtocolVersion(major, minor);
+        return true;
+    }
 }

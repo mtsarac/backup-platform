@@ -10,21 +10,38 @@ namespace BackupPlatform.Domain.Agents;
 /// CredentialGeneration tracks replacement without storing credential material.
 /// Revocation is terminal; re-enrollment requires a new agent identity.
 /// Software/protocol versions are independent; this model does not decide protocol compatibility.
+/// HostName and InstallationId are descriptive enrollment metadata supplied by the agent; they are never authentication factors.
 /// </remarks>
 public sealed class Agent : ITenantOwned
 {
-    public Agent(AgentId id, TenantId tenantId, AgentSoftware software)
+    public const int MaximumHostNameLength = 255;
+
+    public Agent(AgentId id, TenantId tenantId, AgentSoftware software, string? hostName = null, Guid? installationId = null)
     {
         ArgumentNullException.ThrowIfNull(id);
         ArgumentNullException.ThrowIfNull(tenantId);
         ArgumentNullException.ThrowIfNull(software);
+        if (hostName is not null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(hostName);
+            hostName = hostName.Trim();
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(hostName.Length, MaximumHostNameLength);
+        }
+        if (installationId == Guid.Empty)
+        {
+            throw new ArgumentException("An installation identity must not be empty.", nameof(installationId));
+        }
         Id = id;
         TenantId = tenantId;
         Software = software;
+        HostName = hostName;
+        InstallationId = installationId;
     }
 
     public AgentId Id { get; }
     public TenantId TenantId { get; }
+    public string? HostName { get; }
+    public Guid? InstallationId { get; }
     public AgentSoftware Software { get; private set; }
     public AgentStatus Status { get; private set; } = AgentStatus.PendingEnrollment;
     public CapabilitySet Capabilities { get; private set; } = CapabilitySet.Empty;

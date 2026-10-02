@@ -11,6 +11,8 @@ public static class AuthorizationPolicies
     public const string TenantOperator = "TenantOperator";
     public const string TenantViewer = "TenantViewer";
     public const string PlatformAdmin = "PlatformAdmin";
+    /// <summary>Agent-scheme only; never satisfied by a browser session.</summary>
+    public const string Agent = "Agent";
 }
 
 internal sealed record TenantRoleRequirement(TenantRole MinimumRole) : IAuthorizationRequirement;

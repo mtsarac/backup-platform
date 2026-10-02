@@ -4,6 +4,9 @@ using BackupPlatform.Domain.Identity;
 
 namespace BackupPlatform.UnitTests;
 
+// BackupPlatform.Agent is also a namespace (Agent.Core); the alias keeps the domain type addressable.
+using Agent = BackupPlatform.Domain.Agents.Agent;
+
 public sealed class AgentTests
 {
     [Theory]

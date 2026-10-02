@@ -119,6 +119,66 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
     }
 
     [Fact]
+    public void AgentCoreMustNotDependOnAspNetOrPersistence() =>
+        AssertForbiddenExternalDependencies("BackupPlatform.Agent.Core", IsWebDependency, IsPersistenceDependency);
+
+    [Fact]
+    public void DomainMustNotDependOnCryptographyOrPersistence() =>
+        AssertForbiddenExternalDependencies("BackupPlatform.Domain", IsCryptographyDependency, IsPersistenceDependency);
+
+    [Fact]
+    public void ContractsMustNotDependOnBackendInternals()
+    {
+        AssertForbiddenDependencies("BackupPlatform.Contracts", node => IsBackendInternal(node));
+        AssertForbiddenExternalDependencies("BackupPlatform.Contracts", IsCryptographyDependency, IsPersistenceDependency);
+    }
+
+    [Fact]
+    public void AgentSideProjectsMustNotDependOnBackendInternals()
+    {
+        foreach (var (configuration, graph) in fixture.Graphs)
+        {
+            foreach (var agentSide in graph.Values.Where(node =>
+                node.RelativePath.StartsWith("src/agent/", StringComparison.Ordinal)
+                || node.RelativePath.StartsWith("src/hosts/agent/", StringComparison.Ordinal)))
+            {
+                AssertForbiddenDependencies(configuration, graph, agentSide.Name, IsBackendInternal);
+            }
+        }
+    }
+
+    [Fact]
+    public void AgentPlatformImplementationsMustNotDependOnWebOrPersistence()
+    {
+        AssertForbiddenExternalDependencies("BackupPlatform.Agent.Platform.Linux", IsWebDependency, IsPersistenceDependency);
+        AssertForbiddenExternalDependencies("BackupPlatform.Agent.Platform.Windows", IsWebDependency, IsPersistenceDependency);
+    }
+
+    [Fact]
+    public void AgentAuthenticationAndUserAuthenticationMustNotDependOnEachOther()
+    {
+        foreach (var (configuration, graph) in fixture.Graphs)
+        {
+            AssertForbiddenDependencies(configuration, graph, "BackupPlatform.Agents", node => node.Name == "BackupPlatform.Identity");
+            AssertForbiddenDependencies(configuration, graph, "BackupPlatform.Identity", node => node.Name == "BackupPlatform.Agents");
+        }
+        AssertForbiddenExternalDependencies("BackupPlatform.Agents", IsIdentityDependency, IsWebDependency, IsPersistenceDependency);
+        AssertForbiddenExternalDependencies("BackupPlatform.Identity", type => type.StartsWith("BackupPlatform.Agents", StringComparison.Ordinal));
+    }
+
+    private static bool IsBackendInternal(ProjectNode node) =>
+        node.RelativePath.StartsWith("src/modules/", StringComparison.Ordinal)
+        || node.RelativePath.StartsWith("src/hosts/api/", StringComparison.Ordinal)
+        || node.Name is "BackupPlatform.Infrastructure" or "BackupPlatform.Application" or "BackupPlatform.Domain";
+
+    private static bool IsPersistenceDependency(string name) =>
+        name.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("Npgsql", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsCryptographyDependency(string name) =>
+        name.StartsWith("System.Security.Cryptography", StringComparison.OrdinalIgnoreCase);
+
+    [Fact]
     public void BackendModulesMustNotDependOnProviderImplementations()
     {
         foreach (var (configuration, graph) in fixture.Graphs)
