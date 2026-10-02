@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Text.Json;
 
 namespace BackupPlatform.ArchitectureTests;
@@ -78,8 +80,8 @@ public sealed class DependencyGraphFixture : IAsyncLifetime
         startInfo.ArgumentList.Add("msbuild");
         startInfo.ArgumentList.Add(project);
         startInfo.ArgumentList.Add("-nologo");
-        startInfo.ArgumentList.Add("-getItem:ProjectReference,PackageReference");
-        startInfo.ArgumentList.Add("-getProperty:ProjectAssetsFile");
+        startInfo.ArgumentList.Add("-getItem:ProjectReference,PackageReference,FrameworkReference");
+        startInfo.ArgumentList.Add("-getProperty:ProjectAssetsFile,TargetPath");
         startInfo.ArgumentList.Add($"-p:Configuration={configuration}");
         using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start dotnet msbuild.");
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -119,8 +121,45 @@ public sealed class DependencyGraphFixture : IAsyncLifetime
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Order(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        return new ProjectNode(Path.GetFileNameWithoutExtension(project), Path.GetRelativePath(root, project).Replace('\\', '/'), references, packages);
+        var frameworks = document.RootElement.GetProperty("Items").GetProperty("FrameworkReference")
+            .EnumerateArray().Select(item => item.GetProperty("Identity").GetString()!)
+            .Concat(assets.RootElement.GetProperty("project").GetProperty("frameworks").EnumerateObject()
+                .SelectMany(framework => framework.Value.TryGetProperty("frameworkReferences", out var frameworkReferences)
+                    ? frameworkReferences.EnumerateObject().Select(reference => reference.Name)
+                    : Enumerable.Empty<string>()))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var assemblies = Array.Empty<string>();
+        var types = Array.Empty<string>();
+        if (configuration == "Release")
+        {
+            var assemblyPath = document.RootElement.GetProperty("Properties").GetProperty("TargetPath").GetString()
+                ?? throw new InvalidDataException("TargetPath was not evaluated.");
+            if (!Path.IsPathRooted(assemblyPath))
+            {
+                assemblyPath = Path.Combine(Path.GetDirectoryName(project)!, assemblyPath);
+            }
+            Assert.True(File.Exists(assemblyPath), $"Build the Release solution before architecture tests; missing assembly: {assemblyPath}.");
+            using var stream = File.OpenRead(assemblyPath);
+            using var reader = new PEReader(stream);
+            var metadata = reader.GetMetadataReader();
+            assemblies = metadata.AssemblyReferences
+                .Select(handle => metadata.GetString(metadata.GetAssemblyReference(handle).Name)).ToArray();
+            types = metadata.TypeReferences.Select(handle =>
+            {
+                var reference = metadata.GetTypeReference(handle);
+                return $"{metadata.GetString(reference.Namespace)}.{metadata.GetString(reference.Name)}";
+            }).ToArray();
+        }
+        return new ProjectNode(Path.GetFileNameWithoutExtension(project), Path.GetRelativePath(root, project).Replace('\\', '/'),
+            references, packages, frameworks, assemblies, types);
     }
 }
 
-public sealed record ProjectNode(string Name, string RelativePath, string[] References, string[] Packages);
+public sealed record ProjectNode(
+    string Name,
+    string RelativePath,
+    string[] References,
+    string[] Packages,
+    string[] Frameworks,
+    string[] Assemblies,
+    string[] Types);

@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
   </ItemGroup>
@@ -16,6 +17,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/core/infrastructure/BackupPlatform.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/hosts/api/BackupPlatform.Api.csproj" />
   </ItemGroup>
 
 </Project>

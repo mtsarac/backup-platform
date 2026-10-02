@@ -29,6 +29,72 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
     }
 
     [Fact]
+    public void DomainMustNotDependOnWebOrIdentityImplementations() =>
+        AssertForbiddenExternalDependencies("BackupPlatform.Domain", IsWebDependency, IsIdentityDependency);
+
+    [Fact]
+    public void ApplicationMustNotDependOnAspNetOrHttpContext() =>
+        AssertForbiddenExternalDependencies("BackupPlatform.Application", IsWebDependency);
+
+    [Fact]
+    public void ContractsMustNotContainAuthenticationImplementationDependencies()
+    {
+        AssertForbiddenDependencies("BackupPlatform.Contracts", node =>
+            node.Name == "BackupPlatform.Identity" || node.Name == "BackupPlatform.Api");
+        AssertForbiddenExternalDependencies("BackupPlatform.Contracts", IsWebDependency, IsIdentityDependency);
+    }
+
+    private void AssertForbiddenExternalDependencies(string source, params Func<string, bool>[] forbidden)
+    {
+        foreach (var (configuration, graph) in fixture.Graphs)
+        {
+            var nodes = DependencyGraphFixture.GetDependencies(graph, source)
+                .Append(source).Select(name => graph[name]).ToArray();
+            var violations = nodes.SelectMany(node => node.Packages.Concat(node.Frameworks))
+                .Where(name => forbidden.Any(predicate => predicate(name)))
+                .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+            Assert.True(violations.Length == 0,
+                $"{source} has forbidden evaluated package/framework dependencies ({configuration}): {string.Join(", ", violations)}.");
+        }
+        var release = fixture.Graphs["Release"];
+        var assemblies = new HashSet<string>(StringComparer.Ordinal);
+        var pending = new Stack<string>();
+        pending.Push(source);
+        while (pending.TryPop(out var name))
+        {
+            if (!assemblies.Add(name))
+            {
+                continue;
+            }
+            if (!release.TryGetValue(name, out var node))
+            {
+                continue;
+            }
+            foreach (var reference in node.Assemblies)
+            {
+                pending.Push(reference);
+            }
+            var forbiddenTypes = node.Types.Where(type => forbidden.Any(predicate => predicate(type))).ToArray();
+            Assert.True(forbiddenTypes.Length == 0,
+                $"{source} has forbidden compiled type references through {name} (Release): {string.Join(", ", forbiddenTypes)}.");
+        }
+        var forbiddenAssemblies = assemblies.Where(name => forbidden.Any(predicate => predicate(name))).Order(StringComparer.Ordinal).ToArray();
+        Assert.True(forbiddenAssemblies.Length == 0,
+            $"{source} has forbidden compiled assembly dependencies (Release): {string.Join(", ", forbiddenAssemblies)}.");
+    }
+
+    private static bool IsWebDependency(string name) =>
+        name.StartsWith("Microsoft.AspNetCore", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("System.Web", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsIdentityDependency(string name) =>
+        name.StartsWith("Microsoft.Extensions.Identity", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("Microsoft.IdentityModel", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("System.IdentityModel", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("IdentityModel", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("BackupPlatform.Identity", StringComparison.OrdinalIgnoreCase);
+
+    [Fact]
     public void DomainMustNotDependOnInfrastructure()
     {
         AssertForbiddenDependencies("BackupPlatform.Domain", node => node.Name == "BackupPlatform.Infrastructure");

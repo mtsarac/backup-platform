@@ -12,6 +12,10 @@ public sealed class PostgreSqlFixture : IAsyncLifetime
     private string? _administrativeConnectionString;
     private bool _databaseCreated;
     private DbContextOptions<PlatformDbContext>? _options;
+    private string? _connectionString;
+
+    public string ConnectionString => _connectionString
+        ?? throw new InvalidOperationException("The PostgreSQL fixture has not been initialized.");
 
     public async Task InitializeAsync()
     {
@@ -29,7 +33,8 @@ public sealed class PostgreSqlFixture : IAsyncLifetime
         await command.ExecuteNonQueryAsync();
         _databaseCreated = true;
         builder.Database = _databaseName;
-        _options = new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(builder.ConnectionString).Options;
+        _connectionString = builder.ConnectionString;
+        _options = new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(ConnectionString).Options;
         try
         {
             await using var context = CreatePlatformContext();

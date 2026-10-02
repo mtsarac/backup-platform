@@ -1,0 +1,97 @@
+using System.Security.Claims;
+using BackupPlatform.Api.Security;
+using BackupPlatform.Application.Identity;
+using BackupPlatform.Application.Tenancy;
+using BackupPlatform.Domain.Identity;
+using BackupPlatform.Domain.Tenancy;
+using BackupPlatform.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+
+namespace BackupPlatform.IntegrationTests;
+
+internal sealed class AuthApiFactory(string connectionString) : WebApplicationFactory<Program>
+{
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.UseEnvironment("Testing");
+        builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(
+            new Dictionary<string, string?> { ["ConnectionStrings:Platform"] = connectionString }));
+        builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<DbContextOptions<PlatformDbContext>>();
+            services.AddSingleton(new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(connectionString).Options);
+            services.AddTransient<IStartupFilter>(_ => new AuthProbeStartupFilter());
+        });
+    }
+
+    public HttpClient CreateBrowser() => CreateClient(new WebApplicationFactoryClientOptions
+    {
+        BaseAddress = new Uri("https://localhost"),
+        AllowAutoRedirect = false,
+        HandleCookies = true
+    });
+
+    public HttpClient CreateReplayClient() => CreateClient(new WebApplicationFactoryClientOptions
+    {
+        BaseAddress = new Uri("https://localhost"),
+        AllowAutoRedirect = false,
+        HandleCookies = false
+    });
+}
+
+internal sealed class AuthProbeStartupFilter : IStartupFilter
+{
+    public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+    {
+        app.UseRouting();
+        next(app);
+        app.UseEndpoints(endpoints =>
+        {
+            MapTenantPolicy(endpoints, "administrator", AuthorizationPolicies.TenantAdministrator);
+            MapTenantPolicy(endpoints, "operator", AuthorizationPolicies.TenantOperator);
+            endpoints.MapGet("/api/test/platform", context => context.Response.WriteAsJsonAsync(new { allowed = true }))
+                .RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
+            endpoints.MapGet("/api/test/tenants/{tenantId}/immutable", ProbeImmutabilityAsync)
+                .WithMetadata(new TenantScopedEndpoint())
+                .RequireAuthorization(AuthorizationPolicies.TenantViewer);
+        });
+    };
+
+    private static void MapTenantPolicy(IEndpointRouteBuilder endpoints, string path, string policy) =>
+        endpoints.MapGet($"/api/test/tenants/{{tenantId}}/{path}", context => context.Response.WriteAsJsonAsync(new { allowed = true }))
+            .WithMetadata(new TenantScopedEndpoint())
+            .RequireAuthorization(policy);
+
+    private static async Task ProbeImmutabilityAsync(HttpContext context)
+    {
+        var tenant = context.RequestServices.GetRequiredService<ITenantContext>();
+        var user = context.RequestServices.GetRequiredService<ICurrentUser>();
+        var database = context.RequestServices.GetRequiredService<PlatformDbContext>();
+        var originalTenant = tenant.TenantId!;
+        var originalUser = user.UserId!;
+        var replacementTenant = new TenantId(Guid.Parse(context.Request.Query["replacementTenant"].ToString()));
+        var replacementUser = new UserId(Guid.Parse(context.Request.Query["replacementUser"].ToString()));
+        context.User = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, replacementUser.Value.ToString())], BrowserAuthentication.Scheme));
+        context.Request.Headers["X-Tenant-Id"] = replacementTenant.Value.ToString();
+        context.Request.RouteValues["tenantId"] = replacementTenant.Value.ToString();
+        context.Features.Set(new ResolvedTenantContext(new TenantAccess(replacementTenant, "Untrusted replacement", TenantRole.Owner)));
+        var visibleTenants = await database.Tenants.Select(row => row.Id).ToArrayAsync();
+        await context.Response.WriteAsJsonAsync(new
+        {
+            originalTenantId = originalTenant.Value,
+            tenantId = context.RequestServices.GetRequiredService<ITenantContext>().TenantId!.Value,
+            originalUserId = originalUser.Value,
+            userId = context.RequestServices.GetRequiredService<ICurrentUser>().UserId!.Value,
+            visibleTenantIds = visibleTenants.Select(id => id.Value).ToArray()
+        });
+    }
+}

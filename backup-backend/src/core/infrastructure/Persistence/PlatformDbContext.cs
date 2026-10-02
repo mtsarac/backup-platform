@@ -3,6 +3,7 @@ using BackupPlatform.Application.Tenancy;
 using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Tenancy;
+using BackupPlatform.Identity;
 using Microsoft.EntityFrameworkCore;
 
 namespace BackupPlatform.Infrastructure.Persistence;
@@ -44,6 +45,8 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<TenantMembership> TenantMemberships => Set<TenantMembership>();
     public DbSet<PlatformAdmin> PlatformAdmins => Set<PlatformAdmin>();
     public DbSet<Agent> Agents => Set<Agent>();
+    public DbSet<PasswordCredential> PasswordCredentials => Set<PasswordCredential>();
+    public DbSet<UserSession> UserSessions => Set<UserSession>();
 
     /// <summary>Explicit unfiltered context for trusted platform operations only.</summary>
     /// <remarks>Does not authorize the caller. Future application boundaries must authorize its use.</remarks>
@@ -114,6 +117,10 @@ public sealed class PlatformDbContext : DbContext
             if (!IsPlatformOperations && entry.Entity is PlatformAdmin)
             {
                 throw new InvalidOperationException("Platform grants require explicit platform operations.");
+            }
+            if (!IsPlatformOperations && entry.Entity is PasswordCredential or UserSession)
+            {
+                throw new InvalidOperationException("Authentication state writes require explicit identity infrastructure operations.");
             }
         }
     }

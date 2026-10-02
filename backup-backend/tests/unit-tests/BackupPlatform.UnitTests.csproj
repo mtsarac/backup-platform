@@ -17,6 +17,8 @@
   <ItemGroup>
     <ProjectReference Include="../../src/core/domain/BackupPlatform.Domain.csproj" />
     <ProjectReference Include="../../src/core/contracts/BackupPlatform.Contracts.csproj" />
+    <ProjectReference Include="../../src/modules/identity/BackupPlatform.Identity.csproj" />
+    <ProjectReference Include="../../src/modules/tenancy/BackupPlatform.Tenancy.csproj" />
   </ItemGroup>
 
 </Project>
