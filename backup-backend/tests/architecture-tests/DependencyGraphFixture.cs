@@ -78,7 +78,8 @@ public sealed class DependencyGraphFixture : IAsyncLifetime
         startInfo.ArgumentList.Add("msbuild");
         startInfo.ArgumentList.Add(project);
         startInfo.ArgumentList.Add("-nologo");
-        startInfo.ArgumentList.Add("-getItem:ProjectReference");
+        startInfo.ArgumentList.Add("-getItem:ProjectReference,PackageReference");
+        startInfo.ArgumentList.Add("-getProperty:ProjectAssetsFile");
         startInfo.ArgumentList.Add($"-p:Configuration={configuration}");
         using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Could not start dotnet msbuild.");
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -102,8 +103,24 @@ public sealed class DependencyGraphFixture : IAsyncLifetime
             .Select(item => Path.GetFileNameWithoutExtension(item.GetProperty("FullPath").GetString()
                 ?? throw new InvalidDataException("ProjectReference has no FullPath.")))
             .ToArray();
-        return new ProjectNode(Path.GetFileNameWithoutExtension(project), Path.GetRelativePath(root, project).Replace('\\', '/'), references);
+        var assetsPath = document.RootElement.GetProperty("Properties").GetProperty("ProjectAssetsFile").GetString()
+            ?? throw new InvalidDataException("ProjectAssetsFile was not evaluated.");
+        if (!Path.IsPathRooted(assetsPath))
+        {
+            assetsPath = Path.Combine(Path.GetDirectoryName(project)!, assetsPath);
+        }
+        using var assets = JsonDocument.Parse(await File.ReadAllTextAsync(assetsPath));
+        var packages = document.RootElement.GetProperty("Items").GetProperty("PackageReference")
+            .EnumerateArray()
+            .Select(item => item.GetProperty("Identity").GetString()!)
+            .Concat(assets.RootElement.GetProperty("libraries").EnumerateObject()
+                .Where(library => library.Value.GetProperty("type").GetString() == "package")
+                .Select(library => library.Name.Split('/')[0]))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return new ProjectNode(Path.GetFileNameWithoutExtension(project), Path.GetRelativePath(root, project).Replace('\\', '/'), references, packages);
     }
 }
 
-public sealed record ProjectNode(string Name, string RelativePath, string[] References);
+public sealed record ProjectNode(string Name, string RelativePath, string[] References, string[] Packages);

@@ -14,4 +14,8 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="../../src/core/infrastructure/BackupPlatform.Infrastructure.csproj" />
+  </ItemGroup>
+
 </Project>

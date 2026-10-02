@@ -13,6 +13,21 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
         }
     }
 
+    [Theory]
+    [InlineData("BackupPlatform.Domain")]
+    [InlineData("BackupPlatform.Contracts")]
+    public void FoundationProjectsMustNotDependOnPersistencePackages(string project)
+    {
+        foreach (var (configuration, graph) in fixture.Graphs)
+        {
+            var violations = graph[project].Packages
+                .Where(package => package.StartsWith("Microsoft.EntityFrameworkCore", StringComparison.OrdinalIgnoreCase)
+                    || package.StartsWith("Npgsql", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            Assert.True(violations.Length == 0, $"{project} has forbidden direct/transitive persistence packages ({configuration}): {string.Join(", ", violations)}.");
+        }
+    }
+
     [Fact]
     public void DomainMustNotDependOnInfrastructure()
     {
@@ -45,6 +60,18 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
             foreach (var module in graph.Values.Where(node => node.RelativePath.StartsWith("src/modules/", StringComparison.Ordinal)))
             {
                 AssertForbiddenDependencies(configuration, graph, module.Name, IsProviderImplementation);
+            }
+        }
+    }
+
+    [Fact]
+    public void BackendModulesMustNotDependOnInfrastructure()
+    {
+        foreach (var (configuration, graph) in fixture.Graphs)
+        {
+            foreach (var module in graph.Values.Where(node => node.RelativePath.StartsWith("src/modules/", StringComparison.Ordinal)))
+            {
+                AssertForbiddenDependencies(configuration, graph, module.Name, node => node.Name == "BackupPlatform.Infrastructure");
             }
         }
     }
