@@ -1,10 +1,14 @@
 using BackupPlatform.Agents;
+using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Agents.Credentials;
 using BackupPlatform.Agents.Enrollment;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Contracts.Agents;
 using BackupPlatform.Contracts.Protocol;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace BackupPlatform.Api.Endpoints;
 
@@ -17,7 +21,15 @@ public static class AgentEndpoints
     public static IEndpointRouteBuilder MapAgentEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var agent = endpoints.MapGroup("/api/agent").WithMetadata(new AgentApiEndpoint());
-        agent.MapPost("/enroll", EnrollAsync).AllowAnonymous();
+        agent.MapPost("/enroll", EnrollAsync).AllowAnonymous().RequireRateLimiting(AgentRateLimitOptions.Policies.Enrollment);
+        agent.MapPost("/heartbeat", HeartbeatAsync)
+            .RequireAuthorization(AuthorizationPolicies.Agent)
+            .RequireRateLimiting(AgentRateLimitOptions.Policies.Heartbeat)
+            .WithMetadata(new RequiresAgentProtocol(), new RequestSizeLimitAttribute(MaximumHeartbeatBytes));
+        agent.MapGet("/tasks", PollAsync)
+            .RequireAuthorization(AuthorizationPolicies.Agent)
+            .RequireRateLimiting(AgentRateLimitOptions.Policies.Poll)
+            .WithMetadata(new RequiresAgentProtocol());
         agent.MapGet("/me", GetIdentity).RequireAuthorization(AuthorizationPolicies.Agent);
         agent.MapPost("/credential/rotate", BeginRotationAsync).RequireAuthorization(AuthorizationPolicies.Agent);
         agent.MapPost("/credential/confirm", ConfirmRotationAsync)
@@ -26,8 +38,18 @@ public static class AgentEndpoints
         return endpoints;
     }
 
-    private static async Task<IResult> EnrollAsync(AgentEnrollmentRequest request, AgentEnrollmentService service, AgentSecurityOptions options, CancellationToken cancellationToken)
+    private const long MaximumHeartbeatBytes = 8 * 1024;
+
+    private static async Task<IResult> EnrollAsync(
+        AgentEnrollmentRequest request, HttpContext context, AgentEnrollmentService service, AgentSecurityOptions options,
+        EnrollmentTokenThrottle tokenThrottle, CancellationToken cancellationToken)
     {
+        // The token identifier is the public half of the token: limiting by it never keys on a secret.
+        if (AgentSecretReference.TryParse(request.EnrollmentToken, out var tokenId, out _) && !tokenThrottle.TryAcquire(tokenId))
+        {
+            await AgentRateLimiting.WriteRateLimitedAsync(context, tokenThrottle.RetryAfter, cancellationToken);
+            return Results.Empty;
+        }
         var result = await service.EnrollAsync(request, cancellationToken);
         switch (result.Status)
         {
@@ -55,6 +77,40 @@ public static class AgentEndpoints
             default:
                 return Error(StatusCodes.Status401Unauthorized, "invalid_enrollment_token", null);
         }
+    }
+
+    private static async Task<IResult> HeartbeatAsync(
+        AgentHeartbeatRequest request, HttpContext context, ICurrentAgent currentAgent, AgentConnectivityService service,
+        AgentConnectivityOptions options, AgentSecurityOptions security, CancellationToken cancellationToken)
+    {
+        var protocol = context.Features.Get<AgentProtocolFeature>()!.Version;
+        var result = await service.RecordHeartbeatAsync(currentAgent.Identity!, protocol, request, cancellationToken);
+        if (result.Status != HeartbeatStatus.Recorded)
+        {
+            return Error(StatusCodes.Status400BadRequest, AgentErrorCodes.InvalidRequest, $"Invalid field: {result.InvalidField}.");
+        }
+        return Results.Ok(new AgentHeartbeatResponse
+        {
+            ServerTime = result.ServerTime,
+            HeartbeatIntervalSeconds = (int)options.HeartbeatInterval.TotalSeconds,
+            OfflineTimeoutSeconds = (int)options.OfflineTimeout.TotalSeconds,
+            Protocol = AgentProtocolMiddleware.ToWire(security.Protocol),
+            CapabilitySyncRequested = false
+        });
+    }
+
+    private static async Task<IResult> PollAsync(
+        string? cursor, ICurrentAgent currentAgent, AgentConnectivityService service, CancellationToken cancellationToken)
+    {
+        var poll = await service.PollAsync(currentAgent.Identity!, cursor, cancellationToken);
+        return poll is null
+            ? Error(StatusCodes.Status400BadRequest, AgentErrorCodes.InvalidRequest, "Invalid field: cursor.")
+            : Results.Ok(new AgentPollResponse
+            {
+                Cursor = poll.Cursor,
+                Tasks = [],
+                NextPollAfterSeconds = (int)poll.NextPollAfter.TotalSeconds
+            });
     }
 
     private static IResult GetIdentity(ICurrentAgent currentAgent)

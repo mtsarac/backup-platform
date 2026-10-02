@@ -27,8 +27,6 @@ public interface IAgentRegistryStore
     /// <summary>Serialized per agent. Promotes the caller's pending credential and revokes the previous active one.</summary>
     Task<RotationConfirmCommit> ConfirmRotationAsync(AgentIdentity caller, DateTimeOffset now, CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<Agent>> ListAgentsAsync(TenantId tenantId, CancellationToken cancellationToken);
-
     /// <summary>Null when the agent does not exist in the tenant. Terminal; revokes every non-revoked credential.</summary>
     Task<AgentRevocationCommit?> RevokeAgentAsync(TenantId tenantId, AgentId agentId, DateTimeOffset now, CancellationToken cancellationToken);
 }

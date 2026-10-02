@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Only the test project hosts a real Kestrel SignalR hub; the agent projects never reference ASP.NET Core. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/core/contracts/BackupPlatform.Contracts.csproj" />
+    <ProjectReference Include="../../src/agent/core/BackupPlatform.Agent.Core.csproj" />
+    <ProjectReference Include="../../src/agent/transport/BackupPlatform.Agent.Transport.csproj" />
+    <ProjectReference Include="../../src/hosts/agent/BackupPlatform.Agent.Host.csproj" />
+  </ItemGroup>
+
+</Project>

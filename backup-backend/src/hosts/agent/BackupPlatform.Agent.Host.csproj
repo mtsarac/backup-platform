@@ -7,12 +7,21 @@
     <TargetFramework Condition="'$(AgentPlatform)' == 'Windows'">net10.0-windows</TargetFramework>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(AgentPlatform)' == 'Windows'">
+    <DefineConstants>$(DefineConstants);AGENT_PLATFORM_WINDOWS</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(AgentPlatform)' == 'Linux'">
+    <DefineConstants>$(DefineConstants);AGENT_PLATFORM_LINUX</DefineConstants>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../../agent/core/BackupPlatform.Agent.Core.csproj" />
+    <ProjectReference Include="../../agent/transport/BackupPlatform.Agent.Transport.csproj" />
     <ProjectReference Include="../../agent/platform-windows/BackupPlatform.Agent.Platform.Windows.csproj" Condition="'$(AgentPlatform)' == 'Windows'" />
     <ProjectReference Include="../../agent/platform-linux/BackupPlatform.Agent.Platform.Linux.csproj" Condition="'$(AgentPlatform)' == 'Linux'" />
     <ProjectReference Include="../../providers/backup/mssql/BackupPlatform.BackupProviders.MSSQL.csproj" />

@@ -17,11 +17,22 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace BackupPlatform.IntegrationTests;
 
-internal sealed class AuthApiFactory(string connectionString, TimeProvider? timeProvider = null, BackupPlatform.Agents.AgentSecurityOptions? agentOptions = null) : WebApplicationFactory<Program>
+internal sealed class AuthApiFactory(
+    string connectionString,
+    TimeProvider? timeProvider = null,
+    BackupPlatform.Agents.AgentSecurityOptions? agentOptions = null,
+    BackupPlatform.Agents.Connectivity.AgentConnectivityOptions? connectivityOptions = null,
+    AgentRateLimitOptions? rateLimitOptions = null,
+    System.Security.Cryptography.X509Certificates.X509Certificate2? kestrelCertificate = null) : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        if (kestrelCertificate is not null)
+        {
+            // A real TLS listener on an ephemeral loopback port, for tests that need real sockets (SignalR).
+            builder.ConfigureKestrel(kestrel => kestrel.Listen(System.Net.IPAddress.Loopback, 0, listen => listen.UseHttps(kestrelCertificate)));
+        }
         builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(
             new Dictionary<string, string?> { ["ConnectionStrings:Platform"] = connectionString }));
         builder.ConfigureServices(services =>
@@ -38,6 +49,16 @@ internal sealed class AuthApiFactory(string connectionString, TimeProvider? time
             {
                 services.RemoveAll<BackupPlatform.Agents.AgentSecurityOptions>();
                 services.AddSingleton(agentOptions);
+            }
+            if (connectivityOptions is not null)
+            {
+                services.RemoveAll<BackupPlatform.Agents.Connectivity.AgentConnectivityOptions>();
+                services.AddSingleton(connectivityOptions);
+            }
+            if (rateLimitOptions is not null)
+            {
+                services.RemoveAll<AgentRateLimitOptions>();
+                services.AddSingleton(rateLimitOptions);
             }
         });
     }

@@ -68,9 +68,12 @@ public sealed class AgentApiEndpoint { }
 public sealed class AgentAuthenticationOptions : AuthenticationSchemeOptions { }
 
 public sealed class AgentAuthenticationHandler(
-    IOptionsMonitor<AgentAuthenticationOptions> options, ILoggerFactory logger, UrlEncoder encoder, AgentCredentialService credentials)
+    IOptionsMonitor<AgentAuthenticationOptions> options, ILoggerFactory logger, UrlEncoder encoder, AgentCredentialService credentials,
+    AgentAuthFailureLimiter failureLimiter)
     : AuthenticationHandler<AgentAuthenticationOptions>(options, logger, encoder)
 {
+    private const string RateLimitedItem = "BackupPlatform.Agent.RateLimited";
+
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
         var headers = Request.Headers.Authorization;
@@ -87,29 +90,43 @@ public sealed class AgentAuthenticationHandler(
         {
             return AuthenticateResult.NoResult();
         }
+        // The key is the network client, never anything derived from the presented credential.
+        var client = AgentClientKey.From(Context.Connection.RemoteIpAddress);
+        if (failureLimiter.IsBlocked(client))
+        {
+            Context.Items[RateLimitedItem] = failureLimiter.RetryAfter;
+            Logger.LogWarning("Agent authentication refused: too many recent failures from {Client}.", client);
+            return AuthenticateResult.Fail("Too many failed agent authentications.");
+        }
         if (!Request.IsHttps)
         {
             return AuthenticateResult.Fail("Agent credentials require TLS.");
         }
         if (!AgentAuthorizationScheme.TryParseHeaderValue(header, out var credentialId, out var secret))
         {
+            failureLimiter.RecordFailure(client);
             return AuthenticateResult.Fail("Malformed agent credential.");
         }
         var allowPending = Context.GetEndpoint()?.Metadata.GetMetadata<AllowPendingAgentCredential>() is not null;
         var result = await credentials.AuthenticateAsync(credentialId, secret, allowPending, Context.RequestAborted);
         if (result.Identity is null)
         {
+            failureLimiter.RecordFailure(client);
             Logger.LogInformation("Agent authentication rejected: {Failure}.", result.Failure);
             return AuthenticateResult.Fail("Agent authentication failed.");
         }
         return AuthenticateResult.Success(new AuthenticationTicket(AgentAuthentication.CreatePrincipal(result.Identity), Scheme.Name));
     }
 
-    protected override Task HandleChallengeAsync(AuthenticationProperties properties)
+    protected override async Task HandleChallengeAsync(AuthenticationProperties properties)
     {
+        if (Context.Items.TryGetValue(RateLimitedItem, out var retryAfter) && retryAfter is TimeSpan delay)
+        {
+            await AgentRateLimiting.WriteRateLimitedAsync(Context, delay, Context.RequestAborted);
+            return;
+        }
         Response.StatusCode = StatusCodes.Status401Unauthorized;
         Response.Headers.WWWAuthenticate = AgentAuthorizationScheme.Name;
-        return Task.CompletedTask;
     }
 
     protected override Task HandleForbiddenAsync(AuthenticationProperties properties)

@@ -1,4 +1,5 @@
 using BackupPlatform.Api.Endpoints;
+using BackupPlatform.Api.Push;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +10,7 @@ builder.Services.AddPlatformSecurity();
 
 var app = builder.Build();
 _ = app.Services.GetRequiredService<DbContextOptions<PlatformDbContext>>();
+_ = app.Services.GetRequiredService<BackupPlatform.Agents.Connectivity.AgentConnectivityOptions>();
 
 if (isBootstrap)
 {
@@ -22,6 +24,7 @@ app.MapAuthenticationEndpoints();
 app.MapUserEndpoints();
 app.MapAgentEndpoints();
 app.MapAgentAdministrationEndpoints();
+app.MapAgentHub();
 
 app.Run();
 

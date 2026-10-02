@@ -102,7 +102,9 @@ public sealed class AgentEnrollmentIntegrationTests(PostgreSqlFixture fixture) :
             return response.StatusCode;
         })));
         Assert.Equal(1, attempts.Count(status => status == HttpStatusCode.Created));
-        Assert.All(attempts.Where(status => status != HttpStatusCode.Created), status => Assert.Equal(HttpStatusCode.Unauthorized, status));
+        // Losers are refused either because the token was already consumed (401) or by the per-token attempt limit (429).
+        Assert.All(attempts.Where(status => status != HttpStatusCode.Created),
+            status => Assert.True(status is HttpStatusCode.Unauthorized or HttpStatusCode.TooManyRequests, $"Unexpected status {status}."));
         await using var context = fixture.CreatePlatformContext();
         Assert.Equal(1, await context.Agents.CountAsync(agent => agent.TenantId == setup.Tenant.Id));
         Assert.Equal(1, await (from credential in context.AgentCredentials

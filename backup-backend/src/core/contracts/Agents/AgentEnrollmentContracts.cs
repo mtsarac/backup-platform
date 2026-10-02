@@ -85,4 +85,7 @@ public sealed record AgentApiError
     public string Error { get; init; } = string.Empty;
     public string? Message { get; init; }
     public AgentServerProtocol? SupportedProtocol { get; init; }
+    /// <summary>One of <see cref="AgentErrorActions"/> when the agent can act on the failure; otherwise null.</summary>
+    public string? Action { get; init; }
+    public int? RetryAfterSeconds { get; init; }
 }

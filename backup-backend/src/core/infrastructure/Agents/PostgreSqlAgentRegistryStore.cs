@@ -86,15 +86,6 @@ public sealed class PostgreSqlAgentRegistryStore(DbContextOptions<PlatformDbCont
         }
     }
 
-    public async Task<IReadOnlyList<Agent>> ListAgentsAsync(TenantId tenantId, CancellationToken cancellationToken)
-    {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        return await context.Agents.AsNoTracking()
-            .Where(agent => agent.TenantId == tenantId)
-            .OrderBy(agent => agent.HostName).ThenBy(agent => agent.Id)
-            .ToListAsync(cancellationToken);
-    }
-
     public async Task<AgentRevocationCommit?> RevokeAgentAsync(TenantId tenantId, AgentId agentId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);

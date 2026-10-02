@@ -25,6 +25,9 @@ public static class SecurityApplicationBuilderExtensions
         app.UseAuthentication();
         app.UseMiddleware<TenantResolutionMiddleware>();
         app.UseAuthorization();
+        // After authorization so per-agent limits key on the authenticated agent; before the protocol gate so a mismatched agent is still throttled.
+        app.UseRateLimiter();
+        app.UseMiddleware<AgentProtocolMiddleware>();
         app.UseMiddleware<ApiAntiforgeryMiddleware>();
         return app;
     }

@@ -166,6 +166,44 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
         AssertForbiddenExternalDependencies("BackupPlatform.Identity", type => type.StartsWith("BackupPlatform.Agents", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("BackupPlatform.Agent.Core")]
+    [InlineData("BackupPlatform.Domain")]
+    [InlineData("BackupPlatform.Contracts")]
+    [InlineData("BackupPlatform.Application")]
+    [InlineData("BackupPlatform.Agents")]
+    [InlineData("BackupPlatform.Agent.Platform.Linux")]
+    [InlineData("BackupPlatform.Agent.Platform.Windows")]
+    public void TransportNeutralProjectsMustNotDependOnSignalR(string project) =>
+        AssertForbiddenExternalDependencies(project, IsSignalRDependency);
+
+    [Fact]
+    public void AgentCoreConnectivityMustNotKnowHowBytesTravel() =>
+        AssertForbiddenExternalDependencies("BackupPlatform.Agent.Core", IsNetworkTransportDependency, IsWebDependency, IsPersistenceDependency);
+
+    [Fact]
+    public void AgentsModuleMustNotKnowAnyPushTransport() =>
+        AssertForbiddenExternalDependencies("BackupPlatform.Agents", IsNetworkTransportDependency, IsSignalRDependency);
+
+    [Fact]
+    public void AgentTransportMayUseSignalRClientButNeverBackendOrPersistence()
+    {
+        AssertForbiddenExternalDependencies("BackupPlatform.Agent.Transport", IsPersistenceDependency, IsIdentityDependency);
+        foreach (var (configuration, graph) in fixture.Graphs)
+        {
+            AssertForbiddenDependencies(configuration, graph, "BackupPlatform.Agent.Transport", IsBackendInternal);
+        }
+    }
+
+    private static bool IsSignalRDependency(string name) =>
+        name.StartsWith("Microsoft.AspNetCore.SignalR", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("Microsoft.AspNetCore.Http.Connections", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsNetworkTransportDependency(string name) =>
+        name.StartsWith("System.Net.Http", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("System.Net.Sockets", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("System.Net.WebSockets", StringComparison.OrdinalIgnoreCase);
+
     private static bool IsBackendInternal(ProjectNode node) =>
         node.RelativePath.StartsWith("src/modules/", StringComparison.Ordinal)
         || node.RelativePath.StartsWith("src/hosts/api/", StringComparison.Ordinal)

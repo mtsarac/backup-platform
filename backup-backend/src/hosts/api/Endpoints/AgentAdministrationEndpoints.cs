@@ -1,3 +1,4 @@
+using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Agents.Enrollment;
 using BackupPlatform.Agents.Management;
 using BackupPlatform.Api.Security;
@@ -41,6 +42,7 @@ public static class AgentAdministrationEndpoints
         tenant.MapGet("/agent-enrollment-tokens", ListTokensAsync);
         tenant.MapDelete("/agent-enrollment-tokens/{tokenId:guid}", RevokeTokenAsync);
         tenant.MapGet("/agents", ListAgentsAsync);
+        tenant.MapGet("/agents/connectivity-summary", GetConnectivitySummaryAsync);
         tenant.MapPost("/agents/{agentId:guid}/revoke", RevokeAgentAsync);
         return endpoints;
     }
@@ -103,19 +105,52 @@ public static class AgentAdministrationEndpoints
         return revoked is null ? Results.NotFound() : Results.NoContent();
     }
 
-    private static async Task<IResult> ListAgentsAsync(ITenantContext tenantContext, AgentManagementService service, CancellationToken cancellationToken)
+    private static async Task<IResult> ListAgentsAsync(
+        string? connectivity, ITenantContext tenantContext, AgentConnectivityQueryService service, CancellationToken cancellationToken)
     {
-        var agents = await service.ListAsync(tenantContext.TenantId!, cancellationToken);
-        return Results.Ok(agents.Select(agent => new
+        if (!TryParseFilter(connectivity, out var filter))
         {
-            agentId = agent.Id.Value,
-            hostName = agent.HostName,
-            status = agent.Status.ToString(),
-            platform = agent.Software.Platform.ToString(),
-            agentVersion = agent.Software.Version.ToString(),
-            protocolVersion = $"{agent.Software.ProtocolVersion.Major}.{agent.Software.ProtocolVersion.Minor}",
-            credentialGeneration = agent.CredentialGeneration
+            return Results.Json(new { error = "connectivity must be online, offline or unknown." }, statusCode: StatusCodes.Status400BadRequest);
+        }
+        var agents = await service.ListAsync(tenantContext.TenantId!, filter, cancellationToken);
+        return Results.Ok(agents.Select(view => new
+        {
+            agentId = view.Agent.Id.Value,
+            hostName = view.Agent.HostName,
+            status = view.Agent.Status.ToString(),
+            connectivity = view.Connectivity.ToString().ToLowerInvariant(),
+            operationalStatus = view.Status.ToString(),
+            lastSeenAt = view.LastSeenAt,
+            lastHeartbeatAt = view.LastHeartbeatAt,
+            lastConnectedAt = view.LastConnectedAt,
+            platform = view.Agent.Software.Platform.ToString(),
+            agentVersion = view.ReportedAgentVersion,
+            protocolVersion = view.ReportedProtocolVersion,
+            capabilityRevision = view.CapabilityRevision,
+            credentialGeneration = view.Agent.CredentialGeneration
         }));
+    }
+
+    private static async Task<IResult> GetConnectivitySummaryAsync(
+        ITenantContext tenantContext, AgentConnectivityQueryService service, CancellationToken cancellationToken)
+    {
+        var summary = await service.SummarizeAsync(tenantContext.TenantId!, cancellationToken);
+        return Results.Ok(new
+        {
+            online = summary.Online,
+            offline = summary.Offline,
+            unknown = summary.Unknown,
+            disabled = summary.Disabled,
+            revoked = summary.Revoked,
+            total = summary.Total
+        });
+    }
+
+    private static bool TryParseFilter(string? value, out AgentConnectivityFilter filter)
+    {
+        filter = AgentConnectivityFilter.All;
+        return string.IsNullOrEmpty(value)
+            || (Enum.TryParse(value, ignoreCase: true, out filter) && filter != AgentConnectivityFilter.All && Enum.IsDefined(filter));
     }
 
     private static async Task<IResult> RevokeAgentAsync(

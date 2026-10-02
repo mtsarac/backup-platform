@@ -1,9 +1,11 @@
 using BackupPlatform.Agents;
+using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Agents.Credentials;
 using BackupPlatform.Agents.Enrollment;
 using BackupPlatform.Agents.Management;
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Application.Identity;
+using BackupPlatform.Api.Push;
 using BackupPlatform.Application.Tenancy;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Identity;
@@ -35,6 +37,7 @@ public static class SecurityServiceCollectionExtensions
         services.AddScoped<BrowserCookieEvents>();
         AddBrowserAuthentication(services);
         AddAgentSecurity(services);
+        AddAgentConnectivity(services);
         AddPolicies(services);
         services.AddAntiforgery(options =>
         {
@@ -105,6 +108,37 @@ public static class SecurityServiceCollectionExtensions
         services.AddScoped<AgentCredentialService>();
         services.AddScoped<AgentManagementService>();
         services.AddScoped<ICurrentAgent, HttpCurrentAgent>();
+    }
+
+    /// <summary>
+    /// Heartbeat, polling, push channel, rate limits and liveness queries. The connection registry and push dispatcher
+    /// are ephemeral per-process delivery aids; liveness lives in the database.
+    /// </summary>
+    private static void AddAgentConnectivity(IServiceCollection services)
+    {
+        services.TryAddSingleton(provider =>
+        {
+            var options = provider.GetRequiredService<IConfiguration>().GetSection("Agents:Connectivity").Get<AgentConnectivityOptions>()
+                ?? new AgentConnectivityOptions();
+            options.ThrowIfInvalid();
+            return options;
+        });
+        services.AddSingleton<AgentProtocolGate>();
+        services.AddScoped<IAgentConnectivityStore, PostgreSqlAgentConnectivityStore>();
+        services.AddScoped<AgentConnectivityService>();
+        services.AddScoped<AgentConnectivityQueryService>();
+        services.AddAgentRateLimiting();
+        services.AddSingleton<AgentConnectionRegistry>();
+        services.AddSingleton<IAgentPushDispatcher, SignalRAgentPushDispatcher>();
+        services.AddHostedService<AgentConnectionAuditor>();
+        services.AddSignalR(options =>
+        {
+            options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+            options.ClientTimeoutInterval = TimeSpan.FromSeconds(45);
+            options.HandshakeTimeout = TimeSpan.FromSeconds(15);
+            options.MaximumReceiveMessageSize = 4 * 1024;
+            options.EnableDetailedErrors = false;
+        });
     }
 
     private static void AddPolicies(IServiceCollection services)

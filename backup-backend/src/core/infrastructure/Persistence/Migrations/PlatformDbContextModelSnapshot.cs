@@ -22,6 +22,62 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("BackupPlatform.Agents.Connectivity.AgentConnectivityRecord", b =>
+                {
+                    b.Property<Guid>("AgentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CapabilityRevision")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("LastConnectedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("LastHeartbeatAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReportedAgentVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ReportedOsDescription")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int?>("ReportedPlatform")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ReportedProtocolMajor")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ReportedProtocolMinor")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ReportedRuntimeVersion")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("AgentId");
+
+                    b.HasIndex("AgentId", "TenantId");
+
+                    b.HasIndex("TenantId", "LastSeenAt");
+
+                    b.ToTable("agent_connectivity", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_agent_connectivity_protocol", "(\"ReportedProtocolMajor\" IS NULL) = (\"ReportedProtocolMinor\" IS NULL) AND (\"ReportedProtocolMajor\" IS NULL OR (\"ReportedProtocolMajor\" >= 1 AND \"ReportedProtocolMinor\" >= 0))");
+
+                            t.HasCheckConstraint("ck_agent_connectivity_tenant_id", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+                        });
+                });
+
             modelBuilder.Entity("BackupPlatform.Agents.Credentials.AgentCredential", b =>
                 {
                     b.Property<Guid>("Id")
@@ -407,6 +463,16 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_user_sessions_user_id", "\"UserId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
                         });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Agents.Connectivity.AgentConnectivityRecord", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Agents.Agent", null)
+                        .WithMany()
+                        .HasForeignKey("AgentId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("BackupPlatform.Agents.Credentials.AgentCredential", b =>

@@ -1,4 +1,5 @@
 using System.Reflection;
+using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Agents.Credentials;
 using BackupPlatform.Agents.Enrollment;
 using BackupPlatform.Application.Tenancy;
@@ -50,6 +51,7 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<TenantAgentEnrollmentPolicy> TenantAgentEnrollmentPolicies => Set<TenantAgentEnrollmentPolicy>();
     public DbSet<EnrollmentToken> EnrollmentTokens => Set<EnrollmentToken>();
     public DbSet<AgentCredential> AgentCredentials => Set<AgentCredential>();
+    public DbSet<AgentConnectivityRecord> AgentConnectivity => Set<AgentConnectivityRecord>();
     public DbSet<PasswordCredential> PasswordCredentials => Set<PasswordCredential>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
 
@@ -127,9 +129,9 @@ public sealed class PlatformDbContext : DbContext
             {
                 throw new InvalidOperationException("Authentication state writes require explicit identity infrastructure operations.");
             }
-            if (!IsPlatformOperations && entry.Entity is TenantAgentEnrollmentPolicy or AgentCredential)
+            if (!IsPlatformOperations && entry.Entity is TenantAgentEnrollmentPolicy or AgentCredential or AgentConnectivityRecord)
             {
-                throw new InvalidOperationException("Enrollment policy and agent credential writes require explicit platform operations.");
+                throw new InvalidOperationException("Enrollment policy, agent credential and connectivity writes require explicit platform operations.");
             }
         }
     }
