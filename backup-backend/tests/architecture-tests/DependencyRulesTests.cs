@@ -2,6 +2,17 @@ namespace BackupPlatform.ArchitectureTests;
 
 public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClassFixture<DependencyGraphFixture>
 {
+    [Theory]
+    [InlineData("BackupPlatform.Domain")]
+    [InlineData("BackupPlatform.Contracts")]
+    public void FoundationProjectsMustHaveNoProjectDependencies(string project)
+    {
+        foreach (var (configuration, graph) in fixture.Graphs)
+        {
+            Assert.True(graph[project].References.Length == 0, $"{project} must be independent ({configuration}).");
+        }
+    }
+
     [Fact]
     public void DomainMustNotDependOnInfrastructure()
     {
