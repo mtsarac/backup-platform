@@ -1,0 +1,9 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\abstractions\BackupPlatform.BackupProviders.Abstractions.csproj" />
+    <ProjectReference Include="..\..\snapshot\abstractions\BackupPlatform.SnapshotProviders.Abstractions.csproj" />
+  </ItemGroup>
+
+
+</Project>

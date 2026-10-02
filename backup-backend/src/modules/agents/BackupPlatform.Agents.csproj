@@ -1,0 +1,11 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\core\domain\BackupPlatform.Domain.csproj" />
+    <ProjectReference Include="..\..\core\application\BackupPlatform.Application.csproj" />
+    <ProjectReference Include="..\..\core\contracts\BackupPlatform.Contracts.csproj" />
+    <ProjectReference Include="..\..\providers\secret\abstractions\BackupPlatform.SecretProviders.Abstractions.csproj" />
+  </ItemGroup>
+
+
+</Project>

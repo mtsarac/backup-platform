@@ -1,0 +1,29 @@
+# .NET
+**/bin/
+**/obj/
+*.user
+*.suo
+
+# Frontend
+**/node_modules/
+**/dist/
+
+# IDE
+.idea/
+.vscode/
+.vs/
+
+# OS
+.DS_Store
+
+# Secrets / local config
+.env
+.env.*
+!.env.example
+**/appsettings.Development.local.json
+**/appsettings.Local.json
+docs/
+
+# Logs
+*.log
+logs/
