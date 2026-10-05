@@ -113,6 +113,20 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
     }
 
     [Fact]
+    public void ApplicationMustNotDependOnBackupOrStorageImplementations() =>
+        AssertForbiddenDependencies("BackupPlatform.Application", IsProviderImplementation);
+
+    [Fact]
+    public void DomainMustNotDependOnTransportOrContracts() =>
+        AssertForbiddenDependencies("BackupPlatform.Domain", node =>
+            node.Name == "BackupPlatform.Contracts" || node.Name == "BackupPlatform.Agent.Transport");
+
+    [Fact]
+    public void ApiAndSignalRHubsMustNotReachBackupProviderImplementations() =>
+        AssertForbiddenDependencies("BackupPlatform.Api", node => IsProviderImplementation(node)
+            && node.RelativePath.StartsWith("src/providers/backup/", StringComparison.Ordinal));
+
+    [Fact]
     public void AgentCoreMustNotDependOnPlatformImplementations()
     {
         AssertForbiddenDependencies("BackupPlatform.Agent.Core", node => node.Name.StartsWith("BackupPlatform.Agent.Platform.", StringComparison.Ordinal));

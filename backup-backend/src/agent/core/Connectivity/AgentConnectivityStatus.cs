@@ -6,7 +6,7 @@ public enum AgentChannelState
     Stopped,
     /// <summary>The push channel is not connected; connecting or waiting to retry.</summary>
     Connecting,
-    /// <summary>The push channel is connected; polling is idle.</summary>
+    /// <summary>The push channel is connected; configured safety polling may remain active.</summary>
     Connected,
     /// <summary>The backend does not accept the credential; retries happen at the slow maximum delay with a freshly loaded identity.</summary>
     Unauthorized,

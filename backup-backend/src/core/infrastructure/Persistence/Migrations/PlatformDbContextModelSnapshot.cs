@@ -305,6 +305,496 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupArtifact", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AppliedOptionsJson")
+                        .IsRequired()
+                        .HasMaxLength(16384)
+                        .HasColumnType("character varying(16384)");
+
+                    b.Property<string>("ArtifactChecksum")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("AttemptId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BackupType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ChecksumAlgorithm")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("SourceChecksum")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceMetadataJson")
+                        .IsRequired()
+                        .HasMaxLength(16384)
+                        .HasColumnType("character varying(16384)");
+
+                    b.Property<Guid>("TenantId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("_sealed")
+                        .HasColumnType("boolean")
+                        .HasColumnName("Sealed");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("Id", "TenantId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("AttemptId", "TenantId");
+
+                    b.HasIndex("TenantId", "AttemptId")
+                        .IsUnique();
+
+                    b.ToTable("backup_artifacts", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_backup_artifact_checksums", "\"ChecksumAlgorithm\" = 'sha256' AND \"SourceChecksum\" ~ '^[0-9a-f]{64}$' AND \"ArtifactChecksum\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_backup_artifact_size", "\"SizeBytes\" > 0");
+
+                            t.HasCheckConstraint("ck_backup_artifact_type", "\"BackupType\" = 'Full'");
+
+                            t.HasCheckConstraint("ck_backup_artifacts_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_backup_artifacts_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AgentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BackupType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Configuration")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("OverlapPolicy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("TenantId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("AgentId", "TenantId");
+
+                    b.HasIndex("TenantId", "AgentId");
+
+                    b.ToTable("backup_jobs", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_backup_job_policy", "\"BackupType\" = 'Full' AND \"OverlapPolicy\" = 'Queue'");
+
+                            t.HasCheckConstraint("ck_backup_jobs_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_backup_jobs_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupLifecycleFact", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("AttemptId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("Id", "TenantId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("AttemptId", "TenantId");
+
+                    b.HasIndex("RunId", "TenantId");
+
+                    b.HasIndex("TenantId", "RunId", "At");
+
+                    b.ToTable("backup_lifecycle_facts", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_backup_lifecycle_facts_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_backup_lifecycle_facts_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupReplica", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ArtifactId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Checksum")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ChecksumAlgorithm")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("StorageProvider")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("StorageTarget")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<Guid>("TenantId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("VerificationMethod")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("VerificationState")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset?>("VerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("Id", "TenantId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("ArtifactId", "TenantId", "SizeBytes", "Checksum", "ChecksumAlgorithm");
+
+                    b.HasIndex("TenantId", "ArtifactId", "StorageProvider", "StorageTarget", "Key")
+                        .IsUnique();
+
+                    b.ToTable("backup_replicas", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_backup_replica_checksum", "\"ChecksumAlgorithm\" = 'sha256' AND \"Checksum\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_backup_replica_size", "\"SizeBytes\" > 0");
+
+                            t.HasCheckConstraint("ck_backup_replica_status", "\"Status\" = 'Available'");
+
+                            t.HasCheckConstraint("ck_backup_replica_verification", "\"VerificationState\" IN ('Verified','Unverified','Failed') AND ((\"VerificationState\" = 'Verified') = (\"VerifiedAt\" IS NOT NULL)) AND (\"VerifiedAt\" IS NULL OR \"VerifiedAt\" >= \"CreatedAt\")");
+
+                            t.HasCheckConstraint("ck_backup_replicas_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_backup_replicas_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AgentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BackupType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("CancellationRequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Configuration")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CurrentAttemptNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TerminalReason")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("TriggerType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("AgentId", "TenantId");
+
+                    b.HasIndex("JobId", "TenantId");
+
+                    b.HasIndex("TenantId", "CreatedAt");
+
+                    b.HasIndex("TenantId", "JobId", "CreatedAt");
+
+                    b.HasIndex("TenantId", "JobId", "IdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "Status", "CreatedAt");
+
+                    b.HasIndex("TenantId", "AgentId", "Status", "CreatedAt");
+
+                    b.ToTable("backup_runs", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_backup_runs_attempt_number", "\"CurrentAttemptNumber\" >= 1");
+
+                            t.HasCheckConstraint("ck_backup_runs_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_backup_runs_status", "\"Status\" BETWEEN 1 AND 7");
+
+                            t.HasCheckConstraint("ck_backup_runs_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_backup_runs_terminal", "(\"Status\" IN (4,5,6,7)) = (\"CompletedAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_backup_runs_type", "\"BackupType\" = 'Full' AND \"TriggerType\" = 'Manual'");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupRunAttempt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AgentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("LeaseExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LeaseToken")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("LeasedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Platform")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset?>("ProgressAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double?>("ProgressPercent")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("ProgressStage")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ProtocolVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SoftwareVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TerminalReason")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LeaseToken")
+                        .IsUnique()
+                        .HasFilter("\"LeaseToken\" IS NOT NULL");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("AgentId", "TenantId");
+
+                    b.HasIndex("RunId", "TenantId");
+
+                    b.HasIndex("Status", "LeaseExpiresAt");
+
+                    b.HasIndex("TenantId", "AgentId")
+                        .IsUnique()
+                        .HasFilter("\"Status\" IN (2,3)");
+
+                    b.HasIndex("TenantId", "RunId", "Number")
+                        .IsUnique();
+
+                    b.ToTable("backup_run_attempts", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_backup_attempt_lease", "\"Status\" NOT IN (2,3) OR (\"LeaseToken\" IS NOT NULL AND \"LeaseToken\" <> '00000000-0000-0000-0000-000000000000'::uuid AND \"LeaseExpiresAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_backup_attempt_number", "\"Number\" >= 1");
+
+                            t.HasCheckConstraint("ck_backup_attempt_progress", "\"ProgressPercent\" IS NULL OR (\"ProgressPercent\" >= 0 AND \"ProgressPercent\" <= 100)");
+
+                            t.HasCheckConstraint("ck_backup_attempt_started", "\"Status\" <> 3 OR \"StartedAt\" IS NOT NULL");
+
+                            t.HasCheckConstraint("ck_backup_attempt_terminal", "(\"Status\" IN (4,5,6,7)) = (\"CompletedAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_backup_run_attempts_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_backup_run_attempts_status", "\"Status\" BETWEEN 1 AND 7");
+
+                            t.HasCheckConstraint("ck_backup_run_attempts_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+                        });
+                });
+
             modelBuilder.Entity("BackupPlatform.Domain.Tenancy.PlatformAdmin", b =>
                 {
                     b.Property<Guid>("UserId")
@@ -535,6 +1025,122 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupArtifact", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Backups.BackupRunAttempt", null)
+                        .WithMany("Artifacts")
+                        .HasForeignKey("AttemptId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupJob", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Agents.Agent", null)
+                        .WithMany()
+                        .HasForeignKey("AgentId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupLifecycleFact", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Backups.BackupRunAttempt", null)
+                        .WithMany()
+                        .HasForeignKey("AttemptId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("BackupPlatform.Domain.Backups.BackupRun", null)
+                        .WithMany("Facts")
+                        .HasForeignKey("RunId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupReplica", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Backups.BackupArtifact", null)
+                        .WithMany("Replicas")
+                        .HasForeignKey("ArtifactId", "TenantId", "SizeBytes", "Checksum", "ChecksumAlgorithm")
+                        .HasPrincipalKey("Id", "TenantId", "SizeBytes", "ArtifactChecksum", "ChecksumAlgorithm")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupRun", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Agents.Agent", null)
+                        .WithMany()
+                        .HasForeignKey("AgentId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Backups.BackupJob", null)
+                        .WithMany()
+                        .HasForeignKey("JobId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupRunAttempt", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Agents.Agent", null)
+                        .WithMany()
+                        .HasForeignKey("AgentId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Backups.BackupRun", null)
+                        .WithMany("Attempts")
+                        .HasForeignKey("RunId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("BackupPlatform.Domain.Tenancy.PlatformAdmin", b =>
                 {
                     b.HasOne("BackupPlatform.Domain.Tenancy.User", null)
@@ -575,6 +1181,23 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupArtifact", b =>
+                {
+                    b.Navigation("Replicas");
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupRun", b =>
+                {
+                    b.Navigation("Attempts");
+
+                    b.Navigation("Facts");
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupRunAttempt", b =>
+                {
+                    b.Navigation("Artifacts");
                 });
 #pragma warning restore 612, 618
         }

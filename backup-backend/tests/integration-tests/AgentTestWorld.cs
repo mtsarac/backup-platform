@@ -19,11 +19,11 @@ using Npgsql;
 namespace BackupPlatform.IntegrationTests;
 
 /// <summary>Controllable clock that starts at the real time so cookie and database defaults stay coherent.</summary>
-internal sealed class MutableClock(DateTimeOffset? start = null) : TimeProvider
+internal sealed class MutableClock(DateTimeOffset? start = null, bool live = false) : TimeProvider
 {
     // Whole seconds: PostgreSQL stores microseconds, so sub-microsecond ticks would not round-trip in assertions.
     private DateTimeOffset _now = start ?? DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
-    public override DateTimeOffset GetUtcNow() => _now;
+    public override DateTimeOffset GetUtcNow() => live ? DateTimeOffset.UtcNow : _now;
     public void Advance(TimeSpan by) => _now += by;
 }
 

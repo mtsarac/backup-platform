@@ -68,11 +68,12 @@ public sealed record AgentHeartbeatResponse
     public bool CapabilitySyncRequested { get; init; }
 }
 
-/// <summary>Generic envelope for work the backend wants an agent to pick up. No task kinds exist yet; <see cref="Type"/> is open.</summary>
+/// <summary>Generic claimed-work envelope. Push messages only hint that an authoritative poll may find work.</summary>
 public sealed record AgentTaskEnvelope
 {
     public string Id { get; init; } = string.Empty;
     public string Type { get; init; } = string.Empty;
+    public BackupPlatform.Contracts.Backups.BackupTaskSnapshot? Backup { get; init; }
 }
 
 public sealed record AgentPollResponse

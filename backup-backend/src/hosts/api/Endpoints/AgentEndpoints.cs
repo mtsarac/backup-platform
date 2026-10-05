@@ -4,6 +4,7 @@ using BackupPlatform.Agents.Credentials;
 using BackupPlatform.Agents.Enrollment;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Application.Agents;
+using BackupPlatform.Application.Backups;
 using BackupPlatform.Contracts.Agents;
 using BackupPlatform.Contracts.Protocol;
 using Microsoft.AspNetCore.Http;
@@ -100,17 +101,20 @@ public static class AgentEndpoints
     }
 
     private static async Task<IResult> PollAsync(
-        string? cursor, ICurrentAgent currentAgent, AgentConnectivityService service, CancellationToken cancellationToken)
+        string? cursor, ICurrentAgent currentAgent, AgentConnectivityService service, BackupOrchestrator backups, CancellationToken cancellationToken)
     {
         var poll = await service.PollAsync(currentAgent.Identity!, cursor, cancellationToken);
-        return poll is null
-            ? Error(StatusCodes.Status400BadRequest, AgentErrorCodes.InvalidRequest, "Invalid field: cursor.")
-            : Results.Ok(new AgentPollResponse
-            {
-                Cursor = poll.Cursor,
-                Tasks = [],
-                NextPollAfterSeconds = (int)poll.NextPollAfter.TotalSeconds
-            });
+        if (poll is null)
+        {
+            return Error(StatusCodes.Status400BadRequest, AgentErrorCodes.InvalidRequest, "Invalid field: cursor.");
+        }
+        var backup = await backups.ClaimAsync(currentAgent.Identity!, cancellationToken);
+        return Results.Ok(new AgentPollResponse
+        {
+            Cursor = poll.Cursor,
+            Tasks = backup is null ? [] : [new AgentTaskEnvelope { Id = backup.AttemptId.ToString(), Type = "database-backup", Backup = backup }],
+            NextPollAfterSeconds = (int)poll.NextPollAfter.TotalSeconds
+        });
     }
 
     private static IResult GetIdentity(ICurrentAgent currentAgent)

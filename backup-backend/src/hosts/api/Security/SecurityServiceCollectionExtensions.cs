@@ -1,3 +1,6 @@
+using BackupPlatform.Api.Backups;
+using BackupPlatform.Application.Backups;
+using BackupPlatform.Infrastructure.Backups;
 using BackupPlatform.Agents;
 using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Agents.Credentials;
@@ -38,6 +41,9 @@ public static class SecurityServiceCollectionExtensions
         AddBrowserAuthentication(services);
         AddAgentSecurity(services);
         AddAgentConnectivity(services);
+        services.AddScoped<IBackupRunStore, PostgreSqlBackupRunStore>();
+        services.AddScoped<BackupOrchestrator>();
+        services.AddHostedService<StaleBackupDetector>();
         AddPolicies(services);
         services.AddAntiforgery(options =>
         {

@@ -16,7 +16,7 @@ public sealed partial class AgentConnectivityService
     [LoggerMessage(EventId = 10, Level = LogLevel.Debug, Message = "Connecting push channel: AgentId={AgentId} BackendHost={BackendHost} Attempt={Attempt}")]
     private partial void LogPushConnecting(Guid agentId, string backendHost, int attempt);
 
-    [LoggerMessage(EventId = 11, Level = LogLevel.Information, Message = "Push channel connected; polling is idle: AgentId={AgentId} BackendHost={BackendHost} Protocol={ProtocolVersion}")]
+    [LoggerMessage(EventId = 11, Level = LogLevel.Information, Message = "Push channel connected: AgentId={AgentId} BackendHost={BackendHost} Protocol={ProtocolVersion}")]
     private partial void LogPushConnected(Guid agentId, string backendHost, string protocolVersion);
 
     [LoggerMessage(EventId = 12, Level = LogLevel.Information, Message = "Push channel restored: AgentId={AgentId} BackendHost={BackendHost}")]

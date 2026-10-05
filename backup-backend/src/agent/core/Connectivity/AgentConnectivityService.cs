@@ -1,6 +1,7 @@
 using System.Runtime.ExceptionServices;
 using System.Threading.Channels;
 using BackupPlatform.Agent.Core.Identity;
+using BackupPlatform.Agent.Core.Tasks;
 using BackupPlatform.Contracts.Agents;
 using Microsoft.Extensions.Logging;
 
@@ -8,7 +9,7 @@ namespace BackupPlatform.Agent.Core.Connectivity;
 
 /// <summary>
 /// Keeps the agent reachable: a heartbeat loop that runs independently of the channel, a push channel that is
-/// reconnected in the background, and a polling fallback that is active only while the push channel stays unavailable.
+/// reconnected in the background, and polling that also finds durable tasks when push hints are lost.
 /// </summary>
 /// <remarks>
 /// Three loops cooperate through small shared state, each deciding from the same facts: the heartbeat loop
@@ -26,6 +27,7 @@ public sealed partial class AgentConnectivityService : IAgentConnectivityStatus
 
     private readonly IAgentCredentialStore _store;
     private readonly IAgentBackendClient _client;
+    private readonly IAgentTaskSink? _taskSink;
     private readonly IAgentPushChannel _channel;
     private readonly AgentSoftwareInfo _software;
     private readonly ICapabilityRevisionSource _capabilities;
@@ -63,7 +65,8 @@ public sealed partial class AgentConnectivityService : IAgentConnectivityStatus
         AgentConnectivityOptions options,
         AgentBackoff backoff,
         TimeProvider timeProvider,
-        ILogger<AgentConnectivityService> logger)
+        ILogger<AgentConnectivityService> logger,
+        IAgentTaskSink? taskSink = null)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(client);
@@ -81,6 +84,7 @@ public sealed partial class AgentConnectivityService : IAgentConnectivityStatus
         }
         _store = store;
         _client = client;
+        _taskSink = taskSink;
         _channel = channel;
         _software = software;
         _capabilities = capabilities;

@@ -1,6 +1,8 @@
 using BackupPlatform.Agent.Core.Connectivity;
 using BackupPlatform.Agent.Core.Identity;
+using BackupPlatform.Agent.Core.Tasks;
 using BackupPlatform.Agent.Transport;
+using BackupPlatform.SecretProviders.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -21,7 +23,12 @@ public static class AgentHostServiceCollectionExtensions
         services.AddSingleton<IValidateOptions<AgentHostOptions>, AgentHostOptionsValidator>();
 
         services.TryAddSingleton(TimeProvider.System);
-        services.AddSingleton(static provider => provider.GetRequiredService<IOptions<AgentHostOptions>>().Value.Connectivity);
+        services.AddSingleton(static provider =>
+        {
+            var connectivity = provider.GetRequiredService<IOptions<AgentHostOptions>>().Value.Connectivity;
+            connectivity.PollWhilePushConnected = true;
+            return connectivity;
+        });
         services.AddSingleton(static provider =>
         {
             var connectivity = provider.GetRequiredService<IOptions<AgentHostOptions>>().Value.Connectivity;
@@ -36,6 +43,12 @@ public static class AgentHostServiceCollectionExtensions
 
         services.AddAgentTransport();
         services.AddAgentBackupExecution(configuration);
+        services.TryAddSingleton<ISecretProvider, EnvironmentTaskSecretProvider>();
+        services.TryAddSingleton<IBackupTaskCredentialResolver, BackupTaskCredentialResolver>();
+        services.AddSingleton<BackupTaskRequestFactory>();
+        services.AddSingleton<BackupTaskWorker>();
+        services.AddSingleton<IAgentTaskSink>(static provider => provider.GetRequiredService<BackupTaskWorker>());
+        services.AddHostedService<AgentBackupTaskHostedService>();
         services.AddSingleton<AgentConnectivityService>();
         services.AddSingleton<IAgentConnectivityStatus>(static provider => provider.GetRequiredService<AgentConnectivityService>());
         services.AddHostedService<AgentConnectivityWorker>();

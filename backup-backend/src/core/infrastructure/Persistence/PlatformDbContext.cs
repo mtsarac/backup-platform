@@ -4,6 +4,7 @@ using BackupPlatform.Agents.Credentials;
 using BackupPlatform.Agents.Enrollment;
 using BackupPlatform.Application.Tenancy;
 using BackupPlatform.Domain.Agents;
+using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Identity;
@@ -54,6 +55,12 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<AgentConnectivityRecord> AgentConnectivity => Set<AgentConnectivityRecord>();
     public DbSet<PasswordCredential> PasswordCredentials => Set<PasswordCredential>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
+    public DbSet<BackupJob> BackupJobs => Set<BackupJob>();
+    public DbSet<BackupRun> BackupRuns => Set<BackupRun>();
+    public DbSet<BackupRunAttempt> BackupRunAttempts => Set<BackupRunAttempt>();
+    public DbSet<BackupArtifact> BackupArtifacts => Set<BackupArtifact>();
+    public DbSet<BackupReplica> BackupReplicas => Set<BackupReplica>();
+    public DbSet<BackupLifecycleFact> BackupLifecycleFacts => Set<BackupLifecycleFact>();
 
     /// <summary>Explicit unfiltered context for trusted platform operations only.</summary>
     /// <remarks>Does not authorize the caller. Future application boundaries must authorize its use.</remarks>

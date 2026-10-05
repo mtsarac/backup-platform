@@ -19,8 +19,11 @@ public sealed class AgentConnectivityOptions
     /// <summary>Heartbeat period; the effective period never exceeds the interval the server advertises.</summary>
     public TimeSpan HeartbeatInterval { get; set; } = TimeSpan.FromSeconds(30);
 
-    /// <summary>Polling period while the polling fallback is active; the server's <c>NextPollAfterSeconds</c> can only lengthen it.</summary>
+    /// <summary>Polling period for fallback and optional push-connected safety polling; the server's hint can only lengthen it.</summary>
     public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>Safety polling finds durable tasks even when a connected push channel loses a hint.</summary>
+    public bool PollWhilePushConnected { get; set; }
 
     /// <summary>How long the push channel must stay unavailable before polling becomes active. Zero polls from the start.</summary>
     public TimeSpan PushFallbackDelay { get; set; } = TimeSpan.FromSeconds(20);

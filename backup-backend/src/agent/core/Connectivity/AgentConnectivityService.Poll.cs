@@ -41,7 +41,7 @@ public sealed partial class AgentConnectivityService
             }
 
             long? activateAt = null;
-            if (pushUp)
+            if (pushUp && !_options.PollWhilePushConnected)
             {
                 if (pollingActive)
                 {
@@ -53,7 +53,7 @@ public sealed partial class AgentConnectivityService
             }
             else if (!pollingActive)
             {
-                activateAt = After(downSince, _options.PushFallbackDelay);
+                activateAt = _options.PollWhilePushConnected ? now : After(downSince, _options.PushFallbackDelay);
                 if (now >= activateAt)
                 {
                     pollingActive = true;
@@ -127,6 +127,13 @@ public sealed partial class AgentConnectivityService
             var polledAt = _time.GetUtcNow();
             Update(s => s with { ConsecutivePollFailures = 0, LastSuccessfulPollUtc = polledAt });
             LogPollSucceeded(identity.AgentId, response.Tasks.Count, response.NextPollAfterSeconds, pollingActive);
+            if (_taskSink is not null)
+            {
+                foreach (var task in response.Tasks)
+                {
+                    _taskSink.TryPublish(task);
+                }
+            }
             return new PollOutcome(string.IsNullOrEmpty(response.Cursor) ? null : response.Cursor, 0, next,
                 _backoff.AddJitter(PollPeriod(next)), null);
         }

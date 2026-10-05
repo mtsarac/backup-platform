@@ -1,4 +1,5 @@
 using BackupPlatform.Agent.Core.Connectivity;
+using BackupPlatform.Agent.Core.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -17,6 +18,17 @@ public static class AgentTransportServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
         services.AddHttpClient<IAgentBackendClient, HttpAgentBackendClient>(client =>
+            {
+                client.Timeout = RequestTimeout;
+                client.MaxResponseContentBufferSize = 1024 * 1024;
+            })
+            .ConfigurePrimaryHttpMessageHandler(static () => new SocketsHttpHandler
+            {
+                PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+                AllowAutoRedirect = false,
+            })
+            .SetHandlerLifetime(Timeout.InfiniteTimeSpan);
+        services.AddHttpClient<IBackupTaskClient, HttpBackupTaskClient>(client =>
             {
                 client.Timeout = RequestTimeout;
                 client.MaxResponseContentBufferSize = 1024 * 1024;

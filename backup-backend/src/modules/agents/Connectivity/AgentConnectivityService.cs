@@ -25,7 +25,7 @@ public sealed class AgentConnectivityService(IAgentConnectivityStore store, Time
     private const int MaximumCapabilityRevisionLength = 64;
     private const int MaximumRuntimeTextLength = 256;
     private const int MaximumCursorLength = 64;
-    /// <summary>The cursor of the only position that exists today: a queue with nothing in it.</summary>
+    /// <summary>Connectivity cursor; durable task leases, not this position, determine work ownership.</summary>
     public const string EmptyCursor = "0";
 
     public async Task<HeartbeatResult> RecordHeartbeatAsync(
@@ -54,8 +54,7 @@ public sealed class AgentConnectivityService(IAgentConnectivityStore store, Time
     }
 
     /// <summary>
-    /// Fallback poll. No dispatchable work exists in this iteration, so the answer is always an empty position; the
-    /// future dispatcher plugs in here. The poll still counts as a (coalesced) sign of life.
+    /// Records a coalesced sign of life. Task orchestration claims work independently of this connectivity cursor.
     /// </summary>
     public async Task<PollResult?> PollAsync(AgentIdentity caller, string? cursor, CancellationToken cancellationToken)
     {
