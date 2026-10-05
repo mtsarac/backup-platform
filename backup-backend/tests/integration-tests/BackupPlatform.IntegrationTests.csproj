@@ -19,6 +19,8 @@
   <ItemGroup>
     <ProjectReference Include="../../src/core/infrastructure/BackupPlatform.Infrastructure.csproj" />
     <ProjectReference Include="../../src/hosts/api/BackupPlatform.Api.csproj" />
+    <ProjectReference Include="../../src/providers/backup/abstractions/BackupPlatform.BackupProviders.Abstractions.csproj" />
+    <ProjectReference Include="../../src/providers/backup/mssql/BackupPlatform.BackupProviders.MSSQL.csproj" />
   </ItemGroup>
 
 </Project>

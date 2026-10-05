@@ -240,6 +240,68 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
         }
     }
 
+    [Theory]
+    [InlineData("BackupPlatform.Domain")]
+    [InlineData("BackupPlatform.Application")]
+    [InlineData("BackupPlatform.Contracts")]
+    [InlineData("BackupPlatform.Agent.Core")]
+    [InlineData("BackupPlatform.BackupProviders.Abstractions")]
+    [InlineData("BackupPlatform.BackupProviders.FileSystem")]
+    public void CoreAndNeutralProjectsMustNotDependOnSqlClient(string project) =>
+        AssertForbiddenExternalDependencies(project, IsSqlClientDependency);
+
+    [Fact]
+    public void OnlyTheMssqlProviderAndHostCompositionRootsMayReachSqlClient()
+    {
+        foreach (var (configuration, graph) in fixture.Graphs)
+        {
+            foreach (var node in graph.Values.Where(node =>
+                node.Name != "BackupPlatform.BackupProviders.MSSQL"
+                && !node.RelativePath.StartsWith("src/hosts/", StringComparison.Ordinal)))
+            {
+                var violations = node.Packages.Where(IsSqlClientDependency).ToArray();
+                Assert.True(violations.Length == 0,
+                    $"{node.Name} reaches the SQL Server client outside the MSSQL provider ({configuration}): {string.Join(", ", violations)}.");
+            }
+        }
+    }
+
+    [Fact]
+    public void NoProjectOtherThanTheMssqlProviderMayCompileAgainstSqlClient()
+    {
+        var release = fixture.Graphs["Release"];
+        foreach (var node in release.Values.Where(node => node.Name != "BackupPlatform.BackupProviders.MSSQL"))
+        {
+            var violations = node.Types.Concat(node.Assemblies).Where(IsSqlClientDependency).Distinct(StringComparer.Ordinal).ToArray();
+            Assert.True(violations.Length == 0,
+                $"{node.Name} compiles directly against the SQL Server client: {string.Join(", ", violations)}.");
+        }
+    }
+
+    [Fact]
+    public void MssqlProviderMayOnlyDependOnTheBackupProviderAbstractions()
+    {
+        foreach (var (configuration, graph) in fixture.Graphs)
+        {
+            AssertForbiddenDependencies(configuration, graph, "BackupPlatform.BackupProviders.MSSQL",
+                node => node.Name != "BackupPlatform.BackupProviders.Abstractions");
+        }
+    }
+
+    [Fact]
+    public void MssqlProviderMustNotDependOnStorageProviderImplementations() =>
+        AssertForbiddenDependencies("BackupPlatform.BackupProviders.MSSQL", node =>
+            node.RelativePath.StartsWith("src/providers/storage/", StringComparison.Ordinal));
+
+    [Fact]
+    public void FileSystemProviderMustNotDependOnTheMssqlProvider() =>
+        AssertForbiddenDependencies("BackupPlatform.BackupProviders.FileSystem", node => node.Name == "BackupPlatform.BackupProviders.MSSQL");
+
+    private static bool IsSqlClientDependency(string name) =>
+        name.StartsWith("Microsoft.Data.SqlClient", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("System.Data.SqlClient", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("Microsoft.SqlServer", StringComparison.OrdinalIgnoreCase);
+
     [Fact]
     public void ProviderImplementationsMustNotDependOnEachOther()
     {

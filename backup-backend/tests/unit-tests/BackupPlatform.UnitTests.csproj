@@ -23,6 +23,8 @@
     <ProjectReference Include="../../src/core/application/BackupPlatform.Application.csproj" />
     <ProjectReference Include="../../src/agent/core/BackupPlatform.Agent.Core.csproj" />
     <ProjectReference Include="../../src/agent/platform-linux/BackupPlatform.Agent.Platform.Linux.csproj" />
+    <ProjectReference Include="../../src/providers/backup/abstractions/BackupPlatform.BackupProviders.Abstractions.csproj" />
+    <ProjectReference Include="../../src/providers/backup/mssql/BackupPlatform.BackupProviders.MSSQL.csproj" />
   </ItemGroup>
 
 </Project>
