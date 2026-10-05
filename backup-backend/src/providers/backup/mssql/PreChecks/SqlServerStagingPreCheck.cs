@@ -1,5 +1,6 @@
 using System.Globalization;
 using BackupPlatform.BackupProviders.Abstractions.Database;
+using BackupPlatform.BackupProviders.MSSQL.Backup;
 
 namespace BackupPlatform.BackupProviders.MSSQL.PreChecks;
 
@@ -208,5 +209,6 @@ internal static class SqlServerStagingPreCheck
     private static BackupPreCheckItem Skipped(string id) =>
         Item(id, BackupPreCheckStatus.Skipped, SqlServerPreCheckReasons.PrerequisiteFailed, "Not evaluated because an earlier check failed.");
 
-    private static BackupPreCheckItem Item(string id, BackupPreCheckStatus status, string reason, string message) => new(id, status, reason, message);
+    private static BackupPreCheckItem Item(string id, BackupPreCheckStatus status, string reason, string message) =>
+        new(id, status, reason, message, status == BackupPreCheckStatus.Failed ? SqlServerFailureCauses.ForPreCheckReason(reason) : BackupFailureCause.Unclassified);
 }

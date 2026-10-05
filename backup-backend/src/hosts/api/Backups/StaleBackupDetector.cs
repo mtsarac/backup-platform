@@ -2,7 +2,7 @@ using BackupPlatform.Application.Backups;
 
 namespace BackupPlatform.Api.Backups;
 
-/// <summary>Expired leases are terminal AgentLost outcomes; polling never automatically creates a replacement attempt.</summary>
+/// <summary>An expired lease ends its attempt as AgentLost. The run's retry policy then decides between RetryPending and a terminal outcome; the new attempt itself is created by <see cref="BackupRetryWorker"/>, never by polling.</summary>
 public sealed class StaleBackupDetector(IServiceScopeFactory scopes, TimeProvider time, ILogger<StaleBackupDetector> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

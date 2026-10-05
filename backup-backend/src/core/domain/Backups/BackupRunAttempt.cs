@@ -8,7 +8,7 @@ public sealed class BackupRunAttempt : ITenantOwned
     private readonly List<BackupArtifact> _artifacts = [];
     private IReadOnlyList<BackupArtifact>? _artifactView;
     private BackupRunAttempt() { TenantId = null!; AgentId = null!; }
-    internal BackupRunAttempt(Guid id, TenantId tenantId, Guid runId, AgentId agentId, int number, DateTimeOffset createdAt)
+    internal BackupRunAttempt(Guid id, TenantId tenantId, Guid runId, AgentId agentId, int number, DateTimeOffset createdAt, DateTimeOffset? eligibleAt = null)
     {
         BackupGuard.Id(id);
         Id = id;
@@ -17,6 +17,7 @@ public sealed class BackupRunAttempt : ITenantOwned
         AgentId = agentId;
         Number = number;
         CreatedAt = createdAt;
+        EligibleAt = eligibleAt is { } due && due < createdAt ? due : createdAt;
         Status = BackupStatus.Pending;
     }
     public Guid Id { get; private set; }
@@ -26,6 +27,8 @@ public sealed class BackupRunAttempt : ITenantOwned
     public int Number { get; private set; }
     public BackupStatus Status { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
+    /// <summary>When this attempt became eligible to run: its creation for a first or manual attempt, the scheduled due time for an automatic retry. Claim order is EligibleAt, run creation, run id.</summary>
+    public DateTimeOffset EligibleAt { get; private set; }
     public DateTimeOffset? LeasedAt { get; private set; }
     public DateTimeOffset? StartedAt { get; private set; }
     public DateTimeOffset? CompletedAt { get; private set; }
@@ -97,8 +100,7 @@ public sealed class BackupRunAttempt : ITenantOwned
         RequireLease(token, now);
         if (completion.Status is not (BackupStatus.Succeeded or BackupStatus.Failed or BackupStatus.Cancelled))
             throw new ArgumentException("Invalid terminal outcome.");
-        if (completion.Status == BackupStatus.Failed && completion.FailureCode is not
-            ("PreCheckFailed" or "SqlBackupFailed" or "VerificationFailed" or "HashFailed" or "StorageWriteFailed" or "ReplicaVerificationFailed" or "InternalError"))
+        if (completion.Status == BackupStatus.Failed && !BackupFailureCodes.IsAgentReportable(completion.FailureCode))
             throw new ArgumentException("Invalid failure category.");
         if (completion.Status == BackupStatus.Cancelled && completion.FailureCode is not (null or "Cancelled"))
             throw new ArgumentException("Invalid cancellation category.");
@@ -130,6 +132,7 @@ public sealed class BackupRunAttempt : ITenantOwned
         (completion.Artifact is null ? _artifacts.Count == 0 : _artifacts.Count == 1 && _artifacts[0].SameResult(completion.Artifact));
     private void Finish(BackupStatus status, string? reason, DateTimeOffset now)
     {
+        if (IsTerminal) throw new InvalidOperationException("Terminal outcome is immutable.");
         if (reason is not null) BackupGuard.Reference(reason);
         Status = status;
         TerminalReason = reason;

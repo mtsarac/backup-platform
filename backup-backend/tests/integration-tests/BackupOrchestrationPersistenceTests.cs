@@ -25,11 +25,11 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
         var seed = await SeedAsync();
         var requests = Enumerable.Range(0, 12).Select(_ => Store().StartRunAsync(seed.TenantId, seed.JobId, "same-request", Now, default));
         var runs = await Task.WhenAll(requests);
-        Assert.Single(runs.Select(run => run!.Id).Distinct());
+        Assert.Single(runs.Select(run => run.Run!.Id).Distinct());
         var polls = Enumerable.Range(0, 12).Select(_ => Store().ClaimNextAsync(seed.TenantId, seed.AgentId, Now, Lease, default));
         var claims = await Task.WhenAll(polls);
         var claim = Assert.Single(claims.OfType<BackupClaim>());
-        Assert.Equal(runs[0]!.Id, claim.Run.Id);
+        Assert.Equal(runs[0].Run!.Id, claim.Run.Id);
         Assert.Null(await Store().ClaimNextAsync(seed.TenantId, seed.AgentId, Now.AddSeconds(1), Lease, default));
         Assert.Single((await Store().GetRunAsync(seed.TenantId, claim.Run.Id, default))!.Attempts);
     }
@@ -38,9 +38,9 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
     {
         var seed = await SeedAsync();
         var store = Store();
-        var first = await store.StartRunAsync(seed.TenantId, seed.JobId, "first", Now, default);
-        var cancelled = await store.StartRunAsync(seed.TenantId, seed.JobId, "cancelled", Now.AddSeconds(1), default);
-        var next = await store.StartRunAsync(seed.TenantId, seed.JobId, "next", Now.AddSeconds(2), default);
+        var first = (await store.StartRunAsync(seed.TenantId, seed.JobId, "first", Now, default)).Run;
+        var cancelled = (await store.StartRunAsync(seed.TenantId, seed.JobId, "cancelled", Now.AddSeconds(1), default)).Run;
+        var next = (await store.StartRunAsync(seed.TenantId, seed.JobId, "next", Now.AddSeconds(2), default)).Run;
         var claim = (await store.ClaimNextAsync(seed.TenantId, seed.AgentId, Now, Lease, default))!;
         Assert.Equal(first!.Id, claim.Run.Id);
         Assert.Equal(BackupStatus.Cancelled, (await store.RequestCancellationAsync(seed.TenantId, cancelled!.Id, Now, default))!.Status);
@@ -54,7 +54,7 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
         var seed = await SeedAsync();
         var other = await SeedAsync();
         var store = Store();
-        var run = await store.StartRunAsync(seed.TenantId, seed.JobId, "isolation", Now, default);
+        var run = (await store.StartRunAsync(seed.TenantId, seed.JobId, "isolation", Now, default)).Run;
         var claim = (await store.ClaimNextAsync(seed.TenantId, seed.AgentId, Now, Lease, default))!;
         var command = Command(claim, Now);
         Assert.Equal(BackupMutationResult.NotFound, await store.StartAttemptAsync(command with { TenantId = other.TenantId }, default));
@@ -73,7 +73,7 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
         await Assert.ThrowsAsync<InvalidOperationException>(() => scoped.SaveChangesAsync());
     }
     [Fact]
-    public async Task RunningCancellationRenewalProgressAndExpiryPreserveOutcomeWithoutRetry()
+    public async Task CancellationRequestedWhileRunningOutranksAgentLostExpiryAndNeverRetries()
     {
         var isolated = new PostgreSqlFixture();
         await isolated.InitializeAsync();
@@ -81,25 +81,41 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
         {
             var seed = await SeedAsync(isolated);
             var store = Store(isolated);
-            var run = (await store.StartRunAsync(seed.TenantId, seed.JobId, "expiry", Now, default))!;
+            var run = (await store.StartRunAsync(seed.TenantId, seed.JobId, "expiry", Now, default)).Run!;
             var claim = (await store.ClaimNextAsync(seed.TenantId, seed.AgentId, Now, Lease, default))!;
             var command = Command(claim, Now);
             Assert.Equal(BackupMutationResult.Accepted, await store.StartAttemptAsync(command, default));
             Assert.Equal(BackupMutationResult.Accepted, await store.ReportProgressAsync(command with { Now = Now.AddSeconds(10) }, new BackupProgress("Uploading", 42.5), default));
             var cancelling = await store.RequestCancellationAsync(seed.TenantId, run.Id, Now.AddSeconds(15), default);
             Assert.Equal(BackupStatus.Running, cancelling!.Status);
+            Assert.Equal(Now.AddSeconds(15), cancelling.CancellationRequestedAt);
             var renewed = await store.RenewLeaseAsync(command with { Now = Now.AddSeconds(20) }, Lease, default);
             Assert.True(renewed!.CancellationRequested);
             Assert.Equal(Now.AddSeconds(140), renewed.LeaseExpiresAt);
             Assert.Equal(0, await store.ExpireStaleAsync(Now.AddSeconds(120), default));
+            Assert.Equal(BackupStatus.Running, (await store.GetRunAsync(seed.TenantId, run.Id, default))!.Status);
             Assert.Equal(1, await store.ExpireStaleAsync(Now.AddSeconds(140), default));
             Assert.Null(await store.RenewLeaseAsync(command with { Now = Now.AddSeconds(140) }, Lease, default));
             Assert.Equal(BackupMutationResult.Conflict, await store.CompleteAttemptAsync(command with { Now = Now.AddSeconds(140) }, new Completion("Failed", "InternalError", null), default));
             var persisted = (await store.GetRunAsync(seed.TenantId, run.Id, default))!;
-            Assert.Equal(BackupStatus.AgentLost, persisted.Status);
-            Assert.Single(persisted.Attempts);
-            Assert.Equal(42.5, persisted.CurrentAttempt.ProgressPercent);
+            // The attempt keeps the truth (the agent vanished); the run keeps the operator's decision.
+            Assert.Equal(BackupStatus.Cancelled, persisted.Status);
+            Assert.Equal(BackupFailureCodes.Cancelled, persisted.TerminalReason);
+            Assert.Equal(BackupRetryState.None, persisted.RetryState);
+            Assert.Null(persisted.NextAttemptAt);
+            Assert.Equal(Now.AddSeconds(140), persisted.CompletedAt);
+            var attempt = Assert.Single(persisted.Attempts);
+            Assert.Equal(BackupStatus.AgentLost, attempt.Status);
+            Assert.Equal(BackupFailureCodes.AgentLost, attempt.TerminalReason);
+            Assert.Equal(42.5, attempt.ProgressPercent);
+            Assert.Contains(persisted.Facts, fact => fact.Kind == "BackupCancellationRequested");
+            Assert.Single(persisted.Facts, fact => fact.Kind == "BackupRunCancelled");
+            Assert.DoesNotContain(persisted.Facts, fact => fact.Kind is "BackupRetryScheduled" or "BackupRetryStarted" or "BackupRunFailed");
+            // Nothing is scheduled, claimable or manually retryable afterwards, however much time passes.
+            Assert.Empty(await store.StartDueRetriesAsync(Now.AddDays(1), 100, default));
+            Assert.Equal(BackupRetryOutcome.Cancelled, (await store.RetryRunAsync(seed.TenantId, run.Id, Now.AddDays(1), default)).Outcome);
             Assert.Null(await store.ClaimNextAsync(seed.TenantId, seed.AgentId, Now.AddSeconds(141), Lease, default));
+            Assert.Single((await store.GetRunAsync(seed.TenantId, run.Id, default))!.Attempts);
         }
         finally
         {
@@ -112,7 +128,7 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
         var seed = await SeedAsync();
         var other = await SeedAsync();
         var store = Store();
-        var run = (await store.StartRunAsync(seed.TenantId, seed.JobId, "complete", Now, default))!;
+        var run = (await store.StartRunAsync(seed.TenantId, seed.JobId, "complete", Now, default)).Run!;
         var claim = (await store.ClaimNextAsync(seed.TenantId, seed.AgentId, Now, Lease, default))!;
         var command = Command(claim, Now);
         Assert.Equal(BackupMutationResult.Accepted, await store.StartAttemptAsync(command, default));
@@ -146,7 +162,7 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
     {
         var seed = await SeedAsync();
         var store = Store();
-        var run = (await store.StartRunAsync(seed.TenantId, seed.JobId, "multiple-replicas", Now, default))!;
+        var run = (await store.StartRunAsync(seed.TenantId, seed.JobId, "multiple-replicas", Now, default)).Run!;
         var claim = (await store.ClaimNextAsync(seed.TenantId, seed.AgentId, Now, Lease, default))!;
         var command = Command(claim, Now);
         Assert.Equal(BackupMutationResult.Accepted, await store.StartAttemptAsync(command, default));
@@ -218,21 +234,39 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
         Assert.Equal(PostgresErrorCodes.RestrictViolation, deleteError.SqlState);
     }
     [Fact]
-    public async Task DatabaseEnforcesAttemptNumberAndOneActiveAttemptPerAgent()
+    public async Task DatabaseEnforcesAttemptNumberLeaseTokenAndLifecycleInvariants()
     {
         var seed = await SeedAsync();
         var store = Store();
-        var first = (await store.StartRunAsync(seed.TenantId, seed.JobId, "a", Now, default))!;
-        var second = (await store.StartRunAsync(seed.TenantId, seed.JobId, "b", Now.AddSeconds(1), default))!;
-        await store.ClaimNextAsync(seed.TenantId, seed.AgentId, Now, Lease, default);
+        var first = (await store.StartRunAsync(seed.TenantId, seed.JobId, "a", Now, default)).Run!;
+        var second = (await store.StartRunAsync(seed.TenantId, seed.JobId, "b", Now.AddSeconds(1), default)).Run!;
+        var claim = (await store.ClaimNextAsync(seed.TenantId, seed.AgentId, Now, Lease, default))!;
+        Assert.Equal(first.Id, claim.Run.Id);
+        var pending = second.CurrentAttempt.Id;
         await using var context = fixture.CreatePlatformContext();
-        var numberError = await Assert.ThrowsAsync<PostgresException>(() => context.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE backup_run_attempts SET \"RunId\" = {first.Id} WHERE \"Id\" = {second.CurrentAttempt.Id}"));
-        Assert.Equal(PostgresErrorCodes.UniqueViolation, numberError.SqlState);
+        // Both attempts are number 1 of their own run; moving one under the other run would duplicate (Tenant, Run, Number).
+        await AssertViolationAsync(context, PostgresErrorCodes.UniqueViolation, "IX_backup_run_attempts_TenantId_RunId_Number",
+            $"UPDATE backup_run_attempts SET \"RunId\" = {first.Id} WHERE \"Id\" = {pending}");
+        // A lease token identifies exactly one attempt, so a stolen or duplicated token cannot fence two attempts at once.
+        await AssertViolationAsync(context, PostgresErrorCodes.UniqueViolation, "IX_backup_run_attempts_LeaseToken",
+            $"UPDATE backup_run_attempts SET \"Status\" = 2, \"LeaseToken\" = {claim.Attempt.LeaseToken}, \"LeaseExpiresAt\" = {Now.AddMinutes(2)} WHERE \"Id\" = {pending}");
         var token = Guid.NewGuid();
-        var leaseError = await Assert.ThrowsAsync<PostgresException>(() => context.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE backup_run_attempts SET \"Status\" = 2, \"LeaseToken\" = {token}, \"LeaseExpiresAt\" = {Now.AddMinutes(2)} WHERE \"Id\" = {second.CurrentAttempt.Id}"));
-        Assert.Equal(PostgresErrorCodes.UniqueViolation, leaseError.SqlState);
+        await AssertViolationAsync(context, PostgresErrorCodes.CheckViolation, "ck_backup_attempt_lease",
+            $"UPDATE backup_run_attempts SET \"Status\" = 2 WHERE \"Id\" = {pending}");
+        await AssertViolationAsync(context, PostgresErrorCodes.CheckViolation, "ck_backup_attempt_started",
+            $"UPDATE backup_run_attempts SET \"Status\" = 3, \"LeaseToken\" = {token}, \"LeaseExpiresAt\" = {Now.AddMinutes(2)} WHERE \"Id\" = {pending}");
+        await AssertViolationAsync(context, PostgresErrorCodes.CheckViolation, "ck_backup_attempt_terminal",
+            $"UPDATE backup_run_attempts SET \"Status\" = 5 WHERE \"Id\" = {pending}");
+        // RetryPending describes a run waiting for its next attempt; an attempt itself is never in it.
+        await AssertViolationAsync(context, PostgresErrorCodes.CheckViolation, "ck_backup_run_attempts_status",
+            $"UPDATE backup_run_attempts SET \"Status\" = 8 WHERE \"Id\" = {pending}");
+        Assert.Equal(BackupStatus.Pending, (await store.GetRunAsync(seed.TenantId, second.Id, default))!.CurrentAttempt.Status);
+    }
+    private static async Task AssertViolationAsync(PlatformDbContext context, string sqlState, string constraint, FormattableString sql)
+    {
+        var error = await Assert.ThrowsAsync<PostgresException>(() => context.Database.ExecuteSqlInterpolatedAsync(sql));
+        Assert.Equal(sqlState, error.SqlState);
+        Assert.Equal(constraint, error.ConstraintName);
     }
     private async Task<Seed> SeedAsync(PostgreSqlFixture? database = null)
     {
@@ -246,14 +280,14 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
             context.Agents.Add(agent);
             await context.SaveChangesAsync();
         }
-        var job = (await Store(database).CreateJobAsync(new BackupJob(Guid.NewGuid(), tenantId, "Database", agentId, Configuration(), Now), default))!;
+        var job = (await Store(database).CreateJobAsync(new BackupJob(Guid.NewGuid(), tenantId, "Database", agentId, Configuration(), Now, overlapPolicy: BackupOverlapPolicy.Queue), default))!;
         return new Seed(tenantId, agentId, job.Id);
     }
     private async Task<CompletedSeed> CompletedAsync()
     {
         var seed = await SeedAsync();
         var store = Store();
-        var run = (await store.StartRunAsync(seed.TenantId, seed.JobId, "complete", Now, default))!;
+        var run = (await store.StartRunAsync(seed.TenantId, seed.JobId, "complete", Now, default)).Run!;
         var claim = (await store.ClaimNextAsync(seed.TenantId, seed.AgentId, Now, Lease, default))!;
         var command = Command(claim, Now);
         Assert.Equal(BackupMutationResult.Accepted, await store.StartAttemptAsync(command, default));

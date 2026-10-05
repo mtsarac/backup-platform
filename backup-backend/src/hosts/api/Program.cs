@@ -11,6 +11,7 @@ builder.Services.AddPlatformSecurity();
 var app = builder.Build();
 _ = app.Services.GetRequiredService<DbContextOptions<PlatformDbContext>>();
 _ = app.Services.GetRequiredService<BackupPlatform.Agents.Connectivity.AgentConnectivityOptions>();
+_ = app.Services.GetRequiredService<BackupPlatform.Application.Backups.BackupExecutionOptions>();
 
 if (isBootstrap)
 {

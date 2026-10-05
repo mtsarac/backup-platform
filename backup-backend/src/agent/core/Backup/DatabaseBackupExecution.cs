@@ -148,7 +148,7 @@ internal sealed class DatabaseBackupExecution
         if (!_preCheck.CanProceed)
         {
             var first = _preCheck.Items.First(item => item.Status == BackupPreCheckStatus.Failed);
-            throw Fail(stage, first.ReasonCode, first.Message, kind: BackupFailureKind.PreCheckFailed);
+            throw Fail(stage, first.ReasonCode, first.Message, kind: BackupFailureKind.PreCheckFailed, cause: first.Cause);
         }
     }
 
@@ -283,12 +283,13 @@ internal sealed class DatabaseBackupExecution
             }
             catch (StorageException exception)
             {
-                throw Fail(stage, StorageReason(exception.Kind), exception.Message, exception, BackupFailureKind.StorageWriteFailed);
+                throw Fail(stage, StorageReason(exception.Kind), exception.Message, exception, BackupFailureKind.StorageWriteFailed, StorageCause(exception.Kind));
             }
             catch (Exception exception) when (exception is not OperationCanceledException and not StageFailedException)
             {
                 throw Fail(stage, BackupPipelineReasons.StorageUnexpected,
-                    "The storage provider failed unexpectedly. Details are in the agent log.", exception, BackupFailureKind.StorageWriteFailed);
+                    "The storage provider failed unexpectedly. Details are in the agent log.", exception, BackupFailureKind.StorageWriteFailed,
+                    BackupFailureCause.StorageUnavailable);
             }
 
             // From here on an object exists under the final key; if anything below fails it must not be left behind unverified.
@@ -296,7 +297,8 @@ internal sealed class DatabaseBackupExecution
             if (stored.SizeBytes != artifact.SizeBytes || (stored.Checksum is { } checksum && checksum != artifact.Checksum))
             {
                 throw Fail(stage, BackupPipelineReasons.StorageIntegrityMismatch,
-                    "The storage reported a different size or checksum than the artifact that was sent.", kind: BackupFailureKind.StorageWriteFailed);
+                    "The storage reported a different size or checksum than the artifact that was sent.", kind: BackupFailureKind.StorageWriteFailed,
+                    cause: BackupFailureCause.StorageUnavailable);
             }
         }
     }
@@ -531,19 +533,21 @@ internal sealed class DatabaseBackupExecution
         string reason,
         string message,
         Exception? exception = null,
-        BackupFailureKind? kind = null) =>
-        new(Classify(stage, reason, message, exception, kind));
+        BackupFailureKind? kind = null,
+        BackupFailureCause cause = BackupFailureCause.Unclassified) =>
+        new(Classify(stage, reason, message, exception, kind, cause));
 
     private BackupFailure Classify(
         BackupExecutionStage stage,
         string reason,
         string message,
         Exception? exception,
-        BackupFailureKind? kind = null)
+        BackupFailureKind? kind = null,
+        BackupFailureCause cause = BackupFailureCause.Unclassified)
     {
         var resolved = kind ?? KindOf(stage);
         DatabaseBackupPipeline.LogStageFailed(_logger, exception, stage, resolved, reason);
-        return new BackupFailure(resolved, stage, reason, message);
+        return new BackupFailure(resolved, stage, reason, message, cause);
     }
 
     private static BackupFailureKind KindOf(BackupExecutionStage stage) => stage switch
@@ -555,6 +559,15 @@ internal sealed class DatabaseBackupExecution
         BackupExecutionStage.PreparingArtifact or BackupExecutionStage.HashingArtifact => BackupFailureKind.ArtifactPreparationFailed,
         BackupExecutionStage.Uploading => BackupFailureKind.StorageWriteFailed,
         _ => BackupFailureKind.ReplicaVerificationFailed
+    };
+
+    private static BackupFailureCause StorageCause(StorageFailureKind kind) => kind switch
+    {
+        StorageFailureKind.AccessDenied => BackupFailureCause.PermissionDenied,
+        StorageFailureKind.InvalidConfiguration => BackupFailureCause.InvalidConfiguration,
+        StorageFailureKind.NotSupported => BackupFailureCause.Unsupported,
+        StorageFailureKind.InsufficientSpace or StorageFailureKind.AlreadyExists => BackupFailureCause.Unclassified,
+        _ => BackupFailureCause.StorageUnavailable
     };
 
     private static string StorageReason(StorageFailureKind kind) => kind switch

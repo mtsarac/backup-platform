@@ -6,11 +6,6 @@ namespace BackupPlatform.Application.Backups;
 
 public static class BackupInputValidation
 {
-    private static readonly HashSet<string> Reasons = new(StringComparer.Ordinal)
-    {
-        "PreCheckFailed", "SqlBackupFailed", "VerificationFailed", "HashFailed",
-        "StorageWriteFailed", "ReplicaVerificationFailed", "InternalError", "Cancelled"
-    };
     private static readonly HashSet<string> Stages = new(StringComparer.Ordinal)
     {
         "Preparing", "BackingUp", "Verifying", "HashingSource", "PreparingArtifact", "HashingArtifact", "Uploading", "VerifyingReplica", "Completed", "Failed", "Cancelled"
@@ -41,7 +36,7 @@ public static class BackupInputValidation
     {
         if (request.LeaseToken == Guid.Empty) return false;
         if (request.Status == "Cancelled") return request.Artifact is null && request.FailureCode is null or "Cancelled";
-        if (request.Status == "Failed") return request.Artifact is null && request.FailureCode is not null && Reasons.Contains(request.FailureCode) && request.FailureCode != "Cancelled";
+        if (request.Status == "Failed") return request.Artifact is null && request.FailureCode is not null && BackupFailureCodes.IsAgentReportable(request.FailureCode);
         if (request.Status != "Succeeded" || request.FailureCode is not null || request.Artifact is not { } a) return false;
         if (a.SizeBytes <= 0 || a.CreatedAt == default || a.ChecksumAlgorithm != "sha256" || !Checksum(a.SourceChecksum) || !Checksum(a.ArtifactChecksum) ||
             a.Replicas is not { Count: > 0 and <= 8 } || !Metadata(a, configuration)) return false;

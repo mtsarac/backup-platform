@@ -80,12 +80,49 @@ public enum BackupFailureKind
 }
 
 /// <summary>
+/// An engine-independent, coarse reason a pre-check or an execution failed, for consumers that must tell a transient condition from
+/// a permanent one without knowing engine reason codes. <see cref="Unclassified"/> means the provider could not say.
+/// </summary>
+public enum BackupFailureCause
+{
+    /// <summary>The provider did not classify the failure.</summary>
+    Unclassified = 0,
+
+    /// <summary>The database server could not be reached or the connection broke.</summary>
+    DatabaseUnavailable,
+
+    /// <summary>The database server did not answer, or the statement did not finish, within its time limit.</summary>
+    Timeout,
+
+    /// <summary>The database to back up does not exist on the server.</summary>
+    DatabaseNotFound,
+
+    /// <summary>The connection or backup settings are invalid.</summary>
+    InvalidConfiguration,
+
+    /// <summary>The engine or the requested capability cannot do what was asked.</summary>
+    Unsupported,
+
+    /// <summary>The server rejected the credentials.</summary>
+    AuthenticationFailed,
+
+    /// <summary>The credentials are valid but lack a required permission.</summary>
+    PermissionDenied,
+
+    /// <summary>The staging directory is unusable (wrong, missing, not writable, not shared by both sides, or full).</summary>
+    StagingInvalid,
+
+    /// <summary>A storage destination could not be reached or written.</summary>
+    StorageUnavailable
+}
+
+/// <summary>
 /// Why an execution did not succeed. <see cref="ReasonCode"/> is stable and machine-readable; <see cref="Message"/> is a fixed
 /// user-safe sentence: it never embeds engine exception text, credentials, connection strings or directory paths.
 /// </summary>
 public sealed record BackupFailure
 {
-    public BackupFailure(BackupFailureKind kind, BackupExecutionStage stage, string reasonCode, string message)
+    public BackupFailure(BackupFailureKind kind, BackupExecutionStage stage, string reasonCode, string message, BackupFailureCause cause = BackupFailureCause.Unclassified)
     {
         if (!Enum.IsDefined(kind))
         {
@@ -97,12 +134,18 @@ public sealed record BackupFailure
             throw new ArgumentOutOfRangeException(nameof(stage), stage, "Unknown backup stage.");
         }
 
+        if (!Enum.IsDefined(cause))
+        {
+            throw new ArgumentOutOfRangeException(nameof(cause), cause, "Unknown failure cause.");
+        }
+
         ArgumentException.ThrowIfNullOrWhiteSpace(reasonCode);
         ArgumentException.ThrowIfNullOrWhiteSpace(message);
         Kind = kind;
         Stage = stage;
         ReasonCode = reasonCode;
         Message = message;
+        Cause = cause;
     }
 
     public BackupFailureKind Kind { get; }
@@ -112,6 +155,9 @@ public sealed record BackupFailure
 
     public string ReasonCode { get; }
     public string Message { get; }
+
+    /// <summary>Engine-independent classification of the failure; <see cref="BackupFailureCause.Unclassified"/> when unknown.</summary>
+    public BackupFailureCause Cause { get; }
 }
 
 /// <summary>A non-fatal observation (an option fell back, a check could not be verified, a probe left something behind).</summary>

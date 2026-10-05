@@ -17,6 +17,7 @@ public static class BackupEndpoints
         tenant.MapGet("/backup-jobs/{jobId:guid}/runs", ListRunsAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
         tenant.MapGet("/backup-runs/{runId:guid}", GetRunAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
         tenant.MapPost("/backup-runs/{runId:guid}/cancel", CancelAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
+        tenant.MapPost("/backup-runs/{runId:guid}/retry", RetryAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
         return endpoints;
     }
 
@@ -33,7 +34,7 @@ public static class BackupEndpoints
     private static async Task<IResult> GetJobAsync(Guid jobId, ITenantContext tenant, IBackupRunStore store, CancellationToken cancellationToken)
     {
         var job = await store.GetJobAsync(tenant.TenantId!, jobId, cancellationToken);
-        return job is null ? Results.NotFound() : Results.Ok(new BackupJobView(job.Id, job.AgentId.Value, job.Name, job.BackupType, job.OverlapPolicy, job.Enabled, job.CreatedAt, BackupOrchestrator.ToWire(job.Configuration)));
+        return job is null ? Results.NotFound() : Results.Ok(BackupOrchestrator.ToView(job));
     }
 
     private static async Task<IResult> StartRunAsync(Guid jobId, HttpContext context, ITenantContext tenant, BackupOrchestrator service,
@@ -41,10 +42,18 @@ public static class BackupEndpoints
     {
         var keys = context.Request.Headers["Idempotency-Key"];
         if (keys.Count != 1 || !BackupInputValidation.IsValidKey(keys[0])) return Invalid("A valid Idempotency-Key is required (1-128 printable ASCII characters).");
-        var run = await service.StartRunAsync(tenant.TenantId!, jobId, keys[0]!, cancellationToken);
-        if (run is null) return Results.NotFound();
-        await HintAsync(push, run.AgentId, "WorkAvailable", logger);
-        return Results.Ok(BackupOrchestrator.ToView(run));
+        var result = await service.StartRunAsync(tenant.TenantId!, jobId, keys[0]!, cancellationToken);
+        switch (result.Outcome)
+        {
+            case BackupStartOutcome.NotFound:
+                return Results.NotFound();
+            case BackupStartOutcome.SkippedOverlap:
+                // Never a silent skip: the caller learns that nothing was started and which run is in the way.
+                return Results.Conflict(new { error = "overlap_skipped", message = "The job's overlap policy is Skip and another run of this job is active; no run was started.", activeRunId = result.ActiveRunId });
+            default:
+                await HintAsync(push, result.Run!.AgentId, "WorkAvailable", logger);
+                return Results.Ok(BackupOrchestrator.ToView(result.Run));
+        }
     }
 
     private static async Task<IResult> ListRunsAsync(Guid? jobId, int? limit, ITenantContext tenant, IBackupRunStore store, CancellationToken cancellationToken)
@@ -67,6 +76,30 @@ public static class BackupEndpoints
         if (run is null) return Results.NotFound();
         await HintAsync(push, run.AgentId, "CancellationRequested", logger);
         return Results.Ok(BackupOrchestrator.ToView(run));
+    }
+
+    private static async Task<IResult> RetryAsync(Guid runId, ITenantContext tenant, BackupOrchestrator service,
+        IAgentPushDispatcher push, ILogger<BackupOrchestrator> logger, CancellationToken cancellationToken)
+    {
+        var result = await service.RetryAsync(tenant.TenantId!, runId, cancellationToken);
+        switch (result.Outcome)
+        {
+            case BackupRetryOutcome.NotFound:
+                return Results.NotFound();
+            case BackupRetryOutcome.Started:
+                await HintAsync(push, result.Run!.AgentId, "WorkAvailable", logger);
+                return Results.Ok(BackupOrchestrator.ToView(result.Run));
+            default:
+                var (reason, message) = result.Outcome switch
+                {
+                    BackupRetryOutcome.Succeeded => ("succeeded", "A successful run is never retried."),
+                    BackupRetryOutcome.Cancelled => ("cancelled", "A cancelled run is not retried."),
+                    BackupRetryOutcome.InProgress => ("in_progress", "An attempt is already queued or running."),
+                    BackupRetryOutcome.AttemptsExhausted => ("attempts_exhausted", "The run has used every attempt its retry policy allows."),
+                    _ => ("job_overlap", "The job's overlap policy forbids reopening this run while another run of the job is active.")
+                };
+                return Results.Conflict(new { error = "retry_not_allowed", reason, message });
+        }
     }
 
     private static async Task HintAsync(IAgentPushDispatcher push, BackupPlatform.Domain.Identity.AgentId agentId, string reason, ILogger logger)

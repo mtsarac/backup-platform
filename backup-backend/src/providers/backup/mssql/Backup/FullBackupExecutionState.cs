@@ -40,7 +40,9 @@ internal sealed class FullBackupExecutionState
 
     /// <summary>Records the primary outcome. The first one wins.</summary>
     public void Fail(BackupFailureKind kind, BackupExecutionStage stage, string reasonCode, string message) =>
-        Failure ??= new BackupFailure(kind, stage, reasonCode, message);
+        Failure ??= new BackupFailure(
+            kind, stage, reasonCode, message,
+            kind == BackupFailureKind.Cancelled ? BackupFailureCause.Unclassified : SqlServerFailureCauses.ForBackupReason(reasonCode));
 
     public void Cancel(BackupExecutionStage stage) =>
         Fail(BackupFailureKind.Cancelled, stage, "cancelled", "The backup was cancelled.");

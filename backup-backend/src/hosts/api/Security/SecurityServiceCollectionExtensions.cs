@@ -41,9 +41,17 @@ public static class SecurityServiceCollectionExtensions
         AddBrowserAuthentication(services);
         AddAgentSecurity(services);
         AddAgentConnectivity(services);
+        services.TryAddSingleton(provider =>
+        {
+            var options = provider.GetRequiredService<IConfiguration>().GetSection("Backups").Get<BackupExecutionOptions>() ?? new BackupExecutionOptions();
+            options.ThrowIfInvalid();
+            return options;
+        });
         services.AddScoped<IBackupRunStore, PostgreSqlBackupRunStore>();
         services.AddScoped<BackupOrchestrator>();
         services.AddHostedService<StaleBackupDetector>();
+        services.AddSingleton<BackupRetryWorker>();
+        services.AddHostedService(provider => provider.GetRequiredService<BackupRetryWorker>());
         AddPolicies(services);
         services.AddAntiforgery(options =>
         {

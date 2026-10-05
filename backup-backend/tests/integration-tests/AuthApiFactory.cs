@@ -23,7 +23,8 @@ internal sealed class AuthApiFactory(
     BackupPlatform.Agents.AgentSecurityOptions? agentOptions = null,
     BackupPlatform.Agents.Connectivity.AgentConnectivityOptions? connectivityOptions = null,
     AgentRateLimitOptions? rateLimitOptions = null,
-    System.Security.Cryptography.X509Certificates.X509Certificate2? kestrelCertificate = null) : WebApplicationFactory<Program>
+    System.Security.Cryptography.X509Certificates.X509Certificate2? kestrelCertificate = null,
+    IReadOnlyDictionary<string, string?>? configuration = null) : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -33,8 +34,8 @@ internal sealed class AuthApiFactory(
             // A real TLS listener on an ephemeral loopback port, for tests that need real sockets (SignalR).
             builder.ConfigureKestrel(kestrel => kestrel.Listen(System.Net.IPAddress.Loopback, 0, listen => listen.UseHttps(kestrelCertificate)));
         }
-        builder.ConfigureAppConfiguration((_, configuration) => configuration.AddInMemoryCollection(
-            new Dictionary<string, string?> { ["ConnectionStrings:Platform"] = connectionString }));
+        builder.ConfigureAppConfiguration((_, builderConfiguration) => builderConfiguration.AddInMemoryCollection(
+            new Dictionary<string, string?> { ["ConnectionStrings:Platform"] = connectionString }.Concat(configuration ?? new Dictionary<string, string?>())));
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<DbContextOptions<PlatformDbContext>>();

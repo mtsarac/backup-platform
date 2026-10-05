@@ -58,9 +58,13 @@ internal static class BackupGuard
     }
 }
 
+/// <summary>
+/// Attempts only ever use Pending..AgentLost. <see cref="RetryPending"/> exists on the run only: the last attempt failed with a
+/// retryable cause, attempts remain, and the next one is scheduled (<see cref="BackupRun.NextAttemptAt"/>).
+/// </summary>
 public enum BackupStatus
 {
-    Pending = 1, Leased = 2, Running = 3, Succeeded = 4, Failed = 5, Cancelled = 6, AgentLost = 7
+    Pending = 1, Leased = 2, Running = 3, Succeeded = 4, Failed = 5, Cancelled = 6, AgentLost = 7, RetryPending = 8
 }
 
 public sealed record BackupCompletion(BackupStatus Status, string? FailureCode, BackupArtifact? Artifact);

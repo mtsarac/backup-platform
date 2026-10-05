@@ -10,6 +10,54 @@ public sealed class DatabaseBackupPipelineTests : IDisposable
 
     public void Dispose() => _h.Dispose();
 
+    [Theory]
+    [InlineData(StorageFailureKind.Io, BackupFailureCause.StorageUnavailable)]
+    [InlineData(StorageFailureKind.Unexpected, BackupFailureCause.StorageUnavailable)]
+    [InlineData(StorageFailureKind.NotFound, BackupFailureCause.StorageUnavailable)]
+    [InlineData(StorageFailureKind.IntegrityMismatch, BackupFailureCause.StorageUnavailable)]
+    [InlineData(StorageFailureKind.AccessDenied, BackupFailureCause.PermissionDenied)]
+    [InlineData(StorageFailureKind.InvalidConfiguration, BackupFailureCause.InvalidConfiguration)]
+    [InlineData(StorageFailureKind.NotSupported, BackupFailureCause.Unsupported)]
+    [InlineData(StorageFailureKind.InsufficientSpace, BackupFailureCause.Unclassified)]
+    [InlineData(StorageFailureKind.AlreadyExists, BackupFailureCause.Unclassified)]
+    public async Task StorageFailuresCarryAnEngineIndependentCause(StorageFailureKind kind, BackupFailureCause cause)
+    {
+        _h.Storage.OnPut = (_, _, _, _) => throw new StorageException(kind, "The storage rejected the write.");
+
+        var result = await _h.RunAsync();
+
+        Assert.Equal(BackupFailureKind.StorageWriteFailed, result.Failure!.Kind);
+        Assert.Equal(cause, result.Failure.Cause);
+    }
+
+    [Fact]
+    public async Task AFailedPreCheckCarriesTheCauseOfItsFirstFailedItem()
+    {
+        _h.Provider.PreCheck = new BackupPreCheckReport(
+        [
+            new BackupPreCheckItem("server.reachable", BackupPreCheckStatus.Failed, "server-unreachable", "The server cannot be reached.", BackupFailureCause.DatabaseUnavailable),
+            new BackupPreCheckItem("permission.backup", BackupPreCheckStatus.Failed, "backup-permission-denied", "No permission.", BackupFailureCause.PermissionDenied)
+        ]);
+
+        var result = await _h.RunAsync();
+
+        Assert.Equal(BackupFailureKind.PreCheckFailed, result.Failure!.Kind);
+        Assert.Equal(BackupFailureCause.DatabaseUnavailable, result.Failure.Cause);
+    }
+
+    [Fact]
+    public async Task AProviderFailureKeepsItsCauseUntouched()
+    {
+        _h.Provider.Execute = (_, _, _) => Task.FromResult(PipelineHarness.FailedResult(
+            FullBackupStatus.Failed,
+            new BackupFailure(BackupFailureKind.SqlBackupFailed, BackupExecutionStage.BackingUp, "backup-timeout", "The backup timed out.", BackupFailureCause.Timeout)));
+
+        var result = await _h.RunAsync();
+
+        Assert.Equal(BackupFailureCause.Timeout, result.Failure!.Cause);
+        Assert.Equal("backup-timeout", result.Failure.ReasonCode);
+    }
+
     [Fact]
     public async Task HappyPathRunsEveryStageInOrderAndProducesSourceArtifactAndReplicaMetadata()
     {

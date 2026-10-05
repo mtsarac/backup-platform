@@ -15,7 +15,16 @@ public enum BackupTaskFailureCode
     StorageWriteFailed,
     ReplicaVerificationFailed,
     InternalError,
-    Cancelled
+    Cancelled,
+    DatabaseUnavailable,
+    OperationTimedOut,
+    StorageUnavailable,
+    DatabaseNotFound,
+    InvalidConfiguration,
+    UnsupportedCapability,
+    AuthenticationFailed,
+    PermissionDenied,
+    StagingInvalid
 }
 
 internal static class BackupTaskResultMapper
@@ -31,7 +40,7 @@ internal static class BackupTaskResultMapper
         {
             LeaseToken = task.LeaseToken,
             Status = result.Status.ToString(),
-            FailureCode = result.Status == DatabaseBackupStatus.Succeeded ? null : MapFailure(result.Failure?.Kind).ToString(),
+            FailureCode = result.Status == DatabaseBackupStatus.Succeeded ? null : MapFailure(result.Failure).ToString(),
             Artifact = artifact
         };
     }
@@ -43,7 +52,23 @@ internal static class BackupTaskResultMapper
         FailureCode = code.ToString()
     };
 
-    private static BackupTaskFailureCode MapFailure(BackupFailureKind? kind) => kind switch
+    private static BackupTaskFailureCode MapFailure(BackupFailure? failure) => failure?.Kind == BackupFailureKind.Cancelled
+        ? BackupTaskFailureCode.Cancelled
+        : failure?.Cause switch
+        {
+            BackupFailureCause.DatabaseUnavailable => BackupTaskFailureCode.DatabaseUnavailable,
+            BackupFailureCause.Timeout => BackupTaskFailureCode.OperationTimedOut,
+            BackupFailureCause.DatabaseNotFound => BackupTaskFailureCode.DatabaseNotFound,
+            BackupFailureCause.InvalidConfiguration => BackupTaskFailureCode.InvalidConfiguration,
+            BackupFailureCause.Unsupported => BackupTaskFailureCode.UnsupportedCapability,
+            BackupFailureCause.AuthenticationFailed => BackupTaskFailureCode.AuthenticationFailed,
+            BackupFailureCause.PermissionDenied => BackupTaskFailureCode.PermissionDenied,
+            BackupFailureCause.StagingInvalid => BackupTaskFailureCode.StagingInvalid,
+            BackupFailureCause.StorageUnavailable => BackupTaskFailureCode.StorageUnavailable,
+            _ => MapKind(failure?.Kind)
+        };
+
+    private static BackupTaskFailureCode MapKind(BackupFailureKind? kind) => kind switch
     {
         BackupFailureKind.PreCheckFailed => BackupTaskFailureCode.PreCheckFailed,
         BackupFailureKind.SqlBackupFailed => BackupTaskFailureCode.SqlBackupFailed,

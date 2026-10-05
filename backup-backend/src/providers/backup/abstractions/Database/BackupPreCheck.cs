@@ -54,7 +54,7 @@ public static class BackupPreCheckIds
 /// <summary>One pre-check result: which check, how it went, why (machine-readable) and what to tell a person.</summary>
 public sealed record BackupPreCheckItem
 {
-    public BackupPreCheckItem(string checkId, BackupPreCheckStatus status, string reasonCode, string message)
+    public BackupPreCheckItem(string checkId, BackupPreCheckStatus status, string reasonCode, string message, BackupFailureCause cause = BackupFailureCause.Unclassified)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(checkId);
         ArgumentException.ThrowIfNullOrWhiteSpace(reasonCode);
@@ -64,10 +64,16 @@ public sealed record BackupPreCheckItem
             throw new ArgumentOutOfRangeException(nameof(status), status, "Unknown pre-check status.");
         }
 
+        if (!Enum.IsDefined(cause))
+        {
+            throw new ArgumentOutOfRangeException(nameof(cause), cause, "Unknown failure cause.");
+        }
+
         CheckId = checkId;
         Status = status;
         ReasonCode = reasonCode;
         Message = message;
+        Cause = cause;
     }
 
     public string CheckId { get; }
@@ -78,6 +84,9 @@ public sealed record BackupPreCheckItem
 
     /// <summary>User-safe diagnostic. Never contains raw engine exception text, credentials or connection strings.</summary>
     public string Message { get; }
+
+    /// <summary>Engine-independent classification of a failed check; <see cref="BackupFailureCause.Unclassified"/> when unknown or not a failure.</summary>
+    public BackupFailureCause Cause { get; }
 }
 
 /// <summary>The ordered results of a pre-check run together with their aggregate.</summary>

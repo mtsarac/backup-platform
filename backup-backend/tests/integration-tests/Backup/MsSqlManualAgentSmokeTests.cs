@@ -87,13 +87,15 @@ public sealed class MsSqlManualAgentSmokeTests(PostgreSqlFixture database, ITest
         Assert.Equal("Failed", detail.GetProperty("status").GetString());
         var attempt = Assert.Single(detail.GetProperty("attempts").EnumerateArray());
         Assert.Equal("Failed", attempt.GetProperty("status").GetString());
-        Assert.Equal("PreCheckFailed", attempt.GetProperty("reasonCode").GetString());
+        Assert.Equal("DatabaseNotFound", attempt.GetProperty("reasonCode").GetString());
+        Assert.False(attempt.GetProperty("retryable").GetBoolean());
+        Assert.Equal("NotRetryable", detail.GetProperty("retry").GetProperty("state").GetString());
         Assert.Empty(attempt.GetProperty("artifacts").EnumerateArray());
         Assert.Empty(Directory.GetFiles(host.StorageDirectory, "*", SearchOption.AllDirectories));
-        output.WriteLine("Actual invalid database: Run Failed -> Attempt Failed / PreCheckFailed; no artifact or storage output.");
+        output.WriteLine("Actual invalid database: Run Failed (NotRetryable) -> Attempt Failed / DatabaseNotFound; no artifact or storage output.");
     }
 
-    private static BackupExecutionConfiguration Configuration(OrchestrationSqlSource sql, string databaseName) => new()
+    internal static BackupExecutionConfiguration Configuration(OrchestrationSqlSource sql, string databaseName) => new()
     {
         Host = sql.Host, Port = sql.Port, Database = databaseName,
         DatabaseCredentialReference = "sql_smoke", TrustServerCertificate = true,
@@ -109,7 +111,7 @@ public sealed class MsSqlManualAgentSmokeTests(PostgreSqlFixture database, ITest
         return AgentWorld.ReadJson(response).GetProperty("id").GetGuid();
     }
 
-    private static async Task<JsonElement> StartRunAsync(TenantSetup tenant, Guid jobId, string key)
+    internal static async Task<JsonElement> StartRunAsync(TenantSetup tenant, Guid jobId, string key)
     {
         using var tokenResponse = await tenant.Admin.GetAsync("/api/auth/antiforgery");
         var token = AgentWorld.ReadJson(tokenResponse).GetProperty("requestToken").GetString()!;

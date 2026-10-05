@@ -296,6 +296,56 @@ public sealed class BackupTaskWorkerTests
     }
 
     [Theory]
+    [InlineData(BackupFailureKind.PreCheckFailed, BackupFailureCause.DatabaseUnavailable, "DatabaseUnavailable")]
+    [InlineData(BackupFailureKind.SqlBackupFailed, BackupFailureCause.Timeout, "OperationTimedOut")]
+    [InlineData(BackupFailureKind.PreCheckFailed, BackupFailureCause.DatabaseNotFound, "DatabaseNotFound")]
+    [InlineData(BackupFailureKind.PreCheckFailed, BackupFailureCause.InvalidConfiguration, "InvalidConfiguration")]
+    [InlineData(BackupFailureKind.PreCheckFailed, BackupFailureCause.Unsupported, "UnsupportedCapability")]
+    [InlineData(BackupFailureKind.PreCheckFailed, BackupFailureCause.AuthenticationFailed, "AuthenticationFailed")]
+    [InlineData(BackupFailureKind.SqlBackupFailed, BackupFailureCause.PermissionDenied, "PermissionDenied")]
+    [InlineData(BackupFailureKind.PreCheckFailed, BackupFailureCause.StagingInvalid, "StagingInvalid")]
+    [InlineData(BackupFailureKind.StorageWriteFailed, BackupFailureCause.StorageUnavailable, "StorageUnavailable")]
+    [InlineData(BackupFailureKind.PreCheckFailed, BackupFailureCause.Unclassified, "PreCheckFailed")]
+    [InlineData(BackupFailureKind.StorageWriteFailed, BackupFailureCause.Unclassified, "StorageWriteFailed")]
+    public async Task Failure_cause_decides_the_wire_code_before_the_kind_and_no_diagnostics_are_forwarded(
+        BackupFailureKind kind, BackupFailureCause cause, string expected)
+    {
+        await using var harness = new BackupTaskHarness();
+        harness.Pipeline.Execute = (_, _, _) => Task.FromResult(new DatabaseBackupPipelineResult
+        {
+            Status = DatabaseBackupStatus.Failed, FinalStage = BackupExecutionStage.Failed,
+            StartedAt = harness.Time.GetUtcNow(), FinishedAt = harness.Time.GetUtcNow(),
+            Failure = new BackupFailure(kind, BackupExecutionStage.BackingUp, "internal-detail", "password=should-not-be-forwarded", cause)
+        });
+        harness.Start();
+        Assert.True(harness.Worker.TryPublish(harness.Envelope(false)));
+        await Wait.UntilAsync(() => harness.Client.Completions.Count == 1, "failure result");
+        var completion = Assert.Single(harness.Client.Completions);
+        Assert.Equal("Failed", completion.Status);
+        Assert.Equal(expected, completion.FailureCode);
+        Assert.DoesNotContain("should-not-be-forwarded", JsonSerializer.Serialize(completion), StringComparison.Ordinal);
+        Assert.DoesNotContain("internal-detail", JsonSerializer.Serialize(completion), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Cancellation_stays_cancelled_whatever_cause_is_attached()
+    {
+        await using var harness = new BackupTaskHarness();
+        harness.Pipeline.Execute = (_, _, _) => Task.FromResult(new DatabaseBackupPipelineResult
+        {
+            Status = DatabaseBackupStatus.Cancelled, FinalStage = BackupExecutionStage.Cancelled,
+            StartedAt = harness.Time.GetUtcNow(), FinishedAt = harness.Time.GetUtcNow(),
+            Failure = new BackupFailure(BackupFailureKind.Cancelled, BackupExecutionStage.BackingUp, "cancelled", "The backup was cancelled.", BackupFailureCause.Timeout)
+        });
+        harness.Start();
+        Assert.True(harness.Worker.TryPublish(harness.Envelope(false)));
+        await Wait.UntilAsync(() => harness.Client.Completions.Count == 1, "cancelled result");
+        var completion = Assert.Single(harness.Client.Completions);
+        Assert.Equal("Cancelled", completion.Status);
+        Assert.Equal("Cancelled", completion.FailureCode);
+    }
+
+    [Theory]
     [InlineData(DatabaseBackupStatus.Failed, BackupFailureKind.SqlBackupFailed, "SqlBackupFailed")]
     [InlineData(DatabaseBackupStatus.Cancelled, BackupFailureKind.Cancelled, "Cancelled")]
     public async Task Non_success_does_not_publish_artifact_even_when_provider_returns_partial_metadata(

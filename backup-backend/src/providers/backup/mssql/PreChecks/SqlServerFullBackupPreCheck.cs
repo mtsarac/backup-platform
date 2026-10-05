@@ -1,4 +1,5 @@
 using BackupPlatform.BackupProviders.Abstractions.Database;
+using BackupPlatform.BackupProviders.MSSQL.Backup;
 using BackupPlatform.BackupProviders.MSSQL.Capabilities;
 using BackupPlatform.BackupProviders.MSSQL.Discovery;
 
@@ -351,7 +352,7 @@ internal static class SqlServerFullBackupPreCheck
 
     private static BackupPreCheckItem Passed(string id, string reason, string message) => new(id, BackupPreCheckStatus.Passed, reason, message);
 
-    private static BackupPreCheckItem Failed(string id, string reason, string message) => new(id, BackupPreCheckStatus.Failed, reason, message);
+    private static BackupPreCheckItem Failed(string id, string reason, string message) => new(id, BackupPreCheckStatus.Failed, reason, message, SqlServerFailureCauses.ForPreCheckReason(reason));
 
     private static BackupPreCheckItem Skipped(string id) =>
         new(id, BackupPreCheckStatus.Skipped, SqlServerPreCheckReasons.PrerequisiteFailed, "Not evaluated because an earlier check failed.");

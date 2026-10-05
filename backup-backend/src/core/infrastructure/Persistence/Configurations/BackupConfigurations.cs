@@ -32,10 +32,25 @@ internal static class BackupMapping
             value => JsonSerializer.Deserialize<BackupConfiguration>(value, (JsonSerializerOptions?)null)!.Validate()).HasColumnType("jsonb").IsRequired();
     internal static void Agent<T>(EntityTypeBuilder<T> builder) where T : class =>
         builder.Property<AgentId>("AgentId").HasConversion<AgentIdConverter>().IsRequired();
-    internal static void Status<T>(EntityTypeBuilder<T> builder, string table) where T : class
+    internal static void Status<T>(EntityTypeBuilder<T> builder, string table, int maximum) where T : class
     {
         builder.Property<BackupStatus>("Status").HasConversion<int>();
-        builder.ToTable(table, constraints => constraints.HasCheckConstraint($"ck_{table}_status", "\"Status\" BETWEEN 1 AND 7"));
+        builder.ToTable(table, constraints => constraints.HasCheckConstraint($"ck_{table}_status", $"\"Status\" BETWEEN 1 AND {maximum}"));
+    }
+    internal static void RetryPolicy<T>(EntityTypeBuilder<T> builder, System.Linq.Expressions.Expression<Func<T, BackupRetryPolicy?>> property) where T : class
+    {
+        builder.ComplexProperty(property, policy =>
+        {
+            policy.Property(value => value.MaxAttempts).HasColumnName("RetryMaxAttempts");
+            policy.Property(value => value.InitialDelay).HasColumnName("RetryInitialDelay");
+            policy.Property(value => value.MaxDelay).HasColumnName("RetryMaxDelay");
+            policy.Property(value => value.Backoff).HasColumnName("RetryBackoff").HasConversion<int>();
+            policy.Property(value => value.Jitter).HasColumnName("RetryJitter");
+        });
+        var table = typeof(T) == typeof(BackupJob) ? "backup_jobs" : "backup_runs";
+        builder.ToTable(table, constraints => constraints.HasCheckConstraint($"ck_{table}_retry_policy",
+            "\"RetryMaxAttempts\" BETWEEN 1 AND 10 AND \"RetryInitialDelay\" >= interval '1 second' AND \"RetryMaxDelay\" >= \"RetryInitialDelay\" " +
+            "AND \"RetryMaxDelay\" <= interval '24 hours' AND \"RetryBackoff\" IN (1,2) AND \"RetryJitter\" BETWEEN 0 AND 1"));
     }
 }
 
@@ -47,8 +62,10 @@ internal sealed class BackupJobConfiguration : IEntityTypeConfiguration<BackupJo
         BackupMapping.Agent(builder);
         BackupMapping.Configuration(builder);
         builder.Property(job => job.Name).HasMaxLength(200).IsRequired();
+        BackupMapping.RetryPolicy(builder, job => job.RetryPolicy);
+        builder.Property(job => job.OverlapPolicy).HasConversion<string>().HasMaxLength(16).IsRequired();
         builder.ToTable("backup_jobs", table =>
-            table.HasCheckConstraint("ck_backup_job_policy", "\"BackupType\" = 'Full' AND \"OverlapPolicy\" = 'Queue'"));
+            table.HasCheckConstraint("ck_backup_job_policy", "\"BackupType\" = 'Full' AND \"OverlapPolicy\" IN ('Skip','Queue')"));
         builder.HasOne<Agent>().WithMany().HasForeignKey(job => new { job.AgentId, job.TenantId })
             .HasPrincipalKey(agent => new { agent.Id, agent.TenantId }).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(job => new { job.TenantId, job.AgentId });
@@ -62,17 +79,25 @@ internal sealed class BackupRunConfiguration : IEntityTypeConfiguration<BackupRu
         BackupMapping.Base(builder, "backup_runs");
         BackupMapping.Agent(builder);
         BackupMapping.Configuration(builder);
-        BackupMapping.Status(builder, "backup_runs");
+        BackupMapping.Status(builder, "backup_runs", 8);
+        BackupMapping.RetryPolicy(builder, run => run.RetryPolicy);
         builder.ToTable("backup_runs", table =>
         {
             table.HasCheckConstraint("ck_backup_runs_attempt_number", "\"CurrentAttemptNumber\" >= 1");
+            table.HasCheckConstraint("ck_backup_runs_attempt_budget", "\"CurrentAttemptNumber\" <= \"RetryMaxAttempts\"");
             table.HasCheckConstraint("ck_backup_runs_type", "\"BackupType\" = 'Full' AND \"TriggerType\" = 'Manual'");
             table.HasCheckConstraint("ck_backup_runs_terminal", "(\"Status\" IN (4,5,6,7)) = (\"CompletedAt\" IS NOT NULL)");
+            table.HasCheckConstraint("ck_backup_runs_retry_schedule", "(\"Status\" = 8) = (\"NextAttemptAt\" IS NOT NULL)");
+            table.HasCheckConstraint("ck_backup_runs_retry_state", "\"RetryState\" BETWEEN 0 AND 3 AND ((\"Status\" = 8) = (\"RetryState\" = 1))");
+            table.HasCheckConstraint("ck_backup_runs_overlap", "\"OverlapPolicy\" IN ('Skip','Queue')");
         });
         builder.Property(run => run.IdempotencyKey).HasMaxLength(128).IsRequired();
         builder.Property(run => run.TerminalReason).HasMaxLength(128);
+        builder.Property(run => run.OverlapPolicy).HasConversion<string>().HasMaxLength(16).IsRequired();
+        builder.Property(run => run.RetryState).HasConversion<int>();
         builder.Ignore(run => run.CurrentAttempt);
         builder.Ignore(run => run.IsTerminal);
+        builder.Ignore(run => run.IsActive);
         builder.HasOne<BackupJob>().WithMany().HasForeignKey(run => new { run.JobId, run.TenantId })
             .HasPrincipalKey(job => new { job.Id, job.TenantId }).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Agent>().WithMany().HasForeignKey(run => new { run.AgentId, run.TenantId })
@@ -88,6 +113,10 @@ internal sealed class BackupRunConfiguration : IEntityTypeConfiguration<BackupRu
         builder.HasIndex(run => new { run.TenantId, run.CreatedAt });
         builder.HasIndex(run => new { run.TenantId, run.Status, run.CreatedAt });
         builder.HasIndex(run => new { run.TenantId, run.JobId, run.CreatedAt });
+        // Backstop for the Skip overlap policy: at most one active run per job whatever the application does.
+        builder.HasIndex(run => new { run.TenantId, run.JobId }).IsUnique().HasFilter("\"OverlapPolicy\" = 'Skip' AND \"Status\" IN (1,2,3,8)");
+        // The retry worker's only scan: due RetryPending runs, oldest due first.
+        builder.HasIndex(run => new { run.NextAttemptAt, run.Id }).HasFilter("\"Status\" = 8");
     }
 }
 
@@ -97,7 +126,7 @@ internal sealed class BackupAttemptConfiguration : IEntityTypeConfiguration<Back
     {
         BackupMapping.Base(builder, "backup_run_attempts");
         BackupMapping.Agent(builder);
-        BackupMapping.Status(builder, "backup_run_attempts");
+        BackupMapping.Status(builder, "backup_run_attempts", 7);
         builder.ToTable("backup_run_attempts", table =>
         {
             table.HasCheckConstraint("ck_backup_attempt_number", "\"Number\" >= 1");
@@ -118,10 +147,11 @@ internal sealed class BackupAttemptConfiguration : IEntityTypeConfiguration<Back
             .HasPrincipalKey(attempt => new { attempt.Id, attempt.TenantId }).OnDelete(DeleteBehavior.Restrict);
         builder.Navigation(attempt => attempt.Artifacts).HasField("_artifacts").UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.HasIndex(attempt => new { attempt.TenantId, attempt.RunId, attempt.Number }).IsUnique();
-        builder.HasIndex(attempt => new { attempt.TenantId, attempt.AgentId }).IsUnique()
-            .HasFilter("\"Status\" IN (2,3)");
+        // Concurrency is enforced by counting these rows under a lock (agent, tenant and global limits), not by a unique index.
+        builder.HasIndex(attempt => new { attempt.TenantId, attempt.AgentId, attempt.Status });
         builder.HasIndex(attempt => attempt.LeaseToken).IsUnique().HasFilter("\"LeaseToken\" IS NOT NULL");
         builder.HasIndex(attempt => new { attempt.Status, attempt.LeaseExpiresAt });
+        builder.HasIndex(attempt => new { attempt.TenantId, attempt.AgentId, attempt.EligibleAt }).HasFilter("\"Status\" = 1");
     }
 }
 
