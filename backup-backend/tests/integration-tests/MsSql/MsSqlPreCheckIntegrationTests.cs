@@ -23,12 +23,25 @@ public sealed class MsSqlPreCheckIntegrationTests(MsSqlFixture fixture)
     }
 
     [Fact]
-    public async Task BackupOperatorWithoutSysadminIsRecognised()
+    public async Task BackupOperatorWithoutSysadminIsRecognisedAndMayProceedWhenItCanAlsoVerify()
+    {
+        var report = await PreCheckAsync(fixture.Credential(fixture.OperatorWithVerify), fixture.OnlineFull);
+
+        Assert.Equal(SqlServerPreCheckReasons.PermissionGranted, Item(report, BackupPreCheckIds.BackupPermission).ReasonCode);
+        Assert.Equal(SqlServerPreCheckReasons.VerifyPermissionGranted, Item(report, SqlServerFullBackupPreCheck.VerifyPermissionCheckId).ReasonCode);
+        Assert.True(report.CanProceed, Describe(report));
+    }
+
+    [Fact]
+    public async Task ABackupOperatorThatCannotRunRestoreVerifyOnlyIsRefusedBecauseEveryBackupNeedsVerification()
     {
         var report = await PreCheckAsync(fixture.Credential(fixture.Operator), fixture.OnlineFull);
 
         Assert.Equal(SqlServerPreCheckReasons.PermissionGranted, Item(report, BackupPreCheckIds.BackupPermission).ReasonCode);
-        Assert.True(report.CanProceed, Describe(report));
+        var verify = Item(report, SqlServerFullBackupPreCheck.VerifyPermissionCheckId);
+        Assert.Equal(BackupPreCheckStatus.Failed, verify.Status);
+        Assert.Equal(SqlServerPreCheckReasons.VerifyPermissionDenied, verify.ReasonCode);
+        Assert.False(report.CanProceed);
     }
 
     [Fact]
@@ -203,11 +216,10 @@ public sealed class MsSqlPreCheckIntegrationTests(MsSqlFixture fixture)
     public async Task StagingPathShapeIsCheckedAgainstTheServersPlatform()
     {
         var instance = (await _provider.DiscoverSqlServerAsync(fixture.Settings, fixture.Admin, CancellationToken.None)).Instance;
-        var native = new DatabaseServerPath(instance.DefaultBackupDirectory ?? (instance.HostPlatform == SqlServerHostPlatform.Linux ? "/var/opt/mssql/backup" : @"C:\Backups"));
         var foreign = new DatabaseServerPath(instance.HostPlatform == SqlServerHostPlatform.Linux ? @"C:\Backups" : "/var/opt/mssql/backup");
 
-        var good = await _provider.PreCheckFullBackupAsync(fixture.Settings, fixture.Admin, new FullBackupPreCheckRequest(fixture.OnlineFull, stagingPath: native), CancellationToken.None);
-        var bad = await _provider.PreCheckFullBackupAsync(fixture.Settings, fixture.Admin, new FullBackupPreCheckRequest(fixture.OnlineFull, stagingPath: foreign), CancellationToken.None);
+        var good = await _provider.PreCheckFullBackupAsync(fixture.Settings, fixture.Admin, new FullBackupPreCheckRequest(fixture.OnlineFull, staging: fixture.Staging), CancellationToken.None);
+        var bad = await _provider.PreCheckFullBackupAsync(fixture.Settings, fixture.Admin, new FullBackupPreCheckRequest(fixture.OnlineFull, staging: StagingArea.Mapped(foreign, fixture.Staging.AgentDirectory)), CancellationToken.None);
 
         Assert.Equal(BackupPreCheckStatus.Passed, Item(good, BackupPreCheckIds.StagingPathFormat).Status);
         Assert.Equal(SqlServerPreCheckReasons.StagingPathWrongStyle, Item(bad, BackupPreCheckIds.StagingPathFormat).ReasonCode);
@@ -219,7 +231,7 @@ public sealed class MsSqlPreCheckIntegrationTests(MsSqlFixture fixture)
     {
         var extension = new RecordingExtension();
         var provider = new SqlServerBackupProvider(NullLogger<SqlServerBackupProvider>.Instance, [extension]);
-        var request = new FullBackupPreCheckRequest(fixture.OnlineFull, stagingPath: new DatabaseServerPath("/var/opt/mssql/backup"));
+        var request = new FullBackupPreCheckRequest(fixture.OnlineFull, staging: fixture.Staging);
 
         var report = await provider.PreCheckFullBackupAsync(fixture.Settings, fixture.Admin, request, CancellationToken.None);
 

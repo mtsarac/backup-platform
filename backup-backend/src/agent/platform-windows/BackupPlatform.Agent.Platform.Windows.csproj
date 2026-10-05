@@ -1,4 +1,8 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+  </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\core\BackupPlatform.Agent.Core.csproj" />
@@ -8,8 +12,9 @@
     <PackageReference Include="System.Security.Cryptography.ProtectedData" />
   </ItemGroup>
 
-  <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
-  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="BackupPlatform.Agent.Platform.Windows.Tests" />
+    <InternalsVisibleTo Include="BackupPlatform.Agent.Platform.Windows.TestProbe" />
+  </ItemGroup>
 
 </Project>

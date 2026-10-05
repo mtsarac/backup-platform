@@ -2,6 +2,9 @@
 
   <PropertyGroup>
     <IsPackable>false</IsPackable>
+    <!-- Agent.Host targets net10.0-windows when built for Windows (see its project file), and a net10.0 project cannot reference it. -->
+    <AgentPlatform Condition="'$(AgentPlatform)' == '' and $([MSBuild]::IsOSPlatform('Windows'))">Windows</AgentPlatform>
+    <TargetFramework Condition="'$(AgentPlatform)' == 'Windows'">net10.0-windows</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>

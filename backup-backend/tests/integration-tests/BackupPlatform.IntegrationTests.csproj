@@ -18,9 +18,14 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/core/infrastructure/BackupPlatform.Infrastructure.csproj" />
+    <!-- Aliased: the Agent.Core namespace would otherwise shadow the Agent domain entity in this project. -->
+    <ProjectReference Include="../../src/agent/core/BackupPlatform.Agent.Core.csproj" Aliases="AgentCore" />
     <ProjectReference Include="../../src/hosts/api/BackupPlatform.Api.csproj" />
     <ProjectReference Include="../../src/providers/backup/abstractions/BackupPlatform.BackupProviders.Abstractions.csproj" />
     <ProjectReference Include="../../src/providers/backup/mssql/BackupPlatform.BackupProviders.MSSQL.csproj" />
+    <ProjectReference Include="../../src/providers/storage/abstractions/BackupPlatform.StorageProviders.Abstractions.csproj" />
+    <ProjectReference Include="../../src/providers/storage/local/BackupPlatform.StorageProviders.Local.csproj" />
+    <ProjectReference Include="../../src/providers/storage/central/BackupPlatform.StorageProviders.Central.csproj" />
   </ItemGroup>
 
 </Project>

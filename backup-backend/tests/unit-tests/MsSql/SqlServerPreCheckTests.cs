@@ -24,7 +24,8 @@ public sealed class SqlServerPreCheckTests
                 BackupPreCheckIds.DatabaseState,
                 SqlServerFullBackupPreCheck.RecoveryModelCheckId,
                 BackupPreCheckIds.BackupCapability,
-                BackupPreCheckIds.BackupPermission
+                BackupPreCheckIds.BackupPermission,
+                SqlServerFullBackupPreCheck.VerifyPermissionCheckId
             ],
             report.Items.Select(item => item.CheckId));
         Assert.All(report.Items, item => Assert.Equal(BackupPreCheckStatus.Passed, item.Status));
@@ -67,7 +68,7 @@ public sealed class SqlServerPreCheckTests
     public void MissingDatabaseFailsExistenceAndSkipsDependentChecks()
     {
         var report = Run(Healthy() with { Database = null }, new FullBackupPreCheckRequest(
-            "Missing", [SqlServerCapabilityIds.BackupChecksum], new DatabaseServerPath("/var/opt/mssql/backup")));
+            "Missing", [SqlServerCapabilityIds.BackupChecksum], StagingArea.Mapped(new DatabaseServerPath("/var/opt/mssql/backup"), new AgentPath(MsSqlTestData.AgentAbsolute("/var/opt/mssql/backup")))));
 
         var exists = report.Items.Single(i => i.CheckId == BackupPreCheckIds.DatabaseExists);
         Assert.Equal(BackupPreCheckStatus.Failed, exists.Status);
@@ -78,7 +79,12 @@ public sealed class SqlServerPreCheckTests
                 SqlServerFullBackupPreCheck.RecoveryModelCheckId,
                 BackupPreCheckIds.BackupCapability,
                 BackupPreCheckIds.BackupPermission,
+                SqlServerFullBackupPreCheck.VerifyPermissionCheckId,
                 BackupPreCheckIds.StagingPathFormat,
+                BackupPreCheckIds.StagingAgentAccess,
+                BackupPreCheckIds.StagingServerWritable,
+                BackupPreCheckIds.StagingMapping,
+                BackupPreCheckIds.StagingDiskSpace,
                 BackupPreCheckIds.RequestedCapability(SqlServerCapabilityIds.BackupChecksum)
             ],
             report.Items.Where(i => i.Status == BackupPreCheckStatus.Skipped).Select(i => i.CheckId));
@@ -275,6 +281,14 @@ public sealed class SqlServerPreCheckTests
     [InlineData(SqlServerHostPlatform.Linux, "/var/opt/../../etc", BackupPreCheckStatus.Failed)]
     [InlineData(SqlServerHostPlatform.Windows, "D:", BackupPreCheckStatus.Failed)]
     [InlineData(SqlServerHostPlatform.Windows, @"\\", BackupPreCheckStatus.Failed)]
+    [InlineData(SqlServerHostPlatform.Windows, @"D:\Backups\stage:stream", BackupPreCheckStatus.Failed)]
+    [InlineData(SqlServerHostPlatform.Windows, @"D:\Backups\CON", BackupPreCheckStatus.Failed)]
+    [InlineData(SqlServerHostPlatform.Windows, @"D:\Backups\nul.bak", BackupPreCheckStatus.Failed)]
+    [InlineData(SqlServerHostPlatform.Windows, @"\\fileserver\share\LPT1", BackupPreCheckStatus.Failed)]
+    [InlineData(SqlServerHostPlatform.Windows, @"D:\Backups\console", BackupPreCheckStatus.Passed)]
+    [InlineData(SqlServerHostPlatform.Windows, @"\\?\D:\Backups\Staging", BackupPreCheckStatus.Passed)]
+    [InlineData(SqlServerHostPlatform.Linux, "/srv/CON", BackupPreCheckStatus.Passed)]
+    [InlineData(SqlServerHostPlatform.Linux, "/srv/a:b", BackupPreCheckStatus.Passed)]
     [InlineData(SqlServerHostPlatform.Linux, "/var/opt/mssql\nbackup", BackupPreCheckStatus.Failed)]
     [InlineData(SqlServerHostPlatform.Unknown, "/var/opt/mssql/backup", BackupPreCheckStatus.Warning)]
     [InlineData(SqlServerHostPlatform.Unknown, @"D:\Backups", BackupPreCheckStatus.Warning)]
@@ -284,13 +298,6 @@ public sealed class SqlServerPreCheckTests
 
         Assert.Equal(BackupPreCheckIds.StagingPathFormat, item.CheckId);
         Assert.Equal(expected, item.Status);
-    }
-
-    [Fact]
-    public void PassedStagingPathStatesThatServerSideWritabilityIsNotChecked()
-    {
-        var item = SqlServerFullBackupPreCheck.CheckStagingPathFormat(new DatabaseServerPath("/var/opt/mssql/backup"), SqlServerHostPlatform.Linux);
-        Assert.Contains("not checked", item.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -321,8 +328,23 @@ public sealed class SqlServerPreCheckTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new BackupPreCheckItem("check", (BackupPreCheckStatus)99, "reason", "message"));
     }
 
+    [Theory]
+    [InlineData(SqlServerBackupPermission.Granted, BackupPreCheckStatus.Passed, SqlServerPreCheckReasons.VerifyPermissionGranted)]
+    [InlineData(SqlServerBackupPermission.Denied, BackupPreCheckStatus.Failed, SqlServerPreCheckReasons.VerifyPermissionDenied)]
+    [InlineData(SqlServerBackupPermission.Unknown, BackupPreCheckStatus.Warning, SqlServerPreCheckReasons.VerifyPermissionUnknown)]
+    public void ALoginThatCannotRunRestoreVerifyOnlyFailsBecauseEveryBackupNeedsIt(
+        SqlServerBackupPermission permission, BackupPreCheckStatus status, string reason)
+    {
+        var report = Run(Healthy() with { VerifyPermission = permission }, Sales);
+
+        var item = report.Items.Single(i => i.CheckId == SqlServerFullBackupPreCheck.VerifyPermissionCheckId);
+        Assert.Equal(status, item.Status);
+        Assert.Equal(reason, item.ReasonCode);
+        Assert.Equal(status != BackupPreCheckStatus.Failed, report.CanProceed);
+    }
+
     private static SqlServerPreCheckFacts Healthy(SqlServerDatabaseInfo? database = null) =>
-        new(null, null, MsSqlTestData.Instance(), database ?? MsSqlTestData.Database(), SqlServerBackupPermission.Granted);
+        new(null, null, MsSqlTestData.Instance(), database ?? MsSqlTestData.Database(), SqlServerBackupPermission.Granted, null, SqlServerBackupPermission.Granted);
 
     private static BackupPreCheckReport Run(SqlServerPreCheckFacts facts, FullBackupPreCheckRequest request) =>
         new(SqlServerFullBackupPreCheck.Evaluate(facts, request));

@@ -40,6 +40,8 @@ public sealed class AgentHostOptionsValidator : IValidateOptions<AgentHostOption
             failures.AddRange(options.Connectivity.Validate().Select(problem => $"{prefix}Connectivity:{problem}"));
         }
 
+        failures.AddRange(AgentBackupOptionsValidation.Validate(options.Backup));
+
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
     }
 }

@@ -19,6 +19,11 @@
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(AgentPlatform)' == 'Windows'">
+    <!-- Windows Service hosting belongs to the host: it composes the platform; neither Agent.Core nor the platform project knows the service manager. -->
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="../../agent/core/BackupPlatform.Agent.Core.csproj" />
     <ProjectReference Include="../../agent/transport/BackupPlatform.Agent.Transport.csproj" />

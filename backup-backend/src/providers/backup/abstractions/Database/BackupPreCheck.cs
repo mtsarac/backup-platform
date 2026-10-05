@@ -28,8 +28,20 @@ public static class BackupPreCheckIds
     public const string DatabaseState = "database.state";
     public const string BackupCapability = "database.backup-capability";
     public const string BackupPermission = "permission.backup";
-    /// <summary>Only the shape of the path is verified; whether the database service can write there is a separate, later check.</summary>
+    /// <summary>Only the shape of the server-side path is verified here; whether the database service can write there is the separate <see cref="StagingServerWritable"/> check.</summary>
     public const string StagingPathFormat = "staging.path-format";
+
+    /// <summary>The agent process can list, write and delete in its side of the staging directory. Says nothing about the database service account.</summary>
+    public const string StagingAgentAccess = "staging.agent-access";
+
+    /// <summary>The database service account can create entries in the staging directory (probed from the server's side, never inferred from agent access).</summary>
+    public const string StagingServerWritable = "staging.server-writable";
+
+    /// <summary>The server-side and agent-side staging directories are the same storage (an entry made by one side is seen by the other).</summary>
+    public const string StagingMapping = "staging.mapping";
+
+    /// <summary>Free space on the staging volume compared with the estimated backup size.</summary>
+    public const string StagingDiskSpace = "staging.disk-space";
 
     /// <summary>The check id for a capability the caller asked to use.</summary>
     public static string RequestedCapability(DatabaseCapabilityId id)
@@ -97,7 +109,7 @@ public sealed class BackupPreCheckReport
 /// <summary>
 /// A path as seen by the database server's own file system. A server-side backup file is written by the database service
 /// account, not by the agent process, so this type exists to keep the two apart: write access of the agent to a directory
-/// says nothing about the server's ability to write there.
+/// says nothing about the server's ability to write there. The agent's view of a path is <see cref="AgentPath"/>.
 /// </summary>
 public sealed record DatabaseServerPath
 {
@@ -109,6 +121,27 @@ public sealed record DatabaseServerPath
 
     public string Value { get; }
 
+    /// <summary>True for drive-letter and UNC paths, which use <c>\</c> as separator; everything else is treated as POSIX style.</summary>
+    public bool IsWindowsStyle =>
+        (Value.Length >= 3 && char.IsAsciiLetter(Value[0]) && Value[1] == ':' && Value[2] is '\\' or '/')
+        || Value.StartsWith(@"\\", StringComparison.Ordinal);
+
+    /// <summary>
+    /// The path of a file directly inside this directory, using the separator of the path's own style. <paramref name="fileName"/>
+    /// must be a simple name: it is the one value that is joined into a server path, so separators are refused.
+    /// </summary>
+    public DatabaseServerPath Combine(string fileName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
+        if (fileName is "." or ".." || fileName.Any(char.IsControl) || fileName.IndexOfAny(['/', '\\', ':']) >= 0)
+        {
+            throw new ArgumentException("A server file name is a simple name without directory components.", nameof(fileName));
+        }
+
+        var separator = IsWindowsStyle ? '\\' : '/';
+        return new DatabaseServerPath(Value.TrimEnd('/', '\\') + separator + fileName);
+    }
+
     public override string ToString() => Value;
 }
 
@@ -118,19 +151,19 @@ public sealed record FullBackupPreCheckRequest
     public FullBackupPreCheckRequest(
         string databaseName,
         IEnumerable<DatabaseCapabilityId>? requestedCapabilities = null,
-        DatabaseServerPath? stagingPath = null)
+        StagingArea? staging = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(databaseName);
         DatabaseName = databaseName;
         RequestedCapabilities = requestedCapabilities?.Distinct().ToArray() ?? [];
-        StagingPath = stagingPath;
+        Staging = staging;
     }
 
     public string DatabaseName { get; }
 
-    /// <summary>Optional features of the backup, for example compression or checksum, as provider capability identifiers.</summary>
+    /// <summary>Optional features of the backup that must be available, as provider capability identifiers; an unsupported one fails the pre-check.</summary>
     public IReadOnlyList<DatabaseCapabilityId> RequestedCapabilities { get; }
 
-    /// <summary>Where the database server would write the backup file, when the plan stages backups on the server host.</summary>
-    public DatabaseServerPath? StagingPath { get; }
+    /// <summary>The staging directory seen from the database server and from the agent, when the plan stages backups on disk.</summary>
+    public StagingArea? Staging { get; }
 }

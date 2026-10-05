@@ -46,6 +46,9 @@ internal static class SqlServerDiscovery
     // so a 0 is only meaningful for an existing, online database. The pre-check enforces that.
     private const string BackupPermissionSql = "SELECT CONVERT(int, HAS_PERMS_BY_NAME(@name, N'DATABASE', N'BACKUP DATABASE'));";
 
+    // Server-scope permission (no securable name); a principal may always ask about itself. 1 for sysadmin, 0 for db_backupoperator alone.
+    private const string VerifyPermissionSql = "SELECT CONVERT(int, HAS_PERMS_BY_NAME(NULL, NULL, N'CREATE ANY DATABASE'));";
+
     /// <summary>The longest name <c>sysname</c> can hold; longer names cannot exist and are not sent to the server.</summary>
     public const int MaxDatabaseNameLength = 128;
 
@@ -113,6 +116,18 @@ internal static class SqlServerDiscovery
         var rows = await session.QueryAsync(
             "probe-backup-permission", BackupPermissionSql, parameters => BindName(parameters, name), reader => GetInt(reader, 0), cancellationToken)
             .ConfigureAwait(false);
+        return rows.Count == 1 ? MapPermission(rows[0]) : SqlServerBackupPermission.Unknown;
+    }
+
+    /// <summary>
+    /// Asks the server whether the connected principal may run <c>RESTORE VERIFYONLY</c>. Observed on SQL Server 2025: it needs the
+    /// server-level <c>CREATE ANY DATABASE</c> permission (Msg 262 "CREATE DATABASE permission denied in database 'master'")
+    /// that <c>db_backupoperator</c> does not include, and the principal can read its own answer without extra rights.
+    /// </summary>
+    public static async Task<SqlServerBackupPermission> ProbeVerifyPermissionAsync(SqlServerSession session, CancellationToken cancellationToken)
+    {
+        var rows = await session.QueryAsync(
+            "probe-verify-permission", VerifyPermissionSql, bind: null, reader => GetInt(reader, 0), cancellationToken).ConfigureAwait(false);
         return rows.Count == 1 ? MapPermission(rows[0]) : SqlServerBackupPermission.Unknown;
     }
 

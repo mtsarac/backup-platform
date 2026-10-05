@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A tiny console program the Windows tests start as a separate process: DPAPI behaviour that only a real process or account boundary
+    can show (restart, another account) cannot be proven in-process. It is a test tool, not a product component.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/agent/core/BackupPlatform.Agent.Core.csproj" />
+    <ProjectReference Include="../../src/agent/platform-windows/BackupPlatform.Agent.Platform.Windows.csproj" />
+  </ItemGroup>
+
+</Project>

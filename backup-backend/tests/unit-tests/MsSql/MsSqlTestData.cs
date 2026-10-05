@@ -4,6 +4,9 @@ namespace BackupPlatform.UnitTests.MsSql;
 
 internal static class MsSqlTestData
 {
+    /// <summary>An absolute path on the machine running the test: agent paths follow the agent's own operating system, so a POSIX-looking literal is only absolute on POSIX.</summary>
+    public static string AgentAbsolute(string posixLooking) => Path.GetFullPath(posixLooking);
+
     public static SqlServerInstanceInfo Instance(
         string? version = "16.0.4165.4",
         string? edition = "Enterprise Edition (64-bit)",

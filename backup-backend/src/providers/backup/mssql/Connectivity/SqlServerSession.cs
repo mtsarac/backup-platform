@@ -14,6 +14,8 @@ internal sealed partial class SqlServerSession : IAsyncDisposable
     // Backstop for hangs SqlClient's own connect timeout does not bound (for example name resolution); it fires just after the real one.
     private static readonly TimeSpan ConnectGuardGrace = TimeSpan.FromSeconds(5);
 
+    private static readonly TimeSpan CancelRepeatInterval = TimeSpan.FromMilliseconds(250);
+
     private readonly SqlConnection _connection;
     private readonly int _commandTimeoutSeconds;
     private readonly ILogger _logger;
@@ -90,6 +92,77 @@ internal sealed partial class SqlServerSession : IAsyncDisposable
         {
             cancellationToken.ThrowIfCancellationRequested();
             throw Translate(_logger, operation, exception, SqlServerOperationPhase.Command, timedOut: false);
+        }
+    }
+
+    /// <summary>
+    /// Runs one long statement (BACKUP, RESTORE VERIFYONLY, a probe) with its own finite <paramref name="timeout"/>. Unlike
+    /// <see cref="QueryAsync{T}"/> the <see cref="SqlException"/> is NOT translated: the caller needs every error number of the
+    /// failed statement to classify it, and logs the exception itself. <paramref name="onInfoMessage"/> receives the informational
+    /// messages the server sends while the statement runs (for example <c>STATS</c> progress) on the executing thread; it is
+    /// advisory and must not throw.
+    /// <para>
+    /// The statement runs synchronously on a dedicated thread, and cancelling <paramref name="cancellationToken"/> calls
+    /// <see cref="SqlCommand.Cancel"/>, which makes SqlClient send an attention signal that aborts the statement on the server
+    /// (it removes its partial backup file). The returned task completes only once the server has acknowledged, so no statement
+    /// is left running behind a completed call. Why not <c>ExecuteNonQueryAsync(token)</c>: observed against SQL Server 2025 with
+    /// SqlClient, an asynchronous BACKUP with <c>STATS</c> ignores <c>Cancel</c> (and a concurrent <c>Close</c>) once the server
+    /// streams progress messages, so the statement ran to the end seconds to hours after the cancellation; the synchronous call
+    /// stops within ~50 ms at any point of the same backup, with and without <c>STATS</c>.
+    /// </para>
+    /// </summary>
+    public Task ExecuteAsync(
+        string sql,
+        TimeSpan timeout,
+        Action<SqlInfoMessageEventArgs>? onInfoMessage,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.Factory.StartNew(
+            () => ExecuteBlocking(sql, timeout, onInfoMessage, cancellationToken),
+            CancellationToken.None,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
+    }
+
+    private void ExecuteBlocking(string sql, TimeSpan timeout, Action<SqlInfoMessageEventArgs>? onInfoMessage, CancellationToken cancellationToken)
+    {
+        SqlInfoMessageEventHandler? handler = onInfoMessage is null ? null : (_, args) => onInfoMessage(args);
+        if (handler is not null)
+        {
+            _connection.InfoMessage += handler;
+        }
+
+        using var command = _connection.CreateCommand();
+        command.CommandText = sql;
+        command.CommandTimeout = (int)Math.Max(1, Math.Ceiling(timeout.TotalSeconds));
+
+        // Cancel() before the statement is in flight does nothing, so it is repeated until the statement has ended.
+        using var finished = new ManualResetEventSlim();
+        Task? canceller = null;
+        using var registration = cancellationToken.Register(() =>
+            canceller = Task.Run(async () =>
+            {
+                while (!finished.IsSet)
+                {
+                    command.Cancel();
+                    await Task.Delay(CancelRepeatInterval).ConfigureAwait(false);
+                }
+            }));
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            command.ExecuteNonQuery();
+        }
+        finally
+        {
+            finished.Set();
+            registration.Dispose();
+            canceller?.Wait();
+            if (handler is not null)
+            {
+                _connection.InfoMessage -= handler;
+            }
         }
     }
 

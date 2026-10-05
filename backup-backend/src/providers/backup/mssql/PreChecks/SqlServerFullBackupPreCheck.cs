@@ -10,7 +10,9 @@ internal sealed record SqlServerPreCheckFacts(
     DatabaseProviderException? MetadataFailure,
     SqlServerInstanceInfo? Instance,
     SqlServerDatabaseInfo? Database,
-    SqlServerBackupPermission Permission);
+    SqlServerBackupPermission Permission,
+    SqlServerStagingFacts? Staging = null,
+    SqlServerBackupPermission VerifyPermission = SqlServerBackupPermission.Unknown);
 
 /// <summary>Machine-readable reasons the SQL Server full-backup pre-check can report.</summary>
 public static class SqlServerPreCheckReasons
@@ -40,6 +42,9 @@ public static class SqlServerPreCheckReasons
     public const string PermissionGranted = "backup-permission-granted";
     public const string PermissionDenied = "backup-permission-denied";
     public const string PermissionUnknown = "backup-permission-unknown";
+    public const string VerifyPermissionGranted = "verify-permission-granted";
+    public const string VerifyPermissionDenied = "verify-permission-denied";
+    public const string VerifyPermissionUnknown = "verify-permission-unknown";
     public const string CapabilitySupported = "capability-supported";
     public const string CapabilityUnsupported = "capability-unsupported";
     public const string CapabilityUnknown = "capability-unknown";
@@ -48,6 +53,22 @@ public static class SqlServerPreCheckReasons
     public const string StagingPathPlatformUnknown = "staging-path-platform-unknown";
     public const string StagingPathInvalid = "staging-path-invalid";
     public const string StagingPathWrongStyle = "staging-path-wrong-style";
+    public const string StagingAgentAccessible = "staging-agent-accessible";
+    public const string StagingAgentDirectoryMissing = "staging-agent-directory-missing";
+    public const string StagingAgentNotListable = "staging-agent-not-listable";
+    public const string StagingAgentNotWritable = "staging-agent-not-writable";
+    public const string StagingServerWritable = "staging-server-writable";
+    public const string StagingServerWriteUnverifiable = "staging-server-write-unverifiable";
+    public const string StagingServerCannotWrite = "staging-server-cannot-write";
+    public const string StagingServerDirectoryMissing = "staging-server-directory-missing";
+    public const string StagingProbeFailed = "staging-probe-failed";
+    public const string StagingMappingVerified = "staging-mapping-verified";
+    public const string StagingMappingMismatch = "staging-mapping-mismatch";
+    public const string ProbeLeftover = "probe-leftover";
+    public const string DiskSpaceSufficient = "disk-space-sufficient";
+    public const string DiskSpaceInsufficient = "disk-space-insufficient";
+    public const string DiskSpaceEstimateUncertain = "disk-space-estimate-uncertain";
+    public const string DiskSpaceUnknown = "disk-space-unknown";
     public const string ExtensionFailed = "extension-failed";
 }
 
@@ -60,6 +81,7 @@ internal static class SqlServerFullBackupPreCheck
 {
     public const string RecoveryModelCheckId = "database.recovery-model";
     public const string EncryptionCheckId = "database.encryption";
+    public const string VerifyPermissionCheckId = "permission.verify";
 
     public static IReadOnlyList<BackupPreCheckItem> Evaluate(SqlServerPreCheckFacts facts, FullBackupPreCheckRequest request)
     {
@@ -118,6 +140,7 @@ internal static class SqlServerFullBackupPreCheck
         items.Add(database.State == SqlServerDatabaseState.Online
             ? CheckPermission(facts.Permission)
             : Skipped(BackupPreCheckIds.BackupPermission));
+        items.Add(CheckVerifyPermission(facts.VerifyPermission));
 
         if (database.IsTransparentDataEncrypted == true)
         {
@@ -125,9 +148,13 @@ internal static class SqlServerFullBackupPreCheck
                 "The database uses Transparent Data Encryption. The backup is encrypted with the server certificate; a restore elsewhere needs that certificate and its key."));
         }
 
-        if (request.StagingPath is { } stagingPath)
+        if (request.Staging?.ServerDirectory is { } stagingPath)
         {
-            items.Add(CheckStagingPathFormat(stagingPath, instance.HostPlatform));
+            var format = CheckStagingPathFormat(stagingPath, instance.HostPlatform);
+            items.Add(format);
+            items.AddRange(format.Status == BackupPreCheckStatus.Failed || facts.Staging is null
+                ? SqlServerStagingPreCheck.CheckIds.Select(Skipped)
+                : SqlServerStagingPreCheck.Evaluate(facts.Staging));
         }
 
         foreach (var requested in request.RequestedCapabilities)
@@ -147,12 +174,14 @@ internal static class SqlServerFullBackupPreCheck
             BackupPreCheckIds.DatabaseState,
             RecoveryModelCheckId,
             BackupPreCheckIds.BackupCapability,
-            BackupPreCheckIds.BackupPermission
+            BackupPreCheckIds.BackupPermission,
+            VerifyPermissionCheckId
         };
 
-        if (request.StagingPath is not null)
+        if (request.Staging is not null)
         {
             ids.Add(BackupPreCheckIds.StagingPathFormat);
+            ids.AddRange(SqlServerStagingPreCheck.CheckIds);
         }
 
         ids.AddRange(request.RequestedCapabilities.Select(BackupPreCheckIds.RequestedCapability));
@@ -209,6 +238,18 @@ internal static class SqlServerFullBackupPreCheck
             "SQL Server did not report whether the login may back up this database; the backup itself will tell.")
     };
 
+    // The platform never reports a backup as successful without RESTORE VERIFYONLY, so a login that cannot run it would take the whole
+    // backup and then fail at the end. That is refused up front (the server-level permission is CREATE ANY DATABASE).
+    private static BackupPreCheckItem CheckVerifyPermission(SqlServerBackupPermission permission) => permission switch
+    {
+        SqlServerBackupPermission.Granted => Passed(VerifyPermissionCheckId, SqlServerPreCheckReasons.VerifyPermissionGranted,
+            "The login may run RESTORE VERIFYONLY."),
+        SqlServerBackupPermission.Denied => Failed(VerifyPermissionCheckId, SqlServerPreCheckReasons.VerifyPermissionDenied,
+            "The login may not run RESTORE VERIFYONLY, which every backup needs; SQL Server requires the server-level CREATE ANY DATABASE permission for it."),
+        _ => new(VerifyPermissionCheckId, BackupPreCheckStatus.Warning, SqlServerPreCheckReasons.VerifyPermissionUnknown,
+            "SQL Server did not report whether the login may run RESTORE VERIFYONLY; the verification step will tell.")
+    };
+
     private static BackupPreCheckItem FromCapability(string checkId, DatabaseCapabilityId id, DatabaseCapabilitySet capabilities)
     {
         if (!capabilities.TryGet(id, out var capability))
@@ -243,12 +284,21 @@ internal static class SqlServerFullBackupPreCheck
         var windowsStyle = IsWindowsAbsolute(value);
         var posixStyle = value.StartsWith('/');
 
+        // Windows-only spellings that mean something other than a plain directory: an alternate data stream (a colon after the drive
+        // designator) and the reserved device names (CON, NUL, COM1, ... with or without an extension). A POSIX server allows both as
+        // ordinary names, so they are only refused in Windows-style paths.
+        if (windowsStyle && HasWindowsSpecialSegment(value))
+        {
+            return Failed(id, SqlServerPreCheckReasons.StagingPathInvalid,
+                "The staging path contains an alternate data stream or a reserved Windows device name.");
+        }
+
         if (!windowsStyle && !posixStyle)
         {
             return Failed(id, SqlServerPreCheckReasons.StagingPathInvalid, "The staging path must be absolute on the database server.");
         }
 
-        const string formatOnly = " Whether the SQL Server service account can write there is not checked yet.";
+        const string formatOnly = " Only the shape of the path is checked here; write access of the SQL Server service account is the separate staging.server-writable check.";
         return platform switch
         {
             SqlServerHostPlatform.Windows when !windowsStyle => Failed(id, SqlServerPreCheckReasons.StagingPathWrongStyle,
@@ -264,6 +314,32 @@ internal static class SqlServerFullBackupPreCheck
     private static bool IsWindowsAbsolute(string value) =>
         (value.Length >= 3 && char.IsAsciiLetter(value[0]) && value[1] == ':' && value[2] is '\\' or '/')
         || (value.Length >= 3 && value.StartsWith(@"\\", StringComparison.Ordinal) && value[2] != '\\');
+
+    private static readonly HashSet<string> ReservedWindowsDeviceNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+    };
+
+    private static bool HasWindowsSpecialSegment(string value)
+    {
+        // The drive designator ("C:") and the extended-length / device prefix ("\\?\", "\\.\") are the only places a colon or a
+        // question mark may legitimately appear.
+        var rest = value.StartsWith(@"\\?\", StringComparison.Ordinal) || value.StartsWith(@"\\.\", StringComparison.Ordinal) ? value[4..] : value;
+        if (rest.Length >= 2 && char.IsAsciiLetter(rest[0]) && rest[1] == ':')
+        {
+            rest = rest[2..];
+        }
+
+        if (rest.Contains(':'))
+        {
+            return true;
+        }
+
+        return rest.Split('/', '\\').Any(segment =>
+            ReservedWindowsDeviceNames.Contains(segment.Split('.')[0].TrimEnd(' ')));
+    }
 
     private static string ConnectReason(DatabaseFailureKind kind) => kind switch
     {

@@ -35,6 +35,7 @@ public static class AgentHostServiceCollectionExtensions
         services.TryAddSingleton<ICapabilityRevisionSource, NullCapabilityRevisionSource>();
 
         services.AddAgentTransport();
+        services.AddAgentBackupExecution(configuration);
         services.AddSingleton<AgentConnectivityService>();
         services.AddSingleton<IAgentConnectivityStatus>(static provider => provider.GetRequiredService<AgentConnectivityService>());
         services.AddHostedService<AgentConnectivityWorker>();

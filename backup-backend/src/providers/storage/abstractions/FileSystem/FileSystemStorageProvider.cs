@@ -1,0 +1,414 @@
+using System.Buffers;
+using System.Security.Cryptography;
+
+namespace BackupPlatform.StorageProviders.Abstractions.FileSystem;
+
+/// <summary>
+/// The shared engine of every provider that stores objects as files below a directory the agent can open (a local disk, a mounted
+/// volume, a network share). The concrete providers only decide the identity, the topology and an optional key prefix; all file
+/// handling lives here once so it can be reviewed and tested once.
+/// <list type="bullet">
+/// <item><description><b>Atomic publish.</b> Content is written to a hidden sibling file named <c>.&lt;name&gt;.&lt;guid&gt;.partial</c> in the final directory,
+/// flushed to disk, validated against the expected length and checksum, and only then renamed onto the final name. A reader therefore sees
+/// the complete object or nothing. Leftovers of a crashed process keep the <c>.partial</c> suffix so a sweeper can recognise them. The directory entry
+/// itself is not fsynced; after a power loss the rename may be lost, never half-applied.</description></item>
+/// <item><description><b>Containment.</b> A key is mapped to <c>root/prefix/segments</c> and the result must lie strictly inside the root. Because
+/// <see cref="StorageObjectKey"/> already forbids <c>..</c>, rooted and drive-qualified keys, this is defence in depth. In addition,
+/// no existing directory below the root and no existing target file may be a symbolic link or reparse point: such an entry fails the
+/// operation with <see cref="StorageFailureKind.AccessDenied"/> (the layout was tampered with; it is not something a configuration change fixes).
+/// The root itself is whatever the operator configured and may be a link. The check is made right before use and is not a defence against an
+/// attacker who can concurrently modify the storage tree.</description></item>
+/// <item><description><b>Missing root.</b> The root is never created implicitly: an unmounted share would otherwise be replaced by a fresh empty
+/// directory on the system disk and backups would silently land there. The constructor validates only the shape (absolute path); every operation
+/// checks that the root directory exists and fails with <see cref="StorageFailureKind.InvalidConfiguration"/> otherwise, so a share that vanishes
+/// after start-up is detected too. Directories below the root are created on demand.</description></item>
+/// <item><description><b>Messages.</b> Exception messages and <see cref="StorageLocation"/>s never contain a file system path.</description></item>
+/// </list>
+/// Advertised capabilities are exactly <see cref="StorageCapabilityIds.Delete"/> and <see cref="StorageCapabilityIds.AtomicPublish"/>: checksums are
+/// verified by reading back, and resume, multipart, immutability and capacity queries are not implemented.
+/// </summary>
+public abstract class FileSystemStorageProvider : IStorageProvider
+{
+    private const int BlockSize = 1024 * 1024;
+
+    private static readonly StringComparison PathComparison =
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+    private readonly string _root;
+    private readonly string _rootWithSeparator;
+    private readonly string[] _keyPrefix;
+
+    /// <param name="id">The identity reported by <see cref="Id"/>.</param>
+    /// <param name="topology">How bytes reach the storage.</param>
+    /// <param name="rootDirectory">Absolute path of the root directory; it must exist when an operation runs.</param>
+    /// <param name="keyPrefix">
+    /// Fixed leading path segments (each a valid single <see cref="StorageObjectKey"/> segment) under which every key is stored, for providers that
+    /// scope their objects, for example to one tenant. The prefix directories are created on demand and are not part of the key.
+    /// </param>
+    /// <exception cref="ArgumentException">The root is not an absolute path, or a prefix segment is invalid.</exception>
+    protected FileSystemStorageProvider(
+        StorageProviderId id,
+        StorageTopology topology,
+        string rootDirectory,
+        IReadOnlyList<string>? keyPrefix = null)
+    {
+        ArgumentNullException.ThrowIfNull(id);
+        Id = id;
+        Topology = topology;
+        _root = FileSystemStorageRoot.Normalize(rootDirectory);
+        _rootWithSeparator = _root.EndsWith(Path.DirectorySeparatorChar) ? _root : _root + Path.DirectorySeparatorChar;
+        _keyPrefix = [.. (keyPrefix ?? []).Select(ValidatePrefixSegment)];
+        Capabilities = new StorageCapabilities([StorageCapabilityIds.Delete, StorageCapabilityIds.AtomicPublish]);
+    }
+
+    public StorageProviderId Id { get; }
+
+    public StorageTopology Topology { get; }
+
+    public StorageCapabilities Capabilities { get; }
+
+    public async Task<StorageObjectMetadata> PutAsync(
+        StorageObjectKey key,
+        Stream content,
+        StoragePutOptions options,
+        IProgress<long>? progress,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(content);
+        ArgumentNullException.ThrowIfNull(options);
+        if (!content.CanRead)
+        {
+            throw new ArgumentException("The content stream must be readable.", nameof(content));
+        }
+
+        if (options.ExpectedLength is < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), "The expected length must not be negative.");
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var published = false;
+        string? temporaryPath = null;
+        try
+        {
+            var finalPath = ResolveCheckedPath(key);
+            EnsureKeyIsFree(finalPath, options.Overwrite);
+
+            var directory = Path.GetDirectoryName(finalPath)!;
+            Directory.CreateDirectory(directory);
+            temporaryPath = Path.Combine(directory, $".{key.FileName}.{Guid.NewGuid():N}.partial");
+
+            var (length, checksum) = await WriteTemporaryAsync(temporaryPath, content, options, progress, cancellationToken).ConfigureAwait(false);
+
+            Publish(temporaryPath, finalPath, options.Overwrite);
+            published = true;
+            return new StorageObjectMetadata(new StorageLocation(Id, key), length, checksum, new DateTimeOffset(File.GetLastWriteTimeUtc(finalPath), TimeSpan.Zero));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw StorageIoErrors.Map(exception);
+        }
+        finally
+        {
+            if (!published && temporaryPath is not null)
+            {
+                DeleteQuietly(temporaryPath);
+            }
+        }
+    }
+
+    public Task<bool> ExistsAsync(StorageObjectKey key, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        return Execute(cancellationToken, () => File.Exists(ResolveCheckedPath(key)));
+    }
+
+    /// <summary>
+    /// Size and last-modified time come from the file system. <see cref="StorageObjectMetadata.Checksum"/> is always null: stating it would
+    /// require reading the whole object again, which is what <see cref="VerifyAsync"/> is for.
+    /// </summary>
+    public Task<StorageObjectMetadata?> GetMetadataAsync(StorageObjectKey key, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        return Execute(cancellationToken, () => ReadMetadata(key, ResolveCheckedPath(key)));
+    }
+
+    /// <summary>
+    /// A missing object is <see cref="StorageVerificationStatus.Missing"/>; a different size is <see cref="StorageVerificationStatus.SizeMismatch"/>
+    /// decided without reading the content; otherwise the stored file is streamed through SHA-256 (<see cref="StorageVerificationMethod.ReadBack"/>).
+    /// </summary>
+    public async Task<StorageVerificationResult> VerifyAsync(
+        StorageObjectKey key,
+        StorageVerificationExpectation expected,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(expected);
+        cancellationToken.ThrowIfCancellationRequested();
+        var location = new StorageLocation(Id, key);
+        try
+        {
+            var path = ResolveCheckedPath(key);
+            var info = new FileInfo(path);
+            if (!info.Exists)
+            {
+                return new StorageVerificationResult(location, StorageVerificationStatus.Missing, StorageVerificationMethod.ReadBack, null, null);
+            }
+
+            var size = info.Length;
+            if (size != expected.SizeBytes)
+            {
+                return new StorageVerificationResult(location, StorageVerificationStatus.SizeMismatch, StorageVerificationMethod.ReadBack, size, null);
+            }
+
+            await using var stream = new FileStream(path, new FileStreamOptions
+            {
+                Mode = FileMode.Open,
+                Access = FileAccess.Read,
+                Share = FileShare.Read,
+                Options = FileOptions.Asynchronous | FileOptions.SequentialScan,
+                BufferSize = 0
+            });
+            var actual = await ContentHasher.ComputeSha256Async(stream, null, cancellationToken).ConfigureAwait(false);
+            var status = actual == expected.Checksum ? StorageVerificationStatus.Verified : StorageVerificationStatus.ChecksumMismatch;
+            return new StorageVerificationResult(location, status, StorageVerificationMethod.ReadBack, size, actual);
+        }
+        catch (FileNotFoundException)
+        {
+            return new StorageVerificationResult(location, StorageVerificationStatus.Missing, StorageVerificationMethod.ReadBack, null, null);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw StorageIoErrors.Map(exception);
+        }
+    }
+
+    /// <summary>Deletes only the object file. Directories created for its key are left in place (they hold no data, and removing them would race with concurrent writes into the same directory).</summary>
+    public Task<bool> DeleteAsync(StorageObjectKey key, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        return Execute(cancellationToken, () =>
+        {
+            var path = ResolveCheckedPath(key);
+            if (!File.Exists(path))
+            {
+                return false;
+            }
+
+            File.Delete(path);
+            return true;
+        });
+    }
+
+    private static string ValidatePrefixSegment(string segment)
+    {
+        ArgumentNullException.ThrowIfNull(segment);
+        if (segment.Contains('/'))
+        {
+            throw new ArgumentException("A key prefix segment must not contain a separator.", nameof(segment));
+        }
+
+        return new StorageObjectKey(segment).Value;
+    }
+
+    /// <summary>Runs a short synchronous file system operation and reports every outcome through the returned task, as the async contract expects.</summary>
+    private static Task<T> Execute<T>(CancellationToken cancellationToken, Func<T> operation)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return Task.FromCanceled<T>(cancellationToken);
+        }
+
+        try
+        {
+            return Task.FromResult(operation());
+        }
+        catch (Exception exception) when (exception is StorageException or IOException or UnauthorizedAccessException)
+        {
+            return Task.FromException<T>(exception as StorageException ?? StorageIoErrors.Map(exception));
+        }
+    }
+
+    private static bool TryGetAttributes(string path, out FileAttributes attributes)
+    {
+        try
+        {
+            attributes = File.GetAttributes(path);
+            return true;
+        }
+        catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+        {
+            attributes = default;
+            return false;
+        }
+    }
+
+    private static void DeleteQuietly(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Cleanup must never mask the failure that made it necessary; a leftover keeps the .partial suffix for a sweeper.
+        }
+    }
+
+    private StorageObjectMetadata? ReadMetadata(StorageObjectKey key, string path)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            return info.Exists
+                ? new StorageObjectMetadata(new StorageLocation(Id, key), info.Length, null, new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero))
+                : null;
+        }
+        catch (FileNotFoundException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Maps a key to its absolute path after checking the root exists, that no existing component is a link and that the result lies strictly inside the root.</summary>
+    private string ResolveCheckedPath(StorageObjectKey key)
+    {
+        if (!Directory.Exists(_root))
+        {
+            throw new StorageException(StorageFailureKind.InvalidConfiguration, "The storage root is not available.");
+        }
+
+        var current = _root;
+        var inspect = true;
+        foreach (var segment in _keyPrefix.Concat(key.Segments))
+        {
+            current = Path.Combine(current, segment);
+            if (!inspect)
+            {
+                continue;
+            }
+
+            if (!TryGetAttributes(current, out var attributes))
+            {
+                inspect = false;
+                continue;
+            }
+
+            if (attributes.HasFlag(FileAttributes.ReparsePoint))
+            {
+                throw new StorageException(StorageFailureKind.AccessDenied, "The storage location contains a link, which is never followed.");
+            }
+
+            if (!attributes.HasFlag(FileAttributes.Directory))
+            {
+                inspect = false;
+            }
+        }
+
+        var full = Path.GetFullPath(current);
+        if (!full.StartsWith(_rootWithSeparator, PathComparison))
+        {
+            throw new StorageException(StorageFailureKind.AccessDenied, "The storage key resolves outside of the storage root.");
+        }
+
+        return full;
+    }
+
+    private static void EnsureKeyIsFree(string finalPath, StorageOverwritePolicy overwrite)
+    {
+        // A directory under the key means the key is a prefix of other objects; replacing it is never intended.
+        if (Directory.Exists(finalPath) || (overwrite == StorageOverwritePolicy.Fail && File.Exists(finalPath)))
+        {
+            throw new StorageException(StorageFailureKind.AlreadyExists, "An object already exists under this key.");
+        }
+    }
+
+    private static async Task<(long Length, ContentChecksum Checksum)> WriteTemporaryAsync(
+        string temporaryPath,
+        Stream content,
+        StoragePutOptions options,
+        IProgress<long>? progress,
+        CancellationToken cancellationToken)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        long total = 0;
+        await using (var destination = new FileStream(temporaryPath, new FileStreamOptions
+        {
+            Mode = FileMode.CreateNew,
+            Access = FileAccess.Write,
+            Share = FileShare.None,
+            Options = FileOptions.Asynchronous | FileOptions.SequentialScan,
+            BufferSize = 0
+        }))
+        {
+            var buffer = ArrayPool<byte>.Shared.Rent(BlockSize);
+            try
+            {
+                while (true)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    int read;
+                    try
+                    {
+                        read = await content.ReadAsync(buffer.AsMemory(0, BlockSize), cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (IOException exception)
+                    {
+                        throw new StorageException(StorageFailureKind.Io, "The content to store could not be read.", exception);
+                    }
+
+                    if (read == 0)
+                    {
+                        break;
+                    }
+
+                    total += read;
+                    if (options.ExpectedLength is { } expectedLength && total > expectedLength)
+                    {
+                        throw LengthMismatch();
+                    }
+
+                    hash.AppendData(buffer, 0, read);
+                    await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                    progress?.Report(total);
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
+
+            if (options.ExpectedLength is { } expected && total != expected)
+            {
+                throw LengthMismatch();
+            }
+
+            destination.Flush(flushToDisk: true);
+        }
+
+        var checksum = ContentChecksum.Sha256(hash.GetHashAndReset());
+        if (options.ExpectedChecksum is { } expectedChecksum && expectedChecksum != checksum)
+        {
+            throw new StorageException(StorageFailureKind.IntegrityMismatch, "The content checksum differs from the expected checksum.");
+        }
+
+        return (total, checksum);
+    }
+
+    private static StorageException LengthMismatch() =>
+        new(StorageFailureKind.IntegrityMismatch, "The content length differs from the expected length.");
+
+    private static void Publish(string temporaryPath, string finalPath, StorageOverwritePolicy overwrite)
+    {
+        try
+        {
+            File.Move(temporaryPath, finalPath, overwrite == StorageOverwritePolicy.Replace);
+        }
+        catch (IOException) when (overwrite == StorageOverwritePolicy.Fail && (File.Exists(finalPath) || Directory.Exists(finalPath)))
+        {
+            // Another writer published the same key between the early check and the rename.
+            throw new StorageException(StorageFailureKind.AlreadyExists, "An object already exists under this key.");
+        }
+    }
+}

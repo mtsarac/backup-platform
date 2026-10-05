@@ -13,6 +13,9 @@ public sealed class AgentHostOptions
     public string? CredentialStoreDirectory { get; set; }
 
     public AgentConnectivityOptions Connectivity { get; set; } = new();
+
+    /// <summary>Optional: staging directory and reachable storages for database backups. Absent means this agent takes no database backups.</summary>
+    public AgentBackupOptions? Backup { get; set; }
 }
 
 public sealed class AgentBackendOptions

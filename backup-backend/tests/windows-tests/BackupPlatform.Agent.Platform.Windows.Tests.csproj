@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Tests of what only Windows can show: DPAPI, NTFS ACLs, reparse points (symbolic links, junctions) and account boundaries.
+    The project compiles on every OS (so the code cannot rot on a Linux machine) but its tests run only on Windows. Elsewhere every
+    test is reported as SKIPPED with an explicit reason, never as passed. CI must run this project on a Windows worker separately;
+    account-boundary tests need an elevated session, and symbolic-link tests need the corresponding privilege or Developer Mode.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/agent/core/BackupPlatform.Agent.Core.csproj" />
+    <ProjectReference Include="../../src/agent/platform-windows/BackupPlatform.Agent.Platform.Windows.csproj" />
+    <!-- Built, not referenced: the probe is started as a separate process and copied next to the tests. -->
+    <ProjectReference Include="../windows-test-probe/BackupPlatform.Agent.Platform.Windows.TestProbe.csproj" ReferenceOutputAssembly="false" OutputItemType="ProbeAssembly" />
+  </ItemGroup>
+
+  <Target Name="CopyTestProbe" AfterTargets="Build">
+    <PropertyGroup>
+      <_ProbeDirectory>@(ProbeAssembly->'%(RootDir)%(Directory)')</_ProbeDirectory>
+    </PropertyGroup>
+    <ItemGroup>
+      <_ProbeFile Include="$(_ProbeDirectory)**" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_ProbeFile)" DestinationFiles="@(_ProbeFile->'$(OutDir)probe\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

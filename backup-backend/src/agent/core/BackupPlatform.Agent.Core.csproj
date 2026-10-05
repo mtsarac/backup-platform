@@ -11,5 +11,9 @@
     <ProjectReference Include="..\..\providers\snapshot\abstractions\BackupPlatform.SnapshotProviders.Abstractions.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="BackupPlatform.UnitTests" />
+  </ItemGroup>
+
 
 </Project>

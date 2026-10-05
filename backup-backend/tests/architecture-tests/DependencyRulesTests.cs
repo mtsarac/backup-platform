@@ -346,4 +346,111 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
     private static bool IsProviderImplementation(ProjectNode node) =>
         node.RelativePath.StartsWith("src/providers/", StringComparison.Ordinal)
         && !node.Name.EndsWith(".Abstractions", StringComparison.Ordinal);
+
+    [Fact]
+    public void AgentCoreMustNotDependOnProviderImplementations() =>
+        AssertForbiddenDependencies("BackupPlatform.Agent.Core", IsProviderImplementation);
+
+    [Fact]
+    public void OnlyHostsMayComposeProviderImplementations()
+    {
+        foreach (var (configuration, graph) in fixture.Graphs)
+        {
+            foreach (var node in graph.Values.Where(node =>
+                !node.RelativePath.StartsWith("src/hosts/", StringComparison.Ordinal) && !IsProviderImplementation(node)))
+            {
+                AssertForbiddenDependencies(configuration, graph, node.Name, IsProviderImplementation);
+            }
+        }
+    }
+
+    [Fact]
+    public void BackupAndStorageProviderAbstractionsMustBeIndependentOfEachOther()
+    {
+        foreach (var (configuration, graph) in fixture.Graphs)
+        {
+            Assert.True(graph["BackupPlatform.BackupProviders.Abstractions"].References.Length == 0, $"The backup provider abstractions must stand alone ({configuration}).");
+            Assert.True(graph["BackupPlatform.StorageProviders.Abstractions"].References.Length == 0, $"The storage provider abstractions must stand alone ({configuration}).");
+        }
+    }
+
+    [Theory]
+    [InlineData("BackupPlatform.StorageProviders.Local")]
+    [InlineData("BackupPlatform.StorageProviders.Central")]
+    public void StorageProvidersMayOnlyDependOnTheStorageAbstractions(string project)
+    {
+        foreach (var (configuration, graph) in fixture.Graphs)
+        {
+            AssertForbiddenDependencies(configuration, graph, project, node => node.Name != "BackupPlatform.StorageProviders.Abstractions");
+        }
+
+        AssertForbiddenExternalDependencies(project, IsSqlClientDependency, IsPersistenceDependency, IsWebDependency);
+    }
+
+    [Fact]
+    public void StorageAbstractionsMustNotKnowDatabasesOrPersistence() =>
+        AssertForbiddenExternalDependencies("BackupPlatform.StorageProviders.Abstractions", IsSqlClientDependency, IsPersistenceDependency, IsWebDependency);
+
+    [Fact]
+    public void DomainAndContractsMustNotUseFileSystemOrSqlClientApis()
+    {
+        AssertForbiddenExternalDependencies("BackupPlatform.Domain", IsFileSystemApi, IsSqlClientDependency);
+        AssertForbiddenExternalDependencies("BackupPlatform.Contracts", IsFileSystemApi, IsSqlClientDependency);
+    }
+
+    private static bool IsFileSystemApi(string name) =>
+        name is "System.IO.File" or "System.IO.Directory" or "System.IO.FileInfo" or "System.IO.DirectoryInfo"
+            or "System.IO.FileStream" or "System.IO.DriveInfo" or "System.IO.FileSystemInfo";
+
+    [Theory]
+    [InlineData("BackupPlatform.Agent.Core")]
+    [InlineData("BackupPlatform.Agent.Transport")]
+    [InlineData("BackupPlatform.Agent.Platform.Linux")]
+    public void PlatformNeutralAndLinuxAgentProjectsMustNotUseWindowsApis(string project) =>
+        AssertForbiddenExternalDependencies(project, IsDpapiApi, IsWindowsServiceApi, IsWindowsAccessControlApi);
+
+    [Fact]
+    public void OnlyTheWindowsPlatformProjectMayUseDpapi()
+    {
+        // Hosts compose the platform and therefore reach DPAPI through it; everything else must not know it.
+        // SqlClient legitimately brings ProtectedData as a transitive package. Check what each assembly actually uses, not its
+        // dependency's implementation; the Agent.Core/Transport/Linux rule above still forbids even that package dependency.
+        foreach (var node in fixture.Graphs["Release"].Values.Where(node =>
+            !node.RelativePath.StartsWith("src/hosts/", StringComparison.Ordinal) && node.Name != "BackupPlatform.Agent.Platform.Windows"))
+        {
+            var forbidden = node.Assemblies.Concat(node.Types).Where(IsDpapiApi).Distinct(StringComparer.Ordinal).ToArray();
+            Assert.True(forbidden.Length == 0, $"{node.Name} directly uses DPAPI outside the Windows platform: {string.Join(", ", forbidden)}.");
+        }
+    }
+
+    [Fact]
+    public void OnlyTheAgentHostMayReachTheWindowsServiceManager()
+    {
+        foreach (var node in fixture.Graphs["Release"].Values.Where(node => !node.RelativePath.StartsWith("src/hosts/agent/", StringComparison.Ordinal)))
+        {
+            AssertForbiddenExternalDependencies(node.Name, IsWindowsServiceApi);
+        }
+    }
+
+    [Fact]
+    public void TheWindowsPlatformMustNotKnowTheGenericHostOrTheLinuxPlatform()
+    {
+        AssertForbiddenExternalDependencies("BackupPlatform.Agent.Platform.Windows", IsWindowsServiceApi, name => name.StartsWith("Microsoft.Extensions.Hosting", StringComparison.OrdinalIgnoreCase));
+        AssertForbiddenDependencies("BackupPlatform.Agent.Platform.Windows", node => node.Name == "BackupPlatform.Agent.Platform.Linux");
+        AssertForbiddenDependencies("BackupPlatform.Agent.Platform.Linux", node => node.Name == "BackupPlatform.Agent.Platform.Windows");
+    }
+
+    private static bool IsDpapiApi(string name) =>
+        name.StartsWith("System.Security.Cryptography.ProtectedData", StringComparison.Ordinal)
+        || name == "System.Security.Cryptography.DataProtectionScope";
+
+    private static bool IsWindowsServiceApi(string name) =>
+        name.StartsWith("Microsoft.Extensions.Hosting.WindowsServices", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("System.ServiceProcess", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("Microsoft.Extensions.Logging.EventLog", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsWindowsAccessControlApi(string name) =>
+        name is "System.Security.AccessControl.FileSecurity" or "System.Security.AccessControl.DirectorySecurity"
+            or "System.Security.AccessControl.FileSystemAccessRule" or "System.IO.FileSystemAclExtensions"
+            or "System.Security.Principal.WindowsIdentity" or "System.Security.Principal.WindowsPrincipal";
 }

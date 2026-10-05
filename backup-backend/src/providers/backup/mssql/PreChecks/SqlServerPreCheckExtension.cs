@@ -10,10 +10,11 @@ public sealed record SqlServerPreCheckContext(
     SqlServerDatabaseInfo Database);
 
 /// <summary>
-/// Extension point for checks that go beyond metadata. It runs only once the server was reached, the login accepted and the
-/// database found. The first planned implementation is the SQL-Server-service-account write check for the staging path
-/// (<c>staging.path-server-writable</c>): the file is created by the database service account, not by the agent process, so it
-/// must be probed from the server's side and must never be confused with an agent-side file system check.
+/// Extension point for checks that go beyond what the provider itself verifies. It runs only once the server was reached, the
+/// login accepted and the database found, after the built-in checks (which already include the staging checks:
+/// <c>staging.agent-access</c>, <c>staging.server-writable</c>, <c>staging.mapping</c>, <c>staging.disk-space</c>). An extension
+/// adds items; it cannot change or remove built-in ones. A check about the database service account must be probed from the
+/// server's side and must never be confused with an agent-side file system check.
 /// </summary>
 public interface ISqlServerPreCheckExtension
 {

@@ -59,4 +59,18 @@ public interface IDatabaseBackupProvider
         DatabaseCredential credential,
         FullBackupPreCheckRequest request,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Takes one full backup into the staging directory and verifies it with the engine's own verification (SQL Server:
+    /// <c>RESTORE VERIFYONLY</c>); the file is never reported as a success unless that verification passed. The caller is expected
+    /// to have run <see cref="PreCheckFullBackupAsync"/> first. Expected failures and caller cancellation are returned as a
+    /// <see cref="FullBackupResult"/> (never thrown); cancellation stops the running engine statement and removes the partial
+    /// staging file. Only argument errors throw. <paramref name="progress"/> is best-effort and can never change the outcome.
+    /// </summary>
+    Task<FullBackupResult> ExecuteFullBackupAsync(
+        DatabaseConnectionSettings connection,
+        DatabaseCredential credential,
+        FullBackupRequest request,
+        IProgress<BackupProgress>? progress,
+        CancellationToken cancellationToken);
 }
