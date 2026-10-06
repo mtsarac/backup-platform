@@ -136,6 +136,8 @@ public sealed class BackupTaskWorkerTests
         Assert.True(harness.Worker.TryPublish(envelope));
         await Wait.UntilAsync(() => harness.Pipeline.Calls.Count == 1, "provider start");
         Assert.Empty(harness.Client.Progress);
+        // The coalescing timer is armed by the worker after the provider started; advancing the fake clock before that would miss it.
+        await ConnectivityHarness.SettleAsync();
         harness.Time.Advance(TimeSpan.FromSeconds(2));
         await Wait.UntilAsync(() => harness.Client.Progress.Count == 1, "coalesced progress");
         Assert.Equal(100, Assert.Single(harness.Client.Progress).Percent);

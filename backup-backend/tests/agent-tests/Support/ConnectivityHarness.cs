@@ -64,8 +64,14 @@ internal sealed class ConnectivityHarness : IAsyncDisposable
         await SettleAsync();
     }
 
-    /// <summary>Lets queued continuations run; the service has no real-time dependencies.</summary>
-    public static async Task SettleAsync() => await Task.Delay(6);
+    private static readonly TimeSpan SettleDelay = TimeSpan.FromMilliseconds(25);
+
+    /// <summary>
+    /// Lets queued continuations run; the service has no real-time dependencies. The delay is a real wait, so it has to outlast the
+    /// scheduling latency of a loaded machine (a 2 vCPU CI runner): 6 ms let the test observe the service mid-step, for example
+    /// a poll recorded one fake-clock step late.
+    /// </summary>
+    public static async Task SettleAsync() => await Task.Delay(SettleDelay);
 
     public async Task AdvanceAsync(TimeSpan duration, TimeSpan? step = null)
     {
