@@ -455,6 +455,33 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                                 .HasColumnName("RetryMaxDelay");
                         });
 
+                    b.ComplexProperty(typeof(Dictionary<string, object>), "Schedule", "BackupPlatform.Domain.Backups.BackupJob.Schedule#BackupSchedule", b1 =>
+                        {
+                            b1.Property<string>("CronExpression")
+                                .IsRequired()
+                                .HasMaxLength(128)
+                                .HasColumnType("character varying(128)")
+                                .HasColumnName("ScheduleCron");
+
+                            b1.Property<DateTimeOffset>("EffectiveFrom")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("ScheduleEffectiveFrom");
+
+                            b1.Property<bool>("Enabled")
+                                .HasColumnType("boolean")
+                                .HasColumnName("ScheduleEnabled");
+
+                            b1.Property<TimeSpan>("MissedRunGracePeriod")
+                                .HasColumnType("interval")
+                                .HasColumnName("ScheduleMissedRunGrace");
+
+                            b1.Property<string>("TimeZoneId")
+                                .IsRequired()
+                                .HasMaxLength(64)
+                                .HasColumnType("character varying(64)")
+                                .HasColumnName("ScheduleTimeZone");
+                        });
+
                     b.HasKey("Id");
 
                     b.HasIndex("TenantId");
@@ -463,6 +490,10 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "AgentId");
 
+                    b.HasIndex("TenantId", "Id")
+                        .HasDatabaseName("ix_backup_jobs_scheduled")
+                        .HasFilter("\"Enabled\" AND \"ScheduleEnabled\"");
+
                     b.ToTable("backup_jobs", null, t =>
                         {
                             t.HasCheckConstraint("ck_backup_job_policy", "\"BackupType\" = 'Full' AND \"OverlapPolicy\" IN ('Skip','Queue')");
@@ -470,6 +501,8 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_backup_jobs_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
 
                             t.HasCheckConstraint("ck_backup_jobs_retry_policy", "\"RetryMaxAttempts\" BETWEEN 1 AND 10 AND \"RetryInitialDelay\" >= interval '1 second' AND \"RetryMaxDelay\" >= \"RetryInitialDelay\" AND \"RetryMaxDelay\" <= interval '24 hours' AND \"RetryBackoff\" IN (1,2) AND \"RetryJitter\" BETWEEN 0 AND 1");
+
+                            t.HasCheckConstraint("ck_backup_jobs_schedule", "(\"ScheduleEnabled\" IS NULL AND \"ScheduleCron\" IS NULL AND \"ScheduleTimeZone\" IS NULL AND \"ScheduleMissedRunGrace\" IS NULL AND \"ScheduleEffectiveFrom\" IS NULL) OR (\"ScheduleEnabled\" IS NOT NULL AND \"ScheduleCron\" IS NOT NULL AND \"ScheduleTimeZone\" IS NOT NULL AND \"ScheduleMissedRunGrace\" IS NOT NULL AND \"ScheduleEffectiveFrom\" IS NOT NULL AND \"ScheduleMissedRunGrace\" BETWEEN interval '1 minute' AND interval '7 days')");
 
                             t.HasCheckConstraint("ck_backup_jobs_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
                         });
@@ -632,6 +665,9 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("CancellationRequestedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTimeOffset?>("ClaimDeadline")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -664,6 +700,9 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<int>("RetryState")
                         .HasColumnType("integer");
 
+                    b.Property<DateTimeOffset?>("ScheduledOccurrence")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTimeOffset?>("StartedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -680,7 +719,8 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("TriggerType")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<uint>("xmin")
                         .IsConcurrencyToken()
@@ -719,6 +759,9 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AgentId", "TenantId");
 
+                    b.HasIndex("ClaimDeadline", "Id")
+                        .HasFilter("\"Status\" = 1 AND \"ClaimDeadline\" IS NOT NULL");
+
                     b.HasIndex("JobId", "TenantId");
 
                     b.HasIndex("NextAttemptAt", "Id")
@@ -734,6 +777,10 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "JobId", "IdempotencyKey")
                         .IsUnique();
+
+                    b.HasIndex("TenantId", "JobId", "ScheduledOccurrence")
+                        .IsUnique()
+                        .HasFilter("\"ScheduledOccurrence\" IS NOT NULL");
 
                     b.HasIndex("TenantId", "Status", "CreatedAt");
 
@@ -761,7 +808,9 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_backup_runs_terminal", "(\"Status\" IN (4,5,6,7)) = (\"CompletedAt\" IS NOT NULL)");
 
-                            t.HasCheckConstraint("ck_backup_runs_type", "\"BackupType\" = 'Full' AND \"TriggerType\" = 'Manual'");
+                            t.HasCheckConstraint("ck_backup_runs_trigger", "(\"TriggerType\" = 'Manual' AND \"ScheduledOccurrence\" IS NULL AND \"ClaimDeadline\" IS NULL) OR (\"TriggerType\" = 'Scheduled' AND \"ScheduledOccurrence\" IS NOT NULL AND \"ClaimDeadline\" IS NOT NULL AND \"ClaimDeadline\" >= \"ScheduledOccurrence\")");
+
+                            t.HasCheckConstraint("ck_backup_runs_type", "\"BackupType\" = 'Full'");
                         });
                 });
 
@@ -878,6 +927,72 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_backup_run_attempts_status", "\"Status\" BETWEEN 1 AND 7");
 
                             t.HasCheckConstraint("ck_backup_run_attempts_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupScheduleOccurrence", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("DecidedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("JobId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid?>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("ScheduledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TenantId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("Id", "TenantId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("JobId", "TenantId");
+
+                    b.HasIndex("RunId", "TenantId");
+
+                    b.HasIndex("TenantId", "RunId")
+                        .IsUnique()
+                        .HasFilter("\"Outcome\" = 'RunCreated'");
+
+                    b.HasIndex("TenantId", "JobId", "ScheduledAt")
+                        .IsUnique();
+
+                    b.ToTable("backup_schedule_occurrences", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_backup_occurrence_outcome", "\"Outcome\" IN ('RunCreated','SkippedOverlap','MissedGraceExpired','MissedSuperseded','JobDisabled')");
+
+                            t.HasCheckConstraint("ck_backup_occurrence_run", "(\"Outcome\" IN ('RunCreated','SkippedOverlap')) = (\"RunId\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_backup_schedule_occurrences_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_backup_schedule_occurrences_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
                         });
                 });
 
@@ -1225,6 +1340,28 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("Id", "TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupScheduleOccurrence", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Backups.BackupJob", null)
+                        .WithMany()
+                        .HasForeignKey("JobId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Backups.BackupRun", null)
+                        .WithMany()
+                        .HasForeignKey("RunId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("BackupPlatform.Domain.Tenancy.PlatformAdmin", b =>

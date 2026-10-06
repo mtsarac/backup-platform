@@ -30,6 +30,8 @@ public static class BackupFailureCodes
     // Outcomes that are not agent-reported failures.
     public const string Cancelled = "Cancelled";
     public const string AgentLost = "AgentLost";
+    /// <summary>A scheduled run's first attempt was not claimed before its grace period ended, so the stale work was dropped. Not agent-reported, never retried.</summary>
+    public const string ScheduleGraceExpired = "ScheduleGraceExpired";
 
     private static readonly Dictionary<string, bool> AgentReported = new(StringComparer.Ordinal)
     {

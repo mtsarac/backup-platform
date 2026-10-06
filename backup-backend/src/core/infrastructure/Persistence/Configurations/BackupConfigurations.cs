@@ -64,11 +64,28 @@ internal sealed class BackupJobConfiguration : IEntityTypeConfiguration<BackupJo
         builder.Property(job => job.Name).HasMaxLength(200).IsRequired();
         BackupMapping.RetryPolicy(builder, job => job.RetryPolicy);
         builder.Property(job => job.OverlapPolicy).HasConversion<string>().HasMaxLength(16).IsRequired();
+        builder.ComplexProperty(job => job.Schedule, schedule =>
+        {
+            schedule.Property(value => value.Enabled).HasColumnName("ScheduleEnabled");
+            schedule.Property(value => value.CronExpression).HasColumnName("ScheduleCron").HasMaxLength(128);
+            schedule.Property(value => value.TimeZoneId).HasColumnName("ScheduleTimeZone").HasMaxLength(64);
+            schedule.Property(value => value.MissedRunGracePeriod).HasColumnName("ScheduleMissedRunGrace");
+            schedule.Property(value => value.EffectiveFrom).HasColumnName("ScheduleEffectiveFrom");
+        });
+        builder.Ignore(job => job.IsScheduled);
         builder.ToTable("backup_jobs", table =>
-            table.HasCheckConstraint("ck_backup_job_policy", "\"BackupType\" = 'Full' AND \"OverlapPolicy\" IN ('Skip','Queue')"));
+        {
+            table.HasCheckConstraint("ck_backup_job_policy", "\"BackupType\" = 'Full' AND \"OverlapPolicy\" IN ('Skip','Queue')");
+            // The schedule is all-or-nothing and its grace period is bounded (1 minute .. 7 days).
+            table.HasCheckConstraint("ck_backup_jobs_schedule", "(\"ScheduleEnabled\" IS NULL AND \"ScheduleCron\" IS NULL AND \"ScheduleTimeZone\" IS NULL AND \"ScheduleMissedRunGrace\" IS NULL AND \"ScheduleEffectiveFrom\" IS NULL) " +
+                "OR (\"ScheduleEnabled\" IS NOT NULL AND \"ScheduleCron\" IS NOT NULL AND \"ScheduleTimeZone\" IS NOT NULL AND \"ScheduleMissedRunGrace\" IS NOT NULL AND \"ScheduleEffectiveFrom\" IS NOT NULL " +
+                "AND \"ScheduleMissedRunGrace\" BETWEEN interval '1 minute' AND interval '7 days')");
+        });
         builder.HasOne<Agent>().WithMany().HasForeignKey(job => new { job.AgentId, job.TenantId })
             .HasPrincipalKey(agent => new { agent.Id, agent.TenantId }).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(job => new { job.TenantId, job.AgentId });
+        // The sweep and the reconciliation only ever look at jobs that are switched on.
+        builder.HasIndex("TenantId", "Id").HasFilter("\"Enabled\" AND \"ScheduleEnabled\"").HasDatabaseName("ix_backup_jobs_scheduled");
     }
 }
 
@@ -85,13 +102,16 @@ internal sealed class BackupRunConfiguration : IEntityTypeConfiguration<BackupRu
         {
             table.HasCheckConstraint("ck_backup_runs_attempt_number", "\"CurrentAttemptNumber\" >= 1");
             table.HasCheckConstraint("ck_backup_runs_attempt_budget", "\"CurrentAttemptNumber\" <= \"RetryMaxAttempts\"");
-            table.HasCheckConstraint("ck_backup_runs_type", "\"BackupType\" = 'Full' AND \"TriggerType\" = 'Manual'");
+            table.HasCheckConstraint("ck_backup_runs_type", "\"BackupType\" = 'Full'");
+            table.HasCheckConstraint("ck_backup_runs_trigger", "(\"TriggerType\" = 'Manual' AND \"ScheduledOccurrence\" IS NULL AND \"ClaimDeadline\" IS NULL) " +
+                "OR (\"TriggerType\" = 'Scheduled' AND \"ScheduledOccurrence\" IS NOT NULL AND \"ClaimDeadline\" IS NOT NULL AND \"ClaimDeadline\" >= \"ScheduledOccurrence\")");
             table.HasCheckConstraint("ck_backup_runs_terminal", "(\"Status\" IN (4,5,6,7)) = (\"CompletedAt\" IS NOT NULL)");
             table.HasCheckConstraint("ck_backup_runs_retry_schedule", "(\"Status\" = 8) = (\"NextAttemptAt\" IS NOT NULL)");
             table.HasCheckConstraint("ck_backup_runs_retry_state", "\"RetryState\" BETWEEN 0 AND 3 AND ((\"Status\" = 8) = (\"RetryState\" = 1))");
             table.HasCheckConstraint("ck_backup_runs_overlap", "\"OverlapPolicy\" IN ('Skip','Queue')");
         });
         builder.Property(run => run.IdempotencyKey).HasMaxLength(128).IsRequired();
+        builder.Property(run => run.TriggerType).HasMaxLength(16).IsRequired();
         builder.Property(run => run.TerminalReason).HasMaxLength(128);
         builder.Property(run => run.OverlapPolicy).HasConversion<string>().HasMaxLength(16).IsRequired();
         builder.Property(run => run.RetryState).HasConversion<int>();
@@ -117,6 +137,10 @@ internal sealed class BackupRunConfiguration : IEntityTypeConfiguration<BackupRu
         builder.HasIndex(run => new { run.TenantId, run.JobId }).IsUnique().HasFilter("\"OverlapPolicy\" = 'Skip' AND \"Status\" IN (1,2,3,8)");
         // The retry worker's only scan: due RetryPending runs, oldest due first.
         builder.HasIndex(run => new { run.NextAttemptAt, run.Id }).HasFilter("\"Status\" = 8");
+        // One run per scheduled instant of a job, whichever node, wake-up refire or reconciliation tries to create it.
+        builder.HasIndex(run => new { run.TenantId, run.JobId, run.ScheduledOccurrence }).IsUnique().HasFilter("\"ScheduledOccurrence\" IS NOT NULL");
+        // The unclaimed-run sweep: pending scheduled runs, earliest deadline first.
+        builder.HasIndex(run => new { run.ClaimDeadline, run.Id }).HasFilter("\"Status\" = 1 AND \"ClaimDeadline\" IS NOT NULL");
     }
 }
 
@@ -213,5 +237,29 @@ internal sealed class BackupFactConfiguration : IEntityTypeConfiguration<BackupL
         builder.HasOne<BackupRunAttempt>().WithMany().HasForeignKey(fact => new { fact.AttemptId, fact.TenantId })
             .HasPrincipalKey(attempt => new { attempt.Id, attempt.TenantId }).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(fact => new { fact.TenantId, fact.RunId, fact.At });
+    }
+}
+
+internal sealed class BackupScheduleOccurrenceConfiguration : IEntityTypeConfiguration<BackupScheduleOccurrence>
+{
+    public void Configure(EntityTypeBuilder<BackupScheduleOccurrence> builder)
+    {
+        BackupMapping.Base(builder, "backup_schedule_occurrences");
+        builder.ToTable("backup_schedule_occurrences", table =>
+        {
+            table.HasCheckConstraint("ck_backup_occurrence_outcome", "\"Outcome\" IN ('RunCreated','SkippedOverlap','MissedGraceExpired','MissedSuperseded','JobDisabled')");
+            // RunCreated names the created run and SkippedOverlap the run in the way; no other outcome names a run.
+            table.HasCheckConstraint("ck_backup_occurrence_run", "(\"Outcome\" IN ('RunCreated','SkippedOverlap')) = (\"RunId\" IS NOT NULL)");
+        });
+        builder.Property(occurrence => occurrence.Outcome).HasConversion<string>().HasMaxLength(24).IsRequired();
+        builder.Property(occurrence => occurrence.Reason).HasMaxLength(64).IsRequired();
+        builder.HasOne<BackupJob>().WithMany().HasForeignKey(occurrence => new { occurrence.JobId, occurrence.TenantId })
+            .HasPrincipalKey(job => new { job.Id, job.TenantId }).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<BackupRun>().WithMany().HasForeignKey(occurrence => new { occurrence.RunId, occurrence.TenantId })
+            .HasPrincipalKey(run => new { run.Id, run.TenantId }).OnDelete(DeleteBehavior.Restrict);
+        // A scheduled instant is decided exactly once. This key, not memory, is the scheduler's idempotency.
+        builder.HasIndex(occurrence => new { occurrence.TenantId, occurrence.JobId, occurrence.ScheduledAt }).IsUnique();
+        // At most one occurrence is the origin of a run.
+        builder.HasIndex(occurrence => new { occurrence.TenantId, occurrence.RunId }).IsUnique().HasFilter("\"Outcome\" = 'RunCreated'");
     }
 }

@@ -15,6 +15,7 @@ using BackupPlatform.Identity;
 using BackupPlatform.Infrastructure.Agents;
 using BackupPlatform.Infrastructure.Identity;
 using BackupPlatform.Infrastructure.Persistence;
+using BackupPlatform.Infrastructure.Scheduling;
 using BackupPlatform.Tenancy;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
@@ -52,6 +53,8 @@ public static class SecurityServiceCollectionExtensions
         services.AddHostedService<StaleBackupDetector>();
         services.AddSingleton<BackupRetryWorker>();
         services.AddHostedService(provider => provider.GetRequiredService<BackupRetryWorker>());
+        services.AddSingleton<IBackupWorkSignal, AgentPushWorkSignal>();
+        services.AddBackupScheduling();
         AddPolicies(services);
         services.AddAntiforgery(options =>
         {

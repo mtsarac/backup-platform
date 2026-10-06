@@ -2,6 +2,7 @@ using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Application.Tenancy;
+using BackupPlatform.Domain.Backups;
 
 namespace BackupPlatform.Api.Endpoints;
 
@@ -12,6 +13,11 @@ public static class BackupEndpoints
         var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}").WithMetadata(new TenantScopedEndpoint());
         tenant.MapPost("/backup-jobs", CreateJobAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
         tenant.MapGet("/backup-jobs/{jobId:guid}", GetJobAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
+        tenant.MapPut("/backup-jobs/{jobId:guid}/schedule", ChangeScheduleAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
+        tenant.MapDelete("/backup-jobs/{jobId:guid}/schedule", RemoveScheduleAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
+        tenant.MapGet("/backup-jobs/{jobId:guid}/schedule/occurrences", ListOccurrencesAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
+        tenant.MapPost("/backup-jobs/{jobId:guid}/enable", EnableAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
+        tenant.MapPost("/backup-jobs/{jobId:guid}/disable", DisableAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
         tenant.MapPost("/backup-jobs/{jobId:guid}/runs", StartRunAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
         tenant.MapGet("/backup-runs", ListRunsAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
         tenant.MapGet("/backup-jobs/{jobId:guid}/runs", ListRunsAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
@@ -21,20 +27,59 @@ public static class BackupEndpoints
         return endpoints;
     }
 
-    private static async Task<IResult> CreateJobAsync(CreateBackupJobRequest request, ITenantContext tenant, BackupOrchestrator service, CancellationToken cancellationToken)
+    private static async Task<IResult> CreateJobAsync(CreateBackupJobRequest request, ITenantContext tenant, BackupOrchestrator service, BackupScheduleService schedules, CancellationToken cancellationToken)
     {
         try
         {
             var job = await service.CreateJobAsync(tenant.TenantId!, request, cancellationToken);
-            return job is null ? Results.NotFound() : Results.Created($"/api/tenants/{tenant.TenantId!.Value}/backup-jobs/{job.Id}", job);
+            if (job is null) return Results.NotFound();
+            if (job.Schedule is not null) await schedules.TrySynchronizeAsync(tenant.TenantId!, job.Id, cancellationToken);
+            return Results.Created($"/api/tenants/{tenant.TenantId!.Value}/backup-jobs/{job.Id}", job);
         }
+        catch (InvalidBackupScheduleException exception) { return InvalidSchedule(exception); }
         catch (ArgumentException) { return Invalid("Invalid backup job configuration."); }
     }
 
-    private static async Task<IResult> GetJobAsync(Guid jobId, ITenantContext tenant, IBackupRunStore store, CancellationToken cancellationToken)
+    private static async Task<IResult> GetJobAsync(Guid jobId, ITenantContext tenant, IBackupRunStore store, TimeProvider time, CancellationToken cancellationToken)
     {
         var job = await store.GetJobAsync(tenant.TenantId!, jobId, cancellationToken);
-        return job is null ? Results.NotFound() : Results.Ok(BackupOrchestrator.ToView(job));
+        return job is null ? Results.NotFound() : Results.Ok(BackupOrchestrator.ToView(job, time.GetUtcNow()));
+    }
+
+    private static async Task<IResult> ChangeScheduleAsync(Guid jobId, BackupScheduleRequest request, ITenantContext tenant, BackupScheduleService schedules, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var job = await schedules.ChangeScheduleAsync(tenant.TenantId!, jobId, request, cancellationToken);
+            return job is null ? Results.NotFound() : Results.Ok(job);
+        }
+        catch (InvalidBackupScheduleException exception) { return InvalidSchedule(exception); }
+        catch (ArgumentException) { return Invalid("Invalid schedule."); }
+    }
+
+    private static async Task<IResult> RemoveScheduleAsync(Guid jobId, ITenantContext tenant, BackupScheduleService schedules, CancellationToken cancellationToken)
+    {
+        var job = await schedules.ChangeScheduleAsync(tenant.TenantId!, jobId, null, cancellationToken);
+        return job is null ? Results.NotFound() : Results.Ok(job);
+    }
+
+    private static async Task<IResult> EnableAsync(Guid jobId, ITenantContext tenant, BackupScheduleService schedules, CancellationToken cancellationToken)
+    {
+        var job = await schedules.SetEnabledAsync(tenant.TenantId!, jobId, true, cancellationToken);
+        return job is null ? Results.NotFound() : Results.Ok(job);
+    }
+
+    private static async Task<IResult> DisableAsync(Guid jobId, ITenantContext tenant, BackupScheduleService schedules, CancellationToken cancellationToken)
+    {
+        var job = await schedules.SetEnabledAsync(tenant.TenantId!, jobId, false, cancellationToken);
+        return job is null ? Results.NotFound() : Results.Ok(job);
+    }
+
+    private static async Task<IResult> ListOccurrencesAsync(Guid jobId, int? limit, ITenantContext tenant, BackupScheduleService schedules, CancellationToken cancellationToken)
+    {
+        if (limit is < 1 or > 100) return Invalid("Limit must be between 1 and 100.");
+        var occurrences = await schedules.ListOccurrencesAsync(tenant.TenantId!, jobId, limit ?? 50, cancellationToken);
+        return occurrences is null ? Results.NotFound() : Results.Ok(occurrences);
     }
 
     private static async Task<IResult> StartRunAsync(Guid jobId, HttpContext context, ITenantContext tenant, BackupOrchestrator service,
@@ -107,6 +152,10 @@ public static class BackupEndpoints
         try { await push.TrySendPollHintAsync(agentId, reason, CancellationToken.None); }
         catch (Exception exception) { logger.LogWarning(exception, "Backup poll hint delivery failed; durable polling remains authoritative."); }
     }
+
+    /// <summary>Machine-readable and safe to show: names the offending field and a stable code, never the parser's own message.</summary>
+    private static IResult InvalidSchedule(InvalidBackupScheduleException exception) =>
+        Results.BadRequest(new { error = "invalid_schedule", field = exception.Field, code = exception.Code, message = exception.Message });
 
     private static IResult Invalid(string message) => Results.BadRequest(new { error = "invalid_request", message });
 }

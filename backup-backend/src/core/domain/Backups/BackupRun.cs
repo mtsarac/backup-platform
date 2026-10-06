@@ -39,7 +39,8 @@ public sealed class BackupRun : ITenantOwned
     private IReadOnlyList<BackupLifecycleFact>? _factView;
     private BackupRun() { TenantId = null!; AgentId = null!; Configuration = null!; IdempotencyKey = null!; RetryPolicy = null!; }
     public BackupRun(Guid id, TenantId tenantId, Guid jobId, AgentId agentId, BackupConfiguration configuration, string idempotencyKey, DateTimeOffset createdAt,
-        BackupRetryPolicy? retryPolicy = null, BackupOverlapPolicy overlapPolicy = BackupOverlapPolicy.Skip)
+        BackupRetryPolicy? retryPolicy = null, BackupOverlapPolicy overlapPolicy = BackupOverlapPolicy.Skip,
+        string triggerType = BackupTriggerTypes.Manual, DateTimeOffset? scheduledOccurrence = null, DateTimeOffset? claimDeadline = null)
     {
         BackupGuard.Id(id);
         BackupGuard.Id(jobId);
@@ -47,6 +48,10 @@ public sealed class BackupRun : ITenantOwned
         ArgumentNullException.ThrowIfNull(agentId);
         BackupGuard.Text(idempotencyKey, 128);
         if (!Enum.IsDefined(overlapPolicy)) throw new ArgumentException("Unknown overlap policy.");
+        var scheduled = triggerType == BackupTriggerTypes.Scheduled;
+        if (triggerType is not (BackupTriggerTypes.Manual or BackupTriggerTypes.Scheduled)) throw new ArgumentException("Unknown trigger type.");
+        if (scheduled != scheduledOccurrence.HasValue || scheduled != claimDeadline.HasValue) throw new ArgumentException("Only a scheduled run has an occurrence and a claim deadline.");
+        if (claimDeadline < scheduledOccurrence) throw new ArgumentException("The claim deadline cannot precede the occurrence.");
         Id = id;
         TenantId = tenantId;
         JobId = jobId;
@@ -56,9 +61,23 @@ public sealed class BackupRun : ITenantOwned
         OverlapPolicy = overlapPolicy;
         IdempotencyKey = idempotencyKey;
         CreatedAt = createdAt;
+        TriggerType = triggerType;
+        ScheduledOccurrence = scheduledOccurrence is { } occurrence ? BackupGuard.Timestamp(occurrence) : null;
+        ClaimDeadline = claimDeadline is { } deadline ? BackupGuard.Timestamp(deadline) : null;
         Status = BackupStatus.Pending;
         Fact("BackupRunCreated", null, createdAt);
     }
+
+    /// <summary>A run for one scheduled instant of <paramref name="job"/>. Its idempotency key is derived from the instant, so a second creation for it collides.</summary>
+    public static BackupRun ForScheduledOccurrence(Guid id, BackupJob job, DateTimeOffset occurrence, DateTimeOffset createdAt)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        var schedule = job.Schedule ?? throw new InvalidOperationException("The job has no schedule.");
+        return new BackupRun(id, job.TenantId, job.Id, job.AgentId, job.Configuration, ScheduledKey(occurrence), createdAt, job.RetryPolicy, job.OverlapPolicy,
+            BackupTriggerTypes.Scheduled, occurrence, occurrence + schedule.MissedRunGracePeriod);
+    }
+
+    public static string ScheduledKey(DateTimeOffset occurrence) => "scheduled-" + occurrence.UtcDateTime.ToString("yyyyMMddTHHmmssfffZ", System.Globalization.CultureInfo.InvariantCulture);
     public Guid Id { get; private set; }
     public TenantId TenantId { get; private set; }
     public Guid JobId { get; private set; }
@@ -74,7 +93,12 @@ public sealed class BackupRun : ITenantOwned
     /// <summary>Due time of the scheduled automatic retry; set exactly while <see cref="Status"/> is RetryPending.</summary>
     public DateTimeOffset? NextAttemptAt { get; private set; }
     public string BackupType { get; private set; } = "Full";
-    public string TriggerType { get; private set; } = "Manual";
+    /// <summary><see cref="BackupTriggerTypes.Manual"/> or <see cref="BackupTriggerTypes.Scheduled"/>. A retry never creates a run, so it is not a run trigger.</summary>
+    public string TriggerType { get; private set; } = BackupTriggerTypes.Manual;
+    /// <summary>The scheduled instant (UTC) this run was created for; null for a manual run. <see cref="CreatedAt"/> is when it was actually created, so the difference is the scheduling delay.</summary>
+    public DateTimeOffset? ScheduledOccurrence { get; private set; }
+    /// <summary>Scheduled runs only: the instant after which a first attempt that has still not been claimed is dropped (occurrence plus grace). Later attempts are not bound by it.</summary>
+    public DateTimeOffset? ClaimDeadline { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset? StartedAt { get; private set; }
     public DateTimeOffset? CompletedAt { get; private set; }
@@ -91,6 +115,18 @@ public sealed class BackupRun : ITenantOwned
     {
         if (CurrentAttemptNumber != 0) throw new InvalidOperationException("The run already has its first attempt.");
         return AddAttempt(id, now, now, "AttemptQueued");
+    }
+
+    /// <summary>
+    /// Ends a scheduled run whose first attempt was never claimed before its deadline, so stale scheduled work cannot start after the grace
+    /// period. False (and no change) for any other run or state, so it is safe to call from any number of workers.
+    /// </summary>
+    public bool ExpireUnclaimed(DateTimeOffset now)
+    {
+        if (Status != BackupStatus.Pending || CurrentAttemptNumber != 1 || ClaimDeadline is not { } deadline || deadline >= now) return false;
+        CurrentAttempt.CancelPending(now);
+        EndTerminal(BackupStatus.Cancelled, BackupFailureCodes.ScheduleGraceExpired, BackupRetryState.None, now, "BackupScheduledRunExpired");
+        return true;
     }
 
     /// <summary>

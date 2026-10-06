@@ -61,6 +61,7 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<BackupArtifact> BackupArtifacts => Set<BackupArtifact>();
     public DbSet<BackupReplica> BackupReplicas => Set<BackupReplica>();
     public DbSet<BackupLifecycleFact> BackupLifecycleFacts => Set<BackupLifecycleFact>();
+    public DbSet<BackupScheduleOccurrence> BackupScheduleOccurrences => Set<BackupScheduleOccurrence>();
 
     /// <summary>Explicit unfiltered context for trusted platform operations only.</summary>
     /// <remarks>Does not authorize the caller. Future application boundaries must authorize its use.</remarks>

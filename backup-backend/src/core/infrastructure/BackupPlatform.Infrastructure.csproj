@@ -14,7 +14,12 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Quartz" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Scheduling\Schema\*.sql" LogicalName="BackupPlatform.Infrastructure.Scheduling.Schema.%(Filename)%(Extension)" />
+  </ItemGroup>
 
 </Project>

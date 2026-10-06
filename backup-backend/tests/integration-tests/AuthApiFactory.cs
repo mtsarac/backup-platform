@@ -34,8 +34,10 @@ internal sealed class AuthApiFactory(
             // A real TLS listener on an ephemeral loopback port, for tests that need real sockets (SignalR).
             builder.ConfigureKestrel(kestrel => kestrel.Listen(System.Net.IPAddress.Loopback, 0, listen => listen.UseHttps(kestrelCertificate)));
         }
-        builder.ConfigureAppConfiguration((_, builderConfiguration) => builderConfiguration.AddInMemoryCollection(
-            new Dictionary<string, string?> { ["ConnectionStrings:Platform"] = connectionString }.Concat(configuration ?? new Dictionary<string, string?>())));
+        // Scheduling is off unless a test asks for it: its runtime would otherwise start in every API host the suite creates.
+        var settings = new Dictionary<string, string?> { ["ConnectionStrings:Platform"] = connectionString, ["Backups:Scheduling:Enabled"] = "false" };
+        foreach (var (key, value) in configuration ?? new Dictionary<string, string?>()) settings[key] = value;
+        builder.ConfigureAppConfiguration((_, builderConfiguration) => builderConfiguration.AddInMemoryCollection(settings));
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<DbContextOptions<PlatformDbContext>>();

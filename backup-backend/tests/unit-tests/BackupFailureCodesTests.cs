@@ -56,7 +56,7 @@ public sealed class BackupFailureCodesTests
     [Fact]
     public void EveryDeclaredCodeIsClassifiedInTheRetryableOrNonRetryableTable()
     {
-        var classified = Retryable.Concat(NonRetryable).Concat([BackupFailureCodes.Cancelled, BackupFailureCodes.AgentLost]);
+        var classified = Retryable.Concat(NonRetryable).Concat([BackupFailureCodes.Cancelled, BackupFailureCodes.AgentLost, BackupFailureCodes.ScheduleGraceExpired]);
         Assert.Equal(AllDeclaredCodes().Order(StringComparer.Ordinal), classified.Order(StringComparer.Ordinal));
     }
 
@@ -65,6 +65,14 @@ public sealed class BackupFailureCodesTests
     {
         Assert.True(BackupFailureCodes.IsRetryable(BackupFailureCodes.AgentLost));
         Assert.False(BackupFailureCodes.IsRetryable(BackupFailureCodes.Cancelled));
+    }
+
+    [Fact]
+    public void ExpiredScheduledWorkIsNeitherAgentReportableNorRetryable()
+    {
+        // The platform ends the run itself when nobody claimed it within its grace period; an agent can never claim it, and retrying stale work is the point of the grace rule.
+        Assert.False(BackupFailureCodes.IsAgentReportable(BackupFailureCodes.ScheduleGraceExpired));
+        Assert.False(BackupFailureCodes.IsRetryable(BackupFailureCodes.ScheduleGraceExpired));
     }
 
     [Theory]

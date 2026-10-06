@@ -153,6 +153,8 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         var nextId = await (from attempt in context.BackupRunAttempts
                             join run in context.BackupRuns on new { attempt.RunId, attempt.TenantId } equals new { RunId = run.Id, run.TenantId }
                             where attempt.TenantId == tenantId && attempt.AgentId == agentId && attempt.Status == BackupStatus.Pending && run.Status == BackupStatus.Pending
+                               // A scheduled run's first attempt that missed its grace period never starts; the unclaimed-run sweep ends it.
+                               && (run.ClaimDeadline == null || run.ClaimDeadline >= now || attempt.Number > 1)
                             orderby attempt.EligibleAt, run.CreatedAt, run.Id
                             select (Guid?)run.Id).FirstOrDefaultAsync(cancellationToken);
         if (nextId is null)
@@ -245,20 +247,20 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         await transaction.CommitAsync(cancellationToken);
         return BackupMutationResult.Accepted;
     }
-    private static async Task<Guid?> ActiveRunIdAsync(PlatformDbContext context, TenantId tenantId, Guid jobId, Guid? exceptRunId, CancellationToken cancellationToken)
+    internal static async Task<Guid?> ActiveRunIdAsync(PlatformDbContext context, TenantId tenantId, Guid jobId, Guid? exceptRunId, CancellationToken cancellationToken)
     {
         var id = await context.BackupRuns.AsNoTracking().Where(run => run.TenantId == tenantId && run.JobId == jobId && ActiveStatuses.Contains(run.Status) && run.Id != exceptRunId)
             .OrderBy(run => run.CreatedAt).Select(run => (Guid?)run.Id).FirstOrDefaultAsync(cancellationToken);
         return id;
     }
-    private static bool IsUniqueViolation(DbUpdateException exception) => exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
-    private static async Task<bool> LockAgentAsync(PlatformDbContext context, TenantId tenantId, AgentId agentId, CancellationToken cancellationToken)
+    internal static bool IsUniqueViolation(DbUpdateException exception) => exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
+    internal static async Task<bool> LockAgentAsync(PlatformDbContext context, TenantId tenantId, AgentId agentId, CancellationToken cancellationToken)
     {
         await context.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT \"Id\" FROM agents WHERE \"Id\" = {agentId.Value} AND \"TenantId\" = {tenantId.Value} FOR UPDATE", cancellationToken);
         return await context.Agents.AnyAsync(agent => agent.TenantId == tenantId && agent.Id == agentId, cancellationToken);
     }
-    private static IQueryable<BackupRun> Runs(PlatformDbContext context) => context.BackupRuns
+    internal static IQueryable<BackupRun> Runs(PlatformDbContext context) => context.BackupRuns
         .Include(run => run.Attempts).ThenInclude(attempt => attempt.Artifacts).ThenInclude(artifact => artifact.Replicas)
         .Include(run => run.Facts).AsSplitQuery();
     private static DomainCompletion MapCompletion(BackupLeaseCommand command, ApplicationCompletion result)

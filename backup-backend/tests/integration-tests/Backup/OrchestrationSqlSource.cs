@@ -11,8 +11,12 @@ internal sealed class OrchestrationSqlSource : IAsyncDisposable
     public string Host { get; } = AgentHostSmokeProcess.Required("BACKUP_PLATFORM_TEST_MSSQL_HOST");
     public int? Port { get; } = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_PORT") is { Length: > 0 } value
         ? int.Parse(value, System.Globalization.CultureInfo.InvariantCulture) : null;
-    public OrchestrationSqlSource()
+    private readonly int _rows;
+
+    /// <param name="rows">Number of ~8 KB incompressible rows: more rows make the real backup take longer.</param>
+    public OrchestrationSqlSource(int rows = 12000)
     {
+        _rows = rows;
         var builder = new SqlConnectionStringBuilder
         {
             DataSource = Port is { } port ? $"tcp:{Host},{port}" : Host,
@@ -31,7 +35,7 @@ internal sealed class OrchestrationSqlSource : IAsyncDisposable
             ALTER DATABASE [{DatabaseName}] SET RECOVERY SIMPLE;
             USE [{DatabaseName}];
             CREATE TABLE dbo.source_rows (id int IDENTITY PRIMARY KEY, payload varbinary(8000) NOT NULL);
-            INSERT dbo.source_rows(payload) SELECT TOP (12000) CRYPT_GEN_RANDOM(8000)
+            INSERT dbo.source_rows(payload) SELECT TOP ({_rows}) CRYPT_GEN_RANDOM(8000)
             FROM sys.all_objects a CROSS JOIN sys.all_objects b;
             """);
     }

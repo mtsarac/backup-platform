@@ -316,6 +316,60 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
         || name.StartsWith("System.Data.SqlClient", StringComparison.OrdinalIgnoreCase)
         || name.StartsWith("Microsoft.SqlServer", StringComparison.OrdinalIgnoreCase);
 
+    // ---- scheduling: Quartz is wake-up infrastructure at the Infrastructure/host boundary; cron parsing lives in one domain type ----
+
+    [Theory]
+    [InlineData("BackupPlatform.Domain")]
+    [InlineData("BackupPlatform.Application")]
+    [InlineData("BackupPlatform.Contracts")]
+    [InlineData("BackupPlatform.Agent.Core")]
+    [InlineData("BackupPlatform.Agent.Transport")]
+    [InlineData("BackupPlatform.Agent.Platform.Linux")]
+    [InlineData("BackupPlatform.Agent.Platform.Windows")]
+    [InlineData("BackupPlatform.BackupProviders.Abstractions")]
+    [InlineData("BackupPlatform.BackupProviders.MSSQL")]
+    [InlineData("BackupPlatform.BackupProviders.FileSystem")]
+    [InlineData("BackupPlatform.StorageProviders.Abstractions")]
+    [InlineData("BackupPlatform.StorageProviders.Local")]
+    [InlineData("BackupPlatform.StorageProviders.Central")]
+    [InlineData("BackupPlatform.Agent.Host")]
+    public void OnlyTheBackendInfrastructureAndHostMayDependOnTheSchedulerLibrary(string project) =>
+        AssertForbiddenExternalDependencies(project, IsSchedulerLibraryDependency);
+
+    [Fact]
+    public void NoProjectOtherThanInfrastructureMayCompileAgainstTheSchedulerLibrary()
+    {
+        var release = fixture.Graphs["Release"];
+        foreach (var node in release.Values.Where(node => node.Name != "BackupPlatform.Infrastructure"))
+        {
+            var violations = node.Types.Concat(node.Assemblies).Where(IsSchedulerLibraryDependency).Distinct(StringComparer.Ordinal).ToArray();
+            Assert.True(violations.Length == 0, $"{node.Name} compiles directly against the scheduler library: {string.Join(", ", violations)}.");
+        }
+    }
+
+    [Fact]
+    public void OnlyTheDomainMayParseCronExpressions()
+    {
+        var release = fixture.Graphs["Release"];
+        foreach (var node in release.Values.Where(node => node.Name != "BackupPlatform.Domain"))
+        {
+            var violations = node.Types.Concat(node.Assemblies).Where(IsCronParserDependency).Distinct(StringComparer.Ordinal).ToArray();
+            Assert.True(violations.Length == 0, $"{node.Name} compiles directly against the cron parser: {string.Join(", ", violations)}.");
+        }
+    }
+
+    [Fact]
+    public void TheSchedulerInfrastructureMustNotReachBackupOrStorageProviderImplementations() =>
+        AssertForbiddenDependencies("BackupPlatform.Infrastructure", IsProviderImplementation);
+
+    private static bool IsSchedulerLibraryDependency(string name) =>
+        name.Equals("Quartz", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("Quartz.", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsCronParserDependency(string name) =>
+        name.Equals("Cronos", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("Cronos.", StringComparison.OrdinalIgnoreCase);
+
     [Fact]
     public void ProviderImplementationsMustNotDependOnEachOther()
     {
