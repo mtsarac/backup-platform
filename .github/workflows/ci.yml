@@ -68,9 +68,11 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: dotnet test tests/architecture-tests $TEST_FLAGS --logger "trx;LogFileName=architecture-tests.trx"
 
+      # Serial: these tests advance a fake clock and settle with short real-time waits, so CPU contention between test
+      # collections makes them time-sensitive (reproduced locally: 2 of 3 parallel runs failed under load, 0 of 3 serial).
       - name: Agent tests
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: dotnet test tests/agent-tests $TEST_FLAGS --logger "trx;LogFileName=agent-tests.trx"
+        run: dotnet test tests/agent-tests $TEST_FLAGS --logger "trx;LogFileName=agent-tests.trx" -- xUnit.ParallelizeTestCollections=false
 
       - name: Test report
         if: ${{ !cancelled() }}
@@ -126,7 +128,7 @@ jobs:
           dotnet test tests/integration-tests $TEST_FLAGS
           --logger "trx;LogFileName=integration-postgres.trx"
           --filter "FullyQualifiedName!~MsSql&FullyQualifiedName!~BackupPipelineSmoke"
-          -- xUnit.MaxParallelThreads=4
+          -- xUnit.MaxParallelThreads=2
 
       - name: Test report
         if: ${{ !cancelled() }}
@@ -197,7 +199,7 @@ jobs:
           dotnet test tests/integration-tests $TEST_FLAGS
           --logger "trx;LogFileName=integration-mssql-provider.trx"
           --filter "FullyQualifiedName~IntegrationTests.MsSql|FullyQualifiedName~BackupPipelineSmoke"
-          -- xUnit.MaxParallelThreads=4
+          -- xUnit.MaxParallelThreads=2
 
       - name: MSSQL Agent.Host smoke tests (real backend, published agent, real SQL Server)
         id: smoke
@@ -268,9 +270,10 @@ jobs:
         id: build
         run: dotnet build BackupPlatform.sln $BUILD_FLAGS
 
+      # Serial for the same reason as on Linux.
       - name: Agent tests
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: dotnet test tests/agent-tests $TEST_FLAGS --logger "trx;LogFileName=agent-tests-windows.trx"
+        run: dotnet test tests/agent-tests $TEST_FLAGS --logger "trx;LogFileName=agent-tests-windows.trx" -- xUnit.ParallelizeTestCollections=false
 
       # DPAPI, NTFS ACL and reparse-point tests. A test that needs something this runner cannot give (for example symbolic-link
       # privilege) reports itself as SKIPPED with a reason; the report lists every skip and fails the job if nothing passed.

@@ -112,7 +112,7 @@ not a file the applications load.
 |---|---|---|
 | Unit | `dotnet test tests/unit-tests -c Release` | nothing |
 | Architecture (dependency rules) | `dotnet test tests/architecture-tests -c Release` | nothing |
-| Agent | `dotnet test tests/agent-tests -c Release` | nothing (in-process Kestrel/SignalR) |
+| Agent | `dotnet test tests/agent-tests -c Release -- xUnit.ParallelizeTestCollections=false` | nothing (in-process Kestrel/SignalR); run serially, several tests settle a fake clock with short real-time waits |
 | Integration (PostgreSQL) | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName!~MsSql&FullyQualifiedName!~BackupPipelineSmoke"` | `BACKUP_PLATFORM_TEST_CONNECTION_STRING` |
 | Real MSSQL | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName~IntegrationTests.MsSql\|FullyQualifiedName~BackupPipelineSmoke"` | PostgreSQL variable above plus the MSSQL variables below |
 | Real MSSQL + published Agent.Host | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName~AgentSmokeTests" -- xUnit.MaxParallelThreads=1` | everything above plus `BACKUP_PLATFORM_TEST_AGENT_HOST_PATH` |
