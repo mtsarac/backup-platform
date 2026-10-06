@@ -19,7 +19,7 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
             new DatabaseConnectionOptions(requireEncryption: configuration.Encrypt, trustServerCertificate: configuration.TrustServerCertificate));
         var storage = new StorageProviderId(configuration.StorageProvider);
         ArgumentNullException.ThrowIfNull(configuration.StoragePrefix);
-        var scope = $"{task.TenantId:N}/{task.JobId:N}/{task.RunId:N}/{task.AttemptId:N}";
+        var scope = ManagedBackupLayout.AttemptScope(task.TenantId, task.JobId, task.RunId, task.AttemptId);
         var prefix = new StorageObjectKey(configuration.StoragePrefix.Length == 0 ? scope : $"{configuration.StoragePrefix}/{scope}");
         var options = new FullBackupOptions(configuration.CopyOnly ? BackupOptionMode.Required : BackupOptionMode.Off,
             ParsePolicy(configuration.ChecksumPolicy), ParsePolicy(configuration.CompressionPolicy));

@@ -36,6 +36,10 @@
     <ProjectReference Include="../../providers/secret/abstractions/BackupPlatform.SecretProviders.Abstractions.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="BackupPlatform.AgentTests" />
+  </ItemGroup>
+
   <Target Name="ValidateAgentPlatform" BeforeTargets="PrepareForBuild">
     <Error Condition="'$(AgentPlatform)' != 'Windows' and '$(AgentPlatform)' != 'Linux'" Text="AgentPlatform must be Windows or Linux. Set -p:AgentPlatform explicitly when cross-building." />
   </Target>

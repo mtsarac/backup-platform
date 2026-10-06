@@ -27,6 +27,7 @@ app.MapUserEndpoints();
 app.MapAgentEndpoints();
 app.MapAgentAdministrationEndpoints();
 app.MapBackupEndpoints();
+app.MapBackupArtifactEndpoints();
 app.MapBackupTaskEndpoints();
 app.MapAgentHub();
 

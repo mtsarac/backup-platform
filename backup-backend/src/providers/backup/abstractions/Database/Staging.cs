@@ -80,6 +80,28 @@ public sealed record StagingArea
 /// <summary>What the agent process itself can do in the staging directory. Says nothing about the database service account.</summary>
 public sealed record StagingAgentAccess(bool DirectoryExists, bool CanList, bool CanWrite, long? FreeBytes);
 
+/// <summary>A regular file directly inside the staging directory, as listed by <see cref="AgentStagingDirectory.ListFiles"/>.</summary>
+public sealed record StagingFileEntry(string Name, long SizeBytes, DateTimeOffset LastWriteUtc);
+
+/// <summary>What <see cref="AgentStagingDirectory.TryDeleteIdleFile"/> did. Anything but <see cref="Deleted"/> and <see cref="NotFound"/> means the file is still there.</summary>
+public enum StagingDeleteOutcome
+{
+    /// <summary>The file was idle and is gone.</summary>
+    Deleted = 1,
+
+    /// <summary>There was no such file (it may have been removed concurrently).</summary>
+    NotFound,
+
+    /// <summary>Another process holds the file open (the database service may still be writing it, or something is reading it). Left untouched.</summary>
+    InUse,
+
+    /// <summary>The operating system refused the agent access to the file or the directory. Left untouched.</summary>
+    AccessDenied,
+
+    /// <summary>The entry is not a plain file (a link or a directory) or the file system failed. Left untouched or in an unknown state.</summary>
+    Failed
+}
+
 /// <summary>
 /// The agent process' access to its side of a <see cref="StagingArea"/>: inspection, probing and file handling by simple file
 /// names. Every operation is agent-side; none of them proves anything about the database server's access.
@@ -218,6 +240,97 @@ public sealed class AgentStagingDirectory
             return false;
         }
     }
+
+    /// <summary>
+    /// The regular files directly inside the staging directory. Directories, symbolic links and reparse points are skipped: they are
+    /// never the platform's own staged backup files, and following a link out of the directory is exactly what a cleanup must not do.
+    /// Throws the <see cref="IOException"/> or <see cref="UnauthorizedAccessException"/> of a directory that cannot be listed; the caller
+    /// decides what that means.
+    /// </summary>
+    public IReadOnlyList<StagingFileEntry> ListFiles()
+    {
+        var files = new List<StagingFileEntry>();
+        foreach (var info in new DirectoryInfo(_root).EnumerateFiles())
+        {
+            if ((info.Attributes & (FileAttributes.ReparsePoint | FileAttributes.Directory)) != 0)
+            {
+                continue;
+            }
+
+            files.Add(new StagingFileEntry(info.Name, info.Length, new DateTimeOffset(info.LastWriteTimeUtc)));
+        }
+
+        return files;
+    }
+
+    /// <summary>
+    /// Deletes a file nobody has open. The file is first opened exclusively (no sharing) and released again, so a file another process
+    /// still holds, such as one the database service is writing, is reported as <see cref="StagingDeleteOutcome.InUse"/> and never
+    /// removed. Links and directories are refused. Never throws, except <see cref="ArgumentException"/> for a name that is not a simple name.
+    /// </summary>
+    public StagingDeleteOutcome TryDeleteIdleFile(string name)
+    {
+        var path = FilePath(name);
+        try
+        {
+            FileAttributes attributes;
+            try
+            {
+                attributes = File.GetAttributes(path);
+            }
+            catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+            {
+                return StagingDeleteOutcome.NotFound;
+            }
+
+            if ((attributes & (FileAttributes.ReparsePoint | FileAttributes.Directory)) != 0)
+            {
+                return StagingDeleteOutcome.Failed;
+            }
+
+            try
+            {
+                using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+                {
+                }
+            }
+            catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+            {
+                return StagingDeleteOutcome.NotFound;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return StagingDeleteOutcome.AccessDenied;
+            }
+            catch (IOException exception)
+            {
+                return IsSharingViolation(exception) ? StagingDeleteOutcome.InUse : StagingDeleteOutcome.Failed;
+            }
+
+            File.Delete(path);
+            return StagingDeleteOutcome.Deleted;
+        }
+        catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return StagingDeleteOutcome.NotFound;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return StagingDeleteOutcome.AccessDenied;
+        }
+        catch (IOException exception)
+        {
+            return IsSharingViolation(exception) ? StagingDeleteOutcome.InUse : StagingDeleteOutcome.Failed;
+        }
+    }
+
+    /// <summary>
+    /// Windows reports a refused share as ERROR_SHARING_VIOLATION or ERROR_LOCK_VIOLATION. Elsewhere the only IOException that opening an
+    /// existing regular file normally produces is the refusal of the advisory lock <see cref="FileShare.None"/> takes, and an
+    /// unexplained refusal is safest treated the same way: the file stays.
+    /// </summary>
+    private static bool IsSharingViolation(IOException exception) =>
+        !OperatingSystem.IsWindows() || (exception.HResult & 0xFFFF) is 32 or 33;
 
     private static string RequireSimpleName(string name)
     {

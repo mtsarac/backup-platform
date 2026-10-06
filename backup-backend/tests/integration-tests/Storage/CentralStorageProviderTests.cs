@@ -72,6 +72,25 @@ public sealed class CentralStorageProviderTests : FileSystemProviderContractTest
         Assert.True(await tenantB.ExistsAsync(new StorageObjectKey("secret.bak"), CancellationToken.None));
     }
 
+    [Fact]
+    public async Task EnumerateReturnsKeysWithoutTheTenantsPathAndNeverListsAnotherTenant()
+    {
+        var tenantA = CreateProvider(Root);
+        var tenantB = new CentralStorageProvider(new CentralStorageOptions(Root, "tenant-b"));
+        await tenantA.PutAsync(new StorageObjectKey("mssql/a.bak"), new PatternStream(10), FailIfExists, null, CancellationToken.None);
+        await tenantB.PutAsync(new StorageObjectKey("mssql/b.bak"), new PatternStream(10), FailIfExists, null, CancellationToken.None);
+        Directory.CreateDirectory(Path.Combine(Root, "unrelated"));
+        await File.WriteAllBytesAsync(Path.Combine(Root, "unrelated", "x.bak"), [1]);
+
+        var keys = new List<string>();
+        await foreach (var entry in tenantA.EnumerateAsync(null, DateTimeOffset.UtcNow.AddHours(1), CancellationToken.None))
+        {
+            keys.Add(entry.Key.Value);
+        }
+
+        Assert.Equal(["mssql/a.bak"], keys);
+    }
+
     [SymlinkFact]
     public async Task ATenantDirectoryThatIsASymlinkIsRefused()
     {

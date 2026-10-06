@@ -90,7 +90,7 @@ public sealed class BackupRunAttempt : ITenantOwned
         ProgressPercent = percent;
         ProgressAt = now;
     }
-    internal bool Complete(Guid token, DateTimeOffset now, BackupCompletion completion)
+    internal bool Complete(Guid token, DateTimeOffset now, BackupCompletion completion, BackupRetentionPolicy retention)
     {
         if (IsTerminal)
         {
@@ -110,7 +110,7 @@ public sealed class BackupRunAttempt : ITenantOwned
                 throw new InvalidOperationException("Success requires a running attempt and artifact.");
             if (completion.Artifact.AttemptId != Id || completion.Artifact.TenantId != TenantId)
                 throw new ArgumentException("Artifact ownership mismatch.");
-            completion.Artifact.Seal();
+            completion.Artifact.Seal(now, retention);
             _artifacts.Add(completion.Artifact);
         }
         else if (completion.Artifact is not null) throw new ArgumentException("Failed attempts cannot publish artifacts.");

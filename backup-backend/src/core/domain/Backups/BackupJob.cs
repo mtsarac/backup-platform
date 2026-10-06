@@ -5,9 +5,10 @@ namespace BackupPlatform.Domain.Backups;
 
 public sealed class BackupJob : ITenantOwned
 {
-    private BackupJob() { TenantId = null!; AgentId = null!; Name = null!; Configuration = null!; RetryPolicy = null!; }
+    private BackupJob() { TenantId = null!; AgentId = null!; Name = null!; Configuration = null!; RetryPolicy = null!; RetentionPolicy = null!; }
     public BackupJob(Guid id, TenantId tenantId, string name, AgentId agentId, BackupConfiguration configuration, DateTimeOffset createdAt,
-        BackupRetryPolicy? retryPolicy = null, BackupOverlapPolicy overlapPolicy = BackupOverlapPolicy.Skip, BackupSchedule? schedule = null)
+        BackupRetryPolicy? retryPolicy = null, BackupOverlapPolicy overlapPolicy = BackupOverlapPolicy.Skip, BackupSchedule? schedule = null,
+        BackupRetentionPolicy? retentionPolicy = null)
     {
         BackupGuard.Id(id);
         ArgumentNullException.ThrowIfNull(tenantId);
@@ -20,6 +21,7 @@ public sealed class BackupJob : ITenantOwned
         Name = name.Trim();
         Configuration = configuration.Validate() with { };
         RetryPolicy = (retryPolicy ?? BackupRetryPolicy.Default).Validate();
+        RetentionPolicy = (retentionPolicy ?? BackupRetentionPolicy.Default).Validate();
         OverlapPolicy = overlapPolicy;
         Schedule = schedule;
         CreatedAt = createdAt;
@@ -32,6 +34,11 @@ public sealed class BackupJob : ITenantOwned
     public string BackupType { get; private set; } = "Full";
     public BackupConfiguration Configuration { get; private set; }
     public BackupRetryPolicy RetryPolicy { get; private set; }
+    /// <summary>
+    /// Applies to runs created from now on. Backups that already exist keep the expiration they were published with; there is deliberately
+    /// no bulk re-apply.
+    /// </summary>
+    public BackupRetentionPolicy RetentionPolicy { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     /// <summary>A disabled job starts nothing: no manual run and no scheduled run. Disabling is the soft delete.</summary>
     public bool Enabled { get; private set; }
@@ -63,4 +70,6 @@ public sealed class BackupJob : ITenantOwned
         }
         Schedule = schedule;
     }
+
+    public void ChangeRetention(BackupRetentionPolicy policy) => RetentionPolicy = policy.Validate() with { };
 }

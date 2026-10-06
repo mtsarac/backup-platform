@@ -24,12 +24,26 @@ namespace BackupPlatform.StorageProviders.Abstractions.FileSystem;
 /// after start-up is detected too. Directories below the root are created on demand.</description></item>
 /// <item><description><b>Messages.</b> Exception messages and <see cref="StorageLocation"/>s never contain a file system path.</description></item>
 /// </list>
-/// Advertised capabilities are exactly <see cref="StorageCapabilityIds.Delete"/> and <see cref="StorageCapabilityIds.AtomicPublish"/>: checksums are
-/// verified by reading back, and resume, multipart, immutability and capacity queries are not implemented.
+/// Advertised capabilities are exactly <see cref="StorageCapabilityIds.Delete"/>, <see cref="StorageCapabilityIds.AtomicPublish"/>,
+/// <see cref="StorageCapabilityIds.Enumerate"/> and <see cref="StorageCapabilityIds.VerifyAbsence"/>. The last one is honest because a local or
+/// mounted file system reports the truth at once: after <see cref="File.Delete(string)"/> returns, <see cref="File.Exists"/> is false (no eventual
+/// consistency). Checksums are verified by reading back; resume, multipart, immutability and capacity queries are not implemented.
 /// </summary>
 public abstract class FileSystemStorageProvider : IStorageProvider
 {
     private const int BlockSize = 1024 * 1024;
+
+    private const string TemporarySuffix = ".partial";
+    private const int TemporaryTokenLength = 32;
+
+    private static readonly EnumerationOptions ListOptions = new()
+    {
+        // The default skips hidden entries, which on Unix means every dot-file: exactly the .partial leftovers a sweep looks for.
+        AttributesToSkip = 0,
+        RecurseSubdirectories = false,
+        IgnoreInaccessible = false,
+        ReturnSpecialDirectories = false
+    };
 
     private static readonly StringComparison PathComparison =
         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
@@ -58,7 +72,12 @@ public abstract class FileSystemStorageProvider : IStorageProvider
         _root = FileSystemStorageRoot.Normalize(rootDirectory);
         _rootWithSeparator = _root.EndsWith(Path.DirectorySeparatorChar) ? _root : _root + Path.DirectorySeparatorChar;
         _keyPrefix = [.. (keyPrefix ?? []).Select(ValidatePrefixSegment)];
-        Capabilities = new StorageCapabilities([StorageCapabilityIds.Delete, StorageCapabilityIds.AtomicPublish]);
+        Capabilities = new StorageCapabilities([
+            StorageCapabilityIds.Delete,
+            StorageCapabilityIds.AtomicPublish,
+            StorageCapabilityIds.Enumerate,
+            StorageCapabilityIds.VerifyAbsence
+        ]);
     }
 
     public StorageProviderId Id { get; }
@@ -97,7 +116,7 @@ public abstract class FileSystemStorageProvider : IStorageProvider
 
             var directory = Path.GetDirectoryName(finalPath)!;
             Directory.CreateDirectory(directory);
-            temporaryPath = Path.Combine(directory, $".{key.FileName}.{Guid.NewGuid():N}.partial");
+            temporaryPath = Path.Combine(directory, TemporaryName(key.FileName));
 
             var (length, checksum) = await WriteTemporaryAsync(temporaryPath, content, options, progress, cancellationToken).ConfigureAwait(false);
 
@@ -201,6 +220,61 @@ public abstract class FileSystemStorageProvider : IStorageProvider
         });
     }
 
+    /// <summary>
+    /// Walks the tree below the provider scope (and <paramref name="prefix"/>) iteratively. Below the start directory a link is never followed
+    /// or returned; an unreadable subdirectory and a vanished file are skipped so one odd entry cannot abort a sweep, while a problem with the
+    /// start directory itself surfaces as a <see cref="StorageException"/>. Files younger than <paramref name="modifiedBefore"/> are not probed.
+    /// </summary>
+    public async IAsyncEnumerable<StorageEntry> EnumerateAsync(
+        StorageObjectKey? prefix,
+        DateTimeOffset modifiedBefore,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var start = ResolveStartDirectory(prefix);
+        if (start is null)
+        {
+            yield break;
+        }
+
+        var pending = new Stack<(string Path, string Key, bool IsStart)>();
+        pending.Push((start, prefix?.Value ?? string.Empty, true));
+        while (pending.Count > 0)
+        {
+            var (directory, relative, isStart) = pending.Pop();
+            var children = ListDirectory(directory, isStart);
+            if (children is null)
+            {
+                continue;
+            }
+
+            foreach (var child in children)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if ((child.Attributes & FileAttributes.ReparsePoint) != 0)
+                {
+                    continue;
+                }
+
+                var childKey = relative.Length == 0 ? child.Name : relative + "/" + child.Name;
+                if (child is DirectoryInfo)
+                {
+                    if (StorageObjectKey.TryCreate(childKey, out _))
+                    {
+                        pending.Push((child.FullName, childKey, false));
+                    }
+
+                    continue;
+                }
+
+                if (child is FileInfo file && Describe(file, childKey, modifiedBefore) is { } entry)
+                {
+                    yield return entry;
+                }
+            }
+        }
+    }
+
     private static string ValidatePrefixSegment(string segment)
     {
         ArgumentNullException.ThrowIfNull(segment);
@@ -256,6 +330,95 @@ public abstract class FileSystemStorageProvider : IStorageProvider
         }
     }
 
+    /// <summary>The temporary name an upload of <paramref name="finalName"/> is written under; <see cref="IsTemporaryName"/> is its inverse and must stay in sync.</summary>
+    private static string TemporaryName(string finalName) => $".{finalName}.{Guid.NewGuid():N}{TemporarySuffix}";
+
+    /// <summary>True for <c>.&lt;finalName&gt;.&lt;32 lowercase hex&gt;.partial</c> with a nonempty final name, i.e. a name <see cref="TemporaryName"/> can produce.</summary>
+    private static bool IsTemporaryName(string name)
+    {
+        const int tailLength = 1 + TemporaryTokenLength + 8;
+        if (name.Length < 1 + 1 + tailLength || name[0] != '.' || !name.EndsWith(TemporarySuffix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var tokenStart = name.Length - TemporarySuffix.Length - TemporaryTokenLength;
+        if (name[tokenStart - 1] != '.')
+        {
+            return false;
+        }
+
+        foreach (var c in name.AsSpan(tokenStart, TemporaryTokenLength))
+        {
+            if (c is not ((>= '0' and <= '9') or (>= 'a' and <= 'f')))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static List<FileSystemInfo>? ListDirectory(string path, bool isStart)
+    {
+        try
+        {
+            return [.. new DirectoryInfo(path).EnumerateFileSystemInfos("*", ListOptions)];
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return isStart ? throw StorageIoErrors.Map(exception) : null;
+        }
+    }
+
+    /// <summary>Null when the file is not to be reported (too young, not ours, vanished or unreadable metadata).</summary>
+    private static StorageEntry? Describe(FileInfo file, string key, DateTimeOffset modifiedBefore)
+    {
+        try
+        {
+            var modified = file.LastWriteTimeUtc;
+            if (modified >= modifiedBefore.UtcDateTime || !StorageObjectKey.TryCreate(key, out var objectKey))
+            {
+                return null;
+            }
+
+            var length = file.Length;
+            var partial = IsTemporaryName(file.Name);
+            return new StorageEntry(
+                objectKey!,
+                partial ? StorageEntryKind.UnpublishedUpload : StorageEntryKind.Object,
+                length,
+                new DateTimeOffset(modified, TimeSpan.Zero),
+                partial ? ProbeInUse(file.FullName) : null);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The writer holds its temporary file with <see cref="FileShare.None"/>, so failing to open it exclusively means it is still in use.</summary>
+    private static bool? ProbeInUse(string path)
+    {
+        try
+        {
+            using var probe = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
+            return false;
+        }
+        catch (IOException exception) when (exception is not (FileNotFoundException or DirectoryNotFoundException))
+        {
+            return true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
     private StorageObjectMetadata? ReadMetadata(StorageObjectKey key, string path)
     {
         try
@@ -272,7 +435,23 @@ public abstract class FileSystemStorageProvider : IStorageProvider
     }
 
     /// <summary>Maps a key to its absolute path after checking the root exists, that no existing component is a link and that the result lies strictly inside the root.</summary>
-    private string ResolveCheckedPath(StorageObjectKey key)
+    private string ResolveCheckedPath(StorageObjectKey key) => ResolveCheckedPath([.. _keyPrefix, .. key.Segments]);
+
+    /// <summary>The start directory of an enumeration, or null when it does not exist. Links on the way to it are refused exactly as for a key.</summary>
+    private string? ResolveStartDirectory(StorageObjectKey? prefix)
+    {
+        try
+        {
+            var path = ResolveCheckedPath(prefix is null ? _keyPrefix : [.. _keyPrefix, .. prefix.Segments]);
+            return Directory.Exists(path) ? path : null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw StorageIoErrors.Map(exception);
+        }
+    }
+
+    private string ResolveCheckedPath(string[] segments)
     {
         if (!Directory.Exists(_root))
         {
@@ -281,7 +460,7 @@ public abstract class FileSystemStorageProvider : IStorageProvider
 
         var current = _root;
         var inspect = true;
-        foreach (var segment in _keyPrefix.Concat(key.Segments))
+        foreach (var segment in segments)
         {
             current = Path.Combine(current, segment);
             if (!inspect)
@@ -304,6 +483,11 @@ public abstract class FileSystemStorageProvider : IStorageProvider
             {
                 inspect = false;
             }
+        }
+
+        if (segments.Length == 0)
+        {
+            return _root;
         }
 
         var full = Path.GetFullPath(current);

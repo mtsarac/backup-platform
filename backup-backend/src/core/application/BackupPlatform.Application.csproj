@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\domain\BackupPlatform.Domain.csproj" />
     <ProjectReference Include="..\contracts\BackupPlatform.Contracts.csproj" />
+    <ProjectReference Include="..\..\providers\storage\abstractions\BackupPlatform.StorageProviders.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -13,23 +13,27 @@ internal sealed class AgentHostSmokeProcess : IAsyncDisposable
     private readonly Task<string> _output;
     private readonly Task<string> _error;
     private readonly Action<string>? _diagnostic;
-    private AgentHostSmokeProcess(string scratch, Process process, Action<string>? diagnostic)
+    private readonly string _storage;
+    private AgentHostSmokeProcess(string scratch, string storage, Process process, Action<string>? diagnostic)
     {
         _scratch = scratch;
+        _storage = storage;
         _process = process;
         _diagnostic = diagnostic;
         _output = process.StandardOutput.ReadToEndAsync();
         _error = process.StandardError.ReadToEndAsync();
     }
 
-    public string StorageDirectory => Path.Combine(_scratch, "storage");
+    public string StorageDirectory => _storage;
 
-    public static async Task<AgentHostSmokeProcess> StartAsync(AgentWorld world, EnrolledAgent agent, Action<string>? diagnostic = null)
+    /// <param name="localStorageRoot">An existing directory the caller owns and cleans up, to be the agent's local storage (the backend retention workers need to reach the same one); default: a directory inside the host's scratch space.</param>
+    public static async Task<AgentHostSmokeProcess> StartAsync(AgentWorld world, EnrolledAgent agent, Action<string>? diagnostic = null, string? localStorageRoot = null)
     {
         var executable = Required("BACKUP_PLATFORM_TEST_AGENT_HOST_PATH");
         var scratch = Path.Combine(Path.GetTempPath(), "bp_agent_orchestration_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(scratch);
-        Directory.CreateDirectory(Path.Combine(scratch, "storage"));
+        var storage = localStorageRoot ?? Path.Combine(scratch, "storage");
+        Directory.CreateDirectory(storage);
         var identityDirectory = Path.Combine(scratch, "identity");
         Directory.CreateDirectory(identityDirectory);
         if (!OperatingSystem.IsWindows())
@@ -63,14 +67,14 @@ internal sealed class AgentHostSmokeProcess : IAsyncDisposable
         start.Environment["Agent__Backup__Staging__Mapping"] = serverStaging == agentStaging ? "SameHost" : "Mapped";
         start.Environment["Agent__Backup__Staging__ServerDirectory"] = serverStaging;
         start.Environment["Agent__Backup__Staging__AgentDirectory"] = agentStaging;
-        start.Environment["Agent__Backup__LocalStorage__RootDirectory"] = Path.Combine(scratch, "storage");
+        start.Environment["Agent__Backup__LocalStorage__RootDirectory"] = storage;
         start.Environment["BACKUP_AGENT_SECRET_sql_smoke"] = System.Text.Json.JsonSerializer.Serialize(new
         {
             userName = Required("BACKUP_PLATFORM_TEST_MSSQL_USER"), password = Required("BACKUP_PLATFORM_TEST_MSSQL_PASSWORD")
         });
         try
         {
-            return new AgentHostSmokeProcess(scratch, Process.Start(start) ?? throw new InvalidOperationException("Agent.Host could not start."), diagnostic);
+            return new AgentHostSmokeProcess(scratch, storage, Process.Start(start) ?? throw new InvalidOperationException("Agent.Host could not start."), diagnostic);
         }
         catch
         {

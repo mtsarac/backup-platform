@@ -13,7 +13,7 @@ internal sealed class PipelineHarness : IDisposable
 
     private readonly string _root = Path.Combine(Path.GetTempPath(), "bp_test_pipeline_" + Guid.NewGuid().ToString("N")[..10]);
 
-    public PipelineHarness(IArtifactPreparer? preparer = null)
+    public PipelineHarness(IArtifactPreparer? preparer = null, StagingUsageRegistry? usage = null)
     {
         Directory.CreateDirectory(_root);
         StagingDirectory = Path.Combine(_root, "staging");
@@ -22,7 +22,7 @@ internal sealed class PipelineHarness : IDisposable
         Provider = new FakeBackupProvider(this);
         Storage = new InMemoryStorage(this);
         Pipeline = new DatabaseBackupPipeline(
-            [Provider], [Storage], preparer ?? new PassThroughArtifactPreparer(), NullLogger<DatabaseBackupPipeline>.Instance);
+            [Provider], [Storage], preparer ?? new PassThroughArtifactPreparer(), NullLogger<DatabaseBackupPipeline>.Instance, staging: usage);
     }
 
     public string StagingDirectory { get; }
@@ -254,6 +254,18 @@ internal sealed class InMemoryStorage(PipelineHarness harness) : IStorageProvide
         }
 
         return _objects.Remove(key.Value);
+    }
+
+    public async IAsyncEnumerable<StorageEntry> EnumerateAsync(
+        StorageObjectKey? prefix,
+        DateTimeOffset modifiedBefore,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        await Task.CompletedTask;
+        throw new StorageException(StorageFailureKind.NotSupported, "This storage cannot enumerate.");
+        #pragma warning disable CS0162
+        yield break;
+        #pragma warning restore CS0162
     }
 
     public static ContentChecksum Checksum(byte[] bytes) => ContentChecksum.Sha256(System.Security.Cryptography.SHA256.HashData(bytes));

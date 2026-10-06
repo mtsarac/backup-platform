@@ -7,6 +7,7 @@ using BackupPlatform.StorageProviders.Local;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace BackupPlatform.Agent.Host;
 
@@ -26,6 +27,8 @@ public static class AgentBackupServiceCollectionExtensions
         services.AddSingleton<IDatabaseBackupProvider, SqlServerBackupProvider>();
         services.AddSingleton<IArtifactPreparer, PassThroughArtifactPreparer>();
         services.AddSingleton<IDatabaseBackupPipeline, DatabaseBackupPipeline>();
+        // Shared by the pipeline (which holds the staged names of running attempts) and the staging cleanup (which must skip them).
+        services.TryAddSingleton<StagingUsageRegistry>();
 
         var options = configuration.GetSection(AgentHostOptions.SectionName).GetSection(AgentBackupOptions.SectionName).Get<AgentBackupOptions>();
         if (options is null)
@@ -38,6 +41,16 @@ public static class AgentBackupServiceCollectionExtensions
         if (AgentBackupOptionsValidation.TryCreateStaging(options.Staging, out var staging))
         {
             services.AddSingleton(staging);
+            if (AgentBackupOptionsValidation.TryCreateCleanup(options.Staging?.Cleanup, out var cleanup))
+            {
+                services.AddSingleton(cleanup);
+                services.AddSingleton(provider => new StagingCleaner(
+                    new AgentStagingDirectory(staging.AgentDirectory),
+                    provider.GetRequiredService<StagingUsageRegistry>(),
+                    provider.GetRequiredService<TimeProvider>(),
+                    provider.GetRequiredService<ILogger<StagingCleaner>>()));
+                services.AddHostedService<AgentStagingCleanupHostedService>();
+            }
         }
 
         if (options.LocalStorage?.RootDirectory is { } localRoot && AgentBackupOptionsValidation.IsAbsolute(localRoot))
@@ -58,6 +71,11 @@ public static class AgentBackupServiceCollectionExtensions
 /// <summary>Turns <see cref="AgentBackupOptions"/> into domain-level values and explains what is wrong when that is not possible.</summary>
 internal static class AgentBackupOptionsValidation
 {
+    private static readonly TimeSpan MinimumCleanupAge = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan MaximumCleanupAge = TimeSpan.FromDays(365);
+    private static readonly TimeSpan MinimumScanInterval = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan MaximumScanInterval = TimeSpan.FromDays(7);
+
     public static bool IsAbsolute(string path) => !string.IsNullOrWhiteSpace(path) && !path.Any(char.IsControl) && Path.IsPathFullyQualified(path);
 
     public static bool TryCreateStaging(AgentBackupStagingOptions? options, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out StagingArea? staging)
@@ -98,6 +116,22 @@ internal static class AgentBackupOptionsValidation
         }
     }
 
+    /// <summary>Applies the defaults to the parts of the cleanup section that are absent; false when a present value is outside its range.</summary>
+    public static bool TryCreateCleanup(AgentStagingCleanupOptions? options, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out StagingCleanupOptions? cleanup)
+    {
+        var minimumAge = options?.MinimumAge ?? StagingCleanupOptions.DefaultMinimumAge;
+        var scanInterval = options?.ScanInterval ?? StagingCleanupOptions.DefaultScanInterval;
+        if (minimumAge < MinimumCleanupAge || minimumAge > MaximumCleanupAge
+            || scanInterval < MinimumScanInterval || scanInterval > MaximumScanInterval)
+        {
+            cleanup = null;
+            return false;
+        }
+
+        cleanup = new StagingCleanupOptions { Enabled = options?.Enabled ?? true, MinimumAge = minimumAge, ScanInterval = scanInterval };
+        return true;
+    }
+
     /// <summary>One message per problem, each naming the setting. Empty when the section is valid or absent.</summary>
     public static IEnumerable<string> Validate(AgentBackupOptions? options)
     {
@@ -136,6 +170,19 @@ internal static class AgentBackupOptionsValidation
             else if (staging.Mapping == StagingMappingKind.SameHost && staging.ServerDirectory is { } server && server != staging.AgentDirectory)
             {
                 yield return prefix + "Staging:ServerDirectory differs from AgentDirectory; declare the mapping as Mapped or omit ServerDirectory.";
+            }
+
+            if (staging.Cleanup is { } cleanup)
+            {
+                if (cleanup.MinimumAge is { } minimumAge && (minimumAge < MinimumCleanupAge || minimumAge > MaximumCleanupAge))
+                {
+                    yield return prefix + "Staging:Cleanup:MinimumAge must be between 1 minute and 365 days; it has to outlast the longest backup, because a younger file may still be in use.";
+                }
+
+                if (cleanup.ScanInterval is { } scanInterval && (scanInterval < MinimumScanInterval || scanInterval > MaximumScanInterval))
+                {
+                    yield return prefix + "Staging:Cleanup:ScanInterval must be between 10 seconds and 7 days.";
+                }
             }
         }
 

@@ -52,6 +52,18 @@ internal static class BackupMapping
             "\"RetryMaxAttempts\" BETWEEN 1 AND 10 AND \"RetryInitialDelay\" >= interval '1 second' AND \"RetryMaxDelay\" >= \"RetryInitialDelay\" " +
             "AND \"RetryMaxDelay\" <= interval '24 hours' AND \"RetryBackoff\" IN (1,2) AND \"RetryJitter\" BETWEEN 0 AND 1"));
     }
+    internal static void RetentionPolicy<T>(EntityTypeBuilder<T> builder, System.Linq.Expressions.Expression<Func<T, BackupRetentionPolicy?>> property) where T : class
+    {
+        builder.ComplexProperty(property, policy =>
+        {
+            policy.Property(value => value.Enabled).HasColumnName("RetentionEnabled");
+            policy.Property(value => value.KeepFor).HasColumnName("RetentionKeepFor");
+            policy.Property(value => value.DeleteGracePeriod).HasColumnName("RetentionDeleteGrace");
+        });
+        var table = typeof(T) == typeof(BackupJob) ? "backup_jobs" : "backup_runs";
+        builder.ToTable(table, constraints => constraints.HasCheckConstraint($"ck_{table}_retention_policy",
+            "\"RetentionKeepFor\" BETWEEN interval '1 second' AND interval '3650 days' AND \"RetentionDeleteGrace\" BETWEEN interval '1 second' AND interval '365 days'"));
+    }
 }
 
 internal sealed class BackupJobConfiguration : IEntityTypeConfiguration<BackupJob>
@@ -63,6 +75,7 @@ internal sealed class BackupJobConfiguration : IEntityTypeConfiguration<BackupJo
         BackupMapping.Configuration(builder);
         builder.Property(job => job.Name).HasMaxLength(200).IsRequired();
         BackupMapping.RetryPolicy(builder, job => job.RetryPolicy);
+        BackupMapping.RetentionPolicy(builder, job => job.RetentionPolicy);
         builder.Property(job => job.OverlapPolicy).HasConversion<string>().HasMaxLength(16).IsRequired();
         builder.ComplexProperty(job => job.Schedule, schedule =>
         {
@@ -98,6 +111,7 @@ internal sealed class BackupRunConfiguration : IEntityTypeConfiguration<BackupRu
         BackupMapping.Configuration(builder);
         BackupMapping.Status(builder, "backup_runs", 8);
         BackupMapping.RetryPolicy(builder, run => run.RetryPolicy);
+        BackupMapping.RetentionPolicy(builder, run => run.RetentionPolicy);
         builder.ToTable("backup_runs", table =>
         {
             table.HasCheckConstraint("ck_backup_runs_attempt_number", "\"CurrentAttemptNumber\" >= 1");
@@ -189,6 +203,9 @@ internal sealed class BackupArtifactConfiguration : IEntityTypeConfiguration<Bac
             table.HasCheckConstraint("ck_backup_artifact_size", "\"SizeBytes\" > 0");
             table.HasCheckConstraint("ck_backup_artifact_type", "\"BackupType\" = 'Full'");
             table.HasCheckConstraint("ck_backup_artifact_checksums", "\"ChecksumAlgorithm\" = 'sha256' AND \"SourceChecksum\" ~ '^[0-9a-f]{64}$' AND \"ArtifactChecksum\" ~ '^[0-9a-f]{64}$'");
+            // Retention is fixed when the artifact is accepted: an expiration needs the acceptance it was counted from, and the grace period is bounded.
+            table.HasCheckConstraint("ck_backup_artifact_retention", "\"RetentionGracePeriod\" BETWEEN interval '1 second' AND interval '365 days' " +
+                "AND (\"RetentionExpiresAt\" IS NULL OR (\"AcceptedAt\" IS NOT NULL AND \"RetentionExpiresAt\" > \"AcceptedAt\"))");
         });
         builder.Property(artifact => artifact.SourceChecksum).HasMaxLength(64).IsRequired();
         builder.Property(artifact => artifact.ArtifactChecksum).HasMaxLength(64).IsRequired();
@@ -196,6 +213,11 @@ internal sealed class BackupArtifactConfiguration : IEntityTypeConfiguration<Bac
         builder.Property(artifact => artifact.SourceMetadataJson).HasMaxLength(16384).IsRequired();
         builder.Property(artifact => artifact.AppliedOptionsJson).HasMaxLength(16384).IsRequired();
         builder.Property<bool>("_sealed").HasColumnName("Sealed");
+        builder.Property(artifact => artifact.RetentionGracePeriod).HasDefaultValue(TimeSpan.FromHours(24));
+        builder.Ignore(artifact => artifact.State);
+        // The retention scan's only query: expired artifacts nobody pinned and retention has not handled yet, earliest expiry first.
+        builder.HasIndex(artifact => artifact.RetentionExpiresAt).HasDatabaseName("ix_backup_artifacts_retention_due")
+            .HasFilter("\"RetentionExpiresAt\" IS NOT NULL AND \"RetentionPinnedAt\" IS NULL AND \"RetentionAppliedAt\" IS NULL");
         builder.HasIndex(artifact => new { artifact.TenantId, artifact.AttemptId }).IsUnique();
         builder.HasMany(artifact => artifact.Replicas).WithOne()
             .HasForeignKey(replica => new { replica.ArtifactId, replica.TenantId, replica.SizeBytes, replica.Checksum, replica.ChecksumAlgorithm })
@@ -213,7 +235,20 @@ internal sealed class BackupReplicaConfiguration : IEntityTypeConfiguration<Back
         builder.ToTable("backup_replicas", table =>
         {
             table.HasCheckConstraint("ck_backup_replica_size", "\"SizeBytes\" > 0");
-            table.HasCheckConstraint("ck_backup_replica_status", "\"Status\" = 'Available'");
+            table.HasCheckConstraint("ck_backup_replica_status", "\"Status\" IN ('Available','DeletePending','Deleting','DeleteFailed','Deleted')");
+            // Every state carries exactly the delete bookkeeping that belongs to it, so a half-written transition cannot be committed.
+            table.HasCheckConstraint("ck_backup_replica_lifecycle",
+                "(\"DeleteReason\" IS NULL OR \"DeleteReason\" IN ('RetentionExpired','Manual')) AND (\"DeleteRequestedByUserId\" IS NULL OR \"DeleteReason\" = 'Manual') AND (" +
+                "(\"Status\" = 'Available' AND \"DeleteRequestedAt\" IS NULL AND \"DeleteReason\" IS NULL AND \"DeleteAfter\" IS NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL AND \"DeleteLeaseExpiresAt\" IS NULL " +
+                "AND \"DeleteNextAttemptAt\" IS NULL AND \"DeleteFailureCode\" IS NULL AND \"DeletedAt\" IS NULL AND \"DeleteAttempts\" = 0) " +
+                "OR (\"Status\" = 'DeletePending' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeleteAfter\" IS NOT NULL AND \"DeleteAfter\" >= \"DeleteRequestedAt\" AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL " +
+                "AND \"DeleteLeaseExpiresAt\" IS NULL AND \"DeleteNextAttemptAt\" IS NULL AND \"DeleteFailureCode\" IS NULL AND \"DeletedAt\" IS NULL AND \"DeleteAttempts\" = 0) " +
+                "OR (\"Status\" = 'Deleting' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeleteAfter\" IS NOT NULL AND \"DeleteLeaseToken\" IS NOT NULL AND \"DeleteLeaseOwner\" IS NOT NULL " +
+                "AND \"DeleteLeaseExpiresAt\" IS NOT NULL AND \"DeleteNextAttemptAt\" IS NULL AND \"DeletedAt\" IS NULL AND \"DeleteAttempts\" >= 1) " +
+                "OR (\"Status\" = 'DeleteFailed' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeleteAfter\" IS NOT NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL " +
+                "AND \"DeleteLeaseExpiresAt\" IS NULL AND \"DeleteNextAttemptAt\" IS NOT NULL AND \"DeleteFailureCode\" IS NOT NULL AND \"DeletedAt\" IS NULL AND \"DeleteAttempts\" >= 1) " +
+                "OR (\"Status\" = 'Deleted' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeletedAt\" IS NOT NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL " +
+                "AND \"DeleteLeaseExpiresAt\" IS NULL AND \"DeleteNextAttemptAt\" IS NULL AND \"DeleteFailureCode\" IS NULL AND \"DeleteAttempts\" >= 1))");
             table.HasCheckConstraint("ck_backup_replica_checksum", "\"ChecksumAlgorithm\" = 'sha256' AND \"Checksum\" ~ '^[0-9a-f]{64}$'");
             table.HasCheckConstraint("ck_backup_replica_verification", "\"VerificationState\" IN ('Verified','Unverified','Failed') AND ((\"VerificationState\" = 'Verified') = (\"VerifiedAt\" IS NOT NULL)) AND (\"VerifiedAt\" IS NULL OR \"VerifiedAt\" >= \"CreatedAt\")");
         });
@@ -224,6 +259,17 @@ internal sealed class BackupReplicaConfiguration : IEntityTypeConfiguration<Back
         builder.Property(replica => replica.ChecksumAlgorithm).HasMaxLength(16).IsRequired();
         builder.Property(replica => replica.VerificationState).HasMaxLength(32).IsRequired();
         builder.Property(replica => replica.VerificationMethod).HasMaxLength(64).IsRequired();
+        builder.Property(replica => replica.Status).HasConversion<string>().HasMaxLength(16).IsRequired();
+        builder.Property(replica => replica.DeleteReason).HasConversion<string>().HasMaxLength(16);
+        builder.Property(replica => replica.DeleteLeaseOwner).HasMaxLength(128);
+        builder.Property(replica => replica.DeleteFailureCode).HasMaxLength(128);
+        builder.Ignore(replica => replica.IsUsable);
+        // The delete workers' claim query is the union of these three: grace period over, failed delete due again, lease of a crashed owner expired.
+        builder.HasIndex(replica => replica.DeleteAfter).HasDatabaseName("ix_backup_replicas_delete_pending").HasFilter("\"Status\" = 'DeletePending'");
+        builder.HasIndex(replica => replica.DeleteNextAttemptAt).HasDatabaseName("ix_backup_replicas_delete_failed").HasFilter("\"Status\" = 'DeleteFailed'");
+        builder.HasIndex(replica => replica.DeleteLeaseExpiresAt).HasDatabaseName("ix_backup_replicas_delete_leased").HasFilter("\"Status\" = 'Deleting'");
+        // The orphan sweep asks which stored keys some replica still references.
+        builder.HasIndex(replica => new { replica.StorageProvider, replica.Key }).HasDatabaseName("ix_backup_replicas_location");
         builder.HasIndex(replica => new { replica.TenantId, replica.ArtifactId, replica.StorageProvider, replica.StorageTarget, replica.Key }).IsUnique();
     }
 }
@@ -261,5 +307,7 @@ internal sealed class BackupScheduleOccurrenceConfiguration : IEntityTypeConfigu
         builder.HasIndex(occurrence => new { occurrence.TenantId, occurrence.JobId, occurrence.ScheduledAt }).IsUnique();
         // At most one occurrence is the origin of a run.
         builder.HasIndex(occurrence => new { occurrence.TenantId, occurrence.RunId }).IsUnique().HasFilter("\"Outcome\" = 'RunCreated'");
+        // Pruning looks at old decisions only.
+        builder.HasIndex(occurrence => occurrence.DecidedAt).HasDatabaseName("ix_backup_occurrences_decided");
     }
 }

@@ -130,6 +130,150 @@ public sealed class BackupExecutionCompositionTests
         }
     }
 
+    private static ServiceCollection Services(params (string Key, string? Value)[] values)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddAgentHost(Configuration(values));
+        return services;
+    }
+
+    private static bool HasCleanupHostedService(IServiceCollection services) =>
+        services.Any(descriptor => descriptor.ServiceType == typeof(IHostedService) && descriptor.ImplementationType == typeof(AgentStagingCleanupHostedService));
+
+    [Fact]
+    public void TheStagingCleanupExistsOnlyWhenAStagingAreaIsConfigured()
+    {
+        var unconfigured = Services();
+        using var unconfiguredProvider = unconfigured.BuildServiceProvider();
+        Assert.False(HasCleanupHostedService(unconfigured));
+        Assert.Null(unconfiguredProvider.GetService<StagingCleaner>());
+        Assert.Null(unconfiguredProvider.GetService<StagingCleanupOptions>());
+
+        var storageOnly = Services(("Agent:Backup:LocalStorage:RootDirectory", Path.Combine(Root, "local")));
+        using var storageOnlyProvider = storageOnly.BuildServiceProvider();
+        Assert.False(HasCleanupHostedService(storageOnly));
+        Assert.Null(storageOnlyProvider.GetService<StagingCleaner>());
+
+        var configured = Services(
+            ("Agent:Backup:Staging:Mapping", "SameHost"),
+            ("Agent:Backup:Staging:AgentDirectory", Path.Combine(Root, "staging")));
+        using var configuredProvider = configured.BuildServiceProvider();
+        Assert.True(HasCleanupHostedService(configured));
+        Assert.NotNull(configuredProvider.GetRequiredService<StagingCleaner>());
+        Assert.Same(configuredProvider.GetRequiredService<StagingCleaner>(), configuredProvider.GetRequiredService<StagingCleaner>());
+    }
+
+    [Fact]
+    public void AnInvalidStagingAreaRegistersNoCleanupAndLeavesTheComplaintToTheValidator()
+    {
+        var services = Services(("Agent:Backup:Staging:Mapping", "SameHost"), ("Agent:Backup:Staging:AgentDirectory", "relative/staging"));
+
+        Assert.False(HasCleanupHostedService(services));
+    }
+
+    [Fact]
+    public void TheRegistryTheCleanupConsultsIsTheOneSingletonThePipelineHoldsInto()
+    {
+        using var provider = Build(
+            ("Agent:Backup:Staging:Mapping", "SameHost"),
+            ("Agent:Backup:Staging:AgentDirectory", Path.Combine(Root, "staging")));
+
+        Assert.Same(provider.GetRequiredService<StagingUsageRegistry>(), provider.GetRequiredService<StagingUsageRegistry>());
+    }
+
+    [Fact]
+    public void TheCleanupDefaultsAreEnabledTwelveHoursAndHourly()
+    {
+        using var provider = Build(
+            ("Agent:Backup:Staging:Mapping", "SameHost"),
+            ("Agent:Backup:Staging:AgentDirectory", Path.Combine(Root, "staging")));
+
+        var options = provider.GetRequiredService<StagingCleanupOptions>();
+        Assert.True(options.Enabled);
+        Assert.Equal(TimeSpan.FromHours(12), options.MinimumAge);
+        Assert.Equal(TimeSpan.FromHours(1), options.ScanInterval);
+    }
+
+    [Fact]
+    public void ConfiguredCleanupValuesReplaceTheDefaultsOneByOne()
+    {
+        using var provider = Build(
+            ("Agent:Backup:Staging:Mapping", "SameHost"),
+            ("Agent:Backup:Staging:AgentDirectory", Path.Combine(Root, "staging")),
+            ("Agent:Backup:Staging:Cleanup:Enabled", "false"),
+            ("Agent:Backup:Staging:Cleanup:MinimumAge", "1.00:00:00"));
+
+        var options = provider.GetRequiredService<StagingCleanupOptions>();
+        Assert.False(options.Enabled);
+        Assert.Equal(TimeSpan.FromDays(1), options.MinimumAge);
+        Assert.Equal(TimeSpan.FromHours(1), options.ScanInterval);
+    }
+
+    [Fact]
+    public void ACleanupSectionWithinTheLimitsPassesStartupValidation()
+    {
+        var options = new AgentHostOptions
+        {
+            Backend = { BaseUri = "https://backup.example.test/" },
+            Backup = new AgentBackupOptions
+            {
+                Staging = new AgentBackupStagingOptions
+                {
+                    Mapping = StagingMappingKind.SameHost,
+                    AgentDirectory = Path.Combine(Root, "s"),
+                    Cleanup = new AgentStagingCleanupOptions { Enabled = false, MinimumAge = TimeSpan.FromMinutes(1), ScanInterval = TimeSpan.FromSeconds(10) }
+                }
+            }
+        };
+
+        Assert.True(new AgentHostOptionsValidator().Validate(null, options).Succeeded);
+    }
+
+    [Theory]
+    [InlineData("00:00:59")]
+    [InlineData("00:00:00")]
+    [InlineData("-01:00:00")]
+    [InlineData("400.00:00:00")]
+    public void ACleanupMinimumAgeOutsideItsLimitsIsRejectedByName(string value)
+    {
+        var message = Fail(
+            ("Agent:Backup:Staging:Mapping", "SameHost"),
+            ("Agent:Backup:Staging:AgentDirectory", Path.Combine(Root, "s")),
+            ("Agent:Backup:Staging:Cleanup:MinimumAge", value));
+
+        Assert.Contains("Agent:Backup:Staging:Cleanup:MinimumAge must be between 1 minute and 365 days", message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("00:00:09")]
+    [InlineData("00:00:00")]
+    [InlineData("-00:01:00")]
+    [InlineData("8.00:00:00")]
+    public void ACleanupScanIntervalOutsideItsLimitsIsRejectedByName(string value)
+    {
+        var message = Fail(
+            ("Agent:Backup:Staging:Mapping", "SameHost"),
+            ("Agent:Backup:Staging:AgentDirectory", Path.Combine(Root, "s")),
+            ("Agent:Backup:Staging:Cleanup:ScanInterval", value));
+
+        Assert.Contains("Agent:Backup:Staging:Cleanup:ScanInterval must be between 10 seconds and 7 days", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnInvalidCleanupValueRegistersNoCleanupWhileTheValidatorStillReportsIt()
+    {
+        var values = new (string Key, string? Value)[]
+        {
+            ("Agent:Backup:Staging:Mapping", "SameHost"),
+            ("Agent:Backup:Staging:AgentDirectory", Path.Combine(Root, "s")),
+            ("Agent:Backup:Staging:Cleanup:MinimumAge", "00:00:05")
+        };
+
+        Assert.False(HasCleanupHostedService(Services(values)));
+        Assert.Contains("Staging:Cleanup:MinimumAge", Fail(values), StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task AnInvalidBackupSectionFailsHostStartupNamingTheSetting()
     {

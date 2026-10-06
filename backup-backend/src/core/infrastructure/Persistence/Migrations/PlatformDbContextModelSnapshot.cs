@@ -311,6 +311,9 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<DateTimeOffset?>("AcceptedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("AppliedOptionsJson")
                         .IsRequired()
                         .HasMaxLength(16384)
@@ -334,6 +337,20 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(16)");
 
                     b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("RetentionAppliedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("RetentionExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<TimeSpan>("RetentionGracePeriod")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("interval")
+                        .HasDefaultValue(new TimeSpan(1, 0, 0, 0, 0));
+
+                    b.Property<DateTimeOffset?>("RetentionPinnedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<long>("SizeBytes")
@@ -367,6 +384,10 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.HasAlternateKey("Id", "TenantId");
 
+                    b.HasIndex("RetentionExpiresAt")
+                        .HasDatabaseName("ix_backup_artifacts_retention_due")
+                        .HasFilter("\"RetentionExpiresAt\" IS NOT NULL AND \"RetentionPinnedAt\" IS NULL AND \"RetentionAppliedAt\" IS NULL");
+
                     b.HasIndex("TenantId");
 
                     b.HasIndex("AttemptId", "TenantId");
@@ -377,6 +398,8 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.ToTable("backup_artifacts", null, t =>
                         {
                             t.HasCheckConstraint("ck_backup_artifact_checksums", "\"ChecksumAlgorithm\" = 'sha256' AND \"SourceChecksum\" ~ '^[0-9a-f]{64}$' AND \"ArtifactChecksum\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_backup_artifact_retention", "\"RetentionGracePeriod\" BETWEEN interval '1 second' AND interval '365 days' AND (\"RetentionExpiresAt\" IS NULL OR (\"AcceptedAt\" IS NOT NULL AND \"RetentionExpiresAt\" > \"AcceptedAt\"))");
 
                             t.HasCheckConstraint("ck_backup_artifact_size", "\"SizeBytes\" > 0");
 
@@ -429,6 +452,23 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAddOrUpdate()
                         .HasColumnType("xid")
                         .HasColumnName("xmin");
+
+                    b.ComplexProperty(typeof(Dictionary<string, object>), "RetentionPolicy", "BackupPlatform.Domain.Backups.BackupJob.RetentionPolicy#BackupRetentionPolicy", b1 =>
+                        {
+                            b1.IsRequired();
+
+                            b1.Property<TimeSpan>("DeleteGracePeriod")
+                                .HasColumnType("interval")
+                                .HasColumnName("RetentionDeleteGrace");
+
+                            b1.Property<bool>("Enabled")
+                                .HasColumnType("boolean")
+                                .HasColumnName("RetentionEnabled");
+
+                            b1.Property<TimeSpan>("KeepFor")
+                                .HasColumnType("interval")
+                                .HasColumnName("RetentionKeepFor");
+                        });
 
                     b.ComplexProperty(typeof(Dictionary<string, object>), "RetryPolicy", "BackupPlatform.Domain.Backups.BackupJob.RetryPolicy#BackupRetryPolicy", b1 =>
                         {
@@ -499,6 +539,8 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_backup_job_policy", "\"BackupType\" = 'Full' AND \"OverlapPolicy\" IN ('Skip','Queue')");
 
                             t.HasCheckConstraint("ck_backup_jobs_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_backup_jobs_retention_policy", "\"RetentionKeepFor\" BETWEEN interval '1 second' AND interval '3650 days' AND \"RetentionDeleteGrace\" BETWEEN interval '1 second' AND interval '365 days'");
 
                             t.HasCheckConstraint("ck_backup_jobs_retry_policy", "\"RetryMaxAttempts\" BETWEEN 1 AND 10 AND \"RetryInitialDelay\" >= interval '1 second' AND \"RetryMaxDelay\" >= \"RetryInitialDelay\" AND \"RetryMaxDelay\" <= interval '24 hours' AND \"RetryBackoff\" IN (1,2) AND \"RetryJitter\" BETWEEN 0 AND 1");
 
@@ -578,17 +620,57 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTimeOffset?>("DeleteAfter")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DeleteAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DeleteFailureCode")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset?>("DeleteLeaseExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeleteLeaseOwner")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid?>("DeleteLeaseToken")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("DeleteNextAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeleteReason")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("DeleteRequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DeleteRequestedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Key")
                         .IsRequired()
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
+
+                    b.Property<DateTimeOffset?>("LastDeleteAttemptAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<long>("SizeBytes")
                         .HasColumnType("bigint");
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<string>("StorageProvider")
                         .IsRequired()
@@ -627,7 +709,22 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.HasAlternateKey("Id", "TenantId");
 
+                    b.HasIndex("DeleteAfter")
+                        .HasDatabaseName("ix_backup_replicas_delete_pending")
+                        .HasFilter("\"Status\" = 'DeletePending'");
+
+                    b.HasIndex("DeleteLeaseExpiresAt")
+                        .HasDatabaseName("ix_backup_replicas_delete_leased")
+                        .HasFilter("\"Status\" = 'Deleting'");
+
+                    b.HasIndex("DeleteNextAttemptAt")
+                        .HasDatabaseName("ix_backup_replicas_delete_failed")
+                        .HasFilter("\"Status\" = 'DeleteFailed'");
+
                     b.HasIndex("TenantId");
+
+                    b.HasIndex("StorageProvider", "Key")
+                        .HasDatabaseName("ix_backup_replicas_location");
 
                     b.HasIndex("ArtifactId", "TenantId", "SizeBytes", "Checksum", "ChecksumAlgorithm");
 
@@ -638,9 +735,11 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_backup_replica_checksum", "\"ChecksumAlgorithm\" = 'sha256' AND \"Checksum\" ~ '^[0-9a-f]{64}$'");
 
+                            t.HasCheckConstraint("ck_backup_replica_lifecycle", "(\"DeleteReason\" IS NULL OR \"DeleteReason\" IN ('RetentionExpired','Manual')) AND (\"DeleteRequestedByUserId\" IS NULL OR \"DeleteReason\" = 'Manual') AND ((\"Status\" = 'Available' AND \"DeleteRequestedAt\" IS NULL AND \"DeleteReason\" IS NULL AND \"DeleteAfter\" IS NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL AND \"DeleteLeaseExpiresAt\" IS NULL AND \"DeleteNextAttemptAt\" IS NULL AND \"DeleteFailureCode\" IS NULL AND \"DeletedAt\" IS NULL AND \"DeleteAttempts\" = 0) OR (\"Status\" = 'DeletePending' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeleteAfter\" IS NOT NULL AND \"DeleteAfter\" >= \"DeleteRequestedAt\" AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL AND \"DeleteLeaseExpiresAt\" IS NULL AND \"DeleteNextAttemptAt\" IS NULL AND \"DeleteFailureCode\" IS NULL AND \"DeletedAt\" IS NULL AND \"DeleteAttempts\" = 0) OR (\"Status\" = 'Deleting' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeleteAfter\" IS NOT NULL AND \"DeleteLeaseToken\" IS NOT NULL AND \"DeleteLeaseOwner\" IS NOT NULL AND \"DeleteLeaseExpiresAt\" IS NOT NULL AND \"DeleteNextAttemptAt\" IS NULL AND \"DeletedAt\" IS NULL AND \"DeleteAttempts\" >= 1) OR (\"Status\" = 'DeleteFailed' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeleteAfter\" IS NOT NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL AND \"DeleteLeaseExpiresAt\" IS NULL AND \"DeleteNextAttemptAt\" IS NOT NULL AND \"DeleteFailureCode\" IS NOT NULL AND \"DeletedAt\" IS NULL AND \"DeleteAttempts\" >= 1) OR (\"Status\" = 'Deleted' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeletedAt\" IS NOT NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL AND \"DeleteLeaseExpiresAt\" IS NULL AND \"DeleteNextAttemptAt\" IS NULL AND \"DeleteFailureCode\" IS NULL AND \"DeleteAttempts\" >= 1))");
+
                             t.HasCheckConstraint("ck_backup_replica_size", "\"SizeBytes\" > 0");
 
-                            t.HasCheckConstraint("ck_backup_replica_status", "\"Status\" = 'Available'");
+                            t.HasCheckConstraint("ck_backup_replica_status", "\"Status\" IN ('Available','DeletePending','Deleting','DeleteFailed','Deleted')");
 
                             t.HasCheckConstraint("ck_backup_replica_verification", "\"VerificationState\" IN ('Verified','Unverified','Failed') AND ((\"VerificationState\" = 'Verified') = (\"VerifiedAt\" IS NOT NULL)) AND (\"VerifiedAt\" IS NULL OR \"VerifiedAt\" >= \"CreatedAt\")");
 
@@ -728,6 +827,23 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .HasColumnType("xid")
                         .HasColumnName("xmin");
 
+                    b.ComplexProperty(typeof(Dictionary<string, object>), "RetentionPolicy", "BackupPlatform.Domain.Backups.BackupRun.RetentionPolicy#BackupRetentionPolicy", b1 =>
+                        {
+                            b1.IsRequired();
+
+                            b1.Property<TimeSpan>("DeleteGracePeriod")
+                                .HasColumnType("interval")
+                                .HasColumnName("RetentionDeleteGrace");
+
+                            b1.Property<bool>("Enabled")
+                                .HasColumnType("boolean")
+                                .HasColumnName("RetentionEnabled");
+
+                            b1.Property<TimeSpan>("KeepFor")
+                                .HasColumnType("interval")
+                                .HasColumnName("RetentionKeepFor");
+                        });
+
                     b.ComplexProperty(typeof(Dictionary<string, object>), "RetryPolicy", "BackupPlatform.Domain.Backups.BackupRun.RetryPolicy#BackupRetryPolicy", b1 =>
                         {
                             b1.IsRequired();
@@ -795,6 +911,8 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_backup_runs_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
 
                             t.HasCheckConstraint("ck_backup_runs_overlap", "\"OverlapPolicy\" IN ('Skip','Queue')");
+
+                            t.HasCheckConstraint("ck_backup_runs_retention_policy", "\"RetentionKeepFor\" BETWEEN interval '1 second' AND interval '3650 days' AND \"RetentionDeleteGrace\" BETWEEN interval '1 second' AND interval '365 days'");
 
                             t.HasCheckConstraint("ck_backup_runs_retry_policy", "\"RetryMaxAttempts\" BETWEEN 1 AND 10 AND \"RetryInitialDelay\" >= interval '1 second' AND \"RetryMaxDelay\" >= \"RetryInitialDelay\" AND \"RetryMaxDelay\" <= interval '24 hours' AND \"RetryBackoff\" IN (1,2) AND \"RetryJitter\" BETWEEN 0 AND 1");
 
@@ -970,6 +1088,9 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasAlternateKey("Id", "TenantId");
+
+                    b.HasIndex("DecidedAt")
+                        .HasDatabaseName("ix_backup_occurrences_decided");
 
                     b.HasIndex("TenantId");
 

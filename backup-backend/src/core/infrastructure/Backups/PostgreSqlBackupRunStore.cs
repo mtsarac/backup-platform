@@ -57,7 +57,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
             return new BackupStartResult(BackupStartOutcome.NotFound, null);
         if (job.OverlapPolicy == BackupOverlapPolicy.Skip && await ActiveRunIdAsync(context, tenantId, jobId, null, cancellationToken) is { } active)
             return new BackupStartResult(BackupStartOutcome.SkippedOverlap, null, active);
-        var run = new BackupRun(Guid.NewGuid(), tenantId, job.Id, owner, job.Configuration, idempotencyKey, now, job.RetryPolicy, job.OverlapPolicy);
+        var run = new BackupRun(Guid.NewGuid(), tenantId, job.Id, owner, job.Configuration, idempotencyKey, now, job.RetryPolicy, job.OverlapPolicy, retentionPolicy: job.RetentionPolicy);
         run.QueueFirstAttempt(Guid.NewGuid(), now);
         context.BackupRuns.Add(run);
         try { await context.SaveChangesAsync(cancellationToken); }

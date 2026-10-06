@@ -1,4 +1,5 @@
 using BackupPlatform.BackupProviders.Abstractions.Database;
+using BackupPlatform.Contracts.Backups;
 using BackupPlatform.StorageProviders.Abstractions;
 using Microsoft.Extensions.Logging;
 
@@ -21,6 +22,8 @@ internal sealed class DatabaseBackupExecution
     private readonly AgentStagingDirectory _staging;
     private readonly List<BackupWarning> _warnings = [];
     private readonly List<BackupFailure> _cleanupFailures = [];
+    private readonly StagingUsageRegistry? _usage;
+    private readonly List<IDisposable> _holds = [];
 
     private DateTimeOffset _startedAt;
     private BackupPreCheckReport? _preCheck;
@@ -41,7 +44,8 @@ internal sealed class DatabaseBackupExecution
         IArtifactPreparer preparer,
         BackupStageTracker tracker,
         ILogger logger,
-        TimeProvider time)
+        TimeProvider time,
+        StagingUsageRegistry? usage = null)
     {
         _request = request;
         _provider = provider;
@@ -50,10 +54,24 @@ internal sealed class DatabaseBackupExecution
         _tracker = tracker;
         _logger = logger;
         _time = time;
+        _usage = usage;
         _staging = new AgentStagingDirectory(request.Staging.AgentDirectory);
     }
 
     public async Task<DatabaseBackupPipelineResult> RunAsync(CancellationToken cancellationToken)
+    {
+        // Holds outlive every cleanup below: until the very end of the run the staging sweeper must see these files as in use.
+        try
+        {
+            return await RunCoreAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            ReleaseHolds();
+        }
+    }
+
+    private async Task<DatabaseBackupPipelineResult> RunCoreAsync(CancellationToken cancellationToken)
     {
         _startedAt = _time.GetUtcNow();
         BackupFailure? failure = null;
@@ -158,10 +176,13 @@ internal sealed class DatabaseBackupExecution
         FullBackupResult result;
         try
         {
+            // Held before the provider is called: the name must be protected before SQL Server creates the file.
+            var stagedFileName = ManagedBackupLayout.StagedFileName(_request.DatabaseName, _startedAt, Guid.NewGuid());
+            Hold(stagedFileName);
             backupRequest = new FullBackupRequest(
                 _request.DatabaseName,
                 _request.Staging,
-                BackupFileNaming.StagedFileName(_request.DatabaseName, _startedAt, Guid.NewGuid()),
+                stagedFileName,
                 _request.Options,
                 _request.BackupTimeout,
                 _request.VerifyTimeout,
@@ -216,6 +237,7 @@ internal sealed class DatabaseBackupExecution
             _prepared = await _preparer.PrepareAsync(
                 new ArtifactPreparationInput(_staging, _sourceFile!.FileName, DatabaseBackupType.Full, _providerResult!.Options!.Applied),
                 cancellationToken).ConfigureAwait(false);
+            Hold(_prepared.FileName);
             if (!_staging.FileExists(_prepared.FileName))
             {
                 throw Fail(stage, BackupPipelineReasons.ArtifactFileMissing,
@@ -398,6 +420,24 @@ internal sealed class DatabaseBackupExecution
 
     private FileStream OpenForRead(string fileName) =>
         new(_staging.FilePath(fileName), FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 1, FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+    private void Hold(string fileName)
+    {
+        if (_usage is not null)
+        {
+            _holds.Add(_usage.Hold(fileName));
+        }
+    }
+
+    private void ReleaseHolds()
+    {
+        foreach (var hold in _holds)
+        {
+            hold.Dispose();
+        }
+
+        _holds.Clear();
+    }
 
     private void CleanupAfterSuccess()
     {

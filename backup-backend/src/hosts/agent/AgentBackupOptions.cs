@@ -34,6 +34,24 @@ public sealed class AgentBackupStagingOptions
 
     /// <summary>The directory as this agent process names it.</summary>
     public string? AgentDirectory { get; set; }
+
+    /// <summary>How the agent removes leftovers of crashed backups from this directory. Optional: defaults apply.</summary>
+    public AgentStagingCleanupOptions? Cleanup { get; set; }
+}
+
+/// <summary>
+/// Sweeping the agent's own staging directory for staged backup files a crashed process left behind. Every value is optional; an
+/// absent one takes the default (enabled, files older than 12 hours, scanned every hour). Only files the platform itself named are
+/// ever removed, never an operator's own files in that directory.
+/// </summary>
+public sealed class AgentStagingCleanupOptions
+{
+    public bool? Enabled { get; set; }
+
+    /// <summary>Files younger than this are never removed; keep it longer than the longest backup this agent runs.</summary>
+    public TimeSpan? MinimumAge { get; set; }
+
+    public TimeSpan? ScanInterval { get; set; }
 }
 
 public sealed class AgentLocalStorageOptions

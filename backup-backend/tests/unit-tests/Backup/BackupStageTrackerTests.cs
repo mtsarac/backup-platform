@@ -1,5 +1,6 @@
 using BackupPlatform.Agent.Core.Backup;
 using BackupPlatform.BackupProviders.Abstractions.Database;
+using BackupPlatform.Contracts.Backups;
 
 namespace BackupPlatform.UnitTests.Backup;
 
@@ -138,12 +139,73 @@ public sealed class BackupStageTrackerTests
         var started = new DateTimeOffset(2026, 10, 5, 8, 30, 15, TimeSpan.FromHours(3));
         var id = Guid.Parse("a1b2c3d4-0000-0000-0000-000000000000");
 
-        Assert.Equal("Sales_20261005T053015Z_a1b2c3d4_FULL.bak", BackupFileNaming.StagedFileName("Sales", started, id));
-        Assert.Equal("bp_it_q_uote_d____a___20261005T053015Z_a1b2c3d4_FULL.bak", BackupFileNaming.StagedFileName("bp_it_q]uote'd/..\\a;\"", started, id));
-        Assert.StartsWith("database_", BackupFileNaming.StagedFileName("", started, id), StringComparison.Ordinal);
-        var longName = BackupFileNaming.StagedFileName(new string('x', 500), started, id);
+        Assert.Equal("Sales_20261005T053015Z_a1b2c3d4_FULL.bak", ManagedBackupLayout.StagedFileName("Sales", started, id));
+        Assert.Equal("bp_it_q_uote_d____a___20261005T053015Z_a1b2c3d4_FULL.bak", ManagedBackupLayout.StagedFileName("bp_it_q]uote'd/..\\a;\"", started, id));
+        Assert.StartsWith("database_", ManagedBackupLayout.StagedFileName("", started, id), StringComparison.Ordinal);
+        var longName = ManagedBackupLayout.StagedFileName(new string('x', 500), started, id);
         Assert.True(longName.Length < 100);
-        Assert.NotEqual(BackupFileNaming.StagedFileName("Sales", started, id), BackupFileNaming.StagedFileName("Sales", started, Guid.NewGuid()));
+        Assert.NotEqual(ManagedBackupLayout.StagedFileName("Sales", started, id), ManagedBackupLayout.StagedFileName("Sales", started, Guid.NewGuid()));
+    }
+
+    [Fact]
+    public void EveryNameTheAgentStagesIsRecognisedAsManaged()
+    {
+        var started = new DateTimeOffset(2026, 10, 5, 8, 30, 15, TimeSpan.FromHours(3));
+        string[] databases =
+        [
+            "Sales", "", " ", "bp_it_q]uote'd/..\\a;\"", "..", "../../etc/passwd", "a b", "naïve-データベース", "line\nbreak", "tab\t", "NUL\0", "x:y*z?<>|",
+            new string('x', 500), new string('_', 48), new string('-', 49), "emoji-\U0001F600"
+        ];
+
+        foreach (var database in databases)
+        {
+            var name = ManagedBackupLayout.StagedFileName(database, started, Guid.NewGuid());
+            Assert.True(ManagedBackupLayout.IsManagedArtifactName(name), $"not recognised: {name}");
+        }
+    }
+
+    [Theory]
+    [InlineData("Sales_20261005T053015Z_a1b2c3d4_FULL.bin")]
+    [InlineData("Sales_20261005T053015Z_a1b2c3d4_full.bak")]
+    [InlineData("Sales_20261005T053015Z_a1b2c3d4_DIFF.bak")]
+    [InlineData("Sales_20261005T053015Z_A1B2C3D4_FULL.bak")]
+    [InlineData("Sales_20261005T053015Z_a1b2c3d_FULL.bak")]
+    [InlineData("Sales_20261005T053015Z_a1b2c3d4e_FULL.bak")]
+    [InlineData("Sales_20261005T053015Z_FULL.bak")]
+    [InlineData("Sales_20261005T053015_a1b2c3d4_FULL.bak")]
+    [InlineData("Sales_20261005T053015Z_a1b2c3d4_FULL.bak.partial")]
+    [InlineData(".Sales_20261005T053015Z_a1b2c3d4_FULL.bak")]
+    [InlineData("_20261005T053015Z_a1b2c3d4_FULL.bak")]
+    [InlineData("Sales Ltd_20261005T053015Z_a1b2c3d4_FULL.bak")]
+    [InlineData("Sales_20261005T053015Z_a1b2c3d4_FULL.bak ")]
+    [InlineData("Sales_20261005T053015Z_a1b2c3d4_FULL.bak\n")]
+    [InlineData("sub/Sales_20261005T053015Z_a1b2c3d4_FULL.bak")]
+    [InlineData("sub\\Sales_20261005T053015Z_a1b2c3d4_FULL.bak")]
+    [InlineData("../Sales_20261005T053015Z_a1b2c3d4_FULL.bak")]
+    [InlineData("..")]
+    [InlineData(".")]
+    [InlineData("")]
+    [InlineData("Sales_FULL.bak")]
+    [InlineData("Sales.bak")]
+    [InlineData(".bak")]
+    [InlineData("backup.bak")]
+    public void NamesOutsideTheManagedGrammarAreNeverRecognised(string name) =>
+        Assert.False(ManagedBackupLayout.IsManagedArtifactName(name));
+
+    [Fact]
+    public void ANullNameIsNotManaged() => Assert.False(ManagedBackupLayout.IsManagedArtifactName(null));
+
+    [Fact]
+    public void TheAttemptScopeIsTheDashlessLowercaseGuidsJoinedBySlashes()
+    {
+        var tenant = Guid.Parse("0b1f6c2e-8d0a-4f7e-9a53-2f4c1d9d7a10");
+        var job = Guid.Parse("11111111-2222-3333-4444-555555555555");
+        var run = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+        var attempt = Guid.Parse("01234567-89ab-cdef-0123-456789abcdef");
+
+        Assert.Equal(
+            "0b1f6c2e8d0a4f7e9a532f4c1d9d7a10/11111111222233334444555555555555/aaaaaaaabbbbccccddddeeeeeeeeeeee/0123456789abcdef0123456789abcdef",
+            ManagedBackupLayout.AttemptScope(tenant, job, run, attempt));
     }
 
     private sealed class ManualTime(DateTimeOffset start) : TimeProvider

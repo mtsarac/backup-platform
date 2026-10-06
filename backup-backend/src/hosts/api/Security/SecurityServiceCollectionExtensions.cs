@@ -53,6 +53,7 @@ public static class SecurityServiceCollectionExtensions
         services.AddHostedService<StaleBackupDetector>();
         services.AddSingleton<BackupRetryWorker>();
         services.AddHostedService(provider => provider.GetRequiredService<BackupRetryWorker>());
+        AddBackupRetention(services);
         services.AddSingleton<IBackupWorkSignal, AgentPushWorkSignal>();
         services.AddBackupScheduling();
         AddPolicies(services);
@@ -82,6 +83,35 @@ public static class SecurityServiceCollectionExtensions
             throw new InvalidOperationException("Configure BACKUP_PLATFORM_CONNECTION_STRING or ConnectionStrings:Platform.");
         }
         return new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(connectionString).Options;
+    }
+
+    /// <summary>
+    /// Backend-owned retention: options, the storages the backend may reach, the delete/sweep/prune services and the worker that drives them.
+    /// The worker is registered even when disabled; it then does nothing, so the API and its views work either way.
+    /// </summary>
+    private static void AddBackupRetention(IServiceCollection services)
+    {
+        services.TryAddSingleton(provider =>
+        {
+            var options = provider.GetRequiredService<IConfiguration>().GetSection("Backups:Retention").Get<BackupRetentionOptions>() ?? new BackupRetentionOptions();
+            options.ThrowIfInvalid();
+            return options;
+        });
+        services.TryAddSingleton(provider =>
+        {
+            var options = provider.GetRequiredService<IConfiguration>().GetSection("Backups:Storage").Get<BackupStorageOptions>() ?? new BackupStorageOptions();
+            options.ThrowIfInvalid();
+            return options;
+        });
+        // One identity per process: every call to ResolveNodeId without a configured id returns a different value.
+        services.TryAddSingleton(provider => new BackupNodeIdentity(provider.GetRequiredService<BackupRetentionOptions>().ResolveNodeId()));
+        services.TryAddSingleton<IBackupStorageResolver, ConfiguredBackupStorageResolver>();
+        services.AddScoped<IBackupRetentionStore, PostgreSqlBackupRetentionStore>();
+        services.AddScoped<BackupRetentionService>();
+        services.AddScoped<BackupStorageSweeper>();
+        services.AddScoped<BackupArtifactService>();
+        services.AddSingleton<BackupRetentionWorker>();
+        services.AddHostedService(provider => provider.GetRequiredService<BackupRetentionWorker>());
     }
 
     private static ITenantContext ResolveTenantContext(IServiceProvider services)

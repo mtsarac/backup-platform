@@ -18,13 +18,15 @@ public sealed partial class DatabaseBackupPipeline : IDatabaseBackupPipeline
     private readonly IArtifactPreparer _preparer;
     private readonly ILogger<DatabaseBackupPipeline> _logger;
     private readonly TimeProvider _time;
+    private readonly StagingUsageRegistry? _staging;
 
     public DatabaseBackupPipeline(
         IEnumerable<IDatabaseBackupProvider> providers,
         IEnumerable<IStorageProvider> storages,
         IArtifactPreparer preparer,
         ILogger<DatabaseBackupPipeline> logger,
-        TimeProvider? time = null)
+        TimeProvider? time = null,
+        StagingUsageRegistry? staging = null)
     {
         ArgumentNullException.ThrowIfNull(providers);
         ArgumentNullException.ThrowIfNull(storages);
@@ -36,6 +38,7 @@ public sealed partial class DatabaseBackupPipeline : IDatabaseBackupPipeline
         _preparer = preparer;
         _logger = logger;
         _time = time ?? TimeProvider.System;
+        _staging = staging;
     }
 
     public Task<DatabaseBackupPipelineResult> RunFullBackupAsync(
@@ -47,7 +50,7 @@ public sealed partial class DatabaseBackupPipeline : IDatabaseBackupPipeline
         var tracker = new BackupStageTracker(progress, _time);
         _providers.TryGetValue(request.Engine, out var provider);
         _storages.TryGetValue(request.Storage, out var storage);
-        return new DatabaseBackupExecution(request, provider, storage, _preparer, tracker, _logger, _time).RunAsync(cancellationToken);
+        return new DatabaseBackupExecution(request, provider, storage, _preparer, tracker, _logger, _time, _staging).RunAsync(cancellationToken);
     }
 
     [LoggerMessage(EventId = 100, Level = LogLevel.Warning,

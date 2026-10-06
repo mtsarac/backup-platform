@@ -1,41 +1,4 @@
-using System.Globalization;
-using System.Text;
-
 namespace BackupPlatform.Agent.Core.Backup;
-
-/// <summary>
-/// Names staged backup files. The name is derived from untrusted input (the database name), so it is reduced to a safe, portable
-/// alphabet; uniqueness comes from the timestamp plus a random part, never from the database name, because no staged file
-/// may ever be appended to or silently overwritten.
-/// </summary>
-internal static class BackupFileNaming
-{
-    private const int MaxDatabaseNameLength = 48;
-
-    public static string StagedFileName(string databaseName, DateTimeOffset startedAt, Guid unique)
-    {
-        ArgumentNullException.ThrowIfNull(databaseName);
-        var safe = new StringBuilder(Math.Min(databaseName.Length, MaxDatabaseNameLength));
-        foreach (var character in databaseName)
-        {
-            if (safe.Length == MaxDatabaseNameLength)
-            {
-                break;
-            }
-
-            safe.Append(character is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9' or '_' or '-' ? character : '_');
-        }
-
-        if (safe.Length == 0)
-        {
-            safe.Append("database");
-        }
-
-        return string.Create(
-            CultureInfo.InvariantCulture,
-            $"{safe}_{startedAt.UtcDateTime:yyyyMMdd'T'HHmmss'Z'}_{unique.ToString("N", CultureInfo.InvariantCulture)[..8]}_FULL.bak");
-    }
-}
 
 /// <summary>Stable machine-readable reason codes the pipeline itself adds to <see cref="BackupPlatform.BackupProviders.Abstractions.Database.BackupFailure"/>; providers contribute their own.</summary>
 public static class BackupPipelineReasons

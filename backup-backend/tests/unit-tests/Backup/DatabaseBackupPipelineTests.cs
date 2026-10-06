@@ -491,6 +491,132 @@ public sealed class DatabaseBackupPipelineTests : IDisposable
     }
 
     [Fact]
+    public async Task TheStagedNameIsHeldBeforeTheProviderCreatesTheFileAndUntilTheRunEnds()
+    {
+        var usage = new StagingUsageRegistry();
+        using var harness = new PipelineHarness(usage: usage);
+        string? name = null;
+        var heldWhenProviderStarted = false;
+        var fileExistedWhenProviderStarted = true;
+        var heldDuringVerify = false;
+        harness.Provider.Execute = (request, progress, _) =>
+        {
+            name = request.StagedFileName;
+            heldWhenProviderStarted = usage.IsHeld(request.StagedFileName);
+            fileExistedWhenProviderStarted = File.Exists(Path.Combine(harness.StagingDirectory, request.StagedFileName));
+            return Task.FromResult(harness.Provider.WriteBackup(request, progress));
+        };
+        harness.Storage.OnVerify = (_, _) =>
+        {
+            heldDuringVerify = usage.IsHeld(name!);
+            return null;
+        };
+
+        var result = await harness.RunAsync();
+
+        Assert.Equal(DatabaseBackupStatus.Succeeded, result.Status);
+        Assert.True(heldWhenProviderStarted);
+        Assert.False(fileExistedWhenProviderStarted);
+        Assert.True(heldDuringVerify);
+        Assert.NotNull(name);
+        Assert.False(usage.IsHeld(name));
+        Assert.Empty(harness.StagedFiles);
+    }
+
+    [Fact]
+    public async Task ThePreparedArtifactNameIsHeldAsWellAndEverythingIsReleasedAfterCleanup()
+    {
+        var usage = new StagingUsageRegistry();
+        using var harness = new PipelineHarness(new ReversingPreparer(), usage);
+        var heldDuringVerify = new List<string>();
+        harness.Storage.OnVerify = (_, _) =>
+        {
+            heldDuringVerify.AddRange(harness.StagedFiles.Where(usage.IsHeld));
+            return null;
+        };
+
+        var result = await harness.RunAsync();
+
+        Assert.Equal(DatabaseBackupStatus.Succeeded, result.Status);
+        var source = result.SourceFile!.FileName;
+        var artifact = result.Artifact!.FileName;
+        Assert.NotEqual(source, artifact);
+        Assert.Equal(new[] { artifact, source }.Order(StringComparer.Ordinal), heldDuringVerify.Order(StringComparer.Ordinal));
+        Assert.False(usage.IsHeld(source));
+        Assert.False(usage.IsHeld(artifact));
+        Assert.Empty(harness.StagedFiles);
+    }
+
+    [Fact]
+    public async Task TheStagedNameIsReleasedAfterAProviderFailure()
+    {
+        var usage = new StagingUsageRegistry();
+        using var harness = new PipelineHarness(usage: usage);
+        var heldWhenProviderStarted = false;
+        harness.Provider.Execute = (request, _, _) =>
+        {
+            heldWhenProviderStarted = usage.IsHeld(request.StagedFileName);
+            throw new InvalidOperationException("the provider crashed");
+        };
+
+        var result = await harness.RunAsync();
+
+        Assert.Equal(DatabaseBackupStatus.Failed, result.Status);
+        Assert.True(heldWhenProviderStarted);
+        Assert.False(usage.IsHeld(Assert.Single(harness.Provider.Requests).StagedFileName));
+    }
+
+    [Fact]
+    public async Task TheStagedNameIsReleasedAfterAnUploadFailureEvenWhenTheFileIsKept()
+    {
+        var usage = new StagingUsageRegistry();
+        using var harness = new PipelineHarness(usage: usage);
+        harness.Storage.OnPut = (_, _, _, _) => throw new StorageException(StorageFailureKind.Io, "The storage could not be written.");
+
+        var result = await harness.RunAsync(harness.Request(onFailure: StagingFailurePolicy.Keep));
+
+        Assert.Equal(DatabaseBackupStatus.Failed, result.Status);
+        Assert.Equal(StagingCleanupStatus.Kept, result.StagingCleanup.Status);
+        var name = Assert.Single(harness.Provider.Requests).StagedFileName;
+        Assert.Equal([name], harness.StagedFiles);
+        Assert.False(usage.IsHeld(name));
+    }
+
+    [Fact]
+    public async Task TheStagedNameIsReleasedAfterCancellation()
+    {
+        var usage = new StagingUsageRegistry();
+        using var harness = new PipelineHarness(usage: usage);
+        using var cancellation = new CancellationTokenSource();
+        harness.Provider.Execute = (_, _, token) =>
+        {
+            cancellation.Cancel();
+            token.ThrowIfCancellationRequested();
+            throw new InvalidOperationException("unreachable");
+        };
+
+        var result = await harness.RunAsync(cancellationToken: cancellation.Token);
+
+        Assert.Equal(DatabaseBackupStatus.Cancelled, result.Status);
+        Assert.False(usage.IsHeld(Assert.Single(harness.Provider.Requests).StagedFileName));
+    }
+
+    [Fact]
+    public async Task HoldingNeverChangesTheResultOfARun()
+    {
+        using var plain = new PipelineHarness();
+        using var held = new PipelineHarness(usage: new StagingUsageRegistry());
+
+        var plainResult = await plain.RunAsync();
+        var heldResult = await held.RunAsync();
+
+        Assert.Equal(plainResult.Status, heldResult.Status);
+        Assert.Equal(plainResult.Stages.Select(stage => stage.Stage), heldResult.Stages.Select(stage => stage.Stage));
+        Assert.Equal(plainResult.StagingCleanup, heldResult.StagingCleanup);
+        Assert.Equal(plainResult.SourceFile!.Checksum, heldResult.SourceFile!.Checksum);
+    }
+
+    [Fact]
     public async Task ResultsNeverContainCredentialsOrDirectoryPaths()
     {
         _h.Storage.OnPut = (_, _, _, _) => throw new StorageException(StorageFailureKind.Io, "The storage could not be written.", new IOException(_h.StagingDirectory + " SECRET-PASSWORD-123"));

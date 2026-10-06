@@ -1,0 +1,289 @@
+using BackupPlatform.Application.Backups;
+using BackupPlatform.Domain.Backups;
+using BackupPlatform.Domain.Identity;
+using BackupPlatform.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+
+namespace BackupPlatform.Infrastructure.Backups;
+
+/// <summary>
+/// Every decision is made by the database, never by process memory, so any number of backend nodes can run the retention workers at once.
+/// Artifact-level changes (the retention scan, a manual delete, a cancel) serialise on the artifact row lock; the delete workers claim
+/// replica rows with <c>FOR UPDATE SKIP LOCKED</c> and never touch the artifact lock, so the two lock orders cannot cycle. Replica rows carry
+/// the PostgreSQL row version as concurrency token: a cancel that read a replica as DeletePending can therefore never overwrite a claim that
+/// committed in between, it fails and is re-run against the committed truth.
+/// </summary>
+public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbContext> options) : IBackupRetentionStore
+{
+    private const int MaxScanBatch = 1000;
+    private const int MaxClaimBatch = 500;
+    private const int MaxListLimit = 200;
+    private const int LookupChunk = 500;
+    private const int MaxPrunePerCall = 10_000;
+    // A mutation re-runs when a delete worker changed a replica between the read and the write; the lock keeps every other writer out.
+    private const int MutationAttempts = 3;
+
+    public async Task<BackupRetentionApplication> ApplyExpiredRetentionAsync(DateTimeOffset now, int limit, CancellationToken cancellationToken)
+    {
+        now = now.ToUniversalTime();
+        await using var scan = PlatformDbContext.CreateForPlatformOperations(options);
+        // Unlocked and possibly stale on purpose: it only nominates candidates, the locked re-read below decides.
+        var candidates = await scan.BackupArtifacts.AsNoTracking()
+            .Where(artifact => artifact.RetentionExpiresAt <= now && artifact.RetentionPinnedAt == null && artifact.RetentionAppliedAt == null)
+            .OrderBy(artifact => artifact.RetentionExpiresAt).ThenBy(artifact => artifact.Id).Take(Math.Clamp(limit, 1, MaxScanBatch))
+            .Select(artifact => new { artifact.TenantId, artifact.Id }).ToListAsync(cancellationToken);
+        var moved = 0;
+        foreach (var candidate in candidates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+                await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+                // Somebody else (another node's scan, a manual delete, a cancel) owns the artifact right now: it is either handled by them or
+                // picked up by the next scan, never worth waiting for.
+                if (!await LockArtifactAsync(context, candidate.TenantId, candidate.Id, skipLocked: true, cancellationToken)) continue;
+                var artifact = await context.BackupArtifacts.Include(candidateArtifact => candidateArtifact.Replicas)
+                    .SingleOrDefaultAsync(entity => entity.TenantId == candidate.TenantId && entity.Id == candidate.Id, cancellationToken);
+                if (artifact is null) continue;
+                // The domain decides expiry and pin again, now that nobody can change the artifact under it.
+                var applied = artifact.ApplyRetention(now);
+                await context.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                moved += applied;
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // A claim or another writer won this artifact; the next scan sees the committed state.
+            }
+            catch (DbUpdateException exception) when (PostgreSqlBackupRunStore.IsUniqueViolation(exception))
+            {
+                // Same: a competing writer got there first; one artifact never fails the batch.
+            }
+        }
+        return new BackupRetentionApplication(candidates.Count, moved);
+    }
+
+    public async Task<IReadOnlyList<ClaimedReplicaDeletion>> ClaimDueDeletionsAsync(string owner, DateTimeOffset now, TimeSpan lease, int limit, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(owner);
+        now = now.ToUniversalTime();
+        var take = Math.Clamp(limit, 1, MaxClaimBatch);
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        // The locks are taken by this statement; a row another claimer (or a cancel) holds is skipped, never waited for, so no replica is handed out twice.
+        var ids = await context.Database.SqlQuery<Guid>($"""
+            SELECT "Id" AS "Value" FROM backup_replicas
+            WHERE ("Status" = 'DeletePending' AND "DeleteAfter" <= {now})
+               OR ("Status" = 'DeleteFailed' AND "DeleteNextAttemptAt" <= {now})
+               OR ("Status" = 'Deleting' AND "DeleteLeaseExpiresAt" <= {now})
+            ORDER BY CASE "Status" WHEN 'DeletePending' THEN "DeleteAfter" WHEN 'DeleteFailed' THEN "DeleteNextAttemptAt" ELSE "DeleteLeaseExpiresAt" END, "Id"
+            LIMIT {take}
+            FOR UPDATE SKIP LOCKED
+            """).ToListAsync(cancellationToken);
+        if (ids.Count == 0) return [];
+        var position = ids.Select((id, index) => (id, index)).ToDictionary(pair => pair.id, pair => pair.index);
+        var replicas = await context.BackupReplicas.Where(replica => ids.Contains(replica.Id)).ToListAsync(cancellationToken);
+        var claimed = new List<ClaimedReplicaDeletion>(replicas.Count);
+        foreach (var replica in replicas.OrderBy(replica => position[replica.Id]))
+        {
+            // The domain re-validates due-ness on the locked, freshly read row.
+            if (!replica.BeginDelete(Guid.NewGuid(), owner, now, lease)) continue;
+            claimed.Add(new ClaimedReplicaDeletion(replica.Id, replica.TenantId, replica.ArtifactId, replica.StorageProvider, replica.StorageTarget,
+                replica.Key, replica.DeleteLeaseToken!.Value, replica.DeleteAttempts));
+        }
+        if (claimed.Count == 0) return [];
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return claimed;
+    }
+
+    public Task<bool> CompleteDeletionAsync(Guid replicaId, Guid leaseToken, DateTimeOffset now, CancellationToken cancellationToken) =>
+        TransitionReplicaAsync(replicaId, replica => replica.CompleteDelete(leaseToken, now), cancellationToken);
+
+    public Task<bool> FailDeletionAsync(Guid replicaId, Guid leaseToken, DateTimeOffset now, string failureCode, DateTimeOffset nextAttemptAt, CancellationToken cancellationToken) =>
+        TransitionReplicaAsync(replicaId, replica => replica.FailDelete(leaseToken, now, failureCode, nextAttemptAt), cancellationToken);
+
+    public async Task<BackupArtifactDeleteResult> RequestDeleteAsync(TenantId tenantId, Guid artifactId, Guid? requestedByUserId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var result = await MutateArtifactAsync(tenantId, artifactId, artifact => artifact.RequestDelete(now, requestedByUserId), cancellationToken);
+        if (result is null) return new BackupArtifactDeleteResult(BackupArtifactDeleteKind.NotFound, null);
+        var kind = result.Outcome switch
+        {
+            BackupArtifactDeleteOutcome.Requested => BackupArtifactDeleteKind.Requested,
+            BackupArtifactDeleteOutcome.AlreadyDeleted => BackupArtifactDeleteKind.AlreadyDeleted,
+            _ => BackupArtifactDeleteKind.AlreadyInProgress
+        };
+        return new BackupArtifactDeleteResult(kind, result.Record);
+    }
+
+    public async Task<BackupArtifactCancelResult> CancelDeleteAsync(TenantId tenantId, Guid artifactId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var result = await MutateArtifactAsync(tenantId, artifactId, artifact => artifact.CancelDelete(now), cancellationToken);
+        if (result is null) return new BackupArtifactCancelResult(BackupArtifactCancelKind.NotFound, null);
+        return new BackupArtifactCancelResult(result.Outcome > 0 ? BackupArtifactCancelKind.Restored : BackupArtifactCancelKind.NothingToCancel, result.Record);
+    }
+
+    public async Task<BackupArtifactRecord?> GetArtifactAsync(TenantId tenantId, Guid artifactId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var artifact = await context.BackupArtifacts.AsNoTracking().Include(entity => entity.Replicas)
+            .SingleOrDefaultAsync(entity => entity.TenantId == tenantId && entity.Id == artifactId, cancellationToken);
+        if (artifact is null) return null;
+        var owners = await ResolveOwnersAsync(context, tenantId, [artifact.AttemptId], cancellationToken);
+        return ToRecord(artifact, owners);
+    }
+
+    public async Task<IReadOnlyList<BackupArtifactRecord>> ListArtifactsAsync(TenantId tenantId, Guid? jobId, int limit, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var artifacts = await context.BackupArtifacts.AsNoTracking().Include(entity => entity.Replicas)
+            .Where(entity => entity.TenantId == tenantId && (jobId == null || context.BackupRunAttempts.Any(attempt =>
+                attempt.Id == entity.AttemptId && attempt.TenantId == entity.TenantId && context.BackupRuns.Any(run =>
+                    run.Id == attempt.RunId && run.TenantId == attempt.TenantId && run.JobId == jobId))))
+            .OrderByDescending(entity => entity.AcceptedAt ?? entity.CreatedAt).ThenBy(entity => entity.Id)
+            .Take(Math.Clamp(limit, 1, MaxListLimit)).AsSplitQuery().ToListAsync(cancellationToken);
+        var owners = await ResolveOwnersAsync(context, tenantId, artifacts.Select(artifact => artifact.AttemptId).Distinct().ToArray(), cancellationToken);
+        return artifacts.Select(artifact => ToRecord(artifact, owners)).ToList();
+    }
+
+    public async Task<IReadOnlySet<string>> FindReferencedKeysAsync(string storageProvider, IReadOnlyCollection<string> keys, CancellationToken cancellationToken)
+    {
+        var referenced = new HashSet<string>(StringComparer.Ordinal);
+        if (keys.Count == 0) return referenced;
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        foreach (var chunk in keys.Distinct(StringComparer.Ordinal).Chunk(LookupChunk))
+        {
+            // Any tenant, any status: a file a Deleted replica still names was removed on purpose and must not be mistaken for an orphan of another run.
+            var found = await context.BackupReplicas.AsNoTracking()
+                .Where(replica => replica.StorageProvider == storageProvider && chunk.Contains(replica.Key))
+                .Select(replica => replica.Key).Distinct().ToListAsync(cancellationToken);
+            referenced.UnionWith(found);
+        }
+        return referenced;
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, BackupAttemptActivity>> GetAttemptActivityAsync(IReadOnlyCollection<Guid> attemptIds, CancellationToken cancellationToken)
+    {
+        var activity = new Dictionary<Guid, BackupAttemptActivity>();
+        if (attemptIds.Count == 0) return activity;
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        foreach (var chunk in attemptIds.Distinct().Chunk(LookupChunk))
+        {
+            var rows = await (from attempt in context.BackupRunAttempts.AsNoTracking()
+                              join run in context.BackupRuns.AsNoTracking() on new { attempt.RunId, attempt.TenantId } equals new { RunId = run.Id, run.TenantId }
+                              where chunk.Contains(attempt.Id)
+                              select new { AttemptId = attempt.Id, attempt.TenantId, run.JobId, attempt.RunId, AttemptStatus = attempt.Status, RunStatus = run.Status })
+                .ToListAsync(cancellationToken);
+            foreach (var row in rows)
+                activity[row.AttemptId] = new BackupAttemptActivity(row.AttemptId, row.TenantId, row.JobId, row.RunId, row.AttemptStatus, row.RunStatus);
+        }
+        return activity;
+    }
+
+    public async Task<int> PruneScheduleOccurrencesAsync(DateTimeOffset decidedBefore, int limit, CancellationToken cancellationToken)
+    {
+        var cutoff = decidedBefore.ToUniversalTime();
+        var take = Math.Clamp(limit, 1, MaxPrunePerCall);
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        // One statement, so eligibility cannot go stale. A row is kept while it is the newest of its job (the scheduler's watermark: it decides
+        // which instants were already handled) and while the run it names is still in flight. Statuses 4..7 are the terminal ones.
+        return await context.Database.ExecuteSqlInterpolatedAsync($"""
+            DELETE FROM backup_schedule_occurrences
+            WHERE "Id" IN (
+                SELECT o."Id" FROM backup_schedule_occurrences o
+                WHERE o."DecidedAt" < {cutoff}
+                  AND EXISTS (SELECT 1 FROM backup_schedule_occurrences newer
+                              WHERE newer."TenantId" = o."TenantId" AND newer."JobId" = o."JobId" AND newer."ScheduledAt" > o."ScheduledAt")
+                  AND NOT EXISTS (SELECT 1 FROM backup_runs r
+                                  WHERE r."Id" = o."RunId" AND r."TenantId" = o."TenantId" AND r."Status" NOT IN (4, 5, 6, 7))
+                ORDER BY o."DecidedAt", o."Id"
+                LIMIT {take})
+            """, cancellationToken);
+    }
+
+    private async Task<bool> TransitionReplicaAsync(Guid replicaId, Func<BackupReplica, bool> transition, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var replica = await context.BackupReplicas.SingleOrDefaultAsync(entity => entity.Id == replicaId, cancellationToken);
+        if (replica is null || !transition(replica)) return false;
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Another node changed the row after it was read (a takeover after lease expiry): this holder no longer owns the delete.
+            return false;
+        }
+        return true;
+    }
+
+    private sealed record Mutation<TOutcome>(TOutcome Outcome, BackupArtifactRecord Record);
+
+    /// <summary>
+    /// Runs <paramref name="mutate"/> on the artifact under its row lock. A <see cref="DbUpdateConcurrencyException"/> means a delete worker
+    /// claimed a replica between the read and the write; the transaction is rolled back and re-run from a fresh read so the outcome reflects what
+    /// committed (a cancel then finds nothing left to cancel). Null: no such artifact in this tenant.
+    /// </summary>
+    private async Task<Mutation<TOutcome>?> MutateArtifactAsync<TOutcome>(TenantId tenantId, Guid artifactId, Func<BackupArtifact, TOutcome> mutate, CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+            if (!await LockArtifactAsync(context, tenantId, artifactId, skipLocked: false, cancellationToken)) return null;
+            var artifact = await context.BackupArtifacts.Include(entity => entity.Replicas)
+                .SingleOrDefaultAsync(entity => entity.TenantId == tenantId && entity.Id == artifactId, cancellationToken);
+            if (artifact is null) return null;
+            var outcome = mutate(artifact);
+            try
+            {
+                await context.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < MutationAttempts)
+            {
+                continue;
+            }
+            await transaction.CommitAsync(cancellationToken);
+            var owners = await ResolveOwnersAsync(context, tenantId, [artifact.AttemptId], cancellationToken);
+            return new Mutation<TOutcome>(outcome, ToRecord(artifact, owners));
+        }
+    }
+
+    /// <summary>
+    /// Locks the artifact row, tenant-qualified so another tenant's id is simply not found. With <paramref name="skipLocked"/> a row somebody else
+    /// holds counts as not obtained instead of blocking.
+    /// </summary>
+    private static async Task<bool> LockArtifactAsync(PlatformDbContext context, TenantId tenantId, Guid artifactId, bool skipLocked, CancellationToken cancellationToken)
+    {
+        List<Guid> locked;
+        if (skipLocked)
+        {
+            locked = await context.Database.SqlQuery<Guid>(
+                $"SELECT \"Id\" AS \"Value\" FROM backup_artifacts WHERE \"Id\" = {artifactId} AND \"TenantId\" = {tenantId.Value} FOR UPDATE SKIP LOCKED").ToListAsync(cancellationToken);
+        }
+        else
+        {
+            locked = await context.Database.SqlQuery<Guid>(
+                $"SELECT \"Id\" AS \"Value\" FROM backup_artifacts WHERE \"Id\" = {artifactId} AND \"TenantId\" = {tenantId.Value} FOR UPDATE").ToListAsync(cancellationToken);
+        }
+        return locked.Count > 0;
+    }
+
+    private static async Task<Dictionary<Guid, (Guid RunId, Guid JobId)>> ResolveOwnersAsync(PlatformDbContext context, TenantId tenantId, Guid[] attemptIds, CancellationToken cancellationToken)
+    {
+        var rows = await (from attempt in context.BackupRunAttempts.AsNoTracking()
+                          join run in context.BackupRuns.AsNoTracking() on new { attempt.RunId, attempt.TenantId } equals new { RunId = run.Id, run.TenantId }
+                          where attempt.TenantId == tenantId && attemptIds.Contains(attempt.Id)
+                          select new { AttemptId = attempt.Id, attempt.RunId, run.JobId }).ToListAsync(cancellationToken);
+        return rows.ToDictionary(row => row.AttemptId, row => (row.RunId, row.JobId));
+    }
+
+    private static BackupArtifactRecord ToRecord(BackupArtifact artifact, Dictionary<Guid, (Guid RunId, Guid JobId)> owners)
+    {
+        // The foreign keys make a missing attempt or run impossible; failing loudly beats returning an artifact with no owner.
+        if (!owners.TryGetValue(artifact.AttemptId, out var owner)) throw new InvalidOperationException("The artifact's run could not be resolved.");
+        return new BackupArtifactRecord(artifact, owner.RunId, owner.JobId);
+    }
+}

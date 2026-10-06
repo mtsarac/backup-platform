@@ -37,10 +37,11 @@ public sealed class BackupRun : ITenantOwned
     private readonly List<BackupLifecycleFact> _facts = [];
     private IReadOnlyList<BackupRunAttempt>? _attemptView;
     private IReadOnlyList<BackupLifecycleFact>? _factView;
-    private BackupRun() { TenantId = null!; AgentId = null!; Configuration = null!; IdempotencyKey = null!; RetryPolicy = null!; }
+    private BackupRun() { TenantId = null!; AgentId = null!; Configuration = null!; IdempotencyKey = null!; RetryPolicy = null!; RetentionPolicy = null!; }
     public BackupRun(Guid id, TenantId tenantId, Guid jobId, AgentId agentId, BackupConfiguration configuration, string idempotencyKey, DateTimeOffset createdAt,
         BackupRetryPolicy? retryPolicy = null, BackupOverlapPolicy overlapPolicy = BackupOverlapPolicy.Skip,
-        string triggerType = BackupTriggerTypes.Manual, DateTimeOffset? scheduledOccurrence = null, DateTimeOffset? claimDeadline = null)
+        string triggerType = BackupTriggerTypes.Manual, DateTimeOffset? scheduledOccurrence = null, DateTimeOffset? claimDeadline = null,
+        BackupRetentionPolicy? retentionPolicy = null)
     {
         BackupGuard.Id(id);
         BackupGuard.Id(jobId);
@@ -58,6 +59,7 @@ public sealed class BackupRun : ITenantOwned
         AgentId = agentId;
         Configuration = configuration.Validate() with { };
         RetryPolicy = (retryPolicy ?? BackupRetryPolicy.Default).Validate();
+        RetentionPolicy = (retentionPolicy ?? BackupRetentionPolicy.Default).Validate();
         OverlapPolicy = overlapPolicy;
         IdempotencyKey = idempotencyKey;
         CreatedAt = createdAt;
@@ -74,7 +76,7 @@ public sealed class BackupRun : ITenantOwned
         ArgumentNullException.ThrowIfNull(job);
         var schedule = job.Schedule ?? throw new InvalidOperationException("The job has no schedule.");
         return new BackupRun(id, job.TenantId, job.Id, job.AgentId, job.Configuration, ScheduledKey(occurrence), createdAt, job.RetryPolicy, job.OverlapPolicy,
-            BackupTriggerTypes.Scheduled, occurrence, occurrence + schedule.MissedRunGracePeriod);
+            BackupTriggerTypes.Scheduled, occurrence, occurrence + schedule.MissedRunGracePeriod, job.RetentionPolicy);
     }
 
     public static string ScheduledKey(DateTimeOffset occurrence) => "scheduled-" + occurrence.UtcDateTime.ToString("yyyyMMddTHHmmssfffZ", System.Globalization.CultureInfo.InvariantCulture);
@@ -85,6 +87,8 @@ public sealed class BackupRun : ITenantOwned
     public BackupConfiguration Configuration { get; private set; }
     /// <summary>Snapshot of the job's policy at creation; a later job edit does not alter this execution.</summary>
     public BackupRetryPolicy RetryPolicy { get; private set; }
+    /// <summary>Snapshot of the job's retention policy at creation. The artifact this run publishes expires by THIS policy, however the job is edited later.</summary>
+    public BackupRetentionPolicy RetentionPolicy { get; private set; }
     public BackupOverlapPolicy OverlapPolicy { get; private set; }
     public string IdempotencyKey { get; private set; }
     public BackupStatus Status { get; private set; }
@@ -178,7 +182,7 @@ public sealed class BackupRun : ITenantOwned
     /// <param name="jitter">A sample in [0,1) used to shorten a retry delay; the caller owns randomness so the domain stays deterministic.</param>
     public void Complete(Guid token, DateTimeOffset now, BackupCompletion completion, double jitter = 0)
     {
-        if (!CurrentAttempt.Complete(token, now, completion)) return;
+        if (!CurrentAttempt.Complete(token, now, completion, RetentionPolicy)) return;
         AfterAttemptEnded(now, jitter);
     }
 

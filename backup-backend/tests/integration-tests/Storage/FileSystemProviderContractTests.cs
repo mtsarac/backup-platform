@@ -7,7 +7,7 @@ namespace BackupPlatform.IntegrationTests.Storage;
 /// The behaviour every file-system backed provider must show against a real file system. The Local and Central providers run the
 /// same tests through thin subclasses; each test works in its own <c>bp_test_*</c> temp directory and touches nothing else.
 /// </summary>
-public abstract class FileSystemProviderContractTests : IDisposable
+public abstract partial class FileSystemProviderContractTests : IDisposable
 {
     private const int MiB = 1024 * 1024;
 

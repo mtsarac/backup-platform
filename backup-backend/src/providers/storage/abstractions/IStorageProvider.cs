@@ -48,9 +48,25 @@ public static class StorageCapabilityIds
     public static StorageCapabilityId ServerSideChecksum { get; } = new("storage.server-side-checksum");
     public static StorageCapabilityId CapacityQuery { get; } = new("storage.capacity-query");
     public static StorageCapabilityId Resume { get; } = new("storage.resume");
+    public static StorageCapabilityId Enumerate { get; } = new("storage.enumerate");
+    /// <summary>After <see cref="IStorageProvider.DeleteAsync"/> returns, <see cref="IStorageProvider.ExistsAsync"/> reports the truth immediately (no eventual consistency), so "deleted" can be proven by checking absence.</summary>
+    public static StorageCapabilityId VerifyAbsence { get; } = new("storage.verify-absence");
     public static StorageCapabilityId Multipart { get; } = new("storage.multipart");
     public static StorageCapabilityId ImmutableStorage { get; } = new("storage.immutable");
 }
+
+public enum StorageEntryKind
+{
+    /// <summary>A published object.</summary>
+    Object = 1,
+
+    /// <summary>The temporary file of an upload that has not been published (a leftover when the writer died).</summary>
+    UnpublishedUpload
+}
+
+/// <summary>One entry found by <see cref="IStorageProvider.EnumerateAsync"/>.</summary>
+/// <param name="InUse">For an <see cref="StorageEntryKind.UnpublishedUpload"/>: true when a writer still holds it open, false when the provider could prove nobody does, null when it cannot tell. Always null for objects.</param>
+public sealed record StorageEntry(StorageObjectKey Key, StorageEntryKind Kind, long SizeBytes, DateTimeOffset LastModifiedUtc, bool? InUse);
 
 /// <summary>The immutable set of capabilities a provider supports; anything not listed is not supported.</summary>
 public sealed class StorageCapabilities : IReadOnlyCollection<StorageCapabilityId>
@@ -209,4 +225,14 @@ public interface IStorageProvider
 
     /// <summary>Deletes the object; true if it existed. Providers without <see cref="StorageCapabilityIds.Delete"/> throw <see cref="StorageException"/> with <see cref="StorageFailureKind.NotSupported"/>.</summary>
     Task<bool> DeleteAsync(StorageObjectKey key, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Lists the entries stored below <paramref name="prefix"/> (the whole provider scope when null), recursively, that were last
+    /// modified BEFORE <paramref name="modifiedBefore"/>. Younger entries are never returned, so a caller that only ever acts on old entries
+    /// cannot touch something that is still being written. Only entries whose location is expressible as a <see cref="StorageObjectKey"/> are
+    /// returned; anything else in the storage is not ours and is silently left out. Links are never followed or returned. A missing prefix
+    /// lists nothing. Providers without <see cref="StorageCapabilityIds.Enumerate"/> throw <see cref="StorageException"/> with
+    /// <see cref="StorageFailureKind.NotSupported"/>. This exists for maintenance sweeps (orphan and unpublished-upload cleanup); it is not a browsing API.
+    /// </summary>
+    IAsyncEnumerable<StorageEntry> EnumerateAsync(StorageObjectKey? prefix, DateTimeOffset modifiedBefore, CancellationToken cancellationToken);
 }

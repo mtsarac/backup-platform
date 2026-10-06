@@ -16,6 +16,7 @@ public static class BackupEndpoints
         tenant.MapPut("/backup-jobs/{jobId:guid}/schedule", ChangeScheduleAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
         tenant.MapDelete("/backup-jobs/{jobId:guid}/schedule", RemoveScheduleAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
         tenant.MapGet("/backup-jobs/{jobId:guid}/schedule/occurrences", ListOccurrencesAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
+        tenant.MapPut("/backup-jobs/{jobId:guid}/retention", ChangeRetentionAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
         tenant.MapPost("/backup-jobs/{jobId:guid}/enable", EnableAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
         tenant.MapPost("/backup-jobs/{jobId:guid}/disable", DisableAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
         tenant.MapPost("/backup-jobs/{jobId:guid}/runs", StartRunAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
@@ -67,6 +68,17 @@ public static class BackupEndpoints
     {
         var job = await schedules.SetEnabledAsync(tenant.TenantId!, jobId, true, cancellationToken);
         return job is null ? Results.NotFound() : Results.Ok(job);
+    }
+
+    /// <summary>Administrators only: a shorter keep period makes FUTURE backups expire sooner. Existing backups keep the expiration they were accepted with.</summary>
+    private static async Task<IResult> ChangeRetentionAsync(Guid jobId, BackupRetentionPolicyRequest request, ITenantContext tenant, BackupArtifactService service, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var job = await service.ChangeJobRetentionAsync(tenant.TenantId!, jobId, request, cancellationToken);
+            return job is null ? Results.NotFound() : Results.Ok(job);
+        }
+        catch (ArgumentException) { return Invalid("Invalid retention policy."); }
     }
 
     private static async Task<IResult> DisableAsync(Guid jobId, ITenantContext tenant, BackupScheduleService schedules, CancellationToken cancellationToken)
