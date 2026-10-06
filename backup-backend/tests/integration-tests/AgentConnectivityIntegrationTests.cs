@@ -245,6 +245,8 @@ public sealed class AgentConnectivityIntegrationTests(PostgreSqlFixture fixture)
         clock.Advance(TimeSpan.FromSeconds(30));
         using (await world.HeartbeatAsync(agent, AgentWorld.Heartbeat())) { }
         Assert.Null((await world.ConnectivityOfAsync(agent.AgentId))!.CapabilityRevision);
+        // Recording a revision never stores capabilities: only an explicit sync does.
+        Assert.Empty(await world.CapabilityRowsOfAsync(agent.AgentId));
     }
 
     [Fact]

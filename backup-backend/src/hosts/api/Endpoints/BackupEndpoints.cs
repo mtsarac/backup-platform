@@ -2,6 +2,7 @@ using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Application.Tenancy;
+using Microsoft.AspNetCore.Authorization;
 using BackupPlatform.Domain.Backups;
 
 namespace BackupPlatform.Api.Endpoints;
@@ -31,8 +32,10 @@ public static class BackupEndpoints
         return endpoints;
     }
 
-    private static async Task<IResult> CreateJobAsync(CreateBackupJobRequest request, ITenantContext tenant, BackupOrchestrator service, BackupScheduleService schedules, CancellationToken cancellationToken)
+    private static async Task<IResult> CreateJobAsync(CreateBackupJobRequest request, HttpContext context, ITenantContext tenant, IAuthorizationService authorization,
+        BackupOrchestrator service, BackupScheduleService schedules, CancellationToken cancellationToken)
     {
+        if (request.Retention is not null && !await IsAdministratorAsync(authorization, context)) return RetentionForbidden();
         try
         {
             var job = await service.CreateJobAsync(tenant.TenantId!, request, cancellationToken);
@@ -54,9 +57,11 @@ public static class BackupEndpoints
     private static async Task<IResult> ListJobsAsync(ITenantContext tenant, IBackupUiStore store, TimeProvider time, CancellationToken cancellationToken) =>
         Results.Ok(await store.ListJobsAsync(tenant.TenantId!, time.GetUtcNow(), cancellationToken));
 
-    private static async Task<IResult> UpdateJobAsync(Guid jobId, UpdateBackupJobRequest request, ITenantContext tenant,
+    private static async Task<IResult> UpdateJobAsync(Guid jobId, UpdateBackupJobRequest request, HttpContext context, ITenantContext tenant, IAuthorizationService authorization,
         BackupOrchestrator service, BackupScheduleService schedules, CancellationToken cancellationToken)
     {
+        // Retention keeps its administrator-only rule even though it now travels in the same request: an operator simply does not send it.
+        if (request.Retention is not null && !await IsAdministratorAsync(authorization, context)) return RetentionForbidden();
         try
         {
             var job = await service.UpdateJobAsync(tenant.TenantId!, jobId, request, cancellationToken);
@@ -64,9 +69,15 @@ public static class BackupEndpoints
             await schedules.TrySynchronizeAsync(tenant.TenantId!, jobId, cancellationToken);
             return Results.Ok(job);
         }
+        catch (InvalidBackupScheduleException exception) { return InvalidSchedule(exception); }
         catch (InvalidBackupJobException exception) { return InvalidJob(exception); }
         catch (ArgumentException) { return Invalid("Invalid backup job configuration."); }
     }
+
+    private static async Task<bool> IsAdministratorAsync(IAuthorizationService authorization, HttpContext context) =>
+        (await authorization.AuthorizeAsync(context.User, context, AuthorizationPolicies.TenantAdministrator)).Succeeded;
+
+    private static IResult RetentionForbidden() => Results.Json(new { error = "forbidden", field = "retention", code = "administrator_required" }, statusCode: StatusCodes.Status403Forbidden);
 
     private static async Task<IResult> GetDashboardAsync(ITenantContext tenant, IBackupUiStore store,
         AgentConnectivityQueryService connectivity, TimeProvider time, CancellationToken cancellationToken)

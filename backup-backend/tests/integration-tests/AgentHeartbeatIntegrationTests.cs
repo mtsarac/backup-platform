@@ -26,7 +26,8 @@ public sealed class AgentHeartbeatIntegrationTests(PostgreSqlFixture fixture) : 
         Assert.Equal(30, json.GetProperty("heartbeatIntervalSeconds").GetInt32());
         Assert.Equal(120, json.GetProperty("offlineTimeoutSeconds").GetInt32());
         Assert.Equal("1.0", json.GetProperty("protocol").GetProperty("current").GetString());
-        Assert.False(json.GetProperty("capabilitySyncRequested").GetBoolean());
+        // The revision "caps-1" is unknown to the backend, so it asks for a capability sync.
+        Assert.True(json.GetProperty("capabilitySyncRequested").GetBoolean());
 
         var row = await world.ConnectivityOfAsync(agent.AgentId);
         Assert.NotNull(row);

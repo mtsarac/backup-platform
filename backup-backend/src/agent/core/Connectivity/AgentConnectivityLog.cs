@@ -63,6 +63,13 @@ public sealed partial class AgentConnectivityService
         Message = "Server advertises a shorter heartbeat interval: AgentId={AgentId} Configured={Configured} ServerSeconds={ServerSeconds} Effective={Effective}")]
     private partial void LogHeartbeatIntervalLowered(Guid agentId, TimeSpan configured, int serverSeconds, TimeSpan effective);
 
+    [LoggerMessage(EventId = 33, Level = LogLevel.Information, Message = "Capability sync completed: AgentId={AgentId}")]
+    private partial void LogCapabilitySyncSucceeded(Guid agentId);
+
+    [LoggerMessage(EventId = 34, Level = LogLevel.Warning,
+        Message = "Capability sync did not complete, the backend will ask again on a later heartbeat: AgentId={AgentId} BackendHost={BackendHost}")]
+    private partial void LogCapabilitySyncFailed(Guid agentId, string backendHost);
+
     [LoggerMessage(EventId = 40, Level = LogLevel.Warning,
         Message = "Connectivity paused: AgentId={AgentId} ChannelState={ChannelState} Action={Action} Reason={Reason} RetryIn={Delay} BackendHost={BackendHost} Protocol={ProtocolVersion}")]
     private partial void LogRestricted(Guid agentId, AgentChannelState channelState, string action, string reason, TimeSpan delay, string backendHost, string protocolVersion);

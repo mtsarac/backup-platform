@@ -49,7 +49,7 @@ export function BackupDetailPage() {
               {canOperate && canCancelRun(run.status) && <Button variant="destructive" disabled={busy} onClick={() => void perform('cancel')}>{actions.cancel.isPending ? 'İletiliyor…' : 'İptal et'}</Button>}
             </div>
           </header>
-          {notice && run.status !== 'Succeeded' && <p role="status" className="rounded-lg border border-border bg-surface p-3 text-sm">{notice}</p>}
+          {notice && run.status !== 'Succeeded' && !(run.status === 'Cancelled' && notice.startsWith('İptal isteği')) && <p role="status" className="rounded-lg border border-border bg-surface p-3 text-sm">{notice}</p>}
           {mutationError && <p role="alert" className="rounded-lg border border-error/30 bg-error-subtle p-3 text-sm text-error">{errorMessage(mutationError)}</p>}
           {(run.status === 'Failed' || run.status === 'AgentLost') && <section aria-label="Başarısız çalıştırma" className="rounded-lg border border-error/30 bg-error-subtle p-4 text-sm">
             <p className="font-medium text-error">{failureMessage(run.reasonCode ?? run.retry.lastFailureCode)}</p>

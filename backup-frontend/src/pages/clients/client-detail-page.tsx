@@ -7,7 +7,8 @@ import { useTenant } from '@/features/tenancy/use-tenant'
 import { useAgent, agentQueryKeys } from '@/features/agents/hooks'
 import { revokeAgent } from '@/features/agents/api'
 import { AgentState, InfoRow } from '@/features/agents/presentation'
-import { agentDate, capabilitySupportLabels } from '@/features/agents/format'
+import { agentDate } from '@/features/agents/format'
+import { CapabilityList } from '@/features/agents/capabilities'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
 import { errorMessage } from '@/lib/api/failure-messages'
 
@@ -37,18 +38,15 @@ function AgentDetailContent({ tenantId, id, canAdmin }: { tenantId: string; id: 
         <div className="grid gap-4 lg:grid-cols-2">
           <section className="rounded-lg border border-border bg-surface p-4"><h2 className="font-medium text-text-heading">Kimlik ve kayıt</h2><dl className="mt-3 text-sm"><InfoRow label="Makine adı">{agent.hostName}</InfoRow><InfoRow label="Platform">{agent.platform}</InfoRow><InfoRow label="İşletim sistemi">{agent.osDescription}</InfoRow><InfoRow label="Kayıt zamanı">{agentDate(agent.enrolledAt)}</InfoRow><InfoRow label="Yaşam döngüsü"><AgentState value={agent.status} /></InfoRow></dl><p className="mt-3 text-xs text-text-muted">İptal ve devre dışı durumları bağlantı kesilmesinden bağımsızdır.</p></section>
           <section className="rounded-lg border border-border bg-surface p-4"><h2 className="font-medium text-text-heading">Bağlantı ve çalışma</h2><dl className="mt-3 text-sm"><InfoRow label="Bağlantı"><AgentState value={agent.connectivity} /></InfoRow><InfoRow label="Çalışma durumu"><AgentState value={agent.operationalStatus} /></InfoRow><InfoRow label="Son görülme">{agentDate(agent.lastSeenAt)}</InfoRow><InfoRow label="Son heartbeat">{agentDate(agent.lastHeartbeatAt)}</InfoRow><InfoRow label="Son bağlantı">{agentDate(agent.lastConnectedAt)}</InfoRow></dl></section>
-          <section className="rounded-lg border border-border bg-surface p-4"><h2 className="font-medium text-text-heading">Sürümler</h2><dl className="mt-3 text-sm"><InfoRow label="Agent yazılımı">{agent.agentVersion}</InfoRow><InfoRow label="Protokol">{agent.protocolVersion}</InfoRow><InfoRow label="Çalışma ortamı">{agent.runtimeVersion}</InfoRow><InfoRow label="Yetenek revizyonu">{agent.capabilityRevision}</InfoRow></dl></section>
+          <section className="rounded-lg border border-border bg-surface p-4"><h2 className="font-medium text-text-heading">Sürümler</h2><dl className="mt-3 text-sm"><InfoRow label="Agent yazılımı">{agent.agentVersion}</InfoRow><InfoRow label="Protokol">{agent.protocolVersion}</InfoRow><InfoRow label="Çalışma ortamı">{agent.runtimeVersion}</InfoRow><InfoRow label="Bildirilen yetenek revizyonu">{agent.capabilityRevision}</InfoRow><InfoRow label="Kaydedilen yetenek revizyonu">{agent.capabilitiesRevision}</InfoRow></dl></section>
           <section className="rounded-lg border border-border bg-surface p-4">
             <h2 className="font-medium text-text-heading">Bildirilen yetenekler</h2>
             {agent.capabilities.length ? (
-              <ul className="mt-3 space-y-2 text-sm text-text">
-                {agent.capabilities.map((capability) => (
-                  <li key={capability.identifier} className="break-words">
-                    <span className="font-medium">{capability.identifier}</span> · {capabilitySupportLabels[capability.support] ?? capability.support}{capability.version && ` · ${capability.version}`}
-                  </li>
-                ))}
-              </ul>
-            ) : <p className="mt-3 text-sm text-text-muted">Henüz yetenek bildirilmedi.</p>}
+              <>
+                <CapabilityList capabilities={agent.capabilities} />
+                <p className="mt-3 text-xs text-text-muted">Son bildirim: {agentDate(agent.capabilitiesReportedAt)}. Agent düzeyindeki destek, SQL Server örneğinin gerçek desteğini garanti etmez; her çalıştırmadan önce pre-check yapılır.</p>
+              </>
+            ) : <p className="mt-3 text-sm text-text-muted">Henüz bildirilmedi.</p>}
           </section>
         </div>
       </>}

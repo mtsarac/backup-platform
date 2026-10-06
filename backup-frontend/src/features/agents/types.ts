@@ -1,7 +1,8 @@
 export interface AgentCapability {
   identifier: string
   support: string
-  version: string | null
+  metadata?: Record<string, string> | null
+  version?: string | null
 }
 
 /** Safe tenant control-plane projection; no credentials or internal runtime identifiers. */
@@ -17,7 +18,11 @@ export interface Agent {
   platform: string
   agentVersion: string | null
   protocolVersion: string | null
+  /** Revision the agent last advertised in a heartbeat. */
   capabilityRevision: string | null
+  /** Revision of the persisted snapshot (null until the agent syncs). */
+  capabilitiesRevision?: string | null
+  capabilitiesReportedAt?: string | null
   capabilities: AgentCapability[]
 }
 

@@ -72,6 +72,37 @@ describe('Agent read views', () => {
     expect(api.getAgent).toHaveBeenCalledWith('tenant-a', 'agent-a', expect.any(AbortSignal))
   })
 
+  it('lists persisted capabilities with known names and separate supported/unsupported/unknown states', async () => {
+    const capabilities = [
+      { identifier: 'mssql.backup.full', support: 'Supported', metadata: { scope: 'agent' } },
+      { identifier: 'mssql.backup.checksum', support: 'Supported' },
+      { identifier: 'mssql.backup.differential', support: 'Unsupported' },
+      { identifier: 'vendor.custom-feature', support: 'Unknown' },
+    ]
+    vi.mocked(api.getAgents).mockResolvedValue([{ ...agent, capabilities }])
+    vi.mocked(api.getAgent).mockResolvedValue({ ...agent, capabilities, capabilitiesRevision: 'c1-abc', capabilitiesReportedAt: '2026-10-06T12:00:00Z' })
+    const list = mount(<ClientsPage />)
+    const row = (await screen.findByRole('link', { name: 'SQL-01' })).closest('tr')!
+    expect(within(row).getByText('MSSQL Full Backup')).toBeInTheDocument()
+    expect(within(row).getByText('CHECKSUM')).toBeInTheDocument()
+    expect(within(row).getByText('2 yetenek desteklenmiyor veya bilinmiyor')).toBeInTheDocument()
+    list.unmount()
+    mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    const section = (await screen.findByRole('heading', { name: 'Bildirilen yetenekler' })).closest('section')!
+    expect(within(section).getAllByText('Destekleniyor')).toHaveLength(2)
+    expect(within(section).getByText('Desteklenmiyor')).toBeInTheDocument()
+    expect(within(section).getByText('Bilinmiyor')).toBeInTheDocument()
+    expect(within(section).getByText('vendor.custom-feature')).toBeInTheDocument()
+    expect(screen.getByText('c1-abc')).toBeInTheDocument()
+  })
+
+  it('says capabilities were not reported yet instead of inventing support', async () => {
+    vi.mocked(api.getAgents).mockResolvedValue([{ ...agent, capabilities: [] }])
+    mount(<ClientsPage />)
+    const row = (await screen.findByRole('link', { name: 'SQL-01' })).closest('tr')!
+    expect(within(row).getByText('Henüz bildirilmedi')).toBeInTheDocument()
+  })
+
   it('requires focused confirmation before admin revocation and invalidates only related scopes', async () => {
     const { client } = mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
     const invalidate = vi.spyOn(client, 'invalidateQueries')

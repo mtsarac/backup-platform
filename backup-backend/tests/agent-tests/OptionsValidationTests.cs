@@ -194,6 +194,9 @@ public sealed class OptionsValidationTests
         Assert.Equal("https://backup.example.test/base/", client.BackendBaseUri.ToString());
         Assert.IsAssignableFrom<IAgentCredentialStore>(provider.GetRequiredService<IAgentCredentialStore>());
         Assert.Equal(AgentChannelState.Stopped, service.Current.State);
+        Assert.IsType<HttpAgentCapabilityClient>(provider.GetRequiredService<IAgentCapabilityClient>());
+        var source = Assert.IsType<CatalogCapabilityRevisionSource>(provider.GetRequiredService<ICapabilityRevisionSource>());
+        Assert.Equal(provider.GetRequiredService<AgentCapabilityCatalog>().Revision, source.GetRevision());
     }
 
     [Fact]

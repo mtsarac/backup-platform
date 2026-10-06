@@ -2,6 +2,7 @@ using BackupPlatform.Api.Backups;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Infrastructure.Backups;
 using BackupPlatform.Agents;
+using BackupPlatform.Agents.Capabilities;
 using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Agents.Credentials;
 using BackupPlatform.Agents.Enrollment;
@@ -175,6 +176,8 @@ public static class SecurityServiceCollectionExtensions
         });
         services.AddSingleton<AgentProtocolGate>();
         services.AddScoped<IAgentConnectivityStore, PostgreSqlAgentConnectivityStore>();
+        services.AddScoped<IAgentCapabilityStore, PostgreSqlAgentCapabilityStore>();
+        services.AddScoped<AgentCapabilityService>();
         services.AddScoped<AgentConnectivityService>();
         services.AddScoped<AgentConnectivityQueryService>();
         services.AddAgentRateLimiting();

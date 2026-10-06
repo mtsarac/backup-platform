@@ -65,9 +65,11 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         if (job is null) return (null, false);
         // Another edit moved the job to a different agent after the owner was read: start over under the current owner's locks.
         if (job.AgentId != owner) return (null, true);
-        if (!await context.Agents.AnyAsync(agent => agent.Id == update.AgentId && agent.TenantId == tenantId && agent.Status == AgentStatus.Active, cancellationToken)) return (null, false);
+        // The target must be Active only when the job moves to it: an unchanged owner that was since disabled or revoked must not block editing (or disabling) the job.
+        if (update.AgentId != owner && !await context.Agents.AnyAsync(agent => agent.Id == update.AgentId && agent.TenantId == tenantId && agent.Status == AgentStatus.Active, cancellationToken)) return (null, false);
         // Omitted policies keep the values committed so far, read under the lock rather than from an earlier snapshot.
         job.Update(update.Name, update.AgentId, update.Configuration, update.RetryPolicy ?? job.RetryPolicy, update.OverlapPolicy ?? job.OverlapPolicy);
+        update.ApplyUnderLock?.Invoke(job);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return (job, false);

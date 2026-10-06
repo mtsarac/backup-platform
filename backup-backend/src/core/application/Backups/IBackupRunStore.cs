@@ -47,8 +47,13 @@ public sealed record BackupRetryResult(BackupRetryOutcome Outcome, BackupRun? Ru
 /// <summary>A scheduled retry that became a Pending attempt; the owning agent can be hinted.</summary>
 public sealed record BackupRetryStarted(Guid RunId, AgentId AgentId);
 
-/// <summary>Omitted policies keep the job's current values; the store resolves them under its lock.</summary>
-public sealed record BackupJobUpdate(string Name, AgentId AgentId, BackupConfiguration Configuration, BackupRetryPolicy? RetryPolicy, BackupOverlapPolicy? OverlapPolicy);
+/// <summary>
+/// Omitted policies keep the job's current values; the store resolves them under its lock. <paramref name="ApplyUnderLock"/> runs against the job
+/// loaded under the same agent lock and inside the same transaction as the update, so schedule, retention and enabled changes commit together with
+/// the general fields or not at all: any exception it throws abandons the whole edit.
+/// </summary>
+public sealed record BackupJobUpdate(string Name, AgentId AgentId, BackupConfiguration Configuration, BackupRetryPolicy? RetryPolicy, BackupOverlapPolicy? OverlapPolicy,
+    Action<BackupJob>? ApplyUnderLock = null);
 
 /// <summary>
 /// All mutations are atomic, ownership-filtered and durably committed before returning. Retries and concurrency limits live

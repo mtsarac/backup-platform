@@ -1,4 +1,5 @@
 using BackupPlatform.Agents;
+using BackupPlatform.Agents.Capabilities;
 using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Agents.Credentials;
 using BackupPlatform.Agents.Enrollment;
@@ -27,6 +28,10 @@ public static class AgentEndpoints
             .RequireAuthorization(AuthorizationPolicies.Agent)
             .RequireRateLimiting(AgentRateLimitOptions.Policies.Heartbeat)
             .WithMetadata(new RequiresAgentProtocol(), new RequestSizeLimitAttribute(MaximumHeartbeatBytes));
+        agent.MapPut("/capabilities", SyncCapabilitiesAsync)
+            .RequireAuthorization(AuthorizationPolicies.Agent)
+            .RequireRateLimiting(AgentRateLimitOptions.Policies.Heartbeat)
+            .WithMetadata(new RequiresAgentProtocol(), new RequestSizeLimitAttribute(MaximumCapabilitySyncBytes));
         agent.MapGet("/tasks", PollAsync)
             .RequireAuthorization(AuthorizationPolicies.Agent)
             .RequireRateLimiting(AgentRateLimitOptions.Policies.Poll)
@@ -40,6 +45,7 @@ public static class AgentEndpoints
     }
 
     private const long MaximumHeartbeatBytes = 8 * 1024;
+    private const long MaximumCapabilitySyncBytes = 32 * 1024;
 
     private static async Task<IResult> EnrollAsync(
         AgentEnrollmentRequest request, HttpContext context, AgentEnrollmentService service, AgentSecurityOptions options,
@@ -82,7 +88,7 @@ public static class AgentEndpoints
 
     private static async Task<IResult> HeartbeatAsync(
         AgentHeartbeatRequest request, HttpContext context, ICurrentAgent currentAgent, AgentConnectivityService service,
-        AgentConnectivityOptions options, AgentSecurityOptions security, CancellationToken cancellationToken)
+        AgentCapabilityService capabilities, AgentConnectivityOptions options, AgentSecurityOptions security, CancellationToken cancellationToken)
     {
         var protocol = context.Features.Get<AgentProtocolFeature>()!.Version;
         var result = await service.RecordHeartbeatAsync(currentAgent.Identity!, protocol, request, cancellationToken);
@@ -90,14 +96,27 @@ public static class AgentEndpoints
         {
             return Error(StatusCodes.Status400BadRequest, AgentErrorCodes.InvalidRequest, $"Invalid field: {result.InvalidField}.");
         }
+        var syncRequested = await capabilities.IsSyncRequestedAsync(currentAgent.Identity!, request.CapabilityRevision, cancellationToken);
         return Results.Ok(new AgentHeartbeatResponse
         {
             ServerTime = result.ServerTime,
             HeartbeatIntervalSeconds = (int)options.HeartbeatInterval.TotalSeconds,
             OfflineTimeoutSeconds = (int)options.OfflineTimeout.TotalSeconds,
             Protocol = AgentProtocolMiddleware.ToWire(security.Protocol),
-            CapabilitySyncRequested = false
+            CapabilitySyncRequested = syncRequested
         });
+    }
+
+    private static async Task<IResult> SyncCapabilitiesAsync(
+        AgentCapabilitySyncRequest request, ICurrentAgent currentAgent, AgentCapabilityService service, CancellationToken cancellationToken)
+    {
+        var result = await service.SyncAsync(currentAgent.Identity!, request, cancellationToken);
+        return result.Status switch
+        {
+            CapabilitySyncStatus.Synced => Results.Ok(new AgentCapabilitySyncResponse { Revision = result.Revision!, Changed = result.Changed }),
+            CapabilitySyncStatus.InvalidRequest => Error(StatusCodes.Status400BadRequest, AgentErrorCodes.InvalidRequest, $"Invalid field: {result.InvalidField}."),
+            _ => Error(StatusCodes.Status401Unauthorized, "unauthorized", null)
+        };
     }
 
     private static async Task<IResult> PollAsync(

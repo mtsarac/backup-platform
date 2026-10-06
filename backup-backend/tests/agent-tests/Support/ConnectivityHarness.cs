@@ -1,4 +1,5 @@
 using BackupPlatform.Agent.Core.Connectivity;
+using BackupPlatform.Agent.Core.Identity;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 
@@ -109,7 +110,19 @@ internal sealed class ConnectivityHarness : IAsyncDisposable
 
 internal sealed class TestCapabilitySource : ICapabilityRevisionSource
 {
+    private int _syncs;
+
     public string? Revision { get; set; }
 
+    public Func<AgentLocalIdentity, CancellationToken, Task<bool>> OnSync { get; set; } = static (_, _) => Task.FromResult(true);
+
+    public int SyncCount => Volatile.Read(ref _syncs);
+
     public string? GetRevision() => Revision;
+
+    public Task<bool> SyncAsync(AgentLocalIdentity identity, CancellationToken cancellationToken)
+    {
+        Interlocked.Increment(ref _syncs);
+        return OnSync(identity, cancellationToken);
+    }
 }

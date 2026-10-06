@@ -11,8 +11,13 @@ public sealed record BackupRetryPolicyView(int MaxAttempts, double InitialDelayS
 /// <summary>Retention policy as it crosses the API. Omitted members keep the platform default (on create) or the job's current value (on change); durations are seconds.</summary>
 public sealed record BackupRetentionPolicyRequest(bool? Enabled = null, double? KeepForSeconds = null, double? DeleteGracePeriodSeconds = null);
 public sealed record BackupRetentionPolicyView(bool Enabled, double KeepForSeconds, double DeleteGracePeriodSeconds);
-public sealed record CreateBackupJobRequest(string Name, Guid AgentId, BackupExecutionConfiguration Configuration, BackupRetryPolicyRequest? RetryPolicy = null, string? OverlapPolicy = null, BackupScheduleRequest? Schedule = null, BackupRetentionPolicyRequest? Retention = null);
-public sealed record UpdateBackupJobRequest(string Name, Guid AgentId, BackupExecutionConfiguration Configuration, BackupRetryPolicyRequest? RetryPolicy = null, string? OverlapPolicy = null);
+public sealed record CreateBackupJobRequest(string Name, Guid AgentId, BackupExecutionConfiguration Configuration, BackupRetryPolicyRequest? RetryPolicy = null, string? OverlapPolicy = null, BackupScheduleRequest? Schedule = null, BackupRetentionPolicyRequest? Retention = null, bool? Enabled = null);
+/// <summary>
+/// Every editable part of a job in one request. Omitted (null) members keep their current value; <see cref="RemoveSchedule"/> removes the schedule
+/// (it cannot be combined with <see cref="Schedule"/>). The whole request is validated and committed as one unit.
+/// </summary>
+public sealed record UpdateBackupJobRequest(string Name, Guid AgentId, BackupExecutionConfiguration Configuration, BackupRetryPolicyRequest? RetryPolicy = null, string? OverlapPolicy = null,
+    BackupScheduleRequest? Schedule = null, bool RemoveSchedule = false, BackupRetentionPolicyRequest? Retention = null, bool? Enabled = null);
 public sealed record BackupLastRunView(Guid Id, string Status, DateTimeOffset CreatedAt, DateTimeOffset? StartedAt, DateTimeOffset? CompletedAt, string? ReasonCode);
 public sealed record BackupJobView(Guid Id, Guid AgentId, string Name, string BackupType, string OverlapPolicy, BackupRetryPolicyView RetryPolicy, bool Enabled, DateTimeOffset CreatedAt, BackupExecutionConfiguration Configuration, BackupScheduleView? Schedule = null, BackupRetentionPolicyView? Retention = null, BackupLastRunView? LastRun = null, string? AgentName = null, DateTimeOffset? NextOccurrenceAt = null);
 /// <summary>A run. <see cref="ScheduledFor"/> and <see cref="ScheduleDelaySeconds"/> are set for scheduled runs only: the instant the schedule asked for, and how long after it the run was actually created.</summary>
@@ -44,20 +49,43 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         var options = scheduling ?? new BackupSchedulingOptions();
         var overlap = ResolveOverlap(request);
         var schedule = request.Schedule is null ? null : BackupScheduleService.ToDomain(request.Schedule, null, now, options);
-        var job = await store.CreateJobAsync(new BackupJob(Guid.NewGuid(), tenantId, request.Name.Trim(), new AgentId(request.AgentId), configuration, now,
-            ToDomain(request.RetryPolicy), overlap, schedule, ToDomain(request.Retention, retention ?? new BackupRetentionOptions(), null)), cancellationToken);
+        var newJob = new BackupJob(Guid.NewGuid(), tenantId, request.Name.Trim(), new AgentId(request.AgentId), configuration, now,
+            ToDomain(request.RetryPolicy), overlap, schedule, ToDomain(request.Retention, retention ?? new BackupRetentionOptions(), null));
+        if (request.Enabled is false) newJob.Disable();
+        var job = await store.CreateJobAsync(newJob, cancellationToken);
         return job is null ? null : ToView(job, now);
     }
 
+    /// <summary>
+    /// Validates everything first, then applies general fields, schedule, retention and enabled state to the job loaded under the agent lock, in one
+    /// transaction. Any invalid part (or a retention change the caller may not make) leaves the job untouched.
+    /// </summary>
     public async Task<BackupJobView?> UpdateJobAsync(TenantId tenantId, Guid jobId, UpdateBackupJobRequest request, CancellationToken cancellationToken)
     {
-        var validation = new CreateBackupJobRequest(request.Name, request.AgentId, request.Configuration, request.RetryPolicy, request.OverlapPolicy);
+        var validation = new CreateBackupJobRequest(request.Name, request.AgentId, request.Configuration, request.RetryPolicy, request.OverlapPolicy, request.Schedule, request.Retention);
         BackupInputValidation.Validate(validation);
+        if (request.RemoveSchedule && request.Schedule is not null) throw new InvalidBackupJobException("schedule", "conflicting_policy");
+        var now = time.GetUtcNow();
+        var schedulingOptions = scheduling ?? new BackupSchedulingOptions();
+        var retentionOptions = retention ?? new BackupRetentionOptions();
+        var scheduleOverlap = request.Schedule?.OverlapPolicy is null ? (BackupOverlapPolicy?)null : ToDomain(request.Schedule.OverlapPolicy);
+        void ApplyRest(BackupJob target)
+        {
+            if (request.RemoveSchedule) target.ChangeSchedule(null);
+            else if (request.Schedule is not null) target.ChangeSchedule(BackupScheduleService.ToDomain(request.Schedule, target.Schedule, now, schedulingOptions), scheduleOverlap);
+            if (request.Retention is not null)
+            {
+                try { target.ChangeRetention(ToDomain(request.Retention, retentionOptions, target.RetentionPolicy)); }
+                catch (ArgumentException) { throw new InvalidBackupJobException("retention"); }
+            }
+            if (request.Enabled is true) target.Enable(now);
+            else if (request.Enabled is false) target.Disable();
+        }
         var command = new BackupJobUpdate(request.Name, new AgentId(request.AgentId), ToDomain(request.Configuration),
             request.RetryPolicy is null ? null : ToDomain(request.RetryPolicy),
-            request.OverlapPolicy is null ? null : ToDomain(request.OverlapPolicy));
+            request.OverlapPolicy is null ? null : ToDomain(request.OverlapPolicy), ApplyRest);
         var job = await store.UpdateJobAsync(tenantId, jobId, command, cancellationToken);
-        return job is null ? null : ToView(job, time.GetUtcNow());
+        return job is null ? null : ToView(job, now);
     }
 
     private static BackupConfiguration ToDomain(BackupExecutionConfiguration c) => new(c.Engine, c.Database, c.Host, c.Port,

@@ -80,6 +80,8 @@ bun run test       # vitest run (jsdom + RTL)
 ```
 
 ## CURRENT STATE
-- Build, oxlint, and Vitest (`bun run test`) are clean; verified against a real backend + PostgreSQL + Agent.Host + SQL Server in a browser (login, tenant switch, job create/edit, run now, manual retry, scheduled runs, artifact delete/cancel, physical deletion history, enrollment token shown once).
-- Known backend limits surfaced in the UI: agent capabilities are not persisted by the backend yet (shown as "Bildirilmedi"); there is no schedule-occurrence preview endpoint (edit page shows `nextOccurrenceAt` and occurrence history); job edit is several backend calls (general, schedule, retention, enable), so a later step may fail after earlier ones applied.
+- Build, oxlint, and Vitest (`bun run test`) are clean; verified against a real backend + PostgreSQL + Agent.Host + SQL Server in a browser (login, tenant switch, job create/edit, run now, running cancellation, overlap Skip/Queue, manual retry, scheduled runs, artifact delete/cancel, agent-local physical deletion history, enrollment token shown once).
+- Job create and edit are ONE request each (`POST`/`PUT backup-jobs/{id}` carry schedule, `removeSchedule`, retention (admin only) and `enabled`); a failing save changes nothing. The list's enable/disable toggle still uses the separate routes.
+- Agent capabilities are read from the backend's persisted snapshot (`capabilities`, `capabilitiesRevision`, `capabilitiesReportedAt`); an empty list renders "Henüz bildirilmedi".
+- Known backend limit: there is no schedule-occurrence preview endpoint (edit page shows `nextOccurrenceAt` and occurrence history).
 - Run progress uses visibility-aware polling (no SignalR for browsers).

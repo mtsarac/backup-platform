@@ -44,6 +44,16 @@ describe('run detail controls and attention', () => {
     expect(screen.getAllByText('Çalışıyor · Running').length).toBeGreaterThan(0)
   })
 
+  it('drops the pending-cancellation notice once the agent has acknowledged and the run is Cancelled', async () => {
+    state.cancel.mutateAsync.mockResolvedValue(makeRun({ status: 'CancellationRequested' }))
+    const view = renderDetail()
+    fireEvent.click(screen.getByRole('button', { name: 'İptal et' }))
+    await screen.findByText('İptal isteği iletildi. Ajanın işlemi durdurması bekleniyor.')
+    state.query.data = makeRun({ status: 'Cancelled' })
+    view.rerender(<MemoryRouter initialEntries={['/tenants/tenant-a/backup-runs/run-id']}><Routes><Route path="/tenants/:tenantId/backup-runs/:id" element={<BackupDetailPage />} /></Routes></MemoryRouter>)
+    expect(screen.queryByText('İptal isteği iletildi. Ajanın işlemi durdurması bekleniyor.')).not.toBeInTheDocument()
+  })
+
   it('offers manual retry even for automatically nonretryable failures', async () => {
     const failed = makeRun({ status: 'Failed', reasonCode: 'PermissionDenied' })
     failed.retry.lastFailureRetryable = false

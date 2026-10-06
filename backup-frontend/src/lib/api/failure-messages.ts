@@ -42,6 +42,8 @@ const messages: Record<string, string> = {
   invalid_grace: 'Missed-run grace süresi geçersiz.',
   delete_started: 'Fiziksel silme başladığı için silme iptal edilemez.',
   deletion_in_progress: 'Fiziksel silme başladı; artık iptal edilemez.',
+  administrator_required: 'Saklama politikasını yalnızca Owner / Admin değiştirebilir.',
+  conflicting_policy: 'Zamanlama ayarları birbiriyle çakışıyor. Alanları kontrol edin.',
 }
 export function failureMessage(code?: string | null): string {
   if (!code) return 'İşlem başarısız oldu.'

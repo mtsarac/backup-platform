@@ -1,3 +1,4 @@
+using BackupPlatform.Agent.Core.Identity;
 using BackupPlatform.Contracts.Agents;
 
 namespace BackupPlatform.Agent.Core.Connectivity;
@@ -25,6 +26,10 @@ public sealed partial class AgentConnectivityService
                 var acknowledgedAt = _time.GetUtcNow();
                 Update(s => s with { ConsecutiveHeartbeatFailures = 0, LastSuccessfulHeartbeatUtc = acknowledgedAt });
                 LogHeartbeatSucceeded(identity.AgentId, result.Value.ServerTime);
+                if (result.Value.CapabilitySyncRequested)
+                {
+                    StartCapabilitySync(identity, cancellationToken);
+                }
                 delay = _backoff.AddJitter(_effectiveHeartbeatInterval);
             }
             else
@@ -48,6 +53,47 @@ public sealed partial class AgentConnectivityService
                 LogHeartbeatFailed(identity.AgentId, failure.Kind, failure.Description, failures, delay, _backendHost);
             }
             await Task.Delay(delay, _time, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Starts a capability sync in the background unless one is already running, so a slow or failing sync can never delay
+    /// the next heartbeat. A failure is only logged: the backend keeps asking on the following heartbeats until the
+    /// snapshot is stored.
+    /// </summary>
+    private void StartCapabilitySync(AgentLocalIdentity identity, CancellationToken cancellationToken)
+    {
+        if (Interlocked.CompareExchange(ref _capabilitySyncRunning, 1, 0) != 0)
+        {
+            return;
+        }
+        _capabilitySync = Task.Run(() => RunCapabilitySyncAsync(identity, cancellationToken), CancellationToken.None);
+    }
+
+    private async Task RunCapabilitySyncAsync(AgentLocalIdentity identity, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (await _capabilities.SyncAsync(identity, cancellationToken).ConfigureAwait(false))
+            {
+                LogCapabilitySyncSucceeded(identity.AgentId);
+            }
+            else
+            {
+                LogCapabilitySyncFailed(identity.AgentId, _backendHost);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Shutting down; the next run asks again.
+        }
+        catch (Exception exception)
+        {
+            LogUnexpected("capability sync", exception.GetType().Name);
+        }
+        finally
+        {
+            Volatile.Write(ref _capabilitySyncRunning, 0);
         }
     }
 

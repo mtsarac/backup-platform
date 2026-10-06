@@ -141,11 +141,14 @@ public static class AgentAdministrationEndpoints
         osDescription = view.OsDescription,
         runtimeVersion = view.RuntimeVersion,
         enrolledAt = view.EnrolledAt,
-        capabilities = view.Agent.Capabilities.Select(capability => new
+        capabilitiesRevision = view.Capabilities?.Revision,
+        capabilitiesReportedAt = view.Capabilities?.ReportedAt,
+        capabilities = (view.Capabilities?.Capabilities ?? []).Select(capability => new
         {
-            identifier = capability.Identifier.ToString(),
+            identifier = capability.Identifier,
             support = capability.Support.ToString(),
-            version = capability.Version?.ToString()
+            version = (string?)null,
+            metadata = capability.Metadata
         })
     };
 

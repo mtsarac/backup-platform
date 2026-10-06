@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { BackupJobWizardPage } from './backup-job-wizard-page'
-import { saveBackupJob } from '@/features/backup-jobs/api'
+import { saveBackupJob, setJobEnabled } from '@/features/backup-jobs/api'
 import { ApiError } from '@/lib/api/client'
 
 const access = vi.hoisted(() => ({ tenantId: 'tenant-a', canOperate: true, canAdmin: true }))
@@ -30,6 +30,17 @@ describe('iş formu', () => {
     expect(vi.mocked(saveBackupJob).mock.calls[0][1].schedule?.cronExpression).toBe('invalid cron')
     await waitFor(() => expect(document.getElementById('cronExpression-error')).toHaveTextContent(/.+/))
     expect(screen.getByLabelText('Cron ifadesi')).toHaveAttribute('aria-invalid', 'true')
+  })
+  it('geçersiz zamanlama kaydı alan hatasını gösterir ve başka istek göndermez', async () => {
+    vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400, { error: 'invalid_schedule', field: 'cronExpression', code: 'invalid_cron' }))
+    renderPage()
+    fireEvent.change(screen.getByLabelText('Cron ifadesi'), { target: { value: 'x' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
+    await waitFor(() => expect(document.getElementById('cronExpression-error')).toHaveTextContent(/.+/))
+    expect(screen.getByLabelText('Cron ifadesi')).toHaveValue('x')
+    expect(saveBackupJob).toHaveBeenCalledTimes(1)
+    expect(setJobEnabled).not.toHaveBeenCalled()
+    expect(screen.queryByText(/uygulanmış olabilir/)).toBeNull()
   })
   it('saklama süresi hatasını sunucudan alır', async () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400, { field: 'retention.keepForSeconds', code: 'invalid_request' }))

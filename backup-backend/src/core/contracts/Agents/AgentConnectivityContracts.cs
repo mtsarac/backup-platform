@@ -49,9 +49,9 @@ public sealed record AgentHeartbeatRequest
     /// <summary>One of <see cref="AgentPlatformNames"/>.</summary>
     public string Platform { get; init; } = string.Empty;
     /// <summary>
-    /// Opaque revision (at most 64 characters) of the capability set the agent currently advertises. Extension point:
-    /// the backend stores it so a later explicit capability sync can be requested when it changes; a heartbeat never
-    /// carries the capability list itself.
+    /// Revision (at most 64 characters, see <see cref="AgentCapabilityRevision"/>) of the capability set the agent
+    /// currently advertises. When it differs from the revision the backend has stored, the heartbeat answer asks for a
+    /// capability sync; a heartbeat never carries the capability list itself. Null means the agent advertises nothing.
     /// </summary>
     public string? CapabilityRevision { get; init; }
     public AgentRuntimeInfo? Runtime { get; init; }
@@ -64,7 +64,7 @@ public sealed record AgentHeartbeatResponse
     public int HeartbeatIntervalSeconds { get; init; }
     public int OfflineTimeoutSeconds { get; init; }
     public AgentServerProtocol Protocol { get; init; } = new();
-    /// <summary>Always false today; reserved for an explicit capability sync request.</summary>
+    /// <summary>True when the reported capability revision is unknown or differs from the stored snapshot: the agent should <c>PUT /api/agent/capabilities</c>.</summary>
     public bool CapabilitySyncRequested { get; init; }
 }
 

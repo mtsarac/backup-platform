@@ -505,6 +505,125 @@ public sealed class ConnectivityServiceTests
         Assert.Equal("rev-7", h.Client.Heartbeats[1].Request.CapabilityRevision);
     }
 
+    // ---- capability sync -------------------------------------------------------------------------------------
+
+    private static AgentBackendResult<AgentHeartbeatResponse> Acknowledged(bool capabilitySyncRequested) =>
+        AgentBackendResult<AgentHeartbeatResponse>.Success(new AgentHeartbeatResponse
+        {
+            ServerTime = DateTimeOffset.UnixEpoch,
+            HeartbeatIntervalSeconds = 30,
+            OfflineTimeoutSeconds = 90,
+            CapabilitySyncRequested = capabilitySyncRequested
+        });
+
+    [Fact]
+    public async Task Heartbeats_that_do_not_request_a_capability_sync_never_trigger_one()
+    {
+        await using var h = new ConnectivityHarness(random: 0);
+        h.Capabilities.Revision = "rev-7";
+        await h.StartAndSettleAsync();
+
+        await h.AdvanceAsync(TimeSpan.FromSeconds(125), Second);
+
+        Assert.True(h.Client.Heartbeats.Count >= 4);
+        Assert.Equal(0, h.Capabilities.SyncCount);
+    }
+
+    [Fact]
+    public async Task A_heartbeat_answer_requesting_a_capability_sync_triggers_exactly_one_sync_with_the_current_identity()
+    {
+        await using var h = new ConnectivityHarness(random: 0);
+        h.Capabilities.Revision = "rev-7";
+        AgentLocalIdentity? syncedWith = null;
+        h.Capabilities.OnSync = (identity, _) =>
+        {
+            syncedWith = identity;
+            return Task.FromResult(true);
+        };
+        h.Client.OnHeartbeat = (n, _) => Acknowledged(capabilitySyncRequested: n == 2);
+        await h.StartAndSettleAsync();
+
+        await h.AdvanceAsync(TimeSpan.FromSeconds(125), Second);
+
+        Assert.True(h.Client.Heartbeats.Count >= 4);
+        Assert.Equal(1, h.Capabilities.SyncCount);
+        Assert.Equal(h.Store.Identity!.Current.CredentialId, syncedWith!.Current.CredentialId);
+        Assert.Contains(h.Logs.Entries, e => e.Message.Contains("Capability sync completed", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_failing_capability_sync_is_logged_and_never_stops_or_delays_heartbeats(bool throws)
+    {
+        await using var h = new ConnectivityHarness(random: 0);
+        h.Capabilities.Revision = "rev-7";
+        h.Capabilities.OnSync = (_, _) => throws ? throw new InvalidOperationException("sync exploded") : Task.FromResult(false);
+        h.Client.OnHeartbeat = (_, _) => Acknowledged(capabilitySyncRequested: true);
+        await h.StartAndSettleAsync();
+
+        await h.AdvanceAsync(TimeSpan.FromSeconds(125), Second);
+
+        // The backend keeps asking, so every heartbeat retries the sync, and the cadence is untouched.
+        Assert.True(h.Client.Heartbeats.Count >= 4);
+        Assert.Equal(h.Client.Heartbeats.Count, h.Capabilities.SyncCount);
+        Assert.All(Gaps(h.Client.Heartbeats.Select(b => b.At).ToList()), gap => Assert.InRange(gap, 29.9, 31.1));
+        Assert.Equal(0, h.Snapshot.ConsecutiveHeartbeatFailures);
+        Assert.Contains(h.Logs.Entries, e => e.Level >= Microsoft.Extensions.Logging.LogLevel.Warning
+            && (e.Message.Contains("Capability sync did not complete", StringComparison.Ordinal) || e.Message.Contains("capability sync", StringComparison.Ordinal)));
+        Assert.DoesNotContain(TestIdentity.Secret, h.Logs.AllText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_slow_capability_sync_neither_delays_heartbeats_nor_runs_twice_at_once()
+    {
+        await using var h = new ConnectivityHarness(random: 0);
+        h.Capabilities.Revision = "rev-7";
+        var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        h.Capabilities.OnSync = (_, _) => release.Task;
+        h.Client.OnHeartbeat = (_, _) => Acknowledged(capabilitySyncRequested: true);
+        await h.StartAndSettleAsync();
+
+        await h.AdvanceAsync(TimeSpan.FromSeconds(95), Second);
+
+        Assert.True(h.Client.Heartbeats.Count >= 3);
+        Assert.Equal(1, h.Capabilities.SyncCount);
+        Assert.All(Gaps(h.Client.Heartbeats.Select(b => b.At).ToList()), gap => Assert.InRange(gap, 29.9, 31.1));
+
+        release.SetResult(true);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(31), Second);
+
+        Assert.Equal(2, h.Capabilities.SyncCount);
+    }
+
+    [Fact]
+    public async Task Shutdown_cancels_a_capability_sync_that_is_still_running()
+    {
+        await using var h = new ConnectivityHarness(random: 0);
+        h.Capabilities.Revision = "rev-7";
+        var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        h.Capabilities.OnSync = async (_, token) =>
+        {
+            try
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            }
+            catch (OperationCanceledException)
+            {
+                cancelled.SetResult();
+                throw;
+            }
+            return true;
+        };
+        h.Client.OnHeartbeat = (_, _) => Acknowledged(capabilitySyncRequested: true);
+        await h.StartAndSettleAsync();
+        Assert.Equal(1, h.Capabilities.SyncCount);
+
+        await h.StopAsync();
+
+        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
     // ---- shutdown --------------------------------------------------------------------------------------------
 
     [Theory]

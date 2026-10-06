@@ -247,6 +247,13 @@ public sealed class AgentAuthorizationIntegrationTests(PostgreSqlFixture fixture
         var setup = await world.CreateTenantAsync();
         var agent = await world.EnrollAsync(setup);
         using (await world.HeartbeatAsync(agent)) { }
+        var snapshot = AgentWorld.CapabilitySnapshot(
+            AgentWorld.CapabilityReport("mssql.backup.full", "Supported", new Dictionary<string, string> { ["scope"] = "agent" }),
+            AgentWorld.CapabilityReport("mssql.backup.log", "Unsupported"));
+        using (var sync = await world.SyncCapabilitiesAsync(agent, snapshot))
+        {
+            Assert.Equal(HttpStatusCode.OK, sync.StatusCode);
+        }
         var account = await world.SeedUserAsync();
         await world.GrantAsync(setup.Tenant, account, role);
         var session = await world.SignInAsync(account);
@@ -260,8 +267,14 @@ public sealed class AgentAuthorizationIntegrationTests(PostgreSqlFixture fixture
         Assert.Equal("test-os", json.GetProperty("osDescription").GetString());
         Assert.Equal("10.0.0", json.GetProperty("runtimeVersion").GetString());
         Assert.Equal(world.Clock.GetUtcNow(), json.GetProperty("enrolledAt").GetDateTimeOffset());
-        // The platform does not persist reported capabilities yet (AgentConfiguration ignores them), so the safe view must not invent any.
-        Assert.Empty(json.GetProperty("capabilities").EnumerateArray());
+        // The safe view returns exactly the persisted snapshot the agent synced.
+        Assert.Equal(snapshot.Revision, json.GetProperty("capabilitiesRevision").GetString());
+        Assert.Equal(world.Clock.GetUtcNow(), json.GetProperty("capabilitiesReportedAt").GetDateTimeOffset());
+        var capabilities = json.GetProperty("capabilities").EnumerateArray().ToList();
+        Assert.Equal(["mssql.backup.full", "mssql.backup.log"], capabilities.Select(c => c.GetProperty("identifier").GetString()));
+        Assert.Equal(["Supported", "Unsupported"], capabilities.Select(c => c.GetProperty("support").GetString()));
+        Assert.Equal("agent", capabilities[0].GetProperty("metadata").GetProperty("scope").GetString());
+        Assert.Empty(capabilities[1].GetProperty("metadata").EnumerateObject());
         using var list = await session.GetAsync($"{tenantPath}/agents");
         var listEntry = Assert.Single(AgentWorld.ReadJson(list).EnumerateArray());
         Assert.Equal(json.GetProperty("capabilities").GetRawText(), listEntry.GetProperty("capabilities").GetRawText());

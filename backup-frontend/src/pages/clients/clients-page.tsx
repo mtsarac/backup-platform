@@ -5,7 +5,8 @@ import { QueryState } from '@/components/data/query-state'
 import { useAgents } from '@/features/agents/hooks'
 import type { Agent } from '@/features/agents/types'
 import { AgentState } from '@/features/agents/presentation'
-import { agentDate, capabilitySupportLabels } from '@/features/agents/format'
+import { agentDate } from '@/features/agents/format'
+import { CapabilitySummary } from '@/features/agents/capabilities'
 import { useTenant } from '@/features/tenancy/use-tenant'
 
 export function ClientsPage() {
@@ -25,7 +26,7 @@ export function ClientsPage() {
     { key: 'operationalStatus', header: 'Çalışma durumu', render: (agent) => <AgentState value={agent.operationalStatus} /> },
     { key: 'connectivity', header: 'Bağlantı', render: (agent) => <AgentState value={agent.connectivity} /> },
     { key: 'lastSeenAt', header: 'Son görülme', render: (agent) => agentDate(agent.lastSeenAt) },
-    { key: 'capabilities', header: 'Yetenekler', render: (agent) => agent.capabilities.length ? agent.capabilities.map((item) => `${item.identifier} (${capabilitySupportLabels[item.support] ?? item.support})`).join(', ') : 'Bildirilmedi' },
+    { key: 'capabilities', header: 'Yetenekler', wrap: true, render: (agent) => <CapabilitySummary capabilities={agent.capabilities} /> },
   ]
   return <div className="space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-2xl font-semibold text-text-heading">Agent'lar</h1><p className="mt-1 text-sm text-text-muted">Yaşam döngüsü ve bağlantı durumu ayrı olarak gösterilir.</p></div>{canAdmin && <Link className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground" to={`/tenants/${tenantId}/enrollment`}>Agent kaydı</Link>}</div>

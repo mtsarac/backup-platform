@@ -23,6 +23,47 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("BackupPlatform.Agents.Capabilities.AgentCapabilityRecord", b =>
+                {
+                    b.Property<Guid>("AgentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Identifier")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("MetadataJson")
+                        .HasMaxLength(8192)
+                        .HasColumnType("character varying(8192)");
+
+                    b.Property<DateTimeOffset>("ReportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Revision")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("Support")
+                        .HasColumnType("integer");
+
+                    b.HasKey("AgentId", "TenantId", "Identifier");
+
+                    b.HasIndex("TenantId", "AgentId");
+
+                    b.ToTable("agent_capabilities", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_agent_capabilities_support", "\"Support\" IN (0, 1, 2)");
+
+                            t.HasCheckConstraint("ck_agent_capabilities_tenant_id", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_agent_capabilities_text", "length(\"Identifier\") > 0 AND length(\"Revision\") > 0");
+                        });
+                });
+
             modelBuilder.Entity("BackupPlatform.Agents.Connectivity.AgentConnectivityRecord", b =>
                 {
                     b.Property<Guid>("AgentId")
@@ -1324,6 +1365,16 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_user_sessions_user_id", "\"UserId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
                         });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Agents.Capabilities.AgentCapabilityRecord", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Agents.Agent", null)
+                        .WithMany()
+                        .HasForeignKey("AgentId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("BackupPlatform.Agents.Connectivity.AgentConnectivityRecord", b =>

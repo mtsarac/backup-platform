@@ -1,4 +1,5 @@
 using System.Reflection;
+using BackupPlatform.Agents.Capabilities;
 using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Agents.Credentials;
 using BackupPlatform.Agents.Enrollment;
@@ -18,7 +19,8 @@ namespace BackupPlatform.Infrastructure.Persistence;
 /// belongs to trusted infrastructure; it is not an authorization or database RLS boundary.
 /// Do not expose it directly to modules or untrusted callers, and do not use context pooling.
 /// SaveChanges guards tracked writes; bulk LINQ operations retain query filters but bypass those guards.
-/// Capabilities are deliberately not persisted yet; writing agents with nonempty capabilities is rejected.
+/// Agent.Capabilities is not persisted with the agent row; writing agents with nonempty capabilities is rejected. Reported
+/// capability snapshots live in AgentCapabilityRecord rows, replaced as a whole by the capability store.
 /// Mutable rows use PostgreSQL's system xmin as a shadow concurrency token. Tenant ownership also
 /// participates in update/delete predicates, including writes of disconnected entities.
 /// Global users remain tenant-independent; their future access rules belong to application authorization.
@@ -53,6 +55,7 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<EnrollmentToken> EnrollmentTokens => Set<EnrollmentToken>();
     public DbSet<AgentCredential> AgentCredentials => Set<AgentCredential>();
     public DbSet<AgentConnectivityRecord> AgentConnectivity => Set<AgentConnectivityRecord>();
+    public DbSet<AgentCapabilityRecord> AgentCapabilities => Set<AgentCapabilityRecord>();
     public DbSet<PasswordCredential> PasswordCredentials => Set<PasswordCredential>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<BackupJob> BackupJobs => Set<BackupJob>();
@@ -111,7 +114,7 @@ public sealed class PlatformDbContext : DbContext
             }
             if (entry.Entity is Agent agent && agent.Capabilities.Count != 0 && entry.State != EntityState.Deleted)
             {
-                throw new InvalidOperationException("Capability persistence is not available; nonempty capabilities cannot be saved.");
+                throw new InvalidOperationException("Agent.Capabilities is not persisted; nonempty capabilities cannot be saved with an agent (use the capability snapshot store).");
             }
             if (entry.Entity is ITenantOwned owned)
             {
@@ -137,9 +140,9 @@ public sealed class PlatformDbContext : DbContext
             {
                 throw new InvalidOperationException("Authentication state writes require explicit identity infrastructure operations.");
             }
-            if (!IsPlatformOperations && entry.Entity is TenantAgentEnrollmentPolicy or AgentCredential or AgentConnectivityRecord)
+            if (!IsPlatformOperations && entry.Entity is TenantAgentEnrollmentPolicy or AgentCredential or AgentConnectivityRecord or AgentCapabilityRecord)
             {
-                throw new InvalidOperationException("Enrollment policy, agent credential and connectivity writes require explicit platform operations.");
+                throw new InvalidOperationException("Enrollment policy, agent credential, connectivity and capability writes require explicit platform operations.");
             }
         }
     }

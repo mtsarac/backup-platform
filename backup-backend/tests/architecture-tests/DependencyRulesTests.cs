@@ -144,7 +144,11 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
     public void ContractsMustNotDependOnBackendInternals()
     {
         AssertForbiddenDependencies("BackupPlatform.Contracts", node => IsBackendInternal(node));
-        AssertForbiddenExternalDependencies("BackupPlatform.Contracts", IsCryptographyDependency, IsPersistenceDependency);
+        // The one cryptographic primitive contracts may use is SHA-256, for AgentCapabilityRevision: the agent and the backend
+        // must compute the same revision with the same code, and the contracts assembly is the only one both reference.
+        AssertForbiddenExternalDependencies("BackupPlatform.Contracts",
+            name => IsCryptographyDependency(name) && name is not ("System.Security.Cryptography" or "System.Security.Cryptography.SHA256"),
+            IsPersistenceDependency);
     }
 
     [Fact]

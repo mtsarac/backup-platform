@@ -160,4 +160,142 @@ public sealed class BackupUiApiTests(PostgreSqlFixture fixture) : IClassFixture<
         Assert.Equal(1, await scenario.ScanRetriesAsync());
         Assert.Equal("AutomaticRetry", (await scenario.RunAsync(run)).GetProperty("attempts")[1].GetProperty("trigger").GetString());
     }
+
+    private static object FullEdit(Guid agentId, string name, object? schedule = null, object? retention = null, bool? enabled = null, bool removeSchedule = false) => new
+    {
+        name,
+        agentId,
+        configuration = new BackupExecutionConfiguration { Database = "master", Host = "sql-server", IntegratedSecurity = true, StorageExecutionLocation = "Backend" },
+        schedule,
+        removeSchedule,
+        retention,
+        enabled
+    };
+
+    [Fact]
+    public async Task OneRequestChangesGeneralScheduleRetentionAndEnabledTogether()
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture);
+        var job = await scenario.CreateJobAsync();
+        var body = FullEdit(scenario.Agent.AgentId, "Atomic edit",
+            schedule: new { cronExpression = "*/20 * * * *", timeZone = "UTC", missedRunGraceSeconds = 900 },
+            retention: new { enabled = true, keepForSeconds = 7200, deleteGracePeriodSeconds = 3600 }, enabled: false);
+        using var response = await scenario.Admin.SendAsync(HttpMethod.Put, scenario.Root + $"/backup-jobs/{job}", body);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var read = await scenario.Admin.GetAsync(scenario.Root + $"/backup-jobs/{job}");
+        var json = AgentWorld.ReadJson(read);
+        Assert.Equal("Atomic edit", json.GetProperty("name").GetString());
+        Assert.False(json.GetProperty("enabled").GetBoolean());
+        Assert.Equal("*/20 * * * *", json.GetProperty("schedule").GetProperty("cronExpression").GetString());
+        Assert.Equal(7200, json.GetProperty("retention").GetProperty("keepForSeconds").GetDouble());
+
+        using var removed = await scenario.Admin.SendAsync(HttpMethod.Put, scenario.Root + $"/backup-jobs/{job}", FullEdit(scenario.Agent.AgentId, "Atomic edit", removeSchedule: true, enabled: true));
+        Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
+        using var after = await scenario.Admin.GetAsync(scenario.Root + $"/backup-jobs/{job}");
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, AgentWorld.ReadJson(after).GetProperty("schedule").ValueKind);
+        Assert.True(AgentWorld.ReadJson(after).GetProperty("enabled").GetBoolean());
+    }
+
+    [Theory]
+    [InlineData("schedule")]
+    [InlineData("retention")]
+    [InlineData("conflict")]
+    public async Task AnyInvalidPartRejectsTheWholeEditAndChangesNothing(string invalidPart)
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture);
+        var job = await scenario.CreateJobAsync();
+        var validSchedule = new { cronExpression = "0 3 * * *", timeZone = "UTC" };
+        var validRetention = new { enabled = true, keepForSeconds = 7200, deleteGracePeriodSeconds = 3600 };
+        var body = invalidPart switch
+        {
+            "schedule" => FullEdit(scenario.Agent.AgentId, "Must not apply", new { cronExpression = "not a cron", timeZone = "UTC" }, validRetention, false),
+            "retention" => FullEdit(scenario.Agent.AgentId, "Must not apply", validSchedule, new { enabled = true, keepForSeconds = 1, deleteGracePeriodSeconds = 1 }, false),
+            _ => FullEdit(scenario.Agent.AgentId, "Must not apply", validSchedule, validRetention, false, removeSchedule: true)
+        };
+        using var before = await scenario.Admin.GetAsync(scenario.Root + $"/backup-jobs/{job}");
+        var original = await before.Content.ReadAsStringAsync();
+        using var response = await scenario.Admin.SendAsync(HttpMethod.Put, scenario.Root + $"/backup-jobs/{job}", body);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var after = await scenario.Admin.GetAsync(scenario.Root + $"/backup-jobs/{job}");
+        Assert.Equal(original, await after.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task OperatorCannotChangeRetentionThroughTheAtomicEdit()
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture);
+        var job = await scenario.CreateJobAsync();
+        var operatorSession = await scenario.SessionAsync(TenantRole.Operator);
+        var body = FullEdit(scenario.Agent.AgentId, "Operator edit", retention: new { enabled = true, keepForSeconds = 7200, deleteGracePeriodSeconds = 3600 });
+        using var forbidden = await operatorSession.SendAsync(HttpMethod.Put, scenario.Root + $"/backup-jobs/{job}", body);
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+        Assert.Equal("administrator_required", AgentWorld.ReadJson(forbidden).GetProperty("code").GetString());
+        using var read = await scenario.Admin.GetAsync(scenario.Root + $"/backup-jobs/{job}");
+        Assert.Equal("Nightly full backup", AgentWorld.ReadJson(read).GetProperty("name").GetString());
+
+        using var allowed = await operatorSession.SendAsync(HttpMethod.Put, scenario.Root + $"/backup-jobs/{job}",
+            FullEdit(scenario.Agent.AgentId, "Operator edit", new { cronExpression = "0 3 * * *", timeZone = "UTC" }));
+        Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateCanStartDisabledInTheSameRequest()
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture);
+        var body = FullEdit(scenario.Agent.AgentId, "Created disabled", new { cronExpression = "0 3 * * *", timeZone = "UTC" }, enabled: false);
+        using var response = await scenario.CreateJobRawAsync(body);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var json = AgentWorld.ReadJson(response);
+        Assert.False(json.GetProperty("enabled").GetBoolean());
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, json.GetProperty("schedule").GetProperty("nextOccurrenceAt").ValueKind);
+    }
+
+    [Fact]
+    public async Task JobOfARevokedAgentCanStillBeDisabledThroughTheEdit()
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture);
+        var job = await scenario.CreateJobAsync();
+        using var revoke = await scenario.Admin.SendAsync(HttpMethod.Post, scenario.Root + $"/agents/{scenario.Agent.AgentId}/revoke");
+        Assert.Equal(HttpStatusCode.NoContent, revoke.StatusCode);
+        using var edit = await scenario.Admin.SendAsync(HttpMethod.Put, scenario.Root + $"/backup-jobs/{job}", FullEdit(scenario.Agent.AgentId, "Renamed after revoke", enabled: false));
+        Assert.Equal(HttpStatusCode.OK, edit.StatusCode);
+        Assert.False(AgentWorld.ReadJson(edit).GetProperty("enabled").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ManualIdempotencyKeysCannotUseTheSchedulersReservedPrefix()
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture);
+        var job = await scenario.CreateJobAsync();
+        using var reserved = await scenario.StartRawAsync(job, "scheduled-20300101T000000000Z");
+        Assert.Equal(HttpStatusCode.BadRequest, reserved.StatusCode);
+    }
+
+    [Fact]
+    public async Task ConcurrentAtomicEditsAndManualStartsNeverCorruptTheJobOrFailWithServerErrors()
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture);
+        var job = await scenario.CreateJobAsync(overlapPolicy: "Queue");
+        var edits = Enumerable.Range(0, 16).Select(index => scenario.Admin.SendAsync(HttpMethod.Put, scenario.Root + $"/backup-jobs/{job}",
+            FullEdit(scenario.Agent.AgentId, $"Edit {index}", index % 2 == 0 ? new { cronExpression = $"{index} 3 * * *", timeZone = "UTC" } : null,
+                new { enabled = true, keepForSeconds = 7200 + index, deleteGracePeriodSeconds = 3600 }, enabled: true, removeSchedule: index % 2 == 1)));
+        var starts = Enumerable.Range(0, 16).Select(index => scenario.StartRawAsync(job, $"concurrent-{index}"));
+        var responses = await Task.WhenAll(edits.Concat(starts));
+        try
+        {
+            Assert.All(responses, response => Assert.True((int)response.StatusCode < 500, $"Unexpected {(int)response.StatusCode}."));
+            Assert.Equal(16, responses.Take(16).Count(response => response.StatusCode == HttpStatusCode.OK));
+            Assert.Equal(16, responses.Skip(16).Count(response => response.StatusCode == HttpStatusCode.OK));
+            using var read = await scenario.Admin.GetAsync(scenario.Root + $"/backup-jobs/{job}");
+            var json = AgentWorld.ReadJson(read);
+            // The stored job is exactly one of the submitted edits: name, retention and schedule come from the same request.
+            var index = int.Parse(json.GetProperty("name").GetString()!["Edit ".Length..]);
+            Assert.Equal(7200 + index, json.GetProperty("retention").GetProperty("keepForSeconds").GetDouble());
+            Assert.Equal(index % 2 == 0, json.GetProperty("schedule").ValueKind != System.Text.Json.JsonValueKind.Null);
+        }
+        finally
+        {
+            foreach (var response in responses) response.Dispose();
+        }
+    }
 }

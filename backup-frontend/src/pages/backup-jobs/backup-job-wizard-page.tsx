@@ -122,7 +122,7 @@ function JobForm({ job }: { job?: BackupJob }) {
       <p className="text-sm text-text-muted md:col-span-2">Politika değişikliği mevcut yedeklerin son kullanma tarihini değiştirmez.</p>
     </Section>
     {job && <section className="space-y-3 rounded-lg border border-border bg-surface p-4"><h2 className="text-lg font-medium">Son zamanlama oluşumları</h2><QueryState isPending={occurrences.isPending} error={occurrences.error} empty={occurrences.data?.length === 0}><ul className="space-y-2 text-sm">{occurrences.data?.map(item => <li key={item.id}>{new Date(item.scheduledAt).toLocaleString('tr-TR')} · {item.outcome} · {item.reason}{item.runId && <> · <Link className="text-primary underline" to={`/tenants/${tenantId}/backup-runs/${item.runId}`}>Çalıştırmayı aç</Link></>}</li>)}</ul></QueryState></section>}
-    {save.error && <div role="alert" className="rounded-md border border-destructive/30 p-3 text-sm">{errorMessage(save.error)}{job && ' Düzenleme adımları ayrı kaydedilir; önceki adımlar uygulanmış olabilir. Alanı düzeltip tekrar kaydedin.'}</div>}
+    {save.error && <div role="alert" className="rounded-md border border-destructive/30 p-3 text-sm">{errorMessage(save.error)}</div>}
     <div className="flex justify-end"><Button type="submit" disabled={save.isPending}>{save.isPending ? 'Kaydediliyor…' : 'Kaydet'}</Button></div>
   </form>
 }

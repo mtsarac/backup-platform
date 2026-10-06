@@ -39,7 +39,8 @@ public static class AgentHostServiceCollectionExtensions
         services.AddSingleton<IAgentCredentialStore>(static provider =>
             AgentCredentialStoreFactory.Create(provider.GetRequiredService<IOptions<AgentHostOptions>>().Value.CredentialStoreDirectory));
         services.AddSingleton(static _ => AgentSoftwareInfo.Detect(typeof(AgentHostServiceCollectionExtensions).Assembly));
-        services.TryAddSingleton<ICapabilityRevisionSource, NullCapabilityRevisionSource>();
+        services.AddSingleton(static _ => AgentCapabilityCatalog.CreateDefault());
+        services.AddSingleton<ICapabilityRevisionSource, CatalogCapabilityRevisionSource>();
 
         services.AddAgentTransport();
         services.AddAgentBackupExecution(configuration);

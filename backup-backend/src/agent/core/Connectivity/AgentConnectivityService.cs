@@ -55,6 +55,8 @@ public sealed partial class AgentConnectivityService : IAgentConnectivityStatus
     private Restriction? _restriction;
     private long _restrictionSequence;
     private TimeSpan _effectiveHeartbeatInterval;
+    private int _capabilitySyncRunning;
+    private Task? _capabilitySync;
 
     public AgentConnectivityService(
         IAgentCredentialStore store,
@@ -193,6 +195,17 @@ public sealed partial class AgentConnectivityService : IAgentConnectivityStatus
         catch (Exception exception)
         {
             LogUnexpected("push channel shutdown", exception.GetType().Name);
+        }
+        if (_capabilitySync is { } capabilitySync)
+        {
+            try
+            {
+                await capabilitySync.WaitAsync(grace.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Bounded: the sync observes the cancelled loop token and ends on its own.
+            }
         }
         lock (_gate)
         {

@@ -7,9 +7,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 namespace BackupPlatform.Infrastructure.Persistence.Configurations;
 
 /// <summary>
-/// Persists agent identity, lifecycle, and software metadata only. Capabilities are explicitly
-/// ignored in this iteration; the context rejects saves of nonempty capability sets so that
-/// unsupported capability state cannot be silently discarded.
+/// Persists agent identity, lifecycle, and software metadata only. The <see cref="Agent.Capabilities"/> property is
+/// ignored (reported capability snapshots live in the agent_capabilities table); the context rejects saves of
+/// nonempty capability sets so that capability state set on the entity cannot be silently discarded.
 /// </summary>
 internal sealed class AgentConfiguration : IEntityTypeConfiguration<Agent>
 {

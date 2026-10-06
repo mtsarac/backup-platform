@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using BackupPlatform.Agents;
+using BackupPlatform.Agents.Capabilities;
 using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Contracts.Agents;
@@ -158,6 +159,27 @@ internal sealed class AgentWorld : IAsyncDisposable
 
     public Task<HttpResponseMessage> HeartbeatWithCredentialAsync(Guid credentialId, string secret) =>
         SendAgentAsync(HttpMethod.Post, "/api/agent/heartbeat", credentialId, secret, "1.0", Heartbeat());
+
+    public Task<HttpResponseMessage> SyncCapabilitiesAsync(EnrolledAgent agent, object body, string? protocol = "1.0") =>
+        SendAgentAsync(HttpMethod.Put, "/api/agent/capabilities", agent.CredentialId, agent.Secret, protocol, body);
+
+    /// <summary>A sync body whose revision matches its capabilities, as the real agent builds it.</summary>
+    public static AgentCapabilitySyncRequest CapabilitySnapshot(params AgentCapabilityReport[] capabilities) => new()
+    {
+        Revision = AgentCapabilityRevision.Compute(capabilities),
+        Capabilities = capabilities
+    };
+
+    public static AgentCapabilityReport CapabilityReport(
+        string identifier, string support = "Supported", IReadOnlyDictionary<string, string>? metadata = null) =>
+        new() { Identifier = identifier, Support = support, Metadata = metadata };
+
+    public async Task<List<AgentCapabilityRecord>> CapabilityRowsOfAsync(Guid agentId)
+    {
+        await using var context = Database.CreatePlatformContext();
+        var id = new AgentId(agentId);
+        return await context.AgentCapabilities.AsNoTracking().Where(row => row.AgentId == id).OrderBy(row => row.Identifier).ToListAsync();
+    }
 
     public Task<HttpResponseMessage> PollAsync(EnrolledAgent agent, string? cursor = null, string? protocol = "1.0") =>
         SendAgentAsync(HttpMethod.Get, "/api/agent/tasks" + (cursor is null ? string.Empty : $"?cursor={cursor}"), agent.CredentialId, agent.Secret, protocol);
