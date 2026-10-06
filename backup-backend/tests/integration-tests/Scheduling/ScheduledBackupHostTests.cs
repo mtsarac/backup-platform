@@ -38,7 +38,7 @@ public sealed class ScheduledBackupHostTests(PostgreSqlFixture database) : IClas
         var runs = await WaitAsync(async () =>
         {
             using var response = await scenario.Admin.GetAsync(scenario.Root + $"/backup-jobs/{jobId}/runs");
-            var list = AgentWorld.ReadJson(response).EnumerateArray().ToList();
+            var list = AgentWorld.ReadJson(response).GetProperty("items").EnumerateArray().ToList();
             return list.Count == 0 ? null : list;
         });
         var run = Assert.Single(runs);

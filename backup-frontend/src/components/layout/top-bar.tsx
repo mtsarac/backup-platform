@@ -1,51 +1,34 @@
-import { Bell, Menu, Moon, Search, Sun } from 'lucide-react'
+import { useState } from 'react'
+import { Menu, Moon, Sun } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/features/auth/use-auth'
+import { useTenant } from '@/features/tenancy/use-tenant'
 import { useTheme } from '@/hooks/use-theme'
-import { isAdministrator } from '@/lib/ownership'
+import { errorMessage } from '@/lib/api/failure-messages'
 
-interface TopBarProps {
-  onMenuToggle: () => void
-}
-
-export function TopBar({ onMenuToggle }: TopBarProps) {
-  const { logout, user } = useAuth()
+export function TopBar({ onMenuToggle }: { onMenuToggle: () => void }) {
+  const { logout, user, tenants } = useAuth()
+  const { tenantId, tenant, switchTenant } = useTenant()
   const { resolvedTheme, toggleTheme } = useTheme()
-
-  return (
-    <header className="flex h-14 min-w-0 items-center justify-between border-b border-border bg-surface px-6">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" className="lg:hidden" onClick={onMenuToggle} aria-label="Menüyü aç">
-          <Menu className="size-5" />
-        </Button>
-        <span className="text-sm font-medium text-text-heading">Backup Yönetimi</span>
-      </div>
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  async function signOut() { setBusy(true); setError(''); try { await logout() } catch (error) { setError(errorMessage(error)) } finally { setBusy(false) } }
+  return <>
+    <header className="flex min-h-14 min-w-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-surface px-4 py-2 sm:px-6">
       <div className="flex min-w-0 items-center gap-3">
-        <div className="relative hidden min-w-0 md:block">
-          <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-text-muted" />
-          <input
-            type="search"
-            placeholder="Ara..."
-            className="h-8 w-full min-w-0 rounded-md border border-border bg-surface-2 pl-9 pr-3 text-sm outline-none focus:border-ring"
-          />
-        </div>
-        <button className="relative rounded-md p-2 text-text-muted hover:bg-surface-2" aria-label="Bildirimler">
-          <Bell className="size-4" />
-        </button>
-        <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Tema değiştir">
-          {resolvedTheme === 'light' ? <Moon className="size-4" /> : <Sun className="size-4" />}
-        </Button>
-        <div className="flex min-w-0 items-center gap-2">
-          <Badge tone={isAdministrator(user) ? 'info' : 'neutral'}>
-            {isAdministrator(user) ? 'Admin' : 'User'}
-          </Badge>
-          <span className="hidden text-sm text-text-muted sm:inline">{user?.username}</span>
-          <Button variant="ghost" size="sm" onClick={logout}>
-            Çıkış
-          </Button>
-        </div>
+        <Button variant="ghost" size="icon" className="lg:hidden" onClick={onMenuToggle} aria-label="Menüyü aç"><Menu className="size-5" /></Button>
+        <label htmlFor="tenant-select" className="text-sm text-text-muted">Tenant</label>
+        <select id="tenant-select" value={tenantId} onChange={event => { void switchTenant(event.target.value) }} className="max-w-48 rounded-md border border-border bg-surface-2 px-2 py-1 text-sm sm:max-w-72">{tenants.map(item => <option key={item.tenantId} value={item.tenantId}>{item.name}</option>)}</select>
+      </div>
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <Badge tone="info">{tenant.membershipRole ?? tenant.role}</Badge>
+        {user?.isPlatformAdmin && <Badge tone="warning">PlatformAdmin · platform rolü</Badge>}
+        <span className="hidden text-sm text-text-muted sm:inline">{user?.displayName}</span>
+        <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Tema değiştir">{resolvedTheme === 'light' ? <Moon className="size-4" /> : <Sun className="size-4" />}</Button>
+        <Button variant="ghost" size="sm" disabled={busy} onClick={() => { void signOut() }}>Çıkış</Button>
       </div>
     </header>
-  )
+    {error && <p role="alert" className="px-6 py-2 text-sm text-error">{error}</p>}
+  </>
 }

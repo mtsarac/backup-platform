@@ -111,6 +111,78 @@ public sealed class RetentionStoreQueryTests(PostgreSqlFixture fixture) : IClass
         Assert.Equal(BackupArtifactState.Available, listed[0].Artifact.State);
     }
 
+    [Fact]
+    public async Task PagedHistoryTraversesBeyondLegacyCapAndFiltersCreatedTimeJobAgentAndTenant()
+    {
+        var agent = await _world.Harness.AddAgentAsync();
+        var job = await RetentionKit.AddJobAsync(_world.Harness, agent, Policy);
+        var expected = new List<SeededBackup>();
+        for (var index = 0; index < 205; index++)
+            expected.Add(await RetentionKit.SeedAsync(_world.Harness, agent, job, T0.AddMinutes(index)));
+        var stranger = await _world.SeedAsync(Policy);
+        var store = _world.Store();
+        var query = new BackupArtifactQuery(JobId: job.Id, AgentId: agent.AgentId.Value, State: "Available", PageSize: 100);
+        var first = await store.QueryArtifactsAsync(agent.TenantId, query, default);
+        var second = await store.QueryArtifactsAsync(agent.TenantId, query with { Page = 2 }, default);
+        var third = await store.QueryArtifactsAsync(agent.TenantId, query with { Page = 3 }, default);
+        Assert.Equal(205, first.TotalCount);
+        Assert.Equal(205, third.TotalCount);
+        Assert.Equal(expected.AsEnumerable().Reverse().Select(item => item.ArtifactId),
+            first.Items.Concat(second.Items).Concat(third.Items).Select(item => item.Artifact.Id));
+        Assert.Equal(5, third.Items.Count);
+        Assert.DoesNotContain(first.Items, item => item.Artifact.Id == stranger.ArtifactId);
+        Assert.All(first.Items, item =>
+        {
+            Assert.Equal(job.Name, item.JobName);
+            Assert.Equal(job.Configuration.Database, item.DatabaseName);
+            Assert.Equal(agent.AgentId.Value, item.AgentId);
+        });
+        var createdAt = expected[100].AcceptedAt.AddDays(-400);
+        var bound = await store.QueryArtifactsAsync(agent.TenantId, query with { From = createdAt, To = createdAt }, default);
+        Assert.Equal(expected[100].ArtifactId, Assert.Single(bound.Items).Artifact.Id);
+        Assert.Equal(1, bound.TotalCount);
+        var empty = await store.QueryArtifactsAsync(agent.TenantId, query with { JobId = stranger.JobId }, default);
+        Assert.Empty(empty.Items);
+        Assert.Equal(0, empty.TotalCount);
+        var wrongAgent = await store.QueryArtifactsAsync(agent.TenantId, query with { AgentId = Guid.NewGuid() }, default);
+        Assert.Empty(wrongAgent.Items);
+    }
+
+    [Fact]
+    public async Task StateFiltersReflectPendingPhysicalFailureAndDeletedHistory()
+    {
+        var backup = await _world.SeedAsync(Policy);
+        var store = _world.Store();
+        var query = new BackupArtifactQuery(JobId: backup.JobId);
+        var due = await _world.RequestDeleteAsync(store, backup, T0.AddDays(1));
+        Assert.Single((await store.QueryArtifactsAsync(backup.TenantId, query with { State = "DeletePending" }, default)).Items);
+        var claim = await RetentionWorld.ClaimAsync(store, backup, due);
+        Assert.NotNull(claim);
+        Assert.Single((await store.QueryArtifactsAsync(backup.TenantId, query with { State = "Deleting" }, default)).Items);
+        Assert.Empty((await store.QueryArtifactsAsync(backup.TenantId, query with { State = "DeletePending" }, default)).Items);
+        Assert.True(await store.FailDeletionAsync(claim.ReplicaId, claim.LeaseToken, due, BackupDeleteFailureCodes.IoError, due.AddMinutes(1), default));
+        Assert.Single((await store.QueryArtifactsAsync(backup.TenantId, query with { State = "DeleteFailed" }, default)).Items);
+        var retry = await RetentionWorld.ClaimAsync(store, backup, due.AddMinutes(1));
+        Assert.NotNull(retry);
+        Assert.True(await store.CompleteDeletionAsync(retry.ReplicaId, retry.LeaseToken, due.AddMinutes(1), default));
+        Assert.Single((await store.QueryArtifactsAsync(backup.TenantId, query with { State = "Deleted" }, default)).Items);
+        Assert.Empty((await store.QueryArtifactsAsync(backup.TenantId, query with { State = "DeleteFailed" }, default)).Items);
+    }
+
+    [Fact]
+    public async Task AgentUnavailableDispatchIsDeletingRatherThanAPhysicalDeleteFailure()
+    {
+        var agent = await _world.Harness.AddAgentAsync();
+        var job = await RetentionKit.AddJobAsync(_world.Harness, agent, Policy, BackupStorageExecutionLocation.Agent);
+        var backup = await RetentionKit.SeedAsync(_world.Harness, agent, job, T0);
+        var store = _world.Store();
+        var due = await _world.RequestDeleteAsync(store, backup, T0.AddDays(1));
+        await store.ClaimDueDeletionsAsync("worker", due, TimeSpan.FromMinutes(5), 100, default);
+        var query = new BackupArtifactQuery(JobId: job.Id);
+        Assert.Single((await store.QueryArtifactsAsync(agent.TenantId, query with { State = "Deleting" }, default)).Items);
+        Assert.Empty((await store.QueryArtifactsAsync(agent.TenantId, query with { State = "DeleteFailed" }, default)).Items);
+    }
+
     // ---- which stored keys are referenced ---------------------------------------------------------------------------------------
 
     [Fact]

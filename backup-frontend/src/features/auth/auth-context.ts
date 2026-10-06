@@ -1,11 +1,15 @@
 import { createContext } from 'react'
-import type { User } from '@/lib/types'
+import type { TenantMembership, UserProfile } from './types'
 
 export interface AuthContextValue {
-  user: User | null
+  user: UserProfile | null
+  tenants: TenantMembership[]
   isAuthenticated: boolean
-  login: (email: string, password: string) => Promise<void>
-  logout: () => void
+  isLoading: boolean
+  error: unknown
+  sessionExpired: boolean
+  login: (identifier: string, password: string) => Promise<void>
+  logout: () => Promise<void>
+  refresh: () => void
 }
-
 export const AuthContext = createContext<AuthContextValue | null>(null)

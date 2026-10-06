@@ -211,7 +211,8 @@ public sealed class RetentionApiTests(PostgreSqlFixture fixture) : IClassFixture
         Assert.Equal(HttpStatusCode.NotFound, get.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, delete.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, cancel.StatusCode);
-        Assert.Empty(AgentWorld.ReadJson(list).EnumerateArray());
+        Assert.Empty(AgentWorld.ReadJson(list).GetProperty("items").EnumerateArray());
+        Assert.Equal(0, AgentWorld.ReadJson(list).GetProperty("totalCount").GetInt64());
         Assert.Equal(HttpStatusCode.Forbidden, viaVictimRoute.StatusCode); // not a member of that tenant at all
         Assert.Equal("Available", (await ArtifactAsync(scenario, backup.ArtifactId)).GetProperty("state").GetString());
     }
@@ -231,16 +232,55 @@ public sealed class RetentionApiTests(PostgreSqlFixture fixture) : IClassFixture
 
         using var all = await scenario.Admin.GetAsync(scenario.Root + "/backup-artifacts");
         using var onlyA = await scenario.Admin.GetAsync(scenario.Root + $"/backup-artifacts?jobId={jobA}");
-        using var tooMany = await scenario.Admin.GetAsync(scenario.Root + "/backup-artifacts?limit=101");
-        using var none = await scenario.Admin.GetAsync(scenario.Root + "/backup-artifacts?limit=0");
+        using var tooMany = await scenario.Admin.GetAsync(scenario.Root + "/backup-artifacts?pageSize=101");
+        using var none = await scenario.Admin.GetAsync(scenario.Root + "/backup-artifacts?pageSize=0");
 
-        Assert.Equal(new[] { b.ArtifactId, a.ArtifactId }, AgentWorld.ReadJson(all).EnumerateArray().Select(item => item.GetProperty("id").GetGuid()).ToArray()); // newest first
-        var only = Assert.Single(AgentWorld.ReadJson(onlyA).EnumerateArray());
+        Assert.Equal(new[] { b.ArtifactId, a.ArtifactId }, AgentWorld.ReadJson(all).GetProperty("items").EnumerateArray().Select(item => item.GetProperty("id").GetGuid()).ToArray()); // newest first
+        Assert.Equal(2, AgentWorld.ReadJson(all).GetProperty("totalCount").GetInt64());
+        Assert.Equal(1, AgentWorld.ReadJson(all).GetProperty("page").GetInt32());
+        Assert.Equal(25, AgentWorld.ReadJson(all).GetProperty("pageSize").GetInt32());
+        var only = Assert.Single(AgentWorld.ReadJson(onlyA).GetProperty("items").EnumerateArray());
         Assert.Equal(a.ArtifactId, only.GetProperty("id").GetGuid());
         Assert.Equal("DeletePending", only.GetProperty("state").GetString());
         Assert.Equal(jobA, only.GetProperty("jobId").GetGuid());
         Assert.Equal(HttpStatusCode.BadRequest, tooMany.StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, none.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("page=0")]
+    [InlineData("pageSize=101")]
+    [InlineData("pageSize=0")]
+    [InlineData("state=unknown")]
+    [InlineData("from=2026-10-07T00:00:00Z&to=2026-10-06T00:00:00Z")]
+    public async Task ArtifactPagingRejectsInvalidFiltersWithStableErrors(string query)
+    {
+        await using var scenario = await CreateAsync(fixture);
+        using var response = await scenario.Admin.GetAsync(scenario.Root + "/backup-artifacts?" + query);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("invalid_request", AgentWorld.ReadJson(response).GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task PagingReturnsRealMetadataAndCancellationEligibility()
+    {
+        await using var scenario = await CreateAsync(fixture);
+        var jobId = await CreateJobAsync(scenario);
+        var backup = await AcceptBackupAsync(scenario, jobId);
+        using var response = await scenario.Admin.GetAsync(scenario.Root + "/backup-artifacts?pageSize=25");
+        var item = Assert.Single(AgentWorld.ReadJson(response).GetProperty("items").EnumerateArray());
+        var job = await JobAsync(scenario, jobId);
+        Assert.Equal(job.GetProperty("name").GetString(), item.GetProperty("jobName").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(item.GetProperty("databaseName").GetString()));
+        Assert.False(item.GetProperty("cancelDeleteAllowed").GetBoolean());
+        Assert.False(item.TryGetProperty("sourceMetadataJson", out _));
+        Assert.False(item.TryGetProperty("appliedOptionsJson", out _));
+        using (await DeleteArtifactAsync(scenario, backup.ArtifactId)) { }
+        using var pending = await scenario.Admin.GetAsync(scenario.Root + $"/backup-artifacts?jobId={jobId}&state=DeletePending&pageSize=1");
+        Assert.True(Assert.Single(AgentWorld.ReadJson(pending).GetProperty("items").EnumerateArray()).GetProperty("cancelDeleteAllowed").GetBoolean());
+        using var empty = await scenario.Admin.GetAsync(scenario.Root + "/backup-artifacts?page=2&pageSize=1");
+        Assert.Empty(AgentWorld.ReadJson(empty).GetProperty("items").EnumerateArray());
+        Assert.Equal(1, AgentWorld.ReadJson(empty).GetProperty("totalCount").GetInt64());
     }
 
     // ---- manual delete and cancel ----

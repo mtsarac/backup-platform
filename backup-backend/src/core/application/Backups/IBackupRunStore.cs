@@ -47,6 +47,9 @@ public sealed record BackupRetryResult(BackupRetryOutcome Outcome, BackupRun? Ru
 /// <summary>A scheduled retry that became a Pending attempt; the owning agent can be hinted.</summary>
 public sealed record BackupRetryStarted(Guid RunId, AgentId AgentId);
 
+/// <summary>Omitted policies keep the job's current values; the store resolves them under its lock.</summary>
+public sealed record BackupJobUpdate(string Name, AgentId AgentId, BackupConfiguration Configuration, BackupRetryPolicy? RetryPolicy, BackupOverlapPolicy? OverlapPolicy);
+
 /// <summary>
 /// All mutations are atomic, ownership-filtered and durably committed before returning. Retries and concurrency limits live
 /// entirely in the database: a retry is a row (RetryPending + NextAttemptAt) and a slot is a Leased/Running attempt, so neither
@@ -56,6 +59,7 @@ public interface IBackupRunStore
 {
     Task<BackupJob?> CreateJobAsync(BackupJob job, CancellationToken cancellationToken);
     Task<BackupJob?> GetJobAsync(TenantId tenantId, Guid jobId, CancellationToken cancellationToken);
+    Task<BackupJob?> UpdateJobAsync(TenantId tenantId, Guid jobId, BackupJobUpdate update, CancellationToken cancellationToken);
     /// <summary>Idempotent per (tenant, job, key). Applies the job's overlap policy: Skip refuses, Queue enqueues.</summary>
     Task<BackupStartResult> StartRunAsync(TenantId tenantId, Guid jobId, string idempotencyKey, DateTimeOffset now, CancellationToken cancellationToken);
     Task<IReadOnlyList<BackupRun>> ListRunsAsync(TenantId tenantId, Guid? jobId, int limit, CancellationToken cancellationToken);

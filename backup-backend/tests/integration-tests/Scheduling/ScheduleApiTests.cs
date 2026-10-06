@@ -304,14 +304,14 @@ public sealed class ScheduleApiTests(PostgreSqlFixture fixture) : IClassFixture<
         Assert.Equal("superseded_by_later_occurrence", superseded.GetProperty("reason").GetString());
         Assert.Equal(JsonValueKind.Null, superseded.GetProperty("runId").ValueKind);
 
-        // The agent claims it through the normal pipeline; a retryable failure keeps the SAME run and labels the further attempt Retry.
+        // The agent claims it through the normal pipeline; a retryable failure keeps the SAME run and its durable automatic retry provenance.
         var claim = await scenario.FailNextAsync("DatabaseUnavailable");
         Assert.Equal(runId, claim.RunId);
         clock.Advance(TimeSpan.FromMinutes(10));
         await scenario.ScanRetriesAsync();
         var retried = await scenario.RunAsync(runId);
         var attempts = BackupApiScenario.AttemptsOf(retried);
-        Assert.Equal(["Scheduled", "Retry"], attempts.Select(a => a.GetProperty("trigger").GetString()));
+        Assert.Equal(["Scheduled", "AutomaticRetry"], attempts.Select(a => a.GetProperty("trigger").GetString()));
         Assert.Equal("Scheduled", retried.GetProperty("triggerType").GetString());
         Assert.Equal(1, await CountRunsAsync(scenario, jobId));
     }

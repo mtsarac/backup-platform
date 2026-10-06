@@ -1,162 +1,58 @@
-import { ArrowLeft } from 'lucide-react'
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { SqlInstanceList } from '@/components/sql/sql-instance-list'
-import { Skeleton } from '@/components/ui/skeleton'
-import { StatusBadge } from '@/components/ui/badge'
-import { useClient } from '@/features/agents/hooks'
-import { useAuth } from '@/features/auth/use-auth'
-import { isAdministrator } from '@/lib/ownership'
-import { ROUTES } from '@/lib/routes'
-import type { Client } from '@/lib/types'
-
-function AgentInfoCard({ client }: { client: Client }) {
-  return (
-    <div className="rounded-lg border border-border bg-surface p-4">
-      <h2 className="mb-3 text-sm font-medium text-text-muted">Agent Bilgisi</h2>
-      <dl className="space-y-2 text-sm">
-        <div className="flex justify-between gap-4">
-          <dt className="whitespace-nowrap text-text-muted">Versiyon</dt>
-          <dd className="min-w-0 break-words text-right font-mono text-text">{client.agent.version}</dd>
-        </div>
-        <div className="flex justify-between gap-4">
-          <dt className="whitespace-nowrap text-text-muted">Durum</dt>
-          <dd className="min-w-0 text-right">
-            <StatusBadge status={client.agent.status} />
-          </dd>
-        </div>
-        <div className="flex justify-between gap-4">
-          <dt className="whitespace-nowrap text-text-muted">Son Heartbeat</dt>
-          <dd className="min-w-0 break-words text-right font-mono text-text">
-            {new Date(client.agent.lastHeartbeat).toLocaleString('tr-TR')}
-          </dd>
-        </div>
-      </dl>
-    </div>
-  )
-}
-
-function SystemInfoCard({ client }: { client: Client }) {
-  return (
-    <div className="rounded-lg border border-border bg-surface p-4">
-      <h2 className="mb-3 text-sm font-medium text-text-muted">Sistem Bilgisi</h2>
-      <dl className="space-y-2 text-sm">
-        <div className="flex justify-between gap-4">
-          <dt className="whitespace-nowrap text-text-muted">Hostname</dt>
-          <dd className="min-w-0 break-words text-right text-text">{client.hostname}</dd>
-        </div>
-        <div className="flex justify-between gap-4">
-          <dt className="whitespace-nowrap text-text-muted">IP</dt>
-          <dd className="min-w-0 break-words text-right font-mono text-text">{client.ipAddress}</dd>
-        </div>
-        <div className="flex justify-between gap-4">
-          <dt className="whitespace-nowrap text-text-muted">OS</dt>
-          <dd className="min-w-0 break-words text-right text-text">{client.operatingSystem}</dd>
-        </div>
-      </dl>
-    </div>
-  )
-}
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { QueryState } from '@/components/data/query-state'
+import { Button } from '@/components/ui/button'
+import { useTenant } from '@/features/tenancy/use-tenant'
+import { useAgent, agentQueryKeys } from '@/features/agents/hooks'
+import { revokeAgent } from '@/features/agents/api'
+import { AgentState, InfoRow } from '@/features/agents/presentation'
+import { agentDate, capabilitySupportLabels } from '@/features/agents/format'
+import { ConfirmDialog } from '@/features/agents/confirm-dialog'
+import { errorMessage } from '@/lib/api/failure-messages'
 
 export function ClientDetailPage() {
-  const { id } = useParams()
-  const { user } = useAuth()
-  const { data: client, isLoading, error } = useClient(id ?? '')
+  const { tenantId, canAdmin } = useTenant()
+  const { id = '' } = useParams()
+  return <AgentDetailContent key={`${tenantId}:${id}`} tenantId={tenantId} id={id} canAdmin={canAdmin} />
+}
 
-  if (!id) {
-    return (
-      <div className="space-y-4">
-        <Link
-          to={ROUTES.CLIENTS}
-          className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-        >
-          <ArrowLeft className="size-4" />
-          Client&apos;lara dön
-        </Link>
-        <p className="text-text-muted">Client bulunamadı.</p>
-      </div>
-    )
-  }
-
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-8 w-48" />
-        <div className="grid gap-4 md:grid-cols-2">
-          <Skeleton className="h-32 w-full" />
-          <Skeleton className="h-32 w-full" />
+function AgentDetailContent({ tenantId, id, canAdmin }: { tenantId: string; id: string; canAdmin: boolean }) {
+  const query = useAgent(tenantId, id)
+  const client = useQueryClient()
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const revoke = useMutation({ mutationFn: () => revokeAgent(tenantId, id), onSuccess: async () => {
+    setConfirmOpen(false)
+    await Promise.all([
+      client.invalidateQueries({ queryKey: agentQueryKeys.all(tenantId) }),
+      client.invalidateQueries({ queryKey: ['tenant', tenantId, 'dashboard'] }),
+    ])
+  } })
+  const agent = query.data
+  return <div className="space-y-4">
+    <Link to={`/tenants/${tenantId}/agents`} className="text-sm font-medium text-primary hover:underline">← Agent'lara dön</Link>
+    {!id ? <p role="alert" className="text-text-muted">Agent bulunamadı.</p> : <QueryState isPending={query.isPending} error={query.error}>
+      {agent && <>
+        <div className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-semibold text-text-heading">{agent.hostName ?? 'Adsız agent'}</h1>{canAdmin && agent.status !== 'Revoked' && <Button variant="destructive" onClick={() => { revoke.reset(); setConfirmOpen(true) }}>Agent kaydını iptal et</Button>}</div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <section className="rounded-lg border border-border bg-surface p-4"><h2 className="font-medium text-text-heading">Kimlik ve kayıt</h2><dl className="mt-3 text-sm"><InfoRow label="Makine adı">{agent.hostName}</InfoRow><InfoRow label="Platform">{agent.platform}</InfoRow><InfoRow label="İşletim sistemi">{agent.osDescription}</InfoRow><InfoRow label="Kayıt zamanı">{agentDate(agent.enrolledAt)}</InfoRow><InfoRow label="Yaşam döngüsü"><AgentState value={agent.status} /></InfoRow></dl><p className="mt-3 text-xs text-text-muted">İptal ve devre dışı durumları bağlantı kesilmesinden bağımsızdır.</p></section>
+          <section className="rounded-lg border border-border bg-surface p-4"><h2 className="font-medium text-text-heading">Bağlantı ve çalışma</h2><dl className="mt-3 text-sm"><InfoRow label="Bağlantı"><AgentState value={agent.connectivity} /></InfoRow><InfoRow label="Çalışma durumu"><AgentState value={agent.operationalStatus} /></InfoRow><InfoRow label="Son görülme">{agentDate(agent.lastSeenAt)}</InfoRow><InfoRow label="Son heartbeat">{agentDate(agent.lastHeartbeatAt)}</InfoRow><InfoRow label="Son bağlantı">{agentDate(agent.lastConnectedAt)}</InfoRow></dl></section>
+          <section className="rounded-lg border border-border bg-surface p-4"><h2 className="font-medium text-text-heading">Sürümler</h2><dl className="mt-3 text-sm"><InfoRow label="Agent yazılımı">{agent.agentVersion}</InfoRow><InfoRow label="Protokol">{agent.protocolVersion}</InfoRow><InfoRow label="Çalışma ortamı">{agent.runtimeVersion}</InfoRow><InfoRow label="Yetenek revizyonu">{agent.capabilityRevision}</InfoRow></dl></section>
+          <section className="rounded-lg border border-border bg-surface p-4">
+            <h2 className="font-medium text-text-heading">Bildirilen yetenekler</h2>
+            {agent.capabilities.length ? (
+              <ul className="mt-3 space-y-2 text-sm text-text">
+                {agent.capabilities.map((capability) => (
+                  <li key={capability.identifier} className="break-words">
+                    <span className="font-medium">{capability.identifier}</span> · {capabilitySupportLabels[capability.support] ?? capability.support}{capability.version && ` · ${capability.version}`}
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="mt-3 text-sm text-text-muted">Henüz yetenek bildirilmedi.</p>}
+          </section>
         </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="space-y-4">
-        <Link
-          to={ROUTES.CLIENTS}
-          className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-        >
-          <ArrowLeft className="size-4" />
-          Client&apos;lara dön
-        </Link>
-        <div className="rounded-lg border border-error/30 bg-error-subtle p-4 text-sm text-error">
-          Client yüklenirken bir hata oluştu.
-        </div>
-      </div>
-    )
-  }
-
-  if (!client) {
-    return (
-      <div className="space-y-4">
-        <Link
-          to={ROUTES.CLIENTS}
-          className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-        >
-          <ArrowLeft className="size-4" />
-          Client&apos;lara dön
-        </Link>
-        <p className="text-text-muted">Client bulunamadı.</p>
-      </div>
-    )
-  }
-
-  if (!isAdministrator(user) && client.ownerUserId !== user?.id) {
-    return (
-      <div className="space-y-4">
-        <Link
-          to={ROUTES.CLIENTS}
-          className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-        >
-          <ArrowLeft className="size-4" />
-          Client&apos;lara dön
-        </Link>
-        <p className="text-text-muted">Bu cihaza erişim yetkiniz yok.</p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-4">
-      <Link
-        to={ROUTES.CLIENTS}
-        className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-      >
-        <ArrowLeft className="size-4" />
-        Client&apos;lara dön
-      </Link>
-
-      <h1 className="text-2xl font-semibold text-text-heading">{client.hostname}</h1>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <AgentInfoCard client={client} />
-        <SystemInfoCard client={client} />
-      </div>
-
-      <div>
-        <h2 className="mb-3 text-lg font-medium text-text-heading">SQL Server Instances</h2>
-        <SqlInstanceList instances={client.instances} />
-      </div>
-    </div>
-  )
+      </>}
+    </QueryState>}
+    <ConfirmDialog open={confirmOpen} onClose={() => setConfirmOpen(false)} title="Agent kaydı iptal edilsin mi?" description="Bu işlem geri alınamaz. Agent artık bu çalışma alanına bağlanamaz; yeniden kayıt için yeni bir kimlik gerekir." pending={revoke.isPending} error={revoke.error ? errorMessage(revoke.error) : undefined} onConfirm={() => { if (canAdmin) revoke.mutate() }} />
+  </div>
 }

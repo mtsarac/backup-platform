@@ -133,7 +133,7 @@ public sealed class AgentConnectivityIntegrationTests(PostgreSqlFixture fixture)
     }
 
     [Fact]
-    public async Task ConnectivityViewsRequireTenantAdministration()
+    public async Task ConnectivityViewsRequireTenantMembershipButAllowViewers()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var setup = await world.CreateTenantAsync();
@@ -143,8 +143,8 @@ public sealed class AgentConnectivityIntegrationTests(PostgreSqlFixture fixture)
         using var list = await session.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/agents");
         using var summary = await session.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/agents/connectivity-summary");
         using var anonymous = await world.Anonymous.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/agents/connectivity-summary");
-        Assert.Equal(HttpStatusCode.Forbidden, list.StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, summary.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, list.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, summary.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
     }
 

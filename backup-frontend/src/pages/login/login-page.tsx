@@ -4,9 +4,11 @@ import { HardDrive } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/features/auth/use-auth'
 import { ROUTES } from '@/lib/routes'
+import { ApiError } from '@/lib/api/client'
+import { errorMessage } from '@/lib/api/failure-messages'
 
 export function LoginPage() {
-  const { login, isAuthenticated } = useAuth()
+  const { login, isAuthenticated, sessionExpired } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [email, setEmail] = useState('')
@@ -26,9 +28,10 @@ export function LoginPage() {
     setLoading(true)
     try {
       await login(email, password)
+      setPassword('')
       navigate(from, { replace: true })
-    } catch {
-      setError('E-posta veya şifre hatalı.')
+    } catch (error) {
+      setError(error instanceof ApiError && error.status === 401 ? 'Kullanıcı adı veya şifre hatalı.' : errorMessage(error))
     } finally {
       setLoading(false)
     }
@@ -45,10 +48,11 @@ export function LoginPage() {
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="email" className="mb-1 block text-sm font-medium text-text-heading">E-posta</label>
+            <label htmlFor="email" className="mb-1 block text-sm font-medium text-text-heading">Kullanıcı adı</label>
             <input
               id="email"
-              type="email"
+              type="text"
+              autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-sm outline-none focus:border-ring"
@@ -61,16 +65,18 @@ export function LoginPage() {
               id="password"
               type="password"
               value={password}
+              autoComplete="current-password"
               onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-sm outline-none focus:border-ring"
               required
             />
           </div>
-          {error && <p className="text-sm text-error">{error}</p>}
+          {sessionExpired && <p role="status" className="text-sm text-warning">Oturumunuz sona erdi. Yeniden giriş yapın.</p>}
+          {error && <p role="alert" className="text-sm text-error">{error}</p>}
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
           </Button>
-          <p className="text-xs text-text-muted">Mock giriş: admin@example.com admin olarak, başka bir e-posta user olarak girer.</p>
+          <p className="text-xs text-text-muted">Güvenli oturum cookie ile yönetilir. Tenant erişimleri giriş sonrasında gösterilir.</p>
         </form>
       </div>
     </div>

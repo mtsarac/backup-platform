@@ -42,7 +42,46 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         return await context.BackupJobs.AsNoTracking().SingleOrDefaultAsync(job => job.TenantId == tenantId && job.Id == jobId, cancellationToken);
     }
+    public async Task<BackupJob?> UpdateJobAsync(TenantId tenantId, Guid jobId, BackupJobUpdate update, CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            var (job, stale) = await UpdateJobOnceAsync(tenantId, jobId, update, cancellationToken);
+            if (!stale) return job;
+        }
+    }
+    private async Task<(BackupJob? Job, bool Stale)> UpdateJobOnceAsync(TenantId tenantId, Guid jobId, BackupJobUpdate update, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var owner = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && job.Id == jobId)
+            .Select(job => job.AgentId).SingleOrDefaultAsync(cancellationToken);
+        if (owner is null) return (null, false);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var firstAgent = owner.Value.CompareTo(update.AgentId.Value) <= 0 ? owner : update.AgentId;
+        var secondAgent = firstAgent == owner ? update.AgentId : owner;
+        if (!await LockAgentAsync(context, tenantId, firstAgent, cancellationToken)) return (null, false);
+        if (secondAgent != firstAgent && !await LockAgentAsync(context, tenantId, secondAgent, cancellationToken)) return (null, false);
+        var job = await context.BackupJobs.SingleOrDefaultAsync(job => job.TenantId == tenantId && job.Id == jobId, cancellationToken);
+        if (job is null) return (null, false);
+        // Another edit moved the job to a different agent after the owner was read: start over under the current owner's locks.
+        if (job.AgentId != owner) return (null, true);
+        if (!await context.Agents.AnyAsync(agent => agent.Id == update.AgentId && agent.TenantId == tenantId && agent.Status == AgentStatus.Active, cancellationToken)) return (null, false);
+        // Omitted policies keep the values committed so far, read under the lock rather than from an earlier snapshot.
+        job.Update(update.Name, update.AgentId, update.Configuration, update.RetryPolicy ?? job.RetryPolicy, update.OverlapPolicy ?? job.OverlapPolicy);
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return (job, false);
+    }
     public async Task<BackupStartResult> StartRunAsync(TenantId tenantId, Guid jobId, string idempotencyKey, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            var result = await StartRunOnceAsync(tenantId, jobId, idempotencyKey, now, cancellationToken);
+            if (result is not null) return result;
+        }
+    }
+    /// <summary>Null when the job moved to another agent between reading its owner and locking it; the caller starts over.</summary>
+    private async Task<BackupStartResult?> StartRunOnceAsync(TenantId tenantId, Guid jobId, string idempotencyKey, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         var owner = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && job.Id == jobId).Select(job => job.AgentId).SingleOrDefaultAsync(cancellationToken);
@@ -53,6 +92,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         var existing = await Runs(context).SingleOrDefaultAsync(run => run.TenantId == tenantId && run.JobId == jobId && run.IdempotencyKey == idempotencyKey, cancellationToken);
         if (existing is not null) return new BackupStartResult(BackupStartOutcome.Replayed, existing);
         var job = await context.BackupJobs.SingleOrDefaultAsync(job => job.TenantId == tenantId && job.Id == jobId && job.Enabled, cancellationToken);
+        if (job is not null && job.AgentId != owner) return null;
         if (job is null || !await context.Agents.AnyAsync(agent => agent.Id == owner && agent.TenantId == tenantId && agent.Status == AgentStatus.Active, cancellationToken))
             return new BackupStartResult(BackupStartOutcome.NotFound, null);
         if (job.OverlapPolicy == BackupOverlapPolicy.Skip && await ActiveRunIdAsync(context, tenantId, jobId, null, cancellationToken) is { } active)

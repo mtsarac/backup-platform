@@ -49,6 +49,7 @@ public static class SecurityServiceCollectionExtensions
             return options;
         });
         services.AddScoped<IBackupRunStore, PostgreSqlBackupRunStore>();
+        services.AddScoped<IBackupUiStore, PostgreSqlBackupUiStore>();
         services.AddScoped<BackupOrchestrator>();
         services.AddHostedService<StaleBackupDetector>();
         services.AddSingleton<BackupRetryWorker>();

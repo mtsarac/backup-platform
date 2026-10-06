@@ -1,7 +1,9 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { ProtectedRoute } from './components/auth/protected-route'
 import { AppShell } from './components/layout/app-shell'
+import { QueryState } from './components/data/query-state'
 import { useAuth } from './features/auth/use-auth'
+import { TenantProvider } from './features/tenancy/tenant-provider'
 import { LoginPage } from './pages/login/login-page'
 import { DashboardPage } from './pages/dashboard/dashboard-page'
 import { ClientsPage } from './pages/clients/clients-page'
@@ -11,69 +13,35 @@ import { BackupJobsPage } from './pages/backup-jobs/backup-jobs-page'
 import { BackupJobWizardPage } from './pages/backup-jobs/backup-job-wizard-page'
 import { BackupsPage } from './pages/backups/backups-page'
 import { BackupDetailPage } from './pages/backups/backup-detail-page'
-import { RestorePage } from './pages/restore/restore-page'
-import { StoragePage } from './pages/storage/storage-page'
-import { StorageFormPage } from './pages/storage/storage-form-page'
-import { LogsPage } from './pages/logs/logs-page'
-import { UsersPage } from './pages/users/users-page'
-import { SettingsPage } from './pages/settings/settings-page'
-import { isAdministrator } from './lib/ownership'
-import { ROUTES } from './lib/routes'
+import { ArtifactsPage } from './pages/artifacts/artifacts-page'
+import { ArtifactDetailPage } from './pages/artifacts/artifact-detail-page'
+import { TenantSelectPage } from './pages/tenancy/tenant-select-page'
+import { Button } from './components/ui/button'
 
 function AppRoutes() {
-  const { isAuthenticated, user } = useAuth()
-
-  return (
-    <Routes>
-      <Route path={ROUTES.LOGIN} element={isAuthenticated ? <Navigate to={ROUTES.DASHBOARD} replace /> : <LoginPage />} />
-      <Route element={<ProtectedRoute isAuthenticated={isAuthenticated} />}>
-        <Route
-          path="*"
-          element={
-            <AppShell>
-              <Routes>
-                <Route path={ROUTES.DASHBOARD} element={<DashboardPage />} />
-                <Route path={ROUTES.CLIENTS} element={<ClientsPage />} />
-                <Route path={ROUTES.CLIENT_DETAIL} element={<ClientDetailPage />} />
-                <Route path={ROUTES.CLIENT_REGISTER} element={<AgentRegisterPage />} />
-                <Route path={ROUTES.BACKUP_JOBS} element={<BackupJobsPage />} />
-                <Route path={ROUTES.BACKUP_JOB_NEW} element={<BackupJobWizardPage />} />
-                <Route path={ROUTES.BACKUP_JOB_EDIT} element={<BackupJobWizardPage />} />
-                <Route path={ROUTES.BACKUP_HISTORY} element={<BackupsPage />} />
-                <Route path={ROUTES.BACKUP_DETAIL} element={<BackupDetailPage />} />
-                <Route path={ROUTES.RESTORE} element={<RestorePage />} />
-                <Route path={ROUTES.STORAGE} element={<StoragePage />} />
-                <Route path={ROUTES.LOGS} element={<LogsPage />} />
-                <Route
-                  path={ROUTES.USERS}
-                  element={isAdministrator(user) ? <UsersPage /> : <Navigate to={ROUTES.DASHBOARD} replace />}
-                />
-                <Route
-                  path={ROUTES.SETTINGS}
-                  element={isAdministrator(user) ? <SettingsPage /> : <Navigate to={ROUTES.DASHBOARD} replace />}
-                />
-                <Route
-                  path={ROUTES.STORAGE_NEW}
-                  element={
-                    isAdministrator(user) ? <StorageFormPage /> : <Navigate to={ROUTES.STORAGE} replace />
-                  }
-                />
-                <Route path="*" element={<div className="text-text-muted">Sayfa Bulunamadı</div>} />
-              </Routes>
-            </AppShell>
-          }
-        />
-      </Route>
-    </Routes>
-  )
+  const { isAuthenticated, isLoading, error, refresh } = useAuth()
+  if (isLoading) return <div className="mx-auto max-w-lg p-6"><QueryState isPending error={null} /></div>
+  if (error) return <div className="mx-auto max-w-lg space-y-4 p-6"><QueryState isPending={false} error={error} /><Button onClick={refresh}>Tekrar dene</Button></div>
+  return <Routes>
+    <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />} />
+    <Route element={<ProtectedRoute isAuthenticated={isAuthenticated} />}>
+      <Route path="/" element={<TenantSelectPage />} />
+      <Route path="/tenants/:tenantId/*" element={<TenantProvider><AppShell><Routes>
+        <Route index element={<DashboardPage />} />
+        <Route path="agents" element={<ClientsPage />} />
+        <Route path="agents/:id" element={<ClientDetailPage />} />
+        <Route path="enrollment" element={<AgentRegisterPage />} />
+        <Route path="backup-jobs" element={<BackupJobsPage />} />
+        <Route path="backup-jobs/new" element={<BackupJobWizardPage />} />
+        <Route path="backup-jobs/:id/edit" element={<BackupJobWizardPage />} />
+        <Route path="backup-runs" element={<BackupsPage />} />
+        <Route path="backup-runs/:id" element={<BackupDetailPage />} />
+        <Route path="artifacts" element={<ArtifactsPage />} />
+        <Route path="artifacts/:id" element={<ArtifactDetailPage />} />
+        <Route path="*" element={<p>Sayfa bulunamadı.</p>} />
+      </Routes></AppShell></TenantProvider>} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Route>
+  </Routes>
 }
-
-function App() {
-  return (
-    <BrowserRouter>
-      <AppRoutes />
-    </BrowserRouter>
-  )
-}
-
-export default App
+export default function App() { return <BrowserRouter><AppRoutes /></BrowserRouter> }

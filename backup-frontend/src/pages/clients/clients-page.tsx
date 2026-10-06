@@ -1,116 +1,38 @@
-import { useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { Plus } from 'lucide-react'
-import { DataTable } from '@/components/data/data-table'
-import type { Column } from '@/components/data/data-table'
-import { FilterBar } from '@/components/data/filter-bar'
-import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
-import { StatusBadge } from '@/components/ui/badge'
-import { useAuth } from '@/features/auth/use-auth'
-import { useClients } from '@/features/agents/hooks'
-import { displayOwner, isAdministrator, visibleClients } from '@/lib/ownership'
-import { ROUTES } from '@/lib/routes'
-import type { Client } from '@/lib/types'
-
-function clientDetailPath(id: string) {
-  return ROUTES.CLIENT_DETAIL.replace(':id', id)
-}
-
-const clientColumns: Column<Client>[] = [
-  { key: 'hostname', header: 'Hostname', render: (client) => client.hostname },
-  { key: 'ipAddress', header: 'IP', render: (client) => client.ipAddress },
-  { key: 'operatingSystem', header: 'OS', render: (client) => client.operatingSystem },
-  {
-    key: 'status',
-    header: 'Durum',
-    render: (client) => <StatusBadge status={client.agent.status} />,
-  },
-  {
-    key: 'instanceCount',
-    header: 'Instance Sayısı',
-    render: (client) => client.instances.length,
-  },
-  {
-    key: 'actions',
-    header: 'İşlemler',
-    render: (client) => (
-      <Link
-        to={clientDetailPath(client.id)}
-        className="text-sm font-medium text-primary hover:underline"
-      >
-        Görüntüle
-      </Link>
-    ),
-  },
-]
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { DataTable, type Column } from '@/components/data/data-table'
+import { QueryState } from '@/components/data/query-state'
+import { useAgents } from '@/features/agents/hooks'
+import type { Agent } from '@/features/agents/types'
+import { AgentState } from '@/features/agents/presentation'
+import { agentDate, capabilitySupportLabels } from '@/features/agents/format'
+import { useTenant } from '@/features/tenancy/use-tenant'
 
 export function ClientsPage() {
-  const navigate = useNavigate()
-  const { user } = useAuth()
-  const { data: clients, isLoading, error } = useClients()
+  const { tenantId, canAdmin } = useTenant()
+  const query = useAgents(tenantId)
   const [search, setSearch] = useState('')
-  const admin = isAdministrator(user)
-
-  const columns = useMemo<Column<Client>[]>(() => {
-    if (!admin) return clientColumns
-    return [
-      ...clientColumns,
-      {
-        key: 'owner',
-        header: 'Sahip',
-        render: (client: Client) => displayOwner(client.ownerUserId),
-      },
-    ]
-  }, [admin])
-
-  const filteredClients = useMemo(() => {
-    if (!clients) return []
-    const scoped = visibleClients(clients, user)
-    const term = search.trim().toLowerCase()
-    if (term.length === 0) return scoped
-    return scoped.filter(
-      (client) =>
-        client.hostname.toLowerCase().includes(term) ||
-        client.ipAddress.toLowerCase().includes(term) ||
-        client.operatingSystem.toLowerCase().includes(term)
-    )
-  }, [clients, user, search])
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold text-text-heading">Client&apos;lar</h1>
-        <Button onClick={() => navigate(ROUTES.CLIENT_REGISTER)}>
-          <Plus className="size-4" />
-          Agent Kur
-        </Button>
-      </div>
-
-      <FilterBar
-        search={search}
-        onSearchChange={setSearch}
-        placeholder="Hostname, IP veya OS ara..."
-      />
-
-      {error ? (
-        <div className="rounded-lg border border-error/30 bg-error-subtle p-4 text-sm text-error">
-          Client listesi yüklenirken bir hata oluştu.
-        </div>
-      ) : isLoading ? (
-        <div className="space-y-2 rounded-lg border border-border bg-surface p-4">
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-full" />
-        </div>
-      ) : (
-        <DataTable
-          rows={filteredClients}
-          columns={columns}
-          keyExtractor={(client) => client.id}
-          emptyMessage="Client bulunamadı."
-        />
-      )}
+  const [connectivity, setConnectivity] = useState('all')
+  const term = search.trim().toLocaleLowerCase('tr-TR')
+  const rows = (query.data ?? []).filter((agent) =>
+    (connectivity === 'all' || agent.connectivity === connectivity) &&
+    `${agent.hostName ?? ''} ${agent.platform} ${agent.agentVersion ?? ''}`.toLocaleLowerCase('tr-TR').includes(term))
+  const columns: Column<Agent>[] = [
+    { key: 'hostName', header: 'Makine adı', render: (agent) => <Link className="font-medium text-primary hover:underline" to={`/tenants/${tenantId}/agents/${agent.agentId}`}>{agent.hostName ?? 'Adsız agent'}</Link> },
+    { key: 'platform', header: 'Platform', render: (agent) => agent.platform },
+    { key: 'version', header: 'Yazılım / protokol', render: (agent) => <div><div>{agent.agentVersion ?? 'Bildirilmedi'}</div><div className="text-xs text-text-muted">Protokol: {agent.protocolVersion ?? 'Bildirilmedi'}</div></div> },
+    { key: 'status', header: 'Yaşam döngüsü', render: (agent) => <AgentState value={agent.status} /> },
+    { key: 'operationalStatus', header: 'Çalışma durumu', render: (agent) => <AgentState value={agent.operationalStatus} /> },
+    { key: 'connectivity', header: 'Bağlantı', render: (agent) => <AgentState value={agent.connectivity} /> },
+    { key: 'lastSeenAt', header: 'Son görülme', render: (agent) => agentDate(agent.lastSeenAt) },
+    { key: 'capabilities', header: 'Yetenekler', render: (agent) => agent.capabilities.length ? agent.capabilities.map((item) => `${item.identifier} (${capabilitySupportLabels[item.support] ?? item.support})`).join(', ') : 'Bildirilmedi' },
+  ]
+  return <div className="space-y-4">
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-2xl font-semibold text-text-heading">Agent'lar</h1><p className="mt-1 text-sm text-text-muted">Yaşam döngüsü ve bağlantı durumu ayrı olarak gösterilir.</p></div>{canAdmin && <Link className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground" to={`/tenants/${tenantId}/enrollment`}>Agent kaydı</Link>}</div>
+    <div className="flex flex-wrap gap-3">
+      <label className="min-w-0 flex-1 text-sm text-text-muted">Agent ara<input className="mt-1 block w-full rounded-lg border border-border bg-surface px-3 py-2 text-text" placeholder="Makine adı, platform veya sürüm" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
+      <label className="text-sm text-text-muted">Bağlantı<select className="mt-1 block rounded-lg border border-border bg-surface px-3 py-2 text-text" value={connectivity} onChange={(event) => setConnectivity(event.target.value)}><option value="all">Tümü</option><option value="online">Çevrimiçi</option><option value="offline">Çevrimdışı</option><option value="unknown">Bilinmiyor</option></select></label>
     </div>
-  )
+    <QueryState isPending={query.isPending} error={query.error}><DataTable rows={rows} columns={columns} keyExtractor={(agent) => agent.agentId} emptyMessage={search || connectivity !== 'all' ? 'Filtrelere uygun agent bulunamadı.' : 'Henüz kayıtlı agent yok.'} /></QueryState>
+  </div>
 }

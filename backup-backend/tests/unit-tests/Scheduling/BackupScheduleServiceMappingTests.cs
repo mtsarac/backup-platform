@@ -106,7 +106,7 @@ public sealed class BackupScheduleServiceMappingTests
         var view = BackupOrchestrator.ToView(run);
 
         Assert.Equal(("Scheduled", Now.AddHours(1), 12d), (view.TriggerType, view.ScheduledFor, view.ScheduleDelaySeconds));
-        Assert.Equal(["Scheduled", "Retry"], view.Attempts.OrderBy(a => a.Number).Select(a => a.Trigger));
+        Assert.Equal(["Scheduled", "AutomaticRetry"], view.Attempts.OrderBy(a => a.Number).Select(a => a.Trigger));
         var manual = BackupOrchestrator.ToView(NewRun());
         Assert.Equal(("Manual", null, null), (manual.TriggerType, manual.ScheduledFor, manual.ScheduleDelaySeconds));
         Assert.Equal("Manual", Assert.Single(manual.Attempts).Trigger);

@@ -199,6 +199,45 @@ public sealed class BackupArtifactServiceTests
     }
 
     [Fact]
+    public async Task PagedViewsCarrySafeLabelsAndCannotCancelAfterPhysicalDeletionStartsOrFails()
+    {
+        var tenant = TenantId.New();
+        var record = Record(tenant) with { JobName = "Nightly", DatabaseName = "Accounting", AgentName = "db-host", AgentId = Guid.NewGuid() };
+        var query = new BackupArtifactQuery(Page: 12, PageSize: 25);
+        var store = new FakeRetentionStore
+        {
+            OnQueryArtifacts = (actualTenant, actualQuery) =>
+            {
+                Assert.Equal(tenant, actualTenant);
+                Assert.Equal(query, actualQuery);
+                return new([record], 301, query.Page, query.PageSize);
+            }
+        };
+        var service = Service(null, store);
+        record.Artifact.RequestDelete(Now, null);
+        var pending = Assert.Single((await service.QueryAsync(tenant, query, default)).Items);
+        Assert.True(pending.CancelDeleteAllowed);
+        Assert.Equal("Nightly", pending.JobName);
+        Assert.Equal("Accounting", pending.DatabaseName);
+        Assert.Equal("db-host", pending.AgentName);
+        Assert.Equal(record.AgentId, pending.AgentId);
+        var replica = Assert.Single(record.Artifact.Replicas);
+        var token = Guid.NewGuid();
+        var due = replica.DeleteAfter!.Value;
+        Assert.True(replica.BeginDelete(token, "worker", due, TimeSpan.FromMinutes(5)));
+        var deleting = Assert.Single((await service.QueryAsync(tenant, query, default)).Items);
+        Assert.Equal("Deleting", deleting.State);
+        Assert.False(deleting.CancelDeleteAllowed);
+        Assert.True(replica.FailDelete(token, due, BackupDeleteFailureCodes.IoError, due.AddMinutes(1)));
+        var result = await service.QueryAsync(tenant, query, default);
+        var failed = Assert.Single(result.Items);
+        Assert.Equal(301, result.TotalCount);
+        Assert.Equal(12, result.Page);
+        Assert.Equal("DeleteFailed", failed.State);
+        Assert.False(failed.CancelDeleteAllowed);
+    }
+
+    [Fact]
     public async Task ADeleteRequestCarriesTheBackendClockAndTheRequestingUser()
     {
         var tenant = TenantId.New();

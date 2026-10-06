@@ -236,9 +236,9 @@ public sealed class MsSqlScheduledAgentSmokeTests(PostgreSqlFixture database, IT
 
     private static async Task<List<JsonElement>> RunsAsync(TenantSetup tenant, Guid jobId)
     {
-        using var response = await tenant.Admin.GetAsync($"/api/tenants/{tenant.Tenant.Id.Value}/backup-jobs/{jobId}/runs?limit=100");
+        using var response = await tenant.Admin.GetAsync($"/api/tenants/{tenant.Tenant.Id.Value}/backup-jobs/{jobId}/runs?pageSize=100");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        return AgentWorld.ReadJson(response).EnumerateArray().OrderBy(run => run.GetProperty("createdAt").GetDateTimeOffset()).ToList();
+        return AgentWorld.ReadJson(response).GetProperty("items").EnumerateArray().OrderBy(run => run.GetProperty("createdAt").GetDateTimeOffset()).ToList();
     }
 
     private static async Task<List<JsonElement>> OccurrencesAsync(TenantSetup tenant, Guid jobId)

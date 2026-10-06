@@ -1,4 +1,5 @@
 using BackupPlatform.Domain.Identity;
+using BackupPlatform.Domain.Backups;
 
 namespace BackupPlatform.Application.Backups;
 
@@ -22,6 +23,12 @@ public sealed class BackupArtifactService(IBackupRetentionStore store, IBackupSc
     {
         var records = await store.ListArtifactsAsync(tenantId, jobId, Math.Clamp(limit, 1, MaxListLimit), cancellationToken);
         return [.. records.Select(Map)];
+    }
+
+    public async Task<BackupArtifactPage<BackupArtifactView>> QueryAsync(TenantId tenantId, BackupArtifactQuery query, CancellationToken cancellationToken)
+    {
+        var result = await store.QueryArtifactsAsync(tenantId, query, cancellationToken);
+        return new([.. result.Items.Select(Map)], result.TotalCount, result.Page, result.PageSize);
     }
 
     /// <summary>Soft delete: the replicas become DeletePending and stay intact, visible and restorable until the artifact's own grace period is over.</summary>
@@ -53,5 +60,22 @@ public sealed class BackupArtifactService(IBackupRetentionStore store, IBackupSc
 
     private static BackupArtifactView? ToView(BackupArtifactRecord? record) => record is null ? null : Map(record);
 
-    private static BackupArtifactView Map(BackupArtifactRecord record) => BackupOrchestrator.ToView(record.Artifact, record.RunId, record.JobId);
+    private static BackupArtifactView Map(BackupArtifactRecord record)
+    {
+        var artifact = record.Artifact;
+        var state = artifact.State == BackupArtifactState.Available ? "Available"
+            : artifact.State == BackupArtifactState.Deleted ? "Deleted"
+            : artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.DeleteFailed && replica.DeleteFailureCode is not null) ? "DeleteFailed"
+            : artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.Deleting) ? "Deleting"
+            : "DeletePending";
+        return BackupOrchestrator.ToView(artifact, record.RunId, record.JobId) with
+        {
+            State = state,
+            JobName = record.JobName,
+            DatabaseName = record.DatabaseName,
+            AgentName = record.AgentName,
+            AgentId = record.AgentId,
+            CancelDeleteAllowed = artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.DeletePending)
+        };
+    }
 }

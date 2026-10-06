@@ -34,7 +34,7 @@ public sealed class BackupOrchestrationApiTests(PostgreSqlFixture fixture) : ICl
         using var poll = await world.PollAsync(agent);
         Assert.Empty(AgentWorld.ReadJson(poll).GetProperty("tasks").EnumerateArray());
         using var list = await session.GetAsync(root + "/backup-runs");
-        Assert.Equal(runId, Assert.Single(AgentWorld.ReadJson(list).EnumerateArray()).GetProperty("id").GetGuid());
+        Assert.Equal(runId, Assert.Single(AgentWorld.ReadJson(list).GetProperty("items").EnumerateArray()).GetProperty("id").GetGuid());
     }
 
     [Fact]
@@ -55,7 +55,7 @@ public sealed class BackupOrchestrationApiTests(PostgreSqlFixture fixture) : ICl
         using var detail = await session.GetAsync(root + $"/backup-runs/{runId}");
         using var list = await session.GetAsync(root + "/backup-runs");
         Assert.Equal(HttpStatusCode.OK, detail.StatusCode);
-        Assert.Equal(runId, Assert.Single(AgentWorld.ReadJson(list).EnumerateArray()).GetProperty("id").GetGuid());
+        Assert.Equal(runId, Assert.Single(AgentWorld.ReadJson(list).GetProperty("items").EnumerateArray()).GetProperty("id").GetGuid());
         using var deniedCreate = await session.SendAsync(HttpMethod.Post, root + "/backup-jobs", Job(agent.AgentId));
         using var deniedStart = await StartAsync(session, root, jobId, "denied");
         using var deniedCancel = await session.SendAsync(HttpMethod.Post, root + $"/backup-runs/{runId}/cancel");

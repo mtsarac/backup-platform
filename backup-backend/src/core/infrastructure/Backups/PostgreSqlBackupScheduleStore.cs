@@ -23,7 +23,11 @@ public sealed class PostgreSqlBackupScheduleStore(DbContextOptions<PlatformDbCon
     {
         for (var attempt = 0; ; attempt++)
         {
-            try { return await EvaluateOnceAsync(tenantId, jobId, now, cancellationToken); }
+            try
+            {
+                var evaluation = await EvaluateOnceAsync(tenantId, jobId, now, cancellationToken);
+                if (evaluation is not null) return evaluation;
+            }
             catch (DbUpdateException exception) when (PostgreSqlBackupRunStore.IsUniqueViolation(exception) && attempt < 2)
             {
                 // Another writer decided the same instant first. Re-evaluate against what it committed: there is nothing left to do for it.
@@ -31,7 +35,8 @@ public sealed class PostgreSqlBackupScheduleStore(DbContextOptions<PlatformDbCon
         }
     }
 
-    private async Task<BackupScheduleEvaluation> EvaluateOnceAsync(TenantId tenantId, Guid jobId, DateTimeOffset now, CancellationToken cancellationToken)
+    /// <summary>Null when the job moved to another agent between reading its owner and locking it; the caller evaluates again.</summary>
+    private async Task<BackupScheduleEvaluation?> EvaluateOnceAsync(TenantId tenantId, Guid jobId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         var owner = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && job.Id == jobId).Select(job => job.AgentId).SingleOrDefaultAsync(cancellationToken);
@@ -41,6 +46,7 @@ public sealed class PostgreSqlBackupScheduleStore(DbContextOptions<PlatformDbCon
         // Everything below is read under the lock: a schedule edit, a disable or a manual start that committed first is already visible.
         var job = await context.BackupJobs.SingleOrDefaultAsync(job => job.TenantId == tenantId && job.Id == jobId, cancellationToken);
         if (job is null) return BackupScheduleEvaluation.Missing;
+        if (job.AgentId != owner) return null;
         if (job.Schedule is null) return new BackupScheduleEvaluation([], null, null, false);
 
         var last = await context.BackupScheduleOccurrences.Where(occurrence => occurrence.TenantId == tenantId && occurrence.JobId == jobId)
@@ -124,17 +130,21 @@ public sealed class PostgreSqlBackupScheduleStore(DbContextOptions<PlatformDbCon
 
     public async Task<BackupJob?> ModifyJobAsync(TenantId tenantId, Guid jobId, Action<BackupJob> change, CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        var owner = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && job.Id == jobId).Select(job => job.AgentId).SingleOrDefaultAsync(cancellationToken);
-        if (owner is null) return null;
-        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-        if (!await PostgreSqlBackupRunStore.LockAgentAsync(context, tenantId, owner, cancellationToken)) return null;
-        var job = await context.BackupJobs.SingleOrDefaultAsync(job => job.TenantId == tenantId && job.Id == jobId, cancellationToken);
-        if (job is null) return null;
-        change(job);
-        await context.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return job;
+        while (true)
+        {
+            await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+            var owner = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && job.Id == jobId).Select(job => job.AgentId).SingleOrDefaultAsync(cancellationToken);
+            if (owner is null) return null;
+            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+            if (!await PostgreSqlBackupRunStore.LockAgentAsync(context, tenantId, owner, cancellationToken)) return null;
+            var job = await context.BackupJobs.SingleOrDefaultAsync(job => job.TenantId == tenantId && job.Id == jobId, cancellationToken);
+            if (job is null) return null;
+            if (job.AgentId != owner) continue;
+            change(job);
+            await context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return job;
+        }
     }
 
     /// <summary>Active and recently seen. Liveness is the persisted last sign of life against the server clock, never a connection that may have dropped a moment ago.</summary>

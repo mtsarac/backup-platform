@@ -1,0 +1,165 @@
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ArtifactsPage } from '@/pages/artifacts/artifacts-page'
+import { ArtifactDetailPage } from '@/pages/artifacts/artifact-detail-page'
+import { apiRequest } from '@/lib/api/client'
+import type { BackupArtifact, BackupReplica } from './types'
+import { canCancelDeletion, deletionInProgress } from './format'
+
+vi.mock('@/lib/api/client', () => ({
+  apiRequest: vi.fn(),
+  tenantPath: (tenantId: string, path: string) => `tenants/${tenantId}/${path}`,
+  ApiError: class ApiError extends Error {},
+}))
+const permissions = vi.hoisted(() => ({ canAdmin: true }))
+vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canAdmin: permissions.canAdmin, canOperate: true }) }))
+
+const replica: BackupReplica = {
+  id: 'replica-internal', storageProvider: 'Local', storageTarget: 'Backup storage', key: 'not-shown-key',
+  sizeBytes: 4096, checksum: 'abc123', checksumAlgorithm: 'SHA256', verificationState: 'Verified', verificationMethod: 'ReadBack',
+  createdAt: '2026-10-05T10:00:00Z', verifiedAt: '2026-10-05T10:01:00Z', status: 'Available', usable: true,
+  deleteRequestedAt: null, deleteAfter: null, deleteReason: null, deletedAt: null, deleteAttempts: 0,
+  deleteFailureCode: null, deleteNextAttemptAt: null, deletionExecutor: 'Agent', waitingForAgent: false,
+}
+function artifact(overrides: Partial<BackupArtifact> = {}): BackupArtifact {
+  return {
+    id: 'artifact-a', sizeBytes: 4096, sourceChecksum: 'source123', artifactChecksum: 'abc123', checksumAlgorithm: 'SHA256',
+    createdAt: '2026-10-05T10:00:00Z', acceptedAt: '2026-10-05T10:02:00Z', retentionExpiresAt: '2026-11-05T10:02:00Z', retentionPinnedAt: null,
+    state: 'Available', deleteAfter: null, deleteReason: null, runId: 'run-internal', jobId: 'job-internal', attemptId: 'attempt-internal',
+    jobName: 'Günlük SQL', databaseName: 'Accounting', agentName: 'SQL Agent', replicas: [{ ...replica }], ...overrides,
+  }
+}
+function pending(overrides: Partial<BackupReplica> = {}) {
+  return artifact({ state: 'DeletePending', deleteAfter: '2099-10-06T10:00:00Z', replicas: [{ ...replica, status: 'DeletePending', deleteAfter: '2099-10-06T10:00:00Z', ...overrides }] })
+}
+function mount(page: 'list' | 'detail' = 'detail') {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+  render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[page === 'list' ? '/tenants/tenant-a/artifacts' : '/tenants/tenant-a/artifacts/artifact-a']}><Routes>
+    <Route path="/tenants/:tenantId/artifacts" element={<ArtifactsPage />} />
+    <Route path="/tenants/:tenantId/artifacts/:id" element={<ArtifactDetailPage />} />
+  </Routes></MemoryRouter></QueryClientProvider>)
+  return client
+}
+const request = vi.mocked(apiRequest)
+afterEach(() => { cleanup(); vi.clearAllMocks() })
+beforeEach(() => { permissions.canAdmin = true })
+
+describe('Backup dosyaları', () => {
+  it('silmeden önce erişilebilir onay ister ve fiziksel silme yerine bekleme süresini başlatır', async () => {
+    let current = artifact()
+    request.mockImplementation(async (_path, options) => {
+      if (options?.method === 'DELETE') current = pending()
+      return current
+    })
+    const client = mount()
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+    fireEvent.click(await screen.findByRole('button', { name: 'Silme isteği oluştur' }))
+    const dialog = await screen.findByRole('dialog')
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Vazgeç' })).toHaveFocus())
+    expect(within(dialog).getByText(/fiziksel dosyaları hemen silmez/)).toBeInTheDocument()
+    expect(request.mock.calls.some(([, options]) => options?.method === 'DELETE')).toBe(false)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Bekleme süresini başlat' }))
+    await screen.findByText(/Silme isteği alındı/)
+    expect(request).toHaveBeenCalledWith('tenants/tenant-a/backup-artifacts/artifact-a', { method: 'DELETE' })
+    expect(screen.getByText(/Fiziksel silmeye kalan süre/)).toBeInTheDocument()
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant', 'tenant-a', 'backup-artifacts'] })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant', 'tenant-a', 'dashboard'] })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant', 'tenant-a', 'backup-runs'] })
+  })
+
+  it('fiziksel silme başlamadan önce iptal eder', async () => {
+    let current = pending()
+    request.mockImplementation(async (_path, options) => {
+      if (options?.method === 'POST') current = artifact()
+      return current
+    })
+    mount()
+    fireEvent.click(await screen.findByRole('button', { name: 'Silmeyi iptal et' }))
+    await screen.findByText('Silme iptal edildi. Backup dosyaları korunuyor.')
+    expect(request).toHaveBeenCalledWith('tenants/tenant-a/backup-artifacts/artifact-a/cancel-delete', { method: 'POST' })
+    expect(screen.queryByRole('button', { name: 'Silmeyi iptal et' })).not.toBeInTheDocument()
+  })
+
+  it('Agent bekleyişini açıkça gösterir ve henüz başlanmamış silmeyi iptal edilebilir tutar', async () => {
+    request.mockResolvedValue(pending({ waitingForAgent: true, deleteFailureCode: 'agent_unavailable', deleteNextAttemptAt: '2099-10-06T10:05:00Z' }))
+    mount()
+    await screen.findByText(/Fiziksel silme için Agent bekleniyor/)
+    expect(screen.getByRole('button', { name: 'Silmeyi iptal et' })).toBeInTheDocument()
+    expect(screen.getByText('Sonraki silme denemesi')).toBeInTheDocument()
+    expect(screen.getByText('Silme yürütücüsü')).toBeInTheDocument()
+  })
+
+  it('silme başlamış veya başarısız olmuşsa iptal sunmaz; hata içeriğini basmaz', async () => {
+    request.mockResolvedValue(pending({ status: 'DeleteFailed', deleteAttempts: 1, deleteFailureCode: 'secret path /db/password=hidden' }))
+    mount()
+    await screen.findByText(/Fiziksel silme başladığı için/)
+    expect(screen.queryByRole('button', { name: 'Silmeyi iptal et' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/password=hidden/)).not.toBeInTheDocument()
+  })
+
+  it('silinmiş kaydı fiziksel dosyasız geçmiş olarak tutar, konumu gösterir ama iç kimlikleri göstermez', async () => {
+    request.mockResolvedValue(artifact({ state: 'Deleted', replicas: [{ ...replica, status: 'Deleted', usable: false, deletedAt: '2026-10-06T10:00:00Z' }] }))
+    mount()
+    await screen.findByText(/Bu kayıt yalnızca yedekleme geçmişidir/)
+    expect(screen.getByText(/Fiziksel dosya kaldırıldı/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Silme isteği oluştur' })).not.toBeInTheDocument()
+    expect(screen.queryByText('replica-internal')).not.toBeInTheDocument()
+    expect(screen.getByText('not-shown-key')).toBeInTheDocument()
+    expect(screen.queryByText('attempt-internal')).not.toBeInTheDocument()
+  })
+
+  it('Viewer ve Operator için yıkıcı işlemleri gizler', async () => {
+    permissions.canAdmin = false
+    request.mockResolvedValue(artifact())
+    mount()
+    await screen.findByText(/yalnızca yöneticilere açıktır/)
+    expect(screen.queryByRole('button', { name: 'Silme isteği oluştur' })).not.toBeInTheDocument()
+  })
+
+  it('kullanılabilir ve silinmiş dosyaları listeler; filtre sunucu sorgusuna ve tenant kapsamına gider', async () => {
+    request.mockResolvedValue({ items: [artifact(), artifact({ id: 'artifact-b', databaseName: 'History', state: 'Deleted', replicas: [{ ...replica, status: 'Deleted', usable: false }] })], totalCount: 2, page: 1, pageSize: 25 })
+    mount('list')
+    await screen.findByRole('link', { name: 'Accounting' })
+    expect(screen.getByRole('link', { name: 'History' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/artifact-b')
+    expect(screen.getAllByRole('link', { name: 'Günlük SQL' })[0]).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs')
+    expect(screen.getAllByRole('link', { name: 'Çalıştırmayı aç' })[0]).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-internal')
+    fireEvent.change(screen.getByRole('combobox', { name: 'Durum' }), { target: { value: 'DeleteFailed' } })
+    await waitFor(() => expect(request).toHaveBeenCalledWith(expect.stringContaining('state=DeleteFailed'), expect.objectContaining({ signal: expect.any(AbortSignal) })))
+  })
+
+  it('yükleniyor, boş liste ve sunucu hatasını gösterir', async () => {
+    request.mockReturnValue(Promise.race<unknown>([]))
+    mount('list')
+    expect(screen.getByRole('status')).toHaveTextContent('Yükleniyor')
+    cleanup()
+    request.mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 25 })
+    mount('list')
+    await screen.findByText('Kayıt bulunamadı.')
+    cleanup()
+    request.mockRejectedValue(new Error('private server detail'))
+    mount('list')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sunucuya ulaşılamadı')
+    expect(screen.queryByText('private server detail')).not.toBeInTheDocument()
+  })
+
+  it('read-only kullanıcıya bekleyen silmeyi iptal etme yetkisi vermez', async () => {
+    permissions.canAdmin = false
+    request.mockResolvedValue(pending())
+    mount()
+    await screen.findByRole('region', { name: 'Silme süreci' })
+    expect(screen.queryByRole('button', { name: 'Silmeyi iptal et' })).not.toBeInTheDocument()
+  })
+
+  it('bekleyen ve başarısız silmeyi takip eder, terminal geçmişte polling durur', () => {
+    expect(deletionInProgress(pending())).toBe(true)
+    expect(deletionInProgress(pending({ status: 'DeleteFailed', deleteAttempts: 1 }))).toBe(true)
+    expect(deletionInProgress(artifact())).toBe(false)
+    expect(deletionInProgress(artifact({ state: 'Deleted' }))).toBe(false)
+    expect(canCancelDeletion(pending())).toBe(true)
+    expect(canCancelDeletion(pending({ status: 'Deleting', deleteAttempts: 1 }))).toBe(false)
+    expect(canCancelDeletion(pending({ deleteAttempts: 1 }))).toBe(false)
+    expect(canCancelDeletion({ ...pending(), cancelDeleteAllowed: false })).toBe(false)
+  })
+})

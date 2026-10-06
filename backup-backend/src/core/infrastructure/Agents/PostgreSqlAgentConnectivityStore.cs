@@ -89,7 +89,14 @@ public sealed class PostgreSqlAgentConnectivityStore(DbContextOptions<PlatformDb
                     where agent.TenantId == tenantId
                     join record in context.AgentConnectivity.AsNoTracking() on agent.Id equals record.AgentId into joined
                     from record in joined.DefaultIfEmpty()
-                    select new { Agent = agent, Record = record };
+                    select new
+                    {
+                        Agent = agent,
+                        Record = record,
+                        EnrolledAt = context.AgentCredentials
+                            .Where(credential => credential.TenantId == tenantId && credential.AgentId == agent.Id && credential.Generation == 1)
+                            .Select(credential => (DateTimeOffset?)credential.IssuedAt).SingleOrDefault()
+                    };
         // Online is defined as now - lastSeen < timeout, i.e. lastSeen > cutoff; see AgentConnectivityEvaluator.
         query = filter switch
         {
@@ -99,7 +106,25 @@ public sealed class PostgreSqlAgentConnectivityStore(DbContextOptions<PlatformDb
             _ => query
         };
         var rows = await query.OrderBy(row => row.Agent.HostName).ThenBy(row => row.Agent.Id).ToListAsync(cancellationToken);
-        return rows.Select(row => new AgentConnectivityListItem(row.Agent, row.Record)).ToList();
+        return rows.Select(row => new AgentConnectivityListItem(row.Agent, row.Record, row.EnrolledAt)).ToList();
+    }
+
+    public async Task<AgentConnectivityListItem?> GetAsync(TenantId tenantId, AgentId agentId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var row = await (from agent in context.Agents.AsNoTracking()
+                         where agent.TenantId == tenantId && agent.Id == agentId
+                         join record in context.AgentConnectivity.AsNoTracking() on agent.Id equals record.AgentId into joined
+                         from record in joined.DefaultIfEmpty()
+                         select new
+                         {
+                             Agent = agent,
+                             Record = record,
+                             EnrolledAt = context.AgentCredentials
+                                 .Where(credential => credential.TenantId == tenantId && credential.AgentId == agentId && credential.Generation == 1)
+                                 .Select(credential => (DateTimeOffset?)credential.IssuedAt).SingleOrDefault()
+                         }).SingleOrDefaultAsync(cancellationToken);
+        return row is null ? null : new AgentConnectivityListItem(row.Agent, row.Record, row.EnrolledAt);
     }
 
     public async Task<AgentConnectivitySummary> SummarizeAsync(

@@ -97,6 +97,7 @@ internal sealed class FakeRetentionStore(CallJournal? journal = null) : IBackupR
     public Func<TenantId, Guid, DateTimeOffset, BackupArtifactCancelResult> OnCancelDelete { get; set; } = (_, _, _) => throw new NotSupportedException();
     public Func<TenantId, Guid, BackupArtifactRecord?> OnGetArtifact { get; set; } = (_, _) => throw new NotSupportedException();
     public Func<TenantId, Guid?, int, IReadOnlyList<BackupArtifactRecord>> OnListArtifacts { get; set; } = (_, _, _) => throw new NotSupportedException();
+    public Func<TenantId, BackupArtifactQuery, BackupArtifactPage<BackupArtifactRecord>> OnQueryArtifacts { get; set; } = (_, _) => throw new NotSupportedException();
     public List<(TenantId Tenant, Guid ArtifactId, Guid? User, DateTimeOffset Now)> DeleteRequests { get; } = [];
     public List<(TenantId Tenant, Guid? JobId, int Limit)> ListCalls { get; } = [];
 
@@ -146,6 +147,9 @@ internal sealed class FakeRetentionStore(CallJournal? journal = null) : IBackupR
         ListCalls.Add((tenantId, jobId, limit));
         return Task.FromResult(OnListArtifacts(tenantId, jobId, limit));
     }
+
+    public Task<BackupArtifactPage<BackupArtifactRecord>> QueryArtifactsAsync(TenantId tenantId, BackupArtifactQuery query, CancellationToken cancellationToken) =>
+        Task.FromResult(OnQueryArtifacts(tenantId, query));
 
     public Task<IReadOnlySet<string>> FindReferencedKeysAsync(string storageProvider, IReadOnlyCollection<string> keys, CancellationToken cancellationToken)
     {

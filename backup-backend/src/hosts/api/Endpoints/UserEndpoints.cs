@@ -22,7 +22,12 @@ public static class UserEndpoints
         var profile = await userAccessStore.GetUserAsync(currentUser.UserId!, cancellationToken);
         return profile is null
             ? Results.Unauthorized()
-            : Results.Ok(new { userId = profile.UserId.Value, displayName = profile.DisplayName });
+            : Results.Ok(new
+            {
+                userId = profile.UserId.Value,
+                displayName = profile.DisplayName,
+                isPlatformAdmin = await userAccessStore.IsPlatformAdminAsync(currentUser.UserId!, cancellationToken)
+            });
     }
 
     private static async Task<IResult> GetTenantsAsync(ICurrentUser currentUser, IUserAccessStore userAccessStore, CancellationToken cancellationToken)
@@ -32,7 +37,8 @@ public static class UserEndpoints
         {
             tenantId = membership.TenantId.Value,
             name = membership.Name,
-            role = FormatRole(membership.Role)
+            role = FormatRole(membership.Role),
+            membershipRole = membership.Role.ToString()
         }));
     }
 
@@ -43,7 +49,8 @@ public static class UserEndpoints
         {
             tenantId = membership.TenantId.Value,
             name = membership.Name,
-            role = FormatRole(membership.Role)
+            role = FormatRole(membership.Role),
+            membershipRole = membership.Role.ToString()
         });
     }
 

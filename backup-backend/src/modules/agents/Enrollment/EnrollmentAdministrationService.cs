@@ -21,7 +21,7 @@ public sealed record EnrollmentTokenRevoked(TenantId TenantId, Guid TokenId, Use
 
 /// <summary>
 /// Policy and token administration. Authorization is the caller's responsibility: platform administrator for
-/// <see cref="SetEnrollmentEnabledAsync"/>, tenant administrator of the same tenant for the token operations.
+/// platform policy routes, or administrator membership of the same tenant for tenant policy and token routes.
 /// </summary>
 public sealed class EnrollmentAdministrationService(IAgentEnrollmentStore store, TimeProvider timeProvider, AgentSecurityOptions options)
 {

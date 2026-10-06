@@ -4,6 +4,12 @@ using BackupPlatform.Domain.Backups;
 
 namespace BackupPlatform.Application.Backups;
 
+public sealed class InvalidBackupJobException(string field, string code = "invalid_value") : ArgumentException("The backup job field is invalid.")
+{
+    public string Field { get; } = field;
+    public string Code { get; } = code;
+}
+
 public static class BackupInputValidation
 {
     private static readonly HashSet<string> Stages = new(StringComparer.Ordinal)
@@ -17,18 +23,43 @@ public static class BackupInputValidation
     private static bool SafeKey(string? value) => value == string.Empty || value is { Length: <= 512 } && !value.StartsWith('/') && !value.Contains('\\') &&
         !value.Split('/').Any(s => s is "" or "." or "..") && value.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.' or '/');
 
-    public static bool IsValid(CreateBackupJobRequest request)
+    /// <summary>Safe field-level errors; never exposes configuration values or parser exception messages.</summary>
+    public static void Validate(CreateBackupJobRequest request)
     {
         var c = request.Configuration;
-        return Text(request.Name, 200) && request.AgentId != Guid.Empty && c.Engine == "mssql" && Text(c.Database, 128) &&
-            Text(c.Host, 253) && c.Host.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '.' or '-' or '_' or '\\' or ':') &&
-            (c.Port is null or >= 1 and <= 65535) && c.StagingReference == "default" && c.StorageProvider is "local" or "central" &&
-            c.StorageExecutionLocation is null or "Backend" or "Agent" &&
-            (c.StorageExecutionLocation != "Agent" || c.StorageProvider == "local") &&
-            SafeKey(c.StoragePrefix) && c.ChecksumPolicy is "Required" or "Preferred" or "Disabled" &&
-            c.CompressionPolicy is "Required" or "Preferred" or "Disabled" &&
-            (c.IntegratedSecurity ? c.DatabaseCredentialReference is null : Text(c.DatabaseCredentialReference, 64) &&
-                c.DatabaseCredentialReference!.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '-' or '_'));
+        Check(Text(request.Name, 200), "name");
+        Check(request.AgentId != Guid.Empty, "agentId");
+        Check(c is not null, "configuration");
+        Check(c!.Engine == "mssql", "configuration.engine");
+        Check(Text(c.Database, 128), "configuration.database");
+        Check(Text(c.Host, 253) && c.Host.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '.' or '-' or '_' or '\\' or ':'), "configuration.host");
+        Check(c.Port is null or >= 1 and <= 65535, "configuration.port");
+        Check(c.StagingReference == "default", "configuration.stagingReference");
+        Check(c.StorageProvider is "local" or "central", "configuration.storageProvider");
+        Check(c.StorageExecutionLocation is null or "Backend" or "Agent" && (c.StorageExecutionLocation != "Agent" || c.StorageProvider == "local"), "configuration.storageExecutionLocation");
+        Check(SafeKey(c.StoragePrefix), "configuration.storagePrefix");
+        Check(c.ChecksumPolicy is "Required" or "Preferred" or "Disabled", "configuration.checksumPolicy");
+        Check(c.CompressionPolicy is "Required" or "Preferred" or "Disabled", "configuration.compressionPolicy");
+        Check(c.IntegratedSecurity ? c.DatabaseCredentialReference is null : Text(c.DatabaseCredentialReference, 64) && c.DatabaseCredentialReference!.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '-' or '_'), "configuration.databaseCredentialReference");
+        if (request.RetryPolicy is { } retry)
+        {
+            Check(retry.MaxAttempts is null or >= 1 and <= BackupRetryPolicy.MaximumAttemptsLimit, "retryPolicy.maxAttempts");
+            var initial = retry.InitialDelaySeconds ?? BackupRetryPolicy.Default.InitialDelay.TotalSeconds;
+            var maximum = retry.MaxDelaySeconds ?? BackupRetryPolicy.Default.MaxDelay.TotalSeconds;
+            Check(double.IsFinite(initial) && initial is >= 1 and <= 86_400, "retryPolicy.initialDelaySeconds");
+            Check(double.IsFinite(maximum) && maximum >= initial && maximum <= 86_400, "retryPolicy.maxDelaySeconds");
+            Check(retry.Jitter is null || double.IsFinite(retry.Jitter.Value) && retry.Jitter is >= 0 and <= 1, "retryPolicy.jitter");
+            Check(retry.Backoff is null || retry.Backoff.Equals("Fixed", StringComparison.OrdinalIgnoreCase) || retry.Backoff.Equals("Exponential", StringComparison.OrdinalIgnoreCase), "retryPolicy.backoff");
+        }
+        try { _ = BackupOrchestrator.ToDomain(request.OverlapPolicy); }
+        catch (ArgumentException) { throw new InvalidBackupJobException("overlapPolicy"); }
+        if (request.Schedule?.OverlapPolicy is { } scheduled && request.OverlapPolicy is { } overlap)
+            Check(string.Equals(scheduled, overlap, StringComparison.OrdinalIgnoreCase), "overlapPolicy", "conflicting_policy");
+    }
+
+    private static void Check(bool valid, string field, string code = "invalid_value")
+    {
+        if (!valid) throw new InvalidBackupJobException(field, code);
     }
 
     public static bool IsValidProgress(BackupTaskProgressRequest request) => request.LeaseToken != Guid.Empty && Stages.Contains(request.Stage) &&

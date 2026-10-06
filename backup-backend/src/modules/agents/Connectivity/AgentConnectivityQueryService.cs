@@ -12,9 +12,12 @@ public sealed record AgentStatusView(
     DateTimeOffset? LastConnectedAt,
     string? ReportedAgentVersion,
     string? ReportedProtocolVersion,
-    string? CapabilityRevision);
+    string? CapabilityRevision,
+    string? OsDescription,
+    string? RuntimeVersion,
+    DateTimeOffset? EnrolledAt);
 
-/// <summary>Tenant-scoped, read-only view of agent liveness. The caller must already have authorized a tenant administrator.</summary>
+/// <summary>Tenant-scoped, read-only view of agent liveness. The caller must already have authorized a tenant viewer.</summary>
 public sealed class AgentConnectivityQueryService(
     IAgentConnectivityStore store, TimeProvider timeProvider, AgentConnectivityOptions options, AgentProtocolGate gate)
 {
@@ -25,6 +28,14 @@ public sealed class AgentConnectivityQueryService(
         var now = timeProvider.GetUtcNow();
         var items = await store.ListAsync(tenantId, now, options.OfflineTimeout, filter, cancellationToken).ConfigureAwait(false);
         return items.Select(item => ToView(item, now)).ToList();
+    }
+
+    public async Task<AgentStatusView?> GetAsync(TenantId tenantId, AgentId agentId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(tenantId);
+        ArgumentNullException.ThrowIfNull(agentId);
+        var item = await store.GetAsync(tenantId, agentId, cancellationToken).ConfigureAwait(false);
+        return item is null ? null : ToView(item, timeProvider.GetUtcNow());
     }
 
     public Task<AgentConnectivitySummary> SummarizeAsync(TenantId tenantId, CancellationToken cancellationToken)
@@ -45,6 +56,6 @@ public sealed class AgentConnectivityQueryService(
             record?.ReportedProtocolMajor is { } m && record.ReportedProtocolMinor is { } n
                 ? $"{m}.{n}"
                 : $"{item.Agent.Software.ProtocolVersion.Major}.{item.Agent.Software.ProtocolVersion.Minor}",
-            record?.CapabilityRevision);
+            record?.CapabilityRevision, record?.ReportedOsDescription, record?.ReportedRuntimeVersion, item.EnrolledAt);
     }
 }

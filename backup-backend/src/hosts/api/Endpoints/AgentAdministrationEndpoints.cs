@@ -21,10 +21,9 @@ public sealed class SetAgentEnrollmentRequest
 }
 
 /// <summary>
-/// Browser-authenticated control-plane routes. Enrollment permission is an explicit platform operation under
-/// <c>/api/platform</c>: it names the target tenant itself and relies on the PlatformAdmin policy, never on tenant
-/// membership. Everything under <c>/api/tenants/{tenantId}</c> resolves and verifies membership first, then requires
-/// the tenant administrator role for that same tenant.
+/// Browser-authenticated control-plane routes. Platform enrollment operations require PlatformAdmin independently
+/// of membership. Tenant routes resolve membership first: safe agent reads require Viewer, while enrollment policy,
+/// tokens and agent revocation require the administrator role for that same tenant.
 /// </summary>
 public static class AgentAdministrationEndpoints
 {
@@ -36,14 +35,16 @@ public static class AgentAdministrationEndpoints
         platform.MapPut("", SetPolicyAsync);
 
         var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}")
-            .WithMetadata(new TenantScopedEndpoint())
-            .RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
-        tenant.MapPost("/agent-enrollment-tokens", CreateTokenAsync);
-        tenant.MapGet("/agent-enrollment-tokens", ListTokensAsync);
-        tenant.MapDelete("/agent-enrollment-tokens/{tokenId:guid}", RevokeTokenAsync);
-        tenant.MapGet("/agents", ListAgentsAsync);
-        tenant.MapGet("/agents/connectivity-summary", GetConnectivitySummaryAsync);
-        tenant.MapPost("/agents/{agentId:guid}/revoke", RevokeAgentAsync);
+            .WithMetadata(new TenantScopedEndpoint());
+        tenant.MapGet("/agent-enrollment", GetPolicyAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+        tenant.MapPut("/agent-enrollment", SetPolicyAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+        tenant.MapPost("/agent-enrollment-tokens", CreateTokenAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+        tenant.MapGet("/agent-enrollment-tokens", ListTokensAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+        tenant.MapDelete("/agent-enrollment-tokens/{tokenId:guid}", RevokeTokenAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+        tenant.MapGet("/agents", ListAgentsAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
+        tenant.MapGet("/agents/connectivity-summary", GetConnectivitySummaryAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
+        tenant.MapGet("/agents/{agentId:guid}", GetAgentAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
+        tenant.MapPost("/agents/{agentId:guid}/revoke", RevokeAgentAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
         return endpoints;
     }
 
@@ -113,23 +114,40 @@ public static class AgentAdministrationEndpoints
             return Results.Json(new { error = "connectivity must be online, offline or unknown." }, statusCode: StatusCodes.Status400BadRequest);
         }
         var agents = await service.ListAsync(tenantContext.TenantId!, filter, cancellationToken);
-        return Results.Ok(agents.Select(view => new
-        {
-            agentId = view.Agent.Id.Value,
-            hostName = view.Agent.HostName,
-            status = view.Agent.Status.ToString(),
-            connectivity = view.Connectivity.ToString().ToLowerInvariant(),
-            operationalStatus = view.Status.ToString(),
-            lastSeenAt = view.LastSeenAt,
-            lastHeartbeatAt = view.LastHeartbeatAt,
-            lastConnectedAt = view.LastConnectedAt,
-            platform = view.Agent.Software.Platform.ToString(),
-            agentVersion = view.ReportedAgentVersion,
-            protocolVersion = view.ReportedProtocolVersion,
-            capabilityRevision = view.CapabilityRevision,
-            credentialGeneration = view.Agent.CredentialGeneration
-        }));
+        return Results.Ok(agents.Select(ToAgentResponse));
     }
+
+    private static async Task<IResult> GetAgentAsync(
+        Guid agentId, ITenantContext tenantContext, AgentConnectivityQueryService service, CancellationToken cancellationToken)
+    {
+        var agent = await service.GetAsync(tenantContext.TenantId!, new AgentId(agentId), cancellationToken);
+        return agent is null ? Results.NotFound() : Results.Ok(ToAgentResponse(agent));
+    }
+
+    private static object ToAgentResponse(AgentStatusView view) => new
+    {
+        agentId = view.Agent.Id.Value,
+        hostName = view.Agent.HostName,
+        status = view.Agent.Status.ToString(),
+        connectivity = view.Connectivity.ToString().ToLowerInvariant(),
+        operationalStatus = view.Status.ToString(),
+        lastSeenAt = view.LastSeenAt,
+        lastHeartbeatAt = view.LastHeartbeatAt,
+        lastConnectedAt = view.LastConnectedAt,
+        platform = view.Agent.Software.Platform.ToString(),
+        agentVersion = view.ReportedAgentVersion,
+        protocolVersion = view.ReportedProtocolVersion,
+        capabilityRevision = view.CapabilityRevision,
+        osDescription = view.OsDescription,
+        runtimeVersion = view.RuntimeVersion,
+        enrolledAt = view.EnrolledAt,
+        capabilities = view.Agent.Capabilities.Select(capability => new
+        {
+            identifier = capability.Identifier.ToString(),
+            support = capability.Support.ToString(),
+            version = capability.Version?.ToString()
+        })
+    };
 
     private static async Task<IResult> GetConnectivitySummaryAsync(
         ITenantContext tenantContext, AgentConnectivityQueryService service, CancellationToken cancellationToken)

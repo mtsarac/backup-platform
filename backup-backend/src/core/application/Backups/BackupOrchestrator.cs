@@ -12,9 +12,11 @@ public sealed record BackupRetryPolicyView(int MaxAttempts, double InitialDelayS
 public sealed record BackupRetentionPolicyRequest(bool? Enabled = null, double? KeepForSeconds = null, double? DeleteGracePeriodSeconds = null);
 public sealed record BackupRetentionPolicyView(bool Enabled, double KeepForSeconds, double DeleteGracePeriodSeconds);
 public sealed record CreateBackupJobRequest(string Name, Guid AgentId, BackupExecutionConfiguration Configuration, BackupRetryPolicyRequest? RetryPolicy = null, string? OverlapPolicy = null, BackupScheduleRequest? Schedule = null, BackupRetentionPolicyRequest? Retention = null);
-public sealed record BackupJobView(Guid Id, Guid AgentId, string Name, string BackupType, string OverlapPolicy, BackupRetryPolicyView RetryPolicy, bool Enabled, DateTimeOffset CreatedAt, BackupExecutionConfiguration Configuration, BackupScheduleView? Schedule = null, BackupRetentionPolicyView? Retention = null);
+public sealed record UpdateBackupJobRequest(string Name, Guid AgentId, BackupExecutionConfiguration Configuration, BackupRetryPolicyRequest? RetryPolicy = null, string? OverlapPolicy = null);
+public sealed record BackupLastRunView(Guid Id, string Status, DateTimeOffset CreatedAt, DateTimeOffset? StartedAt, DateTimeOffset? CompletedAt, string? ReasonCode);
+public sealed record BackupJobView(Guid Id, Guid AgentId, string Name, string BackupType, string OverlapPolicy, BackupRetryPolicyView RetryPolicy, bool Enabled, DateTimeOffset CreatedAt, BackupExecutionConfiguration Configuration, BackupScheduleView? Schedule = null, BackupRetentionPolicyView? Retention = null, BackupLastRunView? LastRun = null, string? AgentName = null, DateTimeOffset? NextOccurrenceAt = null);
 /// <summary>A run. <see cref="ScheduledFor"/> and <see cref="ScheduleDelaySeconds"/> are set for scheduled runs only: the instant the schedule asked for, and how long after it the run was actually created.</summary>
-public sealed record BackupRunView(Guid Id, Guid JobId, Guid AgentId, string Status, string BackupType, string TriggerType, BackupExecutionConfiguration Configuration, int CurrentAttemptNumber, DateTimeOffset CreatedAt, DateTimeOffset? StartedAt, DateTimeOffset? CompletedAt, DateTimeOffset? CancellationRequestedAt, string? ReasonCode, string? Reason, BackupRetryView Retry, IReadOnlyList<BackupAttemptView> Attempts, DateTimeOffset? ScheduledFor = null, double? ScheduleDelaySeconds = null, DateTimeOffset? ClaimDeadline = null, BackupRetentionPolicyView? Retention = null);
+public sealed record BackupRunView(Guid Id, Guid JobId, Guid AgentId, string Status, string BackupType, string TriggerType, BackupExecutionConfiguration Configuration, int CurrentAttemptNumber, DateTimeOffset CreatedAt, DateTimeOffset? StartedAt, DateTimeOffset? CompletedAt, DateTimeOffset? CancellationRequestedAt, string? ReasonCode, string? Reason, BackupRetryView Retry, IReadOnlyList<BackupAttemptView> Attempts, DateTimeOffset? ScheduledFor = null, double? ScheduleDelaySeconds = null, DateTimeOffset? ClaimDeadline = null, BackupRetentionPolicyView? Retention = null, string? JobName = null, string? AgentName = null);
 /// <summary>Where the run stands in its retry lifecycle. <see cref="AttemptsUsed"/> counts attempts created, <see cref="MaxAttempts"/> is the total allowed (not a retry count).</summary>
 public sealed record BackupRetryView(int MaxAttempts, int AttemptsUsed, string State, DateTimeOffset? NextAttemptAt, string? LastFailureCode, string? LastFailureReason, bool? LastFailureRetryable, string OverlapPolicy, BackupRetryPolicyView Policy);
 public sealed record BackupAttemptView(Guid Id, int Number, string Status, DateTimeOffset CreatedAt, DateTimeOffset? StartedAt, DateTimeOffset? CompletedAt, string? ReasonCode, string? Reason, bool? Retryable, string? ProgressStage, double? ProgressPercent, DateTimeOffset? ProgressAt, IReadOnlyList<BackupArtifactView> Artifacts, string? Trigger = null);
@@ -24,7 +26,7 @@ public sealed record BackupAttemptView(Guid Id, int Number, string Status, DateT
 /// </summary>
 public sealed record BackupArtifactView(Guid Id, long SizeBytes, string SourceChecksum, string ArtifactChecksum, string ChecksumAlgorithm, DateTimeOffset CreatedAt, IReadOnlyList<BackupReplicaView> Replicas,
     string State = "Available", DateTimeOffset? AcceptedAt = null, DateTimeOffset? RetentionExpiresAt = null, DateTimeOffset? RetentionPinnedAt = null, DateTimeOffset? DeleteAfter = null, string? DeleteReason = null,
-    Guid? RunId = null, Guid? JobId = null, Guid? AttemptId = null);
+    Guid? RunId = null, Guid? JobId = null, Guid? AttemptId = null, string? JobName = null, string? DatabaseName = null, string? AgentName = null, bool CancelDeleteAllowed = false, Guid? AgentId = null, string BackupType = "Full", BackupMetadataView? BackupMetadata = null);
 /// <summary>One physical copy. <see cref="Usable"/> is true while the bytes are intact and may be restored from (Available, or DeletePending inside its grace period).</summary>
 public sealed record BackupReplicaView(Guid Id, string StorageProvider, string StorageTarget, string Key, long SizeBytes, string Checksum, string ChecksumAlgorithm, string VerificationState, string VerificationMethod, DateTimeOffset CreatedAt, DateTimeOffset? VerifiedAt,
     string Status = "Available", bool Usable = true, DateTimeOffset? DeleteRequestedAt = null, DateTimeOffset? DeleteAfter = null, string? DeleteReason = null, DateTimeOffset? DeletedAt = null,
@@ -36,22 +38,8 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
 
     public async Task<BackupJobView?> CreateJobAsync(TenantId tenantId, CreateBackupJobRequest request, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(request.Configuration);
-        if (!BackupInputValidation.IsValid(request))
-        {
-            throw new ArgumentException("Invalid backup job configuration.");
-        }
-        var c = request.Configuration;
-        var configuration = new BackupConfiguration(c.Engine, c.Database, c.Host, c.Port, c.IntegratedSecurity, c.DatabaseCredentialReference,
-            c.Encrypt, c.TrustServerCertificate, c.StagingReference, c.StorageProvider, c.StoragePrefix, c.CopyOnly, c.ChecksumPolicy, c.CompressionPolicy)
-        {
-            StorageExecutionLocation = c.StorageExecutionLocation switch
-            {
-                "Backend" => BackupStorageExecutionLocation.Backend,
-                "Agent" => BackupStorageExecutionLocation.Agent,
-                _ => c.StorageProvider == "local" ? BackupStorageExecutionLocation.Agent : BackupStorageExecutionLocation.Backend
-            }
-        };
+        BackupInputValidation.Validate(request);
+        var configuration = ToDomain(request.Configuration);
         var now = time.GetUtcNow();
         var options = scheduling ?? new BackupSchedulingOptions();
         var overlap = ResolveOverlap(request);
@@ -60,6 +48,29 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
             ToDomain(request.RetryPolicy), overlap, schedule, ToDomain(request.Retention, retention ?? new BackupRetentionOptions(), null)), cancellationToken);
         return job is null ? null : ToView(job, now);
     }
+
+    public async Task<BackupJobView?> UpdateJobAsync(TenantId tenantId, Guid jobId, UpdateBackupJobRequest request, CancellationToken cancellationToken)
+    {
+        var validation = new CreateBackupJobRequest(request.Name, request.AgentId, request.Configuration, request.RetryPolicy, request.OverlapPolicy);
+        BackupInputValidation.Validate(validation);
+        var command = new BackupJobUpdate(request.Name, new AgentId(request.AgentId), ToDomain(request.Configuration),
+            request.RetryPolicy is null ? null : ToDomain(request.RetryPolicy),
+            request.OverlapPolicy is null ? null : ToDomain(request.OverlapPolicy));
+        var job = await store.UpdateJobAsync(tenantId, jobId, command, cancellationToken);
+        return job is null ? null : ToView(job, time.GetUtcNow());
+    }
+
+    private static BackupConfiguration ToDomain(BackupExecutionConfiguration c) => new(c.Engine, c.Database, c.Host, c.Port,
+        c.IntegratedSecurity, c.DatabaseCredentialReference, c.Encrypt, c.TrustServerCertificate, c.StagingReference, c.StorageProvider,
+        c.StoragePrefix, c.CopyOnly, c.ChecksumPolicy, c.CompressionPolicy)
+    {
+        StorageExecutionLocation = c.StorageExecutionLocation switch
+        {
+            "Backend" => BackupStorageExecutionLocation.Backend,
+            "Agent" => BackupStorageExecutionLocation.Agent,
+            _ => c.StorageProvider == "local" ? BackupStorageExecutionLocation.Agent : BackupStorageExecutionLocation.Backend
+        }
+    };
 
     public Task<BackupStartResult> StartRunAsync(TenantId tenantId, Guid jobId, string key, CancellationToken cancellationToken)
     {
@@ -178,7 +189,8 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         return new(artifact.Id, artifact.SizeBytes, artifact.SourceChecksum, artifact.ArtifactChecksum, artifact.ChecksumAlgorithm, artifact.CreatedAt,
             artifact.Replicas.Select(ToView).ToArray(), artifact.State.ToString(), artifact.AcceptedAt, artifact.RetentionExpiresAt, artifact.RetentionPinnedAt,
             waiting.Length == 0 ? null : waiting.Min(r => r.DeleteAfter), waiting.OrderBy(r => r.DeleteAfter).FirstOrDefault()?.DeleteReason?.ToString(),
-            runId, jobId, artifact.AttemptId);
+            runId, jobId, artifact.AttemptId, CancelDeleteAllowed: artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.DeletePending), BackupType: artifact.BackupType,
+            BackupMetadata: BackupMetadataProjection.Read(artifact.SourceMetadataJson, artifact.AppliedOptionsJson));
     }
 
     public static BackupReplicaView ToView(BackupReplica r) => new(r.Id, r.StorageProvider, r.StorageTarget, r.Key, r.SizeBytes, r.Checksum, r.ChecksumAlgorithm,
@@ -207,15 +219,26 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         var retry = new BackupRetryView(run.RetryPolicy.MaxAttempts, run.CurrentAttemptNumber, run.RetryState.ToString(), run.NextAttemptAt,
             lastFailure?.TerminalReason, Reason(lastFailure?.TerminalReason), lastFailure is null ? null : BackupFailureCodes.IsRetryable(lastFailure.TerminalReason),
             run.OverlapPolicy.ToString(), ToView(run.RetryPolicy));
-        return new(run.Id, run.JobId, run.AgentId.Value, run.Status.ToString(), run.BackupType, run.TriggerType,
+        return new(run.Id, run.JobId, run.AgentId.Value, RunStatus(run.Status, run.CancellationRequestedAt), run.BackupType, run.TriggerType,
             ToWire(run.Configuration), run.CurrentAttemptNumber, run.CreatedAt, run.StartedAt, run.CompletedAt, run.CancellationRequestedAt,
             run.TerminalReason, Reason(run.TerminalReason), retry, run.Attempts.OrderBy(a => a.Number).Select(a => new BackupAttemptView(a.Id, a.Number,
                 a.Status.ToString(), a.CreatedAt, a.StartedAt, a.CompletedAt, a.TerminalReason, Reason(a.TerminalReason),
                 a.Status is BackupStatus.Failed or BackupStatus.AgentLost ? BackupFailureCodes.IsRetryable(a.TerminalReason) : null, a.ProgressStage, a.ProgressPercent,
                 a.ProgressAt, a.Artifacts.Select(artifact => ToView(artifact, run.Id, run.JobId)).ToArray(),
-                a.Number == 1 ? run.TriggerType : BackupTriggerTypes.Retry)).ToArray(),
+                AttemptTrigger(run, a))).ToArray(),
             run.ScheduledOccurrence, run.ScheduledOccurrence is { } scheduledFor ? Math.Max(0, (run.CreatedAt - scheduledFor).TotalSeconds) : null, run.ClaimDeadline, ToView(run.RetentionPolicy));
     }
+
+    private static string AttemptTrigger(BackupRun run, BackupRunAttempt attempt)
+    {
+        if (attempt.Number == 1) return run.TriggerType;
+        if (run.Facts.Any(fact => fact.AttemptId == attempt.Id && fact.Kind == "BackupManualRetryStarted")) return "ManualRetry";
+        if (run.Facts.Any(fact => fact.AttemptId == attempt.Id && fact.Kind == "BackupAutomaticRetryStarted")) return "AutomaticRetry";
+        return BackupTriggerTypes.Retry;
+    }
+
+    public static string RunStatus(BackupStatus status, DateTimeOffset? cancellationRequestedAt) =>
+        cancellationRequestedAt is not null && status is BackupStatus.Leased or BackupStatus.Running ? "CancellationRequested" : status.ToString();
 
     private static string? Reason(string? code) => code switch
     {

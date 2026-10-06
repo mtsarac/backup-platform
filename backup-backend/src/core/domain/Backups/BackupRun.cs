@@ -141,6 +141,7 @@ public sealed class BackupRun : ITenantOwned
     {
         if (Status != BackupStatus.RetryPending || NextAttemptAt is not { } due || due > now) return false;
         AddAttempt(attemptId, now, due, "BackupRetryStarted");
+        Fact("BackupAutomaticRetryStarted", attemptId, now);
         return true;
     }
 
@@ -158,6 +159,7 @@ public sealed class BackupRun : ITenantOwned
         }
         if (!RetryPolicy.HasAttemptsRemaining(CurrentAttemptNumber)) return BackupManualRetryResult.AttemptsExhausted;
         AddAttempt(attemptId, now, now, "BackupRetryStarted");
+        Fact("BackupManualRetryStarted", attemptId, now);
         return BackupManualRetryResult.Started;
     }
 

@@ -10,7 +10,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col lg:ml-60">
         <TopBar onMenuToggle={() => setMobileOpen((open) => !open)} />
-        <main className="flex-1 p-6">{children}</main>
+        <main className="min-w-0 flex-1 p-4 sm:p-6">{children}</main>
       </div>
     </div>
   )

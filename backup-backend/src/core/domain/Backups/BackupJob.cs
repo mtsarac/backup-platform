@@ -60,6 +60,21 @@ public sealed class BackupJob : ITenantOwned
 
     public void Reconfigure(BackupConfiguration configuration) => Configuration = configuration.Validate() with { };
 
+    /// <summary>Changes future executions only; existing runs retain their configuration and policy snapshots.</summary>
+    public void Update(string name, AgentId agentId, BackupConfiguration configuration, BackupRetryPolicy retryPolicy, BackupOverlapPolicy overlapPolicy)
+    {
+        BackupGuard.Text(name, 200);
+        ArgumentNullException.ThrowIfNull(agentId);
+        if (!Enum.IsDefined(overlapPolicy)) throw new ArgumentException("Unknown overlap policy.");
+        var validatedConfiguration = configuration.Validate();
+        var validatedRetry = retryPolicy.Validate();
+        Name = name.Trim();
+        AgentId = agentId;
+        Configuration = validatedConfiguration with { };
+        RetryPolicy = validatedRetry with { };
+        OverlapPolicy = overlapPolicy;
+    }
+
     /// <summary>Replaces (or, with null, removes) the schedule. Past runs are untouched: they carry their own snapshots.</summary>
     public void ChangeSchedule(BackupSchedule? schedule, BackupOverlapPolicy? overlapPolicy = null)
     {

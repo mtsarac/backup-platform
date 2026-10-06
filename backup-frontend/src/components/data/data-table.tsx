@@ -5,6 +5,8 @@ export interface Column<T> {
   readonly key: string
   readonly header: ReactNode
   readonly render: (row: T) => ReactNode
+  /** Let long values (names, paths, schedules) wrap instead of forcing horizontal scrolling. */
+  readonly wrap?: boolean
 }
 
 interface DataTableProps<T> {
@@ -33,7 +35,7 @@ export function DataTable<T>({
         <thead>
           <tr className="border-b border-border bg-surface-2 text-left text-text-muted">
             {columns.map((column) => (
-              <th key={column.key} className="whitespace-nowrap px-4 py-3 font-medium">
+              <th key={column.key} className="whitespace-nowrap px-3 py-3 font-medium">
                 {column.header}
               </th>
             ))}
@@ -56,7 +58,7 @@ export function DataTable<T>({
                 className="border-b border-border hover:bg-surface-2/50"
               >
                 {columns.map((column) => (
-                  <td key={column.key} className="whitespace-nowrap px-4 py-3 text-text">
+                  <td key={column.key} className={cn('px-3 py-3 text-text', column.wrap ? 'min-w-28 max-w-52 break-words' : 'whitespace-nowrap')}>
                     {column.render(row)}
                   </td>
                 ))}

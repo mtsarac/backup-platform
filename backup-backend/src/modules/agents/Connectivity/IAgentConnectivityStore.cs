@@ -7,7 +7,7 @@ public sealed record HeartbeatWrite(
     AgentId AgentId, TenantId TenantId, DateTimeOffset At, string AgentVersion, int ProtocolMajor, int ProtocolMinor,
     AgentPlatform Platform, string? OsDescription, string? RuntimeVersion, string? CapabilityRevision);
 
-public sealed record AgentConnectivityListItem(Agent Agent, AgentConnectivityRecord? Connectivity);
+public sealed record AgentConnectivityListItem(Agent Agent, AgentConnectivityRecord? Connectivity, DateTimeOffset? EnrolledAt = null);
 
 public enum AgentConnectivityFilter
 {
@@ -42,6 +42,8 @@ public interface IAgentConnectivityStore
 
     Task<IReadOnlyList<AgentConnectivityListItem>> ListAsync(
         TenantId tenantId, DateTimeOffset now, TimeSpan offlineTimeout, AgentConnectivityFilter filter, CancellationToken cancellationToken);
+
+    Task<AgentConnectivityListItem?> GetAsync(TenantId tenantId, AgentId agentId, CancellationToken cancellationToken);
 
     Task<AgentConnectivitySummary> SummarizeAsync(
         TenantId tenantId, DateTimeOffset now, TimeSpan offlineTimeout, CancellationToken cancellationToken);

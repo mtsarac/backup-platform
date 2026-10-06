@@ -231,7 +231,7 @@ public sealed class BackupRetryApiTests(PostgreSqlFixture fixture) : IClassFixtu
         Assert.Equal(active, body.GetProperty("activeRunId").GetGuid());
         Assert.Equal((HttpStatusCode.OK, active), (replay.StatusCode, AgentWorld.ReadJson(replay).GetProperty("id").GetGuid())); // a replay is not a new start
         using var list = await scenario.Admin.GetAsync(scenario.Root + $"/backup-jobs/{skipJob}/runs");
-        Assert.Single(AgentWorld.ReadJson(list).EnumerateArray());
+        Assert.Single(AgentWorld.ReadJson(list).GetProperty("items").EnumerateArray());
 
         using var cancel = await scenario.CancelRawAsync(active);
         Assert.Equal(HttpStatusCode.OK, cancel.StatusCode);

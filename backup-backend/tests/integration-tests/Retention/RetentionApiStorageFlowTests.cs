@@ -84,7 +84,7 @@ public sealed class RetentionApiStorageFlowTests(PostgreSqlFixture fixture) : IC
         Assert.Equal(backup.ArtifactId, ArtifactOf(run).GetProperty("id").GetGuid());
         Assert.Equal("Deleted", ArtifactOf(run).GetProperty("state").GetString());
         using var list = await scenario.Admin.GetAsync(scenario.Root + "/backup-artifacts");
-        Assert.Equal(backup.ArtifactId, Assert.Single(AgentWorld.ReadJson(list).EnumerateArray()).GetProperty("id").GetGuid());
+        Assert.Equal(backup.ArtifactId, Assert.Single(AgentWorld.ReadJson(list).GetProperty("items").EnumerateArray()).GetProperty("id").GetGuid());
 
         using var deleteAgain = await DeleteArtifactAsync(scenario, backup.ArtifactId);
         using var cancel = await CancelDeleteAsync(scenario, backup.ArtifactId);
@@ -173,7 +173,7 @@ public sealed class RetentionApiStorageFlowTests(PostgreSqlFixture fixture) : IC
         var failedAt = scenario.Clock.GetUtcNow();
         var failed = await ArtifactAsync(scenario, backup.ArtifactId);
         var replica = ReplicaOf(failed);
-        Assert.Equal("DeletePending", failed.GetProperty("state").GetString()); // never reported as deleted
+        Assert.Equal("DeleteFailed", failed.GetProperty("state").GetString()); // never reported as deleted: the artifact surfaces the failed physical deletion
         Assert.Equal("DeleteFailed", replica.GetProperty("status").GetString());
         Assert.Equal("storage_not_configured", replica.GetProperty("deleteFailureCode").GetString());
         Assert.Equal(1, replica.GetProperty("deleteAttempts").GetInt32());

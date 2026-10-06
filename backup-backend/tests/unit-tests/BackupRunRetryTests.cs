@@ -330,7 +330,7 @@ public sealed class BackupRunRetryTests
         run.StartScheduledRetry(Guid.NewGuid(), run.NextAttemptAt!.Value);
 
         Assert.Equal(
-            ["BackupRunCreated", "AttemptQueued", "AttemptLeased", "BackupRunStarted", "BackupRetryScheduled", "BackupRetryStarted"],
+            ["BackupRunCreated", "AttemptQueued", "AttemptLeased", "BackupRunStarted", "BackupRetryScheduled", "BackupRetryStarted", "BackupAutomaticRetryStarted"],
             run.Facts.Select(fact => fact.Kind));
     }
 

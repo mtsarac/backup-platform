@@ -21,10 +21,17 @@ public static class BackupArtifactEndpoints
         return endpoints;
     }
 
-    private static async Task<IResult> ListAsync(Guid? jobId, int? limit, ITenantContext tenant, BackupArtifactService service, CancellationToken cancellationToken)
+    private static async Task<IResult> ListAsync(Guid? jobId, Guid? agentId, string? state, DateTimeOffset? from, DateTimeOffset? to,
+        int? page, int? pageSize, ITenantContext tenant, BackupArtifactService service, CancellationToken cancellationToken)
     {
-        if (limit is < 1 or > 100) return Results.BadRequest(new { error = "invalid_request", message = "Limit must be between 1 and 100." });
-        return Results.Ok(await service.ListAsync(tenant.TenantId!, jobId, limit ?? 50, cancellationToken));
+        if (page is < 1 or > 1_000_000 || pageSize is < 1 or > 100)
+            return Results.BadRequest(new { error = "invalid_request", message = "Page must be positive and page size must be between 1 and 100." });
+        if (state is not null && state is not ("Available" or "DeletePending" or "Deleting" or "DeleteFailed" or "Deleted"))
+            return Results.BadRequest(new { error = "invalid_request", message = "Unknown artifact state." });
+        if (from > to)
+            return Results.BadRequest(new { error = "invalid_request", message = "From must not be later than to." });
+        var query = new BackupArtifactQuery(jobId, agentId, state, from?.ToUniversalTime(), to?.ToUniversalTime(), page ?? 1, pageSize ?? 25);
+        return Results.Ok(await service.QueryAsync(tenant.TenantId!, query, cancellationToken));
     }
 
     private static async Task<IResult> GetAsync(Guid artifactId, ITenantContext tenant, BackupArtifactService service, CancellationToken cancellationToken)
