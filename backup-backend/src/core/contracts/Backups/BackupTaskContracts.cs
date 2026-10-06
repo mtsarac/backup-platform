@@ -13,6 +13,7 @@ public sealed record BackupExecutionConfiguration
     public bool TrustServerCertificate { get; init; }
     public string StagingReference { get; init; } = "default";
     public string StorageProvider { get; init; } = "local";
+    public string? StorageExecutionLocation { get; init; }
     public string StoragePrefix { get; init; } = string.Empty;
     public bool CopyOnly { get; init; } = true;
     public string ChecksumPolicy { get; init; } = "Preferred";

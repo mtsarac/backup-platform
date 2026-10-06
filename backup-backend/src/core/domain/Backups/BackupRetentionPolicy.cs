@@ -54,7 +54,7 @@ public enum BackupDeleteReason
 /// </summary>
 public static class BackupDeleteFailureCodes
 {
-    /// <summary>The backend has no storage configured that can reach the replica (for example an agent-local disk the backend cannot see).</summary>
+    /// <summary>No configured backend provider can reach a backend-owned replica.</summary>
     public const string StorageNotConfigured = "storage_not_configured";
     public const string DeleteNotSupported = "delete_not_supported";
     /// <summary>The persisted location is not a valid storage key.</summary>
@@ -65,4 +65,6 @@ public static class BackupDeleteFailureCodes
     /// <summary>The provider reported the delete as done but the object is still present.</summary>
     public const string DeleteNotVerified = "delete_not_verified";
     public const string Unexpected = "unexpected";
+    /// <summary>The deletion is durably dispatched and awaiting the owning agent.</summary>
+    public const string AgentUnavailable = "agent_unavailable";
 }

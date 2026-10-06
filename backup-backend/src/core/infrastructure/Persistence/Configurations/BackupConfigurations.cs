@@ -236,17 +236,27 @@ internal sealed class BackupReplicaConfiguration : IEntityTypeConfiguration<Back
         {
             table.HasCheckConstraint("ck_backup_replica_size", "\"SizeBytes\" > 0");
             table.HasCheckConstraint("ck_backup_replica_status", "\"Status\" IN ('Available','DeletePending','Deleting','DeleteFailed','Deleted')");
-            // Every state carries exactly the delete bookkeeping that belongs to it, so a half-written transition cannot be committed.
+            table.HasCheckConstraint("ck_backup_replica_executor",
+                "(\"ExecutionLocation\" = 'Backend' AND \"OwningAgentId\" IS NULL AND \"DeleteOperationId\" IS NULL AND \"DeleteCompletionToken\" IS NULL) OR " +
+                "(\"ExecutionLocation\" = 'Agent' AND \"StorageProvider\" = 'local' AND \"OwningAgentId\" IS NOT NULL AND \"OwningAgentId\" <> '00000000-0000-0000-0000-000000000000'::uuid)");
+            table.HasCheckConstraint("ck_backup_replica_completion",
+                "(\"DeleteCompletionToken\" IS NULL AND \"DeleteCompletionAbsenceVerified\" IS NULL AND \"DeleteCompletionFailureCode\" IS NULL) OR " +
+                "(\"ExecutionLocation\" = 'Agent' AND \"DeleteOperationId\" IS NOT NULL AND \"DeleteCompletionToken\" IS NOT NULL AND \"DeleteCompletionAbsenceVerified\" IS NOT NULL AND " +
+                "((\"Status\" = 'Deleted' AND \"DeleteCompletionAbsenceVerified\" AND \"DeleteCompletionFailureCode\" IS NULL) OR " +
+                "(\"Status\" = 'DeleteFailed' AND NOT \"DeleteCompletionAbsenceVerified\" AND \"DeleteCompletionFailureCode\" = \"DeleteFailureCode\")))");
             table.HasCheckConstraint("ck_backup_replica_lifecycle",
                 "(\"DeleteReason\" IS NULL OR \"DeleteReason\" IN ('RetentionExpired','Manual')) AND (\"DeleteRequestedByUserId\" IS NULL OR \"DeleteReason\" = 'Manual') AND (" +
                 "(\"Status\" = 'Available' AND \"DeleteRequestedAt\" IS NULL AND \"DeleteReason\" IS NULL AND \"DeleteAfter\" IS NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL AND \"DeleteLeaseExpiresAt\" IS NULL " +
                 "AND \"DeleteNextAttemptAt\" IS NULL AND \"DeleteFailureCode\" IS NULL AND \"DeletedAt\" IS NULL AND \"DeleteAttempts\" = 0) " +
                 "OR (\"Status\" = 'DeletePending' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeleteAfter\" IS NOT NULL AND \"DeleteAfter\" >= \"DeleteRequestedAt\" AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL " +
                 "AND \"DeleteLeaseExpiresAt\" IS NULL AND \"DeleteNextAttemptAt\" IS NULL AND \"DeleteFailureCode\" IS NULL AND \"DeletedAt\" IS NULL AND \"DeleteAttempts\" = 0) " +
-                "OR (\"Status\" = 'Deleting' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeleteAfter\" IS NOT NULL AND \"DeleteLeaseToken\" IS NOT NULL AND \"DeleteLeaseOwner\" IS NOT NULL " +
-                "AND \"DeleteLeaseExpiresAt\" IS NOT NULL AND \"DeleteNextAttemptAt\" IS NULL AND \"DeletedAt\" IS NULL AND \"DeleteAttempts\" >= 1) " +
+                "OR (\"Status\" = 'Deleting' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeleteAfter\" IS NOT NULL AND \"DeletedAt\" IS NULL AND (" +
+                "(\"DeleteLeaseToken\" IS NOT NULL AND \"DeleteLeaseOwner\" IS NOT NULL AND \"DeleteLeaseExpiresAt\" IS NOT NULL AND \"DeleteNextAttemptAt\" IS NULL AND \"DeleteAttempts\" >= 1 " +
+                "AND (\"ExecutionLocation\" = 'Backend' OR (\"DeleteOperationId\" IS NOT NULL AND \"DeleteFailureCode\" IS NULL))) OR " +
+                "(\"ExecutionLocation\" = 'Agent' AND \"DeleteOperationId\" IS NOT NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL AND \"DeleteLeaseExpiresAt\" IS NULL " +
+                "AND \"DeleteNextAttemptAt\" IS NOT NULL AND \"DeleteFailureCode\" = 'agent_unavailable' AND \"DeleteAttempts\" >= 0))) " +
                 "OR (\"Status\" = 'DeleteFailed' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeleteAfter\" IS NOT NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL " +
-                "AND \"DeleteLeaseExpiresAt\" IS NULL AND \"DeleteNextAttemptAt\" IS NOT NULL AND \"DeleteFailureCode\" IS NOT NULL AND \"DeletedAt\" IS NULL AND \"DeleteAttempts\" >= 1) " +
+                "AND \"DeleteLeaseExpiresAt\" IS NULL AND (\"ExecutionLocation\" = 'Agent' OR \"DeleteNextAttemptAt\" IS NOT NULL) AND \"DeleteFailureCode\" IS NOT NULL AND \"DeletedAt\" IS NULL AND \"DeleteAttempts\" >= 1) " +
                 "OR (\"Status\" = 'Deleted' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeletedAt\" IS NOT NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL " +
                 "AND \"DeleteLeaseExpiresAt\" IS NULL AND \"DeleteNextAttemptAt\" IS NULL AND \"DeleteFailureCode\" IS NULL AND \"DeleteAttempts\" >= 1))");
             table.HasCheckConstraint("ck_backup_replica_checksum", "\"ChecksumAlgorithm\" = 'sha256' AND \"Checksum\" ~ '^[0-9a-f]{64}$'");
@@ -254,6 +264,7 @@ internal sealed class BackupReplicaConfiguration : IEntityTypeConfiguration<Back
         });
         builder.Property(replica => replica.StorageProvider).HasMaxLength(128).IsRequired();
         builder.Property(replica => replica.StorageTarget).HasMaxLength(512).IsRequired();
+        builder.Property(replica => replica.ExecutionLocation).HasConversion<string>().HasMaxLength(16).IsRequired();
         builder.Property(replica => replica.Key).HasMaxLength(1024).IsRequired();
         builder.Property(replica => replica.Checksum).HasMaxLength(64).IsRequired();
         builder.Property(replica => replica.ChecksumAlgorithm).HasMaxLength(16).IsRequired();
@@ -263,7 +274,11 @@ internal sealed class BackupReplicaConfiguration : IEntityTypeConfiguration<Back
         builder.Property(replica => replica.DeleteReason).HasConversion<string>().HasMaxLength(16);
         builder.Property(replica => replica.DeleteLeaseOwner).HasMaxLength(128);
         builder.Property(replica => replica.DeleteFailureCode).HasMaxLength(128);
+        builder.Property(replica => replica.DeleteCompletionFailureCode).HasMaxLength(128);
         builder.Ignore(replica => replica.IsUsable);
+        builder.Ignore(replica => replica.WaitingForAgent);
+        builder.HasIndex(replica => new { replica.TenantId, replica.OwningAgentId, replica.DeleteAfter })
+            .HasDatabaseName("ix_backup_replicas_agent_deletions").HasFilter("\"ExecutionLocation\" = 'Agent' AND \"Status\" = 'Deleting'");
         // The delete workers' claim query is the union of these three: grace period over, failed delete due again, lease of a crashed owner expired.
         builder.HasIndex(replica => replica.DeleteAfter).HasDatabaseName("ix_backup_replicas_delete_pending").HasFilter("\"Status\" = 'DeletePending'");
         builder.HasIndex(replica => replica.DeleteNextAttemptAt).HasDatabaseName("ix_backup_replicas_delete_failed").HasFilter("\"Status\" = 'DeleteFailed'");

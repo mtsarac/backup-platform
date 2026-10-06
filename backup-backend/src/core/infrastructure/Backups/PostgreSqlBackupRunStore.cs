@@ -180,7 +180,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
     public Task<BackupMutationResult> ReportProgressAsync(BackupLeaseCommand command, BackupProgress progress, CancellationToken cancellationToken) =>
         MutateAsync(command, run => run.Progress(command.LeaseToken, command.Now, progress.Stage, progress.Percent), cancellationToken);
     public Task<BackupMutationResult> CompleteAttemptAsync(BackupLeaseCommand command, ApplicationCompletion completion, CancellationToken cancellationToken) =>
-        MutateAsync(command, run => run.Complete(command.LeaseToken, command.Now, MapCompletion(command, completion), Jitter()), cancellationToken);
+        MutateAsync(command, run => run.Complete(command.LeaseToken, command.Now, MapCompletion(command, completion, run), Jitter()), cancellationToken);
     public async Task<BackupLeaseResult?> RenewLeaseAsync(BackupLeaseCommand command, TimeSpan leaseDuration, CancellationToken cancellationToken)
     {
         BackupLeaseResult? result = null;
@@ -263,7 +263,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
     internal static IQueryable<BackupRun> Runs(PlatformDbContext context) => context.BackupRuns
         .Include(run => run.Attempts).ThenInclude(attempt => attempt.Artifacts).ThenInclude(artifact => artifact.Replicas)
         .Include(run => run.Facts).AsSplitQuery();
-    private static DomainCompletion MapCompletion(BackupLeaseCommand command, ApplicationCompletion result)
+    private static DomainCompletion MapCompletion(BackupLeaseCommand command, ApplicationCompletion result, BackupRun run)
     {
         var status = result.Outcome switch
         {
@@ -280,7 +280,9 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
             foreach (var replica in input.Replicas)
                 artifact.AddReplica(new BackupReplica(Guid.NewGuid(), command.TenantId, artifact.Id, replica.StorageProvider,
                     replica.StorageTarget, replica.Key, replica.SizeBytes, replica.Checksum, replica.ChecksumAlgorithm,
-                    replica.VerificationState, replica.VerificationMethod, replica.CreatedAt, replica.VerifiedAt));
+                    replica.VerificationState, replica.VerificationMethod, replica.CreatedAt, replica.VerifiedAt,
+                    run.Configuration.StorageExecutionLocation,
+                    run.Configuration.StorageExecutionLocation == BackupStorageExecutionLocation.Agent ? run.AgentId.Value : null));
         }
         return new DomainCompletion(status, result.ReasonCode, artifact);
     }

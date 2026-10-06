@@ -41,7 +41,10 @@ internal static class RetentionApiSupport
     {
         name = "Nightly full backup",
         agentId = scenario.Agent.AgentId,
-        configuration = new BackupExecutionConfiguration { Database = "master", Host = "sql-server", IntegratedSecurity = true },
+        configuration = new BackupExecutionConfiguration
+        {
+            Database = "master", Host = "sql-server", IntegratedSecurity = true, StorageExecutionLocation = "Backend"
+        },
         retention
     };
 

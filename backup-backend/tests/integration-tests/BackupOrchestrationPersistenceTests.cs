@@ -151,7 +151,8 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
         var replica = Assert.Single(artifact.Replicas);
         Assert.Equal(Now, replica.CreatedAt);
         Assert.Throws<InvalidOperationException>(() => artifact.AddReplica(new BackupReplica(Guid.NewGuid(), seed.TenantId, artifact.Id,
-            "local", "default", "another", 100, ArtifactHash, "sha256", "Verified", "ReadBack", Now, Now)));
+            "local", "default", "another", 100, ArtifactHash, "sha256", "Verified", "ReadBack", Now, Now,
+            executionLocation: BackupStorageExecutionLocation.Backend)));
         Assert.Single(persisted.Facts, fact => fact.Kind == "BackupRunSucceeded");
         await using var hidden = fixture.CreateContext(other.TenantId);
         Assert.False(await hidden.BackupArtifacts.AnyAsync(row => row.Id == artifact.Id));
@@ -300,7 +301,8 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
         "sha256", createdAt, "{\"DatabaseName\":\"Database\",\"Nested\":{\"a\":1,\"b\":2}}", "{\"CopyOnly\":true}",
         [new BackupReplicaResult("local", "default", "tenant/job/run/attempt/backup.bak", 100, ArtifactHash, "sha256", "Verified", "ReadBack", createdAt, createdAt)]));
     private static BackupConfiguration Configuration() => new("mssql", "Database", "localhost", null, true, null,
-        true, false, "default", "local", "", true, "Preferred", "Preferred");
+        true, false, "default", "local", "", true, "Preferred", "Preferred")
+        { StorageExecutionLocation = BackupStorageExecutionLocation.Backend };
     private sealed record Seed(TenantId TenantId, AgentId AgentId, Guid JobId);
     private sealed record CompletedSeed(TenantId TenantId, AgentId AgentId, Guid JobId, BackupRun Run);
 }

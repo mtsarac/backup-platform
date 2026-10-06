@@ -14,8 +14,8 @@ namespace BackupPlatform.Application.Backups;
 public sealed record RetentionCycleResult(int ArtifactsExamined, int ReplicasMarkedForDeletion, int DeletionsClaimed, int Deleted, int Failed, int LeaseLost);
 
 /// <summary>
-/// The backend-owned half of retention: it expires backups, then physically removes the replicas whose grace period is over. Every decision is made
-/// by <see cref="IBackupRetentionStore"/> inside the database, so any number of nodes may run this at once; this class only orders the steps and
+/// The backend-owned half of retention: it expires backups, dispatches agent-owned removals and physically deletes only backend-owned replicas.
+/// Every decision is made by <see cref="IBackupRetentionStore"/> in the database, so any number of nodes may run this at once; this class
 /// talks to the storage. A replica is recorded Deleted only after the provider reported the object gone (and, where the provider can prove
 /// absence, after that was checked), never before; any failure is recorded with a stable code and retried at a bounded cadence.
 /// </summary>

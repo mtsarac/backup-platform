@@ -54,10 +54,10 @@ internal sealed class RetentionServiceWorld : IDisposable
         .UseNpgsql(new NpgsqlConnectionStringBuilder(Harness.Database.ConnectionString) { MaxPoolSize = MaxStoreConnections }.ConnectionString).Options;
 
     /// <summary>A store with its own options and pool: what another backend node would hold.</summary>
-    public PostgreSqlBackupRetentionStore Store() => new(DbOptions());
+    public PostgreSqlBackupRetentionStore Store(BackupRetentionOptions? options = null) => new(DbOptions(), options);
 
     public BackupRetentionService Service(string node, TimeProvider clock, IBackupRetentionStore? store = null, BackupRetentionOptions? options = null) =>
-        new(store ?? Store(), Resolver, options ?? new BackupRetentionOptions(), new BackupNodeIdentity(node), clock, NullLogger<BackupRetentionService>.Instance);
+        new(store ?? Store(options), Resolver, options ?? new BackupRetentionOptions(), new BackupNodeIdentity(node), clock, NullLogger<BackupRetentionService>.Instance);
 
     public BackupStorageSweeper Sweeper(TimeProvider clock, BackupRetentionOptions? options = null) =>
         new(Store(), Resolver, options ?? new BackupRetentionOptions(), clock, NullLogger<BackupStorageSweeper>.Instance);

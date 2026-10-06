@@ -7,6 +7,9 @@ public sealed record BackupConfiguration(
     string StagingReference, string StorageProvider, string StoragePrefix, bool CopyOnly,
     string ChecksumPolicy, string CompressionPolicy)
 {
+    public BackupStorageExecutionLocation StorageExecutionLocation { get; init; } =
+        StorageProvider == "local" ? BackupStorageExecutionLocation.Agent : BackupStorageExecutionLocation.Backend;
+
     public BackupConfiguration Validate()
     {
         if (Engine != "mssql") throw new ArgumentException("Unsupported database engine.");
@@ -17,6 +20,9 @@ public sealed record BackupConfiguration(
         if (DatabaseCredentialReference is not null) BackupGuard.Reference(DatabaseCredentialReference);
         if (StagingReference != "default") throw new ArgumentException("Unknown staging reference.");
         BackupGuard.Reference(StorageProvider);
+        if (StorageExecutionLocation is not (BackupStorageExecutionLocation.Backend or BackupStorageExecutionLocation.Agent) ||
+            StorageExecutionLocation == BackupStorageExecutionLocation.Agent && StorageProvider != "local")
+            throw new ArgumentException("Invalid storage execution location.");
         if (StoragePrefix.Length != 0) BackupGuard.RelativeKey(StoragePrefix);
         if (ChecksumPolicy is not ("Required" or "Preferred" or "Disabled") ||
             CompressionPolicy is not ("Required" or "Preferred" or "Disabled"))

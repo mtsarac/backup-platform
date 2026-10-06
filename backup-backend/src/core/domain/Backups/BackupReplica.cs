@@ -5,7 +5,7 @@ namespace BackupPlatform.Domain.Backups;
 
 /// <summary>
 /// Physical lifecycle of one stored copy: Available, then DeletePending (soft delete: intact, visible, cancellable), then Deleting
-/// (a worker holds the lease and the bytes are being removed: irreversible), then Deleted (absence verified) or DeleteFailed (retried later).
+/// (durably dispatched or leased physical removal: irreversible), then Deleted (absence verified) or DeleteFailed.
 /// </summary>
 public enum BackupReplicaStatus
 {
@@ -16,12 +16,15 @@ public enum BackupReplicaStatus
     Deleted
 }
 
+public enum BackupStorageExecutionLocation { Backend = 1, Agent = 2 }
+
 public sealed class BackupReplica : ITenantOwned
 {
     private BackupReplica() { TenantId = null!; StorageProvider = null!; StorageTarget = null!; Key = null!; Checksum = null!; ChecksumAlgorithm = null!; VerificationState = null!; VerificationMethod = null!; }
     public BackupReplica(Guid id, TenantId tenantId, Guid artifactId, string storageProvider, string storageTarget,
         string key, long sizeBytes, string checksum, string checksumAlgorithm, string verificationState,
-        string verificationMethod, DateTimeOffset createdAt, DateTimeOffset? verifiedAt)
+        string verificationMethod, DateTimeOffset createdAt, DateTimeOffset? verifiedAt,
+        BackupStorageExecutionLocation? executionLocation = null, Guid? owningAgentId = null)
     {
         BackupGuard.Id(id);
         BackupGuard.Id(artifactId);
@@ -35,6 +38,12 @@ public sealed class BackupReplica : ITenantOwned
             throw new ArgumentException("Invalid replica metadata.");
         if ((verificationState == "Verified") != verifiedAt.HasValue || verifiedAt < createdAt)
             throw new ArgumentException("Invalid replica verification timestamp.");
+        var location = executionLocation ?? (storageProvider == "local" ? BackupStorageExecutionLocation.Agent : BackupStorageExecutionLocation.Backend);
+        if (!Enum.IsDefined(location) || (location == BackupStorageExecutionLocation.Agent &&
+            (storageProvider != "local" || owningAgentId is null || owningAgentId == Guid.Empty)))
+            throw new ArgumentException("Agent replicas require a local provider and an owning agent.");
+        ExecutionLocation = location;
+        OwningAgentId = location == BackupStorageExecutionLocation.Agent ? owningAgentId : null;
         Id = id;
         TenantId = tenantId;
         ArtifactId = artifactId;
@@ -55,6 +64,8 @@ public sealed class BackupReplica : ITenantOwned
     public string StorageProvider { get; private set; }
     public BackupReplicaStatus Status { get; private set; } = BackupReplicaStatus.Available;
     public string StorageTarget { get; private set; }
+    public BackupStorageExecutionLocation ExecutionLocation { get; private set; }
+    public Guid? OwningAgentId { get; private set; }
     public string Key { get; private set; }
     public long SizeBytes { get; private set; }
     public string Checksum { get; private set; }
@@ -72,17 +83,23 @@ public sealed class BackupReplica : ITenantOwned
     public DateTimeOffset? DeleteAfter { get; private set; }
     /// <summary>How many physical delete attempts were started.</summary>
     public int DeleteAttempts { get; private set; }
-    /// <summary>Fences one delete attempt: only the holder of this token may finish it. Set exactly while <see cref="Status"/> is Deleting.</summary>
+    /// <summary>Fences a claimed physical attempt. An unclaimed agent dispatch deliberately has no lease.</summary>
     public Guid? DeleteLeaseToken { get; private set; }
     public string? DeleteLeaseOwner { get; private set; }
-    /// <summary>A crashed owner's lease simply runs out, after which any node may take the delete over.</summary>
+    /// <summary>A crashed owner's lease runs out; only the configured executor may take it over.</summary>
     public DateTimeOffset? DeleteLeaseExpiresAt { get; private set; }
     public DateTimeOffset? LastDeleteAttemptAt { get; private set; }
-    /// <summary>When a failed delete is tried again; set exactly while <see cref="Status"/> is DeleteFailed.</summary>
+    /// <summary>Retry time, or the next bounded check of an unclaimed agent dispatch. Null for terminal failures.</summary>
     public DateTimeOffset? DeleteNextAttemptAt { get; private set; }
-    /// <summary>Why the last attempt failed (<see cref="BackupDeleteFailureCodes"/>); set exactly while <see cref="Status"/> is DeleteFailed.</summary>
+    /// <summary>The last failure, or agent_unavailable while dispatch waits for the owning agent.</summary>
     public string? DeleteFailureCode { get; private set; }
     public DateTimeOffset? DeletedAt { get; private set; }
+    public Guid? DeleteOperationId { get; private set; }
+    public Guid? DeleteCompletionToken { get; private set; }
+    public bool? DeleteCompletionAbsenceVerified { get; private set; }
+    public string? DeleteCompletionFailureCode { get; private set; }
+    public bool WaitingForAgent => ExecutionLocation == BackupStorageExecutionLocation.Agent &&
+        Status == BackupReplicaStatus.Deleting && DeleteLeaseToken is null;
 
     /// <summary>
     /// Whether the bytes can still be used (a restore, once there is one). A replica waiting out its grace period is intact and
@@ -116,19 +133,20 @@ public sealed class BackupReplica : ITenantOwned
         return true;
     }
 
-    /// <summary>Whether a worker may take the physical delete over at <paramref name="now"/>: the grace period is over, a failed delete is due again, or a previous owner's lease ran out.</summary>
+    /// <summary>Whether grace, retry, dispatch recheck or crash recovery is due. This never authorizes a backend to physically delete an agent-owned object.</summary>
     public bool IsDeletionDue(DateTimeOffset now) => Status switch
     {
         BackupReplicaStatus.DeletePending => DeleteAfter <= now,
         BackupReplicaStatus.DeleteFailed => DeleteNextAttemptAt <= now,
+        BackupReplicaStatus.Deleting when WaitingForAgent => DeleteNextAttemptAt <= now,
         BackupReplicaStatus.Deleting => DeleteLeaseExpiresAt <= now,
         _ => false
     };
 
-    /// <summary>Takes the delete over under a fresh lease. False (and no change) when it is not due, so two workers cannot both begin.</summary>
+    /// <summary>Claims only a backend-owned physical delete under a fresh lease, and only when due.</summary>
     public bool BeginDelete(Guid leaseToken, string owner, DateTimeOffset now, TimeSpan lease)
     {
-        if (!IsDeletionDue(now)) return false;
+        if (ExecutionLocation != BackupStorageExecutionLocation.Backend || !IsDeletionDue(now)) return false;
         BackupGuard.Id(leaseToken);
         BackupGuard.Text(owner, 128);
         if (lease <= TimeSpan.Zero) throw new ArgumentException("Invalid lease duration.");
@@ -145,7 +163,7 @@ public sealed class BackupReplica : ITenantOwned
     /// <summary>The bytes are gone and absence was verified. Accepted from the lease holder even after the lease ran out, as long as nobody took the delete over.</summary>
     public bool CompleteDelete(Guid leaseToken, DateTimeOffset now)
     {
-        if (Status != BackupReplicaStatus.Deleting || DeleteLeaseToken != leaseToken) return false;
+        if (ExecutionLocation != BackupStorageExecutionLocation.Backend || Status != BackupReplicaStatus.Deleting || DeleteLeaseToken != leaseToken) return false;
         Status = BackupReplicaStatus.Deleted;
         DeletedAt = BackupGuard.Timestamp(now);
         ClearLease();
@@ -156,7 +174,7 @@ public sealed class BackupReplica : ITenantOwned
 
     public bool FailDelete(Guid leaseToken, DateTimeOffset now, string failureCode, DateTimeOffset nextAttemptAt)
     {
-        if (Status != BackupReplicaStatus.Deleting || DeleteLeaseToken != leaseToken) return false;
+        if (ExecutionLocation != BackupStorageExecutionLocation.Backend || Status != BackupReplicaStatus.Deleting || DeleteLeaseToken != leaseToken) return false;
         BackupGuard.Reference(failureCode);
         if (nextAttemptAt < now) throw new ArgumentException("A retry cannot be scheduled in the past.");
         Status = BackupReplicaStatus.DeleteFailed;
@@ -164,6 +182,80 @@ public sealed class BackupReplica : ITenantOwned
         DeleteNextAttemptAt = BackupGuard.Timestamp(nextAttemptAt);
         ClearLease();
         return true;
+    }
+
+    public bool DispatchAgentDeletion(Guid operationId, DateTimeOffset now, DateTimeOffset nextCheckAt)
+    {
+        if (ExecutionLocation != BackupStorageExecutionLocation.Agent || !IsDeletionDue(now)) return false;
+        BackupGuard.Id(operationId);
+        if (nextCheckAt <= now) throw new ArgumentException("A dispatch check must be scheduled in the future.");
+        Status = BackupReplicaStatus.Deleting;
+        DeleteOperationId ??= operationId;
+        ClearLease();
+        ClearCompletion();
+        DeleteFailureCode = BackupDeleteFailureCodes.AgentUnavailable;
+        DeleteNextAttemptAt = BackupGuard.Timestamp(nextCheckAt);
+        return true;
+    }
+
+    public bool ClaimAgentDeletion(Guid operationId, Guid token, DateTimeOffset now, TimeSpan lease)
+    {
+        if (ExecutionLocation != BackupStorageExecutionLocation.Agent || Status != BackupReplicaStatus.Deleting ||
+            (!WaitingForAgent && DeleteLeaseExpiresAt > now)) return false;
+        BackupGuard.Id(operationId);
+        BackupGuard.Id(token);
+        if (lease <= TimeSpan.Zero) throw new ArgumentException("Invalid lease duration.");
+        DeleteOperationId ??= operationId;
+        DeleteLeaseToken = token;
+        DeleteLeaseOwner = $"agent:{OwningAgentId:N}";
+        DeleteLeaseExpiresAt = BackupGuard.Timestamp(now + lease);
+        DeleteAttempts = checked(DeleteAttempts + 1);
+        LastDeleteAttemptAt = BackupGuard.Timestamp(now);
+        DeleteNextAttemptAt = null;
+        DeleteFailureCode = null;
+        ClearCompletion();
+        return true;
+    }
+
+    public bool RenewAgentDeletion(Guid operationId, Guid token, DateTimeOffset now, TimeSpan lease)
+    {
+        if (!OwnsAgentDeletion(operationId, token, now)) return false;
+        if (lease <= TimeSpan.Zero) throw new ArgumentException("Invalid lease duration.");
+        DeleteLeaseExpiresAt = BackupGuard.Timestamp(now + lease);
+        return true;
+    }
+
+    public bool CompleteAgentDeletion(Guid operationId, Guid token, DateTimeOffset now, bool absenceVerified,
+        string? failureCode, DateTimeOffset? nextAttemptAt)
+    {
+        if (!OwnsAgentDeletion(operationId, token, now)) return false;
+        if (absenceVerified == (failureCode is not null)) throw new ArgumentException("A deletion must prove absence or report a failure.");
+        if (failureCode is not null) BackupGuard.Reference(failureCode);
+        if (nextAttemptAt < now || (absenceVerified && nextAttemptAt is not null)) throw new ArgumentException("Invalid deletion retry.");
+        Status = absenceVerified ? BackupReplicaStatus.Deleted : BackupReplicaStatus.DeleteFailed;
+        DeletedAt = absenceVerified ? BackupGuard.Timestamp(now) : null;
+        DeleteFailureCode = failureCode;
+        DeleteNextAttemptAt = nextAttemptAt is { } next ? BackupGuard.Timestamp(next) : null;
+        DeleteCompletionToken = token;
+        DeleteCompletionAbsenceVerified = absenceVerified;
+        DeleteCompletionFailureCode = failureCode;
+        ClearLease();
+        return true;
+    }
+
+    public bool SameAgentCompletion(Guid operationId, Guid token, bool absenceVerified, string? failureCode) =>
+        ExecutionLocation == BackupStorageExecutionLocation.Agent && DeleteOperationId == operationId &&
+        DeleteCompletionToken == token && DeleteCompletionAbsenceVerified == absenceVerified && DeleteCompletionFailureCode == failureCode;
+
+    private bool OwnsAgentDeletion(Guid operationId, Guid token, DateTimeOffset now) =>
+        ExecutionLocation == BackupStorageExecutionLocation.Agent && Status == BackupReplicaStatus.Deleting &&
+        DeleteOperationId == operationId && DeleteLeaseToken == token && DeleteLeaseExpiresAt > now;
+
+    private void ClearCompletion()
+    {
+        DeleteCompletionToken = null;
+        DeleteCompletionAbsenceVerified = null;
+        DeleteCompletionFailureCode = null;
     }
 
     private void ClearLease()
@@ -174,6 +266,7 @@ public sealed class BackupReplica : ITenantOwned
     }
 
     internal bool SameResult(BackupReplica other) => StorageProvider == other.StorageProvider && StorageTarget == other.StorageTarget &&
+        ExecutionLocation == other.ExecutionLocation && OwningAgentId == other.OwningAgentId &&
         Key == other.Key && SizeBytes == other.SizeBytes && Checksum == other.Checksum && ChecksumAlgorithm == other.ChecksumAlgorithm &&
         VerificationState == other.VerificationState && VerificationMethod == other.VerificationMethod && CreatedAt == other.CreatedAt && VerifiedAt == other.VerifiedAt;
 }

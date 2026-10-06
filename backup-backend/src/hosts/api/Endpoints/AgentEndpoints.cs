@@ -101,18 +101,31 @@ public static class AgentEndpoints
     }
 
     private static async Task<IResult> PollAsync(
-        string? cursor, ICurrentAgent currentAgent, AgentConnectivityService service, BackupOrchestrator backups, CancellationToken cancellationToken)
+        string? cursor, ICurrentAgent currentAgent, AgentConnectivityService service, BackupOrchestrator backups,
+        AgentReplicaDeletionService deletions, CancellationToken cancellationToken)
     {
         var poll = await service.PollAsync(currentAgent.Identity!, cursor, cancellationToken);
         if (poll is null)
         {
             return Error(StatusCodes.Status400BadRequest, AgentErrorCodes.InvalidRequest, "Invalid field: cursor.");
         }
+        var deletion = await deletions.ClaimAsync(currentAgent.Identity!, cancellationToken);
         var backup = await backups.ClaimAsync(currentAgent.Identity!, cancellationToken);
+        var deletionTask = deletion is null ? null
+            : new AgentTaskEnvelope { Id = deletion.ReplicaId.ToString(), Type = "delete-replica", DeleteReplica = deletion };
+        var backupTask = backup is null ? null
+            : new AgentTaskEnvelope { Id = backup.AttemptId.ToString(), Type = "database-backup", Backup = backup };
+        AgentTaskEnvelope[] tasks = (deletionTask, backupTask) switch
+        {
+            (null, null) => [],
+            ({ } pendingDelete, null) => [pendingDelete],
+            (null, { } pendingBackup) => [pendingBackup],
+            ({ } pendingDelete, { } pendingBackup) => [pendingDelete, pendingBackup]
+        };
         return Results.Ok(new AgentPollResponse
         {
             Cursor = poll.Cursor,
-            Tasks = backup is null ? [] : [new AgentTaskEnvelope { Id = backup.AttemptId.ToString(), Type = "database-backup", Backup = backup }],
+            Tasks = tasks,
             NextPollAfterSeconds = (int)poll.NextPollAfter.TotalSeconds
         });
     }

@@ -124,7 +124,8 @@ internal sealed class BackupStoreHarness(PostgreSqlFixture database)
         [new BackupReplicaResult("local", "default", "tenant/job/run/attempt/backup.bak", 100, ArtifactHash, "sha256", "Verified", "ReadBack", createdAt, createdAt)]));
 
     public static BackupConfiguration Configuration() => new("mssql", "Database", "localhost", null, true, null,
-        true, false, "default", "local", "", true, "Preferred", "Preferred");
+        true, false, "default", "local", "", true, "Preferred", "Preferred")
+        { StorageExecutionLocation = BackupStorageExecutionLocation.Backend };
 
     /// <summary>Live slots straight from the table (independent of the store's own query): Leased/Running attempts whose lease has not expired at <paramref name="at"/>.</summary>
     public static async Task<IReadOnlyList<(Guid Tenant, Guid Agent, long Count)>> LiveSlotsAsync(string connectionString, DateTimeOffset at)

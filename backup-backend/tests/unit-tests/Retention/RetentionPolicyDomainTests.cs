@@ -11,9 +11,11 @@ internal static class RetentionDomain
     private static readonly string SourceHash = new('a', 64);
     private static readonly string ArtifactHash = new('b', 64);
 
+    private static BackupConfiguration BackendConfiguration() => Configuration() with { StorageExecutionLocation = BackupStorageExecutionLocation.Backend };
+
     public static BackupRun NewRun(BackupRetentionPolicy? policy, DateTimeOffset createdAt)
     {
-        var run = new BackupRun(Guid.NewGuid(), TenantId.New(), Guid.NewGuid(), AgentId.New(), Configuration(), "key", createdAt, retentionPolicy: policy);
+        var run = new BackupRun(Guid.NewGuid(), TenantId.New(), Guid.NewGuid(), AgentId.New(), BackendConfiguration(), "key", createdAt, retentionPolicy: policy);
         run.QueueFirstAttempt(Guid.NewGuid(), createdAt);
         return run;
     }
@@ -29,7 +31,7 @@ internal static class RetentionDomain
         for (var index = 0; index < replicas; index++)
         {
             artifact.AddReplica(new BackupReplica(Guid.NewGuid(), artifact.TenantId, artifact.Id, "local", "default", $"backup-key-{index}", 100, ArtifactHash,
-                "sha256", "Verified", "ReadBack", agentReportedAt, agentReportedAt));
+                "sha256", "Verified", "ReadBack", agentReportedAt, agentReportedAt, executionLocation: BackupStorageExecutionLocation.Backend));
         }
         run.Complete(token, acceptedAt, new BackupCompletion(BackupStatus.Succeeded, null, artifact));
         return artifact;
@@ -163,7 +165,8 @@ public sealed class RetentionPolicyDomainTests
     public void ChangingTheJobPolicyNeverRewritesAnExistingRunSnapshotOrArtifactButANewRunSnapshotsTheNewPolicy()
     {
         var original = RetentionDomain.Policy(TimeSpan.FromDays(30), TimeSpan.FromHours(24));
-        var job = new BackupJob(Guid.NewGuid(), TenantId.New(), "Database", AgentId.New(), Configuration(), Now, retentionPolicy: original);
+        var job = new BackupJob(Guid.NewGuid(), TenantId.New(), "Database", AgentId.New(),
+            Configuration() with { StorageExecutionLocation = BackupStorageExecutionLocation.Backend }, Now, retentionPolicy: original);
         var firstRun = new BackupRun(Guid.NewGuid(), job.TenantId, job.Id, job.AgentId, job.Configuration, "first", Now, retentionPolicy: job.RetentionPolicy);
         firstRun.QueueFirstAttempt(Guid.NewGuid(), Now);
         var firstArtifact = RetentionDomain.Complete(firstRun, RetentionDomain.Accepted, Now);
@@ -186,7 +189,8 @@ public sealed class RetentionPolicyDomainTests
     public void AnInvalidPolicyEditIsRefusedAndLeavesTheJobPolicyUntouched()
     {
         var original = RetentionDomain.Policy(TimeSpan.FromDays(30));
-        var job = new BackupJob(Guid.NewGuid(), TenantId.New(), "Database", AgentId.New(), Configuration(), Now, retentionPolicy: original);
+        var job = new BackupJob(Guid.NewGuid(), TenantId.New(), "Database", AgentId.New(),
+            Configuration() with { StorageExecutionLocation = BackupStorageExecutionLocation.Backend }, Now, retentionPolicy: original);
 
         Assert.Throws<ArgumentException>(() => job.ChangeRetention(new BackupRetentionPolicy { KeepFor = TimeSpan.Zero }));
 

@@ -23,9 +23,11 @@ internal static class RetentionKit
         new() { Enabled = enabled, KeepFor = keepFor ?? TimeSpan.FromDays(30), DeleteGracePeriod = grace ?? TimeSpan.FromHours(24) };
 
     /// <summary>A job of <paramref name="agent"/> with the given retention policy.</summary>
-    public static async Task<BackupJob> AddJobAsync(BackupStoreHarness harness, StoreAgent agent, BackupRetentionPolicy? retention = null)
+    public static async Task<BackupJob> AddJobAsync(BackupStoreHarness harness, StoreAgent agent, BackupRetentionPolicy? retention = null,
+        BackupStorageExecutionLocation executionLocation = BackupStorageExecutionLocation.Backend, string storagePrefix = "")
     {
-        var job = new BackupJob(Guid.NewGuid(), agent.TenantId, "Database", agent.AgentId, BackupStoreHarness.Configuration(), BackupStoreHarness.T0,
+        var configuration = BackupStoreHarness.Configuration() with { StorageExecutionLocation = executionLocation, StoragePrefix = storagePrefix };
+        var job = new BackupJob(Guid.NewGuid(), agent.TenantId, "Database", agent.AgentId, configuration, BackupStoreHarness.T0,
             retryPolicy: null, BackupOverlapPolicy.Queue, schedule: null, retention);
         return (await harness.Store().CreateJobAsync(job, default))!;
     }
@@ -45,7 +47,9 @@ internal static class RetentionKit
             ?? throw new InvalidOperationException("The agent could not claim the seeded run.");
         await BackupStoreHarness.StartAttemptAsync(store, claim, acceptedAt - TimeSpan.FromSeconds(30));
         var attemptId = claim.Attempt.Id;
-        var storedKey = key ?? $"{ManagedBackupLayout.AttemptScope(agent.TenantId.Value, job.Id, run.Id, attemptId)}/{ManagedFileName}";
+        var scope = ManagedBackupLayout.AttemptScope(agent.TenantId.Value, job.Id, run.Id, attemptId);
+        var prefix = job.Configuration.StoragePrefix;
+        var storedKey = key ?? $"{(prefix.Length == 0 ? "" : prefix + "/")}{scope}/{ManagedFileName}";
         // The agent reports its own idea of when it finished; retention must ignore it (it is deliberately far in the past here).
         var agentReportedAt = acceptedAt - TimeSpan.FromDays(400);
         var completion = new Completion("Succeeded", null, new BackupArtifactResult(100, BackupStoreHarness.SourceHash, BackupStoreHarness.ArtifactHash,

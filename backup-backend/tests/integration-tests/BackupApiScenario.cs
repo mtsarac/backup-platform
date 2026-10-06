@@ -57,7 +57,10 @@ internal sealed class BackupApiScenario : IAsyncDisposable
     {
         name = "Nightly full backup",
         agentId,
-        configuration = new BackupExecutionConfiguration { Database = "master", Host = "sql-server", IntegratedSecurity = true },
+        configuration = new BackupExecutionConfiguration
+        {
+            Database = "master", Host = "sql-server", IntegratedSecurity = true, StorageExecutionLocation = "Backend"
+        },
         retryPolicy,
         overlapPolicy
     };

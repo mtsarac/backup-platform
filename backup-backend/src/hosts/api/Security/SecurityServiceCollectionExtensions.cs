@@ -107,6 +107,8 @@ public static class SecurityServiceCollectionExtensions
         services.TryAddSingleton(provider => new BackupNodeIdentity(provider.GetRequiredService<BackupRetentionOptions>().ResolveNodeId()));
         services.TryAddSingleton<IBackupStorageResolver, ConfiguredBackupStorageResolver>();
         services.AddScoped<IBackupRetentionStore, PostgreSqlBackupRetentionStore>();
+        services.AddScoped<IAgentReplicaDeletionStore, PostgreSqlAgentReplicaDeletionStore>();
+        services.AddScoped<AgentReplicaDeletionService>();
         services.AddScoped<BackupRetentionService>();
         services.AddScoped<BackupStorageSweeper>();
         services.AddScoped<BackupArtifactService>();

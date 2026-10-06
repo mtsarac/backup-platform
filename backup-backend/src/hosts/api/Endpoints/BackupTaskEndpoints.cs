@@ -18,6 +18,11 @@ public static class BackupTaskEndpoints
         tasks.MapPost("/lease", RenewAsync);
         tasks.MapPost("/progress", ProgressAsync);
         tasks.MapPost("/complete", CompleteAsync);
+        var deletions = endpoints.MapGroup("/api/agent/replica-deletions/{replicaId:guid}")
+            .WithMetadata(new AgentApiEndpoint(), new RequiresAgentProtocol(), new RequestSizeLimitAttribute(4 * 1024))
+            .RequireAuthorization(AuthorizationPolicies.Agent);
+        deletions.MapPost("/lease", RenewDeletionAsync);
+        deletions.MapPost("/complete", CompleteDeletionAsync);
         return endpoints;
     }
 
@@ -62,6 +67,23 @@ public static class BackupTaskEndpoints
         try { return Mutation(await service.CompleteAsync(agent.Identity!, attemptId, request, cancellationToken)); }
         catch (ArgumentException) { return Invalid(); }
     }
+    private static async Task<IResult> RenewDeletionAsync(Guid replicaId, DeleteReplicaLeaseRequest request, ICurrentAgent agent,
+        AgentReplicaDeletionService service, CancellationToken cancellationToken)
+    {
+        if (request.OperationId == Guid.Empty || request.LeaseToken == Guid.Empty) return Invalid();
+        var lease = await service.RenewAsync(agent.Identity!, replicaId, request, cancellationToken);
+        return lease is null ? Mutation(BackupMutationResult.Conflict) : Results.Ok(lease);
+    }
+
+    private static async Task<IResult> CompleteDeletionAsync(Guid replicaId, DeleteReplicaCompletionRequest request, ICurrentAgent agent,
+        AgentReplicaDeletionService service, CancellationToken cancellationToken)
+    {
+        if (request.OperationId == Guid.Empty || request.LeaseToken == Guid.Empty
+            || request.AbsenceVerified != (request.FailureCode is null)) return Invalid();
+        try { return Mutation(await service.CompleteAsync(agent.Identity!, replicaId, request, cancellationToken)); }
+        catch (ArgumentException) { return Invalid(); }
+    }
+
 
     private static bool Bounded(string? value) => value is { Length: > 0 and <= 64 } && !value.Any(char.IsControl);
     private static IResult Invalid() => Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "Invalid task request." });

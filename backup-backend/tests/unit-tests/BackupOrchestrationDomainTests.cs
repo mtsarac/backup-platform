@@ -99,11 +99,11 @@ public sealed class BackupOrchestrationDomainTests
     {
         var artifact = Artifact(Run());
         Assert.Throws<ArgumentException>(() => artifact.AddReplica(new BackupReplica(Guid.NewGuid(), TenantId.New(), artifact.Id,
-            "local", "default", "key", 100, ArtifactHash, "sha256", "Verified", "ReadBack", Now, Now)));
+            "local", "default", "key", 100, ArtifactHash, "sha256", "Verified", "ReadBack", Now, Now, executionLocation: BackupStorageExecutionLocation.Backend)));
         Assert.Throws<ArgumentException>(() => artifact.AddReplica(new BackupReplica(Guid.NewGuid(), artifact.TenantId, artifact.Id,
-            "local", "default", "key", 101, ArtifactHash, "sha256", "Verified", "ReadBack", Now, Now)));
+            "local", "default", "key", 101, ArtifactHash, "sha256", "Verified", "ReadBack", Now, Now, executionLocation: BackupStorageExecutionLocation.Backend)));
         Assert.Throws<ArgumentException>(() => artifact.AddReplica(new BackupReplica(Guid.NewGuid(), artifact.TenantId, artifact.Id,
-            "local", "default", "key", 100, SourceHash, "sha256", "Verified", "ReadBack", Now, Now)));
+            "local", "default", "key", 100, SourceHash, "sha256", "Verified", "ReadBack", Now, Now, executionLocation: BackupStorageExecutionLocation.Backend)));
         artifact.AddReplica(Replica(artifact));
         Assert.Throws<ArgumentException>(() => artifact.AddReplica(Replica(artifact)));
         Assert.Throws<ArgumentException>(() => Replica(artifact, "../escape"));
@@ -136,7 +136,8 @@ public sealed class BackupOrchestrationDomainTests
     {
         var artifact = Artifact(Run());
         Assert.Throws<ArgumentException>(() => new BackupReplica(Guid.NewGuid(), artifact.TenantId, artifact.Id,
-            "local", "default", "backup-key", 100, ArtifactHash, "sha256", state, "ReadBack", Now, hasTimestamp ? Now : null));
+            "local", "default", "backup-key", 100, ArtifactHash, "sha256", state, "ReadBack", Now, hasTimestamp ? Now : null,
+            executionLocation: BackupStorageExecutionLocation.Backend));
     }
     [Theory]
     [InlineData("SqlException: password=secret")]
@@ -159,9 +160,11 @@ public sealed class BackupOrchestrationDomainTests
         return run;
     }
     private static BackupConfiguration Configuration() => new("mssql", "Database", "localhost", null, true, null,
-        true, false, "default", "local", "", true, "Preferred", "Preferred");
+        true, false, "default", "local", "", true, "Preferred", "Preferred")
+        { StorageExecutionLocation = BackupStorageExecutionLocation.Backend };
     private static BackupArtifact Artifact(BackupRun run) => new(Guid.NewGuid(), run.TenantId, run.CurrentAttempt.Id,
         100, SourceHash, ArtifactHash, "sha256", Now, "{}", "{}");
     private static BackupReplica Replica(BackupArtifact artifact, string key = "backup-key") => new(Guid.NewGuid(), artifact.TenantId,
-        artifact.Id, "local", "default", key, 100, ArtifactHash, "sha256", "Verified", "ReadBack", Now, Now);
+        artifact.Id, "local", "default", key, 100, ArtifactHash, "sha256", "Verified", "ReadBack", Now, Now,
+        executionLocation: BackupStorageExecutionLocation.Backend);
 }

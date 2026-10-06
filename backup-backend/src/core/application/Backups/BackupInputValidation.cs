@@ -23,6 +23,8 @@ public static class BackupInputValidation
         return Text(request.Name, 200) && request.AgentId != Guid.Empty && c.Engine == "mssql" && Text(c.Database, 128) &&
             Text(c.Host, 253) && c.Host.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '.' or '-' or '_' or '\\' or ':') &&
             (c.Port is null or >= 1 and <= 65535) && c.StagingReference == "default" && c.StorageProvider is "local" or "central" &&
+            c.StorageExecutionLocation is null or "Backend" or "Agent" &&
+            (c.StorageExecutionLocation != "Agent" || c.StorageProvider == "local") &&
             SafeKey(c.StoragePrefix) && c.ChecksumPolicy is "Required" or "Preferred" or "Disabled" &&
             c.CompressionPolicy is "Required" or "Preferred" or "Disabled" &&
             (c.IntegratedSecurity ? c.DatabaseCredentialReference is null : Text(c.DatabaseCredentialReference, 64) &&
@@ -41,6 +43,7 @@ public static class BackupInputValidation
         if (a.SizeBytes <= 0 || a.CreatedAt == default || a.ChecksumAlgorithm != "sha256" || !Checksum(a.SourceChecksum) || !Checksum(a.ArtifactChecksum) ||
             a.Replicas is not { Count: > 0 and <= 8 } || !Metadata(a, configuration)) return false;
         return a.Replicas.All(r => r is not null && r.StorageProvider == configuration.StorageProvider && Reference(r.StorageTarget) &&
+            (configuration.StorageExecutionLocation != BackupStorageExecutionLocation.Agent || r.StorageTarget == configuration.StorageProvider) &&
             Text(r.Key, 512) && SafeKey(r.Key) && r.SizeBytes == a.SizeBytes && r.ChecksumAlgorithm == a.ChecksumAlgorithm &&
             Checksum(r.Checksum) && r.Checksum.Equals(a.ArtifactChecksum, StringComparison.OrdinalIgnoreCase) && r.VerificationState == "Verified" &&
             r.VerificationMethod is "ReadBack" or "ServerSideChecksum" && r.CreatedAt != default && r.VerifiedAt is not null && r.VerifiedAt >= r.CreatedAt) &&

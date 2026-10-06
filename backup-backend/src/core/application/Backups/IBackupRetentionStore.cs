@@ -50,8 +50,8 @@ public interface IBackupRetentionStore
     Task<BackupRetentionApplication> ApplyExpiredRetentionAsync(DateTimeOffset now, int limit, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Atomically takes ownership of up to <paramref name="limit"/> replicas whose physical delete is due (grace period over, a failed delete due
-    /// again, or a previous owner's lease expired) and starts a delete attempt on each. A replica is never returned to two callers.
+    /// Atomically claims due backend replicas and durably dispatches due agent replicas. Only backend replicas are returned for physical IO.
+    /// Active agent leases are never taken by a backend worker; unclaimed dispatches are checked again at a bounded cadence.
     /// </summary>
     Task<IReadOnlyList<ClaimedReplicaDeletion>> ClaimDueDeletionsAsync(string owner, DateTimeOffset now, TimeSpan lease, int limit, CancellationToken cancellationToken);
 

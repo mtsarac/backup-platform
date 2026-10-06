@@ -30,7 +30,8 @@ public sealed class BackupArtifactServiceTests
     }
 
     private static BackupJob Job(TenantId tenant, BackupRetentionPolicy policy) =>
-        new(Guid.NewGuid(), tenant, "job", AgentId.New(), BackupRunTestSupport.Configuration(), Now, retentionPolicy: policy);
+        new(Guid.NewGuid(), tenant, "job", AgentId.New(),
+            BackupRunTestSupport.Configuration() with { StorageExecutionLocation = BackupStorageExecutionLocation.Backend }, Now, retentionPolicy: policy);
 
     private static BackupRetentionPolicy Policy(bool enabled = true, double keepDays = 10, double graceHours = 2) =>
         new() { Enabled = enabled, KeepFor = TimeSpan.FromDays(keepDays), DeleteGracePeriod = TimeSpan.FromHours(graceHours) };
@@ -41,7 +42,8 @@ public sealed class BackupArtifactServiceTests
     private static BackupArtifactRecord Record(TenantId tenant, Guid? runId = null, Guid? jobId = null)
     {
         var artifact = new BackupArtifact(Guid.NewGuid(), tenant, Guid.NewGuid(), 100, Hash, Hash, "sha256", Now, "{}", "{}");
-        artifact.AddReplica(new BackupReplica(Guid.NewGuid(), tenant, artifact.Id, "local", "default", "k", 100, Hash, "sha256", "Verified", "ReadBack", Now, Now));
+        artifact.AddReplica(new BackupReplica(Guid.NewGuid(), tenant, artifact.Id, "local", "default", "k", 100, Hash, "sha256", "Verified", "ReadBack", Now, Now,
+            executionLocation: BackupStorageExecutionLocation.Backend));
         return new BackupArtifactRecord(artifact, runId ?? Guid.NewGuid(), jobId ?? Guid.NewGuid());
     }
 

@@ -13,8 +13,9 @@ namespace BackupPlatform.Infrastructure.Backups;
 /// the PostgreSQL row version as concurrency token: a cancel that read a replica as DeletePending can therefore never overwrite a claim that
 /// committed in between, it fails and is re-run against the committed truth.
 /// </summary>
-public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbContext> options) : IBackupRetentionStore
+public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbContext> options, BackupRetentionOptions? retention = null) : IBackupRetentionStore
 {
+    private readonly BackupRetentionOptions retentionOptions = retention ?? new BackupRetentionOptions();
     private const int MaxScanBatch = 1000;
     private const int MaxClaimBatch = 500;
     private const int MaxListLimit = 200;
@@ -76,8 +77,9 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
             SELECT "Id" AS "Value" FROM backup_replicas
             WHERE ("Status" = 'DeletePending' AND "DeleteAfter" <= {now})
                OR ("Status" = 'DeleteFailed' AND "DeleteNextAttemptAt" <= {now})
-               OR ("Status" = 'Deleting' AND "DeleteLeaseExpiresAt" <= {now})
-            ORDER BY CASE "Status" WHEN 'DeletePending' THEN "DeleteAfter" WHEN 'DeleteFailed' THEN "DeleteNextAttemptAt" ELSE "DeleteLeaseExpiresAt" END, "Id"
+               OR ("Status" = 'Deleting' AND ("DeleteLeaseExpiresAt" <= {now}
+                   OR ("ExecutionLocation" = 'Agent' AND "DeleteLeaseToken" IS NULL AND "DeleteNextAttemptAt" <= {now})))
+            ORDER BY CASE "Status" WHEN 'DeletePending' THEN "DeleteAfter" WHEN 'DeleteFailed' THEN "DeleteNextAttemptAt" ELSE COALESCE("DeleteLeaseExpiresAt", "DeleteNextAttemptAt") END, "Id"
             LIMIT {take}
             FOR UPDATE SKIP LOCKED
             """).ToListAsync(cancellationToken);
@@ -85,14 +87,22 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
         var position = ids.Select((id, index) => (id, index)).ToDictionary(pair => pair.id, pair => pair.index);
         var replicas = await context.BackupReplicas.Where(replica => ids.Contains(replica.Id)).ToListAsync(cancellationToken);
         var claimed = new List<ClaimedReplicaDeletion>(replicas.Count);
+        var changed = false;
         foreach (var replica in replicas.OrderBy(replica => position[replica.Id]))
         {
+            if (replica.ExecutionLocation == BackupStorageExecutionLocation.Agent)
+            {
+                changed |= replica.DispatchAgentDeletion(replica.DeleteOperationId ?? Guid.NewGuid(), now,
+                    now + retentionOptions.DeleteRetryDelay(Math.Max(1, replica.DeleteAttempts)));
+                continue;
+            }
             // The domain re-validates due-ness on the locked, freshly read row.
             if (!replica.BeginDelete(Guid.NewGuid(), owner, now, lease)) continue;
+            changed = true;
             claimed.Add(new ClaimedReplicaDeletion(replica.Id, replica.TenantId, replica.ArtifactId, replica.StorageProvider, replica.StorageTarget,
                 replica.Key, replica.DeleteLeaseToken!.Value, replica.DeleteAttempts));
         }
-        if (claimed.Count == 0) return [];
+        if (!changed) return [];
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return claimed;
