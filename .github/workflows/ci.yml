@@ -1,0 +1,353 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # Called by release.yml so a tag is only published from a commit that passed every job below.
+  workflow_call:
+  # Manual run of the whole pipeline against any branch.
+  workflow_dispatch:
+
+# Read-only token for every job; nothing here publishes or comments.
+permissions:
+  contents: read
+
+# One live run per ref: a newer push to a branch or pull request cancels the older run. main is never cancelled so every
+# merged commit keeps a complete result.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  # Strict Release build: warnings are errors (Directory.Build.props also turns this on when CI=true).
+  BUILD_FLAGS: -c Release --no-restore -p:ContinuousIntegrationBuild=true -warnaserror
+  # Every suite writes TRX here (relative to backup-backend, i.e. <repo>/TestResults) and the same folder is uploaded.
+  TEST_FLAGS: -c Release --no-build --results-directory ../TestResults --logger console;verbosity=minimal --blame-hang-timeout 15m --blame-hang-dump-type none
+
+jobs:
+  backend-linux:
+    name: Backend (Linux) - build, unit, architecture, agent tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+        working-directory: backup-backend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      # No packages.lock.json exists: the key covers every file that can change a resolved package version.
+      - uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('backup-backend/Directory.Packages.props', 'backup-backend/Directory.Build.props', 'backup-backend/dotnet-tools.json', 'backup-backend/**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore BackupPlatform.sln
+
+      - name: Build (Release, warnings as errors)
+        id: build
+        run: dotnet build BackupPlatform.sln $BUILD_FLAGS
+
+      - name: Unit tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: dotnet test tests/unit-tests $TEST_FLAGS --logger "trx;LogFileName=unit-tests.trx"
+
+      - name: Architecture tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: dotnet test tests/architecture-tests $TEST_FLAGS --logger "trx;LogFileName=architecture-tests.trx"
+
+      - name: Agent tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: dotnet test tests/agent-tests $TEST_FLAGS --logger "trx;LogFileName=agent-tests.trx"
+
+      - name: Test report
+        if: ${{ !cancelled() }}
+        run: python3 ../.github/scripts/trx_report.py --require-passed ../TestResults
+
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-backend-linux
+          path: TestResults
+          retention-days: 14
+          if-no-files-found: warn
+
+  integration-postgres:
+    name: Integration (PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+        working-directory: backup-backend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('backup-backend/Directory.Packages.props', 'backup-backend/Directory.Build.props', 'backup-backend/dotnet-tools.json', 'backup-backend/**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore tests/integration-tests
+
+      - name: Build (Release, warnings as errors)
+        id: build
+        run: dotnet build tests/integration-tests $BUILD_FLAGS
+
+      # Disposable container, random password (masked), published on 127.0.0.1 only. The tests create and drop their own databases.
+      - name: Start PostgreSQL
+        run: ../.github/scripts/start-postgres.sh
+
+      # Everything except the suites that need a real SQL Server: those run in the integration-mssql job.
+      - name: Integration tests (no SQL Server)
+        id: tests
+        run: >
+          dotnet test tests/integration-tests $TEST_FLAGS
+          --logger "trx;LogFileName=integration-postgres.trx"
+          --filter "FullyQualifiedName!~MsSql&FullyQualifiedName!~BackupPipelineSmoke"
+          -- xUnit.MaxParallelThreads=4
+
+      - name: Test report
+        if: ${{ !cancelled() }}
+        run: python3 ../.github/scripts/trx_report.py --require-passed --redact-env BACKUP_PLATFORM_TEST_POSTGRES_PASSWORD ../TestResults
+
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-integration-postgres
+          path: TestResults
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Remove PostgreSQL
+        if: ${{ always() }}
+        run: docker rm --force --volumes bp-ci-postgres
+
+  integration-mssql:
+    name: Integration (real SQL Server)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+        working-directory: backup-backend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('backup-backend/Directory.Packages.props', 'backup-backend/Directory.Build.props', 'backup-backend/dotnet-tools.json', 'backup-backend/**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore tests/integration-tests
+
+      - name: Build (Release, warnings as errors)
+        id: build
+        run: dotnet build tests/integration-tests $BUILD_FLAGS
+
+      # The *AgentSmokeTests start the real published Agent.Host, exactly as a Linux deployment would run it.
+      - name: Publish Agent.Host (linux-x64)
+        run: >
+          dotnet publish src/hosts/agent -c Release -r linux-x64 --self-contained true
+          -p:AgentPlatform=Linux -p:ContinuousIntegrationBuild=true
+          -o "$RUNNER_TEMP/agent-host"
+
+      - name: Start PostgreSQL
+        run: ../.github/scripts/start-postgres.sh
+
+      # SQL Server container with a bind-mounted staging directory both sides can use; see the script for the uid/permission contract.
+      - name: Start SQL Server
+        run: ../.github/scripts/start-mssql.sh
+
+      # The provider suites and BackupPipelineSmoke assert that the shared staging directory holds nothing of their own, so they
+      # must not overlap with the Agent.Host smokes (which stage files in the same directory): two sequential runs, never one.
+      - name: MSSQL provider and pipeline tests
+        id: provider
+        run: >
+          dotnet test tests/integration-tests $TEST_FLAGS
+          --logger "trx;LogFileName=integration-mssql-provider.trx"
+          --filter "FullyQualifiedName~IntegrationTests.MsSql|FullyQualifiedName~BackupPipelineSmoke"
+          -- xUnit.MaxParallelThreads=4
+
+      - name: MSSQL Agent.Host smoke tests (real backend, published agent, real SQL Server)
+        id: smoke
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          BACKUP_PLATFORM_TEST_AGENT_HOST_PATH: ${{ runner.temp }}/agent-host/BackupPlatform.Agent.Host
+        run: >
+          dotnet test tests/integration-tests $TEST_FLAGS
+          --logger "trx;LogFileName=integration-mssql-agent-smoke.trx"
+          --filter "FullyQualifiedName~AgentSmokeTests"
+          -- xUnit.MaxParallelThreads=1
+
+      - name: Test report
+        if: ${{ !cancelled() }}
+        run: >
+          python3 ../.github/scripts/trx_report.py --require-passed
+          --redact-env BACKUP_PLATFORM_TEST_MSSQL_PASSWORD --redact-env BACKUP_PLATFORM_TEST_POSTGRES_PASSWORD
+          ../TestResults
+
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-integration-mssql
+          path: TestResults
+          retention-days: 14
+          if-no-files-found: warn
+
+      # The server log holds no credentials; it explains a SQL Server that crashed or refused a backup.
+      - name: SQL Server log on failure
+        if: ${{ failure() }}
+        run: docker logs bp-ci-mssql --tail 300
+
+      - name: Remove containers and staging
+        if: ${{ always() }}
+        run: |
+          docker rm --force --volumes bp-ci-mssql bp-ci-postgres
+          rm -rf "$RUNNER_TEMP/bp-ci-mssql" "$RUNNER_TEMP/agent-host"
+
+  windows-agent:
+    name: Windows Agent - build, agent tests, Windows platform tests
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+        working-directory: backup-backend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('backup-backend/Directory.Packages.props', 'backup-backend/Directory.Build.props', 'backup-backend/dotnet-tools.json', 'backup-backend/**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore BackupPlatform.sln
+
+      # On Windows Agent.Host and the agent tests build as net10.0-windows with the Windows platform project.
+      - name: Build (Release, warnings as errors)
+        id: build
+        run: dotnet build BackupPlatform.sln $BUILD_FLAGS
+
+      - name: Agent tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: dotnet test tests/agent-tests $TEST_FLAGS --logger "trx;LogFileName=agent-tests-windows.trx"
+
+      # DPAPI, NTFS ACL and reparse-point tests. A test that needs something this runner cannot give (for example symbolic-link
+      # privilege) reports itself as SKIPPED with a reason; the report lists every skip and fails the job if nothing passed.
+      - name: Windows platform tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: dotnet test tests/windows-tests $TEST_FLAGS --logger "trx;LogFileName=windows-platform-tests.trx"
+
+      - name: Test report
+        if: ${{ !cancelled() }}
+        run: python ../.github/scripts/trx_report.py --require-passed ../TestResults
+
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-windows-agent
+          path: TestResults
+          retention-days: 14
+          if-no-files-found: warn
+
+  frontend:
+    name: Frontend - typecheck, lint, tests, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+        working-directory: backup-frontend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # oven-sh/setup-bun v2.2.0, pinned to its commit.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.x
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('backup-frontend/bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install (frozen lockfile)
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Tests
+        run: bun run test -- --reporter=default --reporter=junit --outputFile.junit=../TestResults/frontend-junit.xml
+
+      - name: Production build
+        run: bun run build
+
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-frontend
+          path: TestResults
+          retention-days: 14
+          if-no-files-found: warn
+
+  # One stable name to require in branch protection. Fails when any job above failed, was cancelled or was skipped.
+  ci-result:
+    name: CI result
+    if: ${{ always() }}
+    needs: [backend-linux, integration-postgres, integration-mssql, windows-agent, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every job to succeed
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+        run: |
+          echo "::error::At least one CI job did not succeed."
+          exit 1

@@ -1,0 +1,5 @@
+# Keep LF everywhere so scripts and generated archives are identical on Windows runners.
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.woff2 binary

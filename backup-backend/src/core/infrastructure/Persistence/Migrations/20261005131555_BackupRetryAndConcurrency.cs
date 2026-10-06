@@ -86,7 +86,7 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                 nullable: false,
                 defaultValue: new DateTimeOffset(new DateTime(1, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)));
 
-            migrationBuilder.Sql("UPDATE backup_run_attempts SET \"EligibleAt\" = \"CreatedAt\"");
+            migrationBuilder.Sql("UPDATE backup_run_attempts SET \"EligibleAt\" = \"CreatedAt\";");
 
             migrationBuilder.AlterColumn<string>(
                 name: "OverlapPolicy",

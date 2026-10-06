@@ -1,0 +1,165 @@
+name: Release
+
+on:
+  # A tag such as v0.2.0 or v0.2.0-rc.1 builds, checksums and publishes a GitHub Release.
+  push:
+    tags: ['v*']
+  # Dry run from any branch: runs CI and builds every archive as workflow artifacts; publishes nothing.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  # Nothing is published from a commit that has not passed the complete CI (including real SQL Server and Windows).
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      publish: ${{ steps.resolve.outputs.publish }}
+      prerelease: ${{ steps.resolve.outputs.prerelease }}
+    steps:
+      - id: resolve
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          if [ "$REF_TYPE" = tag ]; then
+            version="${REF_NAME#v}"
+            if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+              echo "::error::Tag '$REF_NAME' is not vMAJOR.MINOR.PATCH[-prerelease]."
+              exit 1
+            fi
+            tag="$REF_NAME"
+            publish=true
+            if [[ "$version" == *-* ]]; then prerelease=true; else prerelease=false; fi
+          else
+            version="0.0.0-dryrun.${RUN_NUMBER}"
+            tag=""
+            publish=false
+            prerelease=true
+          fi
+          {
+            echo "version=$version"
+            echo "tag=$tag"
+            echo "publish=$publish"
+            echo "prerelease=$prerelease"
+          } >> "$GITHUB_OUTPUT"
+          echo "Version: $version" >> "$GITHUB_STEP_SUMMARY"
+
+  package:
+    name: Package ${{ matrix.component }}
+    needs: [ci, version]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: true
+      matrix:
+        component: [agent-win-x64, agent-linux-x64, backend-linux-x64, frontend]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v6
+        if: ${{ matrix.component != 'frontend' }}
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/cache@v6
+        if: ${{ matrix.component != 'frontend' }}
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('backup-backend/Directory.Packages.props', 'backup-backend/Directory.Build.props', 'backup-backend/dotnet-tools.json', 'backup-backend/**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # oven-sh/setup-bun v2.2.0, pinned to its commit.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        if: ${{ matrix.component == 'frontend' }}
+        with:
+          bun-version: 1.4.x
+
+      - uses: actions/cache@v6
+        if: ${{ matrix.component == 'frontend' }}
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('backup-frontend/bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Build archive
+        env:
+          COMPONENT: ${{ matrix.component }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: .github/scripts/package-release.sh "$COMPONENT" "$VERSION" release-out
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.component }}
+          path: release-out/*
+          retention-days: 14
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: [version, package]
+    if: ${{ needs.version.outputs.publish == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release-files
+
+      - name: Checksums
+        working-directory: release-files
+        run: |
+          sha256sum backup-* > SHA256SUMS.txt
+          sha256sum --check SHA256SUMS.txt
+          ls -l
+
+      - name: Create release (draft, upload, publish)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
+          VERSION: ${{ needs.version.outputs.version }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+        run: |
+          cat > notes.md <<EOF
+          ## Backup Platform ${VERSION}
+
+          | Archive | Contents |
+          |---|---|
+          | \`backup-agent-win-x64-${VERSION}.zip\` | Windows Agent (self-contained) with service install/uninstall scripts |
+          | \`backup-agent-linux-x64-${VERSION}.tar.gz\` | Linux Agent (self-contained). **No official installer or systemd unit yet.** |
+          | \`backup-backend-linux-x64-${VERSION}.tar.gz\` | Backend API (self-contained) with the PostgreSQL migration script |
+          | \`backup-frontend-${VERSION}.tar.gz\` | Static web UI; serve it on the same origin as the backend |
+
+          Verify downloads: \`sha256sum --check SHA256SUMS.txt\`. The binaries are not code-signed.
+          Agent.Host has no enrollment command in this release; see the repository README, "Current MVP scope".
+          EOF
+          args=(--repo "$GITHUB_REPOSITORY" --draft --verify-tag --title "$TAG" --notes-file notes.md --generate-notes)
+          if [ "$PRERELEASE" = true ]; then args+=(--prerelease); fi
+          gh release create "$TAG" "${args[@]}" release-files/*
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
