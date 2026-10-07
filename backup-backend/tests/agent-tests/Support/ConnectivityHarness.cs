@@ -1,22 +1,22 @@
 using BackupPlatform.Agent.Core.Connectivity;
 using BackupPlatform.Agent.Core.Identity;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Time.Testing;
 
 namespace BackupPlatform.AgentTests.Support;
 
-/// <summary>The connectivity service wired to fakes and a fake clock. Tests advance virtual time in small steps.</summary>
+/// <summary>The connectivity service wired to fakes and operation-aware virtual time.</summary>
 internal sealed class ConnectivityHarness : IAsyncDisposable
 {
     private readonly CancellationTokenSource _cts = new();
     private Task? _run;
     private ILoggerFactory? _factory;
 
-    public ConnectivityHarness(AgentConnectivityOptions? options = null, double random = 0.5)
+    public ConnectivityHarness(AgentConnectivityOptions? options = null, double random = 0.5, double? retryRandom = null)
     {
-        Time = new FakeTimeProvider(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        Time = new DeterministicTimeProvider();
         Options = options ?? new AgentConnectivityOptions();
         Random = random;
+        RetryRandom = retryRandom ?? (random == 0 ? 0.5 : random);
         Store = new FakeCredentialStore(TestIdentity.Create());
         Client = new FakeBackendClient(Time);
         Channel = new FakePushChannel(Time);
@@ -24,11 +24,14 @@ internal sealed class ConnectivityHarness : IAsyncDisposable
         Capabilities = new TestCapabilitySource();
     }
 
-    public FakeTimeProvider Time { get; }
+    public DeterministicTimeProvider Time { get; }
 
     public AgentConnectivityOptions Options { get; }
 
     public double Random { get; set; }
+
+    // Cadence assertions can remove periodic jitter without turning repeated transient retries into a busy loop.
+    public double RetryRandom { get; set; }
 
     public FakeCredentialStore Store { get; }
 
@@ -53,39 +56,20 @@ internal sealed class ConnectivityHarness : IAsyncDisposable
             Store, Client, Channel,
             new AgentSoftwareInfo("1.2.3", "linux", "Test OS", "10.0.0"),
             Capabilities, Options,
-            new AgentBackoff(Options.ReconnectBaseDelay, Options.ReconnectMaxDelay, () => Random),
+            new AgentBackoff(Options.ReconnectBaseDelay, Options.ReconnectMaxDelay, () => RetryRandom, () => Random),
             Time, _factory.CreateLogger<AgentConnectivityService>());
         _run = Service.RunAsync(_cts.Token);
     }
 
-    public async Task StartAndSettleAsync()
+    public async Task StartAndDrainAsync()
     {
         Start();
-        await SettleAsync();
+        await DrainAsync();
     }
 
-    private static readonly TimeSpan SettleDelay = TimeSpan.FromMilliseconds(25);
+    public Task DrainAsync() => Time.DrainAsync();
 
-    /// <summary>
-    /// Lets queued continuations run; the service has no real-time dependencies. The delay is a real wait, so it has to outlast the
-    /// scheduling latency of a loaded machine (a 2 vCPU CI runner): 6 ms let the test observe the service mid-step, for example
-    /// a poll recorded one fake-clock step late.
-    /// </summary>
-    public static async Task SettleAsync() => await Task.Delay(SettleDelay);
-
-    public async Task AdvanceAsync(TimeSpan duration, TimeSpan? step = null)
-    {
-        var size = step ?? TimeSpan.FromMilliseconds(500);
-        var remaining = duration;
-        while (remaining > TimeSpan.Zero)
-        {
-            var chunk = remaining < size ? remaining : size;
-            Time.Advance(chunk);
-            remaining -= chunk;
-            await SettleAsync();
-        }
-        await SettleAsync();
-    }
+    public Task AdvanceAsync(TimeSpan duration) => Time.AdvanceAsync(duration);
 
     public async Task AdvanceSecondsAsync(double seconds) => await AdvanceAsync(TimeSpan.FromSeconds(seconds));
 

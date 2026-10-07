@@ -14,7 +14,7 @@ public sealed class BackupTaskConnectivityTests
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         harness.Pipeline.Execute = async (request, _, token) =>
         {
-            await release.Task.WaitAsync(token);
+            await harness.Time.ObserveAsync("backup worker", release.Task, token);
             return harness.Success(request);
         };
         var envelope = harness.Envelope();
@@ -37,13 +37,10 @@ public sealed class BackupTaskConnectivityTests
         var running = connectivity.RunAsync(stopping.Token);
         try
         {
-            await Wait.UntilAsync(() => harness.Pipeline.Calls.Count == 1 && backend.Heartbeats.Count >= 1, "claim execution and heartbeat");
-            for (var tick = 0; tick < 4; tick++)
-            {
-                harness.Time.Advance(TimeSpan.FromSeconds(5));
-                await ConnectivityHarness.SettleAsync();
-            }
-            await Wait.UntilAsync(() => backend.Polls.Count >= 3 && backend.Heartbeats.Count >= 3, "connectivity while provider is busy");
+            await harness.Time.DrainAsync();
+            Assert.Single(harness.Pipeline.Calls);
+            await harness.Time.AdvanceAsync(TimeSpan.FromSeconds(20));
+            Assert.True(backend.Polls.Count >= 3 && backend.Heartbeats.Count >= 3);
             Assert.Equal(AgentChannelState.Connected, connectivity.Current.State);
             Assert.Single(harness.Pipeline.Calls);
             Assert.Empty(harness.Client.Completions);

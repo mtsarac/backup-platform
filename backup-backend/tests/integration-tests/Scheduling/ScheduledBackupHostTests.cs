@@ -3,11 +3,14 @@ using System.Text.Json;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Contracts.Backups;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Quartz;
+using Xunit.Abstractions;
 
 namespace BackupPlatform.IntegrationTests.Scheduling;
 
 /// <summary>The whole scheduler runtime in a real API host: Quartz, the database and the sweep, against a real clock.</summary>
-public sealed class ScheduledBackupHostTests(PostgreSqlFixture database) : IClassFixture<PostgreSqlFixture>
+public sealed class ScheduledBackupHostTests(PostgreSqlFixture database, ITestOutputHelper output) : IClassFixture<PostgreSqlFixture>
 {
     private static readonly Dictionary<string, string?> Quick = new()
     {
@@ -16,6 +19,120 @@ public sealed class ScheduledBackupHostTests(PostgreSqlFixture database) : IClas
         // The sweep is parked: a run that appears here was woken by Quartz alone.
         ["Backups:Scheduling:ReconcileInterval"] = "00:30:00"
     };
+
+    [Fact]
+    public async Task FactoryDisposalWaitsForReconciliationCleanupAndJoinsCancelledRepeatedStops()
+    {
+        for (var iteration = 0; iteration < 8; iteration++)
+        {
+            using var probe = new SchedulerLifecycleProbe();
+            probe.ReleaseShutdown();
+            probe.ReleaseFire();
+            await using var original = new AuthApiFactory(database.ConnectionString, new MutableClock(live: true), configuration: Quick);
+            await using var factory = original.WithWebHostBuilder(builder => builder.ConfigureServices(probe.ConfigureServices));
+            try
+            {
+                var provider = factory.Services;
+                _ = provider.GetRequiredService<SchedulerLifecycleProbe.ProviderDisposalProbe>();
+                var runtime = SchedulerRuntime(provider);
+                var scheduler = await provider.GetRequiredService<ISchedulerFactory>().GetScheduler();
+                scheduler.ListenerManager.AddSchedulerListener(new SchedulerCallbackProbe(probe, provider, Guid.Empty));
+                await probe.WaitAsync("reconciliation-active");
+
+                provider.GetRequiredService<IHostApplicationLifetime>().StopApplication();
+                var stop = runtime.StopAsync(new CancellationToken(canceled: true));
+                await probe.WaitAsync("reconciliation-cancelled");
+                var repeatedStop = runtime.StopAsync(new CancellationToken(canceled: true));
+                Assert.False(stop.IsCompleted, probe.Trace);
+                Assert.False(repeatedStop.IsCompleted, probe.Trace);
+                var disposal = factory.DisposeAsync().AsTask();
+                Assert.False(probe.Checkpoint("provider-disposed").IsCompleted, probe.Trace);
+
+                probe.ReleaseReconciliation();
+                await Task.WhenAll(stop, repeatedStop, disposal).WaitAsync(SchedulerLifecycleProbe.Timeout);
+                Assert.True(runtime.ExecuteTask!.IsCompleted, probe.Trace);
+                Assert.Equal(SchedulerStatus.Shutdown, scheduler.Status);
+                probe.AssertOrder("host-stopping", "runtime-stopping", "reconciliation-cancelled",
+                    "reconciliation-cleanup-completed", "reconciliation-stopped", "quartz-shutdown-requested",
+                    "quartz-stopping-callback", "quartz-shutdown-callback", "quartz-shutdown-completed", "runtime-stopped", "provider-disposed");
+            }
+            finally
+            {
+                probe.ReleaseAll();
+                output.WriteLine("Reconciliation lifecycle iteration {0}: {1}", iteration + 1, probe.Trace);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task FactoryDisposalDrainsRealBackupFiringsAndQuartzCallbacksBeforeProviderDisposal()
+    {
+        var kit = new ScheduleKit(database);
+        for (var iteration = 0; iteration < 8; iteration++)
+        {
+            var clock = new MutableClock();
+            var agent = await kit.Runs.AddAgentAsync();
+            var job = await kit.AddJobAsync(agent, from: clock.GetUtcNow());
+            var next = job.Schedule!.NextOccurrenceAfter(clock.GetUtcNow())!.Value;
+            using var probe = new SchedulerLifecycleProbe();
+            await using var original = new AuthApiFactory(database.ConnectionString, clock, configuration: Quick);
+            await using var factory = original.WithWebHostBuilder(builder => builder.ConfigureServices(probe.ConfigureServices));
+            try
+            {
+                var provider = factory.Services;
+                _ = provider.GetRequiredService<SchedulerLifecycleProbe.ProviderDisposalProbe>();
+                var runtime = SchedulerRuntime(provider);
+                var scheduler = await provider.GetRequiredService<ISchedulerFactory>().GetScheduler();
+                var callbacks = new SchedulerCallbackProbe(probe, provider, job.Id);
+                scheduler.ListenerManager.AddSchedulerListener(callbacks);
+                scheduler.ListenerManager.AddJobListener(callbacks);
+                await probe.WaitAsync("reconciliation-active");
+                Assert.Single(await QuartzNode.WakeUpsAsync(database, job.Id));
+
+                clock.Advance(next - clock.GetUtcNow());
+                await kit.SeenAsync(agent, clock.GetUtcNow());
+                await scheduler.TriggerJob(new JobKey(job.Id.ToString("N"), "backup-schedule"));
+                await probe.WaitAsync("fire-active");
+                var disposal = factory.DisposeAsync().AsTask();
+                await probe.WaitAsync("reconciliation-cancelled");
+                Assert.False(disposal.IsCompleted, probe.Trace);
+                Assert.False(probe.Checkpoint("provider-disposed").IsCompleted, probe.Trace);
+                probe.ReleaseReconciliation();
+                await probe.WaitAsync("quartz-stopping-callback");
+
+                // This second stop must join the held first shutdown, not return through Quartz's atomic no-op path.
+                var repeatedStop = runtime.StopAsync(CancellationToken.None);
+                Assert.False(repeatedStop.IsCompleted, probe.Trace);
+                Assert.False(disposal.IsCompleted, probe.Trace);
+                Assert.False(probe.Checkpoint("provider-disposed").IsCompleted, probe.Trace);
+                probe.ReleaseShutdown();
+                await probe.WaitAsync("quartz-stopping-callback-completed");
+                Assert.False(disposal.IsCompleted, probe.Trace);
+                probe.ReleaseFire();
+                await Task.WhenAll(disposal, repeatedStop).WaitAsync(SchedulerLifecycleProbe.Timeout);
+
+                Assert.Equal(SchedulerStatus.Shutdown, scheduler.Status);
+                Assert.True(runtime.ExecuteTask!.IsCompleted, probe.Trace);
+                var run = Assert.Single(await kit.RunsOfAsync(job));
+                Assert.Equal("Scheduled", run.TriggerType.ToString());
+                Assert.Equal("Pending", run.Status.ToString());
+                Assert.Equal(next, run.ScheduledOccurrence);
+                probe.AssertOrder("reconciliation-active", "fire-active", "host-stopping", "runtime-stopping",
+                    "reconciliation-cancelled", "reconciliation-stopped", "quartz-shutdown-requested",
+                    "quartz-stopping-callback", "quartz-stopping-callback-completed", "fire-completed",
+                    "quartz-shutdown-callback", "quartz-shutdown-completed", "runtime-stopped", "provider-disposed");
+            }
+            finally
+            {
+                probe.ReleaseAll();
+                await kit.DisableAsync(job);
+                output.WriteLine("Firing lifecycle iteration {0}: {1}", iteration + 1, probe.Trace);
+            }
+        }
+    }
+
+    private static BackgroundService SchedulerRuntime(IServiceProvider provider) => provider.GetServices<IHostedService>()
+        .OfType<BackgroundService>().Single(service => service.GetType().Name == "BackupSchedulerRuntime");
 
     [Fact]
     public async Task QuartzWakesUpAndCreatesExactlyOneScheduledRun()

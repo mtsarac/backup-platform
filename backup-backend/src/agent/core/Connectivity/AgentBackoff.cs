@@ -10,16 +10,23 @@ public sealed class AgentBackoff
     /// <summary>Fraction of an interval that periodic jitter may add on top.</summary>
     public const double IntervalJitterFraction = 0.1;
 
-    private readonly Func<double> _random;
+    private readonly Func<double> _retryRandom;
+    private readonly Func<double> _intervalRandom;
 
     /// <param name="random">Returns values in [0, 1); injectable so tests are deterministic.</param>
     public AgentBackoff(TimeSpan baseDelay, TimeSpan maxDelay, Func<double>? random = null)
+        : this(baseDelay, maxDelay, random ?? Random.Shared.NextDouble, null)
+    {
+    }
+
+    internal AgentBackoff(TimeSpan baseDelay, TimeSpan maxDelay, Func<double> retryRandom, Func<double>? intervalRandom)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(baseDelay, TimeSpan.Zero);
         ArgumentOutOfRangeException.ThrowIfLessThan(maxDelay, baseDelay);
         BaseDelay = baseDelay;
         MaxDelay = maxDelay;
-        _random = random ?? Random.Shared.NextDouble;
+        _retryRandom = retryRandom;
+        _intervalRandom = intervalRandom ?? retryRandom;
     }
 
     public TimeSpan BaseDelay { get; }
@@ -36,8 +43,8 @@ public sealed class AgentBackoff
     }
 
     /// <summary>Full-jitter delay: uniformly distributed in <c>[0, GetCeiling(retryCount))</c>.</summary>
-    public TimeSpan GetDelay(int retryCount) => GetCeiling(retryCount) * Math.Clamp(_random(), 0d, 1d);
+    public TimeSpan GetDelay(int retryCount) => GetCeiling(retryCount) * Math.Clamp(_retryRandom(), 0d, 1d);
 
     /// <summary>Returns <paramref name="interval"/> plus up to <see cref="IntervalJitterFraction"/> of it.</summary>
-    public TimeSpan AddJitter(TimeSpan interval) => interval + (interval * (IntervalJitterFraction * Math.Clamp(_random(), 0d, 1d)));
+    public TimeSpan AddJitter(TimeSpan interval) => interval + (interval * (IntervalJitterFraction * Math.Clamp(_intervalRandom(), 0d, 1d)));
 }

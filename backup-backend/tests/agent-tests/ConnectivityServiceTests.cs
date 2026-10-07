@@ -8,10 +8,29 @@ namespace BackupPlatform.AgentTests;
 
 public sealed class ConnectivityServiceTests
 {
-    private static readonly TimeSpan Second = TimeSpan.FromSeconds(1);
-
     private static IReadOnlyList<double> Gaps(IReadOnlyList<DateTimeOffset> times) =>
         times.Zip(times.Skip(1), (a, b) => (b - a).TotalSeconds).ToList();
+
+    private static async Task StartWithAdmissionsAsync(ConnectivityHarness harness, params string[] operations)
+    {
+        var admitted = operations.ToDictionary(operation => operation,
+            _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        harness.Time.OnAdmission = (operation, token) =>
+        {
+            if (!admitted.TryGetValue(operation, out var arrived))
+            {
+                return Task.CompletedTask;
+            }
+            arrived.TrySetResult();
+            return release.Task.WaitAsync(token);
+        };
+        harness.Start();
+        await Task.WhenAll(admitted.Values.Select(signal => signal.Task)).WaitAsync(TimeSpan.FromSeconds(10));
+        harness.Time.OnAdmission = null;
+        release.SetResult();
+        await harness.DrainAsync();
+    }
 
     // ---- startup ---------------------------------------------------------------------------------------------
 
@@ -48,13 +67,13 @@ public sealed class ConnectivityServiceTests
     public async Task Connected_push_channel_stops_polling_after_one_catch_up_poll()
     {
         await using var h = new ConnectivityHarness(random: 0);
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
 
         Assert.Equal(AgentChannelState.Connected, h.Snapshot.State);
         Assert.False(h.Snapshot.PollingActive);
         Assert.Single(h.Client.Polls);
 
-        await h.AdvanceAsync(TimeSpan.FromMinutes(5), 2 * Second);
+        await h.AdvanceAsync(TimeSpan.FromMinutes(5));
 
         Assert.Single(h.Client.Polls);
         Assert.Equal(AgentChannelState.Connected, h.Snapshot.State);
@@ -65,7 +84,7 @@ public sealed class ConnectivityServiceTests
     {
         await using var h = new ConnectivityHarness();
         h.Channel.OnConnect = (_, _) => PushFailed();
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
 
         await h.AdvanceSecondsAsync(19);
         Assert.Empty(h.Client.Polls);
@@ -83,7 +102,7 @@ public sealed class ConnectivityServiceTests
         await using var h = new ConnectivityHarness(new AgentConnectivityOptions { PushFallbackDelay = TimeSpan.Zero });
         h.Channel.OnConnect = (_, _) => PushFailed();
 
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
 
         Assert.True(h.Snapshot.PollingActive);
         Assert.Single(h.Client.Polls);
@@ -94,13 +113,13 @@ public sealed class ConnectivityServiceTests
     {
         await using var h = new ConnectivityHarness(random: 0);
         h.Channel.OnConnect = (_, _) => PushFailed();
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
 
-        await h.AdvanceAsync(TimeSpan.FromMinutes(3), Second);
+        await h.AdvanceAsync(TimeSpan.FromMinutes(3));
 
         var polls = h.Client.Polls;
-        Assert.InRange(polls.Count, 5, 6);
-        Assert.All(Gaps(polls.Select(p => p.At).ToList()), gap => Assert.InRange(gap, 29.4, 31.1));
+        Assert.Equal(6, polls.Count);
+        Assert.All(Gaps(polls.Select(p => p.At).ToList()), gap => Assert.Equal(30, gap));
         Assert.Null(polls[0].Cursor);
         Assert.Equal("cursor-1", polls[1].Cursor);
         Assert.Equal("cursor-2", polls[2].Cursor);
@@ -112,14 +131,16 @@ public sealed class ConnectivityServiceTests
         await using var h = new ConnectivityHarness(random: 0);
         h.Channel.OnConnect = (_, _) => PushFailed();
         h.Client.OnPoll = (_, _, _) => AgentBackendResult<AgentPollResponse>.Success(new AgentPollResponse { Cursor = "c", NextPollAfterSeconds = 90 });
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(100), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(100));
         Assert.Single(h.Client.Polls);
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(15), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(9));
+        Assert.Single(h.Client.Polls);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(1));
         Assert.Equal(2, h.Client.Polls.Count);
-        Assert.InRange((h.Client.Polls[1].At - h.Client.Polls[0].At).TotalSeconds, 89.4, 91.1);
+        Assert.Equal(TimeSpan.FromSeconds(90), h.Client.Polls[1].At - h.Client.Polls[0].At);
     }
 
     [Fact]
@@ -128,11 +149,11 @@ public sealed class ConnectivityServiceTests
         await using var h = new ConnectivityHarness(random: 0);
         h.Channel.OnConnect = (_, _) => PushFailed();
         h.Client.OnPoll = (_, _, _) => AgentBackendResult<AgentPollResponse>.Success(new AgentPollResponse { Cursor = "c", NextPollAfterSeconds = 5 });
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(55), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(55));
 
-        Assert.Equal(2, h.Client.Polls.Count); // at about 20 s and 50 s, not every 5 s
+        Assert.Equal(2, h.Client.Polls.Count); // at 20 s and 50 s, not every 5 s
     }
 
     [Fact]
@@ -143,15 +164,15 @@ public sealed class ConnectivityServiceTests
         h.Client.OnPoll = (n, _, _) => n == 1
             ? Fail<AgentPollResponse>(AgentBackendFailureKind.RateLimited, TimeSpan.FromSeconds(120))
             : AgentBackendResult<AgentPollResponse>.Success(new AgentPollResponse { Cursor = "c" });
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(130), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(130));
         Assert.Single(h.Client.Polls);
         Assert.Equal(1, h.Snapshot.ConsecutivePollFailures);
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(20), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(20));
         Assert.Equal(2, h.Client.Polls.Count);
-        Assert.InRange((h.Client.Polls[1].At - h.Client.Polls[0].At).TotalSeconds, 119.4, 121.1);
+        Assert.Equal(TimeSpan.FromSeconds(120), h.Client.Polls[1].At - h.Client.Polls[0].At);
         Assert.Equal(0, h.Snapshot.ConsecutivePollFailures);
     }
 
@@ -161,13 +182,13 @@ public sealed class ConnectivityServiceTests
         await using var h = new ConnectivityHarness(random: 0.9);
         h.Channel.OnConnect = (_, _) => PushFailed();
         h.Client.OnPoll = (_, _, _) => Fail<AgentPollResponse>(AgentBackendFailureKind.Transient);
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
 
-        await h.AdvanceAsync(TimeSpan.FromMinutes(6), 2 * Second);
+        await h.AdvanceAsync(TimeSpan.FromMinutes(6));
 
         var polls = h.Client.Polls;
         Assert.InRange(polls.Count, 3, 12);
-        Assert.All(Gaps(polls.Select(p => p.At).ToList()), gap => Assert.True(gap >= 29.9, $"poll gap {gap}s is below the interval"));
+        Assert.All(Gaps(polls.Select(p => p.At).ToList()), gap => Assert.True(gap >= 30, $"poll gap {gap}s is below the interval"));
     }
 
     [Fact]
@@ -176,17 +197,17 @@ public sealed class ConnectivityServiceTests
         await using var h = new ConnectivityHarness();
         // With half-ceiling delays the 8th attempt lands at about 61 s, well after polling became active at 20 s.
         h.Channel.OnConnect = (n, _) => n <= 7 ? PushFailed() : AgentPushConnectResult.Connected;
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(45), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(45));
         Assert.True(h.Snapshot.PollingActive);
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(30), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(30));
         Assert.Equal(AgentChannelState.Connected, h.Snapshot.State);
         Assert.False(h.Snapshot.PollingActive);
 
         var pollsWhenRestored = h.Client.Polls.Count;
-        await h.AdvanceAsync(TimeSpan.FromMinutes(5), 2 * Second);
+        await h.AdvanceAsync(TimeSpan.FromMinutes(5));
         Assert.Equal(pollsWhenRestored, h.Client.Polls.Count);
     }
 
@@ -194,28 +215,28 @@ public sealed class ConnectivityServiceTests
     public async Task Connection_loss_activates_polling_after_the_fallback_delay_and_reconnection_stops_it()
     {
         await using var h = new ConnectivityHarness(random: 0);
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
         Assert.Single(h.Client.Polls);
 
         h.Channel.Listener!.OnReconnecting(null);
-        await ConnectivityHarness.SettleAsync();
+        await h.DrainAsync();
         Assert.Equal(AgentChannelState.Connecting, h.Snapshot.State);
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(19), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(19));
         Assert.False(h.Snapshot.PollingActive);
-        await h.AdvanceAsync(TimeSpan.FromSeconds(2), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(2));
         Assert.True(h.Snapshot.PollingActive);
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(12), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(12));
         Assert.Equal(2, h.Client.Polls.Count);
 
         h.Channel.Listener!.OnReconnected();
-        await h.AdvanceAsync(TimeSpan.FromSeconds(3), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(3));
 
         Assert.Equal(AgentChannelState.Connected, h.Snapshot.State);
         Assert.False(h.Snapshot.PollingActive);
         Assert.Equal(3, h.Client.Polls.Count); // one catch-up poll after the reconnect
-        await h.AdvanceAsync(TimeSpan.FromMinutes(2), 2 * Second);
+        await h.AdvanceAsync(TimeSpan.FromMinutes(2));
         Assert.Equal(3, h.Client.Polls.Count);
     }
 
@@ -223,11 +244,11 @@ public sealed class ConnectivityServiceTests
     public async Task Closed_push_channel_is_reconnected_with_backoff()
     {
         await using var h = new ConnectivityHarness();
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
         var firstListener = h.Channel.Listener;
 
         firstListener!.OnClosed(null);
-        await h.AdvanceAsync(TimeSpan.FromSeconds(2), TimeSpan.FromMilliseconds(250));
+        await h.AdvanceAsync(TimeSpan.FromSeconds(2));
 
         Assert.Equal(2, h.Channel.ConnectTimes.Count);
         Assert.NotSame(firstListener, h.Channel.Listener);
@@ -238,25 +259,25 @@ public sealed class ConnectivityServiceTests
     public async Task Poll_hint_triggers_a_poll_subject_to_the_minimum_spacing()
     {
         await using var h = new ConnectivityHarness(random: 0);
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
         Assert.Single(h.Client.Polls);
 
         h.Channel.Listener!.OnPollHint(new AgentPollHint { Reason = "work" });
-        await h.AdvanceAsync(TimeSpan.FromMilliseconds(500), TimeSpan.FromMilliseconds(100));
+        await h.AdvanceAsync(TimeSpan.FromMilliseconds(500));
         Assert.Single(h.Client.Polls); // inside the 2 s spacing
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(3), TimeSpan.FromMilliseconds(250));
+        await h.AdvanceAsync(TimeSpan.FromSeconds(3));
         Assert.Equal(2, h.Client.Polls.Count);
 
         for (var i = 0; i < 20; i++)
         {
             h.Channel.Listener!.OnPollHint(new AgentPollHint { Reason = "burst" });
         }
-        await h.AdvanceAsync(TimeSpan.FromSeconds(10), TimeSpan.FromMilliseconds(250));
+        await h.AdvanceAsync(TimeSpan.FromSeconds(10));
 
         var gaps = Gaps(h.Client.Polls.Select(p => p.At).ToList());
         Assert.Equal(3, h.Client.Polls.Count); // a burst of hints is one poll
-        Assert.All(gaps, gap => Assert.True(gap >= 1.9, $"poll gap {gap}s is below the minimum spacing"));
+        Assert.All(gaps, gap => Assert.True(gap >= 2, $"poll gap {gap}s is below the minimum spacing"));
     }
 
     [Fact]
@@ -264,9 +285,9 @@ public sealed class ConnectivityServiceTests
     {
         await using var h = new ConnectivityHarness(random: 0.999);
         h.Channel.OnConnect = (_, _) => PushFailed();
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(400), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(400));
 
         var gaps = Gaps(h.Channel.ConnectTimes);
         Assert.True(gaps.Count >= 10);
@@ -274,10 +295,25 @@ public sealed class ConnectivityServiceTests
         for (var i = 0; i < gaps.Count; i++)
         {
             var ceiling = ceilings[Math.Min(i, ceilings.Length - 1)];
-            Assert.InRange(gaps[i], ceiling * 0.999 - 1.1, ceiling + 1.1);
+            Assert.Equal(TimeSpan.FromMilliseconds(ceiling * 0.999 * 1000).TotalSeconds, gaps[i]);
         }
         Assert.Equal(h.Channel.ConnectTimes.Count - 1, gaps.Count);
         Assert.Equal(gaps.Count, h.Snapshot.ConsecutivePushFailures - 1);
+    }
+
+    [Fact]
+    public async Task Zero_retry_jitter_retries_finite_failures_without_advancing_time()
+    {
+        await using var h = new ConnectivityHarness(random: 0, retryRandom: 0);
+        h.Channel.OnConnect = (attempt, _) => attempt <= 3 ? PushFailed() : AgentPushConnectResult.Connected;
+        var startedAt = h.Time.GetUtcNow();
+
+        await h.StartAndDrainAsync();
+
+        Assert.Equal(4, h.Channel.ConnectTimes.Count);
+        Assert.All(h.Channel.ConnectTimes, time => Assert.Equal(startedAt, time));
+        Assert.Equal(AgentChannelState.Connected, h.Snapshot.State);
+        Assert.Single(h.Client.Polls);
     }
 
     // ---- authentication and protocol failures ----------------------------------------------------------------
@@ -293,20 +329,20 @@ public sealed class ConnectivityServiceTests
         h.Client.OnHeartbeat = (n, identity) => n == 1 || identity.Current.Secret == TestIdentity.RotatedSecret
             ? AgentBackendResult<AgentHeartbeatResponse>.Success(new AgentHeartbeatResponse { HeartbeatIntervalSeconds = 30 })
             : Fail<AgentHeartbeatResponse>(AgentBackendFailureKind.Unauthorized);
-        await h.StartAndSettleAsync();
+        await StartWithAdmissionsAsync(h, "heartbeat", "push");
 
         Assert.Equal(AgentChannelState.Unauthorized, h.Snapshot.State);
         var loadsAfterStart = h.Store.LoadCount;
         h.Store.Identity = rotated;
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(59), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(59));
         Assert.Equal(AgentChannelState.Unauthorized, h.Snapshot.State);
         Assert.Single(h.Channel.ConnectTimes);
         Assert.Single(h.Client.Heartbeats);
         Assert.Empty(h.Client.Polls);
         Assert.Equal(loadsAfterStart, h.Store.LoadCount);
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(5), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(5));
 
         Assert.True(h.Store.LoadCount > loadsAfterStart);
         Assert.Equal(rotated.Current.CredentialId, h.Client.Heartbeats[^1].CredentialId);
@@ -322,14 +358,14 @@ public sealed class ConnectivityServiceTests
         h.Client.OnHeartbeat = (n, _) => n == 1
             ? AgentBackendResult<AgentHeartbeatResponse>.Success(new AgentHeartbeatResponse { HeartbeatIntervalSeconds = 30 })
             : Fail<AgentHeartbeatResponse>(AgentBackendFailureKind.Unauthorized);
-        await h.StartAndSettleAsync();
+        await StartWithAdmissionsAsync(h, "heartbeat", "push");
 
-        await h.AdvanceAsync(TimeSpan.FromMinutes(5), 2 * Second);
+        await h.AdvanceAsync(TimeSpan.FromMinutes(5));
 
         Assert.Equal(AgentChannelState.Unauthorized, h.Snapshot.State);
-        Assert.InRange(h.Channel.ConnectTimes.Count, 5, 6);
-        Assert.All(Gaps(h.Channel.ConnectTimes), gap => Assert.InRange(gap, 59, 63));
-        Assert.All(Gaps(h.Client.Heartbeats.Select(x => x.At).ToList()), gap => Assert.InRange(gap, 59, 63));
+        Assert.Equal(6, h.Channel.ConnectTimes.Count);
+        Assert.All(Gaps(h.Channel.ConnectTimes), gap => Assert.Equal(60, gap));
+        Assert.All(Gaps(h.Client.Heartbeats.Select(x => x.At).ToList()), gap => Assert.Equal(60, gap));
         Assert.True(h.Store.LoadCount >= 5, "the identity is reloaded before each retry");
     }
 
@@ -339,14 +375,14 @@ public sealed class ConnectivityServiceTests
         await using var h = new ConnectivityHarness(random: 0.5);
         h.Channel.OnConnect = (_, _) => PushFailed();
         h.Client.OnPoll = (_, _, _) => Fail<AgentPollResponse>(AgentBackendFailureKind.Unauthorized);
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(60), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(60));
 
         Assert.Equal(AgentChannelState.Unauthorized, h.Snapshot.State);
         Assert.Single(h.Client.Polls);
         var connectsAtPause = h.Channel.ConnectTimes.Count;
-        await h.AdvanceAsync(TimeSpan.FromSeconds(15), Second); // the pause started at about 20 s and lasts 63 s
+        await h.AdvanceAsync(TimeSpan.FromSeconds(15)); // the pause starts at 20 s and lasts 63 s
         Assert.Equal(connectsAtPause, h.Channel.ConnectTimes.Count);
         Assert.Single(h.Client.Polls);
     }
@@ -360,9 +396,9 @@ public sealed class ConnectivityServiceTests
         h.Client.OnHeartbeat = (n, _) => n == 1
             ? AgentBackendResult<AgentHeartbeatResponse>.Success(new AgentHeartbeatResponse { HeartbeatIntervalSeconds = 30 })
             : Fail<AgentHeartbeatResponse>(AgentBackendFailureKind.ProtocolIncompatible, error: error);
-        await h.StartAndSettleAsync();
+        await StartWithAdmissionsAsync(h, "heartbeat", "push");
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(59), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(59));
 
         Assert.Equal(AgentChannelState.ProtocolIncompatible, h.Snapshot.State);
         Assert.Single(h.Channel.ConnectTimes);
@@ -370,17 +406,155 @@ public sealed class ConnectivityServiceTests
         Assert.Empty(h.Client.Polls);
         Assert.Contains(AgentErrorActions.UpgradeAgent, h.Logs.AllText, StringComparison.Ordinal);
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(5), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(5));
 
         Assert.Equal(2, h.Channel.ConnectTimes.Count);
         Assert.Equal(2, h.Client.Heartbeats.Count);
+    }
+
+    [Theory]
+    [InlineData("push", "heartbeat", true)]
+    [InlineData("push", "heartbeat", false)]
+    [InlineData("heartbeat", "push", true)]
+    [InlineData("heartbeat", "push", false)]
+    [InlineData("poll", "push", true)]
+    [InlineData("poll", "push", false)]
+    [InlineData("push", "poll", true)]
+    [InlineData("push", "poll", false)]
+    [InlineData("heartbeat", "poll", true)]
+    [InlineData("heartbeat", "poll", false)]
+    public async Task Credential_rejection_keeps_all_loops_paused_regardless_of_an_admitted_success(
+        string rejector, string successfulOperation, bool rejectionFirst)
+    {
+        await using var h = new ConnectivityHarness(new AgentConnectivityOptions { PushFallbackDelay = TimeSpan.Zero }, random: 0);
+        h.Channel.OnConnect = (_, _) => rejector == "push"
+            ? PushFailed(AgentBackendFailureKind.Unauthorized)
+            : AgentPushConnectResult.Connected;
+        h.Client.OnHeartbeat = (_, _) => rejector == "heartbeat"
+            ? Fail<AgentHeartbeatResponse>(AgentBackendFailureKind.Unauthorized)
+            : successfulOperation == "heartbeat"
+                ? AgentBackendResult<AgentHeartbeatResponse>.Success(new AgentHeartbeatResponse { HeartbeatIntervalSeconds = 30 })
+                : Fail<AgentHeartbeatResponse>(AgentBackendFailureKind.Transient);
+        h.Client.OnPoll = (_, _, _) => rejector == "poll"
+            ? Fail<AgentPollResponse>(AgentBackendFailureKind.Unauthorized)
+            : successfulOperation == "poll"
+                ? AgentBackendResult<AgentPollResponse>.Success(new AgentPollResponse())
+                : Fail<AgentPollResponse>(AgentBackendFailureKind.Transient);
+        var rejectorReady = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var successReady = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseRejector = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseSuccess = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        h.Time.OnAdmission = (operation, token) =>
+        {
+            if (operation == rejector)
+            {
+                rejectorReady.TrySetResult();
+                return releaseRejector.Task.WaitAsync(token);
+            }
+            if (operation == successfulOperation)
+            {
+                successReady.TrySetResult();
+                return releaseSuccess.Task.WaitAsync(token);
+            }
+            return Task.CompletedTask;
+        };
+        h.Start();
+        var restricted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        h.Service.Changed += snapshot =>
+        {
+            if (snapshot.State == AgentChannelState.Unauthorized)
+            {
+                restricted.TrySetResult();
+            }
+        };
+        await Task.WhenAll(rejectorReady.Task, successReady.Task).WaitAsync(TimeSpan.FromSeconds(10));
+        h.Time.OnAdmission = null;
+        if (rejectionFirst)
+        {
+            releaseRejector.SetResult();
+            await restricted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            releaseSuccess.SetResult();
+        }
+        else
+        {
+            releaseSuccess.SetResult();
+            await h.Time.WaitForCheckpointAsync(successfulOperation);
+            releaseRejector.SetResult();
+            await restricted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        await h.DrainAsync();
+        Assert.Equal(AgentChannelState.Unauthorized, h.Snapshot.State);
+        var heartbeats = h.Client.Heartbeats.Count;
+        var connects = h.Channel.ConnectTimes.Count;
+        var polls = h.Client.Polls.Count;
+
+        await h.AdvanceSecondsAsync(59);
+
+        Assert.Equal(heartbeats, h.Client.Heartbeats.Count);
+        Assert.Equal(connects, h.Channel.ConnectTimes.Count);
+        Assert.Equal(polls, h.Client.Polls.Count);
+        Assert.Equal(AgentChannelState.Unauthorized, h.Snapshot.State);
+
+        await h.AdvanceSecondsAsync(1);
+
+        var rejectionTimes = rejector switch
+        {
+            "push" => h.Channel.ConnectTimes,
+            "heartbeat" => h.Client.Heartbeats.Select(call => call.At).ToList(),
+            _ => h.Client.Polls.Select(call => call.At).ToList(),
+        };
+        Assert.Equal(2, rejectionTimes.Count);
+        Assert.Equal(TimeSpan.FromSeconds(60), rejectionTimes[1] - rejectionTimes[0]);
+    }
+
+    [Fact]
+    public async Task Every_loop_probes_each_shared_retry_window_when_all_three_reject_the_credential()
+    {
+        await using var h = new ConnectivityHarness(new AgentConnectivityOptions { PushFallbackDelay = TimeSpan.Zero }, random: 0);
+        h.Channel.OnConnect = (_, _) => PushFailed(AgentBackendFailureKind.Unauthorized);
+        h.Client.OnHeartbeat = (_, _) => Fail<AgentHeartbeatResponse>(AgentBackendFailureKind.Unauthorized);
+        h.Client.OnPoll = (_, _, _) => Fail<AgentPollResponse>(AgentBackendFailureKind.Unauthorized);
+
+        await StartWithAdmissionsAsync(h, "heartbeat", "push", "poll");
+        await h.AdvanceAsync(TimeSpan.FromMinutes(5));
+
+        Assert.Equal(AgentChannelState.Unauthorized, h.Snapshot.State);
+        Assert.Equal(6, h.Channel.ConnectTimes.Count);
+        Assert.Equal(6, h.Client.Heartbeats.Count);
+        Assert.Equal(6, h.Client.Polls.Count);
+        Assert.All(Gaps(h.Channel.ConnectTimes), gap => Assert.Equal(60, gap));
+        Assert.All(Gaps(h.Client.Heartbeats.Select(call => call.At).ToList()), gap => Assert.Equal(60, gap));
+        Assert.All(Gaps(h.Client.Polls.Select(call => call.At).ToList()), gap => Assert.Equal(60, gap));
+    }
+
+    [Fact]
+    public async Task Reconnection_of_an_existing_push_session_cannot_lift_a_newer_credential_restriction()
+    {
+        await using var h = new ConnectivityHarness(random: 0);
+        await h.StartAndDrainAsync();
+        h.Client.OnHeartbeat = (_, _) => Fail<AgentHeartbeatResponse>(AgentBackendFailureKind.Unauthorized);
+        await h.AdvanceSecondsAsync(30);
+        Assert.Equal(AgentChannelState.Unauthorized, h.Snapshot.State);
+        var heartbeats = h.Client.Heartbeats.Count;
+        var polls = h.Client.Polls.Count;
+
+        h.Channel.Listener!.OnReconnecting(null);
+        await h.DrainAsync();
+        h.Channel.Listener.OnReconnected();
+        await h.DrainAsync();
+        await h.AdvanceSecondsAsync(59);
+
+        Assert.Equal(AgentChannelState.Unauthorized, h.Snapshot.State);
+        Assert.Single(h.Channel.ConnectTimes);
+        Assert.Equal(heartbeats, h.Client.Heartbeats.Count);
+        Assert.Equal(polls, h.Client.Polls.Count);
     }
 
     [Fact]
     public async Task Protocol_notice_from_the_server_stops_the_channel_and_pauses_attempts()
     {
         await using var h = new ConnectivityHarness(random: 0);
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
         Assert.Equal(AgentChannelState.Connected, h.Snapshot.State);
 
         h.Channel.Listener!.OnProtocolNotice(new AgentProtocolNotice
@@ -388,7 +562,7 @@ public sealed class ConnectivityServiceTests
             Kind = AgentPushChannelContract.NoticeServerUpgradeRequired,
             Action = AgentErrorActions.WaitForServerUpgrade,
         });
-        await h.AdvanceAsync(TimeSpan.FromSeconds(50), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(50));
 
         Assert.Equal(AgentChannelState.ProtocolIncompatible, h.Snapshot.State);
         Assert.Single(h.Channel.ConnectTimes);
@@ -396,7 +570,7 @@ public sealed class ConnectivityServiceTests
         Assert.Contains(AgentErrorActions.WaitForServerUpgrade, h.Logs.AllText, StringComparison.Ordinal);
         Assert.Single(h.Client.Heartbeats);
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(20), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(20));
 
         Assert.Equal(2, h.Channel.ConnectTimes.Count);
         Assert.Equal(AgentChannelState.Connected, h.Snapshot.State);
@@ -409,13 +583,13 @@ public sealed class ConnectivityServiceTests
     {
         await using var h = new ConnectivityHarness(random: 0.5);
         h.Channel.OnConnect = (_, _) => PushFailed();
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
 
-        await h.AdvanceAsync(TimeSpan.FromMinutes(5), 2 * Second);
+        await h.AdvanceAsync(TimeSpan.FromMinutes(5));
 
         var beats = h.Client.Heartbeats;
         Assert.InRange(beats.Count, 9, 11);
-        Assert.All(Gaps(beats.Select(b => b.At).ToList()), gap => Assert.InRange(gap, 30, 33));
+        Assert.All(Gaps(beats.Select(b => b.At).ToList()), gap => Assert.Equal(31.5, gap));
         Assert.NotNull(h.Snapshot.LastSuccessfulHeartbeatUtc);
     }
 
@@ -424,13 +598,13 @@ public sealed class ConnectivityServiceTests
     {
         await using var h = new ConnectivityHarness(random: 0);
         h.Client.OnHeartbeat = (_, _) => Fail<AgentHeartbeatResponse>(AgentBackendFailureKind.Transient);
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
 
-        await h.AdvanceAsync(TimeSpan.FromMinutes(5), Second);
+        await h.AdvanceAsync(TimeSpan.FromMinutes(5));
 
         var gaps = Gaps(h.Client.Heartbeats.Select(b => b.At).ToList());
         Assert.InRange(h.Client.Heartbeats.Count, 10, 11);
-        Assert.All(gaps, gap => Assert.InRange(gap, 29.9, 31.1));
+        Assert.All(gaps, gap => Assert.Equal(30, gap));
         Assert.True(h.Snapshot.ConsecutiveHeartbeatFailures >= 10);
         Assert.Null(h.Snapshot.LastSuccessfulHeartbeatUtc);
     }
@@ -442,14 +616,14 @@ public sealed class ConnectivityServiceTests
         h.Client.OnHeartbeat = (n, _) => n == 1
             ? Fail<AgentHeartbeatResponse>(AgentBackendFailureKind.RateLimited, TimeSpan.FromSeconds(100))
             : AgentBackendResult<AgentHeartbeatResponse>.Success(new AgentHeartbeatResponse { HeartbeatIntervalSeconds = 30 });
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(95), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(95));
         Assert.Single(h.Client.Heartbeats);
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(10), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(10));
         Assert.Equal(2, h.Client.Heartbeats.Count);
-        Assert.InRange((h.Client.Heartbeats[1].At - h.Client.Heartbeats[0].At).TotalSeconds, 99.4, 101.1);
+        Assert.Equal(TimeSpan.FromSeconds(100), h.Client.Heartbeats[1].At - h.Client.Heartbeats[0].At);
     }
 
     [Theory]
@@ -462,14 +636,14 @@ public sealed class ConnectivityServiceTests
         await using var h = new ConnectivityHarness(random: 0);
         h.Client.OnHeartbeat = (_, _) => AgentBackendResult<AgentHeartbeatResponse>.Success(
             new AgentHeartbeatResponse { HeartbeatIntervalSeconds = serverSeconds, OfflineTimeoutSeconds = serverSeconds * 3 });
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(125), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(125));
 
         Assert.Equal(TimeSpan.FromSeconds(expectedSeconds), h.Snapshot.EffectiveHeartbeatInterval);
         var beats = h.Client.Heartbeats;
-        Assert.All(Gaps(beats.Select(b => b.At).ToList()), gap => Assert.InRange(gap, expectedSeconds - 0.1, expectedSeconds + 1.1));
-        Assert.InRange(beats.Count, 125 / (expectedSeconds + 1) + 1, (125 / expectedSeconds) + 2);
+        Assert.All(Gaps(beats.Select(b => b.At).ToList()), gap => Assert.Equal(expectedSeconds, gap));
+        Assert.Equal(125 / expectedSeconds + 1, beats.Count);
     }
 
     [Fact]
@@ -479,22 +653,22 @@ public sealed class ConnectivityServiceTests
         h.Client.OnHeartbeat = (n, _) => n <= 3
             ? AgentBackendResult<AgentHeartbeatResponse>.Success(new AgentHeartbeatResponse { HeartbeatIntervalSeconds = 10 })
             : Fail<AgentHeartbeatResponse>(AgentBackendFailureKind.Transient);
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(120), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(120));
 
         Assert.Single(h.Logs.Entries, e => e.Message.Contains("shorter heartbeat interval", StringComparison.Ordinal));
-        Assert.All(Gaps(h.Client.Heartbeats.Select(b => b.At).ToList()), gap => Assert.True(gap >= 9.9, $"gap {gap}s"));
+        Assert.All(Gaps(h.Client.Heartbeats.Select(b => b.At).ToList()), gap => Assert.Equal(10, gap));
     }
 
     [Fact]
     public async Task Heartbeat_request_reports_version_platform_runtime_and_capability_revision()
     {
         await using var h = new ConnectivityHarness(random: 0);
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
         h.Capabilities.Revision = "rev-7";
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(31), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(31));
 
         var first = h.Client.Heartbeats[0].Request;
         Assert.Equal("1.2.3", first.AgentVersion);
@@ -521,9 +695,9 @@ public sealed class ConnectivityServiceTests
     {
         await using var h = new ConnectivityHarness(random: 0);
         h.Capabilities.Revision = "rev-7";
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(125), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(125));
 
         Assert.True(h.Client.Heartbeats.Count >= 4);
         Assert.Equal(0, h.Capabilities.SyncCount);
@@ -541,9 +715,9 @@ public sealed class ConnectivityServiceTests
             return Task.FromResult(true);
         };
         h.Client.OnHeartbeat = (n, _) => Acknowledged(capabilitySyncRequested: n == 2);
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(125), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(125));
 
         Assert.True(h.Client.Heartbeats.Count >= 4);
         Assert.Equal(1, h.Capabilities.SyncCount);
@@ -560,14 +734,14 @@ public sealed class ConnectivityServiceTests
         h.Capabilities.Revision = "rev-7";
         h.Capabilities.OnSync = (_, _) => throws ? throw new InvalidOperationException("sync exploded") : Task.FromResult(false);
         h.Client.OnHeartbeat = (_, _) => Acknowledged(capabilitySyncRequested: true);
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(125), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(125));
 
         // The backend keeps asking, so every heartbeat retries the sync, and the cadence is untouched.
         Assert.True(h.Client.Heartbeats.Count >= 4);
         Assert.Equal(h.Client.Heartbeats.Count, h.Capabilities.SyncCount);
-        Assert.All(Gaps(h.Client.Heartbeats.Select(b => b.At).ToList()), gap => Assert.InRange(gap, 29.9, 31.1));
+        Assert.All(Gaps(h.Client.Heartbeats.Select(b => b.At).ToList()), gap => Assert.Equal(30, gap));
         Assert.Equal(0, h.Snapshot.ConsecutiveHeartbeatFailures);
         Assert.Contains(h.Logs.Entries, e => e.Level >= Microsoft.Extensions.Logging.LogLevel.Warning
             && (e.Message.Contains("Capability sync did not complete", StringComparison.Ordinal) || e.Message.Contains("capability sync", StringComparison.Ordinal)));
@@ -582,16 +756,16 @@ public sealed class ConnectivityServiceTests
         var release = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         h.Capabilities.OnSync = (_, _) => release.Task;
         h.Client.OnHeartbeat = (_, _) => Acknowledged(capabilitySyncRequested: true);
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(95), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(95));
 
         Assert.True(h.Client.Heartbeats.Count >= 3);
         Assert.Equal(1, h.Capabilities.SyncCount);
-        Assert.All(Gaps(h.Client.Heartbeats.Select(b => b.At).ToList()), gap => Assert.InRange(gap, 29.9, 31.1));
+        Assert.All(Gaps(h.Client.Heartbeats.Select(b => b.At).ToList()), gap => Assert.Equal(30, gap));
 
         release.SetResult(true);
-        await h.AdvanceAsync(TimeSpan.FromSeconds(31), Second);
+        await h.AdvanceAsync(TimeSpan.FromSeconds(31));
 
         Assert.Equal(2, h.Capabilities.SyncCount);
     }
@@ -616,7 +790,7 @@ public sealed class ConnectivityServiceTests
             return true;
         };
         h.Client.OnHeartbeat = (_, _) => Acknowledged(capabilitySyncRequested: true);
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
         Assert.Equal(1, h.Capabilities.SyncCount);
 
         await h.StopAsync();
@@ -633,8 +807,8 @@ public sealed class ConnectivityServiceTests
     {
         await using var h = new ConnectivityHarness(random: 0.5);
         h.Channel.OnConnect = (_, _) => pushWorks ? AgentPushConnectResult.Connected : PushFailed();
-        await h.StartAndSettleAsync();
-        await h.AdvanceAsync(TimeSpan.FromSeconds(45), Second);
+        await h.StartAndDrainAsync();
+        await h.AdvanceAsync(TimeSpan.FromSeconds(45));
 
         var started = System.Diagnostics.Stopwatch.StartNew();
         await h.StopAsync();
@@ -647,7 +821,7 @@ public sealed class ConnectivityServiceTests
         var polls = h.Client.Polls.Count;
         var connects = h.Channel.ConnectTimes.Count;
 
-        await h.AdvanceAsync(TimeSpan.FromMinutes(10), 10 * Second);
+        await h.AdvanceAsync(TimeSpan.FromMinutes(10));
 
         Assert.Equal(heartbeats, h.Client.Heartbeats.Count);
         Assert.Equal(polls, h.Client.Polls.Count);
@@ -659,9 +833,9 @@ public sealed class ConnectivityServiceTests
     {
         await using var h = new ConnectivityHarness(random: 0.5);
         h.Channel.OnConnect = (n, _) => n == 1 ? throw new InvalidOperationException("boom") : AgentPushConnectResult.Connected;
-        await h.StartAndSettleAsync();
+        await h.StartAndDrainAsync();
 
-        await h.AdvanceAsync(TimeSpan.FromSeconds(3), TimeSpan.FromMilliseconds(250));
+        await h.AdvanceAsync(TimeSpan.FromSeconds(3));
 
         Assert.False(h.Run.IsCompleted);
         Assert.Equal(AgentChannelState.Connected, h.Snapshot.State);

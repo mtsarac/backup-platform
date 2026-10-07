@@ -17,7 +17,7 @@ public sealed class BackupTaskWorkerTests
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         harness.Pipeline.Execute = async (request, _, cancellationToken) =>
         {
-            await release.Task.WaitAsync(cancellationToken);
+            await harness.Time.ObserveAsync("backup worker", release.Task, cancellationToken);
             return harness.Success(request);
         };
         var envelope = harness.Envelope();
@@ -31,6 +31,22 @@ public sealed class BackupTaskWorkerTests
         Assert.False(harness.Worker.TryPublish(envelope));
         Assert.Single(harness.Pipeline.Calls);
         Assert.Single(harness.Client.Starts);
+    }
+
+    [Fact]
+    public async Task A_queued_claim_reaches_completion_without_advancing_the_clock()
+    {
+        await using var harness = new BackupTaskHarness();
+        harness.Start();
+        await harness.Time.DrainAsync();
+        var queuedAt = harness.Time.GetUtcNow();
+
+        Assert.True(harness.Worker.TryPublish(harness.Envelope()));
+        await harness.Time.DrainAsync();
+
+        Assert.Single(harness.Pipeline.Calls);
+        Assert.Equal("Succeeded", Assert.Single(harness.Client.Completions).Status);
+        Assert.Equal(queuedAt, harness.Time.GetUtcNow());
     }
 
     [Fact]
@@ -58,7 +74,7 @@ public sealed class BackupTaskWorkerTests
         {
             try
             {
-                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                await harness.Time.ObserveAsync("backup worker", Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken));
             }
             catch (OperationCanceledException)
             {
@@ -74,7 +90,7 @@ public sealed class BackupTaskWorkerTests
         harness.Start();
         Assert.True(harness.Worker.TryPublish(harness.Envelope()));
         await Wait.UntilAsync(() => harness.Pipeline.Calls.Count == 1, "provider start");
-        harness.Time.Advance(TimeSpan.FromSeconds(10));
+        await harness.Time.AdvanceAsync(TimeSpan.FromSeconds(10));
         await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await Wait.UntilAsync(() => harness.Client.Completions.Count == 1, "cancelled terminal result");
         var completion = Assert.Single(harness.Client.Completions);
@@ -94,7 +110,7 @@ public sealed class BackupTaskWorkerTests
         {
             try
             {
-                await Task.Delay(Timeout.InfiniteTimeSpan, token);
+                await harness.Time.ObserveAsync("backup worker", Task.Delay(Timeout.InfiniteTimeSpan, token));
             }
             catch (OperationCanceledException)
             {
@@ -107,7 +123,7 @@ public sealed class BackupTaskWorkerTests
         harness.Start();
         Assert.True(harness.Worker.TryPublish(harness.Envelope()));
         await Wait.UntilAsync(() => harness.Pipeline.Calls.Count == 1, "provider start");
-        harness.Time.Advance(TimeSpan.FromSeconds(seconds));
+        await harness.Time.AdvanceAsync(TimeSpan.FromSeconds(seconds));
         await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
         harness.Pipeline.Execute = (request, _, _) => Task.FromResult(harness.Success(request));
         var next = harness.Envelope();
@@ -127,7 +143,7 @@ public sealed class BackupTaskWorkerTests
             {
                 progress!.Report(new BackupProgress(BackupExecutionStage.BackingUp, percent, null, null, harness.Time.GetUtcNow()));
             }
-            await release.Task.WaitAsync(token);
+            await harness.Time.ObserveAsync("backup worker", release.Task, token);
             return harness.Success(request);
         };
         harness.Client.OnProgress = () => Fail<bool>(AgentBackendFailureKind.Transient);
@@ -136,9 +152,7 @@ public sealed class BackupTaskWorkerTests
         Assert.True(harness.Worker.TryPublish(envelope));
         await Wait.UntilAsync(() => harness.Pipeline.Calls.Count == 1, "provider start");
         Assert.Empty(harness.Client.Progress);
-        // The coalescing timer is armed by the worker after the provider started; advancing the fake clock before that would miss it.
-        await ConnectivityHarness.SettleAsync();
-        harness.Time.Advance(TimeSpan.FromSeconds(2));
+        await harness.Time.AdvanceAsync(TimeSpan.FromSeconds(2));
         await Wait.UntilAsync(() => harness.Client.Progress.Count == 1, "coalesced progress");
         Assert.Equal(100, Assert.Single(harness.Client.Progress).Percent);
         release.SetResult();
@@ -205,7 +219,7 @@ public sealed class BackupTaskWorkerTests
         await Wait.UntilAsync(() => harness.Client.Completions.Count == 1, "first completion");
         var rotated = Guid.NewGuid();
         harness.Store.Identity = TestIdentity.Create(TestIdentity.RotatedSecret, rotated);
-        harness.Time.Advance(TimeSpan.FromSeconds(2));
+        await harness.Time.AdvanceAsync(TimeSpan.FromSeconds(2));
         await Wait.UntilAsync(() => harness.Client.Completions.Count == 2, "completion retry");
         var results = harness.Client.Completions.ToArray();
         Assert.Same(results[0], results[1]);
@@ -236,7 +250,7 @@ public sealed class BackupTaskWorkerTests
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         harness.Pipeline.Execute = async (request, _, token) =>
         {
-            await release.Task.WaitAsync(token);
+            await harness.Time.ObserveAsync("backup worker", release.Task, token);
             return harness.Success(request);
         };
         harness.Start();
@@ -393,8 +407,7 @@ public sealed class BackupTaskWorkerTests
         harness.Start();
         Assert.True(harness.Worker.TryPublish(harness.Envelope()));
         await Wait.UntilAsync(() => harness.Client.Completions.Count == 1, "first terminal request");
-        harness.Time.Advance(TimeSpan.FromSeconds(120));
-        await ConnectivityHarness.SettleAsync();
+        await harness.Time.AdvanceAsync(TimeSpan.FromSeconds(120));
         harness.Client.OnComplete = null;
         harness.Client.OnRenew = null;
         var next = harness.Envelope();

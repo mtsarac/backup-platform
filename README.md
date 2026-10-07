@@ -112,7 +112,7 @@ not a file the applications load.
 |---|---|---|
 | Unit | `dotnet test tests/unit-tests -c Release` | nothing |
 | Architecture (dependency rules) | `dotnet test tests/architecture-tests -c Release` | nothing |
-| Agent | `dotnet test tests/agent-tests -c Release -- xUnit.ParallelizeTestCollections=false` | nothing (in-process Kestrel/SignalR); run serially, several tests settle a fake clock with short real-time waits |
+| Agent | `dotnet test tests/agent-tests -c Release` | nothing (in-process Kestrel/SignalR); fake-clock tests synchronize on consumer checkpoints and timer deadlines, not real-time settling |
 | Integration (PostgreSQL) | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName!~MsSql&FullyQualifiedName!~BackupPipelineSmoke"` | `BACKUP_PLATFORM_TEST_CONNECTION_STRING` |
 | Real MSSQL | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName~IntegrationTests.MsSql\|FullyQualifiedName~BackupPipelineSmoke"` | PostgreSQL variable above plus the MSSQL variables below |
 | Real MSSQL + published Agent.Host | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName~AgentSmokeTests" -- xUnit.MaxParallelThreads=1` | everything above plus `BACKUP_PLATFORM_TEST_AGENT_HOST_PATH` |
@@ -133,12 +133,23 @@ suites and the Agent.Host smokes as separate invocations (as CI does): they shar
 `.github/scripts/start-postgres.sh` and `start-mssql.sh` start the disposable containers CI uses and append the variables to the file
 named by `$GITHUB_ENV`.
 
+Connectivity and backup-worker tests drain explicitly tracked operations before advancing to the next fake timer deadline.
+They do not depend on loop startup order or serial test collections. Credential/protocol restrictions apply to all three
+connectivity loops; a success admitted before a newer rejection cannot clear that rejection. Real transport tests still
+exercise Kestrel/SignalR and use bounded waits for observed network conditions.
+
 ## Continuous integration and releases
 
 `ci.yml` runs on pull requests and on `main`: Linux build with warnings as errors plus unit, architecture and agent tests;
 PostgreSQL integration tests; real SQL Server integration tests (Docker, shared staging directory); Windows build with agent and
 Windows platform tests; frontend typecheck, lint, tests and build. `CI result` is the single job to require in branch protection.
-Test results are uploaded as TRX/JUnit artifacts.
+Test results are uploaded as TRX/JUnit artifacts. Agent and integration jobs bound collection concurrency to two threads;
+collections are not forced to run serially. The PostgreSQL job also generates the release's idempotent migration script
+and applies it twice to a disposable database, checking that migration history is unchanged.
+
+The scheduler runtime joins concurrent/repeated stop calls: reconciliation cancellation and cleanup finish before Quartz
+shutdown, and Quartz jobs/callbacks finish before the owning provider is disposed. Lifecycle diagnostics are debug-only.
+Shutdown intentionally waits for owned work to finish even if the host's graceful-shutdown deadline has elapsed.
 
 Pushing a tag `vMAJOR.MINOR.PATCH[-prerelease]` runs the CI again and, if green, publishes a GitHub Release with
 `SHA256SUMS.txt` and:

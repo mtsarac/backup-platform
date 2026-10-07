@@ -10,9 +10,8 @@ public sealed partial class AgentConnectivityService
         var failures = 0;
         while (true)
         {
-            await WaitForRestrictionAsync(cancellationToken).ConfigureAwait(false);
+            var attempt = await WaitForRestrictionAsync("heartbeat", cancellationToken).ConfigureAwait(false);
             var identity = Identity;
-            var attempt = BeginAttempt();
             var request = _software.ToHeartbeat(_capabilities.GetRevision());
             var result = await GuardAsync("heartbeat", () => _client.SendHeartbeatAsync(identity, request, cancellationToken)).ConfigureAwait(false);
 
@@ -52,7 +51,7 @@ public sealed partial class AgentConnectivityService
                 }
                 LogHeartbeatFailed(identity.AgentId, failure.Kind, failure.Description, failures, delay, _backendHost);
             }
-            await Task.Delay(delay, _time, cancellationToken).ConfigureAwait(false);
+            await _time.ObserveAsync("heartbeat", Task.Delay(delay, _time, cancellationToken)).ConfigureAwait(false);
         }
     }
 
@@ -67,14 +66,16 @@ public sealed partial class AgentConnectivityService
         {
             return;
         }
+        _time.StartOperation("capability sync");
         _capabilitySync = Task.Run(() => RunCapabilitySyncAsync(identity, cancellationToken), CancellationToken.None);
     }
 
     private async Task RunCapabilitySyncAsync(AgentLocalIdentity identity, CancellationToken cancellationToken)
     {
+        _time.EnterOperation("capability sync");
         try
         {
-            if (await _capabilities.SyncAsync(identity, cancellationToken).ConfigureAwait(false))
+            if (await _time.ObserveAsync("capability sync", _capabilities.SyncAsync(identity, cancellationToken)).ConfigureAwait(false))
             {
                 LogCapabilitySyncSucceeded(identity.AgentId);
             }
@@ -94,6 +95,7 @@ public sealed partial class AgentConnectivityService
         finally
         {
             Volatile.Write(ref _capabilitySyncRunning, 0);
+            _time.EndOperation("capability sync");
         }
     }
 

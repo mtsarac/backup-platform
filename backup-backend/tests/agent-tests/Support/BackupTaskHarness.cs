@@ -8,7 +8,6 @@ using BackupPlatform.Contracts.Agents;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.StorageProviders.Abstractions;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Time.Testing;
 
 namespace BackupPlatform.AgentTests.Support;
 
@@ -16,7 +15,7 @@ internal sealed class BackupTaskHarness : IAsyncDisposable
 {
     private readonly CancellationTokenSource _stop = new();
     private Task? _running;
-    public FakeTimeProvider Time { get; } = new(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+    public DeterministicTimeProvider Time { get; } = new();
     public FakeCredentialStore Store { get; } = new(TestIdentity.Create());
     public TaskClient Client { get; }
     public TaskPipeline Pipeline { get; } = new();
