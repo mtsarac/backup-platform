@@ -5,6 +5,7 @@ using BackupPlatform.Agents.Credentials;
 using BackupPlatform.Agents.Enrollment;
 using BackupPlatform.Application.Tenancy;
 using BackupPlatform.Domain.Agents;
+using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Restores;
@@ -69,6 +70,7 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<RestoreOperation> RestoreOperations => Set<RestoreOperation>();
     public DbSet<RestoreAttempt> RestoreAttempts => Set<RestoreAttempt>();
     public DbSet<RestoreReplicaPin> RestoreReplicaPins => Set<RestoreReplicaPin>();
+    public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
 
     /// <summary>Explicit unfiltered context for trusted platform operations only.</summary>
     /// <remarks>Does not authorize the caller. Future application boundaries must authorize its use.</remarks>
@@ -147,6 +149,14 @@ public sealed class PlatformDbContext : DbContext
             if (!IsPlatformOperations && entry.Entity is TenantAgentEnrollmentPolicy or AgentCredential or AgentConnectivityRecord or AgentCapabilityRecord)
             {
                 throw new InvalidOperationException("Enrollment policy, agent credential, connectivity and capability writes require explicit platform operations.");
+            }
+            if (!IsPlatformOperations && entry.Entity is AuditEvent)
+            {
+                throw new InvalidOperationException("Audit events require explicit platform operations.");
+            }
+            if (entry.Entity is AuditEvent && entry.State != EntityState.Added)
+            {
+                throw new InvalidOperationException("Audit events are append-only.");
             }
         }
     }

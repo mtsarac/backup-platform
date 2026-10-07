@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Identity;
 
 namespace BackupPlatform.Agents.Enrollment;
@@ -32,11 +33,11 @@ public sealed class EnrollmentAdministrationService(IAgentEnrollmentStore store,
     }
 
     public Task<EnrollmentPolicyChanged?> SetEnrollmentEnabledAsync(
-        TenantId tenantId, bool isEnabled, UserId actor, CancellationToken cancellationToken)
+        TenantId tenantId, bool isEnabled, UserId actor, AuditActorKind actorKind, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(tenantId);
         ArgumentNullException.ThrowIfNull(actor);
-        return store.SetPolicyAsync(tenantId, isEnabled, actor, timeProvider.GetUtcNow(), cancellationToken);
+        return store.SetPolicyAsync(tenantId, isEnabled, actor, actorKind, timeProvider.GetUtcNow(), cancellationToken);
     }
 
     /// <summary>Creates a token only while the tenant's enrollment permission is enabled. The plaintext is returned once.</summary>

@@ -110,3 +110,16 @@ backup-backend/deploy/windows/
 ```
 
 `scripts/windows/test-agent-service.sh` is only an orchestration wrapper.
+
+## Browser smoke environment
+
+```bash
+scripts/frontend/browser-smoke-env.sh [--no-build]
+```
+
+Starts a disposable real stack (fresh PostgreSQL database from `BACKUP_PLATFORM_TEST_CONNECTION_STRING`, EF migrations,
+bootstrapped `smoke.admin` PlatformAdmin with a generated password, HTTPS backend API, Vite dev server with the `/api`
+proxy). It prints `SMOKE_FRONTEND_URL`, `SMOKE_API_URL` and `SMOKE_CREDENTIALS_FILE` (a 0600 JSON file, never echoed)
+and runs until interrupted; on exit it stops both processes, drops the database and deletes the runtime directory.
+Start it as a named service (ready log `SMOKE_READY`) and drive the frontend URL with a browser.
+

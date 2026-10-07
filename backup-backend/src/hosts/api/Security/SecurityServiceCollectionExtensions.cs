@@ -1,3 +1,6 @@
+using BackupPlatform.Agents.Platform;
+using BackupPlatform.Application.Platform;
+using BackupPlatform.Infrastructure.Platform;
 using BackupPlatform.Api.Backups;
 using BackupPlatform.Api.Restores;
 using BackupPlatform.Application.Backups;
@@ -42,6 +45,10 @@ public static class SecurityServiceCollectionExtensions
         services.AddSingleton<PasswordHashService>();
         services.AddScoped<AuthenticationService>();
         services.AddScoped<TenantResolutionService>();
+        services.AddScoped<IPlatformAdministrationStore, PostgreSqlPlatformAdministrationStore>();
+        services.AddScoped<PlatformAdministrationService>();
+        services.AddScoped<IPlatformAgentStore, PostgreSqlPlatformAgentStore>();
+        services.AddScoped<PlatformAgentQueryService>();
         services.AddScoped<BrowserCookieEvents>();
         AddBrowserAuthentication(services);
         AddAgentSecurity(services);

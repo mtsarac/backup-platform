@@ -53,7 +53,8 @@ public sealed class AgentConnectivityQueryService(
         return store.SummarizeAsync(tenantId, timeProvider.GetUtcNow(), options.OfflineTimeout, cancellationToken);
     }
 
-    private AgentStatusView ToView(AgentConnectivityListItem item, DateTimeOffset now, AgentCapabilitySnapshot? capabilities)
+    /// <summary>Derives the display state of one stored agent row; used by the tenant and the platform views alike.</summary>
+    public AgentStatusView ToView(AgentConnectivityListItem item, DateTimeOffset now, AgentCapabilitySnapshot? capabilities)
     {
         var record = item.Connectivity;
         var connectivity = AgentConnectivityEvaluator.Evaluate(record?.LastSeenAt, now, options.OfflineTimeout);

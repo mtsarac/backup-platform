@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Agents.Credentials;
@@ -17,8 +18,9 @@ public interface IAgentEnrollmentStore
     /// <summary>Null when the tenant does not exist.</summary>
     Task<EnrollmentPolicyState?> GetPolicyAsync(TenantId tenantId, CancellationToken cancellationToken);
 
-    /// <summary>Null when the tenant does not exist. Otherwise reports the previous and resulting value.</summary>
-    Task<EnrollmentPolicyChanged?> SetPolicyAsync(TenantId tenantId, bool isEnabled, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
+    /// <summary>Null when the tenant does not exist. Otherwise reports the previous and resulting value; an actual change is audited in the same transaction.</summary>
+    Task<EnrollmentPolicyChanged?> SetPolicyAsync(
+        TenantId tenantId, bool isEnabled, UserId actor, AuditActorKind actorKind, DateTimeOffset now, CancellationToken cancellationToken);
 
     Task AddTokenAsync(EnrollmentToken token, CancellationToken cancellationToken);
 

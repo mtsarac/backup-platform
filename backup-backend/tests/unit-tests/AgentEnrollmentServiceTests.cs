@@ -3,6 +3,7 @@ using BackupPlatform.Agents.Credentials;
 using BackupPlatform.Agents.Enrollment;
 using BackupPlatform.Contracts.Agents;
 using BackupPlatform.Contracts.Protocol;
+using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Identity;
 
@@ -191,7 +192,7 @@ public sealed class AgentEnrollmentServiceTests
         public Task<EnrollmentPolicyState?> GetPolicyAsync(TenantId tenantId, CancellationToken cancellationToken) =>
             Task.FromResult<EnrollmentPolicyState?>(new EnrollmentPolicyState(tenantId, enabled, null));
 
-        public Task<EnrollmentPolicyChanged?> SetPolicyAsync(TenantId tenantId, bool isEnabled, UserId actor, DateTimeOffset now, CancellationToken cancellationToken) =>
+        public Task<EnrollmentPolicyChanged?> SetPolicyAsync(TenantId tenantId, bool isEnabled, UserId actor, AuditActorKind actorKind, DateTimeOffset now, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
         public Task AddTokenAsync(EnrollmentToken token, CancellationToken cancellationToken) => throw new NotSupportedException();
