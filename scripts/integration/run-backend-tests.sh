@@ -20,10 +20,10 @@ done
 load_local_env
 require_command dotnet
 cd -- "$REPO_ROOT/backup-backend"
-run_redacted dotnet test tests/unit-tests -c Release "${build_args[@]}"
-run_redacted dotnet test tests/architecture-tests -c Release "${build_args[@]}"
+run_dotnet_tests tests/unit-tests -c Release "${build_args[@]}"
+run_dotnet_tests tests/architecture-tests -c Release "${build_args[@]}"
 agent_filter=()
 if [[ "$connectivity" == false ]]; then
     agent_filter=(--filter 'FullyQualifiedName!~ConnectivityServiceTests')
 fi
-run_redacted dotnet test tests/agent-tests -c Release "${build_args[@]}" "${agent_filter[@]}" -- xUnit.MaxParallelThreads=2
+run_dotnet_tests tests/agent-tests -c Release "${build_args[@]}" "${agent_filter[@]}" -- xUnit.MaxParallelThreads=2

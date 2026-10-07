@@ -50,6 +50,11 @@ const messages: Record<string, string> = {
   membership_not_found: 'Tenant üyeliği bulunamadı. Liste güncel olmayabilir.',
   login_taken: 'Bu kullanıcı adı zaten kullanılıyor.',
   agent_not_found: 'Agent bulunamadı.',
+  enrollment_disabled: 'Yeni Agent kaydı kapalı. Agent kaydı sayfasından kayıt iznini açın.',
+  invalid_enrollment_token: 'Kayıt token’ı geçersiz.',
+  enrollment_token_expired: 'Kayıt token’ının süresi doldu. Yeni bir token oluşturun.',
+  enrollment_token_consumed: 'Kayıt token’ı zaten kullanılmış.',
+  token_revoked: 'Kayıt token’ı iptal edilmiş.',
   invalid_value: 'Girilen değer geçersiz.',
   required: 'Zorunlu bir alan boş bırakıldı.',
   too_long: 'Girilen değer çok uzun.',
@@ -57,7 +62,7 @@ const messages: Record<string, string> = {
   platform_admin_required: 'Platform Administration için PlatformAdmin yetkisi gerekir.',
 }
 // Codes whose text must win over the generic 403/404 wording.
-const statusSpecificCodes = new Set(['tenant_not_found', 'user_not_found', 'membership_not_found', 'agent_not_found', 'platform_admin_required'])
+const statusSpecificCodes: Record<string, true> = { tenant_not_found: true, user_not_found: true, membership_not_found: true, agent_not_found: true, platform_admin_required: true, enrollment_disabled: true }
 export function failureMessage(code?: string | null): string {
   if (!code) return 'İşlem başarısız oldu.'
   return messages[code] ?? (/^[A-Za-z0-9_.-]{1,80}$/.test(code) ? `İşlem başarısız oldu (${code}).` : 'İşlem başarısız oldu.')
@@ -66,7 +71,7 @@ export function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 401) return 'Oturumunuz sona erdi. Yeniden giriş yapın.'
     const code = error.reason ?? error.code
-    if ((error.status === 403 || error.status === 404) && code && statusSpecificCodes.has(code)) return messages[code]
+    if ((error.status === 403 || error.status === 404) && code && Object.hasOwn(statusSpecificCodes, code)) return messages[code]
     if (error.status === 403) return 'Bu işlem için yetkiniz yok.'
     if (error.status === 404) return 'Kayıt bulunamadı veya bu tenant altında erişilemiyor.'
     if (error.status >= 500) return 'Sunucu isteği tamamlayamadı. Daha sonra tekrar deneyin.'

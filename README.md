@@ -209,6 +209,42 @@ They do not depend on loop startup order or serial test collections. Credential/
 connectivity loops; a success admitted before a newer rejection cannot clear that rejection. Real transport tests still
 exercise Kestrel/SignalR and use bounded waits for observed network conditions.
 
+## Agent onboarding
+
+1. A tenant **Owner or Admin** opens **Agents → Add Agent**, selects Windows or Linux, and creates a one-time token.
+   PlatformAdmin alone does not grant tenant enrollment permission; Operator and Viewer cannot create tokens.
+2. Prepare the published Agent files on the target machine. The frontend shows the real command and token expiry;
+   it does not provide an Agent download endpoint. Use the executable folder (`bin/` in release archives).
+3. Run the displayed command against a trusted HTTPS backend. On Windows, use an elevated terminal and an
+   administrator-controlled permanent folder:
+
+   ```powershell
+   .\BackupPlatform.Agent.Host.exe enroll --server 'https://backup.example.com' --token '<one-time-token>' --non-interactive
+   ```
+
+   This invokes the existing Windows installer, enrolls under `NT SERVICE\BackupAgent`, and starts the delayed-auto
+   service. The permanent identity is DPAPI CurrentUser protected for that service account, not the interactive user.
+   No credential copying or database edits are required.
+
+   On Linux, run both commands as the same Unix account:
+
+   ```bash
+   ./BackupPlatform.Agent.Host enroll --server 'https://backup.example.com' --token '<one-time-token>' --store-directory "$HOME/.local/share/backup-agent" --non-interactive
+   ./BackupPlatform.Agent.Host --store-directory "$HOME/.local/share/backup-agent"
+   ```
+
+   The store is owner-only (directory 0700, files 0600); the second command runs in the foreground. There is no
+   bundled systemd installer. `enroll` without automation options also supports interactive input with a hidden token.
+4. The wizard monitors token consumption and the linked Agent, then shows Online after heartbeat and capability sync.
+   Token plaintext is creation-only and is cleared on consumption, expiry, revocation or closing the wizard; it is
+   never put in browser storage. Monitoring is bounded and can be retried, rather than polling indefinitely.
+
+Enrollment refuses an existing identity and preserves it on failure. Windows uninstall defaults to retaining the
+identity and saved server for reinstall; `Uninstall-BackupAgentService.ps1 -RemoveIdentity` (alias `-PurgeIdentity`)
+explicitly removes the local identity. Reinstall with `Install-BackupAgentService.ps1 -BinaryDirectory <published-folder>`
+without a token to verify and reuse the same AgentId. Local purge does not revoke the backend credential or delete its
+Agent record. TLS certificate validation is always enabled; do not disable it to make installation succeed.
+
 ## Continuous integration and releases
 
 `ci.yml` (**Fast CI**) runs on pull requests and pushes to `main`, with only two Linux jobs:
@@ -254,6 +290,7 @@ Implemented:
 - Manual and scheduled runs, retry, cancellation, overlap policy, concurrency limits, agent leases
 - Local and Central storage; retention with soft delete, grace period, agent-local deletion and sweeps
 - Agent connectivity (polling, SignalR hints, heartbeat, capability sync), credential rotation, Windows Service hosting
+- Real Agent enrollment CLI, Windows service-context provisioning/install/start, Linux owner-only enrollment and Add Agent onboarding wizard
 - Multi-tenant backend with cookie authentication and antiforgery; React UI for backup management (restore is currently API-only)
 
 Not yet implemented:
@@ -264,8 +301,7 @@ Not yet implemented:
 - S3, SFTP or other remote storage providers
 - Notifications; an audit trail module
 - File-system and snapshot backup providers
-- An Agent-side enrollment command in `Agent.Host` (the backend enrollment API and the UI exist; `Agent.Host` refuses to start
-  until an identity is stored), a Linux installer/systemd unit, code signing of release binaries
+- A Linux installer/systemd unit and code signing of release binaries
 
 ## Security note
 

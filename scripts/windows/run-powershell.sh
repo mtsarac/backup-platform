@@ -32,7 +32,9 @@ args = ' '.join(value if re.fullmatch(r'-[A-Za-z][A-Za-z0-9]*', value) else quot
 script = """$ErrorActionPreference='Stop'; $global:LASTEXITCODE=0; $path=$null; $code=0
 try {
     $path=Join-Path ([IO.Path]::GetTempPath()) ('backup-local-' + [Guid]::NewGuid().ToString('N') + '.ps1')
-    $content=[Convert]::FromBase64String([Console]::In.ReadToEnd())
+    # Windows OpenSSH does not reliably signal stdin EOF to Windows PowerShell.
+    # The sender frames the payload as one Base64 line, so do not wait for EOF.
+    $content=[Convert]::FromBase64String([Console]::In.ReadLine())
     [IO.File]::WriteAllBytes($path, $content)
     & $path %s
     if ($LASTEXITCODE -ne 0) { $code=$LASTEXITCODE }
@@ -43,7 +45,7 @@ exit $code
 print(base64.b64encode(script.encode('utf-16le')).decode('ascii'))
 PY
 )
-        python3 -c 'import base64,sys; base64.encode(open(sys.argv[1], "rb"), sys.stdout.buffer)' "$local_file" |
+        python3 -c 'import base64,sys; print(base64.b64encode(open(sys.argv[1], "rb").read()).decode("ascii"))' "$local_file" |
             run_redacted "$transport" --command "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand $encoded" ;;
     *) fail 'Usage: run-powershell.sh --command STRING | --file LOCALFILE [-- ARG...]' ;;
 esac

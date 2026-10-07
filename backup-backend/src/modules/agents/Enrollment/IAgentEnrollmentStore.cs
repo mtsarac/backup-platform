@@ -31,6 +31,8 @@ public interface IAgentEnrollmentStore
 
     Task<EnrollmentToken?> FindTokenAsync(Guid tokenId, CancellationToken cancellationToken);
 
+    Task<EnrollmentToken?> FindTenantTokenAsync(TenantId tenantId, Guid tokenId, CancellationToken cancellationToken);
+
     /// <summary>
     /// Atomically consumes the token and persists the agent and its first credential, or does none of it.
     /// Of any number of concurrent calls for one token, at most one returns <see cref="EnrollmentCommit.Enrolled"/>.

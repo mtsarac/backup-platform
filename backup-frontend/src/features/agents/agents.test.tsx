@@ -13,7 +13,7 @@ import * as api from './api'
 
 const tenancy = vi.hoisted(() => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true, tenant: { tenantId: 'tenant-a', name: 'Test', role: 'Owner' } }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => tenancy }))
-vi.mock('./api', () => ({ getAgents: vi.fn(), getAgent: vi.fn(), revokeAgent: vi.fn(), getEnrollmentPolicy: vi.fn(), setEnrollmentPolicy: vi.fn(), getEnrollmentTokens: vi.fn(), createEnrollmentToken: vi.fn(), revokeEnrollmentToken: vi.fn() }))
+vi.mock('./api', () => ({ getAgents: vi.fn(), getAgent: vi.fn(), revokeAgent: vi.fn(), getEnrollmentPolicy: vi.fn(), setEnrollmentPolicy: vi.fn(), getEnrollmentTokens: vi.fn(), getEnrollmentTokenStatus: vi.fn(), createEnrollmentToken: vi.fn(), revokeEnrollmentToken: vi.fn() }))
 
 const agent: AgentDetail = {
   agentId: 'agent-a', hostName: 'SQL-01', platform: 'Windows', status: 'Active',
@@ -37,7 +37,9 @@ beforeEach(() => {
   vi.mocked(api.getAgent).mockResolvedValue(agent)
   vi.mocked(api.getEnrollmentPolicy).mockResolvedValue({ tenantId: 'tenant-a', enabled: true })
   vi.mocked(api.getEnrollmentTokens).mockResolvedValue([{ tokenId: 'token-a', createdAt: '2026-10-06T10:00:00Z', expiresAt: '2026-10-07T10:00:00Z', createdBy: 'internal-user-id' }])
-  vi.mocked(api.createEnrollmentToken).mockResolvedValue({ tokenId: 'token-b', token: 'secret-once-only', expiresAt: '2026-10-07T10:00:00Z' })
+  const expiresAt = new Date(Date.now() + 60 * 60_000).toISOString()
+  vi.mocked(api.createEnrollmentToken).mockResolvedValue({ tokenId: 'token-b', token: 'secret-once-only', expiresAt })
+  vi.mocked(api.getEnrollmentTokenStatus).mockResolvedValue({ tokenId: 'token-b', expiresAt, state: 'Active', agentId: null })
   vi.mocked(api.revokeAgent).mockResolvedValue(undefined)
   vi.mocked(api.revokeEnrollmentToken).mockResolvedValue(undefined)
   vi.mocked(api.setEnrollmentPolicy).mockResolvedValue({ tenantId: 'tenant-a', enabled: false })

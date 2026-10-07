@@ -16,7 +16,7 @@ fail() { printf 'Error: %s\n' "$1" >&2; exit "${2:-1}"; }
 require_command() { command -v "$1" >/dev/null 2>&1 || fail "Required command missing: $1" 127; }
 register_cleanup_dir() { BP_CLEANUP_DIRS+=("$1"); }
 cleanup_runtime() {
-    local status=$? path container failed=0
+    local status=${1:-$?} path container failed=0
     trap - EXIT
     for container in "${BP_CLEANUP_CONTAINERS[@]}"; do
         if docker container inspect "$container" >/dev/null 2>&1 && \
@@ -56,6 +56,14 @@ load_local_env() {
 run_redacted() {
     require_command python3
     "$@" 2>&1 | python3 -u "${REPO_ROOT}/scripts/lib/local-env.py" redact "$BP_CREDENTIAL_FILE"
+}
+run_dotnet_tests() {
+    # VSTest can return success for an empty filter or an entirely skipped suite.
+    # Acceptance requires recorded, actually executed tests, not just exit code zero.
+    make_runtime_dir
+    local results_directory=$RUNTIME_DIR
+    run_redacted dotnet test --logger 'trx;LogFileName=result.trx' --results-directory "$results_directory" "$@"
+    python3 "${REPO_ROOT}/scripts/lib/assert-test-results.py" "${results_directory}/result.trx"
 }
 run_database_probe() {
     require_command dotnet

@@ -7,18 +7,25 @@ Contents
   bin/                              published Agent.Host (BackupPlatform.Agent.Host) and its runtime
   config/agent.settings.example.json  configuration keys with placeholders (no secrets)
 
-Run
-  Agent__Backend__BaseUri=https://backup.example.com/ ./bin/BackupPlatform.Agent.Host
+Enroll and run (same Unix account)
+  1. In the frontend, open Agents -> Add Agent as tenant Owner/Admin, select Linux and create a one-time token.
+  2. From this archive's root:
+       ./bin/BackupPlatform.Agent.Host enroll --server 'https://backup.example.com' --token '<one-time-token>' --store-directory "$HOME/.local/share/backup-agent" --non-interactive
+       ./bin/BackupPlatform.Agent.Host --store-directory "$HOME/.local/share/backup-agent"
+     Optional enrollment flag: --name 'Database host'. Interactive enroll also supports hidden token input.
+  3. The wizard shows Online after authenticated heartbeat and capability sync. The host handles SIGTERM gracefully.
 
-  Configuration comes from environment variables (Agent__...) or bin/appsettings.json; the credential store is
-  /var/lib/backup-agent unless Agent__CredentialStoreDirectory says otherwise. SQL Server credentials are supplied
-  as BACKUP_AGENT_SECRET_<reference> environment variables (JSON {"userName":"...","password":"..."}).
-  The process handles SIGTERM with a graceful shutdown.
+The permanent identity and server are stored owner-only (directory 0700, files 0600), not in appsettings or output.
+Existing enrollment is refused without overwriting identity. Restart using the same account and store retains AgentId.
+The default service-style store is /var/lib/backup-agent; the commands above use an unprivileged per-user store.
+Use a trusted HTTPS certificate; validation is never disabled.
+
+Backup-specific configuration uses Agent__... environment variables or bin/appsettings.json. SQL Server credentials
+are supplied as BACKUP_AGENT_SECRET_<reference> environment variables (JSON {"userName":"...","password":"..."}).
 
 Limitations of this release
-  - There is NO official installer and NO systemd unit. Run the host under a service manager you maintain.
-  - Agent.Host has no enrollment command. It exits with code 1 until an agent identity is stored in the credential
-    store. See the repository README, section "Current MVP scope".
+  - There is NO bundled installer or systemd unit. The run command is foreground; use a service manager you maintain.
+  - The frontend has no Agent download endpoint.
   - The binaries are not code-signed.
 
 Verify the download with the SHA256SUMS.txt file attached to the release.

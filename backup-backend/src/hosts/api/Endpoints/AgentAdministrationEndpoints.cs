@@ -41,6 +41,7 @@ public static class AgentAdministrationEndpoints
         tenant.MapPut("/agent-enrollment", SetTenantPolicyAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
         tenant.MapPost("/agent-enrollment-tokens", CreateTokenAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
         tenant.MapGet("/agent-enrollment-tokens", ListTokensAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+        tenant.MapGet("/agent-enrollment-tokens/{tokenId:guid}", GetTokenStatusAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
         tenant.MapDelete("/agent-enrollment-tokens/{tokenId:guid}", RevokeTokenAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
         tenant.MapGet("/agents", ListAgentsAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
         tenant.MapGet("/agents/connectivity-summary", GetConnectivitySummaryAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
@@ -92,7 +93,7 @@ public static class AgentAdministrationEndpoints
                 expiresAt = result.Issued.Token.ExpiresAt
             }, statusCode: StatusCodes.Status201Created),
             CreateEnrollmentTokenStatus.EnrollmentDisabled => Results.Json(
-                new { error = "Agent enrollment is not enabled for this tenant." }, statusCode: StatusCodes.Status403Forbidden),
+                new { error = "enrollment_disabled", message = "Agent enrollment is not enabled for this tenant." }, statusCode: StatusCodes.Status403Forbidden),
             _ => Results.Json(new { error = "The requested token lifetime is outside the allowed range." }, statusCode: StatusCodes.Status400BadRequest)
         };
     }
@@ -107,6 +108,19 @@ public static class AgentAdministrationEndpoints
             expiresAt = token.ExpiresAt,
             createdBy = token.CreatedBy.Value
         }));
+    }
+
+    private static async Task<IResult> GetTokenStatusAsync(
+        Guid tokenId, ITenantContext tenantContext, EnrollmentAdministrationService service, CancellationToken cancellationToken)
+    {
+        var status = await service.GetTokenStatusAsync(tenantContext.TenantId!, tokenId, cancellationToken);
+        return status is null ? Results.NotFound() : Results.Ok(new
+        {
+            tokenId = status.TokenId,
+            expiresAt = status.ExpiresAt,
+            state = status.State.ToString(),
+            agentId = status.AgentId?.Value
+        });
     }
 
     private static async Task<IResult> RevokeTokenAsync(

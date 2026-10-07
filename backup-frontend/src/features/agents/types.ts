@@ -50,3 +50,10 @@ export interface CreatedEnrollmentToken {
   token: string
   expiresAt: string
 }
+
+export interface EnrollmentTokenStatus {
+  tokenId: string
+  expiresAt: string
+  state: 'Active' | 'Expired' | 'Consumed' | 'Revoked'
+  agentId: string | null
+}

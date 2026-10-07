@@ -117,6 +117,13 @@ public sealed class PostgreSqlAgentEnrollmentStore(DbContextOptions<PlatformDbCo
         return await context.EnrollmentTokens.AsNoTracking().SingleOrDefaultAsync(token => token.Id == tokenId, cancellationToken);
     }
 
+    public async Task<EnrollmentToken?> FindTenantTokenAsync(TenantId tenantId, Guid tokenId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        return await context.EnrollmentTokens.AsNoTracking().SingleOrDefaultAsync(
+            token => token.Id == tokenId && token.TenantId == tenantId, cancellationToken);
+    }
+
     public async Task<EnrollmentCommit> EnrollAsync(
         Guid tokenId, TenantId tenantId, Agent agent, AgentCredential credential, DateTimeOffset now, CancellationToken cancellationToken)
     {

@@ -56,6 +56,9 @@ try {
     }
     $service.Refresh()
     Write-Output ('Agent service status: ' + $service.Status)
+    if ($RequireAgent -and $service.Status -ne 'Running') {
+        throw 'The required BackupAgent service is not running.'
+    }
     if ($Action -ne 'check') { return }
 
     $configuration = Get-ItemProperty -LiteralPath "HKLM:\SYSTEM\CurrentControlSet\Services\$serviceName"
@@ -69,6 +72,9 @@ try {
         $pair = $entry -split '=', 2
         if ($pair.Length -eq 2) { $environmentValues[$pair[0]] = $pair[1] }
     }
+    if ($RequireAgent -and $serviceDetails.StartMode -ne 'Auto') {
+        throw 'The required BackupAgent service does not use automatic startup.'
+    }
     $storeDirectory = $environmentValues['Agent__CredentialStoreDirectory']
     if (-not $storeDirectory) {
         $storeDirectory = Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'BackupAgent'
@@ -78,11 +84,13 @@ try {
         $identity = Get-Item -LiteralPath $identityPath -Force
         if ($identity.Length -eq 0) {
             Write-Output 'Identity: empty file; enrollment is not ready.'
+            if ($RequireAgent) { throw 'The required agent identity file is empty.' }
         } else {
             Write-Output 'Identity: encrypted file present; decryptability and backend credential validity are NOT verified.'
         }
     } else {
         Write-Output 'Identity: absent; service-account enrollment is required.'
+        if ($RequireAgent) { throw 'The required agent identity file is absent.' }
     }
     Write-Output 'Enrollment readiness: cannot be confirmed by an administrator/SSH account; verification requires the running service account and backend authentication.'
 

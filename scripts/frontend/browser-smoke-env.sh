@@ -32,7 +32,14 @@ require_command python3
 
 make_runtime_dir
 work_dir=$RUNTIME_DIR
+# Explicit opt-in for a VM-accessible acceptance stack; the default remains loopback-only.
+public_host=${BP_SMOKE_PUBLIC_HOST:-127.0.0.1}
+[[ $public_host =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail 'BP_SMOKE_PUBLIC_HOST must be an IPv4 address.'
+bind_host=127.0.0.1
+[[ $public_host == 127.0.0.1 ]] || bind_host=0.0.0.0
 database="bp_smoke_$(python3 -c 'import uuid; print(uuid.uuid4().hex[:12])')"
+# Non-secret ownership metadata also identifies this disposable database after a forced shutdown.
+printf '{"database":"%s","processId":%s}\n' "$database" "$$" > "$work_dir/smoke-state.json"
 read -r api_port web_port < <(python3 -c '
 import socket
 sockets = [socket.socket() for _ in range(2)]
@@ -62,13 +69,15 @@ smoke_cleanup() {
         if docker container inspect "$container" >/dev/null 2>&1; then
             docker exec "$container" psql -U postgres -v ON_ERROR_STOP=1 -q \
                 -c "DROP DATABASE IF EXISTS \"$database\" WITH (FORCE)" >/dev/null 2>&1 \
-                && printf 'Smoke database dropped\n' || printf 'Smoke database cleanup failed: %s\n' "$database" >&2
+                && printf 'Smoke database dropped\n' || { printf 'Smoke database cleanup failed: %s\n' "$database" >&2; return 1; }
         else
             printf 'Smoke database left behind (no container %s): %s\n' "$container" "$database" >&2
+            return 1
         fi
     fi
 }
-trap 'rc=$?; smoke_cleanup; (exit "$rc"); cleanup_runtime' EXIT
+# Pass the original status explicitly; a failing subshell here would trip errexit before file cleanup.
+trap 'rc=$?; if ! smoke_cleanup; then if (( rc == 0 )); then rc=1; fi; fi; cleanup_runtime "$rc"' EXIT
 
 cd -- "$REPO_ROOT/backup-backend"
 if [[ $build == true ]]; then
@@ -87,7 +96,8 @@ BACKUP_PLATFORM_BOOTSTRAP_LOGIN=$login BACKUP_PLATFORM_BOOTSTRAP_PASSWORD=$passw
 printf 'Smoke PlatformAdmin bootstrapped\n'
 
 openssl req -x509 -newkey rsa:2048 -nodes -keyout "$work_dir/key.pem" -out "$work_dir/cert.pem" -days 1 \
-    -subj '/CN=localhost' -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1' >/dev/null 2>&1
+    -subj '/CN=Backup Platform disposable smoke' -addext "subjectAltName=DNS:localhost,IP:127.0.0.1,IP:$public_host" \
+    -addext 'basicConstraints=critical,CA:TRUE' -addext 'keyUsage=critical,digitalSignature,keyEncipherment,keyCertSign' >/dev/null 2>&1
 openssl pkcs12 -export -inkey "$work_dir/key.pem" -in "$work_dir/cert.pem" -out "$work_dir/cert.pfx" -passout "pass:$cert_password" >/dev/null 2>&1
 python3 - "$work_dir/credentials.json" "$login" "$password" <<'PY'
 import json, os, sys
@@ -96,43 +106,55 @@ with os.fdopen(fd, 'w') as handle:
     json.dump({'login': sys.argv[2], 'password': sys.argv[3]}, handle)
 PY
 
-ASPNETCORE_URLS="https://127.0.0.1:${api_port}" \
+ASPNETCORE_URLS="https://${bind_host}:${api_port}" \
     ASPNETCORE_Kestrel__Certificates__Default__Path="$work_dir/cert.pfx" \
     ASPNETCORE_Kestrel__Certificates__Default__Password="$cert_password" \
     Backups__Scheduling__Enabled=false Backups__Retention__Enabled=false \
     dotnet "$api_dll" >"$work_dir/api.log" 2>&1 &
 pids+=($!)
+ready=false
 for _ in $(seq 1 60); do
-    if python3 - "$api_port" <<'PY'
-import socket, sys
+    kill -0 "${pids[0]}" 2>/dev/null || fail 'Smoke API exited during startup.'
+    if python3 - "$api_port" "$work_dir/cert.pem" <<'PY'
+import ssl, sys, urllib.request
 try:
-    socket.create_connection(('127.0.0.1', int(sys.argv[1])), 0.5).close()
-except OSError:
+    with urllib.request.urlopen('https://127.0.0.1:%s/api/auth/antiforgery' % sys.argv[1],
+                                context=ssl.create_default_context(cafile=sys.argv[2]), timeout=1) as response:
+        if response.status != 200: sys.exit(1)
+except (OSError, ValueError):
     sys.exit(1)
 PY
-    then break; fi
+    then ready=true; break; fi
     sleep 0.5
 done
+[[ $ready == true ]] || fail 'Smoke API did not become HTTP-ready.'
 
 cd -- "$REPO_ROOT/backup-frontend"
 BACKUP_API_PROXY_TARGET="https://127.0.0.1:${api_port}" BACKUP_API_PROXY_INSECURE=true \
     bun run dev --host localhost --port "$web_port" --strictPort >"$work_dir/web.log" 2>&1 &
 pids+=($!)
+ready=false
 for _ in $(seq 1 60); do
+    kill -0 "${pids[1]}" 2>/dev/null || fail 'Smoke frontend exited during startup.'
     if python3 - "$web_port" <<'PY'
-import socket, sys
+import sys, urllib.request
 try:
-    socket.create_connection(('127.0.0.1', int(sys.argv[1])), 0.5).close()
+    with urllib.request.urlopen('http://localhost:%s/' % sys.argv[1], timeout=1) as response:
+        if response.status != 200: sys.exit(1)
 except OSError:
     sys.exit(1)
 PY
-    then break; fi
+    then ready=true; break; fi
     sleep 0.5
 done
+[[ $ready == true ]] || fail 'Smoke frontend did not become HTTP-ready.'
 
 printf 'SMOKE_API_URL=https://127.0.0.1:%s\n' "$api_port"
+printf 'SMOKE_AGENT_URL=https://%s:%s\n' "$public_host" "$api_port"
+printf 'SMOKE_CERTIFICATE_FILE=%s\n' "$work_dir/cert.pem"
 printf 'SMOKE_FRONTEND_URL=http://localhost:%s\n' "$web_port"
 printf 'SMOKE_CREDENTIALS_FILE=%s\n' "$work_dir/credentials.json"
+printf 'SMOKE_STATE_FILE=%s\n' "$work_dir/smoke-state.json"
 printf 'SMOKE_READY\n'
 # Run until interrupted; fail early if either process dies.
 while kill -0 "${pids[0]}" 2>/dev/null && kill -0 "${pids[1]}" 2>/dev/null; do sleep 1; done

@@ -1,75 +1,166 @@
 <#
 .SYNOPSIS
-Registers the Backup Platform agent host as a Windows Service.
-
+Enrolls and starts BackupAgent as NT SERVICE\BackupAgent, or reinstalls its preserved identity.
 .DESCRIPTION
-The service runs as the virtual account "NT SERVICE\BackupAgent": it needs no password, has no rights beyond what it is granted
-explicitly, and is the account whose DPAPI (CurrentUser) keys protect the agent identity. The identity store (default
-%ProgramData%\BackupAgent) is created and protected by the agent itself the first time it saves an identity.
-
-The agent identity is bound to this account. Whatever stores it (enrollment) must therefore run as the same account; changing the
-service account later orphans the stored identity and requires enrolling again.
-
-The script registers the Application event log source the service logs to (a virtual account may not create one), creates the
-service with automatic start and restart-on-failure, and passes the configuration through the service's environment. It does not
-start the service.
-
-.PARAMETER BinaryDirectory
-Directory holding BackupPlatform.Agent.Host.exe (the published agent host).
-
-.PARAMETER BackendUri
-Base address of the backend, https only. Becomes Agent__Backend__BaseUri.
-
-.PARAMETER StoreDirectory
-Optional identity store directory. Becomes Agent__CredentialStoreDirectory; the default is %ProgramData%\BackupAgent.
-
+Run elevated from the published agent folder. One-time enrollment is performed by the real Windows Service lifetime,
+never by the interactive administrator: permanent identity uses DPAPI CurrentUser of NT SERVICE\BackupAgent.
+The one-time request is DPAPI LocalMachine encrypted, staged with only service/SYSTEM/Administrators access,
+and removed after completion. Tokens and permanent credentials are never placed in service arguments or registry.
+Omit EnrollmentToken to prompt securely for a new identity. An existing identity is preserved and verified instead;
+supplying a token with an existing identity is refused before contacting the backend. BackendUri is only needed for new enrollment.
 .EXAMPLE
-dotnet publish src/hosts/agent/BackupPlatform.Agent.Host.csproj -c Release -r win-x64 --self-contained true -p:AgentPlatform=Windows -o C:\BackupAgent
-.\deploy\windows\Install-BackupAgentService.ps1 -BinaryDirectory C:\BackupAgent -BackendUri https://backup.example/
-
-.NOTES
-Run this script elevated. Keep the published binaries writable only by administrators, and grant the service account read/execute.
-Enrollment must save the identity as NT SERVICE\BackupAgent; a blob created under an interactive user's DPAPI scope cannot be reused.
-Start-Service BackupAgent starts the existing Generic Host with the Windows Service lifetime. Stop-Service BackupAgent requests graceful
-shutdown; after restart the same DPAPI-protected identity is loaded. Console starts retain Ctrl+C behavior; Linux retains SIGTERM behavior.
-
-Windows validation: dotnet test tests/windows-tests -c Release (net10.0-windows). Run elevated for the cross-account tests; their disposable
-local account is granted SeBatchLogonRight only for the test and removed afterwards. Symbolic links additionally need the corresponding
-privilege or Developer Mode. On Linux these 36 tests are explicitly skipped, not passed: a Windows worker is required for actual coverage.
-Existing identity directories are ACL-checked on every operation; unsafe ownership is refused. A loose ACL is narrowed only for an empty
-directory or one containing only store files. Reparse points are refused at the directory, identity file and every ancestor.
-
+.\deploy\windows\Install-BackupAgentService.ps1 -BinaryDirectory $PWD -BackendUri 'https://backup.example/' -AgentName 'Database host'
 #>
 #Requires -RunAsAdministrator
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string] $BinaryDirectory,
-    [Parameter(Mandatory)] [string] $BackendUri,
-    [string] $StoreDirectory
+    [string] $BackendUri,
+    [string] $EnrollmentToken,
+    [string] $AgentName,
+    [string] $StoreDirectory = (Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'BackupAgent')
 )
 
 $ErrorActionPreference = 'Stop'
 $ServiceName = 'BackupAgent'
+$account = "NT SERVICE\$ServiceName"
 
-$executable = Join-Path (Resolve-Path -LiteralPath $BinaryDirectory).Path 'BackupPlatform.Agent.Host.exe'
-if (-not (Test-Path -LiteralPath $executable)) { throw "BackupPlatform.Agent.Host.exe was not found in $BinaryDirectory." }
-if ($BackendUri -notmatch '^https://') { throw 'The backend address must use https.' }
-if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) { throw "The service $ServiceName already exists; run Uninstall-BackupAgentService.ps1 first." }
-
-if (-not [System.Diagnostics.EventLog]::SourceExists($ServiceName)) {
-    New-EventLog -LogName Application -Source $ServiceName
+function Set-ServiceExecutable([string] $Path) {
+    # CIM passes the exact command line to SCM. Windows PowerShell 5 native argument
+    # marshalling strips embedded quotes, making sc.exe binPath unsafe for paths with spaces.
+    $service = Get-CimInstance Win32_Service -Filter "Name='$ServiceName'"
+    $result = Invoke-CimMethod -InputObject $service -MethodName Change -Arguments @{ PathName = $Path }
+    if ($result.ReturnValue -ne 0) { throw 'Windows Service executable configuration failed.' }
 }
 
-$account = "NT SERVICE\$ServiceName"
-& sc.exe create $ServiceName binPath= "`"$executable`"" start= delayed-auto obj= $account DisplayName= 'Backup Platform Agent' | Out-Null
-if ($LASTEXITCODE -ne 0) { throw "sc.exe create failed with exit code $LASTEXITCODE." }
-& sc.exe description $ServiceName 'Connects this machine to the Backup Platform and runs backup work for it.' | Out-Null
-# Restart after a crash: 5 s, 30 s, then every 60 s; the failure counter resets after a day without failures.
-& sc.exe failure $ServiceName reset= 86400 actions= restart/5000/restart/30000/restart/60000 | Out-Null
-& sc.exe failureflag $ServiceName 1 | Out-Null
+function Assert-SafePath([string] $Path) {
+    if (-not [IO.Path]::IsPathRooted($Path) -or $Path.StartsWith('\\')) { throw 'Use an absolute local path.' }
+    $full = [IO.Path]::GetFullPath($Path).TrimEnd('\')
+    if ($full -eq [IO.Path]::GetPathRoot($full).TrimEnd('\')) { throw 'The filesystem root is not an agent directory.' }
+    for ($current = $full; $current; $current = [IO.Path]::GetDirectoryName($current)) {
+        if ((Test-Path -LiteralPath $current) -and ((Get-Item -LiteralPath $current -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw 'Agent paths must not contain a reparse point.'
+        }
+    }
+    return $full
+}
 
-$environment = @("Agent__Backend__BaseUri=$BackendUri")
-if ($StoreDirectory) { $environment += "Agent__CredentialStoreDirectory=$StoreDirectory" }
-Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName" -Name Environment -Type MultiString -Value $environment
+function New-ProtectedDirectory([string] $Path, [Security.Principal.SecurityIdentifier] $ServiceSid) {
+    $security = New-Object Security.AccessControl.DirectorySecurity
+    $security.SetOwner((New-Object Security.Principal.SecurityIdentifier 'S-1-5-32-544'))
+    $security.SetAccessRuleProtection($true, $false)
+    foreach ($sid in @($ServiceSid, (New-Object Security.Principal.SecurityIdentifier 'S-1-5-18'), (New-Object Security.Principal.SecurityIdentifier 'S-1-5-32-544'))) {
+        $rule = New-Object Security.AccessControl.FileSystemAccessRule($sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+        $security.AddAccessRule($rule)
+    }
+    $directory = New-Object IO.DirectoryInfo $Path
+    $directory.Create($security)
+}
 
-Write-Host "Service $ServiceName registered to run as $account. Start it with: Start-Service $ServiceName"
+$binary = Assert-SafePath ([IO.Path]::GetFullPath($BinaryDirectory))
+$store = Assert-SafePath $StoreDirectory
+$executable = Join-Path $binary 'BackupPlatform.Agent.Host.exe'
+if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) { throw 'BackupPlatform.Agent.Host.exe was not found in BinaryDirectory.' }
+$null = Assert-SafePath $executable
+# Refuse executable replacement by an ordinary account rather than quietly installing a privileged service over it.
+$installerSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$trustedBinaryOwners = @('S-1-5-18', 'S-1-5-32-544', $installerSid)
+$writeRights = [Security.AccessControl.FileSystemRights]::Write -bor [Security.AccessControl.FileSystemRights]::Delete -bor [Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor [Security.AccessControl.FileSystemRights]::ChangePermissions -bor [Security.AccessControl.FileSystemRights]::TakeOwnership
+foreach ($item in @((Get-Item -LiteralPath $binary)) + @(Get-ChildItem -LiteralPath $binary -Recurse -Force)) {
+    if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'The published binary tree must not contain reparse points.' }
+    $acl = Get-Acl -LiteralPath $item.FullName
+    if ($trustedBinaryOwners -notcontains $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value) { throw 'The published binary tree has an untrusted owner. Publish under an administrator-controlled directory.' }
+    foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
+        if ($rule.AccessControlType -eq 'Allow' -and ($rule.FileSystemRights -band $writeRights) -and $trustedBinaryOwners -notcontains $rule.IdentityReference.Value) {
+            throw 'The published binary tree is writable by an untrusted account. Publish under an administrator-controlled directory.'
+        }
+    }
+}
+if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) { throw 'BackupAgent already exists. Uninstall without -RemoveIdentity before reinstalling; its identity will be preserved.' }
+$hasIdentity = Test-Path -LiteralPath (Join-Path $store 'agent-identity.bin')
+if ($hasIdentity -and $EnrollmentToken) { throw 'This store is already enrolled. Identity was preserved and the token was not used. Omit EnrollmentToken to reinstall.' }
+if (-not $hasIdentity) {
+    $uri = $null
+    if (-not [Uri]::TryCreate($BackendUri, [UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -ne 'https' -or -not $uri.Host -or $uri.UserInfo -or $uri.Query -or $uri.Fragment) {
+        throw 'BackendUri must be an absolute HTTPS address without user information, query or fragment.'
+    }
+    if (-not $EnrollmentToken) {
+        $secureToken = Read-Host 'Enrollment token (hidden)' -AsSecureString
+        $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureToken)
+        try { $EnrollmentToken = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer) }
+        finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer); $secureToken.Dispose() }
+    }
+    if ($EnrollmentToken -notmatch '^[0-9a-fA-F]{32}\.[A-Za-z0-9_-]{43}$' -or $EnrollmentToken.StartsWith('00000000000000000000000000000000.')) {
+        throw 'The enrollment token is malformed. Copy the complete token from the wizard.'
+    }
+}
+if ($AgentName -and ($AgentName.Length -gt 255 -or $AgentName -match '[\x00-\x1F\x7F]' -or -not $AgentName.Trim())) { throw 'AgentName must contain 1-255 characters without control characters.' }
+
+if (-not [Diagnostics.EventLog]::SourceExists($ServiceName)) { New-EventLog -LogName Application -Source $ServiceName }
+$creation = Invoke-CimMethod -ClassName Win32_Service -MethodName Create -Arguments @{
+    Name = $ServiceName
+    DisplayName = 'Backup Platform Agent'
+    PathName = "`"$executable`""
+    ServiceType = [byte] 16
+    ErrorControl = [byte] 1
+    StartMode = 'Manual'
+    StartName = $account
+}
+if ($creation.ReturnValue -ne 0) { throw 'Windows Service registration failed.' }
+$serviceSid = (New-Object Security.Principal.NTAccount $account).Translate([Security.Principal.SecurityIdentifier])
+$stage = "$store.enrollment-$([Guid]::NewGuid().ToString('N'))"
+$registered = $true
+try {
+    # Existing store protection is checked by the service itself, not rewritten by the interactive installer.
+    if (-not (Test-Path -LiteralPath $store)) { New-ProtectedDirectory $store $serviceSid }
+    New-ProtectedDirectory $stage $serviceSid
+    # Grant only read/execute on published binaries; do not grant the service write access to its executable.
+    & icacls.exe $binary /grant "${account}:(OI)(CI)RX" /T /Q | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'The service could not be granted read/execute access to the published binaries.' }
+    Add-Type -AssemblyName System.Security
+    $request = @{ server = $BackendUri; token = $EnrollmentToken; name = $AgentName } | ConvertTo-Json -Compress
+    $plain = [Text.Encoding]::UTF8.GetBytes($request)
+    $entropy = [Text.Encoding]::UTF8.GetBytes('backup-platform/agent/enrollment-request/v1')
+    try { $encrypted = [Security.Cryptography.ProtectedData]::Protect($plain, $entropy, [Security.Cryptography.DataProtectionScope]::LocalMachine) }
+    finally { [Array]::Clear($plain, 0, $plain.Length); $request = $null; $EnrollmentToken = $null }
+    $requestPath = Join-Path $stage 'request.bin'
+    [IO.File]::WriteAllBytes($requestPath, $encrypted)
+    $environment = @("Agent__CredentialStoreDirectory=$store")
+    if ($BackendUri -and -not $hasIdentity) { $environment += "Agent__Backend__BaseUri=$BackendUri" }
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName" -Name Environment -Type MultiString -Value $environment
+    Set-ServiceExecutable "`"$executable`" --service-enroll `"$requestPath`" `"$store`""
+    Start-Service $ServiceName
+    $resultPath = Join-Path $stage 'result.json'
+    $deadline = [DateTime]::UtcNow.AddSeconds(120)
+    while (-not (Test-Path -LiteralPath $resultPath)) {
+        if ([DateTime]::UtcNow -ge $deadline) { throw 'Service enrollment timed out. Any saved identity was preserved; check the wizard before retrying.' }
+        Start-Sleep -Milliseconds 250
+    }
+    $service = Get-Service $ServiceName
+    $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))
+    $service.Dispose()
+    $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
+    if (-not $result.success) { throw $result.message }
+    Set-ServiceExecutable "`"$executable`""
+    & sc.exe config $ServiceName start= delayed-auto | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Windows Service runtime configuration failed.' }
+    & sc.exe description $ServiceName 'Connects this machine to the Backup Platform and runs backup work for it.' | Out-Null
+    & sc.exe failure $ServiceName reset= 86400 actions= restart/5000/restart/30000/restart/60000 | Out-Null
+    & sc.exe failureflag $ServiceName 1 | Out-Null
+    Start-Service $ServiceName
+    Write-Host 'BackupAgent identity verified and service started as NT SERVICE\BackupAgent. The backend will show Online after heartbeat and capability sync.'
+}
+finally {
+    # Remove the secret staging request even on failure; retain identity and the stopped service for diagnosis/reinstall.
+    if ($registered -and (Test-Path -LiteralPath $stage)) {
+        $running = Get-Service $ServiceName -ErrorAction SilentlyContinue
+        if ($running -and $running.Status -ne 'Stopped' -and -not (Test-Path -LiteralPath (Join-Path $stage 'result.json'))) {
+            Stop-Service $ServiceName -Force -ErrorAction SilentlyContinue
+        }
+        try { Set-ServiceExecutable "`"$executable`"" }
+        finally {
+            $null = Assert-SafePath $stage
+            Remove-Item -LiteralPath $stage -Recurse -Force
+        }
+    }
+}

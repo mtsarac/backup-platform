@@ -9,7 +9,12 @@ while (($#)); do
     case "$1" in
         --configured) configured=true ;;
         -h|--help)
-            printf '%s\n' 'Usage: run-full-acceptance.sh [--configured]' 'Default: create disposable CI PostgreSQL/MSSQL databases and a second restore SQL instance, then run configured acceptance.' 'Configured: check databases, full backend/agent connectivity, PostgreSQL, MSSQL provider + actual-host smoke, cross-instance restore, Windows VM and installed agent service/backend checks.' 'Requires Docker for default mode; configured mode requires explicit database credentials and staging pair plus restore target port. Both modes require the configured Windows SSH VM and installed agent/backend connectivity.'
+            printf '%s\n' 'Usage: run-full-acceptance.sh [--configured]' \
+                'Default: create disposable CI PostgreSQL/MSSQL databases and a second restore SQL instance, then run configured acceptance.' \
+                'Configured: real database probes, full backend/agent connectivity tests, PostgreSQL, MSSQL provider + actual-host smoke and cross-instance restore.' \
+                'Windows checks cover SSH/runtime/SQL service, Running BackupAgent with automatic startup and identity-file presence, plus HTTPS reachability only.' \
+                'These Windows checks do NOT establish DPAPI decryptability, agent authentication, heartbeat, capability sync or frontend Online. Use Onboarding-Smoke.ps1 plus check-enrolled-agent.py and the real frontend for onboarding acceptance.' \
+                'Requires Docker for default mode; configured mode requires explicit database credentials, staging pair and restore target port. Both modes require the configured Windows VM and running enrolled service.'
             exit 0 ;;
         *) fail 'Unknown option; use --help.' ;;
     esac

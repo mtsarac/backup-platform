@@ -19,4 +19,4 @@ load_local_env
 require_command dotnet
 [[ -n "${BACKUP_PLATFORM_TEST_CONNECTION_STRING:-}" ]] || fail 'Set BACKUP_PLATFORM_TEST_CONNECTION_STRING.'
 cd -- "$REPO_ROOT/backup-backend"
-run_redacted dotnet test tests/integration-tests -c Release "${build_args[@]}" --filter 'FullyQualifiedName!~MsSql&FullyQualifiedName!~BackupPipelineSmoke' -- xUnit.MaxParallelThreads=2
+run_dotnet_tests tests/integration-tests -c Release "${build_args[@]}" --filter 'FullyQualifiedName!~MsSql&FullyQualifiedName!~BackupPipelineSmoke' -- xUnit.MaxParallelThreads=2

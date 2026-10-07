@@ -20,6 +20,8 @@ public sealed record EnrollmentPolicyChanged(TenantId TenantId, bool PreviousEna
 
 public sealed record EnrollmentTokenRevoked(TenantId TenantId, Guid TokenId, UserId RevokedBy, DateTimeOffset At);
 
+public sealed record EnrollmentTokenStatus(Guid TokenId, DateTimeOffset ExpiresAt, EnrollmentTokenState State, AgentId? AgentId);
+
 /// <summary>
 /// Policy and token administration. Authorization is the caller's responsibility: platform administrator for
 /// platform policy routes, or administrator membership of the same tenant for tenant policy and token routes.
@@ -65,6 +67,14 @@ public sealed class EnrollmentAdministrationService(IAgentEnrollmentStore store,
     {
         ArgumentNullException.ThrowIfNull(tenantId);
         return store.ListActiveTokensAsync(tenantId, timeProvider.GetUtcNow(), cancellationToken);
+    }
+
+    public async Task<EnrollmentTokenStatus?> GetTokenStatusAsync(TenantId tenantId, Guid tokenId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(tenantId);
+        var token = await store.FindTenantTokenAsync(tenantId, tokenId, cancellationToken).ConfigureAwait(false);
+        return token is null ? null : new EnrollmentTokenStatus(
+            token.Id, token.ExpiresAt, token.GetState(timeProvider.GetUtcNow()), token.ConsumedByAgentId);
     }
 
     /// <summary>Null when the token is unknown to the tenant or can no longer be revoked.</summary>

@@ -241,7 +241,7 @@ internal sealed class WindowsStoreDirectory
         {
             var name = entry.Name;
             var isStoreFile = entry is FileInfo
-                && (name == IdentityFileName
+                && (name == IdentityFileName || name == ".enrollment.lock"
                     || (name.StartsWith(TemporaryPrefix, StringComparison.Ordinal) && name.EndsWith(TemporarySuffix, StringComparison.Ordinal)));
             if (!isStoreFile)
             {

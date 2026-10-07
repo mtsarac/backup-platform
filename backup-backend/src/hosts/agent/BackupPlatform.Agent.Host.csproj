@@ -24,6 +24,10 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(AgentPlatform)' == 'Windows'">
+    <Content Include="../../../deploy/windows/*.ps1" Link="deploy/windows/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="../../agent/core/BackupPlatform.Agent.Core.csproj" />
     <ProjectReference Include="../../agent/transport/BackupPlatform.Agent.Transport.csproj" />

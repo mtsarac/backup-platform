@@ -83,6 +83,10 @@ public static class AgentEndpoints
                 return Error(StatusCodes.Status403Forbidden, "enrollment_disabled", null);
             case AgentEnrollmentStatus.InstallationConflict:
                 return Error(StatusCodes.Status409Conflict, "installation_already_enrolled", null);
+            case AgentEnrollmentStatus.TokenExpired:
+                return Error(StatusCodes.Status401Unauthorized, "enrollment_token_expired", "The enrollment token has expired. Ask a tenant administrator for a new token.");
+            case AgentEnrollmentStatus.TokenConsumed:
+                return Error(StatusCodes.Status401Unauthorized, "enrollment_token_consumed", "The enrollment token has already been used. Ask a tenant administrator for a new token.");
             default:
                 return Error(StatusCodes.Status401Unauthorized, "invalid_enrollment_token", null);
         }
