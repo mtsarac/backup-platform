@@ -2,6 +2,7 @@ using BackupPlatform.Application.Backups;
 using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
+using BackupPlatform.Domain.Restores;
 using BackupPlatform.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -180,6 +181,14 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
             (run.Status == BackupStatus.Leased || run.Status == BackupStatus.Running)).ToListAsync(cancellationToken);
         foreach (var run in held) run.Expire(now, Jitter());
         await context.SaveChangesAsync(cancellationToken);
+        // A backup never runs beside a restore of the same agent: a live (unexpired Leased/Running) restore attempt holds the agent whatever the slot limits say. Decided under the
+        // same agent lock the restore claim takes, so exactly one of the two can ever hold the agent. An expired restore lease does not count: the restore sweep will end it.
+        if (await context.RestoreAttempts.AsNoTracking().AnyAsync(attempt => attempt.TenantId == tenantId && attempt.AgentId == agentId &&
+            (attempt.Status == RestoreStatus.Leased || attempt.Status == RestoreStatus.Running) && attempt.LeaseExpiresAt > now, cancellationToken))
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return null;
+        }
         // A slot is a live (unexpired) Leased/Running attempt. Counting rows, not holding tokens, means a crashed
         // worker, a lost agent or a restarted backend cannot leak a slot: the lease simply runs out.
         var live = await context.BackupRunAttempts.AsNoTracking()

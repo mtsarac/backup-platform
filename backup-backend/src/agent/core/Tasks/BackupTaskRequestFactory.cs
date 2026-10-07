@@ -57,13 +57,23 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
         {
             throw new ArgumentException("The backup configuration is unsupported.");
         }
-        var reference = configuration.DatabaseCredentialReference;
-        if (configuration.IntegratedSecurity ? reference is not null : string.IsNullOrWhiteSpace(reference)
-            || reference.Length > 64 || !reference.All(character => char.IsAsciiLetterOrDigit(character) || character is '_' or '-'))
+        if (!HasValidAuthentication(configuration.IntegratedSecurity, configuration.DatabaseCredentialReference))
         {
             throw new ArgumentException("Authentication requires either integrated security or a named local credential.");
         }
     }
+
+    /// <summary>
+    /// The one rule for how a task authenticates, shared by every task that connects to a database: integrated security carries no credential
+    /// reference, anything else carries exactly one short name (letters, digits, '_' and '-') that the agent resolves locally.
+    /// </summary>
+    internal static bool HasValidAuthentication(bool integratedSecurity, string? credentialReference) =>
+        integratedSecurity
+            ? credentialReference is null
+            : !string.IsNullOrWhiteSpace(credentialReference)
+                && credentialReference.Length <= 64
+                && credentialReference.All(character => char.IsAsciiLetterOrDigit(character) || character is '_' or '-');
+
     private static BackupOptionMode ParsePolicy(string value) => value switch
     {
         "Disabled" => BackupOptionMode.Off,

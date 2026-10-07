@@ -13,6 +13,8 @@ backup source is **Microsoft SQL Server, full backups**.
   and a Linux platform implementation. The agent pulls work; the backend never connects into the customer network.
 - **MSSQL Full Backup pipeline**: pre-check, `BACKUP DATABASE`, `RESTORE VERIFYONLY`, source checksum, artifact
   checksum, storage upload and replica verification, with result metadata stored per run.
+- **MSSQL Full Restore**: verified artifact selection, staged transfer, checksum re-verification, typed backup inspection,
+  target-safe `WITH MOVE`, new-name and explicit overwrite restores, progress, cancellation and tenant restore history through the API.
 - **Scheduling**: cron schedules with explicit time zones, missed-run grace, skip/queue overlap policy. The database is the
   source of truth; Quartz.NET only wakes the backend.
 - **Retry, cancellation, concurrency**: durable retry attempts on the same run, cooperative cancellation, global/tenant/agent
@@ -103,8 +105,70 @@ bun run test
 bun run build
 ```
 
-`backup-backend/.env.example` documents every configuration key (`Backups__*`, `Agent__*`, test variables). It is documentation,
+`backup-backend/.env.example` documents every configuration key (`Backups__*`, `Restores__*`, `Agent__*`, test variables). It is documentation,
 not a file the applications load.
+
+## MSSQL restore
+
+Restore is a separate `RestoreOperation` / `RestoreAttempt`, not a backup run, and produces no artifact. The target agent executes
+the restore using its existing credential-reference resolver; SQL credentials never enter persisted tasks. No automatic restore retry
+is performed: a failed or partially restored target requires an explicit new decision.
+
+| Tenant API (prefix `/api/tenants/{tenantId}`) | Access / behavior |
+|---|---|
+| `POST /backup-artifacts/{artifactId}/restore` | Admin/Operator; `Idempotency-Key` required; 202 for a new operation, 200 for an identical replay, 409 for a changed request using the same key |
+| `GET /restores` | Viewer or higher; paginated history, filters `status`, `artifactId`, `agentId` |
+| `GET /restores/{restoreId}` | Viewer or higher; attempts, progress, file mappings, inspection, warnings and resulting database state |
+| `POST /restores/{restoreId}/cancel` | Admin/Operator; pending work ends immediately; running work receives cooperative SQL cancellation through lease renewal |
+
+Browser writes also require the existing antiforgery token. A new restore request can be:
+
+```json
+{
+  "agentId": "<target-agent-id>",
+  "target": {
+    "host": "sql-target.example",
+    "port": 1433,
+    "databaseCredentialReference": "restore_sql"
+  },
+  "databaseName": "RecoveredDatabase"
+}
+```
+
+`mode` defaults to `NewDatabase`, which refuses an existing target. Overwriting requires
+`mode: "ReplaceExistingDatabase"` and `confirmOverwrite` equal to the requested database name. Disconnecting target sessions additionally
+requires `options.terminateActiveConnections: true`. System databases and protected HA targets are refused.
+
+The backend selects an eligible replica, or the caller supplies `replicaId`. Deleted replicas cannot be restored; verified
+`DeletePending` replicas remain eligible within their existing retention grace period. The operation pins its chosen replica from
+creation through terminal completion. Replica-row locks, deletion-claim rechecks and PostgreSQL triggers prevent physical deletion
+while a pin is active. Backup and restore claims never run concurrently on the same agent, even when the backup agent limit is raised.
+
+The agent streams the replica into its configured restore staging, keeping `AgentPath` separate from the SQL-visible `DatabaseServerPath`.
+An agent-local replica must belong to the executing agent. Central storage must actually be mounted/configured on that agent;
+backend accessibility alone does not make a SQL-visible path. Cross-agent local transfer is explicitly refused as
+`agent_transfer_required`, not silently assumed available. Cross-instance restore is supported when the executing agent can reach
+the source storage and the target SQL Server can read its configured staging.
+
+Checksum re-verification and `RESTORE VERIFYONLY` default to enabled. `options.verifyChecksum` and `options.verifyBackup` can disable
+them explicitly; the result records both verification flags and warns when checksum verification is disabled. A changed physical
+checksum stops execution before the target is touched. Typed
+`HEADERONLY` / `FILELISTONLY` metadata drives version checks and one `WITH MOVE` destination per logical data/log file.
+Generated destinations use the target's own data/log directories, never source physical paths; replacement can reuse matching files
+already owned by the target. Header start/end dates retain the source server's wall-clock time without inventing a target timezone;
+operation and attempt timestamps remain UTC-aware. Multi-set, differential/log, explicitly encrypted backup sets and
+FILESTREAM/memory-optimized/full-text file layouts are not supported.
+
+Cancellation is not a health guarantee. Results distinguish `NotModified`, `Online`, `PartiallyRestored` and `Unknown`, and retain
+the observed SQL database state. A database left `RESTORING` needs an explicit replacement restore or manual removal; it is never
+silently dropped. A failed/cancelled replace attempts to undo a `SINGLE_USER` change in `finally`, and reports any recovery failure.
+A running attempt whose lease is lost reports `Unknown` regardless of its last advisory progress report. Staged copies are cleaned
+on success, failure and cancellation. The SQL Server service account must be able to read files created by the agent in staging:
+configure appropriate directory/file ACLs (and Unix group/umask), not just agent write access.
+
+Backend policy is configured with `Restores__LeaseDuration` (default 120 seconds), `Restores__UnclaimedExpiry` (one hour) and
+`Restores__SweepInterval` (15 seconds). Unclaimed expired requests release their pins rather than unexpectedly restoring much later.
+Restore management is API-only; the existing frontend backup screens are unchanged.
 
 ## Testing
 
@@ -118,6 +182,7 @@ not a file the applications load.
 | Integration (PostgreSQL) | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName!~MsSql&FullyQualifiedName!~BackupPipelineSmoke"` | `BACKUP_PLATFORM_TEST_CONNECTION_STRING` |
 | Real MSSQL | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName~IntegrationTests.MsSql\|FullyQualifiedName~BackupPipelineSmoke"` | PostgreSQL variable above plus the MSSQL variables below |
 | Real MSSQL + published Agent.Host | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName~AgentSmokeTests" -- xUnit.MaxParallelThreads=1` | everything above plus `BACKUP_PLATFORM_TEST_AGENT_HOST_PATH` |
+| Local restore acceptance | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName~MsSqlRestoreAcceptanceTests" -- xUnit.MaxParallelThreads=1` | PostgreSQL, published Agent.Host, two SQL instances with the same test login and shared staging; target port below |
 | Windows platform (DPAPI, ACLs, reparse points) | `dotnet test tests/windows-tests -c Release` | Windows; elsewhere every test is reported as *skipped*, never passed |
 
 Environment variables of the integration tests (values are yours; never commit them):
@@ -129,6 +194,10 @@ Environment variables of the integration tests (values are yours; never commit t
   sees it) and `BACKUP_PLATFORM_TEST_MSSQL_STAGING_AGENT_DIR` (the same directory as the test process sees it).
 - Agent.Host smoke: `BACKUP_PLATFORM_TEST_AGENT_HOST_PATH`, the published host:
   `dotnet publish src/hosts/agent -c Release -r linux-x64 --self-contained true -p:AgentPlatform=Linux -o <dir>`.
+- Cross-instance restore acceptance additionally requires `BACKUP_PLATFORM_TEST_MSSQL_RESTORE_TARGET_PORT`: a second disposable
+  SQL instance on the same test host, using the same test login/password and SQL-visible staging mount. The acceptance backs up
+  a disposable source, deletes it, restores under a different name, verifies exact rows and ONLINE/MULTI_USER, explicitly overwrites
+  the disposable target, then proves checksum mismatch prevents another restore. This local-only acceptance is not added to CI.
 
 The real-MSSQL and PostgreSQL tests **fail** when their variables are missing; they never skip silently. Run the MSSQL provider
 suites and the Agent.Host smokes as separate invocations (as CI does): they share one staging directory.
@@ -181,15 +250,16 @@ they are intentionally not automatic release gates.
 Implemented:
 
 - MSSQL full backup end to end (pre-check, backup, verify, checksums, storage, replica verification)
+- MSSQL full restore through the API and real Agent execution, including cross-instance/new-name/explicit replace, retention pins and safe staging
 - Manual and scheduled runs, retry, cancellation, overlap policy, concurrency limits, agent leases
 - Local and Central storage; retention with soft delete, grace period, agent-local deletion and sweeps
 - Agent connectivity (polling, SignalR hints, heartbeat, capability sync), credential rotation, Windows Service hosting
-- Multi-tenant backend with cookie authentication and antiforgery; React UI for the above
+- Multi-tenant backend with cookie authentication and antiforgery; React UI for backup management (restore is currently API-only)
 
 Not yet implemented:
 
 - PostgreSQL backup provider (PostgreSQL is only the platform's own database)
-- Restore of any kind
+- Differential/log-chain restore, point-in-time recovery, automated restore testing and PostgreSQL restore
 - Differential and transaction-log backups
 - S3, SFTP or other remote storage providers
 - Notifications; an audit trail module

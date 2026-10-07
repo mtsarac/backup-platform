@@ -6,7 +6,9 @@ using BackupPlatform.Agents.Enrollment;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Application.Restores;
 using BackupPlatform.Contracts.Agents;
+using BackupPlatform.Contracts.Restores;
 using BackupPlatform.Contracts.Protocol;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -121,7 +123,7 @@ public static class AgentEndpoints
 
     private static async Task<IResult> PollAsync(
         string? cursor, ICurrentAgent currentAgent, AgentConnectivityService service, BackupOrchestrator backups,
-        AgentReplicaDeletionService deletions, CancellationToken cancellationToken)
+        AgentReplicaDeletionService deletions, RestoreService restores, CancellationToken cancellationToken)
     {
         var poll = await service.PollAsync(currentAgent.Identity!, cursor, cancellationToken);
         if (poll is null)
@@ -129,18 +131,14 @@ public static class AgentEndpoints
             return Error(StatusCodes.Status400BadRequest, AgentErrorCodes.InvalidRequest, "Invalid field: cursor.");
         }
         var deletion = await deletions.ClaimAsync(currentAgent.Identity!, cancellationToken);
-        var backup = await backups.ClaimAsync(currentAgent.Identity!, cancellationToken);
-        var deletionTask = deletion is null ? null
-            : new AgentTaskEnvelope { Id = deletion.ReplicaId.ToString(), Type = "delete-replica", DeleteReplica = deletion };
-        var backupTask = backup is null ? null
-            : new AgentTaskEnvelope { Id = backup.AttemptId.ToString(), Type = "database-backup", Backup = backup };
-        AgentTaskEnvelope[] tasks = (deletionTask, backupTask) switch
-        {
-            (null, null) => [],
-            ({ } pendingDelete, null) => [pendingDelete],
-            (null, { } pendingBackup) => [pendingBackup],
-            ({ } pendingDelete, { } pendingBackup) => [pendingDelete, pendingBackup]
-        };
+        // A restore is explicit user work on a target and never runs beside a backup of the same agent: it is claimed first, and when one was claimed the backup claim is
+        // skipped (the store would refuse it anyway while the restore holds the agent).
+        var restore = await restores.ClaimAsync(currentAgent.Identity!, cancellationToken);
+        var backup = restore is null ? await backups.ClaimAsync(currentAgent.Identity!, cancellationToken) : null;
+        var tasks = new List<AgentTaskEnvelope>(2);
+        if (deletion is not null) tasks.Add(new AgentTaskEnvelope { Id = deletion.ReplicaId.ToString(), Type = "delete-replica", DeleteReplica = deletion });
+        if (restore is not null) tasks.Add(new AgentTaskEnvelope { Id = restore.AttemptId.ToString(), Type = RestoreTaskTypes.DatabaseRestore, Restore = restore });
+        if (backup is not null) tasks.Add(new AgentTaskEnvelope { Id = backup.AttemptId.ToString(), Type = "database-backup", Backup = backup });
         return Results.Ok(new AgentPollResponse
         {
             Cursor = poll.Cursor,

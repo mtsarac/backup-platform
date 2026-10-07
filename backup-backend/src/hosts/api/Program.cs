@@ -13,6 +13,7 @@ _ = app.Services.GetRequiredService<DbContextOptions<PlatformDbContext>>();
 _ = app.Services.GetRequiredService<BackupPlatform.Agents.Connectivity.AgentConnectivityOptions>();
 _ = app.Services.GetRequiredService<BackupPlatform.Application.Backups.BackupExecutionOptions>();
 _ = app.Services.GetRequiredService<BackupPlatform.Application.Backups.BackupSchedulingOptions>();
+_ = app.Services.GetRequiredService<BackupPlatform.Application.Restores.RestoreExecutionOptions>();
 
 if (isBootstrap)
 {
@@ -29,6 +30,8 @@ app.MapAgentAdministrationEndpoints();
 app.MapBackupEndpoints();
 app.MapBackupArtifactEndpoints();
 app.MapBackupTaskEndpoints();
+app.MapRestoreEndpoints();
+app.MapRestoreTaskEndpoints();
 app.MapAgentHub();
 
 app.Run();

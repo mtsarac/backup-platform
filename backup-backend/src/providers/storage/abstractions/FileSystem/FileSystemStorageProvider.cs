@@ -24,7 +24,7 @@ namespace BackupPlatform.StorageProviders.Abstractions.FileSystem;
 /// after start-up is detected too. Directories below the root are created on demand.</description></item>
 /// <item><description><b>Messages.</b> Exception messages and <see cref="StorageLocation"/>s never contain a file system path.</description></item>
 /// </list>
-/// Advertised capabilities are exactly <see cref="StorageCapabilityIds.Delete"/>, <see cref="StorageCapabilityIds.AtomicPublish"/>,
+/// Advertised capabilities are exactly <see cref="StorageCapabilityIds.Read"/>, <see cref="StorageCapabilityIds.Delete"/>, <see cref="StorageCapabilityIds.AtomicPublish"/>,
 /// <see cref="StorageCapabilityIds.Enumerate"/> and <see cref="StorageCapabilityIds.VerifyAbsence"/>. The last one is honest because a local or
 /// mounted file system reports the truth at once: after <see cref="File.Delete(string)"/> returns, <see cref="File.Exists"/> is false (no eventual
 /// consistency). Checksums are verified by reading back; resume, multipart, immutability and capacity queries are not implemented.
@@ -76,7 +76,8 @@ public abstract class FileSystemStorageProvider : IStorageProvider
             StorageCapabilityIds.Delete,
             StorageCapabilityIds.AtomicPublish,
             StorageCapabilityIds.Enumerate,
-            StorageCapabilityIds.VerifyAbsence
+            StorageCapabilityIds.VerifyAbsence,
+            StorageCapabilityIds.Read
         ]);
     }
 
@@ -201,6 +202,31 @@ public abstract class FileSystemStorageProvider : IStorageProvider
         {
             throw StorageIoErrors.Map(exception);
         }
+    }
+
+    /// <summary>Opens the object file for a sequential read under the same containment rules as every other operation. Sharing is read-only so a concurrent verification can read it too.</summary>
+    public Task<Stream> OpenReadAsync(StorageObjectKey key, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        return Execute<Stream>(cancellationToken, () =>
+        {
+            var path = ResolveCheckedPath(key);
+            try
+            {
+                return new FileStream(path, new FileStreamOptions
+                {
+                    Mode = FileMode.Open,
+                    Access = FileAccess.Read,
+                    Share = FileShare.Read,
+                    Options = FileOptions.Asynchronous | FileOptions.SequentialScan,
+                    BufferSize = 0
+                });
+            }
+            catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+            {
+                throw new StorageException(StorageFailureKind.NotFound, "The stored object does not exist.", exception);
+            }
+        });
     }
 
     /// <summary>Deletes only the object file. Directories created for its key are left in place (they hold no data, and removing them would race with concurrent writes into the same directory).</summary>

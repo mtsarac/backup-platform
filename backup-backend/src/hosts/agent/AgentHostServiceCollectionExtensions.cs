@@ -48,11 +48,14 @@ public static class AgentHostServiceCollectionExtensions
         services.TryAddSingleton<IBackupTaskCredentialResolver, BackupTaskCredentialResolver>();
         services.AddSingleton<BackupTaskRequestFactory>();
         services.AddSingleton<BackupTaskWorker>();
+        services.AddSingleton<RestoreTaskRequestFactory>();
+        services.AddSingleton<RestoreTaskWorker>();
         services.TryAddSingleton<IDeleteReplicaProviderResolver, DeleteReplicaProviderResolver>();
         services.AddSingleton<DeleteReplicaTaskWorker>();
         services.AddSingleton<IAgentTaskSink, AgentTaskDispatcher>();
         services.AddHostedService<AgentDeletionTaskHostedService>();
         services.AddHostedService<AgentBackupTaskHostedService>();
+        services.AddHostedService<AgentRestoreTaskHostedService>();
         services.AddSingleton<AgentConnectivityService>();
         services.AddSingleton<IAgentConnectivityStatus>(static provider => provider.GetRequiredService<AgentConnectivityService>());
         services.AddHostedService<AgentConnectivityWorker>();

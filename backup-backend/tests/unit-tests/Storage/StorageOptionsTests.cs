@@ -122,7 +122,8 @@ public sealed class StorageOptionsTests
     {
         Assert.Equal(expectedId, provider.Id);
         Assert.Equal(StorageTopology.AgentDirect, provider.Topology);
-        Assert.Equal(4, provider.Capabilities.Count);
+        Assert.Equal(5, provider.Capabilities.Count);
+        Assert.True(provider.Capabilities.Supports(StorageCapabilityIds.Read));
         Assert.True(provider.Capabilities.Supports(StorageCapabilityIds.Delete));
         Assert.True(provider.Capabilities.Supports(StorageCapabilityIds.AtomicPublish));
         Assert.True(provider.Capabilities.Supports(StorageCapabilityIds.Enumerate));

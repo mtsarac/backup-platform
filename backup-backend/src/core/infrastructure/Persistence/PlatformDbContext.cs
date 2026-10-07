@@ -7,6 +7,7 @@ using BackupPlatform.Application.Tenancy;
 using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
+using BackupPlatform.Domain.Restores;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -65,6 +66,9 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<BackupReplica> BackupReplicas => Set<BackupReplica>();
     public DbSet<BackupLifecycleFact> BackupLifecycleFacts => Set<BackupLifecycleFact>();
     public DbSet<BackupScheduleOccurrence> BackupScheduleOccurrences => Set<BackupScheduleOccurrence>();
+    public DbSet<RestoreOperation> RestoreOperations => Set<RestoreOperation>();
+    public DbSet<RestoreAttempt> RestoreAttempts => Set<RestoreAttempt>();
+    public DbSet<RestoreReplicaPin> RestoreReplicaPins => Set<RestoreReplicaPin>();
 
     /// <summary>Explicit unfiltered context for trusted platform operations only.</summary>
     /// <remarks>Does not authorize the caller. Future application boundaries must authorize its use.</remarks>

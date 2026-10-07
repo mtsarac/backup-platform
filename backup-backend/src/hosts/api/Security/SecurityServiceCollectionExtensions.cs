@@ -1,6 +1,9 @@
 using BackupPlatform.Api.Backups;
+using BackupPlatform.Api.Restores;
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Application.Restores;
 using BackupPlatform.Infrastructure.Backups;
+using BackupPlatform.Infrastructure.Restores;
 using BackupPlatform.Agents;
 using BackupPlatform.Agents.Capabilities;
 using BackupPlatform.Agents.Connectivity;
@@ -56,6 +59,7 @@ public static class SecurityServiceCollectionExtensions
         services.AddSingleton<BackupRetryWorker>();
         services.AddHostedService(provider => provider.GetRequiredService<BackupRetryWorker>());
         AddBackupRetention(services);
+        AddRestores(services);
         services.AddSingleton<IBackupWorkSignal, AgentPushWorkSignal>();
         services.AddBackupScheduling();
         AddPolicies(services);
@@ -116,6 +120,21 @@ public static class SecurityServiceCollectionExtensions
         services.AddScoped<BackupArtifactService>();
         services.AddSingleton<BackupRetentionWorker>();
         services.AddHostedService(provider => provider.GetRequiredService<BackupRetentionWorker>());
+    }
+
+    /// <summary>Restores: policy (configuration section <c>Restores</c>), the store, the service and the sweep that ends restores nobody is working on.</summary>
+    private static void AddRestores(IServiceCollection services)
+    {
+        services.TryAddSingleton(provider =>
+        {
+            var options = provider.GetRequiredService<IConfiguration>().GetSection("Restores").Get<RestoreExecutionOptions>() ?? new RestoreExecutionOptions();
+            options.ThrowIfInvalid();
+            return options;
+        });
+        services.AddScoped<IRestoreStore, PostgreSqlRestoreStore>();
+        services.AddScoped<RestoreService>();
+        services.AddSingleton<StaleRestoreDetector>();
+        services.AddHostedService(provider => provider.GetRequiredService<StaleRestoreDetector>());
     }
 
     private static ITenantContext ResolveTenantContext(IServiceProvider services)

@@ -1,4 +1,5 @@
 using BackupPlatform.Agent.Core.Backup;
+using BackupPlatform.Agent.Core.Restore;
 using BackupPlatform.BackupProviders.Abstractions.Database;
 using BackupPlatform.BackupProviders.MSSQL;
 using BackupPlatform.StorageProviders.Abstractions;
@@ -25,8 +26,10 @@ public static class AgentBackupServiceCollectionExtensions
 
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<IDatabaseBackupProvider, SqlServerBackupProvider>();
+        services.AddSingleton<IDatabaseRestoreProvider, SqlServerRestoreProvider>();
         services.AddSingleton<IArtifactPreparer, PassThroughArtifactPreparer>();
         services.AddSingleton<IDatabaseBackupPipeline, DatabaseBackupPipeline>();
+        services.AddSingleton<IDatabaseRestorePipeline, DatabaseRestorePipeline>();
         // Shared by the pipeline (which holds the staged names of running attempts) and the staging cleanup (which must skip them).
         services.TryAddSingleton<StagingUsageRegistry>();
 
