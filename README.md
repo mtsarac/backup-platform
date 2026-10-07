@@ -113,6 +113,8 @@ not a file the applications load.
 | Unit | `dotnet test tests/unit-tests -c Release` | nothing |
 | Architecture (dependency rules) | `dotnet test tests/architecture-tests -c Release` | nothing |
 | Agent | `dotnet test tests/agent-tests -c Release` | nothing (in-process Kestrel/SignalR); fake-clock tests synchronize on consumer checkpoints and timer deadlines, not real-time settling |
+| Fast agent subset | `dotnet test tests/agent-tests -c Release --filter "FullyQualifiedName!~ConnectivityServiceTests" -- xUnit.MaxParallelThreads=2` | nothing; this is the agent subset used by Fast CI |
+| Connectivity acceptance | `dotnet test tests/agent-tests -c Release --filter "FullyQualifiedName~ConnectivityServiceTests"` | nothing; local/full acceptance only, not a routine PR gate |
 | Integration (PostgreSQL) | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName!~MsSql&FullyQualifiedName!~BackupPipelineSmoke"` | `BACKUP_PLATFORM_TEST_CONNECTION_STRING` |
 | Real MSSQL | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName~IntegrationTests.MsSql\|FullyQualifiedName~BackupPipelineSmoke"` | PostgreSQL variable above plus the MSSQL variables below |
 | Real MSSQL + published Agent.Host | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName~AgentSmokeTests" -- xUnit.MaxParallelThreads=1` | everything above plus `BACKUP_PLATFORM_TEST_AGENT_HOST_PATH` |
@@ -140,18 +142,27 @@ exercise Kestrel/SignalR and use bounded waits for observed network conditions.
 
 ## Continuous integration and releases
 
-`ci.yml` runs on pull requests and on `main`: Linux build with warnings as errors plus unit, architecture and agent tests;
-PostgreSQL integration tests; real SQL Server integration tests (Docker, shared staging directory); Windows build with agent and
-Windows platform tests; frontend typecheck, lint, tests and build. `CI result` is the single job to require in branch protection.
-Test results are uploaded as TRX/JUnit artifacts. Agent and integration jobs bound collection concurrency to two threads;
-collections are not forced to run serially. The PostgreSQL job also generates the release's idempotent migration script
-and applies it twice to a disposable database, checking that migration history is unchanged.
+`ci.yml` (**Fast CI**) runs on pull requests and pushes to `main`, with only two Linux jobs:
 
-The scheduler runtime joins concurrent/repeated stop calls: reconciliation cancellation and cleanup finish before Quartz
-shutdown, and Quartz jobs/callbacks finish before the owning provider is disposed. Lifecycle diagnostics are debug-only.
-Shutdown intentionally waits for owned work to finish even if the host's graceful-shutdown deadline has elapsed.
+- **Backend:** restore, strict Release build, unit tests, architecture tests, and the fast agent subset excluding
+  `ConnectivityServiceTests`.
+- **Frontend:** frozen-lockfile install, typecheck, lint, tests and production build.
 
-Pushing a tag `vMAJOR.MINOR.PATCH[-prerelease]` runs the CI again and, if green, publishes a GitHub Release with
+Require the **Backend** and **Frontend** checks in branch protection; the old `CI result` check no longer exists.
+Superseded PR runs are cancelled, while `main` runs are allowed to finish. NuGet and bun caches use the official cache
+action. Fast CI starts no database containers or Windows runners and uploads no test artifacts.
+
+Heavy acceptance is manual and is not required for ordinary PRs:
+
+- `integration.yml` (**Full Integration**): PostgreSQL integration, the idempotent migration script applied twice,
+  real MSSQL provider/BackupPipelineSmoke tests, then published Agent.Host smokes in a separate invocation.
+- `windows.yml` (**Windows Validation**): strict Windows build and Windows platform tests.
+
+These workflows run only through `workflow_dispatch`; failure diagnostics are retained for three days, and successful
+test runs upload no artifacts. Connectivity tests remain available through the local commands above; they are not silently
+retried or marked as passed. Windows VM/service-account acceptance remains manual.
+
+Pushing a tag `vMAJOR.MINOR.PATCH[-prerelease]` runs Fast CI and, if green, publishes a GitHub Release with
 `SHA256SUMS.txt` and:
 
 - `backup-agent-win-x64-<version>.zip` (self-contained Agent.Host, service install/uninstall scripts, config example)
@@ -161,6 +172,9 @@ Pushing a tag `vMAJOR.MINOR.PATCH[-prerelease]` runs the CI again and, if green,
 
 The tag version is stamped into the assemblies (`-p:Version`), which is the software version every Agent reports in its heartbeat.
 Running the **Release** workflow manually builds all archives as artifacts without publishing anything.
+Manual workflow dispatch becomes available after the workflow files exist on the repository's default branch. Before a
+release, run Full Integration and Windows Validation against the intended release commit when that acceptance is needed;
+they are intentionally not automatic release gates.
 
 ## Current MVP scope
 

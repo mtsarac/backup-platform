@@ -1,0 +1,139 @@
+name: Full Integration
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-integration-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  BUILD_FLAGS: -c Release --no-restore -p:ContinuousIntegrationBuild=true -warnaserror
+  TEST_FLAGS: -c Release --no-build --results-directory ../TestResults --logger console;verbosity=minimal --blame-hang-timeout 15m --blame-hang-dump-type none
+
+jobs:
+  postgres:
+    name: PostgreSQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+        working-directory: backup-backend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('backup-backend/Directory.Packages.props', 'backup-backend/Directory.Build.props', 'backup-backend/dotnet-tools.json', 'backup-backend/**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+      - name: Restore and build
+        run: |
+          dotnet restore tests/integration-tests
+          dotnet build tests/integration-tests $BUILD_FLAGS
+      - name: Start PostgreSQL
+        run: ../.github/scripts/start-postgres.sh
+      - name: Apply idempotent release migration script twice
+        run: bash ../.github/scripts/check-migrations.sh
+      - name: PostgreSQL integration tests
+        run: >
+          dotnet test tests/integration-tests $TEST_FLAGS
+          --logger "trx;LogFileName=integration-postgres.trx"
+          --filter "FullyQualifiedName!~MsSql&FullyQualifiedName!~BackupPipelineSmoke"
+          -- xUnit.MaxParallelThreads=2
+      - name: Test report and secret redaction
+        if: ${{ !cancelled() }}
+        run: python3 ../.github/scripts/trx_report.py --require-passed --redact-env BACKUP_PLATFORM_TEST_POSTGRES_PASSWORD ../TestResults
+      - name: Failure diagnostics
+        if: ${{ failure() && !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: integration-postgres-failure
+          path: TestResults
+          retention-days: 3
+          if-no-files-found: ignore
+      - name: Remove PostgreSQL
+        if: ${{ always() }}
+        run: docker rm --force --volumes bp-ci-postgres
+
+  mssql:
+    name: MSSQL and Agent.Host
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+        working-directory: backup-backend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('backup-backend/Directory.Packages.props', 'backup-backend/Directory.Build.props', 'backup-backend/dotnet-tools.json', 'backup-backend/**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+      - name: Restore and build
+        run: |
+          dotnet restore tests/integration-tests
+          dotnet build tests/integration-tests $BUILD_FLAGS
+      - name: Publish Agent.Host (linux-x64)
+        run: >
+          dotnet publish src/hosts/agent -c Release -r linux-x64 --self-contained true
+          -p:AgentPlatform=Linux -p:ContinuousIntegrationBuild=true
+          -o "$RUNNER_TEMP/agent-host"
+      - name: Start PostgreSQL
+        run: ../.github/scripts/start-postgres.sh
+      - name: Start SQL Server
+        run: ../.github/scripts/start-mssql.sh
+      # Shared staging: provider/pipeline tests and Agent.Host smokes must never overlap.
+      - name: MSSQL provider and BackupPipelineSmoke tests
+        run: >
+          dotnet test tests/integration-tests $TEST_FLAGS
+          --logger "trx;LogFileName=integration-mssql-provider.trx"
+          --filter "FullyQualifiedName~IntegrationTests.MsSql|FullyQualifiedName~BackupPipelineSmoke"
+          -- xUnit.MaxParallelThreads=2
+      - name: Agent.Host smoke tests
+        env:
+          BACKUP_PLATFORM_TEST_AGENT_HOST_PATH: ${{ runner.temp }}/agent-host/BackupPlatform.Agent.Host
+        run: >
+          dotnet test tests/integration-tests $TEST_FLAGS
+          --logger "trx;LogFileName=integration-mssql-agent-smoke.trx"
+          --filter "FullyQualifiedName~AgentSmokeTests"
+          -- xUnit.MaxParallelThreads=1
+      - name: Test report and secret redaction
+        if: ${{ !cancelled() }}
+        run: >
+          python3 ../.github/scripts/trx_report.py --require-passed
+          --redact-env BACKUP_PLATFORM_TEST_MSSQL_PASSWORD --redact-env BACKUP_PLATFORM_TEST_POSTGRES_PASSWORD
+          ../TestResults
+      - name: Failure diagnostics
+        if: ${{ failure() && !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: integration-mssql-failure
+          path: TestResults
+          retention-days: 3
+          if-no-files-found: ignore
+      - name: SQL Server log on failure
+        if: ${{ failure() }}
+        run: docker logs bp-ci-mssql --tail 100
+      - name: Remove containers and staging
+        if: ${{ always() }}
+        run: |
+          docker rm --force --volumes bp-ci-mssql bp-ci-postgres
+          rm -rf "$RUNNER_TEMP/bp-ci-mssql" "$RUNNER_TEMP/agent-host"

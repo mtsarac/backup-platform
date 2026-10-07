@@ -20,9 +20,9 @@ env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
 
 jobs:
-  # Nothing is published from a commit that has not passed the complete CI (including real SQL Server and Windows).
+  # Fast checks gate packaging; Full Integration and Windows Validation are separate manual acceptance workflows.
   ci:
-    name: CI
+    name: Fast CI
     uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
