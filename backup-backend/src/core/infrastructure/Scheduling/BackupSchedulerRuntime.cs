@@ -15,6 +15,8 @@ namespace BackupPlatform.Infrastructure.Scheduling;
 internal sealed class BackupSchedulerRuntime(ISchedulerFactory factory, IServiceScopeFactory scopes, BackupSchedulingOptions options, TimeProvider time, ILogger<BackupSchedulerRuntime> logger) : BackgroundService
 {
     private IScheduler? _scheduler;
+    private readonly object _stopLock = new();
+    private Task? _stopTask;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -30,12 +32,32 @@ internal sealed class BackupSchedulerRuntime(ISchedulerFactory factory, IService
             while (await timer.WaitForNextTickAsync(stoppingToken));
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
+        finally
+        {
+            logger.LogDebug(new EventId(7101, "ReconciliationStopped"), "Backup scheduler reconciliation stopped; cancellation requested: {Cancelled}.", stoppingToken.IsCancellationRequested);
+        }
     }
 
-    public override async Task StopAsync(CancellationToken cancellationToken)
+    public override Task StopAsync(CancellationToken cancellationToken)
     {
-        await base.StopAsync(cancellationToken);
-        if (_scheduler is { Status: not SchedulerStatus.Shutdown }) await _scheduler.Shutdown(waitForJobsToComplete: true, CancellationToken.None);
+        // app.Run and WebApplicationFactory can stop the same host concurrently. Quartz's second Shutdown
+        // returns immediately, so every host stop must join our first stop before either can dispose DI.
+        lock (_stopLock) return _stopTask ??= StopCoreAsync();
+    }
+
+    private async Task StopCoreAsync()
+    {
+        logger.LogDebug(new EventId(7100, "RuntimeStopping"), "Backup scheduler runtime stopping.");
+        // The host's deadline must not leave reconciliation resolving services while DI is disposed.
+        // As with the Quartz drain below, cancellation is requested but owned work is awaited to completion.
+        await base.StopAsync(CancellationToken.None);
+        if (_scheduler is { Status: not SchedulerStatus.Shutdown })
+        {
+            logger.LogDebug(new EventId(7102, "QuartzShutdownRequested"), "Backup scheduler Quartz shutdown requested.");
+            await _scheduler.Shutdown(waitForJobsToComplete: true, CancellationToken.None);
+            logger.LogDebug(new EventId(7103, "QuartzShutdownCompleted"), "Backup scheduler Quartz shutdown completed.");
+        }
+        logger.LogDebug(new EventId(7104, "RuntimeStopped"), "Backup scheduler runtime stopped.");
     }
 
     private async Task StartSchedulerAsync(CancellationToken cancellationToken)

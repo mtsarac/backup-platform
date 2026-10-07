@@ -1,0 +1,39 @@
+version: 2
+
+# Weekly, grouped: one pull request per ecosystem and update kind instead of one per package.
+updates:
+  - package-ecosystem: nuget
+    directory: /backup-backend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # The Microsoft.* / System.* packages are versioned in lockstep with the .NET runtime; they move together.
+      dotnet-platform:
+        patterns: ["Microsoft.*", "System.*"]
+      nuget-minor-patch:
+        update-types: [minor, patch]
+    labels: [dependencies, nuget]
+
+  - package-ecosystem: bun
+    directory: /backup-frontend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      frontend-minor-patch:
+        update-types: [minor, patch]
+    labels: [dependencies, frontend]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    groups:
+      github-actions:
+        patterns: ["*"]
+    labels: [dependencies, github-actions]

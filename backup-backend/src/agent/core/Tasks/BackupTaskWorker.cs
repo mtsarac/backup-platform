@@ -61,7 +61,7 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
                     _seen.Remove(pair.Key);
                 }
             }
-            if (_seen.ContainsKey(id) || !_queue.Writer.TryWrite(task))
+            if (_seen.ContainsKey(id) || !TryEnqueue(task))
             {
                 return false;
             }
@@ -70,16 +70,28 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
         }
     }
 
+    private bool TryEnqueue(AgentTaskEnvelope task) =>
+        _time is IAgentLoopObserver observer ? ObserveEnqueue(observer, task) : _queue.Writer.TryWrite(task);
+
+    private bool ObserveEnqueue(IAgentLoopObserver observer, AgentTaskEnvelope task) =>
+        observer.Signal("backup worker", () => _queue.Writer.TryWrite(task));
+
     public async Task RunAsync(CancellationToken stoppingToken)
     {
         if (Interlocked.Exchange(ref _started, 1) != 0)
         {
             throw new InvalidOperationException("The task worker can only run once.");
         }
+        _time.StartOperation("backup worker");
+        _time.EnterOperation("backup worker");
         try
         {
-            await foreach (var envelope in _queue.Reader.ReadAllAsync(stoppingToken).ConfigureAwait(false))
+            while (await _time.ObserveAsync("backup worker", _queue.Reader.WaitToReadAsync(stoppingToken).AsTask()).ConfigureAwait(false))
             {
+                if (!_queue.Reader.TryRead(out var envelope))
+                {
+                    continue;
+                }
                 var task = envelope.Backup!;
                 lock (_gate)
                 {
@@ -109,6 +121,10 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
+        }
+        finally
+        {
+            _time.EndOperation("backup worker");
         }
     }
 

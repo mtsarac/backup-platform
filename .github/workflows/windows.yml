@@ -1,0 +1,59 @@
+name: Windows Validation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-validation-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  windows:
+    name: Windows platform
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+        working-directory: backup-backend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('backup-backend/Directory.Packages.props', 'backup-backend/Directory.Build.props', 'backup-backend/dotnet-tools.json', 'backup-backend/**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+      - name: Restore
+        run: dotnet restore BackupPlatform.sln
+      - name: Release build (warnings as errors)
+        run: dotnet build BackupPlatform.sln -c Release --no-restore -p:ContinuousIntegrationBuild=true -warnaserror
+      # DPAPI, ACL and reparse-point tests report unsupported prerequisites as skipped, not passed.
+      - name: Windows platform tests
+        run: >
+          dotnet test tests/windows-tests -c Release --no-build --results-directory ../TestResults
+          --logger "trx;LogFileName=windows-platform-tests.trx"
+          --blame-hang-timeout 15m --blame-hang-dump-type none
+      - name: Test report
+        if: ${{ !cancelled() }}
+        run: python3 ../.github/scripts/trx_report.py --require-passed ../TestResults
+      - name: Failure diagnostics
+        if: ${{ failure() && !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-validation-failure
+          path: TestResults
+          retention-days: 3
+          if-no-files-found: ignore

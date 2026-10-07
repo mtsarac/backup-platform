@@ -17,6 +17,7 @@ public sealed partial class AgentConnectivityService
         var pollingActive = false;
         var pollFailures = 0;
         var serverPollAfter = TimeSpan.Zero;
+        Restriction? retryWindow = null;
 
         while (true)
         {
@@ -24,6 +25,7 @@ public sealed partial class AgentConnectivityService
             bool pushUp, catchUp, hint;
             long downSince;
             Restriction? restriction;
+            long attempt;
             lock (_gate)
             {
                 pushUp = _pushUp;
@@ -32,7 +34,12 @@ public sealed partial class AgentConnectivityService
                 hint = _hintRequested;
                 _catchUpRequested = false;
                 _hintRequested = false;
-                restriction = _restriction;
+                if (_restriction is null)
+                {
+                    retryWindow = null;
+                }
+                restriction = retryWindow ?? _restriction;
+                attempt = restriction?.Sequence ?? _restrictionSequence;
             }
             var now = Now;
             if (catchUp || hint)
@@ -84,6 +91,8 @@ public sealed partial class AgentConnectivityService
                 }
                 if (restriction is not null)
                 {
+                    // Like heartbeat and push, honour an already-observed retry window if a sibling rejects its probe first.
+                    retryWindow ??= restriction;
                     dueAt = Math.Max(dueAt, restriction.RetryAt);
                 }
                 if (dueAt <= now)
@@ -92,7 +101,9 @@ public sealed partial class AgentConnectivityService
                     {
                         await RefreshIdentityIfRejectedAsync(restriction, cancellationToken).ConfigureAwait(false);
                     }
-                    var outcome = await PollOnceAsync(cursor, pollingActive, pollFailures, serverPollAfter, cancellationToken).ConfigureAwait(false);
+                    await _time.ObserveAdmissionAsync("poll", cancellationToken).ConfigureAwait(false);
+                    var outcome = await PollOnceAsync(cursor, pollingActive, pollFailures, serverPollAfter, attempt, cancellationToken).ConfigureAwait(false);
+                    retryWindow = null;
                     lastPollAt = Now;
                     requestedAt = null;
                     cursor = outcome.Cursor ?? cursor;
@@ -114,10 +125,9 @@ public sealed partial class AgentConnectivityService
     private TimeSpan PollPeriod(TimeSpan serverPollAfter) =>
         TimeSpan.FromTicks(Math.Max(_options.PollInterval.Ticks, serverPollAfter.Ticks));
 
-    private async Task<PollOutcome> PollOnceAsync(string? cursor, bool pollingActive, int failures, TimeSpan serverPollAfter, CancellationToken cancellationToken)
+    private async Task<PollOutcome> PollOnceAsync(string? cursor, bool pollingActive, int failures, TimeSpan serverPollAfter, long attempt, CancellationToken cancellationToken)
     {
         var identity = Identity;
-        var attempt = BeginAttempt();
         var result = await GuardAsync("poll", () => _client.PollAsync(identity, cursor, cancellationToken)).ConfigureAwait(false);
         if (result.IsSuccess)
         {

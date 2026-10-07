@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="BackupPlatform.UnitTests" />
+    <InternalsVisibleTo Include="BackupPlatform.AgentTests" />
   </ItemGroup>
 
 

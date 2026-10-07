@@ -7,7 +7,6 @@ using BackupPlatform.Contracts.Agents;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Time.Testing;
 
 namespace BackupPlatform.AgentTests;
 
@@ -37,7 +36,7 @@ public sealed class SecretLeakageTests
 
         public Rig(Uri pushBaseUri, FakeHttpHandler handler, LogLevel level)
         {
-            Time = new FakeTimeProvider(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+            Time = new DeterministicTimeProvider();
             Logs = new CaptureLoggerProvider();
             Handler = handler;
             var services = new ServiceCollection();
@@ -51,7 +50,7 @@ public sealed class SecretLeakageTests
             _provider = services.BuildServiceProvider();
         }
 
-        public FakeTimeProvider Time { get; }
+        public DeterministicTimeProvider Time { get; }
 
         public CaptureLoggerProvider Logs { get; }
 
@@ -73,14 +72,7 @@ public sealed class SecretLeakageTests
             _run = Service.RunAsync(_cts.Token);
         }
 
-        public async Task RunForAsync(TimeSpan duration)
-        {
-            for (var elapsed = TimeSpan.Zero; elapsed < duration; elapsed += TimeSpan.FromSeconds(1))
-            {
-                Time.Advance(TimeSpan.FromSeconds(1));
-                await Task.Delay(25);
-            }
-        }
+        public Task RunForAsync(TimeSpan duration) => Time.AdvanceAsync(duration);
 
         public async ValueTask DisposeAsync()
         {

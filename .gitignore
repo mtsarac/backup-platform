@@ -26,4 +26,19 @@ docs/
 
 # Logs
 *.log
-logs/
+/logs/
+backup-backend/**/logs/
+
+# Build / test output
+TestResults/
+*.trx
+coverage/
+/artifacts/
+/publish/
+/release-out/
+/release-files/
+*.tsbuildinfo
+
+# Local tooling state
+.omo/
+.superpowers/

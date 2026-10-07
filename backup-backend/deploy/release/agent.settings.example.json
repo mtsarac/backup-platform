@@ -1,0 +1,26 @@
+{
+  "_comment": "Example only: copy the parts you need into bin/appsettings.json, or supply the same keys as environment variables (Agent__Backup__Staging__AgentDirectory, ...). Contains no secrets: SQL Server credentials are injected as BACKUP_AGENT_SECRET_<reference> environment variables, never stored here.",
+  "Agent": {
+    "Backend": {
+      "BaseUri": "https://backup.example.com/"
+    },
+    "Backup": {
+      "Staging": {
+        "Mapping": "SameHost",
+        "AgentDirectory": "<directory SQL Server writes backups to and this agent reads and deletes>",
+        "Cleanup": {
+          "Enabled": true,
+          "MinimumAge": "12:00:00",
+          "ScanInterval": "01:00:00"
+        }
+      },
+      "LocalStorage": {
+        "RootDirectory": "<directory for backups stored on this machine>"
+      },
+      "CentralStorage": {
+        "RootDirectory": "<directory of the central storage as seen from this machine>",
+        "TenantScope": "<tenant this agent stores for, lowercase>"
+      }
+    }
+  }
+}

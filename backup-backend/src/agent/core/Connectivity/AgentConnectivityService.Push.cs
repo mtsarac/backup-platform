@@ -14,10 +14,9 @@ public sealed partial class AgentConnectivityService
         var attempt = 0;
         while (true)
         {
-            await WaitForRestrictionAsync(cancellationToken).ConfigureAwait(false);
+            var connectAttempt = await WaitForRestrictionAsync("push", cancellationToken).ConfigureAwait(false);
             var identity = Identity;
-            var session = new PushSession(this);
-            var connectAttempt = BeginAttempt();
+            var session = new PushSession(this, connectAttempt);
             _currentSession = session;
             LogPushConnecting(identity.AgentId, _backendHost, attempt);
             var connect = await GuardPushAsync(identity, session, cancellationToken).ConfigureAwait(false);
@@ -27,7 +26,7 @@ public sealed partial class AgentConnectivityService
             {
                 var connectedAt = Now;
                 MarkPushUp(identity.AgentId, restored: false, connectAttempt);
-                await session.Ended.WaitAsync(cancellationToken).ConfigureAwait(false);
+                await _time.ObserveAsync("push", session.Ended, cancellationToken).ConfigureAwait(false);
                 MarkPushDown();
                 await _channel.StopAsync(cancellationToken).ConfigureAwait(false);
                 failure = session.EndFailure;
@@ -73,7 +72,7 @@ public sealed partial class AgentConnectivityService
             }
             if (delay > TimeSpan.Zero)
             {
-                await Task.Delay(delay, _time, cancellationToken).ConfigureAwait(false);
+                await _time.ObserveAsync("push", Task.Delay(delay, _time, cancellationToken)).ConfigureAwait(false);
             }
         }
     }
@@ -126,7 +125,7 @@ public sealed partial class AgentConnectivityService
         SignalWake();
     }
 
-    private sealed class PushSession(AgentConnectivityService owner) : IAgentPushChannelListener
+    private sealed class PushSession(AgentConnectivityService owner, long attemptSequence) : IAgentPushChannelListener
     {
         private readonly TaskCompletionSource _ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -178,7 +177,7 @@ public sealed partial class AgentConnectivityService
         {
             if (IsCurrent)
             {
-                owner.MarkPushUp(owner.Identity.AgentId, restored: true, owner.BeginAttempt());
+                owner.MarkPushUp(owner.Identity.AgentId, restored: true, attemptSequence);
             }
         }
 

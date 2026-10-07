@@ -116,7 +116,24 @@ public sealed partial class AgentConnectivityService : IAgentConnectivityStatus
     /// Runs until <paramref name="stoppingToken"/> is cancelled, then stops every loop, stops the push channel and returns
     /// normally. Throws <see cref="AgentIdentityUnavailableException"/> at startup when no usable identity is stored.
     /// </summary>
-    public async Task RunAsync(CancellationToken stoppingToken)
+    public Task RunAsync(CancellationToken stoppingToken) =>
+        _time is IAgentLoopObserver ? ObserveRunAsync(stoppingToken) : RunCoreAsync(stoppingToken);
+
+    private async Task ObserveRunAsync(CancellationToken stoppingToken)
+    {
+        _time.StartOperation("connectivity");
+        _time.EnterOperation("connectivity");
+        try
+        {
+            await RunCoreAsync(stoppingToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _time.EndOperation("connectivity");
+        }
+    }
+
+    private async Task RunCoreAsync(CancellationToken stoppingToken)
     {
         if (Interlocked.Exchange(ref _started, 1) != 0)
         {
@@ -141,15 +158,18 @@ public sealed partial class AgentConnectivityService : IAgentConnectivityStatus
             _options.HeartbeatInterval, _options.PollInterval, _options.PushFallbackDelay);
 
         using var loops = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        _time.StartOperation("heartbeat");
+        _time.StartOperation("push");
+        _time.StartOperation("poll");
         var tasks = new[]
         {
-            Task.Run(() => HeartbeatLoopAsync(loops.Token), CancellationToken.None),
-            Task.Run(() => PushLoopAsync(loops.Token), CancellationToken.None),
-            Task.Run(() => PollLoopAsync(loops.Token), CancellationToken.None),
+            RunLoopAsync("heartbeat", () => HeartbeatLoopAsync(loops.Token)),
+            RunLoopAsync("push", () => PushLoopAsync(loops.Token)),
+            RunLoopAsync("poll", () => PollLoopAsync(loops.Token)),
         };
         try
         {
-            await Task.WhenAny(tasks).ConfigureAwait(false);
+            await _time.ObserveAsync("connectivity", Task.WhenAny(tasks)).ConfigureAwait(false);
             await loops.CancelAsync().ConfigureAwait(false);
             await Task.WhenAll(tasks).ContinueWith(static _ => { }, TaskScheduler.Default).ConfigureAwait(false);
         }
@@ -164,6 +184,26 @@ public sealed partial class AgentConnectivityService : IAgentConnectivityStatus
                 ExceptionDispatchInfo.Capture(task.Exception!.GetBaseException()).Throw();
             }
         }
+    }
+
+    private Task RunLoopAsync(string operation, Func<Task> run)
+    {
+        if (_time is not IAgentLoopObserver observer)
+        {
+            return Task.Run(run, CancellationToken.None);
+        }
+        return Task.Run(async () =>
+        {
+            observer.Executing(operation);
+            try
+            {
+                await run().ConfigureAwait(false);
+            }
+            finally
+            {
+                _time.EndOperation(operation);
+            }
+        }, CancellationToken.None);
     }
 
     private async Task<AgentLocalIdentity> LoadInitialIdentityAsync(CancellationToken cancellationToken)
@@ -220,15 +260,6 @@ public sealed partial class AgentConnectivityService : IAgentConnectivityStatus
 
     private sealed record Restriction(AgentChannelState Kind, long RetryAt, long Sequence);
 
-    /// <summary>Marks the start of a backend attempt; only a success of an attempt that began after a restriction was set may lift it.</summary>
-    private long BeginAttempt()
-    {
-        lock (_gate)
-        {
-            return _restrictionSequence;
-        }
-    }
-
     private long Now => _time.GetTimestamp();
 
     private long After(long timestamp, TimeSpan delay) => timestamp + (long)(delay.TotalSeconds * _time.TimestampFrequency);
@@ -238,7 +269,17 @@ public sealed partial class AgentConnectivityService : IAgentConnectivityStatus
     private static TimeSpan? ClampRetryAfter(TimeSpan? retryAfter) =>
         retryAfter is { } value ? TimeSpan.FromTicks(Math.Clamp(value.Ticks, 0, MaximumRetryAfter.Ticks)) : null;
 
-    private void SignalWake() => _wake.Writer.TryWrite(true);
+    private void SignalWake()
+    {
+        if (_time is IAgentLoopObserver observer)
+        {
+            observer.Signal("poll", () => _wake.Writer.TryWrite(true));
+        }
+        else
+        {
+            _wake.Writer.TryWrite(true);
+        }
+    }
 
     private async Task WaitForWakeAsync(TimeSpan? timeout, CancellationToken cancellationToken)
     {
@@ -250,7 +291,7 @@ public sealed partial class AgentConnectivityService : IAgentConnectivityStatus
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutSource?.Token ?? CancellationToken.None);
         try
         {
-            await _wake.Reader.WaitToReadAsync(linked.Token).ConfigureAwait(false);
+            await _time.ObserveAsync("poll", _wake.Reader.WaitToReadAsync(linked.Token).AsTask()).ConfigureAwait(false);
             _wake.Reader.TryRead(out _);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -322,22 +363,32 @@ public sealed partial class AgentConnectivityService : IAgentConnectivityStatus
 
     /// <summary>
     /// Waits until no restriction applies or the retry time of the restriction in force is reached, then refreshes the
-    /// identity if the credential was rejected. The retry time observed on entry is honoured even when a sibling loop's
-    /// failed probe replaces the restriction meanwhile, so every loop probes once per window and none is starved.
+    /// identity if the credential was rejected. Admission and the attempt sequence are captured together: a success
+    /// admitted before a sibling's rejection must not clear that newer restriction. A captured retry window remains
+    /// valid if another probe rejects the credential while this loop is resuming.
     /// </summary>
-    private async Task WaitForRestrictionAsync(CancellationToken cancellationToken)
+    private async Task<long> WaitForRestrictionAsync(string operation, CancellationToken cancellationToken)
     {
-        var restriction = Volatile.Read(ref _restriction);
+        Restriction? restriction;
+        long attempt;
+        lock (_gate)
+        {
+            restriction = _restriction;
+            attempt = _restrictionSequence;
+        }
         if (restriction is null)
         {
-            return;
+            await _time.ObserveAdmissionAsync(operation, cancellationToken).ConfigureAwait(false);
+            return attempt;
         }
         var remaining = Until(restriction.RetryAt);
         if (remaining > TimeSpan.Zero)
         {
-            await Task.Delay(remaining, _time, cancellationToken).ConfigureAwait(false);
+            await _time.ObserveAsync(operation, Task.Delay(remaining, _time, cancellationToken)).ConfigureAwait(false);
         }
         await RefreshIdentityIfRejectedAsync(restriction, cancellationToken).ConfigureAwait(false);
+        await _time.ObserveAdmissionAsync(operation, cancellationToken).ConfigureAwait(false);
+        return attempt;
     }
 
     private async Task RefreshIdentityIfRejectedAsync(Restriction restriction, CancellationToken cancellationToken)

@@ -13,11 +13,13 @@ public sealed partial class BackupTaskWorker
 
     private async Task RenewLoopAsync(BackupTaskSnapshot task, BackupTaskLease lease, CancellationTokenSource requestedCancel, CancellationToken cancellationToken)
     {
+        _time.StartOperation("backup renewal");
+        _time.EnterOperation("backup renewal");
         try
         {
             while (true)
             {
-                await Task.Delay(RenewalInterval, _time, cancellationToken).ConfigureAwait(false);
+                await _time.ObserveAsync("backup renewal", Task.Delay(RenewalInterval, _time, cancellationToken)).ConfigureAwait(false);
                 var response = await CallAsync(identity => _client.RenewAsync(identity, task.AttemptId,
                     new BackupTaskLeaseRequest { LeaseToken = task.LeaseToken }, cancellationToken), cancellationToken).ConfigureAwait(false);
                 if (response.IsSuccess)
@@ -41,15 +43,21 @@ public sealed partial class BackupTaskWorker
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
         }
+        finally
+        {
+            _time.EndOperation("backup renewal");
+        }
     }
 
     private async Task ReportLoopAsync(BackupTaskSnapshot task, TaskProgress progress, CancellationToken cancellationToken)
     {
+        _time.StartOperation("backup progress");
+        _time.EnterOperation("backup progress");
         try
         {
             while (true)
             {
-                await Task.Delay(ProgressInterval, _time, cancellationToken).ConfigureAwait(false);
+                await _time.ObserveAsync("backup progress", Task.Delay(ProgressInterval, _time, cancellationToken)).ConfigureAwait(false);
                 if (progress.Take() is not { } current)
                 {
                     continue;
@@ -65,6 +73,10 @@ public sealed partial class BackupTaskWorker
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
         }
+        finally
+        {
+            _time.EndOperation("backup progress");
+        }
     }
 
     private async Task CompleteAsync(Guid attemptId, BackupTaskCompletionRequest completion, CancellationToken cancellationToken)
@@ -78,7 +90,7 @@ public sealed partial class BackupTaskWorker
                 return;
             }
             var delay = response.Failure.RetryAfter is { } requested && requested > CompletionRetry ? requested : CompletionRetry;
-            await Task.Delay(delay, _time, cancellationToken).ConfigureAwait(false);
+            await _time.ObserveAsync("backup worker", Task.Delay(delay, _time, cancellationToken)).ConfigureAwait(false);
         }
     }
 
