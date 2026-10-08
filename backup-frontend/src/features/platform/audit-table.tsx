@@ -23,6 +23,10 @@ const actionLabels: Record<string, string> = {
   'subscription.suspended': 'Abonelik askıya alındı',
   'subscription.resumed': 'Abonelik yeniden etkinleştirildi',
   'subscription.storage_limit_override_changed': 'Depolama limiti override değiştirildi',
+  'quota_policy.created': 'Kota politikası oluşturuldu',
+  'quota_policy.changed': 'Kota politikası değiştirildi',
+  'tenant_storage_usage.rebuilt': 'Depolama kullanımı baştan hesaplandı (Rebuild)',
+  'tenant_storage_usage.reconcile_corrected': 'Depolama kullanımı doğrulandı ve düzeltildi (Reconcile)',
 }
 
 function auditActionLabel(action: string) {

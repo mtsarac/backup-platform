@@ -14,6 +14,7 @@ import {
   useRemoveMembership, useRenameTenant, useSetTenantEnrollment,
 } from '@/features/platform/hooks'
 import { SubscriptionSection } from '@/features/platform/plans/subscription-section'
+import { TenantStorageSection } from '@/features/platform/storage/tenant-storage-section'
 import { platformPaths } from '@/features/platform/paths'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { SearchForm } from '@/features/platform/search-form'
@@ -157,6 +158,7 @@ export function PlatformTenantDetailPage() {
         <RenameForm key={tenant.name} tenantId={tenant.tenantId} name={tenant.name} />
         <EnrollmentSection tenant={tenant} />
         <SubscriptionSection tenantId={tenant.tenantId} tenantName={tenant.name} />
+        <TenantStorageSection tenantId={tenant.tenantId} tenantName={tenant.name} />
         <MembershipsSection tenantId={tenant.tenantId} tenantName={tenant.name} />
         <RecentAudit tenantId={tenant.tenantId} />
       </>}

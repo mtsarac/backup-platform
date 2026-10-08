@@ -4,6 +4,7 @@ using BackupPlatform.Application.Tenancy;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.ManagedService;
 using BackupPlatform.ManagedService.Administration;
+using BackupPlatform.ManagedService.Entitlement;
 using BackupPlatform.ManagedService.Quota;
 
 namespace BackupPlatform.Api.Endpoints;
@@ -32,6 +33,9 @@ public sealed class QuotaPolicyRequest
 /// </summary>
 public static class QuotaEndpoints
 {
+    private const int DefaultPageSize = 25;
+    private const int MaximumPageSize = 100;
+
     public static IEndpointRouteBuilder MapQuotaEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var platform = endpoints.MapGroup("/api/platform").RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
@@ -42,6 +46,7 @@ public static class QuotaEndpoints
         platform.MapGet("/tenants/{tenantId:guid}/quota", GetPlatformQuotaAsync);
         platform.MapPost("/tenants/{tenantId:guid}/storage-usage/reconcile", ReconcileAsync);
         platform.MapPost("/tenants/{tenantId:guid}/storage-usage/rebuild", RebuildAsync);
+        platform.MapGet("/storage-usage", ListStorageUsageAsync);
 
         var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}").WithMetadata(new TenantScopedEndpoint());
         tenant.MapGet("/storage-quota", GetTenantQuotaAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
@@ -79,6 +84,27 @@ public static class QuotaEndpoints
     {
         var view = await usage.GetUsageAsync(new TenantId(tenantId), cancellationToken);
         return view is null ? TenantNotFound() : Results.Ok(ToResponse(view));
+    }
+
+    private static async Task<IResult> ListStorageUsageAsync(
+        string? search, string? quotaState, string? subscriptionStatus, int? page, int? pageSize, IStorageUsageService usage, TimeProvider time, CancellationToken cancellationToken)
+    {
+        var p = page ?? 1;
+        var size = pageSize ?? DefaultPageSize;
+        if (p is < 1 or > 1_000_000 || size is < 1 or > MaximumPageSize)
+        {
+            return Results.BadRequest(new { error = "invalid_request", field = "page", code = "invalid_value" });
+        }
+        if (!TryEnum<QuotaState>(quotaState, out var state))
+        {
+            return Results.BadRequest(new { error = "invalid_request", field = "quotaState", code = "invalid_value" });
+        }
+        if (!TryEnum<EntitlementStatus>(subscriptionStatus, out var status))
+        {
+            return Results.BadRequest(new { error = "invalid_request", field = "subscriptionStatus", code = "invalid_value" });
+        }
+        var result = await usage.ListStorageUsageAsync(new StorageUsageFilter(search, state, status), p, size, time.GetUtcNow(), cancellationToken);
+        return Results.Ok(new { items = result.Items.Select(ToListItemResponse).ToList(), totalCount = result.TotalCount, page = result.Page, pageSize = result.PageSize });
     }
 
     private static async Task<IResult> GetPlatformQuotaAsync(Guid tenantId, IStorageUsageService usage, TimeProvider time, CancellationToken cancellationToken)
@@ -138,9 +164,7 @@ public static class QuotaEndpoints
         name = policy.Name,
         version = policy.Version,
         accountingMode = policy.AccountingMode.ToString(),
-        includedStorageScopes = policy.IncludedStorageScopes.Selectors.Select(selector => selector.Kind == QuotaScopeKind.All
-            ? (object)new { kind = QuotaScopeRule.KindName(selector.Kind) }
-            : new { kind = QuotaScopeRule.KindName(selector.Kind), values = selector.Values }).ToList(),
+        includedStorageScopes = ScopesResponse(policy.IncludedStorageScopes),
         enforcementMode = policy.EnforcementMode.ToString(),
         warningThresholdPercent = policy.WarningThresholdPercent,
         criticalThresholdPercent = policy.CriticalThresholdPercent,
@@ -191,6 +215,9 @@ public static class QuotaEndpoints
         subscriptionStatus = status.EntitlementStatus.ToString(),
         newBackupsAllowed = status.NewBackupsAllowed,
         denialCode = status.DenialCode,
+        enforcementMode = status.EnforcementMode.ToString(),
+        plan = PlanResponse(status.Plan),
+        includedStorageScopes = ScopesResponse(status.IncludedStorageScopes),
         calculatedAt = status.UsageCalculatedAt
     };
 
@@ -211,6 +238,60 @@ public static class QuotaEndpoints
         newBackupsAllowed = status.NewBackupsAllowed,
         denialCode = status.DenialCode,
         policy = new { policyId = status.PolicyId.Value, key = status.PolicyKey, version = status.PolicyVersion },
+        plan = PlanResponse(status.Plan),
+        includedStorageScopes = ScopesResponse(status.IncludedStorageScopes),
         calculatedAt = status.UsageCalculatedAt
     };
+
+    private static object ToListItemResponse(TenantStorageUsageListItem item) => new
+    {
+        tenantId = item.TenantId.Value,
+        tenantName = item.TenantName,
+        plan = PlanResponse(item.Quota.Plan),
+        subscriptionStatus = item.Quota.EntitlementStatus.ToString(),
+        limitBytes = item.Quota.LimitBytes,
+        unlimited = item.Quota.IsUnlimited,
+        // No stored projection: the figures and the state do not exist yet, and are reported as absent rather than as a computed zero.
+        usedBytes = item.HasUsage ? item.Quota.UsedBytes : (long?)null,
+        reservedBytes = item.HasUsage ? item.Quota.ReservedBytes : (long?)null,
+        remainingBytes = item.HasUsage ? item.Quota.RemainingBytes : null,
+        state = item.HasUsage ? item.Quota.State.ToString() : null,
+        warningThreshold = item.Quota.WarningThresholdPercent,
+        criticalThreshold = item.Quota.CriticalThresholdPercent,
+        accountingMode = item.Quota.AccountingMode.ToString(),
+        enforcementMode = item.Quota.EnforcementMode.ToString(),
+        newBackupsAllowed = item.Quota.NewBackupsAllowed,
+        denialCode = item.Quota.DenialCode,
+        policy = new { policyId = item.Quota.PolicyId.Value, key = item.Quota.PolicyKey, version = item.Quota.PolicyVersion },
+        hasUsage = item.HasUsage,
+        usageCurrent = item.UsageCurrent,
+        calculatedAt = item.CalculatedAt
+    };
+
+    private static object? PlanResponse(TenantPlanSummary? plan) => plan is null
+        ? null
+        : new { name = plan.Name, isSystem = plan.IsSystem, systemKey = plan.SystemKey, subscriptionEndsAt = plan.SubscriptionEndsAt };
+
+    private static object ScopesResponse(QuotaScopeRule scopes) => scopes.Selectors.Select(selector => selector.Kind == QuotaScopeKind.All
+        ? (object)new { kind = QuotaScopeRule.KindName(selector.Kind) }
+        : new { kind = QuotaScopeRule.KindName(selector.Kind), values = selector.Values }).ToList();
+
+    private static bool TryEnum<T>(string? text, out T? value) where T : struct, Enum
+    {
+        value = null;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return true;
+        }
+        // By name only: numeric text such as "1" is not a name.
+        foreach (var name in Enum.GetNames<T>())
+        {
+            if (string.Equals(name, text.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                value = Enum.Parse<T>(name);
+                return true;
+            }
+        }
+        return false;
+    }
 }

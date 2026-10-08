@@ -480,6 +480,104 @@ public sealed class QuotaApiIntegrationTests(PostgreSqlFixture fixture) : IClass
     }
 
     [Fact]
+    public async Task TheTenantQuotaNamesItsPlanAndTheScopesItCounts()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var setup = await world.CreateTenantAsync();
+        var plan = await _quota.PlanAsync(5 * Gb);
+        await _quota.AssignAsync(setup.Tenant.Id, plan);
+
+        var json = AgentWorld.ReadJson(await setup.Admin.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/storage-quota"));
+
+        Assert.Equal(("BlockNewBackups", false), (json.GetProperty("enforcementMode").GetString(), json.GetProperty("plan").GetProperty("isSystem").GetBoolean()));
+        Assert.StartsWith("Quota plan ", json.GetProperty("plan").GetProperty("name").GetString());
+        var scope = Assert.Single(json.GetProperty("includedStorageScopes").EnumerateArray());
+        Assert.Equal("all", scope.GetProperty("kind").GetString());
+        // A tenant without a subscription has no plan to name.
+        var bare = await world.CreateTenantAsync();
+        var none = AgentWorld.ReadJson(await bare.Admin.GetAsync($"/api/tenants/{bare.Tenant.Id.Value}/storage-quota"));
+        Assert.Equal(JsonValueKind.Null, none.GetProperty("plan").ValueKind);
+    }
+
+    [Fact]
+    public async Task AdminListsEveryTenantsStandingInOneFilteredPagedRead()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var platform = await PlatformAdminAsync(world);
+        var tag = Guid.NewGuid().ToString("N");
+        var store = _quota.RunStore();
+
+        async Task<(Guid Id, string Name)> TenantAsync(string label, long? limit, long usedBytes, bool subscribe = true)
+        {
+            var tenant = await world.AddTenantAsync();
+            await using (var context = fixture.CreatePlatformContext())
+            {
+                await context.Database.ExecuteSqlInterpolatedAsync($"UPDATE tenants SET \"Name\" = {$"{label} {tag}"} WHERE \"Id\" = {tenant.Id.Value}");
+            }
+            if (subscribe)
+            {
+                await _quota.AssignAsync(tenant.Id, await _quota.PlanAsync(limit));
+            }
+            if (usedBytes > 0)
+            {
+                var agent = new StoreAgent(tenant.Id, await _quota.Harness.AddAgentToAsync(tenant.Id));
+                await _quota.PublishAsync(store, agent, await _quota.JobAsync(agent), usedBytes, Central, Stamp());
+            }
+            return (tenant.Id.Value, $"{label} {tag}");
+        }
+
+        var normal = await TenantAsync("a-normal", 5 * Gb, 1 * Gb);
+        var over = await TenantAsync("b-over", 5 * Gb, 5 * Gb);
+        var unlimited = await TenantAsync("c-unlimited", null, 2 * Gb);
+        var bare = await TenantAsync("d-none", null, 0, subscribe: false);
+        string Url(string query) => $"/api/platform/storage-usage?search={tag}&{query}";
+
+        var all = await CallAsync(platform, HttpMethod.Get, Url("pageSize=100"));
+        Assert.Equal(HttpStatusCode.OK, all.Status);
+        var items = all.Json.GetProperty("items").EnumerateArray().ToList();
+        Assert.Equal(new[] { normal.Id, over.Id, unlimited.Id, bare.Id }, items.Select(item => item.GetProperty("tenantId").GetGuid()).ToArray());
+        Assert.Equal(4, all.Json.GetProperty("totalCount").GetInt64());
+        Assert.Equal(("Normal", 1 * Gb, 5 * Gb, 4 * Gb, "Active"), (items[0].GetProperty("state").GetString(), items[0].GetProperty("usedBytes").GetInt64(),
+            items[0].GetProperty("limitBytes").GetInt64(), items[0].GetProperty("remainingBytes").GetInt64(), items[0].GetProperty("subscriptionStatus").GetString()));
+        Assert.Equal(("OverQuota", false, "quota_exceeded"), (items[1].GetProperty("state").GetString(), items[1].GetProperty("newBackupsAllowed").GetBoolean(), items[1].GetProperty("denialCode").GetString()));
+        Assert.Equal(("Unlimited", true), (items[2].GetProperty("state").GetString(), items[2].GetProperty("unlimited").GetBoolean()));
+        // No subscription and no stored projection: figures and state are absent, never a computed zero.
+        Assert.Equal(("NoSubscription", false, JsonValueKind.Null, JsonValueKind.Null, JsonValueKind.Null, JsonValueKind.Null),
+            (items[3].GetProperty("subscriptionStatus").GetString(), items[3].GetProperty("hasUsage").GetBoolean(), items[3].GetProperty("usedBytes").ValueKind,
+                items[3].GetProperty("state").ValueKind, items[3].GetProperty("plan").ValueKind, items[3].GetProperty("calculatedAt").ValueKind));
+
+        var overOnly = await CallAsync(platform, HttpMethod.Get, Url("quotaState=overquota"));
+        Assert.Equal(new[] { over.Id }, overOnly.Json.GetProperty("items").EnumerateArray().Select(item => item.GetProperty("tenantId").GetGuid()).ToArray());
+        Assert.Equal(1, overOnly.Json.GetProperty("totalCount").GetInt64());
+        var none = await CallAsync(platform, HttpMethod.Get, Url("subscriptionStatus=NoSubscription"));
+        Assert.Equal(new[] { bare.Id }, none.Json.GetProperty("items").EnumerateArray().Select(item => item.GetProperty("tenantId").GetGuid()).ToArray());
+
+        var second = await CallAsync(platform, HttpMethod.Get, Url("page=2&pageSize=3"));
+        Assert.Equal((4L, 2, 3), (second.Json.GetProperty("totalCount").GetInt64(), second.Json.GetProperty("page").GetInt32(), second.Json.GetProperty("pageSize").GetInt32()));
+        Assert.Equal(new[] { bare.Id }, second.Json.GetProperty("items").EnumerateArray().Select(item => item.GetProperty("tenantId").GetGuid()).ToArray());
+
+        Assert.Equal((HttpStatusCode.BadRequest, "invalid_request"), await Reply(platform, HttpMethod.Get, Url("quotaState=1"), null));
+        Assert.Equal((HttpStatusCode.BadRequest, "invalid_request"), await Reply(platform, HttpMethod.Get, Url("subscriptionStatus=bogus"), null));
+        Assert.Equal((HttpStatusCode.BadRequest, "invalid_request"), await Reply(platform, HttpMethod.Get, Url("pageSize=101"), null));
+
+        // The list never computes or writes a projection: the tenant that had none still has none.
+        Assert.Null(await _quota.StoredUsageAsync(new TenantId(bare.Id)));
+    }
+
+    [Fact]
+    public async Task TheStorageUsageListIsPlatformAdminOnly()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var setup = await world.CreateTenantAsync(TenantRole.Owner);
+
+        var forbidden = await CallAsync(setup.Admin, HttpMethod.Get, "/api/platform/storage-usage");
+        using var anonymous = await world.Anonymous.GetAsync("/api/platform/storage-usage");
+
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.Status);
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+    }
+
+    [Fact]
     public async Task TheTenantQuotaFollowsUsageThroughEveryStateAndTheLimitChangesOfThePlatform()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);

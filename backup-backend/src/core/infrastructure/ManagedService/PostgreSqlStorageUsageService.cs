@@ -1,8 +1,10 @@
+using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.ManagedService.Administration;
+using BackupPlatform.ManagedService.Entitlement;
 using BackupPlatform.ManagedService.Quota;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -39,7 +41,89 @@ public sealed class PostgreSqlStorageUsageService(
         var entitlement = await PostgreSqlTenantEntitlementReader.ResolveAsync(context, tenantId, now, cancellationToken);
         var policy = await TenantUsageEngine.ResolvePolicyAsync(context, tenantId, cancellationToken);
         // The projection was verified current against this very policy a moment ago; a concurrent change shows on the next read.
-        return TenantQuotaStatus.Resolve(entitlement, policy, view.UsedBytes, view.ReservedBytes, view.CalculatedAt);
+        return TenantQuotaStatus.Resolve(entitlement, policy, view.UsedBytes, view.ReservedBytes, view.CalculatedAt) with
+        {
+            Plan = await ReadPlanSummaryAsync(context, entitlement, cancellationToken)
+        };
+    }
+
+    public async Task<PagedResult<TenantStorageUsageListItem>> ListStorageUsageAsync(
+        StorageUsageFilter filter, int page, int pageSize, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var tenants = context.Tenants.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(filter.Search))
+        {
+            var term = filter.Search.Trim().ToLowerInvariant();
+            tenants = tenants.Where(tenant => tenant.Name.ToLower().Contains(term));
+        }
+        var ordered = tenants.OrderBy(tenant => tenant.Name).ThenBy(tenant => tenant.Id).Select(tenant => new TenantName(tenant.Id, tenant.Name));
+        var policies = await context.QuotaPolicies.AsNoTracking().Where(policy => policy.Enabled).ToListAsync(cancellationToken);
+        if (filter.State is null && filter.SubscriptionStatus is null)
+        {
+            // Nothing derived is filtered on, so the database pages and only that page is resolved.
+            var total = await tenants.LongCountAsync(cancellationToken);
+            var slice = await ordered.Skip(checked((page - 1) * pageSize)).Take(pageSize).ToListAsync(cancellationToken);
+            return new PagedResult<TenantStorageUsageListItem>(await ResolveStandingsAsync(context, slice, policies, now, cancellationToken), total, page, pageSize);
+        }
+        // State and subscription status are derived (by the one resolver each), never stored, so they cannot be filtered in SQL without
+        // restating those rules there. The rows involved are narrow: one tenant, its current subscription, its plan and its projection.
+        var all = await ResolveStandingsAsync(context, await ordered.ToListAsync(cancellationToken), policies, now, cancellationToken);
+        var matching = all.Where(item =>
+            (filter.SubscriptionStatus is null || item.Quota.EntitlementStatus == filter.SubscriptionStatus)
+            && (filter.State is null || (item.HasUsage && item.Quota.State == filter.State))).ToList();
+        var pageItems = matching.Skip(checked((page - 1) * pageSize)).Take(pageSize).ToList();
+        return new PagedResult<TenantStorageUsageListItem>(pageItems, matching.Count, page, pageSize);
+    }
+
+    private sealed record TenantName(TenantId Id, string Name);
+
+    /// <summary>Resolves the tenants with three set-based reads (subscriptions, plans, projections; the policies are passed in), however many tenants there are.</summary>
+    private static async Task<List<TenantStorageUsageListItem>> ResolveStandingsAsync(
+        PlatformDbContext context, List<TenantName> tenants, List<QuotaPolicy> enabledPolicies, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (tenants.Count == 0)
+        {
+            return [];
+        }
+        var ids = tenants.Select(tenant => tenant.Id).ToList();
+        var subscriptions = await context.TenantSubscriptions.AsNoTracking().Where(row => ids.Contains(row.TenantId)).ToListAsync(cancellationToken);
+        var planIds = subscriptions.Select(row => row.PlanId).Distinct().ToList();
+        var plans = (await context.Plans.AsNoTracking().Where(plan => planIds.Contains(plan.Id)).ToListAsync(cancellationToken)).ToDictionary(plan => plan.Id);
+        var usages = (await context.TenantStorageUsages.AsNoTracking().Where(row => ids.Contains(row.TenantId)).ToListAsync(cancellationToken)).ToDictionary(row => row.TenantId);
+        var openFirst = PostgreSqlTenantEntitlementReader.OpenFirst.Compile();
+        var currentByTenant = subscriptions.GroupBy(row => row.TenantId).ToDictionary(
+            group => group.Key,
+            group => group.OrderBy(openFirst).ThenByDescending(row => row.CreatedAt).ThenByDescending(row => row.Id.Value).First());
+        var items = new List<TenantStorageUsageListItem>(tenants.Count);
+        foreach (var tenant in tenants)
+        {
+            currentByTenant.TryGetValue(tenant.Id, out var current);
+            var plan = current is null ? null : plans[current.PlanId];
+            var entitlement = TenantEntitlement.Resolve(tenant.Id, current, plan, now);
+            var policy = TenantUsageEngine.ChoosePolicy(enabledPolicies, plan?.QuotaPolicyReference);
+            var hasUsage = usages.TryGetValue(tenant.Id, out var stored);
+            var usageCurrent = hasUsage && new UsageRow(stored!.UsedBytes, stored.ReservedBytes, stored.PolicyId, stored.PolicyVersion, stored.AccountingMode, stored.CalculatedAt, stored.Revision).IsComputedUnder(policy);
+            var quota = TenantQuotaStatus.Resolve(entitlement, policy, stored?.UsedBytes ?? 0, stored?.ReservedBytes ?? 0, stored?.CalculatedAt ?? default) with
+            {
+                Plan = plan is null ? null : new TenantPlanSummary(plan.Name, plan.IsSystem, plan.SystemKey, current!.EndsAt)
+            };
+            items.Add(new TenantStorageUsageListItem(tenant.Id, tenant.Name, quota, hasUsage, usageCurrent, stored?.CalculatedAt));
+        }
+        return items;
+    }
+
+    private static async Task<TenantPlanSummary?> ReadPlanSummaryAsync(PlatformDbContext context, TenantEntitlement entitlement, CancellationToken cancellationToken)
+    {
+        if (entitlement.SubscriptionId is null)
+        {
+            return null;
+        }
+        return await (from subscription in context.TenantSubscriptions.AsNoTracking()
+                      where subscription.Id == entitlement.SubscriptionId
+                      join plan in context.Plans.AsNoTracking() on subscription.PlanId equals plan.Id
+                      select new TenantPlanSummary(plan.Name, plan.IsSystem, plan.SystemKey, subscription.EndsAt)).SingleOrDefaultAsync(cancellationToken);
     }
 
     public Task<UsageReconciliation?> ReconcileAsync(TenantId tenantId, UserId? actor, DateTimeOffset now, CancellationToken cancellationToken) =>

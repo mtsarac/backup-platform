@@ -15,12 +15,15 @@ import { BackupJobsPage } from './pages/backup-jobs/backup-jobs-page'
 import { BackupJobWizardPage } from './pages/backup-jobs/backup-job-wizard-page'
 import { BackupsPage } from './pages/backups/backups-page'
 import { BackupDetailPage } from './pages/backups/backup-detail-page'
+import { StoragePage } from './pages/storage/storage-page'
 import { ArtifactsPage } from './pages/artifacts/artifacts-page'
 import { ArtifactDetailPage } from './pages/artifacts/artifact-detail-page'
 import { TenantSelectPage } from './pages/tenancy/tenant-select-page'
 import { Button } from './components/ui/button'
 import { PlatformDashboardPage } from './pages/platform/platform-dashboard-page'
 import { PlatformPlansPage } from './pages/platform/platform-plans-page'
+import { PlatformStoragePage } from './pages/platform/platform-storage-page'
+import { PlatformQuotaPoliciesPage } from './pages/platform/platform-quota-policies-page'
 import { PlatformTenantsPage } from './pages/platform/platform-tenants-page'
 import { PlatformTenantDetailPage } from './pages/platform/platform-tenant-detail-page'
 import { PlatformUsersPage } from './pages/platform/platform-users-page'
@@ -46,6 +49,7 @@ function AppRoutes() {
         <Route path="backup-jobs/:id/edit" element={<BackupJobWizardPage />} />
         <Route path="backup-runs" element={<BackupsPage />} />
         <Route path="backup-runs/:id" element={<BackupDetailPage />} />
+        <Route path="storage" element={<StoragePage />} />
         <Route path="artifacts" element={<ArtifactsPage />} />
         <Route path="artifacts/:id" element={<ArtifactDetailPage />} />
         <Route path="*" element={<p>Sayfa bulunamadı.</p>} />
@@ -57,6 +61,8 @@ function AppRoutes() {
           <Route path="tenants/:tenantId" element={<PlatformTenantDetailPage />} />
           <Route path="tenants/:tenantId/agents/:agentId" element={<PlatformAgentDetailPage />} />
           <Route path="plans" element={<PlatformPlansPage />} />
+          <Route path="storage" element={<PlatformStoragePage />} />
+          <Route path="quota-policies" element={<PlatformQuotaPoliciesPage />} />
           <Route path="users" element={<PlatformUsersPage />} />
           <Route path="agents" element={<PlatformAgentsPage />} />
           <Route path="audit" element={<PlatformAuditPage />} />

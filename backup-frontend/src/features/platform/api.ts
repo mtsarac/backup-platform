@@ -9,7 +9,7 @@ import type {
   Subscription, TenantSubscription,
 } from './plans/types'
 
-function query(params: object) {
+export function query(params: object) {
   const search = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== null && value !== '') search.set(key, String(value))

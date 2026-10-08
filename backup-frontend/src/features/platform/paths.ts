@@ -3,6 +3,8 @@ export const platformPaths = {
   tenants: '/platform/tenants',
   tenant: (tenantId: string) => `/platform/tenants/${encodeURIComponent(tenantId)}`,
   plans: '/platform/plans',
+  storage: '/platform/storage',
+  quotaPolicies: '/platform/quota-policies',
   users: '/platform/users',
   agents: (tenantId?: string) => tenantId ? `/platform/agents?tenantId=${encodeURIComponent(tenantId)}` : '/platform/agents',
   agent: (tenantId: string, agentId: string) => `/platform/tenants/${encodeURIComponent(tenantId)}/agents/${encodeURIComponent(agentId)}`,

@@ -5,6 +5,7 @@ import {
 } from '../api'
 import { platformKeys } from '../hooks'
 import type { PageParams } from '../types'
+import { invalidateStorageViews } from '../storage/hooks'
 import type { AssignSubscriptionInput, CreatePlanInput, PlanFilters, PlanInput, StorageLimitOverride } from './types'
 
 /** Plan list for the Plans page and (with `enabled: 'true'`) the plan picker. The list always comes from the backend. */
@@ -13,7 +14,13 @@ export function usePlans(filters: PlanFilters, enabled = true) {
 }
 
 export function useTenantSubscription(tenantId: string) {
-  return useQuery({ queryKey: platformKeys.subscription(tenantId), queryFn: ({ signal }) => getTenantSubscription(tenantId, signal), enabled: Boolean(tenantId) })
+  return useQuery({
+    queryKey: platformKeys.subscription(tenantId),
+    queryFn: ({ signal }) => getTenantSubscription(tenantId, signal),
+    enabled: Boolean(tenantId),
+    staleTime: 0,
+    refetchOnMount: 'always',
+  })
 }
 
 export function useSubscriptionHistory(tenantId: string, params: PageParams, enabled: boolean) {
@@ -22,6 +29,8 @@ export function useSubscriptionHistory(tenantId: string, params: PageParams, ena
     queryFn: ({ signal }) => getSubscriptionHistory(tenantId, params, signal),
     enabled: Boolean(tenantId) && enabled,
     placeholderData: keepPreviousData,
+    staleTime: 0,
+    refetchOnMount: 'always',
   })
 }
 
@@ -33,6 +42,7 @@ function invalidatePlanViews(client: Client) {
     client.invalidateQueries({ queryKey: platformKeys.plans }),
     client.invalidateQueries({ queryKey: platformKeys.tenants }),
     client.invalidateQueries({ queryKey: platformKeys.audit }),
+    invalidateStorageViews(client),
   ])
 }
 
@@ -58,6 +68,8 @@ function refreshSubscriptionViews(client: Client, tenantId: string) {
     client.invalidateQueries({ queryKey: platformKeys.subscriptionHistory(tenantId) }),
     client.invalidateQueries({ queryKey: platformKeys.plans }),
     client.invalidateQueries({ queryKey: platformKeys.audit }),
+    // Plan, suspension and override all change the limit or the standing that usage is read against.
+    invalidateStorageViews(client, tenantId),
   ])
 }
 

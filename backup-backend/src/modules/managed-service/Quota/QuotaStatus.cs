@@ -68,6 +68,9 @@ public sealed record QuotaAdmissionDecision(bool Allowed, string? DenialCode, Qu
     }
 }
 
+/// <summary>What the tenant is subscribed to, for display next to its quota. Resolved by the reader that has the plan row; never part of a quota decision.</summary>
+public sealed record TenantPlanSummary(string Name, bool IsSystem, string? SystemKey, DateTimeOffset? SubscriptionEndsAt);
+
 /// <summary>
 /// The tenant's storage standing, ready for an API: the effective limit (M1), the policy (how to count), the projected usage and the derived
 /// state. <see cref="RemainingBytes"/> is the limit less used and reserved bytes, never below zero; null when there is no limit.
@@ -75,8 +78,12 @@ public sealed record QuotaAdmissionDecision(bool Allowed, string? DenialCode, Qu
 public sealed record TenantQuotaStatus(
     TenantId TenantId, EntitlementStatus EntitlementStatus, long? LimitBytes, bool IsUnlimited, long UsedBytes, long ReservedBytes, long? RemainingBytes,
     QuotaState State, int WarningThresholdPercent, int CriticalThresholdPercent, QuotaAccountingMode AccountingMode, QuotaEnforcementMode EnforcementMode,
-    QuotaPolicyId PolicyId, string PolicyKey, int PolicyVersion, DateTimeOffset UsageCalculatedAt, bool NewBackupsAllowed, string? DenialCode)
+    QuotaPolicyId PolicyId, string PolicyKey, int PolicyVersion, DateTimeOffset UsageCalculatedAt, bool NewBackupsAllowed, string? DenialCode,
+    QuotaScopeRule IncludedStorageScopes)
 {
+    /// <summary>Null when the tenant has no subscription.</summary>
+    public TenantPlanSummary? Plan { get; init; }
+
     public static TenantQuotaStatus Resolve(TenantEntitlement entitlement, QuotaPolicy policy, long usedBytes, long reservedBytes, DateTimeOffset calculatedAt)
     {
         var limit = entitlement.StorageLimit;
@@ -87,6 +94,6 @@ public sealed record TenantQuotaStatus(
         return new TenantQuotaStatus(
             entitlement.TenantId, entitlement.Status, limitBytes, limit is { IsUnlimited: true }, usedBytes, reservedBytes, remaining, state,
             policy.WarningThresholdPercent, policy.CriticalThresholdPercent, policy.AccountingMode, policy.EnforcementMode,
-            policy.Id, policy.Key, policy.Version, calculatedAt, admission.Allowed, admission.DenialCode);
+            policy.Id, policy.Key, policy.Version, calculatedAt, admission.Allowed, admission.DenialCode, policy.IncludedStorageScopes);
     }
 }

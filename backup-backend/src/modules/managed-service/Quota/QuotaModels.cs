@@ -1,4 +1,6 @@
+using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Identity;
+using BackupPlatform.ManagedService.Entitlement;
 
 namespace BackupPlatform.ManagedService.Quota;
 
@@ -25,6 +27,18 @@ public sealed record UsageReconciliation(
     TenantId TenantId, bool Drifted, long? PreviousUsedBytes, long? PreviousReservedBytes, int? PreviousPolicyVersion,
     long UsedBytes, long ReservedBytes, QuotaPolicyId PolicyId, int PolicyVersion, int ReservationsReleased);
 
+/// <summary>Filters of the cross-tenant usage list. Each is optional; all given ones must match.</summary>
+public sealed record StorageUsageFilter(string? Search, QuotaState? State, EntitlementStatus? SubscriptionStatus);
+
+/// <summary>
+/// One tenant of the cross-tenant usage list. A tenant without a stored projection has <see cref="HasUsage"/> false and its usage figures are
+/// not meaningful (they are zero, never a computed answer). <see cref="UsageCurrent"/> is false when the stored projection was computed under
+/// another definition of usage than the tenant's current policy; the figures are then the last known ones and the next read, a policy-change
+/// recalculation or the maintenance pass replaces them.
+/// </summary>
+public sealed record TenantStorageUsageListItem(
+    TenantId TenantId, string TenantName, TenantQuotaStatus Quota, bool HasUsage, bool UsageCurrent, DateTimeOffset? CalculatedAt);
+
 public sealed record StorageUsageMaintenanceReport(
     int ReservationsExpired, int ProjectionsInitialized, int ProjectionsReconciled, int DriftCorrected, IReadOnlyList<Exception> Errors);
 
@@ -36,6 +50,13 @@ public interface IStorageUsageService
 {
     /// <summary>The projection; a tenant that has none yet gets one computed from the sources first, so a reader never sees a missing or stale number.</summary>
     Task<TenantStorageUsageView?> GetUsageAsync(TenantId tenantId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// One page of every tenant's standing, read in bulk from the stored projections (no per-tenant query, and nothing is recomputed or written by
+    /// a list). Filtering by quota state or subscription status is applied to the derived values before paging.
+    /// </summary>
+    Task<PagedResult<TenantStorageUsageListItem>> ListStorageUsageAsync(
+        StorageUsageFilter filter, int page, int pageSize, DateTimeOffset now, CancellationToken cancellationToken);
 
     /// <summary>Effective limit (M1 entitlement) + policy + usage. Same freshness guarantee as <see cref="GetUsageAsync"/>.</summary>
     Task<TenantQuotaStatus?> GetQuotaStatusAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken);

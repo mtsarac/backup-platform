@@ -52,10 +52,14 @@ internal static class TenantUsageEngine
         var candidates = await context.QuotaPolicies.AsNoTracking()
             .Where(policy => policy.Enabled && (policy.IsDefault || (reference != null && policy.Key == reference)))
             .ToListAsync(cancellationToken);
-        return candidates.FirstOrDefault(policy => reference is not null && policy.Key == reference)
-            ?? candidates.SingleOrDefault(policy => policy.IsDefault)
-            ?? throw new InvalidOperationException("The default quota policy is missing.");
+        return ChoosePolicy(candidates, reference);
     }
+
+    /// <summary>The one selection rule, shared by the per-tenant resolution and the bulk read: the referenced policy when it is among the enabled ones, otherwise the default.</summary>
+    public static QuotaPolicy ChoosePolicy(IReadOnlyCollection<QuotaPolicy> enabledPolicies, string? reference) =>
+        enabledPolicies.FirstOrDefault(policy => reference is not null && policy.Key == reference)
+            ?? enabledPolicies.SingleOrDefault(policy => policy.IsDefault)
+            ?? throw new InvalidOperationException("The default quota policy is missing.");
 
     public static async Task<UsageRow?> ReadAsync(PlatformDbContext context, TenantId tenantId, CancellationToken cancellationToken)
     {

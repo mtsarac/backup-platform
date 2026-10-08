@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { ArrowLeft, LayoutDashboard, Building2, Users, Monitor, Layers, ScrollText, ShieldCheck, X } from 'lucide-react'
+import { ArrowLeft, LayoutDashboard, Building2, Users, Monitor, Layers, ScrollText, ShieldCheck, Gauge, Sliders, X } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { platformPaths } from '@/features/platform/paths'
@@ -7,6 +7,8 @@ import { platformPaths } from '@/features/platform/paths'
 const items = [
   { label: 'Dashboard', path: platformPaths.root, icon: LayoutDashboard, end: true },
   { label: 'Tenants', path: platformPaths.tenants, icon: Building2, end: false },
+  { label: 'Storage Usage', path: platformPaths.storage, icon: Gauge, end: false },
+  { label: 'Quota Policies', path: platformPaths.quotaPolicies, icon: Sliders, end: false },
   { label: 'Plans', path: platformPaths.plans, icon: Layers, end: false },
   { label: 'Users', path: platformPaths.users, icon: Users, end: false },
   { label: 'Agents', path: platformPaths.agents(), icon: Monitor, end: false },
