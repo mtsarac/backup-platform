@@ -3,6 +3,7 @@ import {
   addMembership, changeMembershipRole, createTenant, createUser, getAudit, getMemberships, getPlatformAgent,
   getPlatformAgents, getSummary, getTenant, getTenants, getUsers, removeMembership, renameTenant, setTenantEnrollment,
 } from './api'
+import type { PlanFilters } from './plans/types'
 import type { AuditFilters, CreateUserInput, MembershipRole, PageParams, PlatformAgentFilters, SearchParams } from './types'
 
 export const platformKeys = {
@@ -17,6 +18,11 @@ export const platformKeys = {
   agents: ['platform', 'agents'] as const,
   agentList: (filters: PlatformAgentFilters) => ['platform', 'agents', 'list', filters] as const,
   agent: (tenantId: string, agentId: string) => ['platform', 'agents', 'detail', tenantId, agentId] as const,
+  plans: ['platform', 'plans'] as const,
+  planList: (filters: PlanFilters) => ['platform', 'plans', 'list', filters] as const,
+  subscription: (tenantId: string) => ['platform', 'tenants', 'subscription', tenantId] as const,
+  subscriptionHistory: (tenantId: string) => ['platform', 'tenants', 'subscriptions', tenantId] as const,
+  subscriptionHistoryPage: (tenantId: string, params: PageParams) => ['platform', 'tenants', 'subscriptions', tenantId, params] as const,
   audit: ['platform', 'audit'] as const,
   auditList: (filters: AuditFilters) => ['platform', 'audit', 'list', filters] as const,
 }

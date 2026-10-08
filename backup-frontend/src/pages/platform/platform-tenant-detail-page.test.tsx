@@ -28,6 +28,7 @@ beforeEach(() => {
   vi.mocked(api.getMemberships).mockResolvedValue(paged([ayse, can]))
   vi.mocked(api.getUsers).mockResolvedValue(paged(users))
   vi.mocked(api.getAudit).mockResolvedValue(paged([audit]))
+  vi.mocked(api.getTenantSubscription).mockResolvedValue({ tenantId: 'tenant-a', subscription: null })
 })
 
 describe('platform tenant detail', () => {

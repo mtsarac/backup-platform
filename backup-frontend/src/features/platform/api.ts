@@ -4,6 +4,10 @@ import type {
   PlatformAgentFilters, PlatformAuditEntry, PlatformMembership, PlatformSummary, PlatformTenant, PlatformTenantDetail,
   PlatformUser, SearchParams, TenantEnrollmentResult,
 } from './types'
+import type {
+  AssignSubscriptionInput, AssignSubscriptionResult, CreatePlanInput, Plan, PlanFilters, PlanInput, StorageLimitOverride,
+  Subscription, TenantSubscription,
+} from './plans/types'
 
 function query(params: object) {
   const search = new URLSearchParams()
@@ -74,4 +78,47 @@ export function getPlatformAgent(tenantId: string, agentId: string, signal?: Abo
 
 export function getAudit(filters: AuditFilters, signal?: AbortSignal) {
   return apiRequest<PagedResult<PlatformAuditEntry>>(`platform/audit${query(filters)}`, { signal })
+}
+
+const planUrl = (planId: string) => `platform/plans/${encodeURIComponent(planId)}`
+const subscriptionUrl = (tenantId: string) => `${tenantUrl(tenantId)}/subscription`
+
+export function getPlans(filters: PlanFilters, signal?: AbortSignal) {
+  return apiRequest<PagedResult<Plan>>(`platform/plans${query(filters)}`, { signal })
+}
+
+export function createPlan(input: CreatePlanInput) {
+  return apiRequest<Plan>('platform/plans', { method: 'POST', json: input })
+}
+
+export function updatePlan(planId: string, input: PlanInput) {
+  return apiRequest<Plan>(planUrl(planId), { method: 'PUT', json: input })
+}
+
+export function setPlanEnabled(planId: string, enabled: boolean) {
+  return apiRequest<Plan>(`${planUrl(planId)}/enabled`, { method: 'PUT', json: { enabled } })
+}
+
+export function getTenantSubscription(tenantId: string, signal?: AbortSignal) {
+  return apiRequest<TenantSubscription>(subscriptionUrl(tenantId), { signal })
+}
+
+export function getSubscriptionHistory(tenantId: string, params: PageParams, signal?: AbortSignal) {
+  return apiRequest<PagedResult<Subscription>>(`${tenantUrl(tenantId)}/subscriptions${query(params)}`, { signal })
+}
+
+export function assignSubscriptionPlan(tenantId: string, input: AssignSubscriptionInput) {
+  return apiRequest<AssignSubscriptionResult>(subscriptionUrl(tenantId), { method: 'PUT', json: input })
+}
+
+export function suspendSubscription(tenantId: string) {
+  return apiRequest<Subscription>(`${subscriptionUrl(tenantId)}/suspend`, { method: 'POST' })
+}
+
+export function resumeSubscription(tenantId: string) {
+  return apiRequest<Subscription>(`${subscriptionUrl(tenantId)}/resume`, { method: 'POST' })
+}
+
+export function setStorageLimitOverride(tenantId: string, override: StorageLimitOverride) {
+  return apiRequest<Subscription>(`${subscriptionUrl(tenantId)}/storage-limit-override`, { method: 'PUT', json: override })
 }

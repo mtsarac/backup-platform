@@ -20,6 +20,7 @@
     <ProjectReference Include="../../src/modules/identity/BackupPlatform.Identity.csproj" />
     <ProjectReference Include="../../src/modules/tenancy/BackupPlatform.Tenancy.csproj" />
     <ProjectReference Include="../../src/modules/agents/BackupPlatform.Agents.csproj" />
+    <ProjectReference Include="../../src/modules/managed-service/BackupPlatform.ManagedService.csproj" />
     <ProjectReference Include="../../src/core/application/BackupPlatform.Application.csproj" />
     <ProjectReference Include="../../src/agent/core/BackupPlatform.Agent.Core.csproj" />
     <ProjectReference Include="../../src/agent/platform-linux/BackupPlatform.Agent.Platform.Linux.csproj" />

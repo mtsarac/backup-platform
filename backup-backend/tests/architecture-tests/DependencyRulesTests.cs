@@ -374,6 +374,84 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
         name.Equals("Cronos", StringComparison.OrdinalIgnoreCase)
         || name.StartsWith("Cronos.", StringComparison.OrdinalIgnoreCase);
 
+    // ---- managed service (plans, subscriptions): a commercial module that backup execution, providers and agents never know ----
+
+    private const string ManagedServiceProject = "BackupPlatform.ManagedService";
+
+    [Fact]
+    public void AgentSideProjectsMustNotDependOnManagedService()
+    {
+        foreach (var (configuration, graph) in fixture.Graphs)
+        {
+            foreach (var agentSide in graph.Values.Where(node =>
+                node.RelativePath.StartsWith("src/agent/", StringComparison.Ordinal)
+                || node.RelativePath.StartsWith("src/hosts/agent/", StringComparison.Ordinal)))
+            {
+                AssertForbiddenDependencies(configuration, graph, agentSide.Name, node => node.Name == ManagedServiceProject);
+            }
+        }
+    }
+
+    [Fact]
+    public void StorageProvidersMustNotDependOnManagedService()
+    {
+        foreach (var (configuration, graph) in fixture.Graphs)
+        {
+            foreach (var provider in graph.Values.Where(node => node.RelativePath.StartsWith("src/providers/storage/", StringComparison.Ordinal)))
+            {
+                AssertForbiddenDependencies(configuration, graph, provider.Name, node => node.Name == ManagedServiceProject);
+            }
+        }
+    }
+
+    [Fact]
+    public void BackupProvidersIncludingMssqlMustNotDependOnManagedService()
+    {
+        foreach (var (configuration, graph) in fixture.Graphs)
+        {
+            foreach (var provider in graph.Values.Where(node => node.RelativePath.StartsWith("src/providers/backup/", StringComparison.Ordinal)))
+            {
+                AssertForbiddenDependencies(configuration, graph, provider.Name, node => node.Name == ManagedServiceProject);
+            }
+            AssertForbiddenDependencies(configuration, graph, "BackupPlatform.BackupProviders.MSSQL", node => node.Name == ManagedServiceProject);
+        }
+    }
+
+    [Fact]
+    public void ManagedServiceMustNotKnowProviderImplementationsAgentsOrOtherFeatureModules()
+    {
+        // It builds on the domain and application foundations only (whatever those pull in transitively, such as the storage
+        // abstractions, is theirs). No provider implementation, Agent, host, infrastructure or other feature module is reachable.
+        AssertForbiddenDependencies(ManagedServiceProject, node =>
+            IsProviderImplementation(node)
+            || node.RelativePath.StartsWith("src/agent/", StringComparison.Ordinal)
+            || node.RelativePath.StartsWith("src/hosts/", StringComparison.Ordinal)
+            || (node.RelativePath.StartsWith("src/modules/", StringComparison.Ordinal) && node.Name != ManagedServiceProject)
+            || node.Name == "BackupPlatform.Infrastructure");
+        foreach (var (configuration, graph) in fixture.Graphs)
+        {
+            var direct = graph[ManagedServiceProject].References.Order(StringComparer.Ordinal).ToArray();
+            Assert.True(direct.SequenceEqual(["BackupPlatform.Application", "BackupPlatform.Domain"]),
+                $"{ManagedServiceProject} may only reference the domain and application foundations directly ({configuration}): {string.Join(", ", direct)}.");
+        }
+        AssertForbiddenExternalDependencies(ManagedServiceProject, IsWebDependency, IsPersistenceDependency, IsSqlClientDependency);
+    }
+
+    [Theory]
+    [InlineData("BackupPlatform.Domain")]
+    [InlineData("BackupPlatform.Application")]
+    [InlineData("BackupPlatform.Contracts")]
+    [InlineData("BackupPlatform.Agents")]
+    [InlineData("BackupPlatform.Backups")]
+    [InlineData("BackupPlatform.Scheduling")]
+    [InlineData("BackupPlatform.Storage")]
+    [InlineData("BackupPlatform.Identity")]
+    [InlineData("BackupPlatform.Tenancy")]
+    [InlineData("BackupPlatform.Audit")]
+    [InlineData("BackupPlatform.Notifications")]
+    public void BackupOrchestrationAndFeatureModulesMustNotDependOnManagedService(string project) =>
+        AssertForbiddenDependencies(project, node => node.Name == ManagedServiceProject);
+
     [Fact]
     public void ProviderImplementationsMustNotDependOnEachOther()
     {

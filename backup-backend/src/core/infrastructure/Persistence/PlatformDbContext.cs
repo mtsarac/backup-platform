@@ -11,6 +11,8 @@ using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Restores;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Identity;
+using BackupPlatform.ManagedService.Plans;
+using BackupPlatform.ManagedService.Subscriptions;
 using Microsoft.EntityFrameworkCore;
 
 namespace BackupPlatform.Infrastructure.Persistence;
@@ -71,6 +73,8 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<RestoreAttempt> RestoreAttempts => Set<RestoreAttempt>();
     public DbSet<RestoreReplicaPin> RestoreReplicaPins => Set<RestoreReplicaPin>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+    public DbSet<Plan> Plans => Set<Plan>();
+    public DbSet<TenantSubscription> TenantSubscriptions => Set<TenantSubscription>();
 
     /// <summary>Explicit unfiltered context for trusted platform operations only.</summary>
     /// <remarks>Does not authorize the caller. Future application boundaries must authorize its use.</remarks>
@@ -149,6 +153,10 @@ public sealed class PlatformDbContext : DbContext
             if (!IsPlatformOperations && entry.Entity is TenantAgentEnrollmentPolicy or AgentCredential or AgentConnectivityRecord or AgentCapabilityRecord)
             {
                 throw new InvalidOperationException("Enrollment policy, agent credential, connectivity and capability writes require explicit platform operations.");
+            }
+            if (!IsPlatformOperations && entry.Entity is Plan or TenantSubscription)
+            {
+                throw new InvalidOperationException("Plan and subscription writes require explicit platform operations.");
             }
             if (!IsPlatformOperations && entry.Entity is AuditEvent)
             {

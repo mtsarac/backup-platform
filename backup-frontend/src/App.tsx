@@ -20,6 +20,7 @@ import { ArtifactDetailPage } from './pages/artifacts/artifact-detail-page'
 import { TenantSelectPage } from './pages/tenancy/tenant-select-page'
 import { Button } from './components/ui/button'
 import { PlatformDashboardPage } from './pages/platform/platform-dashboard-page'
+import { PlatformPlansPage } from './pages/platform/platform-plans-page'
 import { PlatformTenantsPage } from './pages/platform/platform-tenants-page'
 import { PlatformTenantDetailPage } from './pages/platform/platform-tenant-detail-page'
 import { PlatformUsersPage } from './pages/platform/platform-users-page'
@@ -55,6 +56,7 @@ function AppRoutes() {
           <Route path="tenants" element={<PlatformTenantsPage />} />
           <Route path="tenants/:tenantId" element={<PlatformTenantDetailPage />} />
           <Route path="tenants/:tenantId/agents/:agentId" element={<PlatformAgentDetailPage />} />
+          <Route path="plans" element={<PlatformPlansPage />} />
           <Route path="users" element={<PlatformUsersPage />} />
           <Route path="agents" element={<PlatformAgentsPage />} />
           <Route path="audit" element={<PlatformAuditPage />} />

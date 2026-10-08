@@ -59,10 +59,26 @@ const messages: Record<string, string> = {
   required: 'Zorunlu bir alan boş bırakıldı.',
   too_long: 'Girilen değer çok uzun.',
   invalid_length: 'Girilen değerin uzunluğu geçersiz.',
+  plan_not_found: 'Plan bulunamadı. Liste güncel olmayabilir.',
+  plan_name_taken: 'Bu plan adı zaten kullanılıyor.',
+  system_plan_immutable: 'Sistem planı değiştirilemez.',
+  concurrent_update: 'Plan başka bir işlemle aynı anda değiştirildi. Sayfayı yenileyip tekrar deneyin.',
+  plan_disabled: 'Bu plan devre dışı; yeni atamalarda seçilemez.',
+  plan_already_assigned: 'Tenant zaten bu planı kullanıyor.',
+  subscription_not_found: 'Tenant için abonelik bulunamadı.',
+  subscription_not_active: 'Abonelik etkin değil; askıya alınamaz.',
+  subscription_not_suspended: 'Abonelik askıda değil; yeniden etkinleştirilemez.',
+  subscription_not_open: 'Abonelik sona ermiş; yalnızca yeni bir plan atanabilir.',
+  subscription_expired: 'Abonelik süresi dolmuş; yalnızca yeni bir plan atanabilir.',
+  invalid_kind: 'Limit türü geçersiz.',
+  unexpected: 'Bu limit türü için bayt değeri girilemez.',
+  out_of_range: 'Girilen değer izin verilen aralığın dışında.',
+  ambiguous: 'Sınırlı boyut ile limitsiz seçeneği birlikte kullanılamaz.',
+  invalid_characters: 'Girilen değer geçersiz karakterler içeriyor.',
   platform_admin_required: 'Platform Administration için PlatformAdmin yetkisi gerekir.',
 }
 // Codes whose text must win over the generic 403/404 wording.
-const statusSpecificCodes: Record<string, true> = { tenant_not_found: true, user_not_found: true, membership_not_found: true, agent_not_found: true, platform_admin_required: true, enrollment_disabled: true }
+const statusSpecificCodes: Record<string, true> = { tenant_not_found: true, user_not_found: true, membership_not_found: true, agent_not_found: true, plan_not_found: true, subscription_not_found: true, platform_admin_required: true, enrollment_disabled: true }
 export function failureMessage(code?: string | null): string {
   if (!code) return 'İşlem başarısız oldu.'
   return messages[code] ?? (/^[A-Za-z0-9_.-]{1,80}$/.test(code) ? `İşlem başarısız oldu (${code}).` : 'İşlem başarısız oldu.')

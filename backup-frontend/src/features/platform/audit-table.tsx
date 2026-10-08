@@ -14,6 +14,15 @@ const actionLabels: Record<string, string> = {
   'membership.removed': 'Üyelik kaldırıldı',
   'agent_enrollment.policy_changed': 'Agent kayıt politikası değiştirildi',
   'user.created': 'Kullanıcı oluşturuldu',
+  'plan.created': 'Plan oluşturuldu',
+  'plan.changed': 'Plan değiştirildi',
+  'plan.enabled': 'Plan etkinleştirildi',
+  'plan.disabled': 'Plan devre dışı bırakıldı',
+  'subscription.assigned': 'Abonelik atandı',
+  'subscription.changed': 'Abonelik planı değiştirildi',
+  'subscription.suspended': 'Abonelik askıya alındı',
+  'subscription.resumed': 'Abonelik yeniden etkinleştirildi',
+  'subscription.storage_limit_override_changed': 'Depolama limiti override değiştirildi',
 }
 
 function auditActionLabel(action: string) {

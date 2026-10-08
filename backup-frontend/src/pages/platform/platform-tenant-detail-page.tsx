@@ -13,6 +13,7 @@ import {
   useAddMembership, useChangeMembershipRole, usePlatformAudit, usePlatformMemberships, usePlatformTenant, usePlatformUsers,
   useRemoveMembership, useRenameTenant, useSetTenantEnrollment,
 } from '@/features/platform/hooks'
+import { SubscriptionSection } from '@/features/platform/plans/subscription-section'
 import { platformPaths } from '@/features/platform/paths'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { SearchForm } from '@/features/platform/search-form'
@@ -155,6 +156,7 @@ export function PlatformTenantDetailPage() {
         <section className="space-y-3 rounded-lg border border-border bg-surface p-4"><div className="flex flex-wrap items-center gap-2"><h2 className="font-medium text-text-heading">Agent durumu</h2><Badge tone={tenant.enrollment.enabled ? 'success' : 'neutral'}>{tenant.enrollment.enabled ? 'Kayıt açık' : 'Kayıt kapalı'}</Badge></div><AgentBreakdown counts={tenant.agents} /></section>
         <RenameForm key={tenant.name} tenantId={tenant.tenantId} name={tenant.name} />
         <EnrollmentSection tenant={tenant} />
+        <SubscriptionSection tenantId={tenant.tenantId} tenantName={tenant.name} />
         <MembershipsSection tenantId={tenant.tenantId} tenantName={tenant.name} />
         <RecentAudit tenantId={tenant.tenantId} />
       </>}
