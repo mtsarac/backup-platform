@@ -37,7 +37,7 @@ internal sealed class BackupStoreHarness(PostgreSqlFixture database)
     private const int MaxStoreConnections = 16;
 
     public PostgreSqlBackupRunStore Store(BackupExecutionOptions? limits = null) => new(new DbContextOptionsBuilder<PlatformDbContext>()
-        .UseNpgsql(new NpgsqlConnectionStringBuilder(Database.ConnectionString) { MaxPoolSize = MaxStoreConnections }.ConnectionString).Options, limits, () => 0);
+        .UseNpgsql(new NpgsqlConnectionStringBuilder(Database.ConnectionString) { MaxPoolSize = MaxStoreConnections }.ConnectionString).Options, AdmitAllBackupAdmission.Instance, limits, () => 0);
 
     public static BackupExecutionOptions Limits(int agent = 1, int tenant = Unbounded, int global = Unbounded, Dictionary<string, int>? overrides = null) => new()
     {

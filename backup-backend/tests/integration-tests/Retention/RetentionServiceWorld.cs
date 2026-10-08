@@ -63,7 +63,7 @@ internal sealed class RetentionServiceWorld : IDisposable
         new(Store(), Resolver, options ?? new BackupRetentionOptions(), clock, NullLogger<BackupStorageSweeper>.Instance);
 
     public BackupArtifactService Artifacts(TimeProvider clock, BackupRetentionOptions? options = null) =>
-        new(Store(), new PostgreSqlBackupScheduleStore(DbOptions()), options ?? new BackupRetentionOptions(), clock);
+        new(Store(), new PostgreSqlBackupScheduleStore(DbOptions(), AdmitAllBackupAdmission.Instance), options ?? new BackupRetentionOptions(), clock);
 
     public static void SetClock(MutableClock clock, DateTimeOffset at) => clock.Advance(at - clock.GetUtcNow());
 

@@ -38,6 +38,7 @@ internal sealed class QuartzNode : IAsyncDisposable
         services.AddSingleton(time ?? TimeProvider.System);
         services.AddSingleton(new DbContextOptionsBuilder<PlatformDbContext>()
             .UseNpgsql(new NpgsqlConnectionStringBuilder(database.ConnectionString) { MaxPoolSize = 12 }.ConnectionString).Options);
+        services.AddSingleton<IBackupAdmissionPolicy>(AdmitAllBackupAdmission.Instance);
         services.AddScoped<IBackupRunStore, PostgreSqlBackupRunStore>();
         services.AddSingleton(signal ?? new RecordingSignal());
         services.AddBackupScheduling();

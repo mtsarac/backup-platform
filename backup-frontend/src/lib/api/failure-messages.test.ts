@@ -30,6 +30,9 @@ describe('platform failure messages', () => {
     [400, { error: 'invalid_request', field: 'storageLimitOverride', code: 'unexpected' }, 'Bu limit türü için bayt değeri girilemez.'],
     [400, { error: 'invalid_request', field: 'name', code: 'invalid_characters' }, 'Girilen değer geçersiz karakterler içeriyor.'],
     [400, { error: 'invalid_request', field: 'endsAt', code: 'invalid_value' }, 'Girilen değer geçersiz.'],
+    [409, { error: 'admission_denied', code: 'quota_exceeded' }, 'Depolama kotası doldu; yeni backup başlatılamadı. Mevcut backup\'lar silinmedi ve geri yüklenebilir.'],
+    [409, { error: 'admission_denied', code: 'subscription_required' }, 'Etkin bir abonelik bulunmadığı için yeni backup başlatılamadı.'],
+    [409, { error: 'quota_policy_key_taken' }, 'Bu kota politikası anahtarı zaten kullanılıyor.'],
   ])('maps %s %j', (status, body, text) => {
     expect(errorMessage(new ApiError(status, body))).toBe(text)
   })

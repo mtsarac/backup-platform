@@ -16,6 +16,12 @@ public sealed class PostgreSqlTenantEntitlementReader(DbContextOptions<PlatformD
     {
         ArgumentNullException.ThrowIfNull(tenantId);
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        return await ResolveAsync(context, tenantId, now, cancellationToken);
+    }
+
+    /// <summary>The same resolution on a context the caller already holds (inside its transaction), so quota code never repeats the M1 rules.</summary>
+    internal static async Task<TenantEntitlement> ResolveAsync(PlatformDbContext context, TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
         var current = await context.TenantSubscriptions.AsNoTracking()
             .Where(row => row.TenantId == tenantId)
             .OrderBy(row => row.Status == SubscriptionStatus.Active || row.Status == SubscriptionStatus.Suspended ? 0 : 1)

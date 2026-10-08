@@ -13,6 +13,13 @@ public static class ManagedServiceAuditActions
     public const string SubscriptionResumed = "subscription.resumed";
     public const string StorageLimitOverrideChanged = "subscription.storage_limit_override_changed";
 
+    public const string QuotaPolicyCreated = "quota_policy.created";
+    public const string QuotaPolicyChanged = "quota_policy.changed";
+    public const string StorageUsageRebuilt = "tenant_storage_usage.rebuilt";
+    public const string StorageUsageCorrected = "tenant_storage_usage.reconcile_corrected";
+
     public const string PlanTargetType = "plan";
+    public const string QuotaPolicyTargetType = "quota_policy";
+    public const string StorageUsageTargetType = "tenant_storage_usage";
     public const string SubscriptionTargetType = "subscription";
 }

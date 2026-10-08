@@ -15,7 +15,7 @@ namespace BackupPlatform.Infrastructure.Backups;
 /// one occurrence row per (job, instant) and one run per (job, instant). Neither the scheduler library nor process memory holds any
 /// scheduling state.
 /// </summary>
-public sealed class PostgreSqlBackupScheduleStore(DbContextOptions<PlatformDbContext> options, AgentConnectivityOptions? connectivity = null) : IBackupScheduleStore
+public sealed class PostgreSqlBackupScheduleStore(DbContextOptions<PlatformDbContext> options, IBackupAdmissionPolicy admission, AgentConnectivityOptions? connectivity = null) : IBackupScheduleStore
 {
     private readonly AgentConnectivityOptions _connectivity = connectivity ?? new AgentConnectivityOptions();
 
@@ -64,14 +64,33 @@ public sealed class PostgreSqlBackupScheduleStore(DbContextOptions<PlatformDbCon
         BackupRun? run = null;
         if (plan.CreateRunFor is { } instant)
         {
-            run = BackupRun.ForScheduledOccurrence(Guid.NewGuid(), job, instant, now);
-            run.QueueFirstAttempt(Guid.NewGuid(), now);
-            context.BackupRuns.Add(run);
-            recorded.Add(new BackupScheduleOccurrence(Guid.NewGuid(), tenantId, jobId, instant, BackupOccurrenceOutcome.RunCreated, BackupOccurrenceReasons.RunCreated, run.Id, now));
+            // Same gate as a manual start. A refusal is a decided occurrence like any other: recorded with its reason, so it is never silently lost.
+            var runId = Guid.NewGuid();
+            var decision = await BackupAdmissionGate.AdmitAsync(admission, context, new BackupAdmissionRequest(tenantId, jobId, runId, BackupTriggerTypes.Scheduled, now), cancellationToken);
+            if (decision.Allowed)
+            {
+                run = BackupRun.ForScheduledOccurrence(runId, job, instant, now);
+                run.QueueFirstAttempt(Guid.NewGuid(), now);
+                context.BackupRuns.Add(run);
+                recorded.Add(new BackupScheduleOccurrence(Guid.NewGuid(), tenantId, jobId, instant, BackupOccurrenceOutcome.RunCreated, BackupOccurrenceReasons.RunCreated, run.Id, now));
+            }
+            else
+            {
+                recorded.Add(new BackupScheduleOccurrence(Guid.NewGuid(), tenantId, jobId, instant, BackupOccurrenceOutcome.AdmissionDenied, decision.DenialCode!, null, now));
+            }
         }
         context.BackupScheduleOccurrences.AddRange(recorded);
-        await context.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            // Admitted but not created (a lost race on the occurrence key, a failed write): give the reservation back.
+            if (run is not null) await BackupAdmissionGate.ReleaseAfterFailureAsync(admission, tenantId, run.Id);
+            throw;
+        }
         return new BackupScheduleEvaluation(recorded, run?.Id, run?.AgentId, plan.Deferred is not null);
     }
 

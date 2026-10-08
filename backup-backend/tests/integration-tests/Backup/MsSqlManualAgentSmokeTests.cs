@@ -20,6 +20,7 @@ public sealed class MsSqlManualAgentSmokeTests(PostgreSqlFixture database, ITest
         await sql.InitializeAsync();
         await using var world = await AgentWorld.CreateAsync(database, clock: new MutableClock(live: true), kestrel: true);
         var tenant = await world.CreateTenantAsync();
+        await world.EntitleAsync(tenant.Tenant);
         var agent = await world.EnrollAsync(tenant);
         var configuration = Configuration(sql, sql.DatabaseName);
         var job = await CreateJobAsync(tenant, agent, configuration);
@@ -78,6 +79,7 @@ public sealed class MsSqlManualAgentSmokeTests(PostgreSqlFixture database, ITest
         await using var sql = new OrchestrationSqlSource();
         await using var world = await AgentWorld.CreateAsync(database, clock: new MutableClock(live: true), kestrel: true);
         var tenant = await world.CreateTenantAsync();
+        await world.EntitleAsync(tenant.Tenant);
         var agent = await world.EnrollAsync(tenant);
         var missingDatabase = "bp_absent_" + Guid.NewGuid().ToString("N");
         var job = await CreateJobAsync(tenant, agent, Configuration(sql, missingDatabase));

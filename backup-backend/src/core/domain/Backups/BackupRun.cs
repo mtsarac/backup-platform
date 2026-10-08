@@ -111,7 +111,8 @@ public sealed class BackupRun : ITenantOwned
     public IReadOnlyList<BackupRunAttempt> Attempts => _attemptView ??= _attempts.AsReadOnly();
     public IReadOnlyList<BackupLifecycleFact> Facts => _factView ??= _facts.AsReadOnly();
     public BackupRunAttempt CurrentAttempt => _attempts.Single(attempt => attempt.Number == CurrentAttemptNumber);
-    public bool IsTerminal => Status is BackupStatus.Succeeded or BackupStatus.Failed or BackupStatus.Cancelled or BackupStatus.AgentLost;
+    public bool IsTerminal => IsTerminalStatus(Status);
+    public static bool IsTerminalStatus(BackupStatus status) => status is BackupStatus.Succeeded or BackupStatus.Failed or BackupStatus.Cancelled or BackupStatus.AgentLost;
     /// <summary>Queued, retrying or executing: the states in which another run of the same job counts as overlapping.</summary>
     public bool IsActive => !IsTerminal;
 

@@ -18,6 +18,19 @@ public enum BackupReplicaStatus
 
 public enum BackupStorageExecutionLocation { Backend = 1, Agent = 2 }
 
+/// <summary>
+/// The one definition of whether a replica still holds bytes in its storage. Everything that totals stored data (quota accounting, the
+/// dashboard) asks here instead of listing statuses itself. A replica occupies storage from the moment it is published until its absence
+/// has been verified (<see cref="BackupReplicaStatus.Deleted"/>): a soft delete, a delete in flight and a failed delete all still occupy it.
+/// </summary>
+public static class BackupReplicaStorage
+{
+    public static readonly IReadOnlyList<BackupReplicaStatus> OccupyingStatuses =
+        [BackupReplicaStatus.Available, BackupReplicaStatus.DeletePending, BackupReplicaStatus.Deleting, BackupReplicaStatus.DeleteFailed];
+
+    public static bool Occupies(BackupReplicaStatus status) => status != BackupReplicaStatus.Deleted;
+}
+
 public sealed class BackupReplica : ITenantOwned
 {
     private BackupReplica() { TenantId = null!; StorageProvider = null!; StorageTarget = null!; Key = null!; Checksum = null!; ChecksumAlgorithm = null!; VerificationState = null!; VerificationMethod = null!; }

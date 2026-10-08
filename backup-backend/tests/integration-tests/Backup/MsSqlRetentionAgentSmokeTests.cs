@@ -230,6 +230,7 @@ public sealed class MsSqlRetentionAgentSmokeTests(PostgreSqlFixture database, IT
                         PollInterval = TimeSpan.FromSeconds(5), SeenWriteCoalescing = TimeSpan.Zero
                     });
                 var tenant = await world.CreateTenantAsync();
+                await world.EntitleAsync(tenant.Tenant);
                 var agent = await world.EnrollAsync(tenant);
                 using var created = await tenant.Admin.SendAsync(HttpMethod.Post, $"/api/tenants/{tenant.Tenant.Id.Value}/backup-jobs", new
                 {

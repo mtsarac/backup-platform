@@ -43,7 +43,11 @@ public enum ManagedServiceOutcome
     /// <summary>The subscription's state does not allow the change; <see cref="ManagedServiceChange{T}.Code"/> says why.</summary>
     InvalidTransition = 10,
     /// <summary>A concurrent writer got there first and the change was not applied.</summary>
-    ConcurrentUpdate = 11
+    ConcurrentUpdate = 11,
+    QuotaPolicyNotFound = 12,
+    QuotaPolicyKeyTaken = 13,
+    /// <summary>A plan cannot point at a disabled quota policy.</summary>
+    QuotaPolicyDisabled = 14
 }
 
 public sealed record ManagedServiceChange<T>(ManagedServiceOutcome Outcome, T? Value = default, string? Code = null) where T : class;

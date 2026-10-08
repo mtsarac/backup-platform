@@ -15,6 +15,7 @@ public sealed class BackupOrchestrationApiTests(PostgreSqlFixture fixture) : ICl
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var setup = await world.CreateTenantAsync();
+        await world.EntitleAsync(setup.Tenant);
         var agent = await world.EnrollAsync(setup);
         var account = await world.SeedUserAsync();
         await world.GrantAsync(setup.Tenant, account, role);
@@ -42,6 +43,7 @@ public sealed class BackupOrchestrationApiTests(PostgreSqlFixture fixture) : ICl
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var setup = await world.CreateTenantAsync();
+        await world.EntitleAsync(setup.Tenant);
         var other = await world.CreateTenantAsync();
         var agent = await world.EnrollAsync(setup);
         var root = $"/api/tenants/{setup.Tenant.Id.Value}";
@@ -75,6 +77,7 @@ public sealed class BackupOrchestrationApiTests(PostgreSqlFixture fixture) : ICl
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var setup = await world.CreateTenantAsync();
+        await world.EntitleAsync(setup.Tenant);
         var agent = await world.EnrollAsync(setup);
         var root = $"/api/tenants/{setup.Tenant.Id.Value}";
         using var create = await setup.Admin.SendAsync(HttpMethod.Post, root + "/backup-jobs", Job(agent.AgentId));
@@ -92,6 +95,7 @@ public sealed class BackupOrchestrationApiTests(PostgreSqlFixture fixture) : ICl
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var setup = await world.CreateTenantAsync();
+        await world.EntitleAsync(setup.Tenant);
         var agent = await world.EnrollAsync(setup);
         var stranger = await world.EnrollAsync(setup);
         var root = $"/api/tenants/{setup.Tenant.Id.Value}";
@@ -137,6 +141,7 @@ public sealed class BackupOrchestrationApiTests(PostgreSqlFixture fixture) : ICl
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var setup = await world.CreateTenantAsync();
+        await world.EntitleAsync(setup.Tenant);
         var agent = await world.EnrollAsync(setup);
         var path = $"/api/agent/tasks/{Guid.NewGuid()}/lease";
         var body = new BackupTaskLeaseRequest { LeaseToken = Guid.NewGuid() };

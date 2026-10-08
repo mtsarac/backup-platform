@@ -2,6 +2,8 @@ using BackupPlatform.Agents.Platform;
 using BackupPlatform.Application.Platform;
 using BackupPlatform.Infrastructure.Platform;
 using BackupPlatform.Api.Backups;
+using BackupPlatform.Api.Quota;
+using BackupPlatform.ManagedService.Quota;
 using BackupPlatform.Api.Restores;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Application.Restores;
@@ -55,6 +57,7 @@ public static class SecurityServiceCollectionExtensions
         services.AddScoped<IManagedServiceStore, PostgreSqlManagedServiceStore>();
         services.AddScoped<ITenantEntitlementReader, PostgreSqlTenantEntitlementReader>();
         services.AddScoped<ManagedServiceAdministrationService>();
+        AddQuota(services);
         services.AddScoped<BrowserCookieEvents>();
         AddBrowserAuthentication(services);
         AddAgentSecurity(services);
@@ -87,6 +90,26 @@ public static class SecurityServiceCollectionExtensions
             options.Cookie.Domain = null;
         });
         return services;
+    }
+
+    /// <summary>
+    /// Quota: the admission gate backup orchestration asks (it sees only <see cref="IBackupAdmissionPolicy"/>), usage reads and recomputation,
+    /// policy administration, and the maintenance loop. Operational settings come from <c>ManagedService:Quota</c>; policy values are rows.
+    /// </summary>
+    private static void AddQuota(IServiceCollection services)
+    {
+        services.TryAddSingleton(provider =>
+        {
+            var options = provider.GetRequiredService<IConfiguration>().GetSection("ManagedService:Quota").Get<QuotaOptions>() ?? new QuotaOptions();
+            options.ThrowIfInvalid();
+            return options;
+        });
+        services.AddScoped<IStorageUsageService, PostgreSqlStorageUsageService>();
+        services.AddScoped<IBackupAdmissionPolicy, PostgreSqlBackupAdmissionPolicy>();
+        services.AddScoped<IQuotaPolicyStore, PostgreSqlQuotaPolicyStore>();
+        services.AddScoped<QuotaPolicyAdministrationService>();
+        services.AddSingleton<StorageUsageMaintenanceWorker>();
+        services.AddHostedService(provider => provider.GetRequiredService<StorageUsageMaintenanceWorker>());
     }
 
     private static DbContextOptions<PlatformDbContext> CreateDatabaseOptions(IServiceProvider services)

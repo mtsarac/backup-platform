@@ -1223,7 +1223,7 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.ToTable("backup_schedule_occurrences", null, t =>
                         {
-                            t.HasCheckConstraint("ck_backup_occurrence_outcome", "\"Outcome\" IN ('RunCreated','SkippedOverlap','MissedGraceExpired','MissedSuperseded','JobDisabled')");
+                            t.HasCheckConstraint("ck_backup_occurrence_outcome", "\"Outcome\" IN ('RunCreated','SkippedOverlap','MissedGraceExpired','MissedSuperseded','JobDisabled','AdmissionDenied')");
 
                             t.HasCheckConstraint("ck_backup_occurrence_run", "(\"Outcome\" IN ('RunCreated','SkippedOverlap')) = (\"RunId\" IS NOT NULL)");
 
@@ -1808,6 +1808,8 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ux_plans_normalized_name");
 
+                    b.HasIndex("QuotaPolicyReference");
+
                     b.HasIndex("SystemKey")
                         .IsUnique()
                         .HasDatabaseName("ux_plans_system_key")
@@ -1824,6 +1826,196 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_plans_storage_limit", "\"StorageLimitBytes\" IS NULL OR (\"StorageLimitBytes\" > 0 AND \"StorageLimitBytes\" <= 1000000000000000)");
 
                             t.HasCheckConstraint("ck_plans_system_key", "\"SystemKey\" IS NULL OR \"IsSystem\"");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.ManagedService.Quota.QuotaPolicy", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AccountingMode")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CriticalThresholdPercent")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("EnforcementMode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("IncludedStorageScopes")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("WarningThresholdPercent")
+                        .HasColumnType("integer");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("Key")
+                        .HasName("ux_quota_policies_key");
+
+                    b.HasIndex("IsDefault")
+                        .IsUnique()
+                        .HasDatabaseName("ux_quota_policies_one_default")
+                        .HasFilter("\"IsDefault\"");
+
+                    b.HasIndex("NormalizedName")
+                        .IsUnique()
+                        .HasDatabaseName("ux_quota_policies_normalized_name");
+
+                    b.ToTable("quota_policies", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_quota_policies_accounting_mode", "\"AccountingMode\" IN (1, 2)");
+
+                            t.HasCheckConstraint("ck_quota_policies_default_enabled", "NOT \"IsDefault\" OR \"Enabled\"");
+
+                            t.HasCheckConstraint("ck_quota_policies_enforcement_mode", "\"EnforcementMode\" IN (1, 2, 3)");
+
+                            t.HasCheckConstraint("ck_quota_policies_id_nonempty", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_quota_policies_key", "\"Key\" ~ '^[a-z0-9][a-z0-9._-]{0,63}$'");
+
+                            t.HasCheckConstraint("ck_quota_policies_name_nonblank", "\"Name\" ~ '[^[:space:]]' AND \"NormalizedName\" ~ '[^[:space:]]'");
+
+                            t.HasCheckConstraint("ck_quota_policies_scopes", "CASE WHEN jsonb_typeof(\"IncludedStorageScopes\") = 'array' THEN jsonb_array_length(\"IncludedStorageScopes\") BETWEEN 1 AND 8 ELSE FALSE END");
+
+                            t.HasCheckConstraint("ck_quota_policies_thresholds", "\"WarningThresholdPercent\" BETWEEN 1 AND 99 AND \"CriticalThresholdPercent\" BETWEEN 2 AND 100 AND \"CriticalThresholdPercent\" > \"WarningThresholdPercent\"");
+
+                            t.HasCheckConstraint("ck_quota_policies_version", "\"Version\" >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.ManagedService.Quota.QuotaReservation", b =>
+                {
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("Bytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReleaseReason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset?>("ReleasedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("RunId");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("ix_quota_reservations_expiry")
+                        .HasFilter("\"ReleasedAt\" IS NULL");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_quota_reservations_active")
+                        .HasFilter("\"ReleasedAt\" IS NULL");
+
+                    b.ToTable("quota_reservations", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_quota_reservations_bytes", "\"Bytes\" > 0");
+
+                            t.HasCheckConstraint("ck_quota_reservations_ids", "\"RunId\" <> '00000000-0000-0000-0000-000000000000'::uuid AND \"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_quota_reservations_period", "\"ExpiresAt\" > \"CreatedAt\"");
+
+                            t.HasCheckConstraint("ck_quota_reservations_reason", "\"ReleaseReason\" IS NULL OR \"ReleaseReason\" IN ('run_finished', 'expired', 'run_not_created', 'orphaned')");
+
+                            t.HasCheckConstraint("ck_quota_reservations_release", "(\"ReleasedAt\" IS NULL) = (\"ReleaseReason\" IS NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.ManagedService.Quota.TenantStorageUsage", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AccountingMode")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("CalculatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PolicyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("PolicyVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("ReservedBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("Revision")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("UsedBytes")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("TenantId");
+
+                    b.HasIndex("CalculatedAt")
+                        .HasDatabaseName("ix_tenant_storage_usage_calculated");
+
+                    b.HasIndex("PolicyId");
+
+                    b.ToTable("tenant_storage_usage", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_tenant_storage_usage_accounting_mode", "\"AccountingMode\" IN (1, 2)");
+
+                            t.HasCheckConstraint("ck_tenant_storage_usage_policy_version", "\"PolicyVersion\" >= 1");
+
+                            t.HasCheckConstraint("ck_tenant_storage_usage_reserved", "\"ReservedBytes\" >= 0");
+
+                            t.HasCheckConstraint("ck_tenant_storage_usage_revision", "\"Revision\" >= 0");
+
+                            t.HasCheckConstraint("ck_tenant_storage_usage_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_tenant_storage_usage_used", "\"UsedBytes\" >= 0");
                         });
                 });
 
@@ -2227,6 +2419,39 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.HasOne("BackupPlatform.Domain.Tenancy.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.ManagedService.Plans.Plan", b =>
+                {
+                    b.HasOne("BackupPlatform.ManagedService.Quota.QuotaPolicy", null)
+                        .WithMany()
+                        .HasForeignKey("QuotaPolicyReference")
+                        .HasPrincipalKey("Key")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("BackupPlatform.ManagedService.Quota.QuotaReservation", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.ManagedService.Quota.TenantStorageUsage", b =>
+                {
+                    b.HasOne("BackupPlatform.ManagedService.Quota.QuotaPolicy", null)
+                        .WithMany()
+                        .HasForeignKey("PolicyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

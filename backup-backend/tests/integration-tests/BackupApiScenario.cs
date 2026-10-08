@@ -34,11 +34,12 @@ internal sealed class BackupApiScenario : IAsyncDisposable
 
     public static string RootOf(TenantSetup setup) => $"/api/tenants/{setup.Tenant.Id.Value}";
 
-    public static async Task<BackupApiScenario> CreateAsync(PostgreSqlFixture database, IReadOnlyDictionary<string, string?>? configuration = null, MutableClock? clock = null)
+    public static async Task<BackupApiScenario> CreateAsync(PostgreSqlFixture database, IReadOnlyDictionary<string, string?>? configuration = null, MutableClock? clock = null, bool entitled = true)
     {
         // Polling is rate limited per agent per minute; scenarios that loop must not trip it.
         var world = await AgentWorld.CreateAsync(database, limits: new AgentRateLimitOptions { PollPerAgent = 1000 }, clock: clock, configuration: configuration);
         var setup = await world.CreateTenantAsync();
+        if (entitled) await world.EntitleAsync(setup.Tenant);
         return new BackupApiScenario(world, setup, await world.EnrollAsync(setup));
     }
 

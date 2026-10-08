@@ -38,8 +38,7 @@ public sealed class AssignPlanRequest
 
 /// <summary>
 /// Plan and tenant-subscription administration. Every route requires the PlatformAdmin policy and none is tenant-scoped: a
-/// tenant Owner/Admin membership grants nothing here. Nothing on these routes changes how backups run (that is a later slice);
-/// they only manage the commercial records and audit every change.
+/// tenant Owner/Admin membership grants nothing here. They manage the commercial records and audit every change; the quota policies a plan references are administered in QuotaEndpoints.
 /// </summary>
 public static class ManagedServicePlatformEndpoints
 {
@@ -190,6 +189,8 @@ public static class ManagedServicePlatformEndpoints
         ManagedServiceOutcome.PlanAlreadyAssigned => Results.Conflict(new { error = "plan_already_assigned" }),
         ManagedServiceOutcome.InvalidTransition => Results.Conflict(new { error = code ?? "invalid_transition" }),
         ManagedServiceOutcome.ConcurrentUpdate => Results.Conflict(new { error = "concurrent_update" }),
+        ManagedServiceOutcome.QuotaPolicyNotFound => Results.NotFound(new { error = "quota_policy_not_found" }),
+        ManagedServiceOutcome.QuotaPolicyDisabled => Results.Conflict(new { error = "quota_policy_disabled" }),
         _ => Results.Problem(statusCode: StatusCodes.Status500InternalServerError)
     };
 

@@ -5,6 +5,7 @@ using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.ManagedService;
 using BackupPlatform.ManagedService.Administration;
 using BackupPlatform.ManagedService.Plans;
+using BackupPlatform.ManagedService.Quota;
 using BackupPlatform.ManagedService.Subscriptions;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -23,7 +24,7 @@ namespace BackupPlatform.Infrastructure.ManagedService;
 /// second writer fails with a unique violation, which is reported as a concurrent update and never leaves two open rows.
 /// The previous row is closed and flushed before the new one is inserted, because a unique index is checked per statement.
 /// </remarks>
-public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbContext> options) : IManagedServiceStore
+public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbContext> options, IStorageUsageService usage, TimeProvider time) : IManagedServiceStore
 {
     public async Task<PagedResult<PlanView>> ListPlansAsync(PlanFilter filter, int page, int pageSize, CancellationToken cancellationToken)
     {
@@ -58,6 +59,10 @@ public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbCon
         if (await context.Plans.AnyAsync(row => row.NormalizedName == plan.NormalizedName, cancellationToken))
         {
             return new(ManagedServiceOutcome.PlanNameTaken);
+        }
+        if (await CheckPolicyReferenceAsync(context, plan.QuotaPolicyReference, cancellationToken) is { } referenceProblem)
+        {
+            return new(referenceProblem);
         }
         context.Plans.Add(plan);
         context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.PlatformAdmin, ManagedServiceAuditActions.PlanCreated, null,
@@ -97,6 +102,13 @@ public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbCon
         {
             return new(ManagedServiceOutcome.PlanNameTaken);
         }
+        var requestedReference = ManagedServiceValidation.QuotaPolicyReference(quotaPolicyReference);
+        // A plan that keeps its (since disabled) policy may still be renamed or re-priced; only pointing at a different policy is checked.
+        if (!string.Equals(plan.QuotaPolicyReference, requestedReference, StringComparison.Ordinal)
+            && await CheckPolicyReferenceAsync(context, requestedReference, cancellationToken) is { } referenceProblem)
+        {
+            return new(referenceProblem);
+        }
         var (previousName, previousLimit, previousReference) = (plan.Name, plan.StorageLimitBytes, plan.QuotaPolicyReference);
         var outcome = ManagedServiceOutcome.Unchanged;
         if (plan.Update(name, storageLimitBytes, quotaPolicyReference, now))
@@ -132,6 +144,12 @@ public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbCon
                 return new(ManagedServiceOutcome.PlanNameTaken);
             }
             outcome = ManagedServiceOutcome.Changed;
+            if (!string.Equals(previousReference, plan.QuotaPolicyReference, StringComparison.Ordinal))
+            {
+                // The plan's tenants now count usage by another policy. Their projections are recognised as stale by their recorded policy
+                // anyway; this makes the new figures available now instead of at each tenant's next read.
+                await RecalculateTenantsOfPlanAsync(context, plan.Id, now, cancellationToken);
+            }
         }
         return new(outcome, ToView(plan, await CountOpenAsync(context, plan.Id, cancellationToken)));
     }
@@ -271,6 +289,10 @@ public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbCon
         try
         {
             await context.SaveChangesAsync(cancellationToken);
+            // The new plan may count usage by another policy. Brought up to date here, under the tenant lock this transaction already holds,
+            // so there is no instant at which the subscription has changed but the projection still describes the old policy.
+            var effectivePolicy = await TenantUsageEngine.ResolvePolicyAsync(context, tenantId, cancellationToken);
+            await TenantUsageEngine.EnsureCurrentAsync(context, tenantId, effectivePolicy, now, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
         catch (DbUpdateException exception) when (IsUniqueViolation(exception) || exception is DbUpdateConcurrencyException)
@@ -369,11 +391,34 @@ public sealed class PostgreSqlManagedServiceStore(DbContextOptions<PlatformDbCon
         return new(outcome, record);
     }
 
-    private static async Task<bool> LockTenantAsync(PlatformDbContext context, TenantId tenantId, CancellationToken cancellationToken)
+    private static Task<bool> LockTenantAsync(PlatformDbContext context, TenantId tenantId, CancellationToken cancellationToken) =>
+        TenantUsageEngine.LockTenantAsync(context, tenantId, cancellationToken);
+
+    /// <summary>Null when the reference is absent or names an enabled policy; otherwise why the plan cannot use it.</summary>
+    private static async Task<ManagedServiceOutcome?> CheckPolicyReferenceAsync(PlatformDbContext context, string? reference, CancellationToken cancellationToken)
     {
-        var locked = await context.Database.SqlQuery<Guid>(
-            $"SELECT \"Id\" AS \"Value\" FROM tenants WHERE \"Id\" = {tenantId.Value} FOR NO KEY UPDATE").ToListAsync(cancellationToken);
-        return locked.Count == 1;
+        if (reference is null)
+        {
+            return null;
+        }
+        var enabled = await context.QuotaPolicies.AsNoTracking().Where(policy => policy.Key == reference).Select(policy => (bool?)policy.Enabled).SingleOrDefaultAsync(cancellationToken);
+        return enabled switch
+        {
+            null => ManagedServiceOutcome.QuotaPolicyNotFound,
+            false => ManagedServiceOutcome.QuotaPolicyDisabled,
+            _ => null
+        };
+    }
+
+    private async Task RecalculateTenantsOfPlanAsync(PlatformDbContext context, PlanId planId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var tenants = await context.TenantSubscriptions.AsNoTracking()
+            .Where(row => row.PlanId == planId && (row.Status == SubscriptionStatus.Active || row.Status == SubscriptionStatus.Suspended))
+            .Select(row => row.TenantId).ToListAsync(cancellationToken);
+        foreach (var tenantId in tenants)
+        {
+            await usage.ReconcileAsync(tenantId, null, time.GetUtcNow(), cancellationToken);
+        }
     }
 
     private static Task<TenantSubscription?> LoadOpenAsync(PlatformDbContext context, TenantId tenantId, CancellationToken cancellationToken) =>

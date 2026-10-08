@@ -97,6 +97,7 @@ scripts/database/with-disposable-databases.sh --restore -- ./scripts/integration
 scripts/integration/run-backend-tests.sh
 scripts/integration/run-backend-tests.sh --connectivity
 scripts/integration/run-postgres-tests.sh
+scripts/integration/run-postgres-tests.sh --filter 'FullyQualifiedName~ManagedService'
 scripts/integration/run-mssql-tests.sh
 scripts/integration/run-mssql-tests.sh --provider --agent --restore
 scripts/integration/run-full-acceptance.sh
@@ -184,4 +185,20 @@ failure exit codes are preserved (SIGTERM is 143), while runtime files are still
 is reported as failure, not silently accepted. A forced SIGKILL/process-tree kill cannot guarantee trap execution.
 In that case the protected state file identifies the exact owned database for recovery; never drop every
 `bp_smoke_*` database or delete unrelated runtime roots.
+
+## Quota browser smoke fixture
+
+```bash
+python3 scripts/frontend/quota-smoke-fixture.py --server "$SMOKE_API_URL" --certificate "$SMOKE_CERTIFICATE_FILE" \
+  setup --credentials-file "$SMOKE_CREDENTIALS_FILE" --state <0600-state-file>
+python3 scripts/frontend/quota-smoke-fixture.py --server ... --certificate ... publish --state <state-file> --bytes 2000000000
+python3 scripts/frontend/quota-smoke-fixture.py --server ... --certificate ... quota   --state <state-file>
+```
+
+Used on top of `scripts/frontend/browser-smoke-env.sh`. `setup` creates, through the real platform/tenant APIs, a tenant, a tenant Admin user
+(login/password only in the 0600 state file), an enrolled protocol-only agent and a `Queue` backup job. In the browser the PlatformAdmin assigns a
+plan (Platform → Tenant → Plan ata) and the tenant Admin presses "Şimdi çalıştır". `publish` plays the agent for one Pending run and completes it
+with a synthetic artifact of `--bytes` bytes (metadata only: no SQL Server, no file), so usage can be driven to any level without a huge backup.
+`quota` prints the tenant's own `GET /storage-quota` view. A browser profile shares cookies across tabs: sign out of one account before signing in as
+the other. Nothing here is a production agent, provider or database writer.
 

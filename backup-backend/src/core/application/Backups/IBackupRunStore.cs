@@ -25,9 +25,11 @@ public enum BackupStartOutcome
     Replayed,
     NotFound,
     /// <summary>The job's overlap policy is Skip and another run of the job is queued, retrying or executing. Nothing was created.</summary>
-    SkippedOverlap
+    SkippedOverlap,
+    /// <summary>The admission policy refused a new run (<see cref="BackupStartResult.DenialCode"/>). Nothing was created.</summary>
+    AdmissionDenied
 }
-public sealed record BackupStartResult(BackupStartOutcome Outcome, BackupRun? Run, Guid? ActiveRunId = null);
+public sealed record BackupStartResult(BackupStartOutcome Outcome, BackupRun? Run, Guid? ActiveRunId = null, string? DenialCode = null);
 
 public enum BackupRetryOutcome
 {

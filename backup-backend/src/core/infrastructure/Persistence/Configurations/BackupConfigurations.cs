@@ -308,7 +308,7 @@ internal sealed class BackupScheduleOccurrenceConfiguration : IEntityTypeConfigu
         BackupMapping.Base(builder, "backup_schedule_occurrences");
         builder.ToTable("backup_schedule_occurrences", table =>
         {
-            table.HasCheckConstraint("ck_backup_occurrence_outcome", "\"Outcome\" IN ('RunCreated','SkippedOverlap','MissedGraceExpired','MissedSuperseded','JobDisabled')");
+            table.HasCheckConstraint("ck_backup_occurrence_outcome", "\"Outcome\" IN ('RunCreated','SkippedOverlap','MissedGraceExpired','MissedSuperseded','JobDisabled','AdmissionDenied')");
             // RunCreated names the created run and SkippedOverlap the run in the way; no other outcome names a run.
             table.HasCheckConstraint("ck_backup_occurrence_run", "(\"Outcome\" IN ('RunCreated','SkippedOverlap')) = (\"RunId\" IS NOT NULL)");
         });

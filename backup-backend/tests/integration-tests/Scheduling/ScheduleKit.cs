@@ -26,7 +26,7 @@ internal sealed class ScheduleKit(PostgreSqlFixture database)
     private DbContextOptions<PlatformDbContext> Options() => new DbContextOptionsBuilder<PlatformDbContext>()
         .UseNpgsql(new NpgsqlConnectionStringBuilder(Database.ConnectionString) { MaxPoolSize = MaxConnections }.ConnectionString).Options;
 
-    public PostgreSqlBackupScheduleStore Store(AgentConnectivityOptions? connectivity = null) => new(Options(), connectivity);
+    public PostgreSqlBackupScheduleStore Store(AgentConnectivityOptions? connectivity = null) => new(Options(), AdmitAllBackupAdmission.Instance, connectivity);
 
     public BackupScheduleService Service(TimeProvider time, IBackupScheduleCoordinator? coordinator = null, RecordingSignal? signal = null,
         BackupSchedulingOptions? options = null, BackupExecutionOptions? limits = null) =>

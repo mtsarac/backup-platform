@@ -23,6 +23,7 @@ public sealed class MsSqlRetryAgentSmokeTests(PostgreSqlFixture database, ITestO
         await using var forwarder = new TcpForwarder(sql.Host, sql.Port ?? 1433);
         await using var world = await AgentWorld.CreateAsync(database, clock: new MutableClock(live: true), kestrel: true);
         var tenant = await world.CreateTenantAsync();
+        await world.EntitleAsync(tenant.Tenant);
         var agent = await world.EnrollAsync(tenant);
         var job = await CreateJobAsync(tenant, agent, Configuration(sql, forwarder, sql.DatabaseName), maxAttempts: 3, initialDelaySeconds: 3, overlap: "Queue");
         var run = await MsSqlManualAgentSmokeTests.StartRunAsync(tenant, job, "retry-success");
@@ -84,6 +85,7 @@ public sealed class MsSqlRetryAgentSmokeTests(PostgreSqlFixture database, ITestO
         await using var forwarder = new TcpForwarder(sql.Host, sql.Port ?? 1433); // never started: every attempt is refused
         await using var world = await AgentWorld.CreateAsync(database, clock: new MutableClock(live: true), kestrel: true);
         var tenant = await world.CreateTenantAsync();
+        await world.EntitleAsync(tenant.Tenant);
         var agent = await world.EnrollAsync(tenant);
         var job = await CreateJobAsync(tenant, agent, Configuration(sql, forwarder, sql.DatabaseName), maxAttempts: 2, initialDelaySeconds: 3, overlap: "Queue");
         var run = await MsSqlManualAgentSmokeTests.StartRunAsync(tenant, job, "retry-exhaustion");
@@ -140,6 +142,7 @@ public sealed class MsSqlRetryAgentSmokeTests(PostgreSqlFixture database, ITestO
         await using var forwarder = new TcpForwarder(sql.Host, sql.Port ?? 1433);
         await using var world = await AgentWorld.CreateAsync(database, clock: new MutableClock(live: true), kestrel: true);
         var tenant = await world.CreateTenantAsync();
+        await world.EntitleAsync(tenant.Tenant);
         var agent = await world.EnrollAsync(tenant);
         var job = await CreateJobAsync(tenant, agent, Configuration(sql, forwarder, sql.DatabaseName), maxAttempts: 3, initialDelaySeconds: 60, maxDelaySeconds: 120, overlap: "Queue");
         var run = await MsSqlManualAgentSmokeTests.StartRunAsync(tenant, job, "cancel-during-backoff");
@@ -185,6 +188,7 @@ public sealed class MsSqlRetryAgentSmokeTests(PostgreSqlFixture database, ITestO
         await using var sql = new OrchestrationSqlSource(); // deliberately not initialised yet: the database does not exist
         await using var world = await AgentWorld.CreateAsync(database, clock: new MutableClock(live: true), kestrel: true);
         var tenant = await world.CreateTenantAsync();
+        await world.EntitleAsync(tenant.Tenant);
         var agent = await world.EnrollAsync(tenant);
         var job = await CreateJobAsync(tenant, agent, MsSqlManualAgentSmokeTests.Configuration(sql, sql.DatabaseName), maxAttempts: 3, initialDelaySeconds: 3);
         var run = await MsSqlManualAgentSmokeTests.StartRunAsync(tenant, job, "manual-retry");

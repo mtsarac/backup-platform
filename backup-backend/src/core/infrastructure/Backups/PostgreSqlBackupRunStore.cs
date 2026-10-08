@@ -17,7 +17,7 @@ namespace BackupPlatform.Infrastructure.Backups;
 /// agent limits are decided against a consistent count of Leased/Running attempts by any number of backend instances. Releasing
 /// transitions (complete, expire, cancel) never wait on that lock, so the two lock orders cannot cycle.
 /// </summary>
-public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext> options, BackupExecutionOptions? limits = null, Func<double>? jitter = null) : IBackupRunStore
+public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext> options, IBackupAdmissionPolicy admission, BackupExecutionOptions? limits = null, Func<double>? jitter = null) : IBackupRunStore
 {
     // Arbitrary fixed application key for the claim critical section.
     private const long ClaimLockKey = 0x4250_434C_4149_4D01;
@@ -100,17 +100,36 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
             return new BackupStartResult(BackupStartOutcome.NotFound, null);
         if (job.OverlapPolicy == BackupOverlapPolicy.Skip && await ActiveRunIdAsync(context, tenantId, jobId, null, cancellationToken) is { } active)
             return new BackupStartResult(BackupStartOutcome.SkippedOverlap, null, active);
-        var run = new BackupRun(Guid.NewGuid(), tenantId, job.Id, owner, job.Configuration, idempotencyKey, now, job.RetryPolicy, job.OverlapPolicy, retentionPolicy: job.RetentionPolicy);
-        run.QueueFirstAttempt(Guid.NewGuid(), now);
-        context.BackupRuns.Add(run);
-        try { await context.SaveChangesAsync(cancellationToken); }
-        catch (DbUpdateException exception) when (IsUniqueViolation(exception))
+        // The gate for a NEW run, after everything that makes the request a no-op (replay, skip) and before anything is created. A retry attempt never comes through here.
+        var runId = Guid.NewGuid();
+        var decision = await BackupAdmissionGate.AdmitAsync(admission, context, new BackupAdmissionRequest(tenantId, job.Id, runId, BackupTriggerTypes.Manual, now), cancellationToken);
+        if (!decision.Allowed)
         {
-            // The unique index on active Skip runs is the backstop behind the agent lock.
-            return new BackupStartResult(BackupStartOutcome.SkippedOverlap, null, await ActiveRunIdAsync(context, tenantId, jobId, null, cancellationToken));
+            // Nothing was created; committing keeps the maintenance the gate did on the way (stale reservations released, a missing projection computed).
+            await transaction.CommitAsync(cancellationToken);
+            return new BackupStartResult(BackupStartOutcome.AdmissionDenied, null, null, decision.DenialCode);
         }
-        await transaction.CommitAsync(cancellationToken);
-        return new BackupStartResult(BackupStartOutcome.Started, run);
+        try
+        {
+            var run = new BackupRun(runId, tenantId, job.Id, owner, job.Configuration, idempotencyKey, now, job.RetryPolicy, job.OverlapPolicy, retentionPolicy: job.RetentionPolicy);
+            run.QueueFirstAttempt(Guid.NewGuid(), now);
+            context.BackupRuns.Add(run);
+            try { await context.SaveChangesAsync(cancellationToken); }
+            catch (DbUpdateException exception) when (IsUniqueViolation(exception))
+            {
+                // The unique index on active Skip runs is the backstop behind the agent lock.
+                await BackupAdmissionGate.ReleaseAfterFailureAsync(admission, tenantId, runId);
+                return new BackupStartResult(BackupStartOutcome.SkippedOverlap, null, await ActiveRunIdAsync(context, tenantId, jobId, null, cancellationToken));
+            }
+            await transaction.CommitAsync(cancellationToken);
+            return new BackupStartResult(BackupStartOutcome.Started, run);
+        }
+        catch
+        {
+            // Admitted but never created: give the reservation back now instead of waiting for it to lapse.
+            await BackupAdmissionGate.ReleaseAfterFailureAsync(admission, tenantId, runId);
+            throw;
+        }
     }
     public async Task<IReadOnlyList<BackupRun>> ListRunsAsync(TenantId tenantId, Guid? jobId, int limit, CancellationToken cancellationToken)
     {

@@ -45,6 +45,9 @@ public static partial class ManagedServiceValidation
         return (display, display.ToLowerInvariant());
     }
 
+    /// <summary>Policy names follow the plan-name rules (trimmed display form, case-insensitive key).</summary>
+    public static (string Display, string Normalized) PolicyName(string? value, string field = "name") => PlanName(value, field);
+
     /// <summary>Null means no reference. A reference is an opaque, lowercase key that a later slice resolves; it is never interpreted here.</summary>
     public static string? QuotaPolicyReference(string? value, string field = "quotaPolicyReference")
     {

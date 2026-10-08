@@ -32,7 +32,27 @@ internal static class ManagedServiceTestSupport
     public static DbContextOptions<PlatformDbContext> OptionsOf(PostgreSqlFixture fixture) =>
         new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(fixture.ConnectionString).Options;
 
-    public static PostgreSqlManagedServiceStore StoreOf(PostgreSqlFixture fixture) => new(OptionsOf(fixture));
+    public static PostgreSqlStorageUsageService UsageOf(PostgreSqlFixture fixture) =>
+        new(OptionsOf(fixture), new BackupPlatform.ManagedService.Quota.QuotaOptions(), Microsoft.Extensions.Logging.Abstractions.NullLogger<PostgreSqlStorageUsageService>.Instance);
+
+    public static PostgreSqlManagedServiceStore StoreOf(PostgreSqlFixture fixture) => new(OptionsOf(fixture), UsageOf(fixture), TimeProvider.System);
+
+    /// <summary>
+    /// What the M1 upgrade gives every pre-existing tenant: an Active, unlimited legacy subscription assigned by the system. Suites about running
+    /// backups use it so the tenant's new runs are admitted (a tenant created later starts with no subscription, which denies them by design).
+    /// </summary>
+    public static async Task GrantLegacyUnlimitedAsync(PostgreSqlFixture fixture, TenantId tenantId)
+    {
+        await using var context = fixture.CreatePlatformContext();
+        var inserted = await context.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO tenant_subscriptions ("Id", "TenantId", "PlanId", "Status", "StartsAt", "EndsAt", "StorageLimitOverrideKind",
+                                              "StorageLimitOverrideBytes", "AssignedByUserId", "CreatedAt", "UpdatedAt")
+            SELECT md5('legacy-unlimited-subscription:' || {tenantId.Value}::text)::uuid, {tenantId.Value}, p."Id", 1, now(), NULL, 0, NULL, NULL, now(), now()
+            FROM plans p WHERE p."SystemKey" = 'legacy_unlimited'
+            ON CONFLICT DO NOTHING
+            """);
+        Assert.Equal(1, inserted);
+    }
 
     public static async Task<Guid> CreatePlanAsync(BrowserSession admin, string? name = null, long? bytes = 5 * Gb, bool enabled = true)
     {

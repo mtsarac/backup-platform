@@ -29,6 +29,8 @@ const messages: Record<string, string> = {
   InternalError: 'İşlem tamamlanamadı. Sistem yöneticisiyle iletişime geçin.',
   Cancelled: 'İşlem iptal edildi.',
   overlap_skipped: 'Backup zaten çalışıyor.',
+  quota_exceeded: 'Depolama kotası doldu; yeni backup başlatılamadı. Mevcut backup\'lar silinmedi ve geri yüklenebilir.',
+  subscription_required: 'Etkin bir abonelik bulunmadığı için yeni backup başlatılamadı.',
   job_overlap: 'Bu Job için başka bir backup çalışıyor.',
   attempts_exhausted: 'İzin verilen toplam attempt sayısına ulaşıldı.',
   succeeded: 'Başarılı backup tekrar denenemez.',
@@ -76,9 +78,14 @@ const messages: Record<string, string> = {
   ambiguous: 'Sınırlı boyut ile limitsiz seçeneği birlikte kullanılamaz.',
   invalid_characters: 'Girilen değer geçersiz karakterler içeriyor.',
   platform_admin_required: 'Platform Administration için PlatformAdmin yetkisi gerekir.',
+  quota_policy_not_found: 'Kota politikası bulunamadı.',
+  quota_policy_key_taken: 'Bu kota politikası anahtarı zaten kullanılıyor.',
+  quota_policy_disabled: 'Bu kota politikası devre dışı; plana atanamaz.',
+  default_policy_required: 'Varsayılan kota politikası devre dışı bırakılamaz.',
+  unsupported_scope_kind: 'Bu kapsam türü henüz desteklenmiyor.',
 }
 // Codes whose text must win over the generic 403/404 wording.
-const statusSpecificCodes: Record<string, true> = { tenant_not_found: true, user_not_found: true, membership_not_found: true, agent_not_found: true, plan_not_found: true, subscription_not_found: true, platform_admin_required: true, enrollment_disabled: true }
+const statusSpecificCodes: Record<string, true> = { tenant_not_found: true, user_not_found: true, membership_not_found: true, agent_not_found: true, plan_not_found: true, quota_policy_not_found: true, subscription_not_found: true, platform_admin_required: true, enrollment_disabled: true }
 export function failureMessage(code?: string | null): string {
   if (!code) return 'İşlem başarısız oldu.'
   return messages[code] ?? (/^[A-Za-z0-9_.-]{1,80}$/.test(code) ? `İşlem başarısız oldu (${code}).` : 'İşlem başarısız oldu.')

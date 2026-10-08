@@ -135,6 +135,16 @@ public sealed class PlanAdministrationIntegrationTests(PostgreSqlFixture fixture
         var duplicate = await CallAsync(admin, HttpMethod.Post, "/api/platform/plans", new { name = $" {name.ToLowerInvariant()} ", storageLimitBytes = Gb });
         Assert.Equal((HttpStatusCode.Conflict, "plan_name_taken"), (duplicate.Status, duplicate.Error));
 
+        // A plan may only name a quota policy that exists.
+        var unknownPolicy = await CallAsync(admin, HttpMethod.Put, $"/api/platform/plans/{planId}", new { name, storageLimitBytes = 50 * Gb, quotaPolicyReference = "std-1" });
+        Assert.Equal((HttpStatusCode.NotFound, "quota_policy_not_found"), (unknownPolicy.Status, unknownPolicy.Error));
+        var policy = await CallAsync(admin, HttpMethod.Post, "/api/platform/quota-policies", new
+        {
+            key = "std-1", name = UniqueName("Policy"), accountingMode = "LogicalArtifactBytes", enforcementMode = "BlockNewBackups",
+            includedStorageScopes = new[] { new { kind = "all" } }, warningThresholdPercent = 80, criticalThresholdPercent = 90
+        });
+        Assert.Equal(HttpStatusCode.Created, policy.Status);
+
         world.Clock.Advance(TimeSpan.FromSeconds(1));
         var edited = await CallAsync(admin, HttpMethod.Put, $"/api/platform/plans/{planId}", new { name = name + " v2", storageLimitBytes = 60 * Gb, quotaPolicyReference = "std-1" });
         Assert.Equal(HttpStatusCode.OK, edited.Status);

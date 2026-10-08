@@ -40,6 +40,7 @@ public sealed class MsSqlRestoreAcceptanceTests(PostgreSqlFixture database, ITes
                 """);
             await using var world = await AgentWorld.CreateAsync(database, clock: new MutableClock(live: true), kestrel: true);
             var tenant = await world.CreateTenantAsync();
+            await world.EntitleAsync(tenant.Tenant);
             var agent = await world.EnrollAsync(tenant);
             var configuration = new BackupExecutionConfiguration
             {
