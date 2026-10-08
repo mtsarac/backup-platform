@@ -1,5 +1,6 @@
 using BackupPlatform.BackupProviders.MSSQL.Capabilities;
 using BackupPlatform.Contracts.Agents;
+using BackupPlatform.Contracts.Downloads;
 
 namespace BackupPlatform.Agent.Host;
 
@@ -33,6 +34,7 @@ public sealed class AgentCapabilityCatalog
         Supported(SqlServerCapabilityIds.CopyOnly.Value),
         Supported(SqlServerCapabilityIds.RestoreVerifyOnly.Value),
         Supported(SqlServerCapabilityIds.RestoreDatabase.Value),
+        Supported(DownloadTaskTypes.Capability),
         // Not implemented in this product yet, whatever the SQL Server instance could do.
         Unsupported(SqlServerCapabilityIds.DifferentialBackup.Value),
         Unsupported(SqlServerCapabilityIds.LogBackup.Value)

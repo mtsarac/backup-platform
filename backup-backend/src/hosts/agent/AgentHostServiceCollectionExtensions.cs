@@ -52,10 +52,12 @@ public static class AgentHostServiceCollectionExtensions
         services.AddSingleton<RestoreTaskWorker>();
         services.TryAddSingleton<IDeleteReplicaProviderResolver, DeleteReplicaProviderResolver>();
         services.AddSingleton<DeleteReplicaTaskWorker>();
+        services.AddSingleton<DownloadTaskWorker>();
         services.AddSingleton<IAgentTaskSink, AgentTaskDispatcher>();
         services.AddHostedService<AgentDeletionTaskHostedService>();
         services.AddHostedService<AgentBackupTaskHostedService>();
         services.AddHostedService<AgentRestoreTaskHostedService>();
+        services.AddHostedService<AgentDownloadTaskHostedService>();
         services.AddSingleton<AgentConnectivityService>();
         services.AddSingleton<IAgentConnectivityStatus>(static provider => provider.GetRequiredService<AgentConnectivityService>());
         services.AddHostedService<AgentConnectivityWorker>();

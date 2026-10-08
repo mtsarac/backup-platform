@@ -30,3 +30,9 @@ If you are developing a production application, we recommend enabling type-aware
 ```
 
 See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+
+## Secure Backup downloads
+
+The existing tenant Backup Browser detail screen supports Owner/Admin-only downloads for Central and Agent-local replicas. It shows destination availability, expected SHA256 and size, offers checksum copying, prepares a scoped download session and polls its status. Ready sessions use a native cookie-authenticated browser download; file bytes are never buffered as a JavaScript Blob. Agent offline, unavailable replicas, denied access and integrity/transfer failures use safe central error messages. Storage keys and physical paths are not displayed.
+
+Availability and status query keys include the tenant and artifact. Changing tenant, artifact, download eligibility or administrative permissions remounts the download controller so an earlier pending session cannot start in the new scope.

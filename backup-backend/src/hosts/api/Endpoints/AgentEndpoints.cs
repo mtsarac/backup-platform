@@ -4,11 +4,13 @@ using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Agents.Credentials;
 using BackupPlatform.Agents.Enrollment;
 using BackupPlatform.Api.Security;
+using BackupPlatform.Api.Downloads;
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Application.Restores;
 using BackupPlatform.Contracts.Agents;
 using BackupPlatform.Contracts.Restores;
+using BackupPlatform.Contracts.Downloads;
 using BackupPlatform.Contracts.Protocol;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -127,7 +129,8 @@ public static class AgentEndpoints
 
     private static async Task<IResult> PollAsync(
         string? cursor, ICurrentAgent currentAgent, AgentConnectivityService service, BackupOrchestrator backups,
-        AgentReplicaDeletionService deletions, RestoreService restores, CancellationToken cancellationToken)
+        AgentReplicaDeletionService deletions, RestoreService restores, AgentDownloadSource downloads, ILogger<AgentDownloadSource> logger,
+        CancellationToken cancellationToken)
     {
         var poll = await service.PollAsync(currentAgent.Identity!, cursor, cancellationToken);
         if (poll is null)
@@ -139,10 +142,19 @@ public static class AgentEndpoints
         // skipped (the store would refuse it anyway while the restore holds the agent).
         var restore = await restores.ClaimAsync(currentAgent.Identity!, cancellationToken);
         var backup = restore is null ? await backups.ClaimAsync(currentAgent.Identity!, cancellationToken) : null;
-        var tasks = new List<AgentTaskEnvelope>(2);
+        DownloadTaskSnapshot? download;
+        try { download = await downloads.ClaimAsync(currentAgent.Identity!, cancellationToken); }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogWarning("Agent download claim refused: Agent={AgentId} Code=download_claim_failed Type={ExceptionType}.",
+                currentAgent.Identity!.AgentId.Value, exception.GetType().Name);
+            return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+        var tasks = new List<AgentTaskEnvelope>(3);
         if (deletion is not null) tasks.Add(new AgentTaskEnvelope { Id = deletion.ReplicaId.ToString(), Type = "delete-replica", DeleteReplica = deletion });
         if (restore is not null) tasks.Add(new AgentTaskEnvelope { Id = restore.AttemptId.ToString(), Type = RestoreTaskTypes.DatabaseRestore, Restore = restore });
         if (backup is not null) tasks.Add(new AgentTaskEnvelope { Id = backup.AttemptId.ToString(), Type = "database-backup", Backup = backup });
+        if (download is not null) tasks.Add(new AgentTaskEnvelope { Id = download.SessionId.ToString(), Type = DownloadTaskTypes.BackupDownload, Download = download });
         return Results.Ok(new AgentPollResponse
         {
             Cursor = poll.Cursor,

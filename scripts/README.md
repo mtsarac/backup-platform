@@ -202,3 +202,33 @@ with a synthetic artifact of `--bytes` bytes (metadata only: no SQL Server, no f
 `quota` prints the tenant's own `GET /storage-quota` view. A browser profile shares cookies across tabs: sign out of one account before signing in as
 the other. Nothing here is a production agent, provider or database writer.
 
+## Secure download verification (M4)
+
+```bash
+scripts/integration/run-download-tests.sh
+scripts/integration/run-download-tests.sh --postgres --no-build
+scripts/frontend/run-download-smoke.sh
+```
+
+The focused runner selects download unit/Agent tests and PostgreSQL download, existing restore pin and Agent deletion-race regressions.
+It uses the shared TRX verifier: zero selections, skipped tests and failures are errors; the full suites are not run.
+
+The real smoke runner reuses the disposable database starters, browser stack, enrollment CLI and Windows onboarding/copy helpers.
+It publishes both Agent platforms, creates an explicit tenant Owner with a seeded 20 GB subscription, and executes actual MSSQL
+`master` backups: Linux Agent → tenant-bound Central storage, and the Windows VM's Agent service → its own local storage.
+Both downloads are authorized through the backend, written with bounded buffers, and checked for exact length, artifact SHA-256
+and a completed lifecycle with exact transferred bytes. No synthetic artifact is used.
+
+After `DOWNLOAD_SMOKE_READY`, open `SMOKE_FRONTEND_URL` using the Owner credentials in the private `SMOKE_DOWNLOAD_STATE_FILE`.
+Use **Artifacts → backup detail → Download Backup** for both artifacts. Save native browser downloads under the owned
+`SMOKE_DOWNLOAD_OUTPUT_DIRECTORY`, independently hash the saved files, and compare with `artifacts.central/local.checksum`
+in the state file. The runner stays alive for this browser verification; stop it with SIGTERM/Ctrl+C to uninstall its owned Windows
+service, remove the disposable certificate, stop the stack and drop only its owned databases/containers/runtime directories.
+It refuses to replace an existing `BackupAgent` service.
+
+`browser-smoke-env.sh --download` can also create just the Owner/token fixture and configured Central root.
+`download-smoke-fixture.py` exposes `setup`, real-Agent `backup` and bounded `verify` commands; all secrets remain in owner-only
+runtime files. `windows/Download-Smoke.ps1` configures only the onboarding-owned service, grants staging access to the SQL service,
+protects its temporary SQL environment-injection registry key and deletes the credential input file. Uninstall removes that owned key.
+No 20 GB throughput/RSS benchmark is claimed by this small real-backup smoke.
+

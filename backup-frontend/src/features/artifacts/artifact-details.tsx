@@ -71,7 +71,6 @@ export function ArtifactDetails({ artifact }: { artifact: BackupArtifact }) {
             {replica.deleteFailureCode && !replica.waitingForAgent && <p role="status" className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">Silme tamamlanamadı: {failureMessage(replica.deleteFailureCode)}</p>}
             <dl className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               <Metadata label="Depolama hedefi">{replica.storageTarget}</Metadata>
-              <Metadata label="Konum / key"><code className="break-all">{replica.key}</code></Metadata>
               <Metadata label="Oluşturulma">{artifactDate(replica.createdAt)}</Metadata>
               <Metadata label="Boyut">{artifactSize(replica.sizeBytes)}</Metadata>
               <Metadata label="Kullanılabilir">{replica.status === 'Deleted' ? 'Hayır · geçmiş kaydı' : replica.usable ? 'Evet · dosya korunuyor' : 'Hayır'}</Metadata>

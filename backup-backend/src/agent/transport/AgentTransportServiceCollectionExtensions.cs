@@ -72,6 +72,18 @@ public static class AgentTransportServiceCollectionExtensions
                 AllowAutoRedirect = false,
             })
             .SetHandlerLifetime(Timeout.InfiniteTimeSpan);
+        services.AddHttpClient<IDownloadTaskClient, HttpDownloadTaskClient>(client =>
+            {
+                // The renewable session lease, not a fixed HTTP timeout, bounds a large upload.
+                client.Timeout = Timeout.InfiniteTimeSpan;
+                client.MaxResponseContentBufferSize = 1024 * 1024;
+            })
+            .ConfigurePrimaryHttpMessageHandler(static () => new SocketsHttpHandler
+            {
+                PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+                AllowAutoRedirect = false,
+            })
+            .SetHandlerLifetime(Timeout.InfiniteTimeSpan);
         services.TryAddSingleton<IAgentPushChannel, SignalRAgentPushChannel>();
         return services;
     }

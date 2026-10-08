@@ -27,13 +27,19 @@ public sealed class PostgreSqlAgentReplicaDeletionStore(DbContextOptions<Platfor
               AND "ExecutionLocation" = 'Agent' AND "Status" = 'Deleting'
               AND ("DeleteLeaseToken" IS NULL OR "DeleteLeaseExpiresAt" <= {now})
               AND NOT EXISTS (SELECT 1 FROM restore_replica_pins pin WHERE pin."ReplicaId" = backup_replicas."Id" AND pin."ReleasedAt" IS NULL)
+              AND NOT EXISTS (SELECT 1 FROM download_sessions hold WHERE hold."ReplicaId" = backup_replicas."Id" AND hold."TenantId" = backup_replicas."TenantId"
+                  AND hold."ReleasedAt" IS NULL AND hold."ExpiresAt" > {now} AND (hold."LeaseExpiresAt" IS NULL OR hold."LeaseExpiresAt" > {now}))
             ORDER BY "DeleteAfter", "Id"
             LIMIT {MaxClaimCandidates}
             FOR UPDATE SKIP LOCKED
             """).ToListAsync(cancellationToken);
         // Most polls find nothing to delete: only a claim that selected rows pays for the second statement.
-        var pinned = ids.Count == 0 ? [] : await context.Database.SqlQuery<Guid>(
-            $"SELECT \"ReplicaId\" AS \"Value\" FROM restore_replica_pins WHERE \"ReleasedAt\" IS NULL AND \"ReplicaId\" = ANY({ids.ToArray()})").ToListAsync(cancellationToken);
+        var pinned = ids.Count == 0 ? [] : await context.Database.SqlQuery<Guid>($"""
+            SELECT "ReplicaId" AS "Value" FROM restore_replica_pins WHERE "ReleasedAt" IS NULL AND "ReplicaId" = ANY({ids.ToArray()})
+            UNION
+            SELECT "ReplicaId" AS "Value" FROM download_sessions WHERE "ReleasedAt" IS NULL AND "ExpiresAt" > {now}
+                AND ("LeaseExpiresAt" IS NULL OR "LeaseExpiresAt" > {now}) AND "ReplicaId" = ANY({ids.ToArray()})
+            """).ToListAsync(cancellationToken);
         if (pinned.Count != 0) ids = [.. ids.Where(id => !pinned.Contains(id))];
         DeleteReplicaTaskSnapshot? task = null;
         foreach (var id in ids)

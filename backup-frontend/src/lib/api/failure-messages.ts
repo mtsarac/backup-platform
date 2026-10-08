@@ -1,6 +1,13 @@
 import { ApiError } from './client'
 
 const messages: Record<string, string> = {
+  replica_unavailable: 'Replica şu anda indirme için kullanılamıyor.',
+  replica_not_found: 'Replica bulunamadı veya bu Backup altında erişilemiyor.',
+  storage_read_not_supported: 'Storage Provider güvenli indirmeyi desteklemiyor.',
+  integrity_mismatch: 'Dosya checksum doğrulaması başarısız. İndirme tamamlanmadı.',
+  download_expired: 'İndirme oturumunun süresi doldu. Yeni bir indirme başlatın.',
+  download_interrupted: 'İndirme kesildi. Yeni bir indirme başlatın.',
+  transfer_failed: 'Dosya aktarımı başarısız oldu. Yeni bir indirme başlatın.',
   DatabaseUnavailable: 'Database bağlantısı geçici olarak kullanılamıyor.',
   DatabaseNotFound: 'Database bulunamadı. Kaynak yapılandırmasını kontrol edin.',
   not_cancellable: 'Silme iptal edilemez; fiziksel silme başlamış veya bekleyen bir istek yok.',

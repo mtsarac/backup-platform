@@ -7,6 +7,7 @@ using BackupPlatform.Application.Tenancy;
 using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Backups;
+using BackupPlatform.Domain.Downloads;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Restores;
 using BackupPlatform.Domain.Tenancy;
@@ -74,6 +75,7 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<RestoreOperation> RestoreOperations => Set<RestoreOperation>();
     public DbSet<RestoreAttempt> RestoreAttempts => Set<RestoreAttempt>();
     public DbSet<RestoreReplicaPin> RestoreReplicaPins => Set<RestoreReplicaPin>();
+    public DbSet<DownloadSession> DownloadSessions => Set<DownloadSession>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<Plan> Plans => Set<Plan>();
     public DbSet<TenantSubscription> TenantSubscriptions => Set<TenantSubscription>();

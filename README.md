@@ -22,6 +22,7 @@ backup source is **Microsoft SQL Server, full backups**.
 - **Local and Central storage**: backups are stored on the agent's disk (Local) or in the platform's central storage.
 - **Retention**: per-job retention policy, soft delete with grace period, verified physical deletion by the backend or the owning agent,
   orphan and partial-upload sweeps.
+- **Secure backup download**: tenant Owner/Admin-only, user-bound sessions, native browser streaming, SHA-256 validation, and expiring retention holds.
 - **Multi-tenant backend**: tenant-scoped API and data, tenant roles (Owner/Admin/Operator/Viewer) plus a separate platform administrator.
 - **React management UI**: dashboard, agents and enrollment, backup jobs (creation wizard), runs, artifacts.
 
@@ -169,6 +170,46 @@ configure appropriate directory/file ACLs (and Unix group/umask), not just agent
 Backend policy is configured with `Restores__LeaseDuration` (default 120 seconds), `Restores__UnclaimedExpiry` (one hour) and
 `Restores__SweepInterval` (15 seconds). Unclaimed expired requests release their pins rather than unexpectedly restoring much later.
 Restore management is API-only; the existing frontend backup screens are unchanged.
+
+## Secure backup download
+
+All download routes require an **Owner or Admin membership in the requested tenant**. Operator, Viewer, and a standalone
+PlatformAdmin grant cannot download. Sessions are bound to their requesting user and artifact; knowing a session URL grants
+no access, and browser writes use the existing antiforgery token.
+
+| API suffix below `/api/tenants/{tenantId}/backup-artifacts/{artifactId}` | Behavior |
+|---|---|
+| `GET /download-availability` | Per-replica availability with stable reasons, expected artifact SHA-256 and size |
+| `POST /downloads` | Optional `{ "replicaId": "..." }`; returns the session, native download URL, safe filename, checksum and size |
+| `GET /downloads/{sessionId}` | `Preparing`, `Ready`, `Streaming`, `Completed`, `Failed` or `Cancelled`, failure code and transferred bytes |
+| `GET /downloads/{sessionId}/content` | Single-use, authenticated native attachment stream; no JavaScript Blob buffering |
+
+New sessions accept only matching, verified, **Available** replicas: `DeletePending`, `Deleting`, failed deletion and deleted
+replicas are refused. Central reads use the existing optional `storage.read` provider capability and tenant-bound configured
+storage resolver. The backend verifies an opened seekable file before response headers and hashes again while transferring;
+corrupt bytes can never produce a successful `Completed` session. A generated `backup-{artifactId}.bak` filename never uses
+persisted filesystem paths or browser input.
+
+Agent-local bytes use the existing outbound agent polling and authenticated callback architecture, not an inbound connection
+to the customer host. A capable owning agent prepares a stream; the backend spools it to a private temporary file with bounded
+memory and independently verifies length and SHA-256 before marking the session `Ready`. Browser status polling precedes the
+native attachment request. This is a separate download transport: restore still reads the provider into agent staging, and
+cross-agent restore transfer is not implied.
+
+Each durable session also holds its chosen replica against physical retention deletion. Creation serializes on artifact and
+replica row locks; both backend and agent delete claims recheck live download holds alongside restore pins. Unused sessions expire
+after 15 minutes, active preparation/streaming uses a 60-second renewable lease, and an expiry worker releases abandoned holds.
+Disconnected browsers cancel the stream and clean temporary resources; lost process leases fail cleanly instead of retaining
+bytes forever. A restarted process cannot resurrect an unverified or missing temporary local stream.
+
+Request/start/terminal lifecycle events are written atomically with their session changes to the append-only audit trail.
+Events are grouped by `sessionId` and identify the tenant and requesting user. `download.streaming` records `startedAt`;
+terminal events record `completedAt`, `result`, `transferredBytes` and a safe failure code. The event timestamps define the
+session timeline without a second mutable audit record. Audit failure prevents transfer authorization; renewal, transfer,
+expiry and cleanup failures are operationally logged using safe codes and exception types, never storage paths or secrets.
+Streaming awaits downstream writes for backpressure and uses bounded buffers. Downloads neither reserve quota nor change
+artifact usage accounting, backup execution, restore execution or the job's retention policy.
+
 
 ## Testing
 

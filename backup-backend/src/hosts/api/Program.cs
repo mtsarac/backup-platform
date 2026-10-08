@@ -1,4 +1,5 @@
 using BackupPlatform.Api.Endpoints;
+using BackupPlatform.Api.Downloads;
 using BackupPlatform.Api.Push;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Infrastructure.Persistence;
@@ -35,6 +36,8 @@ app.MapBackupArtifactEndpoints();
 app.MapBackupTaskEndpoints();
 app.MapRestoreEndpoints();
 app.MapRestoreTaskEndpoints();
+app.MapDownloadEndpoints();
+app.MapAgentDownloadEndpoints();
 app.MapAgentHub();
 
 app.Run();

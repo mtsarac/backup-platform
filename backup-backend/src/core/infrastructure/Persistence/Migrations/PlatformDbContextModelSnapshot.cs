@@ -2500,6 +2500,53 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Navigation("Pin")
                         .IsRequired();
                 });
+            modelBuilder.Entity("BackupPlatform.Domain.Downloads.DownloadSession", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedNever().HasColumnType("uuid");
+                    b.Property<Guid>("TenantId").IsConcurrencyToken().HasColumnType("uuid");
+                    b.Property<Guid>("ArtifactId").HasColumnType("uuid");
+                    b.Property<Guid>("ReplicaId").HasColumnType("uuid");
+                    b.Property<Guid>("UserId").HasColumnType("uuid");
+                    b.Property<Guid?>("AgentId").HasColumnType("uuid");
+                    b.Property<string>("StorageProvider").IsRequired().HasMaxLength(64).HasColumnType("character varying(64)");
+                    b.Property<string>("StorageTarget").IsRequired().HasMaxLength(1024).HasColumnType("character varying(1024)");
+                    b.Property<string>("Key").IsRequired().HasMaxLength(2048).HasColumnType("character varying(2048)");
+                    b.Property<string>("Checksum").IsRequired().HasMaxLength(64).HasColumnType("character varying(64)");
+                    b.Property<string>("Filename").IsRequired().HasMaxLength(255).HasColumnType("character varying(255)");
+                    b.Property<long>("SizeBytes").HasColumnType("bigint");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("timestamp with time zone");
+                    b.Property<DateTimeOffset>("ExpiresAt").HasColumnType("timestamp with time zone");
+                    b.Property<string>("State").IsRequired().HasMaxLength(16).HasColumnType("character varying(16)");
+                    b.Property<string>("LeaseOwner").HasMaxLength(128).HasColumnType("character varying(128)");
+                    b.Property<DateTimeOffset?>("LeaseExpiresAt").HasColumnType("timestamp with time zone");
+                    b.Property<long>("TransferredBytes").HasColumnType("bigint");
+                    b.Property<string>("FailureCode").HasMaxLength(128).HasColumnType("character varying(128)");
+                    b.Property<DateTimeOffset?>("ReleasedAt").HasColumnType("timestamp with time zone");
+                    b.Property<uint>("xmin").IsConcurrencyToken().ValueGeneratedOnAddOrUpdate().HasColumnType("xid");
+                    b.HasKey("Id");
+                    b.HasAlternateKey("Id", "TenantId");
+                    b.HasIndex("TenantId");
+                    b.HasIndex("ArtifactId", "TenantId");
+                    b.HasIndex("ReplicaId", "TenantId");
+                    b.HasIndex("TenantId", "AgentId", "State");
+                    b.HasIndex("ReplicaId").HasDatabaseName("ix_download_sessions_active").HasFilter("\"ReleasedAt\" IS NULL");
+                    b.HasIndex("ExpiresAt").HasDatabaseName("ix_download_sessions_expiry").HasFilter("\"ReleasedAt\" IS NULL");
+                    b.ToTable("download_sessions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_download_sessions_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+                            t.HasCheckConstraint("ck_download_sessions_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+                            t.HasCheckConstraint("ck_download_sessions_state", "\"State\" IN ('Preparing','Ready','Streaming','Completed','Failed','Cancelled')");
+                            t.HasCheckConstraint("ck_download_sessions_bytes", "\"SizeBytes\" >= 0 AND \"TransferredBytes\" BETWEEN 0 AND \"SizeBytes\"");
+                            t.HasCheckConstraint("ck_download_sessions_expiry", "\"ExpiresAt\" > \"CreatedAt\"");
+                            t.HasCheckConstraint("ck_download_sessions_release", "(\"State\" IN ('Completed','Failed','Cancelled')) = (\"ReleasedAt\" IS NOT NULL)");
+                            t.HasCheckConstraint("ck_download_sessions_lease", "(\"LeaseOwner\" IS NULL) = (\"LeaseExpiresAt\" IS NULL)");
+                        });
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null).WithMany().HasForeignKey("TenantId").OnDelete(DeleteBehavior.Restrict).IsRequired();
+                    b.HasOne("BackupPlatform.Domain.Backups.BackupArtifact", null).WithMany().HasForeignKey("ArtifactId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId").OnDelete(DeleteBehavior.Restrict).IsRequired();
+                    b.HasOne("BackupPlatform.Domain.Backups.BackupReplica", null).WithMany().HasForeignKey("ReplicaId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId").OnDelete(DeleteBehavior.Restrict).IsRequired();
+                });
 #pragma warning restore 612, 618
         }
     }

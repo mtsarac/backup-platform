@@ -9,13 +9,16 @@ set -euo pipefail
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
 build=true
+download=false
 while (($#)); do
     case "$1" in
         --no-build) build=false ;;
+        --download) download=true ;;
         -h|--help)
-            printf '%s\n' 'Usage: browser-smoke-env.sh [--no-build]' \
+            printf '%s\n' 'Usage: browser-smoke-env.sh [--no-build] [--download]' \
                 'Needs BACKUP_PLATFORM_TEST_CONNECTION_STRING (admin PostgreSQL) from the private file/environment, dotnet, bun and openssl.' \
                 'Prints SMOKE_FRONTEND_URL, SMOKE_API_URL and SMOKE_CREDENTIALS_FILE (JSON: login, password) then waits.' \
+                '--download creates a real tenant Owner/enrollment fixture and configures a tenant-bound Central root; it does not synthesize backup files.' \
                 'Optional: BP_SMOKE_POSTGRES_CONTAINER (default postgres) is used only to drop the database afterwards.'
             exit 0 ;;
         *) fail 'Unknown option; use --help.' ;;
@@ -128,6 +131,47 @@ PY
     sleep 0.5
 done
 [[ $ready == true ]] || fail 'Smoke API did not become HTTP-ready.'
+
+if [[ $download == true ]]; then
+    python3 "$REPO_ROOT/scripts/frontend/download-smoke-fixture.py" \
+        --server "https://127.0.0.1:$api_port" --certificate "$work_dir/cert.pem" \
+        --state "$work_dir/download-state.json" setup --credentials-file "$work_dir/credentials.json"
+    read -r tenant_id tenant_scope < <(python3 - "$work_dir/download-state.json" <<'PY'
+import json, sys
+state = json.load(open(sys.argv[1]))
+print(state['tenantId'], state['tenantScope'])
+PY
+)
+    mkdir -p "$work_dir/central"
+    kill "${pids[0]}"
+    wait "${pids[0]}" || true
+    env "Backups__Storage__Central__RootDirectory=$work_dir/central" \
+        "Backups__Storage__Central__TenantScopes__${tenant_id}=$tenant_scope" \
+        "ASPNETCORE_URLS=https://${bind_host}:${api_port}" \
+        "ASPNETCORE_Kestrel__Certificates__Default__Path=$work_dir/cert.pfx" \
+        "ASPNETCORE_Kestrel__Certificates__Default__Password=$cert_password" \
+        Backups__Scheduling__Enabled=false Backups__Retention__Enabled=false \
+        dotnet "$api_dll" >>"$work_dir/api.log" 2>&1 &
+    pids[0]=$!
+    ready=false
+    for _ in $(seq 1 60); do
+        kill -0 "${pids[0]}" 2>/dev/null || fail 'Configured download smoke API exited during startup.'
+        if python3 - "$api_port" "$work_dir/cert.pem" <<'PY'
+import ssl, sys, urllib.request
+try:
+    with urllib.request.urlopen('https://127.0.0.1:%s/api/auth/antiforgery' % sys.argv[1],
+                                context=ssl.create_default_context(cafile=sys.argv[2]), timeout=1) as response:
+        if response.status != 200: sys.exit(1)
+except (OSError, ValueError):
+    sys.exit(1)
+PY
+        then ready=true; break; fi
+        sleep 0.5
+    done
+    [[ $ready == true ]] || fail 'Configured download smoke API did not become HTTP-ready.'
+    printf 'SMOKE_DOWNLOAD_STATE_FILE=%s\n' "$work_dir/download-state.json"
+    printf 'SMOKE_CENTRAL_ROOT=%s\n' "$work_dir/central"
+fi
 
 cd -- "$REPO_ROOT/backup-frontend"
 BACKUP_API_PROXY_TARGET="https://127.0.0.1:${api_port}" BACKUP_API_PROXY_INSECURE=true \

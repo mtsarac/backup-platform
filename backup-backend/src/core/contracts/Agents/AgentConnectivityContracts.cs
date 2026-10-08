@@ -76,6 +76,7 @@ public sealed record AgentTaskEnvelope
     public BackupPlatform.Contracts.Backups.BackupTaskSnapshot? Backup { get; init; }
     public BackupPlatform.Contracts.Backups.DeleteReplicaTaskSnapshot? DeleteReplica { get; init; }
     public BackupPlatform.Contracts.Restores.RestoreTaskSnapshot? Restore { get; init; }
+    public BackupPlatform.Contracts.Downloads.DownloadTaskSnapshot? Download { get; init; }
 }
 
 public sealed record AgentPollResponse

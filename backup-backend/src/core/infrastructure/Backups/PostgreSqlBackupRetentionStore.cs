@@ -81,6 +81,8 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
                OR ("Status" = 'Deleting' AND ("DeleteLeaseExpiresAt" <= {now}
                    OR ("ExecutionLocation" = 'Agent' AND "DeleteLeaseToken" IS NULL AND "DeleteNextAttemptAt" <= {now}))))
               AND NOT EXISTS (SELECT 1 FROM restore_replica_pins pin WHERE pin."ReplicaId" = backup_replicas."Id" AND pin."ReleasedAt" IS NULL)
+              AND NOT EXISTS (SELECT 1 FROM download_sessions hold WHERE hold."ReplicaId" = backup_replicas."Id" AND hold."TenantId" = backup_replicas."TenantId"
+                  AND hold."ReleasedAt" IS NULL AND hold."ExpiresAt" > {now} AND (hold."LeaseExpiresAt" IS NULL OR hold."LeaseExpiresAt" > {now}))
             ORDER BY CASE "Status" WHEN 'DeletePending' THEN "DeleteAfter" WHEN 'DeleteFailed' THEN "DeleteNextAttemptAt" ELSE COALESCE("DeleteLeaseExpiresAt", "DeleteNextAttemptAt") END, "Id"
             LIMIT {take}
             FOR UPDATE SKIP LOCKED
@@ -89,8 +91,12 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
         // The check above ran on that statement's snapshot, which can predate a pin a restore committed right before it released its own lock on the row (a restore locks the
         // replica, inserts the pin and commits; it never changes the replica row, so this statement does not re-evaluate it). Now that this transaction holds the row locks, no
         // restore can pin any of these replicas until it ends: a pin that exists now is visible to a NEW statement, and a replica carrying one is left alone.
-        var pinned = await context.Database.SqlQuery<Guid>(
-            $"SELECT \"ReplicaId\" AS \"Value\" FROM restore_replica_pins WHERE \"ReleasedAt\" IS NULL AND \"ReplicaId\" = ANY({ids.ToArray()})").ToListAsync(cancellationToken);
+        var pinned = await context.Database.SqlQuery<Guid>($"""
+            SELECT "ReplicaId" AS "Value" FROM restore_replica_pins WHERE "ReleasedAt" IS NULL AND "ReplicaId" = ANY({ids.ToArray()})
+            UNION
+            SELECT "ReplicaId" AS "Value" FROM download_sessions WHERE "ReleasedAt" IS NULL AND "ExpiresAt" > {now}
+                AND ("LeaseExpiresAt" IS NULL OR "LeaseExpiresAt" > {now}) AND "ReplicaId" = ANY({ids.ToArray()})
+            """).ToListAsync(cancellationToken);
         if (pinned.Count != 0) ids = [.. ids.Where(id => !pinned.Contains(id))];
         if (ids.Count == 0) return [];
         var position = ids.Select((id, index) => (id, index)).ToDictionary(pair => pair.id, pair => pair.index);
