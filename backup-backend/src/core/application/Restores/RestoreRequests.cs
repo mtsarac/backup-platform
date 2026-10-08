@@ -16,7 +16,12 @@ public sealed record RestoreOptionsRequest(bool? TerminateActiveConnections = nu
 /// <paramref name="ConfirmOverwrite"/> to repeat the database name exactly.
 /// </summary>
 public sealed record StartRestoreRequest(Guid AgentId, RestoreTargetRequest Target, string DatabaseName, Guid? ReplicaId = null, string? Mode = null,
-    string? ConfirmOverwrite = null, RestoreOptionsRequest? Options = null);
+    string? ConfirmOverwrite = null, RestoreOptionsRequest? Options = null, Guid? PrecheckId = null);
+
+public sealed record StartRestorePrecheckRequest(Guid AgentId, RestoreTargetRequest Target, string DatabaseName, Guid? ReplicaId = null, string? Mode = null,
+    RestoreOptionsRequest? Options = null);
+
+public sealed record StartRestoreDiscoveryRequest(Guid AgentId, RestoreTargetRequest Target, Guid? ReplicaId = null);
 
 /// <summary>A request field is invalid. Carries the field and a stable code, never the offending value or a parser message.</summary>
 public sealed class InvalidRestoreRequestException(string field, string code = "invalid_value") : ArgumentException("The restore request field is invalid.")

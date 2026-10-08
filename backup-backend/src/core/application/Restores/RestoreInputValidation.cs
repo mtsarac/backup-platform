@@ -22,11 +22,13 @@ public static class RestoreInputValidation
     private static readonly string[] PreCheckStatuses = ["Passed", "Warning", "Failed", "Skipped"];
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public static ValidatedRestoreRequest Validate(Guid artifactId, StartRestoreRequest request)
+    public static ValidatedRestoreRequest Validate(Guid artifactId, StartRestoreRequest request, RestorePurpose purpose = RestorePurpose.Execution)
     {
         ArgumentNullException.ThrowIfNull(request);
         Check(request.AgentId != Guid.Empty, "agentId");
         Check(request.ReplicaId != Guid.Empty, "replicaId");
+        Check(request.PrecheckId != Guid.Empty, "precheckId");
+        Check(purpose == RestorePurpose.Execution || request.PrecheckId is null, "precheckId");
         var target = request.Target;
         Check(target is not null, "target");
         // The same vocabulary as a backup configuration, so one agent resolves both the same way.
@@ -36,11 +38,15 @@ public static class RestoreInputValidation
             ? target.DatabaseCredentialReference is null
             : Text(target.DatabaseCredentialReference, 64) && target.DatabaseCredentialReference!.All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_'),
             "target.databaseCredentialReference");
-        try { RestoreOperation.ValidateDatabaseName(request.DatabaseName); }
-        catch (ArgumentException) { throw new InvalidRestoreRequestException("databaseName"); }
+        if (purpose != RestorePurpose.Discovery)
+        {
+            try { RestoreOperation.ValidateDatabaseName(request.DatabaseName); }
+            catch (ArgumentException) { throw new InvalidRestoreRequestException("databaseName"); }
+        }
+        else Check(request.DatabaseName == string.Empty, "databaseName");
         var mode = ParseMode(request.Mode);
         // Overwriting is a decision the caller states in so many words: the exact name of the database that will be replaced.
-        if (mode == RestoreMode.ReplaceExistingDatabase)
+        if (purpose == RestorePurpose.Execution && mode == RestoreMode.ReplaceExistingDatabase)
         {
             if (request.ConfirmOverwrite is null) throw new InvalidRestoreRequestException("confirmOverwrite", "confirmation_required");
             if (!string.Equals(request.ConfirmOverwrite, request.DatabaseName, StringComparison.Ordinal)) throw new InvalidRestoreRequestException("confirmOverwrite", "confirmation_mismatch");
@@ -53,8 +59,11 @@ public static class RestoreInputValidation
         try { domainTarget.Validate(); }
         catch (ArgumentException) { throw new InvalidRestoreRequestException("target"); }
         var options = new RestoreOptions(request.Options?.TerminateActiveConnections ?? false, request.Options?.VerifyChecksum ?? true, request.Options?.VerifyBackup ?? true);
-        var confirmed = mode == RestoreMode.ReplaceExistingDatabase;
-        return new ValidatedRestoreRequest(domainTarget, request.DatabaseName, mode, confirmed, options, Fingerprint(artifactId, request.AgentId, request.ReplicaId, domainTarget, request.DatabaseName, mode, options));
+        var confirmed = purpose == RestorePurpose.Execution && mode == RestoreMode.ReplaceExistingDatabase;
+        var fingerprint = Fingerprint(artifactId, request.AgentId, request.ReplicaId, domainTarget, request.DatabaseName, mode, options);
+        if (request.PrecheckId is { } precheckId)
+            fingerprint = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(fingerprint + ":" + precheckId.ToString("D"))));
+        return new ValidatedRestoreRequest(domainTarget, request.DatabaseName, mode, confirmed, options, fingerprint);
     }
 
     /// <summary>
@@ -110,7 +119,12 @@ public static class RestoreInputValidation
         switch (status)
         {
             case RestoreStatus.Succeeded:
-                if (failureCode is not null || targetState != RestoreTargetState.Online) throw new ArgumentException("Success requires an online target and no failure code.");
+                var isPreparation = request.Result?.Discovery is not null || request.Result?.PreCheck is { Count: > 0 };
+                var validState = isPreparation
+                    ? targetState is RestoreTargetState.Online or RestoreTargetState.NotModified
+                    : targetState == RestoreTargetState.Online;
+                if (failureCode is not null || !validState)
+                    throw new ArgumentException("Success requires an online target and no failure code.");
                 break;
             case RestoreStatus.Failed:
                 if (!RestoreFailureCodes.IsAgentReportable(failureCode)) throw new ArgumentException("Invalid failure category.");
@@ -161,7 +175,7 @@ public static class RestoreInputValidation
         foreach (var mapping in mappings)
         {
             Require(mapping is not null && Safe(mapping.LogicalName, 128, required: true) && Safe(mapping.FileType, 16) && Safe(mapping.FileGroupName, 128) &&
-                Safe(mapping.SourcePhysicalName, 1024) && Safe(mapping.TargetPhysicalName, 1024, required: true) && mapping.SizeBytes >= 0);
+                Safe(mapping.SourcePhysicalName, 1024) && mapping.TargetPhysicalName is not "" && Safe(mapping.TargetPhysicalName, 1024) && mapping.SizeBytes >= 0);
         }
         if (result.SourceBackup is { } source)
         {

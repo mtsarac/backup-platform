@@ -18,4 +18,10 @@ public interface IDatabaseRestorePipeline
         DatabaseRestorePipelineRequest request,
         IProgress<RestoreProgress>? progress,
         CancellationToken cancellationToken);
+
+    /// <summary>Reads actual instance and database metadata without reading a backup or modifying any database.</summary>
+    Task<DatabaseRestorePipelineResult> RunDiscoveryAsync(
+        RestoreDiscoveryRequest request,
+        IProgress<RestoreProgress>? progress,
+        CancellationToken cancellationToken);
 }

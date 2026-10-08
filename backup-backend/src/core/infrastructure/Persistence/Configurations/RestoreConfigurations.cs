@@ -28,8 +28,9 @@ internal sealed class RestoreOperationConfiguration : IEntityTypeConfiguration<R
             table.HasCheckConstraint("ck_restore_operations_mode",
                 "(\"Mode\" = 'NewDatabase' AND \"OverwritePolicy\" = 'Forbidden') OR (\"Mode\" = 'ReplaceExistingDatabase' AND \"OverwritePolicy\" = 'ReplaceExisting')");
             table.HasCheckConstraint("ck_restore_operations_attempt", "\"CurrentAttemptNumber\" >= 1");
+            table.HasCheckConstraint("ck_restore_operations_purpose", "\"Purpose\" IN ('Execution','Precheck','Discovery')");
             table.HasCheckConstraint("ck_restore_operations_text",
-                "length(\"DatabaseName\") BETWEEN 1 AND 128 AND length(\"IdempotencyKey\") BETWEEN 1 AND 128 AND length(\"RequestFingerprint\") BETWEEN 1 AND 128");
+                "((\"Purpose\" = 'Discovery' AND \"DatabaseName\" = '') OR (\"Purpose\" <> 'Discovery' AND length(\"DatabaseName\") BETWEEN 1 AND 128)) AND length(\"IdempotencyKey\") BETWEEN 1 AND 128 AND length(\"RequestFingerprint\") BETWEEN 1 AND 128");
             table.HasCheckConstraint("ck_restore_operations_target",
                 "(\"TargetPort\" IS NULL OR \"TargetPort\" BETWEEN 1 AND 65535) AND " +
                 "((\"TargetIntegratedSecurity\" AND \"TargetCredentialReference\" IS NULL) OR (NOT \"TargetIntegratedSecurity\" AND \"TargetCredentialReference\" IS NOT NULL))");
@@ -38,10 +39,12 @@ internal sealed class RestoreOperationConfiguration : IEntityTypeConfiguration<R
                 $"(\"Status\" IN ({RestoreMapping.TerminalStatuses})) = (\"CompletedAt\" IS NOT NULL) AND (\"CompletedAt\" IS NOT NULL) = (\"TargetState\" IS NOT NULL)");
             table.HasCheckConstraint("ck_restore_operations_target_state", $"\"TargetState\" IS NULL OR \"TargetState\" IN ({RestoreMapping.TargetStates})");
             table.HasCheckConstraint("ck_restore_operations_outcome",
-                "(\"Status\" <> 'Succeeded' OR (\"TargetState\" = 'Online' AND \"FailureCode\" IS NULL)) AND " +
+                "(\"Status\" <> 'Succeeded' OR (((\"Purpose\" = 'Execution' AND \"TargetState\" = 'Online') OR (\"Purpose\" <> 'Execution' AND \"TargetState\" = 'NotModified')) AND \"FailureCode\" IS NULL)) AND " +
                 "(\"Status\" NOT IN ('Failed','Cancelled','AgentLost') OR (\"TargetState\" <> 'Online' AND \"FailureCode\" IS NOT NULL))");
             table.HasCheckConstraint("ck_restore_operations_result", "\"ResultJson\" IS NULL OR \"CompletedAt\" IS NOT NULL");
         });
+        builder.Property(operation => operation.Purpose).HasConversion<string>().HasMaxLength(16).HasDefaultValue(RestorePurpose.Execution).IsRequired();
+        builder.Property(operation => operation.PrecheckId);
         builder.Property(operation => operation.SourceAccess).HasConversion<string>().HasMaxLength(16).IsRequired();
         builder.Property(operation => operation.Mode).HasConversion<string>().HasMaxLength(24).IsRequired();
         builder.Property(operation => operation.OverwritePolicy).HasConversion<string>().HasMaxLength(16).IsRequired();
@@ -84,7 +87,7 @@ internal sealed class RestoreOperationConfiguration : IEntityTypeConfiguration<R
         builder.HasOne(operation => operation.Pin).WithOne().HasForeignKey<RestoreReplicaPin>(pin => new { pin.OperationId, pin.TenantId })
             .HasPrincipalKey<RestoreOperation>(operation => new { operation.Id, operation.TenantId }).OnDelete(DeleteBehavior.Restrict).IsRequired();
         // The same request key answers with the same operation, whichever node or retry asks.
-        builder.HasIndex(operation => new { operation.TenantId, operation.ArtifactId, operation.IdempotencyKey }).IsUnique();
+        builder.HasIndex(operation => new { operation.TenantId, operation.ArtifactId, operation.Purpose, operation.IdempotencyKey }).IsUnique();
         builder.HasIndex(operation => new { operation.TenantId, operation.CreatedAt });
         builder.HasIndex(operation => new { operation.TenantId, operation.ArtifactId, operation.CreatedAt });
         builder.HasIndex(operation => new { operation.TenantId, operation.Status, operation.CreatedAt });

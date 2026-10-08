@@ -117,6 +117,15 @@ internal sealed class RestorePipelineFake : IDatabaseRestorePipeline
         Calls.Enqueue(request);
         return Execute(request, progress, cancellationToken);
     }
+    public Task<DatabaseRestorePipelineResult> RunDiscoveryAsync(RestoreDiscoveryRequest request, IProgress<RestoreProgress>? progress, CancellationToken cancellationToken) =>
+        Task.FromResult(new DatabaseRestorePipelineResult
+        {
+            Status = DatabaseRestoreStatus.Succeeded,
+            FinalStage = RestoreExecutionStage.Completed,
+            TargetState = DatabaseRestoreTargetState.NotModified,
+            StartedAt = DateTimeOffset.UtcNow,
+            FinishedAt = DateTimeOffset.UtcNow
+        });
 }
 
 internal sealed class RestoreClient(TimeProvider time) : IRestoreTaskClient

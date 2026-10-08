@@ -20,6 +20,10 @@ public sealed class RestoreTaskRequestFactory(IBackupTaskCredentialResolver cred
     public async ValueTask<DatabaseRestorePipelineRequest> CreateAsync(RestoreTaskSnapshot task, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(task);
+        if (task.Purpose is not ("Execution" or "Precheck"))
+        {
+            throw new RestoreTaskRequestException(RestoreAgentFailureCodes.InvalidConfiguration);
+        }
         var staging = ValidateAndResolveStaging(task);
         var mode = ParseMode(task.Mode);
 
@@ -48,7 +52,8 @@ public sealed class RestoreTaskRequestFactory(IBackupTaskCredentialResolver cred
             return new DatabaseRestorePipelineRequest(
                 DatabaseEngineId.MsSql, connection, credential, task.DatabaseName, mode, staging, storage, key, task.TenantId,
                 task.Source.SizeBytes, checksum,
-                task.Options.TerminateActiveConnections, task.Options.VerifyChecksum, task.Options.VerifyBackup);
+                task.Options.TerminateActiveConnections, task.Options.VerifyChecksum, task.Options.VerifyBackup,
+                purpose: task.Purpose == "Precheck" ? RestorePipelinePurpose.Precheck : RestorePipelinePurpose.Execution);
         }
         catch (ArgumentException)
         {
@@ -56,14 +61,44 @@ public sealed class RestoreTaskRequestFactory(IBackupTaskCredentialResolver cred
         }
     }
 
+    public async ValueTask<RestoreDiscoveryRequest> CreateDiscoveryAsync(RestoreTaskSnapshot task, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+        if (task.Purpose != "Discovery" || !HasValidIdentityAndTarget(task))
+        {
+            throw new RestoreTaskRequestException(RestoreAgentFailureCodes.InvalidConfiguration);
+        }
+
+        DatabaseConnectionSettings connection;
+        try
+        {
+            connection = new DatabaseConnectionSettings(new DatabaseEndpoint(task.Target.Host, task.Target.Port),
+                new DatabaseConnectionOptions(requireEncryption: task.Target.Encrypt, trustServerCertificate: task.Target.TrustServerCertificate));
+        }
+        catch (ArgumentException)
+        {
+            throw new RestoreTaskRequestException(RestoreAgentFailureCodes.InvalidConfiguration);
+        }
+
+        var credential = task.Target.IntegratedSecurity
+            ? IntegratedDatabaseCredential.Instance
+            : await ResolveCredentialAsync(task.Target.DatabaseCredentialReference!, cancellationToken).ConfigureAwait(false);
+        return new RestoreDiscoveryRequest(DatabaseEngineId.MsSql, connection, credential);
+    }
+
+    private static bool HasValidIdentityAndTarget(RestoreTaskSnapshot task) =>
+        task.Version == 1 && task.OperationId != Guid.Empty && task.AttemptId != Guid.Empty && task.TenantId != Guid.Empty
+        && task.LeaseToken != Guid.Empty && task.Target is not null
+        && !string.IsNullOrWhiteSpace(task.Target.Host) && task.Target.Host.Length <= MaxHostLength
+        && !task.Target.Host.Any(char.IsControl)
+        && BackupTaskRequestFactory.HasValidAuthentication(task.Target.IntegratedSecurity, task.Target.DatabaseCredentialReference);
+
     private StagingArea ValidateAndResolveStaging(RestoreTaskSnapshot task)
     {
-        if (task.Version != 1 || task.OperationId == Guid.Empty || task.AttemptId == Guid.Empty || task.TenantId == Guid.Empty
-            || task.ArtifactId == Guid.Empty || task.ReplicaId == Guid.Empty || task.LeaseToken == Guid.Empty
-            || task.Source is null || task.Target is null || task.Options is null
+        if (!HasValidIdentityAndTarget(task)
+            || task.ArtifactId == Guid.Empty || task.ReplicaId == Guid.Empty
+            || task.Source is null || task.Options is null
             || string.IsNullOrWhiteSpace(task.DatabaseName) || task.DatabaseName.Length > MaxDatabaseNameLength || task.DatabaseName.Any(char.IsControl)
-            || task.Target.Host is null || task.Target.Host.Length > MaxHostLength
-            || !BackupTaskRequestFactory.HasValidAuthentication(task.Target.IntegratedSecurity, task.Target.DatabaseCredentialReference)
             || !HasValidSource(task.Source))
         {
             throw new RestoreTaskRequestException(RestoreAgentFailureCodes.InvalidConfiguration);

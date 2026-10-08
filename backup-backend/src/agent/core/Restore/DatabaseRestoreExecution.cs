@@ -144,6 +144,11 @@ internal sealed class DatabaseRestoreExecution
         await InspectAsync(provider, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         await PlanAsync(provider, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_request.Purpose == RestorePipelinePurpose.Precheck)
+        {
+            return;
+        }
         await ExecuteAsync(provider, cancellationToken).ConfigureAwait(false);
     }
 

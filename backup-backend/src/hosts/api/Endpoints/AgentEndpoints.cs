@@ -152,7 +152,16 @@ public static class AgentEndpoints
         }
         var tasks = new List<AgentTaskEnvelope>(3);
         if (deletion is not null) tasks.Add(new AgentTaskEnvelope { Id = deletion.ReplicaId.ToString(), Type = "delete-replica", DeleteReplica = deletion });
-        if (restore is not null) tasks.Add(new AgentTaskEnvelope { Id = restore.AttemptId.ToString(), Type = RestoreTaskTypes.DatabaseRestore, Restore = restore });
+        if (restore is not null)
+        {
+            var taskType = restore.Purpose switch
+            {
+                "Precheck" => RestoreTaskTypes.DatabaseRestorePrecheck,
+                "Discovery" => RestoreTaskTypes.DatabaseRestoreDiscovery,
+                _ => RestoreTaskTypes.DatabaseRestore
+            };
+            tasks.Add(new AgentTaskEnvelope { Id = restore.AttemptId.ToString(), Type = taskType, Restore = restore });
+        }
         if (backup is not null) tasks.Add(new AgentTaskEnvelope { Id = backup.AttemptId.ToString(), Type = "database-backup", Backup = backup });
         if (download is not null) tasks.Add(new AgentTaskEnvelope { Id = download.SessionId.ToString(), Type = DownloadTaskTypes.BackupDownload, Download = download });
         return Results.Ok(new AgentPollResponse

@@ -4,6 +4,10 @@ namespace BackupPlatform.Contracts.Restores;
 public static class RestoreTaskTypes
 {
     public const string DatabaseRestore = "database-restore";
+    public const string DatabaseRestorePrecheck = "database-restore-precheck";
+    public const string DatabaseRestoreDiscovery = "database-restore-discovery";
+    public const string PrecheckCapability = "mssql.restore.precheck";
+    public const string DiscoveryCapability = "mssql.restore.discovery";
 }
 
 /// <summary>
@@ -14,6 +18,8 @@ public static class RestoreTaskTypes
 public sealed record RestoreTaskSnapshot
 {
     public int Version { get; init; } = 1;
+    /// <summary><c>Execution</c>, <c>Precheck</c> or <c>Discovery</c>; paired with a distinct envelope task type.</summary>
+    public string Purpose { get; init; } = "Execution";
     public Guid OperationId { get; init; }
     public Guid AttemptId { get; init; }
     public int AttemptNumber { get; init; }
@@ -84,6 +90,7 @@ public sealed record RestoreTaskResult
     public IReadOnlyList<RestoreWarningResult> Warnings { get; init; } = [];
     public RestoreSourceBackupSummary? SourceBackup { get; init; }
     public RestoreTargetServerSummary? TargetServer { get; init; }
+    public RestoreDiscoveryResult? Discovery { get; init; }
     public IReadOnlyList<RestoreFileMappingResult> FileMappings { get; init; } = [];
     public DateTimeOffset? StartedAt { get; init; }
     public DateTimeOffset? FinishedAt { get; init; }
@@ -131,13 +138,25 @@ public sealed record RestoreTargetServerSummary
     public string? HostPlatform { get; init; }
 }
 
-/// <summary>One logical file and where it was restored on the TARGET server. The source server's physical name is informational only; it is never used as a destination.</summary>
+/// <summary>One logical file in the restore plan. Physical filesystem paths are omitted from tenant-facing results.</summary>
 public sealed record RestoreFileMappingResult
 {
     public string LogicalName { get; init; } = string.Empty;
     public string FileType { get; init; } = string.Empty;
     public string? FileGroupName { get; init; }
     public string? SourcePhysicalName { get; init; }
-    public string TargetPhysicalName { get; init; } = string.Empty;
+    public string? TargetPhysicalName { get; init; }
     public long SizeBytes { get; init; }
 }
+
+public sealed record RestoreDiscoveryResult
+{
+    public required RestoreDiscoveredInstance Instance { get; init; }
+    public IReadOnlyList<RestoreDiscoveredDatabase> Databases { get; init; } = [];
+}
+
+public sealed record RestoreDiscoveredInstance(
+    string Engine, string ServerName, string? InstanceName = null, string? Version = null, string? Edition = null, string? HostPlatform = null);
+
+/// <summary><see cref="Availability"/> is <c>Unknown</c>, <c>Online</c> or <c>Unavailable</c>.</summary>
+public sealed record RestoreDiscoveredDatabase(string Name, bool IsSystem, string Availability);

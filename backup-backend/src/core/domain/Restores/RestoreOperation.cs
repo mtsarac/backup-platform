@@ -33,7 +33,7 @@ public sealed class RestoreOperation : ITenantOwned
 
     public RestoreOperation(Guid id, TenantId tenantId, Guid artifactId, Guid replicaId, RestoreSourceAccess sourceAccess, AgentId agentId,
         RestoreTarget target, string databaseName, RestoreMode mode, bool overwriteConfirmed, RestoreOptions? options, string idempotencyKey,
-        string requestFingerprint, Guid? requestedByUserId, DateTimeOffset createdAt)
+        string requestFingerprint, Guid? requestedByUserId, DateTimeOffset createdAt, RestorePurpose purpose = RestorePurpose.Execution, Guid? precheckId = null)
     {
         BackupGuard.Id(id);
         BackupGuard.Id(artifactId);
@@ -45,12 +45,18 @@ public sealed class RestoreOperation : ITenantOwned
         BackupGuard.Text(requestFingerprint, 128);
         if (!Enum.IsDefined(mode)) throw new ArgumentException("Unknown restore mode.");
         if (!Enum.IsDefined(sourceAccess)) throw new ArgumentException("Unknown source access.");
-        ValidateDatabaseName(databaseName);
-        // The overwrite decision is explicit: a replace without confirmation, or a confirmation of a mode that cannot overwrite, is refused here.
-        if (mode == RestoreMode.ReplaceExistingDatabase && !overwriteConfirmed)
+        if (!Enum.IsDefined(purpose)) throw new ArgumentException("Unknown restore purpose.");
+        if (purpose != RestorePurpose.Discovery) ValidateDatabaseName(databaseName);
+        else if (databaseName != string.Empty) throw new ArgumentException("Discovery has no target database.");
+        // Only an execution can acknowledge an overwrite; read-only preparation never does.
+        if (purpose == RestorePurpose.Execution && mode == RestoreMode.ReplaceExistingDatabase && !overwriteConfirmed)
             throw new ArgumentException("Replacing an existing database requires explicit confirmation.");
         if (mode == RestoreMode.NewDatabase && overwriteConfirmed)
             throw new ArgumentException("Only a replace restore can confirm an overwrite.");
+        if (purpose != RestorePurpose.Execution && overwriteConfirmed)
+            throw new ArgumentException("Read-only preparation cannot acknowledge an overwrite.");
+        Purpose = purpose;
+        PrecheckId = precheckId;
         Id = id;
         TenantId = tenantId;
         ArtifactId = artifactId;
@@ -60,7 +66,7 @@ public sealed class RestoreOperation : ITenantOwned
         Target = target.Validate() with { };
         DatabaseName = databaseName;
         Mode = mode;
-        OverwritePolicy = mode == RestoreMode.ReplaceExistingDatabase ? RestoreOverwritePolicy.ReplaceExisting : RestoreOverwritePolicy.Forbidden;
+        OverwritePolicy = purpose == RestorePurpose.Execution && mode == RestoreMode.ReplaceExistingDatabase ? RestoreOverwritePolicy.ReplaceExisting : RestoreOverwritePolicy.Forbidden;
         Options = options ?? RestoreOptions.Default;
         IdempotencyKey = idempotencyKey;
         RequestFingerprint = requestFingerprint;
@@ -72,6 +78,8 @@ public sealed class RestoreOperation : ITenantOwned
 
     public Guid Id { get; private set; }
     public TenantId TenantId { get; private set; }
+    public RestorePurpose Purpose { get; private set; }
+    public Guid? PrecheckId { get; private set; }
     public Guid ArtifactId { get; private set; }
     /// <summary>The replica this restore reads; chosen when the request was accepted and pinned from then on.</summary>
     public Guid ReplicaId { get; private set; }
@@ -147,6 +155,10 @@ public sealed class RestoreOperation : ITenantOwned
         if (attempt.IsTerminal && !string.Equals(ResultJson, completion.ResultJson, StringComparison.Ordinal))
             throw new InvalidOperationException("Terminal outcome is immutable.");
         if (!attempt.Complete(token, now, completion)) return;
+        if (Purpose != RestorePurpose.Execution && completion.TargetState != RestoreTargetState.NotModified)
+            throw new InvalidOperationException("Read-only preparation cannot change the target.");
+        if (Purpose == RestorePurpose.Execution && completion.Status == RestoreStatus.Succeeded && completion.TargetState != RestoreTargetState.Online)
+            throw new InvalidOperationException("An execution must leave the restored database online.");
         EndTerminal(attempt.Status, attempt.FailureCode, attempt.TargetState!.Value, completion.ResultJson, now);
     }
 
@@ -167,7 +179,7 @@ public sealed class RestoreOperation : ITenantOwned
     public bool Expire(DateTimeOffset now)
     {
         var attempt = CurrentAttempt;
-        if (!attempt.Expire(now)) return false;
+        if (!attempt.Expire(now, Purpose)) return false;
         EndTerminal(RestoreStatus.AgentLost, RestoreFailureCodes.AgentLost, attempt.TargetState!.Value, null, now);
         return true;
     }

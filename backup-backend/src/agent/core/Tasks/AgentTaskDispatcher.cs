@@ -9,7 +9,7 @@ public sealed class AgentTaskDispatcher(BackupTaskWorker backups, RestoreTaskWor
     public bool TryPublish(AgentTaskEnvelope task) => task.Type switch
     {
         "database-backup" => backups.TryPublish(task),
-        RestoreTaskTypes.DatabaseRestore => restores.TryPublish(task),
+        RestoreTaskTypes.DatabaseRestore or RestoreTaskTypes.DatabaseRestorePrecheck or RestoreTaskTypes.DatabaseRestoreDiscovery => restores.TryPublish(task),
         "delete-replica" => deletions.TryPublish(task),
         DownloadTaskTypes.BackupDownload => downloads.TryPublish(task),
         _ => false

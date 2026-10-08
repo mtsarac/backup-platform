@@ -1,5 +1,13 @@
 namespace BackupPlatform.Domain.Restores;
 
+/// <summary>Read-only preparation is distinct from the operation that changes a database.</summary>
+public enum RestorePurpose
+{
+    Execution = 1,
+    Precheck = 2,
+    Discovery = 3
+}
+
 /// <summary>
 /// What the restore does to the target. <see cref="NewDatabase"/> is the safe default and can never touch an existing database;
 /// <see cref="ReplaceExistingDatabase"/> overwrites one and therefore needs an explicit, confirmed request.

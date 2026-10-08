@@ -3,6 +3,15 @@ using BackupPlatform.StorageProviders.Abstractions;
 
 namespace BackupPlatform.Agent.Core.Restore;
 
+public enum RestorePipelinePurpose
+{
+    Execution,
+    Precheck
+}
+
+/// <summary>Read-only discovery needs only a connection and the agent-local credential, never a replica or staging area.</summary>
+public sealed record RestoreDiscoveryRequest(DatabaseEngineId Engine, DatabaseConnectionSettings Connection, DatabaseCredential Credential);
+
 /// <summary>
 /// One restore of a stored backup replica into a database, expressed without any engine or storage implementation: which engine,
 /// server and target database, which replica (storage provider, key, the size and SHA-256 it was published with) and where to stage
@@ -28,7 +37,8 @@ public sealed record DatabaseRestorePipelineRequest
         bool verifyChecksum = true,
         bool verifyBackup = true,
         TimeSpan? verifyTimeout = null,
-        TimeSpan? restoreTimeout = null)
+        TimeSpan? restoreTimeout = null,
+        RestorePipelinePurpose purpose = RestorePipelinePurpose.Execution)
     {
         ArgumentNullException.ThrowIfNull(engine);
         ArgumentNullException.ThrowIfNull(connection);
@@ -42,6 +52,10 @@ public sealed record DatabaseRestorePipelineRequest
         {
             throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unknown restore mode.");
         }
+        if (!Enum.IsDefined(purpose))
+        {
+            throw new ArgumentOutOfRangeException(nameof(purpose), purpose, "Unknown restore purpose.");
+        }
 
         if (tenantId == Guid.Empty)
         {
@@ -51,6 +65,7 @@ public sealed record DatabaseRestorePipelineRequest
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(expectedSizeBytes);
 
         Engine = engine;
+        Purpose = purpose;
         Connection = connection;
         Credential = credential;
         DatabaseName = databaseName;
@@ -69,6 +84,7 @@ public sealed record DatabaseRestorePipelineRequest
     }
 
     public DatabaseEngineId Engine { get; }
+    public RestorePipelinePurpose Purpose { get; }
     public DatabaseConnectionSettings Connection { get; }
     public DatabaseCredential Credential { get; }
 
@@ -148,6 +164,7 @@ public sealed record DatabaseRestorePipelineResult
 
     public RestoreBackupInspection? Inspection { get; init; }
     public RestorePlan? Plan { get; init; }
+    public DatabaseInstanceDiscovery? Discovery { get; init; }
 
     /// <summary>Where each logical file was restored (from the engine's result; the plan's mapping when the engine never reported one).</summary>
     public IReadOnlyList<RestoreFileMapping> FileMappings { get; init; } = [];

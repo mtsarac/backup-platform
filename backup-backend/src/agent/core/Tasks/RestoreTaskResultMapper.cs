@@ -19,13 +19,12 @@ internal static class RestoreTaskResultMapper
     private const int MaxId = 64;
     private const int MaxMessage = 300;
     private const int MaxName = 128;
-    private const int MaxPath = 400;
     private const int MaxState = 32;
 
-    /// <summary>What to keep when a result is too large: pre-check items, warnings and file mappings, from the most to the least generous.</summary>
-    private static readonly (int PreCheck, int Warnings, int FileMappings)[] Budgets =
+    /// <summary>Progressively smaller detail budgets, including real discovered databases.</summary>
+    private static readonly (int PreCheck, int Warnings, int FileMappings, int Databases)[] Budgets =
     [
-        (32, 16, 128), (16, 8, 64), (8, 4, 16), (4, 2, 4), (2, 1, 1), (0, 0, 0)
+        (32, 16, 128, 128), (16, 8, 64, 64), (8, 4, 16, 16), (4, 2, 4, 4), (2, 1, 1, 1), (0, 0, 0, 0)
     ];
 
     public const string TruncatedWarning = "result-truncated";
@@ -35,10 +34,15 @@ internal static class RestoreTaskResultMapper
         ArgumentNullException.ThrowIfNull(task);
         ArgumentNullException.ThrowIfNull(result);
 
-        // A state that contradicts the outcome would make the backend refuse the completion, which would strand the attempt; report what is honest instead.
-        if (result.Status == DatabaseRestoreStatus.Succeeded && result.TargetState != DatabaseRestoreTargetState.Online)
+        var readOnly = task.Purpose is "Precheck" or "Discovery";
+        var expectedState = readOnly ? DatabaseRestoreTargetState.NotModified : DatabaseRestoreTargetState.Online;
+        // Read-only tasks can never claim a modified target, even when a provider breaks its contract.
+        if ((readOnly && result.TargetState != DatabaseRestoreTargetState.NotModified)
+            || (result.Status == DatabaseRestoreStatus.Succeeded
+                && (result.TargetState != expectedState || (task.Purpose == "Discovery" && result.Discovery is null))))
         {
-            return Failure(task.LeaseToken, RestoreAgentFailureCodes.InternalError, DatabaseRestoreTargetState.Unknown);
+            return Failure(task.LeaseToken, RestoreAgentFailureCodes.InternalError,
+                readOnly ? DatabaseRestoreTargetState.NotModified : DatabaseRestoreTargetState.Unknown);
         }
 
         var targetState = result.Status != DatabaseRestoreStatus.Succeeded && result.TargetState == DatabaseRestoreTargetState.Online
@@ -81,7 +85,7 @@ internal static class RestoreTaskResultMapper
     {
         foreach (var budget in Budgets[..^1])
         {
-            var mapped = Build(result, targetState, budget.PreCheck, budget.Warnings, budget.FileMappings);
+            var mapped = Build(result, targetState, budget.PreCheck, budget.Warnings, budget.FileMappings, budget.Databases);
             if (JsonSerializer.SerializeToUtf8Bytes(mapped, JsonSerializerOptions.Web).Length <= MaxResultJsonLength)
             {
                 return mapped;
@@ -89,14 +93,16 @@ internal static class RestoreTaskResultMapper
         }
 
         var last = Budgets[^1];
-        return Build(result, targetState, last.PreCheck, last.Warnings, last.FileMappings);
+        return Build(result, targetState, last.PreCheck, last.Warnings, last.FileMappings, last.Databases);
     }
 
-    private static RestoreTaskResult Build(DatabaseRestorePipelineResult result, DatabaseRestoreTargetState targetState, int maxPreCheck, int maxWarnings, int maxMappings)
+    private static RestoreTaskResult Build(DatabaseRestorePipelineResult result, DatabaseRestoreTargetState targetState,
+        int maxPreCheck, int maxWarnings, int maxMappings, int maxDatabases)
     {
         var preCheck = Select(result.PreCheck, maxPreCheck, item => item.Status is BackupPreCheckStatus.Failed or BackupPreCheckStatus.Warning);
         var warnings = result.Warnings.Take(maxWarnings).Select(warning => new RestoreWarningResult(Text(warning.Code, MaxId), Text(warning.Message, MaxMessage))).ToList();
-        var truncated = preCheck.Truncated || result.Warnings.Count > maxWarnings || result.FileMappings.Count > maxMappings;
+        var truncated = preCheck.Truncated || result.Warnings.Count > maxWarnings || result.FileMappings.Count > maxMappings
+            || result.Discovery?.Databases.Count > maxDatabases;
         if (truncated)
         {
             warnings.Add(new RestoreWarningResult(TruncatedWarning, "Some details of this restore were left out because the report was too large."));
@@ -118,13 +124,12 @@ internal static class RestoreTaskResultMapper
                     HostPlatform = Optional(instance.HostPlatform, MaxName)
                 }
                 : null,
+            Discovery = result.Discovery is { } discovery ? MapDiscovery(discovery, maxDatabases) : null,
             FileMappings = result.FileMappings.Take(maxMappings).Select(mapping => new RestoreFileMappingResult
             {
                 LogicalName = Text(mapping.LogicalName, MaxName),
                 FileType = mapping.Kind.ToString(),
                 FileGroupName = Optional(mapping.FileGroupName, MaxName),
-                SourcePhysicalName = Optional(mapping.SourcePhysicalName, MaxPath),
-                TargetPhysicalName = Text(mapping.TargetPath.Value, MaxPath),
                 SizeBytes = mapping.SizeBytes
             }).ToList(),
             StartedAt = result.StartedAt,
@@ -137,6 +142,17 @@ internal static class RestoreTaskResultMapper
             TargetStateNote = NoteFor(result.Status == DatabaseRestoreStatus.Cancelled, targetState)
         };
     }
+
+    private static RestoreDiscoveryResult MapDiscovery(DatabaseInstanceDiscovery discovery, int maxDatabases) => new()
+    {
+        Instance = new RestoreDiscoveredInstance(
+            Text(discovery.Instance.Engine.Value, MaxId), Text(discovery.Instance.ServerName, MaxName),
+            Optional(discovery.Instance.InstanceName, MaxName), Optional(discovery.Instance.Version, MaxName),
+            Optional(discovery.Instance.Edition, MaxName), Optional(discovery.Instance.HostPlatform, MaxName)),
+        Databases = discovery.Databases.Take(maxDatabases).Select(database => new RestoreDiscoveredDatabase(
+            Text(database.Name, MaxName), database.IsSystem,
+            Enum.IsDefined(database.Availability) ? database.Availability.ToString() : nameof(DatabaseAvailability.Unknown))).ToList()
+    };
 
     private static RestoreSourceBackupSummary MapHeader(RestoreBackupHeader header) => new()
     {

@@ -1,12 +1,14 @@
+using BackupPlatform.Agents.Capabilities;
 using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Application.Identity;
 using BackupPlatform.Application.Restores;
 using BackupPlatform.Application.Tenancy;
+using BackupPlatform.Contracts.Restores;
 using BackupPlatform.Domain.Identity;
+using BackupPlatform.Domain.Capabilities;
 using BackupPlatform.Domain.Restores;
-
 namespace BackupPlatform.Api.Endpoints;
 
 /// <summary>
@@ -20,6 +22,9 @@ public static class RestoreEndpoints
     {
         var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}").WithMetadata(new TenantScopedEndpoint());
         tenant.MapPost("/backup-artifacts/{artifactId:guid}/restore", StartAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
+        tenant.MapPost("/backup-artifacts/{artifactId:guid}/restore-precheck", PrecheckAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
+        tenant.MapPost("/backup-artifacts/{artifactId:guid}/restore-discovery", DiscoverAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
+        tenant.MapGet("/backup-artifacts/{artifactId:guid}/restore-targets", TargetsAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
         tenant.MapGet("/restores", ListAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
         tenant.MapGet("/restores/{restoreId:guid}", GetAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
         tenant.MapPost("/restores/{restoreId:guid}/cancel", CancelAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
@@ -38,25 +43,58 @@ public static class RestoreEndpoints
         {
             return Results.BadRequest(new { error = "invalid_request", field = exception.Field, code = exception.Code, message = "Invalid restore request field." });
         }
+        return await MapStartResultAsync(result, tenant, context, push, logger);
+    }
+
+    private static async Task<IResult> PrecheckAsync(Guid artifactId, StartRestorePrecheckRequest request, HttpContext context, ITenantContext tenant, ICurrentUser user, RestoreService service,
+        IAgentPushDispatcher push, ILogger<RestoreService> logger, CancellationToken cancellationToken)
+    {
+        var keys = context.Request.Headers["Idempotency-Key"];
+        if (keys.Count != 1 || !BackupInputValidation.IsValidKey(keys[0]))
+            return Results.BadRequest(new { error = "invalid_request", field = "Idempotency-Key", code = "invalid_value", message = "A valid Idempotency-Key is required (1-128 printable ASCII characters)." });
+        RestoreStartResult result;
+        try { result = await service.PrecheckAsync(tenant.TenantId!, artifactId, keys[0]!, user.UserId?.Value, request, cancellationToken); }
+        catch (InvalidRestoreRequestException exception)
+        {
+            return Results.BadRequest(new { error = "invalid_request", field = exception.Field, code = exception.Code, message = "Invalid restore request field." });
+        }
+        return await MapStartResultAsync(result, tenant, context, push, logger);
+    }
+
+    private static async Task<IResult> DiscoverAsync(Guid artifactId, StartRestoreDiscoveryRequest request, HttpContext context, ITenantContext tenant, ICurrentUser user, RestoreService service,
+        IAgentPushDispatcher push, ILogger<RestoreService> logger, CancellationToken cancellationToken)
+    {
+        var keys = context.Request.Headers["Idempotency-Key"];
+        if (keys.Count != 1 || !BackupInputValidation.IsValidKey(keys[0]))
+            return Results.BadRequest(new { error = "invalid_request", field = "Idempotency-Key", code = "invalid_value", message = "A valid Idempotency-Key is required (1-128 printable ASCII characters)." });
+        RestoreStartResult result;
+        try { result = await service.DiscoverAsync(tenant.TenantId!, artifactId, keys[0]!, user.UserId?.Value, request, cancellationToken); }
+        catch (InvalidRestoreRequestException exception)
+        {
+            return Results.BadRequest(new { error = "invalid_request", field = exception.Field, code = exception.Code, message = "Invalid restore request field." });
+        }
+        return await MapStartResultAsync(result, tenant, context, push, logger);
+    }
+
+    private static async Task<IResult> MapStartResultAsync(RestoreStartResult result, ITenantContext tenant, HttpContext context, IAgentPushDispatcher push, ILogger logger)
+    {
         switch (result.Outcome)
         {
             case RestoreStartOutcome.Started:
                 await HintAsync(push, new AgentId(result.Restore!.AgentId), "WorkAvailable", logger);
                 return Results.Accepted(Location(tenant, result.Restore.Id), result.Restore);
             case RestoreStartOutcome.Replayed:
-                // The same request again: the original restore, nothing new and no new hint.
                 context.Response.Headers.Location = Location(tenant, result.Restore!.Id);
                 return Results.Ok(result.Restore);
             case RestoreStartOutcome.ArtifactNotFound:
                 return Results.NotFound(new { error = "artifact_not_found", message = "The backup does not exist." });
             case RestoreStartOutcome.AgentNotFound:
                 return Results.NotFound(new { error = "agent_not_found", message = "The agent does not exist." });
-            case RestoreStartOutcome.IdempotencyConflict:
+            case RestoreStartOutcome.IdempotencyConflict or RestoreStartOutcome.PrecheckRejected:
                 return Results.Conflict(new { error = result.Code, message = result.Message });
             case RestoreStartOutcome.AgentNotActive or RestoreStartOutcome.AgentCannotRestore:
                 return Results.Json(new { error = result.Code, reason = result.Detail, message = result.Message }, statusCode: StatusCodes.Status422UnprocessableEntity);
             default:
-                // A replica that cannot be restored from any more is a state conflict; every other refusal is a request this version cannot carry out.
                 var status = result.Code switch
                 {
                     "replica_not_found" => StatusCodes.Status404NotFound,
@@ -65,6 +103,86 @@ public static class RestoreEndpoints
                 };
                 return Results.Json(new { error = result.Code, message = result.Message }, statusCode: status);
         }
+    }
+
+    private static async Task<IResult> TargetsAsync(
+        Guid artifactId,
+        ITenantContext tenant,
+        IBackupRetentionStore retentionStore,
+        IBackupUiStore uiStore,
+        AgentConnectivityQueryService agentService,
+        TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        var now = time.GetUtcNow();
+        var artifactRecord = await retentionStore.GetArtifactAsync(tenant.TenantId!, artifactId, cancellationToken);
+        if (artifactRecord is null)
+        {
+            return Results.NotFound(new { error = "artifact_not_found", message = "The backup does not exist." });
+        }
+
+        var artifact = artifactRecord.Artifact;
+        var agentViews = await agentService.ListAsync(tenant.TenantId!, AgentConnectivityFilter.All, cancellationToken);
+        var jobs = await uiStore.ListJobsAsync(tenant.TenantId!, now, cancellationToken);
+
+        var agents = agentViews.Select(view =>
+        {
+            var targetAgentId = new AgentId(view.Agent.Id.Value);
+            var canRestore = view.Capabilities?.Capabilities.Any(c => c.Identifier == RestoreAgentCapability.Identifier && c.Support == CapabilitySupport.Supported) == true;
+            var canPrecheck = view.Capabilities?.Capabilities.Any(c => c.Identifier == RestoreAgentCapability.PrecheckIdentifier && c.Support == CapabilitySupport.Supported) == true;
+            var canDiscover = view.Capabilities?.Capabilities.Any(c => c.Identifier == RestoreAgentCapability.DiscoveryIdentifier && c.Support == CapabilitySupport.Supported) == true;
+
+            var selectedReplica = RestoreSourceEvaluator.SelectReplica(artifact, targetAgentId, now);
+            RestoreSourceRejection? rejection = selectedReplica is null
+                ? RestoreSourceEvaluator.Explain(artifact, targetAgentId, now)
+                : null;
+
+            var sourceAccess = selectedReplica is not null
+                ? RestoreSourceEvaluator.Evaluate(artifact, selectedReplica, targetAgentId, now).Access?.ToString()
+                : null;
+
+            return new
+            {
+                agentId = view.Agent.Id.Value,
+                hostName = view.Agent.HostName,
+                status = view.Agent.Status.ToString(),
+                connectivity = view.Connectivity.ToString().ToLowerInvariant(),
+                canRestore,
+                canPrecheck,
+                canDiscover,
+                sourceEligible = selectedReplica is not null,
+                sourceAccess,
+                rejectionCode = rejection is not null ? RestoreService.RejectionCode(rejection.Value) : null,
+                rejectionMessage = rejection is not null ? RestoreService.RejectionMessage(rejection.Value) : null
+            };
+        }).ToList();
+
+        var targets = jobs
+            .Where(j => j.Configuration is not null && !string.IsNullOrWhiteSpace(j.Configuration.Host))
+            .Select(j => new
+            {
+                jobId = j.Id,
+                jobName = j.Name,
+                agentId = j.AgentId,
+                database = j.Configuration.Database,
+                target = new RestoreTargetView(
+                    j.Configuration.Host,
+                    j.Configuration.Port,
+                    j.Configuration.IntegratedSecurity,
+                    j.Configuration.DatabaseCredentialReference,
+                    j.Configuration.Encrypt,
+                    j.Configuration.TrustServerCertificate)
+            }).ToList();
+
+        return Results.Ok(new
+        {
+            artifactId = artifact.Id,
+            sourceDatabase = artifactRecord.DatabaseName ?? string.Empty,
+            backupType = artifact.BackupType,
+            sizeBytes = artifact.SizeBytes,
+            agents,
+            targets
+        });
     }
 
     private static async Task<IResult> ListAsync(string? status, Guid? artifactId, Guid? agentId, int? page, int? pageSize, ITenantContext tenant, RestoreService service,
@@ -88,10 +206,10 @@ public static class RestoreEndpoints
         return restore is null ? Results.NotFound() : Results.Ok(restore);
     }
 
-    private static async Task<IResult> CancelAsync(Guid restoreId, ITenantContext tenant, RestoreService service, IAgentPushDispatcher push, ILogger<RestoreService> logger,
+    private static async Task<IResult> CancelAsync(Guid restoreId, ITenantContext tenant, ICurrentUser user, RestoreService service, IAgentPushDispatcher push, ILogger<RestoreService> logger,
         CancellationToken cancellationToken)
     {
-        var restore = await service.CancelAsync(tenant.TenantId!, restoreId, cancellationToken);
+        var restore = await service.CancelAsync(tenant.TenantId!, restoreId, cancellationToken, user.UserId?.Value);
         if (restore is null) return Results.NotFound();
         await HintAsync(push, new AgentId(restore.AgentId), "CancellationRequested", logger);
         return Results.Ok(restore);

@@ -18,6 +18,9 @@ import { BackupDetailPage } from './pages/backups/backup-detail-page'
 import { StoragePage } from './pages/storage/storage-page'
 import { ArtifactsPage } from './pages/artifacts/artifacts-page'
 import { ArtifactDetailPage } from './pages/artifacts/artifact-detail-page'
+import { RestoresPage } from './pages/restores/restores-page'
+import { RestoreDetailPage } from './pages/restores/restore-detail-page'
+import { RestoreWizardPage } from './pages/restores/restore-wizard-page'
 import { TenantSelectPage } from './pages/tenancy/tenant-select-page'
 import { Button } from './components/ui/button'
 import { PlatformDashboardPage } from './pages/platform/platform-dashboard-page'
@@ -52,6 +55,9 @@ function AppRoutes() {
         <Route path="storage" element={<StoragePage />} />
         <Route path="artifacts" element={<ArtifactsPage />} />
         <Route path="artifacts/:id" element={<ArtifactDetailPage />} />
+        <Route path="artifacts/:id/restore" element={<RestoreWizardPage />} />
+        <Route path="restores" element={<RestoresPage />} />
+        <Route path="restores/:id" element={<RestoreDetailPage />} />
         <Route path="*" element={<p>Sayfa bulunamadı.</p>} />
       </Routes></AppShell></TenantProvider>} />
       <Route path="/platform" element={<PlatformAdminRoute />}>

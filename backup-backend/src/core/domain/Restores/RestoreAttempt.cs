@@ -117,11 +117,11 @@ public sealed class RestoreAttempt : ITenantOwned
     }
 
     /// <summary>Expired lease: only a claim that never started proves the target was untouched.</summary>
-    internal bool Expire(DateTimeOffset now)
+    internal bool Expire(DateTimeOffset now, RestorePurpose purpose = RestorePurpose.Execution)
     {
         if (Status is not (RestoreStatus.Leased or RestoreStatus.Running) || LeaseExpiresAt > now) return false;
         // Progress is advisory and may be stale or undelivered; a running agent could have reached RESTORE without reporting it.
-        var state = Status == RestoreStatus.Leased ? RestoreTargetState.NotModified : RestoreTargetState.Unknown;
+        var state = purpose != RestorePurpose.Execution || Status == RestoreStatus.Leased ? RestoreTargetState.NotModified : RestoreTargetState.Unknown;
         Finish(RestoreStatus.AgentLost, RestoreFailureCodes.AgentLost, state, now);
         return true;
     }
@@ -160,8 +160,8 @@ public sealed record RestoreCompletion(RestoreStatus Status, string? FailureCode
         switch (Status)
         {
             case RestoreStatus.Succeeded:
-                if (current != RestoreStatus.Running || FailureCode is not null || TargetState != RestoreTargetState.Online)
-                    throw new InvalidOperationException("Success requires a running attempt and an online target.");
+                if (current != RestoreStatus.Running || FailureCode is not null || TargetState is not (RestoreTargetState.Online or RestoreTargetState.NotModified))
+                    throw new InvalidOperationException("Success requires a running attempt and a valid target state.");
                 break;
             case RestoreStatus.Failed:
                 if (!RestoreFailureCodes.IsAgentReportable(FailureCode)) throw new ArgumentException("Invalid failure category.");

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Activity, Database, Gauge, HardDrive, LayoutDashboard, Monitor, KeyRound, ShieldCheck, X } from 'lucide-react'
+import { Activity, Database, Gauge, HardDrive, LayoutDashboard, Monitor, KeyRound, RotateCcw, ShieldCheck, X } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/features/auth/use-auth'
@@ -11,6 +11,7 @@ const items = [
   { label: 'Backup Jobs', path: '/backup-jobs', icon: Database },
   { label: 'Backup Runs', path: '/backup-runs', icon: Activity },
   { label: 'Artifacts', path: '/artifacts', icon: HardDrive },
+  { label: 'Restores', path: '/restores', icon: RotateCcw },
   { label: 'Storage', path: '/storage', icon: Gauge },
 ]
 function SidebarContent({ onClose }: { onClose?: () => void }) {

@@ -19,7 +19,8 @@ public enum RestoreStartOutcome
     /// <summary>The agent has not synced the restore capability as Supported.</summary>
     AgentCannotRestore,
     SourceRejected,
-    IdempotencyConflict
+    IdempotencyConflict,
+    PrecheckRejected
 }
 
 /// <summary>
@@ -42,13 +43,25 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
     /// </summary>
     /// <exception cref="InvalidRestoreRequestException">A request field is invalid.</exception>
     /// <exception cref="ArgumentException">The Idempotency-Key is not a valid bounded key.</exception>
-    public async Task<RestoreStartResult> StartAsync(TenantId tenantId, Guid artifactId, string idempotencyKey, Guid? requestedByUserId, StartRestoreRequest request, CancellationToken cancellationToken)
+    public Task<RestoreStartResult> StartAsync(TenantId tenantId, Guid artifactId, string idempotencyKey, Guid? requestedByUserId, StartRestoreRequest request, CancellationToken cancellationToken) =>
+        CreateAsync(tenantId, artifactId, idempotencyKey, requestedByUserId, request, RestorePurpose.Execution, cancellationToken);
+
+    public Task<RestoreStartResult> PrecheckAsync(TenantId tenantId, Guid artifactId, string idempotencyKey, Guid? requestedByUserId, StartRestorePrecheckRequest request, CancellationToken cancellationToken) =>
+        CreateAsync(tenantId, artifactId, idempotencyKey, requestedByUserId,
+            new StartRestoreRequest(request.AgentId, request.Target, request.DatabaseName, request.ReplicaId, request.Mode, Options: request.Options), RestorePurpose.Precheck, cancellationToken);
+
+    public Task<RestoreStartResult> DiscoverAsync(TenantId tenantId, Guid artifactId, string idempotencyKey, Guid? requestedByUserId, StartRestoreDiscoveryRequest request, CancellationToken cancellationToken) =>
+        CreateAsync(tenantId, artifactId, idempotencyKey, requestedByUserId,
+            new StartRestoreRequest(request.AgentId, request.Target, string.Empty, request.ReplicaId), RestorePurpose.Discovery, cancellationToken);
+
+    private async Task<RestoreStartResult> CreateAsync(TenantId tenantId, Guid artifactId, string idempotencyKey, Guid? requestedByUserId, StartRestoreRequest request,
+        RestorePurpose purpose, CancellationToken cancellationToken)
     {
         if (!BackupInputValidation.IsValidKey(idempotencyKey)) throw new ArgumentException("A bounded Idempotency-Key is required.");
         if (artifactId == Guid.Empty) throw new InvalidRestoreRequestException("artifactId");
-        var validated = RestoreInputValidation.Validate(artifactId, request);
+        var validated = RestoreInputValidation.Validate(artifactId, request, purpose);
         var command = new RestoreCommand(tenantId, artifactId, request.ReplicaId, new AgentId(request.AgentId), validated.Target, validated.DatabaseName, validated.Mode,
-            validated.OverwriteConfirmed, validated.Options, idempotencyKey, validated.Fingerprint, requestedByUserId, time.GetUtcNow());
+            validated.OverwriteConfirmed, validated.Options, idempotencyKey, validated.Fingerprint, requestedByUserId, time.GetUtcNow(), purpose, request.PrecheckId);
         var result = await store.CreateAsync(command, cancellationToken);
         return result.Outcome switch
         {
@@ -62,6 +75,8 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
                 Message: "The selected agent has not reported that it can restore SQL Server databases."),
             RestoreCreateOutcome.IdempotencyConflict => new RestoreStartResult(RestoreStartOutcome.IdempotencyConflict, Code: "idempotency_conflict",
                 Message: "This Idempotency-Key was already used for a different restore request."),
+            RestoreCreateOutcome.PrecheckRejected => new RestoreStartResult(RestoreStartOutcome.PrecheckRejected, Code: "precheck_rejected",
+                Message: "A successful precheck matching this restore request is required."),
             _ => new RestoreStartResult(RestoreStartOutcome.SourceRejected, Code: RejectionCode(result.Rejection!.Value), Message: RejectionMessage(result.Rejection.Value))
         };
     }
@@ -79,9 +94,9 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         return new RestorePageView([.. page.Items.Select(operation => ToView(operation, includeResult: false))], page.TotalCount, page.Page, page.PageSize);
     }
 
-    public async Task<RestoreView?> CancelAsync(TenantId tenantId, Guid restoreId, CancellationToken cancellationToken)
+    public async Task<RestoreView?> CancelAsync(TenantId tenantId, Guid restoreId, CancellationToken cancellationToken, Guid? requestedByUserId = null)
     {
-        var operation = await store.RequestCancellationAsync(tenantId, restoreId, time.GetUtcNow(), cancellationToken);
+        var operation = await store.RequestCancellationAsync(tenantId, restoreId, time.GetUtcNow(), cancellationToken, requestedByUserId);
         return operation is null ? null : ToView(operation, includeResult: true);
     }
 
@@ -137,7 +152,7 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         var replica = claim.Replica;
         return new RestoreTaskSnapshot
         {
-            OperationId = operation.Id, AttemptId = attempt.Id, AttemptNumber = attempt.Number, TenantId = operation.TenantId.Value,
+            OperationId = operation.Id, AttemptId = attempt.Id, AttemptNumber = attempt.Number, TenantId = operation.TenantId.Value, Purpose = operation.Purpose.ToString(),
             LeaseToken = attempt.LeaseToken!.Value, LeaseExpiresAt = attempt.LeaseExpiresAt!.Value,
             ArtifactId = operation.ArtifactId, ReplicaId = operation.ReplicaId,
             Source = new RestoreTaskSource
@@ -179,7 +194,8 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
             new RestoreProgressView(current?.ProgressStage, current?.ProgressPercent, current?.ProgressAt),
             operation.Pin.IsActive, includeResult ? RestoreInputValidation.ReadResult(operation.ResultJson) : null,
             [.. attempts.Select(attempt => new RestoreAttemptView(attempt.Id, attempt.Number, attempt.Status.ToString(), attempt.CreatedAt, attempt.LeasedAt, attempt.StartedAt,
-                attempt.CompletedAt, attempt.FailureCode, Reason(attempt.FailureCode), attempt.TargetState?.ToString(), attempt.ProgressStage, attempt.ProgressPercent, attempt.ProgressAt))]);
+                attempt.CompletedAt, attempt.FailureCode, Reason(attempt.FailureCode), attempt.TargetState?.ToString(), attempt.ProgressStage, attempt.ProgressPercent, attempt.ProgressAt))],
+            operation.Purpose.ToString(), operation.PrecheckId);
     }
 
     /// <summary>The fixed sentence for a failure code; every code in the closed vocabulary has its own, anything else is reported as an internal error.</summary>

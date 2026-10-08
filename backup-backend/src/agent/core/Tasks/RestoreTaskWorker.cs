@@ -54,11 +54,12 @@ public sealed partial class RestoreTaskWorker : IAgentTaskSink
     public bool TryPublish(AgentTaskEnvelope task)
     {
         var now = _time.GetUtcNow();
-        if (task is not { Type: RestoreTaskTypes.DatabaseRestore, Restore: { Version: 1 } restore }
+        if (task is not { Restore: { Version: 1 } restore }
+            || !HasMatchingPurpose(task.Type, restore.Purpose)
             || !Guid.TryParse(task.Id, out var id) || id != restore.AttemptId
             || restore.AttemptId == Guid.Empty || restore.OperationId == Guid.Empty || restore.TenantId == Guid.Empty
             || restore.LeaseToken == Guid.Empty || restore.AttemptNumber < 1
-            || restore.Source is null || restore.Target is null || restore.LeaseExpiresAt <= now)
+            || (restore.Purpose != "Discovery" && restore.Source is null) || restore.Target is null || restore.LeaseExpiresAt <= now)
         {
             return false;
         }
@@ -79,6 +80,11 @@ public sealed partial class RestoreTaskWorker : IAgentTaskSink
             return true;
         }
     }
+
+    private static bool HasMatchingPurpose(string type, string purpose) => (type, purpose) is
+        (RestoreTaskTypes.DatabaseRestore, "Execution")
+        or (RestoreTaskTypes.DatabaseRestorePrecheck, "Precheck")
+        or (RestoreTaskTypes.DatabaseRestoreDiscovery, "Discovery");
 
     private bool TryEnqueue(AgentTaskEnvelope task) =>
         _time is IAgentLoopObserver observer ? observer.Signal("restore worker", () => _queue.Writer.TryWrite(task)) : _queue.Writer.TryWrite(task);
@@ -195,11 +201,19 @@ public sealed partial class RestoreTaskWorker : IAgentTaskSink
     /// </summary>
     private async Task<RestoreTaskCompletionRequest> ExecutePipelineAsync(RestoreTaskSnapshot task, TaskProgress progress, CancellationToken cancellationToken)
     {
-        DatabaseRestorePipelineRequest request;
+        DatabaseRestorePipelineRequest? request = null;
+        RestoreDiscoveryRequest? discovery = null;
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            request = await _requests.CreateAsync(task, cancellationToken).ConfigureAwait(false);
+            if (task.Purpose == "Discovery")
+            {
+                discovery = await _requests.CreateDiscoveryAsync(task, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                request = await _requests.CreateAsync(task, cancellationToken).ConfigureAwait(false);
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -216,16 +230,21 @@ public sealed partial class RestoreTaskWorker : IAgentTaskSink
 
         try
         {
-            var result = await _pipeline.RunRestoreAsync(request, progress, cancellationToken).ConfigureAwait(false);
+            var result = discovery is not null
+                ? await _pipeline.RunDiscoveryAsync(discovery, progress, cancellationToken).ConfigureAwait(false)
+                : await _pipeline.RunRestoreAsync(request!, progress, cancellationToken).ConfigureAwait(false);
             return RestoreTaskResultMapper.Map(task, result);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            return RestoreTaskResultMapper.Failure(task.LeaseToken, RestoreAgentFailureCodes.Cancelled, DatabaseRestoreTargetState.Unknown);
+            return RestoreTaskResultMapper.Failure(task.LeaseToken, RestoreAgentFailureCodes.Cancelled, StateAfterPipelineException(task));
         }
         catch (Exception)
         {
-            return RestoreTaskResultMapper.Failure(task.LeaseToken, RestoreAgentFailureCodes.InternalError, DatabaseRestoreTargetState.Unknown);
+            return RestoreTaskResultMapper.Failure(task.LeaseToken, RestoreAgentFailureCodes.InternalError, StateAfterPipelineException(task));
         }
     }
+
+    private static DatabaseRestoreTargetState StateAfterPipelineException(RestoreTaskSnapshot task) =>
+        task.Purpose == "Execution" ? DatabaseRestoreTargetState.Unknown : DatabaseRestoreTargetState.NotModified;
 }

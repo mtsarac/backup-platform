@@ -17,6 +17,7 @@ public sealed partial class DatabaseRestorePipeline : IDatabaseRestorePipeline
 {
     private readonly IReadOnlyDictionary<DatabaseEngineId, IDatabaseRestoreProvider> _providers;
     private readonly IReadOnlyDictionary<StorageProviderId, IStorageProvider> _storages;
+    private readonly IReadOnlyDictionary<DatabaseEngineId, IDatabaseBackupProvider> _discoveryProviders;
     private readonly ILogger<DatabaseRestorePipeline> _logger;
     private readonly TimeProvider _time;
     private readonly StagingUsageRegistry? _staging;
@@ -26,7 +27,8 @@ public sealed partial class DatabaseRestorePipeline : IDatabaseRestorePipeline
         IEnumerable<IStorageProvider> storages,
         ILogger<DatabaseRestorePipeline> logger,
         TimeProvider? time = null,
-        StagingUsageRegistry? staging = null)
+        StagingUsageRegistry? staging = null,
+        IEnumerable<IDatabaseBackupProvider>? discoveryProviders = null)
     {
         ArgumentNullException.ThrowIfNull(providers);
         ArgumentNullException.ThrowIfNull(storages);
@@ -34,6 +36,7 @@ public sealed partial class DatabaseRestorePipeline : IDatabaseRestorePipeline
 
         _providers = providers.ToDictionary(provider => provider.Engine);
         _storages = storages.ToDictionary(storage => storage.Id);
+        _discoveryProviders = (discoveryProviders ?? []).ToDictionary(provider => provider.Engine);
         _logger = logger;
         _time = time ?? TimeProvider.System;
         _staging = staging;
@@ -49,6 +52,74 @@ public sealed partial class DatabaseRestorePipeline : IDatabaseRestorePipeline
         _providers.TryGetValue(request.Engine, out var provider);
         _storages.TryGetValue(request.Storage, out var storage);
         return new DatabaseRestoreExecution(request, provider, storage, tracker, _logger, _time, _staging).RunAsync(cancellationToken);
+    }
+    public async Task<DatabaseRestorePipelineResult> RunDiscoveryAsync(
+        RestoreDiscoveryRequest request,
+        IProgress<RestoreProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var startedAt = _time.GetUtcNow();
+        var tracker = new RestoreStageTracker(progress, _time);
+        tracker.Enter(RestoreExecutionStage.Preparing);
+
+        if (!_discoveryProviders.TryGetValue(request.Engine, out var provider))
+        {
+            return new DatabaseRestorePipelineResult
+            {
+                Status = DatabaseRestoreStatus.Failed,
+                FinalStage = RestoreExecutionStage.Failed,
+                Failure = new RestorePipelineFailure(RestoreAgentFailureCodes.UnsupportedCapability, RestoreExecutionStage.Preparing,
+                    "unsupported-engine", "The agent does not support discovery for this database engine."),
+                TargetState = DatabaseRestoreTargetState.NotModified,
+                StartedAt = startedAt,
+                FinishedAt = _time.GetUtcNow()
+            };
+        }
+
+        try
+        {
+            var discovery = await provider.DiscoverAsync(request.Connection, request.Credential, cancellationToken).ConfigureAwait(false);
+            tracker.Enter(RestoreExecutionStage.Completed);
+            return new DatabaseRestorePipelineResult
+            {
+                Status = DatabaseRestoreStatus.Succeeded,
+                FinalStage = RestoreExecutionStage.Completed,
+                TargetState = DatabaseRestoreTargetState.NotModified,
+                Discovery = discovery,
+                StartedAt = startedAt,
+                FinishedAt = _time.GetUtcNow()
+            };
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            tracker.Enter(RestoreExecutionStage.Cancelled);
+            return new DatabaseRestorePipelineResult
+            {
+                Status = DatabaseRestoreStatus.Cancelled,
+                FinalStage = RestoreExecutionStage.Cancelled,
+                Failure = new RestorePipelineFailure(RestoreAgentFailureCodes.Cancelled, RestoreExecutionStage.Preparing,
+                    "cancelled", "Discovery was cancelled."),
+                TargetState = DatabaseRestoreTargetState.NotModified,
+                StartedAt = startedAt,
+                FinishedAt = _time.GetUtcNow()
+            };
+        }
+        catch (Exception exception)
+        {
+            LogStageFailed(_logger, exception, RestoreExecutionStage.Preparing, RestoreAgentFailureCodes.DatabaseUnavailable, exception.GetType().Name);
+            tracker.Enter(RestoreExecutionStage.Failed);
+            return new DatabaseRestorePipelineResult
+            {
+                Status = DatabaseRestoreStatus.Failed,
+                FinalStage = RestoreExecutionStage.Failed,
+                Failure = new RestorePipelineFailure(RestoreAgentFailureCodes.DatabaseUnavailable, RestoreExecutionStage.Preparing,
+                    "discovery-failed", "Could not discover instances on the database server."),
+                TargetState = DatabaseRestoreTargetState.NotModified,
+                StartedAt = startedAt,
+                FinishedAt = _time.GetUtcNow()
+            };
+        }
     }
 
     [LoggerMessage(EventId = 200, Level = LogLevel.Warning,

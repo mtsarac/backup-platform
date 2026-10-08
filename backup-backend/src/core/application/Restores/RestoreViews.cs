@@ -20,6 +20,6 @@ public sealed record RestoreAttemptView(Guid Id, int Number, string Status, Date
 public sealed record RestoreView(Guid Id, Guid ArtifactId, Guid ReplicaId, Guid AgentId, string Status, string Mode, string OverwritePolicy, string SourceAccess, string DatabaseName,
     RestoreTargetView Target, RestoreOptionsView Options, DateTimeOffset CreatedAt, DateTimeOffset? StartedAt, DateTimeOffset? CompletedAt, DateTimeOffset? CancellationRequestedAt,
     string? FailureCode, string? Reason, string? TargetState, string? TargetStateSummary, RestoreProgressView Progress, bool ReplicaPinned, RestoreTaskResult? Result,
-    IReadOnlyList<RestoreAttemptView> Attempts);
+    IReadOnlyList<RestoreAttemptView> Attempts, string Purpose = "Execution", Guid? PrecheckId = null);
 
 public sealed record RestorePageView(IReadOnlyList<RestoreView> Items, long TotalCount, int Page, int PageSize);

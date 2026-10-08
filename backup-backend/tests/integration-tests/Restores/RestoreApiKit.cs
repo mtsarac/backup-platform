@@ -47,6 +47,13 @@ internal sealed class RestoreApiScenario : IAsyncDisposable
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    public async Task SyncCapabilitiesAsync(EnrolledAgent agent, params string[] capabilities)
+    {
+        using var response = await World.SyncCapabilitiesAsync(agent,
+            AgentWorld.CapabilitySnapshot(capabilities.Select(capability => AgentWorld.CapabilityReport(capability)).ToArray()));
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     /// <summary>An enrolled sibling agent of the same tenant, optionally able to restore.</summary>
     public async Task<EnrolledAgent> AddAgentAsync(bool restoreCapable = true)
     {
@@ -97,7 +104,7 @@ internal sealed class RestoreApiScenario : IAsyncDisposable
     // ---- the browser side ----
 
     public static object Body(Guid agentId, string databaseName = "Restored", string? mode = null, string? confirmOverwrite = null, Guid? replicaId = null,
-        object? options = null, object? target = null) => new
+        object? options = null, object? target = null, Guid? precheckId = null) => new
         {
             agentId,
             replicaId,
@@ -105,7 +112,8 @@ internal sealed class RestoreApiScenario : IAsyncDisposable
             databaseName,
             mode,
             confirmOverwrite,
-            options
+            options,
+            precheckId
         };
 
     public object Body(string databaseName = "Restored", string? mode = null, string? confirmOverwrite = null, Guid? replicaId = null, object? options = null, EnrolledAgent? agent = null) =>
@@ -127,6 +135,27 @@ internal sealed class RestoreApiScenario : IAsyncDisposable
     public async Task<JsonElement> StartAsync(Guid artifactId, object? body = null, string? key = null)
     {
         using var response = await StartRawAsync(artifactId, body ?? Body(), key ?? Guid.NewGuid().ToString("N"));
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        var view = AgentWorld.ReadJson(response);
+        Assert.Equal($"{Root}/restores/{view.GetProperty("id").GetGuid()}", response.Headers.Location!.OriginalString);
+        return view;
+    }
+
+    public async Task<HttpResponseMessage> StartPreparationRawAsync(Guid artifactId, string purpose, object body, string? key = "prep-1",
+        BrowserSession? session = null, string? root = null)
+    {
+        var browser = session ?? Admin;
+        using var csrf = await browser.Client.GetAsync("/api/auth/antiforgery");
+        using var request = new HttpRequestMessage(HttpMethod.Post, (root ?? Root) + $"/backup-artifacts/{artifactId}/restore-{purpose}");
+        request.Headers.Add("X-CSRF-TOKEN", AgentWorld.ReadJson(csrf).GetProperty("requestToken").GetString());
+        if (key is not null) request.Headers.Add("Idempotency-Key", key);
+        request.Content = JsonContent.Create(body);
+        return await browser.Client.SendAsync(request);
+    }
+
+    public async Task<JsonElement> StartPreparationAsync(Guid artifactId, string purpose = "precheck", object? body = null, string? key = null)
+    {
+        using var response = await StartPreparationRawAsync(artifactId, purpose, body ?? Body(), key ?? Guid.NewGuid().ToString("N"));
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         var view = AgentWorld.ReadJson(response);
         Assert.Equal($"{Root}/restores/{view.GetProperty("id").GetGuid()}", response.Headers.Location!.OriginalString);
@@ -157,12 +186,12 @@ internal sealed class RestoreApiScenario : IAsyncDisposable
     // ---- the agent side ----
 
     /// <summary>One poll; the restore task if the poll carried one. Fails if it carried anything else besides a deletion.</summary>
-    public async Task<RestoreTask?> PollRestoreAsync(EnrolledAgent? agent = null)
+    public async Task<RestoreTask?> PollRestoreAsync(EnrolledAgent? agent = null, string taskType = "database-restore")
     {
         using var response = await World.PollAsync(agent ?? Agent);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var tasks = AgentWorld.ReadJson(response).GetProperty("tasks").EnumerateArray().ToList();
-        var restore = tasks.Where(task => task.GetProperty("type").GetString() == "database-restore").ToList();
+        var restore = tasks.Where(task => task.GetProperty("type").GetString() == taskType).ToList();
         if (restore.Count == 0) return null;
         var envelope = Assert.Single(restore);
         var snapshot = envelope.GetProperty("restore");
@@ -170,8 +199,8 @@ internal sealed class RestoreApiScenario : IAsyncDisposable
         return new RestoreTask(snapshot.GetProperty("operationId").GetGuid(), snapshot.GetProperty("attemptId").GetGuid(), snapshot.GetProperty("leaseToken").GetGuid(), snapshot);
     }
 
-    public async Task<RestoreTask> MustPollRestoreAsync(EnrolledAgent? agent = null) =>
-        await PollRestoreAsync(agent) ?? throw new Xunit.Sdk.XunitException("The agent was expected to receive a restore but the poll carried none.");
+    public async Task<RestoreTask> MustPollRestoreAsync(EnrolledAgent? agent = null, string taskType = "database-restore") =>
+        await PollRestoreAsync(agent, taskType) ?? throw new Xunit.Sdk.XunitException($"The agent was expected to receive {taskType} but the poll carried none.");
 
     public Task<HttpResponseMessage> AgentCallAsync(Guid attemptId, string action, object body, EnrolledAgent? agent = null)
     {

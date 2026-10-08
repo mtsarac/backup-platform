@@ -9,6 +9,16 @@ namespace BackupPlatform.Application.Restores;
 public static class RestoreAgentCapability
 {
     public const string Identifier = "mssql.restore.database";
+    public const string PrecheckIdentifier = "mssql.restore.precheck";
+    public const string DiscoveryIdentifier = "mssql.restore.discovery";
+
+    public static string ForPurpose(RestorePurpose purpose) => purpose switch
+    {
+        RestorePurpose.Execution => Identifier,
+        RestorePurpose.Precheck => PrecheckIdentifier,
+        RestorePurpose.Discovery => DiscoveryIdentifier,
+        _ => throw new ArgumentException("Unknown restore purpose.")
+    };
 }
 
 /// <summary>
@@ -16,7 +26,8 @@ public static class RestoreAgentCapability
 /// database yet: the store decides eligibility under its locks.
 /// </summary>
 public sealed record RestoreCommand(TenantId TenantId, Guid ArtifactId, Guid? ReplicaId, AgentId AgentId, RestoreTarget Target, string DatabaseName,
-    RestoreMode Mode, bool OverwriteConfirmed, RestoreOptions Options, string IdempotencyKey, string RequestFingerprint, Guid? RequestedByUserId, DateTimeOffset Now);
+    RestoreMode Mode, bool OverwriteConfirmed, RestoreOptions Options, string IdempotencyKey, string RequestFingerprint, Guid? RequestedByUserId, DateTimeOffset Now,
+    RestorePurpose Purpose = RestorePurpose.Execution, Guid? PrecheckId = null);
 
 public enum RestoreCreateOutcome
 {
@@ -35,7 +46,8 @@ public enum RestoreCreateOutcome
     /// <summary>No replica may serve this restore; <see cref="RestoreCreateResult.Rejection"/> says why.</summary>
     SourceRejected,
     /// <summary>The same Idempotency-Key was used with a different request.</summary>
-    IdempotencyConflict
+    IdempotencyConflict,
+    PrecheckRejected
 }
 
 public sealed record RestoreCreateResult(RestoreCreateOutcome Outcome, RestoreOperation? Operation = null, RestoreSourceRejection? Rejection = null);
@@ -82,7 +94,7 @@ public interface IRestoreStore
     /// Pending: withdrawn at once (Cancelled, target NotModified, pin released). Leased or Running: the request is recorded and delivered to the agent on its next
     /// lease renewal. Terminal: no change. Null when the operation does not exist in the tenant.
     /// </summary>
-    Task<RestoreOperation?> RequestCancellationAsync(TenantId tenantId, Guid restoreId, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<RestoreOperation?> RequestCancellationAsync(TenantId tenantId, Guid restoreId, DateTimeOffset now, CancellationToken cancellationToken, Guid? requestedByUserId = null);
 
     /// <summary>
     /// Claims the agent's oldest Pending restore. Expires the agent's stale leases and unclaimed restores first, and hands out nothing while the agent
