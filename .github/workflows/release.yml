@@ -157,7 +157,7 @@ jobs:
           | \`backup-frontend-${VERSION}.tar.gz\` | Static web UI; serve it on the same origin as the backend |
 
           Verify downloads: \`sha256sum --check SHA256SUMS.txt\`. The binaries are not code-signed.
-          Agent.Host has no enrollment command in this release; see the repository README, "Current MVP scope".
+          Agent enrollment uses the \`BackupPlatform.Agent.Host enroll\` CLI and the web wizard (Windows service or Linux owner-only store).
           EOF
           args=(--repo "$GITHUB_REPOSITORY" --draft --verify-tag --title "$TAG" --notes-file notes.md --generate-notes)
           if [ "$PRERELEASE" = true ]; then args+=(--prerelease); fi
