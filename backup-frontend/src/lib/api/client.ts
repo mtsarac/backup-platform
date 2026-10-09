@@ -2,7 +2,7 @@ import ky from 'ky'
 
 export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '/api').replace(/\/$/, '')
 const http = ky.create({ credentials: 'include', retry: 0, timeout: 30_000, throwHttpErrors: false, headers: { Accept: 'application/json' } })
-type ErrorBody = { error?: string; code?: string; reason?: string; field?: string; errors?: Record<string, string[]>; activeRunId?: string }
+type ErrorBody = { error?: string; code?: string; reason?: string; field?: string; errors?: Record<string, string[]>; activeRunId?: string; sessionId?: string; permission?: string }
 export class ApiError extends Error {
   readonly status: number
   readonly code?: string
@@ -10,6 +10,8 @@ export class ApiError extends Error {
   readonly field?: string
   readonly fields: Record<string, string>
   readonly activeRunId?: string
+  readonly sessionId?: string
+  readonly permission?: string
   constructor(status: number, body: ErrorBody = {}) {
     super(`API request failed (${status})`)
     this.name = 'ApiError'
@@ -18,6 +20,8 @@ export class ApiError extends Error {
     this.reason = body.reason
     this.field = body.field
     this.activeRunId = body.activeRunId
+    this.sessionId = body.sessionId
+    this.permission = body.permission
     // Do not surface backend exception/message text. Validation values are stable codes.
     this.fields = Object.fromEntries(Object.entries(body.errors ?? {}).map(([field]) => [field, 'invalid_request']))
     if (body.field) this.fields[body.field] = body.code ?? 'invalid_request'

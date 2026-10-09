@@ -2,12 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import * as api from '@/features/platform/api'
+import * as supportApi from '@/features/platform/support/api'
 import { paged, renderPlatform } from '@/features/platform/test-utils'
 import type { PlatformAuditEntry, PlatformMembership, PlatformTenantDetail, PlatformUser } from '@/features/platform/types'
 import { ApiError } from '@/lib/api/client'
 import { PlatformTenantDetailPage } from './platform-tenant-detail-page'
 
 vi.mock('@/features/platform/api')
+vi.mock('@/features/platform/support/api')
 
 const tenant: PlatformTenantDetail = { tenantId: 'tenant-a', name: 'Acme A.Ş.', memberCount: 2, enabledBackupJobs: 5, agents: { total: 4, online: 2, offline: 1, unknown: 0, disabled: 1, revoked: 0 }, enrollment: { enabled: true, changedAt: '2026-10-05T09:00:00Z' } }
 const ayse: PlatformMembership = { userId: 'user-1', displayName: 'Ayşe Yılmaz', loginIdentifier: 'ayse', role: 'Owner' }
@@ -29,6 +31,7 @@ beforeEach(() => {
   vi.mocked(api.getUsers).mockResolvedValue(paged(users))
   vi.mocked(api.getAudit).mockResolvedValue(paged([audit]))
   vi.mocked(api.getTenantSubscription).mockResolvedValue({ tenantId: 'tenant-a', subscription: null })
+  vi.mocked(supportApi.getSessions).mockResolvedValue(paged([]))
 })
 
 describe('platform tenant detail', () => {
@@ -37,6 +40,8 @@ describe('platform tenant detail', () => {
     expect(await screen.findByRole('heading', { name: 'Acme A.Ş.' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: "Bu tenant'ın Agent'ları" })).toHaveAttribute('href', '/platform/agents?tenantId=tenant-a')
     expect(screen.getByRole('link', { name: 'Tüm audit kayıtları' })).toHaveAttribute('href', '/platform/audit?tenantId=tenant-a')
+    expect(await screen.findByRole('heading', { name: 'Destek erişimi' })).toBeInTheDocument()
+    expect(supportApi.getSessions).toHaveBeenCalledWith({ tenantId: 'tenant-a', page: 1, pageSize: 5 }, expect.any(AbortSignal))
     expect(await screen.findByText('Ayşe Yılmaz')).toBeInTheDocument()
     expect(screen.getByText('Can Demir')).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Ayşe Yılmaz rolü' })).toHaveValue('Owner')

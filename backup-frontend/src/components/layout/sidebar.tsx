@@ -23,7 +23,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
       {onClose && <Button variant="ghost" size="icon" onClick={onClose} aria-label="Menüyü kapat"><X className="size-5" /></Button>}
     </div>
     <nav aria-label="Ana navigation" className="flex-1 overflow-auto p-3"><div className="mb-1 px-3 text-xs font-medium text-text-muted">Yönetim</div>
-      <ul className="space-y-0.5">{[...items, ...(canAdmin ? [{ label: 'Enrollment', path: '/enrollment', icon: KeyRound }] : [])].map(item => <li key={item.path}>
+      <ul className="space-y-0.5">{[...items, ...(canAdmin ? [{ label: 'Enrollment', path: '/enrollment', icon: KeyRound }, { label: 'Support Access', path: '/support-access', icon: ShieldCheck }] : [])].map(item => <li key={item.path}>
         <NavLink to={`/tenants/${tenantId}${item.path}`} end={!item.path} onClick={onClose} className={({ isActive }) => `flex items-center gap-3 rounded-md px-3 py-2 text-sm ${isActive ? 'border-l-2 border-primary bg-accent/50 font-medium text-accent-foreground' : 'text-text hover:bg-surface-2'}`}><item.icon className="size-4" />{item.label}</NavLink>
       </li>)}</ul>
       {user?.isPlatformAdmin && <><div className="mb-1 mt-4 px-3 text-xs font-medium text-text-muted">Platform</div>

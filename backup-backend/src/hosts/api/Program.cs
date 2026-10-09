@@ -1,6 +1,7 @@
 using BackupPlatform.Api.Endpoints;
 using BackupPlatform.Api.Downloads;
 using BackupPlatform.Api.Push;
+using BackupPlatform.Api.Support;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -37,6 +38,8 @@ app.MapBackupTaskEndpoints();
 app.MapRestoreEndpoints();
 app.MapRestoreTaskEndpoints();
 app.MapDownloadEndpoints();
+app.MapSupportEndpoints();
+app.MapSupportTransparencyEndpoints();
 app.MapAgentDownloadEndpoints();
 app.MapAgentHub();
 

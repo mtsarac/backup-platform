@@ -42,9 +42,15 @@ internal sealed class RestoreOperationConfiguration : IEntityTypeConfiguration<R
                 "(\"Status\" <> 'Succeeded' OR (((\"Purpose\" = 'Execution' AND \"TargetState\" = 'Online') OR (\"Purpose\" <> 'Execution' AND \"TargetState\" = 'NotModified')) AND \"FailureCode\" IS NULL)) AND " +
                 "(\"Status\" NOT IN ('Failed','Cancelled','AgentLost') OR (\"TargetState\" <> 'Online' AND \"FailureCode\" IS NOT NULL))");
             table.HasCheckConstraint("ck_restore_operations_result", "\"ResultJson\" IS NULL OR \"CompletedAt\" IS NOT NULL");
+            // Whatever the application does, a restore requested through a support session can only create a new database and names its requester.
+            table.HasCheckConstraint("ck_restore_operations_support", "\"SupportSessionId\" IS NULL OR (\"Mode\" = 'NewDatabase' AND \"RequestedByUserId\" IS NOT NULL)");
         });
         builder.Property(operation => operation.Purpose).HasConversion<string>().HasMaxLength(16).HasDefaultValue(RestorePurpose.Execution).IsRequired();
         builder.Property(operation => operation.PrecheckId);
+        builder.Property(operation => operation.SupportSessionId);
+        builder.HasOne<BackupPlatform.Domain.Support.SupportAccessSession>().WithMany().HasForeignKey(operation => new { operation.SupportSessionId, operation.TenantId })
+            .HasPrincipalKey(support => new { support.Id, support.TenantId }).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(operation => operation.SupportSessionId).HasDatabaseName("ix_restore_operations_support").HasFilter("\"SupportSessionId\" IS NOT NULL");
         builder.Property(operation => operation.SourceAccess).HasConversion<string>().HasMaxLength(16).IsRequired();
         builder.Property(operation => operation.Mode).HasConversion<string>().HasMaxLength(24).IsRequired();
         builder.Property(operation => operation.OverwritePolicy).HasConversion<string>().HasMaxLength(16).IsRequired();

@@ -33,6 +33,9 @@ import { PlatformUsersPage } from './pages/platform/platform-users-page'
 import { PlatformAgentsPage } from './pages/platform/platform-agents-page'
 import { PlatformAgentDetailPage } from './pages/platform/platform-agent-detail-page'
 import { PlatformAuditPage } from './pages/platform/platform-audit-page'
+import { PlatformSupportSessionsPage } from './pages/platform/platform-support-sessions-page'
+import { PlatformSupportSessionPage } from './pages/platform/platform-support-session-page'
+import { SupportAccessPage } from './pages/support-access/support-access-page'
 
 function AppRoutes() {
   const { isAuthenticated, isLoading, error, refresh } = useAuth()
@@ -58,6 +61,7 @@ function AppRoutes() {
         <Route path="artifacts/:id/restore" element={<RestoreWizardPage />} />
         <Route path="restores" element={<RestoresPage />} />
         <Route path="restores/:id" element={<RestoreDetailPage />} />
+        <Route path="support-access" element={<SupportAccessPage />} />
         <Route path="*" element={<p>Sayfa bulunamadı.</p>} />
       </Routes></AppShell></TenantProvider>} />
       <Route path="/platform" element={<PlatformAdminRoute />}>
@@ -72,6 +76,8 @@ function AppRoutes() {
           <Route path="users" element={<PlatformUsersPage />} />
           <Route path="agents" element={<PlatformAgentsPage />} />
           <Route path="audit" element={<PlatformAuditPage />} />
+          <Route path="support-sessions" element={<PlatformSupportSessionsPage />} />
+          <Route path="support-sessions/:sessionId" element={<PlatformSupportSessionPage />} />
           <Route path="*" element={<p>Sayfa bulunamadı.</p>} />
         </Route>
       </Route>

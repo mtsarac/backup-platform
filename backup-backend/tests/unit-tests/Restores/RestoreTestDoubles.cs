@@ -76,7 +76,7 @@ internal sealed class FakeRestoreStore : IRestoreStore
         return Task.FromResult(OnList(tenantId, query));
     }
 
-    public Task<RestoreOperation?> RequestCancellationAsync(TenantId tenantId, Guid restoreId, DateTimeOffset now, CancellationToken cancellationToken, Guid? requestedByUserId = null)
+    public Task<RestoreOperation?> RequestCancellationAsync(TenantId tenantId, Guid restoreId, DateTimeOffset now, CancellationToken cancellationToken, Guid? requestedByUserId = null, Guid? supportSessionId = null)
     {
         Calls.Add(nameof(RequestCancellationAsync));
         Cancellations.Add((tenantId, restoreId, now));

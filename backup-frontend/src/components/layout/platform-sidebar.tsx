@@ -12,6 +12,7 @@ const items = [
   { label: 'Plans', path: platformPaths.plans, icon: Layers, end: false },
   { label: 'Users', path: platformPaths.users, icon: Users, end: false },
   { label: 'Agents', path: platformPaths.agents(), icon: Monitor, end: false },
+  { label: 'Support Sessions', path: platformPaths.supportSessions, icon: ShieldCheck, end: false },
   { label: 'Audit', path: platformPaths.audit(), icon: ScrollText, end: false },
 ]
 

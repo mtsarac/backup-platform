@@ -23,6 +23,9 @@ internal sealed class DownloadSessionConfiguration : IEntityTypeConfiguration<Do
             .HasPrincipalKey(artifact => new { artifact.Id, artifact.TenantId }).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<BackupReplica>().WithMany().HasForeignKey(session => new { session.ReplicaId, session.TenantId })
             .HasPrincipalKey(replica => new { replica.Id, replica.TenantId }).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<BackupPlatform.Domain.Support.SupportAccessSession>().WithMany().HasForeignKey(session => new { session.SupportSessionId, session.TenantId })
+            .HasPrincipalKey(support => new { support.Id, support.TenantId }).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(session => session.SupportSessionId).HasDatabaseName("ix_download_sessions_support").HasFilter("\"SupportSessionId\" IS NOT NULL");
         builder.HasIndex(session => session.ReplicaId).HasDatabaseName("ix_download_sessions_active").HasFilter("\"ReleasedAt\" IS NULL");
         builder.HasIndex(session => session.ExpiresAt).HasDatabaseName("ix_download_sessions_expiry").HasFilter("\"ReleasedAt\" IS NULL");
         builder.HasIndex(session => new { session.TenantId, session.AgentId, session.State });

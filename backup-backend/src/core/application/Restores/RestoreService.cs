@@ -20,7 +20,9 @@ public enum RestoreStartOutcome
     AgentCannotRestore,
     SourceRejected,
     IdempotencyConflict,
-    PrecheckRejected
+    PrecheckRejected,
+    /// <summary>The support session that authorized the request ended, expired or lacks the permission by the time the request was committed.</summary>
+    SupportAccessDenied
 }
 
 /// <summary>
@@ -43,25 +45,29 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
     /// </summary>
     /// <exception cref="InvalidRestoreRequestException">A request field is invalid.</exception>
     /// <exception cref="ArgumentException">The Idempotency-Key is not a valid bounded key.</exception>
-    public Task<RestoreStartResult> StartAsync(TenantId tenantId, Guid artifactId, string idempotencyKey, Guid? requestedByUserId, StartRestoreRequest request, CancellationToken cancellationToken) =>
-        CreateAsync(tenantId, artifactId, idempotencyKey, requestedByUserId, request, RestorePurpose.Execution, cancellationToken);
+    public Task<RestoreStartResult> StartAsync(TenantId tenantId, Guid artifactId, string idempotencyKey, Guid? requestedByUserId, StartRestoreRequest request, CancellationToken cancellationToken,
+        Guid? supportSessionId = null) =>
+        CreateAsync(tenantId, artifactId, idempotencyKey, requestedByUserId, request, RestorePurpose.Execution, cancellationToken, supportSessionId);
 
-    public Task<RestoreStartResult> PrecheckAsync(TenantId tenantId, Guid artifactId, string idempotencyKey, Guid? requestedByUserId, StartRestorePrecheckRequest request, CancellationToken cancellationToken) =>
+    public Task<RestoreStartResult> PrecheckAsync(TenantId tenantId, Guid artifactId, string idempotencyKey, Guid? requestedByUserId, StartRestorePrecheckRequest request, CancellationToken cancellationToken,
+        Guid? supportSessionId = null) =>
         CreateAsync(tenantId, artifactId, idempotencyKey, requestedByUserId,
-            new StartRestoreRequest(request.AgentId, request.Target, request.DatabaseName, request.ReplicaId, request.Mode, Options: request.Options), RestorePurpose.Precheck, cancellationToken);
+            new StartRestoreRequest(request.AgentId, request.Target, request.DatabaseName, request.ReplicaId, request.Mode, Options: request.Options), RestorePurpose.Precheck, cancellationToken, supportSessionId);
 
     public Task<RestoreStartResult> DiscoverAsync(TenantId tenantId, Guid artifactId, string idempotencyKey, Guid? requestedByUserId, StartRestoreDiscoveryRequest request, CancellationToken cancellationToken) =>
         CreateAsync(tenantId, artifactId, idempotencyKey, requestedByUserId,
             new StartRestoreRequest(request.AgentId, request.Target, string.Empty, request.ReplicaId), RestorePurpose.Discovery, cancellationToken);
 
     private async Task<RestoreStartResult> CreateAsync(TenantId tenantId, Guid artifactId, string idempotencyKey, Guid? requestedByUserId, StartRestoreRequest request,
-        RestorePurpose purpose, CancellationToken cancellationToken)
+        RestorePurpose purpose, CancellationToken cancellationToken, Guid? supportSessionId = null)
     {
         if (!BackupInputValidation.IsValidKey(idempotencyKey)) throw new ArgumentException("A bounded Idempotency-Key is required.");
         if (artifactId == Guid.Empty) throw new InvalidRestoreRequestException("artifactId");
         var validated = RestoreInputValidation.Validate(artifactId, request, purpose);
+        // Through a support session a restore can only create a new database: this is checked here and again by the domain and by a database constraint.
+        if (supportSessionId is not null && validated.Mode != RestoreMode.NewDatabase) throw new InvalidRestoreRequestException("mode", "replace_forbidden");
         var command = new RestoreCommand(tenantId, artifactId, request.ReplicaId, new AgentId(request.AgentId), validated.Target, validated.DatabaseName, validated.Mode,
-            validated.OverwriteConfirmed, validated.Options, idempotencyKey, validated.Fingerprint, requestedByUserId, time.GetUtcNow(), purpose, request.PrecheckId);
+            validated.OverwriteConfirmed, validated.Options, idempotencyKey, validated.Fingerprint, requestedByUserId, time.GetUtcNow(), purpose, request.PrecheckId, supportSessionId);
         var result = await store.CreateAsync(command, cancellationToken);
         return result.Outcome switch
         {
@@ -77,6 +83,8 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
                 Message: "This Idempotency-Key was already used for a different restore request."),
             RestoreCreateOutcome.PrecheckRejected => new RestoreStartResult(RestoreStartOutcome.PrecheckRejected, Code: "precheck_rejected",
                 Message: "A successful precheck matching this restore request is required."),
+            RestoreCreateOutcome.SupportAccessDenied => new RestoreStartResult(RestoreStartOutcome.SupportAccessDenied, Code: "support_access_denied",
+                Detail: Domain.Support.SupportAccessDenials.Code(result.SupportDenial!.Value), Message: "The support session no longer allows this restore."),
             _ => new RestoreStartResult(RestoreStartOutcome.SourceRejected, Code: RejectionCode(result.Rejection!.Value), Message: RejectionMessage(result.Rejection.Value))
         };
     }
@@ -94,9 +102,9 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         return new RestorePageView([.. page.Items.Select(operation => ToView(operation, includeResult: false))], page.TotalCount, page.Page, page.PageSize);
     }
 
-    public async Task<RestoreView?> CancelAsync(TenantId tenantId, Guid restoreId, CancellationToken cancellationToken, Guid? requestedByUserId = null)
+    public async Task<RestoreView?> CancelAsync(TenantId tenantId, Guid restoreId, CancellationToken cancellationToken, Guid? requestedByUserId = null, Guid? supportSessionId = null)
     {
-        var operation = await store.RequestCancellationAsync(tenantId, restoreId, time.GetUtcNow(), cancellationToken, requestedByUserId);
+        var operation = await store.RequestCancellationAsync(tenantId, restoreId, time.GetUtcNow(), cancellationToken, requestedByUserId, supportSessionId);
         return operation is null ? null : ToView(operation, includeResult: true);
     }
 

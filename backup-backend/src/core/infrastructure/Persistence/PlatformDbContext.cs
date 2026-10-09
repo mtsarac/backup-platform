@@ -10,6 +10,7 @@ using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Downloads;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Restores;
+using BackupPlatform.Domain.Support;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Identity;
 using BackupPlatform.Infrastructure.ManagedService;
@@ -77,6 +78,7 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<RestoreReplicaPin> RestoreReplicaPins => Set<RestoreReplicaPin>();
     public DbSet<DownloadSession> DownloadSessions => Set<DownloadSession>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+    public DbSet<SupportAccessSession> SupportAccessSessions => Set<SupportAccessSession>();
     public DbSet<Plan> Plans => Set<Plan>();
     public DbSet<TenantSubscription> TenantSubscriptions => Set<TenantSubscription>();
     public DbSet<QuotaPolicy> QuotaPolicies => Set<QuotaPolicy>();
@@ -186,6 +188,10 @@ public sealed class PlatformDbContext : DbContext
             if (!IsPlatformOperations && entry.Entity is Plan or TenantSubscription or QuotaPolicy or TenantStorageUsage or QuotaReservation)
             {
                 throw new InvalidOperationException("Plan, subscription and quota writes require explicit platform operations.");
+            }
+            if (!IsPlatformOperations && entry.Entity is SupportAccessSession)
+            {
+                throw new InvalidOperationException("Support access sessions require explicit platform operations.");
             }
             if (!IsPlatformOperations && entry.Entity is AuditEvent)
             {

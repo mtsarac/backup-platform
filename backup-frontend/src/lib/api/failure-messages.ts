@@ -90,6 +90,19 @@ const messages: Record<string, string> = {
   quota_policy_disabled: 'Bu kota politikası devre dışı; plana atanamaz.',
   default_policy_required: 'Varsayılan kota politikası devre dışı bırakılamaz.',
   unsupported_scope_kind: 'Bu kapsam türü henüz desteklenmiyor.',
+  support_access_denied: 'Bu destek oturumu üzerinden erişim reddedildi.',
+  session_expired: 'Destek oturumunun süresi doldu.',
+  session_closed: 'Destek oturumu kapatıldı.',
+  session_revoked: 'Destek erişimi geri alındı.',
+  permission_missing: 'Destek oturumunda bu işlem için gereken izin yok.',
+  not_session_owner: 'Yalnızca destek oturumunu açan PlatformAdmin müşteri verilerine erişebilir ve oturumu kapatabilir.',
+  replace_forbidden: 'Destek erişimi yalnızca yeni Database geri yüklemeye izin verir; mevcut Database üzerine yazılamaz.',
+  active_session_exists: 'Bu tenant için zaten etkin bir destek oturumunuz var.',
+  support_unavailable: 'Destek erişimi güvenli audit kaydı oluşturulamadığı için kullanılamıyor. Hiçbir erişim açılmadı.',
+  support_session_not_found: 'Destek oturumu bulunamadı.',
+  session_not_active: 'Destek oturumu artık etkin değil.',
+  idempotency_conflict: 'Bu istek anahtarı farklı bir işlem için kullanıldı. Formu kapatıp yeniden açın.',
+  view_required: 'Download ve Restore izinleri Backup metadata görüntüleme iznini gerektirir.',
 }
 // Codes whose text must win over the generic 403/404 wording.
 const statusSpecificCodes: Record<string, true> = { tenant_not_found: true, user_not_found: true, membership_not_found: true, agent_not_found: true, plan_not_found: true, quota_policy_not_found: true, subscription_not_found: true, platform_admin_required: true, enrollment_disabled: true }
@@ -101,6 +114,8 @@ export function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 401) return 'Oturumunuz sona erdi. Yeniden giriş yapın.'
     const code = error.reason ?? error.code
+    if (error.code === 'support_access_denied') return failureMessage(code)
+    if (error.code === 'support_session_not_found' || error.code === 'not_session_owner' || error.code === 'replace_forbidden' || error.code === 'support_unavailable') return failureMessage(code)
     if ((error.status === 403 || error.status === 404) && code && Object.hasOwn(statusSpecificCodes, code)) return messages[code]
     if (error.status === 403) return 'Bu işlem için yetkiniz yok.'
     if (error.status === 404) return 'Kayıt bulunamadı veya bu tenant altında erişilemiyor.'

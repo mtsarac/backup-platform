@@ -2,13 +2,18 @@ import type { ReactNode } from 'react'
 import { StatusPill } from '@/components/data/status-pill'
 import { failureMessage } from '@/lib/api/failure-messages'
 import { artifactDate, artifactSize, artifactState, deletionReason } from './format'
-import type { BackupArtifact } from './types'
+import type { BackupArtifact, BackupReplica } from './types'
 
 function Metadata({ label, children }: { label: string; children: ReactNode }) {
   return <div className="min-w-0"><dt className="text-sm text-text-muted">{label}</dt><dd className="mt-1 break-words text-sm text-text">{children}</dd></div>
 }
 
-export function ArtifactDetails({ artifact }: { artifact: BackupArtifact }) {
+/** Metadata presentation also accepts the deliberately redacted platform support projection. */
+interface ArtifactPresentation extends Omit<BackupArtifact, 'attemptId' | 'replicas'> {
+  replicas: (Pick<BackupReplica, 'id' | 'storageProvider' | 'sizeBytes' | 'checksum' | 'checksumAlgorithm' | 'verificationState' | 'verificationMethod' | 'createdAt' | 'verifiedAt' | 'status' | 'usable' | 'deleteRequestedAt' | 'deleteAfter' | 'deletedAt'> & Partial<BackupReplica> & { executionLocation?: string })[]
+}
+
+export function ArtifactDetails({ artifact }: { artifact: ArtifactPresentation }) {
   return (
     <div className="space-y-6">
       {artifact.state === 'Deleted' && (
@@ -70,7 +75,7 @@ export function ArtifactDetails({ artifact }: { artifact: BackupArtifact }) {
             {replica.status === 'Deleted' && <p className="mb-4 text-sm text-text-muted">Fiziksel dosya kaldırıldı. Silinme: {artifactDate(replica.deletedAt)}</p>}
             {replica.deleteFailureCode && !replica.waitingForAgent && <p role="status" className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">Silme tamamlanamadı: {failureMessage(replica.deleteFailureCode)}</p>}
             <dl className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              <Metadata label="Depolama hedefi">{replica.storageTarget}</Metadata>
+              {replica.storageTarget !== undefined && <Metadata label="Depolama hedefi">{replica.storageTarget}</Metadata>}
               <Metadata label="Oluşturulma">{artifactDate(replica.createdAt)}</Metadata>
               <Metadata label="Boyut">{artifactSize(replica.sizeBytes)}</Metadata>
               <Metadata label="Kullanılabilir">{replica.status === 'Deleted' ? 'Hayır · geçmiş kaydı' : replica.usable ? 'Evet · dosya korunuyor' : 'Hayır'}</Metadata>
@@ -79,12 +84,12 @@ export function ArtifactDetails({ artifact }: { artifact: BackupArtifact }) {
               <Metadata label="Doğrulama zamanı">{artifactDate(replica.verifiedAt)}</Metadata>
               <Metadata label="Checksum"><code className="break-all">{replica.checksum}</code></Metadata>
               <Metadata label="Checksum algoritması">{replica.checksumAlgorithm}</Metadata>
-              <Metadata label="Silme yürütücüsü">{replica.deletionExecutor === 'Agent' ? 'Agent' : 'Backend'}</Metadata>
+              <Metadata label="Silme yürütücüsü">{(replica.executionLocation ?? replica.deletionExecutor) === 'Agent' ? 'Agent' : 'Backend'}</Metadata>
               <Metadata label="Silme istendi">{artifactDate(replica.deleteRequestedAt)}</Metadata>
               <Metadata label="Fiziksel silme en erken">{artifactDate(replica.deleteAfter)}</Metadata>
-              <Metadata label="Sonraki silme denemesi">{artifactDate(replica.deleteNextAttemptAt)}</Metadata>
-              <Metadata label="Silme denemesi">{replica.deleteAttempts}</Metadata>
-              <Metadata label="Silme nedeni">{deletionReason(replica.deleteReason)}</Metadata>
+              {replica.deleteNextAttemptAt !== undefined && <Metadata label="Sonraki silme denemesi">{artifactDate(replica.deleteNextAttemptAt)}</Metadata>}
+              {replica.deleteAttempts !== undefined && <Metadata label="Silme denemesi">{replica.deleteAttempts}</Metadata>}
+              {replica.deleteReason !== undefined && <Metadata label="Silme nedeni">{deletionReason(replica.deleteReason)}</Metadata>}
             </dl>
           </article>
         ))}

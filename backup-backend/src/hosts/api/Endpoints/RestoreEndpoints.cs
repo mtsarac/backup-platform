@@ -1,5 +1,6 @@
 using BackupPlatform.Agents.Capabilities;
 using BackupPlatform.Agents.Connectivity;
+using BackupPlatform.Api.Restores;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Application.Identity;
@@ -105,84 +106,10 @@ public static class RestoreEndpoints
         }
     }
 
-    private static async Task<IResult> TargetsAsync(
-        Guid artifactId,
-        ITenantContext tenant,
-        IBackupRetentionStore retentionStore,
-        IBackupUiStore uiStore,
-        AgentConnectivityQueryService agentService,
-        TimeProvider time,
-        CancellationToken cancellationToken)
+    private static async Task<IResult> TargetsAsync(Guid artifactId, ITenantContext tenant, RestoreTargetsReader reader, CancellationToken cancellationToken)
     {
-        var now = time.GetUtcNow();
-        var artifactRecord = await retentionStore.GetArtifactAsync(tenant.TenantId!, artifactId, cancellationToken);
-        if (artifactRecord is null)
-        {
-            return Results.NotFound(new { error = "artifact_not_found", message = "The backup does not exist." });
-        }
-
-        var artifact = artifactRecord.Artifact;
-        var agentViews = await agentService.ListAsync(tenant.TenantId!, AgentConnectivityFilter.All, cancellationToken);
-        var jobs = await uiStore.ListJobsAsync(tenant.TenantId!, now, cancellationToken);
-
-        var agents = agentViews.Select(view =>
-        {
-            var targetAgentId = new AgentId(view.Agent.Id.Value);
-            var canRestore = view.Capabilities?.Capabilities.Any(c => c.Identifier == RestoreAgentCapability.Identifier && c.Support == CapabilitySupport.Supported) == true;
-            var canPrecheck = view.Capabilities?.Capabilities.Any(c => c.Identifier == RestoreAgentCapability.PrecheckIdentifier && c.Support == CapabilitySupport.Supported) == true;
-            var canDiscover = view.Capabilities?.Capabilities.Any(c => c.Identifier == RestoreAgentCapability.DiscoveryIdentifier && c.Support == CapabilitySupport.Supported) == true;
-
-            var selectedReplica = RestoreSourceEvaluator.SelectReplica(artifact, targetAgentId, now);
-            RestoreSourceRejection? rejection = selectedReplica is null
-                ? RestoreSourceEvaluator.Explain(artifact, targetAgentId, now)
-                : null;
-
-            var sourceAccess = selectedReplica is not null
-                ? RestoreSourceEvaluator.Evaluate(artifact, selectedReplica, targetAgentId, now).Access?.ToString()
-                : null;
-
-            return new
-            {
-                agentId = view.Agent.Id.Value,
-                hostName = view.Agent.HostName,
-                status = view.Agent.Status.ToString(),
-                connectivity = view.Connectivity.ToString().ToLowerInvariant(),
-                canRestore,
-                canPrecheck,
-                canDiscover,
-                sourceEligible = selectedReplica is not null,
-                sourceAccess,
-                rejectionCode = rejection is not null ? RestoreService.RejectionCode(rejection.Value) : null,
-                rejectionMessage = rejection is not null ? RestoreService.RejectionMessage(rejection.Value) : null
-            };
-        }).ToList();
-
-        var targets = jobs
-            .Where(j => j.Configuration is not null && !string.IsNullOrWhiteSpace(j.Configuration.Host))
-            .Select(j => new
-            {
-                jobId = j.Id,
-                jobName = j.Name,
-                agentId = j.AgentId,
-                database = j.Configuration.Database,
-                target = new RestoreTargetView(
-                    j.Configuration.Host,
-                    j.Configuration.Port,
-                    j.Configuration.IntegratedSecurity,
-                    j.Configuration.DatabaseCredentialReference,
-                    j.Configuration.Encrypt,
-                    j.Configuration.TrustServerCertificate)
-            }).ToList();
-
-        return Results.Ok(new
-        {
-            artifactId = artifact.Id,
-            sourceDatabase = artifactRecord.DatabaseName ?? string.Empty,
-            backupType = artifact.BackupType,
-            sizeBytes = artifact.SizeBytes,
-            agents,
-            targets
-        });
+        var targets = await reader.ReadAsync(tenant.TenantId!, artifactId, cancellationToken);
+        return targets is null ? Results.NotFound(new { error = "artifact_not_found", message = "The backup does not exist." }) : Results.Ok(targets);
     }
 
     private static async Task<IResult> ListAsync(string? status, Guid? artifactId, Guid? agentId, int? page, int? pageSize, ITenantContext tenant, RestoreService service,

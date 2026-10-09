@@ -232,3 +232,21 @@ runtime files. `windows/Download-Smoke.ps1` configures only the onboarding-owned
 protects its temporary SQL environment-injection registry key and deletes the credential input file. Uninstall removes that owned key.
 No 20 GB throughput/RSS benchmark is claimed by this small real-backup smoke.
 
+
+## Support access verification (M6)
+
+```bash
+scripts/integration/run-support-tests.sh
+scripts/integration/run-support-tests.sh --postgres --no-build
+scripts/frontend/run-restore-smoke.sh
+```
+
+The focused runner selects the support-session domain tests and the PostgreSQL support lifecycle, data-access (metadata, download, fail-closed audit,
+tenant transparency) and restore subsets only, through the shared TRX verifier; the full suites are not run.
+
+The browser smoke reuses `run-restore-smoke.sh` unchanged: it already builds a real verified Central backup of disposable MSSQL data, a Linux Agent that can
+restore, a tenant Owner and the `smoke.admin` PlatformAdmin, who has **no membership** in that tenant. Drive Platform → Tenants → the smoke tenant →
+**Support Access → Open Session** as `smoke.admin` (credentials in `SMOKE_CREDENTIALS_FILE`): with ViewBackupMetadata + DownloadBackup + RestoreBackup,
+browse the backup, download the `.bak` natively and compare its SHA-256 with the artifact checksum, run a precheck and a NewDatabase restore into a new
+database name, and read the session's Audit tab. Close the session and confirm a new download is refused. The same admin without a session, and a session
+of another tenant, must be denied. Never aim a smoke restore at an existing database.

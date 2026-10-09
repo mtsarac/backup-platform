@@ -5,6 +5,8 @@ export const platformPaths = {
   plans: '/platform/plans',
   storage: '/platform/storage',
   quotaPolicies: '/platform/quota-policies',
+  supportSessions: '/platform/support-sessions',
+  supportSession: (sessionId: string) => `/platform/support-sessions/${encodeURIComponent(sessionId)}`,
   users: '/platform/users',
   agents: (tenantId?: string) => tenantId ? `/platform/agents?tenantId=${encodeURIComponent(tenantId)}` : '/platform/agents',
   agent: (tenantId: string, agentId: string) => `/platform/tenants/${encodeURIComponent(tenantId)}/agents/${encodeURIComponent(agentId)}`,

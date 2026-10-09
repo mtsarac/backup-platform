@@ -21,6 +21,9 @@ using BackupPlatform.Agents.Management;
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Application.Identity;
 using BackupPlatform.Api.Push;
+using BackupPlatform.Application.Support;
+using BackupPlatform.Api.Support;
+using BackupPlatform.Infrastructure.Support;
 using BackupPlatform.Application.Tenancy;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Identity;
@@ -61,6 +64,7 @@ public static class SecurityServiceCollectionExtensions
         services.AddScoped<ITenantEntitlementReader, PostgreSqlTenantEntitlementReader>();
         services.AddScoped<ManagedServiceAdministrationService>();
         AddQuota(services);
+        AddSupportAccess(services);
         services.AddScoped<BrowserCookieEvents>();
         AddBrowserAuthentication(services);
         AddAgentSecurity(services);
@@ -120,6 +124,19 @@ public static class SecurityServiceCollectionExtensions
         services.AddHostedService(provider => provider.GetRequiredService<StorageUsageMaintenanceWorker>());
     }
 
+    /// <summary>Support access: sessions, the gate every support operation passes, the transparency reads, and the bookkeeping worker. Settings come from <c>Support</c>.</summary>
+    private static void AddSupportAccess(IServiceCollection services)
+    {
+        services.TryAddSingleton(provider => provider.GetRequiredService<IConfiguration>().GetSection("Support").Get<SupportAccessOptions>() ?? new SupportAccessOptions());
+        services.TryAddSingleton<ISupportApprovalPolicy, ConfiguredSupportApprovalPolicy>();
+        services.AddScoped<ISupportAccessStore, PostgreSqlSupportAccessStore>();
+        services.AddScoped<ISupportQueryStore, PostgreSqlSupportQueryStore>();
+        services.AddScoped<SupportAccessService>();
+        services.AddScoped<SupportRequestGate>();
+        services.AddScoped<SupportRestoreDeps>();
+        services.AddHostedService<SupportSessionExpiryWorker>();
+    }
+
     private static DbContextOptions<PlatformDbContext> CreateDatabaseOptions(IServiceProvider services)
     {
         var configuration = services.GetRequiredService<IConfiguration>();
@@ -177,6 +194,7 @@ public static class SecurityServiceCollectionExtensions
         });
         services.AddScoped<IRestoreStore, PostgreSqlRestoreStore>();
         services.AddScoped<RestoreService>();
+        services.AddScoped<RestoreTargetsReader>();
         services.AddSingleton<StaleRestoreDetector>();
         services.AddHostedService(provider => provider.GetRequiredService<StaleRestoreDetector>());
     }

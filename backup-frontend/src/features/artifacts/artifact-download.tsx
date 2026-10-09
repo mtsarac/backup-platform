@@ -1,21 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
-import { API_BASE_URL } from '@/lib/api/client'
+import { nativeDownloadUrl } from './native-download-url'
 import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
 import { getDownloadAvailability, getDownloadStatus, prepareDownload } from './api'
 import { artifactSize } from './format'
 
-function nativeDownloadUrl(path: string | undefined): string | undefined {
-  if (!path) return undefined
-  try {
-    const base = new URL(`${API_BASE_URL}/`, window.location.origin)
-    const url = new URL(path, base)
-    return url.origin === base.origin && url.pathname.startsWith(base.pathname) ? url.href : undefined
-  } catch {
-    return undefined
-  }
-}
 export function ArtifactDownload({ tenantId, artifactId, canAdmin, eligible }: { tenantId: string; artifactId: string; canAdmin: boolean; eligible: boolean }) {
   // Remount the controller on scope/permission changes: pending requests cannot initiate a download in a new scope.
   return <DownloadController key={`${tenantId}:${artifactId}:${canAdmin}:${eligible}`} tenantId={tenantId} artifactId={artifactId} canAdmin={canAdmin} eligible={eligible} />

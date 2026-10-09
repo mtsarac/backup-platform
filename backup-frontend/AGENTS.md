@@ -38,6 +38,9 @@ backup-frontend/
 | Pages | `src/pages/*` | Thin screens; `clients/` = Agents and Enrollment, `backups/` = Backup Runs. |
 | Shared UI | `src/components/data/*`, `src/components/ui/*`, `src/components/layout/*` | `DataTable` (`wrap` columns), `QueryState`, `StatusPill`, `Badge`, `Button`. |
 
+Platform Support Access (M6) lives in `src/features/platform/support/` and `src/pages/platform/platform-support-{sessions,session}-page.tsx`. Tenant detail opens a time-boxed session with reason, permissions and in-memory idempotency keys; customer metadata/download/NewDatabase restore endpoints are session-scoped with both session and tenant IDs in query keys. Closing, revoking, expiry and detail-route unmount remove customer data caches while retaining session/audit; logout clears the existing `['platform']` root. The read-only Owner/Admin transparency page is `src/pages/support-access/support-access-page.tsx` with tenant-scoped hooks in `src/features/support-access/`. Support restore targets are the customer's real environment, not an isolated support environment, and Start requires a matching successful Precheck plus explicit acknowledgement.
+
+
 ## CODE MAP
 | Symbol | Type | Location | Role |
 |--------|------|----------|------|

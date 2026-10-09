@@ -4,11 +4,12 @@ using BackupPlatform.Domain.Identity;
 
 namespace BackupPlatform.Application.Downloads;
 
-public sealed record DownloadCreateCommand(TenantId TenantId, Guid ArtifactId, Guid ReplicaId, Guid UserId, string Filename, DateTimeOffset Now, TimeSpan Lifetime);
+/// <summary><paramref name="SupportSessionId"/> set means the download is authorized by a support session instead of tenant membership: the store judges that session (owner, active, DownloadBackup) under its row lock.</summary>
+public sealed record DownloadCreateCommand(TenantId TenantId, Guid ArtifactId, Guid ReplicaId, Guid UserId, string Filename, DateTimeOffset Now, TimeSpan Lifetime, Guid? SupportSessionId = null);
 public sealed record DownloadTransition(DownloadState ExpectedState, DownloadState State, string? ExpectedOwner, string? Owner,
     DateTimeOffset Now, TimeSpan? LeaseDuration = null, long Bytes = 0, string? FailureCode = null);
 
-/// <summary>Every lifecycle write is atomic with its audit. Create locks artifact then replica; transitions fence the session row.</summary>
+/// <summary>Every lifecycle write is atomic with its audit. Create locks (support session shared when there is one) artifact then replica; transitions fence the session row.</summary>
 public interface IDownloadStore
 {
     Task<BackupArtifact?> GetArtifactAsync(TenantId tenantId, Guid artifactId, CancellationToken cancellationToken);

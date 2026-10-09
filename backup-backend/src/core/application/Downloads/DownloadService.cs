@@ -34,7 +34,9 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
         return new DownloadAvailability(available, available ? null : replicas.FirstOrDefault()?.Reason ?? "replica_unavailable", replicas, artifact.ArtifactChecksum, artifact.SizeBytes);
     }
 
-    public async Task<PreparedDownload?> PrepareAsync(TenantId tenantId, Guid artifactId, Guid userId, PrepareDownloadRequest request, CancellationToken cancellationToken)
+    /// <exception cref="BackupPlatform.Domain.Support.SupportAccessDeniedException">A support session was given and it can no longer authorize the download.</exception>
+    public async Task<PreparedDownload?> PrepareAsync(TenantId tenantId, Guid artifactId, Guid userId, PrepareDownloadRequest request, CancellationToken cancellationToken,
+        Guid? supportSessionId = null)
     {
         var availability = await GetAvailabilityAsync(tenantId, artifactId, cancellationToken);
         if (availability is null) return null;
@@ -44,15 +46,22 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
         if (selected is null) throw new DownloadUnavailableException(request.ReplicaId is null ? availability.Reason! : "replica_not_found");
         if (!selected.Available) throw new DownloadUnavailableException(selected.Reason!);
         var filename = $"backup-{artifactId:N}.bak";
-        var session = await store.CreateAsync(new DownloadCreateCommand(tenantId, artifactId, selected.ReplicaId, userId, filename, time.GetUtcNow(), SessionLifetime), cancellationToken);
+        var session = await store.CreateAsync(new DownloadCreateCommand(tenantId, artifactId, selected.ReplicaId, userId, filename, time.GetUtcNow(), SessionLifetime, supportSessionId), cancellationToken);
         if (session is null) throw new DownloadUnavailableException("replica_unavailable");
-        return new PreparedDownload(session.Id, $"/api/tenants/{tenantId.Value}/backup-artifacts/{artifactId}/downloads/{session.Id}/content", filename, session.Checksum, session.SizeBytes);
+        var url = supportSessionId is { } support
+            ? $"/api/platform/support-sessions/{support}/artifacts/{artifactId}/downloads/{session.Id}/content"
+            : $"/api/tenants/{tenantId.Value}/backup-artifacts/{artifactId}/downloads/{session.Id}/content";
+        return new PreparedDownload(session.Id, url, filename, session.Checksum, session.SizeBytes);
     }
 
-    public async Task<DownloadSession?> GetOwnedAsync(TenantId tenantId, Guid artifactId, Guid sessionId, Guid userId, CancellationToken cancellationToken)
+    /// <summary>
+    /// The caller's own download of this artifact. A download belongs to the channel it was created through: an ordinary route never serves a support download
+    /// (even to the same user) and a support route serves only the downloads of that support session, so a claim cannot be carried across.
+    /// </summary>
+    public async Task<DownloadSession?> GetOwnedAsync(TenantId tenantId, Guid artifactId, Guid sessionId, Guid userId, CancellationToken cancellationToken, Guid? supportSessionId = null)
     {
         var session = await store.GetAsync(tenantId, sessionId, cancellationToken);
-        if (session is null || session.ArtifactId != artifactId || session.UserId != userId) return null;
+        if (session is null || session.ArtifactId != artifactId || session.UserId != userId || session.SupportSessionId != supportSessionId) return null;
         if (!session.IsTerminal && !session.IsPinned(time.GetUtcNow()))
         {
             session = await store.ExpireSessionAsync(tenantId, sessionId, time.GetUtcNow(), cancellationToken);

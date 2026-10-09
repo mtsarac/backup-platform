@@ -8,8 +8,11 @@ using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Capabilities;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Restores;
+using BackupPlatform.Domain.Support;
+using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Infrastructure.Backups;
 using BackupPlatform.Infrastructure.Persistence;
+using BackupPlatform.Infrastructure.Support;
 using Microsoft.EntityFrameworkCore;
 
 namespace BackupPlatform.Infrastructure.Restores;
@@ -46,6 +49,14 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         var (tenantId, artifactId, agentId) = (command.TenantId, command.ArtifactId, command.AgentId);
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        if (command.SupportSessionId is { } supportId)
+        {
+            // First lock of all (shared): a restore through a support session gets through before the session can end, or is refused after. A close takes the same order.
+            var (session, denial) = await SupportSessionGate.LockAndEvaluateAsync(context, supportId, tenantId, new UserId(command.RequestedByUserId!.Value),
+                SupportPermissions.RestoreBackup, command.Now, cancellationToken);
+            if (session is null) return new RestoreCreateResult(RestoreCreateOutcome.ArtifactNotFound);
+            if (denial is { } refused) return new RestoreCreateResult(RestoreCreateOutcome.SupportAccessDenied, SupportDenial: refused);
+        }
         if (!await context.BackupArtifacts.AnyAsync(artifact => artifact.TenantId == tenantId && artifact.Id == artifactId, cancellationToken))
             return new RestoreCreateResult(RestoreCreateOutcome.ArtifactNotFound);
         if (!await PostgreSqlBackupRunStore.LockAgentAsync(context, tenantId, agentId, cancellationToken))
@@ -56,7 +67,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
                 operation.IdempotencyKey == command.IdempotencyKey, cancellationToken);
         if (existing is not null)
         {
-            return string.Equals(existing.RequestFingerprint, command.RequestFingerprint, StringComparison.Ordinal)
+            return string.Equals(existing.RequestFingerprint, command.RequestFingerprint, StringComparison.Ordinal) && existing.SupportSessionId == command.SupportSessionId
                 ? new RestoreCreateResult(RestoreCreateOutcome.Replayed, existing)
                 : new RestoreCreateResult(RestoreCreateOutcome.IdempotencyConflict);
         }
@@ -71,7 +82,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         {
             var precheck = await context.RestoreOperations.AsNoTracking()
                 .SingleOrDefaultAsync(operation => operation.TenantId == tenantId && operation.Id == precheckId, cancellationToken);
-            if (!MatchesPrecheck(precheck, command)) return new RestoreCreateResult(RestoreCreateOutcome.PrecheckRejected);
+            if (!MatchesPrecheck(precheck, command) || precheck!.SupportSessionId != command.SupportSessionId) return new RestoreCreateResult(RestoreCreateOutcome.PrecheckRejected);
         }
 
         // Lock order: agent (held), artifact, replica. Artifact-level mutators (manual delete, cancel) take the artifact first and then write replicas; taking the replica
@@ -81,7 +92,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         if (selection.Rejection is { } rejection) return new RestoreCreateResult(RestoreCreateOutcome.SourceRejected, Rejection: rejection);
 
         var operation = new RestoreOperation(Guid.NewGuid(), tenantId, artifactId, selection.Replica!.Id, selection.Access, agentId, command.Target, command.DatabaseName, command.Mode,
-            command.OverwriteConfirmed, command.Options, command.IdempotencyKey, command.RequestFingerprint, command.RequestedByUserId, command.Now, command.Purpose, command.PrecheckId);
+            command.OverwriteConfirmed, command.Options, command.IdempotencyKey, command.RequestFingerprint, command.RequestedByUserId, command.Now, command.Purpose, command.PrecheckId, command.SupportSessionId);
         operation.QueueFirstAttempt(Guid.NewGuid(), command.Now);
         context.RestoreOperations.Add(operation);
         AddAudit(context, operation, command.Now, command.RequestedByUserId, command.Purpose switch
@@ -89,7 +100,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
             RestorePurpose.Precheck => "restore.precheck.requested",
             RestorePurpose.Discovery => "restore.discovery.requested",
             _ => "restore.requested"
-        });
+        }, operation.SupportSessionId);
         if (command.OverwriteConfirmed) AddAudit(context, operation, command.Now, command.RequestedByUserId, "restore.overwrite_confirmed");
         try { await context.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateException exception) when (PostgreSqlBackupRunStore.IsUniqueViolation(exception)) { return null; }
@@ -149,6 +160,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         var operations = context.RestoreOperations.AsNoTracking().Where(operation => operation.TenantId == tenantId && operation.Purpose == RestorePurpose.Execution);
+        if (query.SupportSessionId is { } supportSessionId) operations = operations.Where(operation => operation.SupportSessionId == supportSessionId);
         if (query.Status is { } status) operations = operations.Where(operation => operation.Status == status);
         if (query.ArtifactId is { } artifactId) operations = operations.Where(operation => operation.ArtifactId == artifactId);
         if (query.AgentId is { } agentGuid)
@@ -165,11 +177,12 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         return new RestorePage(rows, totalCount, query.Page, query.PageSize);
     }
 
-    public async Task<RestoreOperation?> RequestCancellationAsync(TenantId tenantId, Guid restoreId, DateTimeOffset now, CancellationToken cancellationToken, Guid? requestedByUserId = null)
+    public async Task<RestoreOperation?> RequestCancellationAsync(TenantId tenantId, Guid restoreId, DateTimeOffset now, CancellationToken cancellationToken, Guid? requestedByUserId = null,
+        Guid? supportSessionId = null)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        var owner = await context.RestoreOperations.AsNoTracking().Where(operation => operation.TenantId == tenantId && operation.Id == restoreId)
-            .Select(operation => operation.AgentId).SingleOrDefaultAsync(cancellationToken);
+        var owner = await context.RestoreOperations.AsNoTracking().Where(operation => operation.TenantId == tenantId && operation.Id == restoreId &&
+            (supportSessionId == null || operation.SupportSessionId == supportSessionId)).Select(operation => operation.AgentId).SingleOrDefaultAsync(cancellationToken);
         if (owner is null) return null;
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         if (!await PostgreSqlBackupRunStore.LockAgentAsync(context, tenantId, owner, cancellationToken)) return null;
@@ -178,7 +191,8 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         if (operation is null) return null;
         var changed = !operation.IsTerminal && operation.CancellationRequestedAt is null;
         operation.RequestCancellation(now);
-        if (changed) AddAudit(context, operation, now, requestedByUserId, "restore.cancel_requested");
+        if (changed) AddAudit(context, operation, now, requestedByUserId, "restore.cancel_requested", supportSessionId);
+        AddSupportTerminalAudits(context);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return operation;
@@ -198,6 +212,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         var pending = await Operations(context).Where(operation => operation.TenantId == tenantId && operation.AgentId == agentId && operation.Status == RestoreStatus.Pending)
             .OrderBy(operation => operation.CreatedAt).ThenBy(operation => operation.Id).ToListAsync(cancellationToken);
         foreach (var operation in pending) operation.ExpireUnclaimed(now, unclaimedExpiry);
+        AddSupportTerminalAudits(context);
         await context.SaveChangesAsync(cancellationToken);
         // A restore never runs beside another job of its agent: one live restore attempt, or one live (unexpired) backup attempt, and nothing is handed out.
         var busy = held.Any(operation => !operation.IsTerminal) || await context.BackupRunAttempts.AsNoTracking().AnyAsync(attempt => attempt.TenantId == tenantId &&
@@ -226,6 +241,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
             }
             next.Complete(token, now, new RestoreCompletion(RestoreStatus.Failed, RestoreFailureCodes.ReplicaUnavailable, RestoreTargetState.NotModified, null));
         }
+        AddSupportTerminalAudits(context);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return claim;
@@ -342,6 +358,8 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         try { mutate(operation); }
         catch (InvalidOperationException) { return BackupMutationResult.Conflict; }
         catch (ArgumentException) { return BackupMutationResult.Conflict; }
+        // The terminal audit of a support restore is written with the change that ends it, whether or not its support session is still open.
+        AddSupportTerminalAudits(context);
         try { await context.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateConcurrencyException) { return BackupMutationResult.Conflict; }
         await transaction.CommitAsync(cancellationToken);
@@ -361,15 +379,53 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         (command.ReplicaId is null || command.ReplicaId == precheck.ReplicaId) &&
         SuccessfulPrecheck(RestoreInputValidation.ReadResult(precheck.ResultJson), command.Options);
 
-    private static void AddAudit(PlatformDbContext context, RestoreOperation operation, DateTimeOffset now, Guid? actorId, string action)
+    private static void AddAudit(PlatformDbContext context, RestoreOperation operation, DateTimeOffset now, Guid? actorId, string action, Guid? supportSessionId = null)
     {
         if (actorId is not { } actor) return;
-        context.AuditEvents.Add(AuditEvent.Record(now, new UserId(actor), AuditActorKind.TenantAdministrator, action, operation.TenantId,
-            "restore", operation.Id.ToString("D"), new Dictionary<string, object?>
-            {
-                ["artifactId"] = operation.ArtifactId, ["replicaId"] = operation.ReplicaId, ["agentId"] = operation.AgentId.Value,
-                ["purpose"] = operation.Purpose.ToString(), ["mode"] = operation.Mode.ToString(), ["precheckId"] = operation.PrecheckId
-            }));
+        var details = new Dictionary<string, object?>
+        {
+            ["artifactId"] = operation.ArtifactId, ["replicaId"] = operation.ReplicaId, ["agentId"] = operation.AgentId.Value,
+            ["purpose"] = operation.Purpose.ToString(), ["mode"] = operation.Mode.ToString(), ["precheckId"] = operation.PrecheckId
+        };
+        if (supportSessionId is not { } support)
+        {
+            context.AuditEvents.Add(AuditEvent.Record(now, new UserId(actor), AuditActorKind.TenantAdministrator, action, operation.TenantId,
+                "restore", operation.Id.ToString("D"), details));
+            return;
+        }
+        // Support access: the real PlatformAdmin as actor, the support session, and the restore as the resource. No target host or credential is recorded.
+        details["supportSessionId"] = support;
+        details["result"] = "accepted";
+        var supportAction = action switch
+        {
+            "restore.precheck.requested" => SupportAuditActions.RestorePrecheckRequested,
+            "restore.cancel_requested" => SupportAuditActions.RestoreCancelRequested,
+            _ => SupportAuditActions.RestoreRequested
+        };
+        context.AuditEvents.Add(AuditEvent.Record(now, new UserId(actor), AuditActorKind.PlatformAdmin, supportAction, operation.TenantId,
+            SupportAuditActions.RestoreTargetType, operation.Id.ToString("D"), details, support));
+    }
+
+    /// <summary>
+    /// A support restore that reaches a terminal state in this save gets its terminal audit in the same save, by whoever ends it (the agent's report, an expired
+    /// lease, a withdrawal, a cancellation) and whether or not its support session is still open: the end of a restore is never conditional on the session.
+    /// </summary>
+    internal static void AddSupportTerminalAudits(PlatformDbContext context)
+    {
+        foreach (var entry in context.ChangeTracker.Entries<RestoreOperation>().ToList())
+        {
+            var operation = entry.Entity;
+            if (entry.State != EntityState.Modified || operation.SupportSessionId is not { } support || operation.Purpose != RestorePurpose.Execution || !operation.IsTerminal) continue;
+            if (entry.OriginalValues.GetValue<RestoreStatus>(nameof(RestoreOperation.Status)) is RestoreStatus.Succeeded or RestoreStatus.Failed or RestoreStatus.Cancelled or RestoreStatus.AgentLost) continue;
+            if (operation.RequestedByUserId is not { } actor) continue;
+            context.AuditEvents.Add(AuditEvent.Record(operation.CompletedAt ?? DateTimeOffset.UtcNow, new UserId(actor), AuditActorKind.PlatformAdmin,
+                operation.Status == RestoreStatus.Succeeded ? SupportAuditActions.RestoreCompleted : SupportAuditActions.RestoreFailed, operation.TenantId,
+                SupportAuditActions.RestoreTargetType, operation.Id.ToString("D"), new Dictionary<string, object?>
+                {
+                    ["supportSessionId"] = support, ["artifactId"] = operation.ArtifactId, ["result"] = operation.Status.ToString(),
+                    ["targetState"] = operation.TargetState?.ToString(), ["failure"] = operation.FailureCode
+                }, support));
+        }
     }
 
     private static IQueryable<RestoreOperation> Operations(PlatformDbContext context) =>
