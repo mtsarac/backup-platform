@@ -4,6 +4,7 @@ import { errorMessage } from '@/lib/api/failure-messages'
 import { FormDialog } from '@/features/platform/plans/form-dialog'
 import { inputClass, selectClass } from '@/features/platform/styles'
 import { parseQuotaScopeLabels, parseStorageConnectionIds, type ScopeValuesResult } from '@/features/storage/scope-input'
+import { QuotaConnectionPicker } from '@/features/storage-connections/quota-connection-picker'
 import type { AccountingMode, EnforcementMode, QuotaPolicy, ScopeKind, ScopeSelector } from '@/features/storage/types'
 import { useCreateQuotaPolicy, useUpdateQuotaPolicy } from './hooks'
 
@@ -75,6 +76,8 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
     } else {
       includedStorageScopes = [{ kind: 'all' }]
     }
+    // Editing the first selector must not discard additional selectors already attached to the policy.
+    includedStorageScopes.push(...(policy?.includedStorageScopes?.slice(1) ?? []))
 
     if (isEditing) {
       update.mutate(
@@ -217,7 +220,7 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
             <option value="providerType">Provider Türü (ProviderType - örn. central, local)</option>
             <option value="ownershipType">Sahiplik Türü (OwnershipType - PlatformManaged / TenantManaged)</option>
             <option value="quotaScope">Kota Kapsamı (QuotaScope - örn. managed, tenant)</option>
-            <option value="storageConnection">Depolama Bağlantısı (StorageConnection - GUID)</option>
+            <option value="storageConnection">Depolama Bağlantısı (StorageConnection)</option>
           </select>
         </label>
 
@@ -283,20 +286,22 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
         )}
 
         {scopeKind === 'storageConnection' && (
-          <label className="block text-xs text-text-muted">
-            Depolama bağlantısı kimlikleri (GUID, virgülle veya satırlarla ayırın):
-            <textarea
-              className={`mt-1 ${inputClass} font-mono`}
-              rows={3}
-              value={connectionIds}
-              onChange={(e) => setConnectionIds(e.target.value)}
-              placeholder="3f2b8c1e-0d4a-4b6e-9a7c-5e1d2f3a4b5c"
-              aria-invalid={scopeError !== null}
+          <div className="space-y-2">
+            <label className="block text-xs text-text-muted">
+              Depolama bağlantısı kimlikleri (her satıra veya virgülle bir GUID):
+              <textarea
+                className={`mt-1 h-20 font-mono ${inputClass}`}
+                value={connectionIds}
+                onChange={(e) => setConnectionIds(e.target.value)}
+                placeholder={'3f2b8c1e-0d4a-4b6e-9a7c-5e1d2f3a4b5c\n11111111-2222-3333-4444-555555555555'}
+                aria-invalid={scopeError !== null}
+              />
+            </label>
+            <QuotaConnectionPicker
+              values={connectionIds.split(/[,\n]+/).map(v => v.trim()).filter(Boolean)}
+              onChange={(selected) => setConnectionIds(selected.join('\n'))}
             />
-            <span className="mt-1 block text-[11px] text-text-muted">
-              Yalnızca bu bağlantılara ait kopyalar kotaya dahil edilir. Kimlikler Depolama hedefleri sayfasından alınabilir.
-            </span>
-          </label>
+          </div>
         )}
       </div>
 

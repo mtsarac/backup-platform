@@ -176,6 +176,7 @@ public sealed class StorageConnection : ITenantOwned
         var next = Snapshot(configuration);
         if (next.Count == Configuration.Count && next.All(pair => Configuration.TryGetValue(pair.Key, out var current) && current == pair.Value)) return false;
         Configuration = next;
+        InvalidateTest();
         Touch(now);
         return true;
     }
@@ -217,6 +218,7 @@ public sealed class StorageConnection : ITenantOwned
         SecretReference = reference;
         SecretFieldNames = names;
         SecretUpdatedAt = BackupGuard.Timestamp(now);
+        InvalidateTest();
         Touch(now);
         return previous;
     }
@@ -229,6 +231,7 @@ public sealed class StorageConnection : ITenantOwned
         SecretReference = null;
         SecretFieldNames = [];
         SecretUpdatedAt = BackupGuard.Timestamp(now);
+        InvalidateTest();
         Touch(now);
         return previous;
     }
@@ -241,6 +244,13 @@ public sealed class StorageConnection : ITenantOwned
         LastTestStatus = status;
         LastTestCode = code;
         LastTestedAt = BackupGuard.Timestamp(now);
+    }
+
+    private void InvalidateTest()
+    {
+        LastTestStatus = null;
+        LastTestCode = null;
+        LastTestedAt = null;
     }
 
     /// <summary>Configuration keys are short identifiers (also the secret field names).</summary>

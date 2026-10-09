@@ -2,6 +2,7 @@ using BackupPlatform.BackupProviders.MSSQL.Capabilities;
 using BackupPlatform.Contracts.Agents;
 using BackupPlatform.Contracts.Downloads;
 using BackupPlatform.Contracts.Restores;
+using BackupPlatform.Contracts.Backups;
 
 namespace BackupPlatform.Agent.Host;
 
@@ -38,6 +39,7 @@ public sealed class AgentCapabilityCatalog
         Supported(RestoreTaskTypes.PrecheckCapability),
         Supported(RestoreTaskTypes.DiscoveryCapability),
         Supported(DownloadTaskTypes.Capability),
+        Supported(TaskStorageProtocol.Capability),
         // Not implemented in this product yet, whatever the SQL Server instance could do.
         Unsupported(SqlServerCapabilityIds.DifferentialBackup.Value),
         Unsupported(SqlServerCapabilityIds.LogBackup.Value)

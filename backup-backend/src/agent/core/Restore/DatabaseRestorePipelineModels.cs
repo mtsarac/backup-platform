@@ -96,6 +96,9 @@ public sealed record DatabaseRestorePipelineRequest
     /// <summary>Which registered storage provider holds the replica. It must be able to read (<see cref="StorageCapabilityIds.Read"/>).</summary>
     public StorageProviderId Storage { get; }
 
+    /// <summary>A task-scoped authenticated backend storage proxy.</summary>
+    public IStorageProvider? StorageOverride { get; init; }
+
     /// <summary>The replica's key. Must be a key of the platform's own layout whose tenant is <see cref="TenantId"/>.</summary>
     public StorageObjectKey StorageKey { get; }
     public Guid TenantId { get; }

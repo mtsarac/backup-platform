@@ -43,14 +43,15 @@ public sealed record RestoreTaskSnapshot
 public sealed record RestoreTaskSource
 {
     public string StorageProvider { get; init; } = string.Empty;
+    /// <summary>Persisted storage target; for backend-relayed SFTP, the nonempty storage connection GUID, never credentials or a remote path.</summary>
     public string StorageTarget { get; init; } = string.Empty;
     public string StorageKey { get; init; } = string.Empty;
-    /// <summary><c>Agent</c> (the replica is on the target agent's own disk) or <c>Backend</c> (central storage the agent reaches directly).</summary>
+    /// <summary><c>Agent</c> (target agent's own disk) or <c>Backend</c> (mounted central storage or backend-relayed SFTP).</summary>
     public string StorageExecutionLocation { get; init; } = string.Empty;
     public long SizeBytes { get; init; }
     public string Checksum { get; init; } = string.Empty;
     public string ChecksumAlgorithm { get; init; } = "sha256";
-    /// <summary><c>AgentLocal</c> or <c>CentralStorage</c>.</summary>
+    /// <summary><c>AgentLocal</c>, <c>CentralStorage</c>, or <c>BackendRelayed</c>; SFTP is read through the backend, which alone resolves storage credentials.</summary>
     public string Access { get; init; } = string.Empty;
 }
 

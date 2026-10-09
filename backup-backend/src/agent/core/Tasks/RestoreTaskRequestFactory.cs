@@ -10,7 +10,10 @@ namespace BackupPlatform.Agent.Core.Tasks;
 /// can never choose a staging path, and it carries no secret. A snapshot this agent cannot act on is refused here, before anything is read
 /// or changed, with the failure code the backend will show; nothing about the snapshot's content is retained in the exception.
 /// </summary>
-public sealed class RestoreTaskRequestFactory(IBackupTaskCredentialResolver credentials, IEnumerable<StagingArea> stagingAreas)
+public sealed class RestoreTaskRequestFactory(
+    IBackupTaskCredentialResolver credentials,
+    IEnumerable<StagingArea> stagingAreas,
+    ITaskStorageProviderFactory? storageFactory = null)
 {
     private const int MaxDatabaseNameLength = 128;
     private const int MaxHostLength = 253;
@@ -53,7 +56,10 @@ public sealed class RestoreTaskRequestFactory(IBackupTaskCredentialResolver cred
                 DatabaseEngineId.MsSql, connection, credential, task.DatabaseName, mode, staging, storage, key, task.TenantId,
                 task.Source.SizeBytes, checksum,
                 task.Options.TerminateActiveConnections, task.Options.VerifyChecksum, task.Options.VerifyBackup,
-                purpose: task.Purpose == "Precheck" ? RestorePipelinePurpose.Precheck : RestorePipelinePurpose.Execution);
+                purpose: task.Purpose == "Precheck" ? RestorePipelinePurpose.Precheck : RestorePipelinePurpose.Execution)
+            {
+                StorageOverride = task.Source.Access == "BackendRelayed" ? storageFactory!.CreateRestore(task) : null
+            };
         }
         catch (ArgumentException)
         {
@@ -113,14 +119,17 @@ public sealed class RestoreTaskRequestFactory(IBackupTaskCredentialResolver cred
     }
 
     /// <summary>
-    /// The replica must be one this agent can actually read as the snapshot describes it: an agent-local replica lives in the agent's own
-    /// <c>local</c> storage, a central one in the <c>central</c> storage the backend owns. A pairing that contradicts itself is refused rather than guessed.
+    /// The replica must match its access path: local disk, mounted central storage, or backend-relayed SFTP.
+    /// Contradictory pairings and a relay without its provider factory are refused rather than guessed.
     /// </summary>
-    private static bool HasValidSource(RestoreTaskSource source) =>
+    private bool HasValidSource(RestoreTaskSource source) =>
         source.SizeBytes > 0
         && string.Equals(source.ChecksumAlgorithm, "sha256", StringComparison.Ordinal)
-        && (source.Access, source.StorageProvider, source.StorageExecutionLocation) is
-            ("AgentLocal", "local", "Agent") or ("CentralStorage", "central", "Backend");
+        && ((source.Access, source.StorageProvider, source.StorageExecutionLocation) is
+            ("AgentLocal", "local", "Agent") or ("CentralStorage", "central", "Backend")
+            || (source.Access, source.StorageProvider, source.StorageExecutionLocation) is ("BackendRelayed", "sftp", "Backend")
+            && Guid.TryParse(source.StorageTarget, out var connectionId) && connectionId != Guid.Empty
+            && storageFactory is not null);
 
     private static DatabaseRestoreMode ParseMode(string mode) => mode switch
     {

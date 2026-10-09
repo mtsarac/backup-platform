@@ -16,6 +16,7 @@
     <ProjectReference Include="..\..\providers\secret\data-protection\BackupPlatform.SecretProviders.DataProtection.csproj" />
     <ProjectReference Include="..\..\providers\storage\local\BackupPlatform.StorageProviders.Local.csproj" />
     <ProjectReference Include="..\..\providers\storage\central\BackupPlatform.StorageProviders.Central.csproj" />
+    <ProjectReference Include="..\..\providers\storage\sftp\BackupPlatform.StorageProviders.Sftp.csproj" />
   </ItemGroup>
 
 

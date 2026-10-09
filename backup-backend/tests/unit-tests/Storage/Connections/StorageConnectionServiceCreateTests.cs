@@ -123,6 +123,7 @@ public sealed class StorageConnectionServiceCreateTests
 
     [Theory]
     [InlineData(TestProviders.Planned)]
+    [InlineData("google-drive")]
     [InlineData("does-not-exist")]
     [InlineData("")]
     [InlineData(null)]
@@ -143,7 +144,7 @@ public sealed class StorageConnectionServiceCreateTests
             _h.Store, StorageProviderCatalog.BuiltIn(), _h.Secrets, [], _h.Clock, Microsoft.Extensions.Logging.Abstractions.NullLogger<StorageConnectionService>.Instance);
 
         var exception = await Assert.ThrowsAsync<InvalidStorageConnectionException>(() => service.CreateAsync(
-            StorageScope.Platform, _h.Tenant, Command(StorageProviderTypes.Sftp), _h.Actor, CancellationToken.None));
+            StorageScope.Platform, _h.Tenant, Command(StorageProviderTypes.GoogleDrive), _h.Actor, CancellationToken.None));
 
         Assert.Equal("provider_not_available", exception.Code);
     }

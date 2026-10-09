@@ -20,6 +20,11 @@ public static class StorageTestCodes
     public const string IoError = "io_error";
     public const string IntegrityMismatch = "integrity_mismatch";
     public const string NotSupported = "not_supported";
+    public const string HostKeyMismatch = "host_key_mismatch";
+    public const string AuthenticationFailed = "authentication_failed";
+    public const string Timeout = "timeout";
+    public const string NetworkDenied = "network_denied";
+    public const string NetworkUnavailable = "network_unavailable";
     public const string Unexpected = "unexpected";
 }
 
@@ -95,7 +100,7 @@ public sealed class CentralConnectionTester(IBackupStorageResolver resolver) : I
         }
         catch (StorageException exception)
         {
-            return Failed(Code(exception.Kind), exception.Message);
+            return Failed(CentralConnectionTester.CodeFor(exception.Kind), exception.Message);
         }
         finally
         {
@@ -110,7 +115,7 @@ public sealed class CentralConnectionTester(IBackupStorageResolver resolver) : I
 
     private static StorageTestResult Failed(string code, string message) => new(StorageTestStatus.Failed, code, message);
 
-    private static string Code(StorageFailureKind kind) => kind switch
+    internal static string CodeFor(StorageFailureKind kind) => kind switch
     {
         StorageFailureKind.AccessDenied => StorageTestCodes.AccessDenied,
         StorageFailureKind.InvalidConfiguration => StorageTestCodes.InvalidConfiguration,
@@ -118,6 +123,76 @@ public sealed class CentralConnectionTester(IBackupStorageResolver resolver) : I
         StorageFailureKind.IntegrityMismatch => StorageTestCodes.IntegrityMismatch,
         StorageFailureKind.NotSupported => StorageTestCodes.NotSupported,
         StorageFailureKind.Io or StorageFailureKind.NotFound or StorageFailureKind.AlreadyExists => StorageTestCodes.IoError,
+        StorageFailureKind.HostKeyMismatch => StorageTestCodes.HostKeyMismatch,
+        StorageFailureKind.AuthenticationFailed => StorageTestCodes.AuthenticationFailed,
+        StorageFailureKind.Timeout => StorageTestCodes.Timeout,
+        StorageFailureKind.NetworkDenied => StorageTestCodes.NetworkDenied,
+        StorageFailureKind.NetworkUnavailable => StorageTestCodes.NetworkUnavailable,
         _ => StorageTestCodes.Unexpected
     };
+}
+
+/// <summary>
+/// Tests an SFTP connection by writing, verifying and deleting an isolated probe object inside the tenant's remote base directory.
+/// </summary>
+public sealed class SftpConnectionTester(Func<StorageConnection, ISecretProvider, IStorageProvider> factory) : IStorageConnectionTester
+{
+    public string ProviderType => StorageProviderTypes.Sftp;
+
+    public async Task<StorageTestResult> TestAsync(StorageConnection connection, ISecretProvider secrets, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        IStorageProvider provider;
+        try
+        {
+            provider = factory(connection, secrets);
+        }
+        catch (StorageException ex)
+        {
+            return new StorageTestResult(StorageTestStatus.Failed, CodeFor(ex.Kind), ex.Message);
+        }
+        catch (Exception)
+        {
+            return new StorageTestResult(StorageTestStatus.Failed, StorageTestCodes.InvalidConfiguration, "The storage connection configuration is invalid.");
+        }
+
+        var content = RandomNumberGenerator.GetBytes(64);
+        var key = new StorageObjectKey($"tenants/{connection.TenantId.Value:N}/connection-tests/{Guid.NewGuid():N}.probe");
+        var checksum = ContentChecksum.Sha256(SHA256.HashData(content));
+        var written = false;
+        try
+        {
+            await using (var stream = new MemoryStream(content, writable: false))
+            {
+                await provider.PutAsync(key, stream, new StoragePutOptions(StorageOverwritePolicy.Fail, checksum, content.Length), null, cancellationToken).ConfigureAwait(false);
+            }
+            written = true;
+            var verification = await provider.VerifyAsync(key, new StorageVerificationExpectation(content.Length, checksum), cancellationToken).ConfigureAwait(false);
+            if (verification.Status != StorageVerificationStatus.Verified)
+            {
+                return new StorageTestResult(StorageTestStatus.Failed, StorageTestCodes.IntegrityMismatch, "The probe object did not read back as written.");
+            }
+            await provider.DeleteAsync(key, cancellationToken).ConfigureAwait(false);
+            written = false;
+            if (await provider.ExistsAsync(key, cancellationToken).ConfigureAwait(false))
+            {
+                return new StorageTestResult(StorageTestStatus.Failed, StorageTestCodes.IoError, "The probe object still exists after deletion.");
+            }
+            return new StorageTestResult(StorageTestStatus.Succeeded, StorageTestCodes.Ok, "Wrote, verified and deleted a probe object.");
+        }
+        catch (StorageException ex)
+        {
+            return new StorageTestResult(StorageTestStatus.Failed, CodeFor(ex.Kind), ex.Message);
+        }
+        finally
+        {
+            if (written)
+            {
+                try { await provider.DeleteAsync(key, CancellationToken.None).ConfigureAwait(false); }
+                catch (StorageException) { }
+            }
+        }
+    }
+
+    private static string CodeFor(StorageFailureKind kind) => CentralConnectionTester.CodeFor(kind);
 }

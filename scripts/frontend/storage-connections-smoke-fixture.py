@@ -47,8 +47,8 @@ def inspect(options):
     _, providers = owner.call('GET', tenant + '/storage-providers')
     by_type = {item['providerType']: item for item in providers['items']}
     require(by_type['central']['availability'] == 'Available' and by_type['local']['availability'] == 'Available', 'Local and Central must be available providers.')
-    require(all(by_type[name]['availability'] == 'Planned' and not by_type[name]['tenantCreatable'] and not by_type[name]['capabilities'] for name in ('sftp', 'google-drive')),
-            'SFTP and Google Drive must be planned, not creatable and capability-less.')
+    require(by_type['google-drive']['availability'] == 'Planned' and not by_type['google-drive']['tenantCreatable'] and not by_type['google-drive']['capabilities'],
+            'Google Drive must remain planned, not creatable and capability-less.')
     _, listing = owner.call('GET', tenant + '/storage-connections')
     items = listing['items']
     managed = central(items)
@@ -76,7 +76,7 @@ def inspect(options):
     state['connections'] = {'managedId': managed['id'], 'localId': local['id'], 'usedBytes': quota['usedBytes']}
     write_private(options.state, state)
     print(json.dumps({'stage': stage, 'managedStorage': {'ownership': managed['ownership'], 'quotaScope': managed['quotaScope'], 'replicaCount': managed['replicaCount']},
-                      'local': local['quotaScope'], 'replicaConnectionMatches': True, 'usedBytes': quota['usedBytes'], 'plannedProviders': ['sftp', 'google-drive']}))
+                      'local': local['quotaScope'], 'replicaConnectionMatches': True, 'usedBytes': quota['usedBytes'], 'plannedProviders': ['google-drive']}))
 
 
 def checks(options):
@@ -93,10 +93,7 @@ def checks(options):
     evidence['localTest'] = result['test']['status']
     status, _ = owner.call('POST', f'{tenant}/storage-connections/{ids["managedId"]}/test', {}, expect=(409,))
     evidence['tenantTestingManaged'] = status
-    # Planned providers cannot be created; tenants cannot create platform-managed providers.
-    status, body = owner.call('POST', f'{tenant}/storage-connections', {'providerType': 'sftp', 'name': 'Fake SFTP'}, expect=(400,))
-    require(body['code'] == 'provider_not_available', 'SFTP creation must be refused as not available.')
-    evidence['sftpCreate'] = status
+    # Tenants cannot create platform-managed providers.
     status, _ = owner.call('POST', f'{tenant}/storage-connections', {'providerType': 'central', 'name': 'Mine'}, expect=(403,))
     evidence['tenantCreatesCentral'] = status
     status, _ = owner.call('PUT', f'{tenant}/storage-connections/{ids["localId"]}/secret', {'values': {'password': 'never-stored'}}, expect=(400,))
@@ -155,8 +152,8 @@ def disabled_semantics(options):
 def restore(options):
     state, owner, _ = clients(options)
     tenant = f'/api/tenants/{state["tenantId"]}'
-    artifact = state['artifacts']['central']
-    request = {'agentId': state['agents']['central'], 'target': {'host': options.sql_host, 'port': options.sql_port, 'databaseCredentialReference': 'sql_smoke', 'trustServerCertificate': True},
+    artifact = state['artifacts'][options.provider]
+    request = {'agentId': state['agents'][options.provider], 'target': {'host': options.sql_host, 'port': options.sql_port, 'databaseCredentialReference': 'sql_smoke', 'trustServerCertificate': True},
                'databaseName': options.database, 'mode': 'NewDatabase'}
     _, started = owner.call('POST', tenant + f'/backup-artifacts/{artifact["id"]}/restore', request,
                             headers={'Idempotency-Key': 'm7a-restore-' + uuid.uuid4().hex}, expect=(200, 202))
@@ -186,6 +183,7 @@ def main():
     toggled.add_argument('--disable', action='store_true')
     commands.add_parser('disabled-semantics')
     restoring = commands.add_parser('restore')
+    restoring.add_argument('--provider', choices=('central', 'sftp'), default='central')
     restoring.add_argument('--database', required=True)
     restoring.add_argument('--sql-host', required=True)
     restoring.add_argument('--sql-port', type=int, required=True)

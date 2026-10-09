@@ -50,6 +50,7 @@ public sealed partial class DatabaseBackupPipeline : IDatabaseBackupPipeline
         var tracker = new BackupStageTracker(progress, _time);
         _providers.TryGetValue(request.Engine, out var provider);
         _storages.TryGetValue(request.Storage, out var storage);
+        storage = request.StorageOverride ?? storage;
         return new DatabaseBackupExecution(request, provider, storage, _preparer, tracker, _logger, _time, _staging).RunAsync(cancellationToken);
     }
 

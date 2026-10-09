@@ -3,9 +3,9 @@ import type { ConfigField, ConnectionConfiguration, SecretField, SecretValues } 
 /** Text and Number are kept as typed strings; Boolean as a boolean. Converted to wire values only on submit. */
 export type FieldValues = Record<string, string | boolean>
 
-export function initialFieldValues(fields: readonly ConfigField[], configuration: ConnectionConfiguration = {}): FieldValues {
+export function initialFieldValues(fields: readonly ConfigField[], configuration: ConnectionConfiguration = {}, providerType?: string): FieldValues {
   return Object.fromEntries(fields.map((field) => {
-    const current = configuration[field.name]
+    const current = configuration[field.name] ?? (providerType === 'sftp' ? ({ port: 22, authenticationType: 'password' } as ConnectionConfiguration)[field.name] : undefined)
     if (field.kind === 'Boolean') return [field.name, current === true]
     return [field.name, current === null || current === undefined ? '' : String(current)]
   }))
@@ -39,6 +39,15 @@ export function buildSecretValues(fields: readonly SecretField[], values: Record
 
 export function secretsComplete(fields: readonly SecretField[], values: Record<string, string>): boolean {
   return fields.every((field) => !field.required || Boolean(values[field.name]))
+}
+
+/** SFTP credentials follow the selected authentication method; hidden values are never submitted. */
+export function activeSecretFields(providerType: string, configuration: FieldValues | ConnectionConfiguration, fields: readonly SecretField[]): SecretField[] {
+  if (providerType !== 'sftp') return [...fields]
+  const keyAuthentication = configuration.authenticationType === 'private-key'
+  return fields
+    .filter((field) => keyAuthentication ? field.name === 'privateKey' || field.name === 'passphrase' : field.name === 'password')
+    .map((field) => ({ ...field, required: field.name !== 'passphrase' }))
 }
 
 export function hasSecretInput(values: Record<string, string>): boolean {

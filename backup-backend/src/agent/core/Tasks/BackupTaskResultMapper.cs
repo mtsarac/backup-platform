@@ -124,7 +124,8 @@ internal static class BackupTaskResultMapper
             Replicas = [new BackupTaskReplica
             {
                 StorageProvider = replica.Location.Provider.Value,
-                StorageTarget = replica.Location.Provider.Value,
+                StorageTarget = task.Configuration.StorageProvider == "sftp"
+                    ? task.Configuration.StorageConnectionId!.Value.ToString("D") : replica.Location.Provider.Value,
                 Key = replica.Location.Key.Value,
                 SizeBytes = replica.SizeBytes,
                 Checksum = replica.Checksum.Hex,

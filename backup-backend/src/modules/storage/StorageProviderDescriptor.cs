@@ -107,7 +107,20 @@ public static class BuiltInStorageProviders
         StorageProviderDescriptor.CapabilityNames(FileSystemStorageProvider.FileSystemCapabilities), [StorageOwnership.PlatformManaged],
         tenantCreatable: false, platformCreatable: true, maxConnectionsPerTenant: 1, [], [], StorageTestMode.BackendRoundTrip);
 
-    public static StorageProviderDescriptor Sftp { get; } = Planned(StorageProviderTypes.Sftp, "SFTP");
+    public static StorageProviderDescriptor Sftp { get; } = new(
+        StorageProviderTypes.Sftp, "SFTP", StorageProviderAvailability.Available, StorageTopology.BackendRelayed, BackupStorageExecutionLocation.Backend,
+        ["storage.read", "storage.delete", "storage.atomic-publish", "storage.verify-absence"], [StorageOwnership.TenantManaged],
+        tenantCreatable: true, platformCreatable: false, maxConnectionsPerTenant: null,
+        [
+            new("host", "Host", StorageFieldKind.Text, true, 253),
+            new("port", "Port", StorageFieldKind.Number, false, 5),
+            new("username", "Username", StorageFieldKind.Text, true, 128),
+            new("authenticationType", "Authentication type", StorageFieldKind.Text, true, 16),
+            new("remoteBaseDirectory", "Remote base directory", StorageFieldKind.Text, true, 512),
+            new("hostKeyFingerprint", "SSH host key fingerprint (SHA256)", StorageFieldKind.Text, true, 64)
+        ],
+        [new("password", "Password", false), new("privateKey", "SSH private key", false), new("passphrase", "Private key passphrase", false)],
+        StorageTestMode.BackendRoundTrip);
 
     public static StorageProviderDescriptor GoogleDrive { get; } = Planned(StorageProviderTypes.GoogleDrive, "Google Drive");
 

@@ -50,7 +50,6 @@ public sealed class StorageProviderCatalogTests
     }
 
     [Theory]
-    [InlineData("sftp")]
     [InlineData("google-drive")]
     public void PlannedBuiltInsHaveNoCapabilitiesCannotBeTestedAndNobodyMayCreateThem(string providerType)
     {

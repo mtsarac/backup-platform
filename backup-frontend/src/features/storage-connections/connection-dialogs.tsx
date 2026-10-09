@@ -3,7 +3,7 @@ import { FormDialog } from '@/features/platform/plans/form-dialog'
 import { inputClass } from '@/features/platform/styles'
 import { QUOTA_SCOPE_PATTERN } from '@/features/storage/scope-input'
 import { ConfigFieldInputs, SecretFieldInputs } from './descriptor-fields'
-import { buildConfiguration, buildSecretValues, configurationComplete, hasSecretInput, initialFieldValues, secretsComplete } from './descriptor-values'
+import { activeSecretFields, buildConfiguration, buildSecretValues, configurationComplete, hasSecretInput, initialFieldValues, secretsComplete } from './descriptor-values'
 import type { FieldValues } from './descriptor-values'
 import type { ConnectionOps } from './hooks'
 import { connectionErrorMessage, errorField, invalidFieldName } from './labels'
@@ -22,8 +22,8 @@ export function EditConnectionDialog({ connection, configFields, ops, onClose }:
   const { canEdit, canSetQuotaScope } = connection.permissions
   const [name, setName] = useState(connection.name)
   const [quotaScope, setQuotaScope] = useState(connection.quotaScope)
-  const [values, setValues] = useState<FieldValues>(() => initialFieldValues(configFields, connection.configuration))
-  const initialValues = initialFieldValues(configFields, connection.configuration)
+  const [values, setValues] = useState<FieldValues>(() => initialFieldValues(configFields, connection.configuration, connection.providerType))
+  const initialValues = initialFieldValues(configFields, connection.configuration, connection.providerType)
   const mutation = ops.update
 
   const input: PlatformUpdateConnectionInput = {}
@@ -39,7 +39,8 @@ export function EditConnectionDialog({ connection, configFields, ops, onClose }:
     <label className="block text-sm text-text-muted">Ad
       <input className={inputClass} value={name} required disabled={!canEdit} aria-invalid={errorField(mutation.error) === 'name'} onChange={(event) => setName(event.target.value)} />
     </label>
-    {canEdit && configFields.length > 0 && <ConfigFieldInputs fields={configFields} values={values} invalidName={invalidFieldName(mutation.error, 'configuration')} onChange={(field, value) => setValues((current) => ({ ...current, [field]: value }))} />}
+    {canEdit && configFields.length > 0 && <ConfigFieldInputs providerType={connection.providerType} fields={configFields} values={values} invalidName={invalidFieldName(mutation.error, 'configuration')} onChange={(field, value) => setValues((current) => ({ ...current, [field]: value }))} />}
+    {canEdit && connection.providerType === 'sftp' && <p className="text-xs text-text-muted">Kimlik doğrulama yöntemini değiştirdikten sonra yeni yöntem için kimlik bilgisi ayarlayın ve bağlantıyı test edin. Kullanımdaki bir bağlantının sunucu, kullanıcı, dizin ve kimlik doğrulama yöntemi değiştirilemez.</p>}
     {canSetQuotaScope && <label className="block text-sm text-text-muted">Kota kapsamı
       <input className={inputClass} value={quotaScope} maxLength={64} required aria-invalid={quotaScopeInvalid} onChange={(event) => setQuotaScope(event.target.value)} />
       <span className="mt-1 block text-xs">Kota Politikası seçicileri bu etikete göre eşleşir (küçük harf, rakam ve “-”, 1-64 karakter). Değiştirmek tenant'ın kullanımını yeniden hesaplar.</span>
@@ -57,17 +58,18 @@ interface SecretProps {
 
 /**
  * Secret values exist only in this component's state until submit, are sent once, and are wiped from state at the moment of submit (success
- * or failure alike). The inputs are password-typed and never prefilled: a stored secret is never read back from the API.
+ * or failure alike). Stored credentials are never read back from the API.
  */
 export function SecretDialog({ connection, fields, ops, onClose }: SecretProps) {
   const [values, setValues] = useState<Record<string, string>>({})
+  const activeFields = activeSecretFields(connection.providerType, connection.configuration, fields)
   const mutation = ops.setSecret
   const reset = mutation.reset
   // The mutation's variables hold the submitted values: drop them when the dialog goes away.
   useEffect(() => reset, [reset])
 
   function submit() {
-    const secret = buildSecretValues(fields, values)
+    const secret = buildSecretValues(activeFields, values)
     setValues({})
     mutation.mutate({ connection, values: secret }, { onSuccess: () => { reset(); onClose() } })
   }
@@ -75,8 +77,9 @@ export function SecretDialog({ connection, fields, ops, onClose }: SecretProps) 
   return <FormDialog title={`${connection.hasSecret ? 'Kimlik bilgisini yenile' : 'Kimlik bilgisi ayarla'}: ${connection.name}`}
     description="Değerler yalnızca sunucuya gönderilir; kaydedildikten sonra bir daha gösterilmez. Hata olursa alanları yeniden girmeniz gerekir."
     submitLabel="Kaydet" pendingLabel="Kaydediliyor…" pending={mutation.isPending}
-    disabled={!hasSecretInput(values) || !secretsComplete(fields, values)} error={mutation.error ? connectionErrorMessage(mutation.error) : undefined}
+    disabled={!hasSecretInput(buildSecretValues(activeFields, values)) || !secretsComplete(activeFields, values)} error={mutation.error ? connectionErrorMessage(mutation.error) : undefined}
     onSubmit={submit} onClose={onClose}>
-    <SecretFieldInputs fields={fields} values={values} invalidName={invalidFieldName(mutation.error, 'secret')} onChange={(field, value) => setValues((current) => ({ ...current, [field]: value }))} />
+    {connection.providerType === 'sftp' && <p className="text-xs text-text-muted">Bu işlem kayıtlı kimlik bilgisinin tamamını değiştirir. Yeni {connection.configuration.authenticationType === 'private-key' ? 'özel anahtarı ve gerekiyorsa parolasını' : 'parolayı'} girin. Boş anahtar parolası eski parolayı korumaz.</p>}
+    <SecretFieldInputs providerType={connection.providerType} fields={activeFields} values={values} invalidName={invalidFieldName(mutation.error, 'secret')} onChange={(field, value) => setValues((current) => ({ ...current, [field]: value }))} />
   </FormDialog>
 }

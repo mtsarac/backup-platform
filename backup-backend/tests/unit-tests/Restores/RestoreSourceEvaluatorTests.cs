@@ -406,4 +406,79 @@ public sealed class RestoreSourceEvaluatorTests
         Assert.Null(RestoreSourceEvaluator.SelectReplica(artifact, Agent, due));
         Assert.Equal(RestoreSourceRejection.ReplicaNotRestorable, RestoreSourceEvaluator.Explain(artifact, Agent, due));
     }
+
+    [Fact]
+    public void AnAvailableVerifiedBackendSftpReplicaWithMatchingConnectionTargetIsReadViaBackendRelayed()
+    {
+        var artifact = Artifact();
+        var connectionId = Guid.NewGuid();
+        var replica = new BackupReplica(Guid.NewGuid(), artifact.TenantId, artifact.Id, "sftp", connectionId.ToString("D"),
+            "tenant/sales.bak", 1024, Hash, "sha256", "Verified", "ReadBack", Now.AddDays(-1), Now.AddDays(-1),
+            BackupStorageExecutionLocation.Backend, null, connectionId);
+        AddTo(artifact, replica);
+
+        var decision = RestoreSourceEvaluator.Evaluate(artifact, replica, Agent, Now);
+
+        Assert.True(decision.Eligible);
+        Assert.Equal(RestoreSourceAccess.BackendRelayed, decision.Access);
+        Assert.Null(decision.Rejection);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("not-a-guid")]
+    public void AnSftpReplicaWithInvalidOrMismatchedTargetGuidIsRejected(string target)
+    {
+        var artifact = Artifact();
+        var connectionId = Guid.NewGuid();
+        var replica = new BackupReplica(Guid.NewGuid(), artifact.TenantId, artifact.Id, "sftp",
+            string.IsNullOrEmpty(target) ? Guid.NewGuid().ToString("D") : target,
+            "tenant/sales.bak", 1024, Hash, "sha256", "Verified", "ReadBack", Now.AddDays(-1), Now.AddDays(-1),
+            BackupStorageExecutionLocation.Backend, null, connectionId);
+        AddTo(artifact, replica);
+
+        var decision = RestoreSourceEvaluator.Evaluate(artifact, replica, Agent, Now);
+
+        Assert.False(decision.Eligible);
+        Assert.Equal(RestoreSourceRejection.NoAccessibleReplica, decision.Rejection);
+    }
+
+    [Fact]
+    public void AnSftpReplicaWithoutOwningAgentIsSelectableByAnyAgent()
+    {
+        var artifact = Artifact();
+        var connectionId = Guid.NewGuid();
+        var replica = new BackupReplica(Guid.NewGuid(), artifact.TenantId, artifact.Id, "sftp", connectionId.ToString("D"),
+            "tenant/sales.bak", 1024, Hash, "sha256", "Verified", "ReadBack", Now.AddDays(-1), Now.AddDays(-1),
+            BackupStorageExecutionLocation.Backend, null, connectionId);
+        AddTo(artifact, replica);
+
+        var anotherAgent = AgentId.New();
+        var selected = RestoreSourceEvaluator.SelectReplica(artifact, anotherAgent, Now);
+
+        Assert.Same(replica, selected);
+    }
+
+    [Fact]
+    public void AnUnverifiedOrDeletingSftpReplicaIsRejected()
+    {
+        var artifact = Artifact();
+        var connectionId = Guid.NewGuid();
+        var unverified = new BackupReplica(Guid.NewGuid(), artifact.TenantId, artifact.Id, "sftp", connectionId.ToString("D"),
+            "tenant/sales.bak", 1024, Hash, "sha256", "Unverified", "ReadBack", Now.AddDays(-1), null,
+            BackupStorageExecutionLocation.Backend, null, connectionId);
+        AddTo(artifact, unverified);
+
+        Assert.Equal(RestoreSourceRejection.ReplicaNotVerified, RestoreSourceEvaluator.Evaluate(artifact, unverified, Agent, Now).Rejection);
+
+        var restorable = new BackupReplica(Guid.NewGuid(), artifact.TenantId, artifact.Id, "sftp", connectionId.ToString("D"),
+            "tenant/sales2.bak", 1024, Hash, "sha256", "Verified", "ReadBack", Now.AddDays(-1), Now.AddDays(-1),
+            BackupStorageExecutionLocation.Backend, null, connectionId);
+        AddTo(artifact, restorable);
+        artifact.RequestDelete(Now, null);
+        var due = restorable.DeleteAfter!.Value;
+        restorable.BeginDelete(Guid.NewGuid(), "node-a", due, DeleteLease);
+
+        Assert.Equal(RestoreSourceRejection.ReplicaNotRestorable, RestoreSourceEvaluator.Evaluate(artifact, restorable, Agent, Now).Rejection);
+    }
 }

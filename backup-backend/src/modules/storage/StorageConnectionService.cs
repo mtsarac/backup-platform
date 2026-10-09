@@ -95,7 +95,8 @@ public sealed class StorageConnectionService(
             quotaScope = ValidateQuotaScope(command.QuotaScope);
         }
         var configuration = ValidateConfiguration(descriptor, command.Configuration);
-        var secret = command.Secret is { Count: > 0 } ? ValidateSecret(descriptor, command.Secret) : null;
+        var secret = command.Secret is { Count: > 0 } || descriptor.ProviderType == StorageProviderTypes.Sftp
+            ? ValidateSecret(descriptor, command.Secret, configuration) : null;
         if (secret is null && descriptor.SecretFields.Any(field => field.Required))
         {
             throw new InvalidStorageConnectionException($"secret.{descriptor.SecretFields.First(field => field.Required).Name}", "required");
@@ -166,9 +167,22 @@ public sealed class StorageConnectionService(
         {
             throw new InvalidStorageConnectionException("configuration", "unknown_field");
         }
+        var expectedConfiguration = record.Connection.Configuration;
+        var expectedSecret = record.Connection.SecretReference;
+        StorageTestResult? updateTest = null;
+        if (record.Connection.ProviderType == StorageProviderTypes.Sftp && newConfiguration is not null
+            && newConfiguration["hostKeyFingerprint"] != expectedConfiguration.GetValueOrDefault("hostKeyFingerprint"))
+        {
+            updateTest = await RunTesterAsync(SftpConnectionRules.Candidate(record.Connection, newConfiguration), descriptor, cancellationToken);
+            if (updateTest.Status != StorageTestStatus.Succeeded)
+                return new(StorageConnectionOutcome.Rejected, Code: updateTest.Code ?? "rotation_test_failed");
+        }
 
         var result = await store.MutateAsync(id, scope.TenantId, (connection, now) =>
         {
+            if (connection.ProviderType == StorageProviderTypes.Sftp && newConfiguration is not null
+                && (connection.SecretReference != expectedSecret || !SftpConnectionRules.SameConfiguration(connection.Configuration, expectedConfiguration)))
+                return StorageMutationResult.Rejected("concurrent_update");
             var audit = new List<StorageAuditEntry>();
             var changed = new List<string>();
             if (newName is not null)
@@ -181,6 +195,7 @@ public sealed class StorageConnectionService(
                 var keysChanged = newConfiguration.Keys.Union(before, StringComparer.Ordinal)
                     .Where(key => !connection.Configuration.TryGetValue(key, out var current) || !newConfiguration.TryGetValue(key, out var next) || current != next).Order(StringComparer.Ordinal).ToList();
                 if (connection.Reconfigure(newConfiguration, now)) { changed.Add("configuration"); changed.AddRange(keysChanged.Select(key => $"configuration.{key}")); }
+                if (updateTest is not null) connection.RecordTest(updateTest.Status, updateTest.Code, now);
             }
             if (changed.Count > 0)
             {
@@ -220,17 +235,41 @@ public sealed class StorageConnectionService(
                 throw new InvalidStorageConnectionException("secret", "secrets_not_supported");
             return new(StorageConnectionOutcome.Rejected, Code: Refusal(scope));
         }
-        var secret = ValidateSecret(descriptor!, values);
+        var expectedConfiguration = record.Connection.Configuration;
+        var expectedReference = record.Connection.SecretReference;
+        var secret = ValidateSecret(descriptor!, values, expectedConfiguration);
         var reference = NewReference(id);
         await secrets.SetAsync(new SecretReference(reference), secret.Value, cancellationToken);
+        StorageTestResult? rotationTest = null;
+        if (record.Connection.ProviderType == StorageProviderTypes.Sftp)
+        {
+            try
+            {
+                rotationTest = await RunTesterAsync(SftpConnectionRules.Candidate(record.Connection, expectedConfiguration, reference, secret.FieldNames), descriptor, cancellationToken);
+                if (rotationTest.Status != StorageTestStatus.Succeeded)
+                {
+                    await DiscardAsync(reference);
+                    return new(StorageConnectionOutcome.Rejected, Code: rotationTest.Code ?? "rotation_test_failed");
+                }
+            }
+            catch
+            {
+                await DiscardAsync(reference);
+                throw;
+            }
+        }
         string? superseded = null;
         StorageConnectionResult result;
         try
         {
             result = await store.MutateAsync(id, scope.TenantId, (connection, now) =>
             {
+                if (connection.ProviderType == StorageProviderTypes.Sftp
+                    && (connection.SecretReference != expectedReference || !SftpConnectionRules.SameConfiguration(connection.Configuration, expectedConfiguration)))
+                    return StorageMutationResult.Rejected("concurrent_update");
                 var hadSecret = connection.HasSecret;
                 superseded = connection.AttachSecret(reference, secret.FieldNames, now);
+                if (rotationTest is not null) connection.RecordTest(rotationTest.Status, rotationTest.Code, now);
                 var details = Details(connection);
                 details["secretFields"] = secret.FieldNames;
                 details["replacedExisting"] = hadSecret;
@@ -344,17 +383,21 @@ public sealed class StorageConnectionService(
             return new(StorageConnectionOutcome.Rejected, Code: Refusal(scope));
         }
         var watch = Stopwatch.StartNew();
+        var testedConfiguration = record.Connection.Configuration;
+        var testedSecret = record.Connection.SecretReference;
         var test = await RunTesterAsync(record.Connection, descriptor, cancellationToken);
         watch.Stop();
         StorageConnectionResult result = await store.MutateAsync(id, scope.TenantId, (connection, now) =>
         {
+            if (connection.SecretReference != testedSecret || !SftpConnectionRules.SameConfiguration(connection.Configuration, testedConfiguration))
+                return StorageMutationResult.Rejected("concurrent_update");
             connection.RecordTest(test.Status, test.Code, now);
             var details = Details(connection);
             details["status"] = test.Status.ToString();
             details["code"] = test.Code;
             return new StorageMutationResult(true, [new StorageAuditEntry(StorageConnectionAuditActions.Tested, details)]);
         }, new StorageActor(actorId, scope.ActorKind), time.GetUtcNow(), cancellationToken);
-        if (result.Record is null)
+        if (result.Record is null || result.Outcome is not (StorageConnectionOutcome.Changed or StorageConnectionOutcome.Unchanged))
         {
             return new(result.Outcome, Code: result.Code);
         }
@@ -504,12 +547,14 @@ public sealed class StorageConnectionService(
             if (!valid) throw new InvalidStorageConnectionException($"configuration.{field.Name}", "invalid_value");
             result[field.Name] = value;
         }
+        if (descriptor.ProviderType == StorageProviderTypes.Sftp) SftpConnectionRules.ValidateConfiguration(result);
         return result;
     }
 
     private sealed record ValidatedSecret(SecretValue Value, IReadOnlyList<string> FieldNames);
 
-    private static ValidatedSecret ValidateSecret(StorageProviderDescriptor descriptor, IReadOnlyDictionary<string, string>? values)
+    private static ValidatedSecret ValidateSecret(StorageProviderDescriptor descriptor, IReadOnlyDictionary<string, string>? values,
+        IReadOnlyDictionary<string, string> configuration)
     {
         if (descriptor.SecretFields.Count == 0) throw new InvalidStorageConnectionException("secret", "secrets_not_supported");
         var supplied = values ?? new Dictionary<string, string>();
@@ -529,6 +574,7 @@ public sealed class StorageConnectionService(
             if (value.Length > 8192) throw new InvalidStorageConnectionException($"secret.{field.Name}", "too_long");
             stored[field.Name] = value;
         }
+        if (descriptor.ProviderType == StorageProviderTypes.Sftp) SftpConnectionRules.ValidateSecret(configuration, stored);
         if (stored.Count == 0) throw new InvalidStorageConnectionException("secret", "required");
         return new ValidatedSecret(new SecretValue(JsonSerializer.Serialize(stored)), [.. stored.Keys]);
     }
@@ -577,6 +623,11 @@ public static class StorageTestMessages
         StorageTestCodes.IntegrityMismatch => "The probe object did not read back as written.",
         StorageTestCodes.NotSupported => "The storage does not support what the test needs.",
         StorageTestCodes.IoError => "The storage could not be read or written.",
+        StorageTestCodes.HostKeyMismatch => "The remote SSH host key does not match the configured fingerprint.",
+        StorageTestCodes.AuthenticationFailed => "The SFTP credentials were rejected by the server.",
+        StorageTestCodes.Timeout => "The connection to the SFTP server timed out.",
+        StorageTestCodes.NetworkDenied => "Access to this network destination is not permitted by operator policy.",
+        StorageTestCodes.NetworkUnavailable => "The SFTP server could not be reached over the network.",
         _ => "The connection test failed unexpectedly."
     };
 }

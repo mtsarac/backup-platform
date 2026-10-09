@@ -257,3 +257,27 @@ restore, a tenant Owner and the `smoke.admin` PlatformAdmin, who has **no member
 browse the backup, download the `.bak` natively and compare its SHA-256 with the artifact checksum, run a precheck and a NewDatabase restore into a new
 database name, and read the session's Audit tab. Close the session and confirm a new download is refused. The same admin without a session, and a session
 of another tenant, must be denied. Never aim a smoke restore at an existing database.
+
+## Production SFTP verification (M7b)
+
+```bash
+scripts/integration/run-sftp-smoke.sh
+scripts/integration/run-sftp-smoke.sh --no-build
+```
+
+Disposable integration smoke for backend-relayed SFTP storage:
+
+- Launches a disposable SFTP container (`atmoz/sftp:debian`) with runtime-generated Ed25519 host key, random password, and RSA private key with passphrase in 0600 files.
+- No host ports published; pins container bridge IPv4 address and passes exact `/32` via `Backups__Sftp__AllowedPrivateNetworks__0` to backend stack. Loopback/link-local addresses are rejected.
+- Exercises tenant API connection lifecycle:
+  - Validates password authentication and host fingerprint roundtrip.
+  - Tests wrong host fingerprint rejection with `host_key_mismatch`.
+  - Tests separate connection with `private-key` authentication and passphrase.
+- Real MSSQL mapped backup via Linux Agent selecting the SFTP connection (`storageExecutionLocation="Backend"`).
+- Verifies remote file exists, length and SHA-256 match artifact; confirms zero probe/temp leakage.
+- Streams backend-relayed download, verifies SHA-256 and byte count against artifact.
+- Tests disabled connection and platform admin lock: new backup runs denied (`admission_denied`), existing stored replicas remain available/usable and restorable.
+- Tests secret rotation: invalid candidate credential rejected with HTTP 409 (`authentication_failed`), leaves existing credentials functioning; valid credential update succeeds.
+- Requests artifact deletion through retention API (`DELETE /api/tenants/{id}/backup-artifacts/{id}`); retention worker removes remote SFTP file, confirms absence and quota reduced to zero.
+- Cleans up only owned containers, databases, and runtime directories on exit.
+- Windows evidence note: SFTP relay/storage operations are backend-relayed; Agent backup execution is portable. Windows VM onboarding remains documented under `scripts/windows/` and was not fabricated.

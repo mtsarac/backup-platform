@@ -114,7 +114,7 @@ public sealed class StorageConnectionApiIntegrationTests(PostgreSqlFixture fixtu
             local.GetProperty("tenantCreatable").GetBoolean(), local.GetProperty("platformCreatable").GetBoolean()));
         Assert.Equal(("Available", "BackendRoundTrip", false, true), (central.GetProperty("availability").GetString(), central.GetProperty("testMode").GetString(),
             central.GetProperty("tenantCreatable").GetBoolean(), central.GetProperty("platformCreatable").GetBoolean()));
-        Assert.Equal(("Planned", "None", false, false), (sftp.GetProperty("availability").GetString(), sftp.GetProperty("testMode").GetString(),
+        Assert.Equal(("Available", "BackendRoundTrip", true, false), (sftp.GetProperty("availability").GetString(), sftp.GetProperty("testMode").GetString(),
             sftp.GetProperty("tenantCreatable").GetBoolean(), sftp.GetProperty("platformCreatable").GetBoolean()));
     }
 
@@ -278,10 +278,10 @@ public sealed class StorageConnectionApiIntegrationTests(PostgreSqlFixture fixtu
         Assert.Equal(HttpStatusCode.Forbidden, central.StatusCode);
         Assert.Equal("platform_managed_provider", AgentWorld.ReadJson(central).GetProperty("code").GetString());
 
-        // SFTP (planned) -> 400 provider_not_available
-        using var sftp = await env.Admin.SendAsync(HttpMethod.Post, env.TenantRoot + "/storage-connections", new { providerType = "sftp", name = "My Sftp" });
-        Assert.Equal(HttpStatusCode.BadRequest, sftp.StatusCode);
-        Assert.Equal("provider_not_available", AgentWorld.ReadJson(sftp).GetProperty("code").GetString());
+        // Google Drive (planned) -> 400 provider_not_available
+        using var gdrive = await env.Admin.SendAsync(HttpMethod.Post, env.TenantRoot + "/storage-connections", new { providerType = "google-drive", name = "My Drive" });
+        Assert.Equal(HttpStatusCode.BadRequest, gdrive.StatusCode);
+        Assert.Equal("provider_not_available", AgentWorld.ReadJson(gdrive).GetProperty("code").GetString());
     }
 
     // ---- secret safety and test probe ------------------------------------------------------------------------------------------

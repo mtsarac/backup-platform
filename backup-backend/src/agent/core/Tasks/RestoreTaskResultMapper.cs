@@ -130,6 +130,7 @@ internal static class RestoreTaskResultMapper
                 LogicalName = Text(mapping.LogicalName, MaxName),
                 FileType = mapping.Kind.ToString(),
                 FileGroupName = Optional(mapping.FileGroupName, MaxName),
+                TargetPhysicalName = Optional(mapping.TargetPath.Value, 1024),
                 SizeBytes = mapping.SizeBytes
             }).ToList(),
             StartedAt = result.StartedAt,

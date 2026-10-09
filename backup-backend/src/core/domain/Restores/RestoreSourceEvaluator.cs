@@ -34,8 +34,13 @@ public static class RestoreSourceEvaluator
                 ? RestoreSourceDecision.Accept(RestoreSourceAccess.AgentLocal)
                 : RestoreSourceDecision.Reject(RestoreSourceRejection.AgentTransferRequired);
         }
-        return replica.StorageProvider == "central"
-            ? RestoreSourceDecision.Accept(RestoreSourceAccess.CentralStorage)
+        if (replica.ExecutionLocation != BackupStorageExecutionLocation.Backend)
+            return RestoreSourceDecision.Reject(RestoreSourceRejection.NoAccessibleReplica);
+        if (replica.StorageProvider == "central")
+            return RestoreSourceDecision.Accept(RestoreSourceAccess.CentralStorage);
+        return replica.StorageProvider == "sftp" && replica.StorageConnectionId != Guid.Empty
+            && Guid.TryParse(replica.StorageTarget, out var connectionId) && connectionId == replica.StorageConnectionId
+            ? RestoreSourceDecision.Accept(RestoreSourceAccess.BackendRelayed)
             : RestoreSourceDecision.Reject(RestoreSourceRejection.NoAccessibleReplica);
     }
 

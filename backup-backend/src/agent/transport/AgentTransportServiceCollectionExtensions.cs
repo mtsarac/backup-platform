@@ -84,6 +84,17 @@ public static class AgentTransportServiceCollectionExtensions
                 AllowAutoRedirect = false,
             })
             .SetHandlerLifetime(Timeout.InfiniteTimeSpan);
+        services.AddHttpClient<ITaskStorageProviderFactory, HttpTaskStorageProviderFactory>(client =>
+            {
+                client.Timeout = Timeout.InfiniteTimeSpan;
+                client.MaxResponseContentBufferSize = 1024 * 1024;
+            })
+            .ConfigurePrimaryHttpMessageHandler(static () => new SocketsHttpHandler
+            {
+                PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+                AllowAutoRedirect = false,
+            })
+            .SetHandlerLifetime(Timeout.InfiniteTimeSpan);
         services.TryAddSingleton<IAgentPushChannel, SignalRAgentPushChannel>();
         return services;
     }

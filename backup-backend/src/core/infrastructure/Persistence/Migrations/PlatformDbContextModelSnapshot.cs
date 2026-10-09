@@ -1695,7 +1695,7 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_restore_operations_result", "\"ResultJson\" IS NULL OR \"CompletedAt\" IS NOT NULL");
 
-                            t.HasCheckConstraint("ck_restore_operations_source", "\"SourceAccess\" IN ('AgentLocal','CentralStorage')");
+                            t.HasCheckConstraint("ck_restore_operations_source", "\"SourceAccess\" IN ('AgentLocal','CentralStorage','BackendRelayed')");
 
                             t.HasCheckConstraint("ck_restore_operations_status", "\"Status\" IN ('Pending','Leased','Running','Succeeded','Failed','Cancelled','AgentLost')");
 

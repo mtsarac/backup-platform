@@ -47,6 +47,11 @@ const testMessages: Record<string, string> = {
   not_supported: 'Depolama bu işlemi desteklemiyor.',
   io_error: 'Depolama dosya işlemi tamamlanamadı.',
   unexpected: 'Test beklenmeyen bir nedenle tamamlanamadı.',
+  host_key_mismatch: 'SFTP sunucu anahtarı parmak izi uyuşmuyor. Güvenilir kanaldan doğrulamadan değiştirmeyin.',
+  authentication_failed: 'SFTP kimlik doğrulaması başarısız. Kullanıcı ve yeni kimlik bilgisini kontrol edin.',
+  timeout: 'Depolama bağlantısı zaman aşımına uğradı.',
+  network_denied: 'Depolama sunucusuna erişim ağ güvenlik politikası tarafından engellendi.',
+  network_unavailable: 'Depolama sunucusuna ağ üzerinden ulaşılamıyor.',
 }
 
 /** The backend's `message` is a fixed English sentence: show Turkish by stable `code`, and the backend text only for a code the UI does not know. */
@@ -126,6 +131,7 @@ export function isPlatformCreatable(provider: ProviderDescriptor) {
 /** The connection routes reuse `concurrent_update`, which the shared mapper words for plans. */
 export function connectionErrorMessage(error: unknown): string {
   if (error instanceof ApiError && (error.reason ?? error.code) === 'concurrent_update') return 'Bağlantı başka bir işlemle aynı anda değiştirildi. Sayfayı yenileyip tekrar deneyin.'
+  if (error instanceof ApiError && (error.reason ?? error.code) === 'rotation_test_failed') return 'Yeni kimlik bilgisi veya sunucu parmak izi doğrulanamadı. Mevcut bağlantı ve kimlik bilgisi korunuyor.'
   return errorMessage(error)
 }
 

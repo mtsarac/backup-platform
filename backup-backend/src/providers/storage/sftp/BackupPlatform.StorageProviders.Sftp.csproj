@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="SSH.NET" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\abstractions\BackupPlatform.StorageProviders.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="BackupPlatform.UnitTests" />
+    <InternalsVisibleTo Include="BackupPlatform.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

@@ -33,7 +33,9 @@ public enum RestoreSourceAccess
     /// <summary>The replica lives on the target agent's own disk (agent-local storage).</summary>
     AgentLocal = 1,
     /// <summary>The replica lives in central storage, which the agent reaches directly as a mounted directory.</summary>
-    CentralStorage = 2
+    CentralStorage = 2,
+    /// <summary>The backend reads the SFTP replica and relays its bytes to the target agent; storage credentials stay on the backend.</summary>
+    BackendRelayed = 3
 }
 
 /// <summary>Attempts use Pending..AgentLost; the operation mirrors its current attempt.</summary>

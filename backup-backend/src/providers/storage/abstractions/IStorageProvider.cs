@@ -169,7 +169,12 @@ public enum StorageFailureKind
 
     /// <summary>The storage could not be read or written for another I/O reason, including a source stream that failed while being copied.</summary>
     Io,
-    NotSupported
+    NotSupported,
+    HostKeyMismatch,
+    AuthenticationFailed,
+    Timeout,
+    NetworkDenied,
+    NetworkUnavailable
 }
 
 /// <summary>

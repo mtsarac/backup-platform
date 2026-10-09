@@ -73,6 +73,12 @@ def backup(options):
                      'databaseCredentialReference': 'sql_smoke', 'trustServerCertificate': True,
                      'stagingReference': 'default', 'storageProvider': options.provider, 'storageTarget': 'default',
                      'storagePrefix': 'download-smoke', 'copyOnly': True, 'checksumPolicy': 'Required', 'compressionPolicy': 'Preferred'}
+    if options.provider == 'sftp':
+        if not options.storage_connection_id:
+            raise FixtureFailure('SFTP backup requires an explicit storage connection.')
+        configuration['storageConnectionId'] = options.storage_connection_id
+        configuration['storageExecutionLocation'] = 'Backend'
+        configuration['storagePrefix'] = ''
     _, job = api.call('POST', path + '/backup-jobs', {'name': 'Real download ' + options.provider, 'agentId': agent_id,
                                                    'overlapPolicy': 'Skip', 'configuration': configuration})
     _, run = api.call('POST', path + f'/backup-jobs/{job["id"]}/runs', {}, headers={'Idempotency-Key': 'download-smoke-' + uuid.uuid4().hex}, expect=(200, 201, 202))
@@ -150,14 +156,15 @@ def main():
     first = commands.add_parser('setup')
     first.add_argument('--credentials-file', required=True)
     second = commands.add_parser('backup')
-    second.add_argument('--provider', choices=('central', 'local'), required=True)
+    second.add_argument('--provider', choices=('central', 'local', 'sftp'), required=True)
+    second.add_argument('--storage-connection-id')
     second.add_argument('--agent-name', required=True)
     second.add_argument('--sql-host', required=True)
     second.add_argument('--sql-port', type=int, default=1433)
     second.add_argument('--database', default='master')
     second.add_argument('--timeout', type=int, default=240)
     third = commands.add_parser('verify')
-    third.add_argument('--provider', choices=('central', 'local'), required=True)
+    third.add_argument('--provider', choices=('central', 'local', 'sftp'), required=True)
     third.add_argument('--output', required=True)
     third.add_argument('--timeout', type=int, default=240)
     options = parser.parse_args()

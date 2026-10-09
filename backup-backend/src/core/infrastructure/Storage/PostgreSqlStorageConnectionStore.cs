@@ -130,10 +130,21 @@ public sealed class PostgreSqlStorageConnectionStore(
         {
             return new(StorageConnectionOutcome.NotFound);
         }
+        var previousConfiguration = connection.Configuration;
+        var previousSecret = connection.SecretReference;
         var result = mutation(connection, now);
         if (result.RejectionCode is not null)
         {
             return new(StorageConnectionOutcome.Rejected, Code: result.RejectionCode);
+        }
+        if (connection.ProviderType == StorageProviderTypes.Sftp)
+        {
+            // This is checked under the admission lock, not against an earlier view: a new run cannot race a location change.
+            string[] locationFields = ["host", "port", "username", "authenticationType", "remoteBaseDirectory"];
+            var movesStorage = locationFields.Any(field => previousConfiguration.GetValueOrDefault(field) != connection.Configuration.GetValueOrDefault(field));
+            var clearsCredentials = previousSecret is not null && connection.SecretReference is null;
+            if ((movesStorage || clearsCredentials) && await HasReferencesAsync(context, owner, id, cancellationToken))
+                return new(StorageConnectionOutcome.Rejected, Code: "connection_in_use");
         }
         if (!result.Changed)
         {
@@ -185,12 +196,7 @@ public sealed class PostgreSqlStorageConnectionStore(
         {
             return new(StorageConnectionOutcome.Rejected, Code: "administratively_disabled");
         }
-        var text = id.ToString("D");
-        var referenced = await context.BackupReplicas.AnyAsync(replica => replica.TenantId == owner && replica.StorageConnectionId == id, cancellationToken)
-            || (await context.Database.SqlQuery<int>($"""
-                SELECT (SELECT count(*) FROM backup_jobs WHERE "TenantId" = {owner.Value} AND "Configuration" ->> 'StorageConnectionId' = {text})::int
-                     + (SELECT count(*) FROM backup_runs WHERE "TenantId" = {owner.Value} AND "Configuration" ->> 'StorageConnectionId' = {text})::int AS "Value"
-                """).SingleAsync(cancellationToken)) > 0;
+        var referenced = await HasReferencesAsync(context, owner, id, cancellationToken);
         if (referenced)
         {
             return new(StorageConnectionOutcome.InUse);
@@ -219,6 +225,17 @@ public sealed class PostgreSqlStorageConnectionStore(
             return new(StorageConnectionOutcome.InUse);
         }
         return new(StorageConnectionOutcome.Changed, record);
+    }
+
+    private static async Task<bool> HasReferencesAsync(PlatformDbContext context, TenantId owner, Guid id, CancellationToken cancellationToken)
+    {
+        if (await context.BackupReplicas.AnyAsync(replica => replica.TenantId == owner && replica.StorageConnectionId == id, cancellationToken))
+            return true;
+        var text = id.ToString("D");
+        return (await context.Database.SqlQuery<int>($"""
+            SELECT (SELECT count(*) FROM backup_jobs WHERE "TenantId" = {owner.Value} AND "Configuration" ->> 'StorageConnectionId' = {text})::int
+                 + (SELECT count(*) FROM backup_runs WHERE "TenantId" = {owner.Value} AND "Configuration" ->> 'StorageConnectionId' = {text})::int AS "Value"
+            """).SingleAsync(cancellationToken)) > 0;
     }
 
     /// <summary>Under the tenant lock: usage recomputed from the sources with the tenant's current policy, written in the caller's transaction.</summary>

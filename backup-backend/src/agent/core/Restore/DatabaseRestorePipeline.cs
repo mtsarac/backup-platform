@@ -51,6 +51,7 @@ public sealed partial class DatabaseRestorePipeline : IDatabaseRestorePipeline
         var tracker = new RestoreStageTracker(progress, _time);
         _providers.TryGetValue(request.Engine, out var provider);
         _storages.TryGetValue(request.Storage, out var storage);
+        storage = request.StorageOverride ?? storage;
         return new DatabaseRestoreExecution(request, provider, storage, tracker, _logger, _time, _staging).RunAsync(cancellationToken);
     }
     public async Task<DatabaseRestorePipelineResult> RunDiscoveryAsync(

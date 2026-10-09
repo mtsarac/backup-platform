@@ -365,7 +365,7 @@ public sealed class StorageConnectionServiceUpdateTests
         var tenant = await _h.Service.SetEnabledAsync(_h.TenantScope(), platformOwned.Id, false, _h.Actor, CancellationToken.None);
 
         Assert.Equal(StorageConnectionOutcome.Changed, platform.Outcome);
-        Assert.False(tenantOwned.Enabled);
+        Assert.True(tenantOwned.AdministrativelyDisabled);
         Assert.Equal((StorageConnectionOutcome.Rejected, StorageRejections.PlatformManaged), (tenant.Outcome, tenant.Code));
         Assert.True(platformOwned.Enabled);
     }

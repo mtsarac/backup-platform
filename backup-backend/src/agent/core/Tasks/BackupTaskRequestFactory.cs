@@ -6,7 +6,8 @@ using BackupPlatform.StorageProviders.Abstractions;
 namespace BackupPlatform.Agent.Core.Tasks;
 
 /// <summary>Resolves only host-registered staging and local credential names; task input can never choose a staging path.</summary>
-public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver credentials, IEnumerable<StagingArea> stagingAreas)
+public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver credentials, IEnumerable<StagingArea> stagingAreas,
+    ITaskStorageProviderFactory? storageFactory = null)
 {
     private readonly StagingArea? _staging = stagingAreas.SingleOrDefault();
 
@@ -27,7 +28,12 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
             ? IntegratedDatabaseCredential.Instance
             : await ResolveCredentialAsync(configuration.DatabaseCredentialReference!, cancellationToken).ConfigureAwait(false);
         return new DatabaseBackupPipelineRequest(DatabaseEngineId.MsSql, connection, credential, configuration.Database,
-            staging, storage, prefix, options);
+            staging, storage, prefix, options)
+        {
+            StorageOverride = configuration.StorageProvider == "sftp"
+                ? (storageFactory ?? throw new ArgumentException("Backend-relayed storage is not configured.")).CreateBackup(task)
+                : null
+        };
     }
 
     private async ValueTask<DatabaseCredential> ResolveCredentialAsync(string reference, CancellationToken cancellationToken)
@@ -56,6 +62,11 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
             || configuration.Database.Any(char.IsControl) || configuration.Host is null || configuration.Host.Length > 253)
         {
             throw new ArgumentException("The backup configuration is unsupported.");
+        }
+        if (configuration.StorageProvider == "sftp" && (configuration.StorageExecutionLocation != "Backend"
+            || configuration.StorageConnectionId is null || configuration.StorageConnectionId == Guid.Empty || configuration.StoragePrefix != string.Empty))
+        {
+            throw new ArgumentException("The backend-relayed storage configuration is invalid.");
         }
         if (!HasValidAuthentication(configuration.IntegratedSecurity, configuration.DatabaseCredentialReference))
         {

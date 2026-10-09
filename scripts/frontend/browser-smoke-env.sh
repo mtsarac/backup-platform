@@ -10,10 +10,12 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
 build=true
 download=false
+retention=false
 while (($#)); do
     case "$1" in
         --no-build) build=false ;;
         --download) download=true ;;
+        --retention-smoke) retention=true ;;
         -h|--help)
             printf '%s\n' 'Usage: browser-smoke-env.sh [--no-build] [--download]' \
                 'Needs BACKUP_PLATFORM_TEST_CONNECTION_STRING (admin PostgreSQL) from the private file/environment, dotnet, bun and openssl.' \
@@ -32,6 +34,14 @@ require_command bun
 require_command openssl
 require_command python3
 [[ -n "${BACKUP_PLATFORM_TEST_CONNECTION_STRING:-}" ]] || fail 'Set BACKUP_PLATFORM_TEST_CONNECTION_STRING.'
+# Only the owned disposable stack opts into a short deletion grace period.
+export Backups__Retention__Enabled=$retention
+if [[ $retention == true ]]; then
+    export Backups__Retention__ScanInterval=00:00:01
+    export Backups__Retention__MinimumDeleteGracePeriod=00:00:01
+    export Backups__Retention__DefaultDeleteGracePeriod=00:00:01
+    export Backups__Retention__StorageSweepEnabled=false
+fi
 
 make_runtime_dir
 work_dir=$RUNTIME_DIR
@@ -112,7 +122,7 @@ PY
 ASPNETCORE_URLS="https://${bind_host}:${api_port}" \
     ASPNETCORE_Kestrel__Certificates__Default__Path="$work_dir/cert.pfx" \
     ASPNETCORE_Kestrel__Certificates__Default__Password="$cert_password" \
-    Backups__Scheduling__Enabled=false Backups__Retention__Enabled=false \
+    Backups__Scheduling__Enabled=false \
     dotnet "$api_dll" >"$work_dir/api.log" 2>&1 &
 pids+=($!)
 ready=false
@@ -150,7 +160,7 @@ PY
         "ASPNETCORE_URLS=https://${bind_host}:${api_port}" \
         "ASPNETCORE_Kestrel__Certificates__Default__Path=$work_dir/cert.pfx" \
         "ASPNETCORE_Kestrel__Certificates__Default__Password=$cert_password" \
-        Backups__Scheduling__Enabled=false Backups__Retention__Enabled=false \
+        Backups__Scheduling__Enabled=false \
         dotnet "$api_dll" >>"$work_dir/api.log" 2>&1 &
     pids[0]=$!
     ready=false

@@ -5,22 +5,23 @@ import { usePlatformTenants } from '@/features/platform/hooks'
 import { inputClass, selectClass } from '@/features/platform/styles'
 import { QUOTA_SCOPE_PATTERN } from '@/features/storage/scope-input'
 import { ConfigFieldInputs, SecretFieldInputs } from './descriptor-fields'
-import { buildConfiguration, buildSecretValues, configurationComplete, hasSecretInput, initialFieldValues, secretsComplete } from './descriptor-values'
+import { activeSecretFields, buildConfiguration, buildSecretValues, configurationComplete, hasSecretInput, initialFieldValues, secretsComplete } from './descriptor-values'
 import type { FieldValues } from './descriptor-values'
 import { useCreatePlatformConnection, useCreateTenantConnection, usePlatformProviders } from './hooks'
 import { connectionErrorMessage, errorField, invalidFieldName, isPlatformCreatable } from './labels'
 import type { ProviderDescriptor, TenantCreateConnectionInput } from './types'
 
-/** Everything a provider's descriptor asks for: its safe configuration fields, then its password-typed secret fields. */
+/** Safe descriptor configuration followed by the selected authentication method's new credentials. */
 function ProviderFields({ provider, config, secret, error, onConfig, onSecret }: {
   provider: ProviderDescriptor; config: FieldValues; secret: Record<string, string>; error: unknown
   onConfig: (name: string, value: string | boolean) => void; onSecret: (name: string, value: string) => void
 }) {
+  const fields = activeSecretFields(provider.providerType, config, provider.secretFields)
   return <>
-    <ConfigFieldInputs fields={provider.configFields} values={config} invalidName={invalidFieldName(error, 'configuration')} onChange={onConfig} />
-    {provider.secretFields.length > 0 && <div className="space-y-3 rounded-lg border border-border bg-surface-2 p-3">
+    <ConfigFieldInputs providerType={provider.providerType} fields={provider.configFields} values={config} invalidName={invalidFieldName(error, 'configuration')} onChange={onConfig} />
+    {fields.length > 0 && <div className="space-y-3 rounded-lg border border-border bg-surface-2 p-3">
       <p className="text-xs text-text-muted">Kimlik bilgisi değerleri yalnızca sunucuya gönderilir; kaydedildikten sonra bir daha gösterilmez.</p>
-      <SecretFieldInputs fields={provider.secretFields} values={secret} invalidName={invalidFieldName(error, 'secret')} onChange={onSecret} />
+      <SecretFieldInputs providerType={provider.providerType} fields={fields} values={secret} invalidName={invalidFieldName(error, 'secret')} onChange={onSecret} />
     </div>}
   </>
 }
@@ -29,14 +30,16 @@ function ProviderFields({ provider, config, secret, error, onConfig, onSecret }:
 function providerPayload(provider: ProviderDescriptor, name: string, config: FieldValues, secret: Record<string, string>): TenantCreateConnectionInput {
   const input: TenantCreateConnectionInput = { providerType: provider.providerType, name: name.trim() }
   if (provider.configFields.length > 0) input.configuration = buildConfiguration(provider.configFields, config)
-  if (provider.secretFields.length > 0 && hasSecretInput(secret)) input.secret = buildSecretValues(provider.secretFields, secret)
+  const fields = activeSecretFields(provider.providerType, config, provider.secretFields)
+  const credentials = buildSecretValues(fields, secret)
+  if (hasSecretInput(credentials)) input.secret = credentials
   return input
 }
 
 /** Tenant 'Bağlantı ekle': generic over the descriptor, so a provider that becomes tenant-creatable needs no UI change. */
 export function CreateConnectionDialog({ provider, onClose }: { provider: ProviderDescriptor; onClose: () => void }) {
   const [name, setName] = useState('')
-  const [config, setConfig] = useState<FieldValues>(() => initialFieldValues(provider.configFields))
+  const [config, setConfig] = useState<FieldValues>(() => initialFieldValues(provider.configFields, {}, provider.providerType))
   const [secret, setSecret] = useState<Record<string, string>>({})
   const create = useCreateTenantConnection()
   const reset = create.reset
@@ -49,7 +52,7 @@ export function CreateConnectionDialog({ provider, onClose }: { provider: Provid
   }
 
   return <FormDialog title={`Bağlantı ekle: ${provider.displayName}`} submitLabel="Bağlantı ekle" pendingLabel="Ekleniyor…" pending={create.isPending}
-    disabled={!name.trim() || !configurationComplete(provider.configFields, config) || !secretsComplete(provider.secretFields, secret)}
+    disabled={!name.trim() || !configurationComplete(provider.configFields, config) || !secretsComplete(activeSecretFields(provider.providerType, config, provider.secretFields), secret)}
     error={create.error ? connectionErrorMessage(create.error) : undefined} onSubmit={submit} onClose={onClose}>
     <label className="block text-sm text-text-muted">Ad
       <input className={inputClass} value={name} required aria-invalid={errorField(create.error) === 'name'} onChange={(event) => setName(event.target.value)} />
@@ -102,7 +105,8 @@ export function CreateManagedTargetDialog({ tenant, onClose }: { tenant?: Picked
 
   function chooseProvider(next: string) {
     setProviderType(next)
-    setConfig(initialFieldValues(creatable.find((item) => item.providerType === next)?.configFields ?? []))
+    const selected = creatable.find((item) => item.providerType === next)
+    setConfig(initialFieldValues(selected?.configFields ?? [], {}, next))
     setSecret({})
   }
 
@@ -116,7 +120,7 @@ export function CreateManagedTargetDialog({ tenant, onClose }: { tenant?: Picked
   return <FormDialog title={tenant ? `Managed target ekle: ${tenant.name}` : 'Managed target ekle'}
     description="Seçilen tenant için platform tarafından işletilen (PlatformManaged) bir depolama hedefi oluşturur."
     submitLabel="Managed target ekle" pendingLabel="Ekleniyor…" pending={create.isPending}
-    disabled={!tenantId || !provider || !name.trim() || quotaScopeInvalid || !configurationComplete(provider.configFields, config) || !secretsComplete(provider.secretFields, secret)}
+    disabled={!tenantId || !provider || !name.trim() || quotaScopeInvalid || !configurationComplete(provider.configFields, config) || !secretsComplete(activeSecretFields(provider.providerType, config, provider.secretFields), secret)}
     error={create.error ? connectionErrorMessage(create.error) : providers.error ? connectionErrorMessage(providers.error) : undefined} onSubmit={submit} onClose={onClose}>
     {tenant ? <p className="text-sm text-text-muted">Tenant: <span className="font-medium text-text">{tenant.name}</span></p> : <TenantPicker value={tenantId} onChange={setTenantId} />}
     <label className="block text-sm text-text-muted">Storage Provider

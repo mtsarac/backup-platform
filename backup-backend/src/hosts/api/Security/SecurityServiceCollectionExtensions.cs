@@ -121,6 +121,18 @@ public static class SecurityServiceCollectionExtensions
     /// </summary>
     private static void AddStorageConnections(IServiceCollection services)
     {
+        services.AddSingleton(provider =>
+        {
+            var config = provider.GetRequiredService<IConfiguration>().GetSection("Backups:Sftp");
+            var network = new BackupPlatform.StorageProviders.Sftp.SftpNetworkOptions
+            {
+                AllowedPrivateNetworks = config.GetSection("AllowedPrivateNetworks").Get<string[]>() ?? [],
+                ConnectionTimeout = TimeSpan.FromSeconds(config.GetValue<int?>("ConnectionTimeoutSeconds") ?? 15),
+                OperationTimeout = TimeSpan.FromSeconds(config.GetValue<int?>("OperationTimeoutSeconds") ?? 30),
+                TransferTimeout = TimeSpan.FromSeconds(config.GetValue<int?>("TransferTimeoutSeconds") ?? 3600)
+            };
+            return new BackupPlatform.Api.Backups.SftpConnectionProviderFactory(network);
+        });
         services.AddDataProtection();
         services.AddSingleton<IConfigureOptions<KeyManagementOptions>>(provider => new ConfigureOptions<KeyManagementOptions>(options =>
         {
@@ -137,6 +149,11 @@ public static class SecurityServiceCollectionExtensions
         services.AddScoped<IStorageConnectionStore, PostgreSqlStorageConnectionStore>();
         services.AddScoped<IStorageConnectionTester>(provider => new CentralConnectionTester(provider.GetRequiredService<IBackupStorageResolver>()));
         services.AddScoped<IStorageConnectionTester>(_ => new AgentSideConnectionTester(StorageProviderTypes.Local));
+        services.AddScoped<IStorageConnectionTester>(provider =>
+        {
+            var factory = provider.GetRequiredService<BackupPlatform.Api.Backups.SftpConnectionProviderFactory>();
+            return new SftpConnectionTester((connection, secrets) => factory.Create(connection, secrets));
+        });
         services.AddScoped<StorageConnectionService>();
     }
 
