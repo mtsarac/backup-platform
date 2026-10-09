@@ -413,7 +413,7 @@ public sealed class RestoreSourceEvaluatorTests
         var artifact = Artifact();
         var connectionId = Guid.NewGuid();
         var replica = new BackupReplica(Guid.NewGuid(), artifact.TenantId, artifact.Id, "sftp", connectionId.ToString("D"),
-            "tenant/sales.bak", 1024, Hash, "sha256", "Verified", "ReadBack", Now.AddDays(-1), Now.AddDays(-1),
+            "tenant/sales.bak", artifact.SizeBytes, Hash, "sha256", "Verified", "ReadBack", Now.AddDays(-1), Now.AddDays(-1),
             BackupStorageExecutionLocation.Backend, null, connectionId);
         AddTo(artifact, replica);
 
@@ -433,7 +433,7 @@ public sealed class RestoreSourceEvaluatorTests
         var connectionId = Guid.NewGuid();
         var replica = new BackupReplica(Guid.NewGuid(), artifact.TenantId, artifact.Id, "sftp",
             string.IsNullOrEmpty(target) ? Guid.NewGuid().ToString("D") : target,
-            "tenant/sales.bak", 1024, Hash, "sha256", "Verified", "ReadBack", Now.AddDays(-1), Now.AddDays(-1),
+            "tenant/sales.bak", artifact.SizeBytes, Hash, "sha256", "Verified", "ReadBack", Now.AddDays(-1), Now.AddDays(-1),
             BackupStorageExecutionLocation.Backend, null, connectionId);
         AddTo(artifact, replica);
 
@@ -449,7 +449,7 @@ public sealed class RestoreSourceEvaluatorTests
         var artifact = Artifact();
         var connectionId = Guid.NewGuid();
         var replica = new BackupReplica(Guid.NewGuid(), artifact.TenantId, artifact.Id, "sftp", connectionId.ToString("D"),
-            "tenant/sales.bak", 1024, Hash, "sha256", "Verified", "ReadBack", Now.AddDays(-1), Now.AddDays(-1),
+            "tenant/sales.bak", artifact.SizeBytes, Hash, "sha256", "Verified", "ReadBack", Now.AddDays(-1), Now.AddDays(-1),
             BackupStorageExecutionLocation.Backend, null, connectionId);
         AddTo(artifact, replica);
 
@@ -465,14 +465,14 @@ public sealed class RestoreSourceEvaluatorTests
         var artifact = Artifact();
         var connectionId = Guid.NewGuid();
         var unverified = new BackupReplica(Guid.NewGuid(), artifact.TenantId, artifact.Id, "sftp", connectionId.ToString("D"),
-            "tenant/sales.bak", 1024, Hash, "sha256", "Unverified", "ReadBack", Now.AddDays(-1), null,
+            "tenant/sales.bak", artifact.SizeBytes, Hash, "sha256", "Unverified", "ReadBack", Now.AddDays(-1), null,
             BackupStorageExecutionLocation.Backend, null, connectionId);
         AddTo(artifact, unverified);
 
         Assert.Equal(RestoreSourceRejection.ReplicaNotVerified, RestoreSourceEvaluator.Evaluate(artifact, unverified, Agent, Now).Rejection);
 
         var restorable = new BackupReplica(Guid.NewGuid(), artifact.TenantId, artifact.Id, "sftp", connectionId.ToString("D"),
-            "tenant/sales2.bak", 1024, Hash, "sha256", "Verified", "ReadBack", Now.AddDays(-1), Now.AddDays(-1),
+            "tenant/sales2.bak", artifact.SizeBytes, Hash, "sha256", "Verified", "ReadBack", Now.AddDays(-1), Now.AddDays(-1),
             BackupStorageExecutionLocation.Backend, null, connectionId);
         AddTo(artifact, restorable);
         artifact.RequestDelete(Now, null);

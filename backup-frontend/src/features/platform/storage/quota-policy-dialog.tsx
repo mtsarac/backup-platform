@@ -287,6 +287,11 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
 
         {scopeKind === 'storageConnection' && (
           <div className="space-y-2">
+            <QuotaConnectionPicker
+              values={connectionIds.split(/[,\n]+/).map(v => v.trim()).filter(Boolean)}
+              onChange={(selected) => setConnectionIds(selected.join('\n'))}
+              invalid={scopeError !== null}
+            />
             <label className="block text-xs text-text-muted">
               Depolama bağlantısı kimlikleri (her satıra veya virgülle bir GUID):
               <textarea
@@ -297,10 +302,6 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
                 aria-invalid={scopeError !== null}
               />
             </label>
-            <QuotaConnectionPicker
-              values={connectionIds.split(/[,\n]+/).map(v => v.trim()).filter(Boolean)}
-              onChange={(selected) => setConnectionIds(selected.join('\n'))}
-            />
           </div>
         )}
       </div>
