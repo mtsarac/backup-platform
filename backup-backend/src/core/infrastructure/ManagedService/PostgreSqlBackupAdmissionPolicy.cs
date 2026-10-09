@@ -120,7 +120,7 @@ public sealed class PostgreSqlBackupAdmissionPolicy(
             return 0;
         }
         return await TenantUsageEngine.ReadArtifactAsync(context, request.TenantId, artifactId, cancellationToken) is { } stored
-            ? QuotaAccounting.Estimate(policy, stored.Replicas.Select(replica => replica.ToFact(artifactId, stored.ArtifactSize)))
+            ? QuotaAccounting.Estimate(policy, stored.Replicas.Select(stored.ToFact))
             : 0;
     }
 }

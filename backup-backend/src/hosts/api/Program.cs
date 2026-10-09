@@ -32,6 +32,7 @@ app.MapAgentAdministrationEndpoints();
 app.MapPlatformEndpoints();
 app.MapManagedServicePlatformEndpoints();
 app.MapQuotaEndpoints();
+app.MapStorageConnectionEndpoints();
 app.MapBackupEndpoints();
 app.MapBackupArtifactEndpoints();
 app.MapBackupTaskEndpoints();

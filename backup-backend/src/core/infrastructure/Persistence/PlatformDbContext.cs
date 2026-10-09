@@ -10,6 +10,7 @@ using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Downloads;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Restores;
+using BackupPlatform.Domain.Storage;
 using BackupPlatform.Domain.Support;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Identity;
@@ -84,6 +85,7 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<QuotaPolicy> QuotaPolicies => Set<QuotaPolicy>();
     public DbSet<TenantStorageUsage> TenantStorageUsages => Set<TenantStorageUsage>();
     public DbSet<QuotaReservation> QuotaReservations => Set<QuotaReservation>();
+    public DbSet<StorageConnection> StorageConnections => Set<StorageConnection>();
 
     /// <summary>Explicit unfiltered context for trusted platform operations only.</summary>
     /// <remarks>Does not authorize the caller. Future application boundaries must authorize its use.</remarks>
@@ -188,6 +190,14 @@ public sealed class PlatformDbContext : DbContext
             if (!IsPlatformOperations && entry.Entity is Plan or TenantSubscription or QuotaPolicy or TenantStorageUsage or QuotaReservation)
             {
                 throw new InvalidOperationException("Plan, subscription and quota writes require explicit platform operations.");
+            }
+            if (entry.Entity is BackupReplica { StorageConnectionId: var connectionId } && connectionId == Guid.Empty && entry.State == EntityState.Added)
+            {
+                throw new InvalidOperationException("A replica must be assigned to a storage connection before it is saved.");
+            }
+            if (!IsPlatformOperations && entry.Entity is StorageConnection)
+            {
+                throw new InvalidOperationException("Storage connection writes require explicit platform operations.");
             }
             if (!IsPlatformOperations && entry.Entity is SupportAccessSession)
             {

@@ -3,6 +3,7 @@ import { ApiError } from '@/lib/api/client'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { FormDialog } from '@/features/platform/plans/form-dialog'
 import { inputClass, selectClass } from '@/features/platform/styles'
+import { parseQuotaScopeLabels, parseStorageConnectionIds, type ScopeValuesResult } from '@/features/storage/scope-input'
 import type { AccountingMode, EnforcementMode, QuotaPolicy, ScopeKind, ScopeSelector } from '@/features/storage/types'
 import { useCreateQuotaPolicy, useUpdateQuotaPolicy } from './hooks'
 
@@ -27,6 +28,8 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
   const [scopeKind, setScopeKind] = useState<ScopeKind>(initialScope?.kind ?? 'all')
   const [providerTypes, setProviderTypes] = useState<string>((initialScope?.kind === 'providerType' ? initialScope.values ?? [] : ['central']).join(', '))
   const [ownershipTypes, setOwnershipTypes] = useState<string[]>(initialScope?.kind === 'ownershipType' ? initialScope.values ?? ['PlatformManaged'] : ['PlatformManaged'])
+  const [quotaScopes, setQuotaScopes] = useState<string>((initialScope?.kind === 'quotaScope' ? initialScope.values ?? [] : ['managed']).join(', '))
+  const [connectionIds, setConnectionIds] = useState<string>((initialScope?.kind === 'storageConnection' ? initialScope.values ?? [] : []).join('\n'))
   const [scopeError, setScopeError] = useState<string | null>(null)
 
   const create = useCreateQuotaPolicy()
@@ -62,6 +65,13 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
         return
       }
       includedStorageScopes = [{ kind: 'ownershipType', values: ownershipTypes }]
+    } else if (scopeKind === 'quotaScope' || scopeKind === 'storageConnection') {
+      const parsed: ScopeValuesResult = scopeKind === 'quotaScope' ? parseQuotaScopeLabels(quotaScopes) : parseStorageConnectionIds(connectionIds)
+      if (!parsed.ok) {
+        setScopeError(parsed.error)
+        return
+      }
+      includedStorageScopes = [{ kind: scopeKind, values: parsed.values }]
     } else {
       includedStorageScopes = [{ kind: 'all' }]
     }
@@ -206,6 +216,8 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
             <option value="all">Tüm depolama alanları (All)</option>
             <option value="providerType">Provider Türü (ProviderType - örn. central, local)</option>
             <option value="ownershipType">Sahiplik Türü (OwnershipType - PlatformManaged / TenantManaged)</option>
+            <option value="quotaScope">Kota Kapsamı (QuotaScope - örn. managed, tenant)</option>
+            <option value="storageConnection">Depolama Bağlantısı (StorageConnection - GUID)</option>
           </select>
         </label>
 
@@ -252,6 +264,39 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
               </label>
             </div>
           </div>
+        )}
+
+        {scopeKind === 'quotaScope' && (
+          <label className="block text-xs text-text-muted">
+            Kota kapsamı etiketleri (virgülle ayırın):
+            <input
+              className={`mt-1 ${inputClass}`}
+              value={quotaScopes}
+              onChange={(e) => setQuotaScopes(e.target.value)}
+              placeholder="managed, tenant"
+              aria-invalid={scopeError !== null}
+            />
+            <span className="mt-1 block text-[11px] text-text-muted">
+              Bir depolama bağlantısının kota kapsamı etiketiyle eşleşir. Küçük harf, rakam ve “-”; her etiket 1-64 karakter.
+            </span>
+          </label>
+        )}
+
+        {scopeKind === 'storageConnection' && (
+          <label className="block text-xs text-text-muted">
+            Depolama bağlantısı kimlikleri (GUID, virgülle veya satırlarla ayırın):
+            <textarea
+              className={`mt-1 ${inputClass} font-mono`}
+              rows={3}
+              value={connectionIds}
+              onChange={(e) => setConnectionIds(e.target.value)}
+              placeholder="3f2b8c1e-0d4a-4b6e-9a7c-5e1d2f3a4b5c"
+              aria-invalid={scopeError !== null}
+            />
+            <span className="mt-1 block text-[11px] text-text-muted">
+              Yalnızca bu bağlantılara ait kopyalar kotaya dahil edilir. Kimlikler Depolama hedefleri sayfasından alınabilir.
+            </span>
+          </label>
         )}
       </div>
 

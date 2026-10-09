@@ -1,5 +1,5 @@
 using System.Text.Json;
-using BackupPlatform.Domain.Backups;
+using BackupPlatform.Domain.Storage;
 
 namespace BackupPlatform.ManagedService.Quota;
 
@@ -7,46 +7,29 @@ public enum QuotaScopeKind
 {
     /// <summary>Every replica.</summary>
     All = 1,
-    /// <summary>Replicas whose <c>StorageProvider</c> is one of the listed provider keys.</summary>
+    /// <summary>Replicas on a storage connection whose provider type is one of the listed keys.</summary>
     ProviderType = 2,
-    /// <summary>Replicas whose derived <see cref="StorageOwnership"/> is one of the listed values.</summary>
-    OwnershipType = 3
-}
-
-public enum StorageOwnership
-{
-    PlatformManaged = 1,
-    TenantManaged = 2
-}
-
-/// <summary>What a scope rule can see of one replica: the metadata the schema records today.</summary>
-public readonly record struct ReplicaStorageFacts(string StorageProvider, BackupStorageExecutionLocation ExecutionLocation)
-{
-    public StorageOwnership Ownership => StorageOwnershipClassifier.Classify(StorageProvider, ExecutionLocation);
+    /// <summary>Replicas on a storage connection whose <see cref="StorageOwnership"/> is one of the listed values.</summary>
+    OwnershipType = 3,
+    /// <summary>Replicas on a storage connection whose quota scope label is one of the listed labels.</summary>
+    QuotaScope = 4,
+    /// <summary>Replicas on one of the listed storage connections (by id).</summary>
+    StorageConnection = 5
 }
 
 /// <summary>
-/// The one place a replica becomes an ownership. Storage connections do not exist yet, so ownership is derived from what a replica does
-/// record: the central provider is operated by the platform, anything else (agent-local disks, and every later provider) is the tenant's.
-/// A later slice that stores ownership on the storage connection replaces this method only.
+/// What a scope rule can see of one replica: the properties of the storage connection it lives on. Every selector kind reads one of these; a new
+/// provider type adds a value, never a branch here.
 /// </summary>
-public static class StorageOwnershipClassifier
-{
-    public const string CentralProvider = "central";
-
-    public static StorageOwnership Classify(string storageProvider, BackupStorageExecutionLocation executionLocation) =>
-        executionLocation == BackupStorageExecutionLocation.Backend && string.Equals(storageProvider, CentralProvider, StringComparison.Ordinal)
-            ? StorageOwnership.PlatformManaged
-            : StorageOwnership.TenantManaged;
-}
+public readonly record struct ReplicaStorageFacts(string ProviderType, StorageOwnership Ownership, string QuotaScope, Guid ConnectionId);
 
 /// <summary>One rule of a scope. <see cref="Values"/> are canonical (trimmed, ordinal-sorted, distinct) and empty for <see cref="QuotaScopeKind.All"/>.</summary>
 public sealed record QuotaScopeSelector(QuotaScopeKind Kind, IReadOnlyList<string> Values);
 
 /// <summary>
 /// Which replicas a policy counts: the union of its selectors. It is data (stored as JSON on the policy), so narrowing quota to
-/// platform-managed storage is a policy update and a rebuild, never a code change. Only what the schema can express today is accepted;
-/// a selector kind that needs data the platform does not record yet (a quota label, a storage connection) is rejected, not guessed.
+/// platform-managed storage is a policy update and a rebuild, never a code change. Selectors match properties of the replica's storage connection
+/// (provider type, ownership, quota scope label, or the connection itself), so adding a provider needs no condition in the quota engine.
 /// </summary>
 public sealed class QuotaScopeRule : IEquatable<QuotaScopeRule>
 {
@@ -75,8 +58,10 @@ public sealed class QuotaScopeRule : IEquatable<QuotaScopeRule>
             var matched = selector.Kind switch
             {
                 QuotaScopeKind.All => true,
-                QuotaScopeKind.ProviderType => selector.Values.Contains(replica.StorageProvider, StringComparer.Ordinal),
+                QuotaScopeKind.ProviderType => selector.Values.Contains(replica.ProviderType, StringComparer.Ordinal),
                 QuotaScopeKind.OwnershipType => selector.Values.Contains(replica.Ownership.ToString(), StringComparer.Ordinal),
+                QuotaScopeKind.QuotaScope => selector.Values.Contains(replica.QuotaScope, StringComparer.Ordinal),
+                QuotaScopeKind.StorageConnection => selector.Values.Contains(replica.ConnectionId.ToString("D"), StringComparer.Ordinal),
                 _ => false
             };
             if (matched)
@@ -125,6 +110,20 @@ public sealed class QuotaScopeRule : IEquatable<QuotaScopeRule>
                 case QuotaScopeKind.OwnershipType:
                     values = values.Select(CanonicalOwnership).Distinct(StringComparer.Ordinal).ToList();
                     if (values.Count == 0 || values.Any(value => value.Length == 0))
+                    {
+                        throw new InvalidManagedServiceRequestException(Field, "invalid_value");
+                    }
+                    break;
+                case QuotaScopeKind.QuotaScope:
+                    values = values.Select(value => value.ToLowerInvariant()).Distinct(StringComparer.Ordinal).ToList();
+                    if (values.Count == 0 || values.Count > MaximumValuesPerSelector || !values.All(StorageQuotaScopes.IsValid))
+                    {
+                        throw new InvalidManagedServiceRequestException(Field, "invalid_value");
+                    }
+                    break;
+                case QuotaScopeKind.StorageConnection:
+                    values = values.Select(CanonicalConnectionId).Distinct(StringComparer.Ordinal).ToList();
+                    if (values.Count == 0 || values.Count > MaximumValuesPerSelector || values.Any(value => value.Length == 0))
                     {
                         throw new InvalidManagedServiceRequestException(Field, "invalid_value");
                     }
@@ -194,15 +193,20 @@ public sealed class QuotaScopeRule : IEquatable<QuotaScopeRule>
     {
         QuotaScopeKind.All => "all",
         QuotaScopeKind.ProviderType => "providerType",
-        _ => "ownershipType"
+        QuotaScopeKind.OwnershipType => "ownershipType",
+        QuotaScopeKind.QuotaScope => "quotaScope",
+        QuotaScopeKind.StorageConnection => "storageConnection",
+        _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
 
-    /// <summary>Names only: numeric text such as "1" and kinds that need data the platform lacks (quotaScope, storageConnection) are rejected.</summary>
+    /// <summary>Names only: numeric text such as "1" is rejected.</summary>
     public static QuotaScopeKind ParseKind(string? name) => name switch
     {
         "all" => QuotaScopeKind.All,
         "providerType" => QuotaScopeKind.ProviderType,
         "ownershipType" => QuotaScopeKind.OwnershipType,
+        "quotaScope" => QuotaScopeKind.QuotaScope,
+        "storageConnection" => QuotaScopeKind.StorageConnection,
         _ => throw new InvalidManagedServiceRequestException(Field, "unsupported_scope_kind")
     };
 
@@ -224,4 +228,8 @@ public sealed class QuotaScopeRule : IEquatable<QuotaScopeRule>
 
     private static string CanonicalOwnership(string value) =>
         Enum.GetNames<StorageOwnership>().FirstOrDefault(name => string.Equals(name, value, StringComparison.OrdinalIgnoreCase)) ?? string.Empty;
+
+    /// <summary>The canonical lowercase hyphenated form; anything that is not exactly a non-empty GUID is empty (and so rejected).</summary>
+    private static string CanonicalConnectionId(string value) =>
+        Guid.TryParseExact(value, "D", out var id) && id != Guid.Empty ? id.ToString("D") : string.Empty;
 }

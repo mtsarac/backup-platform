@@ -92,12 +92,13 @@ internal sealed class AgentWorld : IAsyncDisposable
         AgentRateLimitOptions? limits = null,
         MutableClock? clock = null,
         bool kestrel = false,
-        IReadOnlyDictionary<string, string?>? configuration = null)
+        IReadOnlyDictionary<string, string?>? configuration = null,
+        Action<IServiceCollection>? configureServices = null)
     {
         clock ??= new MutableClock();
         var certificate = kestrel ? CreateSelfSignedCertificate() : null;
         return Task.FromResult(new AgentWorld(
-            database, clock, new AuthApiFactory(database.ConnectionString, clock, options, connectivity, limits, certificate, configuration), certificate));
+            database, clock, new AuthApiFactory(database.ConnectionString, clock, options, connectivity, limits, certificate, configuration, configureServices), certificate));
     }
 
     private static X509Certificate2 CreateSelfSignedCertificate()

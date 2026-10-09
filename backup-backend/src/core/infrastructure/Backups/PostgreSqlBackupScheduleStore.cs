@@ -4,6 +4,7 @@ using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Infrastructure.Persistence;
+using BackupPlatform.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 
 namespace BackupPlatform.Infrastructure.Backups;
@@ -66,10 +67,13 @@ public sealed class PostgreSqlBackupScheduleStore(DbContextOptions<PlatformDbCon
         {
             // Same gate as a manual start. A refusal is a decided occurrence like any other: recorded with its reason, so it is never silently lost.
             var runId = Guid.NewGuid();
-            var decision = await BackupAdmissionGate.AdmitAsync(admission, context, new BackupAdmissionRequest(tenantId, jobId, runId, BackupTriggerTypes.Scheduled, now), cancellationToken);
+            var target = await StorageTargetGate.ForNewRunAsync(context, tenantId, job.Configuration, now, cancellationToken);
+            var decision = target.Allowed
+                ? await BackupAdmissionGate.AdmitAsync(admission, context, new BackupAdmissionRequest(tenantId, jobId, runId, BackupTriggerTypes.Scheduled, now), cancellationToken)
+                : BackupAdmissionDecision.Denied(target.DenialCode!);
             if (decision.Allowed)
             {
-                run = BackupRun.ForScheduledOccurrence(runId, job, instant, now);
+                run = BackupRun.ForScheduledOccurrence(runId, job, instant, now, target.Configuration);
                 run.QueueFirstAttempt(Guid.NewGuid(), now);
                 context.BackupRuns.Add(run);
                 recorded.Add(new BackupScheduleOccurrence(Guid.NewGuid(), tenantId, jobId, instant, BackupOccurrenceOutcome.RunCreated, BackupOccurrenceReasons.RunCreated, run.Id, now));

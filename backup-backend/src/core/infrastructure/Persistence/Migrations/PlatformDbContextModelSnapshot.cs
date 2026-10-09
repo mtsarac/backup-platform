@@ -789,6 +789,9 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
 
+                    b.Property<Guid>("StorageConnectionId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("StorageProvider")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -840,6 +843,11 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("StorageProvider", "Key")
                         .HasDatabaseName("ix_backup_replicas_location");
+
+                    b.HasIndex("TenantId", "StorageConnectionId")
+                        .HasDatabaseName("ix_backup_replicas_connection");
+
+                    b.HasIndex("StorageConnectionId", "TenantId", "StorageProvider");
 
                     b.HasIndex("TenantId", "OwningAgentId", "DeleteAfter")
                         .HasDatabaseName("ix_backup_replicas_agent_deletions")
@@ -1755,6 +1763,135 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BackupPlatform.Domain.Storage.StorageConnection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("AdministrativelyDisabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Configuration")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("ConfigurationJson");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LastTestCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("LastTestStatus")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("LastTestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Ownership")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("ProviderType")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("QuotaScope")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SecretFieldNames")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("SecretFieldNamesJson");
+
+                    b.Property<string>("SecretReference")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset?>("SecretUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("StateChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TenantId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("Id", "TenantId");
+
+                    b.HasAlternateKey("Id", "TenantId", "ProviderType")
+                        .HasName("ak_storage_connections_target");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("Ownership", "ProviderType")
+                        .HasDatabaseName("ix_storage_connections_ownership");
+
+                    b.HasIndex("TenantId", "NormalizedName")
+                        .IsUnique()
+                        .HasDatabaseName("ux_storage_connections_name");
+
+                    b.HasIndex("TenantId", "ProviderType")
+                        .IsUnique()
+                        .HasDatabaseName("ux_storage_connections_default")
+                        .HasFilter("\"IsDefault\"");
+
+                    b.ToTable("storage_connections", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_storage_connections_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_storage_connections_name", "length(btrim(\"Name\")) BETWEEN 1 AND 100 AND \"NormalizedName\" = lower(btrim(\"Name\"))");
+
+                            t.HasCheckConstraint("ck_storage_connections_ownership", "\"Ownership\" IN ('PlatformManaged','TenantManaged')");
+
+                            t.HasCheckConstraint("ck_storage_connections_provider", "\"ProviderType\" ~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?$' AND length(\"ProviderType\") <= 32");
+
+                            t.HasCheckConstraint("ck_storage_connections_scope", "\"QuotaScope\" ~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?$' AND length(\"QuotaScope\") <= 64");
+
+                            t.HasCheckConstraint("ck_storage_connections_secret", "(\"SecretReference\" IS NULL) OR (length(\"SecretReference\") BETWEEN 1 AND 128 AND \"SecretUpdatedAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_storage_connections_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_storage_connections_test", "(\"LastTestStatus\" IS NULL) = (\"LastTestedAt\" IS NULL) AND (\"LastTestStatus\" IS NULL OR \"LastTestStatus\" IN ('Succeeded','Failed','NotTestable'))");
+                        });
+                });
+
             modelBuilder.Entity("BackupPlatform.Domain.Support.SupportAccessSession", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2017,6 +2154,30 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_user_sessions_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
 
                             t.HasCheckConstraint("ck_user_sessions_user_id", "\"UserId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Infrastructure.Secrets.SecretCiphertextRecord", b =>
+                {
+                    b.Property<string>("Name")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Ciphertext")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Name");
+
+                    b.ToTable("platform_secrets", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_platform_secrets_name", "length(\"Name\") BETWEEN 1 AND 128");
                         });
                 });
 
@@ -2494,6 +2655,13 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("BackupPlatform.Domain.Storage.StorageConnection", null)
+                        .WithMany()
+                        .HasForeignKey("StorageConnectionId", "TenantId", "StorageProvider")
+                        .HasPrincipalKey("Id", "TenantId", "ProviderType")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("BackupPlatform.Domain.Backups.BackupArtifact", null)
                         .WithMany("Replicas")
                         .HasForeignKey("ArtifactId", "TenantId", "SizeBytes", "Checksum", "ChecksumAlgorithm")
@@ -2677,6 +2845,15 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("ReplicaId", "TenantId")
                         .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Storage.StorageConnection", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

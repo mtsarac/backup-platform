@@ -1,4 +1,5 @@
 using BackupPlatform.Domain.Backups;
+using BackupPlatform.Domain.Storage;
 using BackupPlatform.ManagedService.Quota;
 
 namespace BackupPlatform.UnitTests.ManagedService.Quota;
@@ -8,10 +9,20 @@ public sealed class QuotaAccountingTests
     private const long Gb = 1_000_000_000;
     private static readonly DateTimeOffset Now = new(2026, 10, 8, 12, 0, 0, TimeSpan.Zero);
 
+    /// <summary>
+    /// The facts of the connection a test replica lives on. Ownership and scope are plain data of the connection: a central connection on the backend is
+    /// platform-managed (label "managed"), everything else tenant-managed (label "tenant") — the same properties the system default connections have.
+    /// </summary>
+    private static ReplicaStorageFacts Facts(string provider, BackupStorageExecutionLocation location = BackupStorageExecutionLocation.Backend)
+    {
+        var platform = provider == "central" && location == BackupStorageExecutionLocation.Backend;
+        return new(provider, platform ? StorageOwnership.PlatformManaged : StorageOwnership.TenantManaged, platform ? "managed" : "tenant", Guid.NewGuid());
+    }
+
     private static ReplicaFact Replica(
         Guid artifact, string provider = "central", BackupReplicaStatus status = BackupReplicaStatus.Available, long size = 2 * Gb,
         BackupStorageExecutionLocation location = BackupStorageExecutionLocation.Backend) =>
-        new(artifact, size, size, new ReplicaStorageFacts(provider, location), status);
+        new(artifact, size, size, Facts(provider, location), status);
 
     private static long Total(QuotaAccountingMode mode, QuotaScopeRule scope, params ReplicaFact[] replicas)
     {
@@ -160,8 +171,8 @@ public sealed class QuotaAccountingTests
         var artifact = Guid.NewGuid();
         var replicas = new[]
         {
-            new ReplicaFact(artifact, 10, 10, new ReplicaStorageFacts("central", BackupStorageExecutionLocation.Backend), BackupReplicaStatus.Available),
-            new ReplicaFact(artifact, 10, 7, new ReplicaStorageFacts("sftp", BackupStorageExecutionLocation.Backend), BackupReplicaStatus.Available)
+            new ReplicaFact(artifact, 10, 10, Facts("central"), BackupReplicaStatus.Available),
+            new ReplicaFact(artifact, 10, 7, Facts("sftp"), BackupReplicaStatus.Available)
         };
         Assert.Equal(17, Total(QuotaAccountingMode.PhysicalReplicaBytes, QuotaScopeRule.All, replicas));
         Assert.Equal(10, Total(QuotaAccountingMode.LogicalArtifactBytes, QuotaScopeRule.All, replicas));

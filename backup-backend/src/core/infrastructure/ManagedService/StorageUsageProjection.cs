@@ -46,7 +46,7 @@ internal sealed class StorageUsageProjection
                     // What the replica was before this save; none for a replica this save creates.
                     StoredReplica? original = entry.State == EntityState.Added
                         ? null
-                        : new StoredReplica(replica.Id, replica.SizeBytes, replica.StorageProvider, replica.ExecutionLocation, (BackupReplicaStatus)entry.Property(nameof(BackupReplica.Status)).OriginalValue!);
+                        : new StoredReplica(replica.Id, replica.SizeBytes, replica.StorageConnectionId, (BackupReplicaStatus)entry.Property(nameof(BackupReplica.Status)).OriginalValue!);
                     projection.Tenant(replica.TenantId).Artifact(replica.ArtifactId).Reverts[replica.Id] = original;
                     break;
                 }
@@ -118,8 +118,8 @@ internal sealed class StorageUsageProjection
                 reverted[replicaId] = original;
             }
         }
-        return QuotaAccounting.Contribution(policy, saved.Replicas.Select(replica => replica.ToFact(artifactId, saved.ArtifactSize)))
-            - QuotaAccounting.Contribution(policy, reverted.Values.Select(replica => replica.ToFact(artifactId, saved.ArtifactSize)));
+        return QuotaAccounting.Contribution(policy, saved.Replicas.Select(saved.ToFact))
+            - QuotaAccounting.Contribution(policy, reverted.Values.Select(saved.ToFact));
     }
 
     private TenantChange Tenant(TenantId tenantId)

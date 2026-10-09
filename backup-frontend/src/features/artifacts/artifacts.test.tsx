@@ -23,7 +23,7 @@ vi.mock('./api', async (importOriginal) => ({
   getDownloadAvailability: vi.fn().mockResolvedValue({ available: false, reason: 'replica_unavailable', replicas: [], checksum: 'abc123', sizeBytes: 4096 }),
 }))
 const replica: BackupReplica = {
-  id: 'replica-internal', storageProvider: 'Local', storageTarget: 'Backup storage', key: 'not-shown-key',
+  id: 'replica-internal', storageProvider: 'Local', storageConnectionId: 'connection-local', storageTarget: 'Backup storage', key: 'not-shown-key',
   sizeBytes: 4096, checksum: 'abc123', checksumAlgorithm: 'SHA256', verificationState: 'Verified', verificationMethod: 'ReadBack',
   createdAt: '2026-10-05T10:00:00Z', verifiedAt: '2026-10-05T10:01:00Z', status: 'Available', usable: true,
   deleteRequestedAt: null, deleteAfter: null, deleteReason: null, deletedAt: null, deleteAttempts: 0,

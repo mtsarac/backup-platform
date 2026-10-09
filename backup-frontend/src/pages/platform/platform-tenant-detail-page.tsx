@@ -15,6 +15,7 @@ import {
 } from '@/features/platform/hooks'
 import { SubscriptionSection } from '@/features/platform/plans/subscription-section'
 import { TenantStorageSection } from '@/features/platform/storage/tenant-storage-section'
+import { PlatformTenantConnections } from '@/features/storage-connections/platform-tenant-connections'
 import { SupportAccessSection } from '@/features/platform/support/support-access-section'
 import { platformPaths } from '@/features/platform/paths'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
@@ -160,6 +161,7 @@ export function PlatformTenantDetailPage() {
         <EnrollmentSection tenant={tenant} />
         <SubscriptionSection tenantId={tenant.tenantId} tenantName={tenant.name} />
         <TenantStorageSection tenantId={tenant.tenantId} tenantName={tenant.name} />
+        <PlatformTenantConnections tenantId={tenant.tenantId} tenantName={tenant.name} />
         <SupportAccessSection tenantId={tenant.tenantId} tenantName={tenant.name} />
         <MembershipsSection tenantId={tenant.tenantId} tenantName={tenant.name} />
         <RecentAudit tenantId={tenant.tenantId} />

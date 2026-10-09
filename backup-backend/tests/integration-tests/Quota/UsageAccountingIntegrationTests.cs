@@ -1,5 +1,6 @@
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Domain.Backups;
+using BackupPlatform.Domain.Storage;
 using BackupPlatform.ManagedService.Administration;
 using BackupPlatform.ManagedService.Plans;
 using BackupPlatform.ManagedService.Quota;

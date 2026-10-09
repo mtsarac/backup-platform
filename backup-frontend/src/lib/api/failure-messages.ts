@@ -38,6 +38,19 @@ const messages: Record<string, string> = {
   overlap_skipped: 'Backup zaten çalışıyor.',
   quota_exceeded: 'Depolama kotası doldu; yeni backup başlatılamadı. Mevcut backup\'lar silinmedi ve geri yüklenebilir.',
   subscription_required: 'Etkin bir abonelik bulunmadığı için yeni backup başlatılamadı.',
+  storage_connection_disabled: 'Hedef depolama bağlantısı devre dışı; yeni backup başlatılamaz.',
+  storage_connection_unavailable: 'Hedef depolama bağlantısı bulunamadı veya bu Job\'un Storage Provider\'ına ait değil; yeni backup başlatılamaz.',
+  storage_connection_not_found: 'Depolama bağlantısı bulunamadı. Liste güncel olmayabilir.',
+  storage_connection_name_taken: 'Bu ada sahip bir depolama bağlantısı zaten var.',
+  administratively_disabled: 'Bağlantı platform tarafından kilitlendi. Tenant tercihi bu kilidi kaldıramaz; platform yöneticisine başvurun.',
+  connection_limit_reached: 'Bu Storage Provider için bağlantı sınırına ulaşıldı.',
+  platform_managed: 'Platform yönetimli bağlantıyı yalnızca platform yöneticisi değiştirebilir.',
+  tenant_managed: 'Tenant yönetimli bağlantı için bu işlemi yalnızca tenant yöneticisi yapabilir.',
+  platform_managed_provider: 'Bu Storage Provider yalnızca platform tarafından yönetilir; tenant bağlantı ekleyemez.',
+  connection_in_use: 'Bağlantı hâlâ Replica veya Backup Job tarafından kullanılıyor; silinemez.',
+  provider_not_available: 'Bu Storage Provider henüz kullanılamıyor.',
+  secrets_not_supported: 'Bu Storage Provider kimlik bilgisi kabul etmiyor.',
+  unknown_field: 'Bu Storage Provider için tanımlı olmayan bir alan gönderildi.',
   job_overlap: 'Bu Job için başka bir backup çalışıyor.',
   attempts_exhausted: 'İzin verilen toplam attempt sayısına ulaşıldı.',
   succeeded: 'Başarılı backup tekrar denenemez.',
@@ -105,7 +118,7 @@ const messages: Record<string, string> = {
   view_required: 'Download ve Restore izinleri Backup metadata görüntüleme iznini gerektirir.',
 }
 // Codes whose text must win over the generic 403/404 wording.
-const statusSpecificCodes: Record<string, true> = { tenant_not_found: true, user_not_found: true, membership_not_found: true, agent_not_found: true, plan_not_found: true, quota_policy_not_found: true, subscription_not_found: true, platform_admin_required: true, enrollment_disabled: true }
+const statusSpecificCodes: Record<string, true> = { tenant_not_found: true, user_not_found: true, membership_not_found: true, agent_not_found: true, plan_not_found: true, quota_policy_not_found: true, subscription_not_found: true, platform_admin_required: true, enrollment_disabled: true, storage_connection_not_found: true, platform_managed_provider: true }
 export function failureMessage(code?: string | null): string {
   if (!code) return 'İşlem başarısız oldu.'
   return messages[code] ?? (/^[A-Za-z0-9_.-]{1,80}$/.test(code) ? `İşlem başarısız oldu (${code}).` : 'İşlem başarısız oldu.')

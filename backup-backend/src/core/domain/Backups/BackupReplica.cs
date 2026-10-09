@@ -37,7 +37,7 @@ public sealed class BackupReplica : ITenantOwned
     public BackupReplica(Guid id, TenantId tenantId, Guid artifactId, string storageProvider, string storageTarget,
         string key, long sizeBytes, string checksum, string checksumAlgorithm, string verificationState,
         string verificationMethod, DateTimeOffset createdAt, DateTimeOffset? verifiedAt,
-        BackupStorageExecutionLocation? executionLocation = null, Guid? owningAgentId = null)
+        BackupStorageExecutionLocation? executionLocation = null, Guid? owningAgentId = null, Guid? storageConnectionId = null)
     {
         BackupGuard.Id(id);
         BackupGuard.Id(artifactId);
@@ -57,6 +57,8 @@ public sealed class BackupReplica : ITenantOwned
             throw new ArgumentException("Agent replicas require a local provider and an owning agent.");
         ExecutionLocation = location;
         OwningAgentId = location == BackupStorageExecutionLocation.Agent ? owningAgentId : null;
+        if (storageConnectionId == Guid.Empty) throw new ArgumentException("A storage connection identifier must not be empty.");
+        StorageConnectionId = storageConnectionId ?? Guid.Empty;
         Id = id;
         TenantId = tenantId;
         ArtifactId = artifactId;
@@ -79,6 +81,11 @@ public sealed class BackupReplica : ITenantOwned
     public string StorageTarget { get; private set; }
     public BackupStorageExecutionLocation ExecutionLocation { get; private set; }
     public Guid? OwningAgentId { get; private set; }
+    /// <summary>
+    /// The storage connection (destination) this copy lives on. Always set before a replica is saved (the context refuses to persist one without it);
+    /// <see cref="Guid.Empty"/> only means "not assigned yet" on an object that was never persisted. It never changes the provider, target or key.
+    /// </summary>
+    public Guid StorageConnectionId { get; private set; }
     public string Key { get; private set; }
     public long SizeBytes { get; private set; }
     public string Checksum { get; private set; }

@@ -35,9 +35,18 @@ using BackupPlatform.Infrastructure.Scheduling;
 using BackupPlatform.ManagedService.Administration;
 using BackupPlatform.ManagedService.Entitlement;
 using BackupPlatform.Tenancy;
+using BackupPlatform.Domain.Storage;
+using BackupPlatform.Infrastructure.Secrets;
+using BackupPlatform.Infrastructure.Storage;
+using BackupPlatform.SecretProviders.Abstractions;
+using BackupPlatform.SecretProviders.DataProtection;
+using BackupPlatform.Storage;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
+using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 
 namespace BackupPlatform.Api.Security;
 
@@ -82,6 +91,7 @@ public static class SecurityServiceCollectionExtensions
         services.AddSingleton<BackupRetryWorker>();
         services.AddHostedService(provider => provider.GetRequiredService<BackupRetryWorker>());
         AddBackupRetention(services);
+        AddStorageConnections(services);
         AddRestores(services);
         services.AddScoped<IDownloadStore, PostgreSqlDownloadStore>();
         services.AddScoped<DownloadService>();
@@ -102,6 +112,32 @@ public static class SecurityServiceCollectionExtensions
             options.Cookie.Domain = null;
         });
         return services;
+    }
+
+    /// <summary>
+    /// Storage connections: the provider catalog (one descriptor per provider type; adding a provider adds a descriptor and a tester here), the secret
+    /// store credentials go through (Data Protection encryption over PostgreSQL ciphertext), the persistence and the service the endpoints use.
+    /// Data Protection keeps its host-level defaults unless <c>Secrets:DataProtection:KeysDirectory</c> names a key ring directory (shared across nodes).
+    /// </summary>
+    private static void AddStorageConnections(IServiceCollection services)
+    {
+        services.AddDataProtection();
+        services.AddSingleton<IConfigureOptions<KeyManagementOptions>>(provider => new ConfigureOptions<KeyManagementOptions>(options =>
+        {
+            var directory = provider.GetRequiredService<IConfiguration>()["Secrets:DataProtection:KeysDirectory"];
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                options.XmlRepository = new FileSystemXmlRepository(new DirectoryInfo(directory), provider.GetRequiredService<ILoggerFactory>());
+            }
+        }));
+        services.TryAddSingleton<IStorageProviderCatalog>(_ => StorageProviderCatalog.BuiltIn());
+        services.TryAddSingleton<ISecretCiphertextRepository, PostgreSqlSecretCiphertextRepository>();
+        services.TryAddSingleton<ISecretStore, DataProtectionSecretStore>();
+        services.TryAddSingleton<ISecretProvider>(provider => provider.GetRequiredService<ISecretStore>());
+        services.AddScoped<IStorageConnectionStore, PostgreSqlStorageConnectionStore>();
+        services.AddScoped<IStorageConnectionTester>(provider => new CentralConnectionTester(provider.GetRequiredService<IBackupStorageResolver>()));
+        services.AddScoped<IStorageConnectionTester>(_ => new AgentSideConnectionTester(StorageProviderTypes.Local));
+        services.AddScoped<StorageConnectionService>();
     }
 
     /// <summary>

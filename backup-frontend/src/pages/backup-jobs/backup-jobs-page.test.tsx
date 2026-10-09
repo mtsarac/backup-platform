@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { BackupJobsPage } from './backup-jobs-page'
 import { getBackupJobs, startJobRun } from '@/features/backup-jobs/api'
+import { ApiError } from '@/lib/api/client'
 
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canOperate: true, canAdmin: true }) }))
 vi.mock('@/features/backup-jobs/api', () => ({ getBackupJobs: vi.fn(), getBackupJob: vi.fn(), getOccurrences: vi.fn(), saveBackupJob: vi.fn(), setJobEnabled: vi.fn(), startJobRun: vi.fn() }))
@@ -20,5 +21,16 @@ it('does not create a second Queue-policy run when double-click follows a fast s
   expect(await screen.findByRole('link', { name: 'Çalıştırmayı aç' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-a')
   fireEvent.click(button, { detail: 2 })
   expect(startJobRun).toHaveBeenCalledTimes(1)
+  cache.clear()
+})
+it.each([
+  ['storage_connection_disabled', 'Hedef depolama bağlantısı devre dışı; yeni backup başlatılamaz.'],
+  ['storage_connection_unavailable', 'Hedef depolama bağlantısı bulunamadı veya bu Job\'un Storage Provider\'ına ait değil; yeni backup başlatılamaz.'],
+])('Şimdi çalıştır, %s reddini Türkçe gösterir', async (code, text) => {
+  vi.mocked(startJobRun).mockRejectedValue(new ApiError(409, { error: 'admission_denied', code }))
+  const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(<QueryClientProvider client={cache}><MemoryRouter><BackupJobsPage /></MemoryRouter></QueryClientProvider>)
+  fireEvent.click(await screen.findByRole('button', { name: 'Şimdi çalıştır' }), { detail: 1 })
+  expect(await screen.findByRole('alert')).toHaveTextContent(text)
   cache.clear()
 })

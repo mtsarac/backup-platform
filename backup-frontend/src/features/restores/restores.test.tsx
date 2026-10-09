@@ -56,6 +56,7 @@ const sampleArtifact: BackupArtifact = {
     {
       id: 'replica-1',
       storageProvider: 'central',
+      storageConnectionId: 'connection-central',
       storageTarget: 'default',
       key: 'test-key',
       status: 'Available',

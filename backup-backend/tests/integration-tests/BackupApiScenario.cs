@@ -196,7 +196,7 @@ internal sealed class BackupApiScenario : IAsyncDisposable
                 [
                     new BackupTaskReplica
                     {
-                        StorageProvider = "local", StorageTarget = "default", Key = $"{claim.AttemptId:N}/backup.bak", SizeBytes = 1024,
+                        StorageProvider = "local", StorageTarget = "local", Key = $"{claim.AttemptId:N}/backup.bak", SizeBytes = 1024,
                         Checksum = checksum, VerificationState = "Verified", VerificationMethod = "ReadBack", CreatedAt = now, VerifiedAt = now
                     }
                 ]

@@ -70,12 +70,15 @@ public sealed class BackupRun : ITenantOwned
         Fact("BackupRunCreated", null, createdAt);
     }
 
-    /// <summary>A run for one scheduled instant of <paramref name="job"/>. Its idempotency key is derived from the instant, so a second creation for it collides.</summary>
-    public static BackupRun ForScheduledOccurrence(Guid id, BackupJob job, DateTimeOffset occurrence, DateTimeOffset createdAt)
+    /// <summary>
+    /// A run for one scheduled instant of <paramref name="job"/>. Its idempotency key is derived from the instant, so a second creation for it collides.
+    /// <paramref name="configuration"/> is the job's configuration with its storage connection resolved; omitted, the job's own is snapshotted.
+    /// </summary>
+    public static BackupRun ForScheduledOccurrence(Guid id, BackupJob job, DateTimeOffset occurrence, DateTimeOffset createdAt, BackupConfiguration? configuration = null)
     {
         ArgumentNullException.ThrowIfNull(job);
         var schedule = job.Schedule ?? throw new InvalidOperationException("The job has no schedule.");
-        return new BackupRun(id, job.TenantId, job.Id, job.AgentId, job.Configuration, ScheduledKey(occurrence), createdAt, job.RetryPolicy, job.OverlapPolicy,
+        return new BackupRun(id, job.TenantId, job.Id, job.AgentId, configuration ?? job.Configuration, ScheduledKey(occurrence), createdAt, job.RetryPolicy, job.OverlapPolicy,
             BackupTriggerTypes.Scheduled, occurrence, occurrence + schedule.MissedRunGracePeriod, job.RetentionPolicy);
     }
 

@@ -20,6 +20,9 @@ backup source is **Microsoft SQL Server, full backups**.
 - **Retry, cancellation, concurrency**: durable retry attempts on the same run, cooperative cancellation, global/tenant/agent
   concurrency limits enforced from the database, leases for agent work.
 - **Local and Central storage**: backups are stored on the agent's disk (Local) or in the platform's central storage.
+- **Storage connections**: every destination is a tenant-scoped `StorageConnection` (provider type, ownership `PlatformManaged`/`TenantManaged`, quota scope label,
+  enabled flag, safe configuration, secret reference, provider capabilities). Central storage is the platform-managed "Managed Storage" connection; replicas, jobs and quota scope
+  selectors (`all`, `providerType`, `ownershipType`, `quotaScope`, `storageConnection`) refer to connections. See [Storage connections](#storage-connections).
 - **Retention**: per-job retention policy, soft delete with grace period, verified physical deletion by the backend or the owning agent,
   orphan and partial-upload sweeps.
 - **Secure backup download**: tenant Owner/Admin-only, user-bound sessions, native browser streaming, SHA-256 validation, and expiring retention holds.
@@ -321,6 +324,37 @@ Running the **Release** workflow manually builds all archives as artifacts witho
 Manual workflow dispatch becomes available after the workflow files exist on the repository's default branch. Before a
 release, run Full Integration and Windows Validation against the intended release commit when that acceptance is needed;
 they are intentionally not automatic release gates.
+
+## Storage connections
+
+Every tenant owns two system default connections, created by the migration and on demand: **Local** (agent disk, tenant-managed, scope `tenant`) and **Managed Storage**
+(the Central provider, platform-managed, scope `managed`). Existing replicas were assigned to them by the upgrade, so downloads, restores, retention and quota are unchanged.
+SFTP and Google Drive are listed as *planned* providers (capability display only): a connection for them cannot be created and a test never reports success.
+
+| API | Access / behavior |
+|---|---|
+| `GET /api/tenants/{tenantId}/storage-providers`, `/storage-connections[/{id}]` | Viewer or higher; own tenant only (another tenant's id is `404`); every view carries server-computed `permissions` |
+| `POST/PUT/DELETE /api/tenants/{tenantId}/storage-connections[/{id}]`, `PUT/DELETE .../secret`, `POST .../test`, `POST .../enable`, `.../disable` | Owner/Admin, tenant-managed connections only |
+| `GET /api/platform/storage-connections` (+ per tenant, per id) | PlatformAdmin; secret-safe summaries of every tenant's connections |
+| `POST /api/platform/tenants/{tenantId}/storage-connections`, `PUT/DELETE/test/secret` on platform-managed ones | PlatformAdmin manages managed targets; for tenant-managed ones only enable/disable and the quota scope label |
+
+Credentials are written only through the secret provider (`ISecretStore`, ASP.NET Data Protection over a ciphertext table) and a response, audit event or log never contains a
+value. Create, update, test, enable/disable, secret rotation/removal, quota scope changes and deletion are audited (`storage_connection.*`).
+**Disabling** a connection blocks new manual and scheduled runs that target it (`409 admission_denied`, code `storage_connection_disabled`); runs already admitted finish, and
+every replica already stored on it stays Available, counted in usage, downloadable, restorable and subject to retention. A new provider adds a descriptor
+(`StorageProviderDescriptor`) and a connection tester; the quota engine, views and permissions need no provider-specific code.
+
+Managed Storage reuses the existing Central root: configure `Backups__Storage__Central__RootDirectory` and
+`Backups__Storage__Central__TenantScopes__<tenantId>` on the backend, with the matching
+`Agent__Backup__CentralStorage__RootDirectory` / `TenantScope` on the Agent. Physical paths stay operator configuration, not tenant API fields.
+Local and Central each allow one connection per tenant until distinct physical destinations are supported.
+
+Persist and back up `Secrets__DataProtection__KeysDirectory`; backend nodes that share ciphertext must share the key ring.
+Losing the keys makes existing credentials unreadable. API responses expose only secret presence, field names and the last update time.
+
+Run `scripts/integration/run-storage-connections-smoke.sh` for real Agent/MSSQL acceptance: Central backup, connection/isolation checks,
+migration Down/Up with the stored replica, checksum-verified download, SQL-verified restore, disabled-target access and re-enabled backup.
+Tenant-managed enable/disable has no platform-override marker yet: an authorized tenant can re-enable a connection disabled by PlatformAdmin.
 
 ## Current MVP scope
 

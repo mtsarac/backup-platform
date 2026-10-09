@@ -212,4 +212,75 @@ describe('Platform Quota Policies Page and Dialog', () => {
       )
     })
   })
+
+  it('creates a policy with a quotaScope selector and validates labels', async () => {
+    const user = userEvent.setup()
+    vi.mocked(storageApi.createQuotaPolicy).mockResolvedValue({ ...samplePolicy, policyId: 'qs', key: 'managed-only', name: 'Managed only' })
+    renderPlatform(<PlatformQuotaPoliciesPage />, { path: '/platform/quota-policies', route: '/platform/quota-policies' })
+    await screen.findByText('Default Policy')
+    await user.click(screen.getByRole('button', { name: /Yeni Politika/i }))
+    await user.type(await screen.findByLabelText(/Politika Anahtarı/i), 'managed-only')
+    await user.type(screen.getByLabelText(/Politika Adı/i), 'Managed only')
+    await user.selectOptions(screen.getByLabelText(/Depolama Kapsamı/i), 'quotaScope')
+    const labels = screen.getByLabelText(/Kota kapsamı etiketleri/)
+    expect(labels).toHaveValue('managed')
+
+    await user.clear(labels)
+    await user.type(labels, 'Managed, tenant')
+    await user.click(screen.getByRole('button', { name: 'Oluştur' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('“Managed” geçerli bir kota kapsamı etiketi değil')
+    expect(storageApi.createQuotaPolicy).not.toHaveBeenCalled()
+
+    await user.clear(labels)
+    await user.type(labels, 'x'.repeat(65))
+    await user.click(screen.getByRole('button', { name: 'Oluştur' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('en fazla 64 karakter')
+
+    await user.clear(labels)
+    await user.click(screen.getByRole('button', { name: 'Oluştur' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('En az bir kota kapsamı etiketi')
+
+    await user.type(labels, 'managed, tenant-2, managed')
+    await user.click(screen.getByRole('button', { name: 'Oluştur' }))
+    await waitFor(() => expect(storageApi.createQuotaPolicy).toHaveBeenCalledWith(expect.objectContaining({ key: 'managed-only', includedStorageScopes: [{ kind: 'quotaScope', values: ['managed', 'tenant-2'] }] })))
+  })
+
+  it('edits a policy to a storageConnection selector, validating and lowercasing GUIDs', async () => {
+    const user = userEvent.setup()
+    vi.mocked(storageApi.updateQuotaPolicy).mockResolvedValue({ policy: samplePolicy, tenantsRecalculated: 1 })
+    renderPlatform(<PlatformQuotaPoliciesPage />, { path: '/platform/quota-policies', route: '/platform/quota-policies' })
+    await screen.findByText('Default Policy')
+    await user.click(screen.getByRole('button', { name: 'Düzenle' }))
+    await user.selectOptions(await screen.findByLabelText(/Depolama Kapsamı/i), 'storageConnection')
+    const ids = screen.getByLabelText(/Depolama bağlantısı kimlikleri/)
+
+    await user.click(screen.getByRole('button', { name: 'Kaydet' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('En az bir depolama bağlantısı kimliği')
+
+    await user.type(ids, 'not-a-guid')
+    await user.click(screen.getByRole('button', { name: 'Kaydet' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('“not-a-guid” geçerli bir GUID değil')
+    expect(storageApi.updateQuotaPolicy).not.toHaveBeenCalled()
+
+    await user.clear(ids)
+    await user.type(ids, '3F2B8C1E-0D4A-4B6E-9A7C-5E1D2F3A4B5C,\n11111111-2222-3333-4444-555555555555')
+    await user.click(screen.getByRole('button', { name: 'Kaydet' }))
+    await waitFor(() => expect(storageApi.updateQuotaPolicy).toHaveBeenCalledWith('policy-1', expect.objectContaining({
+      includedStorageScopes: [{ kind: 'storageConnection', values: ['3f2b8c1e-0d4a-4b6e-9a7c-5e1d2f3a4b5c', '11111111-2222-3333-4444-555555555555'] }],
+    })))
+  })
+
+  it('prefills an existing quotaScope selector and prints the new kinds in the list', async () => {
+    const user = userEvent.setup()
+    vi.mocked(storageApi.getQuotaPolicies).mockResolvedValue({ items: [
+      { ...samplePolicy, includedStorageScopes: [{ kind: 'quotaScope', values: ['managed', 'tenant'] }] },
+      { ...samplePolicy, policyId: 'policy-2', key: 'one', name: 'One connection', isDefault: false, includedStorageScopes: [{ kind: 'storageConnection', values: ['3f2b8c1e-0d4a-4b6e-9a7c-5e1d2f3a4b5c'] }] },
+    ] })
+    renderPlatform(<PlatformQuotaPoliciesPage />, { path: '/platform/quota-policies', route: '/platform/quota-policies' })
+    expect(await screen.findByText('Kota kapsamı: managed, tenant')).toBeInTheDocument()
+    expect(screen.getByText('Depolama bağlantısı: 3f2b8c1e-0d4a-4b6e-9a7c-5e1d2f3a4b5c')).toBeInTheDocument()
+    await user.click(screen.getAllByRole('button', { name: 'Düzenle' })[0])
+    expect(await screen.findByLabelText(/Depolama Kapsamı/i)).toHaveValue('quotaScope')
+    expect(screen.getByLabelText(/Kota kapsamı etiketleri/)).toHaveValue('managed, tenant')
+  })
 })

@@ -38,8 +38,12 @@ public static class BackupAdmissionDenialCodes
 {
     public const string SubscriptionRequired = "subscription_required";
     public const string QuotaExceeded = "quota_exceeded";
+    /// <summary>The job's storage connection is disabled: new runs may not target it. Existing replicas on it are unaffected.</summary>
+    public const string StorageConnectionDisabled = "storage_connection_disabled";
+    /// <summary>The job names a storage connection that does not exist, is another tenant's, or serves another provider.</summary>
+    public const string StorageConnectionUnavailable = "storage_connection_unavailable";
 
-    public static bool IsKnown(string? code) => code is SubscriptionRequired or QuotaExceeded;
+    public static bool IsKnown(string? code) => code is SubscriptionRequired or QuotaExceeded or StorageConnectionDisabled or StorageConnectionUnavailable;
 }
 
 public static class BackupTriggerTypes

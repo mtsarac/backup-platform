@@ -104,6 +104,13 @@ scripts/integration/run-full-acceptance.sh
 scripts/integration/run-full-acceptance.sh --configured
 ```
 
+Storage connections smoke (real Central backup -> download -> restore, with the connection upgrade applied to the real replica in between):
+
+```bash
+scripts/integration/run-storage-connections-smoke.sh
+scripts/integration/run-storage-connections-smoke.sh --no-build
+```
+
 Agent service install/uninstall operations reuse:
 
 ```text

@@ -198,6 +198,10 @@ public sealed class UpgradedQuotaDatabase : IAsyncLifetime
         {
             await CopyRowsAsync(from, to, table, "TenantId", tenantId);
         }
+        // Runs of the previous release carry no storage connection in their configuration snapshot; the copy must not smuggle one in from the new schema.
+        await using var strip = new NpgsqlCommand("UPDATE backup_runs SET \"Configuration\" = \"Configuration\" - 'StorageConnectionId' WHERE \"TenantId\" = @tenant", to);
+        strip.Parameters.AddWithValue("tenant", tenantId);
+        await strip.ExecuteNonQueryAsync();
     }
 
     /// <summary>Copies every column of the tenant's rows as stored (system columns such as xmin are not part of SELECT *).</summary>
@@ -206,14 +210,28 @@ public sealed class UpgradedQuotaDatabase : IAsyncLifetime
         await using var select = new NpgsqlCommand($"SELECT * FROM {table} WHERE \"{tenantColumn}\" = @tenant", from);
         select.Parameters.AddWithValue("tenant", tenantId);
         await using var reader = await select.ExecuteReaderAsync();
-        var columns = Enumerable.Range(0, reader.FieldCount).Select(reader.GetName).ToArray();
+        // The source is at the latest schema, the destination at the previous release: copy what both have. A column added since (a replica's storage
+        // connection) is what the upgrade under test has to fill in by itself.
+        var destination = new HashSet<string>(StringComparer.Ordinal);
+        await using (var describe = new NpgsqlCommand("SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = @table", to))
+        {
+            describe.Parameters.AddWithValue("table", table);
+            await using var names = await describe.ExecuteReaderAsync();
+            while (await names.ReadAsync())
+            {
+                destination.Add(names.GetString(0));
+            }
+        }
+        var sources = Enumerable.Range(0, reader.FieldCount).Where(index => destination.Contains(reader.GetName(index))).ToArray();
+        var columns = sources.Select(reader.GetName).ToArray();
         var sql = $"INSERT INTO {table} ({string.Join(", ", columns.Select(column => $"\"{column}\""))}) VALUES ({string.Join(", ", columns.Select((_, index) => $"@p{index}"))})";
         while (await reader.ReadAsync())
         {
             await using var insert = new NpgsqlCommand(sql, to);
-            for (var index = 0; index < columns.Length; index++)
+            for (var position = 0; position < sources.Length; position++)
             {
-                var name = $"p{index}";
+                var index = sources[position];
+                var name = $"p{position}";
                 if (reader.IsDBNull(index))
                 {
                     insert.Parameters.Add(new NpgsqlParameter(name, DBNull.Value) { NpgsqlDbType = NpgsqlDbType.Unknown });

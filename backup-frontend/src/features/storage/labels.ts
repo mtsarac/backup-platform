@@ -40,7 +40,11 @@ export const enforcementModeHelp: Record<EnforcementMode, string> = {
   None: 'Kota kararı verilmez; tenant Unlimited görünür.',
 }
 
-const ownershipLabels: Record<string, string> = { PlatformManaged: 'Platform yönetimli', TenantManaged: 'Tenant yönetimli' }
+export const ownershipLabels: Record<string, string> = { PlatformManaged: 'Platform yönetimli', TenantManaged: 'Tenant yönetimli' }
+
+export function ownershipLabel(ownership: string): string {
+  return Object.hasOwn(ownershipLabels, ownership) ? ownershipLabels[ownership] : ownership
+}
 
 /** One human sentence per selector; kinds the UI does not know are shown verbatim rather than guessed at. */
 export function scopeLabel(selector: ScopeSelector): string {
@@ -48,7 +52,9 @@ export function scopeLabel(selector: ScopeSelector): string {
   switch (selector.kind) {
     case 'all': return 'Tüm storage (All)'
     case 'providerType': return `Provider türü: ${values.join(', ')}`
-    case 'ownershipType': return `Sahiplik: ${values.map((value) => ownershipLabels[value] ?? value).join(', ')}`
+    case 'ownershipType': return `Sahiplik: ${values.map(ownershipLabel).join(', ')}`
+    case 'quotaScope': return `Kota kapsamı: ${values.join(', ')}`
+    case 'storageConnection': return `Depolama bağlantısı: ${values.join(', ')}`
     default: return String(selector.kind)
   }
 }

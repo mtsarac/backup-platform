@@ -3,6 +3,8 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import * as api from '@/features/platform/api'
 import * as supportApi from '@/features/platform/support/api'
+import * as connectionApi from '@/features/storage-connections/api'
+import { catalog, makeConnection, makeManaged, noPermissions } from '@/features/storage-connections/test-fixtures'
 import { paged, renderPlatform } from '@/features/platform/test-utils'
 import type { PlatformAuditEntry, PlatformMembership, PlatformTenantDetail, PlatformUser } from '@/features/platform/types'
 import { ApiError } from '@/lib/api/client'
@@ -10,6 +12,7 @@ import { PlatformTenantDetailPage } from './platform-tenant-detail-page'
 
 vi.mock('@/features/platform/api')
 vi.mock('@/features/platform/support/api')
+vi.mock('@/features/storage-connections/api')
 
 const tenant: PlatformTenantDetail = { tenantId: 'tenant-a', name: 'Acme A.Ş.', memberCount: 2, enabledBackupJobs: 5, agents: { total: 4, online: 2, offline: 1, unknown: 0, disabled: 1, revoked: 0 }, enrollment: { enabled: true, changedAt: '2026-10-05T09:00:00Z' } }
 const ayse: PlatformMembership = { userId: 'user-1', displayName: 'Ayşe Yılmaz', loginIdentifier: 'ayse', role: 'Owner' }
@@ -32,6 +35,8 @@ beforeEach(() => {
   vi.mocked(api.getAudit).mockResolvedValue(paged([audit]))
   vi.mocked(api.getTenantSubscription).mockResolvedValue({ tenantId: 'tenant-a', subscription: null })
   vi.mocked(supportApi.getSessions).mockResolvedValue(paged([]))
+  vi.mocked(connectionApi.getPlatformTenantConnections).mockResolvedValue({ items: [] })
+  vi.mocked(connectionApi.getPlatformProviders).mockResolvedValue({ items: catalog })
 })
 
 describe('platform tenant detail', () => {
@@ -139,5 +144,38 @@ describe('platform tenant detail', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Sonraki' }))
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('?memberPage=2'))
     expect(api.getMemberships).toHaveBeenLastCalledWith('tenant-a', { page: 2, pageSize: 25 }, expect.any(AbortSignal))
+  })
+
+  it('lists the tenant\'s storage connections with permission-gated actions and adds a managed target for this tenant', async () => {
+    const full = { canEdit: true, canSetQuotaScope: true, canToggle: true, canDelete: true, canManageSecret: true, canTest: true }
+    vi.mocked(connectionApi.getPlatformTenantConnections).mockResolvedValue({ items: [
+      makeManaged({ permissions: full }),
+      makeConnection({ permissions: { ...noPermissions, canSetQuotaScope: true, canToggle: true } }),
+    ] })
+    vi.mocked(connectionApi.createPlatformConnection).mockResolvedValue(makeManaged())
+    mount()
+    expect(await screen.findByRole('heading', { name: 'Depolama bağlantıları' })).toBeInTheDocument()
+    expect(connectionApi.getPlatformTenantConnections).toHaveBeenCalledWith('tenant-a', expect.any(AbortSignal))
+    const managed = within((await screen.findByText('Managed Storage')).closest('tr') as HTMLElement)
+    expect(managed.getAllByRole('button').map((button) => button.textContent)).toEqual(['Düzenle', 'Platform kilidi koy', 'Test et', 'Sil'])
+    const local = within(screen.getByText('Local').closest('tr') as HTMLElement)
+    expect(local.getAllByRole('button').map((button) => button.textContent)).toEqual(['Düzenle', 'Platform kilidi koy'])
+    expect(screen.queryByRole('columnheader', { name: 'Tenant' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Managed target ekle' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByRole('heading', { name: 'Managed target ekle: Acme A.Ş.' })).toBeInTheDocument()
+    expect(within(dialog).queryByLabelText('Tenant ara')).not.toBeInTheDocument()
+    await userEvent.selectOptions(await within(dialog).findByLabelText('Storage Provider'), 'central')
+    await userEvent.type(within(dialog).getByLabelText('Ad'), 'İkinci hedef')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Managed target ekle' }))
+    await waitFor(() => expect(connectionApi.createPlatformConnection).toHaveBeenCalledWith('tenant-a', { providerType: 'central', name: 'İkinci hedef', ownership: 'PlatformManaged' }))
+  })
+
+  it('shows the authorization state for the connections section on 403', async () => {
+    vi.mocked(connectionApi.getPlatformTenantConnections).mockRejectedValue(new ApiError(403))
+    mount()
+    expect(await screen.findByRole('heading', { name: 'Depolama bağlantıları' })).toBeInTheDocument()
+    expect(await screen.findByText('Bu alan için yetkiniz yok')).toBeInTheDocument()
   })
 })

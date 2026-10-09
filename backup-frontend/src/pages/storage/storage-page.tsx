@@ -9,6 +9,7 @@ import { Fact, QuotaSummary, StandingBadge, StorageNotices } from '@/features/st
 import { formatCapacity } from '@/features/storage/format'
 import { ApiError } from '@/lib/api/client'
 import { useTenant } from '@/features/tenancy/use-tenant'
+import { TenantDestinations } from '@/features/storage-connections/tenant-destinations'
 
 function Forbidden() {
   return <div role="alert" className="space-y-2 rounded-lg border border-error/30 bg-error-subtle p-6 text-error">
@@ -24,7 +25,7 @@ export function StoragePage() {
   const forbidden = query.error instanceof ApiError && query.error.status === 403
   return <div className="space-y-6">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><h1 className="text-2xl font-semibold text-text-heading">Storage</h1><p className="mt-1 text-sm text-text-muted">{tenant.name} · Depolama planı, kullanım ve kota durumu. 1 GB = 1.000.000.000 bayt.</p></div>
+      <div><h1 className="text-2xl font-semibold text-text-heading">Storage</h1><p className="mt-1 text-sm text-text-muted">{tenant.name} · Depolama planı, kullanım, kota durumu ve depolama hedefleri. 1 GB = 1.000.000.000 bayt.</p></div>
       <Button variant="outline" onClick={() => { void query.refetch() }} disabled={query.isFetching}><RefreshCw className={`size-4 ${query.isFetching ? 'animate-spin' : ''}`} aria-hidden="true" />{query.isFetching && !query.isPending ? 'Yenileniyor…' : 'Yenile'}</Button>
     </div>
     {forbidden ? <Forbidden /> : !quota ? <QueryState isPending={query.isPending} error={query.error} /> : <>
@@ -60,5 +61,6 @@ export function StoragePage() {
           {isLegacyUnlimited(quota.plan) && <p className="text-xs text-text-muted">Legacy Unlimited planda limit olmadığı için eşikler uygulanmaz.</p>}
         </section>
     </>}
+    {!forbidden && !query.isPending && <TenantDestinations />}
   </div>
 }

@@ -36,7 +36,7 @@ public sealed record BackupArtifactView(Guid Id, long SizeBytes, string SourceCh
 public sealed record BackupReplicaView(Guid Id, string StorageProvider, string StorageTarget, string Key, long SizeBytes, string Checksum, string ChecksumAlgorithm, string VerificationState, string VerificationMethod, DateTimeOffset CreatedAt, DateTimeOffset? VerifiedAt,
     string Status = "Available", bool Usable = true, DateTimeOffset? DeleteRequestedAt = null, DateTimeOffset? DeleteAfter = null, string? DeleteReason = null, DateTimeOffset? DeletedAt = null,
     int DeleteAttempts = 0, string? DeleteFailureCode = null, DateTimeOffset? DeleteNextAttemptAt = null,
-    string DeletionExecutor = "Backend", bool WaitingForAgent = false);
+    string DeletionExecutor = "Backend", bool WaitingForAgent = false, Guid? StorageConnectionId = null);
 public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time, BackupSchedulingOptions? scheduling = null, BackupRetentionOptions? retention = null)
 {
     public static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(120);
@@ -92,6 +92,7 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         c.IntegratedSecurity, c.DatabaseCredentialReference, c.Encrypt, c.TrustServerCertificate, c.StagingReference, c.StorageProvider,
         c.StoragePrefix, c.CopyOnly, c.ChecksumPolicy, c.CompressionPolicy)
     {
+        StorageConnectionId = c.StorageConnectionId,
         StorageExecutionLocation = c.StorageExecutionLocation switch
         {
             "Backend" => BackupStorageExecutionLocation.Backend,
@@ -223,7 +224,8 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
 
     public static BackupReplicaView ToView(BackupReplica r) => new(r.Id, r.StorageProvider, r.StorageTarget, r.Key, r.SizeBytes, r.Checksum, r.ChecksumAlgorithm,
         r.VerificationState, r.VerificationMethod, r.CreatedAt, r.VerifiedAt, r.Status.ToString(), r.IsUsable, r.DeleteRequestedAt, r.DeleteAfter,
-        r.DeleteReason?.ToString(), r.DeletedAt, r.DeleteAttempts, r.DeleteFailureCode, r.DeleteNextAttemptAt, r.ExecutionLocation.ToString(), r.WaitingForAgent);
+        r.DeleteReason?.ToString(), r.DeletedAt, r.DeleteAttempts, r.DeleteFailureCode, r.DeleteNextAttemptAt, r.ExecutionLocation.ToString(), r.WaitingForAgent,
+        r.StorageConnectionId == Guid.Empty ? null : r.StorageConnectionId);
 
     public static BackupJobView ToView(BackupJob job, DateTimeOffset now) => new(job.Id, job.AgentId.Value, job.Name, job.BackupType, job.OverlapPolicy.ToString(),
         ToView(job.RetryPolicy), job.Enabled, job.CreatedAt, ToWire(job.Configuration), job.Schedule is null ? null : ToView(job, job.Schedule, now), ToView(job.RetentionPolicy));
@@ -296,7 +298,7 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         Engine = c.Engine, Database = c.Database, Host = c.Host, Port = c.Port, IntegratedSecurity = c.IntegratedSecurity,
         DatabaseCredentialReference = c.DatabaseCredentialReference, Encrypt = c.Encrypt, TrustServerCertificate = c.TrustServerCertificate,
         StagingReference = c.StagingReference, StorageProvider = c.StorageProvider, StoragePrefix = c.StoragePrefix,
-        StorageExecutionLocation = c.StorageExecutionLocation.ToString(),
+        StorageExecutionLocation = c.StorageExecutionLocation.ToString(), StorageConnectionId = c.StorageConnectionId,
         CopyOnly = c.CopyOnly, ChecksumPolicy = c.ChecksumPolicy, CompressionPolicy = c.CompressionPolicy
     };
 }

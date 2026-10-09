@@ -157,9 +157,13 @@ public static class BackupEndpoints
         }
     }
 
-    private static string AdmissionMessage(string? code) => code == BackupAdmissionDenialCodes.SubscriptionRequired
-        ? "The tenant has no active subscription; no run was started."
-        : "The tenant's storage quota is used up; no run was started.";
+    private static string AdmissionMessage(string? code) => code switch
+    {
+        BackupAdmissionDenialCodes.SubscriptionRequired => "The tenant has no active subscription; no run was started.",
+        BackupAdmissionDenialCodes.StorageConnectionDisabled => "The job's storage connection is disabled; no run was started. Existing backups on it stay available.",
+        BackupAdmissionDenialCodes.StorageConnectionUnavailable => "The job's storage connection does not exist for this tenant and provider; no run was started.",
+        _ => "The tenant's storage quota is used up; no run was started."
+    };
 
     private static async Task<IResult> ListRunsAsync(Guid? jobId, Guid? agentId, string? status, string? trigger,
         DateTimeOffset? from, DateTimeOffset? to, int? page, int? pageSize,

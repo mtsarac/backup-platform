@@ -1,4 +1,5 @@
 using BackupPlatform.Domain.Backups;
+using BackupPlatform.Domain.Storage;
 using BackupPlatform.ManagedService;
 using BackupPlatform.ManagedService.Quota;
 
@@ -6,24 +7,66 @@ namespace BackupPlatform.UnitTests.ManagedService.Quota;
 
 public sealed class QuotaScopeRuleTests
 {
-    private static ReplicaStorageFacts Replica(string provider, BackupStorageExecutionLocation location = BackupStorageExecutionLocation.Backend) => new(provider, location);
+    /// <summary>A replica on a connection that looks like the system defaults: central+Backend is platform-managed ("managed"), everything else tenant-managed ("tenant").</summary>
+    private static ReplicaStorageFacts Replica(string provider, BackupStorageExecutionLocation location = BackupStorageExecutionLocation.Backend)
+    {
+        var platform = provider == "central" && location == BackupStorageExecutionLocation.Backend;
+        return new(provider, platform ? StorageOwnership.PlatformManaged : StorageOwnership.TenantManaged, platform ? "managed" : "tenant", Guid.NewGuid());
+    }
 
     private static QuotaScopeRule Rule(QuotaScopeKind kind, params string[] values) => QuotaScopeRule.Create([new QuotaScopeSelector(kind, values)]);
 
     private static string CodeOf(Action action) => Assert.Throws<InvalidManagedServiceRequestException>(action).Code;
 
-    [Theory]
-    [InlineData("central", BackupStorageExecutionLocation.Backend, StorageOwnership.PlatformManaged)]
-    [InlineData("central", BackupStorageExecutionLocation.Agent, StorageOwnership.TenantManaged)]
-    [InlineData("local", BackupStorageExecutionLocation.Agent, StorageOwnership.TenantManaged)]
-    [InlineData("local", BackupStorageExecutionLocation.Backend, StorageOwnership.TenantManaged)]
-    [InlineData("googledrive", BackupStorageExecutionLocation.Backend, StorageOwnership.TenantManaged)]
-    [InlineData("sftp", BackupStorageExecutionLocation.Backend, StorageOwnership.TenantManaged)]
-    [InlineData("Central", BackupStorageExecutionLocation.Backend, StorageOwnership.TenantManaged)]
-    public void OnlyTheCentralProviderOnTheBackendIsPlatformManaged(string provider, BackupStorageExecutionLocation location, StorageOwnership expected)
+    [Fact]
+    public void SelectorsReadTheConnectionsFactsAndNothingElse()
     {
-        Assert.Equal(expected, StorageOwnershipClassifier.Classify(provider, location));
-        Assert.Equal(expected, Replica(provider, location).Ownership);
+        var id = Guid.NewGuid();
+        // Same provider type, different connection data: a rule can tell them apart, which is the whole point of storing it on the connection.
+        var managed = new ReplicaStorageFacts("central", StorageOwnership.PlatformManaged, "managed", id);
+        var premium = new ReplicaStorageFacts("central", StorageOwnership.TenantManaged, "premium", Guid.NewGuid());
+
+        Assert.True(Rule(QuotaScopeKind.QuotaScope, "managed").Matches(managed));
+        Assert.False(Rule(QuotaScopeKind.QuotaScope, "managed").Matches(premium));
+        Assert.True(Rule(QuotaScopeKind.QuotaScope, "premium").Matches(premium));
+        Assert.True(Rule(QuotaScopeKind.OwnershipType, "PlatformManaged").Matches(managed));
+        Assert.False(Rule(QuotaScopeKind.OwnershipType, "PlatformManaged").Matches(premium));
+        Assert.True(Rule(QuotaScopeKind.ProviderType, "central").Matches(premium));
+        Assert.True(Rule(QuotaScopeKind.StorageConnection, id.ToString("D")).Matches(managed));
+        Assert.False(Rule(QuotaScopeKind.StorageConnection, id.ToString("D")).Matches(premium));
+    }
+
+    [Fact]
+    public void ANewProviderTypeNeedsNoConditionInTheRules()
+    {
+        var future = new ReplicaStorageFacts("object-store-9", StorageOwnership.TenantManaged, "tenant-cloud", Guid.NewGuid());
+        Assert.True(QuotaScopeRule.All.Matches(future));
+        Assert.True(Rule(QuotaScopeKind.ProviderType, "object-store-9").Matches(future));
+        Assert.True(Rule(QuotaScopeKind.QuotaScope, "tenant-cloud").Matches(future));
+        Assert.True(Rule(QuotaScopeKind.OwnershipType, "TenantManaged").Matches(future));
+        Assert.False(Rule(QuotaScopeKind.OwnershipType, "PlatformManaged").Matches(future));
+    }
+
+    [Fact]
+    public void QuotaScopeLabelsAreCanonicalizedAndValidated()
+    {
+        Assert.Equal("""[{"kind":"quotaScope","values":["managed","tenant-cloud"]}]""", Rule(QuotaScopeKind.QuotaScope, " Tenant-Cloud ", "managed", "MANAGED").ToJson());
+        foreach (var invalid in new[] { "has space", "-lead", "trail-", "under_score", new string('a', 65), "ünï" })
+        {
+            Assert.Equal("invalid_value", CodeOf(() => Rule(QuotaScopeKind.QuotaScope, invalid)));
+        }
+        Assert.Single(Rule(QuotaScopeKind.QuotaScope, new string('a', 64)).Selectors);
+    }
+
+    [Fact]
+    public void StorageConnectionIdsAreCanonicalizedAndValidated()
+    {
+        var id = Guid.NewGuid();
+        Assert.Equal($$"""[{"kind":"storageConnection","values":["{{id:D}}"]}]""", Rule(QuotaScopeKind.StorageConnection, id.ToString("D").ToUpperInvariant(), id.ToString("D")).ToJson());
+        foreach (var invalid in new[] { "not-a-guid", Guid.Empty.ToString("D"), id.ToString("N"), id.ToString("B"), "1" })
+        {
+            Assert.Equal("invalid_value", CodeOf(() => Rule(QuotaScopeKind.StorageConnection, invalid)));
+        }
     }
 
     [Fact]
@@ -119,8 +162,8 @@ public sealed class QuotaScopeRuleTests
     }
 
     [Theory]
-    [InlineData("quotaScope")]
-    [InlineData("storageConnection")]
+    [InlineData("QuotaScope")]
+    [InlineData("StorageConnection")]
     [InlineData("1")]
     [InlineData("2")]
     [InlineData("ProviderType")]
@@ -191,6 +234,8 @@ public sealed class QuotaScopeRuleTests
     [Theory]
     [InlineData(QuotaScopeKind.ProviderType)]
     [InlineData(QuotaScopeKind.OwnershipType)]
+    [InlineData(QuotaScopeKind.QuotaScope)]
+    [InlineData(QuotaScopeKind.StorageConnection)]
     public void ValueSelectorsNeedAtLeastOneNonBlankValue(QuotaScopeKind kind)
     {
         Assert.Equal("invalid_value", CodeOf(() => Rule(kind)));

@@ -33,6 +33,18 @@ public abstract class FileSystemStorageProvider : IStorageProvider
 {
     private const int BlockSize = 1024 * 1024;
 
+    /// <summary>
+    /// What every file-system provider honestly supports. One definition, so a catalog that describes the provider before an instance exists (a
+    /// connection descriptor) can never disagree with the instance.
+    /// </summary>
+    public static StorageCapabilities FileSystemCapabilities { get; } = new([
+        StorageCapabilityIds.Delete,
+        StorageCapabilityIds.AtomicPublish,
+        StorageCapabilityIds.Enumerate,
+        StorageCapabilityIds.VerifyAbsence,
+        StorageCapabilityIds.Read
+    ]);
+
     private const string TemporarySuffix = ".partial";
     private const int TemporaryTokenLength = 32;
 
@@ -72,13 +84,7 @@ public abstract class FileSystemStorageProvider : IStorageProvider
         _root = FileSystemStorageRoot.Normalize(rootDirectory);
         _rootWithSeparator = _root.EndsWith(Path.DirectorySeparatorChar) ? _root : _root + Path.DirectorySeparatorChar;
         _keyPrefix = [.. (keyPrefix ?? []).Select(ValidatePrefixSegment)];
-        Capabilities = new StorageCapabilities([
-            StorageCapabilityIds.Delete,
-            StorageCapabilityIds.AtomicPublish,
-            StorageCapabilityIds.Enumerate,
-            StorageCapabilityIds.VerifyAbsence,
-            StorageCapabilityIds.Read
-        ]);
+        Capabilities = FileSystemCapabilities;
     }
 
     public StorageProviderId Id { get; }

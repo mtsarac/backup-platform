@@ -32,6 +32,18 @@ describe('platform failure messages', () => {
     [400, { error: 'invalid_request', field: 'endsAt', code: 'invalid_value' }, 'Girilen değer geçersiz.'],
     [409, { error: 'admission_denied', code: 'quota_exceeded' }, 'Depolama kotası doldu; yeni backup başlatılamadı. Mevcut backup\'lar silinmedi ve geri yüklenebilir.'],
     [409, { error: 'admission_denied', code: 'subscription_required' }, 'Etkin bir abonelik bulunmadığı için yeni backup başlatılamadı.'],
+    [409, { error: 'admission_denied', code: 'storage_connection_disabled' }, 'Hedef depolama bağlantısı devre dışı; yeni backup başlatılamaz.'],
+    [409, { error: 'admission_denied', code: 'storage_connection_unavailable' }, 'Hedef depolama bağlantısı bulunamadı veya bu Job\'un Storage Provider\'ına ait değil; yeni backup başlatılamaz.'],
+    [404, { error: 'storage_connection_not_found' }, 'Depolama bağlantısı bulunamadı. Liste güncel olmayabilir.'],
+    [409, { error: 'storage_connection_name_taken' }, 'Bu ada sahip bir depolama bağlantısı zaten var.'],
+    [409, { error: 'connection_limit_reached' }, 'Bu Storage Provider için bağlantı sınırına ulaşıldı.'],
+    [409, { error: 'platform_managed' }, 'Platform yönetimli bağlantıyı yalnızca platform yöneticisi değiştirebilir.'],
+    [409, { error: 'tenant_managed' }, 'Tenant yönetimli bağlantı için bu işlemi yalnızca tenant yöneticisi yapabilir.'],
+    [409, { error: 'connection_in_use' }, 'Bağlantı hâlâ Replica veya Backup Job tarafından kullanılıyor; silinemez.'],
+    [403, { error: 'platform_managed_provider' }, 'Bu Storage Provider yalnızca platform tarafından yönetilir; tenant bağlantı ekleyemez.'],
+    [400, { error: 'invalid_request', field: 'providerType', code: 'provider_not_available' }, 'Bu Storage Provider henüz kullanılamıyor.'],
+    [400, { error: 'invalid_request', field: 'secret', code: 'secrets_not_supported' }, 'Bu Storage Provider kimlik bilgisi kabul etmiyor.'],
+    [400, { error: 'invalid_request', field: 'configuration.foo', code: 'unknown_field' }, 'Bu Storage Provider için tanımlı olmayan bir alan gönderildi.'],
     [409, { error: 'quota_policy_key_taken' }, 'Bu kota politikası anahtarı zaten kullanılıyor.'],
   ])('maps %s %j', (status, body, text) => {
     expect(errorMessage(new ApiError(status, body))).toBe(text)

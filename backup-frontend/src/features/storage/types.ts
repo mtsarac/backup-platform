@@ -9,8 +9,8 @@ export const entitlementStatuses: readonly EntitlementStatus[] = ['Active', 'Sus
 export const accountingModes: readonly AccountingMode[] = ['LogicalArtifactBytes', 'PhysicalReplicaBytes']
 export const enforcementModes: readonly EnforcementMode[] = ['BlockNewBackups', 'WarnOnly', 'None']
 
-/** Only the kinds the backend supports; `quotaScope` and `storageConnection` do not exist yet. */
-export type ScopeKind = 'all' | 'providerType' | 'ownershipType'
+/** The selector kinds the backend accepts: `quotaScope` matches a connection's scope label, `storageConnection` matches connection GUIDs. */
+export type ScopeKind = 'all' | 'providerType' | 'ownershipType' | 'quotaScope' | 'storageConnection'
 export interface ScopeSelector {
   kind: ScopeKind
   values?: string[]

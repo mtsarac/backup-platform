@@ -27,6 +27,15 @@ const actionLabels: Record<string, string> = {
   'quota_policy.changed': 'Kota politikası değiştirildi',
   'tenant_storage_usage.rebuilt': 'Depolama kullanımı baştan hesaplandı (Rebuild)',
   'tenant_storage_usage.reconcile_corrected': 'Depolama kullanımı doğrulandı ve düzeltildi (Reconcile)',
+  'storage_connection.created': 'Depolama bağlantısı oluşturuldu',
+  'storage_connection.updated': 'Depolama bağlantısı güncellendi',
+  'storage_connection.enabled': 'Depolama bağlantısı etkinleştirildi',
+  'storage_connection.disabled': 'Depolama bağlantısı devre dışı bırakıldı',
+  'storage_connection.deleted': 'Depolama bağlantısı silindi',
+  'storage_connection.tested': 'Depolama bağlantısı test edildi',
+  'storage_connection.secret_rotated': 'Depolama bağlantısı kimlik bilgisi yenilendi',
+  'storage_connection.secret_cleared': 'Depolama bağlantısı kimlik bilgisi temizlendi',
+  'storage_connection.quota_scope_changed': 'Depolama bağlantısı kota kapsamı değiştirildi',
 }
 
 function auditActionLabel(action: string) {

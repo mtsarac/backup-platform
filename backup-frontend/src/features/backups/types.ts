@@ -49,6 +49,8 @@ export interface BackupRun {
     host: string
     port: number
     storageProvider: string
+    /** The connection resolved when the run was created. */
+    storageConnectionId?: string | null
   }
   currentAttemptNumber: number
   createdAt: string

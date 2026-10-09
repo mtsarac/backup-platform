@@ -61,6 +61,7 @@ describe('PlatformAdminRoute guard', () => {
     expect(await screen.findByRole('heading', { name: 'Platform Dashboard' })).toBeInTheDocument()
     const nav = screen.getAllByRole('navigation', { name: 'Platform navigation' })[0]
     for (const name of ['Dashboard', 'Tenants', 'Users', 'Agents', 'Audit']) expect(within(nav).getByRole('link', { name })).toBeInTheDocument()
+    expect(within(nav).getByRole('link', { name: 'Storage Targets' })).toHaveAttribute('href', '/platform/storage-connections')
     expect(within(nav).getByRole('link', { name: 'Tenant arayüzüne dön' })).toHaveAttribute('href', '/')
     expect(screen.getAllByText('Platform Administration').length).toBeGreaterThan(0)
     expect(screen.getByText('PlatformAdmin')).toBeInTheDocument()

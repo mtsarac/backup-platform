@@ -10,6 +10,12 @@ public sealed record BackupConfiguration(
     public BackupStorageExecutionLocation StorageExecutionLocation { get; init; } =
         StorageProvider == "local" ? BackupStorageExecutionLocation.Agent : BackupStorageExecutionLocation.Backend;
 
+    /// <summary>
+    /// The storage connection a run writes to. A JOB may leave it null (the tenant's default connection for <see cref="StorageProvider"/>); a RUN always
+    /// snapshots the resolved id when it is created, so retries and replica publication use the destination the run was admitted against.
+    /// </summary>
+    public Guid? StorageConnectionId { get; init; }
+
     public BackupConfiguration Validate()
     {
         if (Engine != "mssql") throw new ArgumentException("Unsupported database engine.");
@@ -20,6 +26,7 @@ public sealed record BackupConfiguration(
         if (DatabaseCredentialReference is not null) BackupGuard.Reference(DatabaseCredentialReference);
         if (StagingReference != "default") throw new ArgumentException("Unknown staging reference.");
         BackupGuard.Reference(StorageProvider);
+        if (StorageConnectionId == Guid.Empty) throw new ArgumentException("A storage connection identifier must not be empty.");
         if (StorageExecutionLocation is not (BackupStorageExecutionLocation.Backend or BackupStorageExecutionLocation.Agent) ||
             StorageExecutionLocation == BackupStorageExecutionLocation.Agent && StorageProvider != "local")
             throw new ArgumentException("Invalid storage execution location.");

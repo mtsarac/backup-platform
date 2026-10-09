@@ -263,6 +263,13 @@ internal sealed class BackupReplicaConfiguration : IEntityTypeConfiguration<Back
             table.HasCheckConstraint("ck_backup_replica_verification", "\"VerificationState\" IN ('Verified','Unverified','Failed') AND ((\"VerificationState\" = 'Verified') = (\"VerifiedAt\" IS NOT NULL)) AND (\"VerifiedAt\" IS NULL OR \"VerifiedAt\" >= \"CreatedAt\")");
         });
         builder.Property(replica => replica.StorageProvider).HasMaxLength(128).IsRequired();
+        builder.Property(replica => replica.StorageConnectionId).IsRequired();
+        // The destination a copy lives on. Composite so it can only name a connection of the replica's own tenant AND provider type.
+        builder.HasOne<BackupPlatform.Domain.Storage.StorageConnection>().WithMany()
+            .HasForeignKey(replica => new { replica.StorageConnectionId, replica.TenantId, replica.StorageProvider })
+            .HasPrincipalKey(connection => new { connection.Id, connection.TenantId, connection.ProviderType })
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(replica => new { replica.TenantId, replica.StorageConnectionId }).HasDatabaseName("ix_backup_replicas_connection");
         builder.Property(replica => replica.StorageTarget).HasMaxLength(512).IsRequired();
         builder.Property(replica => replica.ExecutionLocation).HasConversion<string>().HasMaxLength(16).IsRequired();
         builder.Property(replica => replica.Key).HasMaxLength(1024).IsRequired();

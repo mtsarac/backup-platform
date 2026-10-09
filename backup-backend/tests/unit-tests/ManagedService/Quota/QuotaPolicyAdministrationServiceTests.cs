@@ -125,8 +125,8 @@ public sealed class QuotaPolicyAdministrationServiceTests
     }
 
     [Theory]
-    [InlineData("quotaScope")]
-    [InlineData("storageConnection")]
+    [InlineData("quota-scope")]
+    [InlineData("QuotaScope")]
     [InlineData("1")]
     [InlineData("unknown")]
     [InlineData(null)]
@@ -142,7 +142,7 @@ public sealed class QuotaPolicyAdministrationServiceTests
     public void AnUnsupportedKindAmongSupportedOnesRejectsTheWholeRequest()
     {
         var (service, store) = Setup();
-        var error = Invalid(() => Create(service, scopes: [new("providerType", ["central"]), new("quotaScope", ["gold"])]));
+        var error = Invalid(() => Create(service, scopes: [new("providerType", ["central"]), new("bogusKind", ["gold"])]));
         Assert.Equal("unsupported_scope_kind", error.Code);
         Assert.Equal(0, store.Calls);
     }
@@ -233,8 +233,8 @@ public sealed class QuotaPolicyAdministrationServiceTests
     }
 
     [Theory]
-    [InlineData("quotaScope")]
-    [InlineData("storageConnection")]
+    [InlineData("quota-scope")]
+    [InlineData("StorageConnection")]
     public void UpdateRejectsUnsupportedScopeKinds(string kind)
     {
         var (service, store) = Setup();

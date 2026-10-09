@@ -91,7 +91,7 @@ api_dll="$REPO_ROOT/backup-backend/src/hosts/api/bin/Release/net10.0/BackupPlatf
 
 database_created=true
 run_redacted dotnet tool restore >/dev/null
-run_redacted dotnet ef database update --project src/core/infrastructure >/dev/null
+run_redacted dotnet ef database update --project src/core/infrastructure --configuration Release --no-build >/dev/null
 printf 'Smoke database migrated\n'
 
 BACKUP_PLATFORM_BOOTSTRAP_LOGIN=$login BACKUP_PLATFORM_BOOTSTRAP_PASSWORD=$password \

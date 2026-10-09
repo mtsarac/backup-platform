@@ -2,6 +2,7 @@ using System.Text.Json;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
+using BackupPlatform.Domain.Storage;
 using BackupPlatform.ManagedService.Administration;
 using BackupPlatform.ManagedService.Quota;
 using Microsoft.EntityFrameworkCore;

@@ -14,6 +14,8 @@ public sealed record BackupExecutionConfiguration
     public string StagingReference { get; init; } = "default";
     public string StorageProvider { get; init; } = "local";
     public string? StorageExecutionLocation { get; init; }
+    /// <summary>The destination connection. A job may omit it (the tenant's default for <see cref="StorageProvider"/>); a run always carries the resolved one.</summary>
+    public Guid? StorageConnectionId { get; init; }
     public string StoragePrefix { get; init; } = string.Empty;
     public bool CopyOnly { get; init; } = true;
     public string ChecksumPolicy { get; init; } = "Preferred";
