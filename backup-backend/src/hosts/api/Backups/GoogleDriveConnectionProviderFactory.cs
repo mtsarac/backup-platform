@@ -1,10 +1,12 @@
 using System.Text.Json;
 using BackupPlatform.Domain.Storage;
+using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using BackupPlatform.SecretProviders.Abstractions;
 using BackupPlatform.StorageProviders.Abstractions;
 using BackupPlatform.StorageProviders.GoogleDrive;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace BackupPlatform.Api.Backups;
@@ -14,7 +16,9 @@ public sealed class GoogleDriveConnectionProviderFactory(
     IOptions<GoogleDrivePlatformOptions> platformOptions,
     IGoogleDriveFileCatalog catalog,
     ISecretStore secretStore,
-    DbContextOptions<PlatformDbContext> dbOptions)
+    DbContextOptions<PlatformDbContext> dbOptions,
+    IGoogleDriveStagingStore? stagingStore = null,
+    ILogger<GoogleDriveConnectionProviderFactory>? logger = null)
 {
     private readonly GoogleDrivePlatformOptions _platform = platformOptions?.Value ?? new();
 
@@ -41,7 +45,12 @@ public sealed class GoogleDriveConnectionProviderFactory(
                 connection.Id,
                 folderId,
                 stagingDir,
-                minStagingFreeBytes: _platform.MinStagingFreeBytes);
+                minStagingFreeBytes: _platform.MinStagingFreeBytes,
+                maxRetryAttempts: _platform.RetryMaxAttempts,
+                maxRetryElapsed: _platform.RetryBudget,
+                requestTimeout: _platform.RequestTimeout,
+                uploadTimeout: _platform.UploadTimeout,
+                maxSessionRestarts: _platform.MaxSessionRestarts);
 
             var reference = connection.SecretReference;
             if (reference is null || !reference.StartsWith($"sc-{connection.Id:N}-", StringComparison.Ordinal))
@@ -49,54 +58,70 @@ public sealed class GoogleDriveConnectionProviderFactory(
                 throw new StorageException(StorageFailureKind.AuthenticationFailed, "Google Drive connection has no credentials configured.");
             }
 
-            var secretReference = new SecretReference(reference);
+            CredentialSnapshot? snapshot = null;
             PlatformDbContext? refreshDb = null;
-            StorageConnection? refreshConnection = null;
 
             return new GoogleDriveStorageProvider(
                 http,
                 options,
-                token => ReadCredentialAsync(secrets, secretReference, token),
+                _ => ValueTask.FromResult(new GoogleDriveCredential(snapshot!.RefreshToken)),
                 catalog,
-                async (newRefreshToken, token) =>
+                async (newRefreshToken, _) =>
                 {
-                    var json = JsonSerializer.Serialize(new Dictionary<string, string> { ["refreshToken"] = newRefreshToken });
-                    await secretStore.SetAsync(secretReference, new SecretValue(json), token);
+                    snapshot = await PersistRotationAsync(refreshDb!, connection, snapshot!, newRefreshToken, secrets, options.RequestTimeout);
                 },
                 async (refresh, token) =>
                 {
-                    await using var db = PlatformDbContext.CreateForPlatformOperations(dbOptions);
-                    await using var transaction = await db.Database.BeginTransactionAsync(token);
-                    // Match connection-management's tenant lock, including callback/disconnect and generic secret changes.
-                    await GoogleDriveOAuthService.LockOwnerAsync(db, connection.TenantId, token);
-                    refreshConnection = await db.StorageConnections.SingleOrDefaultAsync(
-                        row => row.TenantId == connection.TenantId && row.Id == connection.Id
-                            && row.ProviderType == StorageProviderTypes.GoogleDrive, token);
-                    if (refreshConnection is null || refreshConnection.SecretReference is not { } currentReference
-                        || !currentReference.StartsWith($"sc-{connection.Id:N}-", StringComparison.Ordinal))
-                        throw InvalidCredentials();
-                    secretReference = new SecretReference(currentReference);
-                    refreshDb = db;
                     try
                     {
-                        return await refresh(token);
+                        await using var session = await GoogleDriveRefreshSession.AcquireAsync(
+                            dbOptions, connection.TenantId, connection.Id, options.MaxRetryElapsed, token);
+                        refreshDb = session.Database;
+                        snapshot = await ReadSnapshotAsync(refreshDb, connection, secrets, options.RequestTimeout, token);
+                        var accessToken = await refresh(token);
+                        await CheckSnapshotAsync(refreshDb, connection, snapshot, secrets, options.RequestTimeout, token);
+                        if (connection.SecretReference != snapshot.Reference)
+                            connection.AttachSecret(snapshot.Reference, ["refreshToken"], snapshot.UpdatedAt ?? DateTimeOffset.UtcNow);
+                        return accessToken;
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                    catch (StorageException exception)
+                    {
+                        logger?.LogWarning("Google Drive credential refresh failed: {Kind}.", exception.Kind);
+                        throw;
+                    }
+                    catch
+                    {
+                        logger?.LogWarning("Google Drive credential refresh failed: {Kind}.", "CoordinationUnavailable");
+                        throw;
                     }
                     finally
                     {
                         refreshDb = null;
-                        refreshConnection = null;
+                        snapshot = null;
                     }
                 },
-                async token =>
+                async _ =>
                 {
-                    var config = new Dictionary<string, string>(refreshConnection!.Configuration, StringComparer.Ordinal)
+                    using var timeout = new CancellationTokenSource(options.RequestTimeout);
+                    refreshDb!.ChangeTracker.Clear();
+                    await using var transaction = await refreshDb.Database.BeginTransactionAsync(timeout.Token);
+                    await GoogleDriveOAuthService.LockOwnerAsync(refreshDb, connection.TenantId, timeout.Token);
+                    var current = await FindConnectionAsync(refreshDb, connection, timeout.Token);
+                    if (await MatchesAsync(current, snapshot!, secrets, timeout.Token))
                     {
-                        ["reauthorizationRequired"] = "true"
-                    };
-                    refreshConnection.Reconfigure(config, DateTimeOffset.UtcNow);
-                    await refreshDb!.SaveChangesAsync(token);
-                    await refreshDb.Database.CurrentTransaction!.CommitAsync(token);
-                });
+                        current!.Reconfigure(new Dictionary<string, string>(current.Configuration, StringComparer.Ordinal)
+                        {
+                            ["reauthorizationRequired"] = "true"
+                        }, DateTimeOffset.UtcNow);
+                        await refreshDb.SaveChangesAsync(timeout.Token);
+                        await transaction.CommitAsync(timeout.Token);
+                    }
+                    else
+                        logger?.LogWarning("Google Drive reliability finding: {Kind}", "RevocationFenceChanged");
+                },
+                reconciliationObserver: logger is null ? null : finding => logger.LogWarning("Google Drive reliability finding: {Kind}", finding.Kind),
+                stagingStore: stagingStore);
         }
         catch (StorageException)
         {
@@ -107,6 +132,91 @@ public sealed class GoogleDriveConnectionProviderFactory(
             throw InvalidConfiguration();
         }
     }
+
+    private async Task<CredentialSnapshot> PersistRotationAsync(
+        PlatformDbContext db, StorageConnection connection, CredentialSnapshot expected, string newRefreshToken,
+        ISecretProvider secrets, TimeSpan operationTimeout)
+    {
+        var reference = $"sc-{connection.Id:N}-{Guid.NewGuid():N}";
+        using var timeout = new CancellationTokenSource(operationTimeout);
+        try
+        {
+            var json = JsonSerializer.Serialize(new Dictionary<string, string> { ["refreshToken"] = newRefreshToken });
+            await secretStore.SetAsync(new SecretReference(reference), new SecretValue(json), timeout.Token);
+            db.ChangeTracker.Clear();
+            await using var transaction = await db.Database.BeginTransactionAsync(timeout.Token);
+            await GoogleDriveOAuthService.LockOwnerAsync(db, connection.TenantId, timeout.Token);
+            var current = await FindConnectionAsync(db, connection, timeout.Token);
+            if (!await MatchesAsync(current, expected, secrets, timeout.Token))
+            {
+                logger?.LogWarning("Google Drive reliability finding: {Kind}", "RotationFenceChanged");
+                throw InvalidCredentials();
+            }
+            // A new immutable reference fences generic secret changes and reauthorization on every node.
+            current!.AttachSecret(reference, ["refreshToken"], DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
+            await db.SaveChangesAsync(timeout.Token);
+            await transaction.CommitAsync(timeout.Token);
+            await GoogleDriveOAuthService.DiscardSecretAsync(dbOptions, secretStore, connection.TenantId, expected.Reference, operationTimeout);
+            return Snapshot(current, newRefreshToken);
+        }
+        catch
+        {
+            // A failed commit may have succeeded: cleanup checks the committed reference before deleting.
+            await GoogleDriveOAuthService.DiscardSecretAsync(dbOptions, secretStore, connection.TenantId, reference, operationTimeout);
+            throw;
+        }
+    }
+
+    private static async Task<CredentialSnapshot> ReadSnapshotAsync(
+        PlatformDbContext db, StorageConnection connection, ISecretProvider secrets, TimeSpan operationTimeout, CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(operationTimeout);
+        db.ChangeTracker.Clear();
+        await using var transaction = await db.Database.BeginTransactionAsync(timeout.Token);
+        await GoogleDriveOAuthService.LockOwnerAsync(db, connection.TenantId, timeout.Token);
+        var current = await FindConnectionAsync(db, connection, timeout.Token);
+        if (current?.SecretReference is not { } reference
+            || !reference.StartsWith($"sc-{connection.Id:N}-", StringComparison.Ordinal)
+            || current.Configuration.GetValueOrDefault("reauthorizationRequired") == "true")
+            throw InvalidCredentials();
+        var credential = await ReadCredentialAsync(secrets, new SecretReference(reference), timeout.Token);
+        await transaction.CommitAsync(timeout.Token);
+        return Snapshot(current, credential.RefreshToken);
+    }
+
+    private static async Task CheckSnapshotAsync(
+        PlatformDbContext db, StorageConnection connection, CredentialSnapshot snapshot, ISecretProvider secrets,
+        TimeSpan operationTimeout, CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(operationTimeout);
+        db.ChangeTracker.Clear();
+        await using var transaction = await db.Database.BeginTransactionAsync(timeout.Token);
+        await GoogleDriveOAuthService.LockOwnerAsync(db, connection.TenantId, timeout.Token);
+        if (!await MatchesAsync(await FindConnectionAsync(db, connection, timeout.Token), snapshot, secrets, timeout.Token))
+            throw InvalidCredentials();
+        await transaction.CommitAsync(timeout.Token);
+    }
+
+    private static Task<StorageConnection?> FindConnectionAsync(PlatformDbContext db, StorageConnection connection, CancellationToken cancellationToken) =>
+        db.StorageConnections.SingleOrDefaultAsync(row => row.TenantId == connection.TenantId && row.Id == connection.Id
+            && row.ProviderType == StorageProviderTypes.GoogleDrive, cancellationToken);
+
+    private static async Task<bool> MatchesAsync(
+        StorageConnection? connection, CredentialSnapshot expected, ISecretProvider secrets, CancellationToken cancellationToken)
+    {
+        if (connection is null || connection.SecretReference != expected.Reference || connection.SecretUpdatedAt != expected.UpdatedAt
+            || connection.Configuration.GetValueOrDefault("reauthorizationRequired") != expected.ReauthorizationRequired)
+            return false;
+        var current = await ReadCredentialAsync(secrets, new SecretReference(expected.Reference), cancellationToken);
+        return string.Equals(current.RefreshToken, expected.RefreshToken, StringComparison.Ordinal);
+    }
+
+    private static CredentialSnapshot Snapshot(StorageConnection connection, string refreshToken) =>
+        new(connection.SecretReference!, connection.SecretUpdatedAt, connection.Configuration.GetValueOrDefault("reauthorizationRequired"), refreshToken);
+
+    private sealed record CredentialSnapshot(string Reference, DateTimeOffset? UpdatedAt, string? ReauthorizationRequired, string RefreshToken);
 
     private static async ValueTask<GoogleDriveCredential> ReadCredentialAsync(
         ISecretProvider secrets, SecretReference reference, CancellationToken cancellationToken)

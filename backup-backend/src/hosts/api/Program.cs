@@ -8,6 +8,8 @@ using Microsoft.EntityFrameworkCore;
 
 var isBootstrap = args.Contains("--bootstrap-user", StringComparer.Ordinal);
 var builder = WebApplication.CreateBuilder(isBootstrap ? args.Where(argument => argument != "--bootstrap-user").ToArray() : args);
+// Hosting's request-start messages include OAuth callback query credentials.
+builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
 builder.Services.AddPlatformSecurity();
 
 var app = builder.Build();

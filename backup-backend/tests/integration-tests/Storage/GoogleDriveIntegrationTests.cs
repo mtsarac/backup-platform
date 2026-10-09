@@ -316,6 +316,90 @@ public sealed class GoogleDriveIntegrationTests(PostgreSqlFixture fixture) : ICl
         Assert.Equal("new.bak", row.FileName);
     }
 
+    [Fact]
+    public async Task GoogleDrive_Reconciliation_IsReadOnlyDurableAndTenantAdminScoped()
+    {
+        var handler = new FakeGoogleDriveServerHandler();
+        var http = new HttpClient(handler);
+        await using var world = await AgentWorld.CreateAsync(fixture, configuration: new Dictionary<string, string?>
+        {
+            ["GoogleDrive:ClientId"] = "test_client_id",
+            ["GoogleDrive:ClientSecret"] = "test_client_secret",
+            ["GoogleDrive:RedirectUri"] = "https://backup.example.test/api/platform/google-drive/oauth/callback"
+        }, configureServices: services => services.AddSingleton(http));
+        var tenant = new Tenant(TenantId.New(), "Reconciliation Tenant");
+        var foreign = new Tenant(TenantId.New(), "Foreign Reconciliation Tenant");
+        var connectionId = Guid.NewGuid();
+        var secretReference = $"sc-{connectionId:N}-reconcile";
+        await using (var db = fixture.CreatePlatformContext())
+        {
+            db.Tenants.AddRange(tenant, foreign);
+            var connection = new StorageConnection(connectionId, tenant.Id, "Drive Reconciliation",
+                StorageProviderTypes.GoogleDrive, StorageOwnership.TenantManaged, "tenant",
+                new Dictionary<string, string>(), false, DateTimeOffset.UtcNow);
+            connection.AttachSecret(secretReference, ["refreshToken"], DateTimeOffset.UtcNow);
+            db.StorageConnections.Add(connection);
+            await db.SaveChangesAsync();
+        }
+        await world.EntitleAsync(tenant);
+        await world.EntitleAsync(foreign);
+        var adminUser = await world.SeedUserAsync();
+        await world.GrantAsync(tenant, adminUser, TenantRole.Admin);
+        await world.GrantAsync(foreign, adminUser, TenantRole.Admin);
+        var viewerUser = await world.SeedUserAsync();
+        await world.GrantAsync(tenant, viewerUser, TenantRole.Viewer);
+        var admin = await world.SignInAsync(adminUser);
+        var viewer = await world.SignInAsync(viewerUser);
+        await world.Factory.Services.GetRequiredService<ISecretStore>().SetAsync(
+            new SecretReference(secretReference), new SecretValue("{\"refreshToken\":\"test_refresh\"}"), default);
+        var provider = world.Factory.Services.GetRequiredService<IBackupStorageResolver>()
+            .Resolve(tenant.Id, StorageProviderTypes.GoogleDrive, connectionId.ToString("D"))!;
+        var key = new StorageObjectKey($"{tenant.Id.Value:N}/job/run/attempt/backup.bak");
+        using var content = new MemoryStream([1, 2, 3, 4]);
+        await provider.PutAsync(key, content, new(StorageOverwritePolicy.Fail, ProbeChecksum, 4), null, default);
+        handler.SimulateExternalDelete();
+
+        var route = $"/api/tenants/{tenant.Id.Value}/storage-connections/{connectionId}/google-drive/reconcile";
+        Assert.Equal(HttpStatusCode.Forbidden, (await viewer.SendAsync(HttpMethod.Post, route, new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await admin.SendAsync(HttpMethod.Post,
+            $"/api/tenants/{foreign.Id.Value}/storage-connections/{connectionId}/google-drive/reconcile", new { })).StatusCode);
+        var response = await admin.SendAsync(HttpMethod.Post, route, new { });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var report = await response.Content.ReadFromJsonAsync<GoogleDriveReconciliationReport>();
+        Assert.NotNull(report);
+        Assert.True(report.DryRun);
+        Assert.Contains(report.Findings, f => f.Kind == "missing");
+        await using var persisted = fixture.CreatePlatformContext();
+        var row = await persisted.GoogleDriveFileMetadata.AsNoTracking().SingleAsync(m =>
+            m.TenantId == tenant.Id && m.ConnectionId == connectionId && m.StorageKey == key.Value);
+        Assert.Equal("missing", row.DriftKind);
+        Assert.NotNull(row.DriftDetectedAt);
+        Assert.Equal(4, row.SizeBytes);
+    }
+
+    [Fact]
+    public async Task GoogleDrive_CatalogConcurrentPublishAndConditionalDeletePreserveReplacement()
+    {
+        var tenantId = Guid.NewGuid();
+        var connectionId = Guid.NewGuid();
+        var options = new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(fixture.ConnectionString).Options;
+        var catalog = new EfGoogleDriveFileCatalog(options, TimeProvider.System);
+        var key = $"{tenantId:N}/job/run/attempt/backup.bak";
+        var initial = new GoogleDriveFileRecord("old-file", "folder", "backup.bak", 4, ProbeChecksum.Hex, null);
+        await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => catalog.SaveAsync(tenantId, connectionId, key, initial, default)));
+        var replacement = initial with { FileId = "new-file" };
+        await catalog.SaveAsync(tenantId, connectionId, key, replacement, default);
+        await catalog.DeleteAsync(tenantId, connectionId, key, initial.FileId, default);
+        Assert.Equal(replacement, await catalog.FindAsync(tenantId, connectionId, key, default));
+        Assert.Single(await catalog.ListAsync(tenantId, connectionId, default));
+        await catalog.ReportFindingAsync(tenantId, connectionId, new("missing", replacement.FileId, null), default);
+        await using var db = fixture.CreatePlatformContext();
+        var row = await db.GoogleDriveFileMetadata.AsNoTracking().SingleAsync(m =>
+            m.TenantId == new TenantId(tenantId) && m.ConnectionId == connectionId && m.StorageKey == key);
+        Assert.Equal("missing", row.DriftKind);
+        Assert.NotNull(row.DriftDetectedAt);
+    }
+
     private sealed class FakeGoogleDriveServerHandler : HttpMessageHandler
     {
         private readonly Dictionary<string, byte[]> _files = [];
@@ -373,7 +457,7 @@ public sealed class GoogleDriveIntegrationTests(PostgreSqlFixture fixture) : ICl
 
             if (uri.Contains("/drive/v3/files?q=") && request.Method == HttpMethod.Get)
             {
-                if (Uri.UnescapeDataString(request.RequestUri!.Query).Contains("mimeType"))
+                if (Uri.UnescapeDataString(request.RequestUri!.Query).Contains("mimeType ="))
                     return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(new { files = Array.Empty<object>() }) });
                 var found = _files.Select(kv => new
                 {
@@ -402,12 +486,12 @@ public sealed class GoogleDriveIntegrationTests(PostgreSqlFixture fixture) : ICl
                     metadata.RootElement.GetProperty("appProperties").EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetString()!));
 
                 var response = new HttpResponseMessage(HttpStatusCode.OK);
-                response.Headers.Location = new Uri($"https://fake-gdrive-upload/{sid}");
+                response.Headers.Location = new Uri($"https://fake-upload.googleapis.com/{sid}");
                 return Task.FromResult(response);
             }
 
             // Put Chunk
-            if (uri.StartsWith("https://fake-gdrive-upload/sess-") && request.Method == HttpMethod.Put)
+            if (uri.StartsWith("https://fake-upload.googleapis.com/sess-") && request.Method == HttpMethod.Put)
             {
                 var sid = uri.Split('/').Last();
                 if (!_sessions.TryGetValue(sid, out var session))
@@ -464,11 +548,12 @@ public sealed class GoogleDriveIntegrationTests(PostgreSqlFixture fixture) : ICl
                     var item = new
                     {
                         id = fid,
-                        name = "probe",
+                        name = _fileNames[fid],
                         size = (long)data.Length,
                         md5Checksum = "fake_md5",
                         trashed = false,
-                        modifiedTime = DateTimeOffset.UtcNow
+                        modifiedTime = DateTimeOffset.UtcNow,
+                        appProperties = _fileProperties[fid]
                     };
                     return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(item) });
                 }

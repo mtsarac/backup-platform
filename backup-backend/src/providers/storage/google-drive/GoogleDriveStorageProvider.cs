@@ -1,5 +1,7 @@
 using System.Buffers;
-using System.IO;
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -14,809 +16,651 @@ namespace BackupPlatform.StorageProviders.GoogleDrive;
 public sealed class GoogleDriveStorageProvider : IStorageProvider
 {
     public static StorageProviderId ProviderId { get; } = new("google-drive");
-
     public static StorageCapabilities GoogleDriveCapabilities { get; } = new([
-        StorageCapabilityIds.Read,
-        StorageCapabilityIds.Delete,
-        StorageCapabilityIds.AtomicPublish,
-        StorageCapabilityIds.VerifyAbsence
-    ]);
-
-    private const string ApiBaseUrl = "https://www.googleapis.com/drive/v3";
-    private const string UploadBaseUrl = "https://www.googleapis.com/upload/drive/v3/files";
-    private const string UploadQuery = "uploadType=resumable&fields=id,name,size,md5Checksum,modifiedTime,trashed";
-
+        StorageCapabilityIds.Read, StorageCapabilityIds.Delete,
+        StorageCapabilityIds.AtomicPublish, StorageCapabilityIds.VerifyAbsence]);
+    private const string ApiBase = "https://www.googleapis.com/drive/v3/files";
+    private const string UploadBase = "https://www.googleapis.com/upload/drive/v3/files";
+    private const string Fields = "id,name,size,md5Checksum,modifiedTime,trashed,appProperties,parents";
+    private static readonly Meter Meter = new("BackupPlatform.GoogleDrive");
+    private static readonly Counter<long> Findings = Meter.CreateCounter<long>("google_drive_reconciliation_findings");
+    private static readonly Counter<long> Retries = Meter.CreateCounter<long>("google_drive_retries");
     private readonly HttpClient _http;
     private readonly GoogleDriveStorageOptions _options;
     private readonly GoogleDriveTokenManager _tokenManager;
     private readonly IGoogleDriveFileCatalog _catalog;
+    private readonly IGoogleDriveStagingStore? _stagingStore;
+    private readonly Action<GoogleDriveReconciliationFinding>? _observer;
     private readonly SemaphoreSlim _folderLock = new(1, 1);
-
     private string? _resolvedFolderId;
 
-    public GoogleDriveStorageProvider(
-        HttpClient http,
-        GoogleDriveStorageOptions options,
+    public GoogleDriveStorageProvider(HttpClient http, GoogleDriveStorageOptions options,
         Func<CancellationToken, ValueTask<GoogleDriveCredential>> credentials,
         IGoogleDriveFileCatalog? catalog = null,
         Func<string, CancellationToken, Task>? onTokenRotated = null,
         Func<Func<CancellationToken, ValueTask<string>>, CancellationToken, ValueTask<string>>? refreshCoordinator = null,
-        Func<CancellationToken, Task>? onReauthorizationRequired = null)
+        Func<CancellationToken, Task>? onReauthorizationRequired = null,
+        Action<GoogleDriveReconciliationFinding>? reconciliationObserver = null,
+        IGoogleDriveStagingStore? stagingStore = null)
     {
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         ArgumentNullException.ThrowIfNull(credentials);
-
         _tokenManager = new GoogleDriveTokenManager(http, options, credentials, onTokenRotated, refreshCoordinator, onReauthorizationRequired);
         _catalog = catalog ?? new InMemoryGoogleDriveFileCatalog();
+        _stagingStore = stagingStore;
+        _observer = reconciliationObserver;
         _resolvedFolderId = options.FolderId;
     }
 
     public StorageProviderId Id => ProviderId;
-
     public StorageTopology Topology => StorageTopology.BackendRelayed;
-
     public StorageCapabilities Capabilities => GoogleDriveCapabilities;
 
-    public async Task<StorageObjectMetadata> PutAsync(
-        StorageObjectKey key,
-        Stream content,
-        StoragePutOptions options,
-        IProgress<long>? progress,
-        CancellationToken cancellationToken)
+    public async Task<StorageObjectMetadata> PutAsync(StorageObjectKey key, Stream content,
+        StoragePutOptions options, IProgress<long>? progress, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(content);
         ArgumentNullException.ThrowIfNull(options);
-
         if (!content.CanRead) throw new ArgumentException("The content stream must be readable.", nameof(content));
         if (options.ExpectedLength is null or <= 0)
-            throw new ArgumentOutOfRangeException(nameof(options), "Google Drive upload requires an explicit expected length.");
-        if (options.ExpectedChecksum is null)
-            throw new ArgumentException("Google Drive upload requires an authoritative checksum.", nameof(options));
-
+            throw new ArgumentOutOfRangeException(nameof(options), "Google Drive requires an explicit positive length.");
+        if (options.ExpectedChecksum is null || options.ExpectedChecksum.Algorithm != ChecksumAlgorithm.Sha256)
+            throw new ArgumentException("Google Drive requires an authoritative SHA-256 checksum.", nameof(options));
+        if (_stagingStore is null)
+            throw new StorageException(StorageFailureKind.InvalidConfiguration, "Google Drive staging is not configured.");
         cancellationToken.ThrowIfCancellationRequested();
-
-        var folderId = await EnsureTargetFolderAsync(cancellationToken).ConfigureAwait(false);
-        var fileName = ExtractFileName(key);
-
-        // Check if file already exists in target folder
-        var existingFile = await FindFileInFolderAsync(folderId, fileName, key.Value, cancellationToken).ConfigureAwait(false);
-        if (existingFile is not null)
-        {
-            if (options.Overwrite == StorageOverwritePolicy.Fail)
-            {
-                // Idempotency: if size matches and verify matches, return existing metadata
-                if (existingFile.Size == options.ExpectedLength.Value)
-                {
-                    var verification = await VerifyAsync(key, new StorageVerificationExpectation(options.ExpectedLength.Value, options.ExpectedChecksum), cancellationToken).ConfigureAwait(false);
-                    if (verification.Status == StorageVerificationStatus.Verified)
-                    {
-                        return new StorageObjectMetadata(new StorageLocation(Id, key), existingFile.Size, options.ExpectedChecksum, existingFile.ModifiedTime);
-                    }
-                }
-
-                throw new StorageException(StorageFailureKind.AlreadyExists, "Target object already exists in Google Drive.");
-            }
-        }
-
-        // Ensure staging directory exists and has bounded capacity
-        Directory.CreateDirectory(_options.StagingDirectory);
-        CheckStagingCapacity(options.ExpectedLength.Value);
-
-        var tempFilePath = Path.Combine(_options.StagingDirectory, $"{_options.TenantId:N}_{_options.ConnectionId:N}_{Guid.NewGuid():N}.tmp");
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(_options.UploadTimeout);
         try
         {
-            // Stage incoming stream to local temporary file to allow re-reading during resumable chunk upload
-            long stagedLength;
-            string stagedChecksum;
-            var fileOptions = new FileStreamOptions
-            {
-                Mode = FileMode.CreateNew,
-                Access = FileAccess.Write,
-                Share = FileShare.None,
-                BufferSize = 64 * 1024,
-                Options = FileOptions.Asynchronous
-            };
-            if (!OperatingSystem.IsWindows())
-                fileOptions.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-            await using (var fileStream = new FileStream(tempFilePath, fileOptions))
-            {
-                using var sha256 = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-                var buffer = ArrayPool<byte>.Shared.Rent(64 * 1024);
-                try
-                {
-                    long totalRead = 0;
-                    while (true)
-                    {
-                        var bytesRead = await content.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false);
-                        if (bytesRead == 0) break;
-                        if (bytesRead > options.ExpectedLength.Value - totalRead)
-                        {
-                            throw new StorageException(StorageFailureKind.IntegrityMismatch, "Stream exceeds the expected length.");
-                        }
-                        await fileStream.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken).ConfigureAwait(false);
-                        sha256.AppendData(buffer, 0, bytesRead);
-                        totalRead += bytesRead;
-                    }
-                    stagedLength = totalRead;
-                    stagedChecksum = Convert.ToHexStringLower(sha256.GetHashAndReset());
-                }
-                finally
-                {
-                    ArrayPool<byte>.Shared.Return(buffer);
-                }
-            }
-
-            // Verify staged bytes before initiating Google Drive upload
-            if (stagedLength != options.ExpectedLength.Value)
-            {
-                throw new StorageException(StorageFailureKind.IntegrityMismatch, $"Stream length mismatch: received {stagedLength}, expected {options.ExpectedLength.Value}.");
-            }
-            if (!string.Equals(stagedChecksum, options.ExpectedChecksum.Hex, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new StorageException(StorageFailureKind.IntegrityMismatch, "Stream checksum mismatch.");
-            }
-
-            // Perform Google Drive resumable upload from staged file
-            var fileResult = await UploadResumableFileAsync(tempFilePath, folderId, fileName, key.Value, stagedLength, stagedChecksum, existingFile?.Id, progress, cancellationToken).ConfigureAwait(false);
-
-            var record = new GoogleDriveFileRecord(fileResult.Id, folderId, fileName, fileResult.Size, options.ExpectedChecksum.Hex, fileResult.Md5Checksum);
-            await _catalog.SaveAsync(_options.TenantId, _options.ConnectionId, key.Value, record, cancellationToken).ConfigureAwait(false);
-
-            return new StorageObjectMetadata(
-                new StorageLocation(Id, key),
-                fileResult.Size,
-                options.ExpectedChecksum,
-                fileResult.ModifiedTime);
+            return await PutCoreAsync(key, content, options, progress, deadline.Token).ConfigureAwait(false);
         }
-        finally
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && deadline.IsCancellationRequested)
         {
-            try
-            {
-                if (File.Exists(tempFilePath)) File.Delete(tempFilePath);
-            }
-            catch
-            {
-                // Staging file cleanup is best-effort
-            }
+            throw new StorageException(StorageFailureKind.Timeout, "Google Drive upload exceeded its time limit.");
         }
     }
 
-    public async Task<bool> ExistsAsync(StorageObjectKey key, CancellationToken cancellationToken)
+    private async Task<StorageObjectMetadata> PutCoreAsync(StorageObjectKey key, Stream content,
+        StoragePutOptions options, IProgress<long>? progress, CancellationToken token)
     {
-        var meta = await GetMetadataAsync(key, cancellationToken).ConfigureAwait(false);
-        return meta is not null;
+        var expected = new StorageVerificationExpectation(options.ExpectedLength!.Value, options.ExpectedChecksum!);
+        var cached = await _catalog.FindAsync(_options.TenantId, _options.ConnectionId, key.Value, token).ConfigureAwait(false);
+        var published = cached is null ? null : await GetOwnedFileAsync(cached.FileId, key.Value, token).ConfigureAwait(false);
+        if (published is not null && await MatchesAsync(published, expected, token).ConfigureAwait(false))
+            return Metadata(key, published, expected.Checksum);
+        if (published is not null && options.Overwrite == StorageOverwritePolicy.Fail)
+            throw new StorageException(StorageFailureKind.AlreadyExists, "Target object already exists in Google Drive.");
+
+        // A completed Drive object survives a catalog failure or process restart; never trust properties without readback.
+        var candidates = await FindCandidatesAsync(key.Value, token).ConfigureAwait(false);
+        foreach (var candidate in candidates.OrderBy(f => f.Id, StringComparer.Ordinal))
+        {
+            if (await MatchesAsync(candidate, expected, token).ConfigureAwait(false))
+            {
+                await PublishAsync(key, candidate, expected.Checksum, token).ConfigureAwait(false);
+                return Metadata(key, candidate, expected.Checksum);
+            }
+        }
+        if (candidates.Count > 0 && options.Overwrite == StorageOverwritePolicy.Fail)
+            throw new StorageException(StorageFailureKind.AlreadyExists, "Conflicting target objects exist in Google Drive.");
+
+        await using var staged = await _stagingStore!.StageAsync(content, expected.SizeBytes, expected.Checksum, token).ConfigureAwait(false);
+        token = staged.CancellationToken;
+        token.ThrowIfCancellationRequested();
+        var folderId = await EnsureTargetFolderAsync(token).ConfigureAwait(false);
+        var uploaded = await UploadAsync(staged.Path, folderId, key, expected, progress, token).ConfigureAwait(false);
+        var owned = await GetOwnedFileAsync(uploaded.Id, key.Value, token).ConfigureAwait(false);
+        if (owned is null || !await MatchesAsync(owned, expected, token).ConfigureAwait(false))
+        {
+            Observe(new("integrity_mismatch", uploaded.Id, StorageKeyHash(key.Value)));
+            throw new StorageException(StorageFailureKind.IntegrityMismatch, "Google Drive readback did not match the uploaded backup.");
+        }
+        await PublishAsync(key, owned, expected.Checksum, token).ConfigureAwait(false);
+        return Metadata(key, owned, expected.Checksum);
     }
+
+    private async Task PublishAsync(StorageObjectKey key, DriveFileInfo file, ContentChecksum checksum, CancellationToken token)
+    {
+        var parent = file.Parents?.FirstOrDefault() ?? await EnsureTargetFolderAsync(token).ConfigureAwait(false);
+        await _catalog.SaveAsync(_options.TenantId, _options.ConnectionId, key.Value,
+            new GoogleDriveFileRecord(file.Id, parent, file.Name, file.Size, checksum.Hex, file.Md5Checksum), token).ConfigureAwait(false);
+    }
+
+    public async Task<bool> ExistsAsync(StorageObjectKey key, CancellationToken cancellationToken) =>
+        await GetMetadataAsync(key, cancellationToken).ConfigureAwait(false) is not null;
 
     public async Task<StorageObjectMetadata?> GetMetadataAsync(StorageObjectKey key, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(key);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        // 1. Try local catalog first
         var cached = await _catalog.FindAsync(_options.TenantId, _options.ConnectionId, key.Value, cancellationToken).ConfigureAwait(false);
         if (cached is not null)
         {
-            var googleFile = await GetFileByIdAsync(cached.FileId, cancellationToken).ConfigureAwait(false);
-            if (googleFile is null || googleFile.Trashed)
+            var file = await GetOwnedFileAsync(cached.FileId, key.Value, cancellationToken).ConfigureAwait(false);
+            if (file is null)
             {
-                // Drift detected: file was removed from Google Drive externally
-                await _catalog.DeleteAsync(_options.TenantId, _options.ConnectionId, key.Value, cancellationToken).ConfigureAwait(false);
+                await ReportAsync(new("missing", cached.FileId, StorageKeyHash(key.Value)), cancellationToken).ConfigureAwait(false);
+                // Keep the catalog evidence; reconciliation is read-only and an upload retry can repair it.
                 return null;
             }
-
-            ContentChecksum? checksum = !string.IsNullOrWhiteSpace(cached.Checksum)
-                ? new ContentChecksum(ChecksumAlgorithm.Sha256, cached.Checksum)
-                : null;
-
-            return new StorageObjectMetadata(new StorageLocation(Id, key), googleFile.Size, checksum, googleFile.ModifiedTime);
+            return Metadata(key, file, Checksum(cached.Checksum));
         }
-
-        // 2. Fall back to querying Google Drive
-        var folderId = await EnsureTargetFolderAsync(cancellationToken).ConfigureAwait(false);
-        var fileName = ExtractFileName(key);
-        var found = await FindFileInFolderAsync(folderId, fileName, key.Value, cancellationToken).ConfigureAwait(false);
-        if (found is null) return null;
-
-        var record = new GoogleDriveFileRecord(found.Id, folderId, fileName, found.Size, found.AppProperties?.GetValueOrDefault("sha256"), found.Md5Checksum);
-        await _catalog.SaveAsync(_options.TenantId, _options.ConnectionId, key.Value, record, cancellationToken).ConfigureAwait(false);
-
-        ContentChecksum? cs = !string.IsNullOrWhiteSpace(record.Checksum)
-            ? new ContentChecksum(ChecksumAlgorithm.Sha256, record.Checksum)
-            : null;
-
-        return new StorageObjectMetadata(new StorageLocation(Id, key), found.Size, cs, found.ModifiedTime);
+        var candidates = await FindCandidatesAsync(key.Value, cancellationToken).ConfigureAwait(false);
+        if (candidates.Count == 0) return null;
+        var first = candidates.OrderBy(f => f.Id, StringComparer.Ordinal).First();
+        var checksum = Checksum(first.AppProperties?.GetValueOrDefault("sha256"));
+        if (checksum is null || candidates.Any(f => f.Size != first.Size
+            || !string.Equals(f.AppProperties?.GetValueOrDefault("sha256"), checksum.Hex, StringComparison.OrdinalIgnoreCase)))
+            throw new StorageException(StorageFailureKind.AlreadyExists, "Ambiguous Google Drive objects require reconciliation.");
+        if (!await MatchesAsync(first, new(first.Size, checksum), cancellationToken).ConfigureAwait(false))
+            throw new StorageException(StorageFailureKind.IntegrityMismatch, "Google Drive recovered object failed verification.");
+        await PublishAsync(key, first, checksum, cancellationToken).ConfigureAwait(false);
+        return Metadata(key, first, checksum);
     }
 
-    public async Task<StorageVerificationResult> VerifyAsync(
-        StorageObjectKey key,
-        StorageVerificationExpectation expected,
-        CancellationToken cancellationToken)
+    public async Task<StorageVerificationResult> VerifyAsync(StorageObjectKey key,
+        StorageVerificationExpectation expected, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(key);
         ArgumentNullException.ThrowIfNull(expected);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var meta = await GetMetadataAsync(key, cancellationToken).ConfigureAwait(false);
-        if (meta is null)
-        {
-            return new StorageVerificationResult(new StorageLocation(Id, key), StorageVerificationStatus.Missing, StorageVerificationMethod.ReadBack, null, null);
-        }
-
-        if (meta.SizeBytes != expected.SizeBytes)
-        {
-            return new StorageVerificationResult(new StorageLocation(Id, key), StorageVerificationStatus.SizeMismatch, StorageVerificationMethod.SizeOnly, meta.SizeBytes, null);
-        }
-
-        // ReadBack verification: stream from Google Drive and compute authoritative SHA-256
-        await using var stream = await OpenReadAsync(key, cancellationToken).ConfigureAwait(false);
-        using var sha256 = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        var buffer = ArrayPool<byte>.Shared.Rent(64 * 1024);
-        long totalBytes = 0;
-        try
-        {
-            while (true)
-            {
-                var read = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false);
-                if (read == 0) break;
-                sha256.AppendData(buffer, 0, read);
-                totalBytes += read;
-            }
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer);
-        }
-
-        if (totalBytes != expected.SizeBytes)
-        {
-            return new StorageVerificationResult(new StorageLocation(Id, key), StorageVerificationStatus.SizeMismatch, StorageVerificationMethod.ReadBack, totalBytes, null);
-        }
-
-        var actualChecksum = new ContentChecksum(ChecksumAlgorithm.Sha256, Convert.ToHexStringLower(sha256.GetHashAndReset()));
-        var status = actualChecksum.Equals(expected.Checksum)
-            ? StorageVerificationStatus.Verified
-            : StorageVerificationStatus.ChecksumMismatch;
-
-        return new StorageVerificationResult(new StorageLocation(Id, key), status, StorageVerificationMethod.ReadBack, totalBytes, actualChecksum);
+        var fileId = await ResolveFileIdAsync(key, cancellationToken).ConfigureAwait(false);
+        if (fileId is null)
+            return new(new StorageLocation(Id, key), StorageVerificationStatus.Missing, StorageVerificationMethod.ReadBack, null, null);
+        var actual = await HashFileAsync(fileId, expected.SizeBytes, cancellationToken).ConfigureAwait(false);
+        var status = actual.Length != expected.SizeBytes ? StorageVerificationStatus.SizeMismatch
+            : actual.Checksum.Equals(expected.Checksum) ? StorageVerificationStatus.Verified : StorageVerificationStatus.ChecksumMismatch;
+        return new(new StorageLocation(Id, key), status, StorageVerificationMethod.ReadBack, actual.Length, actual.Checksum);
     }
 
     public async Task<Stream> OpenReadAsync(StorageObjectKey key, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(key);
-        cancellationToken.ThrowIfCancellationRequested();
-
         var fileId = await ResolveFileIdAsync(key, cancellationToken).ConfigureAwait(false);
-        if (fileId is null)
-        {
-            throw new StorageException(StorageFailureKind.NotFound, "The requested file does not exist in Google Drive.");
-        }
-
-        var accessToken = await _tokenManager.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
-        var request = new HttpRequestMessage(HttpMethod.Get, $"{ApiBaseUrl}/files/{fileId}?alt=media");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-
-        var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-        if (response.IsSuccessStatusCode)
-        {
-            return await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        if (response.StatusCode == HttpStatusCode.NotFound)
-        {
-            throw new StorageException(StorageFailureKind.NotFound, "The requested file was not found in Google Drive.");
-        }
-        if (response.StatusCode == HttpStatusCode.Unauthorized || response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new StorageException(StorageFailureKind.AccessDenied, "Access denied reading file from Google Drive.");
-        }
-
-        throw new StorageException(StorageFailureKind.Io, $"Failed to open read stream from Google Drive (HTTP {response.StatusCode}).");
+        if (fileId is null) throw new StorageException(StorageFailureKind.NotFound, "The requested Google Drive object is absent.");
+        return await OpenFileAsync(fileId, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<bool> DeleteAsync(StorageObjectKey key, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(key);
-        cancellationToken.ThrowIfCancellationRequested();
-
         var fileId = await ResolveFileIdAsync(key, cancellationToken).ConfigureAwait(false);
-        if (fileId is null)
-        {
-            // Already absent: idempotent success
-            await _catalog.DeleteAsync(_options.TenantId, _options.ConnectionId, key.Value, cancellationToken).ConfigureAwait(false);
-            return false;
-        }
-
-        var deleted = await DeleteFileByIdAsync(fileId, cancellationToken).ConfigureAwait(false);
-        await _catalog.DeleteAsync(_options.TenantId, _options.ConnectionId, key.Value, cancellationToken).ConfigureAwait(false);
-        return deleted;
+        if (fileId is null) return false;
+        // Ownership is checked again immediately before the destructive operation.
+        if (await GetOwnedFileAsync(fileId, key.Value, cancellationToken).ConfigureAwait(false) is null) return false;
+        using var response = await SendAsync(() => new(HttpMethod.Delete, FileUrl(fileId)), true, cancellationToken).ConfigureAwait(false);
+        if (response.StatusCode != HttpStatusCode.NotFound) await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
+        await _catalog.DeleteAsync(_options.TenantId, _options.ConnectionId, key.Value, fileId, cancellationToken).ConfigureAwait(false);
+        return response.StatusCode != HttpStatusCode.NotFound;
     }
 
-    public IAsyncEnumerable<StorageEntry> EnumerateAsync(StorageObjectKey? prefix, DateTimeOffset modifiedBefore, CancellationToken cancellationToken)
-    {
+    public IAsyncEnumerable<StorageEntry> EnumerateAsync(StorageObjectKey? prefix, DateTimeOffset modifiedBefore, CancellationToken cancellationToken) =>
         throw new StorageException(StorageFailureKind.NotSupported, "Google Drive enumeration is not supported.");
+
+    /// <summary>Read-only detection. Unreferenced objects may belong to active uploads; this operation never repairs or deletes.</summary>
+    public async Task<GoogleDriveReconciliationReport> ReconcileAsync(CancellationToken cancellationToken)
+    {
+        var findings = new List<GoogleDriveReconciliationFinding>();
+        var records = await _catalog.ListAsync(_options.TenantId, _options.ConnectionId, cancellationToken).ConfigureAwait(false);
+        var files = await ListFilesAsync(ConnectionQuery(), cancellationToken).ConfigureAwait(false);
+        files = files.Where(IsConnectionOwned).ToList();
+        var referenced = records.Select(r => r.Record.FileId).ToHashSet(StringComparer.Ordinal);
+        foreach (var record in records)
+        {
+            var file = await GetFileAsync(record.Record.FileId, cancellationToken).ConfigureAwait(false);
+            var kind = file is null || file.Trashed ? "missing" : !IsOwned(file, record.StorageKey) ? "ownership_conflict" : null;
+            if (kind is not null) findings.Add(new(kind, record.Record.FileId, StorageKeyHash(record.StorageKey)));
+        }
+        foreach (var group in files.GroupBy(f => f.AppProperties?.GetValueOrDefault("storageKeyHash")))
+        {
+            if (group.Count() > 1)
+                foreach (var file in group) findings.Add(new("duplicate", file.Id, group.Key));
+            foreach (var file in group.Where(f => !referenced.Contains(f.Id)))
+                findings.Add(new("unreferenced_candidate", file.Id, group.Key));
+        }
+        foreach (var finding in findings) await ReportAsync(finding, cancellationToken).ConfigureAwait(false);
+        return new(true, records.Count, files.Count, findings);
     }
 
-    private async Task<string?> ResolveFileIdAsync(StorageObjectKey key, CancellationToken cancellationToken)
+    private async Task ReportAsync(GoogleDriveReconciliationFinding finding, CancellationToken token)
     {
-        var cached = await _catalog.FindAsync(_options.TenantId, _options.ConnectionId, key.Value, cancellationToken).ConfigureAwait(false);
-        if (cached is not null) return cached.FileId;
-
-        var meta = await GetMetadataAsync(key, cancellationToken).ConfigureAwait(false);
-        if (meta is null) return null;
-
-        var rec = await _catalog.FindAsync(_options.TenantId, _options.ConnectionId, key.Value, cancellationToken).ConfigureAwait(false);
-        return rec?.FileId;
+        Observe(finding);
+        await _catalog.ReportFindingAsync(_options.TenantId, _options.ConnectionId, finding, token).ConfigureAwait(false);
     }
 
-    private async Task<bool> DeleteFileByIdAsync(string fileId, CancellationToken cancellationToken)
+    private void Observe(GoogleDriveReconciliationFinding finding)
     {
-        var accessToken = await _tokenManager.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
-        using var request = new HttpRequestMessage(HttpMethod.Delete, $"{ApiBaseUrl}/files/{fileId}");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-
-        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        if (response.StatusCode is HttpStatusCode.NoContent or HttpStatusCode.OK)
-        {
-            return true;
-        }
-        if (response.StatusCode == HttpStatusCode.NotFound)
-        {
-            return false;
-        }
-        if (response.StatusCode == HttpStatusCode.Unauthorized || response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new StorageException(StorageFailureKind.AccessDenied, "Google Drive authorization failed during delete.");
-        }
-        if ((int)response.StatusCode >= 500 || response.StatusCode == (HttpStatusCode)429)
-        {
-            throw new StorageException(StorageFailureKind.NetworkUnavailable, "Google Drive service unavailable during delete.");
-        }
-
-        throw new StorageException(StorageFailureKind.Io, $"Failed to delete file from Google Drive (HTTP {response.StatusCode}).");
+        Findings.Add(1, new KeyValuePair<string, object?>("kind", finding.Kind));
+        _observer?.Invoke(finding);
     }
 
-    private async Task<DriveFileInfo?> GetFileByIdAsync(string fileId, CancellationToken cancellationToken)
+    private async Task<string?> ResolveFileIdAsync(StorageObjectKey key, CancellationToken token)
     {
-        var accessToken = await _tokenManager.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"{ApiBaseUrl}/files/{fileId}?fields=id,name,size,md5Checksum,trashed,modifiedTime,appProperties");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-
-        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        if (response.IsSuccessStatusCode)
-        {
-            return await response.Content.ReadFromJsonAsync<DriveFileInfo>(cancellationToken: cancellationToken).ConfigureAwait(false);
-        }
-        if (response.StatusCode == HttpStatusCode.NotFound)
-        {
-            return null;
-        }
-        if (response.StatusCode == HttpStatusCode.Unauthorized || response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new StorageException(StorageFailureKind.AccessDenied, "Access denied checking file in Google Drive.");
-        }
-
-        throw new StorageException(StorageFailureKind.Io, $"Error querying Google Drive file (HTTP {response.StatusCode}).");
+        ArgumentNullException.ThrowIfNull(key);
+        if (await GetMetadataAsync(key, token).ConfigureAwait(false) is null) return null;
+        var record = await _catalog.FindAsync(_options.TenantId, _options.ConnectionId, key.Value, token).ConfigureAwait(false);
+        return record?.FileId;
     }
 
-    private async Task<DriveFileInfo?> FindFileInFolderAsync(string folderId, string fileName, string storageKey, CancellationToken cancellationToken)
+    private async Task<DriveFileInfo?> GetOwnedFileAsync(string id, string key, CancellationToken token)
     {
-        var accessToken = await _tokenManager.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
-        var keyHash = StorageKeyHash(storageKey);
-        var query = $"'{EscapeQuery(folderId)}' in parents and name = '{EscapeQuery(fileName)}' and trashed = false"
-            + $" and appProperties has {{ key='storageKeyHash' and value='{keyHash}' }}"
-            + $" and appProperties has {{ key='tenantId' and value='{_options.TenantId:N}' }}"
-            + $" and appProperties has {{ key='connectionId' and value='{_options.ConnectionId:N}' }}";
-        var url = $"{ApiBaseUrl}/files?q={Uri.EscapeDataString(query)}&fields=files(id,name,size,md5Checksum,trashed,modifiedTime,appProperties)&pageSize=10";
-
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-
-        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        if (response.IsSuccessStatusCode)
+        var file = await GetFileAsync(id, token).ConfigureAwait(false);
+        if (file is null || file.Trashed) return null;
+        if (!IsOwned(file, key))
         {
-            var list = await response.Content.ReadFromJsonAsync<DriveFileList>(cancellationToken: cancellationToken).ConfigureAwait(false);
-            if (list?.Files is { Count: > 0 } files)
+            await ReportAsync(new("ownership_conflict", id, StorageKeyHash(key)), token).ConfigureAwait(false);
+            throw new StorageException(StorageFailureKind.AccessDenied, "Google Drive object ownership does not match this connection.");
+        }
+        return file;
+    }
+
+    private bool IsConnectionOwned(DriveFileInfo file) => file.AppProperties is { } p
+        && p.GetValueOrDefault("tenantId") == _options.TenantId.ToString("N")
+        && p.GetValueOrDefault("connectionId") == _options.ConnectionId.ToString("N");
+    private bool IsOwned(DriveFileInfo file, string key) => IsConnectionOwned(file)
+        && file.AppProperties!.GetValueOrDefault("storageKeyHash") == StorageKeyHash(key);
+    private string ConnectionQuery() => "trashed = false"
+        + $" and appProperties has {{ key='tenantId' and value='{_options.TenantId:N}' }}"
+        + $" and appProperties has {{ key='connectionId' and value='{_options.ConnectionId:N}' }}"
+        + " and mimeType != 'application/vnd.google-apps.folder'";
+
+    private async Task<List<DriveFileInfo>> FindCandidatesAsync(string key, CancellationToken token)
+    {
+        var files = await ListFilesAsync(ConnectionQuery()
+            + $" and appProperties has {{ key='storageKeyHash' and value='{StorageKeyHash(key)}' }}", token).ConfigureAwait(false);
+        files = files.Where(f => !f.Trashed && IsOwned(f, key)).ToList();
+        if (files.Count > 1) Observe(new("duplicate", null, StorageKeyHash(key)));
+        return files;
+    }
+
+    private async Task<List<DriveFileInfo>> ListFilesAsync(string query, CancellationToken token)
+    {
+        var files = new List<DriveFileInfo>();
+        var seenPages = new HashSet<string>(StringComparer.Ordinal);
+        string? page = null;
+        do
+        {
+            var url = $"{ApiBase}?q={Uri.EscapeDataString(query)}&fields=nextPageToken,incompleteSearch,files({Fields})&pageSize=1000";
+            if (page is not null) url += "&pageToken=" + Uri.EscapeDataString(page);
+            using var response = await SendAsync(() => new(HttpMethod.Get, url), true, token).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, token).ConfigureAwait(false);
+            var list = await ReadJsonAsync<DriveFileList>(response, token).ConfigureAwait(false)
+                ?? throw new StorageException(StorageFailureKind.Io, "Google Drive returned invalid search metadata.");
+            if (list.IncompleteSearch) throw new StorageException(StorageFailureKind.NetworkUnavailable, "Google Drive search is incomplete.");
+            if (list.Files is not null) files.AddRange(list.Files);
+            page = list.NextPageToken;
+            if (page is not null && !seenPages.Add(page))
+                throw new StorageException(StorageFailureKind.Io, "Google Drive returned a repeated search page.");
+        } while (!string.IsNullOrEmpty(page));
+        return files;
+    }
+
+    private async Task<DriveFileInfo?> GetFileAsync(string id, CancellationToken token)
+    {
+        using var response = await SendAsync(() => new(HttpMethod.Get, FileUrl(id) + "?fields=" + Fields), true, token).ConfigureAwait(false);
+        if (response.StatusCode == HttpStatusCode.NotFound) return null;
+        await EnsureSuccessAsync(response, token).ConfigureAwait(false);
+        return await ReadJsonAsync<DriveFileInfo>(response, token).ConfigureAwait(false)
+            ?? throw new StorageException(StorageFailureKind.Io, "Google Drive returned invalid object metadata.");
+    }
+
+    private async Task<bool> MatchesAsync(DriveFileInfo file, StorageVerificationExpectation expected, CancellationToken token)
+    {
+        if (file.Size != expected.SizeBytes) return false;
+        if (!string.Equals(file.AppProperties?.GetValueOrDefault("sha256"), expected.Checksum.Hex, StringComparison.OrdinalIgnoreCase)) return false;
+        var actual = await HashFileAsync(file.Id, expected.SizeBytes, token).ConfigureAwait(false);
+        return actual.Length == expected.SizeBytes && actual.Checksum.Equals(expected.Checksum);
+    }
+
+    private async Task<(long Length, ContentChecksum Checksum)> HashFileAsync(string id, long expectedLength, CancellationToken token)
+    {
+        await using var stream = await OpenFileAsync(id, token).ConfigureAwait(false);
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var buffer = ArrayPool<byte>.Shared.Rent(64 * 1024);
+        long length = 0;
+        try
+        {
+            int count;
+            while ((count = await stream.ReadAsync(buffer.AsMemory(), token).ConfigureAwait(false)) > 0)
             {
-                return files.FirstOrDefault(f => f.AppProperties is { } properties
-                    && properties.GetValueOrDefault("storageKeyHash") == keyHash
-                    && properties.GetValueOrDefault("tenantId") == _options.TenantId.ToString("N")
-                    && properties.GetValueOrDefault("connectionId") == _options.ConnectionId.ToString("N"));
+                hash.AppendData(buffer, 0, count);
+                length = checked(length + count);
+                if (length > expectedLength) break;
             }
-            return null;
+            return (length, ContentChecksum.Sha256(hash.GetHashAndReset()));
         }
-
-        if (response.StatusCode == HttpStatusCode.Unauthorized || response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new StorageException(StorageFailureKind.AccessDenied, "Access denied searching Google Drive folder.");
-        }
-
-        throw new StorageException(StorageFailureKind.Io, $"Failed to search Google Drive folder (HTTP {response.StatusCode}).");
+        finally { ArrayPool<byte>.Shared.Return(buffer); }
     }
 
-    /// <summary>Drive caps each appProperties key+value at 124 bytes and real storage keys are longer, so the property holds a fixed-size digest of the key.</summary>
-    private static string StorageKeyHash(string storageKey) =>
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(storageKey)));
-
-    private async Task<DriveFileInfo> UploadResumableFileAsync(
-        string tempFilePath,
-        string folderId,
-        string fileName,
-        string storageKey,
-        long totalLength,
-        string sha256Hex,
-        string? existingFileId,
-        IProgress<long>? progress,
-        CancellationToken cancellationToken)
+    private async Task<Stream> OpenFileAsync(string id, CancellationToken token)
     {
-        var sessionUri = await InitiateResumableUploadSessionAsync(folderId, fileName, storageKey, totalLength, sha256Hex, existingFileId, cancellationToken).ConfigureAwait(false);
-
-        var attempts = 0;
-        const int maxAttempts = 5;
-        long currentOffset = 0;
-
-        await using var fileStream = new FileStream(tempFilePath, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, useAsync: true);
-
-        while (currentOffset < totalLength)
+        var response = await SendAsync(() => new(HttpMethod.Get, FileUrl(id) + "?alt=media"), true, token).ConfigureAwait(false);
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var chunkSize = (int)Math.Min(_options.ChunkSizeBytes, totalLength - currentOffset);
-            var chunkBytes = ArrayPool<byte>.Shared.Rent(chunkSize);
+            await EnsureSuccessAsync(response, token).ConfigureAwait(false);
+            var stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
+            return new ResponseStream(stream, response, _options.RequestTimeout);
+        }
+        catch { response.Dispose(); throw; }
+    }
+
+    private async Task<DriveFileInfo> UploadAsync(string path, string folder, StorageObjectKey key,
+        StorageVerificationExpectation expected, IProgress<long>? progress, CancellationToken token)
+    {
+        var session = await InitiateAsync(folder, key, expected, token).ConfigureAwait(false);
+        var failures = 0;
+        var restarts = 0;
+        Stopwatch? retryClock = null;
+        long offset = 0;
+        var query = false;
+        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 64 * 1024, true);
+        while (true)
+        {
+            token.ThrowIfCancellationRequested();
+            var count = query ? 0 : (int)Math.Min(_options.ChunkSizeBytes, expected.SizeBytes - offset);
+            var bytes = ArrayPool<byte>.Shared.Rent(Math.Max(count, 1));
+            HttpResponseMessage? response = null;
             try
             {
-                fileStream.Position = currentOffset;
-                var bytesRead = 0;
-                while (bytesRead < chunkSize)
+                stream.Position = offset;
+                if (count > 0) await stream.ReadExactlyAsync(bytes.AsMemory(0, count), token).ConfigureAwait(false);
+                var querying = query;
+                response = await SendAsync(() =>
                 {
-                    var read = await fileStream.ReadAsync(chunkBytes.AsMemory(bytesRead, chunkSize - bytesRead), cancellationToken).ConfigureAwait(false);
-                    if (read == 0) break;
-                    bytesRead += read;
-                }
-
-                var chunkEnd = currentOffset + bytesRead - 1;
-                using var request = new HttpRequestMessage(HttpMethod.Put, sessionUri);
-                request.Content = new ByteArrayContent(chunkBytes, 0, bytesRead);
-                request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-                request.Content.Headers.ContentLength = bytesRead;
-                request.Content.Headers.Add("Content-Range", $"bytes {currentOffset}-{chunkEnd}/{totalLength}");
-
-                using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-
-                if (response.StatusCode == (HttpStatusCode)308) // Resume Incomplete
-                {
-                    attempts = 0;
-                    currentOffset = ParseRangeHeaderNextOffset(response.Headers, chunkEnd + 1);
-                    progress?.Report(currentOffset);
-                    continue;
-                }
-
+                    var request = new HttpRequestMessage(HttpMethod.Put, session);
+                    request.Content = new ByteArrayContent(bytes, 0, count);
+                    request.Content.Headers.ContentType = new("application/octet-stream");
+                    request.Content.Headers.ContentLength = count;
+                    request.Content.Headers.TryAddWithoutValidation("Content-Range", querying || count == 0
+                        ? $"bytes */{expected.SizeBytes}" : $"bytes {offset}-{offset + count - 1}/{expected.SizeBytes}");
+                    return request;
+                }, false, token, authorize: false).ConfigureAwait(false);
                 if (response.StatusCode is HttpStatusCode.OK or HttpStatusCode.Created)
                 {
-                    var result = await response.Content.ReadFromJsonAsync<DriveFileInfo>(cancellationToken: cancellationToken).ConfigureAwait(false);
-                    if (result is null || string.IsNullOrWhiteSpace(result.Id))
-                    {
-                        throw new StorageException(StorageFailureKind.Io, "Google Drive upload succeeded but returned invalid metadata.");
-                    }
-                    progress?.Report(totalLength);
-                    return result;
+                    var file = await ReadJsonAsync<DriveFileInfo>(response, token).ConfigureAwait(false);
+                    if (file is null || string.IsNullOrWhiteSpace(file.Id))
+                        throw new StorageException(StorageFailureKind.Io, "Google Drive upload returned invalid metadata.");
+                    progress?.Report(expected.SizeBytes);
+                    return file;
                 }
-
-                // Handle session expiration (404/410)
                 if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone)
                 {
-                    // Session expired: restart from offset 0
-                    sessionUri = await InitiateResumableUploadSessionAsync(folderId, fileName, storageKey, totalLength, sha256Hex, existingFileId, cancellationToken).ConfigureAwait(false);
-                    currentOffset = 0;
-                    attempts = 0;
+                    if (++restarts > _options.MaxSessionRestarts)
+                        throw new StorageException(StorageFailureKind.NetworkUnavailable, "Google Drive upload session restart limit exceeded.");
+                    retryClock ??= Stopwatch.StartNew();
+                    await DelayRetryAsync(response, ++failures, retryClock, token).ConfigureAwait(false);
+                    session = await InitiateAsync(folder, key, expected, token).ConfigureAwait(false);
+                    offset = 0;
+                    query = false;
                     continue;
                 }
-
-                // Rate limited or 5xx
-                if (response.StatusCode == (HttpStatusCode)429 || (int)response.StatusCode >= 500)
+                if ((int)response.StatusCode == 308)
                 {
-                    attempts++;
-                    if (attempts >= maxAttempts)
+                    var next = ParseOffset(response.Headers, expected.SizeBytes);
+                    if (next > offset + count && !querying)
+                        throw new StorageException(StorageFailureKind.Io, "Google Drive returned an invalid resumable offset.");
+                    if (next <= offset || next == expected.SizeBytes)
                     {
-                        throw new StorageException(StorageFailureKind.NetworkUnavailable, $"Google Drive resumable upload failed after {maxAttempts} attempts.");
+                        retryClock ??= Stopwatch.StartNew();
+                        await DelayRetryAsync(response, ++failures, retryClock, token).ConfigureAwait(false);
                     }
-
-                    var retryDelay = GetRetryAfterDelay(response.Headers, attempts);
-                    await Task.Delay(retryDelay, cancellationToken).ConfigureAwait(false);
-
-                    // Query server for actual received byte offset before retrying
-                    currentOffset = await QueryUploadOffsetAsync(sessionUri, totalLength, cancellationToken).ConfigureAwait(false);
+                    offset = next;
+                    query = next == expected.SizeBytes;
+                    progress?.Report(offset);
                     continue;
                 }
-
-                if (response.StatusCode == HttpStatusCode.Forbidden)
-                {
-                    var errText = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                    if (errText.Contains("storageQuotaExceeded", StringComparison.OrdinalIgnoreCase))
-                    {
-                        throw new StorageException(StorageFailureKind.InsufficientSpace, "Google Drive storage quota exceeded.");
-                    }
-                    throw new StorageException(StorageFailureKind.AccessDenied, "Google Drive upload permission denied.");
-                }
-
-                throw new StorageException(StorageFailureKind.Io, $"Google Drive upload chunk failed (HTTP {response.StatusCode}).");
+                var kind = await ClassifyAsync(response, token).ConfigureAwait(false);
+                if (!IsTransient(kind)) throw Failure(kind);
+                retryClock ??= Stopwatch.StartNew();
+                await DelayRetryAsync(response, ++failures, retryClock, token).ConfigureAwait(false);
+                query = true;
             }
-            catch (HttpRequestException) when (attempts < maxAttempts)
+            catch (StorageException ex) when (IsTransient(ex.Kind) && response is null)
             {
-                attempts++;
-                await Task.Delay(TimeSpan.FromMilliseconds(500 * Math.Pow(2, attempts)), cancellationToken).ConfigureAwait(false);
-                currentOffset = await QueryUploadOffsetAsync(sessionUri, totalLength, cancellationToken).ConfigureAwait(false);
+                retryClock ??= Stopwatch.StartNew();
+                await DelayRetryAsync(null, ++failures, retryClock, token).ConfigureAwait(false);
+                query = true;
             }
             finally
             {
-                ArrayPool<byte>.Shared.Return(chunkBytes);
+                response?.Dispose();
+                ArrayPool<byte>.Shared.Return(bytes);
             }
         }
-
-        // Final query if upload loop ended without returning result
-        var finalResult = await QueryUploadCompletionAsync(sessionUri, totalLength, cancellationToken).ConfigureAwait(false);
-        if (finalResult is not null) return finalResult;
-
-        throw new StorageException(StorageFailureKind.Io, "Google Drive resumable upload finished without completion confirmation.");
     }
 
-    private async Task<string> InitiateResumableUploadSessionAsync(
-        string folderId, string fileName, string storageKey, long totalLength, string sha256Hex, string? existingFileId, CancellationToken cancellationToken)
+    private async Task<string> InitiateAsync(string folder, StorageObjectKey key, StorageVerificationExpectation expected, CancellationToken token)
     {
-        var accessToken = await _tokenManager.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
-        var uploadUrl = existingFileId is null ? $"{UploadBaseUrl}?{UploadQuery}" : $"{UploadBaseUrl}/{Uri.EscapeDataString(existingFileId)}?{UploadQuery}";
-        using var request = new HttpRequestMessage(existingFileId is null ? HttpMethod.Post : HttpMethod.Patch, uploadUrl);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        request.Headers.Add("X-Upload-Content-Type", "application/octet-stream");
-        request.Headers.Add("X-Upload-Content-Length", totalLength.ToString());
-
-        var metadata = new Dictionary<string, object>
+        using var response = await SendAsync(() =>
         {
-            ["name"] = fileName,
-            ["appProperties"] = new Dictionary<string, string>
+            var request = new HttpRequestMessage(HttpMethod.Post, $"{UploadBase}?uploadType=resumable&fields={Fields}");
+            request.Headers.Add("X-Upload-Content-Type", "application/octet-stream");
+            request.Headers.Add("X-Upload-Content-Length", expected.SizeBytes.ToString(CultureInfo.InvariantCulture));
+            request.Content = JsonContent.Create(new
             {
-                ["storageKeyHash"] = StorageKeyHash(storageKey),
-                ["tenantId"] = _options.TenantId.ToString("N"),
-                ["connectionId"] = _options.ConnectionId.ToString("N"),
-                ["sha256"] = sha256Hex
-            }
-        };
-        if (existingFileId is null) metadata["parents"] = new[] { folderId };
-
-        request.Content = JsonContent.Create(metadata);
-
-        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-        if (response.IsSuccessStatusCode && response.Headers.Location is { } location)
-        {
-            return location.ToString();
-        }
-
-        if (response.StatusCode == HttpStatusCode.Unauthorized || response.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new StorageException(StorageFailureKind.AccessDenied, "Permission denied initiating Google Drive upload session.");
-        }
-        if ((int)response.StatusCode >= 500)
-        {
-            throw new StorageException(StorageFailureKind.NetworkUnavailable, "Google Drive service temporarily unavailable.");
-        }
-
-        throw new StorageException(StorageFailureKind.Io, $"Failed to initiate Google Drive upload session (HTTP {response.StatusCode}).");
+                name = key.Value.Split('/')[^1], parents = new[] { folder },
+                appProperties = new Dictionary<string, string>
+                {
+                    ["storageKeyHash"] = StorageKeyHash(key.Value), ["tenantId"] = _options.TenantId.ToString("N"),
+                    ["connectionId"] = _options.ConnectionId.ToString("N"), ["sha256"] = expected.Checksum.Hex
+                }
+            });
+            return request;
+        }, true, token).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, token).ConfigureAwait(false);
+        var location = response.Headers.Location;
+        if (location is null || !location.IsAbsoluteUri || location.Scheme != "https"
+            || location.Port != 443 || location.UserInfo.Length != 0 || location.Fragment.Length != 0
+            || !(location.Host == "googleapis.com" || location.Host.EndsWith(".googleapis.com", StringComparison.OrdinalIgnoreCase)))
+            throw new StorageException(StorageFailureKind.Io, "Google Drive returned an invalid upload session.");
+        return location.AbsoluteUri;
     }
 
-    private async Task<long> QueryUploadOffsetAsync(string sessionUri, long totalLength, CancellationToken cancellationToken)
+    private async Task<string> EnsureTargetFolderAsync(CancellationToken token)
     {
+        if (!string.IsNullOrWhiteSpace(_resolvedFolderId)) return _resolvedFolderId;
+        await _folderLock.WaitAsync(token).ConfigureAwait(false);
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Put, sessionUri);
-            request.Content = new ByteArrayContent([]);
-            request.Content.Headers.ContentLength = 0;
-            request.Content.Headers.Add("Content-Range", $"bytes */{totalLength}");
-
-            using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-            if (response.StatusCode == (HttpStatusCode)308)
-            {
-                return ParseRangeHeaderNextOffset(response.Headers, 0);
-            }
-            if (response.StatusCode is HttpStatusCode.OK or HttpStatusCode.Created)
-            {
-                return totalLength;
-            }
-        }
-        catch
-        {
-            // Query failure falls back to last known offset
-        }
-        return 0;
-    }
-
-    private async Task<DriveFileInfo?> QueryUploadCompletionAsync(string sessionUri, long totalLength, CancellationToken cancellationToken)
-    {
-        try
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Put, sessionUri);
-            request.Content = new ByteArrayContent([]);
-            request.Content.Headers.ContentLength = 0;
-            request.Content.Headers.Add("Content-Range", $"bytes */{totalLength}");
-
-            using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-            if (response.StatusCode is HttpStatusCode.OK or HttpStatusCode.Created)
-            {
-                return await response.Content.ReadFromJsonAsync<DriveFileInfo>(cancellationToken: cancellationToken).ConfigureAwait(false);
-            }
-        }
-        catch
-        {
-            // Best effort
-        }
-        return null;
-    }
-
-    private async Task<string> EnsureTargetFolderAsync(CancellationToken cancellationToken)
-    {
-        if (!string.IsNullOrWhiteSpace(_resolvedFolderId))
-        {
+            if (!string.IsNullOrWhiteSpace(_resolvedFolderId)) return _resolvedFolderId;
+            var root = await EnsureFolderAsync("Backup Platform", "root", "root", token).ConfigureAwait(false);
+            var tenant = await EnsureFolderAsync(_options.TenantId.ToString("N"), root, "tenant:" + _options.TenantId.ToString("N"), token).ConfigureAwait(false);
+            _resolvedFolderId = await EnsureFolderAsync(_options.ConnectionId.ToString("N"), tenant, "connection:" + _options.ConnectionId.ToString("N"), token).ConfigureAwait(false);
             return _resolvedFolderId;
         }
+        finally { _folderLock.Release(); }
+    }
 
-        await _folderLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+    private async Task<string> EnsureFolderAsync(string name, string parent, string identity, CancellationToken token)
+    {
+        // Global property identity converges even when another node created a duplicate ancestor concurrently.
+        var query = "mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+            + $" and appProperties has {{ key='backupFolder' and value='{EscapeQuery(identity)}' }}";
+        var matches = await ListFilesAsync(query, token).ConfigureAwait(false);
+        matches = matches.Where(f => f.AppProperties?.GetValueOrDefault("backupFolder") == identity).ToList();
+        if (matches.Count == 0)
         {
-            if (!string.IsNullOrWhiteSpace(_resolvedFolderId))
+            using var response = await SendAsync(() => new(HttpMethod.Post, ApiBase)
             {
-                return _resolvedFolderId;
-            }
-
-            // Hierarchy: Root "Backup Platform" -> Tenant "{tenantId:N}" -> Connection "{connectionId:N}"
-            var rootFolderId = await EnsureFolderAsync("Backup Platform", parentId: "root", cancellationToken).ConfigureAwait(false);
-            var tenantFolderId = await EnsureFolderAsync(_options.TenantId.ToString("N"), rootFolderId, cancellationToken).ConfigureAwait(false);
-            var connectionFolderId = await EnsureFolderAsync(_options.ConnectionId.ToString("N"), tenantFolderId, cancellationToken).ConfigureAwait(false);
-
-            _resolvedFolderId = connectionFolderId;
-            return connectionFolderId;
+                Content = JsonContent.Create(new { name, mimeType = "application/vnd.google-apps.folder", parents = new[] { parent },
+                    appProperties = new Dictionary<string, string> { ["backupFolder"] = identity } })
+            }, true, token).ConfigureAwait(false);
+            await EnsureSuccessAsync(response, token).ConfigureAwait(false);
+            var created = await ReadJsonAsync<DriveFileInfo>(response, token).ConfigureAwait(false);
+            if (created is null || string.IsNullOrWhiteSpace(created.Id))
+                throw new StorageException(StorageFailureKind.Io, "Google Drive returned invalid folder metadata.");
+            matches = await ListFilesAsync(query, token).ConfigureAwait(false);
+            matches = matches.Where(f => f.AppProperties?.GetValueOrDefault("backupFolder") == identity).ToList();
+            if (matches.All(f => f.Id != created.Id)) matches.Add(created);
         }
-        finally
+        if (matches.Count > 1) Observe(new("duplicate_folder", null, null));
+        return matches.OrderBy(f => f.Id, StringComparer.Ordinal).First().Id;
+    }
+
+    private async Task<HttpResponseMessage> SendAsync(Func<HttpRequestMessage> create, bool retry, CancellationToken token, bool authorize = true)
+    {
+        var clock = Stopwatch.StartNew();
+        for (var attempt = 1; ; attempt++)
         {
-            _folderLock.Release();
+            token.ThrowIfCancellationRequested();
+            using var request = create();
+            if (authorize) request.Headers.Authorization = new("Bearer", await _tokenManager.GetAccessTokenAsync(token).ConfigureAwait(false));
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+            var remaining = _options.MaxRetryElapsed - clock.Elapsed;
+            if (retry && remaining <= TimeSpan.Zero) throw Failure(StorageFailureKind.Timeout);
+            timeout.CancelAfter(retry && remaining < _options.RequestTimeout ? remaining : _options.RequestTimeout);
+            HttpResponseMessage? response = null;
+            try
+            {
+                response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
+                if (!retry || response.IsSuccessStatusCode || !IsTransient(await ClassifyAsync(response, timeout.Token).ConfigureAwait(false))) return response;
+                await DelayRetryAsync(response, attempt, clock, token).ConfigureAwait(false);
+            }
+            catch (HttpRequestException)
+            {
+                if (!retry) throw Failure(StorageFailureKind.NetworkUnavailable);
+                await DelayRetryAsync(null, attempt, clock, token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!token.IsCancellationRequested && timeout.IsCancellationRequested)
+            {
+                if (!retry) throw Failure(StorageFailureKind.Timeout);
+                await DelayRetryAsync(null, attempt, clock, token).ConfigureAwait(false);
+            }
+            catch { response?.Dispose(); throw; }
+            response?.Dispose();
         }
     }
 
-    private async Task<string> EnsureFolderAsync(string folderName, string parentId, CancellationToken cancellationToken)
+    private async Task DelayRetryAsync(HttpResponseMessage? response, int attempt, Stopwatch clock, CancellationToken token)
     {
-        var accessToken = await _tokenManager.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
-        var query = $"mimeType = 'application/vnd.google-apps.folder' and name = '{EscapeQuery(folderName)}' and '{parentId}' in parents and trashed = false";
-        var url = $"{ApiBaseUrl}/files?q={Uri.EscapeDataString(query)}&fields=files(id,name)&pageSize=1";
-
-        using var searchReq = new HttpRequestMessage(HttpMethod.Get, url);
-        searchReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-
-        using var searchResp = await _http.SendAsync(searchReq, cancellationToken).ConfigureAwait(false);
-        if (searchResp.IsSuccessStatusCode)
-        {
-            var list = await searchResp.Content.ReadFromJsonAsync<DriveFileList>(cancellationToken: cancellationToken).ConfigureAwait(false);
-            if (list?.Files is { Count: > 0 } files)
-            {
-                return files[0].Id;
-            }
-        }
-        else if (searchResp.StatusCode == HttpStatusCode.Unauthorized || searchResp.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new StorageException(StorageFailureKind.AccessDenied, "Access denied searching Google Drive folder.");
-        }
-
-        // Folder not found: create it
-        using var createReq = new HttpRequestMessage(HttpMethod.Post, $"{ApiBaseUrl}/files");
-        createReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        createReq.Content = JsonContent.Create(new
-        {
-            name = folderName,
-            mimeType = "application/vnd.google-apps.folder",
-            parents = new[] { parentId }
-        });
-
-        using var createResp = await _http.SendAsync(createReq, cancellationToken).ConfigureAwait(false);
-        if (createResp.IsSuccessStatusCode)
-        {
-            var created = await createResp.Content.ReadFromJsonAsync<DriveFileInfo>(cancellationToken: cancellationToken).ConfigureAwait(false);
-            if (created is not null && !string.IsNullOrWhiteSpace(created.Id))
-            {
-                return created.Id;
-            }
-        }
-
-        if (createResp.StatusCode == HttpStatusCode.Unauthorized || createResp.StatusCode == HttpStatusCode.Forbidden)
-        {
-            throw new StorageException(StorageFailureKind.AccessDenied, "Access denied creating folder in Google Drive.");
-        }
-
-        throw new StorageException(StorageFailureKind.Io, $"Failed to create folder in Google Drive (HTTP {createResp.StatusCode}).");
+        if (attempt >= _options.MaxRetryAttempts || clock.Elapsed >= _options.MaxRetryElapsed)
+            throw new StorageException(StorageFailureKind.NetworkUnavailable, "Google Drive retry budget exhausted.");
+        var delay = TimeSpan.FromMilliseconds(Math.Min(_options.MaxRetryDelay.TotalMilliseconds,
+            _options.RetryBaseDelay.TotalMilliseconds * Math.Pow(2, Math.Min(attempt - 1, 20))) * (0.5 + Random.Shared.NextDouble() * 0.5));
+        var after = response?.Headers.RetryAfter;
+        var serverDelay = after?.Delta ?? (after?.Date is { } date ? date - DateTimeOffset.UtcNow : TimeSpan.Zero);
+        if (serverDelay > delay) delay = serverDelay;
+        if (delay >= _options.MaxRetryElapsed - clock.Elapsed)
+            throw new StorageException(StorageFailureKind.NetworkUnavailable, "Google Drive retry delay exceeds its time budget.");
+        Retries.Add(1);
+        await Task.Delay(delay, token).ConfigureAwait(false);
     }
 
-    private void CheckStagingCapacity(long requiredBytes)
+    private async Task<StorageFailureKind> ClassifyAsync(HttpResponseMessage response, CancellationToken token)
     {
-        try
+        if (response.StatusCode == HttpStatusCode.Unauthorized) return StorageFailureKind.AuthenticationFailed;
+        if (response.StatusCode == HttpStatusCode.Forbidden)
         {
-            var root = Path.GetPathRoot(Path.GetFullPath(_options.StagingDirectory));
-            if (!string.IsNullOrEmpty(root))
+            var body = await ReadContentAsync(t => response.Content.ReadAsStringAsync(t), token).ConfigureAwait(false);
+            try
             {
-                var drive = new DriveInfo(root);
-                if (requiredBytes > drive.AvailableFreeSpace - _options.MinStagingFreeBytes)
+                using var json = JsonDocument.Parse(body);
+                if (json.RootElement.ValueKind == JsonValueKind.Object && json.RootElement.TryGetProperty("error", out var error)
+                    && error.ValueKind == JsonValueKind.Object && error.TryGetProperty("errors", out var errors)
+                    && errors.ValueKind == JsonValueKind.Array)
                 {
-                    throw new StorageException(StorageFailureKind.InsufficientSpace, "Insufficient staging disk space for Google Drive upload.");
+                    var reasons = errors.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.Object
+                        && e.TryGetProperty("reason", out var r) && r.ValueKind == JsonValueKind.String ? r.GetString() : null).ToList();
+                    if (reasons.Contains("storageQuotaExceeded")) return StorageFailureKind.InsufficientSpace;
+                    if (reasons.Any(r => r is "rateLimitExceeded" or "userRateLimitExceeded" or "sharingRateLimitExceeded"))
+                        return StorageFailureKind.NetworkUnavailable;
                 }
             }
+            catch (JsonException) { }
+            return StorageFailureKind.AccessDenied;
         }
-        catch (StorageException)
+        return response.StatusCode switch
         {
-            throw;
-        }
-        catch
-        {
-            // DriveInfo check might fail in restricted containers; ignore non-fatal environment exceptions
-        }
+            HttpStatusCode.NotFound or HttpStatusCode.Gone => StorageFailureKind.NotFound,
+            HttpStatusCode.Conflict or HttpStatusCode.PreconditionFailed => StorageFailureKind.AlreadyExists,
+            HttpStatusCode.RequestTimeout or HttpStatusCode.GatewayTimeout => StorageFailureKind.Timeout,
+            (HttpStatusCode)429 => StorageFailureKind.NetworkUnavailable,
+            _ when (int)response.StatusCode >= 500 => StorageFailureKind.NetworkUnavailable,
+            _ => StorageFailureKind.Io
+        };
     }
 
-    private static string ExtractFileName(StorageObjectKey key)
+    private static bool IsTransient(StorageFailureKind kind) => kind is StorageFailureKind.NetworkUnavailable or StorageFailureKind.Timeout;
+    private static StorageException Failure(StorageFailureKind kind) => new(kind, "Google Drive operation failed (" + kind + ").");
+    private async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken token)
     {
-        var segments = key.Value.Split('/');
-        return segments[^1];
+        if (!response.IsSuccessStatusCode) throw Failure(await ClassifyAsync(response, token).ConfigureAwait(false));
     }
 
+    private Task<T?> ReadJsonAsync<T>(HttpResponseMessage response, CancellationToken token) =>
+        ReadContentAsync(t => response.Content.ReadFromJsonAsync<T>(cancellationToken: t), token);
+
+    private async Task<T> ReadContentAsync<T>(Func<CancellationToken, Task<T>> read, CancellationToken token)
+    {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+        deadline.CancelAfter(_options.RequestTimeout);
+        try { return await read(deadline.Token).ConfigureAwait(false); }
+        catch (OperationCanceledException) when (!token.IsCancellationRequested && deadline.IsCancellationRequested)
+        { throw Failure(StorageFailureKind.Timeout); }
+        catch (HttpRequestException) { throw Failure(StorageFailureKind.NetworkUnavailable); }
+        catch (JsonException) { throw Failure(StorageFailureKind.Io); }
+    }
+    private static long ParseOffset(HttpResponseHeaders headers, long length)
+    {
+        if (!headers.TryGetValues("Range", out var values)) return 0;
+        var ranges = values.ToArray();
+        if (ranges.Length != 1 || !ranges[0].StartsWith("bytes=0-", StringComparison.OrdinalIgnoreCase)
+            || !long.TryParse(ranges[0].AsSpan(8), NumberStyles.None, CultureInfo.InvariantCulture, out var last)
+            || last < 0 || last >= length)
+            throw new StorageException(StorageFailureKind.Io, "Google Drive returned a malformed resumable range.");
+        return last + 1;
+    }
+    private static string StorageKeyHash(string key) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(key)));
     private static string EscapeQuery(string value) => value.Replace("\\", "\\\\").Replace("'", "\\'");
-
-    private static long ParseRangeHeaderNextOffset(HttpResponseHeaders headers, long fallback)
-    {
-        if (headers.TryGetValues("Range", out var values))
-        {
-            var rangeStr = values.FirstOrDefault();
-            if (!string.IsNullOrEmpty(rangeStr) && rangeStr.StartsWith("bytes=0-", StringComparison.OrdinalIgnoreCase))
-            {
-                var endPart = rangeStr["bytes=0-".Length..];
-                if (long.TryParse(endPart, out var lastByte))
-                {
-                    return lastByte + 1;
-                }
-            }
-        }
-        return fallback;
-    }
-
-    private static TimeSpan GetRetryAfterDelay(HttpResponseHeaders headers, int attempt)
-    {
-        if (headers.RetryAfter?.Delta is { } delta && delta.TotalSeconds > 0)
-        {
-            return delta;
-        }
-        return TimeSpan.FromMilliseconds(500 * Math.Pow(2, attempt) + Random.Shared.Next(0, 300));
-    }
+    private static string FileUrl(string id) => ApiBase + "/" + Uri.EscapeDataString(id);
+    private StorageObjectMetadata Metadata(StorageObjectKey key, DriveFileInfo file, ContentChecksum? checksum) =>
+        new(new StorageLocation(Id, key), file.Size, checksum, file.ModifiedTime);
+    private static ContentChecksum? Checksum(string? hex) => hex is { Length: 64 } && hex.All(Uri.IsHexDigit)
+        ? new ContentChecksum(ChecksumAlgorithm.Sha256, hex) : null;
 
     private sealed class DriveFileList
     {
-        [JsonPropertyName("files")]
-        public List<DriveFileInfo>? Files { get; set; }
+        [JsonPropertyName("files")] public List<DriveFileInfo>? Files { get; set; }
+        [JsonPropertyName("nextPageToken")] public string? NextPageToken { get; set; }
+        [JsonPropertyName("incompleteSearch")] public bool IncompleteSearch { get; set; }
     }
-
     private sealed class DriveFileInfo
     {
-        [JsonPropertyName("id")]
-        public string Id { get; set; } = "";
+        [JsonPropertyName("id")] public string Id { get; set; } = "";
+        [JsonPropertyName("name")] public string Name { get; set; } = "";
+        [JsonPropertyName("size"), JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)] public long Size { get; set; }
+        [JsonPropertyName("md5Checksum")] public string? Md5Checksum { get; set; }
+        [JsonPropertyName("trashed")] public bool Trashed { get; set; }
+        [JsonPropertyName("modifiedTime")] public DateTimeOffset ModifiedTime { get; set; }
+        [JsonPropertyName("appProperties")] public Dictionary<string, string>? AppProperties { get; set; }
+        [JsonPropertyName("parents")] public List<string>? Parents { get; set; }
+    }
 
-        [JsonPropertyName("name")]
-        public string Name { get; set; } = "";
-
-        [JsonPropertyName("size")]
-        [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
-        public long Size { get; set; }
-
-        [JsonPropertyName("md5Checksum")]
-        public string? Md5Checksum { get; set; }
-
-        [JsonPropertyName("trashed")]
-        public bool Trashed { get; set; }
-
-        [JsonPropertyName("modifiedTime")]
-        public DateTimeOffset ModifiedTime { get; set; }
-
-        [JsonPropertyName("appProperties")]
-        public Dictionary<string, string>? AppProperties { get; set; }
+    private sealed class ResponseStream(Stream stream, HttpResponseMessage response, TimeSpan timeout) : Stream
+    {
+        public override bool CanRead => stream.CanRead;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override int Read(byte[] buffer, int offset, int count) => ReadAsync(buffer.AsMemory(offset, count)).AsTask().GetAwaiter().GetResult();
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken token) => ReadAsync(buffer.AsMemory(offset, count), token).AsTask();
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken token = default)
+        {
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+            deadline.CancelAfter(timeout);
+            try { return await stream.ReadAsync(buffer, deadline.Token).ConfigureAwait(false); }
+            catch (OperationCanceledException) when (!token.IsCancellationRequested && deadline.IsCancellationRequested)
+            { throw Failure(StorageFailureKind.Timeout); }
+            catch (HttpRequestException) { throw Failure(StorageFailureKind.NetworkUnavailable); }
+        }
+        protected override void Dispose(bool disposing) { if (disposing) { stream.Dispose(); response.Dispose(); } base.Dispose(disposing); }
+        public override async ValueTask DisposeAsync() { await stream.DisposeAsync().ConfigureAwait(false); response.Dispose(); GC.SuppressFinalize(this); }
+        public override void Flush() => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 }
+
+public sealed record GoogleDriveReconciliationFinding(string Kind, string? FileId, string? StorageKeyHash);
+public sealed record GoogleDriveReconciliationReport(bool DryRun, int CatalogCount, int DriveCount,
+    IReadOnlyList<GoogleDriveReconciliationFinding> Findings);

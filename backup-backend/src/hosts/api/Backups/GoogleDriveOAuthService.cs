@@ -80,14 +80,9 @@ public sealed class GoogleDriveOAuthService(
         string code, string state, string? error, CancellationToken cancellationToken)
     {
         if (!string.IsNullOrEmpty(error))
-        {
-            return new GoogleDriveOAuthCallbackResult(false, null, null, null, "Google authorization was denied or failed.");
-        }
-
+            return new(false, null, null, null, "Google authorization was denied or failed.");
         if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(state))
-        {
-            return new GoogleDriveOAuthCallbackResult(false, null, null, null, "Missing authorization code or state.");
-        }
+            return new(false, null, null, null, "Missing authorization code or state.");
 
         await using var db = PlatformDbContext.CreateForPlatformOperations(dbOptions);
         var now = time.GetUtcNow();
@@ -95,162 +90,214 @@ public sealed class GoogleDriveOAuthService(
             .Where(s => s.State == state && !s.Used && s.ExpiresAt > now)
             .ExecuteUpdateAsync(setters => setters.SetProperty(s => s.Used, true), cancellationToken);
         if (claimed != 1)
-        {
-            return new GoogleDriveOAuthCallbackResult(false, null, null, null, "Invalid, expired, or previously used authorization state.");
-        }
+            return new(false, null, null, null, "Invalid, expired, or previously used authorization state.");
         var oauthState = await db.GoogleDriveOAuthStates.SingleAsync(s => s.State == state, cancellationToken);
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        await LockOwnerAsync(db, oauthState.TenantId, cancellationToken);
-
-        var connection = await db.StorageConnections
-            .SingleOrDefaultAsync(c => c.TenantId == oauthState.TenantId && c.Id == oauthState.ConnectionId, cancellationToken);
-
-        if (connection is null || connection.ProviderType != StorageProviderTypes.GoogleDrive || connection.AdministrativelyDisabled)
+        StorageConnection? connection;
+        using (var readTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
         {
-            await db.SaveChangesAsync(cancellationToken);
-            return new GoogleDriveOAuthCallbackResult(false, null, null, null, "Associated storage connection not found.");
+            readTimeout.CancelAfter(_platform.RequestTimeout);
+            await using var readTransaction = await db.Database.BeginTransactionAsync(readTimeout.Token);
+            await LockOwnerAsync(db, oauthState.TenantId, readTimeout.Token);
+            connection = await db.StorageConnections.SingleOrDefaultAsync(
+                c => c.TenantId == oauthState.TenantId && c.Id == oauthState.ConnectionId, readTimeout.Token);
+            if (connection is null || connection.ProviderType != StorageProviderTypes.GoogleDrive || connection.AdministrativelyDisabled)
+                return new(false, null, null, null, "Associated storage connection not found.");
+            await readTransaction.CommitAsync(readTimeout.Token);
         }
+        var expectedReference = connection.SecretReference;
+        var expectedSecretTime = connection.SecretUpdatedAt;
+        var expectedRevocation = connection.Configuration.GetValueOrDefault("reauthorizationRequired");
+        var expectedStateTime = connection.StateChangedAt;
 
-        // Token exchange
-        using var exchangeReq = new HttpRequestMessage(HttpMethod.Post, TokenEndpoint);
-        exchangeReq.Content = new FormUrlEncodedContent(new Dictionary<string, string>
+        GoogleTokenResponse? tokenData;
+        GoogleAboutResponse? userInfo;
+        try
         {
-            ["client_id"] = _platform.ClientId,
-            ["client_secret"] = _platform.ClientSecret,
-            ["code"] = code,
-            ["code_verifier"] = oauthState.CodeVerifier,
-            ["grant_type"] = "authorization_code",
-            ["redirect_uri"] = oauthState.RedirectUri
-        });
-
-        using var exchangeResp = await http.SendAsync(exchangeReq, cancellationToken);
-        if (!exchangeResp.IsSuccessStatusCode)
-        {
-            logger.LogWarning("Google Drive token exchange failed with HTTP status {StatusCode}.", (int)exchangeResp.StatusCode);
-            await db.SaveChangesAsync(cancellationToken);
-            return new GoogleDriveOAuthCallbackResult(false, oauthState.TenantId.Value, connection.Id, null, "Google OAuth token exchange failed.");
+            (tokenData, userInfo) = await ExchangeCodeAsync(code, oauthState, cancellationToken);
         }
-
-        var tokenData = await exchangeResp.Content.ReadFromJsonAsync<GoogleTokenResponse>(cancellationToken: cancellationToken);
+        catch (Exception exception) when (exception is HttpRequestException or System.Text.Json.JsonException
+            || exception is OperationCanceledException && !cancellationToken.IsCancellationRequested)
+        {
+            return new(false, oauthState.TenantId.Value, connection.Id, null, "Google OAuth token exchange failed.");
+        }
         if (tokenData is null || string.IsNullOrWhiteSpace(tokenData.AccessToken))
-        {
-            await db.SaveChangesAsync(cancellationToken);
-            return new GoogleDriveOAuthCallbackResult(false, oauthState.TenantId.Value, connection.Id, null, "Empty token response received from Google.");
-        }
-
-        var refreshToken = tokenData.RefreshToken;
-
-        if (string.IsNullOrWhiteSpace(refreshToken))
-        {
-            await db.SaveChangesAsync(cancellationToken);
-            return new GoogleDriveOAuthCallbackResult(false, oauthState.TenantId.Value, connection.Id, null, "No refresh token provided by Google.");
-        }
-
-        // Fetch User Info
-        using var userReq = new HttpRequestMessage(HttpMethod.Get, UserInfoEndpoint);
-        userReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokenData.AccessToken);
-        using var userResp = await http.SendAsync(userReq, cancellationToken);
-        var userInfo = userResp.IsSuccessStatusCode
-            ? await userResp.Content.ReadFromJsonAsync<GoogleAboutResponse>(cancellationToken: cancellationToken)
-            : null;
+            return new(false, oauthState.TenantId.Value, connection.Id, null, "Empty token response received from Google.");
+        if (string.IsNullOrWhiteSpace(tokenData.RefreshToken))
+            return new(false, oauthState.TenantId.Value, connection.Id, null, "No refresh token provided by Google.");
 
         var accountEmail = userInfo?.User?.EmailAddress ?? "";
         var accountName = userInfo?.User?.DisplayName ?? "";
-
-        // Attach secret
         var reference = $"sc-{connection.Id:N}-{Guid.NewGuid():N}";
-        var secretPayload = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string>
+        using var persistTimeout = new CancellationTokenSource(_platform.RequestTimeout);
+        try
         {
-            ["refreshToken"] = refreshToken
-        });
-
-        await secretStore.SetAsync(new SecretReference(reference), new SecretValue(secretPayload), cancellationToken);
-        var oldSecret = connection.AttachSecret(reference, ["refreshToken"], now);
-
-        // Update configuration
-        var config = new Dictionary<string, string>(connection.Configuration, StringComparer.Ordinal)
-        {
-            ["reauthorizationRequired"] = "false"
-        };
-        if (!string.IsNullOrWhiteSpace(accountEmail)) config["accountEmail"] = accountEmail;
-        if (!string.IsNullOrWhiteSpace(accountName)) config["accountName"] = accountName;
-
-        connection.Reconfigure(config, now);
-
-        db.AuditEvents.Add(AuditEvent.Record(
-            now, new UserId(oauthState.UserId), AuditActorKind.TenantAdministrator,
-            "storage_connection.oauth_connected", oauthState.TenantId,
-            BackupPlatform.Storage.StorageConnectionAuditActions.TargetType, connection.Id.ToString("D"),
-            new Dictionary<string, object?> { ["accountEmail"] = accountEmail, ["accountName"] = accountName }));
-
-        await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(CancellationToken.None);
-
-        if (oldSecret is not null)
-        {
-            try { await secretStore.DeleteAsync(new SecretReference(oldSecret), cancellationToken); }
-            catch { }
+            var payload = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, string> { ["refreshToken"] = tokenData.RefreshToken });
+            await secretStore.SetAsync(new SecretReference(reference), new SecretValue(payload), persistTimeout.Token);
+            db.ChangeTracker.Clear();
+            await using var transaction = await db.Database.BeginTransactionAsync(persistTimeout.Token);
+            await LockOwnerAsync(db, oauthState.TenantId, persistTimeout.Token);
+            connection = await db.StorageConnections.SingleOrDefaultAsync(
+                c => c.TenantId == oauthState.TenantId && c.Id == oauthState.ConnectionId, persistTimeout.Token);
+            if (connection is null || connection.ProviderType != StorageProviderTypes.GoogleDrive || connection.AdministrativelyDisabled
+                || connection.SecretReference != expectedReference || connection.SecretUpdatedAt != expectedSecretTime
+                || connection.StateChangedAt != expectedStateTime
+                || connection.Configuration.GetValueOrDefault("reauthorizationRequired") != expectedRevocation)
+            {
+                await transaction.RollbackAsync(persistTimeout.Token);
+                await DiscardSecretAsync(dbOptions, secretStore, oauthState.TenantId, reference, _platform.RequestTimeout);
+                return new(false, oauthState.TenantId.Value, oauthState.ConnectionId, null, "The storage connection changed during authorization. Start authorization again.");
+            }
+            now = time.GetUtcNow();
+            var oldSecret = connection.AttachSecret(reference, ["refreshToken"], now);
+            var config = new Dictionary<string, string>(connection.Configuration, StringComparer.Ordinal)
+            {
+                ["reauthorizationRequired"] = "false"
+            };
+            if (!string.IsNullOrWhiteSpace(accountEmail)) config["accountEmail"] = accountEmail;
+            if (!string.IsNullOrWhiteSpace(accountName)) config["accountName"] = accountName;
+            connection.Reconfigure(config, now);
+            db.AuditEvents.Add(AuditEvent.Record(
+                now, new UserId(oauthState.UserId), AuditActorKind.TenantAdministrator,
+                "storage_connection.oauth_connected", oauthState.TenantId,
+                BackupPlatform.Storage.StorageConnectionAuditActions.TargetType, connection.Id.ToString("D"),
+                new Dictionary<string, object?> { ["accountEmail"] = accountEmail, ["accountName"] = accountName }));
+            await db.SaveChangesAsync(persistTimeout.Token);
+            await transaction.CommitAsync(persistTimeout.Token);
+            if (oldSecret is not null)
+                await DiscardSecretAsync(dbOptions, secretStore, oauthState.TenantId, oldSecret, _platform.RequestTimeout);
+            return new(true, oauthState.TenantId.Value, connection.Id, accountEmail, null);
         }
-
-        return new GoogleDriveOAuthCallbackResult(true, oauthState.TenantId.Value, connection.Id, accountEmail, null);
+        catch
+        {
+            await DiscardSecretAsync(dbOptions, secretStore, oauthState.TenantId, reference, _platform.RequestTimeout);
+            throw;
+        }
     }
 
     public async Task DisconnectAsync(TenantId tenantId, Guid connectionId, Guid userId, CancellationToken cancellationToken)
     {
-        await using var db = PlatformDbContext.CreateForPlatformOperations(dbOptions);
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        await LockOwnerAsync(db, tenantId, cancellationToken);
-        var connection = await db.StorageConnections
-            .SingleOrDefaultAsync(c => c.TenantId == tenantId && c.Id == connectionId, cancellationToken);
-
-        if (connection is null || connection.ProviderType != StorageProviderTypes.GoogleDrive)
+        string? refreshToken = null;
+        string? oldReference;
+        using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
         {
-            throw new InvalidOperationException("Google Drive storage connection not found.");
-        }
-
-        var now = time.GetUtcNow();
-
-        // Attempt revoke
-        if (connection.SecretReference is { } reference)
-        {
-            try
+            timeout.CancelAfter(_platform.RequestTimeout);
+            await using var db = PlatformDbContext.CreateForPlatformOperations(dbOptions);
+            await using var transaction = await db.Database.BeginTransactionAsync(timeout.Token);
+            await LockOwnerAsync(db, tenantId, timeout.Token);
+            var connection = await db.StorageConnections.SingleOrDefaultAsync(
+                c => c.TenantId == tenantId && c.Id == connectionId, timeout.Token);
+            if (connection is null || connection.ProviderType != StorageProviderTypes.GoogleDrive)
+                throw new InvalidOperationException("Google Drive storage connection not found.");
+            if (connection.SecretReference is { } reference)
             {
-                var secretVal = await secretStore.ResolveAsync(new SecretReference(reference), cancellationToken);
-                var fields = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(secretVal.Reveal());
-                if (fields?.GetValueOrDefault("refreshToken") is { } refreshToken)
+                try
                 {
-                    using var revokeReq = new HttpRequestMessage(HttpMethod.Post, RevokeEndpoint);
-                    revokeReq.Content = new FormUrlEncodedContent(new Dictionary<string, string> { ["token"] = refreshToken });
-                    using var revokeResp = await http.SendAsync(revokeReq, cancellationToken);
+                    var secret = await secretStore.ResolveAsync(new SecretReference(reference), timeout.Token);
+                    refreshToken = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(secret.Reveal())?.GetValueOrDefault("refreshToken");
                 }
+                catch (OperationCanceledException) { throw; }
+                catch { /* Unavailable credentials must not prevent a local disconnect. */ }
             }
-            catch
+            var now = time.GetUtcNow();
+            oldReference = connection.DetachSecret(now);
+            var config = new Dictionary<string, string>(connection.Configuration, StringComparer.Ordinal)
             {
-                // Best effort revoke
-            }
+                ["reauthorizationRequired"] = "true"
+            };
+            config.Remove("accountEmail");
+            config.Remove("accountName");
+            connection.Reconfigure(config, now);
+            db.AuditEvents.Add(AuditEvent.Record(
+                now, new UserId(userId), AuditActorKind.TenantAdministrator,
+                "storage_connection.oauth_disconnected", tenantId,
+                BackupPlatform.Storage.StorageConnectionAuditActions.TargetType, connection.Id.ToString("D"),
+                new Dictionary<string, object?>()));
+            await db.SaveChangesAsync(timeout.Token);
+            using var commitTimeout = new CancellationTokenSource(_platform.RequestTimeout);
+            await transaction.CommitAsync(commitTimeout.Token);
         }
-
-        var oldRef = connection.DetachSecret(now);
-        var config = new Dictionary<string, string>(connection.Configuration, StringComparer.Ordinal)
+        try
         {
-            ["reauthorizationRequired"] = "true"
+            if (!string.IsNullOrWhiteSpace(refreshToken))
+                await RevokeBestEffortAsync(refreshToken, cancellationToken);
+        }
+        finally
+        {
+            if (oldReference is not null)
+                await DiscardSecretAsync(dbOptions, secretStore, tenantId, oldReference, _platform.RequestTimeout);
+        }
+    }
+
+    private async Task<(GoogleTokenResponse? Token, GoogleAboutResponse? User)> ExchangeCodeAsync(
+        string code, GoogleDriveOAuthState state, CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(_platform.RequestTimeout);
+        // Authorization codes are single-use; a lost response is not safely retryable.
+        using var request = new HttpRequestMessage(HttpMethod.Post, TokenEndpoint)
+        {
+            Content = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["client_id"] = _platform.ClientId,
+                ["client_secret"] = _platform.ClientSecret,
+                ["code"] = code,
+                ["code_verifier"] = state.CodeVerifier,
+                ["grant_type"] = "authorization_code",
+                ["redirect_uri"] = state.RedirectUri
+            })
         };
-        config.Remove("accountEmail");
-        config.Remove("accountName");
-
-        connection.Reconfigure(config, now);
-
-        db.AuditEvents.Add(AuditEvent.Record(
-            now, new UserId(userId), AuditActorKind.TenantAdministrator,
-            "storage_connection.oauth_disconnected", tenantId,
-            BackupPlatform.Storage.StorageConnectionAuditActions.TargetType, connection.Id.ToString("D"),
-            new Dictionary<string, object?>()));
-        await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(CancellationToken.None);
-        if (oldRef is not null)
+        using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+        if (!response.IsSuccessStatusCode)
         {
-            try { await secretStore.DeleteAsync(new SecretReference(oldRef), cancellationToken); }
-            catch { }
+            logger.LogWarning("Google Drive token exchange failed with HTTP status {StatusCode}.", (int)response.StatusCode);
+            return (null, null);
+        }
+        var token = await response.Content.ReadFromJsonAsync<GoogleTokenResponse>(cancellationToken: timeout.Token);
+        if (string.IsNullOrWhiteSpace(token?.AccessToken) || string.IsNullOrWhiteSpace(token.RefreshToken))
+            return (token, null);
+        using var userRequest = new HttpRequestMessage(HttpMethod.Get, UserInfoEndpoint);
+        userRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.AccessToken);
+        using var userResponse = await http.SendAsync(userRequest, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+        var user = userResponse.IsSuccessStatusCode
+            ? await userResponse.Content.ReadFromJsonAsync<GoogleAboutResponse>(cancellationToken: timeout.Token) : null;
+        return (token, user);
+    }
+
+    private async Task RevokeBestEffortAsync(string refreshToken, CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(_platform.RequestTimeout);
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, RevokeEndpoint)
+            {
+                Content = new FormUrlEncodedContent(new Dictionary<string, string> { ["token"] = refreshToken })
+            };
+            using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception exception) when (exception is HttpRequestException or OperationCanceledException)
+        {
+            // Local revocation is already committed; remote revocation is best-effort.
+        }
+    }
+
+    internal static async Task DiscardSecretAsync(
+        DbContextOptions<PlatformDbContext> options, ISecretStore secrets, TenantId tenantId, string reference, TimeSpan operationTimeout)
+    {
+        using var timeout = new CancellationTokenSource(operationTimeout);
+        try
+        {
+            await using var db = PlatformDbContext.CreateForPlatformOperations(options);
+            await using var transaction = await db.Database.BeginTransactionAsync(timeout.Token);
+            await LockOwnerAsync(db, tenantId, timeout.Token);
+            if (!await db.StorageConnections.AnyAsync(row => row.SecretReference == reference, timeout.Token))
+                await secrets.DeleteAsync(new SecretReference(reference), timeout.Token);
+            await transaction.CommitAsync(timeout.Token);
+        }
+        catch
+        {
+            // A database outage leaves an encrypted orphan rather than deleting potentially live credentials.
         }
     }
 

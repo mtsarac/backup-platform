@@ -19,6 +19,7 @@ import subprocess
 import sys
 import time
 import uuid
+import tempfile
 
 HERE = Path(__file__).parent
 spec = importlib.util.spec_from_file_location('bootstrap', HERE / 'bootstrap.py')
@@ -51,7 +52,7 @@ def session():
 
 
 def state_path(options):
-    return HOME / f'acceptance-{options.provider}.json'
+    return getattr(options, 'smoke_state', None) or HOME / f'acceptance-{options.provider}.json'
 
 
 def load(options):
@@ -185,14 +186,28 @@ def delete(options):
         quotaReduced=used_after < used_before)
 
 
+def smoke(options):
+    # Keep the operator's acceptance artifact/state untouched, including when verification fails.
+    with tempfile.TemporaryDirectory(prefix='m7c1-smoke-', dir=HOME) as directory:
+        options.smoke_state = Path(directory) / 'artifact.json'
+        try:
+            backup(options)
+            download(options)
+        finally:
+            if options.smoke_state.exists():
+                uuid.UUID(load(options)['artifactId'])
+                delete(options)
+            del options.smoke_state
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('step', choices=('backup', 'download', 'restore', 'delete', 'all'))
+    parser.add_argument('step', choices=('backup', 'download', 'restore', 'delete', 'all', 'smoke'))
     parser.add_argument('--provider', choices=('google-drive', 'local'), default='google-drive')
     options = parser.parse_args()
-    steps = {'backup': backup, 'download': download, 'restore': restore, 'delete': delete}
+    steps = {'backup': backup, 'download': download, 'restore': restore, 'delete': delete, 'smoke': smoke}
     try:
-        for name in (steps if options.step == 'all' else [options.step]):
+        for name in (('backup', 'download', 'restore', 'delete') if options.step == 'all' else [options.step]):
             steps[name](options)
     except (FixtureFailure, OSError, ValueError, KeyError, subprocess.CalledProcessError) as failure:
         print('FAIL: ' + (str(failure) if isinstance(failure, FixtureFailure) else 'acceptance step failed: ' + type(failure).__name__ + ' ' + str(failure)[:300]), file=sys.stderr)

@@ -42,6 +42,7 @@ using BackupPlatform.SecretProviders.Abstractions;
 using BackupPlatform.SecretProviders.DataProtection;
 using BackupPlatform.Storage;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -134,6 +135,12 @@ public static class SecurityServiceCollectionExtensions
             return new BackupPlatform.Api.Backups.SftpConnectionProviderFactory(network);
         });
         services.AddDataProtection();
+        services.AddSingleton<IConfigureOptions<DataProtectionOptions>>(provider => new ConfigureOptions<DataProtectionOptions>(options =>
+        {
+            var applicationName = provider.GetRequiredService<IConfiguration>()["Secrets:DataProtection:ApplicationName"];
+            if (!string.IsNullOrWhiteSpace(applicationName))
+                options.ApplicationDiscriminator = applicationName;
+        }));
         services.AddSingleton<IConfigureOptions<KeyManagementOptions>>(provider => new ConfigureOptions<KeyManagementOptions>(options =>
         {
             var directory = provider.GetRequiredService<IConfiguration>()["Secrets:DataProtection:KeysDirectory"];
@@ -155,35 +162,36 @@ public static class SecurityServiceCollectionExtensions
             return new SftpConnectionTester((connection, secrets) => factory.Create(connection, secrets));
         });
         services.AddHttpClient();
+        services.AddHttpClient("google-drive", client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
+            .RemoveAllLoggers();
         services.AddSingleton(provider =>
         {
             var config = provider.GetRequiredService<IConfiguration>().GetSection(BackupPlatform.Api.Backups.GoogleDrivePlatformOptions.SectionName);
-            return Microsoft.Extensions.Options.Options.Create(new BackupPlatform.Api.Backups.GoogleDrivePlatformOptions
-            {
-                ClientId = config["ClientId"] ?? "",
-                ClientSecret = config["ClientSecret"] ?? "",
-                FrontendOrigin = config["FrontendOrigin"] ?? "",
-                RedirectUri = config["RedirectUri"] ?? "",
-                StagingDirectory = config["StagingDirectory"] ?? "",
-                MinStagingFreeBytes = config.GetValue<long?>("MinStagingFreeBytes") ?? 100 * 1024 * 1024
-            });
+            return Microsoft.Extensions.Options.Options.Create(config.Get<BackupPlatform.Api.Backups.GoogleDrivePlatformOptions>() ?? new());
         });
+        services.TryAddSingleton<BackupPlatform.Api.Backups.PostgreSqlGoogleDriveStagingStore>();
+        services.TryAddSingleton<BackupPlatform.StorageProviders.GoogleDrive.IGoogleDriveStagingStore>(provider =>
+            provider.GetRequiredService<BackupPlatform.Api.Backups.PostgreSqlGoogleDriveStagingStore>());
+        services.AddHostedService(provider => provider.GetRequiredService<BackupPlatform.Api.Backups.PostgreSqlGoogleDriveStagingStore>());
         services.TryAddSingleton<BackupPlatform.StorageProviders.GoogleDrive.IGoogleDriveFileCatalog>(provider =>
             new BackupPlatform.Api.Backups.EfGoogleDriveFileCatalog(
                 provider.GetRequiredService<Microsoft.EntityFrameworkCore.DbContextOptions<PlatformDbContext>>(),
                 provider.GetRequiredService<TimeProvider>()));
         services.AddSingleton(provider =>
         {
-            var http = provider.GetService<HttpClient>() ?? provider.GetRequiredService<IHttpClientFactory>().CreateClient();
+            var http = provider.GetService<HttpClient>() ?? provider.GetRequiredService<IHttpClientFactory>().CreateClient("google-drive");
             var options = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<BackupPlatform.Api.Backups.GoogleDrivePlatformOptions>>();
             var catalog = provider.GetRequiredService<BackupPlatform.StorageProviders.GoogleDrive.IGoogleDriveFileCatalog>();
             var secretStore = provider.GetRequiredService<ISecretStore>();
             var dbOptions = provider.GetRequiredService<Microsoft.EntityFrameworkCore.DbContextOptions<PlatformDbContext>>();
-            return new BackupPlatform.Api.Backups.GoogleDriveConnectionProviderFactory(http, options, catalog, secretStore, dbOptions);
+            return new BackupPlatform.Api.Backups.GoogleDriveConnectionProviderFactory(http, options, catalog, secretStore, dbOptions,
+                provider.GetRequiredService<BackupPlatform.StorageProviders.GoogleDrive.IGoogleDriveStagingStore>(),
+                provider.GetRequiredService<ILogger<BackupPlatform.Api.Backups.GoogleDriveConnectionProviderFactory>>());
         });
         services.AddScoped(provider =>
         {
-            var http = provider.GetService<HttpClient>() ?? provider.GetRequiredService<IHttpClientFactory>().CreateClient();
+            var http = provider.GetService<HttpClient>() ?? provider.GetRequiredService<IHttpClientFactory>().CreateClient("google-drive");
             var options = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<BackupPlatform.Api.Backups.GoogleDrivePlatformOptions>>();
             var dbOptions = provider.GetRequiredService<Microsoft.EntityFrameworkCore.DbContextOptions<PlatformDbContext>>();
             var secretStore = provider.GetRequiredService<ISecretStore>();

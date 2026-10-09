@@ -13,7 +13,14 @@ public sealed class GoogleDriveStorageOptions
         string? folderId = null,
         string? stagingDirectory = null,
         int chunkSizeBytes = DefaultChunkSize,
-        long minStagingFreeBytes = DefaultMinStagingFreeBytes)
+        long minStagingFreeBytes = DefaultMinStagingFreeBytes,
+        int maxRetryAttempts = 5,
+        TimeSpan? maxRetryElapsed = null,
+        TimeSpan? requestTimeout = null,
+        TimeSpan? retryBaseDelay = null,
+        TimeSpan? maxRetryDelay = null,
+        TimeSpan? uploadTimeout = null,
+        int maxSessionRestarts = 2)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
         ArgumentException.ThrowIfNullOrWhiteSpace(clientSecret);
@@ -22,6 +29,18 @@ public sealed class GoogleDriveStorageOptions
         if (chunkSizeBytes <= 0 || chunkSizeBytes % (256 * 1024) != 0)
             throw new ArgumentException("Chunk size must be a positive multiple of 256 KiB.", nameof(chunkSizeBytes));
         if (minStagingFreeBytes < 0) throw new ArgumentOutOfRangeException(nameof(minStagingFreeBytes));
+        if (maxRetryAttempts <= 0) throw new ArgumentOutOfRangeException(nameof(maxRetryAttempts));
+        MaxRetryAttempts = maxRetryAttempts;
+        MaxRetryElapsed = maxRetryElapsed ?? TimeSpan.FromMinutes(2);
+        RequestTimeout = requestTimeout ?? TimeSpan.FromSeconds(30);
+        RetryBaseDelay = retryBaseDelay ?? TimeSpan.FromMilliseconds(500);
+        MaxRetryDelay = maxRetryDelay ?? TimeSpan.FromSeconds(30);
+        UploadTimeout = uploadTimeout ?? TimeSpan.FromHours(1);
+        MaxSessionRestarts = maxSessionRestarts;
+        if (MaxRetryElapsed <= TimeSpan.Zero || RequestTimeout <= TimeSpan.Zero
+            || RetryBaseDelay < TimeSpan.Zero || MaxRetryDelay < RetryBaseDelay
+            || UploadTimeout <= TimeSpan.Zero || MaxSessionRestarts < 0)
+            throw new ArgumentOutOfRangeException(nameof(maxRetryElapsed), "Retry and timeout limits must be positive and ordered.");
 
         ClientId = clientId;
         ClientSecret = clientSecret;
@@ -41,6 +60,13 @@ public sealed class GoogleDriveStorageOptions
     public string StagingDirectory { get; }
     public int ChunkSizeBytes { get; }
     public long MinStagingFreeBytes { get; }
+    public int MaxRetryAttempts { get; }
+    public TimeSpan MaxRetryElapsed { get; }
+    public TimeSpan RequestTimeout { get; }
+    public TimeSpan RetryBaseDelay { get; }
+    public TimeSpan MaxRetryDelay { get; }
+    public TimeSpan UploadTimeout { get; }
+    public int MaxSessionRestarts { get; }
 }
 
 public sealed record GoogleDriveCredential(string RefreshToken);

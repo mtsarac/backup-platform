@@ -45,7 +45,8 @@ public static class AgentStorageTransferEndpoints
         var fence = await FenceBackupAsync(attemptId, request, agent, runStore, cancellationToken);
         if (fence.Failure is { } failure) return failure;
         if (request.ContentLength is not > 0 || request.ContentType != "application/octet-stream"
-            || request.Headers[TaskStorageProtocol.ChecksumHeader].FirstOrDefault() is not { Length: 64 } expectedChecksum)
+            || request.Headers[TaskStorageProtocol.ChecksumHeader].FirstOrDefault() is not { Length: 64 } expectedChecksum
+            || expectedChecksum.Any(character => !Uri.IsHexDigit(character)))
             return Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "A validated stream upload is required." });
 
         var provider = resolver.Resolve(agent.Identity!.TenantId, fence.ProviderType!, fence.ConnectionId!.Value.ToString("D"));
@@ -111,6 +112,8 @@ public static class AgentStorageTransferEndpoints
         if (provider is null) return Results.Conflict(new AgentApiError { Error = "storage_not_configured", Message = "Storage not configured." });
         return await WithAdvisoryLockAsync(db, fence.ConnectionId.Value, fence.Key!, async () =>
         {
+            var verified = await FenceBackupAsync(attemptId, request, agent, runStore, cancellationToken);
+            if (verified.Failure is { } failedAgain) return failedAgain;
             try
             {
                 var expectation = new StorageVerificationExpectation(body.SizeBytes, new ContentChecksum(ChecksumAlgorithm.Sha256, body.Checksum));
@@ -137,6 +140,8 @@ public static class AgentStorageTransferEndpoints
         if (provider is null) return Results.Conflict(new AgentApiError { Error = "storage_not_configured", Message = "Storage not configured." });
         return await WithAdvisoryLockAsync(db, fence.ConnectionId.Value, fence.Key!, async () =>
         {
+            var verified = await FenceBackupAsync(attemptId, request, agent, runStore, cancellationToken);
+            if (verified.Failure is { } failedAgain) return failedAgain;
             try
             {
                 var existed = await provider.DeleteAsync(new StorageObjectKey(fence.Key!), cancellationToken);

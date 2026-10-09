@@ -62,6 +62,16 @@ public sealed class GoogleDriveFileMetadata : ITenantOwned
     public string? Md5Checksum { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
+    public string? DriftKind { get; private set; }
+    public DateTimeOffset? DriftDetectedAt { get; private set; }
+
+    public void RecordDrift(string kind, DateTimeOffset now)
+    {
+        if (kind is not ("missing" or "ownership_conflict" or "integrity_mismatch"))
+            throw new ArgumentOutOfRangeException(nameof(kind));
+        DriftKind = kind;
+        DriftDetectedAt = now.ToUniversalTime();
+    }
 
     public void Update(string fileId, string parentFolderId, string fileName, long sizeBytes, string? checksum, string? md5Checksum, DateTimeOffset now)
     {

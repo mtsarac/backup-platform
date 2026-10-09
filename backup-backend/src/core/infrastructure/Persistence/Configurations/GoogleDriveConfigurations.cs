@@ -43,6 +43,8 @@ internal sealed class GoogleDriveFileMetadataConfiguration : IEntityTypeConfigur
         builder.Property(file => file.Md5Checksum).HasMaxLength(64);
         builder.Property(file => file.CreatedAt).IsRequired();
         builder.Property(file => file.UpdatedAt).IsRequired();
+        builder.Property(file => file.DriftKind).HasMaxLength(32);
+        builder.Property(file => file.DriftDetectedAt);
 
         builder.HasIndex(file => new { file.TenantId, file.ConnectionId, file.StorageKey })
             .IsUnique()

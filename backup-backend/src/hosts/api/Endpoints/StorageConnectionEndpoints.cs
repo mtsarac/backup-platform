@@ -58,6 +58,7 @@ public static class StorageConnectionEndpoints
         tenant.MapDelete("/storage-connections/{id:guid}", DeleteForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
         tenant.MapPost("/storage-connections/{id:guid}/google-drive/authorize-url", GoogleDriveAuthorizeAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
         tenant.MapPost("/storage-connections/{id:guid}/google-drive/disconnect", GoogleDriveDisconnectAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+        tenant.MapPost("/storage-connections/{id:guid}/google-drive/reconcile", GoogleDriveReconcileAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
         tenant.MapGet("/storage-connections/google-drive/callback", GoogleDriveOAuthCallbackAsync).AllowAnonymous();
 
         var platform = endpoints.MapGroup("/api/platform").RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
@@ -314,6 +315,26 @@ public static class StorageConnectionEndpoints
         catch (InvalidOperationException)
         {
             return Failure(StorageConnectionOutcome.NotFound, null);
+        }
+    }
+
+    private static async Task<IResult> GoogleDriveReconcileAsync(
+        Guid id, ITenantContext tenant, IStorageConnectionStore store,
+        BackupPlatform.SecretProviders.Abstractions.ISecretProvider secrets,
+        BackupPlatform.Api.Backups.GoogleDriveConnectionProviderFactory factory, CancellationToken cancellationToken)
+    {
+        var record = await store.FindAsync(id, tenant.TenantId, cancellationToken);
+        if (record is null || record.Connection.TenantId != tenant.TenantId
+            || record.Connection.ProviderType != StorageProviderTypes.GoogleDrive)
+            return Results.NotFound();
+        try
+        {
+            var provider = (BackupPlatform.StorageProviders.GoogleDrive.GoogleDriveStorageProvider)factory.Create(record.Connection, secrets);
+            return Results.Ok(await provider.ReconcileAsync(cancellationToken));
+        }
+        catch (BackupPlatform.StorageProviders.Abstractions.StorageException exception)
+        {
+            return Results.UnprocessableEntity(new { error = exception.Kind.ToString() });
         }
     }
 
