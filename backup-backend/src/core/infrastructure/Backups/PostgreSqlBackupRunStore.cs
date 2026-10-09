@@ -2,7 +2,9 @@ using BackupPlatform.Application.Backups;
 using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
+using BackupPlatform.Domain.Restores;
 using BackupPlatform.Infrastructure.Persistence;
+using BackupPlatform.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using ApplicationCompletion = BackupPlatform.Application.Backups.BackupCompletion;
@@ -16,7 +18,7 @@ namespace BackupPlatform.Infrastructure.Backups;
 /// agent limits are decided against a consistent count of Leased/Running attempts by any number of backend instances. Releasing
 /// transitions (complete, expire, cancel) never wait on that lock, so the two lock orders cannot cycle.
 /// </summary>
-public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext> options, BackupExecutionOptions? limits = null, Func<double>? jitter = null) : IBackupRunStore
+public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext> options, IBackupAdmissionPolicy admission, BackupExecutionOptions? limits = null, Func<double>? jitter = null) : IBackupRunStore
 {
     // Arbitrary fixed application key for the claim critical section.
     private const long ClaimLockKey = 0x4250_434C_4149_4D01;
@@ -32,6 +34,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         if (!await LockAgentAsync(context, job.TenantId, job.AgentId, cancellationToken)) return null;
         if (!await context.Agents.AnyAsync(agent => agent.Id == job.AgentId && agent.TenantId == job.TenantId && agent.Status == AgentStatus.Active, cancellationToken)) return null;
+        await StorageTargetGate.EnsureJobTargetAsync(context, job.TenantId, job.Configuration, cancellationToken);
         context.BackupJobs.Add(job);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -68,6 +71,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         // The target must be Active only when the job moves to it: an unchanged owner that was since disabled or revoked must not block editing (or disabling) the job.
         if (update.AgentId != owner && !await context.Agents.AnyAsync(agent => agent.Id == update.AgentId && agent.TenantId == tenantId && agent.Status == AgentStatus.Active, cancellationToken)) return (null, false);
         // Omitted policies keep the values committed so far, read under the lock rather than from an earlier snapshot.
+        await StorageTargetGate.EnsureJobTargetAsync(context, tenantId, update.Configuration, cancellationToken);
         job.Update(update.Name, update.AgentId, update.Configuration, update.RetryPolicy ?? job.RetryPolicy, update.OverlapPolicy ?? job.OverlapPolicy);
         update.ApplyUnderLock?.Invoke(job);
         await context.SaveChangesAsync(cancellationToken);
@@ -99,17 +103,43 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
             return new BackupStartResult(BackupStartOutcome.NotFound, null);
         if (job.OverlapPolicy == BackupOverlapPolicy.Skip && await ActiveRunIdAsync(context, tenantId, jobId, null, cancellationToken) is { } active)
             return new BackupStartResult(BackupStartOutcome.SkippedOverlap, null, active);
-        var run = new BackupRun(Guid.NewGuid(), tenantId, job.Id, owner, job.Configuration, idempotencyKey, now, job.RetryPolicy, job.OverlapPolicy, retentionPolicy: job.RetentionPolicy);
-        run.QueueFirstAttempt(Guid.NewGuid(), now);
-        context.BackupRuns.Add(run);
-        try { await context.SaveChangesAsync(cancellationToken); }
-        catch (DbUpdateException exception) when (IsUniqueViolation(exception))
+        // The destination of a NEW run: refused while its storage connection is disabled (or missing), resolved and snapshotted otherwise. No reservation exists yet to give back.
+        var target = await StorageTargetGate.ForNewRunAsync(context, tenantId, job.Configuration, now, cancellationToken);
+        if (!target.Allowed)
         {
-            // The unique index on active Skip runs is the backstop behind the agent lock.
-            return new BackupStartResult(BackupStartOutcome.SkippedOverlap, null, await ActiveRunIdAsync(context, tenantId, jobId, null, cancellationToken));
+            await transaction.CommitAsync(cancellationToken);
+            return new BackupStartResult(BackupStartOutcome.AdmissionDenied, null, null, target.DenialCode);
         }
-        await transaction.CommitAsync(cancellationToken);
-        return new BackupStartResult(BackupStartOutcome.Started, run);
+        // The gate for a NEW run, after everything that makes the request a no-op (replay, skip) and before anything is created. A retry attempt never comes through here.
+        var runId = Guid.NewGuid();
+        var decision = await BackupAdmissionGate.AdmitAsync(admission, context, new BackupAdmissionRequest(tenantId, job.Id, runId, BackupTriggerTypes.Manual, now), cancellationToken);
+        if (!decision.Allowed)
+        {
+            // Nothing was created; committing keeps the maintenance the gate did on the way (stale reservations released, a missing projection computed).
+            await transaction.CommitAsync(cancellationToken);
+            return new BackupStartResult(BackupStartOutcome.AdmissionDenied, null, null, decision.DenialCode);
+        }
+        try
+        {
+            var run = new BackupRun(runId, tenantId, job.Id, owner, target.Configuration!, idempotencyKey, now, job.RetryPolicy, job.OverlapPolicy, retentionPolicy: job.RetentionPolicy);
+            run.QueueFirstAttempt(Guid.NewGuid(), now);
+            context.BackupRuns.Add(run);
+            try { await context.SaveChangesAsync(cancellationToken); }
+            catch (DbUpdateException exception) when (IsUniqueViolation(exception))
+            {
+                // The unique index on active Skip runs is the backstop behind the agent lock.
+                await BackupAdmissionGate.ReleaseAfterFailureAsync(admission, tenantId, runId);
+                return new BackupStartResult(BackupStartOutcome.SkippedOverlap, null, await ActiveRunIdAsync(context, tenantId, jobId, null, cancellationToken));
+            }
+            await transaction.CommitAsync(cancellationToken);
+            return new BackupStartResult(BackupStartOutcome.Started, run);
+        }
+        catch
+        {
+            // Admitted but never created: give the reservation back now instead of waiting for it to lapse.
+            await BackupAdmissionGate.ReleaseAfterFailureAsync(admission, tenantId, runId);
+            throw;
+        }
     }
     public async Task<IReadOnlyList<BackupRun>> ListRunsAsync(TenantId tenantId, Guid? jobId, int limit, CancellationToken cancellationToken)
     {
@@ -180,6 +210,14 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
             (run.Status == BackupStatus.Leased || run.Status == BackupStatus.Running)).ToListAsync(cancellationToken);
         foreach (var run in held) run.Expire(now, Jitter());
         await context.SaveChangesAsync(cancellationToken);
+        // A backup never runs beside a restore of the same agent: a live (unexpired Leased/Running) restore attempt holds the agent whatever the slot limits say. Decided under the
+        // same agent lock the restore claim takes, so exactly one of the two can ever hold the agent. An expired restore lease does not count: the restore sweep will end it.
+        if (await context.RestoreAttempts.AsNoTracking().AnyAsync(attempt => attempt.TenantId == tenantId && attempt.AgentId == agentId &&
+            (attempt.Status == RestoreStatus.Leased || attempt.Status == RestoreStatus.Running) && attempt.LeaseExpiresAt > now, cancellationToken))
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return null;
+        }
         // A slot is a live (unexpired) Leased/Running attempt. Counting rows, not holding tokens, means a crashed
         // worker, a lost agent or a restarted backend cannot leak a slot: the lease simply runs out.
         var live = await context.BackupRunAttempts.AsNoTracking()
@@ -221,8 +259,19 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         MutateAsync(command, run => run.Start(command.LeaseToken, command.Now, command.SoftwareVersion!, command.ProtocolVersion!, command.Platform!), cancellationToken);
     public Task<BackupMutationResult> ReportProgressAsync(BackupLeaseCommand command, BackupProgress progress, CancellationToken cancellationToken) =>
         MutateAsync(command, run => run.Progress(command.LeaseToken, command.Now, progress.Stage, progress.Percent), cancellationToken);
-    public Task<BackupMutationResult> CompleteAttemptAsync(BackupLeaseCommand command, ApplicationCompletion completion, CancellationToken cancellationToken) =>
-        MutateAsync(command, run => run.Complete(command.LeaseToken, command.Now, MapCompletion(command, completion, run), Jitter()), cancellationToken);
+    public Task<BackupMutationResult> CompleteAttemptAsync(BackupLeaseCommand command, ApplicationCompletion completion, CancellationToken cancellationToken)
+    {
+        // The destination each replica belongs to is resolved under the same agent lock, from the run's snapshot, before the (synchronous) domain completion maps them.
+        var connections = new Dictionary<string, Guid>(StringComparer.Ordinal);
+        return MutateAsync(command, run => run.Complete(command.LeaseToken, command.Now, MapCompletion(command, completion, run, connections), Jitter()), cancellationToken,
+            async (context, run) =>
+            {
+                foreach (var provider in completion.Artifact?.Replicas.Select(replica => replica.StorageProvider).Distinct(StringComparer.Ordinal) ?? [])
+                {
+                    connections[provider] = await StorageTargetGate.ForPublishAsync(context, command.TenantId, run.Configuration, provider, command.Now, cancellationToken);
+                }
+            });
+    }
     public async Task<BackupLeaseResult?> RenewLeaseAsync(BackupLeaseCommand command, TimeSpan leaseDuration, CancellationToken cancellationToken)
     {
         BackupLeaseResult? result = null;
@@ -271,7 +320,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         }
         return started;
     }
-    private async Task<BackupMutationResult> MutateAsync(BackupLeaseCommand command, Action<BackupRun> mutate, CancellationToken cancellationToken)
+    private async Task<BackupMutationResult> MutateAsync(BackupLeaseCommand command, Action<BackupRun> mutate, CancellationToken cancellationToken, Func<PlatformDbContext, BackupRun, Task>? prepare = null)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
@@ -281,6 +330,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         if (run is null) return BackupMutationResult.NotFound;
         // Only the run's current attempt can be addressed: once a retry exists, every callback of an older attempt is stale.
         if (run.CurrentAttempt.Id != command.AttemptId) return BackupMutationResult.Conflict;
+        if (prepare is not null) await prepare(context, run);
         try { mutate(run); }
         catch (InvalidOperationException) { return BackupMutationResult.Conflict; }
         catch (ArgumentException) { return BackupMutationResult.Conflict; }
@@ -305,7 +355,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
     internal static IQueryable<BackupRun> Runs(PlatformDbContext context) => context.BackupRuns
         .Include(run => run.Attempts).ThenInclude(attempt => attempt.Artifacts).ThenInclude(artifact => artifact.Replicas)
         .Include(run => run.Facts).AsSplitQuery();
-    private static DomainCompletion MapCompletion(BackupLeaseCommand command, ApplicationCompletion result, BackupRun run)
+    private static DomainCompletion MapCompletion(BackupLeaseCommand command, ApplicationCompletion result, BackupRun run, IReadOnlyDictionary<string, Guid> connections)
     {
         var status = result.Outcome switch
         {
@@ -324,7 +374,8 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
                     replica.StorageTarget, replica.Key, replica.SizeBytes, replica.Checksum, replica.ChecksumAlgorithm,
                     replica.VerificationState, replica.VerificationMethod, replica.CreatedAt, replica.VerifiedAt,
                     run.Configuration.StorageExecutionLocation,
-                    run.Configuration.StorageExecutionLocation == BackupStorageExecutionLocation.Agent ? run.AgentId.Value : null));
+                    run.Configuration.StorageExecutionLocation == BackupStorageExecutionLocation.Agent ? run.AgentId.Value : null,
+                    connections[replica.StorageProvider]));
         }
         return new DomainCompletion(status, result.ReasonCode, artifact);
     }

@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Audit;
 using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Agents.Enrollment;
 using BackupPlatform.Agents.Management;
@@ -32,14 +33,15 @@ public static class AgentAdministrationEndpoints
         var platform = endpoints.MapGroup("/api/platform/tenants/{tenantId:guid}/agent-enrollment")
             .RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
         platform.MapGet("", GetPolicyAsync);
-        platform.MapPut("", SetPolicyAsync);
+        platform.MapPut("", SetPlatformPolicyAsync);
 
         var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}")
             .WithMetadata(new TenantScopedEndpoint());
         tenant.MapGet("/agent-enrollment", GetPolicyAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
-        tenant.MapPut("/agent-enrollment", SetPolicyAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+        tenant.MapPut("/agent-enrollment", SetTenantPolicyAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
         tenant.MapPost("/agent-enrollment-tokens", CreateTokenAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
         tenant.MapGet("/agent-enrollment-tokens", ListTokensAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+        tenant.MapGet("/agent-enrollment-tokens/{tokenId:guid}", GetTokenStatusAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
         tenant.MapDelete("/agent-enrollment-tokens/{tokenId:guid}", RevokeTokenAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
         tenant.MapGet("/agents", ListAgentsAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
         tenant.MapGet("/agents/connectivity-summary", GetConnectivitySummaryAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
@@ -56,10 +58,19 @@ public static class AgentAdministrationEndpoints
             : Results.Ok(new { tenantId = policy.TenantId.Value, enabled = policy.IsEnabled, changedAt = policy.ChangedAt });
     }
 
+    private static Task<IResult> SetPlatformPolicyAsync(
+        Guid tenantId, SetAgentEnrollmentRequest request, ICurrentUser currentUser, EnrollmentAdministrationService service, CancellationToken cancellationToken) =>
+        SetPolicyAsync(tenantId, request, currentUser, service, AuditActorKind.PlatformAdmin, cancellationToken);
+
+    private static Task<IResult> SetTenantPolicyAsync(
+        Guid tenantId, SetAgentEnrollmentRequest request, ICurrentUser currentUser, EnrollmentAdministrationService service, CancellationToken cancellationToken) =>
+        SetPolicyAsync(tenantId, request, currentUser, service, AuditActorKind.TenantAdministrator, cancellationToken);
+
     private static async Task<IResult> SetPolicyAsync(
-        Guid tenantId, SetAgentEnrollmentRequest request, ICurrentUser currentUser, EnrollmentAdministrationService service, CancellationToken cancellationToken)
+        Guid tenantId, SetAgentEnrollmentRequest request, ICurrentUser currentUser, EnrollmentAdministrationService service,
+        AuditActorKind actorKind, CancellationToken cancellationToken)
     {
-        var change = await service.SetEnrollmentEnabledAsync(new TenantId(tenantId), request.Enabled, currentUser.UserId!, cancellationToken);
+        var change = await service.SetEnrollmentEnabledAsync(new TenantId(tenantId), request.Enabled, currentUser.UserId!, actorKind, cancellationToken);
         return change is null
             ? Results.NotFound()
             : Results.Ok(new { tenantId = change.TenantId.Value, enabled = change.IsEnabled, changed = change.Changed });
@@ -82,7 +93,7 @@ public static class AgentAdministrationEndpoints
                 expiresAt = result.Issued.Token.ExpiresAt
             }, statusCode: StatusCodes.Status201Created),
             CreateEnrollmentTokenStatus.EnrollmentDisabled => Results.Json(
-                new { error = "Agent enrollment is not enabled for this tenant." }, statusCode: StatusCodes.Status403Forbidden),
+                new { error = "enrollment_disabled", message = "Agent enrollment is not enabled for this tenant." }, statusCode: StatusCodes.Status403Forbidden),
             _ => Results.Json(new { error = "The requested token lifetime is outside the allowed range." }, statusCode: StatusCodes.Status400BadRequest)
         };
     }
@@ -97,6 +108,19 @@ public static class AgentAdministrationEndpoints
             expiresAt = token.ExpiresAt,
             createdBy = token.CreatedBy.Value
         }));
+    }
+
+    private static async Task<IResult> GetTokenStatusAsync(
+        Guid tokenId, ITenantContext tenantContext, EnrollmentAdministrationService service, CancellationToken cancellationToken)
+    {
+        var status = await service.GetTokenStatusAsync(tenantContext.TenantId!, tokenId, cancellationToken);
+        return status is null ? Results.NotFound() : Results.Ok(new
+        {
+            tokenId = status.TokenId,
+            expiresAt = status.ExpiresAt,
+            state = status.State.ToString(),
+            agentId = status.AgentId?.Value
+        });
     }
 
     private static async Task<IResult> RevokeTokenAsync(

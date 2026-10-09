@@ -10,12 +10,14 @@ namespace BackupPlatform.Agents.Enrollment;
 public enum AgentEnrollmentStatus
 {
     Enrolled = 1,
-    /// <summary>Unknown, malformed, expired, consumed or revoked; deliberately indistinguishable.</summary>
+    /// <summary>Unknown, malformed, wrong-secret or revoked; deliberately indistinguishable.</summary>
     InvalidToken = 2,
     InvalidRequest = 3,
     EnrollmentDisabled = 4,
     ProtocolIncompatible = 5,
-    InstallationConflict = 6
+    InstallationConflict = 6,
+    TokenExpired = 7,
+    TokenConsumed = 8
 }
 
 /// <summary>Facts about a completed enrollment, shaped for later auditing; carries the one-time credential.</summary>
@@ -38,10 +40,15 @@ public sealed class AgentEnrollmentService(IAgentEnrollmentStore store, TimeProv
     {
         ArgumentNullException.ThrowIfNull(request);
         var now = timeProvider.GetUtcNow();
-        var token = await FindUsableTokenAsync(request.EnrollmentToken, now, cancellationToken).ConfigureAwait(false);
+        var token = await FindVerifiedTokenAsync(request.EnrollmentToken, cancellationToken).ConfigureAwait(false);
         if (token is null)
         {
             return Failure(AgentEnrollmentStatus.InvalidToken);
+        }
+        var tokenStatus = GetTokenFailure(token, now);
+        if (tokenStatus is { } failure)
+        {
+            return Failure(failure);
         }
         if (!TryReadSoftware(request, out var software, out var hostName, out var invalidField, out var protocol))
         {
@@ -60,6 +67,12 @@ public sealed class AgentEnrollmentService(IAgentEnrollmentStore store, TimeProv
         agent.RecordEnrollment();
         var credential = AgentCredential.IssueInitial(agent.Id, agent.TenantId, now);
         var commit = await store.EnrollAsync(token.Id, token.TenantId, agent, credential.Credential, now, cancellationToken).ConfigureAwait(false);
+        if (commit == EnrollmentCommit.TokenUnavailable)
+        {
+            var current = await store.FindTokenAsync(token.Id, cancellationToken).ConfigureAwait(false);
+            return Failure(current is null ? AgentEnrollmentStatus.InvalidToken
+                : GetTokenFailure(current, timeProvider.GetUtcNow()) ?? AgentEnrollmentStatus.InvalidToken);
+        }
         return commit switch
         {
             EnrollmentCommit.Enrolled => new AgentEnrollmentResult(AgentEnrollmentStatus.Enrolled,
@@ -69,7 +82,7 @@ public sealed class AgentEnrollmentService(IAgentEnrollmentStore store, TimeProv
         };
     }
 
-    private async Task<EnrollmentToken?> FindUsableTokenAsync(string presented, DateTimeOffset now, CancellationToken cancellationToken)
+    private async Task<EnrollmentToken?> FindVerifiedTokenAsync(string presented, CancellationToken cancellationToken)
     {
         if (!AgentSecretReference.TryParse(presented, out var tokenId, out var secret))
         {
@@ -82,8 +95,17 @@ public sealed class AgentEnrollmentService(IAgentEnrollmentStore store, TimeProv
             EnrollmentToken.BurnVerification(secret);
             return null;
         }
-        return token.VerifySecret(secret) && token.GetState(now) == EnrollmentTokenState.Active ? token : null;
+        return token.VerifySecret(secret) ? token : null;
     }
+
+    private static AgentEnrollmentStatus? GetTokenFailure(EnrollmentToken token, DateTimeOffset now) =>
+        token.GetState(now) switch
+        {
+            EnrollmentTokenState.Active => null,
+            EnrollmentTokenState.Expired => AgentEnrollmentStatus.TokenExpired,
+            EnrollmentTokenState.Consumed => AgentEnrollmentStatus.TokenConsumed,
+            _ => AgentEnrollmentStatus.InvalidToken
+        };
 
     private static bool TryReadSoftware(
         AgentEnrollmentRequest request, out AgentSoftware software, out string? hostName, out string? invalidField, out ProtocolVersion protocol)

@@ -37,6 +37,7 @@ describe('tenant run lifecycle', () => {
     expect(client.getQueryData(backupQueryKeys.detail('tenant-a', 'run-id'))).toEqual(cancelled)
     expect(invalidate.mock.calls.map(([options]) => options?.queryKey)).toEqual([
       ['tenant', 'tenant-a', 'backup-runs'], ['tenant', 'tenant-a', 'dashboard'], ['tenant', 'tenant-a', 'backup-artifacts'],
+      ['tenant', 'tenant-a', 'storage-quota'],
     ])
     expect(client.getQueryState(['tenant', 'tenant-a', 'backup-jobs'])?.isInvalidated).toBe(false)
     expect(client.getQueryState(['tenant', 'tenant-b', 'backup-runs'])?.isInvalidated).toBe(false)

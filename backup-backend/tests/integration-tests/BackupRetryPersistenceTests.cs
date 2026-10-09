@@ -984,7 +984,7 @@ public sealed class BackupRetryPersistenceTests(PostgreSqlFixture fixture) : ICl
         public ValueTask DisposeAsync() => owned ? new ValueTask(database.DisposeAsync()) : default;
         public PostgreSqlBackupRunStore Store(Func<double>? jitter = null) => StoreFor(database.ConnectionString, jitter);
         public static PostgreSqlBackupRunStore StoreFor(string connectionString, Func<double>? jitter = null) =>
-            new(new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(connectionString).Options, Limits, jitter ?? (() => 0));
+            new(new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(connectionString).Options, AdmitAllBackupAdmission.Instance, Limits, jitter ?? (() => 0));
 
         public async Task<World> SeedAsync(BackupRetryPolicy? policy = null, BackupOverlapPolicy overlap = BackupOverlapPolicy.Queue)
         {

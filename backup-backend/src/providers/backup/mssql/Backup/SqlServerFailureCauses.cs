@@ -1,5 +1,6 @@
 using BackupPlatform.BackupProviders.Abstractions.Database;
 using BackupPlatform.BackupProviders.MSSQL.PreChecks;
+using BackupPlatform.BackupProviders.MSSQL.Restore;
 
 namespace BackupPlatform.BackupProviders.MSSQL.Backup;
 
@@ -38,6 +39,26 @@ internal static class SqlServerFailureCauses
         SqlServerBackupReasons.BackupNotSupported or SqlServerBackupReasons.RequiredOptionUnsupported => BackupFailureCause.Unsupported,
         SqlServerBackupReasons.StagingAgentDirectoryMissing or SqlServerBackupReasons.StagingMappingMismatch
             or SqlServerBackupReasons.StagingWriteFailed or SqlServerBackupReasons.StagedFileExists => BackupFailureCause.StagingInvalid,
+        _ => BackupFailureCause.Unclassified
+    };
+
+    /// <summary>
+    /// The cause of a failed restore pre-check item or restore failure. The engine-independent target conditions (exists, in use, protected, version,
+    /// disk space, file mapping) carry their own <see cref="RestoreReasonCodes"/> and need no cause; a missing target is a missing database.
+    /// </summary>
+    public static BackupFailureCause ForRestoreReason(string reasonCode) => reasonCode switch
+    {
+        SqlServerPreCheckReasons.ServerUnreachable or SqlServerPreCheckReasons.ConnectionFailed or SqlServerPreCheckReasons.MetadataUnavailable
+            or SqlServerRestoreReasons.ServerUnavailable or SqlServerRestoreReasons.ConnectionLost => BackupFailureCause.DatabaseUnavailable,
+        SqlServerRestoreReasons.ConnectionTimeout or SqlServerRestoreReasons.InspectTimeout or SqlServerRestoreReasons.RestoreTimeout
+            or SqlServerRestoreReasons.VerifyTimeout => BackupFailureCause.Timeout,
+        SqlServerRestoreReasons.ConnectionSettingsInvalid or SqlServerRestoreReasons.DatabaseNameInvalid => BackupFailureCause.InvalidConfiguration,
+        SqlServerRestoreReasons.AuthenticationFailed => BackupFailureCause.AuthenticationFailed,
+        SqlServerRestoreReasons.PermissionDenied or SqlServerRestoreReasons.RestorePermissionDenied => BackupFailureCause.PermissionDenied,
+        RestoreReasonCodes.TargetDatabaseMissing => BackupFailureCause.DatabaseNotFound,
+        RestoreReasonCodes.BackupTypeUnsupported or RestoreReasonCodes.TargetVersionTooOld or SqlServerRestoreReasons.BackupEncryptedUnsupported
+            or SqlServerRestoreReasons.BackupEncryptionKeyMissing => BackupFailureCause.Unsupported,
+        SqlServerRestoreReasons.BackupFileUnreadable => BackupFailureCause.StagingInvalid,
         _ => BackupFailureCause.Unclassified
     };
 }

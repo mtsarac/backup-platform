@@ -1,5 +1,5 @@
 import { apiRequest, tenantPath } from '@/lib/api/client'
-import type { Agent, AgentDetail, CreatedEnrollmentToken, EnrollmentPolicy, EnrollmentToken } from './types'
+import type { Agent, AgentDetail, CreatedEnrollmentToken, EnrollmentPolicy, EnrollmentToken, EnrollmentTokenStatus } from './types'
 export type { Agent } from './types'
 
 export function getAgents(tenantId: string, signal?: AbortSignal) {
@@ -31,6 +31,10 @@ export function createEnrollmentToken(tenantId: string, lifetimeMinutes: number,
   return apiRequest<CreatedEnrollmentToken>(tenantPath(tenantId, 'agent-enrollment-tokens'), { method: 'POST', json: { lifetimeMinutes }, signal })
 }
 
-export function revokeEnrollmentToken(tenantId: string, tokenId: string) {
-  return apiRequest<void>(tenantPath(tenantId, `agent-enrollment-tokens/${encodeURIComponent(tokenId)}`), { method: 'DELETE' })
+export function getEnrollmentTokenStatus(tenantId: string, tokenId: string, signal?: AbortSignal) {
+  return apiRequest<EnrollmentTokenStatus>(tenantPath(tenantId, `agent-enrollment-tokens/${encodeURIComponent(tokenId)}`), { signal })
+}
+
+export function revokeEnrollmentToken(tenantId: string, tokenId: string, signal?: AbortSignal) {
+  return apiRequest<void>(tenantPath(tenantId, `agent-enrollment-tokens/${encodeURIComponent(tokenId)}`), { method: 'DELETE', signal })
 }

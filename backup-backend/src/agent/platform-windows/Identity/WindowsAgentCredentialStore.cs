@@ -34,6 +34,17 @@ public sealed class WindowsAgentCredentialStore : IAgentCredentialStore
     public static string DefaultDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "BackupAgent");
 
+    /// <summary>Creates or verifies the protected directory before the host takes its cross-process enrollment lease.</summary>
+    public void PrepareEnrollmentDirectory()
+    {
+        _directory.Prepare(create: true);
+        var leasePath = Path.Combine(_directory.Location, ".enrollment.lock");
+        if (WindowsStoreDirectory.IsReparsePoint(leasePath) is not null)
+        {
+            _directory.VerifyIdentityFile(leasePath);
+        }
+    }
+
     public async Task<AgentLocalIdentity?> LoadAsync(CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);

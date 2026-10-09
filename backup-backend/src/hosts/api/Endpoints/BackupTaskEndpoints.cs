@@ -86,8 +86,8 @@ public static class BackupTaskEndpoints
 
 
     private static bool Bounded(string? value) => value is { Length: > 0 and <= 64 } && !value.Any(char.IsControl);
-    private static IResult Invalid() => Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "Invalid task request." });
-    private static IResult Mutation(BackupMutationResult result) => result switch
+    internal static IResult Invalid() => Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "Invalid task request." });
+    internal static IResult Mutation(BackupMutationResult result) => result switch
     {
         BackupMutationResult.Accepted => Results.NoContent(),
         BackupMutationResult.NotFound => Results.NotFound(),

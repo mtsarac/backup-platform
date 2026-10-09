@@ -36,9 +36,11 @@ public static class BackupInputValidation
         Check(Text(c.Host, 253) && c.Host.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '.' or '-' or '_' or '\\' or ':'), "configuration.host");
         Check(c.Port is null or >= 1 and <= 65535, "configuration.port");
         Check(c.StagingReference == "default", "configuration.stagingReference");
-        Check(c.StorageProvider is "local" or "central", "configuration.storageProvider");
+        Check(c.StorageProvider is "local" or "central" or "sftp" or "google-drive", "configuration.storageProvider");
         Check(c.StorageExecutionLocation is null or "Backend" or "Agent" && (c.StorageExecutionLocation != "Agent" || c.StorageProvider == "local"), "configuration.storageExecutionLocation");
         Check(SafeKey(c.StoragePrefix), "configuration.storagePrefix");
+        Check(c.StorageProvider is not ("sftp" or "google-drive") || c.StoragePrefix == string.Empty, "configuration.storagePrefix");
+        Check(c.StorageProvider is not ("sftp" or "google-drive") || c.StorageConnectionId is { } connection && connection != Guid.Empty, "configuration.storageConnectionId");
         Check(c.ChecksumPolicy is "Required" or "Preferred" or "Disabled", "configuration.checksumPolicy");
         Check(c.CompressionPolicy is "Required" or "Preferred" or "Disabled", "configuration.compressionPolicy");
         Check(c.IntegratedSecurity ? c.DatabaseCredentialReference is null : Text(c.DatabaseCredentialReference, 64) && c.DatabaseCredentialReference!.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '-' or '_'), "configuration.databaseCredentialReference");
@@ -76,6 +78,7 @@ public static class BackupInputValidation
             a.Replicas is not { Count: > 0 and <= 8 } || !Metadata(a, configuration)) return false;
         return a.Replicas.All(r => r is not null && r.StorageProvider == configuration.StorageProvider && Reference(r.StorageTarget) &&
             (configuration.StorageExecutionLocation != BackupStorageExecutionLocation.Agent || r.StorageTarget == configuration.StorageProvider) &&
+            (configuration.StorageProvider is not ("sftp" or "google-drive") || r.StorageTarget == configuration.StorageConnectionId?.ToString("D")) &&
             Text(r.Key, 512) && SafeKey(r.Key) && r.SizeBytes == a.SizeBytes && r.ChecksumAlgorithm == a.ChecksumAlgorithm &&
             Checksum(r.Checksum) && r.Checksum.Equals(a.ArtifactChecksum, StringComparison.OrdinalIgnoreCase) && r.VerificationState == "Verified" &&
             r.VerificationMethod is "ReadBack" or "ServerSideChecksum" && r.CreatedAt != default && r.VerifiedAt is not null && r.VerifiedAt >= r.CreatedAt) &&

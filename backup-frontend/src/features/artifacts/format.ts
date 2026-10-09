@@ -15,7 +15,7 @@ export function artifactSize(bytes: number): string {
   return `${(bytes / 1024 ** exponent).toLocaleString('tr-TR', { maximumFractionDigits: 2 })} ${units[exponent - 1]}`
 }
 
-export function artifactState(artifact: BackupArtifact): string {
+export function artifactState(artifact: { state: string; replicas: { status: string }[] }): string {
   if (artifact.state === 'Deleted') return 'Deleted'
   if (artifact.replicas.some((replica) => replica.status === 'DeleteFailed')) return 'DeleteFailed'
   return artifact.state

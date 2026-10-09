@@ -26,6 +26,8 @@
     <ProjectReference Include="../../src/providers/storage/abstractions/BackupPlatform.StorageProviders.Abstractions.csproj" />
     <ProjectReference Include="../../src/providers/storage/local/BackupPlatform.StorageProviders.Local.csproj" />
     <ProjectReference Include="../../src/providers/storage/central/BackupPlatform.StorageProviders.Central.csproj" />
+    <ProjectReference Include="../../src/providers/storage/sftp/BackupPlatform.StorageProviders.Sftp.csproj" />
+    <ProjectReference Include="../../src/providers/storage/google-drive/BackupPlatform.StorageProviders.GoogleDrive.csproj" />
   </ItemGroup>
 
 </Project>

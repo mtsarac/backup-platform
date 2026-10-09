@@ -70,12 +70,15 @@ public sealed class BackupRun : ITenantOwned
         Fact("BackupRunCreated", null, createdAt);
     }
 
-    /// <summary>A run for one scheduled instant of <paramref name="job"/>. Its idempotency key is derived from the instant, so a second creation for it collides.</summary>
-    public static BackupRun ForScheduledOccurrence(Guid id, BackupJob job, DateTimeOffset occurrence, DateTimeOffset createdAt)
+    /// <summary>
+    /// A run for one scheduled instant of <paramref name="job"/>. Its idempotency key is derived from the instant, so a second creation for it collides.
+    /// <paramref name="configuration"/> is the job's configuration with its storage connection resolved; omitted, the job's own is snapshotted.
+    /// </summary>
+    public static BackupRun ForScheduledOccurrence(Guid id, BackupJob job, DateTimeOffset occurrence, DateTimeOffset createdAt, BackupConfiguration? configuration = null)
     {
         ArgumentNullException.ThrowIfNull(job);
         var schedule = job.Schedule ?? throw new InvalidOperationException("The job has no schedule.");
-        return new BackupRun(id, job.TenantId, job.Id, job.AgentId, job.Configuration, ScheduledKey(occurrence), createdAt, job.RetryPolicy, job.OverlapPolicy,
+        return new BackupRun(id, job.TenantId, job.Id, job.AgentId, configuration ?? job.Configuration, ScheduledKey(occurrence), createdAt, job.RetryPolicy, job.OverlapPolicy,
             BackupTriggerTypes.Scheduled, occurrence, occurrence + schedule.MissedRunGracePeriod, job.RetentionPolicy);
     }
 
@@ -111,7 +114,8 @@ public sealed class BackupRun : ITenantOwned
     public IReadOnlyList<BackupRunAttempt> Attempts => _attemptView ??= _attempts.AsReadOnly();
     public IReadOnlyList<BackupLifecycleFact> Facts => _factView ??= _facts.AsReadOnly();
     public BackupRunAttempt CurrentAttempt => _attempts.Single(attempt => attempt.Number == CurrentAttemptNumber);
-    public bool IsTerminal => Status is BackupStatus.Succeeded or BackupStatus.Failed or BackupStatus.Cancelled or BackupStatus.AgentLost;
+    public bool IsTerminal => IsTerminalStatus(Status);
+    public static bool IsTerminalStatus(BackupStatus status) => status is BackupStatus.Succeeded or BackupStatus.Failed or BackupStatus.Cancelled or BackupStatus.AgentLost;
     /// <summary>Queued, retrying or executing: the states in which another run of the same job counts as overlapping.</summary>
     public bool IsActive => !IsTerminal;
 

@@ -5,6 +5,8 @@ import { QueryState } from '@/components/data/query-state'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
 import { ArtifactDetails } from '@/features/artifacts/artifact-details'
+import { ArtifactDownload } from '@/features/artifacts/artifact-download'
+import { ArtifactRestoreAction } from '@/features/artifacts/artifact-restore-action'
 import { artifactDate, artifactState, canCancelDeletion, deletionInProgress } from '@/features/artifacts/format'
 import { useArtifact, useArtifactActions } from '@/features/artifacts/hooks'
 import { useTenant } from '@/features/tenancy/use-tenant'
@@ -84,6 +86,8 @@ export function ArtifactDetailPage() {
           {!canAdmin && artifact.state !== 'Deleted' && <p className="text-sm text-text-muted">Silme ve silmeyi iptal etme işlemleri yalnızca yöneticilere açıktır.</p>}
           {notice && <p role="status" className="rounded-lg border border-border bg-surface-2 p-3 text-sm text-text">{notice}</p>}
           {mutationError && !dialogOpen && <p role="alert" className="text-sm text-destructive">{errorMessage(mutationError)}</p>}
+          <ArtifactRestoreAction tenantId={tenantId} artifact={artifact} />
+          <ArtifactDownload tenantId={tenantId} artifactId={id} canAdmin={canAdmin} eligible={artifact.state === 'Available'} />
           <ArtifactDetails artifact={artifact} />
         </>}
       </QueryState>

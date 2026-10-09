@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\core\domain\BackupPlatform.Domain.csproj" />
+    <ProjectReference Include="..\..\core\application\BackupPlatform.Application.csproj" />
+  </ItemGroup>
+
+</Project>

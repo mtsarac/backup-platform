@@ -20,3 +20,27 @@ export function deleteArtifact(tenantId: string, id: string) {
 export function cancelArtifactDeletion(tenantId: string, id: string) {
   return apiRequest<BackupArtifact>(tenantPath(tenantId, `backup-artifacts/${encodeURIComponent(id)}/cancel-delete`), { method: 'POST' })
 }
+
+export interface DownloadAvailability {
+  available: boolean
+  reason: string | null
+  replicas: { replicaId: string; storageProvider: string; storageTarget: string; available: boolean; reason: string | null }[]
+  checksum: string
+  sizeBytes: number
+}
+export interface PreparedDownload { sessionId: string; downloadUrl: string; filename: string; checksum: string; sizeBytes: number }
+export interface DownloadStatus {
+  sessionId: string
+  state: 'Preparing' | 'Ready' | 'Streaming' | 'Completed' | 'Failed' | 'Cancelled'
+  failureCode?: string | null
+  transferredBytes: number
+}
+export function getDownloadAvailability(tenantId: string, id: string, signal: AbortSignal) {
+  return apiRequest<DownloadAvailability>(tenantPath(tenantId, `backup-artifacts/${encodeURIComponent(id)}/download-availability`), { signal })
+}
+export function prepareDownload(tenantId: string, id: string, replicaId?: string) {
+  return apiRequest<PreparedDownload>(tenantPath(tenantId, `backup-artifacts/${encodeURIComponent(id)}/downloads`), { method: 'POST', json: replicaId ? { replicaId } : {} })
+}
+export function getDownloadStatus(tenantId: string, id: string, sessionId: string, signal: AbortSignal) {
+  return apiRequest<DownloadStatus>(tenantPath(tenantId, `backup-artifacts/${encodeURIComponent(id)}/downloads/${encodeURIComponent(sessionId)}`), { signal })
+}

@@ -5,6 +5,7 @@ export type ArtifactState = 'Available' | 'DeletePending' | 'DeleteFailed' | 'De
 export interface BackupReplica {
   id: string
   storageProvider: string
+  storageConnectionId: string
   storageTarget: string
   key: string
   sizeBytes: number

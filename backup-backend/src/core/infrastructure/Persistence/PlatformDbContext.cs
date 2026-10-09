@@ -5,10 +5,19 @@ using BackupPlatform.Agents.Credentials;
 using BackupPlatform.Agents.Enrollment;
 using BackupPlatform.Application.Tenancy;
 using BackupPlatform.Domain.Agents;
+using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Backups;
+using BackupPlatform.Domain.Downloads;
 using BackupPlatform.Domain.Identity;
+using BackupPlatform.Domain.Restores;
+using BackupPlatform.Domain.Storage;
+using BackupPlatform.Domain.Support;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Identity;
+using BackupPlatform.Infrastructure.ManagedService;
+using BackupPlatform.ManagedService.Plans;
+using BackupPlatform.ManagedService.Quota;
+using BackupPlatform.ManagedService.Subscriptions;
 using Microsoft.EntityFrameworkCore;
 
 namespace BackupPlatform.Infrastructure.Persistence;
@@ -65,6 +74,21 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<BackupReplica> BackupReplicas => Set<BackupReplica>();
     public DbSet<BackupLifecycleFact> BackupLifecycleFacts => Set<BackupLifecycleFact>();
     public DbSet<BackupScheduleOccurrence> BackupScheduleOccurrences => Set<BackupScheduleOccurrence>();
+    public DbSet<RestoreOperation> RestoreOperations => Set<RestoreOperation>();
+    public DbSet<RestoreAttempt> RestoreAttempts => Set<RestoreAttempt>();
+    public DbSet<RestoreReplicaPin> RestoreReplicaPins => Set<RestoreReplicaPin>();
+    public DbSet<DownloadSession> DownloadSessions => Set<DownloadSession>();
+    public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+    public DbSet<SupportAccessSession> SupportAccessSessions => Set<SupportAccessSession>();
+    public DbSet<Plan> Plans => Set<Plan>();
+    public DbSet<TenantSubscription> TenantSubscriptions => Set<TenantSubscription>();
+    public DbSet<QuotaPolicy> QuotaPolicies => Set<QuotaPolicy>();
+    public DbSet<TenantStorageUsage> TenantStorageUsages => Set<TenantStorageUsage>();
+    public DbSet<QuotaReservation> QuotaReservations => Set<QuotaReservation>();
+    public DbSet<StorageConnection> StorageConnections => Set<StorageConnection>();
+    public DbSet<GoogleDriveOAuthState> GoogleDriveOAuthStates => Set<GoogleDriveOAuthState>();
+    public DbSet<GoogleDriveFileMetadata> GoogleDriveFileMetadata => Set<GoogleDriveFileMetadata>();
+    public DbSet<GoogleDriveStagingReservation> GoogleDriveStagingReservations => Set<GoogleDriveStagingReservation>();
 
     /// <summary>Explicit unfiltered context for trusted platform operations only.</summary>
     /// <remarks>Does not authorize the caller. Future application boundaries must authorize its use.</remarks>
@@ -94,13 +118,35 @@ public sealed class PlatformDbContext : DbContext
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         ValidateTrackedWrites();
+        if (StorageUsageProjection.Capture(this) is not null)
+        {
+            throw new InvalidOperationException("Replica and run lifecycle writes keep the storage usage projection current and must use SaveChangesAsync.");
+        }
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
-    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// A save that changes what a tenant stores (a replica published, changing status or removed) or ends a run that may hold a reservation also
+    /// updates the tenant's usage projection, in the same transaction and under the tenant lock (taken after the rows are written), from the
+    /// before/after of exactly those rows. It is idempotent by construction: the adjustment is the difference between the saved state and the same
+    /// state with this save reverted, so a save that changes nothing adjusts nothing. Every other save is untouched.
+    /// </summary>
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
         ValidateTrackedWrites();
-        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        var projection = StorageUsageProjection.Capture(this);
+        if (projection is null)
+        {
+            return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+        await using var own = Database.CurrentTransaction is null ? await Database.BeginTransactionAsync(cancellationToken) : null;
+        var saved = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        await projection.ApplyAsync(this, cancellationToken);
+        if (own is not null)
+        {
+            await own.CommitAsync(cancellationToken);
+        }
+        return saved;
     }
 
     private void ValidateTrackedWrites()
@@ -143,6 +189,30 @@ public sealed class PlatformDbContext : DbContext
             if (!IsPlatformOperations && entry.Entity is TenantAgentEnrollmentPolicy or AgentCredential or AgentConnectivityRecord or AgentCapabilityRecord)
             {
                 throw new InvalidOperationException("Enrollment policy, agent credential, connectivity and capability writes require explicit platform operations.");
+            }
+            if (!IsPlatformOperations && entry.Entity is Plan or TenantSubscription or QuotaPolicy or TenantStorageUsage or QuotaReservation)
+            {
+                throw new InvalidOperationException("Plan, subscription and quota writes require explicit platform operations.");
+            }
+            if (entry.Entity is BackupReplica { StorageConnectionId: var connectionId } && connectionId == Guid.Empty && entry.State == EntityState.Added)
+            {
+                throw new InvalidOperationException("A replica must be assigned to a storage connection before it is saved.");
+            }
+            if (!IsPlatformOperations && entry.Entity is StorageConnection)
+            {
+                throw new InvalidOperationException("Storage connection writes require explicit platform operations.");
+            }
+            if (!IsPlatformOperations && entry.Entity is SupportAccessSession)
+            {
+                throw new InvalidOperationException("Support access sessions require explicit platform operations.");
+            }
+            if (!IsPlatformOperations && entry.Entity is AuditEvent)
+            {
+                throw new InvalidOperationException("Audit events require explicit platform operations.");
+            }
+            if (entry.Entity is AuditEvent && entry.State != EntityState.Added)
+            {
+                throw new InvalidOperationException("Audit events are append-only.");
             }
         }
     }

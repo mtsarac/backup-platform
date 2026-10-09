@@ -1,12 +1,15 @@
 using BackupPlatform.BackupProviders.MSSQL.Capabilities;
 using BackupPlatform.Contracts.Agents;
+using BackupPlatform.Contracts.Downloads;
+using BackupPlatform.Contracts.Restores;
+using BackupPlatform.Contracts.Backups;
 
 namespace BackupPlatform.Agent.Host;
 
 /// <summary>
 /// The capabilities this agent build advertises, with the revision derived from them. The content is static and
 /// honest: it states what the product implements, not what a particular SQL Server instance allows. Instance-level
-/// support is still decided by the provider's pre-check when a backup runs.
+/// support is still decided by the provider's pre-check when a backup or restore runs.
 /// </summary>
 public sealed class AgentCapabilityCatalog
 {
@@ -32,6 +35,11 @@ public sealed class AgentCapabilityCatalog
         Supported(SqlServerCapabilityIds.BackupCompression.Value),
         Supported(SqlServerCapabilityIds.CopyOnly.Value),
         Supported(SqlServerCapabilityIds.RestoreVerifyOnly.Value),
+        Supported(SqlServerCapabilityIds.RestoreDatabase.Value),
+        Supported(RestoreTaskTypes.PrecheckCapability),
+        Supported(RestoreTaskTypes.DiscoveryCapability),
+        Supported(DownloadTaskTypes.Capability),
+        Supported(TaskStorageProtocol.Capability),
         // Not implemented in this product yet, whatever the SQL Server instance could do.
         Unsupported(SqlServerCapabilityIds.DifferentialBackup.Value),
         Unsupported(SqlServerCapabilityIds.LogBackup.Value)

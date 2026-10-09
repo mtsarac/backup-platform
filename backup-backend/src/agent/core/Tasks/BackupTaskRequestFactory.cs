@@ -6,7 +6,8 @@ using BackupPlatform.StorageProviders.Abstractions;
 namespace BackupPlatform.Agent.Core.Tasks;
 
 /// <summary>Resolves only host-registered staging and local credential names; task input can never choose a staging path.</summary>
-public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver credentials, IEnumerable<StagingArea> stagingAreas)
+public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver credentials, IEnumerable<StagingArea> stagingAreas,
+    ITaskStorageProviderFactory? storageFactory = null)
 {
     private readonly StagingArea? _staging = stagingAreas.SingleOrDefault();
 
@@ -27,7 +28,12 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
             ? IntegratedDatabaseCredential.Instance
             : await ResolveCredentialAsync(configuration.DatabaseCredentialReference!, cancellationToken).ConfigureAwait(false);
         return new DatabaseBackupPipelineRequest(DatabaseEngineId.MsSql, connection, credential, configuration.Database,
-            staging, storage, prefix, options);
+            staging, storage, prefix, options)
+        {
+            StorageOverride = configuration.StorageProvider is "sftp" or "google-drive"
+                ? (storageFactory ?? throw new ArgumentException("Backend-relayed storage is not configured.")).CreateBackup(task)
+                : null
+        };
     }
 
     private async ValueTask<DatabaseCredential> ResolveCredentialAsync(string reference, CancellationToken cancellationToken)
@@ -57,13 +63,28 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
         {
             throw new ArgumentException("The backup configuration is unsupported.");
         }
-        var reference = configuration.DatabaseCredentialReference;
-        if (configuration.IntegratedSecurity ? reference is not null : string.IsNullOrWhiteSpace(reference)
-            || reference.Length > 64 || !reference.All(character => char.IsAsciiLetterOrDigit(character) || character is '_' or '-'))
+        if ((configuration.StorageProvider is "sftp" or "google-drive") && (configuration.StorageExecutionLocation != "Backend"
+            || configuration.StorageConnectionId is null || configuration.StorageConnectionId == Guid.Empty || configuration.StoragePrefix != string.Empty))
+        {
+            throw new ArgumentException("The backend-relayed storage configuration is invalid.");
+        }
+        if (!HasValidAuthentication(configuration.IntegratedSecurity, configuration.DatabaseCredentialReference))
         {
             throw new ArgumentException("Authentication requires either integrated security or a named local credential.");
         }
     }
+
+    /// <summary>
+    /// The one rule for how a task authenticates, shared by every task that connects to a database: integrated security carries no credential
+    /// reference, anything else carries exactly one short name (letters, digits, '_' and '-') that the agent resolves locally.
+    /// </summary>
+    internal static bool HasValidAuthentication(bool integratedSecurity, string? credentialReference) =>
+        integratedSecurity
+            ? credentialReference is null
+            : !string.IsNullOrWhiteSpace(credentialReference)
+                && credentialReference.Length <= 64
+                && credentialReference.All(character => char.IsAsciiLetterOrDigit(character) || character is '_' or '-');
+
     private static BackupOptionMode ParsePolicy(string value) => value switch
     {
         "Disabled" => BackupOptionMode.Off,

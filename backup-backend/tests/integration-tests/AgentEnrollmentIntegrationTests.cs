@@ -34,6 +34,15 @@ public sealed class AgentEnrollmentIntegrationTests(PostgreSqlFixture fixture) :
         var entry = Assert.Single(System.Text.Json.JsonDocument.Parse(listText).RootElement.EnumerateArray());
         Assert.Equal(tokenId, entry.GetProperty("tokenId").GetGuid());
         Assert.Equal(setup.Account.UserId.Value, entry.GetProperty("createdBy").GetGuid());
+        using var activeStatus = await setup.Admin.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/agent-enrollment-tokens/{tokenId}");
+        Assert.Equal(HttpStatusCode.OK, activeStatus.StatusCode);
+        var active = AgentWorld.ReadJson(activeStatus);
+        Assert.Equal(tokenId, active.GetProperty("tokenId").GetGuid());
+        Assert.Equal("Active", active.GetProperty("state").GetString());
+        Assert.True(active.GetProperty("expiresAt").GetDateTimeOffset() > world.Clock.GetUtcNow());
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, active.GetProperty("agentId").ValueKind);
+        Assert.Equal(4, active.EnumerateObject().Count());
+        Assert.DoesNotContain(secret, await activeStatus.Content.ReadAsStringAsync(), StringComparison.Ordinal);
 
         using var revoke = await setup.Admin.SendAsync(HttpMethod.Delete, $"/api/tenants/{setup.Tenant.Id.Value}/agent-enrollment-tokens/{tokenId}");
         Assert.Equal(HttpStatusCode.NoContent, revoke.StatusCode);
@@ -41,6 +50,10 @@ public sealed class AgentEnrollmentIntegrationTests(PostgreSqlFixture fixture) :
         Assert.Empty(AgentWorld.ReadJson(afterRevoke).EnumerateArray());
         using var again = await setup.Admin.SendAsync(HttpMethod.Delete, $"/api/tenants/{setup.Tenant.Id.Value}/agent-enrollment-tokens/{tokenId}");
         Assert.Equal(HttpStatusCode.NotFound, again.StatusCode);
+        using var revokedStatus = await setup.Admin.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/agent-enrollment-tokens/{tokenId}");
+        Assert.Equal(HttpStatusCode.OK, revokedStatus.StatusCode);
+        Assert.Equal("Revoked", AgentWorld.ReadJson(revokedStatus).GetProperty("state").GetString());
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, AgentWorld.ReadJson(revokedStatus).GetProperty("agentId").ValueKind);
 
         using var enroll = await world.PostEnrollAsync(AgentWorld.EnrollmentRequest(token));
         Assert.Equal(HttpStatusCode.Unauthorized, enroll.StatusCode);
@@ -81,6 +94,7 @@ public sealed class AgentEnrollmentIntegrationTests(PostgreSqlFixture fixture) :
         using var second = await world.PostEnrollAsync(AgentWorld.EnrollmentRequest(token));
         Assert.Equal(HttpStatusCode.Created, first.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, second.StatusCode);
+        Assert.Equal("enrollment_token_consumed", AgentWorld.ReadJson(second).GetProperty("error").GetString());
         await using var context = fixture.CreatePlatformContext();
         Assert.Equal(1, await context.Agents.CountAsync(agent => agent.TenantId == setup.Tenant.Id));
         var row = await context.EnrollmentTokens.SingleAsync(candidate => candidate.TenantId == setup.Tenant.Id);
@@ -88,6 +102,10 @@ public sealed class AgentEnrollmentIntegrationTests(PostgreSqlFixture fixture) :
         Assert.Equal(AgentWorld.ReadJson(first).GetProperty("agentId").GetGuid(), row.ConsumedByAgentId!.Value);
         using var list = await setup.Admin.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/agent-enrollment-tokens");
         Assert.Empty(AgentWorld.ReadJson(list).EnumerateArray());
+        using var status = await setup.Admin.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/agent-enrollment-tokens/{row.Id}");
+        Assert.Equal(HttpStatusCode.OK, status.StatusCode);
+        Assert.Equal("Consumed", AgentWorld.ReadJson(status).GetProperty("state").GetString());
+        Assert.Equal(row.ConsumedByAgentId.Value, AgentWorld.ReadJson(status).GetProperty("agentId").GetGuid());
     }
 
     [Fact]
@@ -111,6 +129,13 @@ public sealed class AgentEnrollmentIntegrationTests(PostgreSqlFixture fixture) :
                                join agent in context.Agents on credential.AgentId equals agent.Id
                                where agent.TenantId == setup.Tenant.Id
                                select credential).CountAsync());
+        var consumed = await context.EnrollmentTokens.SingleAsync(row => row.TenantId == setup.Tenant.Id);
+        var winner = await context.Agents.SingleAsync(agent => agent.TenantId == setup.Tenant.Id);
+        Assert.Equal(winner.Id, consumed.ConsumedByAgentId);
+        using var tokenStatus = await setup.Admin.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/agent-enrollment-tokens/{consumed.Id}");
+        Assert.Equal(HttpStatusCode.OK, tokenStatus.StatusCode);
+        Assert.Equal("Consumed", AgentWorld.ReadJson(tokenStatus).GetProperty("state").GetString());
+        Assert.Equal(winner.Id.Value, AgentWorld.ReadJson(tokenStatus).GetProperty("agentId").GetGuid());
     }
 
     [Fact]
@@ -118,7 +143,7 @@ public sealed class AgentEnrollmentIntegrationTests(PostgreSqlFixture fixture) :
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var setup = await world.CreateTenantAsync();
-        var (_, token) = await world.CreateTokenAsync(setup, lifetimeMinutes: 5);
+        var (tokenId, token) = await world.CreateTokenAsync(setup, lifetimeMinutes: 5);
         world.Clock.Advance(TimeSpan.FromMinutes(4));
         using var list = await setup.Admin.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/agent-enrollment-tokens");
         Assert.Single(AgentWorld.ReadJson(list).EnumerateArray());
@@ -127,6 +152,46 @@ public sealed class AgentEnrollmentIntegrationTests(PostgreSqlFixture fixture) :
         Assert.Empty(AgentWorld.ReadJson(expiredList).EnumerateArray());
         using var enroll = await world.PostEnrollAsync(AgentWorld.EnrollmentRequest(token));
         Assert.Equal(HttpStatusCode.Unauthorized, enroll.StatusCode);
+        Assert.Equal("enrollment_token_expired", AgentWorld.ReadJson(enroll).GetProperty("error").GetString());
+        using var status = await setup.Admin.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/agent-enrollment-tokens/{tokenId}");
+        Assert.Equal(HttpStatusCode.OK, status.StatusCode);
+        Assert.Equal("Expired", AgentWorld.ReadJson(status).GetProperty("state").GetString());
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, AgentWorld.ReadJson(status).GetProperty("agentId").ValueKind);
+    }
+
+    [Theory]
+    [InlineData(EnrollmentTokenState.Active)]
+    [InlineData(EnrollmentTokenState.Expired)]
+    [InlineData(EnrollmentTokenState.Consumed)]
+    [InlineData(EnrollmentTokenState.Revoked)]
+    public async Task WrongSecretsAndUnknownIdsReturnTheSameFailureRegardlessOfState(EnrollmentTokenState state)
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var setup = await world.CreateTenantAsync();
+        var (tokenId, token) = await world.CreateTokenAsync(setup, lifetimeMinutes: 5);
+        if (state == EnrollmentTokenState.Expired)
+        {
+            world.Clock.Advance(TimeSpan.FromMinutes(5));
+        }
+        else if (state == EnrollmentTokenState.Consumed)
+        {
+            using var enrolled = await world.PostEnrollAsync(AgentWorld.EnrollmentRequest(token));
+            Assert.Equal(HttpStatusCode.Created, enrolled.StatusCode);
+        }
+        else if (state == EnrollmentTokenState.Revoked)
+        {
+            using var revoked = await setup.Admin.SendAsync(HttpMethod.Delete,
+                $"/api/tenants/{setup.Tenant.Id.Value}/agent-enrollment-tokens/{tokenId}");
+            Assert.Equal(HttpStatusCode.NoContent, revoked.StatusCode);
+        }
+        var forged = AgentSecretReference.Format(tokenId, new string('Z', AgentSecretReference.SecretLength));
+        var unknown = AgentSecretReference.Format(Guid.NewGuid(), new string('Z', AgentSecretReference.SecretLength));
+        using var wrongResponse = await world.PostEnrollAsync(AgentWorld.EnrollmentRequest(forged));
+        using var unknownResponse = await world.PostEnrollAsync(AgentWorld.EnrollmentRequest(unknown));
+        Assert.Equal(HttpStatusCode.Unauthorized, wrongResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, unknownResponse.StatusCode);
+        Assert.Equal("invalid_enrollment_token", AgentWorld.ReadJson(wrongResponse).GetProperty("error").GetString());
+        Assert.Equal(await unknownResponse.Content.ReadAsStringAsync(), await wrongResponse.Content.ReadAsStringAsync());
     }
 
     [Theory]
@@ -160,6 +225,12 @@ public sealed class AgentEnrollmentIntegrationTests(PostgreSqlFixture fixture) :
         Assert.Equal(HttpStatusCode.Forbidden, listA.StatusCode);
         using var listB = await tenantB.Admin.GetAsync($"/api/tenants/{tenantB.Tenant.Id.Value}/agent-enrollment-tokens");
         Assert.Empty(AgentWorld.ReadJson(listB).EnumerateArray());
+        using var statusA = await tenantB.Admin.GetAsync($"/api/tenants/{tenantA.Tenant.Id.Value}/agent-enrollment-tokens/{tokenId}");
+        using var statusB = await tenantB.Admin.GetAsync($"/api/tenants/{tenantB.Tenant.Id.Value}/agent-enrollment-tokens/{tokenId}");
+        using var unknown = await tenantA.Admin.GetAsync($"/api/tenants/{tenantA.Tenant.Id.Value}/agent-enrollment-tokens/{Guid.NewGuid()}");
+        Assert.Equal(HttpStatusCode.Forbidden, statusA.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, statusB.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
 
         // The token always yields an agent of its own tenant; the request cannot choose another one.
         using var enroll = await world.PostEnrollAsync(AgentWorld.EnrollmentRequest(token));
@@ -198,6 +269,7 @@ public sealed class AgentEnrollmentIntegrationTests(PostgreSqlFixture fixture) :
         await world.SetEnrollmentAsync(setup.Tenant, false);
         using var blocked = await world.PostEnrollAsync(AgentWorld.EnrollmentRequest(token));
         Assert.Equal(HttpStatusCode.Forbidden, blocked.StatusCode);
+        Assert.Equal("enrollment_disabled", AgentWorld.ReadJson(blocked).GetProperty("error").GetString());
         await world.SetEnrollmentAsync(setup.Tenant, true);
         using var allowed = await world.PostEnrollAsync(AgentWorld.EnrollmentRequest(token));
         Assert.Equal(HttpStatusCode.Created, allowed.StatusCode);

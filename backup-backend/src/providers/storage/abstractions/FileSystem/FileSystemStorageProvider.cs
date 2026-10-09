@@ -24,7 +24,7 @@ namespace BackupPlatform.StorageProviders.Abstractions.FileSystem;
 /// after start-up is detected too. Directories below the root are created on demand.</description></item>
 /// <item><description><b>Messages.</b> Exception messages and <see cref="StorageLocation"/>s never contain a file system path.</description></item>
 /// </list>
-/// Advertised capabilities are exactly <see cref="StorageCapabilityIds.Delete"/>, <see cref="StorageCapabilityIds.AtomicPublish"/>,
+/// Advertised capabilities are exactly <see cref="StorageCapabilityIds.Read"/>, <see cref="StorageCapabilityIds.Delete"/>, <see cref="StorageCapabilityIds.AtomicPublish"/>,
 /// <see cref="StorageCapabilityIds.Enumerate"/> and <see cref="StorageCapabilityIds.VerifyAbsence"/>. The last one is honest because a local or
 /// mounted file system reports the truth at once: after <see cref="File.Delete(string)"/> returns, <see cref="File.Exists"/> is false (no eventual
 /// consistency). Checksums are verified by reading back; resume, multipart, immutability and capacity queries are not implemented.
@@ -32,6 +32,18 @@ namespace BackupPlatform.StorageProviders.Abstractions.FileSystem;
 public abstract class FileSystemStorageProvider : IStorageProvider
 {
     private const int BlockSize = 1024 * 1024;
+
+    /// <summary>
+    /// What every file-system provider honestly supports. One definition, so a catalog that describes the provider before an instance exists (a
+    /// connection descriptor) can never disagree with the instance.
+    /// </summary>
+    public static StorageCapabilities FileSystemCapabilities { get; } = new([
+        StorageCapabilityIds.Delete,
+        StorageCapabilityIds.AtomicPublish,
+        StorageCapabilityIds.Enumerate,
+        StorageCapabilityIds.VerifyAbsence,
+        StorageCapabilityIds.Read
+    ]);
 
     private const string TemporarySuffix = ".partial";
     private const int TemporaryTokenLength = 32;
@@ -72,12 +84,7 @@ public abstract class FileSystemStorageProvider : IStorageProvider
         _root = FileSystemStorageRoot.Normalize(rootDirectory);
         _rootWithSeparator = _root.EndsWith(Path.DirectorySeparatorChar) ? _root : _root + Path.DirectorySeparatorChar;
         _keyPrefix = [.. (keyPrefix ?? []).Select(ValidatePrefixSegment)];
-        Capabilities = new StorageCapabilities([
-            StorageCapabilityIds.Delete,
-            StorageCapabilityIds.AtomicPublish,
-            StorageCapabilityIds.Enumerate,
-            StorageCapabilityIds.VerifyAbsence
-        ]);
+        Capabilities = FileSystemCapabilities;
     }
 
     public StorageProviderId Id { get; }
@@ -201,6 +208,31 @@ public abstract class FileSystemStorageProvider : IStorageProvider
         {
             throw StorageIoErrors.Map(exception);
         }
+    }
+
+    /// <summary>Opens the object file for a sequential read under the same containment rules as every other operation. Sharing is read-only so a concurrent verification can read it too.</summary>
+    public Task<Stream> OpenReadAsync(StorageObjectKey key, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        return Execute<Stream>(cancellationToken, () =>
+        {
+            var path = ResolveCheckedPath(key);
+            try
+            {
+                return new FileStream(path, new FileStreamOptions
+                {
+                    Mode = FileMode.Open,
+                    Access = FileAccess.Read,
+                    Share = FileShare.Read,
+                    Options = FileOptions.Asynchronous | FileOptions.SequentialScan,
+                    BufferSize = 0
+                });
+            }
+            catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+            {
+                throw new StorageException(StorageFailureKind.NotFound, "The stored object does not exist.", exception);
+            }
+        });
     }
 
     /// <summary>Deletes only the object file. Directories created for its key are left in place (they hold no data, and removing them would race with concurrent writes into the same directory).</summary>

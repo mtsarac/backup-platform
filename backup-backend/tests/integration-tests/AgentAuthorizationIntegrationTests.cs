@@ -100,11 +100,12 @@ public sealed class AgentAuthorizationIntegrationTests(PostgreSqlFixture fixture
         var tenant = admin.Tenant.Id.Value;
         using var create = await session.SendAsync(HttpMethod.Post, $"/api/tenants/{tenant}/agent-enrollment-tokens");
         using var list = await session.GetAsync($"/api/tenants/{tenant}/agent-enrollment-tokens");
+        using var status = await session.GetAsync($"/api/tenants/{tenant}/agent-enrollment-tokens/{tokenId}");
         using var revokeToken = await session.SendAsync(HttpMethod.Delete, $"/api/tenants/{tenant}/agent-enrollment-tokens/{tokenId}");
         using var agents = await session.GetAsync($"/api/tenants/{tenant}/agents");
         using var revokeAgent = await session.SendAsync(HttpMethod.Post, $"/api/tenants/{tenant}/agents/{agent.AgentId}/revoke");
         Assert.Equal(HttpStatusCode.OK, agents.StatusCode);
-        Assert.All(new[] { create, list, revokeToken, revokeAgent }, response => Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode));
+        Assert.All(new[] { create, list, status, revokeToken, revokeAgent }, response => Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode));
         using var stillValid = await world.AgentMeAsync(agent.CredentialId, agent.Secret);
         Assert.Equal(HttpStatusCode.OK, stillValid.StatusCode);
     }
@@ -116,6 +117,7 @@ public sealed class AgentAuthorizationIntegrationTests(PostgreSqlFixture fixture
         var setup = await world.CreateTenantAsync(enrollmentEnabled: false);
         using var response = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/tenants/{setup.Tenant.Id.Value}/agent-enrollment-tokens");
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("enrollment_disabled", AgentWorld.ReadJson(response).GetProperty("error").GetString());
         await using var context = fixture.CreatePlatformContext();
         Assert.False(await context.EnrollmentTokens.AnyAsync(row => row.TenantId == setup.Tenant.Id));
 
@@ -124,6 +126,7 @@ public sealed class AgentAuthorizationIntegrationTests(PostgreSqlFixture fixture
         await world.SetEnrollmentAsync(setup.Tenant, false);
         using var disabledAgain = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/tenants/{setup.Tenant.Id.Value}/agent-enrollment-tokens");
         Assert.Equal(HttpStatusCode.Forbidden, disabledAgain.StatusCode);
+        Assert.Equal("enrollment_disabled", AgentWorld.ReadJson(disabledAgain).GetProperty("error").GetString());
     }
 
     [Fact]
@@ -146,12 +149,13 @@ public sealed class AgentAuthorizationIntegrationTests(PostgreSqlFixture fixture
         var tenant = setup.Tenant.Id.Value;
         using var create = await platform.SendAsync(HttpMethod.Post, $"/api/tenants/{tenant}/agent-enrollment-tokens");
         using var list = await platform.GetAsync($"/api/tenants/{tenant}/agent-enrollment-tokens");
+        using var status = await platform.GetAsync($"/api/tenants/{tenant}/agent-enrollment-tokens/{Guid.NewGuid()}");
         using var agents = await platform.GetAsync($"/api/tenants/{tenant}/agents");
         using var context = await platform.GetAsync($"/api/tenants/{tenant}/context");
         using var detail = await platform.GetAsync($"/api/tenants/{tenant}/agents/{Guid.NewGuid()}");
         using var policy = await platform.GetAsync($"/api/tenants/{tenant}/agent-enrollment");
         using var changePolicy = await platform.SendAsync(HttpMethod.Put, $"/api/tenants/{tenant}/agent-enrollment", new { enabled = false });
-        Assert.All(new[] { create, list, agents, context, detail, policy, changePolicy }, response => Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode));
+        Assert.All(new[] { create, list, status, agents, context, detail, policy, changePolicy }, response => Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode));
     }
 
     [Fact]

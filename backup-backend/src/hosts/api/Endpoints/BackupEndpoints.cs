@@ -148,11 +148,22 @@ public static class BackupEndpoints
             case BackupStartOutcome.SkippedOverlap:
                 // Never a silent skip: the caller learns that nothing was started and which run is in the way.
                 return Results.Conflict(new { error = "overlap_skipped", message = "The job's overlap policy is Skip and another run of this job is active; no run was started.", activeRunId = result.ActiveRunId });
+            case BackupStartOutcome.AdmissionDenied:
+                // The reason is a stable code the caller can show: nothing was started because of the tenant's subscription or quota.
+                return Results.Conflict(new { error = "admission_denied", code = result.DenialCode, message = AdmissionMessage(result.DenialCode) });
             default:
                 await HintAsync(push, result.Run!.AgentId, "WorkAvailable", logger);
                 return Results.Ok(BackupOrchestrator.ToView(result.Run));
         }
     }
+
+    private static string AdmissionMessage(string? code) => code switch
+    {
+        BackupAdmissionDenialCodes.SubscriptionRequired => "The tenant has no active subscription; no run was started.",
+        BackupAdmissionDenialCodes.StorageConnectionDisabled => "The job's storage connection is disabled; no run was started. Existing backups on it stay available.",
+        BackupAdmissionDenialCodes.StorageConnectionUnavailable => "The job's storage connection does not exist for this tenant and provider; no run was started.",
+        _ => "The tenant's storage quota is used up; no run was started."
+    };
 
     private static async Task<IResult> ListRunsAsync(Guid? jobId, Guid? agentId, string? status, string? trigger,
         DateTimeOffset? from, DateTimeOffset? to, int? page, int? pageSize,

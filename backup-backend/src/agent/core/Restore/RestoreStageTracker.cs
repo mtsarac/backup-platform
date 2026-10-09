@@ -1,0 +1,143 @@
+using BackupPlatform.BackupProviders.Abstractions.Database;
+
+namespace BackupPlatform.Agent.Core.Restore;
+
+/// <summary>
+/// The stage state machine of one restore execution; the same rules as <see cref="Backup.BackupStageTracker"/> with the restore vocabulary.
+/// Stages only move forward; a terminal stage (Completed, Failed, Cancelled) closes the timeline and nothing can follow it. Every transition
+/// is also reported as progress. The consumer of progress is untrusted for the purpose of execution: whatever it throws is swallowed, so
+/// reporting can never change an outcome. Providers report from their own threads, so every member takes the same lock; reports reach the
+/// consumer one at a time, in order.
+/// </summary>
+internal sealed class RestoreStageTracker
+{
+    private readonly object _gate = new();
+    private readonly List<RestoreStageRecord> _records = [];
+    private readonly IProgress<RestoreProgress>? _consumer;
+    private readonly TimeProvider _time;
+    private RestoreExecutionStage? _current;
+
+    public RestoreStageTracker(IProgress<RestoreProgress>? consumer, TimeProvider time)
+    {
+        ArgumentNullException.ThrowIfNull(time);
+        _consumer = consumer;
+        _time = time;
+    }
+
+    public RestoreExecutionStage? Current
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _current;
+            }
+        }
+    }
+
+    public IReadOnlyList<RestoreStageRecord> Records
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _records.ToArray();
+            }
+        }
+    }
+
+    /// <summary>Moves to <paramref name="stage"/>, which must come after the current one. Entering the current stage again is a no-op (a provider reports its stages itself).</summary>
+    public void Enter(RestoreExecutionStage stage)
+    {
+        if (!Enum.IsDefined(stage))
+        {
+            throw new ArgumentOutOfRangeException(nameof(stage), stage, "Unknown restore stage.");
+        }
+
+        lock (_gate)
+        {
+            if (_current == stage)
+            {
+                return;
+            }
+
+            if (IsTerminal(_current) || (_current is { } current && stage < current && !IsTerminal(stage)))
+            {
+                throw new InvalidOperationException($"A restore cannot move from {_current} to {stage}.");
+            }
+
+            var now = _time.GetUtcNow();
+            if (_records.Count > 0)
+            {
+                _records[^1] = _records[^1] with { FinishedAt = now };
+            }
+
+            _records.Add(new RestoreStageRecord(stage, now, IsTerminal(stage) ? now : null));
+            _current = stage;
+            Publish(new RestoreProgress(stage, stage == RestoreExecutionStage.Completed ? 100 : null, null, null, now));
+        }
+    }
+
+    /// <summary>Reports progress inside the current stage. Ignored for any other stage and once the timeline is closed.</summary>
+    public void Report(RestoreExecutionStage stage, double? percent, long? bytes, long? totalBytes)
+    {
+        lock (_gate)
+        {
+            if (IsTerminal(_current) || _current != stage)
+            {
+                return;
+            }
+
+            Publish(new RestoreProgress(
+                stage,
+                percent is { } value && !double.IsNaN(value) ? Math.Clamp(value, 0, 100) : null,
+                bytes is >= 0 ? bytes : null,
+                totalBytes is >= 0 ? totalBytes : null,
+                _time.GetUtcNow()));
+        }
+    }
+
+    /// <summary>
+    /// Forwards a provider's own progress: its stage changes are recorded (a provider owns PreparingTarget, Restoring and Finalizing) and its
+    /// numbers are passed on. Terminal stages belong to the pipeline and are ignored, as are stages that would go backwards.
+    /// </summary>
+    public void Forward(RestoreProgress progress)
+    {
+        ArgumentNullException.ThrowIfNull(progress);
+        if (IsTerminal(progress.Stage))
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            if (IsTerminal(_current) || (_current is { } current && progress.Stage < current))
+            {
+                return;
+            }
+
+            Enter(progress.Stage);
+            Report(progress.Stage, progress.Percent, progress.Bytes, progress.TotalBytes);
+        }
+    }
+
+    private static bool IsTerminal(RestoreExecutionStage? stage) =>
+        stage is RestoreExecutionStage.Completed or RestoreExecutionStage.Failed or RestoreExecutionStage.Cancelled;
+
+    private void Publish(RestoreProgress progress)
+    {
+        if (_consumer is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _consumer.Report(progress);
+        }
+        // Progress consumers are untrusted: nothing they throw may reach the execution.
+        catch (Exception)
+        {
+        }
+    }
+}

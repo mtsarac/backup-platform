@@ -65,6 +65,9 @@ public sealed record DatabaseBackupPipelineRequest
     /// <summary>Which registered storage provider receives the artifact.</summary>
     public StorageProviderId Storage { get; }
 
+    /// <summary>A task-scoped provider; used for authenticated backend-relayed storage without host-wide credentials.</summary>
+    public IStorageProvider? StorageOverride { get; init; }
+
     /// <summary>The directory-like key prefix (tenant, job, database, ...) under which the artifact is stored; the artifact file name is appended.</summary>
     public StorageObjectKey StoragePrefix { get; }
 

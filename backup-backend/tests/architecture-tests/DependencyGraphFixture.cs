@@ -130,6 +130,7 @@ public sealed class DependencyGraphFixture : IAsyncLifetime
             .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var assemblies = Array.Empty<string>();
         var types = Array.Empty<string>();
+        var assemblyFile = string.Empty;
         if (configuration == "Release")
         {
             var assemblyPath = document.RootElement.GetProperty("Properties").GetProperty("TargetPath").GetString()
@@ -139,6 +140,7 @@ public sealed class DependencyGraphFixture : IAsyncLifetime
                 assemblyPath = Path.Combine(Path.GetDirectoryName(project)!, assemblyPath);
             }
             Assert.True(File.Exists(assemblyPath), $"Build the Release solution before architecture tests; missing assembly: {assemblyPath}.");
+            assemblyFile = assemblyPath;
             using var stream = File.OpenRead(assemblyPath);
             using var reader = new PEReader(stream);
             var metadata = reader.GetMetadataReader();
@@ -151,7 +153,7 @@ public sealed class DependencyGraphFixture : IAsyncLifetime
             }).ToArray();
         }
         return new ProjectNode(Path.GetFileNameWithoutExtension(project), Path.GetRelativePath(root, project).Replace('\\', '/'),
-            references, packages, frameworks, assemblies, types);
+            references, packages, frameworks, assemblies, types, assemblyFile);
     }
 }
 
@@ -162,4 +164,5 @@ public sealed record ProjectNode(
     string[] Packages,
     string[] Frameworks,
     string[] Assemblies,
-    string[] Types);
+    string[] Types,
+    string AssemblyPath = "");

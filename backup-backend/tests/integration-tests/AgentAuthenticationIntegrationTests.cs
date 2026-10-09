@@ -164,7 +164,9 @@ public sealed class AgentAuthenticationIntegrationTests(PostgreSqlFixture fixtur
         foreach (var path in new[]
         {
             "/api/me", "/api/me/tenants", $"/api/tenants/{tenant}/context", $"/api/tenants/{tenant}/agents",
-            $"/api/tenants/{tenant}/agent-enrollment-tokens", $"/api/platform/tenants/{tenant}/agent-enrollment"
+            $"/api/tenants/{tenant}/agent-enrollment-tokens",
+            $"/api/tenants/{tenant}/agent-enrollment-tokens/{Guid.NewGuid()}",
+            $"/api/platform/tenants/{tenant}/agent-enrollment"
         })
         {
             using var response = await world.AgentCallAsync(HttpMethod.Get, path, agent.CredentialId, agent.Secret);

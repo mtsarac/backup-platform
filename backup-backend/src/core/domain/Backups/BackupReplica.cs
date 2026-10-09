@@ -18,13 +18,26 @@ public enum BackupReplicaStatus
 
 public enum BackupStorageExecutionLocation { Backend = 1, Agent = 2 }
 
+/// <summary>
+/// The one definition of whether a replica still holds bytes in its storage. Everything that totals stored data (quota accounting, the
+/// dashboard) asks here instead of listing statuses itself. A replica occupies storage from the moment it is published until its absence
+/// has been verified (<see cref="BackupReplicaStatus.Deleted"/>): a soft delete, a delete in flight and a failed delete all still occupy it.
+/// </summary>
+public static class BackupReplicaStorage
+{
+    public static readonly IReadOnlyList<BackupReplicaStatus> OccupyingStatuses =
+        [BackupReplicaStatus.Available, BackupReplicaStatus.DeletePending, BackupReplicaStatus.Deleting, BackupReplicaStatus.DeleteFailed];
+
+    public static bool Occupies(BackupReplicaStatus status) => status != BackupReplicaStatus.Deleted;
+}
+
 public sealed class BackupReplica : ITenantOwned
 {
     private BackupReplica() { TenantId = null!; StorageProvider = null!; StorageTarget = null!; Key = null!; Checksum = null!; ChecksumAlgorithm = null!; VerificationState = null!; VerificationMethod = null!; }
     public BackupReplica(Guid id, TenantId tenantId, Guid artifactId, string storageProvider, string storageTarget,
         string key, long sizeBytes, string checksum, string checksumAlgorithm, string verificationState,
         string verificationMethod, DateTimeOffset createdAt, DateTimeOffset? verifiedAt,
-        BackupStorageExecutionLocation? executionLocation = null, Guid? owningAgentId = null)
+        BackupStorageExecutionLocation? executionLocation = null, Guid? owningAgentId = null, Guid? storageConnectionId = null)
     {
         BackupGuard.Id(id);
         BackupGuard.Id(artifactId);
@@ -44,6 +57,8 @@ public sealed class BackupReplica : ITenantOwned
             throw new ArgumentException("Agent replicas require a local provider and an owning agent.");
         ExecutionLocation = location;
         OwningAgentId = location == BackupStorageExecutionLocation.Agent ? owningAgentId : null;
+        if (storageConnectionId == Guid.Empty) throw new ArgumentException("A storage connection identifier must not be empty.");
+        StorageConnectionId = storageConnectionId ?? Guid.Empty;
         Id = id;
         TenantId = tenantId;
         ArtifactId = artifactId;
@@ -66,6 +81,11 @@ public sealed class BackupReplica : ITenantOwned
     public string StorageTarget { get; private set; }
     public BackupStorageExecutionLocation ExecutionLocation { get; private set; }
     public Guid? OwningAgentId { get; private set; }
+    /// <summary>
+    /// The storage connection (destination) this copy lives on. Always set before a replica is saved (the context refuses to persist one without it);
+    /// <see cref="Guid.Empty"/> only means "not assigned yet" on an object that was never persisted. It never changes the provider, target or key.
+    /// </summary>
+    public Guid StorageConnectionId { get; private set; }
     public string Key { get; private set; }
     public long SizeBytes { get; private set; }
     public string Checksum { get; private set; }
@@ -107,6 +127,12 @@ public sealed class BackupReplica : ITenantOwned
     /// begun the bytes may already be partly gone, so from Deleting on the replica is not usable.
     /// </summary>
     public bool IsUsable => Status is BackupReplicaStatus.Available or BackupReplicaStatus.DeletePending;
+
+    /// <summary>
+    /// Whether a restore may read this replica at <paramref name="now"/>: Available, or DeletePending while its grace period has not ended.
+    /// The same condition retention uses to decide a replica may still be recovered; once the delete is due, claimable or begun it is not.
+    /// </summary>
+    public bool IsRestorable(DateTimeOffset now) => Status == BackupReplicaStatus.Available || (Status == BackupReplicaStatus.DeletePending && DeleteAfter > now);
 
     /// <summary>Available to DeletePending. False (and no change) in any other state, so concurrent requesters cannot both win.</summary>
     internal bool RequestDelete(DateTimeOffset now, BackupDeleteReason reason, TimeSpan grace, Guid? requestedBy)

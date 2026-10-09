@@ -31,6 +31,7 @@ public sealed class MsSqlScheduledAgentSmokeTests(PostgreSqlFixture database, IT
         await sql.InitializeAsync();
         await using var world = await AgentWorld.CreateAsync(database, clock: new MutableClock(live: true), kestrel: true, configuration: Backend(seconds: false));
         var tenant = await world.CreateTenantAsync();
+        await world.EntitleAsync(tenant.Tenant);
         var agent = await world.EnrollAsync(tenant);
         await using var host = await AgentHostSmokeProcess.StartAsync(world, agent, output.WriteLine);
         await WaitForAgentAsync(world, agent, host);
@@ -95,6 +96,7 @@ public sealed class MsSqlScheduledAgentSmokeTests(PostgreSqlFixture database, IT
         await using (var first = await AgentWorld.CreateAsync(database, clock: clock, kestrel: true, configuration: Backend(seconds: false)))
         {
             tenant = await first.CreateTenantAsync();
+            await first.EntitleAsync(tenant.Tenant);
             agent = await first.EnrollAsync(tenant);
             await using var firstHost = await AgentHostSmokeProcess.StartAsync(first, agent, output.WriteLine);
             await WaitForAgentAsync(first, agent, firstHost);
@@ -144,6 +146,7 @@ public sealed class MsSqlScheduledAgentSmokeTests(PostgreSqlFixture database, IT
         await sql.InitializeAsync();
         await using var world = await AgentWorld.CreateAsync(database, clock: new MutableClock(live: true), kestrel: true, configuration: Backend(seconds: true));
         var tenant = await world.CreateTenantAsync();
+        await world.EntitleAsync(tenant.Tenant);
         var agent = await world.EnrollAsync(tenant);
         await using var host = await AgentHostSmokeProcess.StartAsync(world, agent, output.WriteLine);
         await WaitForAgentAsync(world, agent, host);
@@ -188,6 +191,7 @@ public sealed class MsSqlScheduledAgentSmokeTests(PostgreSqlFixture database, IT
         await sql.InitializeAsync();
         await using var world = await AgentWorld.CreateAsync(database, clock: new MutableClock(live: true), kestrel: true, configuration: Backend(seconds: true));
         var tenant = await world.CreateTenantAsync();
+        await world.EntitleAsync(tenant.Tenant);
         var agent = await world.EnrollAsync(tenant);
         await using var host = await AgentHostSmokeProcess.StartAsync(world, agent, output.WriteLine);
         await WaitForAgentAsync(world, agent, host);

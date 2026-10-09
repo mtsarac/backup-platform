@@ -72,6 +72,7 @@ public sealed class ScheduledBackupHostTests(PostgreSqlFixture database, ITestOu
         {
             var clock = new MutableClock();
             var agent = await kit.Runs.AddAgentAsync();
+            await ManagedService.ManagedServiceTestSupport.GrantLegacyUnlimitedAsync(database, agent.TenantId);
             var job = await kit.AddJobAsync(agent, from: clock.GetUtcNow());
             var next = job.Schedule!.NextOccurrenceAfter(clock.GetUtcNow())!.Value;
             using var probe = new SchedulerLifecycleProbe();

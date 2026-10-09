@@ -1,6 +1,13 @@
 import { ApiError } from './client'
 
 const messages: Record<string, string> = {
+  replica_unavailable: 'Replica şu anda indirme için kullanılamıyor.',
+  replica_not_found: 'Replica bulunamadı veya bu Backup altında erişilemiyor.',
+  storage_read_not_supported: 'Storage Provider güvenli indirmeyi desteklemiyor.',
+  integrity_mismatch: 'Dosya checksum doğrulaması başarısız. İndirme tamamlanmadı.',
+  download_expired: 'İndirme oturumunun süresi doldu. Yeni bir indirme başlatın.',
+  download_interrupted: 'İndirme kesildi. Yeni bir indirme başlatın.',
+  transfer_failed: 'Dosya aktarımı başarısız oldu. Yeni bir indirme başlatın.',
   DatabaseUnavailable: 'Database bağlantısı geçici olarak kullanılamıyor.',
   DatabaseNotFound: 'Database bulunamadı. Kaynak yapılandırmasını kontrol edin.',
   not_cancellable: 'Silme iptal edilemez; fiziksel silme başlamış veya bekleyen bir istek yok.',
@@ -29,6 +36,21 @@ const messages: Record<string, string> = {
   InternalError: 'İşlem tamamlanamadı. Sistem yöneticisiyle iletişime geçin.',
   Cancelled: 'İşlem iptal edildi.',
   overlap_skipped: 'Backup zaten çalışıyor.',
+  quota_exceeded: 'Depolama kotası doldu; yeni backup başlatılamadı. Mevcut backup\'lar silinmedi ve geri yüklenebilir.',
+  subscription_required: 'Etkin bir abonelik bulunmadığı için yeni backup başlatılamadı.',
+  storage_connection_disabled: 'Hedef depolama bağlantısı devre dışı; yeni backup başlatılamaz.',
+  storage_connection_unavailable: 'Hedef depolama bağlantısı bulunamadı veya bu Job\'un Storage Provider\'ına ait değil; yeni backup başlatılamaz.',
+  storage_connection_not_found: 'Depolama bağlantısı bulunamadı. Liste güncel olmayabilir.',
+  storage_connection_name_taken: 'Bu ada sahip bir depolama bağlantısı zaten var.',
+  administratively_disabled: 'Bağlantı platform tarafından kilitlendi. Tenant tercihi bu kilidi kaldıramaz; platform yöneticisine başvurun.',
+  connection_limit_reached: 'Bu Storage Provider için bağlantı sınırına ulaşıldı.',
+  platform_managed: 'Platform yönetimli bağlantıyı yalnızca platform yöneticisi değiştirebilir.',
+  tenant_managed: 'Tenant yönetimli bağlantı için bu işlemi yalnızca tenant yöneticisi yapabilir.',
+  platform_managed_provider: 'Bu Storage Provider yalnızca platform tarafından yönetilir; tenant bağlantı ekleyemez.',
+  connection_in_use: 'Bağlantı hâlâ Replica veya Backup Job tarafından kullanılıyor; silinemez.',
+  provider_not_available: 'Bu Storage Provider henüz kullanılamıyor.',
+  secrets_not_supported: 'Bu Storage Provider kimlik bilgisi kabul etmiyor.',
+  unknown_field: 'Bu Storage Provider için tanımlı olmayan bir alan gönderildi.',
   job_overlap: 'Bu Job için başka bir backup çalışıyor.',
   attempts_exhausted: 'İzin verilen toplam attempt sayısına ulaşıldı.',
   succeeded: 'Başarılı backup tekrar denenemez.',
@@ -44,7 +66,59 @@ const messages: Record<string, string> = {
   deletion_in_progress: 'Fiziksel silme başladı; artık iptal edilemez.',
   administrator_required: 'Saklama politikasını yalnızca Owner / Admin değiştirebilir.',
   conflicting_policy: 'Zamanlama ayarları birbiriyle çakışıyor. Alanları kontrol edin.',
+  already_member: 'Bu kullanıcı zaten tenant üyesi.',
+  user_not_found: 'Kullanıcı bulunamadı.',
+  tenant_not_found: 'Tenant bulunamadı.',
+  membership_not_found: 'Tenant üyeliği bulunamadı. Liste güncel olmayabilir.',
+  login_taken: 'Bu kullanıcı adı zaten kullanılıyor.',
+  agent_not_found: 'Agent bulunamadı.',
+  enrollment_disabled: 'Yeni Agent kaydı kapalı. Agent kaydı sayfasından kayıt iznini açın.',
+  invalid_enrollment_token: 'Kayıt token’ı geçersiz.',
+  enrollment_token_expired: 'Kayıt token’ının süresi doldu. Yeni bir token oluşturun.',
+  enrollment_token_consumed: 'Kayıt token’ı zaten kullanılmış.',
+  token_revoked: 'Kayıt token’ı iptal edilmiş.',
+  invalid_value: 'Girilen değer geçersiz.',
+  required: 'Zorunlu bir alan boş bırakıldı.',
+  too_long: 'Girilen değer çok uzun.',
+  invalid_length: 'Girilen değerin uzunluğu geçersiz.',
+  plan_not_found: 'Plan bulunamadı. Liste güncel olmayabilir.',
+  plan_name_taken: 'Bu plan adı zaten kullanılıyor.',
+  system_plan_immutable: 'Sistem planı değiştirilemez.',
+  concurrent_update: 'Plan başka bir işlemle aynı anda değiştirildi. Sayfayı yenileyip tekrar deneyin.',
+  plan_disabled: 'Bu plan devre dışı; yeni atamalarda seçilemez.',
+  plan_already_assigned: 'Tenant zaten bu planı kullanıyor.',
+  subscription_not_found: 'Tenant için abonelik bulunamadı.',
+  subscription_not_active: 'Abonelik etkin değil; askıya alınamaz.',
+  subscription_not_suspended: 'Abonelik askıda değil; yeniden etkinleştirilemez.',
+  subscription_not_open: 'Abonelik sona ermiş; yalnızca yeni bir plan atanabilir.',
+  subscription_expired: 'Abonelik süresi dolmuş; yalnızca yeni bir plan atanabilir.',
+  invalid_kind: 'Limit türü geçersiz.',
+  unexpected: 'Bu limit türü için bayt değeri girilemez.',
+  out_of_range: 'Girilen değer izin verilen aralığın dışında.',
+  ambiguous: 'Sınırlı boyut ile limitsiz seçeneği birlikte kullanılamaz.',
+  invalid_characters: 'Girilen değer geçersiz karakterler içeriyor.',
+  platform_admin_required: 'Platform Administration için PlatformAdmin yetkisi gerekir.',
+  quota_policy_not_found: 'Kota politikası bulunamadı.',
+  quota_policy_key_taken: 'Bu kota politikası anahtarı zaten kullanılıyor.',
+  quota_policy_disabled: 'Bu kota politikası devre dışı; plana atanamaz.',
+  default_policy_required: 'Varsayılan kota politikası devre dışı bırakılamaz.',
+  unsupported_scope_kind: 'Bu kapsam türü henüz desteklenmiyor.',
+  support_access_denied: 'Bu destek oturumu üzerinden erişim reddedildi.',
+  session_expired: 'Destek oturumunun süresi doldu.',
+  session_closed: 'Destek oturumu kapatıldı.',
+  session_revoked: 'Destek erişimi geri alındı.',
+  permission_missing: 'Destek oturumunda bu işlem için gereken izin yok.',
+  not_session_owner: 'Yalnızca destek oturumunu açan PlatformAdmin müşteri verilerine erişebilir ve oturumu kapatabilir.',
+  replace_forbidden: 'Destek erişimi yalnızca yeni Database geri yüklemeye izin verir; mevcut Database üzerine yazılamaz.',
+  active_session_exists: 'Bu tenant için zaten etkin bir destek oturumunuz var.',
+  support_unavailable: 'Destek erişimi güvenli audit kaydı oluşturulamadığı için kullanılamıyor. Hiçbir erişim açılmadı.',
+  support_session_not_found: 'Destek oturumu bulunamadı.',
+  session_not_active: 'Destek oturumu artık etkin değil.',
+  idempotency_conflict: 'Bu istek anahtarı farklı bir işlem için kullanıldı. Formu kapatıp yeniden açın.',
+  view_required: 'Download ve Restore izinleri Backup metadata görüntüleme iznini gerektirir.',
 }
+// Codes whose text must win over the generic 403/404 wording.
+const statusSpecificCodes: Record<string, true> = { tenant_not_found: true, user_not_found: true, membership_not_found: true, agent_not_found: true, plan_not_found: true, quota_policy_not_found: true, subscription_not_found: true, platform_admin_required: true, enrollment_disabled: true, storage_connection_not_found: true, platform_managed_provider: true }
 export function failureMessage(code?: string | null): string {
   if (!code) return 'İşlem başarısız oldu.'
   return messages[code] ?? (/^[A-Za-z0-9_.-]{1,80}$/.test(code) ? `İşlem başarısız oldu (${code}).` : 'İşlem başarısız oldu.')
@@ -52,10 +126,14 @@ export function failureMessage(code?: string | null): string {
 export function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     if (error.status === 401) return 'Oturumunuz sona erdi. Yeniden giriş yapın.'
+    const code = error.reason ?? error.code
+    if (error.code === 'support_access_denied') return failureMessage(code)
+    if (error.code === 'support_session_not_found' || error.code === 'not_session_owner' || error.code === 'replace_forbidden' || error.code === 'support_unavailable') return failureMessage(code)
+    if ((error.status === 403 || error.status === 404) && code && Object.hasOwn(statusSpecificCodes, code)) return messages[code]
     if (error.status === 403) return 'Bu işlem için yetkiniz yok.'
     if (error.status === 404) return 'Kayıt bulunamadı veya bu tenant altında erişilemiyor.'
     if (error.status >= 500) return 'Sunucu isteği tamamlayamadı. Daha sonra tekrar deneyin.'
-    return failureMessage(error.reason ?? error.code)
+    return failureMessage(code)
   }
   return 'Sunucuya ulaşılamadı. Bağlantınızı kontrol edip tekrar deneyin.'
 }

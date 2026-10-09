@@ -15,7 +15,9 @@ public enum BackupOccurrenceOutcome
     /// <summary>A later occurrence became due before this one ran; only the most recent eligible occurrence is acted on, so it was dropped.</summary>
     MissedSuperseded = 4,
     /// <summary>The job or its schedule was disabled when the occurrence became due.</summary>
-    JobDisabled = 5
+    JobDisabled = 5,
+    /// <summary>The commercial layer refused a new run for it (subscription or quota). Nothing was created; the reason is the denial code.</summary>
+    AdmissionDenied = 6
 }
 
 /// <summary>Stable codes that explain an occurrence outcome.</summary>
@@ -28,6 +30,20 @@ public static class BackupOccurrenceReasons
     public const string SupersededByLater = "superseded_by_later_occurrence";
     public const string JobDisabled = "job_disabled";
     public const string ScheduleDisabled = "schedule_disabled";
+    // A denied occurrence's reason is the admission denial code itself (BackupAdmissionDenialCodes), so the explanation a user sees is the same everywhere.
+}
+
+/// <summary>Why a NEW backup run was refused. Stable, user-visible codes; a retry attempt of an already admitted run is never refused.</summary>
+public static class BackupAdmissionDenialCodes
+{
+    public const string SubscriptionRequired = "subscription_required";
+    public const string QuotaExceeded = "quota_exceeded";
+    /// <summary>The job's storage connection is disabled: new runs may not target it. Existing replicas on it are unaffected.</summary>
+    public const string StorageConnectionDisabled = "storage_connection_disabled";
+    /// <summary>The job names a storage connection that does not exist, is another tenant's, or serves another provider.</summary>
+    public const string StorageConnectionUnavailable = "storage_connection_unavailable";
+
+    public static bool IsKnown(string? code) => code is SubscriptionRequired or QuotaExceeded or StorageConnectionDisabled or StorageConnectionUnavailable;
 }
 
 public static class BackupTriggerTypes

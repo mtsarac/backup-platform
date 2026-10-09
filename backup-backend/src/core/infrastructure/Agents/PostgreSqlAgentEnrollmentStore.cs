@@ -1,5 +1,6 @@
 using BackupPlatform.Agents.Credentials;
 using BackupPlatform.Agents.Enrollment;
+using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Infrastructure.Persistence;
@@ -31,7 +32,7 @@ public sealed class PostgreSqlAgentEnrollmentStore(DbContextOptions<PlatformDbCo
     }
 
     public async Task<EnrollmentPolicyChanged?> SetPolicyAsync(
-        TenantId tenantId, bool isEnabled, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
+        TenantId tenantId, bool isEnabled, UserId actor, AuditActorKind actorKind, DateTimeOffset now, CancellationToken cancellationToken)
     {
         for (var attempt = 1; ; attempt++)
         {
@@ -52,6 +53,11 @@ public sealed class PostgreSqlAgentEnrollmentStore(DbContextOptions<PlatformDbCo
             else
             {
                 policy.Set(isEnabled, actor, now);
+            }
+            if (previous != isEnabled)
+            {
+                context.AuditEvents.Add(AuditEvent.Record(now, actor, actorKind, AuditActions.EnrollmentPolicyChanged, tenantId,
+                    "tenant", tenantId.Value.ToString("D"), new Dictionary<string, object?> { ["previousEnabled"] = previous, ["enabled"] = isEnabled }));
             }
             try
             {
@@ -109,6 +115,13 @@ public sealed class PostgreSqlAgentEnrollmentStore(DbContextOptions<PlatformDbCo
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         return await context.EnrollmentTokens.AsNoTracking().SingleOrDefaultAsync(token => token.Id == tokenId, cancellationToken);
+    }
+
+    public async Task<EnrollmentToken?> FindTenantTokenAsync(TenantId tenantId, Guid tokenId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        return await context.EnrollmentTokens.AsNoTracking().SingleOrDefaultAsync(
+            token => token.Id == tokenId && token.TenantId == tenantId, cancellationToken);
     }
 
     public async Task<EnrollmentCommit> EnrollAsync(

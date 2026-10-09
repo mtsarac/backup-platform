@@ -7,6 +7,7 @@
     <ProjectReference Include="..\..\modules\identity\BackupPlatform.Identity.csproj" />
     <ProjectReference Include="..\..\modules\tenancy\BackupPlatform.Tenancy.csproj" />
     <ProjectReference Include="..\..\modules\agents\BackupPlatform.Agents.csproj" />
+    <ProjectReference Include="..\..\modules\managed-service\BackupPlatform.ManagedService.csproj" />
     <ProjectReference Include="..\..\modules\scheduling\BackupPlatform.Scheduling.csproj" />
     <ProjectReference Include="..\..\modules\backups\BackupPlatform.Backups.csproj" />
     <ProjectReference Include="..\..\modules\storage\BackupPlatform.Storage.csproj" />
@@ -15,6 +16,8 @@
     <ProjectReference Include="..\..\providers\secret\data-protection\BackupPlatform.SecretProviders.DataProtection.csproj" />
     <ProjectReference Include="..\..\providers\storage\local\BackupPlatform.StorageProviders.Local.csproj" />
     <ProjectReference Include="..\..\providers\storage\central\BackupPlatform.StorageProviders.Central.csproj" />
+    <ProjectReference Include="..\..\providers\storage\sftp\BackupPlatform.StorageProviders.Sftp.csproj" />
+    <ProjectReference Include="..\..\providers\storage\google-drive\BackupPlatform.StorageProviders.GoogleDrive.csproj" />
   </ItemGroup>
 
 

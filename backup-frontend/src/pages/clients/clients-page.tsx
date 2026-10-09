@@ -8,12 +8,15 @@ import { AgentState } from '@/features/agents/presentation'
 import { agentDate } from '@/features/agents/format'
 import { CapabilitySummary } from '@/features/agents/capabilities'
 import { useTenant } from '@/features/tenancy/use-tenant'
+import { Button } from '@/components/ui/button'
+import { AddAgentDialog } from '@/features/agents/add-agent-dialog'
 
 export function ClientsPage() {
   const { tenantId, canAdmin } = useTenant()
   const query = useAgents(tenantId)
   const [search, setSearch] = useState('')
   const [connectivity, setConnectivity] = useState('all')
+  const [addingTenant, setAddingTenant] = useState<string | null>(null)
   const term = search.trim().toLocaleLowerCase('tr-TR')
   const rows = (query.data ?? []).filter((agent) =>
     (connectivity === 'all' || agent.connectivity === connectivity) &&
@@ -29,11 +32,12 @@ export function ClientsPage() {
     { key: 'capabilities', header: 'Yetenekler', wrap: true, render: (agent) => <CapabilitySummary capabilities={agent.capabilities} /> },
   ]
   return <div className="space-y-4">
-    <div className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-2xl font-semibold text-text-heading">Agent'lar</h1><p className="mt-1 text-sm text-text-muted">Yaşam döngüsü ve bağlantı durumu ayrı olarak gösterilir.</p></div>{canAdmin && <Link className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground" to={`/tenants/${tenantId}/enrollment`}>Agent kaydı</Link>}</div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-2xl font-semibold text-text-heading">Agent'lar</h1><p className="mt-1 text-sm text-text-muted">Yaşam döngüsü ve bağlantı durumu ayrı olarak gösterilir.</p></div>{canAdmin && <div className="flex flex-wrap items-center gap-3"><Link className="text-sm text-primary hover:underline" to={`/tenants/${tenantId}/enrollment`}>Agent kaydı</Link><Button onClick={() => setAddingTenant(tenantId)}>Agent ekle</Button></div>}</div>
     <div className="flex flex-wrap gap-3">
       <label className="min-w-0 flex-1 text-sm text-text-muted">Agent ara<input className="mt-1 block w-full rounded-lg border border-border bg-surface px-3 py-2 text-text" placeholder="Makine adı, platform veya sürüm" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
       <label className="text-sm text-text-muted">Bağlantı<select className="mt-1 block rounded-lg border border-border bg-surface px-3 py-2 text-text" value={connectivity} onChange={(event) => setConnectivity(event.target.value)}><option value="all">Tümü</option><option value="online">Çevrimiçi</option><option value="offline">Çevrimdışı</option><option value="unknown">Bilinmiyor</option></select></label>
     </div>
     <QueryState isPending={query.isPending} error={query.error}><DataTable rows={rows} columns={columns} keyExtractor={(agent) => agent.agentId} emptyMessage={search || connectivity !== 'all' ? 'Filtrelere uygun agent bulunamadı.' : 'Henüz kayıtlı agent yok.'} /></QueryState>
+    {canAdmin && addingTenant === tenantId && <AddAgentDialog key={tenantId} tenantId={tenantId} onClose={() => setAddingTenant(null)} />}
   </div>
 }

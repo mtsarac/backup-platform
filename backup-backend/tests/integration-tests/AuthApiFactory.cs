@@ -24,7 +24,8 @@ internal sealed class AuthApiFactory(
     BackupPlatform.Agents.Connectivity.AgentConnectivityOptions? connectivityOptions = null,
     AgentRateLimitOptions? rateLimitOptions = null,
     System.Security.Cryptography.X509Certificates.X509Certificate2? kestrelCertificate = null,
-    IReadOnlyDictionary<string, string?>? configuration = null) : WebApplicationFactory<Program>
+    IReadOnlyDictionary<string, string?>? configuration = null,
+    Action<IServiceCollection>? configureServices = null) : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -39,7 +40,8 @@ internal sealed class AuthApiFactory(
         {
             ["ConnectionStrings:Platform"] = connectionString,
             ["Backups:Scheduling:Enabled"] = "false",
-            ["Backups:Retention:Enabled"] = "false"
+            ["Backups:Retention:Enabled"] = "false",
+            ["ManagedService:Quota:MaintenanceEnabled"] = "false"
         };
         foreach (var (key, value) in configuration ?? new Dictionary<string, string?>()) settings[key] = value;
         builder.ConfigureAppConfiguration((_, builderConfiguration) => builderConfiguration.AddInMemoryCollection(settings));
@@ -68,6 +70,7 @@ internal sealed class AuthApiFactory(
                 services.RemoveAll<AgentRateLimitOptions>();
                 services.AddSingleton(rateLimitOptions);
             }
+            configureServices?.Invoke(services);
         });
     }
 

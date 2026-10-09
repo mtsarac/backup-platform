@@ -73,16 +73,31 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         // The locks are taken by this statement; a row another claimer (or a cancel) holds is skipped, never waited for, so no replica is handed out twice.
+        // A replica a restore has pinned is not a candidate at all, so a pinned replica whose delete is long due cannot crowd the batch.
         var ids = await context.Database.SqlQuery<Guid>($"""
             SELECT "Id" AS "Value" FROM backup_replicas
-            WHERE ("Status" = 'DeletePending' AND "DeleteAfter" <= {now})
+            WHERE (("Status" = 'DeletePending' AND "DeleteAfter" <= {now})
                OR ("Status" = 'DeleteFailed' AND "DeleteNextAttemptAt" <= {now})
                OR ("Status" = 'Deleting' AND ("DeleteLeaseExpiresAt" <= {now}
-                   OR ("ExecutionLocation" = 'Agent' AND "DeleteLeaseToken" IS NULL AND "DeleteNextAttemptAt" <= {now})))
+                   OR ("ExecutionLocation" = 'Agent' AND "DeleteLeaseToken" IS NULL AND "DeleteNextAttemptAt" <= {now}))))
+              AND NOT EXISTS (SELECT 1 FROM restore_replica_pins pin WHERE pin."ReplicaId" = backup_replicas."Id" AND pin."ReleasedAt" IS NULL)
+              AND NOT EXISTS (SELECT 1 FROM download_sessions hold WHERE hold."ReplicaId" = backup_replicas."Id" AND hold."TenantId" = backup_replicas."TenantId"
+                  AND hold."ReleasedAt" IS NULL AND hold."ExpiresAt" > {now} AND (hold."LeaseExpiresAt" IS NULL OR hold."LeaseExpiresAt" > {now}))
             ORDER BY CASE "Status" WHEN 'DeletePending' THEN "DeleteAfter" WHEN 'DeleteFailed' THEN "DeleteNextAttemptAt" ELSE COALESCE("DeleteLeaseExpiresAt", "DeleteNextAttemptAt") END, "Id"
             LIMIT {take}
             FOR UPDATE SKIP LOCKED
             """).ToListAsync(cancellationToken);
+        if (ids.Count == 0) return [];
+        // The check above ran on that statement's snapshot, which can predate a pin a restore committed right before it released its own lock on the row (a restore locks the
+        // replica, inserts the pin and commits; it never changes the replica row, so this statement does not re-evaluate it). Now that this transaction holds the row locks, no
+        // restore can pin any of these replicas until it ends: a pin that exists now is visible to a NEW statement, and a replica carrying one is left alone.
+        var pinned = await context.Database.SqlQuery<Guid>($"""
+            SELECT "ReplicaId" AS "Value" FROM restore_replica_pins WHERE "ReleasedAt" IS NULL AND "ReplicaId" = ANY({ids.ToArray()})
+            UNION
+            SELECT "ReplicaId" AS "Value" FROM download_sessions WHERE "ReleasedAt" IS NULL AND "ExpiresAt" > {now}
+                AND ("LeaseExpiresAt" IS NULL OR "LeaseExpiresAt" > {now}) AND "ReplicaId" = ANY({ids.ToArray()})
+            """).ToListAsync(cancellationToken);
+        if (pinned.Count != 0) ids = [.. ids.Where(id => !pinned.Contains(id))];
         if (ids.Count == 0) return [];
         var position = ids.Select((id, index) => (id, index)).ToDictionary(pair => pair.id, pair => pair.index);
         var replicas = await context.BackupReplicas.Where(replica => ids.Contains(replica.Id)).ToListAsync(cancellationToken);

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useVisibleTab } from '@/hooks/use-visible-tab'
+import { storageQueryKeys, useRefreshQuotaWhenFinished } from '@/features/storage/hooks'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { cancelBackup, getBackup, getBackups, retryBackup } from './api'
 import { isActiveRun } from './presentation'
@@ -11,32 +12,25 @@ export const backupQueryKeys = {
   detail: (tenantId: string, id: string) => ['tenant', tenantId, 'backup-runs', 'detail', id] as const,
 }
 
-function useVisibleTab() {
-  const [visible, setVisible] = useState(() => document.visibilityState === 'visible')
-  useEffect(() => {
-    const update = () => setVisible(document.visibilityState === 'visible')
-    document.addEventListener('visibilitychange', update)
-    return () => document.removeEventListener('visibilitychange', update)
-  }, [])
-  return visible
-}
-
 export function useBackups(filters: BackupRunFilters = {}) {
   const { tenantId } = useTenant()
   const visible = useVisibleTab()
-  return useQuery({
+  const query = useQuery({
     queryKey: backupQueryKeys.list(tenantId, filters),
     queryFn: ({ signal }) => getBackups(tenantId, filters, signal),
     refetchInterval: (query) => visible && !query.state.error && query.state.data?.items.some((run) => isActiveRun(run.status)) ? 5000 : false,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: false,
   })
+  // A run that finishes turns reserved capacity into used capacity (or releases it): the tenant's quota changed.
+  useRefreshQuotaWhenFinished(tenantId, Boolean(query.data?.items.some((run) => isActiveRun(run.status))))
+  return query
 }
 
 export function useBackup(id: string) {
   const { tenantId } = useTenant()
   const visible = useVisibleTab()
-  return useQuery({
+  const query = useQuery({
     queryKey: backupQueryKeys.detail(tenantId, id),
     queryFn: ({ signal }) => getBackup(tenantId, id, signal),
     enabled: id.length > 0,
@@ -44,6 +38,8 @@ export function useBackup(id: string) {
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: false,
   })
+  useRefreshQuotaWhenFinished(tenantId, Boolean(query.data && isActiveRun(query.data.status)))
+  return query
 }
 
 export function useBackupActions(id: string) {
@@ -56,6 +52,7 @@ export function useBackupActions(id: string) {
       client.invalidateQueries({ queryKey: backupQueryKeys.all(tenantId) }),
       client.invalidateQueries({ queryKey: ['tenant', tenantId, 'dashboard'] }),
       client.invalidateQueries({ queryKey: ['tenant', tenantId, 'backup-artifacts'] }),
+      client.invalidateQueries({ queryKey: storageQueryKeys.quota(tenantId) }),
     ])
   }
   const retry = useMutation({ mutationFn: () => retryBackup(tenantId, id), onSuccess, retry: false })

@@ -17,6 +17,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void cache.cancelQueries()
     cache.setQueryData(['auth', 'me'], null)
     cache.removeQueries({ queryKey: ['tenant'] })
+    cache.removeQueries({ queryKey: ['platform'] })
     cache.removeQueries({ queryKey: ['auth', 'tenants'] })
   }), [cache])
   async function login(loginIdentifier: string, password: string) {
@@ -24,6 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     resetAntiforgery()
     await cache.cancelQueries()
     cache.removeQueries({ queryKey: ['tenant'] })
+    cache.removeQueries({ queryKey: ['platform'] })
     const profile = await apiRequest<UserProfile>('me')
     const tenants = await apiRequest<TenantMembership[]>('me/tenants')
     setSessionExpired(false)
@@ -35,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     resetAntiforgery()
     await cache.cancelQueries()
     cache.removeQueries({ queryKey: ['tenant'] })
+    cache.removeQueries({ queryKey: ['platform'] })
     cache.removeQueries({ queryKey: ['auth', 'tenants'] })
     cache.setQueryData(['auth', 'me'], null)
     setSessionExpired(false)

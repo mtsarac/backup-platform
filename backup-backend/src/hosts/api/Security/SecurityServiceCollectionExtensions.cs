@@ -1,6 +1,17 @@
+using BackupPlatform.Agents.Platform;
+using BackupPlatform.Application.Platform;
+using BackupPlatform.Infrastructure.Platform;
 using BackupPlatform.Api.Backups;
+using BackupPlatform.Api.Quota;
+using BackupPlatform.ManagedService.Quota;
+using BackupPlatform.Api.Restores;
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Application.Restores;
 using BackupPlatform.Infrastructure.Backups;
+using BackupPlatform.Infrastructure.Restores;
+using BackupPlatform.Api.Downloads;
+using BackupPlatform.Application.Downloads;
+using BackupPlatform.Infrastructure.Downloads;
 using BackupPlatform.Agents;
 using BackupPlatform.Agents.Capabilities;
 using BackupPlatform.Agents.Connectivity;
@@ -10,17 +21,33 @@ using BackupPlatform.Agents.Management;
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Application.Identity;
 using BackupPlatform.Api.Push;
+using BackupPlatform.Application.Support;
+using BackupPlatform.Api.Support;
+using BackupPlatform.Infrastructure.Support;
 using BackupPlatform.Application.Tenancy;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Identity;
 using BackupPlatform.Infrastructure.Agents;
 using BackupPlatform.Infrastructure.Identity;
 using BackupPlatform.Infrastructure.Persistence;
+using BackupPlatform.Infrastructure.ManagedService;
 using BackupPlatform.Infrastructure.Scheduling;
+using BackupPlatform.ManagedService.Administration;
+using BackupPlatform.ManagedService.Entitlement;
 using BackupPlatform.Tenancy;
+using BackupPlatform.Domain.Storage;
+using BackupPlatform.Infrastructure.Secrets;
+using BackupPlatform.Infrastructure.Storage;
+using BackupPlatform.SecretProviders.Abstractions;
+using BackupPlatform.SecretProviders.DataProtection;
+using BackupPlatform.Storage;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
+using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 
 namespace BackupPlatform.Api.Security;
 
@@ -39,6 +66,15 @@ public static class SecurityServiceCollectionExtensions
         services.AddSingleton<PasswordHashService>();
         services.AddScoped<AuthenticationService>();
         services.AddScoped<TenantResolutionService>();
+        services.AddScoped<IPlatformAdministrationStore, PostgreSqlPlatformAdministrationStore>();
+        services.AddScoped<PlatformAdministrationService>();
+        services.AddScoped<IPlatformAgentStore, PostgreSqlPlatformAgentStore>();
+        services.AddScoped<PlatformAgentQueryService>();
+        services.AddScoped<IManagedServiceStore, PostgreSqlManagedServiceStore>();
+        services.AddScoped<ITenantEntitlementReader, PostgreSqlTenantEntitlementReader>();
+        services.AddScoped<ManagedServiceAdministrationService>();
+        AddQuota(services);
+        AddSupportAccess(services);
         services.AddScoped<BrowserCookieEvents>();
         AddBrowserAuthentication(services);
         AddAgentSecurity(services);
@@ -56,6 +92,13 @@ public static class SecurityServiceCollectionExtensions
         services.AddSingleton<BackupRetryWorker>();
         services.AddHostedService(provider => provider.GetRequiredService<BackupRetryWorker>());
         AddBackupRetention(services);
+        AddStorageConnections(services);
+        AddRestores(services);
+        services.AddScoped<IDownloadStore, PostgreSqlDownloadStore>();
+        services.AddScoped<DownloadService>();
+        services.AddScoped<DownloadStreamer>();
+        services.AddHostedService<DownloadExpiryWorker>();
+        services.AddAgentDownloads();
         services.AddSingleton<IBackupWorkSignal, AgentPushWorkSignal>();
         services.AddBackupScheduling();
         AddPolicies(services);
@@ -70,6 +113,131 @@ public static class SecurityServiceCollectionExtensions
             options.Cookie.Domain = null;
         });
         return services;
+    }
+
+    /// <summary>
+    /// Storage connections: the provider catalog (one descriptor per provider type; adding a provider adds a descriptor and a tester here), the secret
+    /// store credentials go through (Data Protection encryption over PostgreSQL ciphertext), the persistence and the service the endpoints use.
+    /// Data Protection keeps its host-level defaults unless <c>Secrets:DataProtection:KeysDirectory</c> names a key ring directory (shared across nodes).
+    /// </summary>
+    private static void AddStorageConnections(IServiceCollection services)
+    {
+        services.AddSingleton(provider =>
+        {
+            var config = provider.GetRequiredService<IConfiguration>().GetSection("Backups:Sftp");
+            var network = new BackupPlatform.StorageProviders.Sftp.SftpNetworkOptions
+            {
+                AllowedPrivateNetworks = config.GetSection("AllowedPrivateNetworks").Get<string[]>() ?? [],
+                ConnectionTimeout = TimeSpan.FromSeconds(config.GetValue<int?>("ConnectionTimeoutSeconds") ?? 15),
+                OperationTimeout = TimeSpan.FromSeconds(config.GetValue<int?>("OperationTimeoutSeconds") ?? 30),
+                TransferTimeout = TimeSpan.FromSeconds(config.GetValue<int?>("TransferTimeoutSeconds") ?? 3600)
+            };
+            return new BackupPlatform.Api.Backups.SftpConnectionProviderFactory(network);
+        });
+        services.AddDataProtection();
+        services.AddSingleton<IConfigureOptions<DataProtectionOptions>>(provider => new ConfigureOptions<DataProtectionOptions>(options =>
+        {
+            var applicationName = provider.GetRequiredService<IConfiguration>()["Secrets:DataProtection:ApplicationName"];
+            if (!string.IsNullOrWhiteSpace(applicationName))
+                options.ApplicationDiscriminator = applicationName;
+        }));
+        services.AddSingleton<IConfigureOptions<KeyManagementOptions>>(provider => new ConfigureOptions<KeyManagementOptions>(options =>
+        {
+            var directory = provider.GetRequiredService<IConfiguration>()["Secrets:DataProtection:KeysDirectory"];
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                options.XmlRepository = new FileSystemXmlRepository(new DirectoryInfo(directory), provider.GetRequiredService<ILoggerFactory>());
+            }
+        }));
+        services.TryAddSingleton<IStorageProviderCatalog>(_ => StorageProviderCatalog.BuiltIn());
+        services.TryAddSingleton<ISecretCiphertextRepository, PostgreSqlSecretCiphertextRepository>();
+        services.TryAddSingleton<ISecretStore, DataProtectionSecretStore>();
+        services.TryAddSingleton<ISecretProvider>(provider => provider.GetRequiredService<ISecretStore>());
+        services.AddScoped<IStorageConnectionStore, PostgreSqlStorageConnectionStore>();
+        services.AddScoped<IStorageConnectionTester>(provider => new CentralConnectionTester(provider.GetRequiredService<IBackupStorageResolver>()));
+        services.AddScoped<IStorageConnectionTester>(_ => new AgentSideConnectionTester(StorageProviderTypes.Local));
+        services.AddScoped<IStorageConnectionTester>(provider =>
+        {
+            var factory = provider.GetRequiredService<BackupPlatform.Api.Backups.SftpConnectionProviderFactory>();
+            return new SftpConnectionTester((connection, secrets) => factory.Create(connection, secrets));
+        });
+        services.AddHttpClient();
+        services.AddHttpClient("google-drive", client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
+            .RemoveAllLoggers();
+        services.AddSingleton(provider =>
+        {
+            var config = provider.GetRequiredService<IConfiguration>().GetSection(BackupPlatform.Api.Backups.GoogleDrivePlatformOptions.SectionName);
+            return Microsoft.Extensions.Options.Options.Create(config.Get<BackupPlatform.Api.Backups.GoogleDrivePlatformOptions>() ?? new());
+        });
+        services.TryAddSingleton<BackupPlatform.Api.Backups.PostgreSqlGoogleDriveStagingStore>();
+        services.TryAddSingleton<BackupPlatform.StorageProviders.GoogleDrive.IGoogleDriveStagingStore>(provider =>
+            provider.GetRequiredService<BackupPlatform.Api.Backups.PostgreSqlGoogleDriveStagingStore>());
+        services.AddHostedService(provider => provider.GetRequiredService<BackupPlatform.Api.Backups.PostgreSqlGoogleDriveStagingStore>());
+        services.TryAddSingleton<BackupPlatform.StorageProviders.GoogleDrive.IGoogleDriveFileCatalog>(provider =>
+            new BackupPlatform.Api.Backups.EfGoogleDriveFileCatalog(
+                provider.GetRequiredService<Microsoft.EntityFrameworkCore.DbContextOptions<PlatformDbContext>>(),
+                provider.GetRequiredService<TimeProvider>()));
+        services.AddSingleton(provider =>
+        {
+            var http = provider.GetService<HttpClient>() ?? provider.GetRequiredService<IHttpClientFactory>().CreateClient("google-drive");
+            var options = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<BackupPlatform.Api.Backups.GoogleDrivePlatformOptions>>();
+            var catalog = provider.GetRequiredService<BackupPlatform.StorageProviders.GoogleDrive.IGoogleDriveFileCatalog>();
+            var secretStore = provider.GetRequiredService<ISecretStore>();
+            var dbOptions = provider.GetRequiredService<Microsoft.EntityFrameworkCore.DbContextOptions<PlatformDbContext>>();
+            return new BackupPlatform.Api.Backups.GoogleDriveConnectionProviderFactory(http, options, catalog, secretStore, dbOptions,
+                provider.GetRequiredService<BackupPlatform.StorageProviders.GoogleDrive.IGoogleDriveStagingStore>(),
+                provider.GetRequiredService<ILogger<BackupPlatform.Api.Backups.GoogleDriveConnectionProviderFactory>>());
+        });
+        services.AddScoped(provider =>
+        {
+            var http = provider.GetService<HttpClient>() ?? provider.GetRequiredService<IHttpClientFactory>().CreateClient("google-drive");
+            var options = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<BackupPlatform.Api.Backups.GoogleDrivePlatformOptions>>();
+            var dbOptions = provider.GetRequiredService<Microsoft.EntityFrameworkCore.DbContextOptions<PlatformDbContext>>();
+            var secretStore = provider.GetRequiredService<ISecretStore>();
+            var time = provider.GetRequiredService<TimeProvider>();
+            var logger = provider.GetRequiredService<ILogger<BackupPlatform.Api.Backups.GoogleDriveOAuthService>>();
+            return new BackupPlatform.Api.Backups.GoogleDriveOAuthService(http, options, dbOptions, secretStore, time, logger);
+        });
+        services.AddScoped<IStorageConnectionTester>(provider =>
+        {
+            var factory = provider.GetRequiredService<BackupPlatform.Api.Backups.GoogleDriveConnectionProviderFactory>();
+            return new GoogleDriveConnectionTester((connection, secrets) => factory.Create(connection, secrets));
+        });
+        services.AddScoped<StorageConnectionService>();
+    }
+
+    /// <summary>
+    /// Quota: the admission gate backup orchestration asks (it sees only <see cref="IBackupAdmissionPolicy"/>), usage reads and recomputation,
+    /// policy administration, and the maintenance loop. Operational settings come from <c>ManagedService:Quota</c>; policy values are rows.
+    /// </summary>
+    private static void AddQuota(IServiceCollection services)
+    {
+        services.TryAddSingleton(provider =>
+        {
+            var options = provider.GetRequiredService<IConfiguration>().GetSection("ManagedService:Quota").Get<QuotaOptions>() ?? new QuotaOptions();
+            options.ThrowIfInvalid();
+            return options;
+        });
+        services.AddScoped<IStorageUsageService, PostgreSqlStorageUsageService>();
+        services.AddScoped<IBackupAdmissionPolicy, PostgreSqlBackupAdmissionPolicy>();
+        services.AddScoped<IQuotaPolicyStore, PostgreSqlQuotaPolicyStore>();
+        services.AddScoped<QuotaPolicyAdministrationService>();
+        services.AddSingleton<StorageUsageMaintenanceWorker>();
+        services.AddHostedService(provider => provider.GetRequiredService<StorageUsageMaintenanceWorker>());
+    }
+
+    /// <summary>Support access: sessions, the gate every support operation passes, the transparency reads, and the bookkeeping worker. Settings come from <c>Support</c>.</summary>
+    private static void AddSupportAccess(IServiceCollection services)
+    {
+        services.TryAddSingleton(provider => provider.GetRequiredService<IConfiguration>().GetSection("Support").Get<SupportAccessOptions>() ?? new SupportAccessOptions());
+        services.TryAddSingleton<ISupportApprovalPolicy, ConfiguredSupportApprovalPolicy>();
+        services.AddScoped<ISupportAccessStore, PostgreSqlSupportAccessStore>();
+        services.AddScoped<ISupportQueryStore, PostgreSqlSupportQueryStore>();
+        services.AddScoped<SupportAccessService>();
+        services.AddScoped<SupportRequestGate>();
+        services.AddScoped<SupportRestoreDeps>();
+        services.AddHostedService<SupportSessionExpiryWorker>();
     }
 
     private static DbContextOptions<PlatformDbContext> CreateDatabaseOptions(IServiceProvider services)
@@ -116,6 +284,22 @@ public static class SecurityServiceCollectionExtensions
         services.AddScoped<BackupArtifactService>();
         services.AddSingleton<BackupRetentionWorker>();
         services.AddHostedService(provider => provider.GetRequiredService<BackupRetentionWorker>());
+    }
+
+    /// <summary>Restores: policy (configuration section <c>Restores</c>), the store, the service and the sweep that ends restores nobody is working on.</summary>
+    private static void AddRestores(IServiceCollection services)
+    {
+        services.TryAddSingleton(provider =>
+        {
+            var options = provider.GetRequiredService<IConfiguration>().GetSection("Restores").Get<RestoreExecutionOptions>() ?? new RestoreExecutionOptions();
+            options.ThrowIfInvalid();
+            return options;
+        });
+        services.AddScoped<IRestoreStore, PostgreSqlRestoreStore>();
+        services.AddScoped<RestoreService>();
+        services.AddScoped<RestoreTargetsReader>();
+        services.AddSingleton<StaleRestoreDetector>();
+        services.AddHostedService(provider => provider.GetRequiredService<StaleRestoreDetector>());
     }
 
     private static ITenantContext ResolveTenantContext(IServiceProvider services)

@@ -2,9 +2,9 @@ import { useRef, type ReactNode } from 'react'
 import { Dialog } from '@base-ui/react/dialog'
 import { Button } from '@/components/ui/button'
 
-export function ConfirmDialog({ open, onClose, title, description, pending, error, onConfirm }: {
+export function ConfirmDialog({ open, onClose, title, description, pending, error, onConfirm, confirmLabel = 'İptali onayla' }: {
   open: boolean; onClose: () => void; title: string; description: ReactNode;
-  pending: boolean; error?: string; onConfirm: () => void
+  pending: boolean; error?: string; onConfirm: () => void; confirmLabel?: string
 }) {
   const cancelRef = useRef<HTMLButtonElement>(null)
   return <Dialog.Root open={open} onOpenChange={(next) => { if (!next && !pending) onClose() }} disablePointerDismissal={pending}>
@@ -16,7 +16,7 @@ export function ConfirmDialog({ open, onClose, title, description, pending, erro
         {error && <p role="alert" className="text-sm text-error">{error}</p>}
         <div className="flex flex-wrap justify-end gap-2">
           <Dialog.Close render={<Button ref={cancelRef} variant="outline" disabled={pending} />}>Vazgeç</Dialog.Close>
-          <Button disabled={pending} onClick={onConfirm}>{pending ? 'İşleniyor…' : 'İptali onayla'}</Button>
+          <Button disabled={pending} onClick={onConfirm}>{pending ? 'İşleniyor…' : confirmLabel}</Button>
         </div>
       </Dialog.Popup>
     </Dialog.Portal>

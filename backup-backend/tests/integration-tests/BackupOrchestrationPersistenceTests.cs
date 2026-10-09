@@ -17,7 +17,7 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
     private static readonly TimeSpan Lease = TimeSpan.FromMinutes(2);
     private static readonly string SourceHash = new('a', 64);
     private static readonly string ArtifactHash = new('b', 64);
-    private PostgreSqlBackupRunStore Store(PostgreSqlFixture? database = null) => new(new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql((database ?? fixture).ConnectionString).Options);
+    private PostgreSqlBackupRunStore Store(PostgreSqlFixture? database = null) => new(new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql((database ?? fixture).ConnectionString).Options, AdmitAllBackupAdmission.Instance);
 
     [Fact]
     public async Task ConcurrentManualRequestsAndPollsCreateOneRunAndOneExclusiveClaim()

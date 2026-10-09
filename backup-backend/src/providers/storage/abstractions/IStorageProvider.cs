@@ -53,6 +53,8 @@ public static class StorageCapabilityIds
     public static StorageCapabilityId VerifyAbsence { get; } = new("storage.verify-absence");
     public static StorageCapabilityId Multipart { get; } = new("storage.multipart");
     public static StorageCapabilityId ImmutableStorage { get; } = new("storage.immutable");
+    /// <summary>The provider can stream a stored object back to the caller (<see cref="IStorageProvider.OpenReadAsync"/>), which a restore needs.</summary>
+    public static StorageCapabilityId Read { get; } = new("storage.read");
 }
 
 public enum StorageEntryKind
@@ -167,7 +169,12 @@ public enum StorageFailureKind
 
     /// <summary>The storage could not be read or written for another I/O reason, including a source stream that failed while being copied.</summary>
     Io,
-    NotSupported
+    NotSupported,
+    HostKeyMismatch,
+    AuthenticationFailed,
+    Timeout,
+    NetworkDenied,
+    NetworkUnavailable
 }
 
 /// <summary>
@@ -222,6 +229,14 @@ public interface IStorageProvider
     /// a provider without server-side checksums reads the object back.
     /// </summary>
     Task<StorageVerificationResult> VerifyAsync(StorageObjectKey key, StorageVerificationExpectation expected, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Opens the stored object for one sequential read. The caller owns and disposes the stream; the provider never exposes a path. A missing
+    /// object is a <see cref="StorageException"/> with <see cref="StorageFailureKind.NotFound"/>. Providers without <see cref="StorageCapabilityIds.Read"/>
+    /// throw <see cref="StorageFailureKind.NotSupported"/> (the default, so a provider that only writes needs no change).
+    /// </summary>
+    Task<Stream> OpenReadAsync(StorageObjectKey key, CancellationToken cancellationToken) =>
+        Task.FromException<Stream>(new StorageException(StorageFailureKind.NotSupported, "This storage cannot be read."));
 
     /// <summary>Deletes the object; true if it existed. Providers without <see cref="StorageCapabilityIds.Delete"/> throw <see cref="StorageException"/> with <see cref="StorageFailureKind.NotSupported"/>.</summary>
     Task<bool> DeleteAsync(StorageObjectKey key, CancellationToken cancellationToken);

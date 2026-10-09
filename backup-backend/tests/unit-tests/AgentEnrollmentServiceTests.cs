@@ -3,6 +3,7 @@ using BackupPlatform.Agents.Credentials;
 using BackupPlatform.Agents.Enrollment;
 using BackupPlatform.Contracts.Agents;
 using BackupPlatform.Contracts.Protocol;
+using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Identity;
 
@@ -119,16 +120,52 @@ public sealed class AgentEnrollmentServiceTests
     {
         var consumed = World.Create(enabled: true);
         Assert.Equal(AgentEnrollmentStatus.Enrolled, (await consumed.Service.EnrollAsync(consumed.Request(), CancellationToken.None)).Status);
-        Assert.Equal(AgentEnrollmentStatus.InvalidToken, (await consumed.Service.EnrollAsync(consumed.Request(), CancellationToken.None)).Status);
+        Assert.Equal(AgentEnrollmentStatus.TokenConsumed, (await consumed.Service.EnrollAsync(consumed.Request(), CancellationToken.None)).Status);
         Assert.Single(consumed.Store.Agents);
 
         var expired = World.Create(enabled: true);
         expired.Clock.Advance(TimeSpan.FromHours(2));
-        Assert.Equal(AgentEnrollmentStatus.InvalidToken, (await expired.Service.EnrollAsync(expired.Request(), CancellationToken.None)).Status);
+        Assert.Equal(AgentEnrollmentStatus.TokenExpired, (await expired.Service.EnrollAsync(expired.Request(), CancellationToken.None)).Status);
 
         var revoked = World.Create(enabled: true);
         revoked.Store.Token.Revoke(UserId.New(), Now);
         Assert.Equal(AgentEnrollmentStatus.InvalidToken, (await revoked.Service.EnrollAsync(revoked.Request(), CancellationToken.None)).Status);
+    }
+
+    [Theory]
+    [InlineData(EnrollmentTokenState.Expired)]
+    [InlineData(EnrollmentTokenState.Consumed)]
+    [InlineData(EnrollmentTokenState.Revoked)]
+    public async Task WrongSecretsNeverRevealTokenState(EnrollmentTokenState state)
+    {
+        var world = World.Create(enabled: true);
+        if (state == EnrollmentTokenState.Expired)
+        {
+            world.Clock.Advance(TimeSpan.FromHours(2));
+        }
+        else if (state == EnrollmentTokenState.Consumed)
+        {
+            world.Store.Token.Consume(AgentId.New(), Now);
+        }
+        else
+        {
+            world.Store.Token.Revoke(UserId.New(), Now);
+        }
+        var forged = AgentSecretReference.Format(world.Store.Token.Id, new string('Z', AgentSecretReference.SecretLength));
+        var result = await world.Service.EnrollAsync(world.Request() with { EnrollmentToken = forged }, CancellationToken.None);
+        Assert.Equal(AgentEnrollmentStatus.InvalidToken, result.Status);
+        Assert.Empty(world.Store.Agents);
+    }
+
+    [Fact]
+    public async Task ConcurrentConsumptionReportsConsumedAfterTheCommitLoses()
+    {
+        var world = World.Create(enabled: true);
+        world.Store.ConsumeBeforeCommit = true;
+        var result = await world.Service.EnrollAsync(world.Request(), CancellationToken.None);
+        Assert.Equal(AgentEnrollmentStatus.TokenConsumed, result.Status);
+        Assert.Empty(world.Store.Agents);
+        Assert.NotNull(world.Store.Token.ConsumedByAgentId);
     }
 
     [Fact]
@@ -187,11 +224,12 @@ public sealed class AgentEnrollmentServiceTests
     {
         public EnrollmentToken Token { get; } = token;
         public List<Agent> Agents { get; } = [];
+        public bool ConsumeBeforeCommit { get; set; }
 
         public Task<EnrollmentPolicyState?> GetPolicyAsync(TenantId tenantId, CancellationToken cancellationToken) =>
             Task.FromResult<EnrollmentPolicyState?>(new EnrollmentPolicyState(tenantId, enabled, null));
 
-        public Task<EnrollmentPolicyChanged?> SetPolicyAsync(TenantId tenantId, bool isEnabled, UserId actor, DateTimeOffset now, CancellationToken cancellationToken) =>
+        public Task<EnrollmentPolicyChanged?> SetPolicyAsync(TenantId tenantId, bool isEnabled, UserId actor, AuditActorKind actorKind, DateTimeOffset now, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
         public Task AddTokenAsync(EnrollmentToken token, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -205,9 +243,17 @@ public sealed class AgentEnrollmentServiceTests
         public Task<EnrollmentToken?> FindTokenAsync(Guid tokenId, CancellationToken cancellationToken) =>
             Task.FromResult(tokenId == Token.Id ? Token : null);
 
+        public Task<EnrollmentToken?> FindTenantTokenAsync(TenantId tenantId, Guid tokenId, CancellationToken cancellationToken) =>
+            Task.FromResult(tokenId == Token.Id && tenantId == Token.TenantId ? Token : null);
+
         public Task<EnrollmentCommit> EnrollAsync(
             Guid tokenId, TenantId tenantId, Agent agent, AgentCredential credential, DateTimeOffset now, CancellationToken cancellationToken)
         {
+            if (ConsumeBeforeCommit)
+            {
+                Token.Consume(AgentId.New(), now);
+                return Task.FromResult(EnrollmentCommit.TokenUnavailable);
+            }
             if (tokenId != Token.Id || Token.GetState(now) != EnrollmentTokenState.Active)
             {
                 return Task.FromResult(EnrollmentCommit.TokenUnavailable);

@@ -7,17 +7,23 @@ import { ArtifactDetailPage } from '@/pages/artifacts/artifact-detail-page'
 import { apiRequest } from '@/lib/api/client'
 import type { BackupArtifact, BackupReplica } from './types'
 import { canCancelDeletion, deletionInProgress } from './format'
+import type * as ArtifactApi from './api'
 
 vi.mock('@/lib/api/client', () => ({
   apiRequest: vi.fn(),
+  API_BASE_URL: '/api',
   tenantPath: (tenantId: string, path: string) => `tenants/${tenantId}/${path}`,
   ApiError: class ApiError extends Error {},
 }))
 const permissions = vi.hoisted(() => ({ canAdmin: true }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canAdmin: permissions.canAdmin, canOperate: true }) }))
 
+vi.mock('./api', async (importOriginal) => ({
+  ...await importOriginal<typeof ArtifactApi>(),
+  getDownloadAvailability: vi.fn().mockResolvedValue({ available: false, reason: 'replica_unavailable', replicas: [], checksum: 'abc123', sizeBytes: 4096 }),
+}))
 const replica: BackupReplica = {
-  id: 'replica-internal', storageProvider: 'Local', storageTarget: 'Backup storage', key: 'not-shown-key',
+  id: 'replica-internal', storageProvider: 'Local', storageConnectionId: 'connection-local', storageTarget: 'Backup storage', key: 'not-shown-key',
   sizeBytes: 4096, checksum: 'abc123', checksumAlgorithm: 'SHA256', verificationState: 'Verified', verificationMethod: 'ReadBack',
   createdAt: '2026-10-05T10:00:00Z', verifiedAt: '2026-10-05T10:01:00Z', status: 'Available', usable: true,
   deleteRequestedAt: null, deleteAfter: null, deleteReason: null, deletedAt: null, deleteAttempts: 0,
@@ -99,14 +105,14 @@ describe('Backup dosyaları', () => {
     expect(screen.queryByText(/password=hidden/)).not.toBeInTheDocument()
   })
 
-  it('silinmiş kaydı fiziksel dosyasız geçmiş olarak tutar, konumu gösterir ama iç kimlikleri göstermez', async () => {
+  it('silinmiş kaydı fiziksel dosyasız geçmiş olarak tutar ve storage key veya iç kimlikleri göstermez', async () => {
     request.mockResolvedValue(artifact({ state: 'Deleted', replicas: [{ ...replica, status: 'Deleted', usable: false, deletedAt: '2026-10-06T10:00:00Z' }] }))
     mount()
     await screen.findByText(/Bu kayıt yalnızca yedekleme geçmişidir/)
     expect(screen.getByText(/Fiziksel dosya kaldırıldı/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Silme isteği oluştur' })).not.toBeInTheDocument()
     expect(screen.queryByText('replica-internal')).not.toBeInTheDocument()
-    expect(screen.getByText('not-shown-key')).toBeInTheDocument()
+    expect(screen.queryByText('not-shown-key')).not.toBeInTheDocument()
     expect(screen.queryByText('attempt-internal')).not.toBeInTheDocument()
   })
 
@@ -161,5 +167,14 @@ describe('Backup dosyaları', () => {
     expect(canCancelDeletion(pending({ status: 'Deleting', deleteAttempts: 1 }))).toBe(false)
     expect(canCancelDeletion(pending({ deleteAttempts: 1 }))).toBe(false)
     expect(canCancelDeletion({ ...pending(), cancelDeleteAllowed: false })).toBe(false)
+  })
+
+  it('sayfalama sunucu sorgusuna gider ve filtre değişikliği ilk sayfaya döner', async () => {
+    request.mockResolvedValue({ items: [artifact()], totalCount: 51, page: 1, pageSize: 25 })
+    mount('list')
+    fireEvent.click(await screen.findByRole('button', { name: 'Sonraki' }))
+    await waitFor(() => expect(request).toHaveBeenCalledWith(expect.stringContaining('page=2&'), expect.objectContaining({ signal: expect.any(AbortSignal) })))
+    fireEvent.change(screen.getByRole('combobox', { name: 'Durum' }), { target: { value: 'Available' } })
+    await waitFor(() => expect(request).toHaveBeenCalledWith(expect.stringContaining('page=1&pageSize=25&state=Available'), expect.objectContaining({ signal: expect.any(AbortSignal) })))
   })
 })

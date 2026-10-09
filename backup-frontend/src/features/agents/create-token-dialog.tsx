@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Dialog } from '@base-ui/react/dialog'
 import { Button } from '@/components/ui/button'
 import { createEnrollmentToken } from './api'
 import type { CreatedEnrollmentToken } from './types'
 import { agentDate } from './format'
 import { errorMessage } from '@/lib/api/failure-messages'
+import { useEnrollmentMonitor } from './use-enrollment-monitor'
 
 /** Mounted only while open. Plaintext exists in local state, never in a query/mutation cache. */
 export function CreateTokenDialog({ tenantId, onClose, onCreated }: { tenantId: string; onClose: () => void; onCreated: () => void }) {
@@ -14,6 +15,10 @@ export function CreateTokenDialog({ tenantId, onClose, onCreated }: { tenantId: 
   const [error, setError] = useState('')
   const request = useRef<AbortController | null>(null)
   const lifetimeRef = useRef<HTMLInputElement>(null)
+  const tokenId = created?.tokenId
+  const expiresAt = created?.expiresAt
+  const ticket = useMemo(() => tokenId && expiresAt ? { tokenId, expiresAt } : null, [tokenId, expiresAt])
+  const monitor = useEnrollmentMonitor(tenantId, ticket, () => setCreated(value => value ? { ...value, token: '' } : null))
   useEffect(() => () => { request.current?.abort() }, [])
   function close() {
     request.current?.abort()
@@ -45,11 +50,11 @@ export function CreateTokenDialog({ tenantId, onClose, onCreated }: { tenantId: 
         <Dialog.Description className="text-sm text-text-muted">Token yalnızca agent kaydı için kullanılır. Güvenli bir kanaldan paylaşın. Bu token tekrar görüntülenemez.</Dialog.Description>
         {created ? (
           <div className="space-y-3" role="status">
-            <p className="text-sm font-medium text-success">Token oluşturuldu.</p>
-            <label className="block text-sm text-text-muted">
+            <p className="text-sm font-medium text-success">{created.token ? 'Token oluşturuldu.' : monitor.phase === 'Checking' ? 'Token gizlendi; kayıt durumu doğrulanıyor.' : monitor.phase === 'Expired' ? 'Token süresi doldu.' : monitor.phase === 'Revoked' ? 'Token iptal edildi.' : 'Token kullanıldı.'}</p>
+            {created.token && <label className="block text-sm text-text-muted">
               Tek seferlik kayıt token'ı
               <textarea readOnly rows={3} value={created.token} className="mt-2 block w-full resize-none rounded-lg border border-border bg-surface-2 p-3 font-mono text-sm text-text" />
-            </label>
+            </label>}
             <p className="text-sm text-text-muted">Son kullanma: {agentDate(created.expiresAt)}</p>
             <p className="text-sm font-medium text-text">Bu token tekrar görüntülenemez.</p>
           </div>
@@ -63,6 +68,8 @@ export function CreateTokenDialog({ tenantId, onClose, onCreated }: { tenantId: 
           </form>
         )}
         {error && <p role="alert" className="text-sm text-error">{error}</p>}
+        {monitor.error && <p role="alert" className="text-sm text-error">{monitor.error}</p>}
+        {monitor.paused && <Button variant="outline" onClick={monitor.retry}>Takibi tekrar dene</Button>}
         <div className="flex flex-wrap justify-end gap-2"><Dialog.Close render={<Button variant="outline" />}>Kapat</Dialog.Close>{!created && <Button type="submit" form="create-enrollment-token" disabled={pending}>{pending ? 'Oluşturuluyor…' : 'Token oluştur'}</Button>}</div>
       </Dialog.Popup>
     </Dialog.Portal>

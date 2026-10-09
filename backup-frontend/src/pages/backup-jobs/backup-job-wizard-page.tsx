@@ -7,11 +7,14 @@ import { QueryState } from '@/components/data/query-state'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { getAgents } from '@/features/agents/api'
 import { useBackupJob, useJobOccurrences, useSaveBackupJob } from '@/features/backup-jobs/hooks'
+import { useTenantConnections, useTenantProviders } from '@/features/storage-connections/hooks'
+import { connectionUnavailableReason, resolveJobConnection } from '@/features/storage-connections/job-connection-picker-utils'
+import { JobConnectionPicker } from '@/features/storage-connections/job-connection-picker'
 import type { BackupJob, BackupJobInput, BackupConfiguration, Schedule, RetryPolicy, RetentionPolicy } from '@/features/backup-jobs/types'
 import { ApiError } from '@/lib/api/client'
 import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
 
-const initialConfiguration: BackupConfiguration = { engine: 'mssql', database: '', host: '', port: null, integratedSecurity: true, databaseCredentialReference: null, encrypt: true, trustServerCertificate: false, stagingReference: 'default', storageProvider: 'local', storagePrefix: '', storageExecutionLocation: 'Agent', copyOnly: true, checksumPolicy: 'Required', compressionPolicy: 'Preferred' }
+const initialConfiguration: BackupConfiguration = { engine: 'mssql', database: '', host: '', port: null, integratedSecurity: true, databaseCredentialReference: null, encrypt: true, trustServerCertificate: false, stagingReference: 'default', storageProvider: 'local', storageConnectionId: null, storagePrefix: '', storageExecutionLocation: 'Agent', copyOnly: true, checksumPolicy: 'Required', compressionPolicy: 'Preferred' }
 const initialSchedule: Schedule = { enabled: true, cronExpression: '0 2 * * *', timeZone: 'Europe/Istanbul', missedRunGraceSeconds: 3600, overlapPolicy: 'Skip' }
 const initialRetry: RetryPolicy = { maxAttempts: 3, initialDelaySeconds: 30, maxDelaySeconds: 300, backoff: 'Exponential', jitter: 0.2 }
 const initialRetention: RetentionPolicy = { enabled: true, keepForSeconds: 1209600, deleteGracePeriodSeconds: 86400 }
@@ -26,11 +29,11 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 export function BackupJobWizardPage() {
   const { id = '' } = useParams()
-  const { canOperate } = useTenant()
+  const { tenantId, canOperate } = useTenant()
   const job = useBackupJob(id)
   if (!canOperate) return <p role="alert">Bu sayfada değişiklik yapma yetkiniz yok. Viewer rolü salt okunurdur.</p>
-  if (id) return <QueryState isPending={job.isPending} error={job.error}>{job.data && <JobForm key={id} job={job.data} />}</QueryState>
-  return <JobForm />
+  if (id) return <QueryState isPending={job.isPending} error={job.error}>{job.data && <JobForm key={`${tenantId}:${id}`} job={job.data} />}</QueryState>
+  return <JobForm key={`${tenantId}:new`} />
 }
 function JobForm({ job }: { job?: BackupJob }) {
   const { tenantId, canAdmin } = useTenant()
@@ -48,6 +51,21 @@ function JobForm({ job }: { job?: BackupJob }) {
   const [enabled, setEnabled] = useState(job?.enabled ?? true)
   const [overlap, setOverlap] = useState<'Skip' | 'Queue'>(job?.overlapPolicy ?? 'Skip')
   const saving = useRef(false)
+  const connections = useTenantConnections()
+  const providers = useTenantProviders()
+  const connectionItems = connections.data?.items ?? []
+  const providerItems = providers.data?.items ?? []
+  const target = resolveJobConnection(configuration, connectionItems)
+  const targetProvider = providerItems.find(item => item.providerType === target?.providerType)
+  const existingTarget = Boolean(job && (job.configuration.storageConnectionId ?? null) === (configuration.storageConnectionId ?? null) && job.configuration.storageProvider === configuration.storageProvider)
+  const pickerPending = connections.isPending || providers.isPending
+  const pickerError = connections.error ?? providers.error
+  const targetBlocked = !existingTarget && Boolean(connectionUnavailableReason(target, targetProvider))
+  const cannotSave = pickerPending || Boolean(pickerError) || targetBlocked
+  function refreshConnections() {
+    void connections.refetch()
+    void providers.refetch()
+  }
   const errors: Record<string, string> = save.error instanceof ApiError ? { ...Object.fromEntries(Object.entries(save.error.fields).map(([field, code]) => [field, failureMessage(code)])), ...(save.error.field ? { [save.error.field]: errorMessage(save.error) } : {}) } : {}
   function text(name: string, label: string, value: string, onChange: (value: string) => void, disabled = false) {
     return <Field name={name} label={label} errors={errors}><input id={name} className={inputClass} value={value} disabled={disabled} aria-invalid={Boolean(errors[name])} aria-describedby={`${name}-error`} onChange={event => onChange(event.target.value)} /></Field>
@@ -64,10 +82,16 @@ function JobForm({ job }: { job?: BackupJob }) {
   const policies = [['Disabled', 'Off — kapalı'], ['Preferred', 'IfSupported — destekleniyorsa'], ['Required', 'Required — zorunlu']] as const
   return <form noValidate className="space-y-5" onSubmit={event => {
     event.preventDefault()
-    if (saving.current) return
+    if (saving.current || cannotSave) return
     saving.current = true
     const input: BackupJobInput = { name, agentId, configuration, retryPolicy: retry, overlapPolicy: overlap, enabled, schedule: scheduled ? { ...schedule, overlapPolicy: overlap } : null, ...(canAdmin ? { retention } : {}) }
-    save.mutate(input, { onSuccess: () => navigate(`/tenants/${tenantId}/backup-jobs`), onSettled: () => { saving.current = false } })
+    save.mutate(input, {
+      onSuccess: () => navigate(`/tenants/${tenantId}/backup-jobs`),
+      onError: error => {
+        if (error instanceof ApiError && ['storage_connection_disabled', 'storage_connection_unavailable'].includes(error.reason ?? error.code ?? '')) refreshConnections()
+      },
+      onSettled: () => { saving.current = false },
+    })
   }}>
     <Link className="text-sm text-primary hover:underline" to={`/tenants/${tenantId}/backup-jobs`}>← Yedekleme işlerine dön</Link>
     <h1 className="text-2xl font-semibold text-text-heading">{job ? 'Yedekleme işini düzenle' : 'Yeni yedekleme işi'}</h1>
@@ -93,9 +117,8 @@ function JobForm({ job }: { job?: BackupJob }) {
       {selection('configuration.compressionPolicy', 'Compression', configuration.compressionPolicy, policies, value => setConfiguration({ ...configuration, compressionPolicy: value as BackupConfiguration['compressionPolicy'] }))}
     </Section>
     <Section title="Depolama ve yürütme">
-      {text('configuration.storageProvider', 'Storage Provider referansı', configuration.storageProvider, storageProvider => setConfiguration({ ...configuration, storageProvider }))}
+      <JobConnectionPicker configuration={configuration} connections={connectionItems} providers={providerItems} pending={pickerPending} error={pickerError} fieldError={errors['configuration.storageConnectionId'] ?? errors.storageConnectionId ?? errors['configuration.storageProvider']} existingTarget={existingTarget} onChange={setConfiguration} onRefresh={refreshConnections} />
       {text('configuration.storagePrefix', 'Hedef öneki (göreli anahtar)', configuration.storagePrefix, storagePrefix => setConfiguration({ ...configuration, storagePrefix }))}
-      {selection('configuration.storageExecutionLocation', 'Depolama yürütme konumu', configuration.storageExecutionLocation, [['Agent', 'Agent'], ['Backend', 'Backend']], value => setConfiguration({ ...configuration, storageExecutionLocation: value as BackupConfiguration['storageExecutionLocation'] }))}
       {text('configuration.stagingReference', 'Staging referansı', configuration.stagingReference, stagingReference => setConfiguration({ ...configuration, stagingReference }))}
     </Section>
     <Section title="Zamanlama">
@@ -121,8 +144,8 @@ function JobForm({ job }: { job?: BackupJob }) {
       {number('retention.deleteGracePeriodSeconds', 'DeleteGracePeriod — silme bekleme süresi (saniye)', retention.deleteGracePeriodSeconds, value => setRetention({ ...retention, deleteGracePeriodSeconds: value ?? 0 }), !canAdmin)}
       <p className="text-sm text-text-muted md:col-span-2">Politika değişikliği mevcut yedeklerin son kullanma tarihini değiştirmez.</p>
     </Section>
-    {job && <section className="space-y-3 rounded-lg border border-border bg-surface p-4"><h2 className="text-lg font-medium">Son zamanlama oluşumları</h2><QueryState isPending={occurrences.isPending} error={occurrences.error} empty={occurrences.data?.length === 0}><ul className="space-y-2 text-sm">{occurrences.data?.map(item => <li key={item.id}>{new Date(item.scheduledAt).toLocaleString('tr-TR')} · {item.outcome} · {item.reason}{item.runId && <> · <Link className="text-primary underline" to={`/tenants/${tenantId}/backup-runs/${item.runId}`}>Çalıştırmayı aç</Link></>}</li>)}</ul></QueryState></section>}
+    {job && <section className="space-y-3 rounded-lg border border-border bg-surface p-4"><h2 className="text-lg font-medium">Son zamanlama oluşumları</h2><QueryState isPending={occurrences.isPending} error={occurrences.error} empty={occurrences.data?.length === 0}><ul className="space-y-2 text-sm">{occurrences.data?.map(item => <li key={item.id}>{new Date(item.scheduledAt).toLocaleString('tr-TR')} · {item.outcome} · {item.outcome === 'AdmissionDenied' ? failureMessage(item.reason) : item.reason}{item.runId && <> · <Link className="text-primary underline" to={`/tenants/${tenantId}/backup-runs/${item.runId}`}>Çalıştırmayı aç</Link></>}</li>)}</ul></QueryState></section>}
     {save.error && <div role="alert" className="rounded-md border border-destructive/30 p-3 text-sm">{errorMessage(save.error)}</div>}
-    <div className="flex justify-end"><Button type="submit" disabled={save.isPending}>{save.isPending ? 'Kaydediliyor…' : 'Kaydet'}</Button></div>
+    <div className="flex justify-end"><Button type="submit" disabled={save.isPending || cannotSave}>{save.isPending ? 'Kaydediliyor…' : 'Kaydet'}</Button></div>
   </form>
 }
