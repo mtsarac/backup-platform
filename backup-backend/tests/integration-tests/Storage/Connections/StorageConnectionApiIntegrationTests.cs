@@ -269,7 +269,7 @@ public sealed class StorageConnectionApiIntegrationTests(PostgreSqlFixture fixtu
     }
 
     [Fact]
-    public async Task TenantCannotCreateCentralOrPlannedProviders()
+    public async Task TenantCannotCreateCentralProvider()
     {
         await using var env = await ApiWorld.CreateAsync(fixture);
 
@@ -277,11 +277,6 @@ public sealed class StorageConnectionApiIntegrationTests(PostgreSqlFixture fixtu
         using var central = await env.Admin.SendAsync(HttpMethod.Post, env.TenantRoot + "/storage-connections", new { providerType = "central", name = "My Central" });
         Assert.Equal(HttpStatusCode.Forbidden, central.StatusCode);
         Assert.Equal("platform_managed_provider", AgentWorld.ReadJson(central).GetProperty("code").GetString());
-
-        // Google Drive (planned) -> 400 provider_not_available
-        using var gdrive = await env.Admin.SendAsync(HttpMethod.Post, env.TenantRoot + "/storage-connections", new { providerType = "google-drive", name = "My Drive" });
-        Assert.Equal(HttpStatusCode.BadRequest, gdrive.StatusCode);
-        Assert.Equal("provider_not_available", AgentWorld.ReadJson(gdrive).GetProperty("code").GetString());
     }
 
     // ---- secret safety and test probe ------------------------------------------------------------------------------------------

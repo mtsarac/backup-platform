@@ -161,6 +161,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "managed-service", "managed-
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BackupPlatform.ManagedService", "src\modules\managed-service\BackupPlatform.ManagedService.csproj", "{6CD156B9-8874-4DF1-92FF-BDE631234A22}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "google-drive", "google-drive", "{744CC783-0CC7-9765-399C-59CCBDF2A2BD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BackupPlatform.StorageProviders.GoogleDrive", "src\providers\storage\google-drive\BackupPlatform.StorageProviders.GoogleDrive.csproj", "{E58B1F43-5869-42DA-BADA-3EF0B58B9242}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -591,6 +595,18 @@ Global
 		{6CD156B9-8874-4DF1-92FF-BDE631234A22}.Release|x64.Build.0 = Release|Any CPU
 		{6CD156B9-8874-4DF1-92FF-BDE631234A22}.Release|x86.ActiveCfg = Release|Any CPU
 		{6CD156B9-8874-4DF1-92FF-BDE631234A22}.Release|x86.Build.0 = Release|Any CPU
+		{E58B1F43-5869-42DA-BADA-3EF0B58B9242}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E58B1F43-5869-42DA-BADA-3EF0B58B9242}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E58B1F43-5869-42DA-BADA-3EF0B58B9242}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E58B1F43-5869-42DA-BADA-3EF0B58B9242}.Debug|x64.Build.0 = Debug|Any CPU
+		{E58B1F43-5869-42DA-BADA-3EF0B58B9242}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E58B1F43-5869-42DA-BADA-3EF0B58B9242}.Debug|x86.Build.0 = Debug|Any CPU
+		{E58B1F43-5869-42DA-BADA-3EF0B58B9242}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E58B1F43-5869-42DA-BADA-3EF0B58B9242}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E58B1F43-5869-42DA-BADA-3EF0B58B9242}.Release|x64.ActiveCfg = Release|Any CPU
+		{E58B1F43-5869-42DA-BADA-3EF0B58B9242}.Release|x64.Build.0 = Release|Any CPU
+		{E58B1F43-5869-42DA-BADA-3EF0B58B9242}.Release|x86.ActiveCfg = Release|Any CPU
+		{E58B1F43-5869-42DA-BADA-3EF0B58B9242}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -673,5 +689,7 @@ Global
 		{3784AC1C-A2AE-AAA7-DC73-893EE5D5E2F1} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{456CD1E2-C52F-5E17-9D56-7CB7B1BE6C4B} = {EC447DCF-ABFA-6E24-52A5-D7FD48A5C558}
 		{6CD156B9-8874-4DF1-92FF-BDE631234A22} = {456CD1E2-C52F-5E17-9D56-7CB7B1BE6C4B}
+		{744CC783-0CC7-9765-399C-59CCBDF2A2BD} = {E49D6A69-42C7-7E21-719F-CF7CE880A98E}
+		{E58B1F43-5869-42DA-BADA-3EF0B58B9242} = {744CC783-0CC7-9765-399C-59CCBDF2A2BD}
 	EndGlobalSection
 EndGlobal

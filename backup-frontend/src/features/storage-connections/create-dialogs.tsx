@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { FormDialog } from '@/features/platform/plans/form-dialog'
 import { usePlatformTenants } from '@/features/platform/hooks'
@@ -7,7 +8,9 @@ import { QUOTA_SCOPE_PATTERN } from '@/features/storage/scope-input'
 import { ConfigFieldInputs, SecretFieldInputs } from './descriptor-fields'
 import { activeSecretFields, buildConfiguration, buildSecretValues, configurationComplete, hasSecretInput, initialFieldValues, secretsComplete } from './descriptor-values'
 import type { FieldValues } from './descriptor-values'
-import { useCreatePlatformConnection, useCreateTenantConnection, usePlatformProviders } from './hooks'
+import { storageConnectionKeys, useCreatePlatformConnection, useCreateTenantConnection, usePlatformProviders } from './hooks'
+import { getGoogleDriveAuthorizeUrl, testTenantConnection } from './api'
+import { openGoogleOAuthPopup } from './google-oauth'
 import { connectionErrorMessage, errorField, invalidFieldName, isPlatformCreatable } from './labels'
 import type { ProviderDescriptor, TenantCreateConnectionInput } from './types'
 
@@ -42,13 +45,28 @@ export function CreateConnectionDialog({ provider, onClose }: { provider: Provid
   const [config, setConfig] = useState<FieldValues>(() => initialFieldValues(provider.configFields, {}, provider.providerType))
   const [secret, setSecret] = useState<Record<string, string>>({})
   const create = useCreateTenantConnection()
+  const client = useQueryClient()
   const reset = create.reset
   useEffect(() => reset, [reset])
 
   function submit() {
     const input = providerPayload(provider, name, config, secret)
     setSecret({})
-    create.mutate(input, { onSuccess: () => { reset(); onClose() } })
+    create.mutate(input, {
+      onSuccess: (newConnection) => {
+        reset()
+        onClose()
+        if (provider.providerType === 'google-drive') {
+          getGoogleDriveAuthorizeUrl(newConnection.tenantId, newConnection.id).then(({ authorizationUrl }) => {
+            openGoogleOAuthPopup(authorizationUrl, () => {
+              // The test records its result on the connection either way; refresh the list so the new state is shown.
+              testTenantConnection(newConnection.tenantId, newConnection.id).catch(() => {})
+                .finally(() => client.invalidateQueries({ queryKey: storageConnectionKeys.tenantAll(newConnection.tenantId) }))
+            })
+          }).catch(() => {})
+        }
+      }
+    })
   }
 
   return <FormDialog title={`Bağlantı ekle: ${provider.displayName}`} submitLabel="Bağlantı ekle" pendingLabel="Ekleniyor…" pending={create.isPending}

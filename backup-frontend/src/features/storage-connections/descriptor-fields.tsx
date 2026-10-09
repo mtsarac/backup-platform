@@ -5,7 +5,10 @@ import type { ConfigField, SecretField } from './types'
 
 export function ConfigFieldInputs({ fields, values, onChange, invalidName, providerType }: { fields: readonly ConfigField[]; values: FieldValues; onChange: (name: string, value: string | boolean) => void; invalidName?: string; providerType?: string }) {
   const prefix = useId()
-  return <>{fields.map((field) => {
+  const visibleFields = providerType === 'google-drive'
+    ? fields.filter((f) => !['accountEmail', 'accountName', 'folderId', 'reauthorizationRequired'].includes(f.name))
+    : fields
+  return <>{visibleFields.map((field) => {
     const id = `${prefix}-${field.name}`
     const invalid = invalidName === field.name
     if (field.kind === 'Boolean') {

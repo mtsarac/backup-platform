@@ -102,6 +102,8 @@ public sealed class StorageConnectionService(
             throw new InvalidStorageConnectionException($"secret.{descriptor.SecretFields.First(field => field.Required).Name}", "required");
         }
 
+        if (descriptor.ProviderType == StorageProviderTypes.GoogleDrive)
+            configuration["reauthorizationRequired"] = "true";
         var now = time.GetUtcNow();
         var id = Guid.NewGuid();
         var connection = new StorageConnection(id, tenantId, name, descriptor.ProviderType, ownership, quotaScope, configuration, isDefault: false, now);
@@ -191,6 +193,9 @@ public sealed class StorageConnectionService(
             }
             if (newConfiguration is not null)
             {
+                if (connection.ProviderType == StorageProviderTypes.GoogleDrive)
+                    newConfiguration["reauthorizationRequired"] = connection.Configuration.GetValueOrDefault("reauthorizationRequired")
+                        ?? (connection.HasSecret ? "false" : "true");
                 var before = connection.Configuration.Keys.ToHashSet(StringComparer.Ordinal);
                 var keysChanged = newConfiguration.Keys.Union(before, StringComparer.Ordinal)
                     .Where(key => !connection.Configuration.TryGetValue(key, out var current) || !newConfiguration.TryGetValue(key, out var next) || current != next).Order(StringComparer.Ordinal).ToList();
@@ -310,7 +315,13 @@ public sealed class StorageConnectionService(
         var result = await store.MutateAsync(id, scope.TenantId, (connection, now) =>
         {
             removed = connection.DetachSecret(now);
-            return removed is null
+            var configurationChanged = false;
+            if (connection.ProviderType == StorageProviderTypes.GoogleDrive)
+                configurationChanged = connection.Reconfigure(new Dictionary<string, string>(connection.Configuration, StringComparer.Ordinal)
+                {
+                    ["reauthorizationRequired"] = "true"
+                }, now);
+            return removed is null && !configurationChanged
                 ? StorageMutationResult.NoChange
                 : new StorageMutationResult(true, [new StorageAuditEntry(StorageConnectionAuditActions.SecretCleared, Details(connection))]);
         }, new StorageActor(actorId, scope.ActorKind), time.GetUtcNow(), cancellationToken);
@@ -389,7 +400,18 @@ public sealed class StorageConnectionService(
         watch.Stop();
         StorageConnectionResult result = await store.MutateAsync(id, scope.TenantId, (connection, now) =>
         {
-            if (connection.SecretReference != testedSecret || !SftpConnectionRules.SameConfiguration(connection.Configuration, testedConfiguration))
+            IReadOnlyDictionary<string, string> currentConfiguration = connection.Configuration;
+            IReadOnlyDictionary<string, string> expectedConfiguration = testedConfiguration;
+            if (connection.ProviderType == StorageProviderTypes.GoogleDrive)
+            {
+                var current = new Dictionary<string, string>(currentConfiguration, StringComparer.Ordinal);
+                var expected = new Dictionary<string, string>(expectedConfiguration, StringComparer.Ordinal);
+                current.Remove("reauthorizationRequired");
+                expected.Remove("reauthorizationRequired");
+                currentConfiguration = current;
+                expectedConfiguration = expected;
+            }
+            if (connection.SecretReference != testedSecret || !SftpConnectionRules.SameConfiguration(currentConfiguration, expectedConfiguration))
                 return StorageMutationResult.Rejected("concurrent_update");
             connection.RecordTest(test.Status, test.Code, now);
             var details = Details(connection);

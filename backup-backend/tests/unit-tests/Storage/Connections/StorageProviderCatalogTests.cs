@@ -49,20 +49,19 @@ public sealed class StorageProviderCatalogTests
         Assert.Equal(StorageTestMode.BackendRoundTrip, central.TestMode);
     }
 
-    [Theory]
-    [InlineData("google-drive")]
-    public void PlannedBuiltInsHaveNoCapabilitiesCannotBeTestedAndNobodyMayCreateThem(string providerType)
+    [Fact]
+    public void GoogleDriveIsAvailableTenantCreatableWithBackendRoundTrip()
     {
-        var descriptor = StorageProviderCatalog.BuiltIn().Find(providerType)!;
+        var googleDrive = BuiltInStorageProviders.GoogleDrive;
 
-        Assert.Equal(StorageProviderAvailability.Planned, descriptor.Availability);
-        Assert.False(descriptor.IsAvailable);
-        Assert.Empty(descriptor.Capabilities);
-        Assert.Equal(StorageTestMode.None, descriptor.TestMode);
-        Assert.False(descriptor.TenantCreatable);
-        Assert.False(descriptor.PlatformCreatable);
-        Assert.Null(descriptor.Topology);
-        Assert.Null(descriptor.ExecutionLocation);
+        Assert.Equal(StorageProviderAvailability.Available, googleDrive.Availability);
+        Assert.True(googleDrive.IsAvailable);
+        Assert.True(googleDrive.TenantCreatable);
+        Assert.False(googleDrive.PlatformCreatable);
+        Assert.Equal([StorageOwnership.TenantManaged], googleDrive.SupportedOwnerships);
+        Assert.Equal(StorageTestMode.BackendRoundTrip, googleDrive.TestMode);
+        Assert.Contains(googleDrive.ConfigFields, f => f.Name == "accountEmail");
+        Assert.Contains(googleDrive.SecretFields, f => f.Name == "refreshToken");
     }
 
     [Fact]

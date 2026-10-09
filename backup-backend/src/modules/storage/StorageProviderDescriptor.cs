@@ -122,7 +122,17 @@ public static class BuiltInStorageProviders
         [new("password", "Password", false), new("privateKey", "SSH private key", false), new("passphrase", "Private key passphrase", false)],
         StorageTestMode.BackendRoundTrip);
 
-    public static StorageProviderDescriptor GoogleDrive { get; } = Planned(StorageProviderTypes.GoogleDrive, "Google Drive");
+    public static StorageProviderDescriptor GoogleDrive { get; } = new(
+        StorageProviderTypes.GoogleDrive, "Google Drive", StorageProviderAvailability.Available, StorageTopology.BackendRelayed, BackupStorageExecutionLocation.Backend,
+        ["storage.read", "storage.delete", "storage.atomic-publish", "storage.verify-absence"], [StorageOwnership.TenantManaged],
+        tenantCreatable: true, platformCreatable: false, maxConnectionsPerTenant: null,
+        [
+            new("accountEmail", "Google hesabı", StorageFieldKind.Text, false, 256),
+            new("accountName", "Hesap adı", StorageFieldKind.Text, false, 256),
+            new("folderId", "Klasör ID", StorageFieldKind.Text, false, 128)
+        ],
+        [new("refreshToken", "Refresh token", false)],
+        StorageTestMode.BackendRoundTrip);
 
     public static IReadOnlyList<StorageProviderDescriptor> All { get; } = [Local, Central, Sftp, GoogleDrive];
 

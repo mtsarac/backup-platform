@@ -8,6 +8,7 @@ import {
   setPlatformConnectionEnabled, setPlatformConnectionSecret, setTenantConnectionEnabled, setTenantConnectionSecret, testPlatformConnection,
   testTenantConnection, updatePlatformConnection, updateTenantConnection,
 } from './api'
+import { getGoogleDriveAuthorizeUrl, disconnectGoogleDrive } from './api'
 import type {
   ConnectionTestResponse, ConnectionView, PlatformConnectionFilters, PlatformCreateConnectionInput, PlatformUpdateConnectionInput,
   SecretValues, TenantCreateConnectionInput,
@@ -133,5 +134,24 @@ export function useCreatePlatformConnection() {
     mutationFn: ({ tenantId, input }: { tenantId: string; input: PlatformCreateConnectionInput }) => createPlatformConnection(tenantId, input),
     onSettled: (_data, _error, variables) => invalidatePlatformViews(client, variables.tenantId),
     gcTime: 0,
+  })
+}
+
+export function useGoogleDriveConnect() {
+  return useMutation({
+    mutationFn: ({ tenantId, connectionId }: { tenantId: string; connectionId: string }) =>
+      getGoogleDriveAuthorizeUrl(tenantId, connectionId),
+  })
+}
+
+export function useGoogleDriveDisconnect() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ tenantId, connectionId }: { tenantId: string; connectionId: string }) =>
+      disconnectGoogleDrive(tenantId, connectionId),
+    onSettled: (_data, _error, variables) => {
+      invalidateTenantViews(client, variables.tenantId)
+      invalidatePlatformViews(client, variables.tenantId)
+    },
   })
 }

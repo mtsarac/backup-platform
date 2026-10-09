@@ -1,5 +1,8 @@
 using System.Net;
 using System.Text.Json;
+using System.Net.Http.Json;
+using BackupPlatform.Contracts.Agents;
+using BackupPlatform.Contracts.Backups;
 using static BackupPlatform.IntegrationTests.RestoreApiScenario;
 
 namespace BackupPlatform.IntegrationTests;
@@ -79,6 +82,36 @@ public sealed class RestoreTaskApiTests(PostgreSqlFixture fixture) : IClassFixtu
             Assert.All(new[] { start, renew, progress, complete }, response => Assert.Equal(HttpStatusCode.NotFound, response.StatusCode));
         }
         Assert.Equal("Running", StatusOf(await scenario.RestoreAsync(restoreId)));
+    }
+
+    [Theory]
+    [InlineData("content")]
+    [InlineData("metadata")]
+    [InlineData("verify")]
+    public async Task StorageRelay_RejectsAnotherAgentEvenWithTheCorrectRestoreLease(string endpoint)
+    {
+        var (scenario, _, task) = await ClaimedAsync(fixture, started: true);
+        await using var _ = scenario;
+        var sibling = await scenario.AddAgentAsync();
+        var source = task.Snapshot.GetProperty("source");
+        foreach (var caller in new[] { scenario.Agent, sibling })
+        {
+            using var request = new HttpRequestMessage(endpoint == "verify" ? HttpMethod.Post : HttpMethod.Get,
+                $"/api/agent/restore-tasks/{task.AttemptId}/storage/{endpoint}");
+            request.Headers.TryAddWithoutValidation("Authorization", AgentAuthorizationScheme.FormatHeaderValue(caller.CredentialId, caller.Secret));
+            request.Headers.Add("X-Backup-Agent-Protocol", "1.0");
+            request.Headers.Add(TaskStorageProtocol.LeaseHeader, task.LeaseToken.ToString("D"));
+            request.Headers.Add(TaskStorageProtocol.RestoreHeader, task.OperationId.ToString("D"));
+            request.Headers.Add(TaskStorageProtocol.KeyHeader, source.GetProperty("storageKey").GetString());
+            if (endpoint == "verify")
+                request.Content = JsonContent.Create(new TaskStorageVerifyRequest(source.GetProperty("sizeBytes").GetInt64(), source.GetProperty("checksum").GetString()!));
+
+            using var response = await scenario.World.Anonymous.SendAsync(request);
+
+            Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+            // The owner passes the lease fence; this fixture's central replica is intentionally not a relay source.
+            Assert.Equal(caller == scenario.Agent ? "source_inaccessible" : "lease_conflict", Error(response));
+        }
     }
 
     [Fact]

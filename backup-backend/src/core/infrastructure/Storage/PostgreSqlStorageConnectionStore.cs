@@ -146,6 +146,13 @@ public sealed class PostgreSqlStorageConnectionStore(
             if ((movesStorage || clearsCredentials) && await HasReferencesAsync(context, owner, id, cancellationToken))
                 return new(StorageConnectionOutcome.Rejected, Code: "connection_in_use");
         }
+        if (connection.ProviderType == StorageProviderTypes.GoogleDrive)
+        {
+            var movesStorage = previousConfiguration.GetValueOrDefault("folderId") != connection.Configuration.GetValueOrDefault("folderId");
+            var clearsCredentials = previousSecret is not null && connection.SecretReference is null;
+            if ((movesStorage || clearsCredentials) && await HasReferencesAsync(context, owner, id, cancellationToken))
+                return new(StorageConnectionOutcome.Rejected, Code: "connection_in_use");
+        }
         if (!result.Changed)
         {
             return new(StorageConnectionOutcome.Unchanged, await ReadAsync(context, id, owner, cancellationToken));

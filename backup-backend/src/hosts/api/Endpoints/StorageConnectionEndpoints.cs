@@ -56,6 +56,9 @@ public static class StorageConnectionEndpoints
         tenant.MapPost("/storage-connections/{id:guid}/disable", (Guid id, ITenantContext t, ICurrentUser u, StorageConnectionService s, CancellationToken c) =>
             ToggleAsync(Scope(t), id, false, u, s, c)).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
         tenant.MapDelete("/storage-connections/{id:guid}", DeleteForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+        tenant.MapPost("/storage-connections/{id:guid}/google-drive/authorize-url", GoogleDriveAuthorizeAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+        tenant.MapPost("/storage-connections/{id:guid}/google-drive/disconnect", GoogleDriveDisconnectAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+        tenant.MapGet("/storage-connections/google-drive/callback", GoogleDriveOAuthCallbackAsync).AllowAnonymous();
 
         var platform = endpoints.MapGroup("/api/platform").RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
         platform.MapGet("/storage-providers", ListProviders);
@@ -72,6 +75,7 @@ public static class StorageConnectionEndpoints
         platform.MapPost("/storage-connections/{id:guid}/disable", (Guid id, ICurrentUser u, StorageConnectionService s, CancellationToken c) =>
             ToggleAsync(StorageScope.Platform, id, false, u, s, c));
         platform.MapDelete("/storage-connections/{id:guid}", DeleteForPlatformAsync);
+        endpoints.MapGet("/api/platform/google-drive/oauth/callback", GoogleDriveOAuthCallbackAsync).AllowAnonymous();
         return endpoints;
     }
 
@@ -281,4 +285,82 @@ public static class StorageConnectionEndpoints
             canTest = view.Permissions.CanTest
         }
     };
+
+    private static async Task<IResult> GoogleDriveAuthorizeAsync(
+        Guid id, ITenantContext tenant, ICurrentUser user,
+        BackupPlatform.Api.Backups.GoogleDriveOAuthService oauth, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var url = await oauth.CreateAuthorizationUrlAsync(tenant.TenantId!, id, user.UserId!.Value, cancellationToken);
+            return Results.Ok(new { authorizationUrl = url });
+        }
+        catch (InvalidOperationException)
+        {
+            // Unknown / disabled connection, or the platform OAuth client is not configured: nothing about which is revealed.
+            return Results.Conflict(new { error = "google_drive_authorization_unavailable" });
+        }
+    }
+
+    private static async Task<IResult> GoogleDriveDisconnectAsync(
+        Guid id, ITenantContext tenant, ICurrentUser user,
+        BackupPlatform.Api.Backups.GoogleDriveOAuthService oauth, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await oauth.DisconnectAsync(tenant.TenantId!, id, user.UserId!.Value, cancellationToken);
+            return Results.Ok(new { disconnected = true });
+        }
+        catch (InvalidOperationException)
+        {
+            return Failure(StorageConnectionOutcome.NotFound, null);
+        }
+    }
+
+    private static async Task<IResult> GoogleDriveOAuthCallbackAsync(
+        HttpRequest request,
+        BackupPlatform.Api.Backups.GoogleDriveOAuthService oauth,
+        Microsoft.Extensions.Options.IOptions<BackupPlatform.Api.Backups.GoogleDrivePlatformOptions> options,
+        CancellationToken cancellationToken)
+    {
+        var code = request.Query["code"].ToString();
+        var state = request.Query["state"].ToString();
+        var error = request.Query["error"].ToString();
+        var result = await oauth.ProcessCallbackAsync(code, state, string.IsNullOrEmpty(error) ? null : error, cancellationToken);
+
+        // Only server-fixed text and a server-generated GUID reach the page: nothing from the query string is echoed.
+        var html = $$"""
+            <!DOCTYPE html>
+            <html>
+            <head><title>Google Drive Authorization</title></head>
+            <body style="font-family:sans-serif;text-align:center;padding:50px;">
+            <script>
+                if (window.opener) {
+                    window.opener.postMessage({
+                        type: 'GOOGLE_DRIVE_OAUTH_COMPLETED',
+                        success: {{(result.Success ? "true" : "false")}},
+                        connectionId: '{{(result.ConnectionId?.ToString("D") ?? "")}}'
+                    }, {{MessageTargetOriginScript(options.Value.FrontendOrigin)}});
+                    window.close();
+                } else {
+                    window.location.href = '/';
+                }
+            </script>
+            <h2>{{(result.Success ? "Google Drive bağlantısı başarılı!" : "Bağlantı başarısız")}}</h2>
+            <p>{{(result.Success ? "Pencereyi kapatabilirsiniz." : "Google Drive yetkilendirmesi tamamlanamadı. Lütfen tekrar deneyin.")}}</p>
+            </body>
+            </html>
+            """;
+
+        return Results.Content(html, "text/html", System.Text.Encoding.UTF8);
+    }
+
+    /// <summary>
+    /// The popup is opened by the frontend, which is not the API origin when the two run on different ports. Only the explicitly configured
+    /// <c>GoogleDrive:FrontendOrigin</c> (a bare http/https origin) is ever a target; unset or malformed means same-origin delivery. Never a wildcard.
+    /// </summary>
+    private static string MessageTargetOriginScript(string? configured) =>
+        Uri.TryCreate(configured, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" && uri.AbsolutePath == "/" && uri.Query.Length == 0 && uri.Fragment.Length == 0
+            ? System.Text.Json.JsonSerializer.Serialize(uri.GetLeftPart(UriPartial.Authority))
+            : "window.location.origin";
 }

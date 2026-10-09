@@ -30,7 +30,7 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
         return new DatabaseBackupPipelineRequest(DatabaseEngineId.MsSql, connection, credential, configuration.Database,
             staging, storage, prefix, options)
         {
-            StorageOverride = configuration.StorageProvider == "sftp"
+            StorageOverride = configuration.StorageProvider is "sftp" or "google-drive"
                 ? (storageFactory ?? throw new ArgumentException("Backend-relayed storage is not configured.")).CreateBackup(task)
                 : null
         };
@@ -63,7 +63,7 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
         {
             throw new ArgumentException("The backup configuration is unsupported.");
         }
-        if (configuration.StorageProvider == "sftp" && (configuration.StorageExecutionLocation != "Backend"
+        if ((configuration.StorageProvider is "sftp" or "google-drive") && (configuration.StorageExecutionLocation != "Backend"
             || configuration.StorageConnectionId is null || configuration.StorageConnectionId == Guid.Empty || configuration.StoragePrefix != string.Empty))
         {
             throw new ArgumentException("The backend-relayed storage configuration is invalid.");

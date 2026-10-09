@@ -281,3 +281,46 @@ Disposable integration smoke for backend-relayed SFTP storage:
 - Requests artifact deletion through retention API (`DELETE /api/tenants/{id}/backup-artifacts/{id}`); retention worker removes remote SFTP file, confirms absence and quota reduced to zero.
 - Cleans up only owned containers, databases, and runtime directories on exit.
 - Windows evidence note: SFTP relay/storage operations are backend-relayed; Agent backup execution is portable. Windows VM onboarding remains documented under `scripts/windows/` and was not fabricated.
+
+## Persistent local development stack (`scripts/dev/`)
+
+Not disposable: state lives in `~/.local/share/backup-platform-dev` (override with `BP_DEV_HOME`), the PostgreSQL database is `backup_platform_dev`
+in the existing `postgres` container, and accounts are written once to the git-ignored `docs/local-development-accounts.txt` (0600).
+
+```bash
+scripts/dev/start.sh [--no-build] [--no-agent]   # idempotent: MSSQL container, DB, migrations, API, seed, Vite, Linux Agent
+scripts/dev/status.sh
+scripts/dev/stop.sh                              # stops processes + bp-dev-mssql only; keeps every piece of data
+scripts/dev/agent.sh start|stop|status
+scripts/dev/mssql-test-db.sh create|verify DB|drop-restored DB
+scripts/dev/acceptance.py backup|download|restore|delete|all --provider local|google-drive
+```
+
+- Frontend `http://localhost:5173` (Vite, `/api` proxied to `https://localhost:7179`); API `http://localhost:5252` (the Google OAuth callback) and `https://localhost:7179` (Agent).
+- Google credentials are read from `docs/client_secret_*.json` at API start into the process environment only; `GoogleDrive__FrontendOrigin` allowlists the one
+  frontend origin the callback popup may `postMessage` to. In Development only, the callback path is exempt from HTTPS redirection (Google's registered URI is plain `http://localhost`).
+- `bp-dev-mssql` is a dedicated container because the shared `mssql` container keeps staging in a root-only Docker volume the host Agent cannot read. Only this stack stops/starts it.
+- Dev-only retention override: `DefaultDeleteGracePeriod=10s` so deletion can be exercised by hand (production default: 1 day).
+
+### M7c hardening and operating limits
+
+- Refresh/rotation, OAuth callback and disconnect reuse PostgreSQL tenant locking. All nodes must share PostgreSQL, secret storage and Data Protection keys.
+  The lock spans Google HTTP and durable credential persistence; slow Google responses can delay tenant management/quota work. External token rotation
+  cannot be atomic with a local secret write: a crash or storage outage can still require reauthorization.
+- `reauthorizationRequired` is server-controlled and ordinary configuration updates preserve it. OAuth state is consumed atomically; the Google Drive
+  migration Designer now has the full target model matching the snapshot.
+- Replica lookup requires tenant/connection/key identity; reupload updates the catalog's complete Drive identity. Replacement uploads preserve the old
+  file until commit. Restore relay checks the authenticated target Agent. Staging rejects excess bytes and uses owner-only Unix permissions.
+- There is no aggregate/concurrent staging reservation or crash-file sweeper. Use a protected staging volume, restrictive Windows ACLs and operational
+  concurrency/free-space monitoring. The current free-space probe does not reliably identify a separately mounted staging volume.
+- Completed-object retries verify content, but resumable session/offset state is not persisted across process restarts. Lost completion/session expiry
+  and concurrent folder creation can leave duplicate/orphan objects; session-expiry retries have no independent bound.
+- Drive reason-code mapping and external-drift telemetry are incomplete. Browser consumers should verify the published SHA-256; streaming can deliver
+  bytes before a final integrity failure. Restore checksum verification should remain enabled.
+- The earlier `BackendRelayedRestoreSources` migration still has an empty Designer target model; rollback/downgrade remains an operational risk.
+
+Focused PostgreSQL regression command (no MSSQL acceptance suite):
+
+```bash
+scripts/integration/run-postgres-tests.sh --filter 'FullyQualifiedName~GoogleDrive|FullyQualifiedName~StorageRelay_RejectsAnotherAgentEvenWithTheCorrectRestoreLease|FullyQualifiedName~StorageConnectionApiIntegrationTests'
+```

@@ -15,15 +15,15 @@ namespace BackupPlatform.Agent.Transport;
 public sealed class HttpTaskStorageProviderFactory(HttpClient http, AgentBackendEndpoint endpoint, IAgentCredentialStore identities) : ITaskStorageProviderFactory
 {
     public IStorageProvider CreateBackup(BackupTaskSnapshot task) => new Provider(http, endpoint, identities,
-        $"api/agent/tasks/{task.AttemptId:D}/storage", task.LeaseToken, null);
+        $"api/agent/tasks/{task.AttemptId:D}/storage", task.LeaseToken, null, task.Configuration.StorageProvider);
 
     public IStorageProvider CreateRestore(RestoreTaskSnapshot task) => new Provider(http, endpoint, identities,
-        $"api/agent/restore-tasks/{task.AttemptId:D}/storage", task.LeaseToken, task.OperationId);
+        $"api/agent/restore-tasks/{task.AttemptId:D}/storage", task.LeaseToken, task.OperationId, task.Source.StorageProvider);
 
     private sealed class Provider(HttpClient http, AgentBackendEndpoint endpoint, IAgentCredentialStore identities,
-        string path, Guid lease, Guid? restore) : IStorageProvider
+        string path, Guid lease, Guid? restore, string providerType) : IStorageProvider
     {
-        public StorageProviderId Id { get; } = new("sftp");
+        public StorageProviderId Id { get; } = new(providerType);
         public StorageTopology Topology => StorageTopology.BackendRelayed;
         public StorageCapabilities Capabilities { get; } = new([StorageCapabilityIds.Read, StorageCapabilityIds.Delete,
             StorageCapabilityIds.AtomicPublish, StorageCapabilityIds.VerifyAbsence]);

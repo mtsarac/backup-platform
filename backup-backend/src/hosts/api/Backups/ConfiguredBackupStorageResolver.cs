@@ -27,13 +27,15 @@ public sealed class ConfiguredBackupStorageResolver : IBackupStorageResolver
     private readonly Dictionary<Guid, IStorageProvider> _central = [];
     private readonly IServiceScopeFactory? _scopes;
     private readonly SftpConnectionProviderFactory? _sftp;
+    private readonly GoogleDriveConnectionProviderFactory? _googleDrive;
 
-    public ConfiguredBackupStorageResolver(BackupStorageOptions options, IServiceScopeFactory? scopes = null, SftpConnectionProviderFactory? sftp = null)
+    public ConfiguredBackupStorageResolver(BackupStorageOptions options, IServiceScopeFactory? scopes = null, SftpConnectionProviderFactory? sftp = null, GoogleDriveConnectionProviderFactory? googleDrive = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         options.ThrowIfInvalid();
         _scopes = scopes;
         _sftp = sftp;
+        _googleDrive = googleDrive;
         var managed = new List<BackupManagedStorage>();
         if (options.Local?.RootDirectory is { } localRoot && !string.IsNullOrWhiteSpace(localRoot))
         {
@@ -62,6 +64,12 @@ public sealed class ConfiguredBackupStorageResolver : IBackupStorageResolver
         {
             return _scopes is not null && _sftp is not null && Guid.TryParse(storageTarget, out var connectionId) && connectionId != Guid.Empty
                 ? new ScopedSftpProvider(tenantId, connectionId, _scopes, _sftp)
+                : null;
+        }
+        if (storageProvider == StorageProviderTypes.GoogleDrive)
+        {
+            return _scopes is not null && _googleDrive is not null && Guid.TryParse(storageTarget, out var connectionId) && connectionId != Guid.Empty
+                ? new ScopedGoogleDriveProvider(tenantId, connectionId, _scopes, _googleDrive)
                 : null;
         }
         if (storageTarget != storageProvider && storageTarget != DefaultTarget) return null;
@@ -113,6 +121,52 @@ public sealed class ConfiguredBackupStorageResolver : IBackupStorageResolver
                 || record.Connection.ProviderType != StorageProviderTypes.Sftp)
                 throw new StorageException(StorageFailureKind.InvalidConfiguration, "The SFTP storage connection is not available.");
             // Availability fences new admissions, not access to replicas already stored on a disabled connection.
+            var secrets = scope.ServiceProvider.GetRequiredService<ISecretProvider>();
+            var provider = factory.Create(record.Connection, secrets);
+            return await operation(provider, cancellationToken);
+        }
+    }
+
+    private sealed class ScopedGoogleDriveProvider(
+        TenantId tenantId, Guid connectionId, IServiceScopeFactory scopes, GoogleDriveConnectionProviderFactory factory) : IStorageProvider
+    {
+        private static readonly StorageCapabilities Supported = new([
+            StorageCapabilityIds.Read, StorageCapabilityIds.Delete, StorageCapabilityIds.AtomicPublish, StorageCapabilityIds.VerifyAbsence]);
+
+        public StorageProviderId Id { get; } = new(StorageProviderTypes.GoogleDrive);
+        public StorageTopology Topology => StorageTopology.BackendRelayed;
+        public StorageCapabilities Capabilities => Supported;
+
+        public Task<StorageObjectMetadata> PutAsync(StorageObjectKey key, Stream content, StoragePutOptions options, IProgress<long>? progress, CancellationToken cancellationToken) =>
+            ExecuteAsync((provider, token) => provider.PutAsync(key, content, options, progress, token), cancellationToken);
+
+        public Task<bool> ExistsAsync(StorageObjectKey key, CancellationToken cancellationToken) =>
+            ExecuteAsync((provider, token) => provider.ExistsAsync(key, token), cancellationToken);
+
+        public Task<StorageObjectMetadata?> GetMetadataAsync(StorageObjectKey key, CancellationToken cancellationToken) =>
+            ExecuteAsync((provider, token) => provider.GetMetadataAsync(key, token), cancellationToken);
+
+        public Task<StorageVerificationResult> VerifyAsync(StorageObjectKey key, StorageVerificationExpectation expected, CancellationToken cancellationToken) =>
+            ExecuteAsync((provider, token) => provider.VerifyAsync(key, expected, token), cancellationToken);
+
+        public Task<Stream> OpenReadAsync(StorageObjectKey key, CancellationToken cancellationToken) =>
+            ExecuteAsync((provider, token) => provider.OpenReadAsync(key, token), cancellationToken);
+
+        public Task<bool> DeleteAsync(StorageObjectKey key, CancellationToken cancellationToken) =>
+            ExecuteAsync((provider, token) => provider.DeleteAsync(key, token), cancellationToken);
+
+        public IAsyncEnumerable<StorageEntry> EnumerateAsync(StorageObjectKey? prefix, DateTimeOffset modifiedBefore, CancellationToken cancellationToken) =>
+            throw new StorageException(StorageFailureKind.NotSupported, "Google Drive enumeration is not supported.");
+
+        private async Task<T> ExecuteAsync<T>(Func<IStorageProvider, CancellationToken, Task<T>> operation, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var scope = scopes.CreateAsyncScope();
+            var store = scope.ServiceProvider.GetRequiredService<IStorageConnectionStore>();
+            var record = await store.FindAsync(connectionId, tenantId, cancellationToken);
+            if (record is null || record.Connection.Id != connectionId || record.Connection.TenantId != tenantId
+                || record.Connection.ProviderType != StorageProviderTypes.GoogleDrive)
+                throw new StorageException(StorageFailureKind.InvalidConfiguration, "The Google Drive storage connection is not available.");
             var secrets = scope.ServiceProvider.GetRequiredService<ISecretProvider>();
             var provider = factory.Create(record.Connection, secrets);
             return await operation(provider, cancellationToken);

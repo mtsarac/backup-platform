@@ -196,3 +196,73 @@ public sealed class SftpConnectionTester(Func<StorageConnection, ISecretProvider
 
     private static string CodeFor(StorageFailureKind kind) => CentralConnectionTester.CodeFor(kind);
 }
+
+/// <summary>
+/// Tests a Google Drive connection by verifying OAuth credentials, folder access, probe upload, verification and deletion.
+/// </summary>
+public sealed class GoogleDriveConnectionTester(Func<StorageConnection, ISecretProvider, IStorageProvider> factory) : IStorageConnectionTester
+{
+    public string ProviderType => StorageProviderTypes.GoogleDrive;
+
+    public async Task<StorageTestResult> TestAsync(StorageConnection connection, ISecretProvider secrets, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        if (!connection.HasSecret)
+        {
+            return new StorageTestResult(StorageTestStatus.Failed, StorageTestCodes.SecretUnavailable, "Google Drive account is not connected. Reauthorization required.");
+        }
+
+        IStorageProvider provider;
+        try
+        {
+            provider = factory(connection, secrets);
+        }
+        catch (StorageException ex)
+        {
+            return new StorageTestResult(StorageTestStatus.Failed, CodeFor(ex.Kind), ex.Message);
+        }
+        catch (Exception)
+        {
+            return new StorageTestResult(StorageTestStatus.Failed, StorageTestCodes.InvalidConfiguration, "The storage connection configuration is invalid.");
+        }
+
+        var content = RandomNumberGenerator.GetBytes(64);
+        var key = new StorageObjectKey($"{connection.TenantId.Value:N}/connection-tests/{Guid.NewGuid():N}.probe");
+        var checksum = ContentChecksum.Sha256(SHA256.HashData(content));
+        var written = false;
+        try
+        {
+            await using (var stream = new MemoryStream(content, writable: false))
+            {
+                await provider.PutAsync(key, stream, new StoragePutOptions(StorageOverwritePolicy.Fail, checksum, content.Length), null, cancellationToken).ConfigureAwait(false);
+            }
+            written = true;
+            var verification = await provider.VerifyAsync(key, new StorageVerificationExpectation(content.Length, checksum), cancellationToken).ConfigureAwait(false);
+            if (verification.Status != StorageVerificationStatus.Verified)
+            {
+                return new StorageTestResult(StorageTestStatus.Failed, StorageTestCodes.IntegrityMismatch, "The probe object did not read back as written.");
+            }
+            await provider.DeleteAsync(key, cancellationToken).ConfigureAwait(false);
+            written = false;
+            if (await provider.ExistsAsync(key, cancellationToken).ConfigureAwait(false))
+            {
+                return new StorageTestResult(StorageTestStatus.Failed, StorageTestCodes.IoError, "The probe object still exists after deletion.");
+            }
+            return new StorageTestResult(StorageTestStatus.Succeeded, StorageTestCodes.Ok, "Verified Google Drive credentials, folder access, upload, read-back and deletion.");
+        }
+        catch (StorageException ex)
+        {
+            return new StorageTestResult(StorageTestStatus.Failed, CodeFor(ex.Kind), ex.Message);
+        }
+        finally
+        {
+            if (written)
+            {
+                try { await provider.DeleteAsync(key, CancellationToken.None).ConfigureAwait(false); }
+                catch (StorageException) { }
+            }
+        }
+    }
+
+    private static string CodeFor(StorageFailureKind kind) => CentralConnectionTester.CodeFor(kind);
+}

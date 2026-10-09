@@ -20,7 +20,11 @@ public static class SecurityApplicationBuilderExtensions
         {
             app.UseHsts();
         }
-        app.UseHttpsRedirection();
+        // Development only: Google's registered loopback redirect URI is plain http://localhost; redirecting that single callback to the untrusted dev-cert HTTPS port would break the popup.
+        var development = app.Environment.IsDevelopment();
+        app.UseWhen(
+            context => !(development && context.Request.Path.Equals("/api/platform/google-drive/oauth/callback", StringComparison.OrdinalIgnoreCase)),
+            branch => branch.UseHttpsRedirection());
         app.UseRouting();
         app.UseAuthentication();
         app.UseMiddleware<TenantResolutionMiddleware>();

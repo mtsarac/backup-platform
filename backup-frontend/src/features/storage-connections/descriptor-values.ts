@@ -43,6 +43,7 @@ export function secretsComplete(fields: readonly SecretField[], values: Record<s
 
 /** SFTP credentials follow the selected authentication method; hidden values are never submitted. */
 export function activeSecretFields(providerType: string, configuration: FieldValues | ConnectionConfiguration, fields: readonly SecretField[]): SecretField[] {
+  if (providerType === 'google-drive') return []
   if (providerType !== 'sftp') return [...fields]
   const keyAuthentication = configuration.authenticationType === 'private-key'
   return fields

@@ -43,7 +43,14 @@ export function LastTest({ test }: { test: ConnectionTest | null }) {
   </div>
 }
 
-export function SecretStatus({ connection }: { connection: Pick<ConnectionView, 'hasSecret' | 'secretUpdatedAt'> }) {
+export function SecretStatus({ connection }: { connection: Pick<ConnectionView, 'hasSecret' | 'secretUpdatedAt' | 'providerType' | 'configuration'> }) {
+  if (connection.providerType === 'google-drive') {
+    const reauth = connection.configuration?.reauthorizationRequired === 'true' || !connection.hasSecret
+    return <span className="inline-flex flex-wrap items-center gap-1.5">
+      <Badge tone={reauth ? 'warning' : 'success'}>{reauth ? 'Yeniden yetkilendirme gerekli' : 'Bağlı'}</Badge>
+      {connection.configuration?.accountEmail && <span className="text-xs text-text-muted">{String(connection.configuration.accountEmail)}</span>}
+    </span>
+  }
   return <span className="inline-flex flex-wrap items-center gap-1.5">
     <Badge tone={connection.hasSecret ? 'success' : 'neutral'}>{secretStatusLabel(connection)}</Badge>
     {connection.hasSecret && connection.secretUpdatedAt && <span className="text-xs text-text-muted">{agentDate(connection.secretUpdatedAt)}</span>}

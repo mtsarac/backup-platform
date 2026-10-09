@@ -44,6 +44,14 @@ export function deleteTenantConnection(tenantId: string, id: string) {
   return apiRequest<void>(connection(tenantId, id), { method: 'DELETE' })
 }
 
+export function getGoogleDriveAuthorizeUrl(tenantId: string, id: string) {
+  return apiRequest<{ authorizationUrl: string }>(connection(tenantId, id, '/google-drive/authorize-url'), { method: 'POST' })
+}
+
+export function disconnectGoogleDrive(tenantId: string, id: string) {
+  return apiRequest<{ disconnected: boolean }>(connection(tenantId, id, '/google-drive/disconnect'), { method: 'POST' })
+}
+
 const platformConnection = (id: string, suffix = '') => `platform/storage-connections/${encodeURIComponent(id)}${suffix}`
 
 export function getPlatformProviders(signal?: AbortSignal) {
