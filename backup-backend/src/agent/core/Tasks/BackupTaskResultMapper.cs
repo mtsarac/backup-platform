@@ -41,9 +41,39 @@ internal static class BackupTaskResultMapper
             LeaseToken = task.LeaseToken,
             Status = result.Status.ToString(),
             FailureCode = result.Status == DatabaseBackupStatus.Succeeded ? null : MapFailure(result.Failure).ToString(),
-            Artifact = artifact
+            Artifact = artifact,
+            Destinations = MapDestinations(result)
         };
     }
+
+    /// <summary>
+    /// One entry per destination, whatever the run's status: this is how a Failed run still says which destinations failed and how. A destination only
+    /// counts as Verified when its replica provably matches the artifact; anything else is reported as the failure it is.
+    /// </summary>
+    private static BackupTaskDestinationResult[] MapDestinations(DatabaseBackupPipelineResult result) => [.. result.Destinations.Select(destination =>
+    {
+        var sound = IsSound(destination, result.Artifact);
+        var cancelled = !sound && destination.State == BackupDestinationState.Cancelled;
+        return new BackupTaskDestinationResult
+        {
+            StorageProvider = destination.Destination.Storage.Value,
+            StorageConnectionId = destination.Destination.ConnectionId,
+            State = sound ? "Verified" : cancelled ? "Cancelled" : "Failed",
+            Upload = destination.Uploaded ? "Succeeded"
+                : destination.State == BackupDestinationState.Failed && destination.Failure is { Stage: BackupExecutionStage.Uploading, ReasonCode: not BackupPipelineReasons.StorageNotAvailable } ? "Failed" : "NotAttempted",
+            Verification = sound ? "Verified" : destination.Failure?.Stage == BackupExecutionStage.VerifyingReplica ? "Failed" : "NotRun",
+            FailureCode = sound ? null : cancelled ? BackupTaskFailureCode.Cancelled.ToString()
+                : (destination.Failure is null ? BackupTaskFailureCode.ReplicaVerificationFailed : MapFailure(destination.Failure)).ToString(),
+            Key = destination.Uploaded ? destination.Key?.Value : null,
+            ObjectMayRemain = destination.ObjectMayRemain && destination.Key is not null,
+            StartedAt = destination.StartedAt,
+            CompletedAt = destination.FinishedAt
+        };
+    })];
+
+    private static bool IsSound(BackupDestinationResult destination, BackupArtifactInfo? artifact) =>
+        destination is { State: BackupDestinationState.Verified, Replica: { VerificationStatus: StorageVerificationStatus.Verified } replica }
+        && artifact is not null && replica.SizeBytes == artifact.SizeBytes && replica.Checksum == artifact.Checksum;
 
     public static BackupTaskCompletionRequest Failure(Guid leaseToken, BackupTaskFailureCode code) => new()
     {
@@ -82,9 +112,12 @@ internal static class BackupTaskResultMapper
 
     private static BackupTaskArtifact? MapArtifact(BackupTaskSnapshot task, DatabaseBackupPipelineResult result)
     {
-        if (result.SourceFile is not { } source || result.Artifact is not { } artifact || result.Replica is not { } replica
-            || replica.VerificationStatus != StorageVerificationStatus.Verified
-            || replica.SizeBytes != artifact.SizeBytes || replica.Checksum != artifact.Checksum)
+        if (result.SourceFile is not { } source || result.Artifact is not { } artifact)
+        {
+            return null;
+        }
+        var copies = result.Destinations.Where(destination => IsSound(destination, artifact)).ToArray();
+        if (copies.Length == 0)
         {
             return null;
         }
@@ -121,20 +154,21 @@ internal static class BackupTaskResultMapper
                 }
             }, JsonSerializerOptions.Web),
             AppliedOptionsJson = JsonSerializer.Serialize(result.Options?.Applied, JsonSerializerOptions.Web),
-            Replicas = [new BackupTaskReplica
+            Replicas = [.. copies.Select(copy => new BackupTaskReplica
             {
-                StorageProvider = replica.Location.Provider.Value,
-                StorageTarget = (task.Configuration.StorageProvider is "sftp" or "google-drive")
-                    ? task.Configuration.StorageConnectionId!.Value.ToString("D") : replica.Location.Provider.Value,
-                Key = replica.Location.Key.Value,
-                SizeBytes = replica.SizeBytes,
-                Checksum = replica.Checksum.Hex,
+                StorageProvider = copy.Replica!.Location.Provider.Value,
+                StorageTarget = copy.Destination.Storage.Value is "sftp" or "google-drive" && copy.Destination.ConnectionId is { } connection
+                    ? connection.ToString("D") : copy.Replica.Location.Provider.Value,
+                StorageConnectionId = copy.Destination.ConnectionId,
+                Key = copy.Replica.Location.Key.Value,
+                SizeBytes = copy.Replica.SizeBytes,
+                Checksum = copy.Replica.Checksum.Hex,
                 ChecksumAlgorithm = "sha256",
-                VerificationState = replica.VerificationStatus.ToString(),
-                VerificationMethod = replica.VerificationMethod.ToString(),
+                VerificationState = copy.Replica.VerificationStatus.ToString(),
+                VerificationMethod = copy.Replica.VerificationMethod.ToString(),
                 CreatedAt = result.BackupFinishedAt ?? result.StartedAt,
-                VerifiedAt = replica.VerifiedAt
-            }]
+                VerifiedAt = copy.Replica.VerifiedAt
+            })]
         };
     }
 }

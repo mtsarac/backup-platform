@@ -60,7 +60,9 @@ internal sealed class BackupStageTracker
                 return;
             }
 
-            if (IsTerminal(_current) || (_current is { } current && stage < current && !IsTerminal(stage)))
+            // Uploading again after VerifyingReplica is the next destination of the same artifact; any other backward move is a bug.
+            var nextDestination = stage == BackupExecutionStage.Uploading && _current == BackupExecutionStage.VerifyingReplica;
+            if (IsTerminal(_current) || (_current is { } current && stage < current && !IsTerminal(stage) && !nextDestination))
             {
                 throw new InvalidOperationException($"A backup cannot move from {_current} to {stage}.");
             }

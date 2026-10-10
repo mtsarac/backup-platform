@@ -68,7 +68,7 @@ public sealed class BackupArtifactService(IBackupRetentionStore store, IBackupSc
             : artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.DeleteFailed && replica.DeleteFailureCode is not null) ? "DeleteFailed"
             : artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.Deleting) ? "Deleting"
             : "DeletePending";
-        return BackupOrchestrator.ToView(artifact, record.RunId, record.JobId) with
+        return BackupOrchestrator.ToView(artifact, record.RunId, record.JobId, record.Snapshot) with
         {
             State = state,
             JobName = record.JobName,

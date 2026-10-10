@@ -334,7 +334,7 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
         return locked.Count > 0;
     }
 
-    private sealed record ArtifactOwner(Guid RunId, Guid JobId, string JobName, string DatabaseName, string? AgentName, AgentId AgentId);
+    private sealed record ArtifactOwner(Guid RunId, Guid JobId, string JobName, string DatabaseName, string? AgentName, AgentId AgentId, BackupConfiguration Snapshot);
 
     private static async Task<Dictionary<Guid, ArtifactOwner>> ResolveOwnersAsync(PlatformDbContext context, TenantId tenantId, Guid[] attemptIds, CancellationToken cancellationToken)
     {
@@ -344,14 +344,14 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
                           join agent in context.Agents.AsNoTracking() on new { run.AgentId, run.TenantId } equals new { AgentId = agent.Id, agent.TenantId }
                           where attempt.TenantId == tenantId && attemptIds.Contains(attempt.Id)
                           select new { AttemptId = attempt.Id, attempt.RunId, run.JobId, JobName = job.Name,
-                              DatabaseName = run.Configuration.Database, AgentName = agent.HostName, run.AgentId }).ToListAsync(cancellationToken);
-        return rows.ToDictionary(row => row.AttemptId, row => new ArtifactOwner(row.RunId, row.JobId, row.JobName, row.DatabaseName, row.AgentName, row.AgentId));
+                              Snapshot = run.Configuration, AgentName = agent.HostName, run.AgentId }).ToListAsync(cancellationToken);
+        return rows.ToDictionary(row => row.AttemptId, row => new ArtifactOwner(row.RunId, row.JobId, row.JobName, row.Snapshot.Database, row.AgentName, row.AgentId, row.Snapshot));
     }
 
     private static BackupArtifactRecord ToRecord(BackupArtifact artifact, Dictionary<Guid, ArtifactOwner> owners)
     {
         // Tenant-qualified joins resolve only safe display labels, never configuration credentials or paths.
         if (!owners.TryGetValue(artifact.AttemptId, out var owner)) throw new InvalidOperationException("The artifact's run could not be resolved.");
-        return new BackupArtifactRecord(artifact, owner.RunId, owner.JobId, owner.JobName, owner.DatabaseName, owner.AgentName, owner.AgentId.Value);
+        return new BackupArtifactRecord(artifact, owner.RunId, owner.JobId, owner.JobName, owner.DatabaseName, owner.AgentName, owner.AgentId.Value, owner.Snapshot);
     }
 }

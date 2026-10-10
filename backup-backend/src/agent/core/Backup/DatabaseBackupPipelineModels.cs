@@ -84,7 +84,30 @@ public sealed record DatabaseBackupPipelineRequest
 
     /// <summary>What happens to staged files when the execution fails (cancellation always removes them).</summary>
     public StagingFailurePolicy StagingOnFailure { get; }
+
+    /// <summary>
+    /// Every place the one artifact is copied to, in order (the primary first). Empty means the single destination named by
+    /// <see cref="Storage"/> and <see cref="StorageOverride"/>; <see cref="EffectiveDestinations"/> is the one answer to "where does it go".
+    /// </summary>
+    public IReadOnlyList<BackupPipelineDestination> Destinations { get; init; } = [];
+
+    public IReadOnlyList<BackupPipelineDestination> EffectiveDestinations =>
+        Destinations.Count > 0 ? Destinations : [new BackupPipelineDestination(Storage, StorageOverride, null, true)];
+
+    /// <summary>
+    /// How many destinations must end Verified for the run to be worth taking. It only lets the pipeline refuse BEFORE the engine backup when too few
+    /// destinations can even be reached; what a run with fewer verified copies than required MEANS is the backend's replication compliance, not the engine's success.
+    /// </summary>
+    public int RequiredVerifiedReplicas { get; init; } = 1;
+
+    /// <summary>Upper bound for the upload and verification of ONE destination; null selects <see cref="DefaultDestinationTimeout"/>. A destination that exceeds it fails alone.</summary>
+    public TimeSpan? DestinationTimeout { get; init; }
+
+    public static readonly TimeSpan DefaultDestinationTimeout = TimeSpan.FromHours(6);
 }
+
+/// <summary>One copy target of an execution. <see cref="StorageOverride"/> is a task-scoped (lease-bound, relayed) provider; <see cref="ConnectionId"/> is the snapshot destination it belongs to.</summary>
+public sealed record BackupPipelineDestination(StorageProviderId Storage, IStorageProvider? StorageOverride = null, Guid? ConnectionId = null, bool IsPrimary = false);
 
 public enum ArtifactTransformKind
 {
@@ -133,6 +156,29 @@ public enum DatabaseBackupStatus
     Cancelled
 }
 
+public enum BackupDestinationState
+{
+    Verified = 1,
+    Failed,
+    /// <summary>Not completed because the execution was cancelled (the destination in flight, or one that was never started).</summary>
+    Cancelled
+}
+
+/// <summary>
+/// The independent outcome of one destination. A destination is Verified only with a <see cref="Replica"/> whose storage verification passed;
+/// <see cref="ObjectMayRemain"/> is set when an object was written under <see cref="Key"/> and could not be proven removed afterwards.
+/// </summary>
+public sealed record BackupDestinationResult(
+    BackupPipelineDestination Destination,
+    BackupDestinationState State,
+    BackupReplicaInfo? Replica,
+    BackupFailure? Failure,
+    bool Uploaded,
+    StorageObjectKey? Key,
+    bool ObjectMayRemain,
+    DateTimeOffset StartedAt,
+    DateTimeOffset FinishedAt);
+
 /// <summary>
 /// The complete outcome of one pipeline execution: the metadata an orchestrator persists as BackupArtifact and BackupReplica and
 /// maps onto a BackupRunAttempt (<see cref="Stages"/> is the attempt timeline, <see cref="FinalStage"/> the terminal state).
@@ -171,7 +217,12 @@ public sealed record DatabaseBackupPipelineResult
 
     public BackupSourceFile? SourceFile { get; init; }
     public BackupArtifactInfo? Artifact { get; init; }
-    public BackupReplicaInfo? Replica { get; init; }
+
+    /// <summary>One entry per destination, in request order. Empty only when the execution stopped before any transfer began.</summary>
+    public IReadOnlyList<BackupDestinationResult> Destinations { get; init; } = [];
+
+    /// <summary>The first verified copy (for a single destination: THE copy). Null when no destination verified.</summary>
+    public BackupReplicaInfo? Replica => Destinations.Select(destination => destination.Replica).FirstOrDefault(replica => replica is not null);
 
     public IReadOnlyList<BackupWarning> Warnings { get; init; } = [];
 

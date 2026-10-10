@@ -62,8 +62,10 @@ internal sealed class BackupTaskHarness : IAsyncDisposable
                 request.DatabaseName, new Dictionary<string, string> { ["recovery-model"] = "simple", ["compatibility-level"] = "160" }),
             SourceFile = new BackupSourceFile("source.bak", 512, sourceChecksum),
             Artifact = new BackupArtifactInfo("source.bak.gz", 256, artifactChecksum, false, [new ArtifactTransform(ArtifactTransformKind.Compression, "gzip")]),
-            Replica = new BackupReplicaInfo(new StorageLocation(request.Storage, request.StoragePrefix.Combine("source.bak.gz")),
-                256, artifactChecksum, StorageVerificationStatus.Verified, StorageVerificationMethod.ReadBack, now),
+            Destinations = [.. request.EffectiveDestinations.Select(destination => new BackupDestinationResult(destination, BackupDestinationState.Verified,
+                new BackupReplicaInfo(new StorageLocation(destination.Storage, request.StoragePrefix.Combine("source.bak.gz")),
+                    256, artifactChecksum, StorageVerificationStatus.Verified, StorageVerificationMethod.ReadBack, now),
+                null, true, request.StoragePrefix.Combine("source.bak.gz"), false, now.AddSeconds(-1), now))],
             Options = new BackupOptionsOutcome(request.Options, new AppliedFullBackupOptions(true, true, false)),
             Verification = new BackupVerification(BackupVerificationStatus.Passed, "RESTORE VERIFYONLY", now.AddSeconds(-1), now)
         };

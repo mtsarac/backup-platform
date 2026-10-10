@@ -90,16 +90,16 @@ internal readonly record struct StorageTargetDecision(BackupConfiguration? Confi
 internal static class StorageTargetGate
 {
     public static async Task<StorageTargetDecision> ForNewRunAsync(
-        PlatformDbContext context, TenantId tenantId, BackupConfiguration configuration, DateTimeOffset now, CancellationToken cancellationToken)
+        PlatformDbContext context, TenantId tenantId, AgentId agentId, BackupConfiguration configuration, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var resolvedDestinations = new List<BackupDestination>();
         var effectiveDestinations = configuration.ResolveEffectiveDestinations();
 
-        // Execution guard: Multi-storage replication upload orchestration is deferred to M7d.3.
-        // Prevent partial success illusion by rejecting execution of jobs with multiple destinations.
-        if (effectiveDestinations.Count > 1)
+        // The ONE admission point of manual and scheduled runs (a retry re-runs the admitted snapshot and is fenced again at claim, relay and completion).
+        // Several destinations are executed only by an agent that says it can: otherwise the run would be taken and its copies could never all be made.
+        if (effectiveDestinations.Count > 1 && !await SupportsMultiDestinationAsync(context, tenantId, agentId, cancellationToken))
         {
-            return new(null, BackupAdmissionDenialCodes.MultiDestinationExecutionNotSupported);
+            return new(null, BackupAdmissionDenialCodes.AgentMultiDestinationUnsupported);
         }
 
         foreach (var dest in effectiveDestinations)
@@ -127,6 +127,11 @@ internal static class StorageTargetGate
                 return new(null, BackupAdmissionDenialCodes.StorageConnectionDisabled);
             }
 
+            if (resolvedDestinations.Any(existing => existing.StorageProvider == dest.StorageProvider && existing.StorageConnectionId == connection.Id))
+            {
+                // Two entries that resolve to the same connection are one destination twice: it would receive (and report) the artifact twice.
+                return new(null, BackupAdmissionDenialCodes.DestinationCombinationUnsupported);
+            }
             resolvedDestinations.Add(dest with { StorageConnectionId = connection.Id });
         }
 
@@ -142,6 +147,12 @@ internal static class StorageTargetGate
 
         return new(updatedConfig, null);
     }
+
+    /// <summary>Whether the agent's last reported capability snapshot declares multi-destination execution. Absent or Unsupported or Unknown is no.</summary>
+    public static Task<bool> SupportsMultiDestinationAsync(PlatformDbContext context, TenantId tenantId, AgentId agentId, CancellationToken cancellationToken) =>
+        context.AgentCapabilities.AsNoTracking().AnyAsync(record => record.TenantId == tenantId && record.AgentId == agentId
+            && record.Identifier == BackupPlatform.Contracts.Backups.BackupTaskProtocol.MultiDestinationCapability
+            && record.Support == BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, cancellationToken);
 
     /// <summary>
     /// The connection a finished run's replicas belong to: the one its run snapshotted, or, for a run created before connections existed, the tenant's

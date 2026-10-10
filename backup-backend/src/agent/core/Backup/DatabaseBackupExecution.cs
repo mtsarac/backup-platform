@@ -14,7 +14,7 @@ internal sealed class DatabaseBackupExecution
 {
     private readonly DatabaseBackupPipelineRequest _request;
     private readonly IDatabaseBackupProvider? _provider;
-    private readonly IStorageProvider? _storage;
+    private readonly IReadOnlyDictionary<StorageProviderId, IStorageProvider> _storages;
     private readonly IArtifactPreparer _preparer;
     private readonly BackupStageTracker _tracker;
     private readonly ILogger _logger;
@@ -32,15 +32,14 @@ internal sealed class DatabaseBackupExecution
     private BackupSourceFile? _sourceFile;
     private PreparedArtifact? _prepared;
     private BackupArtifactInfo? _artifact;
-    private StorageObjectKey? _key;
-    private bool _replicaStored;
-    private BackupReplicaInfo? _replica;
+    private readonly List<BackupDestinationResult> _destinations = [];
+    private bool _transferCancelled;
     private StagingCleanup _stagingCleanup = StagingCleanup.NotNeeded;
 
     public DatabaseBackupExecution(
         DatabaseBackupPipelineRequest request,
         IDatabaseBackupProvider? provider,
-        IStorageProvider? storage,
+        IReadOnlyDictionary<StorageProviderId, IStorageProvider> storages,
         IArtifactPreparer preparer,
         BackupStageTracker tracker,
         ILogger logger,
@@ -49,7 +48,7 @@ internal sealed class DatabaseBackupExecution
     {
         _request = request;
         _provider = provider;
-        _storage = storage;
+        _storages = storages;
         _preparer = preparer;
         _tracker = tracker;
         _logger = logger;
@@ -114,18 +113,17 @@ internal sealed class DatabaseBackupExecution
     private async Task RunStagesAsync(CancellationToken cancellationToken)
     {
         _tracker.Enter(BackupExecutionStage.Preparing);
-        var (provider, storage) = ResolveProviders();
+        var (provider, targets) = ResolveProviders();
 
         await PreCheckAsync(provider, cancellationToken).ConfigureAwait(false);
         await BackUpAsync(provider, cancellationToken).ConfigureAwait(false);
         await HashSourceAsync(cancellationToken).ConfigureAwait(false);
         await PrepareArtifactAsync(cancellationToken).ConfigureAwait(false);
         await HashArtifactAsync(cancellationToken).ConfigureAwait(false);
-        await UploadAsync(storage, cancellationToken).ConfigureAwait(false);
-        await VerifyReplicaAsync(storage, cancellationToken).ConfigureAwait(false);
+        await TransferAsync(targets, cancellationToken).ConfigureAwait(false);
     }
 
-    private (IDatabaseBackupProvider Provider, IStorageProvider Storage) ResolveProviders()
+    private (IDatabaseBackupProvider Provider, (BackupPipelineDestination Destination, IStorageProvider? Storage)[] Targets) ResolveProviders()
     {
         if (_provider is null)
         {
@@ -133,13 +131,19 @@ internal sealed class DatabaseBackupExecution
                 "No backup provider is registered for the requested database engine.");
         }
 
-        if (_storage is null)
+        // Task-scoped providers win over host-registered ones. A destination this agent cannot reach is not skipped: it ends Failed below.
+        var targets = _request.EffectiveDestinations
+            .Select(destination => (destination, destination.StorageOverride ?? _storages.GetValueOrDefault(destination.Storage)))
+            .ToArray();
+        // Refused BEFORE the engine runs: a backup that can never reach the required number of copies must not be taken.
+        if (targets.Count(target => target.Item2 is not null) < Math.Max(1, _request.RequiredVerifiedReplicas))
         {
-            throw Fail(BackupExecutionStage.Preparing, BackupPipelineReasons.StorageNotAvailable,
-                "The requested storage provider is not available on this agent.");
+            throw Fail(BackupExecutionStage.Preparing, BackupPipelineReasons.StorageNotAvailable, targets.Length == 1
+                ? "The requested storage provider is not available on this agent."
+                : "Too few of the requested storage destinations are available on this agent to reach the required number of copies.");
         }
 
-        return (_provider, _storage);
+        return (_provider, targets);
     }
 
     private async Task PreCheckAsync(IDatabaseBackupProvider provider, CancellationToken cancellationToken)
@@ -262,7 +266,92 @@ internal sealed class DatabaseBackupExecution
         _artifact = new BackupArtifactInfo(prepared.FileName, size, checksum, prepared.IsSourceFile, prepared.Transforms);
     }
 
-    private async Task UploadAsync(IStorageProvider storage, CancellationToken cancellationToken)
+    /// <summary>
+    /// Copies the one artifact to every destination, one after the other. Each destination ends with its OWN result: a destination that fails (or
+    /// times out) never touches another's copy, and a copy that was verified is never rolled back. The artifact file stays in staging until the last
+    /// destination is done; every destination opens its own read stream, so no destination can consume another's.
+    /// </summary>
+    private async Task TransferAsync((BackupPipelineDestination Destination, IStorageProvider? Storage)[] targets, CancellationToken cancellationToken)
+    {
+        foreach (var (destination, storage) in targets)
+        {
+            if (_transferCancelled || cancellationToken.IsCancellationRequested)
+            {
+                _transferCancelled = true;
+                var now = _time.GetUtcNow();
+                _destinations.Add(new BackupDestinationResult(destination, BackupDestinationState.Cancelled, null,
+                    new BackupFailure(BackupFailureKind.Cancelled, BackupExecutionStage.Uploading, BackupPipelineReasons.Cancelled, "The backup was cancelled."),
+                    false, null, false, now, now));
+                continue;
+            }
+
+            _destinations.Add(await TransferOneAsync(destination, storage, cancellationToken).ConfigureAwait(false));
+        }
+
+        if (_destinations.Any(result => result.State == BackupDestinationState.Verified))
+        {
+            // At least one verified copy exists: the artifact is real and is published with whatever else happened. Cancellation does not unmake it.
+            return;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        throw new StageFailedException(_destinations.Select(result => result.Failure).First(failure => failure is not null)!);
+    }
+
+    private async Task<BackupDestinationResult> TransferOneAsync(BackupPipelineDestination destination, IStorageProvider? storage, CancellationToken cancellationToken)
+    {
+        var startedAt = _time.GetUtcNow();
+        var transfer = new Transfer();
+        BackupFailure? failure = null;
+        BackupReplicaInfo? replica = null;
+        var cancelled = false;
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        bounded.CancelAfter(_request.DestinationTimeout ?? DatabaseBackupPipelineRequest.DefaultDestinationTimeout);
+        try
+        {
+            if (storage is null)
+            {
+                throw Fail(BackupExecutionStage.Uploading, BackupPipelineReasons.StorageNotAvailable,
+                    "The requested storage provider is not available on this agent.", kind: BackupFailureKind.StorageWriteFailed, cause: BackupFailureCause.Unsupported);
+            }
+
+            await UploadAsync(storage, transfer, bounded.Token).ConfigureAwait(false);
+            replica = await VerifyReplicaAsync(storage, transfer, bounded.Token).ConfigureAwait(false);
+        }
+        catch (StageFailedException exception)
+        {
+            failure = exception.Failure;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            cancelled = true;
+            _transferCancelled = true;
+            failure = new BackupFailure(BackupFailureKind.Cancelled, _tracker.Current ?? BackupExecutionStage.Uploading, BackupPipelineReasons.Cancelled, "The backup was cancelled.");
+        }
+        catch (OperationCanceledException exception)
+        {
+            failure = Classify(_tracker.Current ?? BackupExecutionStage.Uploading, BackupPipelineReasons.DestinationTimeout,
+                "The storage destination did not finish within the allowed time.", exception, null, BackupFailureCause.Timeout);
+        }
+        catch (Exception exception)
+        {
+            failure = Classify(_tracker.Current ?? BackupExecutionStage.Uploading, BackupPipelineReasons.Unexpected,
+                "An unexpected error stopped a storage destination. Details are in the agent log.", exception);
+        }
+
+        var objectMayRemain = false;
+        if (replica is null && transfer.Stored && storage is not null && transfer.Key is not null)
+        {
+            objectMayRemain = !await RemoveUnverifiedReplicaAsync(storage, transfer.Key).ConfigureAwait(false);
+        }
+
+        return new BackupDestinationResult(
+            destination,
+            replica is not null ? BackupDestinationState.Verified : cancelled ? BackupDestinationState.Cancelled : BackupDestinationState.Failed,
+            replica, failure, transfer.Stored, transfer.Key, objectMayRemain, startedAt, _time.GetUtcNow());
+    }
+
+    private async Task UploadAsync(IStorageProvider storage, Transfer transfer, CancellationToken cancellationToken)
     {
         const BackupExecutionStage stage = BackupExecutionStage.Uploading;
         _tracker.Enter(stage);
@@ -270,7 +359,7 @@ internal sealed class DatabaseBackupExecution
 
         try
         {
-            _key = _request.StoragePrefix.Combine(artifact.FileName);
+            transfer.Key = _request.StoragePrefix.Combine(artifact.FileName);
         }
         catch (ArgumentException exception)
         {
@@ -291,13 +380,20 @@ internal sealed class DatabaseBackupExecution
 
         await using (stream.ConfigureAwait(false))
         {
+            // The same staged file feeds every destination; one that changed since it was hashed must not be sent to any of them.
+            if (stream.Length != artifact.SizeBytes)
+            {
+                throw Fail(stage, BackupPipelineReasons.StagedFileChanged,
+                    "The staged artifact changed after it was hashed, so it cannot be uploaded.", kind: BackupFailureKind.StorageWriteFailed);
+            }
+
             StorageObjectMetadata stored;
             try
             {
                 var progress = new CallbackProgress<long>(bytes => _tracker.Report(
                     stage, artifact.SizeBytes > 0 ? bytes * 100.0 / artifact.SizeBytes : 100, bytes, artifact.SizeBytes));
                 stored = await storage.PutAsync(
-                    _key,
+                    transfer.Key,
                     stream,
                     new StoragePutOptions(_request.Overwrite, artifact.Checksum, artifact.SizeBytes),
                     progress,
@@ -315,7 +411,7 @@ internal sealed class DatabaseBackupExecution
             }
 
             // From here on an object exists under the final key; if anything below fails it must not be left behind unverified.
-            _replicaStored = true;
+            transfer.Stored = true;
             if (stored.SizeBytes != artifact.SizeBytes || (stored.Checksum is { } checksum && checksum != artifact.Checksum))
             {
                 throw Fail(stage, BackupPipelineReasons.StorageIntegrityMismatch,
@@ -325,7 +421,7 @@ internal sealed class DatabaseBackupExecution
         }
     }
 
-    private async Task VerifyReplicaAsync(IStorageProvider storage, CancellationToken cancellationToken)
+    private async Task<BackupReplicaInfo> VerifyReplicaAsync(IStorageProvider storage, Transfer transfer, CancellationToken cancellationToken)
     {
         const BackupExecutionStage stage = BackupExecutionStage.VerifyingReplica;
         _tracker.Enter(stage);
@@ -334,7 +430,7 @@ internal sealed class DatabaseBackupExecution
         try
         {
             verification = await storage.VerifyAsync(
-                _key!, new StorageVerificationExpectation(artifact.SizeBytes, artifact.Checksum), cancellationToken).ConfigureAwait(false);
+                transfer.Key!, new StorageVerificationExpectation(artifact.SizeBytes, artifact.Checksum), cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is not OperationCanceledException and not StageFailedException)
         {
@@ -358,13 +454,20 @@ internal sealed class DatabaseBackupExecution
             throw Fail(stage, reason, text!, kind: BackupFailureKind.ReplicaVerificationFailed);
         }
 
-        _replica = new BackupReplicaInfo(
+        return new BackupReplicaInfo(
             verification.Location,
             verification.ActualSizeBytes ?? artifact.SizeBytes,
             verification.ActualChecksum ?? artifact.Checksum,
             verification.Status,
             verification.Method,
             _time.GetUtcNow());
+    }
+
+    /// <summary>What one destination has done so far: the key it targets and whether an object was written under it.</summary>
+    private sealed class Transfer
+    {
+        public StorageObjectKey? Key { get; set; }
+        public bool Stored { get; set; }
     }
 
     private async Task<(ContentChecksum Checksum, long Size)> HashFileAsync(
@@ -457,10 +560,7 @@ internal sealed class DatabaseBackupExecution
 
     private async Task CleanupAfterFailureAsync(bool cancelled)
     {
-        if (_replicaStored && _storage is not null && _key is not null)
-        {
-            await RemoveUnverifiedReplicaAsync(_storage, _key).ConfigureAwait(false);
-        }
+        // Destinations clean up their own unverified objects as they fail (TransferOneAsync); only staging is left.
 
         // A file handed over by the provider is ours to remove; a file the provider failed on was dealt with by the provider.
         if (_stagedFile is null)
@@ -484,24 +584,29 @@ internal sealed class DatabaseBackupExecution
         _stagingCleanup = new StagingCleanup(StagingCleanupStatus.Deleted);
     }
 
-    private async Task RemoveUnverifiedReplicaAsync(IStorageProvider storage, StorageObjectKey key)
+    /// <summary>Removes an object that was written but never verified. False when it could not be proven removed: the object may still exist.</summary>
+    private async Task<bool> RemoveUnverifiedReplicaAsync(IStorageProvider storage, StorageObjectKey key)
     {
         var stage = _tracker.Current ?? BackupExecutionStage.Uploading;
         if (!storage.Capabilities.Supports(StorageCapabilityIds.Delete))
         {
             RecordCleanupFailure(stage, BackupPipelineReasons.ReplicaCleanupFailed,
                 "A stored copy that could not be verified remains because the storage cannot delete.", null);
-            return;
+            return false;
         }
 
         try
         {
-            await storage.DeleteAsync(key, CancellationToken.None).ConfigureAwait(false);
+            // Bounded, and independent of the (possibly already expired or cancelled) token of the transfer that failed.
+            using var bounded = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+            await storage.DeleteAsync(key, bounded.Token).ConfigureAwait(false);
+            return true;
         }
         catch (Exception exception)
         {
             RecordCleanupFailure(stage, BackupPipelineReasons.ReplicaCleanupFailed,
                 "A stored copy that could not be verified could not be removed and may still be present.", exception);
+            return false;
         }
     }
 
@@ -560,7 +665,7 @@ internal sealed class DatabaseBackupExecution
             Verification = provider?.Verification ?? BackupVerification.NotRun,
             SourceFile = _sourceFile,
             Artifact = _artifact,
-            Replica = status == DatabaseBackupStatus.Succeeded ? _replica : null,
+            Destinations = _destinations.ToArray(),
             Warnings = _warnings.ToArray(),
             StagingCleanup = _stagingCleanup,
             CleanupFailures = _cleanupFailures.ToArray(),

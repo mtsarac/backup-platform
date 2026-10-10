@@ -507,6 +507,105 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupDestinationOutcome", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AttemptId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExecutionLocation")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<bool>("IsPrimary")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Key")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<bool>("ObjectMayRemain")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("ReplicaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("RunId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("StorageConnectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("StorageProvider")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid>("TenantId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Upload")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Verification")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("Id", "TenantId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("AttemptId", "TenantId");
+
+                    b.HasIndex("TenantId", "RunId");
+
+                    b.HasIndex("TenantId", "AttemptId", "StorageProvider", "StorageConnectionId")
+                        .IsUnique();
+
+                    b.ToTable("backup_destination_outcomes", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_backup_destination_outcome_state", "\"State\" IN ('Verified','Failed','Cancelled') AND \"Upload\" IN ('Succeeded','Failed','NotAttempted') AND \"Verification\" IN ('Verified','Failed','NotRun')");
+
+                            t.HasCheckConstraint("ck_backup_destination_outcome_times", "\"CompletedAt\" >= \"StartedAt\"");
+
+                            t.HasCheckConstraint("ck_backup_destination_outcome_verified", "(\"State\" = 'Verified') = (\"ReplicaId\" IS NOT NULL) AND (\"State\" <> 'Verified' OR (\"FailureCode\" IS NULL AND \"Upload\" = 'Succeeded' AND \"Verification\" = 'Verified' AND \"Key\" IS NOT NULL)) AND (\"State\" = 'Verified' OR (\"FailureCode\" IS NOT NULL AND \"Verification\" <> 'Verified')) AND (NOT \"ObjectMayRemain\" OR (\"State\" <> 'Verified' AND \"Key\" IS NOT NULL AND \"Upload\" = 'Succeeded'))");
+
+                            t.HasCheckConstraint("ck_backup_destination_outcomes_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_backup_destination_outcomes_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+                        });
+                });
+
             modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupJob", b =>
                 {
                     b.Property<Guid>("Id")
@@ -848,6 +947,11 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_backup_replicas_connection");
 
                     b.HasIndex("StorageConnectionId", "TenantId", "StorageProvider");
+
+                    b.HasIndex("TenantId", "ArtifactId", "StorageConnectionId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_backup_replicas_live_verified_destination")
+                        .HasFilter("\"VerificationState\" = 'Verified' AND \"Status\" <> 'Deleted'");
 
                     b.HasIndex("TenantId", "OwningAgentId", "DeleteAfter")
                         .HasDatabaseName("ix_backup_replicas_agent_deletions")
@@ -2774,6 +2878,22 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupDestinationOutcome", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Backups.BackupRunAttempt", null)
+                        .WithMany("DestinationOutcomes")
+                        .HasForeignKey("AttemptId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupJob", b =>
                 {
                     b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
@@ -3148,6 +3268,8 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("BackupPlatform.Domain.Backups.BackupRunAttempt", b =>
                 {
                     b.Navigation("Artifacts");
+
+                    b.Navigation("DestinationOutcomes");
                 });
 
             modelBuilder.Entity("BackupPlatform.Domain.Restores.RestoreOperation", b =>

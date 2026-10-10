@@ -50,7 +50,10 @@ public sealed class BackupArtifact : ITenantOwned
         if (_sealed) throw new InvalidOperationException("Terminal artifact metadata is immutable.");
         if (replica.ArtifactId != Id || replica.TenantId != TenantId || replica.SizeBytes != SizeBytes ||
             replica.Checksum != ArtifactChecksum || replica.ChecksumAlgorithm != ChecksumAlgorithm ||
-            _replicas.Any(existing => existing.StorageProvider == replica.StorageProvider && existing.StorageTarget == replica.StorageTarget && existing.Key == replica.Key))
+            _replicas.Any(existing => existing.StorageProvider == replica.StorageProvider && existing.StorageTarget == replica.StorageTarget && existing.Key == replica.Key) ||
+            // One artifact holds at most one live verified copy per destination (a later repair replaces a Deleted one, it never doubles a live one).
+            replica.VerificationState == "Verified" && replica.StorageConnectionId != Guid.Empty && _replicas.Any(existing => existing.VerificationState == "Verified" && existing.Status != BackupReplicaStatus.Deleted &&
+                existing.StorageProvider == replica.StorageProvider && existing.StorageConnectionId == replica.StorageConnectionId))
             throw new ArgumentException("Replica does not match its artifact.");
         _replicas.Add(replica);
     }
@@ -93,7 +96,8 @@ public sealed class BackupArtifact : ITenantOwned
     /// replicas to be loaded.
     /// </summary>
     public BackupArtifactState State =>
-        _replicas.Any(replica => replica.Status == BackupReplicaStatus.Available) ? BackupArtifactState.Available
+        // A copy that never verified (an orphan kept only so its bytes stay accounted for) never makes the artifact Available.
+        _replicas.Any(replica => replica.Status == BackupReplicaStatus.Available && replica.VerificationState == "Verified") ? BackupArtifactState.Available
         : _replicas.Count > 0 && _replicas.All(replica => replica.Status == BackupReplicaStatus.Deleted) ? BackupArtifactState.Deleted
         : BackupArtifactState.DeletePending;
 

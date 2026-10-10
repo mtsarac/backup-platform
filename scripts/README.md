@@ -302,6 +302,31 @@ scripts/dev/acceptance.py backup|download|restore|delete|all --provider local|go
 - `bp-dev-mssql` is a dedicated container because the shared `mssql` container keeps staging in a root-only Docker volume the host Agent cannot read. Only this stack stops/starts it.
 - Dev-only retention override: `DefaultDeleteGracePeriod=10s` so deletion can be exercised by hand (production default: 1 day).
 
+### M7d.3 multi-destination execution
+
+One backup run takes ONE SQL Server backup, hashes it once (one canonical artifact SHA-256) and copies the staged file sequentially to every snapshot destination
+(bounded per destination by `DestinationTimeout`, default 6 h). Each destination is uploaded, read-back verified and recorded on its own: a failing or timed-out
+destination never touches another's copy, and a verified copy is never rolled back. The staged file is removed only after the last destination.
+
+- Engine success and replication compliance are separate. `BackupRun.Status` stays `Succeeded` while at least one copy is verified; the API adds
+  `replication` (`Healthy` / `Degraded` / `InsufficientReplicas` / `Unavailable`, verified vs required vs destinations, per-destination state and failure code) to runs,
+  attempts and artifacts. A run with no verified copy fails and publishes no artifact; its per-destination outcomes are still stored (`backup_destination_outcomes`).
+- Admission is capability-aware for manual and scheduled runs alike: a job with several destinations is refused (`agent_multi_destination_unsupported`) unless the agent
+  advertises `backup.multi-destination`; such a run is also never handed to an agent that lost the capability. A denied scheduled occurrence is recorded once and is never re-run
+  automatically; recovery is an operator action (fix the agent/job, then start a run). Occurrences recorded earlier as `multi_destination_execution_not_supported` stay history.
+- The relay authorizes every call per destination on the server (`X-Storage-Destination` is only a selector): tenant, agent, attempt lease, snapshot membership, relayed location,
+  key layout and current connection state (a disabled connection takes no new upload). Another destination's, tenant's or run's connection is refused.
+- Quota: logical bytes count the artifact once, physical bytes count every replica row. An object that was written but could not be proven removed after its destination failed
+  is stored as an unusable `Failed` replica (counted physically, removed by retention); if the run itself failed there is no artifact to attach it to, so it is only recorded
+  on the outcome (`ObjectMayRemain`). Backend-reachable storages are swept by the existing orphan sweep; SFTP/Google Drive cannot be enumerated.
+- Not in this phase: repair, background replica retry, restore source fallback. The admission estimate still comes from the job's previous artifact (first run: 0).
+
+Real acceptance against the dev stack (needs the Google Drive connection from `acceptance.py`; starts a disposable SFTP container; restarts only the dev API/Agent):
+
+```bash
+scripts/dev/multi-destination-acceptance.sh [--no-build]   # healthy 3 replicas, SFTP down -> Degraded, required 3 -> InsufficientReplicas, then deletes its own artifacts
+```
+
 ### M7c hardening and operating limits
 
 - Refresh/rotation, OAuth callback and disconnect reuse PostgreSQL tenant locking. All nodes must share PostgreSQL, secret storage and Data Protection keys.

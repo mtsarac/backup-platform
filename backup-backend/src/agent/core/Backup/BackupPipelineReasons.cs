@@ -30,6 +30,7 @@ public static class BackupPipelineReasons
     public const string ReplicaVerificationError = "replica-verification-error";
     public const string StagingCleanupFailed = "staging-cleanup-failed";
     public const string ReplicaCleanupFailed = "replica-cleanup-failed";
+    public const string DestinationTimeout = "destination-timeout";
     public const string Cancelled = "cancelled";
     public const string Unexpected = "unexpected";
 }

@@ -20,7 +20,7 @@ public sealed class RestoreTaskRequestFactoryTests
         public BackupTaskSnapshot? LastBackupTask { get; private set; }
         public RestoreTaskSnapshot? LastRestoreTask { get; private set; }
 
-        public IStorageProvider CreateBackup(BackupTaskSnapshot task)
+        public IStorageProvider CreateBackup(BackupTaskSnapshot task, BackupDestinationContract destination)
         {
             BackupCalls++;
             LastBackupTask = task;

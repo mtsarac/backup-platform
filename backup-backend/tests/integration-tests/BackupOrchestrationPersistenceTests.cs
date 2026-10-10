@@ -169,7 +169,8 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
         Assert.Equal(BackupMutationResult.Accepted, await store.StartAttemptAsync(command, default));
         var completion = Success(Now);
         var first = completion.Artifact!.Replicas[0];
-        var second = first with { StorageTarget = "secondary", Key = "tenant/job/run/attempt/second.bak" };
+        // One live verified copy per destination: the second physical copy is on another storage.
+        var second = first with { StorageProvider = "central", StorageTarget = "secondary", Key = "tenant/job/run/attempt/second.bak" };
         completion = completion with { Artifact = completion.Artifact with { Replicas = [first, second] } };
         Assert.Equal(BackupMutationResult.Accepted, await store.CompleteAttemptAsync(command, completion, default));
         var persisted = (await store.GetRunAsync(seed.TenantId, run.Id, default))!;
@@ -232,11 +233,10 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
         Assert.Equal(1, persistedRun.Configuration.RequiredVerifiedReplicaCount);
     }
     [Fact]
-    public async Task MultiDestinationJobExecutionIsBlockedByExecutionGuardUntilM7d3()
+    public async Task MultiDestinationJobIsAdmittedOnlyForAnAgentThatDeclaresMultiDestinationExecution()
     {
         var seed = await SeedAsync();
         var store = Store();
-
         var multiConfig = Configuration() with
         {
             Destinations =
@@ -246,16 +246,26 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
             ],
             RequiredVerifiedReplicaCount = 2
         };
+        await store.UpdateJobAsync(seed.TenantId, seed.JobId, new BackupJobUpdate("MultiJob", seed.AgentId, multiConfig, BackupRetryPolicy.Default, BackupOverlapPolicy.Queue), default);
 
-        var updateCommand = new BackupJobUpdate("MultiJob", seed.AgentId, multiConfig, BackupRetryPolicy.Default, BackupOverlapPolicy.Queue);
-        await store.UpdateJobAsync(seed.TenantId, seed.JobId, updateCommand, default);
+        var refused = await store.StartRunAsync(seed.TenantId, seed.JobId, "guard-run", Now, default);
 
-        // Attempt to start a run on a multi-destination job
-        var startResult = await store.StartRunAsync(seed.TenantId, seed.JobId, "guard-run", Now, default);
+        Assert.Equal(BackupStartOutcome.AdmissionDenied, refused.Outcome);
+        Assert.Equal(BackupAdmissionDenialCodes.AgentMultiDestinationUnsupported, refused.DenialCode);
+        Assert.Null(refused.Run);
+        await using (var context = fixture.CreatePlatformContext())
+        {
+            context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(seed.AgentId, seed.TenantId,
+                BackupPlatform.Contracts.Backups.BackupTaskProtocol.MultiDestinationCapability, BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, null, "revision-1", Now));
+            await context.SaveChangesAsync();
+        }
 
-        Assert.Equal(BackupStartOutcome.AdmissionDenied, startResult.Outcome);
-        Assert.Equal(BackupAdmissionDenialCodes.MultiDestinationExecutionNotSupported, startResult.DenialCode);
-        Assert.Null(startResult.Run);
+        var admitted = await store.StartRunAsync(seed.TenantId, seed.JobId, "guard-run-2", Now, default);
+
+        Assert.Equal(BackupStartOutcome.Started, admitted.Outcome);
+        Assert.Equal(["local", "central"], admitted.Run!.Configuration.Destinations.Select(d => d.StorageProvider));
+        Assert.All(admitted.Run.Configuration.Destinations, d => Assert.NotNull(d.StorageConnectionId));
+        Assert.Equal(2, admitted.Run.Configuration.RequiredVerifiedReplicaCount);
     }
     [Theory]
     [InlineData("job-agent")]

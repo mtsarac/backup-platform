@@ -40,6 +40,7 @@ public sealed class AgentCapabilityCatalog
         Supported(RestoreTaskTypes.DiscoveryCapability),
         Supported(DownloadTaskTypes.Capability),
         Supported(TaskStorageProtocol.Capability),
+        Supported(BackupTaskProtocol.MultiDestinationCapability),
         // Not implemented in this product yet, whatever the SQL Server instance could do.
         Unsupported(SqlServerCapabilityIds.DifferentialBackup.Value),
         Unsupported(SqlServerCapabilityIds.LogBackup.Value)

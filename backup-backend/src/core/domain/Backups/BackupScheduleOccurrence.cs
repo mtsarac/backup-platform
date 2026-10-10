@@ -42,10 +42,18 @@ public static class BackupAdmissionDenialCodes
     public const string StorageConnectionDisabled = "storage_connection_disabled";
     /// <summary>The job names a storage connection that does not exist, is another tenant's, or serves another provider.</summary>
     public const string StorageConnectionUnavailable = "storage_connection_unavailable";
-    /// <summary>Execution of multi-destination replication jobs is deferred to M7d.3; only single destination runs are permitted.</summary>
+    /// <summary>
+    /// Historic: occurrences recorded while multi-destination execution did not exist yet. Kept recognized (those rows are history, and are NEVER re-run
+    /// automatically); nothing produces it any more.
+    /// </summary>
     public const string MultiDestinationExecutionNotSupported = "multi_destination_execution_not_supported";
+    /// <summary>The job has several destinations and its agent does not advertise multi-destination execution. Fail-closed for manual and scheduled runs alike.</summary>
+    public const string AgentMultiDestinationUnsupported = "agent_multi_destination_unsupported";
+    /// <summary>The job's destinations cannot all be executed as configured (the same connection twice after resolution).</summary>
+    public const string DestinationCombinationUnsupported = "destination_combination_unsupported";
 
-    public static bool IsKnown(string? code) => code is SubscriptionRequired or QuotaExceeded or StorageConnectionDisabled or StorageConnectionUnavailable or MultiDestinationExecutionNotSupported;
+    public static bool IsKnown(string? code) => code is SubscriptionRequired or QuotaExceeded or StorageConnectionDisabled or StorageConnectionUnavailable
+        or MultiDestinationExecutionNotSupported or AgentMultiDestinationUnsupported or DestinationCombinationUnsupported;
 }
 
 public static class BackupTriggerTypes

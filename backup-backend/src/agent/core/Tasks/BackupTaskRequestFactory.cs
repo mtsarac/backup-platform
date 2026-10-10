@@ -18,7 +18,6 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
         var staging = _staging ?? throw new ArgumentException("Default staging is not configured.");
         var connection = new DatabaseConnectionSettings(new DatabaseEndpoint(configuration.Host, configuration.Port),
             new DatabaseConnectionOptions(requireEncryption: configuration.Encrypt, trustServerCertificate: configuration.TrustServerCertificate));
-        var storage = new StorageProviderId(configuration.StorageProvider);
         ArgumentNullException.ThrowIfNull(configuration.StoragePrefix);
         var scope = ManagedBackupLayout.AttemptScope(task.TenantId, task.JobId, task.RunId, task.AttemptId);
         var prefix = new StorageObjectKey(configuration.StoragePrefix.Length == 0 ? scope : $"{configuration.StoragePrefix}/{scope}");
@@ -27,14 +26,35 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
         var credential = configuration.IntegratedSecurity
             ? IntegratedDatabaseCredential.Instance
             : await ResolveCredentialAsync(configuration.DatabaseCredentialReference!, cancellationToken).ConfigureAwait(false);
+        var destinations = EffectiveDestinations(configuration);
+        var targets = destinations.Select(destination => new BackupPipelineDestination(
+            new StorageProviderId(destination.StorageProvider),
+            destination.StorageProvider is "sftp" or "google-drive"
+                ? (storageFactory ?? throw new ArgumentException("Backend-relayed storage is not configured.")).CreateBackup(task, destination)
+                : null,
+            destination.StorageConnectionId,
+            destination.IsPrimary)).ToArray();
+        var primary = targets.Single(target => target.IsPrimary);
         return new DatabaseBackupPipelineRequest(DatabaseEngineId.MsSql, connection, credential, configuration.Database,
-            staging, storage, prefix, options)
+            staging, primary.Storage, prefix, options)
         {
-            StorageOverride = configuration.StorageProvider is "sftp" or "google-drive"
-                ? (storageFactory ?? throw new ArgumentException("Backend-relayed storage is not configured.")).CreateBackup(task)
-                : null
+            StorageOverride = primary.StorageOverride,
+            Destinations = configuration.Destinations.Count > 0 ? targets : [],
+            RequiredVerifiedReplicas = Math.Max(1, configuration.RequiredVerifiedReplicaCount)
         };
     }
+
+    /// <summary>The snapshot's destinations; a snapshot that predates them names its one destination in the legacy fields.</summary>
+    private static IReadOnlyList<BackupDestinationContract> EffectiveDestinations(BackupExecutionConfiguration configuration) =>
+        configuration.Destinations is { Count: > 0 } listed
+            ? listed
+            : [new BackupDestinationContract
+            {
+                StorageProvider = configuration.StorageProvider,
+                StorageConnectionId = configuration.StorageConnectionId,
+                StorageExecutionLocation = configuration.StorageExecutionLocation,
+                IsPrimary = true
+            }];
 
     private async ValueTask<DatabaseCredential> ResolveCredentialAsync(string reference, CancellationToken cancellationToken)
     {
@@ -63,10 +83,25 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
         {
             throw new ArgumentException("The backup configuration is unsupported.");
         }
-        if ((configuration.StorageProvider is "sftp" or "google-drive") && (configuration.StorageExecutionLocation != "Backend"
-            || configuration.StorageConnectionId is null || configuration.StorageConnectionId == Guid.Empty || configuration.StoragePrefix != string.Empty))
+        var destinations = EffectiveDestinations(configuration);
+        if (destinations.Count(destination => destination.IsPrimary) != 1
+            || configuration.RequiredVerifiedReplicaCount < 1 || configuration.RequiredVerifiedReplicaCount > destinations.Count
+            || destinations.Select(destination => (destination.StorageProvider, destination.StorageConnectionId)).Distinct().Count() != destinations.Count)
         {
-            throw new ArgumentException("The backend-relayed storage configuration is invalid.");
+            throw new ArgumentException("The destination set is invalid.");
+        }
+        // An unsupported provider/location combination is refused here, explicitly: no destination is ever skipped silently.
+        foreach (var destination in destinations)
+        {
+            if (destination.StorageProvider is not ("local" or "central" or "sftp" or "google-drive"))
+            {
+                throw new ArgumentException("The destination storage provider is unsupported.");
+            }
+            if ((destination.StorageProvider is "sftp" or "google-drive") && (destination.StorageExecutionLocation != "Backend"
+                || destination.StorageConnectionId is null || destination.StorageConnectionId == Guid.Empty || configuration.StoragePrefix != string.Empty))
+            {
+                throw new ArgumentException("The backend-relayed storage configuration is invalid.");
+            }
         }
         if (!HasValidAuthentication(configuration.IntegratedSecurity, configuration.DatabaseCredentialReference))
         {

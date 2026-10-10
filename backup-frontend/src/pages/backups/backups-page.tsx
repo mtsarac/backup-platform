@@ -9,6 +9,7 @@ import { useAgents } from '@/features/agents/hooks'
 import { useBackupJobs } from '@/features/backup-jobs/hooks'
 import { useBackups } from '@/features/backups/hooks'
 import { dateFilterInstant, formatDuration, formatTimestamp, runStatuses, runStatusLabels, triggerLabel } from '@/features/backups/presentation'
+import { ReplicationBadge } from '@/features/backups/replication'
 import type { BackupRun, BackupRunFilters, BackupRunStatus, BackupTrigger } from '@/features/backups/types'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { errorMessage } from '@/lib/api/failure-messages'
@@ -35,7 +36,7 @@ export function BackupsPage() {
     { key: 'scheduled', header: 'Planlanan zaman', render: (run) => formatTimestamp(run.scheduledFor) },
     { key: 'started', header: 'Başlangıç', render: (run) => formatTimestamp(run.startedAt) },
     { key: 'duration', header: 'Süre', render: (run) => formatDuration(run.startedAt, run.completedAt) },
-    { key: 'status', header: 'Durum', render: (run) => <StatusPill status={run.status} /> },
+    { key: 'status', header: 'Durum', render: (run) => <div className="flex flex-col items-start gap-1"><StatusPill status={run.status} /><ReplicationBadge replication={run.replication} /></div> },
     { key: 'attempts', header: 'Deneme sayısı', render: (run) => `${run.currentAttemptNumber} / ${run.retry.maxAttempts}` },
   ]
 

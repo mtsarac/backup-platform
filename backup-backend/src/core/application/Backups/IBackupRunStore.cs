@@ -10,9 +10,11 @@ public sealed record BackupLeaseCommand(TenantId TenantId, AgentId AgentId, Guid
     public string? Platform { get; init; }
 }
 public sealed record BackupProgress(string Stage, double? Percent);
-public sealed record BackupCompletion(string Outcome, string? ReasonCode, BackupArtifactResult? Artifact);
+public sealed record BackupCompletion(string Outcome, string? ReasonCode, BackupArtifactResult? Artifact, IReadOnlyList<BackupDestinationReport>? Destinations = null);
 public sealed record BackupArtifactResult(long SizeBytes, string SourceChecksum, string ArtifactChecksum, string ChecksumAlgorithm, DateTimeOffset CreatedAt, string SourceMetadataJson, string AppliedOptionsJson, IReadOnlyList<BackupReplicaResult> Replicas);
-public sealed record BackupReplicaResult(string StorageProvider, string StorageTarget, string Key, long SizeBytes, string Checksum, string ChecksumAlgorithm, string VerificationState, string VerificationMethod, DateTimeOffset CreatedAt, DateTimeOffset? VerifiedAt);
+public sealed record BackupReplicaResult(string StorageProvider, string StorageTarget, string Key, long SizeBytes, string Checksum, string ChecksumAlgorithm, string VerificationState, string VerificationMethod, DateTimeOffset CreatedAt, DateTimeOffset? VerifiedAt, Guid? StorageConnectionId = null);
+/// <summary>What the agent reported for one snapshot destination (already validated against the run's snapshot).</summary>
+public sealed record BackupDestinationReport(string StorageProvider, Guid? StorageConnectionId, string State, string Upload, string Verification, string? FailureCode, string? Key, bool ObjectMayRemain, DateTimeOffset StartedAt, DateTimeOffset CompletedAt);
 public sealed record BackupClaim(BackupRun Run, BackupRunAttempt Attempt);
 public sealed record BackupLeaseResult(DateTimeOffset LeaseExpiresAt, bool CancellationRequested);
 public enum BackupMutationResult { Accepted, NotFound, Conflict }

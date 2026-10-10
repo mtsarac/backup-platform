@@ -1,5 +1,33 @@
 import type { BackupMetadata } from './backup-metadata'
 
+export type ReplicationStatus = 'Healthy' | 'Degraded' | 'InsufficientReplicas' | 'Unavailable'
+
+/** One snapshot destination of a run: Verified, Failed, Cancelled, NotAttempted or Deleted. */
+export interface ReplicationDestination {
+  storageProvider: string
+  storageConnectionId: string | null
+  isPrimary: boolean
+  state: string
+  failureCode: string | null
+  failureReason: string | null
+  objectMayRemain: boolean
+  replicaId: string | null
+  replicaStatus: string | null
+}
+
+/**
+ * The backend's authoritative replication compliance, independent of the run status: a run can be Succeeded and still be Degraded or
+ * InsufficientReplicas. `destinations` is empty on artifact listings, where only the replicas are known.
+ */
+export interface ReplicationHealth {
+  requiredVerifiedReplicas: number
+  verifiedReplicas: number
+  destinationCount: number
+  status: ReplicationStatus
+  policySatisfied: boolean
+  destinations: ReplicationDestination[]
+}
+
 export type ArtifactState = 'Available' | 'DeletePending' | 'DeleteFailed' | 'Deleted'
 
 export interface BackupReplica {
@@ -52,6 +80,7 @@ export interface BackupArtifact {
   cancelDeleteAllowed?: boolean
   backupType?: string
   backupMetadata?: BackupMetadata | null
+  replication?: ReplicationHealth | null
 }
 
 export interface ArtifactList {

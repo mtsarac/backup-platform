@@ -9,6 +9,8 @@ using BackupPlatform.Application.Restores;
 using BackupPlatform.Contracts.Agents;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Identity;
+using BackupPlatform.Domain.Backups;
+using BackupPlatform.Storage;
 using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.StorageProviders.Abstractions;
 using Microsoft.AspNetCore.Mvc;
@@ -40,9 +42,9 @@ public static class AgentStorageTransferEndpoints
     }
 
     private static async Task<IResult> UploadAsync(Guid attemptId, HttpRequest request, ICurrentAgent agent,
-        IBackupRunStore runStore, IBackupStorageResolver resolver, PlatformDbContext db, CancellationToken cancellationToken)
+        IBackupRunStore runStore, IStorageConnectionStore connections, IBackupStorageResolver resolver, PlatformDbContext db, CancellationToken cancellationToken)
     {
-        var fence = await FenceBackupAsync(attemptId, request, agent, runStore, cancellationToken);
+        var fence = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: true, cancellationToken);
         if (fence.Failure is { } failure) return failure;
         if (request.ContentLength is not > 0 || request.ContentType != "application/octet-stream"
             || request.Headers[TaskStorageProtocol.ChecksumHeader].FirstOrDefault() is not { Length: 64 } expectedChecksum
@@ -54,7 +56,7 @@ public static class AgentStorageTransferEndpoints
 
         return await WithAdvisoryLockAsync(db, fence.ConnectionId.Value, fence.Key!, async () =>
         {
-            var verified = await FenceBackupAsync(attemptId, request, agent, runStore, cancellationToken);
+            var verified = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: true, cancellationToken);
             if (verified.Failure is { } failedAgain) return failedAgain;
             try
             {
@@ -70,9 +72,9 @@ public static class AgentStorageTransferEndpoints
     }
 
     private static async Task<IResult> ReadBackupAsync(Guid attemptId, HttpRequest request, ICurrentAgent agent,
-        IBackupRunStore runStore, IBackupStorageResolver resolver, CancellationToken cancellationToken)
+        IBackupRunStore runStore, IStorageConnectionStore connections, IBackupStorageResolver resolver, CancellationToken cancellationToken)
     {
-        var fence = await FenceBackupAsync(attemptId, request, agent, runStore, cancellationToken);
+        var fence = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: false, cancellationToken);
         if (fence.Failure is { } failure) return failure;
         var provider = resolver.Resolve(agent.Identity!.TenantId, fence.ProviderType!, fence.ConnectionId!.Value.ToString("D"));
         if (provider is null) return Results.Conflict(new AgentApiError { Error = "storage_not_configured", Message = "Storage not configured." });
@@ -85,9 +87,9 @@ public static class AgentStorageTransferEndpoints
     }
 
     private static async Task<IResult> GetBackupMetadataAsync(Guid attemptId, HttpRequest request, ICurrentAgent agent,
-        IBackupRunStore runStore, IBackupStorageResolver resolver, CancellationToken cancellationToken)
+        IBackupRunStore runStore, IStorageConnectionStore connections, IBackupStorageResolver resolver, CancellationToken cancellationToken)
     {
-        var fence = await FenceBackupAsync(attemptId, request, agent, runStore, cancellationToken);
+        var fence = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: false, cancellationToken);
         if (fence.Failure is { } failure) return failure;
         var provider = resolver.Resolve(agent.Identity!.TenantId, fence.ProviderType!, fence.ConnectionId!.Value.ToString("D"));
         if (provider is null) return Results.Conflict(new AgentApiError { Error = "storage_not_configured", Message = "Storage not configured." });
@@ -104,15 +106,15 @@ public static class AgentStorageTransferEndpoints
     }
 
     private static async Task<IResult> VerifyBackupAsync(Guid attemptId, TaskStorageVerifyRequest body, HttpRequest request, ICurrentAgent agent,
-        IBackupRunStore runStore, IBackupStorageResolver resolver, PlatformDbContext db, CancellationToken cancellationToken)
+        IBackupRunStore runStore, IStorageConnectionStore connections, IBackupStorageResolver resolver, PlatformDbContext db, CancellationToken cancellationToken)
     {
-        var fence = await FenceBackupAsync(attemptId, request, agent, runStore, cancellationToken);
+        var fence = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: false, cancellationToken);
         if (fence.Failure is { } failure) return failure;
         var provider = resolver.Resolve(agent.Identity!.TenantId, fence.ProviderType!, fence.ConnectionId!.Value.ToString("D"));
         if (provider is null) return Results.Conflict(new AgentApiError { Error = "storage_not_configured", Message = "Storage not configured." });
         return await WithAdvisoryLockAsync(db, fence.ConnectionId.Value, fence.Key!, async () =>
         {
-            var verified = await FenceBackupAsync(attemptId, request, agent, runStore, cancellationToken);
+            var verified = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: false, cancellationToken);
             if (verified.Failure is { } failedAgain) return failedAgain;
             try
             {
@@ -132,15 +134,15 @@ public static class AgentStorageTransferEndpoints
     }
 
     private static async Task<IResult> DeleteBackupAsync(Guid attemptId, HttpRequest request, ICurrentAgent agent,
-        IBackupRunStore runStore, IBackupStorageResolver resolver, PlatformDbContext db, CancellationToken cancellationToken)
+        IBackupRunStore runStore, IStorageConnectionStore connections, IBackupStorageResolver resolver, PlatformDbContext db, CancellationToken cancellationToken)
     {
-        var fence = await FenceBackupAsync(attemptId, request, agent, runStore, cancellationToken);
+        var fence = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: false, cancellationToken);
         if (fence.Failure is { } failure) return failure;
         var provider = resolver.Resolve(agent.Identity!.TenantId, fence.ProviderType!, fence.ConnectionId!.Value.ToString("D"));
         if (provider is null) return Results.Conflict(new AgentApiError { Error = "storage_not_configured", Message = "Storage not configured." });
         return await WithAdvisoryLockAsync(db, fence.ConnectionId.Value, fence.Key!, async () =>
         {
-            var verified = await FenceBackupAsync(attemptId, request, agent, runStore, cancellationToken);
+            var verified = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: false, cancellationToken);
             if (verified.Failure is { } failedAgain) return failedAgain;
             try
             {
@@ -211,25 +213,49 @@ public static class AgentStorageTransferEndpoints
         }, cancellationToken);
     }
 
+    /// <summary>
+    /// Authorizes ONE backup transfer call on the server, from stored facts only: the agent's identity and tenant, the attempt's current lease (the fencing
+    /// token), the destination named by <see cref="TaskStorageProtocol.DestinationHeader"/> against the run's SNAPSHOT (a connection id the snapshot does not
+    /// contain, or one that is not backend-relayed, is refused), the key against the run's own layout, and the connection against what it is NOW (it must still
+    /// be the tenant's and of the snapshot's provider; a write additionally needs it enabled). The destination header is a selector, never an authority.
+    /// A call without the header (an agent that predates multi-destination runs) is understood only for a single-destination run.
+    /// </summary>
     private static async Task<(IResult? Failure, Guid? ConnectionId, string? Key, string? ProviderType)> FenceBackupAsync(
-        Guid attemptId, HttpRequest request, ICurrentAgent agent, IBackupRunStore store, CancellationToken cancellationToken)
+        Guid attemptId, HttpRequest request, ICurrentAgent agent, IBackupRunStore store, IStorageConnectionStore connections, bool write, CancellationToken cancellationToken)
     {
         if (attemptId == Guid.Empty || agent.Identity is null)
             return (Results.Unauthorized(), null, null, null);
         if (!Guid.TryParse(request.Headers[TaskStorageProtocol.LeaseHeader], out var lease) || lease == Guid.Empty
             || request.Headers[TaskStorageProtocol.KeyHeader].FirstOrDefault() is not { Length: > 0 } key)
             return (Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "Missing lease or key headers." }), null, null, null);
+        Guid? named = null;
+        if (request.Headers.TryGetValue(TaskStorageProtocol.DestinationHeader, out var header))
+        {
+            if (!Guid.TryParse(header.FirstOrDefault(), out var parsed) || parsed == Guid.Empty)
+                return (Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "The destination header is invalid." }), null, null, null);
+            named = parsed;
+        }
 
         var claim = await store.GetAttemptAsync(agent.Identity.TenantId, agent.Identity.AgentId, attemptId, cancellationToken);
-        if (claim is null || !claim.Attempt.HasLease(lease, DateTimeOffset.UtcNow)
-            || claim.Run.Configuration.StorageProvider is not ("sftp" or "google-drive") || claim.Run.Configuration.StorageConnectionId is not { } connectionId)
+        if (claim is null || claim.Run.CurrentAttempt.Id != attemptId || !claim.Attempt.HasLease(lease, DateTimeOffset.UtcNow))
             return (Results.Conflict(new AgentApiError { Error = "lease_conflict", Message = "Invalid lease or storage target." }), null, null, null);
 
-        if (!ManagedBackupLayout.TryParseStorageKey(key, out var layout) || layout is null
-            || layout.TenantId != agent.Identity.TenantId.Value || layout.AttemptId != attemptId)
+        var snapshot = claim.Run.Configuration.ResolveEffectiveDestinations();
+        var destination = named is { } id
+            ? snapshot.SingleOrDefault(candidate => candidate.StorageConnectionId == id)
+            : snapshot.Count == 1 ? snapshot[0] : null;
+        if (destination is not { StorageProvider: "sftp" or "google-drive", StorageExecutionLocation: BackupStorageExecutionLocation.Backend, StorageConnectionId: { } connectionId })
+            return (Results.Conflict(new AgentApiError { Error = "destination_not_authorized", Message = "The destination is not part of this run." }), null, null, null);
+
+        if (!ManagedBackupLayout.TryParseStorageKey(key, out var layout) || layout is null || layout.TenantId != agent.Identity.TenantId.Value
+            || layout.AttemptId != attemptId || layout.RunId != claim.Run.Id || layout.JobId != claim.Run.JobId)
             return (Results.Conflict(new AgentApiError { Error = "invalid_key", Message = "The key layout does not match the attempt." }), null, null, null);
 
-        return (null, connectionId, key, claim.Run.Configuration.StorageProvider);
+        var connection = (await connections.FindAsync(connectionId, agent.Identity.TenantId, cancellationToken))?.Connection;
+        if (connection is null || connection.TenantId != agent.Identity.TenantId || connection.ProviderType != destination.StorageProvider || (write && !connection.EffectiveEnabled))
+            return (Results.Conflict(new AgentApiError { Error = "destination_unavailable", Message = "The destination storage connection is not available." }), null, null, null);
+
+        return (null, connectionId, key, destination.StorageProvider);
     }
 
     private static async Task<(IResult? Failure, Guid? ConnectionId, string? Key, string? ProviderType)> FenceRestoreAsync(

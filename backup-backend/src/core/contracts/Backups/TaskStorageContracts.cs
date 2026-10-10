@@ -7,6 +7,8 @@ public static class TaskStorageProtocol
     public const string LeaseHeader = "X-Task-Lease";
     public const string KeyHeader = "X-Storage-Key";
     public const string ChecksumHeader = "X-Storage-Sha256";
+    /// <summary>Names the snapshot destination (a storage connection id) a backup transfer targets. The backend authorizes it against the run snapshot; it is never trusted as a location.</summary>
+    public const string DestinationHeader = "X-Storage-Destination";
     public const string RestoreHeader = "X-Restore-Operation";
 }
 

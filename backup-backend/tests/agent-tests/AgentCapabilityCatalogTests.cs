@@ -16,9 +16,9 @@ public sealed class AgentCapabilityCatalogTests
         var supported = catalog.Capabilities.Where(c => c.Support == AgentCapabilitySupportNames.Supported).Select(c => c.Identifier).Order(StringComparer.Ordinal);
         var unsupported = catalog.Capabilities.Where(c => c.Support == AgentCapabilitySupportNames.Unsupported).Select(c => c.Identifier).Order(StringComparer.Ordinal);
         Assert.Equal(
-            ["mssql.backup.checksum", "mssql.backup.compression", "mssql.backup.copy-only", "mssql.backup.full", "mssql.restore.database", "mssql.restore.discovery", "mssql.restore.precheck", "mssql.restore.verify-only", "storage.backend-relay", "storage.download"], supported);
+            ["backup.multi-destination", "mssql.backup.checksum", "mssql.backup.compression", "mssql.backup.copy-only", "mssql.backup.full", "mssql.restore.database", "mssql.restore.discovery", "mssql.restore.precheck", "mssql.restore.verify-only", "storage.backend-relay", "storage.download"], supported);
         Assert.Equal(["mssql.backup.differential", "mssql.backup.log"], unsupported);
-        Assert.Equal(12, catalog.Capabilities.Count);
+        Assert.Equal(13, catalog.Capabilities.Count);
         Assert.All(catalog.Capabilities.Where(c => c.Support == AgentCapabilitySupportNames.Supported),
             c => Assert.Equal("agent", Assert.Single(c.Metadata!, entry => entry.Key == "scope").Value));
         Assert.Equal(AgentCapabilityRevision.Compute(catalog.Capabilities), catalog.Revision);

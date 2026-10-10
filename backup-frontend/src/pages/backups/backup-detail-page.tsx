@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { ArtifactDetails } from '@/features/artifacts/artifact-details'
 import { useBackup, useBackupActions } from '@/features/backups/hooks'
 import { canCancelRun, canRetryRun, formatDuration, formatSeconds, formatTimestamp, progressStageLabel, retryStateLabels, triggerLabel } from '@/features/backups/presentation'
+import { ReplicationBadge, ReplicationSection } from '@/features/backups/replication'
 import type { BackupRun } from '@/features/backups/types'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
@@ -45,6 +46,7 @@ export function BackupDetailPage() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <StatusPill status={run.status} />
+              <ReplicationBadge replication={run.replication} />
               {canOperate && canRetryRun(run.status) && <Button disabled={busy} onClick={() => void perform('retry')}>{actions.retry.isPending ? 'Sıraya alınıyor…' : 'Yeniden dene'}</Button>}
               {canOperate && canCancelRun(run.status) && <Button variant="destructive" disabled={busy} onClick={() => void perform('cancel')}>{actions.cancel.isPending ? 'İletiliyor…' : 'İptal et'}</Button>}
             </div>
@@ -58,6 +60,7 @@ export function BackupDetailPage() {
           </section>}
           {run.status === 'RetryPending' && <p role="status" className="rounded-lg border border-border bg-surface p-4 text-sm">Otomatik yeniden deneme bekleniyor. Sonraki deneme: {formatTimestamp(run.retry.nextAttemptAt)}. {failureMessage(run.retry.lastFailureCode)}</p>}
           {run.status === 'CancellationRequested' && <p role="status" className="rounded-lg border border-border bg-surface p-4 text-sm">İptal istendi; çalıştırma henüz iptal edilmiş değildir. Ajan sonucu bildirdiğinde durum güncellenir.</p>}
+          <ReplicationSection replication={run.replication} />
           <section aria-labelledby="run-summary" className="rounded-lg border border-border bg-surface p-5">
             <h2 id="run-summary" className="mb-4 text-lg font-semibold text-text-heading">Çalıştırma özeti</h2>
             <dl className="grid gap-4 text-sm sm:grid-cols-2 xl:grid-cols-3">
@@ -84,7 +87,7 @@ export function BackupDetailPage() {
             {run.attempts.map((attempt) => {
               const percent = attempt.progressPercent == null ? undefined : Math.min(100, Math.max(0, attempt.progressPercent))
               return <article key={attempt.id} aria-label={`${attempt.number}. deneme`} className="space-y-4 rounded-lg border border-border bg-surface p-5">
-                <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-medium text-text-heading">{attempt.number}. deneme · {triggerLabel(attempt.trigger)}</h3><StatusPill status={attempt.status} /></div>
+                <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-medium text-text-heading">{attempt.number}. deneme · {triggerLabel(attempt.trigger)}</h3><span className="flex flex-wrap items-center gap-2"><StatusPill status={attempt.status} /><ReplicationBadge replication={attempt.replication} /></span></div>
                 <dl className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
                   {[
                     ['Oluşturulma', formatTimestamp(attempt.createdAt)], ['Başlangıç', formatTimestamp(attempt.startedAt)],

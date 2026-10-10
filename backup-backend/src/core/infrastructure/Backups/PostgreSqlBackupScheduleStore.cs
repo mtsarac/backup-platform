@@ -67,7 +67,7 @@ public sealed class PostgreSqlBackupScheduleStore(DbContextOptions<PlatformDbCon
         {
             // Same gate as a manual start. A refusal is a decided occurrence like any other: recorded with its reason, so it is never silently lost.
             var runId = Guid.NewGuid();
-            var target = await StorageTargetGate.ForNewRunAsync(context, tenantId, job.Configuration, now, cancellationToken);
+            var target = await StorageTargetGate.ForNewRunAsync(context, tenantId, owner, job.Configuration, now, cancellationToken);
             var decision = target.Allowed
                 ? await BackupAdmissionGate.AdmitAsync(admission, context, new BackupAdmissionRequest(tenantId, jobId, runId, BackupTriggerTypes.Scheduled, now), cancellationToken)
                 : BackupAdmissionDecision.Denied(target.DenialCode!);

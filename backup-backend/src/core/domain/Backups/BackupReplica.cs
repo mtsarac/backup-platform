@@ -126,7 +126,7 @@ public sealed class BackupReplica : ITenantOwned
     /// stays usable: the grace period exists so a mistaken or premature deletion can still be recovered from. Once the physical delete has
     /// begun the bytes may already be partly gone, so from Deleting on the replica is not usable.
     /// </summary>
-    public bool IsUsable => Status is BackupReplicaStatus.Available or BackupReplicaStatus.DeletePending;
+    public bool IsUsable => VerificationState == "Verified" && Status is BackupReplicaStatus.Available or BackupReplicaStatus.DeletePending;
 
     /// <summary>
     /// Whether a restore may read this replica at <paramref name="now"/>: Available, or DeletePending while its grace period has not ended.

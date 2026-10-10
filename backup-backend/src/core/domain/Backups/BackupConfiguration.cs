@@ -74,14 +74,31 @@ public sealed record BackupConfiguration(
     }
 
     /// <summary>
-    /// Resolves canonical destinations list. If Destinations is empty, derives single primary destination from legacy fields.
+    /// Resolves canonical destinations list. If Destinations is empty, derives single primary destination from legacy fields (including the configured
+    /// execution location: a legacy job's location is whatever it says, not what its provider would default to).
     /// </summary>
     public IReadOnlyList<BackupDestination> ResolveEffectiveDestinations()
     {
         if (Destinations is { Count: > 0 })
             return Destinations;
 
-        return [new BackupDestination(StorageProvider, StorageConnectionId, IsPrimary: true)];
+        return [new BackupDestination(StorageProvider, StorageConnectionId, IsPrimary: true) { StorageExecutionLocation = StorageExecutionLocation }];
+    }
+
+    // Value equality for the destination list (a record compares collections by reference, so two loads of the same snapshot would differ).
+    public bool Equals(BackupConfiguration? other) => other is not null && Engine == other.Engine && Database == other.Database && Host == other.Host && Port == other.Port &&
+        IntegratedSecurity == other.IntegratedSecurity && DatabaseCredentialReference == other.DatabaseCredentialReference && Encrypt == other.Encrypt &&
+        TrustServerCertificate == other.TrustServerCertificate && StagingReference == other.StagingReference && StorageProvider == other.StorageProvider &&
+        StoragePrefix == other.StoragePrefix && CopyOnly == other.CopyOnly && ChecksumPolicy == other.ChecksumPolicy && CompressionPolicy == other.CompressionPolicy &&
+        StorageExecutionLocation == other.StorageExecutionLocation && StorageConnectionId == other.StorageConnectionId &&
+        RequiredVerifiedReplicaCount == other.RequiredVerifiedReplicaCount && Destinations.SequenceEqual(other.Destinations);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Engine); hash.Add(Database); hash.Add(Host); hash.Add(Port); hash.Add(StorageProvider); hash.Add(StorageConnectionId); hash.Add(RequiredVerifiedReplicaCount);
+        foreach (var destination in Destinations) hash.Add(destination);
+        return hash.ToHashCode();
     }
 }
 
@@ -127,4 +144,4 @@ public enum BackupStatus
     Pending = 1, Leased = 2, Running = 3, Succeeded = 4, Failed = 5, Cancelled = 6, AgentLost = 7, RetryPending = 8
 }
 
-public sealed record BackupCompletion(BackupStatus Status, string? FailureCode, BackupArtifact? Artifact);
+public sealed record BackupCompletion(BackupStatus Status, string? FailureCode, BackupArtifact? Artifact, IReadOnlyList<BackupDestinationOutcome>? Outcomes = null);

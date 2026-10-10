@@ -14,14 +14,14 @@ namespace BackupPlatform.Agent.Transport;
 
 public sealed class HttpTaskStorageProviderFactory(HttpClient http, AgentBackendEndpoint endpoint, IAgentCredentialStore identities) : ITaskStorageProviderFactory
 {
-    public IStorageProvider CreateBackup(BackupTaskSnapshot task) => new Provider(http, endpoint, identities,
-        $"api/agent/tasks/{task.AttemptId:D}/storage", task.LeaseToken, null, task.Configuration.StorageProvider);
+    public IStorageProvider CreateBackup(BackupTaskSnapshot task, BackupDestinationContract destination) => new Provider(http, endpoint, identities,
+        $"api/agent/tasks/{task.AttemptId:D}/storage", task.LeaseToken, null, destination.StorageProvider, destination.StorageConnectionId);
 
     public IStorageProvider CreateRestore(RestoreTaskSnapshot task) => new Provider(http, endpoint, identities,
-        $"api/agent/restore-tasks/{task.AttemptId:D}/storage", task.LeaseToken, task.OperationId, task.Source.StorageProvider);
+        $"api/agent/restore-tasks/{task.AttemptId:D}/storage", task.LeaseToken, task.OperationId, task.Source.StorageProvider, null);
 
     private sealed class Provider(HttpClient http, AgentBackendEndpoint endpoint, IAgentCredentialStore identities,
-        string path, Guid lease, Guid? restore, string providerType) : IStorageProvider
+        string path, Guid lease, Guid? restore, string providerType, Guid? destination) : IStorageProvider
     {
         public StorageProviderId Id { get; } = new(providerType);
         public StorageTopology Topology => StorageTopology.BackendRelayed;
@@ -97,6 +97,7 @@ public sealed class HttpTaskStorageProviderFactory(HttpClient http, AgentBackend
             request.Headers.TryAddWithoutValidation(TaskStorageProtocol.KeyHeader, key.Value);
             if (checksum is not null) request.Headers.TryAddWithoutValidation(TaskStorageProtocol.ChecksumHeader, checksum);
             if (restore is { } operationId) request.Headers.TryAddWithoutValidation(TaskStorageProtocol.RestoreHeader, operationId.ToString("D"));
+            if (destination is { } destinationId) request.Headers.TryAddWithoutValidation(TaskStorageProtocol.DestinationHeader, destinationId.ToString("D"));
             try { return await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false); }
             catch (Exception exception) when (exception is HttpRequestException or IOException)
             { throw new StorageException(StorageFailureKind.Io, "The storage relay is unavailable."); }

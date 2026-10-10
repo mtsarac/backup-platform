@@ -3,6 +3,7 @@ import { StatusPill } from '@/components/data/status-pill'
 import { failureMessage } from '@/lib/api/failure-messages'
 import { artifactDate, artifactSize, artifactState, deletionReason } from './format'
 import type { BackupArtifact, BackupReplica } from './types'
+import { ReplicationSummary } from '@/features/backups/replication'
 
 function Metadata({ label, children }: { label: string; children: ReactNode }) {
   return <div className="min-w-0"><dt className="text-sm text-text-muted">{label}</dt><dd className="mt-1 break-words text-sm text-text">{children}</dd></div>
@@ -25,6 +26,7 @@ export function ArtifactDetails({ artifact }: { artifact: ArtifactPresentation }
         <h2 className="mb-4 font-semibold text-text">Backup bilgileri</h2>
         <dl className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           <Metadata label="Durum"><StatusPill status={artifactState(artifact)} /></Metadata>
+          {artifact.replication && <Metadata label="Replikasyon"><ReplicationSummary replication={artifact.replication} /></Metadata>}
           <Metadata label="Backup tipi">{artifact.backupType ?? '—'}</Metadata>
           <Metadata label="Database">{artifact.databaseName || '—'}</Metadata>
           <Metadata label="Backup Job">{artifact.jobName || '—'}</Metadata>

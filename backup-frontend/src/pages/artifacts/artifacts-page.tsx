@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { artifactDate, artifactSize, artifactState } from '@/features/artifacts/format'
 import { useArtifacts } from '@/features/artifacts/hooks'
 import type { ArtifactFilters, ArtifactState, BackupArtifact } from '@/features/artifacts/types'
+import { ReplicationSummary } from '@/features/backups/replication'
 import { useTenant } from '@/features/tenancy/use-tenant'
 
 const filters: { value: ArtifactState | ''; label: string }[] = [
@@ -32,7 +33,7 @@ export function ArtifactsPage() {
     { key: 'size', header: 'Boyut', render: (artifact) => artifactSize(artifact.sizeBytes) },
     { key: 'expiry', header: 'Saklama sonu', render: (artifact) => artifact.retentionExpiresAt ? artifactDate(artifact.retentionExpiresAt) : 'Süre sınırı yok' },
     { key: 'state', header: 'Durum', render: (artifact) => <StatusPill status={artifactState(artifact)} /> },
-    { key: 'replicas', header: 'Replika durumu', render: (artifact) => <div className="flex flex-wrap gap-1">{artifact.replicas.map((replica, index) => <span key={replica.id} className="flex items-center gap-1"><span className="text-xs text-text-muted">{index + 1}.</span><StatusPill status={replica.status} /></span>)}</div> },
+    { key: 'replicas', header: 'Replika durumu', render: (artifact) => <div className="space-y-1"><ReplicationSummary replication={artifact.replication} /><div className="flex flex-wrap gap-1">{artifact.replicas.map((replica, index) => <span key={replica.id} className="flex items-center gap-1"><span className="text-xs text-text-muted">{index + 1}.</span><StatusPill status={replica.status} /></span>)}</div></div> },
   ]
   const lastPage = Math.max(1, Math.ceil((query.data?.totalCount ?? 0) / filter.pageSize))
   function setFilters(next: Partial<ArtifactFilters>) {

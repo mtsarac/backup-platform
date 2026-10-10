@@ -5,7 +5,7 @@ namespace BackupPlatform.Application.Backups;
 
 /// <summary>An artifact with the run and job it belongs to; the replicas are loaded.</summary>
 public sealed record BackupArtifactRecord(BackupArtifact Artifact, Guid RunId, Guid JobId,
-    string? JobName = null, string? DatabaseName = null, string? AgentName = null, Guid? AgentId = null);
+    string? JobName = null, string? DatabaseName = null, string? AgentName = null, Guid? AgentId = null, BackupConfiguration? Snapshot = null);
 
 /// <summary>Created-at bounds are inclusive UTC instants; pagination has no history cutoff.</summary>
 public sealed record BackupArtifactQuery(Guid? JobId = null, Guid? AgentId = null, string? State = null,

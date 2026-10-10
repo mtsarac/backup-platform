@@ -184,6 +184,9 @@ internal sealed class BackupAttemptConfiguration : IEntityTypeConfiguration<Back
         builder.HasMany(attempt => attempt.Artifacts).WithOne().HasForeignKey(artifact => new { artifact.AttemptId, artifact.TenantId })
             .HasPrincipalKey(attempt => new { attempt.Id, attempt.TenantId }).OnDelete(DeleteBehavior.Restrict);
         builder.Navigation(attempt => attempt.Artifacts).HasField("_artifacts").UsePropertyAccessMode(PropertyAccessMode.Field);
+        builder.HasMany(attempt => attempt.DestinationOutcomes).WithOne().HasForeignKey(outcome => new { outcome.AttemptId, outcome.TenantId })
+            .HasPrincipalKey(attempt => new { attempt.Id, attempt.TenantId }).OnDelete(DeleteBehavior.Restrict);
+        builder.Navigation(attempt => attempt.DestinationOutcomes).HasField("_outcomes").UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.HasIndex(attempt => new { attempt.TenantId, attempt.RunId, attempt.Number }).IsUnique();
         // Concurrency is enforced by counting these rows under a lock (agent, tenant and global limits), not by a unique index.
         builder.HasIndex(attempt => new { attempt.TenantId, attempt.AgentId, attempt.Status });
@@ -293,6 +296,39 @@ internal sealed class BackupReplicaConfiguration : IEntityTypeConfiguration<Back
         // The orphan sweep asks which stored keys some replica still references.
         builder.HasIndex(replica => new { replica.StorageProvider, replica.Key }).HasDatabaseName("ix_backup_replicas_location");
         builder.HasIndex(replica => new { replica.TenantId, replica.ArtifactId, replica.StorageProvider, replica.StorageTarget, replica.Key }).IsUnique();
+        // The same invariant as BackupArtifact.AddReplica, enforced where no application path can bypass it.
+        builder.HasIndex(replica => new { replica.TenantId, replica.ArtifactId, replica.StorageConnectionId }).IsUnique().HasDatabaseName("ux_backup_replicas_live_verified_destination")
+            .HasFilter("\"VerificationState\" = 'Verified' AND \"Status\" <> 'Deleted'");
+    }
+}
+
+internal sealed class BackupDestinationOutcomeConfiguration : IEntityTypeConfiguration<BackupDestinationOutcome>
+{
+    public void Configure(EntityTypeBuilder<BackupDestinationOutcome> builder)
+    {
+        BackupMapping.Base(builder, "backup_destination_outcomes");
+        builder.ToTable("backup_destination_outcomes", table =>
+        {
+            table.HasCheckConstraint("ck_backup_destination_outcome_state", "\"State\" IN ('Verified','Failed','Cancelled') AND \"Upload\" IN ('Succeeded','Failed','NotAttempted') AND \"Verification\" IN ('Verified','Failed','NotRun')");
+            // Verified is the whole story of a stored, verified copy; every other state names a reason and no replica; a possibly-left-behind object was written and did not verify.
+            table.HasCheckConstraint("ck_backup_destination_outcome_verified",
+                "(\"State\" = 'Verified') = (\"ReplicaId\" IS NOT NULL) " +
+                "AND (\"State\" <> 'Verified' OR (\"FailureCode\" IS NULL AND \"Upload\" = 'Succeeded' AND \"Verification\" = 'Verified' AND \"Key\" IS NOT NULL)) " +
+                "AND (\"State\" = 'Verified' OR (\"FailureCode\" IS NOT NULL AND \"Verification\" <> 'Verified')) " +
+                "AND (NOT \"ObjectMayRemain\" OR (\"State\" <> 'Verified' AND \"Key\" IS NOT NULL AND \"Upload\" = 'Succeeded'))");
+            table.HasCheckConstraint("ck_backup_destination_outcome_times", "\"CompletedAt\" >= \"StartedAt\"");
+        });
+        builder.Property(outcome => outcome.StorageProvider).HasMaxLength(128).IsRequired();
+        builder.Property(outcome => outcome.ExecutionLocation).HasConversion<string>().HasMaxLength(16).IsRequired();
+        builder.Property(outcome => outcome.State).HasMaxLength(16).IsRequired();
+        builder.Property(outcome => outcome.Upload).HasMaxLength(16).IsRequired();
+        builder.Property(outcome => outcome.Verification).HasMaxLength(16).IsRequired();
+        builder.Property(outcome => outcome.FailureCode).HasMaxLength(128);
+        builder.Property(outcome => outcome.Key).HasMaxLength(1024);
+        builder.Ignore(outcome => outcome.IsVerified);
+        // One outcome per destination per attempt: a duplicate completion can never double-record a destination.
+        builder.HasIndex(outcome => new { outcome.TenantId, outcome.AttemptId, outcome.StorageProvider, outcome.StorageConnectionId }).IsUnique();
+        builder.HasIndex(outcome => new { outcome.TenantId, outcome.RunId });
     }
 }
 

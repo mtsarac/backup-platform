@@ -72,6 +72,7 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<BackupRunAttempt> BackupRunAttempts => Set<BackupRunAttempt>();
     public DbSet<BackupArtifact> BackupArtifacts => Set<BackupArtifact>();
     public DbSet<BackupReplica> BackupReplicas => Set<BackupReplica>();
+    public DbSet<BackupDestinationOutcome> BackupDestinationOutcomes => Set<BackupDestinationOutcome>();
     public DbSet<BackupLifecycleFact> BackupLifecycleFacts => Set<BackupLifecycleFact>();
     public DbSet<BackupScheduleOccurrence> BackupScheduleOccurrences => Set<BackupScheduleOccurrence>();
     public DbSet<RestoreOperation> RestoreOperations => Set<RestoreOperation>();

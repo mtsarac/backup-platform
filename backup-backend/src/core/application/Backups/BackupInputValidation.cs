@@ -84,21 +84,65 @@ public static class BackupInputValidation
     public static bool IsValidProgress(BackupTaskProgressRequest request) => request.LeaseToken != Guid.Empty && Stages.Contains(request.Stage) &&
         (request.Percent is null || double.IsFinite(request.Percent.Value) && request.Percent is >= 0 and <= 100);
 
+    private const int MaxDestinations = 16;
+
+    /// <summary>
+    /// A completion is accepted only if everything it names is part of the RUN'S SNAPSHOT: every replica and every destination result must be one of the
+    /// snapshot destinations, none twice, and a run with several destinations must account for every one of them. Nothing the agent says can add a destination.
+    /// </summary>
     public static bool IsValidCompletion(BackupTaskCompletionRequest request, BackupConfiguration configuration)
     {
-        if (request.LeaseToken == Guid.Empty) return false;
-        if (request.Status == "Cancelled") return request.Artifact is null && request.FailureCode is null or "Cancelled";
-        if (request.Status == "Failed") return request.Artifact is null && request.FailureCode is not null && BackupFailureCodes.IsAgentReportable(request.FailureCode);
+        if (request.LeaseToken == Guid.Empty || request.Destinations is not { Count: <= MaxDestinations }) return false;
+        var snapshot = configuration.ResolveEffectiveDestinations();
+        if (request.Status == "Cancelled") return request.Artifact is null && request.FailureCode is null or "Cancelled" && ValidDestinations(request.Destinations, snapshot, null);
+        if (request.Status == "Failed") return request.Artifact is null && request.FailureCode is not null && BackupFailureCodes.IsAgentReportable(request.FailureCode) && ValidDestinations(request.Destinations, snapshot, null);
         if (request.Status != "Succeeded" || request.FailureCode is not null || request.Artifact is not { } a) return false;
         if (a.SizeBytes <= 0 || a.CreatedAt == default || a.ChecksumAlgorithm != "sha256" || !Checksum(a.SourceChecksum) || !Checksum(a.ArtifactChecksum) ||
-            a.Replicas is not { Count: > 0 and <= 8 } || !Metadata(a, configuration)) return false;
-        return a.Replicas.All(r => r is not null && r.StorageProvider == configuration.StorageProvider && Reference(r.StorageTarget) &&
-            (configuration.StorageExecutionLocation != BackupStorageExecutionLocation.Agent || r.StorageTarget == configuration.StorageProvider) &&
-            (configuration.StorageProvider is not ("sftp" or "google-drive") || r.StorageTarget == configuration.StorageConnectionId?.ToString("D")) &&
+            a.Replicas is not { Count: > 0 } || a.Replicas.Count > snapshot.Count || !Metadata(a, configuration)) return false;
+        return a.Replicas.All(r => r is not null && Destination(snapshot, r.StorageProvider, r.StorageConnectionId) is { } destination && Reference(r.StorageTarget) &&
+            (destination.StorageExecutionLocation != BackupStorageExecutionLocation.Agent || r.StorageTarget == r.StorageProvider) &&
+            (destination.StorageProvider is not ("sftp" or "google-drive") || r.StorageTarget == destination.StorageConnectionId?.ToString("D")) &&
             Text(r.Key, 512) && SafeKey(r.Key) && r.SizeBytes == a.SizeBytes && r.ChecksumAlgorithm == a.ChecksumAlgorithm &&
             Checksum(r.Checksum) && r.Checksum.Equals(a.ArtifactChecksum, StringComparison.OrdinalIgnoreCase) && r.VerificationState == "Verified" &&
             r.VerificationMethod is "ReadBack" or "ServerSideChecksum" && r.CreatedAt != default && r.VerifiedAt is not null && r.VerifiedAt >= r.CreatedAt) &&
-            a.Replicas.Select(r => (r.StorageProvider, r.StorageTarget, r.Key)).Distinct().Count() == a.Replicas.Count;
+            a.Replicas.Select(r => (r.StorageProvider, r.StorageTarget, r.Key)).Distinct().Count() == a.Replicas.Count &&
+            a.Replicas.Select(r => Destination(snapshot, r.StorageProvider, r.StorageConnectionId)).Distinct().Count() == a.Replicas.Count &&
+            ValidDestinations(request.Destinations, snapshot, a);
+    }
+
+    /// <summary>The snapshot destination a report or replica names. An agent that does not name the connection (it predates multi-destination runs) is understood only where the provider is unambiguous.</summary>
+    private static BackupDestination? Destination(IReadOnlyList<BackupDestination> snapshot, string? provider, Guid? connectionId)
+    {
+        var candidates = snapshot.Where(d => d.StorageProvider == provider && (connectionId is null || d.StorageConnectionId == connectionId)).ToArray();
+        return candidates.Length == 1 ? candidates[0] : null;
+    }
+
+    /// <summary>
+    /// Empty is legal when nothing was transferred (a failure before the transfer) and for a single-destination run reported by an agent that predates the field.
+    /// Otherwise every snapshot destination appears exactly once, and a destination is Verified exactly when the artifact has its replica.
+    /// </summary>
+    private static bool ValidDestinations(IReadOnlyList<BackupTaskDestinationResult> reported, IReadOnlyList<BackupDestination> snapshot, BackupTaskArtifact? artifact)
+    {
+        if (reported.Count == 0) return artifact is null || snapshot.Count == 1;
+        if (reported.Count != snapshot.Count) return false;
+        var seen = new HashSet<BackupDestination>();
+        foreach (var d in reported)
+        {
+            if (d is null || Destination(snapshot, d.StorageProvider, d.StorageConnectionId) is not { } destination || !seen.Add(destination)) return false;
+            if (d.State is not ("Verified" or "Failed" or "Cancelled") || d.Upload is not ("Succeeded" or "Failed" or "NotAttempted") ||
+                d.Verification is not ("Verified" or "Failed" or "NotRun") || d.StartedAt == default || d.CompletedAt < d.StartedAt) return false;
+            if (d.Key is not null && !(Text(d.Key, 512) && SafeKey(d.Key) && d.Key.Length > 0)) return false;
+            if (d.ObjectMayRemain && (d.Key is null || d.Upload != "Succeeded" || d.State == "Verified")) return false;
+            if (d.State == "Verified")
+            {
+                var replica = artifact?.Replicas.FirstOrDefault(r => Destination(snapshot, r.StorageProvider, r.StorageConnectionId) == destination);
+                if (replica is null || d.Upload != "Succeeded" || d.Verification != "Verified" || d.FailureCode is not null || d.Key != replica.Key) return false;
+            }
+            else if (d.Verification == "Verified" || d.FailureCode is null ||
+                (d.State == "Cancelled" ? d.FailureCode != "Cancelled" : !BackupFailureCodes.IsAgentReportable(d.FailureCode))) return false;
+        }
+        // Every replica the artifact carries belongs to a destination that reported Verified: nothing is published that was not accounted for.
+        return artifact is null ? reported.All(d => d.State != "Verified") : reported.Count(d => d.State == "Verified") == artifact.Replicas.Count;
     }
 
     private static bool Checksum(string? value) => value is { Length: 64 } && value.All(Uri.IsHexDigit);

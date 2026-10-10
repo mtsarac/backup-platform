@@ -1,4 +1,4 @@
-import type { BackupArtifact } from '@/features/artifacts/types'
+import type { BackupArtifact, ReplicationHealth } from '@/features/artifacts/types'
 
 export type BackupRunStatus = 'Pending' | 'Leased' | 'Running' | 'RetryPending' | 'CancellationRequested' | 'Succeeded' | 'Failed' | 'Cancelled' | 'AgentLost'
 export type BackupTrigger = 'Manual' | 'Scheduled' | 'Retry' | 'ManualRetry' | 'AutomaticRetry'
@@ -32,6 +32,8 @@ export interface BackupAttempt {
   progressPercent: number | null
   progressAt: string | null
   artifacts: BackupArtifact[]
+  /** Replication compliance of what this attempt transferred; null when nothing was transferred. */
+  replication?: ReplicationHealth | null
 }
 
 export interface BackupRun {
@@ -75,6 +77,8 @@ export interface BackupRun {
     policy: BackupRetryPolicy
   }
   attempts: BackupAttempt[]
+  /** Authoritative replication compliance, independent of `status`: a Succeeded run can still be Degraded or InsufficientReplicas. */
+  replication?: ReplicationHealth | null
 }
 
 export interface BackupRunFilters {

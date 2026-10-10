@@ -7,6 +7,8 @@ public sealed class BackupRunAttempt : ITenantOwned
 {
     private readonly List<BackupArtifact> _artifacts = [];
     private IReadOnlyList<BackupArtifact>? _artifactView;
+    private readonly List<BackupDestinationOutcome> _outcomes = [];
+    private IReadOnlyList<BackupDestinationOutcome>? _outcomeView;
     private BackupRunAttempt() { TenantId = null!; AgentId = null!; }
     internal BackupRunAttempt(Guid id, TenantId tenantId, Guid runId, AgentId agentId, int number, DateTimeOffset createdAt, DateTimeOffset? eligibleAt = null)
     {
@@ -42,6 +44,8 @@ public sealed class BackupRunAttempt : ITenantOwned
     public DateTimeOffset? ProgressAt { get; private set; }
     public string? TerminalReason { get; private set; }
     public IReadOnlyList<BackupArtifact> Artifacts => _artifactView ??= _artifacts.AsReadOnly();
+    /// <summary>How each snapshot destination ended in this attempt. Empty for attempts that never reached a transfer, and for attempts that predate multi-destination runs.</summary>
+    public IReadOnlyList<BackupDestinationOutcome> DestinationOutcomes => _outcomeView ??= _outcomes.AsReadOnly();
     public bool IsTerminal => Status is BackupStatus.Succeeded or BackupStatus.Failed or BackupStatus.Cancelled or BackupStatus.AgentLost;
     public bool HasLease(Guid token, DateTimeOffset now) => token != Guid.Empty && LeaseToken == token && LeaseExpiresAt > now && !IsTerminal;
     internal void Claim(Guid token, DateTimeOffset now, TimeSpan duration)
@@ -114,6 +118,13 @@ public sealed class BackupRunAttempt : ITenantOwned
             _artifacts.Add(completion.Artifact);
         }
         else if (completion.Artifact is not null) throw new ArgumentException("Failed attempts cannot publish artifacts.");
+        foreach (var outcome in completion.Outcomes ?? [])
+        {
+            if (outcome.AttemptId != Id || outcome.TenantId != TenantId || outcome.RunId != RunId ||
+                _outcomes.Any(existing => existing.StorageProvider == outcome.StorageProvider && existing.StorageConnectionId == outcome.StorageConnectionId))
+                throw new ArgumentException("Destination outcome does not belong to this attempt.");
+            _outcomes.Add(outcome);
+        }
         Finish(completion.Status, completion.FailureCode, now);
         return true;
     }
@@ -129,7 +140,8 @@ public sealed class BackupRunAttempt : ITenantOwned
         return true;
     }
     private bool Matches(BackupCompletion completion) => Status == completion.Status && TerminalReason == completion.FailureCode &&
-        (completion.Artifact is null ? _artifacts.Count == 0 : _artifacts.Count == 1 && _artifacts[0].SameResult(completion.Artifact));
+        (completion.Artifact is null ? _artifacts.Count == 0 : _artifacts.Count == 1 && _artifacts[0].SameResult(completion.Artifact)) &&
+        _outcomes.Count == (completion.Outcomes?.Count ?? 0) && (completion.Outcomes ?? []).All(incoming => _outcomes.Any(stored => stored.SameResult(incoming)));
     private void Finish(BackupStatus status, string? reason, DateTimeOffset now)
     {
         if (IsTerminal) throw new InvalidOperationException("Terminal outcome is immutable.");
