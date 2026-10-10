@@ -92,26 +92,55 @@ internal static class StorageTargetGate
     public static async Task<StorageTargetDecision> ForNewRunAsync(
         PlatformDbContext context, TenantId tenantId, BackupConfiguration configuration, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        StorageConnection? connection;
-        if (configuration.StorageConnectionId is { } id)
+        var resolvedDestinations = new List<BackupDestination>();
+        var effectiveDestinations = configuration.ResolveEffectiveDestinations();
+
+        // Execution guard: Multi-storage replication upload orchestration is deferred to M7d.3.
+        // Prevent partial success illusion by rejecting execution of jobs with multiple destinations.
+        if (effectiveDestinations.Count > 1)
         {
-            connection = await context.StorageConnections.AsNoTracking().SingleOrDefaultAsync(row => row.TenantId == tenantId && row.Id == id, cancellationToken);
-            if (connection is null || connection.ProviderType != configuration.StorageProvider)
-            {
-                return new(null, BackupAdmissionDenialCodes.StorageConnectionUnavailable);
-            }
+            return new(null, BackupAdmissionDenialCodes.MultiDestinationExecutionNotSupported);
         }
-        else
+
+        foreach (var dest in effectiveDestinations)
         {
-            connection = await StorageConnectionProvisioner.ResolveDefaultAsync(context, tenantId, configuration.StorageProvider, now, cancellationToken);
-            if (connection is null)
+            StorageConnection? connection;
+            if (dest.StorageConnectionId is { } id)
             {
-                return new(null, BackupAdmissionDenialCodes.StorageConnectionUnavailable);
+                connection = await context.StorageConnections.AsNoTracking().SingleOrDefaultAsync(row => row.TenantId == tenantId && row.Id == id, cancellationToken);
+                if (connection is null || connection.ProviderType != dest.StorageProvider)
+                {
+                    return new(null, BackupAdmissionDenialCodes.StorageConnectionUnavailable);
+                }
             }
+            else
+            {
+                connection = await StorageConnectionProvisioner.ResolveDefaultAsync(context, tenantId, dest.StorageProvider, now, cancellationToken);
+                if (connection is null)
+                {
+                    return new(null, BackupAdmissionDenialCodes.StorageConnectionUnavailable);
+                }
+            }
+
+            if (!connection.EffectiveEnabled)
+            {
+                return new(null, BackupAdmissionDenialCodes.StorageConnectionDisabled);
+            }
+
+            resolvedDestinations.Add(dest with { StorageConnectionId = connection.Id });
         }
-        return connection.EffectiveEnabled
-            ? new(configuration with { StorageConnectionId = connection.Id }, null)
-            : new(null, BackupAdmissionDenialCodes.StorageConnectionDisabled);
+
+        var primary = resolvedDestinations.FirstOrDefault(d => d.IsPrimary) ?? resolvedDestinations[0];
+
+        var updatedConfig = configuration with
+        {
+            StorageProvider = primary.StorageProvider,
+            StorageConnectionId = primary.StorageConnectionId,
+            StorageExecutionLocation = primary.StorageExecutionLocation,
+            Destinations = resolvedDestinations
+        };
+
+        return new(updatedConfig, null);
     }
 
     /// <summary>
@@ -121,6 +150,16 @@ internal static class StorageTargetGate
     public static async Task<Guid> ForPublishAsync(
         PlatformDbContext context, TenantId tenantId, BackupConfiguration configuration, string replicaProvider, DateTimeOffset now, CancellationToken cancellationToken)
     {
+        // First check in Destinations
+        var matchingDest = configuration.ResolveEffectiveDestinations()
+            .FirstOrDefault(d => d.StorageProvider == replicaProvider && d.StorageConnectionId is not null);
+
+        if (matchingDest?.StorageConnectionId is { } destConnId
+            && await context.StorageConnections.AsNoTracking().AnyAsync(row => row.TenantId == tenantId && row.Id == destConnId && row.ProviderType == replicaProvider, cancellationToken))
+        {
+            return destConnId;
+        }
+
         if (configuration.StorageConnectionId is { } id
             && await context.StorageConnections.AsNoTracking().AnyAsync(row => row.TenantId == tenantId && row.Id == id && row.ProviderType == replicaProvider, cancellationToken))
         {
@@ -141,15 +180,19 @@ internal static class StorageTargetGate
     /// <summary>A job may name a connection; it must be the tenant's and serve the job's provider. Everything else (enabled or not) is decided when a run starts.</summary>
     public static async Task EnsureJobTargetAsync(PlatformDbContext context, TenantId tenantId, BackupConfiguration configuration, CancellationToken cancellationToken)
     {
-        if (configuration.StorageConnectionId is not { } id)
+        var effectiveDestinations = configuration.ResolveEffectiveDestinations();
+        foreach (var dest in effectiveDestinations)
         {
-            return;
-        }
-        var matches = await context.StorageConnections.AsNoTracking()
-            .AnyAsync(row => row.TenantId == tenantId && row.Id == id && row.ProviderType == configuration.StorageProvider, cancellationToken);
-        if (!matches)
-        {
-            throw new InvalidBackupJobException("configuration.storageConnectionId", "invalid_value");
+            if (dest.StorageConnectionId is not { } id)
+            {
+                continue;
+            }
+            var matches = await context.StorageConnections.AsNoTracking()
+                .AnyAsync(row => row.TenantId == tenantId && row.Id == id && row.ProviderType == dest.StorageProvider, cancellationToken);
+            if (!matches)
+            {
+                throw new InvalidBackupJobException("configuration.storageConnectionId", "invalid_value");
+            }
         }
     }
 }

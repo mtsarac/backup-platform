@@ -16,6 +16,18 @@ public sealed record BackupConfiguration(
     /// </summary>
     public Guid? StorageConnectionId { get; init; }
 
+    /// <summary>
+    /// Configured storage destinations for multi-storage replication.
+    /// If empty or not provided, falls back to the canonical single destination defined by StorageProvider and StorageConnectionId.
+    /// </summary>
+    public IReadOnlyList<BackupDestination> Destinations { get; init; } = [];
+
+    /// <summary>
+    /// Minimum number of verified replicas required for a run attempt to be deemed successful.
+    /// Defaults to 1. Must be between 1 and the total number of destinations.
+    /// </summary>
+    public int RequiredVerifiedReplicaCount { get; init; } = 1;
+
     public BackupConfiguration Validate()
     {
         if (Engine != "mssql") throw new ArgumentException("Unsupported database engine.");
@@ -34,7 +46,42 @@ public sealed record BackupConfiguration(
         if (ChecksumPolicy is not ("Required" or "Preferred" or "Disabled") ||
             CompressionPolicy is not ("Required" or "Preferred" or "Disabled"))
             throw new ArgumentException("Invalid backup option policy.");
+
+        var effectiveDestinations = ResolveEffectiveDestinations();
+        if (effectiveDestinations.Count == 0)
+            throw new ArgumentException("At least one storage destination is required.");
+
+        var primaryCount = effectiveDestinations.Count(d => d.IsPrimary);
+        if (primaryCount != 1)
+            throw new ArgumentException("Exactly one destination must be designated as primary.");
+
+        var distinctDestinations = effectiveDestinations
+            .Select(d => (d.StorageProvider, d.StorageConnectionId))
+            .Distinct()
+            .Count();
+        if (distinctDestinations != effectiveDestinations.Count)
+            throw new ArgumentException("Duplicate storage destinations are not allowed.");
+
+        foreach (var dest in effectiveDestinations)
+        {
+            dest.Validate();
+        }
+
+        if (RequiredVerifiedReplicaCount < 1 || RequiredVerifiedReplicaCount > effectiveDestinations.Count)
+            throw new ArgumentException("RequiredVerifiedReplicaCount must be between 1 and the number of destinations.");
+
         return this;
+    }
+
+    /// <summary>
+    /// Resolves canonical destinations list. If Destinations is empty, derives single primary destination from legacy fields.
+    /// </summary>
+    public IReadOnlyList<BackupDestination> ResolveEffectiveDestinations()
+    {
+        if (Destinations is { Count: > 0 })
+            return Destinations;
+
+        return [new BackupDestination(StorageProvider, StorageConnectionId, IsPrimary: true)];
     }
 }
 

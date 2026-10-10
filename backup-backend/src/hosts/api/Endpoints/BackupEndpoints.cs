@@ -162,6 +162,7 @@ public static class BackupEndpoints
         BackupAdmissionDenialCodes.SubscriptionRequired => "The tenant has no active subscription; no run was started.",
         BackupAdmissionDenialCodes.StorageConnectionDisabled => "The job's storage connection is disabled; no run was started. Existing backups on it stay available.",
         BackupAdmissionDenialCodes.StorageConnectionUnavailable => "The job's storage connection does not exist for this tenant and provider; no run was started.",
+        BackupAdmissionDenialCodes.MultiDestinationExecutionNotSupported => "Multi-destination backup execution is deferred until full replication engine (M7d.3); no run was started.",
         _ => "The tenant's storage quota is used up; no run was started."
     };
 

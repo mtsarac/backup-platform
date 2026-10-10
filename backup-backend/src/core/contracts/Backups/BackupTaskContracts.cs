@@ -20,8 +20,17 @@ public sealed record BackupExecutionConfiguration
     public bool CopyOnly { get; init; } = true;
     public string ChecksumPolicy { get; init; } = "Preferred";
     public string CompressionPolicy { get; init; } = "Preferred";
+    public IReadOnlyList<BackupDestinationContract> Destinations { get; init; } = [];
+    public int RequiredVerifiedReplicaCount { get; init; } = 1;
 }
 
+public sealed record BackupDestinationContract
+{
+    public string StorageProvider { get; init; } = "local";
+    public Guid? StorageConnectionId { get; init; }
+    public string? StorageExecutionLocation { get; init; }
+    public bool IsPrimary { get; init; }
+}
 /// <summary>A database-authoritative claim, not a push command. Tokens fence every mutation of this attempt.</summary>
 public sealed record BackupTaskSnapshot
 {

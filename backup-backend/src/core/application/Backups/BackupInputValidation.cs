@@ -36,14 +36,30 @@ public static class BackupInputValidation
         Check(Text(c.Host, 253) && c.Host.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '.' or '-' or '_' or '\\' or ':'), "configuration.host");
         Check(c.Port is null or >= 1 and <= 65535, "configuration.port");
         Check(c.StagingReference == "default", "configuration.stagingReference");
-        Check(c.StorageProvider is "local" or "central" or "sftp" or "google-drive", "configuration.storageProvider");
-        Check(c.StorageExecutionLocation is null or "Backend" or "Agent" && (c.StorageExecutionLocation != "Agent" || c.StorageProvider == "local"), "configuration.storageExecutionLocation");
         Check(SafeKey(c.StoragePrefix), "configuration.storagePrefix");
-        Check(c.StorageProvider is not ("sftp" or "google-drive") || c.StoragePrefix == string.Empty, "configuration.storagePrefix");
-        Check(c.StorageProvider is not ("sftp" or "google-drive") || c.StorageConnectionId is { } connection && connection != Guid.Empty, "configuration.storageConnectionId");
         Check(c.ChecksumPolicy is "Required" or "Preferred" or "Disabled", "configuration.checksumPolicy");
         Check(c.CompressionPolicy is "Required" or "Preferred" or "Disabled", "configuration.compressionPolicy");
         Check(c.IntegratedSecurity ? c.DatabaseCredentialReference is null : Text(c.DatabaseCredentialReference, 64) && c.DatabaseCredentialReference!.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '-' or '_'), "configuration.databaseCredentialReference");
+
+        var destinations = c.Destinations is { Count: > 0 }
+            ? c.Destinations
+            : [new BackupDestinationContract { StorageProvider = c.StorageProvider, StorageConnectionId = c.StorageConnectionId, StorageExecutionLocation = c.StorageExecutionLocation, IsPrimary = true }];
+
+        Check(destinations.Count > 0, "configuration.destinations");
+        Check(destinations.Count(d => d.IsPrimary) == 1, "configuration.destinations", "primary_destination_required");
+        Check(destinations.Select(d => (d.StorageProvider, d.StorageConnectionId)).Distinct().Count() == destinations.Count, "configuration.destinations", "duplicate_destination");
+
+        for (var i = 0; i < destinations.Count; i++)
+        {
+            var d = destinations[i];
+            var prefix = c.Destinations is { Count: > 0 } ? $"configuration.destinations[{i}]." : "configuration.";
+            Check(d.StorageProvider is "local" or "central" or "sftp" or "google-drive", $"{prefix}storageProvider");
+            Check(d.StorageExecutionLocation is null or "Backend" or "Agent" && (d.StorageExecutionLocation != "Agent" || d.StorageProvider == "local"), $"{prefix}storageExecutionLocation");
+            Check(d.StorageProvider is not ("sftp" or "google-drive") || c.StoragePrefix == string.Empty, "configuration.storagePrefix");
+            Check(d.StorageProvider is not ("sftp" or "google-drive") || d.StorageConnectionId is { } connection && connection != Guid.Empty, $"{prefix}storageConnectionId");
+        }
+
+        Check(c.RequiredVerifiedReplicaCount >= 1 && c.RequiredVerifiedReplicaCount <= destinations.Count, "configuration.requiredVerifiedReplicaCount");
         if (request.RetryPolicy is { } retry)
         {
             Check(retry.MaxAttempts is null or >= 1 and <= BackupRetryPolicy.MaximumAttemptsLimit, "retryPolicy.maxAttempts");

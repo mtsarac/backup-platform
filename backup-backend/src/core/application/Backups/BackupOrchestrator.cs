@@ -88,18 +88,46 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         return job is null ? null : ToView(job, now);
     }
 
-    private static BackupConfiguration ToDomain(BackupExecutionConfiguration c) => new(c.Engine, c.Database, c.Host, c.Port,
-        c.IntegratedSecurity, c.DatabaseCredentialReference, c.Encrypt, c.TrustServerCertificate, c.StagingReference, c.StorageProvider,
-        c.StoragePrefix, c.CopyOnly, c.ChecksumPolicy, c.CompressionPolicy)
+    private static BackupConfiguration ToDomain(BackupExecutionConfiguration c)
     {
-        StorageConnectionId = c.StorageConnectionId,
-        StorageExecutionLocation = c.StorageExecutionLocation switch
+        var destinations = c.Destinations is { Count: > 0 }
+            ? c.Destinations.Select(d => new BackupDestination(
+                d.StorageProvider,
+                d.StorageConnectionId,
+                d.IsPrimary)
+            {
+                StorageExecutionLocation = d.StorageExecutionLocation switch
+                {
+                    "Backend" => BackupStorageExecutionLocation.Backend,
+                    "Agent" => BackupStorageExecutionLocation.Agent,
+                    _ => d.StorageProvider == "local" ? BackupStorageExecutionLocation.Agent : BackupStorageExecutionLocation.Backend
+                }
+            }).ToArray()
+            : Array.Empty<BackupDestination>();
+
+        // Determine canonical primary destination
+        var primary = destinations.FirstOrDefault(d => d.IsPrimary)
+                      ?? (destinations.Length > 0 ? destinations[0] : null);
+
+        var provider = primary?.StorageProvider ?? c.StorageProvider;
+        var connectionId = primary?.StorageConnectionId ?? c.StorageConnectionId;
+        var location = primary?.StorageExecutionLocation ?? (c.StorageExecutionLocation switch
         {
             "Backend" => BackupStorageExecutionLocation.Backend,
             "Agent" => BackupStorageExecutionLocation.Agent,
-            _ => c.StorageProvider == "local" ? BackupStorageExecutionLocation.Agent : BackupStorageExecutionLocation.Backend
-        }
-    };
+            _ => provider == "local" ? BackupStorageExecutionLocation.Agent : BackupStorageExecutionLocation.Backend
+        });
+
+        return new(c.Engine, c.Database, c.Host, c.Port,
+            c.IntegratedSecurity, c.DatabaseCredentialReference, c.Encrypt, c.TrustServerCertificate, c.StagingReference, provider,
+            c.StoragePrefix, c.CopyOnly, c.ChecksumPolicy, c.CompressionPolicy)
+        {
+            StorageConnectionId = connectionId,
+            StorageExecutionLocation = location,
+            Destinations = destinations,
+            RequiredVerifiedReplicaCount = c.RequiredVerifiedReplicaCount > 0 ? c.RequiredVerifiedReplicaCount : 1
+        };
+    }
 
     public Task<BackupStartResult> StartRunAsync(TenantId tenantId, Guid jobId, string key, CancellationToken cancellationToken)
     {
@@ -299,6 +327,14 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         DatabaseCredentialReference = c.DatabaseCredentialReference, Encrypt = c.Encrypt, TrustServerCertificate = c.TrustServerCertificate,
         StagingReference = c.StagingReference, StorageProvider = c.StorageProvider, StoragePrefix = c.StoragePrefix,
         StorageExecutionLocation = c.StorageExecutionLocation.ToString(), StorageConnectionId = c.StorageConnectionId,
-        CopyOnly = c.CopyOnly, ChecksumPolicy = c.ChecksumPolicy, CompressionPolicy = c.CompressionPolicy
+        CopyOnly = c.CopyOnly, ChecksumPolicy = c.ChecksumPolicy, CompressionPolicy = c.CompressionPolicy,
+        Destinations = c.ResolveEffectiveDestinations().Select(d => new BackupDestinationContract
+        {
+            StorageProvider = d.StorageProvider,
+            StorageConnectionId = d.StorageConnectionId,
+            StorageExecutionLocation = d.StorageExecutionLocation.ToString(),
+            IsPrimary = d.IsPrimary
+        }).ToArray(),
+        RequiredVerifiedReplicaCount = c.RequiredVerifiedReplicaCount
     };
 }

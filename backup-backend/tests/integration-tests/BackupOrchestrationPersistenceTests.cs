@@ -184,6 +184,79 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
         });
         Assert.Equal(BackupMutationResult.Accepted, await Store().CompleteAttemptAsync(command, completion, default));
     }
+    [Fact]
+    public async Task MultiDestinationJobPersistsConfigurationAndRunSnapshotIsImmuneToJobReconfiguration()
+    {
+        var seed = await SeedAsync();
+        var store = Store();
+
+        var multiConfig = Configuration() with
+        {
+            Destinations =
+            [
+                new BackupDestination("local", null, IsPrimary: true),
+                new BackupDestination("central", null, IsPrimary: false)
+            ],
+            RequiredVerifiedReplicaCount = 2
+        };
+
+        var updateCommand = new BackupJobUpdate("MultiJob", seed.AgentId, multiConfig, BackupRetryPolicy.Default, BackupOverlapPolicy.Queue);
+        var updatedJob = (await store.UpdateJobAsync(seed.TenantId, seed.JobId, updateCommand, default))!;
+
+        Assert.Equal(2, updatedJob.Configuration.Destinations.Count);
+        Assert.Equal(2, updatedJob.Configuration.RequiredVerifiedReplicaCount);
+
+        // Start a run under single destination configuration
+        var singleConfig = Configuration() with
+        {
+            Destinations =
+            [
+                new BackupDestination("local", null, IsPrimary: true)
+            ],
+            RequiredVerifiedReplicaCount = 1
+        };
+        await store.UpdateJobAsync(seed.TenantId, seed.JobId, new BackupJobUpdate("SingleJob", seed.AgentId, singleConfig, BackupRetryPolicy.Default, BackupOverlapPolicy.Queue), default);
+
+        var startResult = await store.StartRunAsync(seed.TenantId, seed.JobId, "single-dest-run", Now, default);
+        var run = startResult.Run!;
+
+        Assert.Single(run.Configuration.Destinations);
+        Assert.Equal(1, run.Configuration.RequiredVerifiedReplicaCount);
+
+        // Now modify job configuration to multi destination
+        await store.UpdateJobAsync(seed.TenantId, seed.JobId, updateCommand, default);
+
+        // Verify that the run's persisted snapshot is unchanged
+        var persistedRun = (await store.GetRunAsync(seed.TenantId, run.Id, default))!;
+        Assert.Single(persistedRun.Configuration.Destinations);
+        Assert.Equal(1, persistedRun.Configuration.RequiredVerifiedReplicaCount);
+    }
+    [Fact]
+    public async Task MultiDestinationJobExecutionIsBlockedByExecutionGuardUntilM7d3()
+    {
+        var seed = await SeedAsync();
+        var store = Store();
+
+        var multiConfig = Configuration() with
+        {
+            Destinations =
+            [
+                new BackupDestination("local", null, IsPrimary: true),
+                new BackupDestination("central", null, IsPrimary: false)
+            ],
+            RequiredVerifiedReplicaCount = 2
+        };
+
+        var updateCommand = new BackupJobUpdate("MultiJob", seed.AgentId, multiConfig, BackupRetryPolicy.Default, BackupOverlapPolicy.Queue);
+        await store.UpdateJobAsync(seed.TenantId, seed.JobId, updateCommand, default);
+
+        // Attempt to start a run on a multi-destination job
+        var startResult = await store.StartRunAsync(seed.TenantId, seed.JobId, "guard-run", Now, default);
+
+        Assert.Equal(BackupStartOutcome.AdmissionDenied, startResult.Outcome);
+        Assert.Equal(BackupAdmissionDenialCodes.MultiDestinationExecutionNotSupported, startResult.DenialCode);
+        Assert.Null(startResult.Run);
+    }
     [Theory]
     [InlineData("job-agent")]
     [InlineData("run-job")]

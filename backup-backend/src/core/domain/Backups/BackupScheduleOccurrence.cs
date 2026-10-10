@@ -42,8 +42,10 @@ public static class BackupAdmissionDenialCodes
     public const string StorageConnectionDisabled = "storage_connection_disabled";
     /// <summary>The job names a storage connection that does not exist, is another tenant's, or serves another provider.</summary>
     public const string StorageConnectionUnavailable = "storage_connection_unavailable";
+    /// <summary>Execution of multi-destination replication jobs is deferred to M7d.3; only single destination runs are permitted.</summary>
+    public const string MultiDestinationExecutionNotSupported = "multi_destination_execution_not_supported";
 
-    public static bool IsKnown(string? code) => code is SubscriptionRequired or QuotaExceeded or StorageConnectionDisabled or StorageConnectionUnavailable;
+    public static bool IsKnown(string? code) => code is SubscriptionRequired or QuotaExceeded or StorageConnectionDisabled or StorageConnectionUnavailable or MultiDestinationExecutionNotSupported;
 }
 
 public static class BackupTriggerTypes
