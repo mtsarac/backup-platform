@@ -40,6 +40,7 @@ const messages: Record<string, string> = {
   subscription_required: 'Etkin bir abonelik bulunmadığı için yeni backup başlatılamadı.',
   storage_connection_disabled: 'Hedef depolama bağlantısı devre dışı; yeni backup başlatılamaz.',
   storage_connection_unavailable: 'Hedef depolama bağlantısı bulunamadı veya bu Job\'un Storage Provider\'ına ait değil; yeni backup başlatılamaz.',
+  multi_destination_execution_not_supported: 'Çoklu hedefli replikasyon henüz desteklenmiyor (M7d.3). Yapılandırma kaydedilebilir ancak yedekleme başlatılamaz.',
   storage_connection_not_found: 'Depolama bağlantısı bulunamadı. Liste güncel olmayabilir.',
   storage_connection_name_taken: 'Bu ada sahip bir depolama bağlantısı zaten var.',
   administratively_disabled: 'Bağlantı platform tarafından kilitlendi. Tenant tercihi bu kilidi kaldıramaz; platform yöneticisine başvurun.',

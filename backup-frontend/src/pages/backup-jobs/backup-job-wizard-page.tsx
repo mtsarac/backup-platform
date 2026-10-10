@@ -9,7 +9,7 @@ import { getAgents } from '@/features/agents/api'
 import { useBackupJob, useJobOccurrences, useSaveBackupJob } from '@/features/backup-jobs/hooks'
 import { useTenantConnections, useTenantProviders } from '@/features/storage-connections/hooks'
 import { connectionUnavailableReason, resolveJobConnection } from '@/features/storage-connections/job-connection-picker-utils'
-import { JobConnectionPicker } from '@/features/storage-connections/job-connection-picker'
+import { MultiDestinationPicker } from '@/features/storage-connections/multi-destination-picker'
 import type { BackupJob, BackupJobInput, BackupConfiguration, Schedule, RetryPolicy, RetentionPolicy } from '@/features/backup-jobs/types'
 import { ApiError } from '@/lib/api/client'
 import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
@@ -117,7 +117,7 @@ function JobForm({ job }: { job?: BackupJob }) {
       {selection('configuration.compressionPolicy', 'Compression', configuration.compressionPolicy, policies, value => setConfiguration({ ...configuration, compressionPolicy: value as BackupConfiguration['compressionPolicy'] }))}
     </Section>
     <Section title="Depolama ve yürütme">
-      <JobConnectionPicker configuration={configuration} connections={connectionItems} providers={providerItems} pending={pickerPending} error={pickerError} fieldError={errors['configuration.storageConnectionId'] ?? errors.storageConnectionId ?? errors['configuration.storageProvider']} existingTarget={existingTarget} onChange={setConfiguration} onRefresh={refreshConnections} />
+      <MultiDestinationPicker configuration={configuration} connections={connectionItems} providers={providerItems} pending={pickerPending} error={pickerError} fieldError={errors['configuration.storageConnectionId'] ?? errors.storageConnectionId ?? errors['configuration.storageProvider'] ?? errors['configuration.destinations'] ?? errors['configuration.requiredVerifiedReplicaCount']} existingTarget={existingTarget} onChange={setConfiguration} onRefresh={refreshConnections} />
       {text('configuration.storagePrefix', 'Hedef öneki (göreli anahtar)', configuration.storagePrefix, storagePrefix => setConfiguration({ ...configuration, storagePrefix }))}
       {text('configuration.stagingReference', 'Staging referansı', configuration.stagingReference, stagingReference => setConfiguration({ ...configuration, stagingReference }))}
     </Section>

@@ -228,4 +228,34 @@ public sealed class MultiStorageConfigurationUnitTests
         Assert.Equal("central", primary.StorageProvider);
         Assert.True(primary.IsPrimary);
     }
+    [Fact]
+    public void Configuration_WithExplicitDestinations_SyncsPrimaryFieldsWithCanonicalPrimary()
+    {
+        var destinations = new List<BackupDestination>
+        {
+            new("sftp", Guid.NewGuid(), IsPrimary: false),
+            new("central", Guid.NewGuid(), IsPrimary: true)
+        };
+
+        var config = new BackupConfiguration(
+            Engine: "mssql", Database: "DB", Host: "host", Port: null,
+            IntegratedSecurity: true, DatabaseCredentialReference: null,
+            Encrypt: true, TrustServerCertificate: false, StagingReference: "default",
+            StorageProvider: "central", StoragePrefix: "",
+            CopyOnly: true, ChecksumPolicy: "Required", CompressionPolicy: "Preferred")
+        {
+            StorageExecutionLocation = BackupStorageExecutionLocation.Backend,
+            StorageConnectionId = destinations[1].StorageConnectionId,
+            Destinations = destinations,
+            RequiredVerifiedReplicaCount = 2
+        };
+        config.Validate();
+
+        var wire = BackupOrchestrator.ToWire(config);
+        Assert.Equal("central", wire.StorageProvider);
+        Assert.Equal(destinations[1].StorageConnectionId, wire.StorageConnectionId);
+        Assert.Equal(2, wire.Destinations.Count);
+        Assert.Equal(2, wire.RequiredVerifiedReplicaCount);
+        Assert.True(wire.Destinations[1].IsPrimary);
+    }
 }

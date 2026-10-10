@@ -1,4 +1,10 @@
 export type OptionPolicy = 'Disabled' | 'Preferred' | 'Required'
+export interface BackupDestination {
+  storageProvider: string
+  storageConnectionId?: string | null
+  storageExecutionLocation: 'Agent' | 'Backend'
+  isPrimary: boolean
+}
 export interface BackupConfiguration {
   engine: 'mssql'; database: string; host: string; port: number | null
   integratedSecurity: boolean; databaseCredentialReference: string | null
@@ -6,6 +12,8 @@ export interface BackupConfiguration {
   storageProvider: string; storagePrefix: string; storageExecutionLocation: 'Agent' | 'Backend'
   /** null / absent = the tenant's default connection for `storageProvider`; runs always snapshot the resolved id. */
   storageConnectionId?: string | null
+  destinations?: BackupDestination[]
+  requiredVerifiedReplicaCount?: number
   copyOnly: boolean; checksumPolicy: OptionPolicy; compressionPolicy: OptionPolicy
 }
 export interface RetryPolicy { maxAttempts: number; initialDelaySeconds: number; maxDelaySeconds: number; backoff: string; jitter: number }
