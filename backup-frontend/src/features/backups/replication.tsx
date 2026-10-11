@@ -1,6 +1,6 @@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import type { ReplicationDestination, ReplicationHealth, ReplicationStatus } from '@/features/artifacts/types'
+import type { ReplicaRepairOperation, ReplicationDestination, ReplicationHealth, ReplicationStatus } from '@/features/artifacts/types'
 import { failureMessage } from '@/lib/api/failure-messages'
 
 type Tone = 'success' | 'warning' | 'error'
@@ -43,14 +43,18 @@ function DestinationRow({
   destination,
   onRepair,
   isRepairing,
-  canRepair
+  canRepair,
+  repairOperation
 }: {
   destination: ReplicationDestination
   onRepair?: (destination: ReplicationDestination) => void
   isRepairing?: boolean
   canRepair?: boolean
+  repairOperation?: ReplicaRepairOperation | null
 }) {
   const meta = destinationStates[destination.state] ?? { label: destination.state, tone: 'neutral' as const }
+  const isAutoPending = repairOperation?.status === 'Pending' && Boolean(repairOperation?.nextRetryAt)
+  const isExhausted = Boolean(repairOperation?.isExhausted)
   const repairEligible = Boolean(canRepair && destination.state !== 'Verified' && onRepair)
   return (
     <li className="flex flex-wrap items-start justify-between gap-2 rounded-md border border-border bg-surface-2 p-3 text-sm">
@@ -58,6 +62,19 @@ function DestinationRow({
         <p className="font-medium text-text">{providerLabels[destination.storageProvider] ?? destination.storageProvider}{destination.isPrimary && <span className="ml-2 text-xs text-text-muted">Birincil</span>}</p>
         {destination.state === 'Failed' && destination.failureCode && <p className="text-error">{destination.failureReason ?? failureMessage(destination.failureCode)} <span className="text-text-muted">· {destination.failureCode}</span></p>}
         {destination.objectMayRemain && <p className="text-warning">Hedefte tamamlanmamış bir dosya kalmış olabilir; saklama süreci bu dosyayı da kaldırır.</p>}
+        {isAutoPending && (
+          <p className="text-xs text-amber-500 font-medium">
+            Otomatik yeniden deneme bekleniyor (Deneme {repairOperation?.attemptCount ?? 0} / {repairOperation?.maxAttempts ?? 5})
+            {repairOperation?.nextRetryAt && ` · Sonraki: ${new Date(repairOperation.nextRetryAt).toLocaleTimeString()}`}
+            {repairOperation?.lastFailureCode && ` (${repairOperation.lastFailureCode})`}
+          </p>
+        )}
+        {isExhausted && (
+          <p className="text-xs text-error font-medium">
+            Yeniden deneme sınırına ulaşıldı ({repairOperation?.attemptCount ?? 5} / {repairOperation?.maxAttempts ?? 5})
+            {repairOperation?.lastFailureCode && ` · Son hata: ${repairOperation.lastFailureCode}`}
+          </p>
+        )}
       </div>
       <div className="flex items-center gap-2">
         <Badge tone={meta.tone}>{meta.label}</Badge>
@@ -81,12 +98,14 @@ export function ReplicationSection({
   replication,
   onRepair,
   repairingDestinationId,
-  canRepair
+  canRepair,
+  repairs
 }: {
   replication?: ReplicationHealth | null
   onRepair?: (destination: ReplicationDestination) => void
   repairingDestinationId?: string | null
   canRepair?: boolean
+  repairs?: ReplicaRepairOperation[] | null
 }) {
   if (!replication) return null
   return (
@@ -103,6 +122,8 @@ export function ReplicationSection({
         <ul className="space-y-2" aria-label="Hedef sonuçları">
           {replication.destinations.map((destination) => {
             const destId = destination.storageConnectionId ?? destination.storageProvider
+            const destRepairs = repairs?.filter(r => destination.storageConnectionId ? r.storageConnectionId === destination.storageConnectionId : r.storageProvider === destination.storageProvider)
+            const repairOp = destRepairs && destRepairs.length > 0 ? destRepairs[0] : null
             const isRepairing = repairingDestinationId === destId || (destination.storageConnectionId !== null && repairingDestinationId === destination.storageConnectionId)
             return (
               <DestinationRow
@@ -111,6 +132,7 @@ export function ReplicationSection({
                 onRepair={onRepair}
                 isRepairing={isRepairing}
                 canRepair={canRepair}
+                repairOperation={repairOp}
               />
             )
           })}

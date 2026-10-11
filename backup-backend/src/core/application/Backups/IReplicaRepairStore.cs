@@ -60,6 +60,49 @@ public interface IReplicaRepairStore
         DateTimeOffset now,
         CancellationToken cancellationToken);
 
+    Task<bool> ScheduleRetryAsync(
+        TenantId tenantId,
+        Guid operationId,
+        Guid leaseToken,
+        string failureCode,
+        string? reason,
+        DateTimeOffset nextRetryAt,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+
+    Task RecordRepairOrphanAsync(
+        TenantId tenantId,
+        Guid artifactId,
+        Guid storageConnectionId,
+        string storageProvider,
+        string storageTarget,
+        string key,
+        long sizeBytes,
+        string checksum,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+
+    Task<ReplicaRepairOperation?> ClaimDueRepairAsync(
+        string leaseOwner,
+        DateTimeOffset now,
+        TimeSpan leaseDuration,
+        CancellationToken cancellationToken,
+        TenantId? tenantId = null);
+
+    Task<int> RecoverStaleRepairsAsync(
+        DateTimeOffset now,
+        TimeSpan initialRetryDelay,
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<ReplicaRepairOperation>> DiscoverEligibleRepairsAsync(
+        DateTimeOffset now,
+        int maxBatch,
+        CancellationToken cancellationToken);
+
+    Task<int> GetActiveRepairsCountAsync(
+        TenantId? tenantId,
+        CancellationToken cancellationToken);
+
     Task<bool> RequestCancellationAsync(
         TenantId tenantId,
         Guid operationId,

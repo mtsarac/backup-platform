@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { cancelArtifactDeletion, deleteArtifact, getArtifact, listArtifacts, startReplicaRepair, getReplicaRepair, cancelReplicaRepair } from './api'
+import { cancelArtifactDeletion, deleteArtifact, getArtifact, listArtifacts, startReplicaRepair, getReplicaRepair, cancelReplicaRepair, listReplicaRepairs } from './api'
 import { storageQueryKeys, useRefreshQuotaWhenFinished } from '@/features/storage/hooks'
 import { deletionInProgress } from './format'
 import type { ArtifactFilters, BackupArtifact, StartReplicaRepairRequest } from './types'
@@ -74,6 +74,18 @@ export function useRepairStatus(tenantId: string, artifactId: string, repairId: 
     refetchInterval: (query) => {
       const status = query.state.data?.status
       return status === 'Pending' || status === 'InProgress' ? 2000 : false
+    },
+  })
+}
+
+export function useArtifactRepairs(tenantId: string, artifactId: string) {
+  return useQuery({
+    queryKey: ['tenant', tenantId, 'backup-artifacts', 'repairs', artifactId],
+    queryFn: ({ signal }) => listReplicaRepairs(tenantId, artifactId, signal),
+    enabled: Boolean(tenantId && artifactId),
+    refetchInterval: (query) => {
+      const active = query.state.data?.some((r) => r.status === 'Pending' || r.status === 'InProgress')
+      return active ? 3000 : false
     },
   })
 }

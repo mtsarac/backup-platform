@@ -46,6 +46,11 @@ vi.mock('@/features/artifacts/hooks', () => ({
     isPending: false,
     error: null,
   }),
+  useArtifactRepairs: () => ({
+    data: state.repairOp ? [state.repairOp] : [],
+    isPending: false,
+    error: null,
+  }),
 }))
 
 const sampleArtifact = (destState = 'Failed', hasVerifiedReplica = true): BackupArtifact => ({
@@ -207,5 +212,71 @@ describe('Manual replica repair frontend flow', () => {
 
     expect(screen.getByText(/Onarım işlemi devam ediyor/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Onarımı iptal et/i })).toBeInTheDocument()
+  })
+
+  it('renders auto-retry pending indicator with attempt count and next retry time', () => {
+    state.artifact = sampleArtifact('Failed', true)
+    state.repairOp = {
+      id: 'repair-2',
+      artifactId: 'artifact-1',
+      storageConnectionId: 'sftp-conn',
+      storageProvider: 'sftp',
+      sourceReplicaId: 'rep-1',
+      targetReplicaId: null,
+      status: 'Pending',
+      failureCode: 'StorageUnavailable',
+      failureReason: 'Connection timed out',
+      transferredBytes: 0,
+      totalBytes: 1048576,
+      createdAt: '2026-10-11T12:00:00Z',
+      startedAt: '2026-10-11T12:00:01Z',
+      completedAt: null,
+      cancellationRequestedAt: null,
+      requestedByUserId: null,
+      attemptCount: 2,
+      maxAttempts: 5,
+      nextRetryAt: '2026-10-11T12:05:00Z',
+      lastFailureCode: 'StorageUnavailable',
+      isExhausted: false,
+    }
+
+    renderPage()
+
+    expect(screen.getByText(/Otomatik yeniden deneme bekleniyor \(Deneme 2 \/ 5\)/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/StorageUnavailable/i).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByRole('button', { name: /^onar$/i })).toBeInTheDocument()
+  })
+
+  it('renders retry exhausted indicator when max attempts reached', () => {
+    state.artifact = sampleArtifact('Failed', true)
+    state.repairOp = {
+      id: 'repair-3',
+      artifactId: 'artifact-1',
+      storageConnectionId: 'sftp-conn',
+      storageProvider: 'sftp',
+      sourceReplicaId: 'rep-1',
+      targetReplicaId: null,
+      status: 'Failed',
+      failureCode: 'StorageUnavailable',
+      failureReason: 'Connection timed out',
+      transferredBytes: 0,
+      totalBytes: 1048576,
+      createdAt: '2026-10-11T12:00:00Z',
+      startedAt: '2026-10-11T12:00:01Z',
+      completedAt: '2026-10-11T12:30:00Z',
+      cancellationRequestedAt: null,
+      requestedByUserId: null,
+      attemptCount: 5,
+      maxAttempts: 5,
+      nextRetryAt: null,
+      lastFailureCode: 'StorageUnavailable',
+      isExhausted: true,
+    }
+
+    renderPage()
+
+    expect(screen.getByText(/Yeniden deneme sınırına ulaşıldı \(5 \/ 5\)/i)).toBeInTheDocument()
+    expect(screen.getByText(/Son hata: StorageUnavailable/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^onar$/i })).toBeInTheDocument()
   })
 })

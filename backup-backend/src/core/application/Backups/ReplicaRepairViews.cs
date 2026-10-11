@@ -18,7 +18,13 @@ public sealed record ReplicaRepairOperationView(
     DateTimeOffset? StartedAt,
     DateTimeOffset? CompletedAt,
     DateTimeOffset? CancellationRequestedAt,
-    Guid? RequestedByUserId);
+    Guid? RequestedByUserId,
+    int AttemptCount = 0,
+    int MaxAttempts = 5,
+    DateTimeOffset? NextRetryAt = null,
+    DateTimeOffset? LastAttemptAt = null,
+    string? LastFailureCode = null,
+    bool IsExhausted = false);
 
 public sealed record StartReplicaRepairRequest(
     Guid? StorageConnectionId = null,

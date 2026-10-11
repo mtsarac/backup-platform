@@ -209,4 +209,137 @@ public sealed class ManualReplicaRepairUnitTests
         var candidates = ReplicaRepairSourceEvaluator.SelectCandidateSources(artifact, T0);
         Assert.Empty(candidates);
     }
+
+    [Fact]
+    public void Scenario5_RetryPolicy_exponential_backoff_and_jitter_bounds()
+    {
+        var delay1 = ReplicaRepairRetryPolicy.CalculateDelay(1, 0.0);
+        var delay2 = ReplicaRepairRetryPolicy.CalculateDelay(2, 0.0);
+        var delay3 = ReplicaRepairRetryPolicy.CalculateDelay(3, 0.0);
+
+        Assert.Equal(TimeSpan.FromSeconds(30), delay1);
+        Assert.Equal(TimeSpan.FromSeconds(60), delay2);
+        Assert.Equal(TimeSpan.FromSeconds(120), delay3);
+
+        // Jitter should reduce delay up to 20%
+        var jittered = ReplicaRepairRetryPolicy.CalculateDelay(1, 1.0);
+        Assert.Equal(TimeSpan.FromSeconds(24), jittered);
+
+        // Max delay capped at 1 hour
+        var delay10 = ReplicaRepairRetryPolicy.CalculateDelay(10, 0.0);
+        Assert.Equal(TimeSpan.FromHours(1), delay10);
+    }
+
+    [Fact]
+    public void Scenario6_RetryPolicy_max_attempts_and_exhaustion()
+    {
+        var op = new ReplicaRepairOperation(Guid.NewGuid(), Tenant, Guid.NewGuid(), Guid.NewGuid(), "sftp", null, T0, maxAttempts: 3);
+        Assert.False(op.IsExhausted);
+        Assert.Equal(0, op.AttemptCount);
+
+        var t1 = Guid.NewGuid();
+        op.Claim(t1, "worker-1", T0, TimeSpan.FromMinutes(5));
+        Assert.Equal(1, op.AttemptCount);
+        op.ScheduleRetry(t1, ReplicaRepairFailureCodes.StorageUnavailable, "fail 1", T0.AddSeconds(30), T0.AddSeconds(5));
+        Assert.Equal(ReplicaRepairStatus.Pending, op.Status);
+        Assert.False(op.IsExhausted);
+
+        var t2 = Guid.NewGuid();
+        op.Claim(t2, "worker-2", T0.AddSeconds(35), TimeSpan.FromMinutes(5));
+        Assert.Equal(2, op.AttemptCount);
+        op.ScheduleRetry(t2, ReplicaRepairFailureCodes.StorageUnavailable, "fail 2", T0.AddSeconds(90), T0.AddSeconds(40));
+        Assert.Equal(ReplicaRepairStatus.Pending, op.Status);
+        Assert.False(op.IsExhausted);
+
+        var t3 = Guid.NewGuid();
+        op.Claim(t3, "worker-3", T0.AddSeconds(95), TimeSpan.FromMinutes(5));
+        Assert.Equal(3, op.AttemptCount);
+        op.Fail(t3, ReplicaRepairFailureCodes.StorageUnavailable, "exhausted", T0.AddSeconds(100));
+        Assert.Equal(ReplicaRepairStatus.Failed, op.Status);
+        Assert.True(op.IsExhausted);
+        Assert.Null(op.NextRetryAt);
+    }
+
+    [Fact]
+    public void Scenario7_Transient_vs_permanent_failure_classification()
+    {
+        Assert.True(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.StorageUnavailable));
+        Assert.True(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.OperationTimedOut));
+        Assert.True(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.StorageWriteFailed));
+        Assert.True(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.SourceInaccessible));
+        Assert.True(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.LeaseLost));
+        Assert.True(ReplicaRepairRetryPolicy.IsTransient("lease_expired"));
+        Assert.True(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.InternalError));
+
+        Assert.False(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.ArtifactExpired));
+        Assert.False(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.AlreadyVerified));
+        Assert.False(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.Cancelled));
+        Assert.False(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.UnsupportedSource));
+        Assert.False(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.SourceChecksumMismatch));
+        Assert.False(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.QuotaExceeded));
+        Assert.False(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.DestinationNotConfigured));
+        Assert.False(ReplicaRepairRetryPolicy.IsTransient("storage_connection_disabled"));
+    }
+
+    [Fact]
+    public void Scenario16_AddOrphanReplica_registers_unverified_replica_bound_for_cleanup()
+    {
+        var (artifact, source) = CreateArtifact("central");
+        var orphan = new BackupReplica(
+            Guid.NewGuid(),
+            Tenant,
+            artifact.Id,
+            "sftp",
+            "sftp-target",
+            $"{Tenant.Value:N}/job/run/attempt/failed.bak",
+            Size,
+            Checksum,
+            "sha256",
+            "Failed",
+            "RepairCleanupFailed",
+            T0,
+            verifiedAt: null,
+            BackupStorageExecutionLocation.Backend,
+            owningAgentId: null,
+            storageConnectionId: Guid.NewGuid());
+
+        artifact.AddOrphanReplica(orphan, T0);
+
+        Assert.Equal(2, artifact.Replicas.Count);
+        var registered = artifact.Replicas.Single(r => r.Id == orphan.Id);
+        Assert.Equal("Failed", registered.VerificationState);
+        Assert.Equal(BackupReplicaStatus.DeletePending, registered.Status);
+        Assert.True(BackupReplicaStorage.Occupies(registered.Status));
+    }
+
+    [Fact]
+    public void Scenario12_Stale_recovery_recovers_to_pending_when_attempts_remain()
+    {
+        var op = new ReplicaRepairOperation(Guid.NewGuid(), Tenant, Guid.NewGuid(), Guid.NewGuid(), "sftp", null, T0, maxAttempts: 3);
+        var token = Guid.NewGuid();
+        op.Claim(token, "crashed-worker", T0, TimeSpan.FromMinutes(2));
+        Assert.Equal(1, op.AttemptCount);
+        Assert.Equal(ReplicaRepairStatus.InProgress, op.Status);
+
+        // Worker crashed, lease expired at T0 + 2m
+        var now = T0.AddMinutes(3);
+        op.RecoverStale("lease_expired", "Worker lost", now.AddSeconds(30), now);
+
+        Assert.Equal(ReplicaRepairStatus.Pending, op.Status);
+        Assert.Equal(now.AddSeconds(30), op.NextRetryAt);
+        Assert.False(op.IsExhausted);
+
+        // If max attempts reached, recovers to Failed
+        var token2 = Guid.NewGuid();
+        op.Claim(token2, "worker-2", now.AddSeconds(30), TimeSpan.FromMinutes(2));
+        var token3 = Guid.NewGuid();
+        op.ScheduleRetry(token2, "lease_expired", "fail", now.AddMinutes(2), now.AddMinutes(1));
+        op.Claim(token3, "worker-3", now.AddMinutes(2), TimeSpan.FromMinutes(2));
+        Assert.Equal(3, op.AttemptCount);
+
+        op.RecoverStale("lease_expired", "Exhausted", now.AddMinutes(5), now.AddMinutes(5));
+        Assert.Equal(ReplicaRepairStatus.Failed, op.Status);
+        Assert.True(op.IsExhausted);
+        Assert.Null(op.NextRetryAt);
+    }
 }

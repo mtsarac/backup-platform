@@ -84,6 +84,31 @@ public sealed class BackupArtifact : ITenantOwned
             _replicas.Add(replica);
         }
     }
+    /// <summary>Registers an unverified or failed orphan replica from an incomplete repair attempt onto a sealed artifact for durable retention cleanup.</summary>
+    public void AddOrphanReplica(BackupReplica replica, DateTimeOffset now)
+    {
+        ArgumentNullException.ThrowIfNull(replica);
+        if (!_sealed) throw new InvalidOperationException("Only a sealed artifact can accept an orphan replica.");
+        if (replica.ArtifactId != Id || replica.TenantId != TenantId)
+            throw new ArgumentException("Replica does not match its artifact.");
+        if (replica.VerificationState == "Verified")
+            throw new ArgumentException("An orphan replica cannot be verified.");
+
+        var existingKeyIndex = _replicas.FindIndex(existing => existing.StorageProvider == replica.StorageProvider && existing.StorageTarget == replica.StorageTarget && existing.Key == replica.Key);
+        if (existingKeyIndex >= 0)
+        {
+            var existing = _replicas[existingKeyIndex];
+            if (existing.VerificationState != "Verified")
+            {
+                existing.RequestDelete(now, BackupDeleteReason.RetentionExpired, TimeSpan.Zero, null);
+            }
+        }
+        else
+        {
+            replica.RequestDelete(now, BackupDeleteReason.RetentionExpired, TimeSpan.Zero, null);
+            _replicas.Add(replica);
+        }
+    }
     /// <summary>
     /// Publishes the artifact once the backend accepts the attempt's completion. <paramref name="acceptedAt"/> is the BACKEND's clock at that
     /// moment, never a timestamp the agent reported, and it is the only basis of retention: not the run's creation, not the attempt's

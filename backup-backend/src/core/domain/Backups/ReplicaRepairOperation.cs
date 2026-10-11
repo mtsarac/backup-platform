@@ -20,7 +20,9 @@ public sealed class ReplicaRepairOperation : ITenantOwned
         Guid? sourceReplicaId,
         DateTimeOffset createdAt,
         Guid? requestedByUserId = null,
-        long totalBytes = 0)
+        long totalBytes = 0,
+        int maxAttempts = 5,
+        DateTimeOffset? nextRetryAt = null)
     {
         BackupGuard.Id(id);
         BackupGuard.Id(artifactId);
@@ -36,9 +38,10 @@ public sealed class ReplicaRepairOperation : ITenantOwned
         CreatedAt = BackupGuard.Timestamp(createdAt);
         RequestedByUserId = requestedByUserId;
         TotalBytes = Math.Max(0, totalBytes);
+        MaxAttempts = Math.Clamp(maxAttempts, 1, 10);
+        NextRetryAt = nextRetryAt is { } retry ? BackupGuard.Timestamp(retry) : null;
         Status = ReplicaRepairStatus.Pending;
     }
-
     public Guid Id { get; private set; }
     public TenantId TenantId { get; private set; }
     public Guid ArtifactId { get; private set; }
@@ -55,12 +58,18 @@ public sealed class ReplicaRepairOperation : ITenantOwned
     public long TransferredBytes { get; private set; }
     public long TotalBytes { get; private set; }
     public Guid? RequestedByUserId { get; private set; }
+    public int AttemptCount { get; private set; }
+    public int MaxAttempts { get; private set; } = 5;
+    public DateTimeOffset? NextRetryAt { get; private set; }
+    public DateTimeOffset? LastAttemptAt { get; private set; }
+    public string? LastFailureCode { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset? StartedAt { get; private set; }
     public DateTimeOffset? CompletedAt { get; private set; }
     public DateTimeOffset? CancellationRequestedAt { get; private set; }
 
     public bool IsTerminal => Status is ReplicaRepairStatus.Succeeded or ReplicaRepairStatus.Failed or ReplicaRepairStatus.Cancelled;
+    public bool IsExhausted => AttemptCount >= MaxAttempts && Status == ReplicaRepairStatus.Failed;
     public bool HasLease(Guid token, DateTimeOffset now) => token != Guid.Empty && LeaseToken == token && LeaseExpiresAt > now && !IsTerminal;
 
     public void SetSourceReplica(Guid sourceReplicaId)
@@ -80,6 +89,9 @@ public sealed class ReplicaRepairOperation : ITenantOwned
         Status = ReplicaRepairStatus.InProgress;
         LeaseToken = token;
         LeaseOwner = owner;
+        AttemptCount = checked(AttemptCount + 1);
+        LastAttemptAt = BackupGuard.Timestamp(now);
+        NextRetryAt = null;
         StartedAt = BackupGuard.Timestamp(now);
         LeaseExpiresAt = BackupGuard.Timestamp(now + duration);
     }
@@ -106,7 +118,22 @@ public sealed class ReplicaRepairOperation : ITenantOwned
         Status = ReplicaRepairStatus.Succeeded;
         TargetReplicaId = targetReplicaId;
         TransferredBytes = TotalBytes > 0 ? TotalBytes : TransferredBytes;
+        NextRetryAt = null;
         CompletedAt = BackupGuard.Timestamp(now);
+        ClearLease();
+    }
+
+    public void ScheduleRetry(Guid token, string failureCode, string? reason, DateTimeOffset nextRetryAt, DateTimeOffset now)
+    {
+        ValidateLease(token, now);
+        BackupGuard.Reference(failureCode);
+
+        Status = ReplicaRepairStatus.Pending;
+        FailureCode = failureCode;
+        FailureReason = reason;
+        LastFailureCode = failureCode;
+        LastAttemptAt = BackupGuard.Timestamp(now);
+        NextRetryAt = BackupGuard.Timestamp(nextRetryAt);
         ClearLease();
     }
 
@@ -118,7 +145,33 @@ public sealed class ReplicaRepairOperation : ITenantOwned
         Status = ReplicaRepairStatus.Failed;
         FailureCode = failureCode;
         FailureReason = reason;
+        LastFailureCode = failureCode;
+        LastAttemptAt = BackupGuard.Timestamp(now);
+        NextRetryAt = null;
         CompletedAt = BackupGuard.Timestamp(now);
+        ClearLease();
+    }
+
+    public void RecoverStale(string failureCode, string? reason, DateTimeOffset? nextRetryAt, DateTimeOffset now)
+    {
+        if (IsTerminal) return;
+        BackupGuard.Reference(failureCode);
+
+        FailureCode = failureCode;
+        FailureReason = reason;
+        LastFailureCode = failureCode;
+        LastAttemptAt = BackupGuard.Timestamp(now);
+        if (nextRetryAt.HasValue && AttemptCount < MaxAttempts)
+        {
+            Status = ReplicaRepairStatus.Pending;
+            NextRetryAt = BackupGuard.Timestamp(nextRetryAt.Value);
+        }
+        else
+        {
+            Status = ReplicaRepairStatus.Failed;
+            NextRetryAt = null;
+            CompletedAt = BackupGuard.Timestamp(now);
+        }
         ClearLease();
     }
 
@@ -130,6 +183,9 @@ public sealed class ReplicaRepairOperation : ITenantOwned
         Status = ReplicaRepairStatus.Failed;
         FailureCode = failureCode;
         FailureReason = reason;
+        LastFailureCode = failureCode;
+        LastAttemptAt = BackupGuard.Timestamp(now);
+        NextRetryAt = null;
         CompletedAt = BackupGuard.Timestamp(now);
         ClearLease();
     }
@@ -148,6 +204,7 @@ public sealed class ReplicaRepairOperation : ITenantOwned
         FailureCode = ReplicaRepairFailureCodes.Cancelled;
         FailureReason = "Repair operation was cancelled.";
         CompletedAt = BackupGuard.Timestamp(now);
+        NextRetryAt = null;
         ClearLease();
     }
 
@@ -159,9 +216,9 @@ public sealed class ReplicaRepairOperation : ITenantOwned
         FailureCode = ReplicaRepairFailureCodes.Cancelled;
         FailureReason = "Repair operation was cancelled before start.";
         CompletedAt = BackupGuard.Timestamp(now);
+        NextRetryAt = null;
         ClearLease();
     }
-
     private void ValidateLease(Guid token, DateTimeOffset now)
     {
         if (Status != ReplicaRepairStatus.InProgress || LeaseToken != token || LeaseExpiresAt <= now)

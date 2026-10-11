@@ -1360,6 +1360,9 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("ArtifactId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
                     b.Property<DateTimeOffset?>("CancellationRequestedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1377,6 +1380,13 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
 
+                    b.Property<DateTimeOffset?>("LastAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastFailureCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<DateTimeOffset?>("LeaseExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1386,6 +1396,12 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("LeaseToken")
                         .HasColumnType("uuid");
+
+                    b.Property<int>("MaxAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("NextRetryAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid?>("RequestedByUserId")
                         .HasColumnType("uuid");
@@ -1439,6 +1455,10 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("ArtifactId", "TenantId");
+
+                    b.HasIndex("NextRetryAt", "Id")
+                        .HasDatabaseName("ix_replica_repair_due")
+                        .HasFilter("\"Status\" = 'Pending'");
 
                     b.HasIndex("SourceReplicaId", "TenantId");
 

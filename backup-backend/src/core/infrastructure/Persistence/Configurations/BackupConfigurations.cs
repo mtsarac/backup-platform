@@ -387,7 +387,12 @@ internal sealed class ReplicaRepairOperationConfiguration : IEntityTypeConfigura
         builder.Property(repair => repair.LeaseOwner).HasMaxLength(128);
         builder.Property(repair => repair.FailureCode).HasMaxLength(128);
         builder.Property(repair => repair.FailureReason).HasMaxLength(512);
-
+        builder.Property(repair => repair.AttemptCount).IsRequired();
+        builder.Property(repair => repair.MaxAttempts).IsRequired();
+        builder.Property(repair => repair.NextRetryAt);
+        builder.Property(repair => repair.LastAttemptAt);
+        builder.Property(repair => repair.LastFailureCode).HasMaxLength(64);
+        builder.Ignore(repair => repair.IsExhausted);
         builder.HasOne<BackupArtifact>().WithMany().HasForeignKey(repair => new { repair.ArtifactId, repair.TenantId })
             .HasPrincipalKey(artifact => new { artifact.Id, artifact.TenantId }).OnDelete(DeleteBehavior.Restrict);
 
@@ -402,5 +407,9 @@ internal sealed class ReplicaRepairOperationConfiguration : IEntityTypeConfigura
         builder.HasIndex(repair => repair.SourceReplicaId)
             .HasDatabaseName("ix_replica_repair_active_source")
             .HasFilter("\"Status\" IN ('Pending', 'InProgress') AND \"SourceReplicaId\" IS NOT NULL");
+
+        builder.HasIndex(repair => new { repair.NextRetryAt, repair.Id })
+            .HasDatabaseName("ix_replica_repair_due")
+            .HasFilter("\"Status\" = 'Pending'");
     }
 }

@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
+using Microsoft.Extensions.DependencyInjection;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Backups;
@@ -462,9 +463,10 @@ public sealed class ManualReplicaRepairIntegrationTests(PostgreSqlFixture fixtur
             setup.Agent.TenantId, artifact.Id, new StartReplicaRepairRequest(StorageConnectionId: setup.Sftp.Id), null, default, executeInBackground: false);
 
         var op = await setup.RepairService.ExecuteRepairAsync(setup.Agent.TenantId, artifact.Id, startResult.Operation!.Id);
-        Assert.Equal("Failed", op!.Status);
+        Assert.Equal("Pending", op!.Status);
         Assert.Equal(ReplicaRepairFailureCodes.StorageWriteFailed, op.FailureCode);
-
+        Assert.NotNull(op.NextRetryAt);
+        Assert.Equal(1, op.AttemptCount);
         Assert.Empty(sftpProvider.Storage);
     }
 
@@ -481,5 +483,97 @@ public sealed class ManualReplicaRepairIntegrationTests(PostgreSqlFixture fixtur
         Assert.Empty(reloaded.CurrentAttempt.DestinationOutcomes);
         var replication = BackupOrchestrator.ToView(reloaded).Replication!;
         Assert.Equal(("Healthy", 1, 1), (replication.Status, replication.VerifiedReplicas, replication.DestinationCount));
+    }
+
+    [Fact]
+    public async Task Scenario18_Automatic_repair_worker_executes_due_repair_to_verified_without_new_backup()
+    {
+        var setup = await SetupAsync(verified: new HashSet<string> { "central" });
+        var artifact = setup.Artifact;
+
+        var startResult = await setup.RepairService.StartRepairAsync(
+            setup.Agent.TenantId, artifact.Id, new StartReplicaRepairRequest(StorageConnectionId: setup.Sftp.Id), null, default, executeInBackground: false);
+
+        Assert.True(startResult.Success);
+        Assert.Equal("Pending", startResult.Operation!.Status);
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        services.AddSingleton<IReplicaRepairStore>(setup.RepairStore);
+        services.AddSingleton(setup.RepairService);
+        var sp = services.BuildServiceProvider();
+        var scopeFactory = sp.GetRequiredService<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>();
+
+        // Run AutomaticReplicaRepairWorker tick
+        var worker = new BackupPlatform.Api.Backups.AutomaticReplicaRepairWorker(
+            scopeFactory, TimeProvider.System, NullLogger<BackupPlatform.Api.Backups.AutomaticReplicaRepairWorker>.Instance);
+        var executed = await worker.TickAsync(setup.Agent.TenantId, default);
+        Assert.True(executed >= 1);
+
+        await using var context = fixture.CreatePlatformContext();
+        ReplicaRepairOperation? updatedOp = null;
+        for (var i = 0; i < 50; i++)
+        {
+            updatedOp = await context.ReplicaRepairOperations.AsNoTracking().SingleOrDefaultAsync(r => r.Id == startResult.Operation.Id);
+            if (updatedOp?.Status == ReplicaRepairStatus.Succeeded) break;
+            await Task.Delay(100);
+        }
+        Assert.Equal(ReplicaRepairStatus.Succeeded, updatedOp?.Status);
+
+        var reloadedArtifact = await context.BackupArtifacts.Include(a => a.Replicas).SingleAsync(a => a.Id == artifact.Id);
+        Assert.True(reloadedArtifact.Replicas.Count(r => r.VerificationState == "Verified") >= 2);
+
+        // No new run or artifact created
+        var runsCount = await context.BackupRuns.CountAsync(r => r.TenantId == setup.Agent.TenantId);
+        Assert.Equal(1, runsCount);
+    }
+
+    [Fact]
+    public async Task Scenario19_Multi_node_concurrent_workers_claim_safely_without_duplicates()
+    {
+        var setup = await SetupAsync(verified: new HashSet<string> { "central" });
+        var artifact = setup.Artifact;
+
+        var startResult = await setup.RepairService.StartRepairAsync(
+            setup.Agent.TenantId, artifact.Id, new StartReplicaRepairRequest(StorageConnectionId: setup.Sftp.Id), null, default, executeInBackground: false);
+
+        var store = new PostgreSqlReplicaRepairStore(World.Options());
+        var now = DateTimeOffset.UtcNow;
+
+        var task1 = store.ClaimDueRepairAsync("node-1", now, TimeSpan.FromMinutes(5), default, setup.Agent.TenantId);
+        var task2 = store.ClaimDueRepairAsync("node-2", now, TimeSpan.FromMinutes(5), default, setup.Agent.TenantId);
+
+        var results = await Task.WhenAll(task1, task2);
+        var claimed = results.Where(r => r is not null).ToList();
+
+        Assert.Single(claimed);
+    }
+
+    [Fact]
+    public async Task Scenario21_Durable_orphan_replica_recorded_when_storage_delete_fails()
+    {
+        var setup = await SetupAsync(mode: QuotaAccountingMode.PhysicalReplicaBytes, verified: new HashSet<string> { "central" });
+        var artifact = setup.Artifact;
+        var store = new PostgreSqlReplicaRepairStore(World.Options());
+
+        var targetKey = $"{setup.Agent.TenantId.Value:N}/job/run/attempt/orphan.bak";
+        var now = DateTimeOffset.UtcNow;
+
+        await store.RecordRepairOrphanAsync(
+            setup.Agent.TenantId,
+            artifact.Id,
+            setup.Sftp.Id,
+            "sftp",
+            setup.Sftp.Id.ToString("D"),
+            targetKey,
+            Content.Length,
+            Checksum,
+            now,
+            default);
+
+        await using var context = fixture.CreatePlatformContext();
+        var orphan = await context.BackupReplicas.SingleOrDefaultAsync(r => r.Key == targetKey);
+        Assert.NotNull(orphan);
+        Assert.Equal("Failed", orphan.VerificationState);
+        Assert.Equal(BackupReplicaStatus.DeletePending, orphan.Status);
+        Assert.True(BackupReplicaStorage.Occupies(orphan.Status));
     }
 }

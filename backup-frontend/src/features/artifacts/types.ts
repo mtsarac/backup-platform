@@ -47,6 +47,12 @@ export interface ReplicaRepairOperation {
   completedAt: string | null
   cancellationRequestedAt: string | null
   requestedByUserId: string | null
+  attemptCount?: number
+  maxAttempts?: number
+  nextRetryAt?: string | null
+  lastAttemptAt?: string | null
+  lastFailureCode?: string | null
+  isExhausted?: boolean
 }
 
 export interface StartReplicaRepairRequest {
@@ -84,6 +90,7 @@ export interface BackupReplica {
 
 export interface BackupArtifact {
   id: string
+  tenantId?: string | null
   sizeBytes: number
   sourceChecksum: string
   artifactChecksum: string

@@ -10,7 +10,7 @@ import { ArtifactRestoreAction } from '@/features/artifacts/artifact-restore-act
 import { artifactDate, artifactState, canCancelDeletion, deletionInProgress } from '@/features/artifacts/format'
 import { ReplicationSection } from '@/features/backups/replication'
 import type { ReplicationDestination } from '@/features/artifacts/types'
-import { useArtifact, useArtifactActions, useReplicaRepair, useRepairStatus } from '@/features/artifacts/hooks'
+import { useArtifact, useArtifactActions, useReplicaRepair, useRepairStatus, useArtifactRepairs } from '@/features/artifacts/hooks'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { errorMessage } from '@/lib/api/failure-messages'
 
@@ -40,6 +40,7 @@ export function ArtifactDetailPage() {
   const [repairError, setRepairError] = useState<string | null>(null)
   const { startRepair, cancelRepair } = useReplicaRepair(tenantId, id)
   const repairQuery = useRepairStatus(tenantId, id, activeRepairId)
+  const repairsQuery = useArtifactRepairs(tenantId, id)
 
   useEffect(() => {
     const op = repairQuery.data
@@ -168,6 +169,7 @@ export function ArtifactDetailPage() {
               onRepair={handleRepair}
               repairingDestinationId={repairingDestId}
               canRepair={canRepair}
+              repairs={repairsQuery.data}
             />
           )}
           <ArtifactRestoreAction tenantId={tenantId} artifact={artifact} />
