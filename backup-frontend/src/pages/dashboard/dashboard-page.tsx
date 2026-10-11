@@ -9,12 +9,13 @@ import { QueryState } from '@/components/data/query-state'
 import { StatusPill } from '@/components/data/status-pill'
 import { DataTable, type Column } from '@/components/data/data-table'
 import type { BackupRun } from '@/features/backups/types'
+import { ReplicationBadge } from '@/features/backups/replication'
 import type { BackupJob } from '@/features/backup-jobs/types'
 
 interface Dashboard {
   jobs: { total: number; enabled: number; scheduled: number }
   agents: { total: number; online: number; offline: number; unknown: number; disabled: number; revoked: number }
-  runs: { active: number; running: number; retryPending: number; cancellationRequested: number; storageFailedLast24Hours: number; failedLast24Hours: number; succeededLast24Hours: number }
+  runs: { active: number; running: number; retryPending: number; cancellationRequested: number; storageFailedLast24Hours: number; failedLast24Hours: number; succeededLast24Hours: number; replicationInsufficientLast24Hours?: number }
   artifacts: { total: number; sizeBytes: number; deletePending: number; deleteFailed: number }
   recentRuns: BackupRun[]
   upcomingJobs: BackupJob[]
@@ -31,17 +32,18 @@ export function DashboardPage() {
     { key: 'job', header: 'Job / Database', render: run => <Link className="text-primary hover:underline" to={`${base}/backup-runs/${run.id}`}>{run.jobName} / {run.configuration.database}</Link> },
     { key: 'agent', header: 'Agent', render: run => run.agentName ?? '—' },
     { key: 'date', header: 'Başlangıç', render: run => new Date(run.startedAt ?? run.createdAt).toLocaleString('tr-TR') },
-    { key: 'status', header: 'Durum', render: run => <StatusPill status={run.status} /> },
+    { key: 'status', header: 'Durum', render: run => <span className="inline-flex flex-wrap items-center gap-2"><StatusPill status={run.status} /><ReplicationBadge replication={run.replication} /></span> },
     { key: 'attention', header: 'Bilgi', render: run => run.reasonCode ? failureMessage(run.reasonCode) : run.status === 'RetryPending' ? 'Yeni attempt bekleniyor.' : run.status === 'CancellationRequested' ? 'Agent iptali henüz tamamlamadı.' : '—' },
   ]
   return <div className="space-y-6">
     <div><h1 className="text-2xl font-semibold text-text-heading">Dashboard</h1><p className="mt-1 text-sm text-text-muted">{tenant.name} · Gerçek backup ve Agent durumu</p></div>
     <QueryState isPending={query.isPending} error={query.error}>
       {data && <>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><KpiCard label="Agents" value={data.agents.total} icon={Monitor} /><KpiCard label="Scheduled Jobs" value={data.jobs.scheduled} icon={Database} /><KpiCard label="Başarılı · son 24 saat" value={data.runs.succeededLast24Hours} icon={HardDrive} /><KpiCard label="Başarısız · son 24 saat" value={data.runs.failedLast24Hours} icon={AlertCircle} danger={data.runs.failedLast24Hours > 0} /></div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><KpiCard label="Agents" value={data.agents.total} icon={Monitor} /><KpiCard label="Scheduled Jobs" value={data.jobs.scheduled} icon={Database} /><KpiCard label="Yedek üretildi · son 24 saat" value={data.runs.succeededLast24Hours} icon={HardDrive} /><KpiCard label="Başarısız · son 24 saat" value={data.runs.failedLast24Hours} icon={AlertCircle} danger={data.runs.failedLast24Hours > 0} /></div>
         <section className="rounded-lg border border-border bg-surface p-4"><h2 className="font-medium text-text-heading">Agent bağlantı durumu ve yaşam döngüsü</h2><dl className="mt-3 flex flex-wrap gap-5 text-sm">{(Object.entries({ online: 'Çevrimiçi', offline: 'Çevrimdışı', unknown: 'Bağlantı bilinmiyor', disabled: 'Devre dışı (lifecycle)', revoked: 'İptal edilmiş (lifecycle)' }) as [keyof Dashboard['agents'], string][]).map(([key, label]) => <div key={key}><dt className="text-text-muted">{label}</dt><dd className="font-semibold">{data.agents[key]}</dd></div>)}</dl></section>
         {data.artifacts.deleteFailed > 0 && <div role="alert" className="rounded-lg border border-error/30 bg-error-subtle p-4 text-error">{data.artifacts.deleteFailed} artifact silinemedi. <Link className="underline" to={`${base}/artifacts?state=DeleteFailed`}>Silme hatalarını inceleyin.</Link></div>}
         {data.runs.storageFailedLast24Hours > 0 && <div role="alert" className="rounded-lg border border-error/30 bg-error-subtle p-4 text-error">{data.runs.storageFailedLast24Hours} backup sırasında storage yazma veya replica doğrulama hatası oluştu. <Link className="underline" to={`${base}/backup-runs?status=Failed`}>Başarısız backups</Link></div>}
+        {(data.runs.replicationInsufficientLast24Hours ?? 0) > 0 && <div role="alert" className="rounded-lg border border-error/30 bg-error-subtle p-4 text-error">{data.runs.replicationInsufficientLast24Hours} backup son 24 saatte kullanılabilir yedek üretti, ancak gereken doğrulanmış replika sayısına ulaşamadı. <Link className="underline" to={`${base}/backup-runs?status=Succeeded`}>Replikasyon sonuçlarını inceleyin.</Link></div>}
         <section className="flex flex-wrap gap-5 rounded-lg border border-border bg-surface p-4 text-sm"><span>Running: <strong>{data.runs.running}</strong></span><span>RetryPending: <strong>{data.runs.retryPending}</strong></span><span>CancellationRequested: <strong>{data.runs.cancellationRequested}</strong></span></section>
         <div className="grid gap-4 sm:grid-cols-3"><KpiCard label="Aktif Runs" value={data.runs.active} icon={PlayCircle} /><KpiCard label="Etkin Jobs" value={data.jobs.enabled} icon={Database} /><KpiCard label="Silme bekleyen artifacts" value={data.artifacts.deletePending} icon={HardDrive} /></div>
         <section className="space-y-3"><div className="flex items-center justify-between"><h2 className="text-lg font-medium text-text-heading">Son backups</h2><Link className="text-sm text-primary" to={`${base}/backup-runs`}>Tüm history</Link></div><DataTable rows={data.recentRuns} columns={columns} keyExtractor={run => run.id} emptyMessage="Bu tenant için henüz backup çalıştırılmadı." /></section>

@@ -85,6 +85,9 @@ public sealed record DatabaseBackupPipelineRequest
     /// <summary>What happens to staged files when the execution fails (cancellation always removes them).</summary>
     public StagingFailurePolicy StagingOnFailure { get; }
 
+    /// <summary>The hard-quota artifact bound, checked after hashing and before copying to any destination.</summary>
+    public long? MaxArtifactBytes { get; init; }
+
     /// <summary>
     /// Every place the one artifact is copied to, in order (the primary first). Empty means the single destination named by
     /// <see cref="Storage"/> and <see cref="StorageOverride"/>; <see cref="EffectiveDestinations"/> is the one answer to "where does it go".

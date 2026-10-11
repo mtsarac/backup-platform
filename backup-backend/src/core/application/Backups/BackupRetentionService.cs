@@ -133,8 +133,8 @@ public sealed class BackupRetentionService(
         {
             return exception.Kind switch
             {
-                StorageFailureKind.AccessDenied => BackupDeleteFailureCodes.AccessDenied,
-                StorageFailureKind.InvalidConfiguration or StorageFailureKind.NotFound => BackupDeleteFailureCodes.StorageUnavailable,
+                StorageFailureKind.AccessDenied or StorageFailureKind.AuthenticationFailed => BackupDeleteFailureCodes.AccessDenied,
+                StorageFailureKind.InvalidConfiguration or StorageFailureKind.NotFound or StorageFailureKind.NetworkUnavailable or StorageFailureKind.Timeout => BackupDeleteFailureCodes.StorageUnavailable,
                 StorageFailureKind.Io or StorageFailureKind.InsufficientSpace => BackupDeleteFailureCodes.IoError,
                 StorageFailureKind.NotSupported => BackupDeleteFailureCodes.DeleteNotSupported,
                 _ => BackupDeleteFailureCodes.Unexpected

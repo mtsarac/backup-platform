@@ -209,6 +209,11 @@ with a synthetic artifact of `--bytes` bytes (metadata only: no SQL Server, no f
 `quota` prints the tenant's own `GET /storage-quota` view. A browser profile shares cookies across tabs: sign out of one account before signing in as
 the other. Nothing here is a production agent, provider or database writer.
 
+The fixture syncs the bounded-upload capability and refuses synthetic metadata larger than a claimed hard-quota bound.
+A fresh counted job under a finite hard policy now returns `quota_size_unknown`; bootstrap history only through an explicit operator-chosen WarnOnly policy or unlimited override,
+then restore the hard policy before exercising reservations. The real download/SFTP smoke uses an explicit unlimited override for its disposable transport tenant;
+hard-quota behavior is verified separately by PostgreSQL integration tests.
+
 ## Secure download verification (M4)
 
 ```bash
@@ -263,6 +268,7 @@ of another tenant, must be denied. Never aim a smoke restore at an existing data
 ```bash
 scripts/integration/run-sftp-smoke.sh
 scripts/integration/run-sftp-smoke.sh --no-build
+scripts/integration/run-sftp-smoke.sh --provider-only   # disposable real SFTP deletion/failure/restart regressions only
 ```
 
 Disposable integration smoke for backend-relayed SFTP storage:
@@ -310,16 +316,23 @@ destination never touches another's copy, and a verified copy is never rolled ba
 
 - Engine success and replication compliance are separate. `BackupRun.Status` stays `Succeeded` while at least one copy is verified; the API adds
   `replication` (`Healthy` / `Degraded` / `InsufficientReplicas` / `Unavailable`, verified vs required vs destinations, per-destination state and failure code) to runs,
-  attempts and artifacts. A run with no verified copy fails and publishes no artifact; its per-destination outcomes are still stored (`backup_destination_outcomes`).
+  attempts and artifacts. A run with no verified copy fails and publishes no usable artifact; cleanup-only metadata and its destination outcomes remain durable.
 - Admission is capability-aware for manual and scheduled runs alike: a job with several destinations is refused (`agent_multi_destination_unsupported`) unless the agent
   advertises `backup.multi-destination`; such a run is also never handed to an agent that lost the capability. A denied scheduled occurrence is recorded once and is never re-run
   automatically; recovery is an operator action (fix the agent/job, then start a run). Occurrences recorded earlier as `multi_destination_execution_not_supported` stay history.
 - The relay authorizes every call per destination on the server (`X-Storage-Destination` is only a selector): tenant, agent, attempt lease, snapshot membership, relayed location,
   key layout and current connection state (a disabled connection takes no new upload). Another destination's, tenant's or run's connection is refused.
-- Quota: logical bytes count the artifact once, physical bytes count every replica row. An object that was written but could not be proven removed after its destination failed
-  is stored as an unusable `Failed` replica (counted physically, removed by retention); if the run itself failed there is no artifact to attach it to, so it is only recorded
-  on the outcome (`ObjectMayRemain`). Backend-reachable storages are swept by the existing orphan sweep; SFTP/Google Drive cannot be enumerated.
-- Not in this phase: repair, background replica retry, restore source fallback. The admission estimate still comes from the job's previous artifact (first run: 0).
+- Hard quota: a counted first run without size history is refused (`quota_size_unknown`), never admitted with a zero reservation. History supplies the canonical size and the
+  current resolved destinations supply logical/physical multiplicity. Agents must advertise `backup.quota-bounded-upload` and honor `maxArtifactBytes` before any transfer;
+  the relay independently bounds upload lengths. Live runs/retries retain reservations beyond the old TTL; occupied bytes consume their reservation without double charging.
+- Before remote PUT, tenant/attempt/connection/key and conservative bytes are persisted as unverified intent replicas. Failed/cancelled completion retains unresolved objects
+  even with zero verified copies; successful completion preserves verified copies. Existing retention leases/retries recover after restart, fence stale workers and defer
+  cleanup while the upload advisory lock is held. No remote sweep/listing is required for cataloged object cleanup.
+- SFTP deletion proves absence of both the final object and its deterministic partial sibling; absent parent/root is idempotent success, never a blanket success for
+  permissions, authentication, network or timeout errors. Drive saves its owned file ID before readback and deletes corrupt cataloged objects by identity.
+- `Succeeded` remains engine/artifact success; an independent last-24h replication-insufficient metric/alert prevents monitoring it as fully compliant.
+  Timeouts remain 6 h per destination (maximum 16 sequential destinations, no aggregate deadline); lease heartbeat and cancellation remain independent.
+- Not in this phase: repair, background replica retry, restore source fallback.
 
 Real acceptance against the dev stack (needs the Google Drive connection from `acceptance.py`; starts a disposable SFTP container; restarts only the dev API/Agent):
 

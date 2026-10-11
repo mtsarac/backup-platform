@@ -35,15 +35,8 @@ public sealed class MultiDestinationExecutionIntegrationTests(PostgreSqlFixture 
 
     private async Task<Multi> SetupAsync(bool capable = true, int required = 2, bool scheduled = false, QuotaAccountingMode? mode = null)
     {
-        StoreAgent agent;
-        if (mode is { } accounting)
-        {
-            (agent, _) = await World.TenantOnPolicyAsync(accounting, QuotaScopeRule.All);
-        }
-        else
-        {
-            agent = await World.AgentAsync(100 * QuotaWorld.Gb);
-        }
+        var policy = await World.CreatePolicyAsync(mode ?? QuotaAccountingMode.LogicalArtifactBytes, QuotaScopeRule.All, QuotaEnforcementMode.WarnOnly);
+        var agent = await World.AgentAsync(100 * QuotaWorld.Gb, policy.Key);
         var (_, central) = await _connections.DefaultsAsync(agent.TenantId);
         var sftp = await _connections.AddAsync(agent.TenantId, "sftp-1", "sftp");
         var drive = await _connections.AddAsync(agent.TenantId, "drive-1", "google-drive");
@@ -68,17 +61,19 @@ public sealed class MultiDestinationExecutionIntegrationTests(PostgreSqlFixture 
         await context.SaveChangesAsync();
     }
 
-    private static string Key(string provider) => $"{provider}/tenant/job/run/attempt/db_20261005T000000Z_aaaaaaaa_FULL.bak";
+    private static string Key(string provider, BackupClaim? claim = null) => claim is null
+        ? $"{provider}/tenant/job/run/attempt/db_20261005T000000Z_aaaaaaaa_FULL.bak"
+        : $"{ManagedBackupLayout.AttemptScope(claim.Run.TenantId.Value, claim.Run.JobId, claim.Run.Id, claim.Attempt.Id)}/db_20261005T000000Z_aaaaaaaa_FULL.bak";
 
     /// <summary>The completion an agent reports: a verified copy on each destination in <paramref name="verified"/>, a recorded failure on the rest.</summary>
-    private static Completion Report(Multi multi, DateTimeOffset at, long size, ISet<string> verified, ISet<string>? mayRemain = null) => new("Succeeded", null,
+    private static Completion Report(Multi multi, DateTimeOffset at, long size, ISet<string> verified, ISet<string>? mayRemain = null, BackupClaim? claim = null) => new("Succeeded", null,
         new BackupArtifactResult(size, BackupStoreHarness.SourceHash, BackupStoreHarness.ArtifactHash, "sha256", at, "{\"DatabaseName\":\"Database\"}", "{\"CopyOnly\":true}",
-            [.. multi.All.Where(d => verified.Contains(d.Provider)).Select(d => new BackupReplicaResult(d.Provider, d.Provider == "central" ? "central" : d.Connection.Id.ToString("D"), Key(d.Provider),
+            [.. multi.All.Where(d => verified.Contains(d.Provider)).Select(d => new BackupReplicaResult(d.Provider, d.Provider == "central" ? "central" : d.Connection.Id.ToString("D"), Key(d.Provider, claim),
                 size, BackupStoreHarness.ArtifactHash, "sha256", "Verified", "ReadBack", at, at, d.Connection.Id))]),
         [.. multi.All.Select(d => verified.Contains(d.Provider)
-            ? new BackupDestinationReport(d.Provider, d.Connection.Id, "Verified", "Succeeded", "Verified", null, Key(d.Provider), false, at, at)
+            ? new BackupDestinationReport(d.Provider, d.Connection.Id, "Verified", "Succeeded", "Verified", null, Key(d.Provider, claim), false, at, at)
             : mayRemain?.Contains(d.Provider) == true
-                ? new BackupDestinationReport(d.Provider, d.Connection.Id, "Failed", "Succeeded", "Failed", "ReplicaVerificationFailed", Key(d.Provider), true, at, at)
+                ? new BackupDestinationReport(d.Provider, d.Connection.Id, "Failed", "Succeeded", "Failed", "ReplicaVerificationFailed", Key(d.Provider, claim), true, at, at)
                 : new BackupDestinationReport(d.Provider, d.Connection.Id, "Failed", "Failed", "NotRun", "StorageUnavailable", null, false, at, at))]);
 
     private static Completion AllFailed(Multi multi, DateTimeOffset at) => new("Failed", "StorageWriteFailed", null,
@@ -211,6 +206,8 @@ public sealed class MultiDestinationExecutionIntegrationTests(PostgreSqlFixture 
         await World.AssertUsedAsync(multi.Agent.TenantId, 100);
         await World.AssertNoDriftAsync(multi.Agent.TenantId);
         Assert.Empty(await UnreleasedAsync(fixture, multi.Agent.TenantId));
+        var dashboard = await new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupUiStore(World.Options()).GetDashboardAsync(multi.Agent.TenantId, T0, default);
+        Assert.Equal(0, dashboard.Runs.ReplicationInsufficientLast24Hours);
     }
 
     [Fact]
@@ -231,12 +228,12 @@ public sealed class MultiDestinationExecutionIntegrationTests(PostgreSqlFixture 
         var multi = await SetupAsync(required: 2, mode: QuotaAccountingMode.PhysicalReplicaBytes);
         var (started, claim) = await StartAndClaimAsync(multi, T0);
 
-        await BackupStoreHarness.CompleteAsync(World.RunStore(), claim, Report(multi, T0, 100, new HashSet<string> { "central", "sftp" }, new HashSet<string> { "google-drive" }), T0);
+        await BackupStoreHarness.CompleteAsync(World.RunStore(), claim, Report(multi, T0, 100, new HashSet<string> { "central", "sftp" }, new HashSet<string> { "google-drive" }, claim), T0);
 
         var run = await ReloadAsync(multi, started.Id);
         var artifact = run.CurrentAttempt.Artifacts.Single();
         var orphan = Assert.Single(artifact.Replicas, r => r.VerificationState != "Verified");
-        Assert.Equal(("google-drive", BackupReplicaStatus.Available, false), (orphan.StorageProvider, orphan.Status, orphan.IsUsable));
+        Assert.Equal(("google-drive", BackupReplicaStatus.DeletePending, false), (orphan.StorageProvider, orphan.Status, orphan.IsUsable));
         Assert.Equal(BackupArtifactState.Available, artifact.State);
         // The orphan's bytes are counted (it IS on the disk), but it is not a verified copy: the projection still says two.
         await World.AssertUsedAsync(multi.Agent.TenantId, 300);
@@ -257,6 +254,8 @@ public sealed class MultiDestinationExecutionIntegrationTests(PostgreSqlFixture 
         Assert.Equal(BackupStatus.Succeeded, run.Status);
         Assert.Equal(BackupArtifactState.Available, run.CurrentAttempt.Artifacts.Single().State);
         Assert.Equal(("InsufficientReplicas", false, 1), (view.Replication!.Status, view.Replication.PolicySatisfied, view.Replication.VerifiedReplicas));
+        var dashboard = await new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupUiStore(World.Options()).GetDashboardAsync(multi.Agent.TenantId, T0, default);
+        Assert.Equal((1, 1, 0), (dashboard.Runs.ReplicationInsufficientLast24Hours, dashboard.Runs.SucceededLast24Hours, dashboard.Runs.FailedLast24Hours));
     }
 
     [Fact]
@@ -276,6 +275,146 @@ public sealed class MultiDestinationExecutionIntegrationTests(PostgreSqlFixture 
         Assert.Equal(("Unavailable", false, 0), (replication.Status, replication.PolicySatisfied, replication.VerifiedReplicas));
         await World.AssertOracleAsync(multi.Agent.TenantId, 0, 0);
         Assert.Empty(await UnreleasedAsync(fixture, multi.Agent.TenantId));
+    }
+
+    [Fact]
+    public async Task All_failed_remote_objects_survive_restart_and_deletion_retry_without_losing_bytes_or_fencing()
+    {
+        var multi = await SetupAsync(mode: QuotaAccountingMode.PhysicalReplicaBytes);
+        var (started, claim) = await StartAndClaimAsync(multi, T0);
+        var reported = Report(multi, T0, 100, new HashSet<string>(), new HashSet<string> { "sftp", "google-drive" }, claim);
+        var completion = reported with { Outcome = "Failed", ReasonCode = "StorageWriteFailed" };
+        var store = World.RunStore();
+        Assert.Equal(BackupMutationResult.Accepted, await store.CompleteAttemptAsync(BackupStoreHarness.Command(claim, T0), completion, default));
+        Assert.Equal(BackupMutationResult.Accepted, await store.CompleteAttemptAsync(BackupStoreHarness.Command(claim, T0), completion, default));
+        var run = await ReloadAsync(multi, started.Id);
+        Assert.Equal(BackupStatus.Failed, run.Status);
+        var artifact = Assert.Single(run.CurrentAttempt.Artifacts);
+        Assert.Equal(BackupArtifactState.DeletePending, artifact.State);
+        Assert.False(BackupOrchestrator.ToView(run).Attempts.Single().Artifacts.Single().CancelDeleteAllowed);
+        Assert.All(artifact.Replicas, replica =>
+        {
+            Assert.False(replica.IsUsable);
+            Assert.False(replica.IsRestorable(T0));
+            Assert.Equal(multi.Agent.TenantId, replica.TenantId);
+            Assert.Equal("Failed", replica.VerificationState);
+            Assert.Equal(BackupReplicaStatus.DeletePending, replica.Status);
+            Assert.Equal(T0, replica.DeleteAfter);
+        });
+        Assert.Equal(0, artifact.CancelDelete(T0));
+        Assert.Equal("Unavailable", BackupOrchestrator.ToView(run).Replication!.Status);
+        await World.AssertUsedAsync(multi.Agent.TenantId, 200);
+        await World.AssertNoDriftAsync(multi.Agent.TenantId);
+        var retention = new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRetentionStore(World.Options());
+        var first = await retention.ClaimDueDeletionsAsync("before-restart", T0, TimeSpan.FromMinutes(1), 10, default);
+        Assert.Equal(2, first.Count);
+        foreach (var deletion in first)
+            Assert.True(await retention.FailDeletionAsync(deletion.ReplicaId, deletion.LeaseToken, T0, BackupDeleteFailureCodes.StorageUnavailable, T0.AddMinutes(1), default));
+        await World.AssertUsedAsync(multi.Agent.TenantId, 200);
+        retention = new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRetentionStore(World.Options());
+        var retry = await retention.ClaimDueDeletionsAsync("restarted", T0.AddMinutes(1), TimeSpan.FromMinutes(1), 10, default);
+        Assert.Equal(first.Select(d => d.ReplicaId).Order(), retry.Select(d => d.ReplicaId).Order());
+        var recovered = await new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRetentionStore(World.Options())
+            .ClaimDueDeletionsAsync("after-worker-crash", T0.AddMinutes(2), TimeSpan.FromMinutes(1), 10, default);
+        Assert.Equal(2, recovered.Count);
+        foreach (var stale in retry)
+            Assert.False(await retention.CompleteDeletionAsync(stale.ReplicaId, stale.LeaseToken, T0.AddMinutes(2), default));
+        await World.AssertUsedAsync(multi.Agent.TenantId, 200);
+        foreach (var deletion in recovered)
+            Assert.True(await retention.CompleteDeletionAsync(deletion.ReplicaId, deletion.LeaseToken, T0.AddMinutes(2), default));
+        await World.AssertUsedAsync(multi.Agent.TenantId, 0);
+        await World.AssertNoDriftAsync(multi.Agent.TenantId);
+        Assert.Empty(await retention.ClaimDueDeletionsAsync("again", T0.AddDays(1), TimeSpan.FromMinutes(1), 10, default));
+        Assert.Equal(BackupArtifactState.Deleted, (await ReloadAsync(multi, started.Id)).CurrentAttempt.Artifacts.Single().State);
+    }
+
+    [Fact]
+    public async Task Remote_transfer_intents_survive_lost_callback_and_are_not_cleaned_while_the_attempt_is_live()
+    {
+        var multi = await SetupAsync(mode: QuotaAccountingMode.PhysicalReplicaBytes);
+        var (started, claim) = await StartAndClaimAsync(multi, T0);
+        var command = BackupStoreHarness.Command(claim, T0);
+        foreach (var connection in new[] { multi.Sftp, multi.Drive })
+        {
+            var intent = new BackupTransferIntent(connection.Id, Key(connection.ProviderType, claim), 100, BackupStoreHarness.ArtifactHash);
+            Assert.Equal(BackupMutationResult.Accepted, await World.RunStore().RecordTransferAsync(command, intent, default));
+            Assert.Equal(BackupMutationResult.Accepted, await World.RunStore().RecordTransferAsync(command, intent, default));
+            Assert.Equal(BackupMutationResult.Conflict, await World.RunStore().RecordTransferAsync(command with { LeaseToken = Guid.NewGuid() }, intent, default));
+            Assert.Equal(BackupMutationResult.Conflict, await World.RunStore().RecordTransferAsync(command,
+                intent with { Key = intent.Key.Replace("aaaaaaaa", "bbbbbbbb") }, default));
+        }
+        var run = await ReloadAsync(multi, started.Id);
+        Assert.Equal(2, run.CurrentAttempt.Artifacts.Single().Replicas.Count);
+        await World.AssertUsedAsync(multi.Agent.TenantId, 200);
+        var retention = new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRetentionStore(World.Options());
+        Assert.DoesNotContain(await retention.ClaimDueDeletionsAsync("live", T0.AddMinutes(1), TimeSpan.FromMinutes(1), 100, default),
+            deletion => deletion.TenantId == multi.Agent.TenantId);
+        var expired = claim.Attempt.LeaseExpiresAt!.Value.AddSeconds(1);
+        await World.RunStore().ExpireStaleAsync(expired, default);
+        Assert.Equal(BackupStatus.AgentLost, (await ReloadAsync(multi, started.Id)).Attempts.Single(attempt => attempt.Id == claim.Attempt.Id).Status);
+        await using var writer = new NpgsqlConnection(fixture.ConnectionString);
+        await writer.OpenAsync();
+        var finalKey = Key("sftp", claim);
+        var slash = finalKey.LastIndexOf('/');
+        var partialKey = finalKey[..(slash + 1)] + "." + finalKey[(slash + 1)..] + ".partial";
+        var lockId = BackupPlatform.Infrastructure.Backups.BackupTransferLock.Id(multi.Sftp.Id, partialKey);
+        await using (var acquire = new NpgsqlCommand("SELECT pg_advisory_lock(@id)", writer))
+        {
+            acquire.Parameters.AddWithValue("id", lockId);
+            await acquire.ExecuteNonQueryAsync();
+        }
+        var restarted = new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRetentionStore(World.Options());
+        var first = (await restarted.ClaimDueDeletionsAsync("restarted", expired, TimeSpan.FromMinutes(1), 100, default))
+            .Where(deletion => deletion.TenantId == multi.Agent.TenantId).ToArray();
+        Assert.Equal("google-drive", Assert.Single(first).StorageProvider);
+        await using (var release = new NpgsqlCommand("SELECT pg_advisory_unlock(@id)", writer))
+        {
+            release.Parameters.AddWithValue("id", lockId);
+            await release.ExecuteNonQueryAsync();
+        }
+        var second = (await restarted.ClaimDueDeletionsAsync("restarted", expired, TimeSpan.FromMinutes(1), 100, default))
+            .Where(deletion => deletion.TenantId == multi.Agent.TenantId).ToArray();
+        Assert.Equal("sftp", Assert.Single(second).StorageProvider);
+        var deletions = first.Concat(second).ToArray();
+        Assert.All(deletions, deletion =>
+        {
+            Assert.Equal(multi.Agent.TenantId, deletion.TenantId);
+            Assert.Equal(Key(deletion.StorageProvider, claim), deletion.Key);
+        });
+        Assert.Equal(BackupMutationResult.Conflict, await World.RunStore().RecordTransferAsync(command with { Now = expired },
+            new BackupTransferIntent(multi.Sftp.Id, Key("sftp", claim), 100, BackupStoreHarness.ArtifactHash), default));
+        await World.AssertUsedAsync(multi.Agent.TenantId, 200);
+    }
+
+    [Theory]
+    [InlineData(QuotaAccountingMode.LogicalArtifactBytes, 100)]
+    [InlineData(QuotaAccountingMode.PhysicalReplicaBytes, 300)]
+    public async Task Completion_atomically_merges_remote_intents_preserves_verified_copies_and_retains_unreported_objects(QuotaAccountingMode mode, long expectedBytes)
+    {
+        var multi = await SetupAsync(mode: mode);
+        var (started, claim) = await StartAndClaimAsync(multi, T0);
+        foreach (var connection in new[] { multi.Sftp, multi.Drive })
+            Assert.Equal(BackupMutationResult.Accepted, await World.RunStore().RecordTransferAsync(BackupStoreHarness.Command(claim, T0),
+                new BackupTransferIntent(connection.Id, Key(connection.ProviderType, claim), 100, BackupStoreHarness.ArtifactHash), default));
+        var completion = Report(multi, T0, 100, new HashSet<string> { "central", "sftp" }, claim: claim);
+        await BackupStoreHarness.CompleteAsync(World.RunStore(), claim, completion, T0);
+        Assert.Equal(BackupMutationResult.Accepted, await World.RunStore().CompleteAttemptAsync(BackupStoreHarness.Command(claim, T0), completion, default));
+        var run = await ReloadAsync(multi, started.Id);
+        var artifact = Assert.Single(run.CurrentAttempt.Artifacts);
+        Assert.Equal(3, artifact.Replicas.Count);
+        Assert.All(artifact.Replicas.Where(replica => replica.StorageProvider != "google-drive"), replica =>
+        {
+            Assert.True(replica.IsUsable);
+            Assert.Equal(BackupReplicaStatus.Available, replica.Status);
+        });
+        Assert.Equal(BackupReplicaStatus.DeletePending, artifact.Replicas.Single(replica => replica.StorageProvider == "google-drive").Status);
+        Assert.Equal("Degraded", BackupOrchestrator.ToView(run).Replication!.Status);
+        await World.AssertUsedAsync(multi.Agent.TenantId, expectedBytes);
+        await World.AssertNoDriftAsync(multi.Agent.TenantId);
+        var due = await new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRetentionStore(World.Options())
+            .ClaimDueDeletionsAsync("cleanup", T0, TimeSpan.FromMinutes(1), 100, default);
+        var deletion = Assert.Single(due, candidate => candidate.TenantId == multi.Agent.TenantId);
+        Assert.Equal("google-drive", deletion.StorageProvider);
     }
 
     [Fact]
@@ -345,7 +484,7 @@ public sealed class MultiDestinationExecutionIntegrationTests(PostgreSqlFixture 
     {
         var multi = await SetupAsync(required: 2);
         var (started, claim) = await StartAndClaimAsync(multi, T0);
-        await BackupStoreHarness.CompleteAsync(World.RunStore(), claim, Report(multi, T0, 100, new HashSet<string> { "central", "sftp" }, new HashSet<string> { "google-drive" }), T0);
+        await BackupStoreHarness.CompleteAsync(World.RunStore(), claim, Report(multi, T0, 100, new HashSet<string> { "central", "sftp" }, new HashSet<string> { "google-drive" }, claim), T0);
         var artifactId = (await ReloadAsync(multi, started.Id)).CurrentAttempt.Artifacts.Single().Id;
         var expiry = (await ReloadAsync(multi, started.Id)).CurrentAttempt.Artifacts.Single().RetentionExpiresAt;
 
@@ -354,7 +493,7 @@ public sealed class MultiDestinationExecutionIntegrationTests(PostgreSqlFixture 
         await World.ChangeArtifactAsync(artifactId, artifact => after = artifact.ApplyRetention(expiry!.Value.AddMinutes(1)));
 
         Assert.Equal(0, before);
-        Assert.Equal(3, after);
+        Assert.Equal(2, after);
         await using var context = fixture.CreatePlatformContext();
         var replicas = await context.BackupReplicas.AsNoTracking().Where(r => r.ArtifactId == artifactId).ToListAsync();
         Assert.All(replicas, replica => Assert.Equal(BackupReplicaStatus.DeletePending, replica.Status));

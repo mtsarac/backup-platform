@@ -1,6 +1,8 @@
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Infrastructure.Backups;
+using BackupPlatform.Infrastructure.Storage;
+using Microsoft.Extensions.Logging.Abstractions;
 using BackupPlatform.IntegrationTests.Scheduling;
 using BackupPlatform.ManagedService.Quota;
 using BackupPlatform.ManagedService.Subscriptions;
@@ -25,9 +27,25 @@ public sealed class ScheduledAdmissionIntegrationTests(PostgreSqlFixture fixture
     private async Task<Scheduled> ScheduleAsync(BackupOverlapPolicy overlap = BackupOverlapPolicy.Queue, bool subscribe = true)
     {
         var agent = await _world.AgentAsync(subscribe: subscribe);
+        await new PostgreSqlStorageConnectionStore(_world.Options(), TimeProvider.System, NullLogger<PostgreSqlStorageConnectionStore>.Instance)
+            .ListAsync(agent.TenantId, default);
         var job = await _kit.AddJobAsync(agent, overlap: overlap);
         var admission = new CountingAdmission(_world.Admission());
         return new Scheduled(agent, job, admission, _world.ScheduleStore(admission));
+    }
+
+    [Fact]
+    public async Task ACountedFirstScheduledRunWithLazyDefaultsFailsClosedInsideItsCreationTransaction()
+    {
+        var policy = await _world.CreatePolicyAsync(QuotaAccountingMode.LogicalArtifactBytes, QuotaScopeRule.All);
+        var agent = await _world.AgentAsync(5 * QuotaWorld.Gb, policy.Key);
+        var job = await _kit.AddJobAsync(agent);
+        await _kit.SeenAsync(agent, H(1, 19));
+        var evaluation = await _world.ScheduleStore().EvaluateAsync(agent.TenantId, job.Id, H(1, 20), default);
+        Assert.Null(evaluation.CreatedRunId);
+        Assert.Equal(BackupAdmissionDenialCodes.QuotaSizeUnknown, Assert.Single(evaluation.Recorded).Reason);
+        Assert.Equal(0, await _world.Harness.CountRunsAsync(job.Id));
+        Assert.Empty(await ReservationsAsync(fixture, agent.TenantId));
     }
 
     private static Task<BackupScheduleEvaluation> EvaluateAsync(Scheduled scheduled, DateTimeOffset now) =>
@@ -39,12 +57,13 @@ public sealed class ScheduledAdmissionIntegrationTests(PostgreSqlFixture fixture
         await _world.PublishAsync(_world.RunStore(), publisher, await CreateJobAsync(_world, publisher), 5_500_000_000, Central, T0);
     }
 
-    public enum Cause { OverQuota, Suspended, NoSubscription }
+    public enum Cause { OverQuota, Suspended, NoSubscription, UnknownSize }
 
     [Theory]
     [InlineData(Cause.OverQuota)]
     [InlineData(Cause.Suspended)]
     [InlineData(Cause.NoSubscription)]
+    [InlineData(Cause.UnknownSize)]
     public async Task ADueOccurrenceOfATenantThatCannotStartRunsIsRecordedAsDeniedAndCreatesNoRun(Cause cause)
     {
         var scheduled = await ScheduleAsync(subscribe: cause != Cause.NoSubscription);
@@ -57,8 +76,17 @@ public sealed class ScheduledAdmissionIntegrationTests(PostgreSqlFixture fixture
             case Cause.Suspended:
                 await SuspendAsync(_world, tenant);
                 break;
+            case Cause.UnknownSize:
+                var policy = await _world.CreatePolicyAsync(QuotaAccountingMode.LogicalArtifactBytes, QuotaScopeRule.All);
+                await _world.AssignAsync(tenant, await _world.PlanAsync(5 * QuotaWorld.Gb, policy.Key));
+                break;
         }
-        var code = cause == Cause.OverQuota ? BackupAdmissionDenialCodes.QuotaExceeded : BackupAdmissionDenialCodes.SubscriptionRequired;
+        var code = cause switch
+        {
+            Cause.OverQuota => BackupAdmissionDenialCodes.QuotaExceeded,
+            Cause.UnknownSize => BackupAdmissionDenialCodes.QuotaSizeUnknown,
+            _ => BackupAdmissionDenialCodes.SubscriptionRequired
+        };
         await _kit.SeenAsync(scheduled.Agent, H(1, 19));
 
         var evaluation = await EvaluateAsync(scheduled, H(1, 20));
@@ -102,6 +130,8 @@ public sealed class ScheduledAdmissionIntegrationTests(PostgreSqlFixture fixture
                 await _world.AssignAsync(tenant, await _world.PlanAsync(5 * Gb));
                 break;
         }
+        // This job has no size history: recovery uses an explicit unlimited override, not a zero-byte hard reservation.
+        await SetOverrideAsync(_world, tenant, StorageLimitOverride.Unlimited);
         await _kit.SeenAsync(scheduled.Agent, H(2, 9));
         var created = await EvaluateAsync(scheduled, H(2, 10));
 
@@ -122,6 +152,7 @@ public sealed class ScheduledAdmissionIntegrationTests(PostgreSqlFixture fixture
     public async Task OverlapIsAppliedAfterARecoveryExactlyAsBefore(BackupOverlapPolicy overlap)
     {
         var scheduled = await ScheduleAsync(overlap);
+        await SetOverrideAsync(_world, scheduled.Agent.TenantId, StorageLimitOverride.Unlimited);
         var tenant = scheduled.Agent.TenantId;
         await SuspendAsync(_world, tenant);
         await _kit.SeenAsync(scheduled.Agent, H(1, 19));

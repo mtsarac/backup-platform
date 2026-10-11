@@ -1,7 +1,10 @@
 using System.Net;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 using BackupPlatform.StorageProviders.Abstractions;
 using BackupPlatform.StorageProviders.Sftp;
+using Renci.SshNet.Common;
+using Renci.SshNet.Messages.Transport;
 using Xunit;
 
 namespace BackupPlatform.UnitTests.Storage;
@@ -102,5 +105,29 @@ public sealed class SftpStorageProviderConfigurationTests
         var foreignKey = new StorageObjectKey($"{Guid.NewGuid():N}/job/run/att/test.bak");
         var ex = Assert.Throws<StorageException>(() => resolver.ResolveCheckedRemotePath(foreignKey));
         Assert.Equal(StorageFailureKind.AccessDenied, ex.Kind);
+    }
+
+    [Fact]
+    public void ExceptionMapper_Preserves_DeletionFailureClasses()
+    {
+        (Exception Exception, StorageFailureKind Kind)[] cases =
+        [
+            (new SftpPathNotFoundException("Missing"), StorageFailureKind.NotFound),
+            (new SftpPermissionDeniedException("Denied"), StorageFailureKind.AccessDenied),
+            (new SshAuthenticationException("Rejected"), StorageFailureKind.AuthenticationFailed),
+            (new SshConnectionException("Disconnected", DisconnectReason.ConnectionLost), StorageFailureKind.NetworkUnavailable),
+            (new SshConnectionException("Denied", DisconnectReason.HostNotAllowedToConnect), StorageFailureKind.AccessDenied),
+            (new SocketException((int)SocketError.ConnectionRefused), StorageFailureKind.NetworkUnavailable),
+            (new SocketException((int)SocketError.TimedOut), StorageFailureKind.Timeout),
+            (new SshOperationTimeoutException("Timed out"), StorageFailureKind.Timeout),
+            (new SshException("Failure"), StorageFailureKind.Io)
+        ];
+
+        foreach (var (exception, kind) in cases)
+        {
+            var mapped = SftpExceptionMapper.Map(exception);
+            Assert.Equal(kind, mapped.Kind);
+            Assert.Same(exception, mapped.InnerException);
+        }
     }
 }

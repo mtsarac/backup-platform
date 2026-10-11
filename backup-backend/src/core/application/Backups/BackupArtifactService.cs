@@ -75,7 +75,7 @@ public sealed class BackupArtifactService(IBackupRetentionStore store, IBackupSc
             DatabaseName = record.DatabaseName,
             AgentName = record.AgentName,
             AgentId = record.AgentId,
-            CancelDeleteAllowed = artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.DeletePending)
+            CancelDeleteAllowed = artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.DeletePending && replica.VerificationState == "Verified")
         };
     }
 }

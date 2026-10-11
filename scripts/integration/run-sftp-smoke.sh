@@ -8,8 +8,15 @@ if [[ ${1:-} != --configured ]]; then
 fi
 shift
 stack_options=(--download --retention-smoke)
-if [[ ${1:-} == --no-build ]]; then stack_options+=(--no-build); shift; fi
-(( $# == 0 )) || fail 'Usage: run-sftp-smoke.sh [--no-build]'
+provider_only=false
+while (($#)); do
+    case "$1" in
+        --no-build) stack_options+=(--no-build) ;;
+        --provider-only) provider_only=true ;;
+        *) fail 'Usage: run-sftp-smoke.sh [--no-build] [--provider-only]' ;;
+    esac
+    shift
+done
 load_local_env
 for command in docker dotnet python3 ssh-keygen; do require_command "$command"; done
 SFTP_IMAGE=${SFTP_IMAGE:-atmoz/sftp:debian}
@@ -114,6 +121,17 @@ state['configuration'] = {'host': sys.argv[2], 'port': '22', 'username': 'smoke'
                           'remoteBaseDirectory': '/upload', 'hostKeyFingerprint': sys.argv[3]}
 (root / 'sftp.json').write_text(json.dumps(state))
 PY
+export BACKUP_PLATFORM_TEST_SFTP_ENABLED=true BACKUP_PLATFORM_TEST_SFTP_HOST="$sftp_ip" BACKUP_PLATFORM_TEST_SFTP_PORT=22
+export BACKUP_PLATFORM_TEST_SFTP_USER=smoke BACKUP_PLATFORM_TEST_SFTP_FINGERPRINT="$fingerprint" BACKUP_PLATFORM_TEST_SFTP_BASE_DIR=/upload
+BACKUP_PLATFORM_TEST_SFTP_PASSWORD=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["password"])' "$work/sftp.json")
+export BACKUP_PLATFORM_TEST_SFTP_PASSWORD
+run_dotnet_tests "$REPO_ROOT/backup-backend/tests/integration-tests" -c Release \
+    --filter 'FullyQualifiedName~SftpStorageProviderIntegrationTests' -- xUnit.MaxParallelThreads=1
+unset BACKUP_PLATFORM_TEST_SFTP_PASSWORD BACKUP_PLATFORM_TEST_SFTP_ENABLED
+if [[ "$provider_only" == true ]]; then
+    printf 'SFTP_PROVIDER_OK\n'
+    exit 0
+fi
 export BP_SMOKE_POSTGRES_CONTAINER=$POSTGRES_CONTAINER
 "$REPO_ROOT/scripts/frontend/browser-smoke-env.sh" "${stack_options[@]}" >"$work/stack.log" 2>&1 &
 stack_pid=$!

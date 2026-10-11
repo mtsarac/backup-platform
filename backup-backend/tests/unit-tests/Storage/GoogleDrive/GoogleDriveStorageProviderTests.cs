@@ -69,11 +69,76 @@ public sealed class GoogleDriveStorageProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task Put_RestartsExpiredSession_WithinBoundedBudget()
+    public async Task Put_RestartsExpiredSession_WithoutDuplicateObjects()
     {
         var server = new FakeDrive { Expirations = 1 };
         await Put(Provider(server));
         Assert.Equal(2, server.SessionsCreated);
+        Assert.Equal(Bytes, Assert.Single(server.Files).Value.Bytes);
+        Assert.Equal(1, server.IdsGenerated);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Put_LostCompletionResponse_RecoversWithoutDuplicateObjects(bool expireSession)
+    {
+        var server = new FakeDrive { LoseCompletionReply = true, ExpireCompletedSession = expireSession };
+        var catalog = new InMemoryGoogleDriveFileCatalog();
+        var result = await Put(Provider(server, catalog));
+        Assert.Equal(Bytes.Length, result.SizeBytes);
+        Assert.Equal(Bytes, Assert.Single(server.Files).Value.Bytes);
+        Assert.Equal(1, server.IdsGenerated);
+        Assert.Equal(1, server.SessionsCreated);
+        server.RejectListing = true;
+        await Put(Provider(server, catalog));
+        Assert.Single(server.Files);
+        Assert.Equal(1, server.SessionsCreated);
+    }
+
+    [Fact]
+    public async Task Put_InterruptedInitiation_PersistsLocatorForRestartCleanup()
+    {
+        var server = new FakeDrive { LoseInitiationReply = true };
+        var catalog = new InMemoryGoogleDriveFileCatalog();
+        var reachedInitiation = false;
+        server.BeforeInitiation = async token =>
+        {
+            reachedInitiation = true;
+            var locator = await catalog.FindAsync(_tenant, _connection, _key.Value, token);
+            Assert.NotNull(locator);
+            Assert.Null(locator.Checksum);
+        };
+        var failure = await Assert.ThrowsAsync<StorageException>(() => Put(Provider(server, catalog)));
+        Assert.True(reachedInitiation);
+        Assert.True(failure.ObjectMayRemain);
+        Assert.Equal(_key, failure.RemainingObjectKey);
+        Assert.Single(server.Files);
+        server.RejectReadback = true;
+        server.RejectListing = true;
+        var restarted = Provider(server, catalog);
+        Assert.True(await restarted.DeleteAsync(_key, default));
+        Assert.False(await restarted.DeleteAsync(_key, default));
+        Assert.Empty(server.Files);
+        Assert.Empty(Directory.EnumerateFiles(_directory));
+    }
+
+    [Fact]
+    public async Task Put_CancelledAfterRemoteCompletion_CleansUpByPersistedIdentity()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var server = new FakeDrive { LoseCompletionReply = true, OnOffsetQuery = cancellation.Cancel };
+        var catalog = new InMemoryGoogleDriveFileCatalog();
+        var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            Put(Provider(server, catalog), token: cancellation.Token));
+        var retained = Assert.IsType<StorageException>(exception.Data[nameof(StorageException)]);
+        Assert.True(retained.ObjectMayRemain);
+        Assert.Single(server.Files);
+        server.RejectReadback = true;
+        server.RejectListing = true;
+        Assert.True(await Provider(server, catalog).DeleteAsync(retained.RemainingObjectKey!, default));
+        Assert.Empty(server.Files);
+        Assert.Empty(Directory.EnumerateFiles(_directory));
     }
 
     [Fact]
@@ -84,6 +149,8 @@ public sealed class GoogleDriveStorageProviderTests : IDisposable
         Assert.Equal(StorageFailureKind.NetworkUnavailable, failure.Kind);
         Assert.Equal(3, server.SessionsCreated);
         Assert.Empty(Directory.EnumerateFiles(_directory));
+        Assert.Empty(server.Files);
+        Assert.Equal(1, server.IdsGenerated);
     }
 
     [Theory]
@@ -158,7 +225,9 @@ public sealed class GoogleDriveStorageProviderTests : IDisposable
     {
         var server = new FakeDrive();
         var catalog = new FailingCatalog();
-        await Assert.ThrowsAsync<IOException>(() => Put(Provider(server, catalog)));
+        var failure = await Assert.ThrowsAsync<StorageException>(() => Put(Provider(server, catalog)));
+        Assert.True(failure.ObjectMayRemain);
+        Assert.Equal(_key, failure.RemainingObjectKey);
         Assert.Single(server.Files);
         Assert.Empty(Directory.EnumerateFiles(_directory));
         var restarted = Provider(server, catalog);
@@ -300,13 +369,51 @@ public sealed class GoogleDriveStorageProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task Put_ReadbackMismatchNeverPublishes()
+    public async Task Put_ReadbackMismatchRetainsCleanupLocator_WithoutPublishingVerifiedChecksum()
     {
         var server = new FakeDrive { CorruptNextUpload = true };
         var catalog = new InMemoryGoogleDriveFileCatalog();
-        var failure = await Assert.ThrowsAsync<StorageException>(() => Put(Provider(server, catalog)));
+        var provider = Provider(server, catalog);
+        var failure = await Assert.ThrowsAsync<StorageException>(() => Put(provider));
         Assert.Equal(StorageFailureKind.IntegrityMismatch, failure.Kind);
-        Assert.Null(await catalog.FindAsync(_tenant, _connection, _key.Value, default));
+        Assert.True(failure.ObjectMayRemain);
+        Assert.Equal(_key, failure.RemainingObjectKey);
+        var retained = await catalog.FindAsync(_tenant, _connection, _key.Value, default);
+        Assert.NotNull(retained);
+        Assert.Null(retained.Checksum);
+        var readbacks = server.Readbacks;
+        Assert.True(await provider.DeleteAsync(failure.RemainingObjectKey!, default));
+        Assert.Equal(readbacks, server.Readbacks);
+        Assert.False(await provider.DeleteAsync(_key, default));
+        Assert.Empty(server.Files);
+    }
+
+    [Fact]
+    public async Task Delete_UncatalogedCorruptOwnedObject_DoesNotRequireVerification()
+    {
+        var server = new FakeDrive { CorruptNextUpload = true };
+        await Assert.ThrowsAsync<StorageException>(() => Put(Provider(server)));
+        var restarted = Provider(server);
+        var readbacks = server.Readbacks;
+        Assert.True(await restarted.DeleteAsync(_key, default));
+        Assert.Equal(readbacks, server.Readbacks);
+        Assert.Empty(server.Files);
+    }
+
+    [Fact]
+    public async Task Put_CancelledReadback_PreservesCancellationAndCleanupLocator()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var server = new FakeDrive { OnReadback = cancellation.Cancel };
+        var catalog = new InMemoryGoogleDriveFileCatalog();
+        var provider = Provider(server, catalog);
+        var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Put(provider, token: cancellation.Token));
+        var retained = Assert.IsType<StorageException>(exception.Data[nameof(StorageException)]);
+        Assert.True(retained.ObjectMayRemain);
+        Assert.Equal(_key, retained.RemainingObjectKey);
+        Assert.Null((await catalog.FindAsync(_tenant, _connection, _key.Value, default))!.Checksum);
+        Assert.True(await provider.DeleteAsync(retained.RemainingObjectKey!, default));
+        Assert.Empty(server.Files);
     }
 
     [Fact]
@@ -369,28 +476,82 @@ public sealed class GoogleDriveStorageProviderTests : IDisposable
             _ => ValueTask.FromResult(new GoogleDriveCredential("refresh")), catalog,
             stagingStore: new TestStagingStore(_directory, lease.Token));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => Put(provider));
-        Assert.Null(await catalog.FindAsync(_tenant, _connection, _key.Value, default));
+        var locator = await catalog.FindAsync(_tenant, _connection, _key.Value, default);
+        Assert.NotNull(locator);
+        Assert.Null(locator.Checksum);
+        var restarted = Provider(server, catalog);
+        server.RejectReadback = true;
+        server.RejectListing = true;
+        Assert.False(await restarted.DeleteAsync(_key, default));
+        Assert.Empty(server.Files);
         Assert.Empty(Directory.EnumerateFiles(_directory));
     }
 
     [Fact]
-    public async Task Catalog_DeleteDoesNotRemoveConcurrentReplacement()
+    public async Task Delete_RetainsKnownIdentityUntilDurableRetentionCompletion()
     {
+        var server = new FakeDrive();
         var catalog = new InMemoryGoogleDriveFileCatalog();
-        var record = new GoogleDriveFileRecord("replacement", "folder", "backup.bak", 4, Digest(Bytes).Hex, null);
-        await catalog.SaveAsync(_tenant, _connection, _key.Value, record, default);
-        await catalog.DeleteAsync(_tenant, _connection, _key.Value, "old-object", default);
-        Assert.Equal(record, await catalog.FindAsync(_tenant, _connection, _key.Value, default));
+        await Put(Provider(server, catalog));
+        var restarted = Provider(server, catalog);
+        server.RejectReadback = true;
+        server.RejectListing = true;
+        Assert.True(await restarted.DeleteAsync(_key, default));
+        Assert.False(await restarted.DeleteAsync(_key, default));
+        Assert.False(await restarted.ExistsAsync(_key, default));
+        Assert.False(await Provider(server, catalog).ExistsAsync(_key, default));
+        Assert.Empty(server.Files);
+    }
+
+    [Fact]
+    public async Task Put_UnexpectedCompletionIdentity_DoesNotPublishAndRemainsDeletable()
+    {
+        var server = new FakeDrive { WrongCompletionId = true };
+        var catalog = new InMemoryGoogleDriveFileCatalog();
+        var failure = await Assert.ThrowsAsync<StorageException>(() => Put(Provider(server, catalog)));
+        Assert.Equal(StorageFailureKind.IntegrityMismatch, failure.Kind);
+        Assert.True(failure.ObjectMayRemain);
+        Assert.Equal(_key, failure.RemainingObjectKey);
+        Assert.Null((await catalog.FindAsync(_tenant, _connection, _key.Value, default))!.Checksum);
+        Assert.Single(server.Files);
+        server.RejectListing = true;
+        server.RejectReadback = true;
+        Assert.True(await Provider(server, catalog).DeleteAsync(_key, default));
+        Assert.Empty(server.Files);
+    }
+
+    [Fact]
+    public async Task Put_IdentityAllocationFailure_DoesNotCreateRemoteObject()
+    {
+        var server = new FakeDrive { GenerateIdStatus = HttpStatusCode.Unauthorized };
+        var failure = await Assert.ThrowsAsync<StorageException>(() => Put(Provider(server)));
+        Assert.Equal(StorageFailureKind.AuthenticationFailed, failure.Kind);
+        Assert.Equal(0, server.SessionsCreated);
+        Assert.Empty(server.Files);
+        Assert.Empty(Directory.EnumerateFiles(_directory));
+    }
+
+    [Fact]
+    public async Task Put_InitialCatalogSaveFailure_PreventsRemoteCreation()
+    {
+        var server = new FakeDrive();
+        var catalog = new FailingCatalog { FailUnverifiedSave = true };
+        await Assert.ThrowsAsync<IOException>(() => Put(Provider(server, catalog)));
+        Assert.Equal(0, server.SessionsCreated);
+        Assert.Empty(server.Files);
+        Assert.Empty(Directory.EnumerateFiles(_directory));
     }
 
     private sealed class FailingCatalog : IGoogleDriveFileCatalog
     {
         private readonly InMemoryGoogleDriveFileCatalog _inner = new();
         public bool FailNextSave { get; set; } = true;
+        public bool FailUnverifiedSave { get; set; }
         public Task<GoogleDriveFileRecord?> FindAsync(Guid tenant, Guid connection, string key, CancellationToken token) => _inner.FindAsync(tenant, connection, key, token);
         public Task SaveAsync(Guid tenant, Guid connection, string key, GoogleDriveFileRecord record, CancellationToken token)
         {
-            if (FailNextSave) { FailNextSave = false; throw new IOException("Injected catalog failure."); }
+            if (FailUnverifiedSave && record.Checksum is null) throw new IOException("Injected initial catalog failure.");
+            if (FailNextSave && record.Checksum is not null) { FailNextSave = false; throw new IOException("Injected catalog failure."); }
             return _inner.SaveAsync(tenant, connection, key, record, token);
         }
         public Task DeleteAsync(Guid tenant, Guid connection, string key, string expectedFileId, CancellationToken token) => _inner.DeleteAsync(tenant, connection, key, expectedFileId, token);
@@ -431,13 +592,15 @@ public sealed class GoogleDriveStorageProviderTests : IDisposable
     private sealed class FakeDrive : HttpMessageHandler
     {
         public sealed record FileData(string Name, byte[] Bytes, Dictionary<string, string> Properties, string Parent);
-        private sealed record Session(string Name, long Length, MemoryStream Bytes, Dictionary<string, string> Properties, string Parent);
+        private sealed record Session(string FileId, string Name, long Length, MemoryStream Bytes, Dictionary<string, string> Properties, string Parent);
         public Dictionary<string, FileData> Files { get; } = new();
         public Dictionary<string, (string Name, Dictionary<string, string> Properties)> Folders { get; } = new();
         private readonly Dictionary<string, Session> _sessions = new();
         private readonly object _gate = new();
         private readonly TaskCompletionSource _rootGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private int _rootSearches;
+        public int IdsGenerated { get; private set; }
+        public bool LoseInitiationReply { get; set; }
         public int SessionsCreated { get; private set; }
         public int ChunkRequests { get; private set; }
         public int OffsetQueries { get; private set; }
@@ -448,6 +611,12 @@ public sealed class GoogleDriveStorageProviderTests : IDisposable
         public bool IncompleteWithoutProgress { get; set; }
         public string? Range { get; set; }
         public bool LoseChunkReply { get; set; }
+        public bool LoseCompletionReply { get; set; }
+        public bool ExpireCompletedSession { get; set; }
+        public bool WrongCompletionId { get; set; }
+        public HttpStatusCode? GenerateIdStatus { get; set; }
+        public bool RejectReadback { get; set; }
+        public bool RejectListing { get; set; }
         public bool CompleteAs308 { get; set; }
         public bool CorruptNextUpload { get; set; }
         public bool GateRootSearch { get; set; }
@@ -456,7 +625,9 @@ public sealed class GoogleDriveStorageProviderTests : IDisposable
         public string? FailureReason { get; set; }
         public RetryConditionHeaderValue? RetryAfter { get; set; }
         public Action? OnOffsetQuery { get; set; }
+        public Action? OnReadback { get; set; }
         public Func<CancellationToken, Task>? BeforeChunk { get; set; }
+        public Func<CancellationToken, Task>? BeforeInitiation { get; set; }
         public void Duplicate(string id) => Files.Add(id + "-duplicate", Files[id]);
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
@@ -469,6 +640,8 @@ public sealed class GoogleDriveStorageProviderTests : IDisposable
                 ? await request.Content.ReadAsByteArrayAsync(token) : [];
             if (uri.Host == "upload.googleapis.com" && payload.Length > 0 && BeforeChunk is not null)
                 await BeforeChunk(token);
+            if (uri.AbsolutePath.StartsWith("/upload/") && BeforeInitiation is not null)
+                await BeforeInitiation(token);
             if (uri.Query.Contains("backupFolder") && uri.Query.Contains("root") && GateRootSearch)
             {
                 if (Interlocked.Increment(ref _rootSearches) <= 2)
@@ -481,11 +654,28 @@ public sealed class GoogleDriveStorageProviderTests : IDisposable
             lock (_gate)
             {
                 if (request.Method == HttpMethod.Patch) PatchRequests++;
+                if (request.Method == HttpMethod.Get && uri.AbsolutePath == "/drive/v3/files/generateIds")
+                {
+                    if (GenerateIdStatus is { } status) return new(status);
+                    var parameters = uri.Query.TrimStart('?').Split('&')
+                        .Select(p => p.Split('=', 2)).ToDictionary(p => p[0], p => Uri.UnescapeDataString(p[1]));
+                    if (parameters["count"] != "1" || parameters["space"] != "drive" || parameters["type"] != "files")
+                        throw new InvalidOperationException("Unexpected generated-ID request.");
+                    return Json(new { ids = new[] { "generated-" + ++IdsGenerated } });
+                }
                 if (uri.AbsolutePath.StartsWith("/upload/"))
                 {
+                    var fileId = metadata.GetProperty("id").GetString()!;
+                    if (Files.ContainsKey(fileId)) return new(HttpStatusCode.Conflict);
                     var id = "session-" + ++SessionsCreated;
-                    _sessions[id] = new(metadata.GetProperty("name").GetString()!, long.Parse(request.Headers.GetValues("X-Upload-Content-Length").Single()),
+                    _sessions[id] = new(fileId, metadata.GetProperty("name").GetString()!, long.Parse(request.Headers.GetValues("X-Upload-Content-Length").Single()),
                         new MemoryStream(), Properties(metadata), metadata.GetProperty("parents")[0].GetString()!);
+                    if (LoseInitiationReply)
+                    {
+                        Files.Add(fileId, new(metadata.GetProperty("name").GetString()!, [], Properties(metadata),
+                            metadata.GetProperty("parents")[0].GetString()!));
+                        throw new HttpRequestException("Injected lost initiation response.");
+                    }
                     var response = Json(new { });
                     response.Headers.Location = new("https://upload.googleapis.com/" + id);
                     return response;
@@ -499,7 +689,8 @@ public sealed class GoogleDriveStorageProviderTests : IDisposable
                         OffsetQueries++;
                         OnOffsetQuery?.Invoke();
                         token.ThrowIfCancellationRequested();
-                        if (session.Bytes.Length == session.Length) return FileJson("file-" + id, Files["file-" + id]);
+                        if (ExpireCompletedSession && Files.ContainsKey(session.FileId)) return new(HttpStatusCode.NotFound);
+                        if (session.Bytes.Length == session.Length) return FileJson(session.FileId, Files[session.FileId]);
                         return Incomplete(session.Bytes.Length == 0 ? null : "bytes=0-" + (session.Bytes.Length - 1));
                     }
                     ChunkRequests++;
@@ -519,15 +710,17 @@ public sealed class GoogleDriveStorageProviderTests : IDisposable
                         var bytes = session.Bytes.ToArray();
                         if (CorruptNextUpload) { bytes[0] ^= 1; CorruptNextUpload = false; }
                         var file = new FileData(session.Name, bytes, session.Properties, session.Parent);
-                        Files["file-" + id] = file;
+                        if (!Files.TryAdd(session.FileId, file)) return new(HttpStatusCode.Conflict);
+                        if (LoseCompletionReply) { LoseCompletionReply = false; throw new HttpRequestException("Injected lost completion response."); }
                         if (CompleteAs308) return Incomplete("bytes=0-" + (session.Length - 1));
-                        return FileJson("file-" + id, file);
+                        return FileJson(WrongCompletionId ? "unexpected-completion-id" : session.FileId, file);
                     }
                     if (LoseChunkReply) { LoseChunkReply = false; throw new HttpRequestException("Injected lost response."); }
                     return Incomplete("bytes=0-" + (session.Bytes.Length - 1));
                 }
                 if (request.Method == HttpMethod.Get && uri.Query.StartsWith("?q="))
                 {
+                    if (RejectListing) throw new InvalidOperationException("Listing unavailable.");
                     var parameters = uri.Query.TrimStart('?').Split('&').Select(p => p.Split('=', 2)).ToDictionary(p => p[0], p => Uri.UnescapeDataString(p[1]));
                     var query = parameters["q"];
                     IEnumerable<object> matches;
@@ -547,16 +740,23 @@ public sealed class GoogleDriveStorageProviderTests : IDisposable
                     Folders.Add(id, (metadata.GetProperty("name").GetString()!, Properties(metadata)));
                     return Json(new { id });
                 }
-                var fileId = uri.AbsolutePath.Split('/')[^1];
+                var targetFileId = uri.AbsolutePath.Split('/')[^1];
                 if (request.Method == HttpMethod.Delete)
                 {
                     DeleteRequests++;
-                    return new(Files.Remove(fileId) ? HttpStatusCode.NoContent : HttpStatusCode.NotFound);
+                    return new(Files.Remove(targetFileId) ? HttpStatusCode.NoContent : HttpStatusCode.NotFound);
                 }
-                if (request.Method == HttpMethod.Get && Files.TryGetValue(fileId, out var data))
+                if (request.Method == HttpMethod.Get && Files.TryGetValue(targetFileId, out var data))
                 {
-                    if (uri.Query == "?alt=media") { Readbacks++; return new(HttpStatusCode.OK) { Content = new ByteArrayContent(data.Bytes) }; }
-                    return FileJson(fileId, data);
+                    if (uri.Query == "?alt=media")
+                    {
+                        if (RejectReadback) throw new InvalidOperationException("Media readback unavailable.");
+                        Readbacks++;
+                        OnReadback?.Invoke();
+                        token.ThrowIfCancellationRequested();
+                        return new(HttpStatusCode.OK) { Content = new ByteArrayContent(data.Bytes) };
+                    }
+                    return FileJson(targetFileId, data);
                 }
                 if (request.Method == HttpMethod.Get) return new(HttpStatusCode.NotFound);
                 throw new InvalidOperationException("Unexpected fake Drive request.");

@@ -50,6 +50,10 @@ internal sealed class StorageUsageProjection
                     projection.Tenant(replica.TenantId).Artifact(replica.ArtifactId).Reverts[replica.Id] = original;
                     break;
                 }
+                case BackupArtifact artifact when entry.State == EntityState.Deleted:
+                    projection ??= new StorageUsageProjection();
+                    projection.Tenant(artifact.TenantId).Artifact(artifact.Id).DeletedSize = artifact.SizeBytes;
+                    break;
                 case BackupRun run when entry.State == EntityState.Modified && run.IsTerminal
                     && entry.Property(nameof(BackupRun.Status)).OriginalValue is BackupStatus original && !BackupRun.IsTerminalStatus(original):
                     projection ??= new StorageUsageProjection();
@@ -92,7 +96,7 @@ internal sealed class StorageUsageProjection
             {
                 await TenantUsageEngine.AdjustUsedAsync(context, change.TenantId, delta, cancellationToken);
             }
-            if (released > 0)
+            if (released > 0 || delta != 0)
             {
                 await TenantUsageEngine.RefreshReservedAsync(context, change.TenantId, cancellationToken);
             }
@@ -102,9 +106,11 @@ internal sealed class StorageUsageProjection
     private static async Task<long> DeltaAsync(
         PlatformDbContext context, TenantId tenantId, QuotaPolicy policy, Guid artifactId, ArtifactChange artifact, CancellationToken cancellationToken)
     {
-        if (await TenantUsageEngine.ReadArtifactAsync(context, tenantId, artifactId, cancellationToken) is not { } saved)
+        var saved = await TenantUsageEngine.ReadArtifactAsync(context, tenantId, artifactId, cancellationToken);
+        if (saved is null)
         {
-            return 0;
+            if (artifact.DeletedSize is not { } size) return 0;
+            saved = new StoredArtifact(artifactId, size, [], await TenantUsageEngine.LoadConnectionFactsAsync(context, tenantId, cancellationToken));
         }
         var reverted = saved.Replicas.ToDictionary(replica => replica.Id);
         foreach (var (replicaId, original) in artifact.Reverts)
@@ -151,5 +157,6 @@ internal sealed class StorageUsageProjection
     private sealed class ArtifactChange
     {
         public Dictionary<Guid, StoredReplica?> Reverts { get; } = [];
+        public long? DeletedSize { get; set; }
     }
 }

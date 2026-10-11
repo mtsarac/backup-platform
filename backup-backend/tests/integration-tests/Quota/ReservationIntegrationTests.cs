@@ -207,7 +207,7 @@ public sealed class ReservationIntegrationTests(PostgreSqlFixture fixture) : ICl
     private QuotaWorld ShortLived() => new(fixture) { QuotaOptions = new QuotaOptions { ReservationTimeToLive = TimeSpan.FromMinutes(30) } };
 
     [Fact]
-    public async Task MaintenanceReleasesAReservationFromItsExpiryInstantWithoutTouchingTheRun()
+    public async Task MaintenanceKeepsTheReservationOfAQueuedRunAtItsExpiryInstant()
     {
         var world = ShortLived();
         var seed = await SeedAsync(world);
@@ -223,16 +223,14 @@ public sealed class ReservationIntegrationTests(PostgreSqlFixture fixture) : ICl
         var onTime = await world.Usage().RunMaintenanceAsync(expiresAt, default);
 
         Assert.Empty(onTime.Errors);
-        Assert.True(onTime.ReservationsExpired >= 1);
         var reservation = await ReservationOfAsync(fixture, tenant, run.Id);
-        Assert.Equal(expiresAt, reservation.ReleasedAt);
-        Assert.Equal(QuotaReservation.ReasonExpired, reservation.ReleaseReason);
-        Assert.Equal(0, (await UsageAsync(world, seed)).ReservedBytes);
+        Assert.Null(reservation.ReleasedAt);
+        Assert.Equal(Gb, (await UsageAsync(world, seed)).ReservedBytes);
         Assert.Equal(BackupStatus.Pending, (await RunAsync(world, tenant, run.Id)).Status);
     }
 
     [Fact]
-    public async Task TheNextAdmissionReleasesAnExpiredReservationSoItCannotBlockForever()
+    public async Task TheNextAdmissionCannotSpendAnExpiredQueuedRunsReservation()
     {
         var world = ShortLived();
         var agent = await world.AgentAsync(2_500_000_000);
@@ -248,14 +246,11 @@ public sealed class ReservationIntegrationTests(PostgreSqlFixture fixture) : ICl
         var blocked = await store.StartRunAsync(tenant, small.Id, "blocked", T0.AddMinutes(2), default);
         Assert.Equal((BackupStartOutcome.AdmissionDenied, BackupAdmissionDenialCodes.QuotaExceeded), (blocked.Outcome, blocked.DenialCode));
 
-        // The holder's run never finishes. Past its reservation's expiry the same request is admitted.
-        var later = await StartAsync(store, small, "blocked", T0.AddMinutes(32));
-
-        var expired = await ReservationOfAsync(fixture, tenant, holder.Id);
-        Assert.Equal((QuotaReservation.ReasonExpired, T0.AddMinutes(32)), (expired.ReleaseReason, expired.ReleasedAt));
-        var current = Assert.Single(await UnreleasedAsync(fixture, tenant));
-        Assert.Equal((later.Id, 400_000_000), (current.RunId, current.Bytes));
-        Assert.Equal(400_000_000, (await world.StoredUsageAsync(tenant))!.ReservedBytes);
+        // Expiry alone cannot free the holder's budget: it can still be claimed without asking admission.
+        var later = await store.StartRunAsync(tenant, small.Id, "blocked", T0.AddMinutes(32), default);
+        Assert.Equal((BackupStartOutcome.AdmissionDenied, BackupAdmissionDenialCodes.QuotaExceeded), (later.Outcome, later.DenialCode));
+        Assert.Null((await ReservationOfAsync(fixture, tenant, holder.Id)).ReleasedAt);
+        Assert.Equal(Gb, (await world.StoredUsageAsync(tenant))!.ReservedBytes);
     }
 
     // ---- orphans and missed callbacks ----------------------------------------------------------------------------------------
@@ -333,7 +328,7 @@ public sealed class ReservationIntegrationTests(PostgreSqlFixture fixture) : ICl
         Assert.Equal(Gb, (await UsageAsync(_world, seed)).ReservedBytes);
     }
 
-    // ---- a live lease outlives the time-to-live, and only a live lease does -----------------------------------------------------
+    // ---- live runs keep reservations until lifecycle termination --------------------------------------------------------------
 
     private Task<BackupLeaseResult?> RenewAsync(Seed seed, BackupClaim claim, DateTimeOffset at, TimeSpan lease) =>
         seed.Store.RenewLeaseAsync(BackupStoreHarness.Command(claim, at), lease, default);
@@ -359,7 +354,7 @@ public sealed class ReservationIntegrationTests(PostgreSqlFixture fixture) : ICl
     }
 
     [Fact]
-    public async Task AReservationIsKeptWhileTheLeaseIsRenewedAndReleasedOnceTheRenewalStops()
+    public async Task AReservationIsKeptAfterLeaseRenewalStopsUntilTheRunTerminates()
     {
         var seed = await SeedAsync();
         var tenant = seed.Agent.TenantId;
@@ -380,7 +375,7 @@ public sealed class ReservationIntegrationTests(PostgreSqlFixture fixture) : ICl
         }
         Assert.Equal(Gb, (await UsageAsync(_world, seed)).ReservedBytes);
 
-        // The last lease lapses, so nothing protects the reservation any more: the very next pass gives it back.
+        // A lapsed lease is not terminal: the lifecycle can schedule a retry without admission.
         var lapsed = renewedAt + lease;
         await usage.RunMaintenanceAsync(lapsed.AddSeconds(-1), default);
         Assert.Null((await ReservationOfAsync(fixture, tenant, run.Id)).ReleasedAt);
@@ -388,12 +383,12 @@ public sealed class ReservationIntegrationTests(PostgreSqlFixture fixture) : ICl
 
         Assert.Empty(after.Errors);
         var reservation = await ReservationOfAsync(fixture, tenant, run.Id);
-        Assert.Equal((QuotaReservation.ReasonExpired, lapsed), (reservation.ReleaseReason, reservation.ReleasedAt));
-        Assert.Equal(0, (await UsageAsync(_world, seed)).ReservedBytes);
+        Assert.Null(reservation.ReleasedAt);
+        Assert.Equal(Gb, (await UsageAsync(_world, seed)).ReservedBytes);
     }
 
     [Fact]
-    public async Task AnAbandonedRunWhoseLeaseLapsedLosesItsReservationAtExpiryAndIsThenMarkedAgentLost()
+    public async Task AnAbandonedRunReleasesItsReservationOnlyWhenMarkedAgentLost()
     {
         var seed = await SeedAsync(retry: new BackupRetryPolicy { MaxAttempts = 1 });
         var tenant = seed.Agent.TenantId;
@@ -401,14 +396,16 @@ public sealed class ReservationIntegrationTests(PostgreSqlFixture fixture) : ICl
         await ClaimStartedAsync(seed.Store, seed.Agent, At);
         var expiresAt = At + _world.QuotaOptions.ReservationTimeToLive;
 
-        // The agent vanished: its two-minute lease is long over by the time the reservation expires, and no sweep has run yet.
+        // The lease lapsed, but until the lifecycle ends the run it could still retry with this reservation.
         await _world.Usage().RunMaintenanceAsync(expiresAt, default);
 
         var reservation = await ReservationOfAsync(fixture, tenant, run.Id);
-        Assert.Equal((QuotaReservation.ReasonExpired, expiresAt), (reservation.ReleaseReason, reservation.ReleasedAt));
-        Assert.Equal(0, (await UsageAsync(_world, seed)).ReservedBytes);
+        Assert.Null(reservation.ReleasedAt);
+        Assert.Equal(Gb, (await UsageAsync(_world, seed)).ReservedBytes);
         Assert.True(await seed.Store.ExpireStaleAsync(expiresAt.AddMinutes(1), default) >= 1);
         Assert.Equal(BackupStatus.AgentLost, (await RunAsync(_world, tenant, run.Id)).Status);
+        Assert.Equal(QuotaReservation.ReasonRunFinished, (await ReservationOfAsync(fixture, tenant, run.Id)).ReleaseReason);
+        Assert.Equal(0, (await UsageAsync(_world, seed)).ReservedBytes);
     }
 
     [Fact]
@@ -480,5 +477,22 @@ public sealed class ReservationIntegrationTests(PostgreSqlFixture fixture) : ICl
         Assert.Single(await AuditAsync(fixture, tenant, ManagedServiceAuditActions.StorageUsageCorrected));
         // The reservation itself was never touched: it belongs to a live run.
         Assert.Null((await ReservationOfAsync(fixture, tenant, run.Id)).ReleasedAt);
+    }
+
+    [Fact]
+    public async Task RetryPendingRunKeepsItsReservationPastExpiryAndItsNextAttemptRemainsBounded()
+    {
+        var world = ShortLived();
+        var seed = await SeedAsync(world);
+        var run = await StartAsync(seed.Store, seed.Job, "waiting-retry", At);
+        await FailNextAsync(seed.Store, seed.Agent, BackupFailureCodes.DatabaseUnavailable, At);
+        var later = At.AddHours(2);
+        var maintained = await world.Usage().RunMaintenanceAsync(later, default);
+        Assert.Empty(maintained.Errors);
+        Assert.Null((await ReservationOfAsync(fixture, seed.Agent.TenantId, run.Id)).ReleasedAt);
+        Assert.Equal(Gb, (await UsageAsync(world, seed)).ReservedBytes);
+        await seed.Store.StartDueRetriesAsync(later, 100, default);
+        var claim = await ClaimStartedAsync(seed.Store, seed.Agent, later);
+        Assert.Equal(Gb, claim.MaxArtifactBytes);
     }
 }

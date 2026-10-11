@@ -38,6 +38,8 @@ public static class BackupAdmissionDenialCodes
 {
     public const string SubscriptionRequired = "subscription_required";
     public const string QuotaExceeded = "quota_exceeded";
+    public const string QuotaSizeUnknown = "quota_size_unknown";
+    public const string QuotaBoundedUploadUnsupported = "quota_bounded_upload_unsupported";
     /// <summary>The job's storage connection is disabled: new runs may not target it. Existing replicas on it are unaffected.</summary>
     public const string StorageConnectionDisabled = "storage_connection_disabled";
     /// <summary>The job names a storage connection that does not exist, is another tenant's, or serves another provider.</summary>
@@ -52,8 +54,8 @@ public static class BackupAdmissionDenialCodes
     /// <summary>The job's destinations cannot all be executed as configured (the same connection twice after resolution).</summary>
     public const string DestinationCombinationUnsupported = "destination_combination_unsupported";
 
-    public static bool IsKnown(string? code) => code is SubscriptionRequired or QuotaExceeded or StorageConnectionDisabled or StorageConnectionUnavailable
-        or MultiDestinationExecutionNotSupported or AgentMultiDestinationUnsupported or DestinationCombinationUnsupported;
+    public static bool IsKnown(string? code) => code is SubscriptionRequired or QuotaExceeded or QuotaSizeUnknown or StorageConnectionDisabled or StorageConnectionUnavailable
+        or MultiDestinationExecutionNotSupported or AgentMultiDestinationUnsupported or DestinationCombinationUnsupported or QuotaBoundedUploadUnsupported;
 }
 
 public static class BackupTriggerTypes

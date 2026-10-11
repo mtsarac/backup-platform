@@ -70,16 +70,24 @@ public sealed class MultiDestinationTaskTests
     {
         var storage = new RecordingFactory();
 
-        var request = await Factory(storage).CreateAsync(Snapshot(ThreeDestinations), default);
+        var request = await Factory(storage).CreateAsync(Snapshot(ThreeDestinations) with { MaxArtifactBytes = 123 }, default);
 
         Assert.Equal(3, request.Destinations.Count);
         Assert.Equal(2, request.RequiredVerifiedReplicas);
+        Assert.Equal(123L, request.MaxArtifactBytes);
         Assert.Equal([Central, Sftp, Drive], request.Destinations.Select(d => d.ConnectionId!.Value));
         // Central is written by the agent's own provider; only sftp and Google Drive go through the relay, each bound to ITS destination.
         Assert.Null(request.Destinations[0].StorageOverride);
         Assert.Equal(["sftp", "google-drive"], storage.Destinations.Select(d => d.StorageProvider));
         Assert.Equal([Sftp, Drive], storage.Destinations.Select(d => d.StorageConnectionId!.Value));
         Assert.Single(request.Destinations, d => d.IsPrimary);
+    }
+
+    [Fact]
+    public async Task A_negative_hard_quota_bound_is_refused_as_invalid_task_input()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            Factory().CreateAsync(Snapshot(ThreeDestinations) with { MaxArtifactBytes = -1 }, default).AsTask());
     }
 
     [Fact]
@@ -91,6 +99,7 @@ public sealed class MultiDestinationTaskTests
         var request = await Factory().CreateAsync(snapshot, default);
 
         Assert.Empty(request.Destinations);
+        Assert.Null(request.MaxArtifactBytes);
         var only = Assert.Single(request.EffectiveDestinations);
         Assert.Equal("central", only.Storage.Value);
     }
@@ -183,7 +192,8 @@ public sealed class MultiDestinationTaskTests
 
         Assert.Equal("Failed", completion.Status);
         Assert.Equal("StorageUnavailable", completion.FailureCode);
-        Assert.Null(completion.Artifact);
+        Assert.Equal(256, completion.Artifact!.SizeBytes);
+        Assert.Empty(completion.Artifact.Replicas);
         Assert.All(completion.Destinations, d => Assert.Equal("Failed", d.State));
         var mismatch = completion.Destinations[1];
         Assert.Equal("Succeeded", mismatch.Upload);

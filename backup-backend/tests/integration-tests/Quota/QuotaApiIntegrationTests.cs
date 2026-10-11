@@ -687,8 +687,8 @@ public sealed class QuotaApiIntegrationTests(PostgreSqlFixture fixture) : IClass
         var quota = AgentWorld.ReadJson(await scenario.Admin.GetAsync(scenario.Root + "/storage-quota"));
         Assert.Equal(("OverQuota", false), (quota.GetProperty("state").GetString(), quota.GetProperty("newBackupsAllowed").GetBoolean()));
 
-        // Capacity back (a 10 GB override): the very same key now starts a run, i.e. the refusal consumed nothing.
-        Assert.Equal(HttpStatusCode.OK, (await CallAsync(platform, HttpMethod.Put, SubscriptionPath(tenantId.Value) + "/storage-limit-override", new { kind = "limited", bytes = 10 * Gb })).Status);
+        // Unknown-size first runs need an unlimited override (or history) rather than a zero-byte hard reservation.
+        Assert.Equal(HttpStatusCode.OK, (await CallAsync(platform, HttpMethod.Put, SubscriptionPath(tenantId.Value) + "/storage-limit-override", new { kind = "unlimited" })).Status);
         var runId = await scenario.StartRunAsync(jobId, "key-2");
         Assert.Equal(1, await harness.CountRunsAsync(jobId));
         Assert.Equal("Pending", BackupApiScenario.StatusOf(await scenario.RunAsync(runId)));

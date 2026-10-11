@@ -326,7 +326,7 @@ public sealed class UsageAccountingIntegrationTests(PostgreSqlFixture database) 
     {
         var agent = await _world.AgentAsync(10 * Gb);
         var job = await _world.JobAsync(agent);
-        var store = _world.RunStore();
+        var store = _world.RunStore(AdmitAllBackupAdmission.Instance);
         var started = await store.StartRunAsync(agent.TenantId, job.Id, $"dup-{Guid.NewGuid():N}", QuotaWorld.T0, default);
         Assert.Equal(BackupStartOutcome.Started, started.Outcome);
         var claim = await BackupStoreHarness.ClaimAsync(store, agent, QuotaWorld.T0);

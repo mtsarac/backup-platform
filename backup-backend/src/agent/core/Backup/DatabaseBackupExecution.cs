@@ -120,6 +120,9 @@ internal sealed class DatabaseBackupExecution
         await HashSourceAsync(cancellationToken).ConfigureAwait(false);
         await PrepareArtifactAsync(cancellationToken).ConfigureAwait(false);
         await HashArtifactAsync(cancellationToken).ConfigureAwait(false);
+        if (_request.MaxArtifactBytes is { } maximum && _artifact!.SizeBytes > maximum)
+            throw Fail(BackupExecutionStage.HashingArtifact, BackupPipelineReasons.QuotaExceeded,
+                "The backup artifact exceeds its hard-quota reservation; no destination was written.", kind: BackupFailureKind.PreCheckFailed);
         await TransferAsync(targets, cancellationToken).ConfigureAwait(false);
     }
 
@@ -401,7 +404,18 @@ internal sealed class DatabaseBackupExecution
             }
             catch (StorageException exception)
             {
+                if (exception is { ObjectMayRemain: true, RemainingObjectKey: { } remaining })
+                {
+                    transfer.Stored = true;
+                    transfer.Key = remaining;
+                }
                 throw Fail(stage, StorageReason(exception.Kind), exception.Message, exception, BackupFailureKind.StorageWriteFailed, StorageCause(exception.Kind));
+            }
+            catch (OperationCanceledException exception) when (exception.Data[nameof(StorageException)] is StorageException { ObjectMayRemain: true, RemainingObjectKey: { } })
+            {
+                transfer.Stored = true;
+                transfer.Key = ((StorageException)exception.Data[nameof(StorageException)]!).RemainingObjectKey;
+                throw;
             }
             catch (Exception exception) when (exception is not OperationCanceledException and not StageFailedException)
             {

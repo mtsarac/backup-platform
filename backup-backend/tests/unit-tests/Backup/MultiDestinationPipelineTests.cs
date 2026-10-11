@@ -16,7 +16,7 @@ public sealed class MultiDestinationPipelineTests : IDisposable
     private static BackupPipelineDestination Destination(string provider, InMemoryStorage storage, bool primary = false) =>
         new(new StorageProviderId(provider), storage, Guid.NewGuid(), primary);
 
-    private DatabaseBackupPipelineRequest Request(IReadOnlyList<BackupPipelineDestination> destinations, int required = 1, TimeSpan? timeout = null)
+    private DatabaseBackupPipelineRequest Request(IReadOnlyList<BackupPipelineDestination> destinations, int required = 1, TimeSpan? timeout = null, long? maxBytes = null)
     {
         var single = _h.Request();
         return new DatabaseBackupPipelineRequest(single.Engine, single.Connection, single.Credential, single.DatabaseName, single.Staging,
@@ -25,8 +25,30 @@ public sealed class MultiDestinationPipelineTests : IDisposable
             StorageOverride = destinations[0].StorageOverride,
             Destinations = destinations,
             RequiredVerifiedReplicas = required,
-            DestinationTimeout = timeout
+            DestinationTimeout = timeout,
+            MaxArtifactBytes = maxBytes
         };
+    }
+
+    [Theory]
+    [InlineData(-1, DatabaseBackupStatus.Failed)]
+    [InlineData(0, DatabaseBackupStatus.Succeeded)]
+    public async Task Hard_quota_cap_is_checked_before_any_destination_is_written(int offset, DatabaseBackupStatus expected)
+    {
+        var stores = new[] { NewStorage(), NewStorage() };
+        var result = await _h.RunAsync(Request([Destination("central", stores[0], true), Destination("sftp", stores[1])],
+            maxBytes: PipelineHarness.BackupBytes.LongLength + offset));
+        Assert.Equal(expected, result.Status);
+        if (expected == DatabaseBackupStatus.Failed)
+        {
+            Assert.Equal(BackupPipelineReasons.QuotaExceeded, result.Failure!.ReasonCode);
+            Assert.All(stores, store => Assert.Empty(store.Objects));
+        }
+        else
+        {
+            Assert.All(stores, store => Assert.Equal(PipelineHarness.BackupBytes, Assert.Single(store.Objects).Value));
+        }
+        Assert.Empty(_h.StagedFiles);
     }
 
     [Fact]

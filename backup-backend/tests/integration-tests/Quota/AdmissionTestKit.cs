@@ -54,8 +54,16 @@ internal static class AdmissionTestKit
     public const long Gb = QuotaWorld.Gb;
     public static readonly DateTimeOffset T0 = QuotaWorld.T0;
 
-    public static async Task<StoreAgent> AddAgentAsync(QuotaWorld world, TenantId tenantId) =>
-        new(tenantId, await world.Harness.AddAgentToAsync(tenantId));
+    public static async Task<StoreAgent> AddAgentAsync(QuotaWorld world, TenantId tenantId)
+    {
+        var agent = new StoreAgent(tenantId, await world.Harness.AddAgentToAsync(tenantId));
+        await using var context = world.Database.CreatePlatformContext();
+        context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(agent.AgentId, tenantId,
+            BackupPlatform.Contracts.Backups.BackupTaskProtocol.QuotaBoundedUploadCapability,
+            BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, null, "quota", T0));
+        await context.SaveChangesAsync();
+        return agent;
+    }
 
     /// <summary>A job storing on the central provider (platform-managed). <paramref name="retry"/> null is the default 3-attempt policy.</summary>
     public static async Task<BackupJob> CreateJobAsync(

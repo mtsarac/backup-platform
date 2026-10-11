@@ -132,7 +132,8 @@ public sealed class BackupReplica : ITenantOwned
     /// Whether a restore may read this replica at <paramref name="now"/>: Available, or DeletePending while its grace period has not ended.
     /// The same condition retention uses to decide a replica may still be recovered; once the delete is due, claimable or begun it is not.
     /// </summary>
-    public bool IsRestorable(DateTimeOffset now) => Status == BackupReplicaStatus.Available || (Status == BackupReplicaStatus.DeletePending && DeleteAfter > now);
+    public bool IsRestorable(DateTimeOffset now) => VerificationState == "Verified" &&
+        (Status == BackupReplicaStatus.Available || (Status == BackupReplicaStatus.DeletePending && DeleteAfter > now));
 
     /// <summary>Available to DeletePending. False (and no change) in any other state, so concurrent requesters cannot both win.</summary>
     internal bool RequestDelete(DateTimeOffset now, BackupDeleteReason reason, TimeSpan grace, Guid? requestedBy)
@@ -150,7 +151,7 @@ public sealed class BackupReplica : ITenantOwned
     /// <summary>DeletePending to Available. A delete that has begun (or finished, or failed) is never taken back.</summary>
     internal bool CancelDelete()
     {
-        if (Status != BackupReplicaStatus.DeletePending) return false;
+        if (Status != BackupReplicaStatus.DeletePending || VerificationState != "Verified") return false;
         Status = BackupReplicaStatus.Available;
         DeleteRequestedAt = null;
         DeleteReason = null;

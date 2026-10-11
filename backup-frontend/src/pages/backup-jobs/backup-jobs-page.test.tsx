@@ -26,6 +26,8 @@ it('does not create a second Queue-policy run when double-click follows a fast s
 it.each([
   ['storage_connection_disabled', 'Hedef depolama bağlantısı devre dışı; yeni backup başlatılamaz.'],
   ['storage_connection_unavailable', 'Hedef depolama bağlantısı bulunamadı veya bu Job\'un Storage Provider\'ına ait değil; yeni backup başlatılamaz.'],
+  ['quota_size_unknown', 'Backup boyutu henüz bilinmediği için kesin depolama kotasında güvenli alan ayrılamadı; yeni backup başlatılmadı. Boyut tahmininin belirlenmesi için yöneticiye başvurun.'],
+  ['quota_bounded_upload_unsupported', 'Agent, yükleme öncesinde kesin depolama kotasını uygulamayı desteklemiyor; Agent\'ı güncelleyin. Yeni backup başlatılmadı.'],
 ])('Şimdi çalıştır, %s reddini Türkçe gösterir', async (code, text) => {
   vi.mocked(startJobRun).mockRejectedValue(new ApiError(409, { error: 'admission_denied', code }))
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })

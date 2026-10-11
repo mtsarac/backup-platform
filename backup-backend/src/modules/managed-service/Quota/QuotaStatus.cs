@@ -56,9 +56,7 @@ public sealed record QuotaAdmissionDecision(bool Allowed, string? DenialCode, Qu
         {
             return new QuotaAdmissionDecision(true, null, state);
         }
-        // Already at or over the limit is refused outright. Beyond that, the run's expected size is checked against what is left, so two
-        // runs started together cannot both be admitted into an overshoot that either one alone would have avoided. The estimate is only
-        // what the same job produced last time (0 without history); the real artifact may still turn out bigger, and is never cut off.
+        // Admission reserves the expected contribution atomically; execution enforces the corresponding artifact byte bound.
         var limit = entitlement.StorageLimit!.Value.Bytes!.Value;
         var committed = QuotaStateResolver.Committed(usedBytes, reservedBytes);
         var projected = committed > long.MaxValue - Math.Max(0, estimatedBytes) ? long.MaxValue : committed + Math.Max(0, estimatedBytes);

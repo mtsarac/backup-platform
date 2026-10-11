@@ -326,7 +326,7 @@ public sealed class BackupRetryApiTests(PostgreSqlFixture fixture) : IClassFixtu
         {
             "PreCheckFailed", "SqlBackupFailed", "VerificationFailed", "HashFailed", "StorageWriteFailed", "ReplicaVerificationFailed", "InternalError",
             "DatabaseUnavailable", "OperationTimedOut", "StorageUnavailable", "DatabaseNotFound", "InvalidConfiguration", "UnsupportedCapability",
-            "AuthenticationFailed", "PermissionDenied", "StagingInvalid"
+            "AuthenticationFailed", "PermissionDenied", "StagingInvalid", "QuotaExceeded"
         };
         var singleAttempt = await scenario.CreateJobAsync(new { maxAttempts = 1 });
         foreach (var code in vocabulary)

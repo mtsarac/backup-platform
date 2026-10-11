@@ -15,6 +15,7 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
     {
         var configuration = task.Configuration;
         ValidateConfiguration(configuration);
+        if (task.MaxArtifactBytes is < 0) throw new ArgumentException("The artifact byte limit is invalid.");
         var staging = _staging ?? throw new ArgumentException("Default staging is not configured.");
         var connection = new DatabaseConnectionSettings(new DatabaseEndpoint(configuration.Host, configuration.Port),
             new DatabaseConnectionOptions(requireEncryption: configuration.Encrypt, trustServerCertificate: configuration.TrustServerCertificate));
@@ -39,6 +40,7 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
             staging, primary.Storage, prefix, options)
         {
             StorageOverride = primary.StorageOverride,
+            MaxArtifactBytes = task.MaxArtifactBytes,
             Destinations = configuration.Destinations.Count > 0 ? targets : [],
             RequiredVerifiedReplicas = Math.Max(1, configuration.RequiredVerifiedReplicaCount)
         };

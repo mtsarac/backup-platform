@@ -94,6 +94,32 @@ public sealed class BackupRunAttempt : ITenantOwned
         ProgressPercent = percent;
         ProgressAt = now;
     }
+    public void RecordTransfer(Guid token, DateTimeOffset now, BackupArtifact artifact)
+    {
+        RequireLease(token, now);
+        if (Status != BackupStatus.Running || artifact.AttemptId != Id || artifact.TenantId != TenantId)
+            throw new InvalidOperationException("Only a running lease holder may record a transfer.");
+        var existing = _artifacts.SingleOrDefault();
+        if (existing is null)
+        {
+            artifact.QueueOrphanCleanup(now);
+            _artifacts.Add(artifact);
+            return;
+        }
+        if (existing.SizeBytes != artifact.SizeBytes || existing.ArtifactChecksum != artifact.ArtifactChecksum)
+            throw new ArgumentException("Transfers must refer to the same staged artifact.");
+        var replica = artifact.Replicas.Single();
+        var prior = existing.Replicas.SingleOrDefault(r => r.StorageConnectionId == replica.StorageConnectionId);
+        if (prior is not null)
+        {
+            if (prior.Key != replica.Key) throw new ArgumentException("One destination cannot upload multiple objects in an attempt.");
+            return;
+        }
+        existing.AddReplica(new BackupReplica(replica.Id, TenantId, existing.Id, replica.StorageProvider, replica.StorageTarget, replica.Key,
+            replica.SizeBytes, replica.Checksum, replica.ChecksumAlgorithm, "Unverified", "None", replica.CreatedAt, null,
+            replica.ExecutionLocation, replica.OwningAgentId, replica.StorageConnectionId));
+        existing.QueueOrphanCleanup(now);
+    }
     internal bool Complete(Guid token, DateTimeOffset now, BackupCompletion completion, BackupRetentionPolicy retention)
     {
         if (IsTerminal)
@@ -112,12 +138,16 @@ public sealed class BackupRunAttempt : ITenantOwned
         {
             if (Status != BackupStatus.Running || completion.Artifact is null || completion.FailureCode is not null)
                 throw new InvalidOperationException("Success requires a running attempt and artifact.");
-            if (completion.Artifact.AttemptId != Id || completion.Artifact.TenantId != TenantId)
-                throw new ArgumentException("Artifact ownership mismatch.");
-            completion.Artifact.Seal(now, retention);
-            _artifacts.Add(completion.Artifact);
         }
-        else if (completion.Artifact is not null) throw new ArgumentException("Failed attempts cannot publish artifacts.");
+        _artifacts.Clear();
+        if (completion.Artifact is { } artifact)
+        {
+            if (artifact.AttemptId != Id || artifact.TenantId != TenantId)
+                throw new ArgumentException("Artifact ownership mismatch.");
+            if (completion.Status == BackupStatus.Succeeded) artifact.Seal(now, retention);
+            else artifact.SealOrphans(now);
+            _artifacts.Add(artifact);
+        }
         foreach (var outcome in completion.Outcomes ?? [])
         {
             if (outcome.AttemptId != Id || outcome.TenantId != TenantId || outcome.RunId != RunId ||

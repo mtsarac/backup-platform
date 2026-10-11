@@ -160,6 +160,8 @@ public static class BackupEndpoints
     private static string AdmissionMessage(string? code) => code switch
     {
         BackupAdmissionDenialCodes.SubscriptionRequired => "The tenant has no active subscription; no run was started.",
+        BackupAdmissionDenialCodes.QuotaSizeUnknown => "The backup size is not yet known, so space cannot be reserved safely under the hard storage quota; no run was started. Ask an administrator to establish a size estimate.",
+        BackupAdmissionDenialCodes.QuotaBoundedUploadUnsupported => "The agent does not enforce the hard storage quota before uploading; update the agent. No run was started.",
         BackupAdmissionDenialCodes.StorageConnectionDisabled => "The job's storage connection is disabled; no run was started. Existing backups on it stay available.",
         BackupAdmissionDenialCodes.StorageConnectionUnavailable => "The job's storage connection does not exist for this tenant and provider; no run was started.",
         BackupAdmissionDenialCodes.MultiDestinationExecutionNotSupported => "This occurrence was recorded while multi-destination backup execution was not available; no run was started.",

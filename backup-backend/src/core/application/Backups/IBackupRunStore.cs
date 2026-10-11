@@ -15,7 +15,11 @@ public sealed record BackupArtifactResult(long SizeBytes, string SourceChecksum,
 public sealed record BackupReplicaResult(string StorageProvider, string StorageTarget, string Key, long SizeBytes, string Checksum, string ChecksumAlgorithm, string VerificationState, string VerificationMethod, DateTimeOffset CreatedAt, DateTimeOffset? VerifiedAt, Guid? StorageConnectionId = null);
 /// <summary>What the agent reported for one snapshot destination (already validated against the run's snapshot).</summary>
 public sealed record BackupDestinationReport(string StorageProvider, Guid? StorageConnectionId, string State, string Upload, string Verification, string? FailureCode, string? Key, bool ObjectMayRemain, DateTimeOffset StartedAt, DateTimeOffset CompletedAt);
-public sealed record BackupClaim(BackupRun Run, BackupRunAttempt Attempt);
+public sealed record BackupTransferIntent(Guid StorageConnectionId, string Key, long SizeBytes, string Checksum);
+public sealed record BackupClaim(BackupRun Run, BackupRunAttempt Attempt)
+{
+    public long? MaxArtifactBytes { get; init; }
+}
 public sealed record BackupLeaseResult(DateTimeOffset LeaseExpiresAt, bool CancellationRequested);
 public enum BackupMutationResult { Accepted, NotFound, Conflict }
 
@@ -85,6 +89,7 @@ public interface IBackupRunStore
     Task<BackupClaim?> GetAttemptAsync(TenantId tenantId, AgentId agentId, Guid attemptId, CancellationToken cancellationToken);
     Task<BackupMutationResult> StartAttemptAsync(BackupLeaseCommand command, CancellationToken cancellationToken);
     Task<BackupLeaseResult?> RenewLeaseAsync(BackupLeaseCommand command, TimeSpan leaseDuration, CancellationToken cancellationToken);
+    Task<BackupMutationResult> RecordTransferAsync(BackupLeaseCommand command, BackupTransferIntent transfer, CancellationToken cancellationToken);
     Task<BackupMutationResult> ReportProgressAsync(BackupLeaseCommand command, BackupProgress progress, CancellationToken cancellationToken);
     Task<BackupMutationResult> CompleteAttemptAsync(BackupLeaseCommand command, BackupCompletion completion, CancellationToken cancellationToken);
     /// <summary>Marks expired Leased/Running attempts AgentLost and, per policy, schedules their retry or ends the run. Returns the attempts expired.</summary>

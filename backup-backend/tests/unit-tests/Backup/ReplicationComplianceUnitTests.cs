@@ -293,6 +293,35 @@ public sealed class ReplicationComplianceUnitTests
         Assert.False(BackupInputValidation.IsValidCompletion(Failure(Failed("central", Central)), Snapshot(1)));
     }
 
+    [Theory]
+    [InlineData("Failed", "StorageWriteFailed")]
+    [InlineData("Cancelled", "Cancelled")]
+    public void Failed_or_cancelled_orphans_require_valid_artifact_metadata_and_never_publish_verified_copies(string status, string failure)
+    {
+        var orphan = Failed("sftp", Sftp) with { Upload = "Succeeded", Verification = "Failed", Key = Key, ObjectMayRemain = true };
+        var request = Completion([], [Failed("central", Central), orphan, Failed("google-drive", Drive)]) with { Status = status, FailureCode = failure };
+        Assert.True(BackupInputValidation.IsValidCompletion(request, Snapshot(2)));
+        Assert.False(BackupInputValidation.IsValidCompletion(request with { Artifact = null }, Snapshot(2)));
+        Assert.False(BackupInputValidation.IsValidCompletion(request with { Artifact = request.Artifact! with { SizeBytes = 0 } }, Snapshot(2)));
+        Assert.False(BackupInputValidation.IsValidCompletion(request with { Artifact = request.Artifact! with { Replicas = [ReplicaOf("sftp", Sftp)] } }, Snapshot(2)));
+        Assert.False(BackupInputValidation.IsValidCompletion(request with { Destinations = [Failed("central", Central), Failed("sftp", Sftp), Failed("google-drive", Drive)] }, Snapshot(2)));
+    }
+
+    [Theory]
+    [InlineData(16, true)]
+    [InlineData(17, false)]
+    public void Jobs_cannot_exceed_the_completion_destination_limit(int count, bool allowed)
+    {
+        var configuration = BackupOrchestrator.ToWire(Snapshot(1)) with
+        {
+            Destinations = [.. Enumerable.Range(0, count).Select(i => new BackupDestinationContract
+                { StorageProvider = "sftp", StorageConnectionId = Guid.NewGuid(), IsPrimary = i == 0, StorageExecutionLocation = "Backend" })]
+        };
+        var request = new CreateBackupJobRequest("bounded", Guid.NewGuid(), configuration);
+        if (allowed) BackupInputValidation.Validate(request);
+        else Assert.Throws<InvalidBackupJobException>(() => BackupInputValidation.Validate(request));
+    }
+
     [Fact]
     public void An_agent_that_predates_destination_reports_is_understood_only_for_a_single_destination_run()
     {

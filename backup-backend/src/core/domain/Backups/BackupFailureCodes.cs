@@ -26,6 +26,7 @@ public static class BackupFailureCodes
     public const string AuthenticationFailed = "AuthenticationFailed";
     public const string PermissionDenied = "PermissionDenied";
     public const string StagingInvalid = "StagingInvalid";
+    public const string QuotaExceeded = "QuotaExceeded";
 
     // Outcomes that are not agent-reported failures.
     public const string Cancelled = "Cancelled";
@@ -51,6 +52,7 @@ public static class BackupFailureCodes
         [UnsupportedCapability] = false,
         [AuthenticationFailed] = false,
         [PermissionDenied] = false,
+        [QuotaExceeded] = false,
         [StagingInvalid] = false
     };
 

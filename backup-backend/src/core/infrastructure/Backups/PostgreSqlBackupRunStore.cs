@@ -1,8 +1,10 @@
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Restores;
+using BackupPlatform.Infrastructure.ManagedService;
 using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
@@ -112,7 +114,8 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         }
         // The gate for a NEW run, after everything that makes the request a no-op (replay, skip) and before anything is created. A retry attempt never comes through here.
         var runId = Guid.NewGuid();
-        var decision = await BackupAdmissionGate.AdmitAsync(admission, context, new BackupAdmissionRequest(tenantId, job.Id, runId, BackupTriggerTypes.Manual, now), cancellationToken);
+        var decision = await BackupAdmissionGate.AdmitAsync(admission, context,
+            new BackupAdmissionRequest(tenantId, job.Id, runId, BackupTriggerTypes.Manual, now) { Configuration = target.Configuration }, cancellationToken);
         if (!decision.Allowed)
         {
             // Nothing was created; committing keeps the maintenance the gate did on the way (stale reservations released, a missing projection computed).
@@ -239,6 +242,8 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
                                   select run.Id).Take(16).ToListAsync(cancellationToken);
         BackupRun? next = null;
         bool? supportsMultiDestination = null;
+        bool? supportsQuotaBound = null;
+        long? maxArtifactBytes = null;
         foreach (var candidateId in candidateIds)
         {
             var candidate = await Runs(context).SingleAsync(run => run.TenantId == tenantId && run.Id == candidateId, cancellationToken);
@@ -248,6 +253,13 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
                 supportsMultiDestination ??= await StorageTargetGate.SupportsMultiDestinationAsync(context, tenantId, agentId, cancellationToken);
                 if (supportsMultiDestination != true) continue;
             }
+            var bound = await TenantUsageEngine.ReadRunMaxArtifactBytesAsync(context, candidate, now, cancellationToken);
+            if (bound is not null)
+            {
+                supportsQuotaBound ??= await TenantUsageEngine.SupportsQuotaBoundedUploadAsync(context, tenantId, agentId, cancellationToken);
+                if (supportsQuotaBound != true) continue;
+            }
+            maxArtifactBytes = bound;
             next = candidate;
             break;
         }
@@ -259,26 +271,60 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         next.Claim(Guid.NewGuid(), now, leaseDuration);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return new BackupClaim(next, next.CurrentAttempt);
+        return new BackupClaim(next, next.CurrentAttempt)
+        {
+            MaxArtifactBytes = maxArtifactBytes
+        };
     }
     public async Task<BackupClaim?> GetAttemptAsync(TenantId tenantId, AgentId agentId, Guid attemptId, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         var run = await Runs(context).AsNoTracking().SingleOrDefaultAsync(run => run.TenantId == tenantId && run.AgentId == agentId &&
             run.Attempts.Any(attempt => attempt.Id == attemptId && attempt.TenantId == tenantId && attempt.AgentId == agentId), cancellationToken);
-        return run is null ? null : new BackupClaim(run, run.Attempts.Single(attempt => attempt.Id == attemptId));
+        return run is null ? null : new BackupClaim(run, run.Attempts.Single(attempt => attempt.Id == attemptId))
+        {
+            MaxArtifactBytes = await TenantUsageEngine.ReadRunMaxArtifactBytesAsync(context, run, run.CurrentAttempt.LeasedAt ?? run.CreatedAt, cancellationToken)
+        };
     }
     public Task<BackupMutationResult> StartAttemptAsync(BackupLeaseCommand command, CancellationToken cancellationToken) =>
         MutateAsync(command, run => run.Start(command.LeaseToken, command.Now, command.SoftwareVersion!, command.ProtocolVersion!, command.Platform!), cancellationToken);
     public Task<BackupMutationResult> ReportProgressAsync(BackupLeaseCommand command, BackupProgress progress, CancellationToken cancellationToken) =>
         MutateAsync(command, run => run.Progress(command.LeaseToken, command.Now, progress.Stage, progress.Percent), cancellationToken);
+    public Task<BackupMutationResult> RecordTransferAsync(BackupLeaseCommand command, BackupTransferIntent transfer, CancellationToken cancellationToken) =>
+        MutateAsync(command, run =>
+        {
+            var destination = run.Configuration.ResolveEffectiveDestinations().SingleOrDefault(d => d.StorageConnectionId == transfer.StorageConnectionId);
+            if (destination is not { StorageProvider: "sftp" or "google-drive", StorageExecutionLocation: BackupStorageExecutionLocation.Backend } ||
+                !ManagedBackupLayout.TryParseStorageKey(transfer.Key, out var layout) || layout is null || layout.IsPartial ||
+                layout.TenantId != command.TenantId.Value || layout.JobId != run.JobId || layout.RunId != run.Id || layout.AttemptId != command.AttemptId)
+                throw new ArgumentException("The upload intent does not belong to this attempt.");
+            var artifact = new BackupArtifact(Guid.NewGuid(), command.TenantId, command.AttemptId, transfer.SizeBytes, transfer.Checksum,
+                transfer.Checksum, "sha256", command.Now, "{\"kind\":\"remote-upload-intent\"}", "{}");
+            artifact.AddReplica(new BackupReplica(Guid.NewGuid(), command.TenantId, artifact.Id, destination.StorageProvider, transfer.StorageConnectionId.ToString("D"),
+                transfer.Key, transfer.SizeBytes, transfer.Checksum, "sha256", "Unverified", "None", command.Now, null,
+                BackupStorageExecutionLocation.Backend, storageConnectionId: transfer.StorageConnectionId));
+            run.CurrentAttempt.RecordTransfer(command.LeaseToken, command.Now, artifact);
+        }, cancellationToken);
     public Task<BackupMutationResult> CompleteAttemptAsync(BackupLeaseCommand command, ApplicationCompletion completion, CancellationToken cancellationToken)
     {
         // The destination each replica and outcome belongs to is resolved under the same agent lock, from the run's snapshot, before the (synchronous) domain completion maps them.
         var connections = new Dictionary<string, Guid>(StringComparer.Ordinal);
-        return MutateAsync(command, run => run.Complete(command.LeaseToken, command.Now, MapCompletion(command, completion, run, connections), Jitter()), cancellationToken,
+        IReadOnlyList<BackupArtifactResult> retained = [];
+        return MutateAsync(command, run => run.Complete(command.LeaseToken, command.Now, MapCompletion(command, completion, run, connections, retained), Jitter()), cancellationToken,
             async (context, run) =>
             {
+                var pending = run.CurrentAttempt.Artifacts.ToArray();
+                retained = pending.Select(artifact => new BackupArtifactResult(artifact.SizeBytes, artifact.SourceChecksum, artifact.ArtifactChecksum,
+                    artifact.ChecksumAlgorithm, artifact.CreatedAt, artifact.SourceMetadataJson, artifact.AppliedOptionsJson,
+                    artifact.Replicas.Select(replica => new BackupReplicaResult(replica.StorageProvider, replica.StorageTarget, replica.Key, replica.SizeBytes,
+                        replica.Checksum, replica.ChecksumAlgorithm, replica.VerificationState, replica.VerificationMethod, replica.CreatedAt, replica.VerifiedAt,
+                        replica.StorageConnectionId)).ToArray())).ToArray();
+                if (!run.CurrentAttempt.IsTerminal && pending.Length > 0 && run.CurrentAttempt.HasLease(command.LeaseToken, command.Now))
+                {
+                    context.BackupReplicas.RemoveRange(pending.SelectMany(artifact => artifact.Replicas));
+                    context.BackupArtifacts.RemoveRange(pending);
+                    await context.SaveChangesAsync(cancellationToken);
+                }
                 // A single-destination snapshot keeps its pre-multi-destination meaning for a replica that names no connection (an agent that predates the field): the provider's
                 // default connection. Several destinations never fall back: whatever the agent names must BE one of them.
                 var snapshot = run.Configuration.ResolveEffectiveDestinations();
@@ -374,7 +420,8 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         .Include(run => run.Attempts).ThenInclude(attempt => attempt.Artifacts).ThenInclude(artifact => artifact.Replicas)
         .Include(run => run.Attempts).ThenInclude(attempt => attempt.DestinationOutcomes)
         .Include(run => run.Facts).AsSplitQuery();
-    private static DomainCompletion MapCompletion(BackupLeaseCommand command, ApplicationCompletion result, BackupRun run, IReadOnlyDictionary<string, Guid> connections)
+    private static DomainCompletion MapCompletion(BackupLeaseCommand command, ApplicationCompletion result, BackupRun run,
+        IReadOnlyDictionary<string, Guid> connections, IReadOnlyList<BackupArtifactResult> retained)
     {
         var status = result.Outcome switch
         {
@@ -413,6 +460,19 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
                 replicaIds[(destination.StorageProvider, connection)] = copy.Id;
             }
         }
+        foreach (var pending in retained)
+        {
+            artifact ??= new BackupArtifact(Guid.NewGuid(), command.TenantId, command.AttemptId, pending.SizeBytes, pending.SourceChecksum,
+                pending.ArtifactChecksum, pending.ChecksumAlgorithm, pending.CreatedAt, pending.SourceMetadataJson, pending.AppliedOptionsJson);
+            foreach (var replica in pending.Replicas)
+            {
+                if (artifact.Replicas.Any(r => r.StorageConnectionId == replica.StorageConnectionId) ||
+                    result.Destinations?.Any(d => d.StorageConnectionId == replica.StorageConnectionId && d.ObjectMayRemain) == true) continue;
+                var (destination, connection) = Resolve(replica.StorageProvider, replica.StorageConnectionId);
+                artifact.AddReplica(NewReplica(destination, connection, artifact.Id, replica.StorageTarget, replica.Key, replica.SizeBytes,
+                    replica.Checksum, replica.ChecksumAlgorithm, "Failed", "None", replica.CreatedAt, null));
+            }
+        }
         var outcomes = new List<BackupDestinationOutcome>();
         foreach (var report in result.Destinations ?? [])
         {
@@ -420,12 +480,16 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
             Guid? replicaId = report.State == BackupDestinationStates.Verified
                 ? replicaIds.TryGetValue((destination.StorageProvider, connection), out var id) ? id : throw new ArgumentException("A verified destination has no replica.")
                 : null;
-            if (artifact is not null && report.ObjectMayRemain)
+            if (report.ObjectMayRemain)
             {
+                if (artifact is null || !ManagedBackupLayout.TryParseStorageKey(report.Key, out var layout) || layout is null ||
+                    layout.TenantId != command.TenantId.Value || layout.JobId != run.JobId || layout.RunId != run.Id || layout.AttemptId != command.AttemptId)
+                    throw new ArgumentException("An orphan requires artifact metadata and an object key owned by this attempt.");
                 // The object exists physically but never verified: it is recorded as a Failed replica so its bytes stay accounted for and retention can remove it.
                 var target = destination.StorageProvider is "sftp" or "google-drive" ? connection.ToString("D") : destination.StorageProvider;
-                artifact.AddReplica(NewReplica(destination, connection, artifact.Id, target, report.Key!, artifact.SizeBytes, artifact.ArtifactChecksum, artifact.ChecksumAlgorithm,
-                    "Failed", "None", report.CompletedAt, null));
+                var orphan = NewReplica(destination, connection, artifact.Id, target, report.Key!, artifact.SizeBytes, artifact.ArtifactChecksum, artifact.ChecksumAlgorithm,
+                    "Failed", "None", report.CompletedAt, null);
+                artifact.AddReplica(orphan);
             }
             outcomes.Add(new BackupDestinationOutcome(Guid.NewGuid(), command.TenantId, run.Id, command.AttemptId, destination.StorageProvider, connection, destination.IsPrimary,
                 destination.StorageExecutionLocation, report.State, report.Upload, report.Verification, report.FailureCode, report.Key, report.ObjectMayRemain, report.StartedAt, report.CompletedAt, replicaId));

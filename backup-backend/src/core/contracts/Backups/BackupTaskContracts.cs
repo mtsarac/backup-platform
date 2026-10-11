@@ -4,6 +4,7 @@ namespace BackupPlatform.Contracts.Backups;
 public static class BackupTaskProtocol
 {
     public const string MultiDestinationCapability = "backup.multi-destination";
+    public const string QuotaBoundedUploadCapability = "backup.quota-bounded-upload";
 }
 
 /// <summary>Immutable execution input. Credential material is resolved locally by reference, never carried in this envelope.</summary>
@@ -51,6 +52,8 @@ public sealed record BackupTaskSnapshot
     public string BackupType { get; init; } = "Full";
     public required BackupExecutionConfiguration Configuration { get; init; }
     public bool CancellationRequested { get; init; }
+    /// <summary>Hard-quota bound checked before any transfer; null means no hard bound, zero refuses storage.</summary>
+    public long? MaxArtifactBytes { get; init; }
 }
 
 public sealed record BackupTaskStartRequest
@@ -89,6 +92,7 @@ public sealed record BackupTaskCompletionRequest
     public Guid LeaseToken { get; init; }
     public string Status { get; init; } = string.Empty;
     public string? FailureCode { get; init; }
+    /// <summary>On failure/cancellation, metadata with no verified replicas is permitted only to account for ObjectMayRemain destinations and schedule their cleanup.</summary>
     public BackupTaskArtifact? Artifact { get; init; }
     public IReadOnlyList<BackupTaskDestinationResult> Destinations { get; init; } = [];
 }

@@ -72,6 +72,22 @@ public sealed class BackupArtifact : ITenantOwned
         RetentionExpiresAt = retention.ExpiresAt(AcceptedAt.Value);
         RetentionGracePeriod = retention.DeleteGracePeriod;
         _sealed = true;
+        QueueOrphanCleanup(acceptedAt);
+    }
+
+    internal void SealOrphans(DateTimeOffset acceptedAt)
+    {
+        if (_replicas.Count == 0 || _replicas.Any(replica => replica.VerificationState == "Verified"))
+            throw new ArgumentException("An unsuccessful artifact may only retain cleanup-bound unverified objects.");
+        AcceptedAt = BackupGuard.Timestamp(acceptedAt);
+        _sealed = true;
+        QueueOrphanCleanup(acceptedAt);
+    }
+
+    internal void QueueOrphanCleanup(DateTimeOffset now)
+    {
+        foreach (var replica in _replicas.Where(replica => replica.VerificationState != "Verified"))
+            replica.RequestDelete(now, BackupDeleteReason.RetentionExpired, TimeSpan.Zero, null);
     }
 
     /// <summary>When the backend accepted the completion that published this artifact (UTC). Null only for artifacts that predate retention.</summary>

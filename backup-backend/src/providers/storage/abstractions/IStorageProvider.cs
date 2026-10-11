@@ -184,13 +184,18 @@ public enum StorageFailureKind
 /// </summary>
 public sealed class StorageException : Exception
 {
-    public StorageException(StorageFailureKind kind, string userMessage, Exception? innerException = null)
+    public StorageException(StorageFailureKind kind, string userMessage, Exception? innerException = null,
+        bool objectMayRemain = false, StorageObjectKey? remainingObjectKey = null)
         : base(userMessage, innerException)
     {
         Kind = kind;
+        ObjectMayRemain = objectMayRemain;
+        RemainingObjectKey = remainingObjectKey;
     }
 
     public StorageFailureKind Kind { get; }
+    public bool ObjectMayRemain { get; }
+    public StorageObjectKey? RemainingObjectKey { get; }
 }
 
 /// <summary>

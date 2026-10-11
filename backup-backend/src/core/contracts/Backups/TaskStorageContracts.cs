@@ -21,6 +21,8 @@ public sealed record TaskStorageResponse
     public string? VerificationStatus { get; init; }
     public string? VerificationMethod { get; init; }
     public string? FailureKind { get; init; }
+    public bool ObjectMayRemain { get; init; }
+    public string? RemainingObjectKey { get; init; }
 }
 
 public sealed record TaskStorageVerifyRequest(long SizeBytes, string Checksum);

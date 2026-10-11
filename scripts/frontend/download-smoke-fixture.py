@@ -39,7 +39,9 @@ def setup(options):
     plan = next((item for item in plans['items'] if not item['isSystem'] and (item['storageLimitBytes'] or 0) >= 20_000_000_000), None)
     if plan is None:
         raise FixtureFailure('Seeded 20 GB-or-larger enabled plan is required for real backup admission.')
-    platform.call('PUT', f'/api/platform/tenants/{tenant_id}/subscription', {'planId': plan['planId']})
+    # Fresh smoke jobs have no size history; transport acceptance uses an explicit unlimited override, not a hard-quota bypass.
+    platform.call('PUT', f'/api/platform/tenants/{tenant_id}/subscription',
+                  {'planId': plan['planId'], 'storageLimitOverride': {'kind': 'unlimited'}})
     owner = {'login': 'download.owner.' + suffix, 'password': 'Smoke-' + uuid.uuid4().hex + '!'}
     _, user = platform.call('POST', '/api/platform/users', {'loginIdentifier': owner['login'], 'password': owner['password'], 'displayName': 'Download Smoke Owner'})
     platform.call('POST', f'/api/platform/tenants/{tenant_id}/memberships', {'userId': user['userId'], 'role': 'Owner'})

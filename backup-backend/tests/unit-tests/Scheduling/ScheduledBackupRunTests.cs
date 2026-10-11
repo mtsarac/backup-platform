@@ -179,6 +179,18 @@ public sealed class ScheduledBackupRunTests
         Assert.Null(Record(outcome, null).RunId);
     }
 
+    [Theory]
+    [InlineData(BackupAdmissionDenialCodes.QuotaSizeUnknown)]
+    [InlineData(BackupAdmissionDenialCodes.QuotaBoundedUploadUnsupported)]
+    public void UnsafeQuotaAdmissionCanBeRecordedWithoutClaimingTheQuotaIsFull(string reason)
+    {
+        var occurrence = new BackupScheduleOccurrence(Guid.NewGuid(), TenantId.New(), Guid.NewGuid(), Occurrence,
+            BackupOccurrenceOutcome.AdmissionDenied, reason, null, Occurrence.AddSeconds(7));
+        Assert.Equal(reason, occurrence.Reason);
+        Assert.Null(occurrence.RunId);
+        Assert.True(BackupAdmissionDenialCodes.IsKnown(occurrence.Reason));
+    }
+
     [Fact]
     public void AnUnknownOutcomeIsRejected() =>
         Assert.Throws<ArgumentException>(() => Record((BackupOccurrenceOutcome)99, null));

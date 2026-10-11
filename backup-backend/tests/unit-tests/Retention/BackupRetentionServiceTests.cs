@@ -107,6 +107,9 @@ public sealed class BackupRetentionServiceTests
 
     [Theory]
     [InlineData(StorageFailureKind.AccessDenied, "access_denied")]
+    [InlineData(StorageFailureKind.AuthenticationFailed, "access_denied")]
+    [InlineData(StorageFailureKind.NetworkUnavailable, "storage_unavailable")]
+    [InlineData(StorageFailureKind.Timeout, "storage_unavailable")]
     [InlineData(StorageFailureKind.InvalidConfiguration, "storage_unavailable")]
     [InlineData(StorageFailureKind.NotFound, "storage_unavailable")]
     [InlineData(StorageFailureKind.Io, "io_error")]

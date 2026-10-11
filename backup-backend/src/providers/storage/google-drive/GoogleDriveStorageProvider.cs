@@ -77,9 +77,11 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
         {
             return await PutCoreAsync(key, content, options, progress, deadline.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && deadline.IsCancellationRequested)
+        catch (OperationCanceledException exception) when (!cancellationToken.IsCancellationRequested && deadline.IsCancellationRequested)
         {
-            throw new StorageException(StorageFailureKind.Timeout, "Google Drive upload exceeded its time limit.");
+            var retained = exception.Data[nameof(StorageException)] as StorageException;
+            throw new StorageException(StorageFailureKind.Timeout, "Google Drive upload exceeded its time limit.", exception,
+                retained?.ObjectMayRemain == true, retained?.RemainingObjectKey);
         }
     }
 
@@ -90,11 +92,15 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
         var cached = await _catalog.FindAsync(_options.TenantId, _options.ConnectionId, key.Value, token).ConfigureAwait(false);
         var published = cached is null ? null : await GetOwnedFileAsync(cached.FileId, key.Value, token).ConfigureAwait(false);
         if (published is not null && await MatchesAsync(published, expected, token).ConfigureAwait(false))
+        {
+            if (!string.Equals(cached!.Checksum, expected.Checksum.Hex, StringComparison.OrdinalIgnoreCase))
+                await PublishAsync(key, published, expected.Checksum, token).ConfigureAwait(false);
             return Metadata(key, published, expected.Checksum);
+        }
         if (published is not null && options.Overwrite == StorageOverwritePolicy.Fail)
             throw new StorageException(StorageFailureKind.AlreadyExists, "Target object already exists in Google Drive.");
 
-        // A completed Drive object survives a catalog failure or process restart; never trust properties without readback.
+        // Unreferenced candidates survive catalog failures and process restarts.
         var candidates = await FindCandidatesAsync(key.Value, token).ConfigureAwait(false);
         foreach (var candidate in candidates.OrderBy(f => f.Id, StringComparer.Ordinal))
         {
@@ -111,15 +117,51 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
         token = staged.CancellationToken;
         token.ThrowIfCancellationRequested();
         var folderId = await EnsureTargetFolderAsync(token).ConfigureAwait(false);
-        var uploaded = await UploadAsync(staged.Path, folderId, key, expected, progress, token).ConfigureAwait(false);
-        var owned = await GetOwnedFileAsync(uploaded.Id, key.Value, token).ConfigureAwait(false);
-        if (owned is null || !await MatchesAsync(owned, expected, token).ConfigureAwait(false))
+        var retainUploaded = published is null;
+        var fileId = cached is { Checksum: null } && published is null ? cached.FileId
+            : await GenerateIdAsync(token).ConfigureAwait(false);
+        if (retainUploaded)
         {
-            Observe(new("integrity_mismatch", uploaded.Id, StorageKeyHash(key.Value)));
-            throw new StorageException(StorageFailureKind.IntegrityMismatch, "Google Drive readback did not match the uploaded backup.");
+            // Persist the locator before Drive can create bytes; retain an old replacement until readback succeeds.
+            await _catalog.SaveAsync(_options.TenantId, _options.ConnectionId, key.Value,
+                new GoogleDriveFileRecord(fileId, folderId, key.Value.Split('/')[^1], expected.SizeBytes, null, null),
+                token).ConfigureAwait(false);
         }
-        await PublishAsync(key, owned, expected.Checksum, token).ConfigureAwait(false);
-        return Metadata(key, owned, expected.Checksum);
+        try
+        {
+            DriveFileInfo uploaded;
+            try
+            {
+                uploaded = await UploadAsync(staged.Path, folderId, fileId, key, expected, progress, token).ConfigureAwait(false);
+            }
+            catch (StorageException exception) when (exception.Kind == StorageFailureKind.AlreadyExists)
+            {
+                var recovered = await GetOwnedFileAsync(fileId, key.Value, token).ConfigureAwait(false);
+                if (recovered is null || !await MatchesAsync(recovered, expected, token).ConfigureAwait(false)) throw;
+                await PublishAsync(key, recovered, expected.Checksum, token).ConfigureAwait(false);
+                return Metadata(key, recovered, expected.Checksum);
+            }
+            var owned = await GetOwnedFileAsync(uploaded.Id, key.Value, token).ConfigureAwait(false);
+            if (owned is null || !await MatchesAsync(owned, expected, token).ConfigureAwait(false))
+            {
+                Observe(new("integrity_mismatch", uploaded.Id, StorageKeyHash(key.Value)));
+                throw new StorageException(StorageFailureKind.IntegrityMismatch, "Google Drive readback did not match the uploaded backup.");
+            }
+            await PublishAsync(key, owned, expected.Checksum, token).ConfigureAwait(false);
+            return Metadata(key, owned, expected.Checksum);
+        }
+        catch (Exception exception) when (retainUploaded)
+        {
+            var kind = exception is StorageException storage ? storage.Kind
+                : exception is OperationCanceledException ? StorageFailureKind.Timeout : StorageFailureKind.Io;
+            var failure = new StorageException(kind, "Google Drive upload failed after reserving its object identity.", exception, true, key);
+            if (exception is OperationCanceledException)
+            {
+                exception.Data[nameof(StorageException)] = failure;
+                throw;
+            }
+            throw failure;
+        }
     }
 
     private async Task PublishAsync(StorageObjectKey key, DriveFileInfo file, ContentChecksum checksum, CancellationToken token)
@@ -182,13 +224,21 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
 
     public async Task<bool> DeleteAsync(StorageObjectKey key, CancellationToken cancellationToken)
     {
-        var fileId = await ResolveFileIdAsync(key, cancellationToken).ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(key);
+        var cached = await _catalog.FindAsync(_options.TenantId, _options.ConnectionId, key.Value, cancellationToken).ConfigureAwait(false);
+        var fileId = cached?.FileId;
+        if (fileId is null)
+        {
+            var candidates = await FindCandidatesAsync(key.Value, cancellationToken).ConfigureAwait(false);
+            if (candidates.Count > 1)
+                throw new StorageException(StorageFailureKind.AlreadyExists, "Ambiguous Google Drive objects require reconciliation.");
+            fileId = candidates.SingleOrDefault()?.Id;
+        }
         if (fileId is null) return false;
         // Ownership is checked again immediately before the destructive operation.
         if (await GetOwnedFileAsync(fileId, key.Value, cancellationToken).ConfigureAwait(false) is null) return false;
         using var response = await SendAsync(() => new(HttpMethod.Delete, FileUrl(fileId)), true, cancellationToken).ConfigureAwait(false);
         if (response.StatusCode != HttpStatusCode.NotFound) await EnsureSuccessAsync(response, cancellationToken).ConfigureAwait(false);
-        await _catalog.DeleteAsync(_options.TenantId, _options.ConnectionId, key.Value, fileId, cancellationToken).ConfigureAwait(false);
         return response.StatusCode != HttpStatusCode.NotFound;
     }
 
@@ -342,10 +392,10 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
         catch { response.Dispose(); throw; }
     }
 
-    private async Task<DriveFileInfo> UploadAsync(string path, string folder, StorageObjectKey key,
+    private async Task<DriveFileInfo> UploadAsync(string path, string folder, string fileId, StorageObjectKey key,
         StorageVerificationExpectation expected, IProgress<long>? progress, CancellationToken token)
     {
-        var session = await InitiateAsync(folder, key, expected, token).ConfigureAwait(false);
+        var session = await InitiateAsync(folder, fileId, key, expected, token).ConfigureAwait(false);
         var failures = 0;
         var restarts = 0;
         Stopwatch? retryClock = null;
@@ -378,16 +428,20 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
                     var file = await ReadJsonAsync<DriveFileInfo>(response, token).ConfigureAwait(false);
                     if (file is null || string.IsNullOrWhiteSpace(file.Id))
                         throw new StorageException(StorageFailureKind.Io, "Google Drive upload returned invalid metadata.");
+                    if (!string.Equals(file.Id, fileId, StringComparison.Ordinal))
+                        throw new StorageException(StorageFailureKind.IntegrityMismatch, "Google Drive upload returned an unexpected object identity.");
                     progress?.Report(expected.SizeBytes);
                     return file;
                 }
                 if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone)
                 {
+                    var completed = await GetOwnedFileAsync(fileId, key.Value, token).ConfigureAwait(false);
+                    if (completed is not null) return completed;
                     if (++restarts > _options.MaxSessionRestarts)
                         throw new StorageException(StorageFailureKind.NetworkUnavailable, "Google Drive upload session restart limit exceeded.");
                     retryClock ??= Stopwatch.StartNew();
                     await DelayRetryAsync(response, ++failures, retryClock, token).ConfigureAwait(false);
-                    session = await InitiateAsync(folder, key, expected, token).ConfigureAwait(false);
+                    session = await InitiateAsync(folder, fileId, key, expected, token).ConfigureAwait(false);
                     offset = 0;
                     query = false;
                     continue;
@@ -427,7 +481,18 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
         }
     }
 
-    private async Task<string> InitiateAsync(string folder, StorageObjectKey key, StorageVerificationExpectation expected, CancellationToken token)
+    private async Task<string> GenerateIdAsync(CancellationToken token)
+    {
+        using var response = await SendAsync(() => new(HttpMethod.Get,
+            $"{ApiBase}/generateIds?count=1&space=drive&type=files"), true, token).ConfigureAwait(false);
+        await EnsureSuccessAsync(response, token).ConfigureAwait(false);
+        var generated = await ReadJsonAsync<DriveFileIds>(response, token).ConfigureAwait(false);
+        if (generated?.Ids is not [var id] || string.IsNullOrWhiteSpace(id))
+            throw new StorageException(StorageFailureKind.Io, "Google Drive returned an invalid object identity.");
+        return id;
+    }
+
+    private async Task<string> InitiateAsync(string folder, string fileId, StorageObjectKey key, StorageVerificationExpectation expected, CancellationToken token)
     {
         using var response = await SendAsync(() =>
         {
@@ -436,7 +501,7 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
             request.Headers.Add("X-Upload-Content-Length", expected.SizeBytes.ToString(CultureInfo.InvariantCulture));
             request.Content = JsonContent.Create(new
             {
-                name = key.Value.Split('/')[^1], parents = new[] { folder },
+                id = fileId, name = key.Value.Split('/')[^1], parents = new[] { folder },
                 appProperties = new Dictionary<string, string>
                 {
                     ["storageKeyHash"] = StorageKeyHash(key.Value), ["tenantId"] = _options.TenantId.ToString("N"),
@@ -615,6 +680,11 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
         new(new StorageLocation(Id, key), file.Size, checksum, file.ModifiedTime);
     private static ContentChecksum? Checksum(string? hex) => hex is { Length: 64 } && hex.All(Uri.IsHexDigit)
         ? new ContentChecksum(ChecksumAlgorithm.Sha256, hex) : null;
+
+    private sealed class DriveFileIds
+    {
+        [JsonPropertyName("ids")] public string[]? Ids { get; set; }
+    }
 
     private sealed class DriveFileList
     {

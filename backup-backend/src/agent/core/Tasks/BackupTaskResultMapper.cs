@@ -24,15 +24,16 @@ public enum BackupTaskFailureCode
     UnsupportedCapability,
     AuthenticationFailed,
     PermissionDenied,
-    StagingInvalid
+    StagingInvalid,
+    QuotaExceeded
 }
 
 internal static class BackupTaskResultMapper
 {
     public static BackupTaskCompletionRequest Map(BackupTaskSnapshot task, DatabaseBackupPipelineResult result)
     {
-        var artifact = result.Status == DatabaseBackupStatus.Succeeded ? MapArtifact(task, result) : null;
-        if (result.Status == DatabaseBackupStatus.Succeeded && artifact is null)
+        var artifact = MapArtifact(task, result);
+        if (result.Status == DatabaseBackupStatus.Succeeded && (artifact is null || artifact.Replicas.Count == 0))
         {
             return Failure(task.LeaseToken, BackupTaskFailureCode.InternalError);
         }
@@ -82,7 +83,9 @@ internal static class BackupTaskResultMapper
         FailureCode = code.ToString()
     };
 
-    private static BackupTaskFailureCode MapFailure(BackupFailure? failure) => failure?.Kind == BackupFailureKind.Cancelled
+    private static BackupTaskFailureCode MapFailure(BackupFailure? failure) => failure?.ReasonCode == BackupPipelineReasons.QuotaExceeded
+        ? BackupTaskFailureCode.QuotaExceeded
+        : failure?.Kind == BackupFailureKind.Cancelled
         ? BackupTaskFailureCode.Cancelled
         : failure?.Cause switch
         {
@@ -117,7 +120,7 @@ internal static class BackupTaskResultMapper
             return null;
         }
         var copies = result.Destinations.Where(destination => IsSound(destination, artifact)).ToArray();
-        if (copies.Length == 0)
+        if (copies.Length == 0 && !result.Destinations.Any(destination => destination.ObjectMayRemain))
         {
             return null;
         }

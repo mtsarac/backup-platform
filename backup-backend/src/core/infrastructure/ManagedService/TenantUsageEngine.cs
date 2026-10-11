@@ -2,6 +2,7 @@ using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Storage;
 using BackupPlatform.Infrastructure.Persistence;
+using BackupPlatform.Infrastructure.Storage;
 using BackupPlatform.ManagedService.Quota;
 using BackupPlatform.ManagedService.Subscriptions;
 using Microsoft.EntityFrameworkCore;
@@ -71,13 +72,15 @@ internal static class TenantUsageEngine
     }
 
     /// <summary>Usage from the artifacts and replicas, counted by <paramref name="policy"/>. Streams the tenant's occupying replicas once; nothing is summed in SQL, so the rule exists only in the accumulator.</summary>
-    public static async Task<long> ComputeUsedAsync(PlatformDbContext context, TenantId tenantId, QuotaPolicy policy, CancellationToken cancellationToken)
+    public static async Task<long> ComputeUsedAsync(PlatformDbContext context, TenantId tenantId, QuotaPolicy policy, CancellationToken cancellationToken, Guid? runId = null, Guid? excludeAttemptId = null)
     {
         var accumulator = QuotaAccounting.NewAccumulator(policy);
         var occupying = BackupReplicaStorage.OccupyingStatuses.ToArray();
         var rows = from replica in context.BackupReplicas.AsNoTracking()
                    where replica.TenantId == tenantId && occupying.Contains(replica.Status)
                    join artifact in context.BackupArtifacts.AsNoTracking() on new { replica.ArtifactId, replica.TenantId } equals new { ArtifactId = artifact.Id, artifact.TenantId }
+                   where runId == null || context.BackupRunAttempts.Any(attempt => attempt.TenantId == tenantId && attempt.Id == artifact.AttemptId && attempt.RunId == runId)
+                   where excludeAttemptId == null || artifact.AttemptId != excludeAttemptId
                    join connection in context.StorageConnections.AsNoTracking() on new { replica.StorageConnectionId, replica.TenantId } equals new { StorageConnectionId = connection.Id, connection.TenantId }
                    select new
                    {
@@ -91,9 +94,20 @@ internal static class TenantUsageEngine
         return accumulator.TotalBytes;
     }
 
-    public static async Task<long> ComputeReservedAsync(PlatformDbContext context, TenantId tenantId, CancellationToken cancellationToken) =>
-        await context.QuotaReservations.AsNoTracking().Where(row => row.TenantId == tenantId && row.ReleasedAt == null)
-            .SumAsync(row => (long?)row.Bytes, cancellationToken) ?? 0;
+    public static async Task<long> ComputeReservedAsync(PlatformDbContext context, TenantId tenantId, CancellationToken cancellationToken)
+    {
+        var policy = await ResolvePolicyAsync(context, tenantId, cancellationToken);
+        var reservations = await context.QuotaReservations.AsNoTracking().Where(row => row.TenantId == tenantId && row.ReleasedAt == null)
+            .Select(row => new { row.RunId, row.Bytes }).ToListAsync(cancellationToken);
+        var total = 0L;
+        foreach (var reservation in reservations)
+        {
+            var consumed = await ComputeUsedAsync(context, tenantId, policy, cancellationToken, reservation.RunId);
+            var remaining = Math.Max(0, reservation.Bytes - consumed);
+            total = total > long.MaxValue - remaining ? long.MaxValue : total + remaining;
+        }
+        return total;
+    }
 
     /// <summary>Replaces the projection with the given figures (insert or overwrite). Idempotent.</summary>
     public static Task WriteAsync(
@@ -146,14 +160,15 @@ internal static class TenantUsageEngine
             WHERE "TenantId" = {tenantId.Value}
             """, cancellationToken);
 
-    /// <summary>ReservedBytes is always the sum of the unreleased reservations, so the figure is recomputed from them rather than adjusted.</summary>
-    public static Task RefreshReservedAsync(PlatformDbContext context, TenantId tenantId, CancellationToken cancellationToken) =>
-        context.Database.ExecuteSqlInterpolatedAsync($"""
-            UPDATE tenant_storage_usage
-            SET "ReservedBytes" = COALESCE((SELECT SUM(r."Bytes") FROM quota_reservations r WHERE r."TenantId" = {tenantId.Value} AND r."ReleasedAt" IS NULL), 0),
-                "Revision" = "Revision" + 1
+    /// <summary>Only unspent reservation bytes remain reserved: copies already persisted are counted in UsedBytes.</summary>
+    public static async Task RefreshReservedAsync(PlatformDbContext context, TenantId tenantId, CancellationToken cancellationToken)
+    {
+        var reserved = await ComputeReservedAsync(context, tenantId, cancellationToken);
+        await context.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE tenant_storage_usage SET "ReservedBytes" = {reserved}, "Revision" = "Revision" + 1
             WHERE "TenantId" = {tenantId.Value}
             """, cancellationToken);
+    }
 
     public static Task<int> InsertReservationAsync(
         PlatformDbContext context, TenantId tenantId, Guid runId, long bytes, DateTimeOffset now, TimeSpan timeToLive, CancellationToken cancellationToken)
@@ -179,10 +194,8 @@ internal static class TenantUsageEngine
     }
 
     /// <summary>
-    /// Releases reservations nothing will ever release: expired ones, ones of a run that already ended (a missed callback), and ones of a run that was
-    /// never created. A reservation past its time-to-live is kept while its run holds a live lease (Leased or Running attempt whose lease has not run
-    /// out): a renewing agent is proof the run is alive. The exemption is bounded by that lease, so a run that stops renewing is released again by the
-    /// next call. Returns how many were released; the caller refreshes ReservedBytes.
+    /// A run can still be claimed or retried without admission while nonterminal, so its reservation cannot expire with its lease.
+    /// Only abandoned reservations without a run expire; terminal runs and orphaned admissions are released below.
     /// </summary>
     public static async Task<int> ReleaseStaleReservationsAsync(PlatformDbContext context, TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken)
     {
@@ -191,8 +204,8 @@ internal static class TenantUsageEngine
         var released = await context.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE quota_reservations q SET "ReleasedAt" = {at}, "ReleaseReason" = 'expired'
             WHERE q."TenantId" = {tenantId.Value} AND q."ReleasedAt" IS NULL AND q."ExpiresAt" <= {at}
-              AND NOT EXISTS (SELECT 1 FROM backup_run_attempts a
-                              WHERE a."RunId" = q."RunId" AND a."TenantId" = q."TenantId" AND a."Status" IN (2, 3) AND a."LeaseExpiresAt" > {at})
+              AND NOT EXISTS (SELECT 1 FROM backup_runs r
+                              WHERE r."Id" = q."RunId" AND r."TenantId" = q."TenantId" AND r."Status" NOT IN (4, 5, 6, 7))
             """, cancellationToken);
         released += await context.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE quota_reservations q SET "ReleasedAt" = {at}, "ReleaseReason" = 'run_finished'
@@ -206,6 +219,47 @@ internal static class TenantUsageEngine
             """, cancellationToken);
         return released;
     }
+
+    internal static async Task<int?> CountCopiesAsync(
+        PlatformDbContext context, TenantId tenantId, BackupConfiguration configuration, QuotaPolicy policy, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var copies = 0;
+        foreach (var destination in configuration.ResolveEffectiveDestinations())
+        {
+            var connection = destination.StorageConnectionId is { } id
+                ? await context.StorageConnections.AsNoTracking().SingleOrDefaultAsync(row => row.TenantId == tenantId && row.Id == id, cancellationToken)
+                : await StorageConnectionProvisioner.ResolveDefaultAsync(context, tenantId, destination.StorageProvider, now, cancellationToken);
+            if (connection is null) return null;
+            if (!policy.IncludedStorageScopes.Matches(
+                new ReplicaStorageFacts(connection.ProviderType, connection.Ownership, connection.QuotaScope, connection.Id))) continue;
+            if (policy.AccountingMode == QuotaAccountingMode.LogicalArtifactBytes) return 1;
+            copies++;
+        }
+        return copies;
+    }
+
+    /// <summary>The hard run's remaining reserved artifact bound; zero fails closed when its reservation is absent or exhausted.</summary>
+    internal static async Task<long?> ReadRunMaxArtifactBytesAsync(
+        PlatformDbContext context, BackupRun run, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var policy = await ResolvePolicyAsync(context, run.TenantId, cancellationToken);
+        var entitlement = await PostgreSqlTenantEntitlementReader.ResolveAsync(context, run.TenantId, now, cancellationToken);
+        if (policy.EnforcementMode != QuotaEnforcementMode.BlockNewBackups || entitlement.StorageLimit is not { IsUnlimited: false }) return null;
+        var copies = await CountCopiesAsync(context, run.TenantId, run.Configuration, policy, now, cancellationToken);
+        if (copies == 0) return null;
+        if (copies is null) return 0;
+        var reserved = await context.QuotaReservations.AsNoTracking()
+            .Where(row => row.TenantId == run.TenantId && row.RunId == run.Id && row.ReleasedAt == null)
+            .Select(row => (long?)row.Bytes).SingleOrDefaultAsync(cancellationToken) ?? 0;
+        var consumed = await ComputeUsedAsync(context, run.TenantId, policy, cancellationToken, run.Id, run.CurrentAttempt.Id);
+        return Math.Max(0, reserved - consumed) / copies.Value;
+    }
+
+    internal static Task<bool> SupportsQuotaBoundedUploadAsync(
+        PlatformDbContext context, TenantId tenantId, AgentId agentId, CancellationToken cancellationToken) =>
+        context.AgentCapabilities.AsNoTracking().AnyAsync(record => record.TenantId == tenantId && record.AgentId == agentId
+            && record.Identifier == BackupPlatform.Contracts.Backups.BackupTaskProtocol.QuotaBoundedUploadCapability
+            && record.Support == BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, cancellationToken);
 
     /// <summary>What the scope selectors can see of each of the tenant's storage connections.</summary>
     public static async Task<Dictionary<Guid, ReplicaStorageFacts>> LoadConnectionFactsAsync(PlatformDbContext context, TenantId tenantId, CancellationToken cancellationToken) =>

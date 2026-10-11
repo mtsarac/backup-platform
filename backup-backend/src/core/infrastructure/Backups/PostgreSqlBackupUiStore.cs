@@ -47,7 +47,16 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
         var since = now.AddHours(-24);
         var active = await runs.CountAsync(run => run.Status == BackupStatus.Pending || run.Status == BackupStatus.Leased || run.Status == BackupStatus.Running || run.Status == BackupStatus.RetryPending, cancellationToken);
         var failed = await runs.CountAsync(run => run.CompletedAt >= since && (run.Status == BackupStatus.Failed || run.Status == BackupStatus.AgentLost), cancellationToken);
-        var succeeded = await runs.CountAsync(run => run.CompletedAt >= since && run.Status == BackupStatus.Succeeded, cancellationToken);
+        var successful = await runs.Where(run => run.CompletedAt >= since && run.Status == BackupStatus.Succeeded)
+            .Select(run => new
+            {
+                run.Configuration,
+                VerifiedReplicas = run.Attempts.Where(attempt => attempt.Number == run.CurrentAttemptNumber)
+                    .SelectMany(attempt => attempt.DestinationOutcomes).Count(outcome => outcome.State == BackupDestinationStates.Verified)
+            }).ToListAsync(cancellationToken);
+        // Completion outcomes are immutable: intentional retention must not become a failed replication execution.
+        var replicationInsufficient = successful.Count(run => run.Configuration.RequiredVerifiedReplicaCount > 1 &&
+            run.VerifiedReplicas < run.Configuration.RequiredVerifiedReplicaCount);
         var artifacts = context.BackupArtifacts.AsNoTracking().Where(artifact => artifact.TenantId == tenantId);
         var total = await artifacts.CountAsync(cancellationToken);
         var running = await runs.CountAsync(run => run.Status == BackupStatus.Running, cancellationToken);
@@ -61,7 +70,7 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
         var recent = await PostgreSqlBackupRunStore.Runs(context).AsNoTracking().Where(run => run.TenantId == tenantId)
             .OrderByDescending(run => run.CreatedAt).ThenBy(run => run.Id).Take(8).ToListAsync(cancellationToken);
         return new(new(jobs.Count, jobs.Count(job => job.Enabled), jobs.Count(job => job.Enabled && job.Schedule is { Enabled: true })),
-            new(active, failed, succeeded, running, retryPending, cancellationRequested, storageFailed), new(total, size, pending, deleteFailed), await RunViewsAsync(context, tenantId, recent, cancellationToken),
+            new(active, failed, successful.Count, running, retryPending, cancellationRequested, storageFailed, replicationInsufficient), new(total, size, pending, deleteFailed), await RunViewsAsync(context, tenantId, recent, cancellationToken),
             jobs.Where(job => job.NextOccurrenceAt is not null).OrderBy(job => job.NextOccurrenceAt).Take(5).ToArray());
     }
 

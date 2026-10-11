@@ -18,7 +18,7 @@ public sealed record ManagedStorageKey(string Prefix, Guid TenantId, Guid JobId,
 /// <item><description>Staged and stored artifact: <c>{database}_{yyyyMMddTHHmmssZ}_{8 hex}_FULL.bak</c>.</description></item>
 /// <item><description>Storage key: <c>[{prefix}/]{tenant:N}/{job:N}/{run:N}/{attempt:N}/{artifact name}</c>. The four identifiers are what lets the
 /// backend prove which attempt a stored file belongs to.</description></item>
-/// <item><description>Unpublished upload: <c>.{artifact name}.{32 hex}.partial</c> in the same directory as the object it was becoming.</description></item>
+/// <item><description>Unpublished upload: <c>.{artifact name}.{32 hex}.partial</c>, or SFTP's deterministic <c>.{artifact name}.partial</c>, in the same directory.</description></item>
 /// </list>
 /// </summary>
 public static class ManagedBackupLayout
@@ -28,7 +28,7 @@ public static class ManagedBackupLayout
 
     // \z, not $: in .NET `$` also matches before a trailing newline, and a name with a newline is not a managed name.
     private static readonly Regex ArtifactName = new($@"^{ArtifactPattern}\z", RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
-    private static readonly Regex PartialName = new($@"^\.{ArtifactPattern}\.[0-9a-f]{{32}}\.partial\z", RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+    private static readonly Regex PartialName = new($@"^\.{ArtifactPattern}(?:\.[0-9a-f]{{32}})?\.partial\z", RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
     /// <summary>
     /// The staged file name. It is derived from untrusted input (the database name), so it is reduced to a safe, portable alphabet;

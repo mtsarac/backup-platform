@@ -71,8 +71,13 @@ public sealed class PostgreSqlBackupAdmissionPolicy(
             await TenantUsageEngine.RefreshReservedAsync(context, request.TenantId, cancellationToken);
         }
         var (usage, _) = await TenantUsageEngine.EnsureCurrentAsync(context, request.TenantId, policy, request.Now, cancellationToken);
+        if (await context.QuotaReservations.AsNoTracking().AnyAsync(reservation => reservation.TenantId == request.TenantId
+            && reservation.RunId == request.RunId && reservation.ReleasedAt == null, cancellationToken))
+        {
+            return BackupAdmissionDecision.Admitted;
+        }
         var estimate = await EstimateAsync(context, request, policy, cancellationToken);
-        var decision = QuotaAdmissionDecision.Decide(entitlement, policy, usage.UsedBytes, usage.ReservedBytes, estimate);
+        var decision = QuotaAdmissionDecision.Decide(entitlement, policy, usage.UsedBytes, usage.ReservedBytes, estimate ?? 0);
         if (!decision.Allowed)
         {
             logger.LogWarning(
@@ -81,7 +86,18 @@ public sealed class PostgreSqlBackupAdmissionPolicy(
                 policy.Key, policy.Version, request.TriggerType, request.RunId);
             return BackupAdmissionDecision.Denied(decision.DenialCode!);
         }
-        if (estimate > 0 && await TenantUsageEngine.InsertReservationAsync(context, request.TenantId, request.RunId, estimate, request.Now, quota.ReservationTimeToLive, cancellationToken) > 0)
+        if (estimate is null && policy.EnforcementMode == QuotaEnforcementMode.BlockNewBackups)
+        {
+            return BackupAdmissionDecision.Denied(BackupAdmissionDenialCodes.QuotaSizeUnknown);
+        }
+        if (estimate is > 0 && policy.EnforcementMode == QuotaEnforcementMode.BlockNewBackups)
+        {
+            var agentId = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == request.TenantId && job.Id == request.JobId)
+                .Select(job => job.AgentId).SingleAsync(cancellationToken);
+            if (!await TenantUsageEngine.SupportsQuotaBoundedUploadAsync(context, request.TenantId, agentId, cancellationToken))
+                return BackupAdmissionDecision.Denied(BackupAdmissionDenialCodes.QuotaBoundedUploadUnsupported);
+        }
+        if (estimate is > 0 && await TenantUsageEngine.InsertReservationAsync(context, request.TenantId, request.RunId, estimate.Value, request.Now, quota.ReservationTimeToLive, cancellationToken) > 0)
         {
             await TenantUsageEngine.RefreshReservedAsync(context, request.TenantId, cancellationToken);
             logger.LogInformation("Quota reservation created for tenant {TenantId}, run {RunId}: {ReservedBytes} bytes (state {State}).",
@@ -106,21 +122,21 @@ public sealed class PostgreSqlBackupAdmissionPolicy(
         await transaction.CommitAsync(cancellationToken);
     }
 
-    /// <summary>What the run is expected to add: what the same job's most recent artifact contributes under the policy. No history, or a policy that does not count where the job stores, is 0.</summary>
-    private static async Task<long> EstimateAsync(PlatformDbContext context, BackupAdmissionRequest request, QuotaPolicy policy, CancellationToken cancellationToken)
+    /// <summary>History supplies only the artifact size; the current resolved destination snapshot supplies its counted copies.</summary>
+    private static async Task<long?> EstimateAsync(PlatformDbContext context, BackupAdmissionRequest request, QuotaPolicy policy, CancellationToken cancellationToken)
     {
-        var previous = await (from artifact in context.BackupArtifacts.AsNoTracking()
-                              join attempt in context.BackupRunAttempts.AsNoTracking() on new { artifact.AttemptId, artifact.TenantId } equals new { AttemptId = attempt.Id, attempt.TenantId }
-                              join run in context.BackupRuns.AsNoTracking() on new { attempt.RunId, attempt.TenantId } equals new { RunId = run.Id, run.TenantId }
-                              where run.TenantId == request.TenantId && run.JobId == request.JobId
-                              orderby artifact.CreatedAt descending, artifact.Id descending
-                              select (Guid?)artifact.Id).FirstOrDefaultAsync(cancellationToken);
-        if (previous is not { } artifactId)
-        {
-            return 0;
-        }
-        return await TenantUsageEngine.ReadArtifactAsync(context, request.TenantId, artifactId, cancellationToken) is { } stored
-            ? QuotaAccounting.Estimate(policy, stored.Replicas.Select(stored.ToFact))
-            : 0;
+        var configuration = request.Configuration ?? await context.BackupJobs.AsNoTracking()
+            .Where(job => job.TenantId == request.TenantId && job.Id == request.JobId)
+            .Select(job => job.Configuration).SingleAsync(cancellationToken);
+        var copies = await TenantUsageEngine.CountCopiesAsync(context, request.TenantId, configuration, policy, request.Now, cancellationToken);
+        if (copies == 0) return 0;
+        if (copies is null) return null;
+        var size = await (from artifact in context.BackupArtifacts.AsNoTracking()
+                          join attempt in context.BackupRunAttempts.AsNoTracking() on new { artifact.AttemptId, artifact.TenantId } equals new { AttemptId = attempt.Id, attempt.TenantId }
+                          join run in context.BackupRuns.AsNoTracking() on new { attempt.RunId, attempt.TenantId } equals new { RunId = run.Id, run.TenantId }
+                          where run.TenantId == request.TenantId && run.JobId == request.JobId
+                          orderby artifact.CreatedAt descending, artifact.Id descending
+                          select (long?)artifact.SizeBytes).FirstOrDefaultAsync(cancellationToken);
+        return size is not > 0 ? null : size > long.MaxValue / copies.Value ? long.MaxValue : size.Value * copies.Value;
     }
 }

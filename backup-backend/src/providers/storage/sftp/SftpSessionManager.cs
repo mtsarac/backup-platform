@@ -134,10 +134,6 @@ public sealed class SftpSessionManager
         catch (SshAuthenticationException ex)
         {
             client.Dispose();
-            if (!hostKeyValidated && client.IsConnected == false)
-            {
-                // In some SSH.NET flows, failing host key drops before or surfaces during auth
-            }
             throw new StorageException(StorageFailureKind.AuthenticationFailed, "SFTP authentication failed.", ex);
         }
         catch (Exception ex)

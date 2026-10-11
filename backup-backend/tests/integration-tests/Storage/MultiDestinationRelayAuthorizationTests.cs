@@ -111,6 +111,25 @@ public sealed class MultiDestinationRelayAuthorizationTests(PostgreSqlFixture fi
     }
 
     [Fact]
+    public async Task Hard_quota_relay_refuses_missing_reservations_and_oversized_artifacts_before_provider_upload()
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture);
+        var arrangement = await ArrangeAsync(scenario, multi: false);
+        var quota = new BackupPlatform.IntegrationTests.Quota.QuotaWorld(fixture);
+        await quota.AssignAsync(scenario.Setup.Tenant.Id, await quota.PlanAsync(1000));
+        await AssertRefusedAsync(await UploadAsync(arrangement, arrangement.Sftp), "quota_exceeded");
+        await BackupPlatform.IntegrationTests.Quota.AdmissionTestKit.InsertReservationAsync(fixture, scenario.Setup.Tenant.Id,
+            arrangement.RunId, 2, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(6));
+        await AssertRefusedAsync(await UploadAsync(arrangement, arrangement.Sftp), "quota_exceeded");
+        await using (var context = fixture.CreatePlatformContext())
+        {
+            await context.Database.ExecuteSqlInterpolatedAsync($"UPDATE quota_reservations SET \"Bytes\" = 3 WHERE \"RunId\" = {arrangement.RunId}");
+        }
+        // At the exact bound it reaches normal request validation, still without contacting a provider.
+        AssertAuthorized(await UploadAsync(arrangement, arrangement.Sftp));
+    }
+
+    [Fact]
     public async Task Every_relayed_snapshot_destination_is_authorized_for_its_own_connection_and_only_that()
     {
         await using var scenario = await BackupApiScenario.CreateAsync(fixture);

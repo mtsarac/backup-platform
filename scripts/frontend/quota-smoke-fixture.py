@@ -14,6 +14,7 @@ The agent client is a throwaway protocol client for this smoke; it is not a prod
 Secrets are read from / written to owner-only (0600) files and are never printed.
 """
 import argparse
+import hashlib
 import http.cookiejar
 import json
 import os
@@ -112,8 +113,12 @@ def setup(options):
     _, token = tenant_admin.call('POST', f'/api/tenants/{tenant_id}/agent-enrollment-tokens', {})
     _, enrolled = Api(options.server, options.certificate).call('POST', '/api/agent/enroll', {
         'enrollmentToken': token['token'], 'installationId': str(uuid.uuid4()), 'agentVersion': '1.2.3', 'protocolVersion': '1.0',
-        'platform': 'linux', 'hostName': 'quota-smoke-host', 'capabilities': ['backup.file-system']})
+        'platform': 'linux', 'hostName': 'quota-smoke-host', 'capabilities': ['backup.file-system', 'backup.quota-bounded-upload']})
     agent = {'agentId': enrolled['agentId'], 'credentialId': enrolled['credential']['credentialId'], 'secret': enrolled['credential']['secret']}
+    reports = [{'identifier': key, 'support': 'Supported'} for key in ('backup.file-system', 'backup.quota-bounded-upload')]
+    canonical = ''.join(f'{len(report["identifier"])}:{report["identifier"]};9:Supported;0;\n' for report in reports)
+    tenant_admin.call('PUT', '/api/agent/capabilities',
+                      {'revision': 'c1-' + hashlib.sha256(canonical.encode()).hexdigest()[:48], 'capabilities': reports}, agent_headers(agent))
     _, job = tenant_admin.call('POST', f'/api/tenants/{tenant_id}/backup-jobs', {
         'name': 'Quota smoke backup', 'agentId': agent['agentId'], 'overlapPolicy': 'Queue',
         'configuration': {'engine': 'mssql', 'database': 'master', 'host': 'sql-server', 'integratedSecurity': True, 'storageExecutionLocation': 'Backend'}})
@@ -131,6 +136,8 @@ def publish(options):
     if not tasks:
         raise FixtureFailure('There is no pending run to complete; start a run in the UI first.')
     backup = tasks[0]['backup']
+    if backup.get('maxArtifactBytes') is not None and options.bytes > backup['maxArtifactBytes']:
+        raise FixtureFailure('Synthetic artifact exceeds the hard-quota bound; choose a permitted size.')
     attempt = backup['attemptId']
     lease = backup['leaseToken']
     api.call('POST', f'/api/agent/tasks/{attempt}/start', {'leaseToken': lease, 'softwareVersion': '1.2.3', 'protocolVersion': '1.0', 'platform': 'linux'}, agent_headers(agent))

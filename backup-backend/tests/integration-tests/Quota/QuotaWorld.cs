@@ -85,6 +85,13 @@ internal sealed class QuotaWorld(PostgreSqlFixture database)
     public async Task<StoreAgent> AgentAsync(long? limitBytes = 5 * Gb, string? policyKey = null, bool subscribe = true)
     {
         var agent = await Harness.AddAgentAsync();
+        await using (var context = Database.CreatePlatformContext())
+        {
+            context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(agent.AgentId, agent.TenantId,
+                BackupPlatform.Contracts.Backups.BackupTaskProtocol.QuotaBoundedUploadCapability,
+                BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, null, "quota", T0));
+            await context.SaveChangesAsync();
+        }
         if (subscribe)
         {
             await AssignAsync(agent.TenantId, await PlanAsync(limitBytes, policyKey));
@@ -103,13 +110,23 @@ internal sealed class QuotaWorld(PostgreSqlFixture database)
     }
 
     /// <summary>
-    /// Publishes an artifact through the REAL lifecycle (start run → claim → start → complete with an artifact), so the incremental projection is
-    /// exercised exactly as in production. Admission is the real policy unless <paramref name="store"/> was built with another. Returns the run and the artifact id.
+    /// Seeds historical usage through the real claim/start/completion lifecycle, with explicit test-only admission bypass.
+    /// New-run admission itself is exercised separately by the calling test.
     /// </summary>
     public async Task<(BackupRun Run, Guid ArtifactId)> PublishAsync(
         PostgreSqlBackupRunStore store, StoreAgent agent, BackupJob job, long sizeBytes, IReadOnlyList<ReplicaSpec> replicas, DateTimeOffset at, string? key = null)
     {
-        var started = await store.StartRunAsync(agent.TenantId, job.Id, key ?? $"run-{Guid.NewGuid():N}", at, default);
+        await using (var capabilityContext = Database.CreatePlatformContext())
+        {
+            var capability = BackupPlatform.Contracts.Backups.BackupTaskProtocol.QuotaBoundedUploadCapability;
+            if (!await capabilityContext.AgentCapabilities.AnyAsync(record => record.AgentId == agent.AgentId && record.Identifier == capability))
+            {
+                capabilityContext.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(agent.AgentId, agent.TenantId,
+                    capability, BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, null, "historical-fixture", at));
+                await capabilityContext.SaveChangesAsync();
+            }
+        }
+        var started = await RunStore(AdmitAllBackupAdmission.Instance).StartRunAsync(agent.TenantId, job.Id, key ?? $"run-{Guid.NewGuid():N}", at, default);
         Assert.Equal(BackupStartOutcome.Started, started.Outcome);
         var claim = await BackupStoreHarness.ClaimAsync(store, agent, at);
         Assert.NotNull(claim);

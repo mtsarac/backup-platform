@@ -368,9 +368,16 @@ public sealed class UpgradeMigrationIntegrationTests(UpgradedQuotaDatabase upgra
     }
 
     [Fact]
-    public async Task ATenantOnTheFiveGbPlanKeepsBackingUpAfterTheUpgradeAndReservesWhatItsLastBackupSuggests()
+    public async Task ATenantOnTheFiveGbPlanReservesHistoryAfterItsAgentAdvertisesBoundedUploads()
     {
         var tenant = upgraded.FiveGbAdmit;
+        await using (var context = PlatformDbContext.CreateForPlatformOperations(upgraded.Options()))
+        {
+            context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(new AgentId(tenant.AgentId), tenant.TenantId,
+                BackupPlatform.Contracts.Backups.BackupTaskProtocol.QuotaBoundedUploadCapability,
+                BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, null, "upgraded", Now));
+            await context.SaveChangesAsync();
+        }
 
         var started = await upgraded.RunStore().StartRunAsync(tenant.TenantId, tenant.JobId, $"after-upgrade-{Guid.NewGuid():N}", Now, default);
 

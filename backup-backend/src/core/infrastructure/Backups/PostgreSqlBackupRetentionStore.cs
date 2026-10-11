@@ -81,6 +81,9 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
                OR ("Status" = 'Deleting' AND ("DeleteLeaseExpiresAt" <= {now}
                    OR ("ExecutionLocation" = 'Agent' AND "DeleteLeaseToken" IS NULL AND "DeleteNextAttemptAt" <= {now}))))
               AND NOT EXISTS (SELECT 1 FROM restore_replica_pins pin WHERE pin."ReplicaId" = backup_replicas."Id" AND pin."ReleasedAt" IS NULL)
+              AND NOT EXISTS (SELECT 1 FROM backup_artifacts artifact JOIN backup_run_attempts attempt
+                  ON attempt."Id" = artifact."AttemptId" AND attempt."TenantId" = artifact."TenantId"
+                  WHERE artifact."Id" = backup_replicas."ArtifactId" AND artifact."TenantId" = backup_replicas."TenantId" AND attempt."Status" IN (2, 3))
               AND NOT EXISTS (SELECT 1 FROM download_sessions hold WHERE hold."ReplicaId" = backup_replicas."Id" AND hold."TenantId" = backup_replicas."TenantId"
                   AND hold."ReleasedAt" IS NULL AND hold."ExpiresAt" > {now} AND (hold."LeaseExpiresAt" IS NULL OR hold."LeaseExpiresAt" > {now}))
             ORDER BY CASE "Status" WHEN 'DeletePending' THEN "DeleteAfter" WHEN 'DeleteFailed' THEN "DeleteNextAttemptAt" ELSE COALESCE("DeleteLeaseExpiresAt", "DeleteNextAttemptAt") END, "Id"
@@ -111,6 +114,12 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
                     now + retentionOptions.DeleteRetryDelay(Math.Max(1, replica.DeleteAttempts)));
                 continue;
             }
+            if (replica.StorageProvider is "sftp" or "google-drive")
+            {
+                // A timed-out attempt can still have a remote PUT in flight; do not publish absence ahead of that writer.
+                var transferLock = BackupTransferLock.Id(replica.StorageConnectionId, replica.Key);
+                if (!await context.Database.SqlQuery<bool>($"SELECT pg_try_advisory_xact_lock({transferLock}) AS \"Value\"").SingleAsync(cancellationToken)) continue;
+            }
             // The domain re-validates due-ness on the locked, freshly read row.
             if (!replica.BeginDelete(Guid.NewGuid(), owner, now, lease)) continue;
             changed = true;
@@ -123,8 +132,29 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
         return claimed;
     }
 
-    public Task<bool> CompleteDeletionAsync(Guid replicaId, Guid leaseToken, DateTimeOffset now, CancellationToken cancellationToken) =>
-        TransitionReplicaAsync(replicaId, replica => replica.CompleteDelete(leaseToken, now), cancellationToken);
+    public async Task<bool> CompleteDeletionAsync(Guid replicaId, Guid leaseToken, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var replica = await context.BackupReplicas.SingleOrDefaultAsync(entity => entity.Id == replicaId, cancellationToken);
+        if (replica is null || !replica.CompleteDelete(leaseToken, now)) return false;
+        if (replica.StorageProvider == "google-drive")
+        {
+            await context.GoogleDriveFileMetadata.Where(m =>
+                m.TenantId == replica.TenantId && m.ConnectionId == replica.StorageConnectionId && m.StorageKey == replica.Key)
+                .ExecuteDeleteAsync(cancellationToken);
+        }
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return false;
+        }
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
 
     public Task<bool> FailDeletionAsync(Guid replicaId, Guid leaseToken, DateTimeOffset now, string failureCode, DateTimeOffset nextAttemptAt, CancellationToken cancellationToken) =>
         TransitionReplicaAsync(replicaId, replica => replica.FailDelete(leaseToken, now, failureCode, nextAttemptAt), cancellationToken);

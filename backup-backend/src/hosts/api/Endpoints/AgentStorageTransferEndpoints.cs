@@ -1,6 +1,4 @@
-using System.Text;
 using System.Buffers;
-using System.Security.Cryptography;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Application.Backups;
@@ -11,6 +9,7 @@ using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Storage;
+using BackupPlatform.Infrastructure.Backups;
 using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.StorageProviders.Abstractions;
 using Microsoft.AspNetCore.Mvc;
@@ -58,6 +57,11 @@ public static class AgentStorageTransferEndpoints
         {
             var verified = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: true, cancellationToken);
             if (verified.Failure is { } failedAgain) return failedAgain;
+            var command = new BackupLeaseCommand(agent.Identity!.TenantId, agent.Identity.AgentId, attemptId,
+                Guid.Parse(request.Headers[TaskStorageProtocol.LeaseHeader]!), DateTimeOffset.UtcNow);
+            if (await runStore.RecordTransferAsync(command, new BackupTransferIntent(fence.ConnectionId.Value, fence.Key!, request.ContentLength!.Value, expectedChecksum), cancellationToken)
+                != BackupMutationResult.Accepted)
+                return Results.Conflict(new AgentApiError { Error = "lease_conflict", Message = "The upload intent could not be recorded safely." });
             try
             {
                 var options = new StoragePutOptions(StorageOverwritePolicy.Fail, new ContentChecksum(ChecksumAlgorithm.Sha256, expectedChecksum), request.ContentLength);
@@ -239,6 +243,8 @@ public static class AgentStorageTransferEndpoints
         var claim = await store.GetAttemptAsync(agent.Identity.TenantId, agent.Identity.AgentId, attemptId, cancellationToken);
         if (claim is null || claim.Run.CurrentAttempt.Id != attemptId || !claim.Attempt.HasLease(lease, DateTimeOffset.UtcNow))
             return (Results.Conflict(new AgentApiError { Error = "lease_conflict", Message = "Invalid lease or storage target." }), null, null, null);
+        if (write && claim.MaxArtifactBytes is { } maximum && (request.ContentLength is null || request.ContentLength.Value > maximum))
+            return (Results.Conflict(new AgentApiError { Error = "quota_exceeded", Message = "The artifact exceeds this run's reserved storage capacity." }), null, null, null);
 
         var snapshot = claim.Run.Configuration.ResolveEffectiveDestinations();
         var destination = named is { } id
@@ -285,13 +291,16 @@ public static class AgentStorageTransferEndpoints
     }
 
     private static IResult StorageError(StorageException exception) =>
-        Results.UnprocessableEntity(new TaskStorageResponse { FailureKind = exception.Kind.ToString() });
+        Results.UnprocessableEntity(new TaskStorageResponse
+        {
+            FailureKind = exception.Kind.ToString(), ObjectMayRemain = exception.ObjectMayRemain, RemainingObjectKey = exception.RemainingObjectKey?.Value
+        });
 
     private static async Task<IResult> WithAdvisoryLockAsync(PlatformDbContext db, Guid connectionId, string key, Func<Task<IResult>> action, CancellationToken cancellationToken)
     {
         var connection = (NpgsqlConnection)db.Database.GetDbConnection();
         if (connection.State != System.Data.ConnectionState.Open) await connection.OpenAsync(cancellationToken);
-        var lockId = ComputeLockId(connectionId, key);
+        var lockId = BackupTransferLock.Id(connectionId, key);
         await using (var acquire = new NpgsqlCommand("SELECT pg_advisory_lock(@id);", connection))
         {
             acquire.Parameters.AddWithValue("id", lockId);
@@ -309,10 +318,4 @@ public static class AgentStorageTransferEndpoints
         }
     }
 
-    private static long ComputeLockId(Guid connectionId, string key)
-    {
-        var bytes = Encoding.UTF8.GetBytes($"{connectionId:N}:{key}");
-        var hash = SHA256.HashData(bytes);
-        return BitConverter.ToInt64(hash, 0);
-    }
 }

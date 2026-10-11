@@ -1,9 +1,13 @@
 using BackupPlatform.Domain.Identity;
+using BackupPlatform.Domain.Backups;
 
 namespace BackupPlatform.Application.Backups;
 
 /// <summary>A new BackupRun (manual or scheduled) asking to be created. <see cref="RunId"/> is the identity the run will have if it is admitted.</summary>
-public sealed record BackupAdmissionRequest(TenantId TenantId, Guid JobId, Guid RunId, string TriggerType, DateTimeOffset Now);
+public sealed record BackupAdmissionRequest(TenantId TenantId, Guid JobId, Guid RunId, string TriggerType, DateTimeOffset Now)
+{
+    public BackupConfiguration? Configuration { get; init; }
+}
 
 /// <summary>Allowed, or denied with one of the stable <see cref="BackupPlatform.Domain.Backups.BackupAdmissionDenialCodes"/>.</summary>
 public sealed record BackupAdmissionDecision(bool Allowed, string? DenialCode)
@@ -19,7 +23,7 @@ public sealed record BackupAdmissionDecision(bool Allowed, string? DenialCode)
 /// </summary>
 /// <remarks>
 /// An admitted request may hold a reservation keyed by <see cref="BackupAdmissionRequest.RunId"/>. The reservation is released by the persistence
-/// layer when the run reaches a terminal state, and lapses on its own if the run is never created or never finishes; a caller whose run creation
+/// layer when the run reaches a terminal state, and lapses on its own if the run is never created; a caller whose run creation
 /// fails after admission calls <see cref="ReleaseAsync"/> to give it back at once.
 /// </remarks>
 public interface IBackupAdmissionPolicy

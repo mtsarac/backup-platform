@@ -121,7 +121,8 @@ public sealed class HttpTaskStorageProviderFactory(HttpClient http, AgentBackend
             {
                 var failure = await response.Content.ReadFromJsonAsync<TaskStorageResponse>(JsonSerializerOptions.Web, cancellationToken).ConfigureAwait(false);
                 if (Enum.TryParse<StorageFailureKind>(failure?.FailureKind, out var kind))
-                    throw new StorageException(kind, "The storage operation failed.");
+                    throw new StorageException(kind, "The storage operation failed.", objectMayRemain: failure!.ObjectMayRemain,
+                        remainingObjectKey: failure.RemainingObjectKey is { } key ? new StorageObjectKey(key) : null);
             }
             throw new StorageException(response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.Conflict
                 ? StorageFailureKind.AccessDenied : StorageFailureKind.Io, "The storage relay rejected the operation.");

@@ -79,11 +79,12 @@ public sealed class SftpStorageProvider : IStorageProvider
         var keyLock = _keyedLocks.GetOrAdd(finalRemotePath, _ => new SemaphoreSlim(1, 1));
         await keyLock.WaitAsync(cancellationToken).ConfigureAwait(false);
 
-        using var client = await _sessionManager.CreateConnectedClientAsync(cancellationToken).ConfigureAwait(false);
-
+        SftpClient? client = null;
         var uploadedTemp = false;
+        var published = false;
         try
         {
+            client = await _sessionManager.CreateConnectedClientAsync(cancellationToken).ConfigureAwait(false);
             // Verify existing target
             var existing = await TryGetItemAsync(client, finalRemotePath, cancellationToken).ConfigureAwait(false);
             if (existing is not null)
@@ -198,6 +199,7 @@ public sealed class SftpStorageProvider : IStorageProvider
 
             await client.RenameFileAsync(tempRemotePath, finalRemotePath, cancellationToken).ConfigureAwait(false);
             uploadedTemp = false;
+            published = true;
 
             var finalItem = await TryGetItemAsync(client, finalRemotePath, cancellationToken).ConfigureAwait(false);
             var lastModified = finalItem is not null
@@ -206,28 +208,41 @@ public sealed class SftpStorageProvider : IStorageProvider
 
             return new StorageObjectMetadata(new StorageLocation(Id, key), totalWritten, actualChecksum, lastModified);
         }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
         catch (Exception ex)
-        {
-            throw SftpExceptionMapper.Map(ex, "Failed to upload object to SFTP.");
-        }
-        finally
         {
             if (uploadedTemp)
             {
                 try
                 {
-                    await client.DeleteFileAsync(tempRemotePath, CancellationToken.None).ConfigureAwait(false);
+                    await client!.DeleteFileAsync(tempRemotePath, CancellationToken.None).ConfigureAwait(false);
+                    uploadedTemp = false;
+                }
+                catch (SftpPathNotFoundException)
+                {
+                    uploadedTemp = false;
                 }
                 catch
                 {
-                    // Best effort temp cleanup
+                    // Retain the exact temporary key when cleanup cannot prove absence.
                 }
             }
 
+            var mapped = SftpExceptionMapper.Map(ex, "Failed to upload object to SFTP.");
+            if (uploadedTemp || published)
+            {
+                var remainingKey = published ? key : new StorageObjectKey(tempRemotePath[(_pathResolver.ConnectionRoot.Length + 1)..]);
+                mapped = new StorageException(mapped.Kind, mapped.Message, ex, true, remainingKey);
+            }
+            if (ex is OperationCanceledException)
+            {
+                if (mapped.ObjectMayRemain) ex.Data[nameof(StorageException)] = mapped;
+                throw;
+            }
+            throw mapped;
+        }
+        finally
+        {
+            client?.Dispose();
             keyLock.Release();
         }
     }
@@ -343,30 +358,20 @@ public sealed class SftpStorageProvider : IStorageProvider
         var keyLock = _keyedLocks.GetOrAdd(finalRemotePath, _ => new SemaphoreSlim(1, 1));
         await keyLock.WaitAsync(cancellationToken).ConfigureAwait(false);
 
-        using var client = await _sessionManager.CreateConnectedClientAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var item = await TryGetItemAsync(client, finalRemotePath, cancellationToken).ConfigureAwait(false);
-            if (item is null)
+            using var client = await _sessionManager.CreateConnectedClientAsync(cancellationToken).ConfigureAwait(false);
+            var deleted = await DeleteFileIfPresentAsync(client, finalRemotePath, cancellationToken).ConfigureAwait(false);
+            var fileName = key.Segments[^1];
+            if (fileName.StartsWith('.') && fileName.EndsWith(".partial", StringComparison.Ordinal))
             {
-                return false;
+                return deleted;
             }
 
-            if (item.IsDirectory || item.IsSymbolicLink)
-            {
-                throw new StorageException(StorageFailureKind.AccessDenied, "Target to delete is not a regular file.");
-            }
-
-            await client.DeleteFileAsync(finalRemotePath, cancellationToken).ConfigureAwait(false);
-
-            // Verify absence immediately
-            var remaining = await TryGetItemAsync(client, finalRemotePath, cancellationToken).ConfigureAwait(false);
-            if (remaining is not null)
-            {
-                throw new StorageException(StorageFailureKind.Io, "File still exists after deletion.");
-            }
-
-            return true;
+            // A crashed upload may retain the atomic-publish alternative instead of the final object.
+            var deletedPartial = await DeleteFileIfPresentAsync(client,
+                SftpPathResolver.DeterministicTempPath(finalRemotePath), cancellationToken).ConfigureAwait(false);
+            return deleted || deletedPartial;
         }
         catch (OperationCanceledException)
         {
@@ -380,6 +385,26 @@ public sealed class SftpStorageProvider : IStorageProvider
         {
             keyLock.Release();
         }
+    }
+
+    private static async Task<bool> DeleteFileIfPresentAsync(SftpClient client, string remotePath, CancellationToken token)
+    {
+        var item = await TryGetItemAsync(client, remotePath, token).ConfigureAwait(false);
+        if (item is null) return false;
+        if (item.IsDirectory || item.IsSymbolicLink)
+            throw new StorageException(StorageFailureKind.AccessDenied, "Target to delete is not a regular file.");
+
+        try
+        {
+            await client.DeleteFileAsync(remotePath, token).ConfigureAwait(false);
+        }
+        catch (SftpPathNotFoundException)
+        {
+            // A concurrent remover already established absence.
+        }
+        if (await TryGetItemAsync(client, remotePath, token).ConfigureAwait(false) is not null)
+            throw new StorageException(StorageFailureKind.Io, "File still exists after deletion.");
+        return true;
     }
 
     public IAsyncEnumerable<StorageEntry> EnumerateAsync(
@@ -444,7 +469,12 @@ public sealed class SftpStorageProvider : IStorageProvider
 
         try
         {
-            var items = new List<ISftpFile>();
+            // OPENDIR may report generic failure for a missing parent; LSTAT distinguishes absence from denial.
+            if (!await client.ExistsAsync(parentDir, cancellationToken).ConfigureAwait(false))
+            {
+                return null;
+            }
+
             await foreach (var item in client.ListDirectoryAsync(parentDir, cancellationToken).ConfigureAwait(false))
             {
                 if (item.Name == fileName)

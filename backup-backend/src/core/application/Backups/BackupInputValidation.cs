@@ -45,7 +45,7 @@ public static class BackupInputValidation
             ? c.Destinations
             : [new BackupDestinationContract { StorageProvider = c.StorageProvider, StorageConnectionId = c.StorageConnectionId, StorageExecutionLocation = c.StorageExecutionLocation, IsPrimary = true }];
 
-        Check(destinations.Count > 0, "configuration.destinations");
+        Check(destinations.Count is > 0 and <= MaxDestinations, "configuration.destinations");
         Check(destinations.Count(d => d.IsPrimary) == 1, "configuration.destinations", "primary_destination_required");
         Check(destinations.Select(d => (d.StorageProvider, d.StorageConnectionId)).Distinct().Count() == destinations.Count, "configuration.destinations", "duplicate_destination");
 
@@ -92,13 +92,17 @@ public static class BackupInputValidation
     /// </summary>
     public static bool IsValidCompletion(BackupTaskCompletionRequest request, BackupConfiguration configuration)
     {
-        if (request.LeaseToken == Guid.Empty || request.Destinations is not { Count: <= MaxDestinations }) return false;
+        if (request.LeaseToken == Guid.Empty || request.Destinations is not { Count: <= MaxDestinations } || request.Destinations.Any(d => d is null)) return false;
         var snapshot = configuration.ResolveEffectiveDestinations();
-        if (request.Status == "Cancelled") return request.Artifact is null && request.FailureCode is null or "Cancelled" && ValidDestinations(request.Destinations, snapshot, null);
-        if (request.Status == "Failed") return request.Artifact is null && request.FailureCode is not null && BackupFailureCodes.IsAgentReportable(request.FailureCode) && ValidDestinations(request.Destinations, snapshot, null);
-        if (request.Status != "Succeeded" || request.FailureCode is not null || request.Artifact is not { } a) return false;
+        if (request.Status == "Cancelled" && request.FailureCode is not (null or "Cancelled")) return false;
+        if (request.Status == "Failed" && (request.FailureCode is null || !BackupFailureCodes.IsAgentReportable(request.FailureCode))) return false;
+        if (request.Status is "Failed" or "Cancelled" && request.Artifact is null)
+            return !request.Destinations.Any(d => d.ObjectMayRemain) && ValidDestinations(request.Destinations, snapshot, null);
+        if (request.Status is not ("Succeeded" or "Failed" or "Cancelled") || request.Artifact is not { } a) return false;
+        if (request.Status == "Succeeded" && request.FailureCode is not null) return false;
         if (a.SizeBytes <= 0 || a.CreatedAt == default || a.ChecksumAlgorithm != "sha256" || !Checksum(a.SourceChecksum) || !Checksum(a.ArtifactChecksum) ||
-            a.Replicas is not { Count: > 0 } || a.Replicas.Count > snapshot.Count || !Metadata(a, configuration)) return false;
+            a.Replicas is null || a.Replicas.Count > snapshot.Count || !Metadata(a, configuration)) return false;
+        if (request.Status == "Succeeded" ? a.Replicas.Count == 0 : a.Replicas.Count != 0 || !request.Destinations.Any(d => d.ObjectMayRemain)) return false;
         return a.Replicas.All(r => r is not null && Destination(snapshot, r.StorageProvider, r.StorageConnectionId) is { } destination && Reference(r.StorageTarget) &&
             (destination.StorageExecutionLocation != BackupStorageExecutionLocation.Agent || r.StorageTarget == r.StorageProvider) &&
             (destination.StorageProvider is not ("sftp" or "google-drive") || r.StorageTarget == destination.StorageConnectionId?.ToString("D")) &&

@@ -161,6 +161,7 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
             RunId = claim.Run.Id, JobId = claim.Run.JobId, TenantId = claim.Run.TenantId.Value,
             AttemptId = claim.Attempt.Id, AttemptNumber = claim.Attempt.Number,
             LeaseToken = claim.Attempt.LeaseToken!.Value, LeaseExpiresAt = claim.Attempt.LeaseExpiresAt!.Value,
+            MaxArtifactBytes = claim.MaxArtifactBytes,
             Configuration = ToWire(claim.Run.Configuration), CancellationRequested = claim.Run.CancellationRequestedAt is not null
         };
     }
@@ -256,7 +257,7 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         return new(artifact.Id, artifact.SizeBytes, artifact.SourceChecksum, artifact.ArtifactChecksum, artifact.ChecksumAlgorithm, artifact.CreatedAt,
             artifact.Replicas.Select(ToView).ToArray(), artifact.State.ToString(), artifact.AcceptedAt, artifact.RetentionExpiresAt, artifact.RetentionPinnedAt,
             waiting.Length == 0 ? null : waiting.Min(r => r.DeleteAfter), waiting.OrderBy(r => r.DeleteAfter).FirstOrDefault()?.DeleteReason?.ToString(),
-            runId, jobId, artifact.AttemptId, CancelDeleteAllowed: artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.DeletePending), BackupType: artifact.BackupType,
+            runId, jobId, artifact.AttemptId, CancelDeleteAllowed: artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.DeletePending && replica.VerificationState == "Verified"), BackupType: artifact.BackupType,
             BackupMetadata: BackupMetadataProjection.Read(artifact.SourceMetadataJson, artifact.AppliedOptionsJson),
             Replication: snapshot is null ? null : ToView(BackupReplicationEvaluator.ForArtifact(snapshot.RequiredVerifiedReplicaCount, snapshot.ResolveEffectiveDestinations().Count, artifact.Replicas)));
     }
@@ -330,6 +331,7 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         BackupFailureCodes.VerificationFailed => "The database backup did not pass verification.",
         BackupFailureCodes.HashFailed => "The backup checksum could not be computed.",
         BackupFailureCodes.StorageWriteFailed => "The backup artifact could not be written to storage.",
+        BackupFailureCodes.QuotaExceeded => "The actual backup size exceeds the space available under the hard storage quota; the destination upload was refused.",
         BackupFailureCodes.ReplicaVerificationFailed => "The stored backup replica did not pass verification.",
         BackupFailureCodes.DatabaseUnavailable => "The database server could not be reached.",
         BackupFailureCodes.OperationTimedOut => "A backup operation timed out.",

@@ -329,7 +329,7 @@ they are intentionally not automatic release gates.
 
 Every tenant owns two system default connections, created by the migration and on demand: **Local** (agent disk, tenant-managed, scope `tenant`) and **Managed Storage**
 (the Central provider, platform-managed, scope `managed`). Existing replicas were assigned to them by the upgrade, so downloads, restores, retention and quota are unchanged.
-SFTP and Google Drive are listed as *planned* providers (capability display only): a connection for them cannot be created and a test never reports success.
+SFTP and Google Drive are backend-relayed tenant-managed providers, with pinned SFTP host identity and tenant/connection-bound Drive object ownership.
 
 | API | Access / behavior |
 |---|---|
@@ -356,6 +356,27 @@ Run `scripts/integration/run-storage-connections-smoke.sh` for real Agent/MSSQL 
 migration Down/Up with the stored replica, checksum-verified download, SQL-verified restore, disabled-target access and re-enabled backup.
 Tenant-managed enable/disable has no platform-override marker yet: an authorized tenant can re-enable a connection disabled by PlatformAdmin.
 
+## Multi-storage quota and orphan recovery
+
+Finite `BlockNewBackups` quotas fail closed for a counted job with no size history (`409 quota_size_unknown`).
+History supplies the artifact size; the current destination snapshot supplies the counted copies: once for logical accounting, every scoped destination for physical accounting.
+Hard-quota execution requires `backup.quota-bounded-upload`; the task carries `maxArtifactBytes`, and the Agent refuses an oversized artifact before writing any destination.
+The backend also fences relay upload lengths. Reservations remain live across pending runs, retries and long transfers, and convert to occupied bytes without double charging.
+
+Bootstrapping a new counted job requires an administrator's explicit, controlled use of an existing WarnOnly policy or unlimited subscription override to establish history,
+then restoration of the intended hard policy. The platform never weakens the policy automatically. Growth beyond the reserved historical size fails before upload.
+
+Before a remote PUT, the backend durably records its tenant/attempt/destination/key and conservative expected bytes as an unverified cleanup-bound replica.
+Failed completion preserves those records even when no destination verifies; successful completion preserves good replicas and retains unresolved objects for cleanup.
+Unverified replicas are never download/restore sources or cancellable deletions. Existing retention leases, retry/backoff and PostgreSQL upload locks recover cleanup after restart
+without deleting beside an active remote writer; bytes fall only after verified absence. SFTP cleanup checks both the final key and its deterministic `.partial` sibling.
+Drive stores the owned file ID in its durable catalog before readback verification, so corrupt objects can be deleted by identity without being promoted to Verified.
+
+`Succeeded` still means a usable backup was produced, not that replication policy was satisfied. The dashboard labels that KPI explicitly and independently alerts on
+`replicationInsufficientLast24Hours`; completed destination outcomes keep historical execution compliance independent of later retention.
+There is still no aggregate transfer deadline: at most 16 sequential destinations each retain the existing 6-hour timeout, with independent lease renewal and cooperative cancellation.
+
+
 ## Current MVP scope
 
 Implemented:
@@ -363,7 +384,7 @@ Implemented:
 - MSSQL full backup end to end (pre-check, backup, verify, checksums, storage, replica verification)
 - MSSQL full restore through the API and real Agent execution, including cross-instance/new-name/explicit replace, retention pins and safe staging
 - Manual and scheduled runs, retry, cancellation, overlap policy, concurrency limits, agent leases
-- Local and Central storage; retention with soft delete, grace period, agent-local deletion and sweeps
+- Local, Central, SFTP and Google Drive storage; multi-destination execution, hard-quota admission and durable orphan recovery; retention with verified deletion
 - Agent connectivity (polling, SignalR hints, heartbeat, capability sync), credential rotation, Windows Service hosting
 - Real Agent enrollment CLI, Windows service-context provisioning/install/start, Linux owner-only enrollment and Add Agent onboarding wizard
 - Multi-tenant backend with cookie authentication and antiforgery; React UI for backup management (restore is currently API-only)
@@ -373,7 +394,7 @@ Not yet implemented:
 - PostgreSQL backup provider (PostgreSQL is only the platform's own database)
 - Differential/log-chain restore, point-in-time recovery, automated restore testing and PostgreSQL restore
 - Differential and transaction-log backups
-- S3, SFTP or other remote storage providers
+- S3 or other additional remote storage providers
 - Notifications; an audit trail module
 - File-system and snapshot backup providers
 - A Linux installer/systemd unit and code signing of release binaries

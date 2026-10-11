@@ -25,11 +25,11 @@ public sealed class AdmissionIntegrationTests(PostgreSqlFixture fixture) : IClas
     // ---- the quota gate ----------------------------------------------------------------------------------------------------
 
     [Theory]
-    [InlineData(4_500_000_000, true)]
-    [InlineData(4_999_999_999, true)]
-    [InlineData(5_000_000_000, false)]
-    [InlineData(5_500_000_000, false)]
-    public async Task ANewRunIsDeniedExactlyWhenUsedBytesReachTheLimit(long usedBytes, bool admitted)
+    [InlineData(4_500_000_000, BackupAdmissionDenialCodes.QuotaSizeUnknown)]
+    [InlineData(4_999_999_999, BackupAdmissionDenialCodes.QuotaSizeUnknown)]
+    [InlineData(5_000_000_000, BackupAdmissionDenialCodes.QuotaExceeded)]
+    [InlineData(5_500_000_000, BackupAdmissionDenialCodes.QuotaExceeded)]
+    public async Task AFirstCountedRunNeverBypassesHardQuota(long usedBytes, string denialCode)
     {
         var agent = await _world.AgentAsync();
         var history = await _world.JobAsync(agent);
@@ -41,15 +41,8 @@ public sealed class AdmissionIntegrationTests(PostgreSqlFixture fixture) : IClas
 
         Assert.Equal(usedBytes, (await _world.StoredUsageAsync(agent.TenantId))!.UsedBytes);
         Assert.Empty(await ReservationsAsync(fixture, agent.TenantId));
-        if (admitted)
-        {
-            Assert.Equal(BackupStartOutcome.Started, result.Outcome);
-            Assert.Null(result.DenialCode);
-            Assert.Equal(1, await _world.Harness.CountRunsAsync(fresh.Id));
-            return;
-        }
         Assert.Equal(BackupStartOutcome.AdmissionDenied, result.Outcome);
-        Assert.Equal(BackupAdmissionDenialCodes.QuotaExceeded, result.DenialCode);
+        Assert.Equal(denialCode, result.DenialCode);
         Assert.Null(result.Run);
         Assert.Equal(0, await _world.Harness.CountRunsAsync(fresh.Id));
     }
@@ -90,21 +83,20 @@ public sealed class AdmissionIntegrationTests(PostgreSqlFixture fixture) : IClas
     {
         var agent = await _world.AgentAsync();
         var history = await _world.JobAsync(agent);
-        var fresh = await _world.JobAsync(agent);
         var store = _world.RunStore();
         await _world.PublishAsync(store, agent, history, 5_500_000_000, Central, T0);
 
-        var denied = await store.StartRunAsync(agent.TenantId, fresh.Id, "retry-me", T0.AddMinutes(1), default);
+        var denied = await store.StartRunAsync(agent.TenantId, history.Id, "retry-me", T0.AddMinutes(1), default);
         Assert.Equal(BackupStartOutcome.AdmissionDenied, denied.Outcome);
-        Assert.Equal(0, await _world.Harness.CountRunsAsync(fresh.Id));
+        Assert.Equal(1, await _world.Harness.CountRunsAsync(history.Id));
 
-        await SetOverrideAsync(_world, agent.TenantId, StorageLimitOverride.Limited(10 * Gb));
-        var again = await store.StartRunAsync(agent.TenantId, fresh.Id, "retry-me", T0.AddMinutes(2), default);
+        await SetOverrideAsync(_world, agent.TenantId, StorageLimitOverride.Limited(12 * Gb));
+        var again = await store.StartRunAsync(agent.TenantId, history.Id, "retry-me", T0.AddMinutes(2), default);
 
         // Started, not Replayed: the refusal did not consume the idempotency key.
         Assert.Equal(BackupStartOutcome.Started, again.Outcome);
         Assert.Equal("retry-me", again.Run!.IdempotencyKey);
-        Assert.Equal(1, await _world.Harness.CountRunsAsync(fresh.Id));
+        Assert.Equal(2, await _world.Harness.CountRunsAsync(history.Id));
     }
 
     [Fact]
@@ -193,8 +185,8 @@ public sealed class AdmissionIntegrationTests(PostgreSqlFixture fixture) : IClas
         var store = _world.RunStore();
         await _world.PublishAsync(store, agent, history, Gb, Central, T0);
         var one = await _world.JobAsync(agent);
-        var two = await _world.JobAsync(agent);
-        var three = await _world.JobAsync(agent);
+        var two = history;
+        var three = history;
 
         // The 5 GB plan has room; a 1 GB override has none (used == limit).
         await SetOverrideAsync(_world, agent.TenantId, StorageLimitOverride.Limited(Gb));
@@ -203,8 +195,8 @@ public sealed class AdmissionIntegrationTests(PostgreSqlFixture fixture) : IClas
         var denied = await store.StartRunAsync(agent.TenantId, one.Id, "k1", T0.AddMinutes(1), default);
         Assert.Equal((BackupStartOutcome.AdmissionDenied, BackupAdmissionDenialCodes.QuotaExceeded), (denied.Outcome, denied.DenialCode));
 
-        // One byte of room is room.
-        await SetOverrideAsync(_world, agent.TenantId, StorageLimitOverride.Limited(Gb + 1));
+        // The known 1 GB artifact fits exactly alongside the stored 1 GB.
+        await SetOverrideAsync(_world, agent.TenantId, StorageLimitOverride.Limited(2 * Gb));
         await StartAsync(store, two, "k2", T0.AddMinutes(2));
 
         // A larger override than the plan limit opens the gate on a tenant that was over its plan.
@@ -260,7 +252,7 @@ public sealed class AdmissionIntegrationTests(PostgreSqlFixture fixture) : IClas
         Assert.Equal(4_500_000_000, (await _world.StoredUsageAsync(agent.TenantId))!.UsedBytes);
 
         await _world.AssignAsync(agent.TenantId, await _world.PlanAsync(10 * Gb));
-        await StartAsync(store, fresh, "after-upgrade", T0.AddMinutes(2));
+        await StartAsync(store, history, "after-upgrade", T0.AddMinutes(2));
     }
 
     // ---- the subscription gate ----------------------------------------------------------------------------------------------
@@ -281,7 +273,7 @@ public sealed class AdmissionIntegrationTests(PostgreSqlFixture fixture) : IClas
     [Fact]
     public async Task SuspendingDeniesNewRunsAndResumingAdmitsAgainWithTheSameKey()
     {
-        var agent = await _world.AgentAsync();
+        var agent = await _world.AgentAsync(limitBytes: null);
         var job = await _world.JobAsync(agent);
         var store = _world.RunStore();
 
@@ -302,7 +294,7 @@ public sealed class AdmissionIntegrationTests(PostgreSqlFixture fixture) : IClas
     {
         var agent = await _world.AgentAsync(subscribe: false);
         var endsAt = DateTimeOffset.UtcNow.AddHours(1);
-        await _world.AssignAsync(agent.TenantId, await _world.PlanAsync(5 * Gb), endsAt: endsAt);
+        await _world.AssignAsync(agent.TenantId, await _world.PlanAsync(null), endsAt: endsAt);
         var before = await _world.JobAsync(agent);
         var after = await _world.JobAsync(agent);
         var store = _world.RunStore();
@@ -336,36 +328,20 @@ public sealed class AdmissionIntegrationTests(PostgreSqlFixture fixture) : IClas
         Assert.Equal((BackupStartOutcome.AdmissionDenied, BackupAdmissionDenialCodes.SubscriptionRequired), (result.Outcome, result.DenialCode));
     }
 
-    // ---- a running backup is never cut off ------------------------------------------------------------------------------------
+    // ---- reservations bound transfer, not persistence of already-written artifacts -------------------------------------------
 
     [Fact]
-    public async Task ABackupThatEndsBiggerThanTheRemainingSpaceKeepsItsArtifactAndTheNextRunIsDenied()
+    public async Task AHistoricalReservationIsExposedAsAnArtifactByteBound()
     {
         var agent = await _world.AgentAsync();
-        var history = await _world.JobAsync(agent);
-        var growing = await _world.JobAsync(agent);
-        var next = await _world.JobAsync(agent);
+        var job = await _world.JobAsync(agent);
         var store = _world.RunStore();
-        await _world.PublishAsync(store, agent, history, 4_500_000_000, Central, T0);
-
-        // No history for this job: nothing is reserved, so the run is admitted into 0.5 GB of room and then writes 1 GB.
-        var run = await StartAsync(store, growing, "growing", T0.AddMinutes(1));
-        Assert.Empty(await ReservationsAsync(fixture, agent.TenantId));
+        await _world.PublishAsync(store, agent, job, Gb, Central, T0);
+        var run = await StartAsync(store, job, "bounded", T0.AddMinutes(1));
         var claim = await ClaimStartedAsync(store, agent, T0.AddMinutes(1));
         Assert.Equal(run.Id, claim.Run.Id);
-        await BackupStoreHarness.CompleteAsync(store, claim, QuotaWorld.Success(Gb, Central, T0.AddMinutes(2)), T0.AddMinutes(2));
-
-        var finished = await RunAsync(_world, agent.TenantId, run.Id);
-        Assert.Equal(BackupStatus.Succeeded, finished.Status);
-        Assert.Equal(1, await _world.Harness.CountArtifactsAsync(run.Id));
-        Assert.Equal(5_500_000_000, (await _world.StoredUsageAsync(agent.TenantId))!.UsedBytes);
-        Assert.Equal((5_500_000_000, 5_500_000_000), await _world.SourceUsageAsync(agent.TenantId));
-        var status = await StatusAsync(agent.TenantId);
-        Assert.Equal((QuotaState.OverQuota, 0L, false, BackupAdmissionDenialCodes.QuotaExceeded), (status.State, status.RemainingBytes, status.NewBackupsAllowed, status.DenialCode));
-
-        var denied = await store.StartRunAsync(agent.TenantId, next.Id, "next", T0.AddMinutes(3), default);
-        Assert.Equal((BackupStartOutcome.AdmissionDenied, BackupAdmissionDenialCodes.QuotaExceeded), (denied.Outcome, denied.DenialCode));
-        Assert.Equal(0, await _world.Harness.CountRunsAsync(next.Id));
+        Assert.Equal(Gb, claim.MaxArtifactBytes);
+        Assert.Equal(Gb, (await store.GetAttemptAsync(agent.TenantId, agent.AgentId, claim.Attempt.Id, default))!.MaxArtifactBytes);
     }
 
     // ---- replay and retry never ask again -----------------------------------------------------------------------------------
@@ -375,6 +351,7 @@ public sealed class AdmissionIntegrationTests(PostgreSqlFixture fixture) : IClas
     {
         var agent = await _world.AgentAsync();
         var job = await _world.JobAsync(agent);
+        await _world.PublishAsync(_world.RunStore(), agent, job, 100, Central, T0.AddSeconds(-1));
         var publisher = await AddAgentAsync(_world, agent.TenantId);
         var counting = new CountingAdmission(_world.Admission());
         var store = _world.RunStore(counting);
@@ -388,7 +365,7 @@ public sealed class AdmissionIntegrationTests(PostgreSqlFixture fixture) : IClas
         Assert.Equal(BackupStartOutcome.Replayed, replay.Outcome);
         Assert.Equal(original.Id, replay.Run!.Id);
         Assert.Equal(1, counting.Calls);
-        Assert.Equal(1, await _world.Harness.CountRunsAsync(job.Id));
+        Assert.Equal(2, await _world.Harness.CountRunsAsync(job.Id));
         var fresh = await store.StartRunAsync(agent.TenantId, job.Id, "other-key", T0.AddMinutes(2), default);
         Assert.Equal(BackupStartOutcome.AdmissionDenied, fresh.Outcome);
         Assert.Equal(2, counting.Calls);
@@ -397,7 +374,7 @@ public sealed class AdmissionIntegrationTests(PostgreSqlFixture fixture) : IClas
     [Fact]
     public async Task AdmissionIsAskedOncePerNewRunWithItsIdentityAndTheManualTrigger()
     {
-        var agent = await _world.AgentAsync();
+        var agent = await _world.AgentAsync(limitBytes: null);
         var job = await _world.JobAsync(agent);
         var counting = new CountingAdmission(_world.Admission());
         var store = _world.RunStore(counting);
@@ -424,6 +401,7 @@ public sealed class AdmissionIntegrationTests(PostgreSqlFixture fixture) : IClas
         var agent = await _world.AgentAsync();
         var publisher = await AddAgentAsync(_world, agent.TenantId);
         var job = await _world.JobAsync(agent);
+        await _world.PublishAsync(_world.RunStore(), agent, job, Gb / 10, Central, T0.AddSeconds(-1));
         var counting = new CountingAdmission(_world.Admission());
         var store = _world.RunStore(counting);
         var run = await StartAsync(store, job, "first", T0);
@@ -471,6 +449,7 @@ public sealed class AdmissionIntegrationTests(PostgreSqlFixture fixture) : IClas
         var agent = await _world.AgentAsync();
         var publisher = await AddAgentAsync(_world, agent.TenantId);
         var job = await _world.JobAsync(agent);
+        await _world.PublishAsync(_world.RunStore(), agent, job, 100, Central, T0.AddSeconds(-1));
         var counting = new CountingAdmission(_world.Admission());
         var store = _world.RunStore(counting);
         var run = await StartAsync(store, job, "first", T0);
@@ -591,7 +570,7 @@ public sealed class AdmissionIntegrationTests(PostgreSqlFixture fixture) : IClas
     }
 
     [Fact]
-    public async Task ParallelAdmissionsWithoutAnEstimateAreAllAdmittedBecauseTheLimitIsSoft()
+    public async Task ParallelHardAdmissionsWithoutAnEstimateAreAllDenied()
     {
         const int racers = 8;
         var first = await _world.AgentAsync();
@@ -604,9 +583,9 @@ public sealed class AdmissionIntegrationTests(PostgreSqlFixture fixture) : IClas
         var results = await Task.WhenAll(jobs.Select((job, index) =>
             _world.RunStore().StartRunAsync(first.TenantId, job.Id, $"race-{index}", T0, default)));
 
-        Assert.All(results, result => Assert.Equal(BackupStartOutcome.Started, result.Outcome));
+        Assert.All(results, result => Assert.Equal((BackupStartOutcome.AdmissionDenied, BackupAdmissionDenialCodes.QuotaSizeUnknown), (result.Outcome, result.DenialCode)));
         Assert.Empty(await ReservationsAsync(fixture, first.TenantId));
-        Assert.Equal(racers, (await _world.RunStore().ListRunsAsync(first.TenantId, null, 200, default)).Count);
+        Assert.Empty(await _world.RunStore().ListRunsAsync(first.TenantId, null, 200, default));
         Assert.Equal(0, (await _world.StoredUsageAsync(first.TenantId))?.ReservedBytes ?? 0);
     }
 }

@@ -125,7 +125,7 @@ public sealed class BackupUiApiTests(PostgreSqlFixture fixture) : IClassFixture<
         Assert.Equal(8, data.GetProperty("recentRuns").GetArrayLength());
         Assert.Equal(1, data.GetProperty("jobs").GetProperty("total").GetInt32());
         Assert.Equal(1, data.GetProperty("agents").GetProperty("total").GetInt32());
-        foreach (var name in new[] { "running", "retryPending", "cancellationRequested", "storageFailedLast24Hours" })
+        foreach (var name in new[] { "running", "retryPending", "cancellationRequested", "storageFailedLast24Hours", "replicationInsufficientLast24Hours" })
             Assert.True(data.GetProperty("runs").TryGetProperty(name, out _));
     }
 
