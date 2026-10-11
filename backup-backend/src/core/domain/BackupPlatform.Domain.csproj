@@ -3,5 +3,9 @@
   <ItemGroup>
     <PackageReference Include="Cronos" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="BackupPlatform.UnitTests" />
+    <InternalsVisibleTo Include="BackupPlatform.IntegrationTests" />
+  </ItemGroup>
 
 </Project>

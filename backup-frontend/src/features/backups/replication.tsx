@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import type { ReplicationDestination, ReplicationHealth, ReplicationStatus } from '@/features/artifacts/types'
 import { failureMessage } from '@/lib/api/failure-messages'
 
@@ -38,8 +39,19 @@ export function ReplicationSummary({ replication }: { replication?: ReplicationH
   return <span className="inline-flex flex-wrap items-center gap-2"><ReplicationBadge replication={replication} /><span className="text-xs text-text-muted">{replicationCounts(replication)}</span></span>
 }
 
-function DestinationRow({ destination }: { destination: ReplicationDestination }) {
+function DestinationRow({
+  destination,
+  onRepair,
+  isRepairing,
+  canRepair
+}: {
+  destination: ReplicationDestination
+  onRepair?: (destination: ReplicationDestination) => void
+  isRepairing?: boolean
+  canRepair?: boolean
+}) {
   const meta = destinationStates[destination.state] ?? { label: destination.state, tone: 'neutral' as const }
+  const repairEligible = Boolean(canRepair && destination.state !== 'Verified' && onRepair)
   return (
     <li className="flex flex-wrap items-start justify-between gap-2 rounded-md border border-border bg-surface-2 p-3 text-sm">
       <div className="space-y-1">
@@ -47,13 +59,35 @@ function DestinationRow({ destination }: { destination: ReplicationDestination }
         {destination.state === 'Failed' && destination.failureCode && <p className="text-error">{destination.failureReason ?? failureMessage(destination.failureCode)} <span className="text-text-muted">· {destination.failureCode}</span></p>}
         {destination.objectMayRemain && <p className="text-warning">Hedefte tamamlanmamış bir dosya kalmış olabilir; saklama süreci bu dosyayı da kaldırır.</p>}
       </div>
-      <Badge tone={meta.tone}>{meta.label}</Badge>
+      <div className="flex items-center gap-2">
+        <Badge tone={meta.tone}>{meta.label}</Badge>
+        {repairEligible && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isRepairing}
+            onClick={() => onRepair!(destination)}
+          >
+            {isRepairing ? 'Onarılıyor…' : 'Onar'}
+          </Button>
+        )}
+      </div>
     </li>
   )
 }
 
 /** A failed destination is shown next to the verified ones: a partial failure is never folded into one "success". */
-export function ReplicationSection({ replication }: { replication?: ReplicationHealth | null }) {
+export function ReplicationSection({
+  replication,
+  onRepair,
+  repairingDestinationId,
+  canRepair
+}: {
+  replication?: ReplicationHealth | null
+  onRepair?: (destination: ReplicationDestination) => void
+  repairingDestinationId?: string | null
+  canRepair?: boolean
+}) {
   if (!replication) return null
   return (
     <section aria-label="Replikasyon" className="space-y-3 rounded-lg border border-border bg-surface p-5">
@@ -65,7 +99,23 @@ export function ReplicationSection({ replication }: { replication?: ReplicationH
       {replication.status === 'Degraded' && <p role="status" className="text-sm text-warning">Yedek kullanılabilir ve politika karşılanıyor; ancak bazı hedeflerde doğrulanmış kopya yok.</p>}
       {replication.status === 'InsufficientReplicas' && <p role="alert" className="text-sm text-error">Yedek kullanılabilir, ancak politikanın gerektirdiği doğrulanmış replika sayısına ulaşılamadı.</p>}
       {replication.status === 'Unavailable' && <p role="alert" className="text-sm text-error">Hiçbir hedefte doğrulanmış kopya yok; kullanılabilir bir yedek oluşmadı.</p>}
-      {replication.destinations.length > 0 && <ul className="space-y-2" aria-label="Hedef sonuçları">{replication.destinations.map((destination) => <DestinationRow key={`${destination.storageProvider}:${destination.storageConnectionId ?? 'default'}`} destination={destination} />)}</ul>}
+      {replication.destinations.length > 0 && (
+        <ul className="space-y-2" aria-label="Hedef sonuçları">
+          {replication.destinations.map((destination) => {
+            const destId = destination.storageConnectionId ?? destination.storageProvider
+            const isRepairing = repairingDestinationId === destId || (destination.storageConnectionId !== null && repairingDestinationId === destination.storageConnectionId)
+            return (
+              <DestinationRow
+                key={`${destination.storageProvider}:${destination.storageConnectionId ?? 'default'}`}
+                destination={destination}
+                onRepair={onRepair}
+                isRepairing={isRepairing}
+                canRepair={canRepair}
+              />
+            )
+          })}
+        </ul>
+      )}
     </section>
   )
 }

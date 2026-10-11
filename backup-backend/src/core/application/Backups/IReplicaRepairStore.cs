@@ -1,0 +1,86 @@
+using BackupPlatform.Domain.Backups;
+using BackupPlatform.Domain.Identity;
+
+namespace BackupPlatform.Application.Backups;
+
+public interface IReplicaRepairStore
+{
+    Task<ReplicaRepairAdmissionResult> AdmitRepairAsync(
+        TenantId tenantId,
+        Guid artifactId,
+        Guid? storageConnectionId,
+        string? storageProvider,
+        DateTimeOffset now,
+        CancellationToken cancellationToken,
+        Guid? excludeOperationId = null);
+    Task<ReplicaRepairOperation> CreateOperationAsync(
+        ReplicaRepairOperation operation,
+        CancellationToken cancellationToken);
+
+    Task<ReplicaRepairOperation?> ClaimOperationAsync(
+        TenantId tenantId,
+        Guid operationId,
+        Guid leaseToken,
+        string leaseOwner,
+        DateTimeOffset now,
+        TimeSpan leaseDuration,
+        CancellationToken cancellationToken);
+
+    Task<bool> RenewLeaseAsync(
+        TenantId tenantId,
+        Guid operationId,
+        Guid leaseToken,
+        DateTimeOffset now,
+        TimeSpan leaseDuration,
+        CancellationToken cancellationToken);
+
+    Task<bool> UpdateProgressAsync(
+        TenantId tenantId,
+        Guid operationId,
+        Guid leaseToken,
+        long transferredBytes,
+        long totalBytes,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+
+    Task<BackupReplica> CompleteOperationAsync(
+        TenantId tenantId,
+        Guid operationId,
+        Guid leaseToken,
+        BackupReplica newReplica,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+
+    Task<bool> FailOperationAsync(
+        TenantId tenantId,
+        Guid operationId,
+        Guid leaseToken,
+        string failureCode,
+        string? reason,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+
+    Task<bool> RequestCancellationAsync(
+        TenantId tenantId,
+        Guid operationId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+
+    Task<bool> CancelOperationAsync(
+        TenantId tenantId,
+        Guid operationId,
+        Guid leaseToken,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+
+    Task<ReplicaRepairOperationView?> GetOperationAsync(
+        TenantId tenantId,
+        Guid artifactId,
+        Guid operationId,
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<ReplicaRepairOperationView>> ListOperationsAsync(
+        TenantId tenantId,
+        Guid artifactId,
+        CancellationToken cancellationToken);
+}

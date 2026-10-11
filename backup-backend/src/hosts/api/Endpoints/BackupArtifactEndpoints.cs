@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Backups;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Application.Identity;
@@ -18,6 +19,10 @@ public static class BackupArtifactEndpoints
         tenant.MapGet("/backup-artifacts/{artifactId:guid}", GetAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
         tenant.MapDelete("/backup-artifacts/{artifactId:guid}", DeleteAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
         tenant.MapPost("/backup-artifacts/{artifactId:guid}/cancel-delete", CancelDeleteAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+        tenant.MapPost("/backup-artifacts/{artifactId:guid}/repairs", StartRepairAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
+        tenant.MapGet("/backup-artifacts/{artifactId:guid}/repairs/{repairId:guid}", GetRepairAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
+        tenant.MapPost("/backup-artifacts/{artifactId:guid}/repairs/{repairId:guid}/cancel", CancelRepairAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
+        tenant.MapGet("/backup-artifacts/{artifactId:guid}/repairs", ListRepairsAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
         return endpoints;
     }
 
@@ -64,5 +69,69 @@ public static class BackupArtifactEndpoints
                 Results.Conflict(new { error = "not_cancellable", message = "The backup has no pending deletion to cancel, or its physical deletion has already started." }),
             _ => Results.NotFound()
         };
+    }
+
+    private static async Task<IResult> StartRepairAsync(
+        Guid artifactId,
+        StartReplicaRepairRequest request,
+        ITenantContext tenant,
+        ICurrentUser user,
+        ReplicaRepairService service,
+        CancellationToken cancellationToken)
+    {
+        var result = await service.StartRepairAsync(tenant.TenantId!, artifactId, request, user.UserId?.Value, cancellationToken);
+        if (!result.Success)
+        {
+            return result.Code switch
+            {
+                "artifact_not_found" or "storage_connection_not_found" =>
+                    Results.NotFound(new { error = result.Code, message = result.Message }),
+                ReplicaRepairFailureCodes.AlreadyVerified or "repair_already_in_progress" or ReplicaRepairFailureCodes.ArtifactExpired or "artifact_deleted" =>
+                    Results.Conflict(new { error = result.Code, message = result.Message }),
+                "unauthorized_destination" or "storage_connection_disabled" =>
+                    Results.BadRequest(new { error = result.Code, message = result.Message }),
+                ReplicaRepairFailureCodes.NoVerifiedSourceAvailable or ReplicaRepairFailureCodes.QuotaExceeded =>
+                    Results.UnprocessableEntity(new { error = result.Code, message = result.Message }),
+                _ => Results.BadRequest(new { error = result.Code ?? "repair_failed", message = result.Message ?? "Failed to start replica repair." })
+            };
+        }
+
+        return Results.Accepted($"/api/tenants/{tenant.TenantId!.Value}/backup-artifacts/{artifactId}/repairs/{result.Operation!.Id}", result.Operation);
+    }
+
+    private static async Task<IResult> GetRepairAsync(
+        Guid artifactId,
+        Guid repairId,
+        ITenantContext tenant,
+        ReplicaRepairService service,
+        CancellationToken cancellationToken)
+    {
+        var operation = await service.GetRepairAsync(tenant.TenantId!, artifactId, repairId, cancellationToken);
+        return operation is null ? Results.NotFound() : Results.Ok(operation);
+    }
+
+    private static async Task<IResult> CancelRepairAsync(
+        Guid artifactId,
+        Guid repairId,
+        ITenantContext tenant,
+        ReplicaRepairService service,
+        CancellationToken cancellationToken)
+    {
+        var success = await service.CancelRepairAsync(tenant.TenantId!, artifactId, repairId, cancellationToken);
+        if (!success)
+            return Results.NotFound(new { error = "repair_not_found", message = "Repair operation not found or cannot be cancelled." });
+
+        var operation = await service.GetRepairAsync(tenant.TenantId!, artifactId, repairId, cancellationToken);
+        return Results.Ok(operation);
+    }
+
+    private static async Task<IResult> ListRepairsAsync(
+        Guid artifactId,
+        ITenantContext tenant,
+        ReplicaRepairService service,
+        CancellationToken cancellationToken)
+    {
+        var list = await service.ListRepairsAsync(tenant.TenantId!, artifactId, cancellationToken);
+        return Results.Ok(list);
     }
 }

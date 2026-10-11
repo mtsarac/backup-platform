@@ -1352,6 +1352,115 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.ReplicaRepairOperation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ArtifactId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CancellationRequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<DateTimeOffset?>("LeaseExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LeaseOwner")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid?>("LeaseToken")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("RequestedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("SourceReplicaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("StorageConnectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("StorageProvider")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid?>("TargetReplicaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("TotalBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("TransferredBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("Id", "TenantId");
+
+                    b.HasIndex("SourceReplicaId")
+                        .HasDatabaseName("ix_replica_repair_active_source")
+                        .HasFilter("\"Status\" IN ('Pending', 'InProgress') AND \"SourceReplicaId\" IS NOT NULL");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("ArtifactId", "TenantId");
+
+                    b.HasIndex("SourceReplicaId", "TenantId");
+
+                    b.HasIndex("TenantId", "ArtifactId", "StorageConnectionId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_replica_repair_active")
+                        .HasFilter("\"Status\" IN ('Pending', 'InProgress')");
+
+                    b.ToTable("replica_repair_operations", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_replica_repair_operations_bytes", "\"TransferredBytes\" >= 0 AND \"TotalBytes\" >= 0 AND \"TransferredBytes\" <= \"TotalBytes\"");
+
+                            t.HasCheckConstraint("ck_replica_repair_operations_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_replica_repair_operations_status", "\"Status\" IN ('Pending','InProgress','Succeeded','Failed','Cancelled')");
+
+                            t.HasCheckConstraint("ck_replica_repair_operations_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_replica_repair_operations_terminal", "(\"Status\" IN ('Succeeded','Failed','Cancelled')) = (\"CompletedAt\" IS NOT NULL)");
+                        });
+                });
+
             modelBuilder.Entity("BackupPlatform.Domain.Downloads.DownloadSession", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3019,6 +3128,28 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.HasOne("BackupPlatform.Domain.Backups.BackupRun", null)
                         .WithMany()
                         .HasForeignKey("RunId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.ReplicaRepairOperation", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Backups.BackupArtifact", null)
+                        .WithMany()
+                        .HasForeignKey("ArtifactId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Backups.BackupReplica", null)
+                        .WithMany()
+                        .HasForeignKey("SourceReplicaId", "TenantId")
                         .HasPrincipalKey("Id", "TenantId")
                         .OnDelete(DeleteBehavior.Restrict);
                 });

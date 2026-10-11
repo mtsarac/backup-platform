@@ -369,3 +369,38 @@ internal sealed class BackupScheduleOccurrenceConfiguration : IEntityTypeConfigu
         builder.HasIndex(occurrence => occurrence.DecidedAt).HasDatabaseName("ix_backup_occurrences_decided");
     }
 }
+
+internal sealed class ReplicaRepairOperationConfiguration : IEntityTypeConfiguration<ReplicaRepairOperation>
+{
+    public void Configure(EntityTypeBuilder<ReplicaRepairOperation> builder)
+    {
+        BackupMapping.Base(builder, "replica_repair_operations");
+        builder.ToTable("replica_repair_operations", table =>
+        {
+            table.HasCheckConstraint("ck_replica_repair_operations_status", "\"Status\" IN ('Pending','InProgress','Succeeded','Failed','Cancelled')");
+            table.HasCheckConstraint("ck_replica_repair_operations_bytes", "\"TransferredBytes\" >= 0 AND \"TotalBytes\" >= 0 AND \"TransferredBytes\" <= \"TotalBytes\"");
+            table.HasCheckConstraint("ck_replica_repair_operations_terminal", "(\"Status\" IN ('Succeeded','Failed','Cancelled')) = (\"CompletedAt\" IS NOT NULL)");
+        });
+
+        builder.Property(repair => repair.StorageProvider).HasMaxLength(128).IsRequired();
+        builder.Property(repair => repair.Status).HasConversion<string>().HasMaxLength(32).IsRequired();
+        builder.Property(repair => repair.LeaseOwner).HasMaxLength(128);
+        builder.Property(repair => repair.FailureCode).HasMaxLength(128);
+        builder.Property(repair => repair.FailureReason).HasMaxLength(512);
+
+        builder.HasOne<BackupArtifact>().WithMany().HasForeignKey(repair => new { repair.ArtifactId, repair.TenantId })
+            .HasPrincipalKey(artifact => new { artifact.Id, artifact.TenantId }).OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<BackupReplica>().WithMany().HasForeignKey(repair => new { repair.SourceReplicaId, repair.TenantId })
+            .HasPrincipalKey(replica => new { replica.Id, replica.TenantId }).OnDelete(DeleteBehavior.Restrict).IsRequired(false);
+
+        builder.HasIndex(repair => new { repair.TenantId, repair.ArtifactId, repair.StorageConnectionId })
+            .HasDatabaseName("ux_replica_repair_active")
+            .IsUnique()
+            .HasFilter("\"Status\" IN ('Pending', 'InProgress')");
+
+        builder.HasIndex(repair => repair.SourceReplicaId)
+            .HasDatabaseName("ix_replica_repair_active_source")
+            .HasFilter("\"Status\" IN ('Pending', 'InProgress') AND \"SourceReplicaId\" IS NOT NULL");
+    }
+}

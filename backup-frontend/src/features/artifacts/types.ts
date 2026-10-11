@@ -28,6 +28,32 @@ export interface ReplicationHealth {
   destinations: ReplicationDestination[]
 }
 
+export type ReplicaRepairStatus = 'Pending' | 'InProgress' | 'Succeeded' | 'Failed' | 'Cancelled'
+
+export interface ReplicaRepairOperation {
+  id: string
+  artifactId: string
+  storageConnectionId: string
+  storageProvider: string
+  sourceReplicaId: string | null
+  targetReplicaId: string | null
+  status: ReplicaRepairStatus
+  failureCode: string | null
+  failureReason: string | null
+  transferredBytes: number
+  totalBytes: number
+  createdAt: string
+  startedAt: string | null
+  completedAt: string | null
+  cancellationRequestedAt: string | null
+  requestedByUserId: string | null
+}
+
+export interface StartReplicaRepairRequest {
+  storageConnectionId?: string | null
+  storageProvider?: string | null
+}
+
 export type ArtifactState = 'Available' | 'DeletePending' | 'DeleteFailed' | 'Deleted'
 
 export interface BackupReplica {

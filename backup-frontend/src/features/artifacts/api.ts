@@ -1,5 +1,5 @@
 import { apiRequest, tenantPath } from '@/lib/api/client'
-import type { ArtifactFilters, ArtifactList, BackupArtifact } from './types'
+import type { ArtifactFilters, ArtifactList, BackupArtifact, ReplicaRepairOperation, StartReplicaRepairRequest } from './types'
 
 export function listArtifacts(tenantId: string, filters: ArtifactFilters, signal: AbortSignal) {
   const search = new URLSearchParams({ page: String(filters.page), pageSize: String(filters.pageSize) })
@@ -19,6 +19,22 @@ export function deleteArtifact(tenantId: string, id: string) {
 
 export function cancelArtifactDeletion(tenantId: string, id: string) {
   return apiRequest<BackupArtifact>(tenantPath(tenantId, `backup-artifacts/${encodeURIComponent(id)}/cancel-delete`), { method: 'POST' })
+}
+
+export function startReplicaRepair(tenantId: string, id: string, request: StartReplicaRepairRequest) {
+  return apiRequest<ReplicaRepairOperation>(tenantPath(tenantId, `backup-artifacts/${encodeURIComponent(id)}/repairs`), { method: 'POST', json: request })
+}
+
+export function getReplicaRepair(tenantId: string, id: string, repairId: string, signal?: AbortSignal) {
+  return apiRequest<ReplicaRepairOperation>(tenantPath(tenantId, `backup-artifacts/${encodeURIComponent(id)}/repairs/${encodeURIComponent(repairId)}`), { signal })
+}
+
+export function cancelReplicaRepair(tenantId: string, id: string, repairId: string) {
+  return apiRequest<ReplicaRepairOperation>(tenantPath(tenantId, `backup-artifacts/${encodeURIComponent(id)}/repairs/${encodeURIComponent(repairId)}/cancel`), { method: 'POST' })
+}
+
+export function listReplicaRepairs(tenantId: string, id: string, signal?: AbortSignal) {
+  return apiRequest<ReplicaRepairOperation[]>(tenantPath(tenantId, `backup-artifacts/${encodeURIComponent(id)}/repairs`), { signal })
 }
 
 export interface DownloadAvailability {

@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { cancelArtifactDeletion, deleteArtifact, getArtifact, listArtifacts } from './api'
+import { cancelArtifactDeletion, deleteArtifact, getArtifact, listArtifacts, startReplicaRepair, getReplicaRepair, cancelReplicaRepair } from './api'
 import { storageQueryKeys, useRefreshQuotaWhenFinished } from '@/features/storage/hooks'
 import { deletionInProgress } from './format'
-import type { ArtifactFilters, BackupArtifact } from './types'
+import type { ArtifactFilters, BackupArtifact, StartReplicaRepairRequest } from './types'
 
 export function useArtifacts(tenantId: string, filters: ArtifactFilters) {
   const query = useQuery({
@@ -41,4 +41,39 @@ export function useArtifactActions(tenantId: string, id: string) {
   const requestDelete = useMutation({ mutationFn: () => deleteArtifact(tenantId, id), onSuccess: updated })
   const cancelDelete = useMutation({ mutationFn: () => cancelArtifactDeletion(tenantId, id), onSuccess: updated })
   return { requestDelete, cancelDelete }
+}
+
+export function useReplicaRepair(tenantId: string, id: string) {
+  const queryClient = useQueryClient()
+  const startRepair = useMutation({
+    mutationFn: (request: StartReplicaRepairRequest) => startReplicaRepair(tenantId, id, request),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'backup-artifacts', 'detail', id] }),
+        queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'backup-artifacts', 'repairs', id] }),
+      ])
+    },
+  })
+  const cancelRepair = useMutation({
+    mutationFn: (repairId: string) => cancelReplicaRepair(tenantId, id, repairId),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'backup-artifacts', 'detail', id] }),
+        queryClient.invalidateQueries({ queryKey: ['tenant', tenantId, 'backup-artifacts', 'repairs', id] }),
+      ])
+    },
+  })
+  return { startRepair, cancelRepair }
+}
+
+export function useRepairStatus(tenantId: string, artifactId: string, repairId: string | null) {
+  return useQuery({
+    queryKey: ['tenant', tenantId, 'backup-artifacts', 'repairs', artifactId, repairId],
+    queryFn: ({ signal }) => getReplicaRepair(tenantId, artifactId, repairId!, signal),
+    enabled: Boolean(repairId),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      return status === 'Pending' || status === 'InProgress' ? 2000 : false
+    },
+  })
 }

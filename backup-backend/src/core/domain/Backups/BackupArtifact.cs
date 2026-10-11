@@ -57,6 +57,33 @@ public sealed class BackupArtifact : ITenantOwned
             throw new ArgumentException("Replica does not match its artifact.");
         _replicas.Add(replica);
     }
+    /// <summary>Adds a verified replica repaired from an existing verified source replica onto a sealed artifact.</summary>
+    public void AddRepairedReplica(BackupReplica replica)
+    {
+        ArgumentNullException.ThrowIfNull(replica);
+        if (!_sealed) throw new InvalidOperationException("Only a sealed artifact can accept a repaired replica.");
+        if (replica.ArtifactId != Id || replica.TenantId != TenantId || replica.SizeBytes != SizeBytes ||
+            replica.Checksum != ArtifactChecksum || replica.ChecksumAlgorithm != ChecksumAlgorithm)
+            throw new ArgumentException("Replica does not match its artifact.");
+        if (replica.VerificationState != "Verified")
+            throw new ArgumentException("A repaired replica must be verified.");
+        if (replica.StorageConnectionId != Guid.Empty && _replicas.Any(existing => existing.VerificationState == "Verified" && existing.Status != BackupReplicaStatus.Deleted &&
+            existing.StorageProvider == replica.StorageProvider && existing.StorageConnectionId == replica.StorageConnectionId))
+            throw new ArgumentException("Artifact already has a live verified replica for this destination.");
+
+        var existingKeyIndex = _replicas.FindIndex(existing => existing.StorageProvider == replica.StorageProvider && existing.StorageTarget == replica.StorageTarget && existing.Key == replica.Key);
+        if (existingKeyIndex >= 0)
+        {
+            var existing = _replicas[existingKeyIndex];
+            if (existing.VerificationState == "Verified" && existing.Status != BackupReplicaStatus.Deleted)
+                throw new ArgumentException("Artifact already has a live verified replica for this destination.");
+            _replicas[existingKeyIndex] = replica;
+        }
+        else
+        {
+            _replicas.Add(replica);
+        }
+    }
     /// <summary>
     /// Publishes the artifact once the backend accepts the attempt's completion. <paramref name="acceptedAt"/> is the BACKEND's clock at that
     /// moment, never a timestamp the agent reported, and it is the only basis of retention: not the run's creation, not the attempt's

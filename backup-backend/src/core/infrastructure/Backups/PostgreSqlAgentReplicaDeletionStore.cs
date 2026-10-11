@@ -27,6 +27,7 @@ public sealed class PostgreSqlAgentReplicaDeletionStore(DbContextOptions<Platfor
               AND "ExecutionLocation" = 'Agent' AND "Status" = 'Deleting'
               AND ("DeleteLeaseToken" IS NULL OR "DeleteLeaseExpiresAt" <= {now})
               AND NOT EXISTS (SELECT 1 FROM restore_replica_pins pin WHERE pin."ReplicaId" = backup_replicas."Id" AND pin."ReleasedAt" IS NULL)
+              AND NOT EXISTS (SELECT 1 FROM replica_repair_operations repair WHERE repair."SourceReplicaId" = backup_replicas."Id" AND repair."TenantId" = backup_replicas."TenantId" AND repair."Status" IN ('Pending', 'InProgress'))
               AND NOT EXISTS (SELECT 1 FROM download_sessions hold WHERE hold."ReplicaId" = backup_replicas."Id" AND hold."TenantId" = backup_replicas."TenantId"
                   AND hold."ReleasedAt" IS NULL AND hold."ExpiresAt" > {now} AND (hold."LeaseExpiresAt" IS NULL OR hold."LeaseExpiresAt" > {now}))
             ORDER BY "DeleteAfter", "Id"
@@ -39,6 +40,8 @@ public sealed class PostgreSqlAgentReplicaDeletionStore(DbContextOptions<Platfor
             UNION
             SELECT "ReplicaId" AS "Value" FROM download_sessions WHERE "ReleasedAt" IS NULL AND "ExpiresAt" > {now}
                 AND ("LeaseExpiresAt" IS NULL OR "LeaseExpiresAt" > {now}) AND "ReplicaId" = ANY({ids.ToArray()})
+                UNION
+                SELECT "SourceReplicaId" AS "Value" FROM replica_repair_operations WHERE "Status" IN ('Pending', 'InProgress') AND "SourceReplicaId" = ANY({ids.ToArray()})
             """).ToListAsync(cancellationToken);
         if (pinned.Count != 0) ids = [.. ids.Where(id => !pinned.Contains(id))];
         DeleteReplicaTaskSnapshot? task = null;

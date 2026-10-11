@@ -81,6 +81,7 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
                OR ("Status" = 'Deleting' AND ("DeleteLeaseExpiresAt" <= {now}
                    OR ("ExecutionLocation" = 'Agent' AND "DeleteLeaseToken" IS NULL AND "DeleteNextAttemptAt" <= {now}))))
               AND NOT EXISTS (SELECT 1 FROM restore_replica_pins pin WHERE pin."ReplicaId" = backup_replicas."Id" AND pin."ReleasedAt" IS NULL)
+              AND NOT EXISTS (SELECT 1 FROM replica_repair_operations repair WHERE repair."SourceReplicaId" = backup_replicas."Id" AND repair."TenantId" = backup_replicas."TenantId" AND repair."Status" IN ('Pending', 'InProgress'))
               AND NOT EXISTS (SELECT 1 FROM backup_artifacts artifact JOIN backup_run_attempts attempt
                   ON attempt."Id" = artifact."AttemptId" AND attempt."TenantId" = artifact."TenantId"
                   WHERE artifact."Id" = backup_replicas."ArtifactId" AND artifact."TenantId" = backup_replicas."TenantId" AND attempt."Status" IN (2, 3))
@@ -99,6 +100,8 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
             UNION
             SELECT "ReplicaId" AS "Value" FROM download_sessions WHERE "ReleasedAt" IS NULL AND "ExpiresAt" > {now}
                 AND ("LeaseExpiresAt" IS NULL OR "LeaseExpiresAt" > {now}) AND "ReplicaId" = ANY({ids.ToArray()})
+                UNION
+                SELECT "SourceReplicaId" AS "Value" FROM replica_repair_operations WHERE "Status" IN ('Pending', 'InProgress') AND "SourceReplicaId" = ANY({ids.ToArray()})
             """).ToListAsync(cancellationToken);
         if (pinned.Count != 0) ids = [.. ids.Where(id => !pinned.Contains(id))];
         if (ids.Count == 0) return [];
