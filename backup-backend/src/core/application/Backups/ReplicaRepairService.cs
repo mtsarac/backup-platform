@@ -145,6 +145,7 @@ public sealed class ReplicaRepairService(
             BackupReplica? sourceReplica = null;
             Stream? sourceStream = null;
 
+            string? targetKey = null;
             foreach (var candidate in candidateSources)
             {
                 if (cts.Token.IsCancellationRequested) break;
@@ -167,12 +168,18 @@ public sealed class ReplicaRepairService(
                     continue;
                 }
 
+                var slash = candidate.Key.LastIndexOf('/');
+                var fileName = slash >= 0 ? candidate.Key[(slash + 1)..] : candidate.Key;
+                var targetScope = slash >= 0 ? candidate.Key[..slash] : "";
+                var candidateTargetKey = string.IsNullOrEmpty(targetScope) ? fileName : $"{targetScope}/{fileName}";
+
                 try
                 {
-                    if (!await store.PinSourceAsync(tenantId, operationId, leaseToken, candidate.Id, time.GetUtcNow(), cts.Token)) continue;
+                    if (!await store.PinSourceAsync(tenantId, operationId, leaseToken, candidate.Id, candidateTargetKey, time.GetUtcNow(), cts.Token)) continue;
                     sourceStream = await resolved.OpenReadAsync(new StorageObjectKey(candidate.Key), cts.Token);
                     sourceProvider = resolved;
                     sourceReplica = candidate;
+                    targetKey = candidateTargetKey;
                     break;
                 }
                 catch (StorageException ex)
@@ -182,7 +189,7 @@ public sealed class ReplicaRepairService(
                 }
             }
 
-            if (sourceStream is null || sourceReplica is null || sourceProvider is null)
+            if (sourceStream is null || sourceReplica is null || sourceProvider is null || targetKey is null)
             {
                 var failureCode = candidateSources.Any(c => string.Equals(c.StorageProvider, "local", StringComparison.OrdinalIgnoreCase)) && candidateSources.Count == 1
                     ? ReplicaRepairFailureCodes.UnsupportedSource
@@ -193,13 +200,7 @@ public sealed class ReplicaRepairService(
                 return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
             }
 
-            claimed.SetSourceReplica(sourceReplica.Id);
-
-            var slash = sourceReplica.Key.LastIndexOf('/');
-            var fileName = slash >= 0 ? sourceReplica.Key[(slash + 1)..] : sourceReplica.Key;
-            var targetScope = slash >= 0 ? sourceReplica.Key[..slash] : "";
-            var targetKey = string.IsNullOrEmpty(targetScope) ? fileName : $"{targetScope}/{fileName}";
-
+            claimed.SetTargetIntent(sourceReplica.Id, targetKey);
             await using (sourceStream)
             {
                 await using var hashingStream = new Sha256VerifyingStream(sourceStream);
@@ -274,29 +275,41 @@ public sealed class ReplicaRepairService(
                     catch (OperationCanceledException) { }
                 });
 
+                var putCompleted = false;
+
                 try
                 {
                     await destinationProvider.PutAsync(new StorageObjectKey(targetKey), hashingStream, putOptions, progress, cts.Token);
+                    putCompleted = true;
 
-                    // Verify source SHA-256
-                    var actualSourceChecksum = hashingStream.GetHashHex();
-                    if (!string.Equals(actualSourceChecksum, artifact.ArtifactChecksum, StringComparison.OrdinalIgnoreCase))
+                    // If provider read the source stream, verify its SHA-256 hash.
+                    // If provider did not read the stream (Position == 0), the destination object was already present
+                    // with matching metadata (idempotent PUT); readback verification will validate and adopt it.
+                    if (hashingStream.Position > 0)
                     {
-                        logger.LogError("Source replica {SourceReplicaId} checksum mismatch: computed {Actual}, expected {Expected}",
-                            sourceReplica.Id, actualSourceChecksum, artifact.ArtifactChecksum);
-                        await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, artifact, targetDestination, destinationTarget, targetKey);
-                        await FailOrRetryAsync(claimed, leaseToken, ReplicaRepairFailureCodes.SourceChecksumMismatch,
-                            "Source replica data failed SHA-256 integrity verification.", CancellationToken.None);
-                        return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                        var actualSourceChecksum = hashingStream.GetHashHex();
+                        if (hashingStream.Position != artifact.SizeBytes || !string.Equals(actualSourceChecksum, artifact.ArtifactChecksum, StringComparison.OrdinalIgnoreCase))
+                        {
+                            logger.LogError("Source replica {SourceReplicaId} checksum mismatch: computed {Actual}, expected {Expected}",
+                                sourceReplica.Id, actualSourceChecksum, artifact.ArtifactChecksum);
+                            await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, targetKey);
+                            await FailOrRetryAsync(claimed, leaseToken, ReplicaRepairFailureCodes.SourceChecksumMismatch,
+                                "Source replica data failed SHA-256 integrity verification.", CancellationToken.None);
+                            return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                        }
+                    }
+                    else
+                    {
+                        logger.LogInformation("Destination object already present for repair {OperationId}. Validating existing object via readback.", operationId);
                     }
 
-                    // Destination readback verification
+                    // Destination readback verification (for both freshly uploaded and existing adopted objects)
                     var expectation = new StorageVerificationExpectation(artifact.SizeBytes, new ContentChecksum(ChecksumAlgorithm.Sha256, artifact.ArtifactChecksum));
                     var verifyResult = await destinationProvider.VerifyAsync(new StorageObjectKey(targetKey), expectation, cts.Token);
                     if (verifyResult.Status != StorageVerificationStatus.Verified)
                     {
                         logger.LogError("Destination readback verification failed for repair {OperationId}: {Status}", operationId, verifyResult.Status);
-                        await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, artifact, targetDestination, destinationTarget, targetKey);
+                        await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, targetKey);
                         await FailOrRetryAsync(claimed, leaseToken, ReplicaRepairFailureCodes.DestinationReadbackFailed,
                             "Destination readback verification failed.", CancellationToken.None);
                         return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
@@ -347,7 +360,7 @@ public sealed class ReplicaRepairService(
                     }
 
                     logger.LogInformation("Repair operation {OperationId} was cancelled by user request.", operationId);
-                    await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, artifact, targetDestination, destinationTarget, targetKey);
+                    await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, targetKey);
                     await store.CancelOperationAsync(tenantId, operationId, leaseToken, time.GetUtcNow(), CancellationToken.None);
                     return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
                 }
@@ -355,7 +368,7 @@ public sealed class ReplicaRepairService(
                 {
                     logger.LogError(sex, "Destination storage put/verify failed for repair {OperationId}: {Message}", operationId, sex.Message);
                     if (sex.Kind != StorageFailureKind.AlreadyExists)
-                        await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, artifact, targetDestination, destinationTarget, targetKey);
+                        await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, targetKey);
                     var code = sex.Kind switch
                     {
                         StorageFailureKind.AlreadyExists => ReplicaRepairFailureCodes.AlreadyVerified,
@@ -365,6 +378,17 @@ public sealed class ReplicaRepairService(
                         _ => ReplicaRepairFailureCodes.StorageUnavailable
                     };
                     await FailOrRetryAsync(claimed, leaseToken, code, sex.Message, CancellationToken.None);
+                    return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Unexpected error in repair execution {OperationId}: {Message}", operationId, ex.Message);
+                    if (putCompleted)
+                    {
+                        await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, targetKey);
+                    }
+                    await FailOrRetryAsync(claimed, leaseToken, ReplicaRepairFailureCodes.InternalError,
+                        $"Internal error: {ex.GetType().Name}: {ex.Message}", CancellationToken.None);
                     return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
                 }
                 finally
@@ -453,18 +477,39 @@ public sealed class ReplicaRepairService(
     private async Task TryCleanupOrRecordOrphanAsync(
         IStorageProvider destinationProvider,
         TenantId tenantId,
+        Guid operationId,
+        Guid leaseToken,
         BackupArtifact artifact,
         BackupDestination targetDestination,
         string destinationTarget,
         string targetKey)
     {
+        var canCleanup = await store.CanCleanupTargetAsync(
+            tenantId, operationId, leaseToken, targetKey, time.GetUtcNow(), CancellationToken.None);
+        if (!canCleanup)
+        {
+            logger.LogWarning("Fenced cleanup skipped for operation {OperationId}, key {Key}. Lease not held or verified replica exists.",
+                operationId, targetKey);
+            return;
+        }
+
+        var deleted = false;
         try
         {
-            await destinationProvider.DeleteAsync(new StorageObjectKey(targetKey), CancellationToken.None);
+            deleted = await destinationProvider.DeleteAsync(new StorageObjectKey(targetKey), CancellationToken.None);
+        }
+        catch (StorageException ex) when (ex.Kind == StorageFailureKind.NotFound)
+        {
+            deleted = true;
         }
         catch (Exception delEx)
         {
-            logger.LogWarning(delEx, "Failed to delete target key {Key} after repair failure. Recording durable orphan replica.", targetKey);
+            logger.LogWarning(delEx, "Failed to delete target key {Key} during cleanup. Recording durable orphan replica.", targetKey);
+        }
+
+        if (!deleted)
+        {
+            logger.LogWarning("Target key {Key} deletion unconfirmed after repair failure. Recording durable orphan replica.", targetKey);
             await store.RecordRepairOrphanAsync(
                 tenantId,
                 artifact.Id,

@@ -9,6 +9,7 @@ public sealed record ReplicaRepairOperationView(
     string StorageProvider,
     Guid? SourceReplicaId,
     Guid? TargetReplicaId,
+    string? TargetKey,
     string Status,
     string? FailureCode,
     string? FailureReason,

@@ -140,7 +140,10 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         await context.SaveChangesAsync(cancellationToken);
         return operation;
     }
-    public async Task<bool> PinSourceAsync(TenantId tenantId, Guid operationId, Guid leaseToken, Guid sourceReplicaId, DateTimeOffset now, CancellationToken cancellationToken)
+    public Task<bool> PinSourceAsync(TenantId tenantId, Guid operationId, Guid leaseToken, Guid sourceReplicaId, DateTimeOffset now, CancellationToken cancellationToken) =>
+        PinSourceAsync(tenantId, operationId, leaseToken, sourceReplicaId, "default.bak", now, cancellationToken);
+
+    public async Task<bool> PinSourceAsync(TenantId tenantId, Guid operationId, Guid leaseToken, Guid sourceReplicaId, string targetKey, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
@@ -157,9 +160,38 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         if (sources.Count == 0) return false;
         var source = await context.BackupReplicas.AsNoTracking().SingleAsync(entity => entity.TenantId == tenantId && entity.Id == sourceReplicaId, cancellationToken);
         if (!ReplicaRepairSourceEvaluator.IsEligibleSource(source, now) || source.ExecutionLocation != BackupStorageExecutionLocation.Backend) return false;
-        operation.SetSourceReplica(source.Id);
+        operation.SetTargetIntent(source.Id, targetKey);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> CanCleanupTargetAsync(
+        TenantId tenantId,
+        Guid operationId,
+        Guid leaseToken,
+        string targetKey,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var operation = await context.ReplicaRepairOperations
+            .SingleOrDefaultAsync(r => r.TenantId == tenantId && r.Id == operationId, cancellationToken);
+
+        if (operation is null || !operation.HasLease(leaseToken, now)) return false;
+
+        // Fencing: If a live Verified replica already exists on this destination, never delete!
+        var hasVerified = await context.BackupReplicas
+            .AnyAsync(r => r.TenantId == tenantId && r.ArtifactId == operation.ArtifactId &&
+                r.StorageProvider == operation.StorageProvider &&
+                r.StorageConnectionId == operation.StorageConnectionId &&
+                r.VerificationState == "Verified" &&
+                r.Status != BackupReplicaStatus.Deleted, cancellationToken);
+        if (hasVerified) return false;
+
+        // Fencing: Atomically extend lease by 2 minutes so no competing worker can claim during deletion
+        operation.RenewLease(leaseToken, now, TimeSpan.FromMinutes(2));
+        await context.SaveChangesAsync(cancellationToken);
         return true;
     }
 
@@ -257,13 +289,25 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         if (artifact is null)
             throw new InvalidOperationException("Artifact not found during completion.");
 
+        var existingVerified = artifact.Replicas.FirstOrDefault(r =>
+            r.VerificationState == "Verified" &&
+            r.Status != BackupReplicaStatus.Deleted &&
+            r.StorageProvider == newReplica.StorageProvider &&
+            r.StorageConnectionId == newReplica.StorageConnectionId);
+
+        if (existingVerified is not null)
+        {
+            operation.Succeed(leaseToken, existingVerified.Id, now);
+            await context.SaveChangesAsync(cancellationToken);
+            return existingVerified;
+        }
+
         artifact.AddRepairedReplica(newReplica);
 
         if (!context.BackupReplicas.Local.Contains(newReplica) && !await context.BackupReplicas.AnyAsync(r => r.Id == newReplica.Id, cancellationToken))
         {
             context.BackupReplicas.Add(newReplica);
         }
-
         operation.Succeed(leaseToken, newReplica.Id, now);
 
         try
@@ -440,6 +484,37 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
             else
             {
                 op.MarkStaleFailed("lease_expired", "Repair lease expired and maximum retry attempts exhausted.", now);
+                if (!string.IsNullOrEmpty(op.TargetKey))
+                {
+                    var artifact = await context.BackupArtifacts
+                        .Include(a => a.Replicas)
+                        .SingleOrDefaultAsync(a => a.TenantId == op.TenantId && a.Id == op.ArtifactId, cancellationToken);
+                    if (artifact is not null && !artifact.Replicas.Any(r => r.StorageProvider == op.StorageProvider && r.StorageConnectionId == op.StorageConnectionId && r.VerificationState == "Verified" && r.Status != BackupReplicaStatus.Deleted))
+                    {
+                        var orphan = new BackupReplica(
+                            Guid.NewGuid(),
+                            op.TenantId,
+                            op.ArtifactId,
+                            op.StorageProvider,
+                            op.StorageConnectionId == Guid.Empty ? op.StorageProvider : op.StorageConnectionId.ToString("D"),
+                            op.TargetKey,
+                            Math.Max(1, op.TotalBytes),
+                            artifact.ArtifactChecksum,
+                            artifact.ChecksumAlgorithm,
+                            "Failed",
+                            "RepairCrashRecovery",
+                            now,
+                            verifiedAt: null,
+                            BackupStorageExecutionLocation.Backend,
+                            owningAgentId: null,
+                            storageConnectionId: op.StorageConnectionId);
+                        artifact.AddOrphanReplica(orphan, now);
+                        if (!context.BackupReplicas.Local.Contains(orphan) && !await context.BackupReplicas.AnyAsync(r => r.Id == orphan.Id, cancellationToken))
+                        {
+                            context.BackupReplicas.Add(orphan);
+                        }
+                    }
+                }
             }
             count++;
         }
@@ -644,6 +719,7 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
             r.StorageProvider,
             r.SourceReplicaId,
             r.TargetReplicaId,
+            r.TargetKey,
             r.Status.ToString(),
             r.FailureCode,
             r.FailureReason,

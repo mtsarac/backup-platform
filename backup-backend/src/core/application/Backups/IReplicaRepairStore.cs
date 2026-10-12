@@ -26,7 +26,17 @@ public interface IReplicaRepairStore
         TimeSpan leaseDuration,
         CancellationToken cancellationToken);
 
-    Task<bool> PinSourceAsync(TenantId tenantId, Guid operationId, Guid leaseToken, Guid sourceReplicaId, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<bool> PinSourceAsync(TenantId tenantId, Guid operationId, Guid leaseToken, Guid sourceReplicaId, string targetKey, DateTimeOffset now, CancellationToken cancellationToken);
+
+    Task<bool> PinSourceAsync(TenantId tenantId, Guid operationId, Guid leaseToken, Guid sourceReplicaId, DateTimeOffset now, CancellationToken cancellationToken) =>
+        PinSourceAsync(tenantId, operationId, leaseToken, sourceReplicaId, "default.bak", now, cancellationToken);
+    Task<bool> CanCleanupTargetAsync(
+        TenantId tenantId,
+        Guid operationId,
+        Guid leaseToken,
+        string targetKey,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
 
     Task<bool> RenewLeaseAsync(
         TenantId tenantId,

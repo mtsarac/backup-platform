@@ -369,7 +369,8 @@ public sealed class ReplicaRepairHeartbeatUnitTests
         }
 
         public Task<bool> ScheduleRetryAsync(TenantId tenantId, Guid operationId, Guid leaseToken, string failureCode, string? reason, DateTimeOffset nextRetryAt, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(true);
-        public Task<bool> PinSourceAsync(TenantId tenantId, Guid operationId, Guid leaseToken, Guid sourceReplicaId, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task<bool> PinSourceAsync(TenantId tenantId, Guid operationId, Guid leaseToken, Guid sourceReplicaId, string targetKey, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task<bool> CanCleanupTargetAsync(TenantId tenantId, Guid operationId, Guid leaseToken, string targetKey, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(true);
         public Task<bool> UpdateProgressAsync(TenantId tenantId, Guid operationId, Guid leaseToken, long transferredBytes, long totalBytes, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(true);
         public Task<bool> RequestCancellationAsync(TenantId tenantId, Guid operationId, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(true);
         public Task RecordRepairOrphanAsync(TenantId tenantId, Guid artifactId, Guid storageConnectionId, string storageProvider, string storageTarget, string key, long sizeBytes, string checksum, DateTimeOffset now, CancellationToken cancellationToken) => Task.CompletedTask;
@@ -390,6 +391,7 @@ public sealed class ReplicaRepairHeartbeatUnitTests
                 "sftp",
                 null,
                 CompletedReplica?.Id,
+                null,
                 CompletedReplica is not null ? ReplicaRepairStatus.Succeeded.ToString() : CancelOperationCallCount > 0 ? ReplicaRepairStatus.Cancelled.ToString() : ReplicaRepairStatus.InProgress.ToString(),
                 null,
                 null,

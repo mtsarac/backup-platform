@@ -1425,6 +1425,10 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
+                    b.Property<string>("TargetKey")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
                     b.Property<Guid?>("TargetReplicaId")
                         .HasColumnType("uuid");
 

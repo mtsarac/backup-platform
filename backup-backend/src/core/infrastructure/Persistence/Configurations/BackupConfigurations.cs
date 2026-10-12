@@ -383,6 +383,7 @@ internal sealed class ReplicaRepairOperationConfiguration : IEntityTypeConfigura
         });
 
         builder.Property(repair => repair.StorageProvider).HasMaxLength(128).IsRequired();
+        builder.Property(repair => repair.TargetKey).HasMaxLength(512);
         builder.Property(repair => repair.Status).HasConversion<string>().HasMaxLength(32).IsRequired();
         builder.Property(repair => repair.LeaseOwner).HasMaxLength(128);
         builder.Property(repair => repair.FailureCode).HasMaxLength(128);

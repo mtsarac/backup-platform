@@ -22,7 +22,8 @@ public sealed class ReplicaRepairOperation : ITenantOwned
         Guid? requestedByUserId = null,
         long totalBytes = 0,
         int maxAttempts = 5,
-        DateTimeOffset? nextRetryAt = null)
+        DateTimeOffset? nextRetryAt = null,
+        string? targetKey = null)
     {
         BackupGuard.Id(id);
         BackupGuard.Id(artifactId);
@@ -40,6 +41,7 @@ public sealed class ReplicaRepairOperation : ITenantOwned
         TotalBytes = Math.Max(0, totalBytes);
         MaxAttempts = Math.Clamp(maxAttempts, 1, 10);
         NextRetryAt = nextRetryAt is { } retry ? BackupGuard.Timestamp(retry) : null;
+        TargetKey = targetKey;
         Status = ReplicaRepairStatus.Pending;
     }
     public Guid Id { get; private set; }
@@ -49,6 +51,7 @@ public sealed class ReplicaRepairOperation : ITenantOwned
     public string StorageProvider { get; private set; }
     public Guid? SourceReplicaId { get; private set; }
     public Guid? TargetReplicaId { get; private set; }
+    public string? TargetKey { get; private set; }
     public ReplicaRepairStatus Status { get; private set; }
     public string? LeaseOwner { get; private set; }
     public Guid? LeaseToken { get; private set; }
@@ -72,13 +75,21 @@ public sealed class ReplicaRepairOperation : ITenantOwned
     public bool IsExhausted => AttemptCount >= MaxAttempts && Status == ReplicaRepairStatus.Failed;
     public bool HasLease(Guid token, DateTimeOffset now) => token != Guid.Empty && LeaseToken == token && LeaseExpiresAt > now && !IsTerminal;
 
+    public void SetTargetIntent(Guid sourceReplicaId, string targetKey)
+    {
+        if (IsTerminal) throw new InvalidOperationException("Cannot update target intent on a terminal repair operation.");
+        BackupGuard.Id(sourceReplicaId);
+        BackupGuard.Text(targetKey, 512);
+        SourceReplicaId = sourceReplicaId;
+        TargetKey = targetKey;
+    }
+
     public void SetSourceReplica(Guid sourceReplicaId)
     {
         if (IsTerminal) throw new InvalidOperationException("Cannot update source replica on a terminal repair operation.");
         BackupGuard.Id(sourceReplicaId);
         SourceReplicaId = sourceReplicaId;
     }
-
     public void Claim(Guid token, string owner, DateTimeOffset now, TimeSpan duration)
     {
         if (Status != ReplicaRepairStatus.Pending) throw new InvalidOperationException("Only a pending repair can be claimed.");
