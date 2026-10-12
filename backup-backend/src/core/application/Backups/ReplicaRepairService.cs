@@ -234,6 +234,9 @@ public sealed class ReplicaRepairService(
                     artifact.SizeBytes);
 
                 using var heartbeatCts = new CancellationTokenSource();
+                var leaseLost = false;
+                var heartbeatFailed = false;
+
                 var heartbeatTask = Task.Run(async () =>
                 {
                     using var timer = new PeriodicTimer(TimeSpan.FromSeconds(20), time);
@@ -241,36 +244,116 @@ public sealed class ReplicaRepairService(
                     {
                         while (await timer.WaitForNextTickAsync(heartbeatCts.Token))
                         {
-                            var renewed = await store.RenewLeaseAsync(tenantId, operationId, leaseToken, time.GetUtcNow(), DefaultLeaseDuration, heartbeatCts.Token);
+                            bool renewed;
+                            try
+                            {
+                                renewed = await store.RenewLeaseAsync(
+                                    tenantId, operationId, leaseToken, time.GetUtcNow(), DefaultLeaseDuration, heartbeatCts.Token);
+                            }
+                            catch (OperationCanceledException) when (heartbeatCts.IsCancellationRequested)
+                            {
+                                break;
+                            }
+                            catch (Exception ex)
+                            {
+                                logger.LogWarning(ex, "Error in repair lease heartbeat for {OperationId}. Stopping operation to preserve lease safety.", operationId);
+                                heartbeatFailed = true;
+                                cts.Cancel();
+                                break;
+                            }
+
                             if (!renewed)
                             {
-                                logger.LogWarning("Repair operation {OperationId} lease renewal failed; triggering cooperative cancellation.", operationId);
+                                leaseLost = true;
+                                logger.LogWarning("Repair operation {OperationId} lease renewal returned false; lease lost. Fencing operation.", operationId);
                                 cts.Cancel();
                                 break;
                             }
                         }
                     }
                     catch (OperationCanceledException) { }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(ex, "Error in repair lease heartbeat for {OperationId}.", operationId);
-                    }
                 });
 
                 try
                 {
                     await destinationProvider.PutAsync(new StorageObjectKey(targetKey), hashingStream, putOptions, progress, cts.Token);
+
+                    // Verify source SHA-256
+                    var actualSourceChecksum = hashingStream.GetHashHex();
+                    if (!string.Equals(actualSourceChecksum, artifact.ArtifactChecksum, StringComparison.OrdinalIgnoreCase))
+                    {
+                        logger.LogError("Source replica {SourceReplicaId} checksum mismatch: computed {Actual}, expected {Expected}",
+                            sourceReplica.Id, actualSourceChecksum, artifact.ArtifactChecksum);
+                        await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, artifact, targetDestination, destinationTarget, targetKey);
+                        await FailOrRetryAsync(claimed, leaseToken, ReplicaRepairFailureCodes.SourceChecksumMismatch,
+                            "Source replica data failed SHA-256 integrity verification.", CancellationToken.None);
+                        return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                    }
+
+                    // Destination readback verification
+                    var expectation = new StorageVerificationExpectation(artifact.SizeBytes, new ContentChecksum(ChecksumAlgorithm.Sha256, artifact.ArtifactChecksum));
+                    var verifyResult = await destinationProvider.VerifyAsync(new StorageObjectKey(targetKey), expectation, cts.Token);
+                    if (verifyResult.Status != StorageVerificationStatus.Verified)
+                    {
+                        logger.LogError("Destination readback verification failed for repair {OperationId}: {Status}", operationId, verifyResult.Status);
+                        await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, artifact, targetDestination, destinationTarget, targetKey);
+                        await FailOrRetryAsync(claimed, leaseToken, ReplicaRepairFailureCodes.DestinationReadbackFailed,
+                            "Destination readback verification failed.", CancellationToken.None);
+                        return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                    }
+
+                    // Complete operation and create verified replica
+                    var finishTime = time.GetUtcNow();
+                    var newReplica = new BackupReplica(
+                        Guid.NewGuid(),
+                        tenantId,
+                        artifact.Id,
+                        targetDestination.StorageProvider,
+                        destinationTarget,
+                        targetKey,
+                        artifact.SizeBytes,
+                        artifact.ArtifactChecksum,
+                        artifact.ChecksumAlgorithm,
+                        "Verified",
+                        verifyResult.Method.ToString(),
+                        finishTime,
+                        finishTime,
+                        BackupStorageExecutionLocation.Backend,
+                        owningAgentId: null,
+                        storageConnectionId: targetDestination.StorageConnectionId ?? Guid.Empty);
+                    await store.CompleteOperationAsync(tenantId, operationId, leaseToken, newReplica, finishTime, CancellationToken.None);
+                    logger.LogInformation("Repair operation {OperationId} succeeded. Created replica {ReplicaId} on {Provider}:{Target}.",
+                        operationId, newReplica.Id, newReplica.StorageProvider, newReplica.StorageTarget);
+                    return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
                 }
                 catch (OperationCanceledException)
                 {
-                    logger.LogInformation("Repair operation {OperationId} was cancelled during transfer.", operationId);
+                    if (leaseLost)
+                    {
+                        logger.LogWarning("Repair operation {OperationId} was cancelled due to lost lease. Skipping cleanup and terminal cancellation.", operationId);
+                        return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                    }
+
+                    if (heartbeatFailed)
+                    {
+                        logger.LogWarning("Repair operation {OperationId} was cancelled due to heartbeat failure. Skipping cleanup and terminal cancellation.", operationId);
+                        return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                    }
+
+                    if (externalToken.IsCancellationRequested)
+                    {
+                        logger.LogInformation("Repair operation {OperationId} stopped due to host shutdown.", operationId);
+                        return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                    }
+
+                    logger.LogInformation("Repair operation {OperationId} was cancelled by user request.", operationId);
                     await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, artifact, targetDestination, destinationTarget, targetKey);
                     await store.CancelOperationAsync(tenantId, operationId, leaseToken, time.GetUtcNow(), CancellationToken.None);
                     return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
                 }
                 catch (StorageException sex)
                 {
-                    logger.LogError(sex, "Destination storage put failed for repair {OperationId}: {Message}", operationId, sex.Message);
+                    logger.LogError(sex, "Destination storage put/verify failed for repair {OperationId}: {Message}", operationId, sex.Message);
                     if (sex.Kind != StorageFailureKind.AlreadyExists)
                         await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, artifact, targetDestination, destinationTarget, targetKey);
                     var code = sex.Kind switch
@@ -289,58 +372,16 @@ public sealed class ReplicaRepairService(
                     heartbeatCts.Cancel();
                     try { await heartbeatTask; } catch { /* ignore */ }
                 }
-
-                // Verify source SHA-256
-                var actualSourceChecksum = hashingStream.GetHashHex();
-                if (!string.Equals(actualSourceChecksum, artifact.ArtifactChecksum, StringComparison.OrdinalIgnoreCase))
-                {
-                    logger.LogError("Source replica {SourceReplicaId} checksum mismatch: computed {Actual}, expected {Expected}",
-                        sourceReplica.Id, actualSourceChecksum, artifact.ArtifactChecksum);
-                    await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, artifact, targetDestination, destinationTarget, targetKey);
-                    await FailOrRetryAsync(claimed, leaseToken, ReplicaRepairFailureCodes.SourceChecksumMismatch,
-                        "Source replica data failed SHA-256 integrity verification.", CancellationToken.None);
-                    return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
-                }
-
-                // Destination readback verification
-                var expectation = new StorageVerificationExpectation(artifact.SizeBytes, new ContentChecksum(ChecksumAlgorithm.Sha256, artifact.ArtifactChecksum));
-                var verifyResult = await destinationProvider.VerifyAsync(new StorageObjectKey(targetKey), expectation, cts.Token);
-                if (verifyResult.Status != StorageVerificationStatus.Verified)
-                {
-                    logger.LogError("Destination readback verification failed for repair {OperationId}: {Status}", operationId, verifyResult.Status);
-                    await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, artifact, targetDestination, destinationTarget, targetKey);
-                    await FailOrRetryAsync(claimed, leaseToken, ReplicaRepairFailureCodes.DestinationReadbackFailed,
-                        "Destination readback verification failed.", CancellationToken.None);
-                    return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
-                }
-
-                // Complete operation and create verified replica
-                var finishTime = time.GetUtcNow();
-                var newReplica = new BackupReplica(
-                    Guid.NewGuid(),
-                    tenantId,
-                    artifact.Id,
-                    targetDestination.StorageProvider,
-                    destinationTarget,
-                    targetKey,
-                    artifact.SizeBytes,
-                    artifact.ArtifactChecksum,
-                    artifact.ChecksumAlgorithm,
-                    "Verified",
-                    verifyResult.Method.ToString(),
-                    finishTime,
-                    finishTime,
-                    BackupStorageExecutionLocation.Backend,
-                    owningAgentId: null,
-                    storageConnectionId: targetDestination.StorageConnectionId ?? Guid.Empty);
-                await store.CompleteOperationAsync(tenantId, operationId, leaseToken, newReplica, finishTime, CancellationToken.None);
-                logger.LogInformation("Repair operation {OperationId} succeeded. Created replica {ReplicaId} on {Provider}:{Target}.",
-                    operationId, newReplica.Id, newReplica.StorageProvider, newReplica.StorageTarget);
-                return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
             }
         }
         catch (OperationCanceledException)
         {
+            if (externalToken.IsCancellationRequested)
+            {
+                logger.LogInformation("Repair operation {OperationId} stopped due to host shutdown.", operationId);
+                return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+            }
+
             logger.LogInformation("Repair operation {OperationId} cancelled.", operationId);
             await store.CancelOperationAsync(tenantId, operationId, leaseToken, time.GetUtcNow(), CancellationToken.None);
             return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
