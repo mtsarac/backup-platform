@@ -38,7 +38,7 @@ public interface IReplicaRepairStore
         DateTimeOffset now,
         CancellationToken cancellationToken);
 
-    Task<bool> RenewLeaseAsync(
+    Task<ReplicaRepairLeaseRenewal> RenewLeaseAsync(
         TenantId tenantId,
         Guid operationId,
         Guid leaseToken,

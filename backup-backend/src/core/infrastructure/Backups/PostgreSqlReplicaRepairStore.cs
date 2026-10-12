@@ -213,6 +213,12 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
 
         if (operation.Status == ReplicaRepairStatus.Pending)
         {
+            if (operation.CancellationRequestedAt != null)
+            {
+                operation.CancelPending(now);
+                await context.SaveChangesAsync(cancellationToken);
+                return null;
+            }
             operation.Claim(leaseToken, leaseOwner, now, leaseDuration);
             await context.SaveChangesAsync(cancellationToken);
             return operation;
@@ -220,6 +226,12 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
 
         if (operation.Status == ReplicaRepairStatus.InProgress && operation.LeaseExpiresAt <= now)
         {
+            if (operation.CancellationRequestedAt != null)
+            {
+                operation.CancelStale(now);
+                await context.SaveChangesAsync(cancellationToken);
+                return null;
+            }
             operation.Claim(leaseToken, leaseOwner, now, leaseDuration);
             await context.SaveChangesAsync(cancellationToken);
             return operation;
@@ -228,7 +240,7 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         return null;
     }
 
-    public async Task<bool> RenewLeaseAsync(
+    public async Task<ReplicaRepairLeaseRenewal> RenewLeaseAsync(
         TenantId tenantId,
         Guid operationId,
         Guid leaseToken,
@@ -240,11 +252,12 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         var operation = await context.ReplicaRepairOperations
             .SingleOrDefaultAsync(r => r.TenantId == tenantId && r.Id == operationId, cancellationToken);
 
-        if (operation is null || !operation.HasLease(leaseToken, now)) return false;
+        if (operation is null || !operation.HasLease(leaseToken, now)) return ReplicaRepairLeaseRenewal.Lost;
 
+        var cancellationRequested = operation.CancellationRequestedAt != null;
         operation.RenewLease(leaseToken, now, leaseDuration);
         await context.SaveChangesAsync(cancellationToken);
-        return true;
+        return ReplicaRepairLeaseRenewal.Active(cancellationRequested);
     }
 
     public async Task<bool> UpdateProgressAsync(
@@ -454,6 +467,14 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
 
         if (operation is null || operation.Status != ReplicaRepairStatus.Pending) return null;
 
+        if (operation.CancellationRequestedAt != null)
+        {
+            operation.CancelPending(now);
+            await context.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+            return null;
+        }
+
         var leaseToken = Guid.NewGuid();
         operation.Claim(leaseToken, leaseOwner, now, leaseDuration);
         await context.SaveChangesAsync(cancellationToken);
@@ -476,6 +497,44 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         var count = 0;
         foreach (var op in stale)
         {
+            if (op.CancellationRequestedAt != null)
+            {
+                op.CancelStale(now);
+                if (!string.IsNullOrEmpty(op.TargetKey))
+                {
+                    var artifact = await context.BackupArtifacts
+                        .Include(a => a.Replicas)
+                        .SingleOrDefaultAsync(a => a.TenantId == op.TenantId && a.Id == op.ArtifactId, cancellationToken);
+                    if (artifact is not null && !artifact.Replicas.Any(r => r.StorageProvider == op.StorageProvider && r.StorageConnectionId == op.StorageConnectionId && r.VerificationState == "Verified" && r.Status != BackupReplicaStatus.Deleted))
+                    {
+                        var orphan = new BackupReplica(
+                            Guid.NewGuid(),
+                            op.TenantId,
+                            op.ArtifactId,
+                            op.StorageProvider,
+                            op.StorageConnectionId == Guid.Empty ? op.StorageProvider : op.StorageConnectionId.ToString("D"),
+                            op.TargetKey,
+                            Math.Max(1, op.TotalBytes),
+                            artifact.ArtifactChecksum,
+                            artifact.ChecksumAlgorithm,
+                            "Failed",
+                            "RepairCrashRecovery",
+                            now,
+                            verifiedAt: null,
+                            BackupStorageExecutionLocation.Backend,
+                            owningAgentId: null,
+                            storageConnectionId: op.StorageConnectionId);
+                        artifact.AddOrphanReplica(orphan, now);
+                        if (!context.BackupReplicas.Local.Contains(orphan) && !await context.BackupReplicas.AnyAsync(r => r.Id == orphan.Id, cancellationToken))
+                        {
+                            context.BackupReplicas.Add(orphan);
+                        }
+                    }
+                }
+                count++;
+                continue;
+            }
+
             if (op.AttemptCount < op.MaxAttempts)
             {
                 var delay = TimeSpan.FromSeconds(Math.Min(3600, initialRetryDelay.TotalSeconds * Math.Pow(2, Math.Max(0, op.AttemptCount - 1))));
@@ -645,6 +704,13 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
             .SingleOrDefaultAsync(r => r.TenantId == tenantId && r.Id == operationId, cancellationToken);
 
         if (operation is null || operation.IsTerminal) return false;
+
+        if (operation.Status == ReplicaRepairStatus.Pending)
+        {
+            operation.CancelPending(now);
+            await context.SaveChangesAsync(cancellationToken);
+            return true;
+        }
 
         operation.RequestCancellation(now);
         await context.SaveChangesAsync(cancellationToken);

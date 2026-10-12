@@ -230,6 +230,17 @@ public sealed class ReplicaRepairOperation : ITenantOwned
         NextRetryAt = null;
         ClearLease();
     }
+
+    public void CancelStale(DateTimeOffset now)
+    {
+        if (IsTerminal) return;
+        Status = ReplicaRepairStatus.Cancelled;
+        FailureCode = ReplicaRepairFailureCodes.Cancelled;
+        FailureReason = "Repair operation was cancelled.";
+        CompletedAt = BackupGuard.Timestamp(now);
+        NextRetryAt = null;
+        ClearLease();
+    }
     private void ValidateLease(Guid token, DateTimeOffset now)
     {
         if (Status != ReplicaRepairStatus.InProgress || LeaseToken != token || LeaseExpiresAt <= now)

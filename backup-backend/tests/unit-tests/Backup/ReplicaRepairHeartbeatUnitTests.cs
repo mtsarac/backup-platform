@@ -337,18 +337,19 @@ public sealed class ReplicaRepairHeartbeatUnitTests
         public Action? OnRenewLease { get; set; }
         public int RenewLeaseCallCount;
         public bool ShouldRenewSucceed { get; set; } = true;
+        public bool CancellationRequestedOnRenew { get; set; }
         public Exception? RenewLeaseThrows { get; set; }
         public BackupReplica? CompletedReplica;
         public int CancelOperationCallCount;
         public int FailOperationCallCount;
 
-        public Task<bool> RenewLeaseAsync(TenantId tenantId, Guid operationId, Guid leaseToken, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken)
+        public Task<ReplicaRepairLeaseRenewal> RenewLeaseAsync(TenantId tenantId, Guid operationId, Guid leaseToken, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken)
         {
             Interlocked.Increment(ref RenewLeaseCallCount);
             OnRenewLease?.Invoke();
             if (RenewLeaseThrows is not null)
                 throw RenewLeaseThrows;
-            return Task.FromResult(ShouldRenewSucceed);
+            return Task.FromResult<ReplicaRepairLeaseRenewal>(new(ShouldRenewSucceed, CancellationRequestedOnRenew));
         }
         public Task<BackupReplica> CompleteOperationAsync(TenantId tenantId, Guid operationId, Guid leaseToken, BackupReplica newReplica, DateTimeOffset now, CancellationToken cancellationToken)
         {

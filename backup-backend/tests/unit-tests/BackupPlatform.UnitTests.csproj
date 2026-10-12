@@ -35,6 +35,7 @@
     <ProjectReference Include="../../src/modules/storage/BackupPlatform.Storage.csproj" />
     <ProjectReference Include="../../src/providers/secret/abstractions/BackupPlatform.SecretProviders.Abstractions.csproj" />
     <ProjectReference Include="../../src/providers/secret/data-protection/BackupPlatform.SecretProviders.DataProtection.csproj" />
+    <ProjectReference Include="../../src/hosts/api/BackupPlatform.Api.csproj" />
   </ItemGroup>
 
 </Project>

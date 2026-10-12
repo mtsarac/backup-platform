@@ -20,7 +20,7 @@ public sealed class ReplicaRepairService(
     ILogger<ReplicaRepairService> logger)
 {
     private static readonly TimeSpan DefaultLeaseDuration = TimeSpan.FromMinutes(10);
-    private readonly ConcurrentDictionary<Guid, CancellationTokenSource> _runningRepairs = new();
+    private static readonly ConcurrentDictionary<Guid, CancellationTokenSource> _activeLocalCts = new();
 
     public async Task<ReplicaRepairStartResult> StartRepairAsync(
         TenantId tenantId,
@@ -28,7 +28,7 @@ public sealed class ReplicaRepairService(
         StartReplicaRepairRequest request,
         Guid? requestedByUserId,
         CancellationToken cancellationToken,
-        bool executeInBackground = true)
+        bool executeInBackground = false)
     {
         ArgumentNullException.ThrowIfNull(tenantId);
         var now = time.GetUtcNow();
@@ -68,10 +68,6 @@ public sealed class ReplicaRepairService(
         logger.LogInformation("Replica repair operation created: Id={OperationId}, Tenant={TenantId}, Artifact={ArtifactId}, Destination={Provider}:{ConnectionId}",
             operation.Id, tenantId, artifactId, targetDestination.StorageProvider, targetDestination.StorageConnectionId);
 
-        if (executeInBackground)
-        {
-            _ = Task.Run(() => ExecuteRepairAsync(tenantId, artifactId, operation.Id, admission, CancellationToken.None));
-        }
         var view = await store.GetOperationAsync(tenantId, artifactId, operation.Id, cancellationToken);
         return new(true, view);
     }
@@ -103,7 +99,10 @@ public sealed class ReplicaRepairService(
         }
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(externalToken);
-        _runningRepairs[operationId] = cts;
+        _activeLocalCts[operationId] = cts;
+        var leaseLost = false;
+        var heartbeatFailed = false;
+        var userCancellationRequested = false;
 
         admission ??= await store.AdmitRepairAsync(
             tenantId,
@@ -119,7 +118,7 @@ public sealed class ReplicaRepairService(
             var code = admission.DenialCode ?? ReplicaRepairFailureCodes.InternalError;
             var reason = admission.DenialReason ?? "Admission re-evaluation failed.";
             await FailOrRetryAsync(claimed, leaseToken, code, reason, CancellationToken.None);
-            _runningRepairs.TryRemove(operationId, out _);
+            _activeLocalCts.TryRemove(operationId, out _);
             return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
         }
 
@@ -207,6 +206,7 @@ public sealed class ReplicaRepairService(
 
                 var progressUpdating = 0;
                 long lastReportedBytes = 0;
+                Task progressTask = Task.CompletedTask;
                 var progress = new Progress<long>(bytes =>
                 {
                     if (bytes - Volatile.Read(ref lastReportedBytes) >= 10 * 1024 * 1024)
@@ -214,17 +214,8 @@ public sealed class ReplicaRepairService(
                         if (Interlocked.CompareExchange(ref progressUpdating, 1, 0) == 0)
                         {
                             Volatile.Write(ref lastReportedBytes, bytes);
-                            _ = Task.Run(async () =>
-                            {
-                                try
-                                {
-                                    await store.UpdateProgressAsync(tenantId, operationId, leaseToken, bytes, artifact.SizeBytes, time.GetUtcNow(), CancellationToken.None);
-                                }
-                                finally
-                                {
-                                    Interlocked.Exchange(ref progressUpdating, 0);
-                                }
-                            });
+                            progressTask = store.UpdateProgressAsync(tenantId, operationId, leaseToken, bytes, artifact.SizeBytes, time.GetUtcNow(), CancellationToken.None)
+                                .ContinueWith(_ => Interlocked.Exchange(ref progressUpdating, 0), TaskScheduler.Default);
                         }
                     }
                 });
@@ -235,9 +226,6 @@ public sealed class ReplicaRepairService(
                     artifact.SizeBytes);
 
                 using var heartbeatCts = new CancellationTokenSource();
-                var leaseLost = false;
-                var heartbeatFailed = false;
-
                 var heartbeatTask = Task.Run(async () =>
                 {
                     using var timer = new PeriodicTimer(TimeSpan.FromSeconds(20), time);
@@ -245,10 +233,10 @@ public sealed class ReplicaRepairService(
                     {
                         while (await timer.WaitForNextTickAsync(heartbeatCts.Token))
                         {
-                            bool renewed;
+                            ReplicaRepairLeaseRenewal renewal;
                             try
                             {
-                                renewed = await store.RenewLeaseAsync(
+                                renewal = await store.RenewLeaseAsync(
                                     tenantId, operationId, leaseToken, time.GetUtcNow(), DefaultLeaseDuration, heartbeatCts.Token);
                             }
                             catch (OperationCanceledException) when (heartbeatCts.IsCancellationRequested)
@@ -263,10 +251,18 @@ public sealed class ReplicaRepairService(
                                 break;
                             }
 
-                            if (!renewed)
+                            if (!renewal.Success)
                             {
                                 leaseLost = true;
                                 logger.LogWarning("Repair operation {OperationId} lease renewal returned false; lease lost. Fencing operation.", operationId);
+                                cts.Cancel();
+                                break;
+                            }
+
+                            if (renewal.CancellationRequested)
+                            {
+                                userCancellationRequested = true;
+                                logger.LogInformation("Repair operation {OperationId} cancellation observed in database lease heartbeat. Stopping transfer.", operationId);
                                 cts.Cancel();
                                 break;
                             }
@@ -359,7 +355,7 @@ public sealed class ReplicaRepairService(
                         return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
                     }
 
-                    logger.LogInformation("Repair operation {OperationId} was cancelled by user request.", operationId);
+                    logger.LogInformation("Repair operation {OperationId} was cancelled by user request (observedInHeartbeat={InHeartbeat}).", operationId, userCancellationRequested);
                     await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, targetKey);
                     await store.CancelOperationAsync(tenantId, operationId, leaseToken, time.GetUtcNow(), CancellationToken.None);
                     return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
@@ -400,13 +396,14 @@ public sealed class ReplicaRepairService(
         }
         catch (OperationCanceledException)
         {
-            if (externalToken.IsCancellationRequested)
+            if (leaseLost || heartbeatFailed || externalToken.IsCancellationRequested)
             {
-                logger.LogInformation("Repair operation {OperationId} stopped due to host shutdown.", operationId);
+                logger.LogInformation("Repair operation {OperationId} stopped without user cancellation (leaseLost={LeaseLost}, heartbeatFailed={HeartbeatFailed}, hostShutdown={HostShutdown}).",
+                    operationId, leaseLost, heartbeatFailed, externalToken.IsCancellationRequested);
                 return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
             }
 
-            logger.LogInformation("Repair operation {OperationId} cancelled.", operationId);
+            logger.LogInformation("Repair operation {OperationId} cancelled (observedInHeartbeat={InHeartbeat}).", operationId, userCancellationRequested);
             await store.CancelOperationAsync(tenantId, operationId, leaseToken, time.GetUtcNow(), CancellationToken.None);
             return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
         }
@@ -419,7 +416,7 @@ public sealed class ReplicaRepairService(
         }
         finally
         {
-            _runningRepairs.TryRemove(operationId, out _);
+            _activeLocalCts.TryRemove(operationId, out _);
         }
     }
 
@@ -429,7 +426,7 @@ public sealed class ReplicaRepairService(
         Guid operationId,
         CancellationToken cancellationToken)
     {
-        if (_runningRepairs.TryGetValue(operationId, out var cts))
+        if (_activeLocalCts.TryGetValue(operationId, out var cts))
         {
             try { cts.Cancel(); } catch { /* ignore */ }
         }

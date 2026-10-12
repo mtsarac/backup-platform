@@ -39,3 +39,10 @@ public sealed record ReplicaRepairAdmissionResult(
     BackupDestination? TargetDestination = null,
     BackupReplica? SelectedSource = null,
     IReadOnlyList<BackupReplica>? CandidateSources = null);
+
+public readonly record struct ReplicaRepairLeaseRenewal(bool Success, bool CancellationRequested)
+{
+    public static ReplicaRepairLeaseRenewal Lost => new(false, false);
+    public static ReplicaRepairLeaseRenewal Active(bool cancellationRequested = false) => new(true, cancellationRequested);
+    public static implicit operator ReplicaRepairLeaseRenewal(bool success) => new(success, false);
+}
