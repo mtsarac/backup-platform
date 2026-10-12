@@ -82,6 +82,47 @@ public sealed class ReplicaRepairDurableIntentUnitTests
         Assert.Equal(0, store.RecordedOrphanCount);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task IntegrityMismatch_FailsWithFencedCleanup_WithoutPublishingReplica(bool corruptSource)
+    {
+        var targetConnId = Guid.NewGuid();
+        var (artifact, sourceReplica, admission) = CreateSetup(targetConnId);
+        var store = new FakeRepairStore();
+        var sourceData = (byte[])ArtifactData.Clone();
+        if (corruptSource)
+            sourceData[0] ^= 1;
+        var provider = new FakeStorageProvider(sourceData, Checksum);
+        if (!corruptSource)
+        {
+            provider.OnVerifyAsync = _ => Task.FromResult(new StorageVerificationResult(
+                new StorageLocation(provider.Id, new StorageObjectKey(sourceReplica.Key)),
+                StorageVerificationStatus.ChecksumMismatch,
+                StorageVerificationMethod.ReadBack,
+                Size,
+                new ContentChecksum(ChecksumAlgorithm.Sha256, new string('a', 64))));
+        }
+        var service = new ReplicaRepairService(store, new FakeStorageResolver(provider),
+            new FakeTimeProvider(T0), NullLogger<ReplicaRepairService>.Instance);
+        var claimedOp = new ReplicaRepairOperation(Guid.NewGuid(), Tenant, artifact.Id, targetConnId, "sftp", sourceReplica.Id, T0, maxAttempts: 1);
+        claimedOp.Claim(Guid.NewGuid(), "worker-1", T0, TimeSpan.FromMinutes(10));
+
+        var result = await service.ExecuteRepairAsync(Tenant, artifact.Id, claimedOp.Id, admission,
+            externalToken: CancellationToken.None, claimedOperation: claimedOp);
+
+        Assert.NotNull(result);
+        Assert.Equal(ReplicaRepairStatus.Failed.ToString(), result.Status);
+        Assert.Equal(corruptSource ? ReplicaRepairFailureCodes.SourceChecksumMismatch
+            : ReplicaRepairFailureCodes.DestinationReadbackFailed, result.FailureCode);
+        Assert.Null(result.TargetReplicaId);
+        Assert.Null(store.CompletedReplica);
+        Assert.True(store.CanCleanupChecked);
+        Assert.Equal(sourceReplica.Key, Assert.Single(provider.DeletedKeys));
+        Assert.Equal(corruptSource ? 0 : 1, provider.VerifyCalls);
+        Assert.Equal(0, store.RecordedOrphanCount);
+    }
+
     [Fact]
     public async Task VerifyAsync_WhenThrowsException_PerformsFencedCleanup_And_RecordsDurableOrphan_IfDeletionUnconfirmed()
     {
@@ -111,6 +152,8 @@ public sealed class ReplicaRepairDurableIntentUnitTests
             claimedOperation: claimedOp);
 
         Assert.NotNull(result);
+        Assert.Equal(ReplicaRepairFailureCodes.StorageWriteFailed, result.FailureCode);
+        Assert.Null(result.TargetReplicaId);
         Assert.Null(store.CompletedReplica);
         Assert.True(store.CanCleanupChecked);
         Assert.Equal(1, store.RecordedOrphanCount);
@@ -146,6 +189,8 @@ public sealed class ReplicaRepairDurableIntentUnitTests
             claimedOperation: claimedOp);
 
         Assert.NotNull(result);
+        Assert.Equal(ReplicaRepairFailureCodes.StorageWriteFailed, result.FailureCode);
+        Assert.Null(result.TargetReplicaId);
         Assert.Null(store.CompletedReplica);
         Assert.True(store.CanCleanupChecked);
         Assert.NotEmpty(provider.DeletedKeys);
@@ -299,6 +344,7 @@ public sealed class ReplicaRepairDurableIntentUnitTests
         public Func<CancellationToken, Task<StorageVerificationResult>>? OnVerifyAsync { get; set; }
         public bool DeleteResult { get; set; } = true;
         public Exception? DeleteThrows { get; set; }
+        public int VerifyCalls { get; private set; }
 
         public Task<StorageObjectMetadata> PutAsync(StorageObjectKey key, Stream content, StoragePutOptions options, IProgress<long>? progress, CancellationToken cancellationToken)
         {
@@ -316,6 +362,7 @@ public sealed class ReplicaRepairDurableIntentUnitTests
 
         public Task<StorageVerificationResult> VerifyAsync(StorageObjectKey key, StorageVerificationExpectation expected, CancellationToken cancellationToken)
         {
+            VerifyCalls++;
             if (OnVerifyAsync is not null)
                 return OnVerifyAsync(cancellationToken);
 
@@ -350,6 +397,8 @@ public sealed class ReplicaRepairDurableIntentUnitTests
         public Exception? CompleteOperationThrows;
         public int RecordedOrphanCount;
         public string? LastRecordedOrphanKey;
+        public string? FailureCode;
+        public ReplicaRepairStatus Status = ReplicaRepairStatus.InProgress;
 
         public Task<bool> PinSourceAsync(TenantId tenantId, Guid operationId, Guid leaseToken, Guid sourceReplicaId, string targetKey, DateTimeOffset now, CancellationToken cancellationToken)
         {
@@ -380,8 +429,18 @@ public sealed class ReplicaRepairDurableIntentUnitTests
 
         public Task<ReplicaRepairLeaseRenewal> RenewLeaseAsync(TenantId tenantId, Guid operationId, Guid leaseToken, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken) => Task.FromResult<ReplicaRepairLeaseRenewal>(true);
         public Task<bool> CancelOperationAsync(TenantId tenantId, Guid operationId, Guid leaseToken, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(true);
-        public Task<bool> FailOperationAsync(TenantId tenantId, Guid operationId, Guid leaseToken, string failureCode, string? reason, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(true);
-        public Task<bool> ScheduleRetryAsync(TenantId tenantId, Guid operationId, Guid leaseToken, string failureCode, string? reason, DateTimeOffset nextRetryAt, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task<bool> FailOperationAsync(TenantId tenantId, Guid operationId, Guid leaseToken, string failureCode, string? reason, DateTimeOffset now, CancellationToken cancellationToken)
+        {
+            FailureCode = failureCode;
+            Status = ReplicaRepairStatus.Failed;
+            return Task.FromResult(true);
+        }
+        public Task<bool> ScheduleRetryAsync(TenantId tenantId, Guid operationId, Guid leaseToken, string failureCode, string? reason, DateTimeOffset nextRetryAt, DateTimeOffset now, CancellationToken cancellationToken)
+        {
+            FailureCode = failureCode;
+            Status = ReplicaRepairStatus.Pending;
+            return Task.FromResult(true);
+        }
         public Task<bool> UpdateProgressAsync(TenantId tenantId, Guid operationId, Guid leaseToken, long transferredBytes, long totalBytes, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(true);
         public Task<bool> RequestCancellationAsync(TenantId tenantId, Guid operationId, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(true);
         public Task<ReplicaRepairAdmissionResult> AdmitRepairAsync(TenantId tenantId, Guid artifactId, Guid? storageConnectionId, string? storageProvider, DateTimeOffset now, CancellationToken cancellationToken, Guid? excludeOperationId = null) => throw new NotSupportedException();
@@ -401,8 +460,8 @@ public sealed class ReplicaRepairDurableIntentUnitTests
                 null,
                 CompletedReplica?.Id,
                 PinnedTargetKey,
-                CompletedReplica is not null ? ReplicaRepairStatus.Succeeded.ToString() : ReplicaRepairStatus.InProgress.ToString(),
-                null,
+                CompletedReplica is not null ? ReplicaRepairStatus.Succeeded.ToString() : Status.ToString(),
+                FailureCode,
                 null,
                 Size,
                 Size,

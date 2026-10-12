@@ -12,7 +12,7 @@ public enum EntitlementStatus
     Expired = 3
 }
 
-/// <summary>What a tenant might do. The names are the contract the quota/admission slice builds on.</summary>
+/// <summary>Operations evaluated by subscription entitlement.</summary>
 public enum EntitlementOperation
 {
     /// <summary>Creating a new BackupRun (manual or scheduled).</summary>
@@ -28,13 +28,12 @@ public enum EntitlementOperation
 }
 
 /// <summary>
-/// A tenant's commercial standing, resolved once from its current subscription and plan. M1 only defines the contract:
-/// backup orchestration does not consult it yet and nothing here changes how backups run.
+/// Subscription and plan state used by backup admission. Subscription eligibility does not replace quota or RBAC checks.
 /// </summary>
 /// <remarks>
-/// Contract for the admission slice:
+/// Subscription eligibility:
 /// <list type="bullet">
-/// <item>Active: everything is allowed.</item>
+/// <item>Active: the subscription permits every operation.</item>
 /// <item>Suspended, Expired and NoSubscription: a <b>new</b> BackupRun is denied with <see cref="SubscriptionRequiredCode"/>.</item>
 /// <item>In every state, customer data stays reachable: viewing, downloading (subject to normal RBAC), restore, manual delete and retention cleanup,
 /// as do agent connectivity and the retry attempts of a run that was already admitted. A subscription change must never cut those off.</item>

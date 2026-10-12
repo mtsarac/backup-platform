@@ -598,34 +598,55 @@ public sealed class ManualReplicaRepairIntegrationTests(PostgreSqlFixture fixtur
 
         Assert.True(startResult.Success);
         Assert.Equal("Pending", startResult.Operation!.Status);
-        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
-        services.AddSingleton<IReplicaRepairStore>(setup.RepairStore);
-        services.AddSingleton(setup.RepairService);
-        var sp = services.BuildServiceProvider();
-        var scopeFactory = sp.GetRequiredService<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>();
-
-        // Run AutomaticReplicaRepairWorker tick
-        var worker = new BackupPlatform.Api.Backups.AutomaticReplicaRepairWorker(
-            scopeFactory, TimeProvider.System, NullLogger<BackupPlatform.Api.Backups.AutomaticReplicaRepairWorker>.Instance);
-        var executed = await worker.TickAsync(setup.Agent.TenantId, default);
-        Assert.True(executed >= 1);
+        var readEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseRead = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        var sourceProvider = (InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, "central", "central")!;
+        sourceProvider.BeforeRead = async () =>
+        {
+            readEntered.TrySetResult();
+            await releaseRead.Task.WaitAsync(deadline.Token);
+        };
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<IBackupStorageResolver>(setup.Resolver);
+        services.AddScoped<IReplicaRepairStore>(_ => new PostgreSqlReplicaRepairStore(World.Options()));
+        services.AddScoped<ReplicaRepairService>();
+        await using var sp = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        using var worker = new BackupPlatform.Api.Backups.AutomaticReplicaRepairWorker(
+            sp.GetRequiredService<IServiceScopeFactory>(), TimeProvider.System,
+            NullLogger<BackupPlatform.Api.Backups.AutomaticReplicaRepairWorker>.Instance);
+        try
+        {
+            await worker.TickAsync(setup.Agent.TenantId, deadline.Token);
+            await readEntered.Task.WaitAsync(deadline.Token);
+            releaseRead.TrySetResult();
+            await worker.WaitForRunningTasksAsync(deadline.Token);
+        }
+        finally
+        {
+            releaseRead.TrySetResult();
+            using var shutdownDeadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            await worker.StopAsync(shutdownDeadline.Token);
+        }
 
         await using var context = fixture.CreatePlatformContext();
-        ReplicaRepairOperation? updatedOp = null;
-        for (var i = 0; i < 50; i++)
-        {
-            updatedOp = await context.ReplicaRepairOperations.AsNoTracking().SingleOrDefaultAsync(r => r.Id == startResult.Operation.Id);
-            if (updatedOp?.Status == ReplicaRepairStatus.Succeeded) break;
-            await Task.Delay(100);
-        }
-        Assert.Equal(ReplicaRepairStatus.Succeeded, updatedOp?.Status);
+        var updatedOp = await context.ReplicaRepairOperations.AsNoTracking().SingleAsync(r => r.Id == startResult.Operation.Id);
+        Assert.Equal(ReplicaRepairStatus.Succeeded, updatedOp.Status);
+        Assert.NotNull(updatedOp.TargetReplicaId);
 
         var reloadedArtifact = await context.BackupArtifacts.Include(a => a.Replicas).SingleAsync(a => a.Id == artifact.Id);
-        Assert.True(reloadedArtifact.Replicas.Count(r => r.VerificationState == "Verified") >= 2);
+        var repairedReplica = Assert.Single(reloadedArtifact.Replicas, r => r.Id == updatedOp.TargetReplicaId);
+        Assert.Equal("Verified", repairedReplica.VerificationState);
+        Assert.Equal(setup.Sftp.Id, repairedReplica.StorageConnectionId);
+        var destinationProvider = (InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, "sftp", setup.Sftp.Id.ToString("D"))!;
+        Assert.Equal(Content, destinationProvider.Storage[repairedReplica.Key]);
 
         // No new run or artifact created
         var runsCount = await context.BackupRuns.CountAsync(r => r.TenantId == setup.Agent.TenantId);
         Assert.Equal(1, runsCount);
+        Assert.Equal(1, await context.BackupArtifacts.CountAsync(a => a.TenantId == setup.Agent.TenantId));
     }
 
     [Fact]

@@ -62,7 +62,7 @@ backup-backend/
   BackupPlatform.sln               Directory.Build.props, Directory.Packages.props, dotnet-tools.json
   .env.example                     every backend/agent/test setting, documented (no values)
   src/core/                        domain, application, contracts, infrastructure (EF Core / PostgreSQL)
-  src/modules/                     identity, tenancy, agents, backups, storage (scheduling, audit, notifications: placeholders)
+  src/modules/                     identity, tenancy, agents, managed-service, storage
   src/agent/                       core, transport, platform-windows, platform-linux
   src/providers/                   backup (abstractions, mssql), storage (abstractions, local, central), secret, snapshot
   src/hosts/                       api (ASP.NET Core backend), agent (Agent.Host)
@@ -261,6 +261,10 @@ artifact usage accounting, backup execution, restore execution or the job's rete
 | Real MSSQL + published Agent.Host | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName~AgentSmokeTests" -- xUnit.MaxParallelThreads=1` | everything above plus `BACKUP_PLATFORM_TEST_AGENT_HOST_PATH` |
 | Local restore acceptance | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName~MsSqlRestoreAcceptanceTests" -- xUnit.MaxParallelThreads=1` | PostgreSQL, published Agent.Host, two SQL instances with the same test login and shared staging; target port below |
 | Windows platform (DPAPI, ACLs, reparse points) | `dotnet test tests/windows-tests -c Release` | Windows; elsewhere every test is reported as *skipped*, never passed |
+
+Replica repair fault tests execute `ReplicaRepairService` with controlled source/readback failures and assert fenced cleanup
+and no replica publication. Worker integration uses scoped stores/services and awaits tracked completion instead of timer settling,
+then checks the persisted operation, destination bytes and unchanged backup run/artifact counts.
 
 Environment variables of the integration tests (values are yours; never commit them):
 
