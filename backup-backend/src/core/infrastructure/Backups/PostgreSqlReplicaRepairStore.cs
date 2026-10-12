@@ -665,21 +665,42 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
 
-        var candidateArtifacts = await context.BackupArtifacts
-            .Include(a => a.Replicas)
-            .Where(a => (tenantId == null || a.TenantId == tenantId)
-                && a.AcceptedAt != null
-                && (a.RetentionExpiresAt == null || a.RetentionExpiresAt > now || a.RetentionPinnedAt != null))
-            .OrderByDescending(a => a.CreatedAt)
-            .Take(50)
-            .ToListAsync(cancellationToken);
-
+        const int ScanBatchSize = 50;
+        DateTimeOffset? cursorCreatedAt = null;
+        Guid? cursorId = null;
         var created = new List<ReplicaRepairOperation>();
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
 
-        foreach (var artifact in candidateArtifacts)
+        while (created.Count < maxBatch)
         {
-            if (created.Count >= maxBatch) break;
+            var query = context.BackupArtifacts
+                .Include(a => a.Replicas)
+                .Where(a => (tenantId == null || a.TenantId == tenantId)
+                    && a.AcceptedAt != null
+                    && (a.RetentionExpiresAt == null || a.RetentionExpiresAt > now || a.RetentionPinnedAt != null));
+
+            if (cursorCreatedAt.HasValue && cursorId.HasValue)
+            {
+                var cTime = cursorCreatedAt.Value;
+                var cId = cursorId.Value;
+                query = query.Where(a => a.CreatedAt < cTime || (a.CreatedAt == cTime && a.Id < cId));
+            }
+
+            var candidateArtifacts = await query
+                .OrderByDescending(a => a.CreatedAt)
+                .ThenByDescending(a => a.Id)
+                .Take(ScanBatchSize)
+                .ToListAsync(cancellationToken);
+
+            if (candidateArtifacts.Count == 0) break;
+
+            var last = candidateArtifacts[^1];
+            cursorCreatedAt = last.CreatedAt;
+            cursorId = last.Id;
+
+            foreach (var artifact in candidateArtifacts)
+            {
+                if (created.Count >= maxBatch) break;
             var lockedArtifacts = await context.Database.SqlQuery<Guid>($"""
                 SELECT "Id" AS "Value" FROM backup_artifacts
                 WHERE "TenantId" = {artifact.TenantId.Value} AND "Id" = {artifact.Id} FOR NO KEY UPDATE
@@ -751,11 +772,11 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
                 created.Add(newOp);
             }
         }
+    }
 
         await transaction.CommitAsync(cancellationToken);
         return created;
     }
-
     public async Task<int> GetActiveRepairsCountAsync(TenantId? tenantId, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);

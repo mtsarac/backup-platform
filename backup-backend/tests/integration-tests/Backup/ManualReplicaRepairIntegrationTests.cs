@@ -934,6 +934,54 @@ public sealed class ManualReplicaRepairIntegrationTests(PostgreSqlFixture fixtur
     }
 
     [Fact]
+    public async Task DiscoveryFindsOlderBrokenArtifactWhenOverFiftyNewerHealthyArtifactsExist()
+    {
+        // Setup creates an artifact missing the sftp replica (eligible for repair)
+        var setup = await SetupAsync(verified: new HashSet<string> { "central", "google-drive" });
+        var now = DateTimeOffset.UtcNow;
+        var olderArtifact = setup.Artifact;
+
+        // Seed 55 newer healthy artifacts for the same tenant where all replicas are verified
+        var (_, central) = await _connections.DefaultsAsync(setup.Agent.TenantId);
+        await using (var context = fixture.CreatePlatformContext())
+        {
+            var baseAttempt = await context.BackupRunAttempts.AsNoTracking().SingleAsync(a => a.TenantId == setup.Agent.TenantId && a.Id == setup.Artifact.AttemptId);
+            var baseTime = now.AddMinutes(1);
+            for (var i = 0; i < 55; i++)
+            {
+                var attemptId = Guid.NewGuid();
+                var attempt = new BackupRunAttempt(attemptId, setup.Agent.TenantId, baseAttempt.RunId, setup.Agent.AgentId, i + 2, baseTime.AddSeconds(i));
+                var token = Guid.NewGuid();
+                attempt.Claim(token, baseTime.AddSeconds(i), TimeSpan.FromMinutes(5));
+                attempt.Start(token, baseTime.AddSeconds(i), "1.0", "1.0", "Linux");
+
+                var healthy = new BackupArtifact(Guid.NewGuid(), setup.Agent.TenantId, attemptId, 100,
+                    Checksum, Checksum, "sha256", baseTime.AddSeconds(i), "{}", "{}");
+                healthy.AddReplica(new BackupReplica(Guid.NewGuid(), setup.Agent.TenantId, healthy.Id, "central", "central",
+                    $"k-central-{i}", 100, Checksum, "sha256", "Verified", "ReadBack", baseTime.AddSeconds(i), baseTime.AddSeconds(i),
+                    BackupStorageExecutionLocation.Backend, null, storageConnectionId: central.Id));
+                healthy.AddReplica(new BackupReplica(Guid.NewGuid(), setup.Agent.TenantId, healthy.Id, "sftp", setup.Sftp.Id.ToString("D"),
+                    $"k-sftp-{i}", 100, Checksum, "sha256", "Verified", "ReadBack", baseTime.AddSeconds(i), baseTime.AddSeconds(i),
+                    BackupStorageExecutionLocation.Backend, null, storageConnectionId: setup.Sftp.Id));
+                healthy.AddReplica(new BackupReplica(Guid.NewGuid(), setup.Agent.TenantId, healthy.Id, "google-drive", setup.Drive.Id.ToString("D"),
+                    $"k-drive-{i}", 100, Checksum, "sha256", "Verified", "ReadBack", baseTime.AddSeconds(i), baseTime.AddSeconds(i),
+                    BackupStorageExecutionLocation.Backend, null, storageConnectionId: setup.Drive.Id));
+
+                attempt.Complete(token, baseTime.AddSeconds(i), new BackupPlatform.Domain.Backups.BackupCompletion(BackupStatus.Succeeded, null, healthy), new BackupRetentionPolicy());
+                context.BackupRunAttempts.Add(attempt);
+                context.BackupArtifacts.Add(healthy);
+            }
+            await context.SaveChangesAsync();
+        }
+
+        // Discovery with batch 10 must paginate past the 55 newer healthy artifacts and discover the older broken artifact
+        var discovered = await setup.RepairStore.DiscoverEligibleRepairsAsync(now, 10, default, setup.Agent.TenantId);
+        var repair = Assert.Single(discovered);
+        Assert.Equal(olderArtifact.Id, repair.ArtifactId);
+        Assert.Equal(setup.Sftp.Id, repair.StorageConnectionId);
+    }
+
+    [Fact]
     public async Task RepairSourceSwitchIsDurableTenantQualifiedAndLeaseFenced()
     {
         var setup = await SetupAsync(verified: new HashSet<string> { "central", "google-drive" });
