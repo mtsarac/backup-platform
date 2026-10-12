@@ -788,6 +788,95 @@ public sealed class ManualReplicaRepairIntegrationTests(PostgreSqlFixture fixtur
     }
 
     [Fact]
+    public async Task RestoreClaimNetworkProbeDoesNotHoldDatabaseLocksAcrossProbe()
+    {
+        var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp" });
+        var world = new RestoreWorld(fixture);
+        await world.EnableRestoreAsync(setup.Agent);
+        var now = DateTimeOffset.UtcNow;
+        var store = new PostgreSqlRestoreStore(World.Options(), setup.Resolver);
+        var operation = (await store.CreateAsync(RestoreWorld.Command(setup.Agent.TenantId, setup.Artifact.Id, setup.Agent.AgentId, now: now), default)).Operation!;
+        var primary = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "central");
+        var fallback = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "sftp");
+
+        var probeStarted = new TaskCompletionSource<bool>();
+        var probeRelease = new TaskCompletionSource<bool>();
+        var canReadProbeFinished = false;
+
+        ((InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, fallback.StorageProvider, fallback.StorageTarget)!).BeforeRead = async () =>
+        {
+            probeStarted.TrySetResult(true);
+            await probeRelease.Task;
+            canReadProbeFinished = true;
+        };
+
+        // Primary fails read so it probes fallback (sftp), triggering BeforeRead
+        ((InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, primary.StorageProvider, primary.StorageTarget)!).ShouldFailRead = true;
+
+        var claimTask = Task.Run(() => store.ClaimNextAsync(setup.Agent.TenantId, setup.Agent.AgentId, now, RestoreWorld.Lease, RestoreWorld.Unclaimed, default));
+        await probeStarted.Task;
+
+        // While BeforeRead is blocked, an independent DB transaction must be able to acquire agent and replica row locks immediately without waiting for probe
+        await using (var context = fixture.CreatePlatformContext())
+        {
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await using var tx = await context.Database.BeginTransactionAsync(timeoutCts.Token);
+            var agentRows = await context.Database.SqlQuery<Guid>(
+                $"SELECT \"Id\" AS \"Value\" FROM agents WHERE \"Id\" = {setup.Agent.AgentId.Value} AND \"TenantId\" = {setup.Agent.TenantId.Value} FOR UPDATE").ToListAsync(timeoutCts.Token);
+            Assert.Single(agentRows);
+            var lockedReplicas = await context.Database.SqlQuery<Guid>(
+                $"SELECT \"Id\" AS \"Value\" FROM backup_replicas WHERE \"Id\" = {fallback.Id} FOR UPDATE").ToListAsync(timeoutCts.Token);
+            Assert.Single(lockedReplicas);
+            await tx.RollbackAsync(timeoutCts.Token);
+        }
+
+        Assert.False(canReadProbeFinished);
+        probeRelease.TrySetResult(true);
+        var claim = await claimTask;
+        Assert.NotNull(claim);
+        Assert.Equal(fallback.Id, claim.Replica.Id);
+    }
+
+    [Fact]
+    public async Task RestoreCancelledDuringRemoteProbeIsSafelyRefusedAndNotHandedOut()
+    {
+        var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp" });
+        var world = new RestoreWorld(fixture);
+        await world.EnableRestoreAsync(setup.Agent);
+        var now = DateTimeOffset.UtcNow;
+        var store = new PostgreSqlRestoreStore(World.Options(), setup.Resolver);
+        var operation = (await store.CreateAsync(RestoreWorld.Command(setup.Agent.TenantId, setup.Artifact.Id, setup.Agent.AgentId, now: now), default)).Operation!;
+        var primary = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "central");
+        var fallback = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "sftp");
+
+        var probeStarted = new TaskCompletionSource<bool>();
+        var probeRelease = new TaskCompletionSource<bool>();
+
+        ((InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, fallback.StorageProvider, fallback.StorageTarget)!).BeforeRead = async () =>
+        {
+            probeStarted.TrySetResult(true);
+            await probeRelease.Task;
+        };
+        ((InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, primary.StorageProvider, primary.StorageTarget)!).ShouldFailRead = true;
+
+        var claimTask = Task.Run(() => store.ClaimNextAsync(setup.Agent.TenantId, setup.Agent.AgentId, now, RestoreWorld.Lease, RestoreWorld.Unclaimed, default));
+        await probeStarted.Task;
+
+        // User cancels the restore while probe is running
+        var cancelled = await store.RequestCancellationAsync(setup.Agent.TenantId, operation.Id, now.AddSeconds(1), default);
+        Assert.NotNull(cancelled);
+        Assert.Equal(RestoreStatus.Cancelled, cancelled.Status);
+
+        probeRelease.TrySetResult(true);
+        var claim = await claimTask;
+        Assert.Null(claim);
+
+        var stored = await world.OperationAsync(operation.Id);
+        Assert.Equal(RestoreStatus.Cancelled, stored.Status);
+        Assert.False(stored.Pin.IsActive);
+    }
+
+    [Fact]
     public async Task DisabledConnectionStillServesStoredRestore()
     {
         var setup = await SetupAsync(verified: new HashSet<string> { "sftp" });
