@@ -360,6 +360,15 @@ Every tenant owns two system default connections, created by the migration and o
 (the Central provider, platform-managed, scope `managed`). Existing replicas were assigned to them by the upgrade, so downloads, restores, retention and quota are unchanged.
 SFTP and Google Drive are backend-relayed tenant-managed providers, with pinned SFTP host identity and tenant/connection-bound Drive object ownership.
 
+Agent relay uploads, verification and deletion preserve their PostgreSQL session advisory lock against retention.
+Per backend node, admission allows up to `min(4, MaxPoolSize - 4)` simultaneous lock-holding transfers, never below zero,
+and at most two per tenant. Four connections remain available for normal API traffic and transfer re-fence/intent transactions.
+`MaxPoolSize` comes from the platform PostgreSQL connection string; values of four or fewer reject these transfers.
+Saturation returns `429 retry_later` with `Retry-After: 1`, without queuing another lock connection or touching remote storage.
+Request cancellation and host shutdown cancel admitted work; its lock connection closes before admission is released.
+Uncertain lock acquisition or failed unlock discards the associated connection pool to avoid leaking session locks,
+which can temporarily require other pooled connections to reconnect. Transfer locks are not replaced by a new durable lease protocol.
+
 | API | Access / behavior |
 |---|---|
 | `GET /api/tenants/{tenantId}/storage-providers`, `/storage-connections[/{id}]` | Viewer or higher; own tenant only (another tenant's id is `404`); every view carries server-computed `permissions` |
