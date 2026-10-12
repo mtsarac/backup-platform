@@ -211,6 +211,11 @@ replicas are refused. Central reads use the existing optional `storage.read` pro
 storage resolver. The backend verifies an opened seekable file before response headers and hashes again while transferring;
 corrupt bytes can never produce a successful `Completed` session. A generated `backup-{artifactId}.bak` filename never uses
 persisted filesystem paths or browser input.
+For non-seekable sources, the final byte is withheld until exact EOF and SHA-256 verification. A corrupt, short or oversized
+source therefore cannot finish a successful response with the declared Content-Length: it returns an error before streaming,
+or aborts an incomplete body afterward. A corrupt prefix may already have been sent; clients must reject incomplete downloads.
+`TransferredBytes` counts bytes actually written, not bytes read for verification. Streaming uses one pooled 64 KiB buffer,
+without a whole-file memory buffer or an additional disk spool.
 
 Before headers are sent, an open failure or seekable checksum mismatch can fall back to another matching, verified, Available
 backend replica. The live session's hold switches atomically before the alternative is opened; tenant, user, checksum and size

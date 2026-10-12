@@ -52,18 +52,28 @@ public sealed class DownloadStreamer(IDownloadStore store, DownloadService servi
                 context.Response.Headers["X-Content-Type-Options"] = "nosniff";
                 context.Response.Headers.ContentDisposition = new ContentDispositionHeaderValue("attachment") { FileName = session.Filename, FileNameStar = session.Filename }.ToString();
                 using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-                while (true)
+                long readBytes = 0;
+                while (readBytes < session.SizeBytes)
                 {
-                    var read = await source.ReadAsync(buffer.AsMemory(0, BufferSize), transfer.Token);
-                    if (read == 0) break;
-                    if (Interlocked.Read(ref transferred) + read > session.SizeBytes) throw IntegrityFailure();
+                    var read = await source.ReadAsync(buffer.AsMemory(0, (int)Math.Min(BufferSize, session.SizeBytes - readBytes)), transfer.Token);
+                    if (read == 0) throw IntegrityFailure();
                     hash.AppendData(buffer, 0, read);
-                    await context.Response.Body.WriteAsync(buffer.AsMemory(0, read), transfer.Token);
-                    Interlocked.Add(ref transferred, read);
+                    readBytes += read;
+                    var writeLength = readBytes == session.SizeBytes ? read - 1 : read;
+                    if (writeLength > 0)
+                    {
+                        await context.Response.Body.WriteAsync(buffer.AsMemory(0, writeLength), transfer.Token);
+                        Interlocked.Add(ref transferred, writeLength);
+                    }
+                    if (readBytes == session.SizeBytes) buffer[0] = buffer[read - 1];
                 }
-                if (transferred != session.SizeBytes || !string.Equals(Convert.ToHexStringLower(hash.GetHashAndReset()), session.Checksum, StringComparison.Ordinal)) throw IntegrityFailure();
+
+                // Withhold the final byte until EOF and SHA-256 agree, so corrupt data cannot satisfy Content-Length.
+                if (await source.ReadAsync(buffer.AsMemory(1, 1), transfer.Token) != 0 ||
+                    !string.Equals(Convert.ToHexStringLower(hash.GetHashAndReset()), session.Checksum, StringComparison.Ordinal)) throw IntegrityFailure();
+                await context.Response.Body.WriteAsync(buffer.AsMemory(0, 1), transfer.Token);
+                Interlocked.Increment(ref transferred);
                 await context.Response.Body.FlushAsync(transfer.Token);
-                // Stop renewal first so a progress update cannot race completion's final byte count.
                 await StopRenewalAsync(renewStop, renewal);
                 var completed = await store.TransitionAsync(session.Id, new DownloadTransition(DownloadState.Streaming, DownloadState.Completed, owner, null,
                     time.GetUtcNow(), Bytes: transferred), transfer.Token);

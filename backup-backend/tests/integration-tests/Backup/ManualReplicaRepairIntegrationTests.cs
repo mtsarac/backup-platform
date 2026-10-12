@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Net;
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -131,8 +132,10 @@ public sealed class ManualReplicaRepairIntegrationTests(PostgreSqlFixture fixtur
         PostgreSqlReplicaRepairStore RepairStore,
         ReplicaRepairService RepairService);
 
-    private async Task<MultiSetup> SetupAsync(QuotaAccountingMode mode = QuotaAccountingMode.LogicalArtifactBytes, ISet<string>? verified = null)
+    private async Task<MultiSetup> SetupAsync(QuotaAccountingMode mode = QuotaAccountingMode.LogicalArtifactBytes, ISet<string>? verified = null, byte[]? content = null)
     {
+        content ??= Content;
+        var checksum = Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
         var policy = await World.CreatePolicyAsync(mode, QuotaScopeRule.All, QuotaEnforcementMode.WarnOnly);
         var agent = await World.AgentAsync(100 * QuotaWorld.Gb, policy.Key);
         var (_, central) = await _connections.DefaultsAsync(agent.TenantId);
@@ -185,7 +188,7 @@ public sealed class ManualReplicaRepairIntegrationTests(PostgreSqlFixture fixtur
 
             if (isVer)
             {
-                replicaResults.Add(new BackupReplicaResult(provider, target, key, Content.Length, Checksum, "sha256", "Verified", "ReadBack", T0, T0, conn.Id));
+                replicaResults.Add(new BackupReplicaResult(provider, target, key, content.Length, checksum, "sha256", "Verified", "ReadBack", T0, T0, conn.Id));
                 destReports.Add(new BackupDestinationReport(provider, conn.Id, "Verified", "Succeeded", "Verified", null, key, false, T0, T0));
             }
             else
@@ -195,7 +198,7 @@ public sealed class ManualReplicaRepairIntegrationTests(PostgreSqlFixture fixtur
         }
 
         var completion = new Completion("Succeeded", null,
-            new BackupArtifactResult(Content.Length, Checksum, Checksum, "sha256", T0, "{}", "{}", replicaResults),
+            new BackupArtifactResult(content.Length, checksum, checksum, "sha256", T0, "{}", "{}", replicaResults),
             destReports);
 
         await BackupStoreHarness.CompleteAsync(store, claim, completion, T0);
@@ -210,7 +213,7 @@ public sealed class ManualReplicaRepairIntegrationTests(PostgreSqlFixture fixtur
             {
                 var target = provider == "central" ? "central" : conn.Id.ToString("D");
                 var p = (InMemoryStorageProvider)resolver.Resolve(agent.TenantId, provider, target)!;
-                p.Storage[KeyFor(provider, conn)] = Content;
+                p.Storage[KeyFor(provider, conn)] = content;
             }
         }
 
@@ -1075,6 +1078,13 @@ public sealed class ManualReplicaRepairIntegrationTests(PostgreSqlFixture fixtur
             "backup.bak", clock.GetUtcNow(), TimeSpan.FromMinutes(15)), default))!;
         var broken = new MidStreamFailure(Content);
         ((InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, primary.StorageProvider, primary.StorageTarget)!).ReadStream = _ => broken;
+        var fallbackReads = 0;
+        var fallback = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "sftp");
+        ((InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, fallback.StorageProvider, fallback.StorageTarget)!).BeforeRead = () =>
+        {
+            Interlocked.Increment(ref fallbackReads);
+            return Task.CompletedTask;
+        };
         var service = new DownloadService(store, setup.Resolver, new NoAgentDownloadSource(), clock, NullLogger<DownloadService>.Instance);
         var streamer = new DownloadStreamer(store, service, clock, NullLogger<DownloadStreamer>.Instance);
         var builder = WebApplication.CreateBuilder();
@@ -1086,23 +1096,139 @@ public sealed class ManualReplicaRepairIntegrationTests(PostgreSqlFixture fixtur
             try { await streamer.StreamAsync(http, session); }
             finally { ended.TrySetResult(); }
         });
-        await app.StartAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         try
         {
+            await app.StartAsync(timeout.Token);
             using var client = new HttpClient { BaseAddress = new Uri(app.Urls.Single()) };
-            await Assert.ThrowsAsync<HttpRequestException>(async () =>
-            {
-                using var response = await client.GetAsync("/download", HttpCompletionOption.ResponseHeadersRead);
-                await response.Content.ReadAsByteArrayAsync();
-            });
+            using var response = await client.GetAsync("/download", HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal((long)Content.Length, response.Content.Headers.ContentLength);
+            await using var body = await response.Content.ReadAsStreamAsync(timeout.Token);
+            var prefix = new byte[2];
+            await body.ReadExactlyAsync(prefix, timeout.Token);
+            Assert.Equal(Content[..prefix.Length], prefix);
+            broken.Continue.TrySetResult();
+            await Assert.ThrowsAnyAsync<IOException>(() => body.CopyToAsync(Stream.Null, timeout.Token));
             await ended.Task.WaitAsync(TimeSpan.FromSeconds(10));
             var failed = (await store.GetAsync(session.TenantId, session.Id, default))!;
             Assert.Equal((DownloadState.Failed, primary.Id, "transfer_failed"), (failed.State, failed.ReplicaId, failed.FailureCode));
-            Assert.Equal(Content.Length / 2, failed.TransferredBytes);
+            Assert.Equal((long)Content.Length / 2, failed.TransferredBytes);
             Assert.NotNull(failed.ReleasedAt);
+            Assert.False(failed.IsPinned(clock.GetUtcNow()));
             Assert.True(broken.Disposed);
+            Assert.Equal(0, fallbackReads);
         }
-        finally { await app.StopAsync(); }
+        finally
+        {
+            broken.Continue.TrySetResult();
+            using var shutdown = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await app.StopAsync(shutdown.Token);
+        }
+    }
+
+    [Theory]
+    [InlineData(1, "valid")]
+    [InlineData(1, "bitflip")]
+    [InlineData(1, "short")]
+    [InlineData(1, "extra")]
+    [InlineData(8, "valid")]
+    [InlineData(8, "bitflip")]
+    [InlineData(8, "short")]
+    [InlineData(8, "extra")]
+    [InlineData(131073, "valid")]
+    [InlineData(131073, "bitflip")]
+    [InlineData(131073, "short")]
+    [InlineData(131073, "extra")]
+    public async Task HttpNonSeekableDownloadRequiresExactLengthAndChecksum(int size, string variant)
+    {
+        var content = Enumerable.Range(0, size).Select(index => (byte)(index % 251)).ToArray();
+        var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp" }, content: content);
+        var clock = new MutableClock();
+        var store = new PostgreSqlDownloadStore(World.Options(), clock);
+        var user = new User(UserId.New(), "Integrity stream downloader");
+        await using (var context = fixture.CreatePlatformContext())
+        {
+            context.Users.Add(user);
+            context.TenantMemberships.Add(new TenantMembership(setup.Agent.TenantId, user.Id, TenantRole.Admin));
+            await context.SaveChangesAsync();
+        }
+        var primary = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "central");
+        var session = (await store.CreateAsync(new(setup.Agent.TenantId, setup.Artifact.Id, primary.Id, user.Id.Value,
+            "backup.bak", clock.GetUtcNow(), TimeSpan.FromMinutes(15)), default))!;
+        byte[] returned = variant switch
+        {
+            "short" => content[..^1],
+            "extra" => [.. content, 255],
+            _ => [.. content]
+        };
+        if (variant == "bitflip") returned[0] ^= 0xFF;
+        var source = new NonSeekableStream(returned, size > 1 ? Math.Min(size, returned.Length) : null);
+        ((InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, primary.StorageProvider, primary.StorageTarget)!).ReadStream = _ => source;
+        var fallbackReads = 0;
+        var fallback = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "sftp");
+        ((InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, fallback.StorageProvider, fallback.StorageTarget)!).BeforeRead = () =>
+        {
+            Interlocked.Increment(ref fallbackReads);
+            return Task.CompletedTask;
+        };
+        var service = new DownloadService(store, setup.Resolver, new NoAgentDownloadSource(), clock, NullLogger<DownloadService>.Instance);
+        var streamer = new DownloadStreamer(store, service, clock, NullLogger<DownloadStreamer>.Instance);
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");
+        await using var app = builder.Build();
+        var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        app.MapGet("/download", async (HttpContext http) =>
+        {
+            try { await streamer.StreamAsync(http, session); }
+            finally { ended.TrySetResult(); }
+        });
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        try
+        {
+            await app.StartAsync(timeout.Token);
+            using var client = new HttpClient { BaseAddress = new Uri(app.Urls.Single()) };
+            using var response = await client.GetAsync("/download", HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+            if (variant == "valid")
+            {
+                Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                Assert.Equal((long)size, response.Content.Headers.ContentLength);
+                source.Continue.TrySetResult();
+                Assert.Equal(content, await response.Content.ReadAsByteArrayAsync(timeout.Token));
+            }
+            else if (size == 1)
+            {
+                Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+                Assert.Contains("integrity_mismatch", await response.Content.ReadAsStringAsync(timeout.Token));
+            }
+            else
+            {
+                Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                Assert.Equal((long)size, response.Content.Headers.ContentLength);
+                await using var body = await response.Content.ReadAsStreamAsync(timeout.Token);
+                var prefix = new byte[Math.Min(4, size - 1)];
+                await body.ReadExactlyAsync(prefix, timeout.Token);
+                Assert.Equal(returned[..prefix.Length], prefix);
+                source.Continue.TrySetResult();
+                await Assert.ThrowsAnyAsync<IOException>(() => body.CopyToAsync(Stream.Null, timeout.Token));
+            }
+            await ended.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            var persisted = (await store.GetAsync(session.TenantId, session.Id, default))!;
+            var valid = variant == "valid";
+            Assert.Equal((valid ? DownloadState.Completed : DownloadState.Failed, primary.Id, valid ? null : "integrity_mismatch"),
+                (persisted.State, persisted.ReplicaId, persisted.FailureCode));
+            Assert.Equal(valid ? (long)size : size - 1L, persisted.TransferredBytes);
+            Assert.NotNull(persisted.ReleasedAt);
+            Assert.False(persisted.IsPinned(clock.GetUtcNow()));
+            Assert.True(source.Disposed);
+            Assert.Equal(0, fallbackReads);
+        }
+        finally
+        {
+            source.Continue.TrySetResult();
+            using var shutdown = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await app.StopAsync(shutdown.Token);
+        }
     }
 
     [Fact]
@@ -1125,14 +1251,34 @@ public sealed class ManualReplicaRepairIntegrationTests(PostgreSqlFixture fixtur
 
     private sealed class MidStreamFailure(byte[] bytes) : MemoryStream(bytes)
     {
-        private bool _read;
+        private int _reads;
+        public TaskCompletionSource Continue { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool Disposed { get; private set; }
         public override bool CanSeek => false;
-        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
         {
-            if (_read) throw new IOException("Simulated non-seekable provider failure.");
-            _read = true;
-            return base.ReadAsync(buffer[..((int)Length / 2)], cancellationToken);
+            if (_reads >= 2)
+            {
+                await Continue.Task.WaitAsync(cancellationToken);
+                throw new IOException("Simulated non-seekable provider failure.");
+            }
+            _reads++;
+            return await base.ReadAsync(buffer[..Math.Min(buffer.Length, (int)Length / 4)], cancellationToken);
+        }
+        protected override void Dispose(bool disposing) { Disposed = true; base.Dispose(disposing); }
+    }
+    private sealed class NonSeekableStream(byte[] bytes, int? pauseAfterBytes) : MemoryStream(bytes)
+    {
+        public TaskCompletionSource Continue { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public bool Disposed { get; private set; }
+        public override bool CanSeek => false;
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            // Hold terminal reads until the client observes body bytes, rather than racing Kestrel's abort.
+            if (pauseAfterBytes is { } threshold && Position >= threshold)
+                await Continue.Task.WaitAsync(cancellationToken);
+            var length = Math.Min(buffer.Length, Math.Min(4093, Math.Max(1, (int)Length / 3)));
+            return await base.ReadAsync(buffer[..length], cancellationToken);
         }
         protected override void Dispose(bool disposing) { Disposed = true; base.Dispose(disposing); }
     }
