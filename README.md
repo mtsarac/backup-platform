@@ -178,6 +178,10 @@ configure appropriate directory/file ACLs (and Unix group/umask), not just agent
 Backend policy is configured with `Restores__LeaseDuration` (default 120 seconds), `Restores__UnclaimedExpiry` (one hour) and
 `Restores__SweepInterval` (15 seconds). Unclaimed expired requests release their pins rather than unexpectedly restoring much later.
 The Restore Wizard uses the same source eligibility, precheck and explicit overwrite contracts as the API.
+Each new wizard discovery, precheck/recheck or restore attempt gets its own idempotency key. A transport/5xx failure
+can retry the same captured request with the same key; a definitive rejection or changed inputs starts a new attempt.
+Agent, target, database, mode and option changes invalidate affected results and overwrite confirmation.
+Late responses cannot re-enable stale destructive restores or navigate after leaving the wizard.
 
 ## Automatic replica repair
 
