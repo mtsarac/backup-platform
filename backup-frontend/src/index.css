@@ -161,3 +161,32 @@ body {
     outline-offset: 2px;
   }
 }
+
+/* High-contrast mode: toggled by the A11y toolbar via .hc on <html>. */
+:root.hc {
+  --foreground: #000000;
+  --card-foreground: #000000;
+  --popover-foreground: #000000;
+  --muted-foreground: #0f172a;
+  --text: #000000;
+  --text-heading: #000000;
+  --text-muted: #0f172a;
+  --border: #0f172a;
+  --input: #0f172a;
+  --primary: #1e3a8a;
+  --ring: #1e3a8a;
+}
+
+:root.dark.hc {
+  --foreground: #ffffff;
+  --card-foreground: #ffffff;
+  --popover-foreground: #ffffff;
+  --muted-foreground: #f8fafc;
+  --text: #ffffff;
+  --text-heading: #ffffff;
+  --text-muted: #f8fafc;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --primary: #93c5fd;
+  --ring: #bfdbfe;
+}
