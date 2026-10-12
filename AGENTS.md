@@ -1,66 +1,64 @@
-# Backup Platform — Agent Code Quality Rules
+# Repository Agent Rules
 
-## Core Principles
+These rules apply to all changes in this repository, regardless of task, branch, phase, or coding assistant.
 
-- Prefer simple, readable, maintainable code over unnecessary abstractions.
-- Minimize code volume without compromising correctness, security or backup safety.
-- Do not introduce wrappers, interfaces, helpers or services without a clear responsibility.
-- Avoid duplicate business logic and multiple sources of truth.
-- Prefer extending existing implementations over introducing parallel systems.
-- Never simplify away tenant isolation, lease fencing, checksum verification, retention pinning or durable recovery guarantees.
-- Frontend visual redesign is not a priority; functional correctness and maintainability are.
+## Engineering Principles
 
-## C# Comments & Documentation
+- Prefer clear, correct, maintainable solutions with the smallest justified scope.
+- Understand the existing behavior and root cause before changing code; avoid patch stacking.
+- Reuse established components and conventions instead of creating parallel implementations.
+- Avoid duplicate logic, unnecessary wrappers, speculative abstractions, and multiple sources of truth.
+- Keep responsibilities cohesive and module boundaries explicit. Do not split or combine code merely to change line counts.
+- Never trade correctness, security, or recoverability for fewer lines or faster delivery.
+- Prioritize functional correctness and maintainability over unrelated visual or stylistic changes.
 
-- Follow standard C# XML documentation conventions.
-- Use `/// <summary>` for public APIs and non-obvious contracts when documentation adds value.
-- Use `/// <param>`, `/// <returns>` and `/// <exception>` only when they clarify important behavior.
-- Use normal `//` comments primarily to explain **why**, not **what**.
-- Document non-obvious concurrency, security and data-integrity invariants.
-- Do not add comments to every fix, condition, assignment, try/catch or method.
-- Do not write comments describing obvious code.
-- Avoid changelog-style comments such as "Fixed bug", "New implementation" or "Previously this method...".
-- Remove stale or redundant comments when modifying the associated code.
-- Prefer meaningful naming and small cohesive methods over explanatory comments.
-- Keep documentation concise and accurate. Existing XML documentation must remain valid after refactoring.
+## Correctness & Safety
 
-## Code Structure
+- Preserve authorization and tenant isolation at every relevant entry point and data access boundary.
+- Respect transactional consistency, concurrency limits, ownership, leases, and fencing. Stale workers must not mutate newer owners' state or data.
+- Preserve backup and restore integrity: validate data before publishing it as verified; do not silently discard valid data.
+- Handle failure, timeout, cancellation, shutdown, retries, and restart recovery deliberately; distinguish their semantics.
+- Remote side effects must have appropriate ownership checks and durable recovery or cleanup paths.
+- Do not introduce untracked background tasks or hold database transactions/locks across slow external I/O without a justified, safe design.
+- Preserve retention rules, active-operation pins, quota accounting, and existing persistent data. Do not remove safety checks as "redundant" without proving equivalence.
+- Treat secrets and credentials as sensitive: avoid logging, exposing, or persisting them in unauthorized locations.
 
-- Follow SRP and maintain clear module boundaries.
-- Identify root causes instead of layering patches.
-- Avoid God Services, deeply nested control flow and repeated error classification.
-- Do not extract methods solely to reduce line count.
-- Do not create an interface for every class.
-- Do not introduce generic infrastructure for hypothetical future requirements.
-- Keep provider-specific logic out of shared domain code.
-- Avoid fire-and-forget tasks, untracked background operations and long database transactions spanning network I/O.
+## Code & Documentation
 
-## Tests
+- Follow existing language conventions and use meaningful names rather than explanatory comments.
+- In C#, follow standard XML documentation conventions; use `/// <summary>`, `<param>`, `<returns>`, and `<exception>` where they clarify a public API or non-obvious contract.
+- Write comments mainly to explain *why* a decision or invariant exists, not *what* obvious code does.
+- Document subtle security, concurrency, and integrity constraints when the code alone cannot explain them.
+- Do not add comments to every fix, method, conditional, or assignment; avoid changelog-style comments and stale explanations.
+- Keep error handling intentional. Do not swallow failures, conceal incomplete work, or add fallback behavior without a defined contract.
 
-- Add tests for new behaviors, regressions and meaningful failure scenarios.
-- Before adding a test, check whether an existing test already covers the same contract.
-- Prefer parameterized tests when they meaningfully reduce duplication.
-- Do not add multiple tests proving exactly the same behavior at the same layer.
-- Preserve critical safety tests: tenant isolation, authorization, checksum, retention, quota, backup/restore, cancellation, leasing and concurrency.
-- Run focused tests during development; reserve full integration suites for validation milestones.
-- Never delete tests merely to reduce the total test count.
-- Do not fabricate PASS results for unexecuted tests.
+## Tests & Validation
 
-## Pre-v1 Development
+- Add or update tests for changed behavior, regressions, and meaningful failure scenarios.
+- Check existing coverage first; do not duplicate tests that establish the same contract at the same layer.
+- Prefer deterministic tests and parameterization where they improve clarity; avoid unnecessary sleeps and brittle implementation-detail assertions.
+- Preserve tests for authorization, tenant isolation, backup/restore integrity, checksums, cancellation, retries, retention, quota, fencing, and concurrency.
+- Run focused tests while developing, then the relevant build, broader tests, or CI checks according to change risk.
+- Never delete, skip, weaken, or rewrite tests merely to make a failing build green.
+- Report which checks ran, their actual results, and any checks that could not run. Never fabricate validation results.
 
-- Backward compatibility with unpublished development versions is not automatically required.
-- Remove obsolete DTOs, adapters and legacy fallbacks when their usage has been verified.
-- Frontend, backend and Agent contracts may evolve together.
-- Prefer EF Core-generated migrations; manually customize SQL where PostgreSQL-specific behavior requires it.
-- Never modify persistent user data or discard migration history without an explicit migration/data-preservation strategy.
+## Contracts, Persistence & Pre-Release Changes
 
-## Change Discipline
+- Pre-1.0 status does not automatically require compatibility with unpublished versions, but it also does not permit losing existing data.
+- When changing contracts, inspect and update every affected backend, frontend, agent, persisted snapshot, and test fixture together as needed.
+- Remove obsolete adapters or legacy paths only after verifying their callers, deployed consumers, and persisted data implications.
+- Prefer generated EF Core migrations for routine schema changes; customize SQL when justified by database-specific requirements.
+- Do not rewrite applied migration history, delete development data, or change existing storage objects without an explicit, safe migration plan.
 
-- Make focused, minimal changes.
-- Avoid unrelated refactoring inside a bug fix.
-- Review the complete lifecycle, including failure, cancellation and restart paths.
-- Before completion, review the diff for unnecessary code, comments, dependencies and duplicate tests.
-- Report remaining risks and verification limits.
+## Scope, Git & Attribution
+
+- Keep changes task-focused; avoid unrelated refactoring or speculative features.
+- Review the final diff for unnecessary code, dependencies, comments, and tests.
+- Follow repository commit conventions; commit only when requested. Do not push, merge, create PRs, tag, or publish releases without explicit authorization.
+- The agent MUST NOT add itself as an author, co-author, contributor, reviewer, signer, or generator of repository changes.
+- Do not insert AI/agent attribution into commit messages, commit trailers (`Co-authored-by`, `Signed-off-by`, `Generated-by`), PR descriptions, code headers, or generated-file metadata.
+- Do not change Git identity settings to impersonate a person. If committing would attribute changes to an agent or an unauthorized identity, stop and report the blocker rather than creating that commit.
+- State remaining risks, limitations, and incomplete steps accurately.
 - Use no more than 2 subagents unless explicitly authorized.
 
-**Goal: Less unnecessary code, lower complexity and higher reliability—not fewer lines at the cost of correctness.**
+**Goal:** Minimal complexity, reliable behavior, and maintainable code—not minimal line count at the expense of safety.

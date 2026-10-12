@@ -1,78 +1,71 @@
 @AGENTS.md
 
-# Project Context — Backup Platform
+# Backup Platform — Project Guide
 
-Multi-tenant database backup, replication, retention and restore platform.
+A multi-tenant backup platform with a .NET backend and agent, a React frontend, and pluggable database/storage providers. The shared engineering and attribution rules are in `AGENTS.md`.
 
-## Architecture & Directories
+## Repository Map
 
 - `backup-backend/`: .NET 10 solution (`BackupPlatform.sln`).
-  - `src/core/contracts/`: Shared message contracts, layout rules (`ManagedBackupLayout`).
-  - `src/core/domain/`: Core aggregates, entities, guard clauses (`BackupGuard`), zero external dependencies.
-  - `src/core/application/`: Orchestrators, services, store interfaces (`IBackupRunStore`, `IReplicaRepairStore`).
-  - `src/core/infrastructure/`: EF Core `PlatformDbContext`, PostgreSQL stores, Quartz scheduler.
-  - `src/modules/`: Modular services (`tenancy`, `identity`, `agents`, `managed-service`, `storage`, `backups`, `audit`, `scheduling`, `notifications`).
-  - `src/providers/`: Storage (`central`, `sftp`, `google-drive`, `local`), Backup (`mssql`, `file-system`), Secret (`data-protection`).
-  - `src/hosts/api/`: ASP.NET Core REST API, SignalR hub, background workers.
-  - `src/hosts/agent/`: Standalone agent daemon (`BackupPlatform.Agent.Host`).
-  - `src/agent/core/`: Agent backup/restore pipelines and staging cleaner.
-  - `src/agent/transport/`: Agent-backend communication.
-  - `tests/unit-tests/`: Fast unit tests (domain, services, configurations).
-  - `tests/architecture-tests/`: NetArchTest architecture boundary tests.
-  - `tests/agent-tests/`: Agent task and pipeline tests.
-  - `tests/integration-tests/`: Integration tests requiring PostgreSQL / MSSQL.
-- `backup-frontend/`: React 19, TypeScript, Vite, Tailwind CSS, Bun runtime.
-- `docs/`: Technical specifications, review reports, and hardening trackers.
+  - `src/core/domain/`: Business entities and invariants; no project-level dependencies on other application layers.
+  - `src/core/contracts/`: Shared API/agent contracts and storage layout contracts.
+  - `src/core/application/`: Use cases, orchestration, application interfaces.
+  - `src/core/infrastructure/`: EF Core persistence, PostgreSQL stores, scheduler integration.
+  - `src/modules/`: Feature-level modules; check actual implementation before assuming a module is functional.
+  - `src/providers/`: Database backup, storage, and secret provider implementations or placeholders.
+  - `src/agent/core/`, `src/agent/transport/`: Agent execution and backend communication.
+  - `src/hosts/api/`, `src/hosts/agent/`: API and agent hosts.
+  - `tests/`: Unit, architecture, agent, and integration test projects.
+- `backup-frontend/`: React, TypeScript, Vite, and Bun.
+- `docs/`: Specifications, planning, reviews, and task trackers. Verify whether individual files are Git-tracked or ignored.
 
-## Build & Test Commands
+## Routine Commands
 
-### Backend (`cd backup-backend`)
-- Build: `dotnet build BackupPlatform.sln`
-- Release build (CI): `dotnet build BackupPlatform.sln -c Release -p:ContinuousIntegrationBuild=true -warnaserror`
-- Fast Unit Tests: `dotnet test tests/unit-tests`
-- Fast Architecture Tests: `dotnet test tests/architecture-tests`
-- Fast Agent Tests: `dotnet test tests/agent-tests --filter "FullyQualifiedName!~ConnectivityServiceTests" -- xUnit.MaxParallelThreads=2`
+Run backend commands from `backup-backend/`:
 
-### Frontend (`cd backup-frontend`)
-- Install: `bun install --frozen-lockfile`
-- Typecheck: `bun run typecheck`
-- Lint: `bun run lint`
-- Tests: `bun run test`
-- Build: `bun run build`
+```fish
+cd backup-backend
+dotnet restore BackupPlatform.sln
+dotnet build BackupPlatform.sln -c Release -p:ContinuousIntegrationBuild=true -warnaserror
+dotnet test tests/unit-tests -c Release --no-build
+dotnet test tests/architecture-tests -c Release --no-build
+dotnet test tests/agent-tests -c Release --no-build --filter 'FullyQualifiedName!~ConnectivityServiceTests' -- xUnit.MaxParallelThreads=2
+```
 
-## Test Separation
+Run frontend commands from `backup-frontend/`:
 
-- **Fast CI (`ci.yml`):** Unit tests, architecture tests, fast agent tests, frontend typecheck/lint/test/build. No external database containers needed. Run these locally for routine verification.
-- **Integration Tests (`integration.yml`):**
-  - PostgreSQL suite: `dotnet test tests/integration-tests --filter "FullyQualifiedName!~MsSql&FullyQualifiedName!~BackupPipelineSmoke"`. Requires `BACKUP_PLATFORM_TEST_CONNECTION_STRING` with database creation privileges.
-  - MSSQL + Agent.Host suite: Requires running PostgreSQL and SQL Server test containers.
+```fish
+cd backup-frontend
+bun install --frozen-lockfile
+bun run typecheck
+bun run lint
+bun run test
+bun run build
+```
 
-## Critical Invariants
+- `.github/workflows/ci.yml`: Routine fast checks, without external database containers.
+- `.github/workflows/integration.yml`: Database-dependent tests; PostgreSQL/MSSQL setup and credentials are required.
+- Prefer the workflow files as the source of truth if command names, filters, or requirements change.
 
-- **Tenant Isolation:** Every query, mutation and path resolution must enforce `TenantId`. Never allow cross-tenant access.
-- **Lease Fencing:** Writers and workers hold timed leases (`LeaseToken`, `LeaseExpiresAt`). Stale/expired lease owners must never publish replicas, complete operations, or delete remote objects.
-- **Backup & Restore Safety:** Verification before publication. Readback SHA-256 and size verification required before marking a replica `Verified`. Never delete verified replicas during cleanup.
-- **Retention & Cleanup:** Pinned artifacts (`RetentionPinnedAt`) survive retention expiration. Deletions must verify absence or persist durable orphan records (`Failed`, `DeletePending`) for subsequent retention sweeps.
-- **Quota Accounting:** Quota evaluated before run/repair admission; unverified/orphan storage tracked against tenant usage.
+## Architectural Boundaries
 
-## Dependency Boundaries
+- Keep domain business logic independent of persistence, web hosting, and provider implementations.
+- Application code coordinates domain operations through contracts/abstractions; infrastructure and providers implement external I/O.
+- Keep host/composition concerns at host boundaries and platform-specific logic out of shared agent code.
+- Respect API/agent wire contracts and provider capabilities. Do not assume a provider supports an operation without checking it.
 
-- `Domain` depends only on `Contracts`; never reference EF Core, ASP.NET Core, or storage provider SDKs.
-- `Application` depends on `Domain` and `Contracts`; consumes store/provider interfaces, never concrete infrastructure.
-- `Infrastructure` implements application interfaces using EF Core and PostgreSQL.
-- `Agent.Core` never references ASP.NET Core or EF Core.
-- Storage and backup providers are isolated adapters behind abstraction interfaces.
+## Data & Lifecycle Invariants
 
-## Database Migrations
+- Tenant-scoped reads, writes, storage paths, and operational commands must enforce authorization and tenant isolation.
+- Long-running work must respect leases, fencing, ownership, and durable recovery across retries, shutdown, and worker takeover.
+- An artifact/replica is only reported as verified when the applicable integrity checks succeed; failures must not destroy healthy replicas.
+- Retention, restore/download pins, remote cleanup, and orphan tracking must remain consistent with persisted state.
+- Quota admission, usage, reservations, and release/reconciliation must remain consistent with the selected policy and concurrent work.
+- Apply these invariants to new features as well as existing backup/restore flows; do not rely on the status of any particular roadmap phase.
 
-- Tooling: Entity Framework Core CLI (`dotnet ef`).
-- Context: `PlatformDbContext` in `src/core/infrastructure`.
-- Migration command:
-  `BACKUP_PLATFORM_CONNECTION_STRING="Host=localhost;Database=dummy" dotnet ef migrations add <MigrationName> --project src/core/infrastructure --startup-project src/core/infrastructure`
-- Never modify persistent user data or discard migration history.
+## Migrations & Workflow
 
-## Workflow & Git
-
-- Development on feature or fix branches (`fix/backup-safety-hardening`).
-- Make small, atomic commits with conventional commit messages (`fix(scope): description`).
-- Never perform automated push, pull request creation, release tagging, or branch merging unless explicitly instructed.
+- Use the EF Core CLI with `PlatformDbContext` under `src/core/infrastructure`; inspect current design-time configuration before generating a migration.
+- Review generated schema changes and preserve existing data and migration history.
+- Work on the user's current authorized branch. Do not hardcode a specific branch or milestone into permanent repository instructions.
+- Keep commits focused and use the existing CI checks appropriate to the change. Follow `AGENTS.md` for Git and attribution rules.
