@@ -496,6 +496,59 @@ public sealed class ManualReplicaRepairIntegrationTests(PostgreSqlFixture fixtur
         Assert.Empty(await setup.RepairStore.ListOperationsAsync(setup.Agent.TenantId, setup.Artifact.Id, default));
     }
 
+    private async Task<MultiSetup> SetupHardQuotaForOneRepairAsync()
+    {
+        var setup = await SetupAsync(mode: QuotaAccountingMode.PhysicalReplicaBytes, verified: new HashSet<string> { "central" });
+        var policyKey = await CreatePolicyAsync(World, QuotaEnforcementMode.BlockNewBackups, QuotaAccountingMode.PhysicalReplicaBytes, QuotaScopeRule.All);
+        // The central replica plus exactly one more copy fit.
+        await World.AssignAsync(setup.Agent.TenantId, await World.PlanAsync(Content.Length * 2, policyKey));
+        return setup;
+    }
+
+    [Fact]
+    public async Task Repair_quota_hold_counts_against_later_repairs_until_the_operation_ends()
+    {
+        var setup = await SetupHardQuotaForOneRepairAsync();
+        var tenantId = setup.Agent.TenantId;
+
+        var first = await setup.RepairService.StartRepairAsync(tenantId, setup.Artifact.Id, new StartReplicaRepairRequest(StorageConnectionId: setup.Sftp.Id), null, default);
+        Assert.True(first.Success);
+        var held = await World.StoredUsageAsync(tenantId);
+        Assert.Equal((Content.Length, Content.Length), (held!.UsedBytes, held.ReservedBytes));
+
+        var second = await setup.RepairService.StartRepairAsync(tenantId, setup.Artifact.Id, new StartReplicaRepairRequest(StorageConnectionId: setup.Drive.Id), null, default);
+        Assert.False(second.Success);
+        Assert.Equal(ReplicaRepairFailureCodes.QuotaExceeded, second.Code);
+        Assert.DoesNotContain(await setup.RepairStore.ListOperationsAsync(tenantId, setup.Artifact.Id, default), op => op.StorageConnectionId == setup.Drive.Id);
+
+        Assert.True(await setup.RepairService.CancelRepairAsync(tenantId, setup.Artifact.Id, first.Operation!.Id, default));
+        var released = await World.StoredUsageAsync(tenantId);
+        Assert.Equal((Content.Length, 0L), (released!.UsedBytes, released.ReservedBytes));
+
+        var retry = await setup.RepairService.StartRepairAsync(tenantId, setup.Artifact.Id, new StartReplicaRepairRequest(StorageConnectionId: setup.Drive.Id), null, default);
+        Assert.True(retry.Success);
+        var executed = await setup.RepairService.ExecuteRepairAsync(tenantId, setup.Artifact.Id, retry.Operation!.Id);
+        Assert.Equal("Succeeded", executed!.Status);
+        var settled = await World.StoredUsageAsync(tenantId);
+        Assert.Equal((Content.Length * 2L, 0L), (settled!.UsedBytes, settled.ReservedBytes));
+    }
+
+    [Fact]
+    public async Task Concurrent_repairs_admit_only_as_many_as_fit_the_hard_quota()
+    {
+        var setup = await SetupHardQuotaForOneRepairAsync();
+        var tenantId = setup.Agent.TenantId;
+
+        var results = await Task.WhenAll(
+            setup.RepairService.StartRepairAsync(tenantId, setup.Artifact.Id, new StartReplicaRepairRequest(StorageConnectionId: setup.Sftp.Id), null, default),
+            setup.RepairService.StartRepairAsync(tenantId, setup.Artifact.Id, new StartReplicaRepairRequest(StorageConnectionId: setup.Drive.Id), null, default));
+
+        Assert.Single(results, result => result.Success);
+        Assert.Single(results, result => result is { Success: false, Code: ReplicaRepairFailureCodes.QuotaExceeded });
+        var usage = await World.StoredUsageAsync(tenantId);
+        Assert.Equal((Content.Length, Content.Length), (usage!.UsedBytes, usage.ReservedBytes));
+    }
+
     [Fact]
     public async Task Scenario17_Partial_upload_orphan_recovery_and_cleanup_on_failure()
     {

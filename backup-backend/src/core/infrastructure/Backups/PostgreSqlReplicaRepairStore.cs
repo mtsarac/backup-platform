@@ -11,14 +11,25 @@ namespace BackupPlatform.Infrastructure.Backups;
 
 public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbContext> options) : IReplicaRepairStore
 {
-    public async Task<ReplicaRepairAdmissionResult> AdmitRepairAsync(
+    public Task<ReplicaRepairAdmissionResult> AdmitRepairAsync(
         TenantId tenantId,
         Guid artifactId,
         Guid? storageConnectionId,
         string? storageProvider,
         DateTimeOffset now,
         CancellationToken cancellationToken,
-        Guid? excludeOperationId = null)
+        Guid? excludeOperationId = null) =>
+        EvaluateRepairAsync(tenantId, artifactId, storageConnectionId, storageProvider, now, excludeOperationId, checkQuota: true, cancellationToken);
+
+    private async Task<ReplicaRepairAdmissionResult> EvaluateRepairAsync(
+        TenantId tenantId,
+        Guid artifactId,
+        Guid? storageConnectionId,
+        string? storageProvider,
+        DateTimeOffset now,
+        Guid? excludeOperationId,
+        bool checkQuota,
+        CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
 
@@ -123,23 +134,84 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
 
         var selectedSource = candidateSources[0];
 
-        var quotaDecision = await PostgreSqlBackupAdmissionPolicy.AdmitReplicaRepairAsync(
-            context, tenantId, artifact, targetDestination, connection, now, cancellationToken);
+        if (!checkQuota)
+            return new(true, null, null, artifact, targetDestination, selectedSource, candidateSources);
+
+        // A new repair is only pre-checked here; CreateOperationAsync reserves under the tenant lock. An existing operation is re-reserved
+        // atomically, so its hold follows the current policy and artifact state.
+        var own = excludeOperationId is { } ownId
+            ? await context.ReplicaRepairOperations.SingleOrDefaultAsync(r => r.TenantId == tenantId && r.Id == ownId, cancellationToken)
+            : null;
+        BackupAdmissionDecision quotaDecision;
+        if (own is { IsTerminal: false })
+        {
+            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+            quotaDecision = await ReserveQuotaAsync(context, own, now, cancellationToken);
+            if (quotaDecision.Allowed)
+            {
+                await context.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            }
+        }
+        else
+        {
+            quotaDecision = await PostgreSqlBackupAdmissionPolicy.AdmitReplicaRepairAsync(
+                context, tenantId, artifact, targetDestination.StorageProvider, effectiveConnectionId, connection, now, cancellationToken);
+        }
         if (!quotaDecision.Allowed)
-            return new(false, ReplicaRepairFailureCodes.QuotaExceeded, $"Storage quota limit exceeded: {quotaDecision.DenialCode}.");
+            return QuotaDenied(quotaDecision);
 
         return new(true, null, null, artifact, targetDestination, selectedSource, candidateSources);
     }
 
-    public async Task<ReplicaRepairOperation> CreateOperationAsync(
+    public async Task<ReplicaRepairAdmissionResult> CreateOperationAsync(
         ReplicaRepairOperation operation,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(operation);
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        // Lock order: artifact row -> tenant row (taken by ReserveQuotaAsync).
+        await context.Database.SqlQuery<Guid>($"""
+            SELECT "Id" AS "Value" FROM backup_artifacts
+            WHERE "TenantId" = {operation.TenantId.Value} AND "Id" = {operation.ArtifactId} FOR NO KEY UPDATE
+            """).ToListAsync(cancellationToken);
+        // A terminal operation (imported history) holds nothing.
+        if (!operation.IsTerminal)
+        {
+            var decision = await ReserveQuotaAsync(context, operation, operation.CreatedAt, cancellationToken);
+            if (!decision.Allowed)
+                return QuotaDenied(decision);
+        }
+
         context.ReplicaRepairOperations.Add(operation);
         await context.SaveChangesAsync(cancellationToken);
-        return operation;
+        await transaction.CommitAsync(cancellationToken);
+        return new(true, null, null);
     }
+
+    /// <summary>
+    /// Decides a repair's counted bytes against used + every other hold and sets the hold on the operation, under the tenant lock and inside the
+    /// caller's transaction, so concurrent repairs and runs cannot both see the same free capacity. The caller saves the operation and commits.
+    /// </summary>
+    private static async Task<BackupAdmissionDecision> ReserveQuotaAsync(
+        PlatformDbContext context, ReplicaRepairOperation operation, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (!await TenantUsageEngine.LockTenantAsync(context, operation.TenantId, cancellationToken))
+            return BackupAdmissionDecision.Denied(BackupAdmissionDenialCodes.SubscriptionRequired);
+
+        var artifact = await context.BackupArtifacts.AsNoTracking().Include(a => a.Replicas)
+            .SingleAsync(a => a.TenantId == operation.TenantId && a.Id == operation.ArtifactId, cancellationToken);
+        var connection = operation.StorageConnectionId == Guid.Empty
+            ? null
+            : await context.StorageConnections.AsNoTracking()
+                .SingleOrDefaultAsync(c => c.TenantId == operation.TenantId && c.Id == operation.StorageConnectionId, cancellationToken);
+        return await PostgreSqlBackupAdmissionPolicy.AdmitReplicaRepairAsync(
+            context, operation.TenantId, artifact, operation.StorageProvider, operation.StorageConnectionId, connection, now, cancellationToken, reserveOn: operation);
+    }
+
+    private static ReplicaRepairAdmissionResult QuotaDenied(BackupAdmissionDecision decision) =>
+        new(false, ReplicaRepairFailureCodes.QuotaExceeded, $"Storage quota limit exceeded: {decision.DenialCode}.");
     public Task<bool> PinSourceAsync(TenantId tenantId, Guid operationId, Guid leaseToken, Guid sourceReplicaId, DateTimeOffset now, CancellationToken cancellationToken) =>
         PinSourceAsync(tenantId, operationId, leaseToken, sourceReplicaId, "default.bak", now, cancellationToken);
 
@@ -647,7 +719,9 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
                 // Retryable failures remain Pending; terminal history is never revived by discovery.
                 if (existingOp is not null) continue;
 
-                var admission = await AdmitRepairAsync(artifact.TenantId, artifact.Id, dest.StorageConnectionId, dest.StorageProvider, now, cancellationToken);
+                // Quota is decided by the reservation below, in this transaction; a second connection must not touch the usage rows it holds.
+                var admission = await EvaluateRepairAsync(
+                    artifact.TenantId, artifact.Id, dest.StorageConnectionId, dest.StorageProvider, now, excludeOperationId: null, checkQuota: false, cancellationToken);
                 if (!admission.Allowed || admission.SelectedSource is null) continue;
                 var lockedSources = await context.Database.SqlQuery<Guid>($"""
                     SELECT "Id" AS "Value" FROM backup_replicas
@@ -670,15 +744,14 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
                     maxAttempts: 5,
                     nextRetryAt: now);
 
+                // Saved per operation so the next candidate of the tenant sees this hold.
+                if (!(await ReserveQuotaAsync(context, newOp, now, cancellationToken)).Allowed) continue;
                 context.ReplicaRepairOperations.Add(newOp);
+                await context.SaveChangesAsync(cancellationToken);
                 created.Add(newOp);
             }
         }
 
-        if (created.Count > 0)
-        {
-            await context.SaveChangesAsync(cancellationToken);
-        }
         await transaction.CommitAsync(cancellationToken);
         return created;
     }

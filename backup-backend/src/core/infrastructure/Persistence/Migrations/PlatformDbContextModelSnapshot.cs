@@ -1406,6 +1406,9 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("RequestedByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<long>("ReservedQuotaBytes")
+                        .HasColumnType("bigint");
+
                     b.Property<Guid?>("SourceReplicaId")
                         .HasColumnType("uuid");
 
@@ -1476,6 +1479,8 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_replica_repair_operations_bytes", "\"TransferredBytes\" >= 0 AND \"TotalBytes\" >= 0 AND \"TransferredBytes\" <= \"TotalBytes\"");
 
                             t.HasCheckConstraint("ck_replica_repair_operations_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_replica_repair_operations_reserved", "\"ReservedQuotaBytes\" >= 0");
 
                             t.HasCheckConstraint("ck_replica_repair_operations_status", "\"Status\" IN ('Pending','InProgress','Succeeded','Failed','Cancelled')");
 

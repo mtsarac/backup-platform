@@ -13,7 +13,8 @@ public interface IReplicaRepairStore
         DateTimeOffset now,
         CancellationToken cancellationToken,
         Guid? excludeOperationId = null);
-    Task<ReplicaRepairOperation> CreateOperationAsync(
+    /// <summary>Persists a new operation together with its quota reservation; a denied reservation creates nothing.</summary>
+    Task<ReplicaRepairAdmissionResult> CreateOperationAsync(
         ReplicaRepairOperation operation,
         CancellationToken cancellationToken);
 

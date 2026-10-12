@@ -63,7 +63,13 @@ public sealed class ReplicaRepairService(
             requestedByUserId,
             artifact.SizeBytes);
 
-        await store.CreateOperationAsync(operation, cancellationToken);
+        var created = await store.CreateOperationAsync(operation, cancellationToken);
+        if (!created.Allowed)
+        {
+            logger.LogWarning("Replica repair denied for tenant {TenantId}, artifact {ArtifactId}: {Code} - {Reason}",
+                tenantId, artifactId, created.DenialCode, created.DenialReason);
+            return new(false, null, created.DenialCode, created.DenialReason);
+        }
 
         logger.LogInformation("Replica repair operation created: Id={OperationId}, Tenant={TenantId}, Artifact={ArtifactId}, Destination={Provider}:{ConnectionId}",
             operation.Id, tenantId, artifactId, targetDestination.StorageProvider, targetDestination.StorageConnectionId);

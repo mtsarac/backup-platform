@@ -71,9 +71,22 @@ public sealed class ReplicaRepairOperation : ITenantOwned
     public DateTimeOffset? CompletedAt { get; private set; }
     public DateTimeOffset? CancellationRequestedAt { get; private set; }
 
+    /// <summary>
+    /// Counted storage bytes held against the tenant's quota for this repair. The hold exists only while the operation is Pending or InProgress:
+    /// its status is the single authority, so no terminal path has to release it.
+    /// </summary>
+    public long ReservedQuotaBytes { get; private set; }
+
     public bool IsTerminal => Status is ReplicaRepairStatus.Succeeded or ReplicaRepairStatus.Failed or ReplicaRepairStatus.Cancelled;
     public bool IsExhausted => AttemptCount >= MaxAttempts && Status == ReplicaRepairStatus.Failed;
     public bool HasLease(Guid token, DateTimeOffset now) => token != Guid.Empty && LeaseToken == token && LeaseExpiresAt > now && !IsTerminal;
+
+    public void ReserveQuota(long bytes)
+    {
+        if (IsTerminal) throw new InvalidOperationException("Cannot reserve quota for a terminal repair operation.");
+        ArgumentOutOfRangeException.ThrowIfNegative(bytes);
+        ReservedQuotaBytes = bytes;
+    }
 
     public void SetTargetIntent(Guid sourceReplicaId, string targetKey)
     {

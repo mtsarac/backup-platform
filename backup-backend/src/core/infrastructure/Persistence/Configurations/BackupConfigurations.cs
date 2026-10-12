@@ -379,6 +379,7 @@ internal sealed class ReplicaRepairOperationConfiguration : IEntityTypeConfigura
         {
             table.HasCheckConstraint("ck_replica_repair_operations_status", "\"Status\" IN ('Pending','InProgress','Succeeded','Failed','Cancelled')");
             table.HasCheckConstraint("ck_replica_repair_operations_bytes", "\"TransferredBytes\" >= 0 AND \"TotalBytes\" >= 0 AND \"TransferredBytes\" <= \"TotalBytes\"");
+            table.HasCheckConstraint("ck_replica_repair_operations_reserved", "\"ReservedQuotaBytes\" >= 0");
             table.HasCheckConstraint("ck_replica_repair_operations_terminal", "(\"Status\" IN ('Succeeded','Failed','Cancelled')) = (\"CompletedAt\" IS NOT NULL)");
         });
 
@@ -390,6 +391,7 @@ internal sealed class ReplicaRepairOperationConfiguration : IEntityTypeConfigura
         builder.Property(repair => repair.FailureReason).HasMaxLength(512);
         builder.Property(repair => repair.AttemptCount).IsRequired();
         builder.Property(repair => repair.MaxAttempts).IsRequired();
+        builder.Property(repair => repair.ReservedQuotaBytes).HasColumnType("bigint").IsRequired();
         builder.Property(repair => repair.NextRetryAt);
         builder.Property(repair => repair.LastAttemptAt);
         builder.Property(repair => repair.LastFailureCode).HasMaxLength(64);

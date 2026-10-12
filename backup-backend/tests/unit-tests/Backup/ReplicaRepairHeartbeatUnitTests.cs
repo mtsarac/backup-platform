@@ -61,8 +61,12 @@ public sealed class ReplicaRepairHeartbeatUnitTests
             {
                 var tcs = new TaskCompletionSource<bool>();
                 store.OnRenewLease = () => tcs.TrySetResult(true);
-                time.Advance(TimeSpan.FromSeconds(20));
-                await tcs.Task;
+                // The heartbeat timer may not be registered yet; keep advancing until a renewal is observed.
+                while (!tcs.Task.IsCompleted)
+                {
+                    time.Advance(TimeSpan.FromSeconds(20));
+                    await Task.Delay(5);
+                }
             }
 
             return new StorageVerificationResult(
@@ -108,8 +112,12 @@ public sealed class ReplicaRepairHeartbeatUnitTests
         {
             var tcs = new TaskCompletionSource<bool>();
             store.OnRenewLease = () => tcs.TrySetResult(true);
-            time.Advance(TimeSpan.FromSeconds(20));
-            await tcs.Task;
+            // The heartbeat timer may not be registered yet; keep advancing until a renewal is observed.
+            while (!tcs.Task.IsCompleted)
+            {
+                time.Advance(TimeSpan.FromSeconds(20));
+                await Task.Delay(5);
+            }
 
             while (!ct.IsCancellationRequested)
             {
@@ -158,8 +166,12 @@ public sealed class ReplicaRepairHeartbeatUnitTests
         {
             var tcs = new TaskCompletionSource<bool>();
             store.OnRenewLease = () => tcs.TrySetResult(true);
-            time.Advance(TimeSpan.FromSeconds(20));
-            await tcs.Task;
+            // The heartbeat timer may not be registered yet; keep advancing until a renewal is observed.
+            while (!tcs.Task.IsCompleted)
+            {
+                time.Advance(TimeSpan.FromSeconds(20));
+                await Task.Delay(5);
+            }
 
             while (!ct.IsCancellationRequested)
             {
@@ -376,7 +388,7 @@ public sealed class ReplicaRepairHeartbeatUnitTests
         public Task<bool> RequestCancellationAsync(TenantId tenantId, Guid operationId, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(true);
         public Task RecordRepairOrphanAsync(TenantId tenantId, Guid artifactId, Guid storageConnectionId, string storageProvider, string storageTarget, string key, long sizeBytes, string checksum, DateTimeOffset now, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task<ReplicaRepairAdmissionResult> AdmitRepairAsync(TenantId tenantId, Guid artifactId, Guid? storageConnectionId, string? storageProvider, DateTimeOffset now, CancellationToken cancellationToken, Guid? excludeOperationId = null) => throw new NotSupportedException();
-        public Task<ReplicaRepairOperation> CreateOperationAsync(ReplicaRepairOperation operation, CancellationToken cancellationToken) => Task.FromResult(operation);
+        public Task<ReplicaRepairAdmissionResult> CreateOperationAsync(ReplicaRepairOperation operation, CancellationToken cancellationToken) => Task.FromResult(new ReplicaRepairAdmissionResult(true, null, null));
         public Task<ReplicaRepairOperation?> ClaimOperationAsync(TenantId tenantId, Guid operationId, Guid leaseToken, string leaseOwner, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<ReplicaRepairOperation?> ClaimDueRepairAsync(string leaseOwner, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken, TenantId? tenantId = null) => throw new NotSupportedException();
         public Task<int> RecoverStaleRepairsAsync(DateTimeOffset now, TimeSpan initialRetryDelay, CancellationToken cancellationToken) => Task.FromResult(0);

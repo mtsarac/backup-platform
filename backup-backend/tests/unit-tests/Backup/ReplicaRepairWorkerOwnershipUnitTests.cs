@@ -172,8 +172,12 @@ public sealed class ReplicaRepairWorkerOwnershipUnitTests
 
             var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             fakeStore.OnRenewLease = () => tcs.TrySetResult(true);
-            time.Advance(TimeSpan.FromSeconds(20));
-            await tcs.Task;
+            // The heartbeat timer may not be registered yet; keep advancing until a renewal is observed.
+            while (!tcs.Task.IsCompleted)
+            {
+                time.Advance(TimeSpan.FromSeconds(20));
+                await Task.Delay(5);
+            }
 
             var cancelTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             using var reg = ct.Register(() => cancelTcs.TrySetResult(true));
@@ -327,8 +331,12 @@ public sealed class ReplicaRepairWorkerOwnershipUnitTests
         {
             var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             fakeStore.OnRenewLease = () => tcs.TrySetResult(true);
-            time.Advance(TimeSpan.FromSeconds(20));
-            await tcs.Task;
+            // The heartbeat timer may not be registered yet; keep advancing until a renewal is observed.
+            while (!tcs.Task.IsCompleted)
+            {
+                time.Advance(TimeSpan.FromSeconds(20));
+                await Task.Delay(5);
+            }
 
             var cancelTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             using var reg = ct.Register(() => cancelTcs.TrySetResult(true));
@@ -401,10 +409,10 @@ public sealed class ReplicaRepairWorkerOwnershipUnitTests
                 [_source!]));
         }
 
-        public Task<ReplicaRepairOperation> CreateOperationAsync(ReplicaRepairOperation operation, CancellationToken cancellationToken)
+        public Task<ReplicaRepairAdmissionResult> CreateOperationAsync(ReplicaRepairOperation operation, CancellationToken cancellationToken)
         {
             CurrentOperation = operation;
-            return Task.FromResult(operation);
+            return Task.FromResult(new ReplicaRepairAdmissionResult(true, null, null));
         }
 
         public Task<ReplicaRepairOperation?> ClaimDueRepairAsync(string leaseOwner, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken, TenantId? tenantId = null)

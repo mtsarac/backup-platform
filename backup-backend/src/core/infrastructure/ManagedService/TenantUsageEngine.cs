@@ -106,6 +106,15 @@ internal static class TenantUsageEngine
             var remaining = Math.Max(0, reservation.Bytes - consumed);
             total = total > long.MaxValue - remaining ? long.MaxValue : total + remaining;
         }
+        // A repair's hold lives exactly as long as the operation is open, so reconcile and the save hook agree without a release step.
+        var repairs = await context.ReplicaRepairOperations.AsNoTracking()
+            .Where(row => row.TenantId == tenantId && row.ReservedQuotaBytes > 0
+                && (row.Status == ReplicaRepairStatus.Pending || row.Status == ReplicaRepairStatus.InProgress))
+            .Select(row => row.ReservedQuotaBytes).ToListAsync(cancellationToken);
+        foreach (var held in repairs)
+        {
+            total = total > long.MaxValue - held ? long.MaxValue : total + held;
+        }
         return total;
     }
 
