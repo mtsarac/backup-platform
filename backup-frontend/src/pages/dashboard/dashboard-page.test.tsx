@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeRun } from '@/features/backups/test-data'
@@ -23,6 +24,9 @@ function renderDashboard() {
 }
 
 beforeEach(() => {
+  localStorage.clear()
+  state.data.runs.failedLast24Hours = 0
+  state.data.runs.succeededLast24Hours = 1
   state.data.runs.replicationInsufficientLast24Hours = undefined
   state.data.recentRuns = []
 })
@@ -64,5 +68,26 @@ describe('dashboard replication monitoring', () => {
     renderDashboard()
     expect(screen.getByText('Başarılı · Succeeded')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+describe('dashboard simplified status', () => {
+  it('shows the safe banner when nothing needs attention', () => {
+    renderDashboard()
+    expect(screen.getByRole('status')).toHaveTextContent('Sistem güvende')
+  })
+
+  it('counts distinct attention conditions in the banner', () => {
+    state.data.runs.failedLast24Hours = 2
+    renderDashboard()
+    expect(screen.getByRole('status')).toHaveTextContent('Dikkat edilmesi gereken 1 durum var')
+  })
+
+  it('defaults to card view and switches to the table', async () => {
+    state.data.recentRuns = [makeRun({ status: 'Succeeded' })]
+    renderDashboard()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Liste' }))
+    expect(screen.getByRole('table')).toBeInTheDocument()
   })
 })
