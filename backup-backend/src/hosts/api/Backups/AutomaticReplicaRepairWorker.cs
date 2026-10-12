@@ -148,13 +148,9 @@ public sealed class AutomaticReplicaRepairWorker(
         var executed = 0;
         while (!cancellationToken.IsCancellationRequested && !_workerStoppingCts.IsCancellationRequested)
         {
-            if (tenantId == null)
+            if (_runningTasks.Count >= MaxGlobalConcurrentRepairs)
             {
-                var activeGlobal = await store.GetActiveRepairsCountAsync(tenantId: null, cancellationToken);
-                if (activeGlobal >= MaxGlobalConcurrentRepairs || _runningTasks.Count >= MaxGlobalConcurrentRepairs)
-                {
-                    break;
-                }
+                break;
             }
 
             var claimed = await store.ClaimDueRepairAsync(
@@ -162,25 +158,12 @@ public sealed class AutomaticReplicaRepairWorker(
                 time.GetUtcNow(),
                 TimeSpan.FromMinutes(10),
                 cancellationToken,
-                tenantId);
+                tenantId,
+                maxGlobalConcurrent: MaxGlobalConcurrentRepairs,
+                maxTenantConcurrent: MaxTenantConcurrentRepairs);
             if (claimed is null)
             {
                 break;
-            }
-
-            var activeTenant = await store.GetActiveRepairsCountAsync(claimed.TenantId, cancellationToken);
-            if (activeTenant > MaxTenantConcurrentRepairs)
-            {
-                await store.ScheduleRetryAsync(
-                    claimed.TenantId,
-                    claimed.Id,
-                    claimed.LeaseToken!.Value,
-                    "tenant_concurrency_limit",
-                    "Tenant repair concurrency limit reached; deferred.",
-                    time.GetUtcNow().AddSeconds(15),
-                    time.GetUtcNow(),
-                    cancellationToken);
-                continue;
             }
 
             executed++;

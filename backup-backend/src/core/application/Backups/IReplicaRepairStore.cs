@@ -100,7 +100,9 @@ public interface IReplicaRepairStore
         DateTimeOffset now,
         TimeSpan leaseDuration,
         CancellationToken cancellationToken,
-        TenantId? tenantId = null);
+        TenantId? tenantId = null,
+        int? maxGlobalConcurrent = null,
+        int? maxTenantConcurrent = null);
 
     Task<int> RecoverStaleRepairsAsync(
         DateTimeOffset now,

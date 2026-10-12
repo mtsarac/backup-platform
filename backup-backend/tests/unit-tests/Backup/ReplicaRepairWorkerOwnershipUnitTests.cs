@@ -415,7 +415,7 @@ public sealed class ReplicaRepairWorkerOwnershipUnitTests
             return Task.FromResult(new ReplicaRepairAdmissionResult(true, null, null));
         }
 
-        public Task<ReplicaRepairOperation?> ClaimDueRepairAsync(string leaseOwner, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken, TenantId? tenantId = null)
+        public Task<ReplicaRepairOperation?> ClaimDueRepairAsync(string leaseOwner, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken, TenantId? tenantId = null, int? maxGlobalConcurrent = null, int? maxTenantConcurrent = null)
         {
             if (CurrentOperation is null || CurrentOperation.Status != ReplicaRepairStatus.Pending) return Task.FromResult<ReplicaRepairOperation?>(null);
             if (CurrentOperation.CancellationRequestedAt != null)

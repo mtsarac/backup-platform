@@ -161,6 +161,12 @@ public sealed class ReplicaRepairOperation : ITenantOwned
         ClearLease();
     }
 
+    public void DeferRetry(DateTimeOffset nextRetryAt)
+    {
+        if (Status != ReplicaRepairStatus.Pending) throw new InvalidOperationException("Only pending operations can be deferred.");
+        NextRetryAt = BackupGuard.Timestamp(nextRetryAt);
+    }
+
     public void Fail(Guid token, string failureCode, string? reason, DateTimeOffset now)
     {
         ValidateLease(token, now);

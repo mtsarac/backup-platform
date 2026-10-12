@@ -518,10 +518,23 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         DateTimeOffset now,
         TimeSpan leaseDuration,
         CancellationToken cancellationToken,
-        TenantId? tenantId = null)
+        TenantId? tenantId = null,
+        int? maxGlobalConcurrent = null,
+        int? maxTenantConcurrent = null)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var tx = await context.Database.BeginTransactionAsync(cancellationToken);
+
+        if (maxGlobalConcurrent.HasValue)
+        {
+            var activeGlobal = await context.ReplicaRepairOperations
+                .CountAsync(r => r.Status == ReplicaRepairStatus.InProgress && r.LeaseExpiresAt > now, cancellationToken);
+            if (activeGlobal >= maxGlobalConcurrent.Value)
+            {
+                await tx.RollbackAsync(cancellationToken);
+                return null;
+            }
+        }
 
         var dueId = await context.Database.SqlQuery<Guid>($"""
             SELECT "Id" AS "Value" FROM replica_repair_operations
@@ -545,6 +558,20 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
             await context.SaveChangesAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);
             return null;
+        }
+
+        if (maxTenantConcurrent.HasValue)
+        {
+            var activeTenant = await context.ReplicaRepairOperations
+                .CountAsync(r => r.TenantId == operation.TenantId && r.Status == ReplicaRepairStatus.InProgress && r.LeaseExpiresAt > now, cancellationToken);
+            if (activeTenant >= maxTenantConcurrent.Value)
+            {
+                // Defer next retry without consuming AttemptCount
+                operation.DeferRetry(now.AddSeconds(15));
+                await context.SaveChangesAsync(cancellationToken);
+                await tx.CommitAsync(cancellationToken);
+                return null;
+            }
         }
 
         var leaseToken = Guid.NewGuid();
