@@ -1,10 +1,7 @@
 name: Release
 
 on:
-  # A tag such as v0.2.0 or v0.2.0-rc.1 builds, checksums and publishes a GitHub Release.
-  push:
-    tags: ['v*']
-  # Dry run from any branch: runs CI and builds every archive as workflow artifacts; publishes nothing.
+  # Publishing is paused during pre-v1 development. Manual runs build archives without publishing, even when dispatched on a tag.
   workflow_dispatch:
 
 permissions:
@@ -38,11 +35,12 @@ jobs:
     steps:
       - id: resolve
         env:
+          EVENT_NAME: ${{ github.event_name }}
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
           RUN_NUMBER: ${{ github.run_number }}
         run: |
-          if [ "$REF_TYPE" = tag ]; then
+          if [ "$EVENT_NAME" = push ] && [ "$REF_TYPE" = tag ]; then
             version="${REF_NAME#v}"
             if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
               echo "::error::Tag '$REF_NAME' is not vMAJOR.MINOR.PATCH[-prerelease]."
