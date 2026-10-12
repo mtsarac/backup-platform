@@ -464,6 +464,38 @@ public sealed class ManualReplicaRepairIntegrationTests(PostgreSqlFixture fixtur
         Assert.Equal(Content.Length * 2, usageAfter.UsedBytes);
     }
 
+    [Theory]
+    [InlineData(QuotaAccountingMode.PhysicalReplicaBytes, null, false)]
+    [InlineData(QuotaAccountingMode.LogicalArtifactBytes, null, true)]
+    [InlineData(QuotaAccountingMode.PhysicalReplicaBytes, "central", true)]
+    [InlineData(QuotaAccountingMode.LogicalArtifactBytes, "sftp", false)]
+    public async Task Repair_quota_admission_counts_only_additional_bytes_in_policy_scope(
+        QuotaAccountingMode mode, string? countedProvider, bool allowed)
+    {
+        var setup = await SetupAsync(mode: mode, verified: new HashSet<string> { "central" });
+        var scopes = countedProvider is null
+            ? QuotaScopeRule.All
+            : QuotaScopeRule.Create([new QuotaScopeSelector(QuotaScopeKind.ProviderType, [countedProvider])]);
+        var policyKey = await CreatePolicyAsync(World, QuotaEnforcementMode.BlockNewBackups, mode, scopes);
+        await World.AssignAsync(setup.Agent.TenantId, await World.PlanAsync(Content.Length - 1, policyKey));
+        var usageBefore = await World.StoredUsageAsync(setup.Agent.TenantId);
+        var reservationsBefore = await ReservationsAsync(fixture, setup.Agent.TenantId);
+
+        var admission = await setup.RepairStore.AdmitRepairAsync(
+            setup.Agent.TenantId, setup.Artifact.Id, setup.Sftp.Id, null, DateTimeOffset.UtcNow, default);
+
+        Assert.Equal(allowed, admission.Allowed);
+        Assert.Equal(allowed ? null : ReplicaRepairFailureCodes.QuotaExceeded, admission.DenialCode);
+        Assert.Equal(allowed ? null : "Storage quota limit exceeded: quota_exceeded.", admission.DenialReason);
+        var usageAfter = await World.StoredUsageAsync(setup.Agent.TenantId);
+        Assert.NotNull(usageBefore);
+        Assert.NotNull(usageAfter);
+        Assert.Equal((usageBefore.UsedBytes, usageBefore.ReservedBytes), (usageAfter.UsedBytes, usageAfter.ReservedBytes));
+        var reservationsAfter = await ReservationsAsync(fixture, setup.Agent.TenantId);
+        Assert.Equal(reservationsBefore.Select(reservation => reservation.RunId), reservationsAfter.Select(reservation => reservation.RunId));
+        Assert.Empty(await setup.RepairStore.ListOperationsAsync(setup.Agent.TenantId, setup.Artifact.Id, default));
+    }
+
     [Fact]
     public async Task Scenario17_Partial_upload_orphan_recovery_and_cleanup_on_failure()
     {

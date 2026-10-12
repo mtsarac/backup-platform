@@ -185,6 +185,7 @@ Discovery schedules missing destinations from the backup run's stored configurat
 stays Pending with its retry schedule; terminal, cancelled and exhausted repair history is never automatically restarted.
 The chosen backend source is durably pinned under a live fenced lease before opening it. Repair verifies source SHA-256 and
 destination readback, and never deletes an existing destination object that rejected the upload with AlreadyExists.
+Repair quota checks belong to the managed-service admission policy and count only additional bytes within the configured scope; they do not reserve repair capacity.
 
 Apply the `ReplicaFallbackPinning` migration before running replica fallback: its PostgreSQL guards permit only live, pre-transfer
 download source changes, reject restore source changes after hand-off, and revalidate moved restore pins.

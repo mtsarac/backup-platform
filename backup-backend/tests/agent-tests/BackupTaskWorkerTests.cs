@@ -106,7 +106,7 @@ public sealed class BackupTaskWorkerTests
     {
         await using var harness = new BackupTaskHarness();
         var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        harness.Pipeline.Execute = async (_, _, token) =>
+        harness.Pipeline.Execute = async (request, _, token) =>
         {
             try
             {
@@ -115,7 +115,7 @@ public sealed class BackupTaskWorkerTests
             catch (OperationCanceledException)
             {
                 cancelled.SetResult();
-                throw;
+                return harness.Success(request);
             }
             throw new InvalidOperationException();
         };
@@ -364,7 +364,7 @@ public sealed class BackupTaskWorkerTests
     [Theory]
     [InlineData(DatabaseBackupStatus.Failed, BackupFailureKind.SqlBackupFailed, "SqlBackupFailed")]
     [InlineData(DatabaseBackupStatus.Cancelled, BackupFailureKind.Cancelled, "Cancelled")]
-    public async Task Non_success_does_not_publish_artifact_even_when_provider_returns_partial_metadata(
+    public async Task Failure_before_transfer_does_not_publish_artifact_from_partial_source_metadata(
         DatabaseBackupStatus status, BackupFailureKind failure, string expectedCode)
     {
         await using var harness = new BackupTaskHarness();
@@ -372,7 +372,9 @@ public sealed class BackupTaskWorkerTests
         {
             Status = status,
             FinalStage = status == DatabaseBackupStatus.Cancelled ? BackupExecutionStage.Cancelled : BackupExecutionStage.Failed,
-            Failure = new BackupFailure(failure, BackupExecutionStage.BackingUp, "partial-result", "A safe provider failure.")
+            Failure = new BackupFailure(failure, BackupExecutionStage.BackingUp, "partial-result", "A safe provider failure."),
+            Verification = BackupVerification.NotRun,
+            Destinations = []
         });
         harness.Start();
         Assert.True(harness.Worker.TryPublish(harness.Envelope()));
@@ -381,6 +383,7 @@ public sealed class BackupTaskWorkerTests
         Assert.Equal(status.ToString(), completion.Status);
         Assert.Equal(expectedCode, completion.FailureCode);
         Assert.Null(completion.Artifact);
+        Assert.Empty(completion.Destinations);
     }
 
     [Fact]

@@ -154,13 +154,18 @@ public sealed class MultiDestinationTaskTests
     private static BackupPipelineDestination[] Targets() =>
         [.. ThreeDestinations.Select(d => new BackupPipelineDestination(new StorageProviderId(d.StorageProvider), null, d.StorageConnectionId, d.IsPrimary))];
 
-    [Fact]
-    public void A_partial_success_publishes_only_verified_replicas_and_reports_every_destination()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void A_partial_success_publishes_only_verified_replicas_and_reports_every_destination(bool cancelled)
     {
         var targets = Targets();
         var key = new StorageObjectKey("t/j/r/a/Sales_20261010T120000Z_aaaaaaaa_FULL.bak");
-        var timeout = new BackupFailure(BackupFailureKind.StorageWriteFailed, BackupExecutionStage.Uploading, BackupPipelineReasons.DestinationTimeout, "slow", BackupFailureCause.Timeout);
-        var result = Result(DatabaseBackupStatus.Succeeded, null, Verified(targets[0], key), Verified(targets[1], key), Failed(targets[2], timeout));
+        var failure = cancelled
+            ? new BackupFailure(BackupFailureKind.Cancelled, BackupExecutionStage.Uploading, BackupPipelineReasons.Cancelled, "cancelled")
+            : new BackupFailure(BackupFailureKind.StorageWriteFailed, BackupExecutionStage.Uploading, BackupPipelineReasons.DestinationTimeout, "slow", BackupFailureCause.Timeout);
+        var remaining = Failed(targets[2], failure) with { State = cancelled ? BackupDestinationState.Cancelled : BackupDestinationState.Failed };
+        var result = Result(DatabaseBackupStatus.Succeeded, null, Verified(targets[0], key), Verified(targets[1], key), remaining);
 
         var completion = BackupTaskResultMapper.Map(Snapshot(ThreeDestinations), result);
 
@@ -171,10 +176,10 @@ public sealed class MultiDestinationTaskTests
         Assert.Equal(Sftp.ToString("D"), replicas[1].StorageTarget);
         Assert.Equal("central", replicas[0].StorageTarget);
         Assert.Equal(3, completion.Destinations.Count);
-        Assert.Equal(["Verified", "Verified", "Failed"], completion.Destinations.Select(d => d.State));
+        Assert.Equal(["Verified", "Verified", cancelled ? "Cancelled" : "Failed"], completion.Destinations.Select(d => d.State));
         var failed = completion.Destinations[2];
-        Assert.Equal("OperationTimedOut", failed.FailureCode);
-        Assert.Equal("Failed", failed.Upload);
+        Assert.Equal(cancelled ? "Cancelled" : "OperationTimedOut", failed.FailureCode);
+        Assert.Equal(cancelled ? "NotAttempted" : "Failed", failed.Upload);
         Assert.Equal("NotRun", failed.Verification);
         Assert.Null(failed.Key);
     }
@@ -201,6 +206,31 @@ public sealed class MultiDestinationTaskTests
         Assert.True(mismatch.ObjectMayRemain);
         Assert.Equal(key.Value, mismatch.Key);
         Assert.Equal("ReplicaVerificationFailed", mismatch.FailureCode);
+    }
+
+    [Fact]
+    public void Cancellation_during_verification_retains_orphan_metadata_without_publishing_a_replica()
+    {
+        var targets = Targets();
+        var key = new StorageObjectKey("t/j/r/a/Sales_20261010T120000Z_aaaaaaaa_FULL.bak");
+        var cancellation = new BackupFailure(BackupFailureKind.Cancelled, BackupExecutionStage.VerifyingReplica, BackupPipelineReasons.Cancelled, "cancelled");
+        var uploaded = Failed(targets[0], cancellation, uploaded: true, key, mayRemain: true) with { State = BackupDestinationState.Cancelled };
+        var result = Result(DatabaseBackupStatus.Cancelled, cancellation, uploaded,
+            Failed(targets[1], cancellation) with { State = BackupDestinationState.Cancelled },
+            Failed(targets[2], cancellation) with { State = BackupDestinationState.Cancelled });
+
+        var completion = BackupTaskResultMapper.Map(Snapshot(ThreeDestinations), result);
+
+        Assert.Equal("Cancelled", completion.Status);
+        Assert.Equal("Cancelled", completion.FailureCode);
+        Assert.Equal(256, completion.Artifact!.SizeBytes);
+        Assert.Empty(completion.Artifact.Replicas);
+        Assert.All(completion.Destinations, destination => Assert.Equal("Cancelled", destination.State));
+        Assert.True(completion.Destinations[0].ObjectMayRemain);
+        Assert.Equal(key.Value, completion.Destinations[0].Key);
+        Assert.Equal("Succeeded", completion.Destinations[0].Upload);
+        Assert.Equal("Failed", completion.Destinations[0].Verification);
+        Assert.All(completion.Destinations.Skip(1), destination => Assert.False(destination.ObjectMayRemain));
     }
 
     [Fact]

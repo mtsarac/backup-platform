@@ -21,6 +21,7 @@ vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 
 vi.mock('./api', async (importOriginal) => ({
   ...await importOriginal<typeof ArtifactApi>(),
   getDownloadAvailability: vi.fn().mockResolvedValue({ available: false, reason: 'replica_unavailable', replicas: [], checksum: 'abc123', sizeBytes: 4096 }),
+  listReplicaRepairs: vi.fn().mockResolvedValue([]),
 }))
 const replica: BackupReplica = {
   id: 'replica-internal', storageProvider: 'Local', storageConnectionId: 'connection-local', storageTarget: 'Backup storage', key: 'not-shown-key',

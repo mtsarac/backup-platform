@@ -19,7 +19,7 @@ vi.mock('@/features/backup-jobs/api', () => ({ getBackupJob: vi.fn(), getOccurre
 function PickerShell() {
   const { switchTenant } = useTenant()
   const navigate = useNavigate()
-  return <><button onClick={async () => { await switchTenant('tenant-b'); navigate('/tenants/tenant-b') }}>Switch tenant</button><button onClick={() => navigate('/tenants/tenant-b')}>Direct navigation</button><BackupJobWizardPage /></>
+  return <><button onClick={async () => { await switchTenant('tenant-b') }}>Switch tenant</button><button onClick={() => navigate('/tenants/tenant-b')}>Direct navigation</button><BackupJobWizardPage /></>
 }
 
 function mount(cache: QueryClient) {

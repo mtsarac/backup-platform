@@ -5,7 +5,6 @@ using BackupPlatform.Domain.Storage;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Infrastructure.ManagedService;
 using BackupPlatform.Infrastructure.Persistence;
-using BackupPlatform.ManagedService.Quota;
 using Microsoft.EntityFrameworkCore;
 
 namespace BackupPlatform.Infrastructure.Backups;
@@ -124,43 +123,10 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
 
         var selectedSource = candidateSources[0];
 
-        // Quota admission check
-        var entitlement = await PostgreSqlTenantEntitlementReader.ResolveAsync(context, tenantId, now, cancellationToken);
-        var policy = await TenantUsageEngine.ResolvePolicyAsync(context, tenantId, cancellationToken);
-
-        if (policy.EnforcementMode != QuotaEnforcementMode.None && entitlement.StorageLimit is { IsUnlimited: false })
-        {
-            long additionalBytes = 0;
-            var providerType = targetDestination.StorageProvider;
-            var ownership = connection?.Ownership ?? StorageOwnership.PlatformManaged;
-            var quotaScope = connection?.QuotaScope ?? StorageQuotaScopes.DefaultFor(ownership);
-            var targetFacts = new ReplicaStorageFacts(providerType, ownership, quotaScope, targetDestination.StorageConnectionId ?? Guid.Empty);
-
-            if (policy.AccountingMode == QuotaAccountingMode.PhysicalReplicaBytes)
-            {
-                if (policy.IncludedStorageScopes.Matches(targetFacts))
-                    additionalBytes = artifact.SizeBytes;
-            }
-            else if (policy.AccountingMode == QuotaAccountingMode.LogicalArtifactBytes)
-            {
-                var connectionFacts = await TenantUsageEngine.LoadConnectionFactsAsync(context, tenantId, cancellationToken);
-                var hasReplicaInScope = artifact.Replicas.Any(r =>
-                    r.Status != BackupReplicaStatus.Deleted &&
-                    connectionFacts.TryGetValue(r.StorageConnectionId, out var facts) &&
-                    policy.IncludedStorageScopes.Matches(facts));
-
-                if (!hasReplicaInScope && policy.IncludedStorageScopes.Matches(targetFacts))
-                    additionalBytes = artifact.SizeBytes;
-            }
-
-            if (additionalBytes > 0)
-            {
-                var (usage, _) = await TenantUsageEngine.EnsureCurrentAsync(context, tenantId, policy, now, cancellationToken);
-                var decision = QuotaAdmissionDecision.Decide(entitlement, policy, usage.UsedBytes, usage.ReservedBytes, additionalBytes);
-                if (!decision.Allowed)
-                    return new(false, ReplicaRepairFailureCodes.QuotaExceeded, $"Storage quota limit exceeded: {decision.DenialCode}.");
-            }
-        }
+        var quotaDecision = await PostgreSqlBackupAdmissionPolicy.AdmitReplicaRepairAsync(
+            context, tenantId, artifact, targetDestination, connection, now, cancellationToken);
+        if (!quotaDecision.Allowed)
+            return new(false, ReplicaRepairFailureCodes.QuotaExceeded, $"Storage quota limit exceeded: {quotaDecision.DenialCode}.");
 
         return new(true, null, null, artifact, targetDestination, selectedSource, candidateSources);
     }

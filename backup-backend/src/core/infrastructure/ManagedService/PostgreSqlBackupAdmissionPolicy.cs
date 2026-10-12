@@ -2,6 +2,7 @@ using BackupPlatform.Application.Backups;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Infrastructure.Backups;
 using BackupPlatform.Domain.Identity;
+using BackupPlatform.Domain.Storage;
 using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.ManagedService.Entitlement;
 using BackupPlatform.ManagedService.Quota;
@@ -103,6 +104,56 @@ public sealed class PostgreSqlBackupAdmissionPolicy(
             logger.LogInformation("Quota reservation created for tenant {TenantId}, run {RunId}: {ReservedBytes} bytes (state {State}).",
                 request.TenantId, request.RunId, estimate, decision.State);
         }
+        return BackupAdmissionDecision.Admitted;
+    }
+
+    /// <summary>Checks only the additional counted bytes of a repair; it neither admits a new run nor creates a reservation.</summary>
+    internal static async Task<BackupAdmissionDecision> AdmitReplicaRepairAsync(
+        PlatformDbContext context,
+        TenantId tenantId,
+        BackupArtifact artifact,
+        BackupDestination targetDestination,
+        StorageConnection? connection,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var entitlement = await PostgreSqlTenantEntitlementReader.ResolveAsync(context, tenantId, now, cancellationToken);
+        var policy = await TenantUsageEngine.ResolvePolicyAsync(context, tenantId, cancellationToken);
+
+        if (policy.EnforcementMode != QuotaEnforcementMode.None && entitlement.StorageLimit is { IsUnlimited: false })
+        {
+            long additionalBytes = 0;
+            var providerType = targetDestination.StorageProvider;
+            var ownership = connection?.Ownership ?? StorageOwnership.PlatformManaged;
+            var quotaScope = connection?.QuotaScope ?? StorageQuotaScopes.DefaultFor(ownership);
+            var targetFacts = new ReplicaStorageFacts(providerType, ownership, quotaScope, targetDestination.StorageConnectionId ?? Guid.Empty);
+
+            if (policy.AccountingMode == QuotaAccountingMode.PhysicalReplicaBytes)
+            {
+                if (policy.IncludedStorageScopes.Matches(targetFacts))
+                    additionalBytes = artifact.SizeBytes;
+            }
+            else if (policy.AccountingMode == QuotaAccountingMode.LogicalArtifactBytes)
+            {
+                var connectionFacts = await TenantUsageEngine.LoadConnectionFactsAsync(context, tenantId, cancellationToken);
+                var hasReplicaInScope = artifact.Replicas.Any(r =>
+                    r.Status != BackupReplicaStatus.Deleted &&
+                    connectionFacts.TryGetValue(r.StorageConnectionId, out var facts) &&
+                    policy.IncludedStorageScopes.Matches(facts));
+
+                if (!hasReplicaInScope && policy.IncludedStorageScopes.Matches(targetFacts))
+                    additionalBytes = artifact.SizeBytes;
+            }
+
+            if (additionalBytes > 0)
+            {
+                var (usage, _) = await TenantUsageEngine.EnsureCurrentAsync(context, tenantId, policy, now, cancellationToken);
+                var decision = QuotaAdmissionDecision.Decide(entitlement, policy, usage.UsedBytes, usage.ReservedBytes, additionalBytes);
+                if (!decision.Allowed)
+                    return BackupAdmissionDecision.Denied(decision.DenialCode!);
+            }
+        }
+
         return BackupAdmissionDecision.Admitted;
     }
 
