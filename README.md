@@ -148,6 +148,11 @@ The backend selects an eligible replica, or the caller supplies `replicaId`. Del
 creation through terminal completion. Replica-row locks, deletion-claim rechecks and PostgreSQL triggers prevent physical deletion
 while a pin is active. Backup and restore claims never run concurrently on the same agent, even when the backup agent limit is raised.
 
+Before agent hand-off, the backend probes sources it can read and can atomically move the restore pin to another eligible replica.
+This does not verify the physical checksum: the agent still verifies the staged bytes before touching the target. Agent-local files
+and Central storage mounted only on the agent remain the agent's responsibility. Once a restore is handed out, it never switches
+source or starts a second restore automatically. Disabled storage connections remain readable for already-stored backups.
+
 The agent streams the replica into its configured restore staging, keeping `AgentPath` separate from the SQL-visible `DatabaseServerPath`.
 An agent-local replica must belong to the executing agent. Central storage must actually be mounted/configured on that agent;
 backend accessibility alone does not make a SQL-visible path. Cross-agent local transfer is explicitly refused as
@@ -172,7 +177,17 @@ configure appropriate directory/file ACLs (and Unix group/umask), not just agent
 
 Backend policy is configured with `Restores__LeaseDuration` (default 120 seconds), `Restores__UnclaimedExpiry` (one hour) and
 `Restores__SweepInterval` (15 seconds). Unclaimed expired requests release their pins rather than unexpectedly restoring much later.
-Restore management is API-only; the existing frontend backup screens are unchanged.
+The Restore Wizard uses the same source eligibility, precheck and explicit overwrite contracts as the API.
+
+## Automatic replica repair
+
+Discovery schedules missing destinations from the backup run's stored configuration, globally or for one tenant. Retryable work
+stays Pending with its retry schedule; terminal, cancelled and exhausted repair history is never automatically restarted.
+The chosen backend source is durably pinned under a live fenced lease before opening it. Repair verifies source SHA-256 and
+destination readback, and never deletes an existing destination object that rejected the upload with AlreadyExists.
+
+Apply the `ReplicaFallbackPinning` migration before running replica fallback: its PostgreSQL guards permit only live, pre-transfer
+download source changes, reject restore source changes after hand-off, and revalidate moved restore pins.
 
 ## Secure backup download
 
@@ -192,6 +207,11 @@ replicas are refused. Central reads use the existing optional `storage.read` pro
 storage resolver. The backend verifies an opened seekable file before response headers and hashes again while transferring;
 corrupt bytes can never produce a successful `Completed` session. A generated `backup-{artifactId}.bak` filename never uses
 persisted filesystem paths or browser input.
+
+Before headers are sent, an open failure or seekable checksum mismatch can fall back to another matching, verified, Available
+backend replica. The live session's hold switches atomically before the alternative is opened; tenant, user, checksum and size
+remain unchanged. A prepared session may still read its held DeletePending copy, but it cannot acquire a new DeletePending source.
+Failures after response bytes begin abort the HTTP transfer rather than concatenate or restart it.
 
 Agent-local bytes use the existing outbound agent polling and authenticated callback architecture, not an inbound connection
 to the customer host. A capable owning agent prepares a stream; the backend spools it to a private temporary file with bounded

@@ -115,9 +115,9 @@ export function ReplicationSection({
         <ReplicationBadge replication={replication} />
       </div>
       <p className="text-sm text-text-muted">{replicationCounts(replication)}</p>
-      {replication.status === 'Degraded' && <p role="status" className="text-sm text-warning">Yedek kullanılabilir ve politika karşılanıyor; ancak bazı hedeflerde doğrulanmış kopya yok.</p>}
-      {replication.status === 'InsufficientReplicas' && <p role="alert" className="text-sm text-error">Yedek kullanılabilir, ancak politikanın gerektirdiği doğrulanmış replika sayısına ulaşılamadı.</p>}
-      {replication.status === 'Unavailable' && <p role="alert" className="text-sm text-error">Hiçbir hedefte doğrulanmış kopya yok; kullanılabilir bir yedek oluşmadı.</p>}
+      {replication.status === 'Degraded' && <p role="status" className="text-sm text-warning">Yedek kullanılabilir ve politika karşılanıyor; mevcut doğrulanmış replikalardan indirme ve geri yükleme yapılabilir.</p>}
+      {replication.status === 'InsufficientReplicas' && <p role="alert" className="text-sm text-error">Politikanın gerektirdiği replika sayısına ulaşılamadı; ancak mevcut doğrulanmış replikalardan indirme ve geri yükleme mümkündür.</p>}
+      {replication.status === 'Unavailable' && <p role="alert" className="text-sm text-error">Hiçbir hedefte doğrulanmış kopya yok; indirme ve geri yükleme kullanılamaz.</p>}
       {replication.destinations.length > 0 && (
         <ul className="space-y-2" aria-label="Hedef sonuçları">
           {replication.destinations.map((destination) => {

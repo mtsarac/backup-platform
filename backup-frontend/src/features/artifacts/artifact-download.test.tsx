@@ -41,6 +41,28 @@ describe('secure Backup download', () => {
     expect(anchor.download).toBe('backup.bak')
     expect(anchor.href).toContain('/api/tenants/tenant-a/backup-artifacts/artifact-a/downloads/session-a/content')
   })
+  it('leaves automatic replica selection to the server and permits retry after exhausted fallback', async () => {
+    vi.mocked(getDownloadAvailability).mockResolvedValue({ ...availability, replicas: [
+      availability.replicas[0],
+      { replicaId: 'sftp', storageProvider: 'SFTP', storageTarget: 'Remote storage', available: true, reason: null },
+      availability.replicas[1],
+    ] })
+    vi.mocked(getDownloadStatus).mockResolvedValue({ sessionId: 'session-a', state: 'Failed', failureCode: 'storage_unavailable', transferredBytes: 0 })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    mount()
+    const selector = await screen.findByRole('combobox', { name: 'İndirme hedefi' })
+    expect(selector).toHaveValue('')
+    fireEvent.click(screen.getByRole('button', { name: 'Download Backup' }))
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(prepareDownload).toHaveBeenCalledWith('tenant-a', 'artifact-a', undefined)
+    expect(click).not.toHaveBeenCalled()
+    expect(selector).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Download Backup' })).toBeEnabled()
+    fireEvent.change(selector, { target: { value: 'sftp' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Download Backup' }))
+    await waitFor(() => expect(prepareDownload).toHaveBeenLastCalledWith('tenant-a', 'artifact-a', 'sftp'))
+    expect(click).not.toHaveBeenCalled()
+  })
   it('keeps Preparing explicit and displays safe terminal integrity failure', async () => {
     vi.mocked(getDownloadStatus).mockResolvedValue({ sessionId: 'session-a', state: 'Preparing', transferredBytes: 0 })
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})

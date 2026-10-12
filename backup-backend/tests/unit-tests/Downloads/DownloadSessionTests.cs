@@ -192,4 +192,35 @@ public sealed class DownloadSessionTests
         Assert.True(session.Transition(DownloadState.Streaming, "node-a", DownloadState.Completed, null, Now.AddMinutes(20).AddSeconds(1), null, Size, null));
         Assert.False(session.IsPinned(Now.AddMinutes(20).AddSeconds(1)));
     }
+    [Fact]
+    public void ReplicaSwitchRejectsForeignContentAndAgentLocalSources()
+    {
+        var source = Source();
+        var session = new DownloadSession(Guid.NewGuid(), source.Artifact, source.Replica, Guid.NewGuid(), "backup.bak", Now, Lease);
+        BackupReplica Replica(long size = Size, string? checksum = null, bool local = false) =>
+            new(Guid.NewGuid(), source.Artifact.TenantId, source.Artifact.Id, local ? "local" : "central", "default", "alternate.bak",
+                size, checksum ?? Checksum, "sha256", "Verified", "ReadBack", Now, Now,
+                local ? BackupStorageExecutionLocation.Agent : BackupStorageExecutionLocation.Backend, local ? Guid.NewGuid() : null);
+        Assert.False(session.SwitchReplica(Source().Replica, null, Now));
+        Assert.False(session.SwitchReplica(Replica(size: Size - 1), null, Now));
+        Assert.False(session.SwitchReplica(Replica(checksum: new string('a', 64)), null, Now));
+        Assert.False(session.SwitchReplica(Replica(local: true), null, Now));
+        var alternate = Replica();
+        Assert.True(session.SwitchReplica(alternate, null, Now));
+        Assert.Equal(alternate.Id, session.ReplicaId);
+        Assert.Equal(alternate.Key, session.Key);
+    }
+
+    [Fact]
+    public void ReplicaSwitchRequiresLiveOwnerAndCannotChangeSourceAfterBytesAreSent()
+    {
+        var source = Source();
+        var session = new DownloadSession(Guid.NewGuid(), source.Artifact, source.Replica, Guid.NewGuid(), "backup.bak", Now, Lease);
+        Assert.True(session.Transition(DownloadState.Ready, null, DownloadState.Streaming, "owner", Now, Lease, 0, null));
+        Assert.False(session.SwitchReplica(source.Replica, "stale-owner", Now));
+        Assert.False(session.SwitchReplica(source.Replica, "owner", Now + Lease));
+        Assert.True(session.Transition(DownloadState.Streaming, "owner", DownloadState.Streaming, "owner", Now, Lease, 1, null));
+        Assert.False(session.SwitchReplica(source.Replica, "owner", Now));
+        Assert.Equal(source.Replica.Id, session.ReplicaId);
+    }
 }

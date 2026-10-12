@@ -141,6 +141,16 @@ public sealed class RestoreOperation : ITenantOwned
         return attempt;
     }
 
+    public bool SwitchReplica(BackupReplica newReplica, RestoreSourceAccess access)
+    {
+        if (IsTerminal || Status != RestoreStatus.Pending || !Pin.IsActive || CancellationRequestedAt is not null) return false;
+        if (newReplica.TenantId != TenantId || newReplica.ArtifactId != ArtifactId) return false;
+        ReplicaId = newReplica.Id;
+        SourceAccess = access;
+        Pin.SwitchReplica(newReplica.Id);
+        return true;
+    }
+
     public void Claim(Guid token, DateTimeOffset now, TimeSpan duration)
     {
         if (Status != RestoreStatus.Pending) throw new InvalidOperationException("Only a pending restore can be claimed.");

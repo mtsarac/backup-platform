@@ -19,6 +19,7 @@ public interface IDownloadStore
     Task<DownloadSession?> TransitionAsync(Guid sessionId, DownloadTransition transition, CancellationToken cancellationToken);
     Task<int> ExpireAsync(DateTimeOffset now, CancellationToken cancellationToken);
     Task<DownloadSession?> ExpireSessionAsync(TenantId tenantId, Guid sessionId, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<DownloadSession?> SwitchReplicaAsync(Guid sessionId, Guid currentReplicaId, string? expectedOwner, BackupReplica newReplica, CancellationToken cancellationToken);
 }
 
 /// <summary>Optional outbound agent transport. Returns a verified, bounded-memory file stream, never a browser-facing agent URL.</summary>

@@ -313,7 +313,7 @@ describe('RestoreDetailPage', () => {
 })
 
 describe('RestoreWizardPage', () => {
-  it('navigates through agent selection, NewDatabase mode, precheck, and starts restore', async () => {
+  it.each(['CentralStorage', 'BackendRelayed', 'AgentLocal'] as const)('uses the eligible %s agent through precheck and execution', async (sourceAccess) => {
     const precheckResult: RestoreView = {
       ...sampleRestore,
       id: 'precheck-op-1',
@@ -359,6 +359,10 @@ describe('RestoreWizardPage', () => {
         restoreFinishedAt: null,
       },
     }
+    vi.mocked(RestoreApi.getRestoreTargets).mockResolvedValue({
+      ...sampleTargets,
+      agents: [sampleTargets.agents[1], { ...sampleTargets.agents[0], sourceAccess }],
+    })
     vi.mocked(RestoreApi.startRestorePrecheck).mockResolvedValue(precheckResult)
     vi.mocked(RestoreApi.getRestore).mockImplementation((_tenantId, id) => {
       if (id === 'precheck-op-1') return Promise.resolve(precheckResult)
@@ -377,6 +381,7 @@ describe('RestoreWizardPage', () => {
     expect(await screen.findByRole('heading', { name: /1\. Hedef Agent Seçimi/i })).toBeInTheDocument()
     const continueBtn = screen.getByRole('button', { name: /Devam et: Restore Modu/i })
     expect(continueBtn).toBeEnabled()
+    expect(screen.getByRole('combobox', { name: 'Agent' })).toHaveValue('agent-1')
     fireEvent.click(continueBtn)
 
     // Step 2: Restore Mode
@@ -387,6 +392,9 @@ describe('RestoreWizardPage', () => {
 
     // Step 3: Precheck results
     await waitFor(() => expect(RestoreApi.startRestorePrecheck).toHaveBeenCalled())
+    expect(RestoreApi.startRestorePrecheck).toHaveBeenCalledWith('tenant-a', 'artifact-1', expect.objectContaining({
+      agentId: 'agent-1', target: sampleTargets.targets[0].target, databaseName: 'SalesDB_restored', mode: 'NewDatabase',
+    }), expect.any(String))
     expect(await screen.findByText(/Tüm ön kontroller başarıyla tamamlandı/i)).toBeInTheDocument()
 
     // Step 4: Execute
@@ -395,6 +403,35 @@ describe('RestoreWizardPage', () => {
     fireEvent.click(executeBtn)
 
     await waitFor(() => expect(RestoreApi.startRestore).toHaveBeenCalled())
+    expect(RestoreApi.startRestore).toHaveBeenCalledWith('tenant-a', 'artifact-1', expect.objectContaining({
+      agentId: 'agent-1', target: sampleTargets.targets[0].target, precheckId: 'precheck-op-1',
+    }), expect.any(String))
+  })
+
+  it('blocks an ineligible agent without sending a precheck and allows an eligible selection', async () => {
+    renderWithClient(<Routes><Route path="/tenants/:tenantId/artifacts/:id/restore" element={<RestoreWizardPage />} /></Routes>, '/tenants/tenant-a/artifacts/artifact-1/restore')
+    const selector = await screen.findByRole('combobox', { name: 'Agent' })
+    fireEvent.change(selector, { target: { value: 'agent-2' } })
+    const next = screen.getByRole('button', { name: /Devam et: Restore Modu/i })
+    expect(next).toBeDisabled()
+    fireEvent.click(next)
+    expect(RestoreApi.startRestorePrecheck).not.toHaveBeenCalled()
+    expect(RestoreApi.startRestore).not.toHaveBeenCalled()
+    fireEvent.change(selector, { target: { value: 'agent-1' } })
+    expect(next).toBeEnabled()
+  })
+
+  it('prevents execution when a BackendRelayed precheck fails', async () => {
+    vi.mocked(RestoreApi.getRestoreTargets).mockResolvedValue({ ...sampleTargets, agents: [{ ...sampleTargets.agents[0], sourceAccess: 'BackendRelayed' }] })
+    const failed: RestoreView = { ...sampleRestore, id: 'failed-precheck', purpose: 'Precheck', status: 'Failed', failureCode: 'StorageUnavailable', reason: null }
+    vi.mocked(RestoreApi.startRestorePrecheck).mockResolvedValue(failed)
+    vi.mocked(RestoreApi.getRestore).mockResolvedValue(failed)
+    renderWithClient(<Routes><Route path="/tenants/:tenantId/artifacts/:id/restore" element={<RestoreWizardPage />} /></Routes>, '/tenants/tenant-a/artifacts/artifact-1/restore')
+    fireEvent.click(await screen.findByRole('button', { name: /Devam et: Restore Modu/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i }))
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Yeni Database Olarak Restore Başlat/i })).toBeDisabled()
+    expect(RestoreApi.startRestore).not.toHaveBeenCalled()
   })
 
   it('requires exact confirmation text for ReplaceExistingDatabase mode', async () => {

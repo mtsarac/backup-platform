@@ -13,6 +13,7 @@ using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Infrastructure.Backups;
 using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.Infrastructure.Support;
+using BackupPlatform.StorageProviders.Abstractions;
 using Microsoft.EntityFrameworkCore;
 
 namespace BackupPlatform.Infrastructure.Restores;
@@ -24,7 +25,7 @@ namespace BackupPlatform.Infrastructure.Restores;
 /// (<c>FOR UPDATE</c>). The replica lock is what the retention pin relies on: a delete claim holds that row's lock while it checks for pins, so a pin can never
 /// slip in between its check and its update, and the other way round the restore sees a replica a claim already took and refuses it.
 /// </summary>
-public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> options) : IRestoreStore
+public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> options, IBackupStorageResolver? storage = null) : IRestoreStore
 {
     private const int MaxScanBatch = 500;
     // A concurrent eligibility change re-selects a replica this many times before the request is refused.
@@ -120,7 +121,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         var artifact = await LoadArtifactAsync(context, command, cancellationToken);
         for (var round = 0; round < SelectionRounds; round++)
         {
-            BackupReplica? candidate;
+            BackupReplica? candidate = null;
             if (command.ReplicaId is { } requested)
             {
                 candidate = artifact.Replicas.SingleOrDefault(replica => replica.Id == requested);
@@ -229,9 +230,40 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         foreach (var next in pending.Where(operation => operation.Status == RestoreStatus.Pending))
         {
             if (!supported.Contains(RestoreAgentCapability.ForPurpose(next.Purpose), StringComparer.Ordinal)) continue;
+            BackupReplica? replica = null;
+            if (next.Pin.IsActive && await LockArtifactAsync(context, tenantId, next.ArtifactId, cancellationToken))
+            {
+                var artifact = await context.BackupArtifacts.AsNoTracking().Include(entity => entity.Replicas)
+                    .SingleAsync(entity => entity.TenantId == tenantId && entity.Id == next.ArtifactId, cancellationToken);
+                var candidates = artifact.Replicas
+                    .Where(candidate => candidate.Id == next.ReplicaId && candidate.Status is BackupReplicaStatus.Available or BackupReplicaStatus.DeletePending ||
+                        RestoreSourceEvaluator.Evaluate(artifact, candidate, agentId, now).Eligible)
+                    .OrderBy(candidate => candidate.Id == next.ReplicaId ? 0 : 1)
+                    .ThenBy(candidate => candidate.ExecutionLocation == BackupStorageExecutionLocation.Agent ? 0 : 1)
+                    .ThenBy(candidate => ReplicaRepairSourceEvaluator.GetProviderPriority(candidate.StorageProvider))
+                    .ThenByDescending(candidate => candidate.CreatedAt);
+                foreach (var candidate in candidates)
+                {
+                    if (!await LockReplicaAsync(context, tenantId, next.ArtifactId, candidate.Id, cancellationToken)) continue;
+                    var locked = await context.BackupReplicas.AsNoTracking()
+                        .SingleAsync(entity => entity.TenantId == tenantId && entity.ArtifactId == next.ArtifactId && entity.Id == candidate.Id, cancellationToken);
+                    var decision = RestoreSourceEvaluator.Evaluate(artifact, locked, agentId, now);
+                    var alreadyPinned = locked.Id == next.ReplicaId &&
+                        locked.Status is BackupReplicaStatus.Available or BackupReplicaStatus.DeletePending &&
+                        locked.VerificationState == "Verified" && locked.VerifiedAt is not null;
+                    if ((!alreadyPinned && !decision.Eligible) || !await CanReadAsync(locked, cancellationToken)) continue;
+                    if (!alreadyPinned)
+                    {
+                        if (!next.SwitchReplica(locked, decision.Access!.Value)) continue;
+                        AddAudit(context, next, now, null, "restore.replica_fallback", next.SupportSessionId);
+                    }
+                    replica = locked;
+                    break;
+                }
+            }
             var token = Guid.NewGuid();
             next.Claim(token, now, leaseDuration);
-            var replica = await context.BackupReplicas.AsNoTracking().SingleOrDefaultAsync(entity => entity.TenantId == tenantId && entity.Id == next.ReplicaId, cancellationToken);
+
             // The pin keeps the replica out of every delete claim, so this holds unless the database was changed behind the platform's back. If it does not hold, the
             // restore must not be handed to an agent: it ends here, failed, with the target untouched and the pin released.
             if (next.Pin.IsActive && replica is { Status: BackupReplicaStatus.Available or BackupReplicaStatus.DeletePending })
@@ -246,6 +278,22 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         await transaction.CommitAsync(cancellationToken);
         return claim;
     }
+    private async Task<bool> CanReadAsync(BackupReplica replica, CancellationToken cancellationToken)
+    {
+        // Agent-local files are checked by their owning agent; backend replicas are probed before any restore is handed out.
+        if (replica.ExecutionLocation == BackupStorageExecutionLocation.Agent || storage is null) return true;
+        try
+        {
+            var provider = storage.Resolve(replica.TenantId, replica.StorageProvider, replica.StorageTarget);
+            // Central storage can be mounted only on the agent; absence of a backend mount is not evidence of source failure.
+            if (provider is null) return replica.StorageProvider == "central";
+            if (!provider.Capabilities.Supports(StorageCapabilityIds.Read)) return false;
+            await using var source = await provider.OpenReadAsync(new StorageObjectKey(replica.Key), cancellationToken);
+            return source.CanRead;
+        }
+        catch (Exception exception) when (exception is StorageException or IOException or UnauthorizedAccessException) { return false; }
+    }
+
 
     public async Task<RestoreLeaseOutcome> StartAsync(RestoreLeaseCommand command, TimeSpan leaseDuration, CancellationToken cancellationToken)
     {

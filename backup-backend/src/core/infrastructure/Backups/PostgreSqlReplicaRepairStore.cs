@@ -174,6 +174,29 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         await context.SaveChangesAsync(cancellationToken);
         return operation;
     }
+    public async Task<bool> PinSourceAsync(TenantId tenantId, Guid operationId, Guid leaseToken, Guid sourceReplicaId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var operations = await context.Database.SqlQuery<Guid>($"""
+            SELECT "Id" AS "Value" FROM replica_repair_operations WHERE "TenantId" = {tenantId.Value} AND "Id" = {operationId} FOR UPDATE
+            """).ToListAsync(cancellationToken);
+        if (operations.Count == 0) return false;
+        var operation = await context.ReplicaRepairOperations.SingleAsync(entity => entity.TenantId == tenantId && entity.Id == operationId, cancellationToken);
+        if (!operation.HasLease(leaseToken, now) || operation.CancellationRequestedAt is not null) return false;
+        var sources = await context.Database.SqlQuery<Guid>($"""
+            SELECT "Id" AS "Value" FROM backup_replicas
+            WHERE "TenantId" = {tenantId.Value} AND "ArtifactId" = {operation.ArtifactId} AND "Id" = {sourceReplicaId} FOR UPDATE
+            """).ToListAsync(cancellationToken);
+        if (sources.Count == 0) return false;
+        var source = await context.BackupReplicas.AsNoTracking().SingleAsync(entity => entity.TenantId == tenantId && entity.Id == sourceReplicaId, cancellationToken);
+        if (!ReplicaRepairSourceEvaluator.IsEligibleSource(source, now) || source.ExecutionLocation != BackupStorageExecutionLocation.Backend) return false;
+        operation.SetSourceReplica(source.Id);
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
 
     public async Task<ReplicaRepairOperation?> ClaimOperationAsync(
         TenantId tenantId,
@@ -408,7 +431,7 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         var dueId = await context.Database.SqlQuery<Guid>($"""
             SELECT "Id" AS "Value" FROM replica_repair_operations
             WHERE "Status" = 'Pending' AND ("NextRetryAt" IS NULL OR "NextRetryAt" <= {now})
-              AND ({tenantId == null} OR "TenantId" = {tenantId!.Value})
+              AND ({tenantId == null} OR "TenantId" = {(tenantId == null ? Guid.Empty : tenantId.Value)})
             ORDER BY COALESCE("NextRetryAt", "CreatedAt") ASC
             LIMIT 1
             FOR UPDATE SKIP LOCKED
@@ -465,23 +488,31 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
     public async Task<IReadOnlyList<ReplicaRepairOperation>> DiscoverEligibleRepairsAsync(
         DateTimeOffset now,
         int maxBatch,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TenantId? tenantId = null)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
 
         var candidateArtifacts = await context.BackupArtifacts
             .Include(a => a.Replicas)
-            .Where(a => a.AcceptedAt != null
+            .Where(a => (tenantId == null || a.TenantId == tenantId)
+                && a.AcceptedAt != null
                 && (a.RetentionExpiresAt == null || a.RetentionExpiresAt > now || a.RetentionPinnedAt != null))
             .OrderByDescending(a => a.CreatedAt)
             .Take(50)
             .ToListAsync(cancellationToken);
 
         var created = new List<ReplicaRepairOperation>();
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
 
         foreach (var artifact in candidateArtifacts)
         {
             if (created.Count >= maxBatch) break;
+            var lockedArtifacts = await context.Database.SqlQuery<Guid>($"""
+                SELECT "Id" AS "Value" FROM backup_artifacts
+                WHERE "TenantId" = {artifact.TenantId.Value} AND "Id" = {artifact.Id} FOR NO KEY UPDATE
+                """).ToListAsync(cancellationToken);
+            if (lockedArtifacts.Count == 0) continue;
 
             var attempt = await context.BackupRunAttempts
                 .AsNoTracking()
@@ -513,18 +544,18 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
                     .OrderByDescending(r => r.CreatedAt)
                     .FirstOrDefaultAsync(cancellationToken);
 
-                if (existingOp is not null)
-                {
-                    if (existingOp.Status is ReplicaRepairStatus.Pending or ReplicaRepairStatus.InProgress or ReplicaRepairStatus.Succeeded or ReplicaRepairStatus.Cancelled)
-                        continue;
-                    if (existingOp.IsExhausted)
-                        continue;
-                    if (existingOp.CompletedAt is { } completed && now - completed < TimeSpan.FromMinutes(2))
-                        continue;
-                }
+                // Retryable failures remain Pending; terminal history is never revived by discovery.
+                if (existingOp is not null) continue;
 
                 var admission = await AdmitRepairAsync(artifact.TenantId, artifact.Id, dest.StorageConnectionId, dest.StorageProvider, now, cancellationToken);
                 if (!admission.Allowed || admission.SelectedSource is null) continue;
+                var lockedSources = await context.Database.SqlQuery<Guid>($"""
+                    SELECT "Id" AS "Value" FROM backup_replicas
+                    WHERE "TenantId" = {artifact.TenantId.Value} AND "ArtifactId" = {artifact.Id} AND "Id" = {admission.SelectedSource.Id} FOR UPDATE
+                    """).ToListAsync(cancellationToken);
+                if (lockedSources.Count == 0) continue;
+                var source = await context.BackupReplicas.AsNoTracking().SingleAsync(entity => entity.TenantId == artifact.TenantId && entity.Id == admission.SelectedSource.Id, cancellationToken);
+                if (!ReplicaRepairSourceEvaluator.IsEligibleSource(source, now) || source.ExecutionLocation != BackupStorageExecutionLocation.Backend) continue;
 
                 var newOp = new ReplicaRepairOperation(
                     Guid.NewGuid(),
@@ -548,6 +579,7 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         {
             await context.SaveChangesAsync(cancellationToken);
         }
+        await transaction.CommitAsync(cancellationToken);
         return created;
     }
 

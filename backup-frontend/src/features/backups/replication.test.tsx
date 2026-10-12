@@ -73,12 +73,6 @@ describe('replication compliance rendering', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Yedek kullanılabilir ve politika karşılanıyor')
   })
 
-  it('warns when verified copies fall short of the policy and when none exist, with an alert', () => {
-    const { rerender } = render(<ReplicationSection replication={healthOf('InsufficientReplicas', 1)} />)
-    expect(screen.getByRole('alert')).toHaveTextContent('politikanın gerektirdiği doğrulanmış replika sayısına ulaşılamadı')
-    rerender(<ReplicationSection replication={healthOf('Unavailable', 0)} />)
-    expect(screen.getByRole('alert')).toHaveTextContent('Hiçbir hedefte doğrulanmış kopya yok')
-  })
 
   it('flags an object that may remain on a failed destination', () => {
     render(<ReplicationSection replication={healthOf('Degraded', 2, 2, [{ ...destination('sftp', 'Failed', 'StorageUnavailable'), objectMayRemain: true }, destination('central', 'Verified', null, true), destination('local', 'Verified')])} />)

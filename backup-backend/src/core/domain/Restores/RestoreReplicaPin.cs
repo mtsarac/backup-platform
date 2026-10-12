@@ -33,4 +33,11 @@ public sealed class RestoreReplicaPin : ITenantOwned
     public bool IsActive => ReleasedAt is null;
 
     internal void Release(DateTimeOffset now) => ReleasedAt ??= BackupGuard.Timestamp(now);
+
+    internal void SwitchReplica(Guid newReplicaId)
+    {
+        if (ReleasedAt is not null) throw new InvalidOperationException("Cannot switch replica of released pin.");
+        BackupGuard.Id(newReplicaId);
+        ReplicaId = newReplicaId;
+    }
 }

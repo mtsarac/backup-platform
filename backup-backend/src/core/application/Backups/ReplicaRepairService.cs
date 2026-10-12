@@ -169,6 +169,7 @@ public sealed class ReplicaRepairService(
 
                 try
                 {
+                    if (!await store.PinSourceAsync(tenantId, operationId, leaseToken, candidate.Id, time.GetUtcNow(), cts.Token)) continue;
                     sourceStream = await resolved.OpenReadAsync(new StorageObjectKey(candidate.Key), cts.Token);
                     sourceProvider = resolved;
                     sourceReplica = candidate;
@@ -270,7 +271,8 @@ public sealed class ReplicaRepairService(
                 catch (StorageException sex)
                 {
                     logger.LogError(sex, "Destination storage put failed for repair {OperationId}: {Message}", operationId, sex.Message);
-                    await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, artifact, targetDestination, destinationTarget, targetKey);
+                    if (sex.Kind != StorageFailureKind.AlreadyExists)
+                        await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, artifact, targetDestination, destinationTarget, targetKey);
                     var code = sex.Kind switch
                     {
                         StorageFailureKind.AlreadyExists => ReplicaRepairFailureCodes.AlreadyVerified,

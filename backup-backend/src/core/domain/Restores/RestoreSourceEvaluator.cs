@@ -24,8 +24,10 @@ public static class RestoreSourceEvaluator
         ArgumentNullException.ThrowIfNull(targetAgent);
         if (replica.ArtifactId != artifact.Id || replica.TenantId != artifact.TenantId) return RestoreSourceDecision.Reject(RestoreSourceRejection.ReplicaNotFound);
         if (artifact.BackupType != "Full") return RestoreSourceDecision.Reject(RestoreSourceRejection.BackupTypeUnsupported);
-        // Available, or DeletePending inside its grace period (the grace period exists precisely so a premature deletion can still be recovered from).
-        if (!replica.IsRestorable(now)) return RestoreSourceDecision.Reject(RestoreSourceRejection.ReplicaNotRestorable);
+        // New pins may recover DeletePending only inside grace; already-held copies survive grace under retention's row locks.
+        if (replica.Status != BackupReplicaStatus.Available &&
+            !(replica.Status == BackupReplicaStatus.DeletePending && replica.DeleteAfter > now))
+            return RestoreSourceDecision.Reject(RestoreSourceRejection.ReplicaNotRestorable);
         if (replica.VerificationState != "Verified" || replica.VerifiedAt is null) return RestoreSourceDecision.Reject(RestoreSourceRejection.ReplicaNotVerified);
         if (replica.ChecksumAlgorithm != "sha256" || replica.Checksum.Length != 64) return RestoreSourceDecision.Reject(RestoreSourceRejection.ChecksumUnavailable);
         if (replica.ExecutionLocation == BackupStorageExecutionLocation.Agent)
@@ -49,15 +51,19 @@ public static class RestoreSourceEvaluator
     /// resort), the target agent's own copy before a shared one (no network), then the newest. Null when none qualifies; the caller reports the
     /// most informative rejection with <see cref="Explain"/>.
     /// </summary>
-    public static BackupReplica? SelectReplica(BackupArtifact artifact, AgentId targetAgent, DateTimeOffset now) =>
+    public static IReadOnlyList<BackupReplica> SelectCandidateReplicas(BackupArtifact artifact, AgentId targetAgent, DateTimeOffset now) =>
         artifact.Replicas
             .Select(replica => (Replica: replica, Decision: Evaluate(artifact, replica, targetAgent, now)))
             .Where(candidate => candidate.Decision.Eligible)
             .OrderBy(candidate => candidate.Replica.Status == BackupReplicaStatus.Available ? 0 : 1)
             .ThenBy(candidate => candidate.Decision.Access == RestoreSourceAccess.AgentLocal ? 0 : 1)
+            .ThenBy(candidate => ReplicaRepairSourceEvaluator.GetProviderPriority(candidate.Replica.StorageProvider))
             .ThenByDescending(candidate => candidate.Replica.CreatedAt)
             .Select(candidate => candidate.Replica)
-            .FirstOrDefault();
+            .ToList();
+
+    public static BackupReplica? SelectReplica(BackupArtifact artifact, AgentId targetAgent, DateTimeOffset now) =>
+        SelectCandidateReplicas(artifact, targetAgent, now).FirstOrDefault();
 
     /// <summary>Why no replica qualified: the rejection of the "closest" candidate (an agent-transfer problem outranks a plain unavailability).</summary>
     public static RestoreSourceRejection Explain(BackupArtifact artifact, AgentId targetAgent, DateTimeOffset now)

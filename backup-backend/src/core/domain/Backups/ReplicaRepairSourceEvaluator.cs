@@ -9,6 +9,9 @@ public static class ReplicaRepairSourceEvaluator
         ["google-drive"] = 3,
         ["local"] = 4
     };
+    public static int GetProviderPriority(string? provider) =>
+        provider is not null && ProviderPriority.TryGetValue(provider, out var p) ? p : 99;
+
 
     public static bool IsEligibleSource(BackupReplica replica, DateTimeOffset now)
     {

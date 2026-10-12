@@ -64,11 +64,14 @@ function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tena
       {copyNotice && <p role="status" className="text-sm">{copyNotice}</p>}
       <label className="block text-sm">İndirme hedefi
         <select aria-label="İndirme hedefi" className="mt-1 block w-full rounded-md border border-border bg-surface p-2" value={replicaId} disabled={busy} onChange={event => setReplicaId(event.target.value)}>
-          <option value="">Otomatik · kullanılabilir Replica</option>
+          <option value="">Otomatik · en uygun replika (Fallback destekli)</option>
           {availability.data.replicas.map(replica => <option key={replica.replicaId} value={replica.replicaId} disabled={!replica.available}>{replica.storageProvider} · {replica.storageTarget}{!replica.available ? ` · ${failureMessage(replica.reason)}` : ''}</option>)}
         </select>
       </label>
-      {!availability.data.available && <p role="status">İndirme kullanılamıyor: {failureMessage(availability.data.reason)}</p>}
+      {!replicaId && availability.data.replicas.filter(r => r.available).length > 1 && (
+        <p className="text-xs text-text-muted">Otomatik seçimde, aktarım başlamadan önce backend'in okuyabildiği alternatif doğrulanmış replika denenebilir. Aktarım başladıktan sonra hata oluşursa indirme durur; otomatik yeniden başlatılmaz.</p>
+      )}
+      {!availability.data.available && <p role="status" className="text-sm text-destructive">İndirme kullanılamıyor: Hiçbir doğrulanmış kopya erişilebilir değil ({failureMessage(availability.data.reason)}).</p>}
       <Button disabled={busy || !availability.data.available || Boolean(selected && !selected.available)} onClick={() => { started.current = false; prepare.mutate() }}>{prepare.isPending || status.data?.state === 'Preparing' ? 'İndirme hazırlanıyor…' : 'Download Backup'}</Button>
     </>}
     {session && !status.data && !status.error && <p role="status">İndirme hazırlanıyor…</p>}

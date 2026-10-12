@@ -70,6 +70,20 @@ public sealed class DownloadSession : ITenantOwned
         return true;
     }
 
+    public bool SwitchReplica(BackupReplica newReplica, string? expectedOwner, DateTimeOffset now)
+    {
+        if (!IsPinned(now) || LeaseOwner != expectedOwner || TransferredBytes != 0 ||
+            (State != DownloadState.Ready && State != DownloadState.Streaming) || newReplica.ExecutionLocation != BackupStorageExecutionLocation.Backend) return false;
+        if (newReplica.TenantId != TenantId || newReplica.ArtifactId != ArtifactId || newReplica.Status != BackupReplicaStatus.Available ||
+            newReplica.VerificationState != "Verified" || newReplica.Checksum != Checksum || newReplica.SizeBytes != SizeBytes) return false;
+        ReplicaId = newReplica.Id;
+        AgentId = newReplica.ExecutionLocation == BackupStorageExecutionLocation.Agent ? newReplica.OwningAgentId : null;
+        StorageProvider = newReplica.StorageProvider;
+        StorageTarget = newReplica.StorageTarget;
+        Key = newReplica.Key;
+        return true;
+    }
+
     /// <summary>
     /// Ends a not yet terminal download because the support session that authorized it was closed or revoked. A transfer in progress sees the
     /// state change on its next lease renewal and stops. False (no change) when already terminal.

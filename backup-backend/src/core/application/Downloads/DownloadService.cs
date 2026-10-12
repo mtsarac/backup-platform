@@ -1,3 +1,5 @@
+using System.Buffers;
+using System.Security.Cryptography;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Downloads;
@@ -42,7 +44,10 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
         if (availability is null) return null;
         var selected = request.ReplicaId is { } requested
             ? availability.Replicas.SingleOrDefault(replica => replica.ReplicaId == requested)
-            : availability.Replicas.Where(replica => replica.Available).OrderBy(replica => replica.StorageProvider == "central" ? 0 : 1).FirstOrDefault();
+            : availability.Replicas
+                .Where(replica => replica.Available)
+                .OrderBy(replica => ReplicaRepairSourceEvaluator.GetProviderPriority(replica.StorageProvider))
+                .FirstOrDefault();
         if (selected is null) throw new DownloadUnavailableException(request.ReplicaId is null ? availability.Reason! : "replica_not_found");
         if (!selected.Available) throw new DownloadUnavailableException(selected.Reason!);
         var filename = $"backup-{artifactId:N}.bak";
@@ -69,14 +74,89 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
         return session;
     }
 
-    public async Task<Stream> OpenReadAsync(DownloadSession session, CancellationToken cancellationToken)
+    public async Task<(Stream Stream, DownloadSession Session)> OpenReadWithFallbackAsync(DownloadSession session, CancellationToken cancellationToken)
     {
-        if (session.AgentId is not null) return await agentSource.OpenReadAsync(session, cancellationToken);
-        var provider = storage.Resolve(session.TenantId, session.StorageProvider, session.StorageTarget);
-        if (provider is null) throw new DownloadUnavailableException("storage_not_configured");
-        if (!provider.Capabilities.Supports(StorageCapabilityIds.Read)) throw new DownloadUnavailableException("storage_read_not_supported");
-        return await provider.OpenReadAsync(new StorageObjectKey(session.Key), cancellationToken);
+        if (!session.IsPinned(time.GetUtcNow())) throw new DownloadUnavailableException("download_interrupted");
+        var artifact = await store.GetArtifactAsync(session.TenantId, session.ArtifactId, cancellationToken);
+        if (artifact is null) throw new DownloadUnavailableException("artifact_not_found");
+
+        var candidates = artifact.Replicas
+            .Where(replica => replica.TenantId == session.TenantId && replica.ArtifactId == session.ArtifactId &&
+                (replica.Status == BackupReplicaStatus.Available ||
+                    replica.Id == session.ReplicaId && replica.Status == BackupReplicaStatus.DeletePending) &&
+                replica.VerificationState == "Verified" && replica.Checksum == session.Checksum && replica.SizeBytes == session.SizeBytes &&
+                (replica.Id == session.ReplicaId || replica.ExecutionLocation == BackupStorageExecutionLocation.Backend))
+            .OrderBy(replica => replica.Id == session.ReplicaId ? 0 : 1)
+            .ThenBy(replica => ReplicaRepairSourceEvaluator.GetProviderPriority(replica.StorageProvider))
+            .ThenByDescending(replica => replica.CreatedAt);
+
+        StorageException? integrityFailure = null;
+        foreach (var candidate in candidates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (candidate.Id != session.ReplicaId)
+            {
+                // Commit the new hold before opening bytes; a stale owner or lost selection must never stream an unpinned source.
+                var switched = await store.SwitchReplicaAsync(session.Id, session.ReplicaId, session.LeaseOwner, candidate, cancellationToken);
+                if (switched is null) continue;
+                logger.LogInformation("Download {SessionId} fell back from replica {OldReplicaId} to {NewReplicaId}.",
+                    session.Id, session.ReplicaId, candidate.Id);
+                session = switched;
+            }
+
+            Stream? stream = null;
+            try
+            {
+                if (candidate.ExecutionLocation == BackupStorageExecutionLocation.Agent)
+                    stream = await agentSource.OpenReadAsync(session, cancellationToken);
+                else
+                {
+                    var provider = storage.Resolve(session.TenantId, session.StorageProvider, session.StorageTarget);
+                    if (provider is null || !provider.Capabilities.Supports(StorageCapabilityIds.Read)) continue;
+                    stream = await provider.OpenReadAsync(new StorageObjectKey(session.Key), cancellationToken);
+                }
+                if (stream.CanSeek) await VerifyAsync(stream, session, cancellationToken);
+                return (stream, session);
+            }
+            catch (Exception exception) when (exception is StorageException or IOException or UnauthorizedAccessException)
+            {
+                if (exception is StorageException { Kind: StorageFailureKind.IntegrityMismatch } mismatch) integrityFailure = mismatch;
+                logger.LogWarning("Download read failed for replica {ReplicaId} with {ExceptionType}.", candidate.Id, exception.GetType().Name);
+            }
+            catch
+            {
+                if (stream is not null) await stream.DisposeAsync();
+                throw;
+            }
+            if (stream is not null) await stream.DisposeAsync();
+        }
+        if (integrityFailure is not null) throw integrityFailure;
+        throw new DownloadUnavailableException("replica_unavailable");
     }
+
+    private static async Task VerifyAsync(Stream source, DownloadSession session, CancellationToken cancellationToken)
+    {
+        var buffer = ArrayPool<byte>.Shared.Rent(64 * 1024);
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        try
+        {
+            long length = 0;
+            while (true)
+            {
+                var read = await source.ReadAsync(buffer.AsMemory(), cancellationToken);
+                if (read == 0) break;
+                length += read;
+                if (length > session.SizeBytes) throw IntegrityFailure();
+                hash.AppendData(buffer, 0, read);
+            }
+            if (length != session.SizeBytes || !string.Equals(Convert.ToHexStringLower(hash.GetHashAndReset()), session.Checksum, StringComparison.Ordinal))
+                throw IntegrityFailure();
+            source.Position = 0;
+        }
+        finally { ArrayPool<byte>.Shared.Return(buffer); }
+    }
+
+    private static StorageException IntegrityFailure() => new(StorageFailureKind.IntegrityMismatch, "The stored backup failed integrity verification.");
 
     public Task ReleaseAsync(DownloadSession session, CancellationToken cancellationToken) => session.AgentId is null
         ? Task.CompletedTask : agentSource.ReleaseAsync(session.Id, cancellationToken);

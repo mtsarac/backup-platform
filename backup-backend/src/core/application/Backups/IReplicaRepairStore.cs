@@ -26,6 +26,8 @@ public interface IReplicaRepairStore
         TimeSpan leaseDuration,
         CancellationToken cancellationToken);
 
+    Task<bool> PinSourceAsync(TenantId tenantId, Guid operationId, Guid leaseToken, Guid sourceReplicaId, DateTimeOffset now, CancellationToken cancellationToken);
+
     Task<bool> RenewLeaseAsync(
         TenantId tenantId,
         Guid operationId,
@@ -97,7 +99,8 @@ public interface IReplicaRepairStore
     Task<IReadOnlyList<ReplicaRepairOperation>> DiscoverEligibleRepairsAsync(
         DateTimeOffset now,
         int maxBatch,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        TenantId? tenantId = null);
 
     Task<int> GetActiveRepairsCountAsync(
         TenantId? tenantId,

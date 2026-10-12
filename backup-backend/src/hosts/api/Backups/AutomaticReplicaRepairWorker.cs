@@ -73,7 +73,7 @@ public sealed class AutomaticReplicaRepairWorker(
         {
             try
             {
-                var discovered = await store.DiscoverEligibleRepairsAsync(now, 10, cancellationToken);
+                var discovered = await store.DiscoverEligibleRepairsAsync(now, 10, cancellationToken, tenantId);
                 if (discovered.Count > 0)
                 {
                     logger.LogInformation("Discovered and scheduled {Count} automatic replica repairs.", discovered.Count);

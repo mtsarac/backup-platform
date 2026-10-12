@@ -5,6 +5,16 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Microsoft.Extensions.DependencyInjection;
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Api.Downloads;
+using BackupPlatform.Application.Downloads;
+using BackupPlatform.Application.Restores;
+using BackupPlatform.Domain.Downloads;
+using BackupPlatform.Domain.Restores;
+using BackupPlatform.Infrastructure.Downloads;
+using BackupPlatform.Infrastructure.Restores;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
@@ -40,11 +50,14 @@ public sealed class ManualReplicaRepairIntegrationTests(PostgreSqlFixture fixtur
         public ConcurrentBag<string> DeletedKeys { get; } = new();
         public bool ShouldFailRead { get; set; }
         public bool ShouldFailWrite { get; set; }
+        public StorageFailureKind WriteFailureKind { get; set; } = StorageFailureKind.Io;
         public bool ShouldFailVerify { get; set; }
+        public Func<byte[], Stream>? ReadStream { get; set; }
+        public Func<Task>? BeforeRead { get; set; }
 
         public Task<StorageObjectMetadata> PutAsync(StorageObjectKey key, Stream content, StoragePutOptions options, IProgress<long>? progress, CancellationToken cancellationToken)
         {
-            if (ShouldFailWrite) throw new StorageException(StorageFailureKind.Io, "Simulated write failure");
+            if (ShouldFailWrite) throw new StorageException(WriteFailureKind, "Simulated write failure");
             using var ms = new MemoryStream();
             content.CopyTo(ms);
             var bytes = ms.ToArray();
@@ -53,11 +66,12 @@ public sealed class ManualReplicaRepairIntegrationTests(PostgreSqlFixture fixtur
             return Task.FromResult(new StorageObjectMetadata(new StorageLocation(Id, key), bytes.Length, new ContentChecksum(ChecksumAlgorithm.Sha256, Checksum), DateTimeOffset.UtcNow));
         }
 
-        public Task<Stream> OpenReadAsync(StorageObjectKey key, CancellationToken cancellationToken)
+        public async Task<Stream> OpenReadAsync(StorageObjectKey key, CancellationToken cancellationToken)
         {
+            if (BeforeRead is not null) await BeforeRead();
             if (ShouldFailRead) throw new StorageException(StorageFailureKind.Io, "Simulated read failure");
             if (Storage.TryGetValue(key.Value, out var bytes))
-                return Task.FromResult<Stream>(new MemoryStream(bytes));
+                return ReadStream?.Invoke(bytes) ?? new MemoryStream(bytes);
             throw new StorageException(StorageFailureKind.NotFound, "Key not found");
         }
 
@@ -575,5 +589,336 @@ public sealed class ManualReplicaRepairIntegrationTests(PostgreSqlFixture fixtur
         Assert.Equal("Failed", orphan.VerificationState);
         Assert.Equal(BackupReplicaStatus.DeletePending, orphan.Status);
         Assert.True(BackupReplicaStorage.Occupies(orphan.Status));
+    }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DownloadFallsBackBeforeHeadersAndPinsTheBytesItServes(bool corruptPrimary)
+    {
+        var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp" });
+        var clock = new MutableClock();
+        var store = new PostgreSqlDownloadStore(World.Options(), clock);
+        var user = new User(UserId.New(), "Fallback downloader");
+        await using (var context = fixture.CreatePlatformContext())
+        {
+            context.Users.Add(user);
+            context.TenantMemberships.Add(new TenantMembership(setup.Agent.TenantId, user.Id, TenantRole.Admin));
+            await context.SaveChangesAsync();
+        }
+        var primary = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "central");
+        var fallback = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "sftp");
+        var session = (await store.CreateAsync(new(setup.Agent.TenantId, setup.Artifact.Id, primary.Id, user.Id.Value,
+            "backup.bak", clock.GetUtcNow(), TimeSpan.FromMinutes(15)), default))!;
+        var provider = (InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, primary.StorageProvider, primary.StorageTarget)!;
+        if (corruptPrimary) provider.Storage[primary.Key] = [8, 7, 6, 5, 4, 3, 2, 1];
+        else provider.ShouldFailRead = true;
+        var retention = new PostgreSqlBackupRetentionStore(World.Options());
+        ((InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, fallback.StorageProvider, fallback.StorageTarget)!).BeforeRead = async () =>
+        {
+            Assert.Equal(fallback.Id, (await store.GetAsync(session.TenantId, session.Id, default))!.ReplicaId);
+            await retention.RequestDeleteAsync(session.TenantId, session.ArtifactId, user.Id.Value, clock.GetUtcNow(), default);
+            await using var context = fixture.CreatePlatformContext();
+            var now = clock.GetUtcNow();
+            await context.Database.ExecuteSqlInterpolatedAsync($"UPDATE backup_replicas SET \"DeleteAfter\" = {now} WHERE \"TenantId\" = {session.TenantId.Value} AND \"ArtifactId\" = {session.ArtifactId}");
+            Assert.DoesNotContain(await retention.ClaimDueDeletionsAsync("while-reading", now, TimeSpan.FromMinutes(2), 500, default), claim => claim.ReplicaId == fallback.Id);
+        };
+        var service = new DownloadService(store, setup.Resolver, new NoAgentDownloadSource(), clock, NullLogger<DownloadService>.Instance);
+        var http = new DefaultHttpContext();
+        http.Response.Body = new MemoryStream();
+        await new DownloadStreamer(store, service, clock, NullLogger<DownloadStreamer>.Instance).StreamAsync(http, session);
+        Assert.Equal(Content, ((MemoryStream)http.Response.Body).ToArray());
+        var completed = (await store.GetAsync(session.TenantId, session.Id, default))!;
+        Assert.Equal((DownloadState.Completed, fallback.Id, (long)Content.Length), (completed.State, completed.ReplicaId, completed.TransferredBytes));
+        Assert.NotNull(completed.ReleasedAt);
+        Assert.Contains(await retention.ClaimDueDeletionsAsync("after-download", clock.GetUtcNow(), TimeSpan.FromMinutes(2), 500, default), claim => claim.ReplicaId == fallback.Id);
+    }
+
+    [Fact]
+    public async Task ConcurrentDownloadSwitchesHaveOneWinnerAndFenceWrongOwnerExpiredLeaseAndForeignReplica()
+    {
+        var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp", "google-drive" });
+        var other = await SetupAsync(verified: new HashSet<string> { "central" });
+        var clock = new MutableClock();
+        var store = new PostgreSqlDownloadStore(World.Options(), clock);
+        var user = new User(UserId.New(), "Source switch owner");
+        await using (var context = fixture.CreatePlatformContext())
+        {
+            context.Users.Add(user);
+            context.TenantMemberships.Add(new TenantMembership(setup.Agent.TenantId, user.Id, TenantRole.Admin));
+            await context.SaveChangesAsync();
+        }
+        var primary = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "central");
+        var session = (await store.CreateAsync(new(setup.Agent.TenantId, setup.Artifact.Id, primary.Id, user.Id.Value,
+            "backup.bak", clock.GetUtcNow(), TimeSpan.FromMinutes(15)), default))!;
+        var fallback = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "sftp");
+        var alternate = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "google-drive");
+        Assert.NotNull(await store.TransitionAsync(session.Id, new(DownloadState.Ready, DownloadState.Streaming, null, "owner", clock.GetUtcNow(), TimeSpan.FromSeconds(60)), default));
+        Assert.Null(await store.SwitchReplicaAsync(session.Id, primary.Id, "wrong-owner", fallback, default));
+        Assert.Null(await store.SwitchReplicaAsync(session.Id, primary.Id, "owner", other.Artifact.Replicas.Single(), default));
+        var results = await Task.WhenAll(
+            store.SwitchReplicaAsync(session.Id, primary.Id, "owner", fallback, default),
+            new PostgreSqlDownloadStore(World.Options(), clock).SwitchReplicaAsync(session.Id, primary.Id, "owner", alternate, default));
+        var winner = Assert.Single(results, result => result is not null)!;
+        Assert.Equal(winner.ReplicaId, (await store.GetAsync(session.TenantId, session.Id, default))!.ReplicaId);
+        await using (var context = fixture.CreatePlatformContext())
+        {
+            var rejected = await Assert.ThrowsAsync<PostgresException>(() => context.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE download_sessions SET "ReplicaId" = {primary.Id}, "StorageProvider" = {primary.StorageProvider},
+                    "StorageTarget" = {primary.StorageTarget}, "Key" = {primary.Key}, "LeaseOwner" = 'stale-owner'
+                WHERE "Id" = {session.Id}
+                """));
+            Assert.Equal("23514", rejected.SqlState);
+        }
+        clock.Advance(TimeSpan.FromSeconds(60));
+        Assert.Null(await store.SwitchReplicaAsync(session.Id, winner.ReplicaId, "owner", primary, default));
+    }
+
+    [Fact]
+    public async Task RestoreProbesUnavailablePrimaryAndSwitchesItsPinBeforeClaim()
+    {
+        var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp" });
+        var world = new RestoreWorld(fixture);
+        await world.EnableRestoreAsync(setup.Agent);
+        var now = DateTimeOffset.UtcNow;
+        var store = new PostgreSqlRestoreStore(World.Options(), setup.Resolver);
+        var operation = (await store.CreateAsync(RestoreWorld.Command(setup.Agent.TenantId, setup.Artifact.Id, setup.Agent.AgentId, now: now), default)).Operation!;
+        var primary = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "central");
+        var fallback = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "sftp");
+        ((InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, primary.StorageProvider, primary.StorageTarget)!).ShouldFailRead = true;
+        var claim = (await store.ClaimNextAsync(setup.Agent.TenantId, setup.Agent.AgentId, now, RestoreWorld.Lease, RestoreWorld.Unclaimed, default))!;
+        Assert.Equal((fallback.Id, RestoreSourceAccess.BackendRelayed, RestoreStatus.Leased), (claim.Replica.Id, claim.Operation.SourceAccess, claim.Operation.Status));
+        Assert.Equal(fallback.Id, (await world.OperationAsync(operation.Id)).Pin.ReplicaId);
+        Assert.Equal(0, await world.ActivePinsAsync(primary.Id));
+        Assert.Equal(1, await world.ActivePinsAsync(fallback.Id));
+        Assert.False(claim.Operation.SwitchReplica(primary, RestoreSourceAccess.CentralStorage));
+        Assert.Null(await store.ClaimNextAsync(setup.Agent.TenantId, setup.Agent.AgentId, now, RestoreWorld.Lease, RestoreWorld.Unclaimed, default));
+        await store.StartAsync(RestoreWorld.Command(claim, now), RestoreWorld.Lease, default);
+        await using var context = fixture.CreatePlatformContext();
+        var movedOperation = await Assert.ThrowsAsync<PostgresException>(() => context.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE restore_operations SET \"ReplicaId\" = {primary.Id} WHERE \"Id\" = {operation.Id}"));
+        Assert.Equal("23514", movedOperation.SqlState);
+        var movedPin = await Assert.ThrowsAsync<PostgresException>(() => context.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE restore_replica_pins SET \"ReplicaId\" = {primary.Id} WHERE \"OperationId\" = {operation.Id}"));
+        Assert.Equal("23514", movedPin.SqlState);
+    }
+
+    [Fact]
+    public async Task DisabledConnectionStillServesStoredRestore()
+    {
+        var setup = await SetupAsync(verified: new HashSet<string> { "sftp" });
+        await new RestoreWorld(fixture).EnableRestoreAsync(setup.Agent);
+        await using (var context = fixture.CreatePlatformContext())
+        {
+            var connection = await context.StorageConnections.SingleAsync(entity => entity.Id == setup.Sftp.Id);
+            connection.SetEnabled(false, DateTimeOffset.UtcNow);
+            await context.SaveChangesAsync();
+        }
+        var store = new PostgreSqlRestoreStore(World.Options(), setup.Resolver);
+        var result = await store.CreateAsync(RestoreWorld.Command(setup.Agent.TenantId, setup.Artifact.Id, setup.Agent.AgentId, now: DateTimeOffset.UtcNow), default);
+        Assert.Equal(RestoreCreateOutcome.Created, result.Outcome);
+        Assert.Equal(RestoreSourceAccess.BackendRelayed, result.Operation!.SourceAccess);
+    }
+
+    [Theory]
+    [InlineData("Failed")]
+    [InlineData("Cancelled")]
+    [InlineData("Succeeded")]
+    [InlineData("Exhausted")]
+    public async Task DiscoveryNeverRestartsTerminalRepairHistory(string terminal)
+    {
+        var setup = await SetupAsync(verified: new HashSet<string> { "central", "google-drive" });
+        var now = DateTimeOffset.UtcNow;
+        var operation = new ReplicaRepairOperation(Guid.NewGuid(), setup.Agent.TenantId, setup.Artifact.Id, setup.Sftp.Id, "sftp", null, now.AddMinutes(-10),
+            maxAttempts: terminal == "Exhausted" ? 1 : 5);
+        var token = Guid.NewGuid();
+        operation.Claim(token, "terminal-worker", now.AddMinutes(-10), TimeSpan.FromMinutes(5));
+        if (terminal is "Failed" or "Exhausted") operation.Fail(token, ReplicaRepairFailureCodes.SourceChecksumMismatch, "permanent", now.AddMinutes(-9));
+        else if (terminal == "Cancelled") operation.Cancel(token, now.AddMinutes(-9));
+        else operation.Succeed(token, setup.Artifact.Replicas.First().Id, now.AddMinutes(-9));
+        await setup.RepairStore.CreateOperationAsync(operation, default);
+        Assert.Empty(await setup.RepairStore.DiscoverEligibleRepairsAsync(now, 10, default, setup.Agent.TenantId));
+        var history = await setup.RepairStore.ListOperationsAsync(setup.Agent.TenantId, setup.Artifact.Id, default);
+        Assert.Equal(operation.Id, Assert.Single(history).Id);
+        Assert.Equal(terminal == "Exhausted" ? "Failed" : terminal, history[0].Status);
+    }
+
+    [Fact]
+    public async Task DiscoveryIsTenantScopedGlobalAndConcurrentWithoutDuplicateOperations()
+    {
+        var first = await SetupAsync(verified: new HashSet<string> { "central", "google-drive" });
+        var second = await SetupAsync(verified: new HashSet<string> { "central", "google-drive" });
+        var now = DateTimeOffset.UtcNow;
+        var discovered = await Task.WhenAll(
+            first.RepairStore.DiscoverEligibleRepairsAsync(now, 10, default, first.Agent.TenantId),
+            new PostgreSqlReplicaRepairStore(World.Options()).DiscoverEligibleRepairsAsync(now, 10, default, first.Agent.TenantId));
+        var operation = Assert.Single(discovered.SelectMany(batch => batch));
+        Assert.Equal(first.Agent.TenantId, operation.TenantId);
+        Assert.Empty(await second.RepairStore.ListOperationsAsync(second.Agent.TenantId, second.Artifact.Id, default));
+        var global = await first.RepairStore.DiscoverEligibleRepairsAsync(now, 10, default);
+        Assert.Contains(global, entity => entity.TenantId == second.Agent.TenantId && entity.ArtifactId == second.Artifact.Id);
+        Assert.NotNull(await first.RepairStore.ClaimDueRepairAsync("global", now, TimeSpan.FromMinutes(5), default));
+    }
+
+    [Fact]
+    public async Task RepairSourceSwitchIsDurableTenantQualifiedAndLeaseFenced()
+    {
+        var setup = await SetupAsync(verified: new HashSet<string> { "central", "google-drive" });
+        var other = await SetupAsync(verified: new HashSet<string> { "central" });
+        var now = DateTimeOffset.UtcNow;
+        var created = Assert.Single(await setup.RepairStore.DiscoverEligibleRepairsAsync(now, 10, default, setup.Agent.TenantId));
+        var claimed = (await setup.RepairStore.ClaimDueRepairAsync("source-switch", now, TimeSpan.FromMinutes(5), default, setup.Agent.TenantId))!;
+        var alternate = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "google-drive");
+        Assert.False(await setup.RepairStore.PinSourceAsync(setup.Agent.TenantId, created.Id, Guid.NewGuid(), alternate.Id, now, default));
+        Assert.False(await setup.RepairStore.PinSourceAsync(setup.Agent.TenantId, created.Id, claimed.LeaseToken!.Value, other.Artifact.Replicas.Single().Id, now, default));
+        Assert.True(await setup.RepairStore.PinSourceAsync(setup.Agent.TenantId, created.Id, claimed.LeaseToken.Value, alternate.Id, now, default));
+        await using var context = fixture.CreatePlatformContext();
+        Assert.Equal(alternate.Id, (await context.ReplicaRepairOperations.AsNoTracking().SingleAsync(entity => entity.Id == created.Id)).SourceReplicaId);
+        Assert.False(await setup.RepairStore.PinSourceAsync(setup.Agent.TenantId, created.Id, claimed.LeaseToken.Value, alternate.Id, now.AddMinutes(5), default));
+    }
+
+    [Fact]
+    public async Task DownloadCannotReadAlternativeWhenRetentionWinsItsPinRace()
+    {
+        var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp" });
+        var clock = new MutableClock();
+        var store = new PostgreSqlDownloadStore(World.Options(), clock);
+        var user = new User(UserId.New(), "Retention race owner");
+        await using (var context = fixture.CreatePlatformContext())
+        {
+            context.Users.Add(user);
+            context.TenantMemberships.Add(new TenantMembership(setup.Agent.TenantId, user.Id, TenantRole.Admin));
+            await context.SaveChangesAsync();
+        }
+        var primary = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "central");
+        var alternate = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "sftp");
+        var session = (await store.CreateAsync(new(setup.Agent.TenantId, setup.Artifact.Id, primary.Id, user.Id.Value,
+            "backup.bak", clock.GetUtcNow(), TimeSpan.FromMinutes(15)), default))!;
+        var provider = (InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, primary.StorageProvider, primary.StorageTarget)!;
+        provider.ShouldFailRead = true;
+        provider.BeforeRead = async () =>
+        {
+            await new PostgreSqlBackupRetentionStore(World.Options()).RequestDeleteAsync(session.TenantId, session.ArtifactId, null, clock.GetUtcNow(), default);
+        };
+        var alternateOpened = false;
+        ((InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, alternate.StorageProvider, alternate.StorageTarget)!).BeforeRead = () =>
+        {
+            alternateOpened = true;
+            return Task.CompletedTask;
+        };
+        var service = new DownloadService(store, setup.Resolver, new NoAgentDownloadSource(), clock, NullLogger<DownloadService>.Instance);
+        var http = new DefaultHttpContext();
+        http.Response.Body = new MemoryStream();
+        await new DownloadStreamer(store, service, clock, NullLogger<DownloadStreamer>.Instance).StreamAsync(http, session);
+        var failed = (await store.GetAsync(session.TenantId, session.Id, default))!;
+        Assert.False(alternateOpened);
+        Assert.Equal((DownloadState.Failed, primary.Id, 0L), (failed.State, failed.ReplicaId, failed.TransferredBytes));
+        Assert.Equal(StatusCodes.Status409Conflict, http.Response.StatusCode);
+        Assert.NotNull(failed.ReleasedAt);
+    }
+
+    [Fact]
+    public async Task RestoreWithNoReadableCopyFailsWithoutHandoffAndReleasesPin()
+    {
+        var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp" });
+        var world = new RestoreWorld(fixture);
+        await world.EnableRestoreAsync(setup.Agent);
+        var now = DateTimeOffset.UtcNow;
+        var store = new PostgreSqlRestoreStore(World.Options(), setup.Resolver);
+        var operation = (await store.CreateAsync(RestoreWorld.Command(setup.Agent.TenantId, setup.Artifact.Id, setup.Agent.AgentId, now: now), default)).Operation!;
+        foreach (var replica in setup.Artifact.Replicas)
+            ((InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, replica.StorageProvider, replica.StorageTarget)!).ShouldFailRead = true;
+        Assert.Null(await store.ClaimNextAsync(setup.Agent.TenantId, setup.Agent.AgentId, now, RestoreWorld.Lease, RestoreWorld.Unclaimed, default));
+        var failed = await world.OperationAsync(operation.Id);
+        Assert.Equal((RestoreStatus.Failed, RestoreTargetState.NotModified, RestoreFailureCodes.ReplicaUnavailable),
+            (failed.Status, failed.TargetState, failed.FailureCode));
+        Assert.False(failed.Pin.IsActive);
+        Assert.Null(failed.StartedAt);
+    }
+
+    [Fact]
+    public async Task HttpMidStreamFailureAbortsInsteadOfRetryingAnotherReplica()
+    {
+        var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp" });
+        var clock = new MutableClock();
+        var store = new PostgreSqlDownloadStore(World.Options(), clock);
+        var user = new User(UserId.New(), "HTTP fallback owner");
+        await using (var context = fixture.CreatePlatformContext())
+        {
+            context.Users.Add(user);
+            context.TenantMemberships.Add(new TenantMembership(setup.Agent.TenantId, user.Id, TenantRole.Admin));
+            await context.SaveChangesAsync();
+        }
+        var primary = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "central");
+        var session = (await store.CreateAsync(new(setup.Agent.TenantId, setup.Artifact.Id, primary.Id, user.Id.Value,
+            "backup.bak", clock.GetUtcNow(), TimeSpan.FromMinutes(15)), default))!;
+        var broken = new MidStreamFailure(Content);
+        ((InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, primary.StorageProvider, primary.StorageTarget)!).ReadStream = _ => broken;
+        var service = new DownloadService(store, setup.Resolver, new NoAgentDownloadSource(), clock, NullLogger<DownloadService>.Instance);
+        var streamer = new DownloadStreamer(store, service, clock, NullLogger<DownloadStreamer>.Instance);
+        var builder = WebApplication.CreateBuilder();
+        builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");
+        await using var app = builder.Build();
+        var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        app.MapGet("/download", async (HttpContext http) =>
+        {
+            try { await streamer.StreamAsync(http, session); }
+            finally { ended.TrySetResult(); }
+        });
+        await app.StartAsync();
+        try
+        {
+            using var client = new HttpClient { BaseAddress = new Uri(app.Urls.Single()) };
+            await Assert.ThrowsAsync<HttpRequestException>(async () =>
+            {
+                using var response = await client.GetAsync("/download", HttpCompletionOption.ResponseHeadersRead);
+                await response.Content.ReadAsByteArrayAsync();
+            });
+            await ended.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            var failed = (await store.GetAsync(session.TenantId, session.Id, default))!;
+            Assert.Equal((DownloadState.Failed, primary.Id, "transfer_failed"), (failed.State, failed.ReplicaId, failed.FailureCode));
+            Assert.Equal(Content.Length / 2, failed.TransferredBytes);
+            Assert.NotNull(failed.ReleasedAt);
+            Assert.True(broken.Disposed);
+        }
+        finally { await app.StopAsync(); }
+    }
+
+    [Fact]
+    public async Task RepairNeverDeletesAnExistingObjectItDidNotCreate()
+    {
+        var setup = await SetupAsync(verified: new HashSet<string> { "central" });
+        var source = setup.Artifact.Replicas.Single();
+        var destination = (InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, "sftp", setup.Sftp.Id.ToString("D"))!;
+        byte[] existing = [42, 43, 44];
+        destination.Storage[source.Key] = existing;
+        destination.ShouldFailWrite = true;
+        destination.WriteFailureKind = StorageFailureKind.AlreadyExists;
+        var started = await setup.RepairService.StartRepairAsync(setup.Agent.TenantId, setup.Artifact.Id, new(StorageConnectionId: setup.Sftp.Id), null, default, executeInBackground: false);
+        var result = await setup.RepairService.ExecuteRepairAsync(setup.Agent.TenantId, setup.Artifact.Id, started.Operation!.Id);
+        Assert.Equal("Failed", result!.Status);
+        Assert.Equal(ReplicaRepairFailureCodes.AlreadyVerified, result.FailureCode);
+        Assert.Equal(existing, destination.Storage[source.Key]);
+        Assert.DoesNotContain(source.Key, destination.DeletedKeys);
+    }
+
+    private sealed class MidStreamFailure(byte[] bytes) : MemoryStream(bytes)
+    {
+        private bool _read;
+        public bool Disposed { get; private set; }
+        public override bool CanSeek => false;
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (_read) throw new IOException("Simulated non-seekable provider failure.");
+            _read = true;
+            return base.ReadAsync(buffer[..((int)Length / 2)], cancellationToken);
+        }
+        protected override void Dispose(bool disposing) { Disposed = true; base.Dispose(disposing); }
+    }
+
+    private sealed class NoAgentDownloadSource : IAgentDownloadSource
+    {
+        public Task<string?> GetUnavailableReasonAsync(TenantId tenantId, BackupReplica replica, CancellationToken cancellationToken) => Task.FromResult<string?>("agent_unavailable");
+        public Task<Stream> OpenReadAsync(DownloadSession session, CancellationToken cancellationToken) => throw new InvalidOperationException("These replicas must be backend-read.");
+        public Task ReleaseAsync(Guid sessionId, CancellationToken cancellationToken) => throw new InvalidOperationException("No agent spool was allocated.");
     }
 }

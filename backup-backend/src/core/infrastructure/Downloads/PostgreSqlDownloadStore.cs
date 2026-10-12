@@ -167,6 +167,44 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
         return session;
     }
 
+    public async Task<DownloadSession?> SwitchReplicaAsync(Guid sessionId, Guid currentReplicaId, string? expectedOwner, BackupReplica newReplica, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var link = await context.DownloadSessions.AsNoTracking().Where(entity => entity.Id == sessionId)
+            .Select(entity => new { entity.TenantId, entity.ArtifactId }).SingleOrDefaultAsync(cancellationToken);
+        if (link is null) return null;
+        var artifacts = await context.Database.SqlQuery<Guid>($"""
+            SELECT "Id" AS "Value" FROM backup_artifacts
+            WHERE "TenantId" = {link.TenantId.Value} AND "Id" = {link.ArtifactId} FOR NO KEY UPDATE
+            """).ToListAsync(cancellationToken);
+        if (artifacts.Count == 0) return null;
+        var ids = await context.Database.SqlQuery<Guid>($"""
+            SELECT "Id" AS "Value" FROM download_sessions
+            WHERE "Id" = {sessionId} FOR UPDATE
+            """).ToListAsync(cancellationToken);
+        if (ids.Count == 0) return null;
+        var session = await context.DownloadSessions.SingleAsync(s => s.Id == sessionId, cancellationToken);
+        if (session.ReplicaId != currentReplicaId || session.IsTerminal) return null;
+
+        var replicaLocked = await context.Database.SqlQuery<Guid>($"""
+            SELECT "Id" AS "Value" FROM backup_replicas
+            WHERE "TenantId" = {session.TenantId.Value} AND "ArtifactId" = {session.ArtifactId} AND "Id" = {newReplica.Id} FOR UPDATE
+            """).ToListAsync(cancellationToken);
+        if (replicaLocked.Count == 0) return null;
+
+        var replica = await context.BackupReplicas.AsNoTracking().SingleAsync(r => r.TenantId == session.TenantId && r.ArtifactId == session.ArtifactId && r.Id == newReplica.Id, cancellationToken);
+        if (replica.Status != BackupReplicaStatus.Available || replica.VerificationState != "Verified" ||
+            replica.Checksum != session.Checksum || replica.SizeBytes != session.SizeBytes) return null;
+
+        var now = _time.GetUtcNow();
+        if (!session.SwitchReplica(replica, expectedOwner, now)) return null;
+        AddAudit(context, session, now, "download.replica_fallback");
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return session;
+    }
+
     private static async Task<DownloadSession?> LockSessionAsync(PlatformDbContext context, Guid sessionId, CancellationToken cancellationToken)
     {
         var ids = await context.Database.SqlQuery<Guid>($"SELECT \"Id\" AS \"Value\" FROM download_sessions WHERE \"Id\" = {sessionId} FOR UPDATE")
@@ -206,7 +244,7 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
     private static string SupportAction(string action) => action switch
     {
         "download.requested" => SupportAuditActions.DownloadRequested,
-        "download.streaming" => SupportAuditActions.DownloadStarted,
+        "download.streaming" or "download.replica_fallback" => SupportAuditActions.DownloadStarted,
         "download.completed" => SupportAuditActions.DownloadCompleted,
         _ => SupportAuditActions.DownloadFailed
     };

@@ -269,9 +269,14 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
               {activeAgent && (
                 <div className={`rounded-md p-3 text-sm ${activeAgent.sourceEligible && activeAgent.canRestore ? 'bg-success-subtle text-success' : 'bg-error-subtle text-error'}`}>
                   {activeAgent.sourceEligible && activeAgent.canRestore ? (
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="size-4 shrink-0" />
-                      <span>Bu Agent bu backup için uygun ({activeAgent.sourceAccess === 'AgentLocal' ? 'Yerel Replica' : 'Merkezi Storage'}).</span>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="size-4 shrink-0" />
+                        <span>Bu Agent bu backup için uygun ({activeAgent.sourceAccess === 'AgentLocal' ? 'Yerel Replika' : activeAgent.sourceAccess === 'BackendRelayed' ? 'Uzak Depolama (SFTP / Google Drive Relay)' : 'Merkezi Depolama'}).</span>
+                      </div>
+                      <p className="ml-6 text-xs text-text-muted">{activeAgent.sourceAccess === 'AgentLocal'
+                        ? 'Yerel replika yalnızca onu barındıran hedef Agent tarafından okunabilir; backend yerel dosyayı kontrol edemez.'
+                        : "Kaynak erişimi kontrol edilirken, Agent'a devredilmeden önce backend'in okuyabildiği alternatif doğrulanmış replika seçilebilir."} Agent'a devir, staging veya hedef değişikliği sonrasında Restore otomatik yeniden başlatılmaz.</p>
                     </div>
                   ) : (
                     <div className="flex items-start gap-2">
