@@ -93,11 +93,11 @@ internal static class StorageTargetGate
         PlatformDbContext context, TenantId tenantId, AgentId agentId, BackupConfiguration configuration, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var resolvedDestinations = new List<BackupDestination>();
-        var effectiveDestinations = configuration.ResolveEffectiveDestinations();
+        var effectiveDestinations = configuration.Destinations;
 
         // The ONE admission point of manual and scheduled runs (a retry re-runs the admitted snapshot and is fenced again at claim, relay and completion).
-        // Several destinations are executed only by an agent that says it can: otherwise the run would be taken and its copies could never all be made.
-        if (effectiveDestinations.Count > 1 && !await SupportsMultiDestinationAsync(context, tenantId, agentId, cancellationToken))
+        // Every run is a destination-list snapshot: an agent that does not execute those would read the missing fields as defaults and write to the wrong place.
+        if (!await SupportsMultiDestinationAsync(context, tenantId, agentId, cancellationToken))
         {
             return new(null, BackupAdmissionDenialCodes.AgentMultiDestinationUnsupported);
         }
@@ -135,47 +135,22 @@ internal static class StorageTargetGate
             resolvedDestinations.Add(dest with { StorageConnectionId = connection.Id });
         }
 
-        var primary = resolvedDestinations.FirstOrDefault(d => d.IsPrimary) ?? resolvedDestinations[0];
-
-        var updatedConfig = configuration with
-        {
-            StorageProvider = primary.StorageProvider,
-            StorageConnectionId = primary.StorageConnectionId,
-            StorageExecutionLocation = primary.StorageExecutionLocation,
-            Destinations = resolvedDestinations
-        };
-
-        return new(updatedConfig, null);
+        return new(configuration with { Destinations = resolvedDestinations }, null);
     }
 
-    /// <summary>Whether the agent's last reported capability snapshot declares multi-destination execution. Absent or Unsupported or Unknown is no.</summary>
+    /// <summary>Whether the agent's last reported capability snapshot declares destination-list execution. Absent or Unsupported or Unknown is no.</summary>
     public static Task<bool> SupportsMultiDestinationAsync(PlatformDbContext context, TenantId tenantId, AgentId agentId, CancellationToken cancellationToken) =>
         context.AgentCapabilities.AsNoTracking().AnyAsync(record => record.TenantId == tenantId && record.AgentId == agentId
             && record.Identifier == BackupPlatform.Contracts.Backups.BackupTaskProtocol.MultiDestinationCapability
             && record.Support == BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, cancellationToken);
 
     /// <summary>
-    /// The connection a finished run's replicas belong to: the one its run snapshotted, or, for a run created before connections existed, the tenant's
+    /// The connection that holds the copies of a run snapshot destination that names none (a run admitted before storage connections existed): the tenant's
     /// default for the provider. Never refuses (an enabled flag is irrelevant to publishing what already ran).
     /// </summary>
     public static async Task<Guid> ForPublishAsync(
-        PlatformDbContext context, TenantId tenantId, BackupConfiguration configuration, string replicaProvider, DateTimeOffset now, CancellationToken cancellationToken)
+        PlatformDbContext context, TenantId tenantId, string replicaProvider, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        // First check in Destinations
-        var matchingDest = configuration.ResolveEffectiveDestinations()
-            .FirstOrDefault(d => d.StorageProvider == replicaProvider && d.StorageConnectionId is not null);
-
-        if (matchingDest?.StorageConnectionId is { } destConnId
-            && await context.StorageConnections.AsNoTracking().AnyAsync(row => row.TenantId == tenantId && row.Id == destConnId && row.ProviderType == replicaProvider, cancellationToken))
-        {
-            return destConnId;
-        }
-
-        if (configuration.StorageConnectionId is { } id
-            && await context.StorageConnections.AsNoTracking().AnyAsync(row => row.TenantId == tenantId && row.Id == id && row.ProviderType == replicaProvider, cancellationToken))
-        {
-            return id;
-        }
         var resolved = await StorageConnectionProvisioner.ResolveDefaultAsync(context, tenantId, replicaProvider, now, cancellationToken);
         if (resolved is null && StorageProviderTypes.IsValid(replicaProvider))
         {
@@ -191,9 +166,9 @@ internal static class StorageTargetGate
     /// <summary>A job may name a connection; it must be the tenant's and serve the job's provider. Everything else (enabled or not) is decided when a run starts.</summary>
     public static async Task EnsureJobTargetAsync(PlatformDbContext context, TenantId tenantId, BackupConfiguration configuration, CancellationToken cancellationToken)
     {
-        var effectiveDestinations = configuration.ResolveEffectiveDestinations();
-        foreach (var dest in effectiveDestinations)
+        for (var i = 0; i < configuration.Destinations.Count; i++)
         {
+            var dest = configuration.Destinations[i];
             if (dest.StorageConnectionId is not { } id)
             {
                 continue;
@@ -202,7 +177,7 @@ internal static class StorageTargetGate
                 .AnyAsync(row => row.TenantId == tenantId && row.Id == id && row.ProviderType == dest.StorageProvider, cancellationToken);
             if (!matches)
             {
-                throw new InvalidBackupJobException("configuration.storageConnectionId", "invalid_value");
+                throw new InvalidBackupJobException($"configuration.destinations[{i}].storageConnectionId", "invalid_value");
             }
         }
     }

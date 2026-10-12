@@ -238,7 +238,7 @@ public sealed class MsSqlRetentionAgentSmokeTests(PostgreSqlFixture database, IT
                     agentId = agent.AgentId,
                     configuration = MsSqlManualAgentSmokeTests.Configuration(sql, sql.DatabaseName) with
                     {
-                        StorageExecutionLocation = agentLocal ? "Agent" : "Backend"
+                        Destinations = [BackupTestDestinations.Local(location: agentLocal ? "Agent" : "Backend")]
                     },
                     retention = new { enabled = retentionEnabled, keepForSeconds, deleteGracePeriodSeconds = graceSeconds }
                 });

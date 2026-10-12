@@ -169,7 +169,7 @@ public sealed class StorageConnectionQuotaScopeIntegrationTests(PostgreSqlFixtur
         await _world.DefaultsAsync(agent.TenantId);
         var premium = await _world.AddAsync(agent.TenantId, "Premium target", "central", StorageOwnership.PlatformManaged, "premium");
         var defaultJob = await _world.Quota.JobAsync(agent);
-        var premiumConfiguration = BackupStoreHarness.Configuration() with { StorageProvider = "central", StorageExecutionLocation = BackupStorageExecutionLocation.Backend, StorageConnectionId = premium.Id };
+        var premiumConfiguration = BackupStoreHarness.Configuration("central", BackupStorageExecutionLocation.Backend, premium.Id);
         var premiumJob = (await _world.Quota.RunStore().CreateJobAsync(new BackupJob(Guid.NewGuid(), agent.TenantId, "Premium", agent.AgentId, premiumConfiguration, QuotaWorld.T0, null, BackupOverlapPolicy.Queue), default))!;
 
         var (defaultRun, defaultArtifact) = await _world.Quota.PublishCopiesAsync(agent, defaultJob, 3 * Gb, ReplicaSpec.Central);
@@ -178,8 +178,8 @@ public sealed class StorageConnectionQuotaScopeIntegrationTests(PostgreSqlFixtur
         var (_, defaultCentral) = await _world.DefaultsAsync(agent.TenantId);
         Assert.Equal(defaultCentral.Id, Assert.Single(await _world.ReplicasAsync(defaultArtifact)).StorageConnectionId);
         Assert.Equal(premium.Id, Assert.Single(await _world.ReplicasAsync(premiumArtifact)).StorageConnectionId);
-        Assert.Equal(defaultCentral.Id, defaultRun.Configuration.StorageConnectionId);
-        Assert.Equal(premium.Id, premiumRun.Configuration.StorageConnectionId);
+        Assert.Equal(defaultCentral.Id, defaultRun.Configuration.Destinations.Single(d => d.IsPrimary).StorageConnectionId);
+        Assert.Equal(premium.Id, premiumRun.Configuration.Destinations.Single(d => d.IsPrimary).StorageConnectionId);
         await _world.Quota.AssertUsedAsync(agent.TenantId, Gb);
         await _world.Quota.AssertOracleAsync(agent.TenantId, 4 * Gb, 4 * Gb);
         Assert.Equal((Gb, Gb), await ConnectionWorld.OracleAsync(fixture.ConnectionString, agent.TenantId, quotaScope: "premium"));

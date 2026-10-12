@@ -380,7 +380,7 @@ public sealed class StorageTransferAdmissionTests(PostgreSqlFixture fixture) : I
         {
             var tenant = await World.CreateTenantAsync();
             await World.EntitleAsync(tenant.Tenant);
-            var agent = await World.EnrollAsync(tenant);
+            var agent = await World.DeclareBackupCapabilityAsync(await World.EnrollAsync(tenant));
             var id = Guid.NewGuid();
             await using (var db = fixture.CreatePlatformContext())
             {
@@ -396,8 +396,8 @@ public sealed class StorageTransferAdmissionTests(PostgreSqlFixture fixture) : I
                 name = "Admission test", agentId = agent.AgentId,
                 configuration = new BackupExecutionConfiguration
                 {
-                    Database = "master", Host = "sql-server", IntegratedSecurity = true, StorageProvider = "google-drive",
-                    StorageConnectionId = id, StorageExecutionLocation = "Backend"
+                    Database = "master", Host = "sql-server", IntegratedSecurity = true,
+                    Destinations = [BackupTestDestinations.Relayed("google-drive", id, primary: true)]
                 }
             });
             Assert.Equal(HttpStatusCode.Created, created.StatusCode);
@@ -435,6 +435,7 @@ public sealed class StorageTransferAdmissionTests(PostgreSqlFixture fixture) : I
             request.Headers.Add(TaskStorageProtocol.LeaseHeader, lease.ToString("D"));
             request.Headers.Add(TaskStorageProtocol.KeyHeader, target.Key);
             if (restore is { } operationId) request.Headers.Add(TaskStorageProtocol.RestoreHeader, operationId.ToString("D"));
+            else request.Headers.Add(TaskStorageProtocol.DestinationHeader, target.ConnectionId.ToString("D"));
             if (operation == "upload")
             {
                 request.Headers.Add(TaskStorageProtocol.ChecksumHeader, Checksum);
@@ -467,7 +468,12 @@ public sealed class StorageTransferAdmissionTests(PostgreSqlFixture fixture) : I
                             StorageProvider = "google-drive", StorageTarget = target.ConnectionId.ToString("D"), StorageConnectionId = target.ConnectionId,
                             Key = target.Key, SizeBytes = 3, Checksum = Checksum, VerificationState = "Verified", VerificationMethod = "ReadBack", CreatedAt = now, VerifiedAt = now
                         }]
-                    }
+                    },
+                    Destinations = [new BackupTaskDestinationResult
+                    {
+                        StorageProvider = "google-drive", StorageConnectionId = target.ConnectionId, State = "Verified", Upload = "Succeeded", Verification = "Verified",
+                        Key = target.Key, StartedAt = now.AddSeconds(-1), CompletedAt = now
+                    }]
                 });
             Assert.Equal(HttpStatusCode.NoContent, completed.StatusCode);
             using var capability = await World.SyncCapabilitiesAsync(target.Agent, AgentWorld.CapabilitySnapshot(AgentWorld.CapabilityReport(RestoreApiScenario.Capability)));

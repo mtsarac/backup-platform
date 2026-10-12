@@ -279,7 +279,7 @@ Disposable integration smoke for backend-relayed SFTP storage:
   - Validates password authentication and host fingerprint roundtrip.
   - Tests wrong host fingerprint rejection with `host_key_mismatch`.
   - Tests separate connection with `private-key` authentication and passphrase.
-- Real MSSQL mapped backup via Linux Agent selecting the SFTP connection (`storageExecutionLocation="Backend"`).
+- Real MSSQL mapped backup via Linux Agent selecting the SFTP connection (destination `{"storageProvider":"sftp","storageExecutionLocation":"Backend","isPrimary":true}`).
 - Verifies remote file exists, length and SHA-256 match artifact; confirms zero probe/temp leakage.
 - Streams backend-relayed download, verifies SHA-256 and byte count against artifact.
 - Tests disabled connection and platform admin lock: new backup runs denied (`admission_denied`), existing stored replicas remain available/usable and restorable.
@@ -317,8 +317,8 @@ destination never touches another's copy, and a verified copy is never rolled ba
 - Engine success and replication compliance are separate. `BackupRun.Status` stays `Succeeded` while at least one copy is verified; the API adds
   `replication` (`Healthy` / `Degraded` / `InsufficientReplicas` / `Unavailable`, verified vs required vs destinations, per-destination state and failure code) to runs,
   attempts and artifacts. A run with no verified copy fails and publishes no usable artifact; cleanup-only metadata and its destination outcomes remain durable.
-- Admission is capability-aware for manual and scheduled runs alike: a job with several destinations is refused (`agent_multi_destination_unsupported`) unless the agent
-  advertises `backup.multi-destination`; such a run is also never handed to an agent that lost the capability. A denied scheduled occurrence is recorded once and is never re-run
+- Admission is capability-aware for manual and scheduled runs alike: every run snapshots a destination list, so a job is refused (`agent_multi_destination_unsupported`) unless the agent
+  advertises `backup.multi-destination` (executes destination-list snapshots); such a run is also never handed to an agent that lost the capability. A denied scheduled occurrence is recorded once and is never re-run
   automatically; recovery is an operator action (fix the agent/job, then start a run). Occurrences recorded earlier as `multi_destination_execution_not_supported` stay history.
 - The relay authorizes every call per destination on the server (`X-Storage-Destination` is only a selector): tenant, agent, attempt lease, snapshot membership, relayed location,
   key layout and current connection state (a disabled connection takes no new upload). Another destination's, tenant's or run's connection is refused.

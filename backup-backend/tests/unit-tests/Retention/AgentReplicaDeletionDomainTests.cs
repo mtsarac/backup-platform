@@ -12,7 +12,7 @@ public sealed class AgentReplicaDeletionDomainTests
 
     private static BackupArtifact Pending()
     {
-        var configuration = BackupRunTestSupport.Configuration() with { StorageExecutionLocation = BackupStorageExecutionLocation.Agent };
+        var configuration = BackupRunTestSupport.Configuration() with { Destinations = [new BackupDestination("local", null, true) { StorageExecutionLocation = BackupStorageExecutionLocation.Agent }] };
         var run = new BackupRun(Guid.NewGuid(), TenantId.New(), Guid.NewGuid(), AgentId.New(), configuration, "agent-delete", Now.AddDays(-2),
             retentionPolicy: RetentionDomain.Policy(grace: TimeSpan.FromSeconds(1)));
         run.QueueFirstAttempt(Guid.NewGuid(), Now.AddDays(-2));

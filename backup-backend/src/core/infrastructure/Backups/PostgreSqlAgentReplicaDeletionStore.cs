@@ -138,11 +138,12 @@ public sealed class PostgreSqlAgentReplicaDeletionStore(DbContextOptions<Platfor
 
     private static string? ValidateAuthority(BackupReplica replica, AgentIdentity identity, Authority? authority)
     {
-        if (authority is null || authority.AgentId != identity.AgentId.Value ||
-            authority.Configuration.StorageExecutionLocation != BackupStorageExecutionLocation.Agent ||
-            authority.Configuration.StorageProvider != "local" || replica.StorageProvider != authority.Configuration.StorageProvider)
+        var primary = authority?.Configuration.Destinations.FirstOrDefault(d => d.IsPrimary);
+        if (authority is null || primary is null || authority.AgentId != identity.AgentId.Value ||
+            primary.StorageExecutionLocation != BackupStorageExecutionLocation.Agent ||
+            primary.StorageProvider != "local" || replica.StorageProvider != primary.StorageProvider)
             return DeleteReplicaFailureCodes.InvalidConfiguration;
-        if (replica.StorageTarget != authority.Configuration.StorageProvider) return DeleteReplicaFailureCodes.StorageTargetUnknown;
+        if (replica.StorageTarget != primary.StorageProvider) return DeleteReplicaFailureCodes.StorageTargetUnknown;
         if (!ManagedBackupLayout.TryParseStorageKey(replica.Key, out var key) || key is null || key.IsPartial ||
             key.TenantId != replica.TenantId.Value || key.JobId != authority.JobId || key.RunId != authority.RunId ||
             key.AttemptId != authority.AttemptId || key.Prefix != authority.Configuration.StoragePrefix)

@@ -73,14 +73,17 @@ def backup(options):
     agent_id = agent.get('agentId', agent.get('id'))
     configuration = {'engine': 'mssql', 'host': options.sql_host, 'port': options.sql_port, 'database': options.database,
                      'databaseCredentialReference': 'sql_smoke', 'trustServerCertificate': True,
-                     'stagingReference': 'default', 'storageProvider': options.provider, 'storageTarget': 'default',
-                     'storagePrefix': 'download-smoke', 'copyOnly': True, 'checksumPolicy': 'Required', 'compressionPolicy': 'Preferred'}
+                     'stagingReference': 'default', 'storageTarget': 'default',
+                     'storagePrefix': 'download-smoke', 'copyOnly': True, 'checksumPolicy': 'Required', 'compressionPolicy': 'Preferred',
+                     'requiredVerifiedReplicaCount': 1}
+    destination = {'storageProvider': options.provider, 'storageConnectionId': None,
+                   'storageExecutionLocation': 'Agent' if options.provider == 'local' else 'Backend', 'isPrimary': True}
     if options.provider == 'sftp':
         if not options.storage_connection_id:
             raise FixtureFailure('SFTP backup requires an explicit storage connection.')
-        configuration['storageConnectionId'] = options.storage_connection_id
-        configuration['storageExecutionLocation'] = 'Backend'
+        destination['storageConnectionId'] = options.storage_connection_id
         configuration['storagePrefix'] = ''
+    configuration['destinations'] = [destination]
     _, job = api.call('POST', path + '/backup-jobs', {'name': 'Real download ' + options.provider, 'agentId': agent_id,
                                                    'overlapPolicy': 'Skip', 'configuration': configuration})
     _, run = api.call('POST', path + f'/backup-jobs/{job["id"]}/runs', {}, headers={'Idempotency-Key': 'download-smoke-' + uuid.uuid4().hex}, expect=(200, 201, 202))

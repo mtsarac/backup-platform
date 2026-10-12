@@ -16,7 +16,7 @@ public sealed class BackupOrchestrationApiTests(PostgreSqlFixture fixture) : ICl
         await using var world = await AgentWorld.CreateAsync(fixture);
         var setup = await world.CreateTenantAsync();
         await world.EntitleAsync(setup.Tenant);
-        var agent = await world.EnrollAsync(setup);
+        var agent = await world.DeclareBackupCapabilityAsync(await world.EnrollAsync(setup));
         var account = await world.SeedUserAsync();
         await world.GrantAsync(setup.Tenant, account, role);
         var session = await world.SignInAsync(account);
@@ -39,13 +39,31 @@ public sealed class BackupOrchestrationApiTests(PostgreSqlFixture fixture) : ICl
     }
 
     [Fact]
+    public async Task JobWithoutDestinationsIsRejectedOnTheDestinationsField()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var setup = await world.CreateTenantAsync();
+        await world.EntitleAsync(setup.Tenant);
+        var agent = await world.EnrollAsync(setup);
+        var body = new CreateBackupJobRequestBody("No destinations", agent.AgentId, new BackupExecutionConfiguration
+        {
+            Database = "master", Host = "sql-server", IntegratedSecurity = true
+        });
+
+        using var response = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/tenants/{setup.Tenant.Id.Value}/backup-jobs", body);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("configuration.destinations", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task ViewerCanReadButCannotCreateStartOrCancelAndCrossTenantReadsAreHidden()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
         var setup = await world.CreateTenantAsync();
         await world.EntitleAsync(setup.Tenant);
         var other = await world.CreateTenantAsync();
-        var agent = await world.EnrollAsync(setup);
+        var agent = await world.DeclareBackupCapabilityAsync(await world.EnrollAsync(setup));
         var root = $"/api/tenants/{setup.Tenant.Id.Value}";
         using var create = await setup.Admin.SendAsync(HttpMethod.Post, root + "/backup-jobs", Job(agent.AgentId));
         var jobId = AgentWorld.ReadJson(create).GetProperty("id").GetGuid();
@@ -78,7 +96,7 @@ public sealed class BackupOrchestrationApiTests(PostgreSqlFixture fixture) : ICl
         await using var world = await AgentWorld.CreateAsync(fixture);
         var setup = await world.CreateTenantAsync();
         await world.EntitleAsync(setup.Tenant);
-        var agent = await world.EnrollAsync(setup);
+        var agent = await world.DeclareBackupCapabilityAsync(await world.EnrollAsync(setup));
         var root = $"/api/tenants/{setup.Tenant.Id.Value}";
         using var create = await setup.Admin.SendAsync(HttpMethod.Post, root + "/backup-jobs", Job(agent.AgentId));
         var jobId = AgentWorld.ReadJson(create).GetProperty("id").GetGuid();
@@ -96,7 +114,7 @@ public sealed class BackupOrchestrationApiTests(PostgreSqlFixture fixture) : ICl
         await using var world = await AgentWorld.CreateAsync(fixture);
         var setup = await world.CreateTenantAsync();
         await world.EntitleAsync(setup.Tenant);
-        var agent = await world.EnrollAsync(setup);
+        var agent = await world.DeclareBackupCapabilityAsync(await world.EnrollAsync(setup));
         var stranger = await world.EnrollAsync(setup);
         var root = $"/api/tenants/{setup.Tenant.Id.Value}";
         using var create = await setup.Admin.SendAsync(HttpMethod.Post, root + "/backup-jobs", Job(agent.AgentId));
@@ -155,7 +173,7 @@ public sealed class BackupOrchestrationApiTests(PostgreSqlFixture fixture) : ICl
 
     private static CreateBackupJobRequestBody Job(Guid agentId) => new("Manual full backup", agentId, new BackupExecutionConfiguration
     {
-        Database = "master", Host = "sql-server", IntegratedSecurity = true
+        Database = "master", Host = "sql-server", IntegratedSecurity = true, Destinations = BackupTestDestinations.LocalBackend
     });
     private sealed record CreateBackupJobRequestBody(string Name, Guid AgentId, BackupExecutionConfiguration Configuration);
     private static async Task<HttpResponseMessage> StartAsync(BrowserSession session, string root, Guid jobId, string key)

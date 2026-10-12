@@ -4,7 +4,7 @@ export function makeRun(patch: Partial<BackupRun> = {}): BackupRun {
   return {
     id: 'run-id', jobId: 'job-id', agentId: 'agent-id', jobName: 'Günlük SQL yedeği', agentName: 'SQL ajanı',
     status: 'Running', backupType: 'mssql-full', triggerType: 'Manual',
-    configuration: { database: 'Uygulama', engine: 'mssql', host: 'sql-host', port: 1433, storageProvider: 'local' },
+    configuration: { database: 'Uygulama', engine: 'mssql', host: 'sql-host', port: 1433, destinations: [{ storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true }] },
     currentAttemptNumber: 1, createdAt: '2026-10-06T10:00:00Z', startedAt: '2026-10-06T10:01:00Z',
     completedAt: null, cancellationRequestedAt: null, reasonCode: null, reason: null,
     scheduledFor: null, scheduleDelaySeconds: null, claimDeadline: null, retention: null,

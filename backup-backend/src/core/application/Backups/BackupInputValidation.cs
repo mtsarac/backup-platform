@@ -41,10 +41,7 @@ public static class BackupInputValidation
         Check(c.CompressionPolicy is "Required" or "Preferred" or "Disabled", "configuration.compressionPolicy");
         Check(c.IntegratedSecurity ? c.DatabaseCredentialReference is null : Text(c.DatabaseCredentialReference, 64) && c.DatabaseCredentialReference!.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '-' or '_'), "configuration.databaseCredentialReference");
 
-        var destinations = c.Destinations is { Count: > 0 }
-            ? c.Destinations
-            : [new BackupDestinationContract { StorageProvider = c.StorageProvider, StorageConnectionId = c.StorageConnectionId, StorageExecutionLocation = c.StorageExecutionLocation, IsPrimary = true }];
-
+        var destinations = c.Destinations ?? [];
         Check(destinations.Count is > 0 and <= MaxDestinations, "configuration.destinations");
         Check(destinations.Count(d => d.IsPrimary) == 1, "configuration.destinations", "primary_destination_required");
         Check(destinations.Select(d => (d.StorageProvider, d.StorageConnectionId)).Distinct().Count() == destinations.Count, "configuration.destinations", "duplicate_destination");
@@ -52,9 +49,9 @@ public static class BackupInputValidation
         for (var i = 0; i < destinations.Count; i++)
         {
             var d = destinations[i];
-            var prefix = c.Destinations is { Count: > 0 } ? $"configuration.destinations[{i}]." : "configuration.";
+            var prefix = $"configuration.destinations[{i}].";
             Check(d.StorageProvider is "local" or "central" or "sftp" or "google-drive", $"{prefix}storageProvider");
-            Check(d.StorageExecutionLocation is null or "Backend" or "Agent" && (d.StorageExecutionLocation != "Agent" || d.StorageProvider == "local"), $"{prefix}storageExecutionLocation");
+            Check(d.StorageExecutionLocation is "Backend" or "Agent" && (d.StorageExecutionLocation != "Agent" || d.StorageProvider == "local"), $"{prefix}storageExecutionLocation");
             Check(d.StorageProvider is not ("sftp" or "google-drive") || c.StoragePrefix == string.Empty, "configuration.storagePrefix");
             Check(d.StorageProvider is not ("sftp" or "google-drive") || d.StorageConnectionId is { } connection && connection != Guid.Empty, $"{prefix}storageConnectionId");
         }
@@ -93,7 +90,7 @@ public static class BackupInputValidation
     public static bool IsValidCompletion(BackupTaskCompletionRequest request, BackupConfiguration configuration)
     {
         if (request.LeaseToken == Guid.Empty || request.Destinations is not { Count: <= MaxDestinations } || request.Destinations.Any(d => d is null)) return false;
-        var snapshot = configuration.ResolveEffectiveDestinations();
+        var snapshot = configuration.Destinations;
         if (request.Status == "Cancelled" && request.FailureCode is not (null or "Cancelled")) return false;
         if (request.Status == "Failed" && (request.FailureCode is null || !BackupFailureCodes.IsAgentReportable(request.FailureCode))) return false;
         if (request.Status is "Failed" or "Cancelled" && request.Artifact is null)
@@ -122,12 +119,12 @@ public static class BackupInputValidation
     }
 
     /// <summary>
-    /// Empty is legal when nothing was transferred (a failure before the transfer) and for a single-destination run reported by an agent that predates the field.
+    /// Empty is legal only when nothing was transferred (a failure before the transfer).
     /// Otherwise every snapshot destination appears exactly once, and a destination is Verified exactly when the artifact has its replica.
     /// </summary>
     private static bool ValidDestinations(IReadOnlyList<BackupTaskDestinationResult> reported, IReadOnlyList<BackupDestination> snapshot, BackupTaskArtifact? artifact)
     {
-        if (reported.Count == 0) return artifact is null || snapshot.Count == 1;
+        if (reported.Count == 0) return artifact is null;
         if (reported.Count != snapshot.Count) return false;
         var seen = new HashSet<BackupDestination>();
         foreach (var d in reported)

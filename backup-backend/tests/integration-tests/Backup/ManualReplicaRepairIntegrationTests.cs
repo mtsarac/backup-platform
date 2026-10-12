@@ -144,9 +144,6 @@ public sealed class ManualReplicaRepairIntegrationTests(PostgreSqlFixture fixtur
 
         var configuration = BackupStoreHarness.Configuration() with
         {
-            StorageProvider = "central",
-            StorageConnectionId = central.Id,
-            StorageExecutionLocation = BackupStorageExecutionLocation.Backend,
             Destinations =
             [
                 new BackupDestination("central", central.Id, true),
@@ -158,14 +155,6 @@ public sealed class ManualReplicaRepairIntegrationTests(PostgreSqlFixture fixtur
 
         var job = new BackupJob(Guid.NewGuid(), agent.TenantId, "Replicated", agent.AgentId, configuration, T0, null, BackupOverlapPolicy.Queue);
         job = (await World.RunStore().CreateJobAsync(job, default))!;
-
-        await using (var context = fixture.CreatePlatformContext())
-        {
-            context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(
-                agent.AgentId, agent.TenantId, BackupTaskProtocol.MultiDestinationCapability,
-                BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, null, "rev", T0));
-            await context.SaveChangesAsync();
-        }
 
         var store = World.RunStore();
         var started = await store.StartRunAsync(agent.TenantId, job.Id, $"key-{Guid.NewGuid():N}", T0, default);

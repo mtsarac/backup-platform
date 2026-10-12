@@ -104,7 +104,7 @@ internal sealed class QuotaWorld(PostgreSqlFixture database)
 
     private async Task<BackupJob> AddJobAsync(StoreAgent agent, BackupOverlapPolicy overlap, BackupStorageExecutionLocation location)
     {
-        var configuration = BackupStoreHarness.Configuration() with { StorageExecutionLocation = location, StorageProvider = location == BackupStorageExecutionLocation.Agent ? "local" : "central" };
+        var configuration = BackupStoreHarness.Configuration(location == BackupStorageExecutionLocation.Agent ? "local" : "central", location);
         var job = new BackupJob(Guid.NewGuid(), agent.TenantId, "Database", agent.AgentId, configuration, T0, null, overlap);
         return (await RunStore().CreateJobAsync(job, default))!;
     }
@@ -128,6 +128,7 @@ internal sealed class QuotaWorld(PostgreSqlFixture database)
         }
         var started = await RunStore(AdmitAllBackupAdmission.Instance).StartRunAsync(agent.TenantId, job.Id, key ?? $"run-{Guid.NewGuid():N}", at, default);
         Assert.Equal(BackupStartOutcome.Started, started.Outcome);
+        await Harness.SnapshotDestinationsAsync(started.Run!.Id, [.. replicas.Select(replica => replica.Provider).Distinct()]);
         var claim = await BackupStoreHarness.ClaimAsync(store, agent, at);
         Assert.NotNull(claim);
         await BackupStoreHarness.StartAttemptAsync(store, claim!, at);

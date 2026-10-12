@@ -101,7 +101,7 @@ public sealed class MsSqlManualAgentSmokeTests(PostgreSqlFixture database, ITest
     {
         Host = sql.Host, Port = sql.Port, Database = databaseName,
         DatabaseCredentialReference = "sql_smoke", TrustServerCertificate = true,
-        StagingReference = "default", StorageProvider = "local", StoragePrefix = "manual",
+        StagingReference = "default", Destinations = BackupTestDestinations.LocalAgent, StoragePrefix = "manual",
         CopyOnly = true, ChecksumPolicy = "Required", CompressionPolicy = "Preferred"
     };
 

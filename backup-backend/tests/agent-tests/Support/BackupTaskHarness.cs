@@ -41,7 +41,8 @@ internal sealed class BackupTaskHarness : IAsyncDisposable
             {
                 Database = "Sales", Host = "sql.example.test", Port = 1433,
                 IntegratedSecurity = integrated, DatabaseCredentialReference = integrated ? null : "sales-db",
-                StoragePrefix = "backups"
+                StoragePrefix = "backups",
+                Destinations = [new BackupDestinationContract { StorageProvider = "local", StorageExecutionLocation = "Agent", IsPrimary = true }]
             }
         };
         return new AgentTaskEnvelope { Id = task.AttemptId.ToString(), Type = "database-backup", Backup = task };

@@ -63,7 +63,7 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         if (run is null)
             return new(false, "run_not_found", "Backup run not found.");
 
-        var snapshotDestinations = run.Configuration.ResolveEffectiveDestinations();
+        var snapshotDestinations = run.Configuration.Destinations;
 
         BackupDestination? targetDestination = null;
         if (storageConnectionId is { } connId && connId != Guid.Empty)
@@ -724,7 +724,7 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
                 .SingleOrDefaultAsync(r => r.TenantId == artifact.TenantId && r.Id == attempt.RunId, cancellationToken);
             if (run is null) continue;
 
-            var destinations = run.Configuration.ResolveEffectiveDestinations();
+            var destinations = run.Configuration.Destinations;
 
             foreach (var dest in destinations)
             {

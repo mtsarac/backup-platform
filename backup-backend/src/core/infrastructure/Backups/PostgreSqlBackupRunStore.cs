@@ -247,12 +247,9 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         foreach (var candidateId in candidateIds)
         {
             var candidate = await Runs(context).SingleAsync(run => run.TenantId == tenantId && run.Id == candidateId, cancellationToken);
-            if (candidate.Configuration.ResolveEffectiveDestinations().Count > 1)
-            {
-                // A retry or a queued run reaches an agent without passing admission again, so the capability is fenced here too: such a run waits for an agent that can execute it.
-                supportsMultiDestination ??= await StorageTargetGate.SupportsMultiDestinationAsync(context, tenantId, agentId, cancellationToken);
-                if (supportsMultiDestination != true) continue;
-            }
+            // A retry or a queued run reaches an agent without passing admission again, so the capability is fenced here too: such a run waits for an agent that can execute it.
+            supportsMultiDestination ??= await StorageTargetGate.SupportsMultiDestinationAsync(context, tenantId, agentId, cancellationToken);
+            if (supportsMultiDestination != true) continue;
             var bound = await TenantUsageEngine.ReadRunMaxArtifactBytesAsync(context, candidate, now, cancellationToken);
             if (bound is not null)
             {
@@ -293,7 +290,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
     public Task<BackupMutationResult> RecordTransferAsync(BackupLeaseCommand command, BackupTransferIntent transfer, CancellationToken cancellationToken) =>
         MutateAsync(command, run =>
         {
-            var destination = run.Configuration.ResolveEffectiveDestinations().SingleOrDefault(d => d.StorageConnectionId == transfer.StorageConnectionId);
+            var destination = run.Configuration.Destinations.SingleOrDefault(d => d.StorageConnectionId == transfer.StorageConnectionId);
             if (destination is not { StorageProvider: "sftp" or "google-drive", StorageExecutionLocation: BackupStorageExecutionLocation.Backend } ||
                 !ManagedBackupLayout.TryParseStorageKey(transfer.Key, out var layout) || layout is null || layout.IsPartial ||
                 layout.TenantId != command.TenantId.Value || layout.JobId != run.JobId || layout.RunId != run.Id || layout.AttemptId != command.AttemptId)
@@ -307,7 +304,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         }, cancellationToken);
     public Task<BackupMutationResult> CompleteAttemptAsync(BackupLeaseCommand command, ApplicationCompletion completion, CancellationToken cancellationToken)
     {
-        // The destination each replica and outcome belongs to is resolved under the same agent lock, from the run's snapshot, before the (synchronous) domain completion maps them.
+        // Replicas the agent already transferred are carried across the completion under the same agent lock; each destination is resolved from the run's snapshot when the domain completion is mapped.
         var connections = new Dictionary<string, Guid>(StringComparer.Ordinal);
         IReadOnlyList<BackupArtifactResult> retained = [];
         return MutateAsync(command, run => run.Complete(command.LeaseToken, command.Now, MapCompletion(command, completion, run, connections, retained), Jitter()), cancellationToken,
@@ -325,14 +322,10 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
                     context.BackupArtifacts.RemoveRange(pending);
                     await context.SaveChangesAsync(cancellationToken);
                 }
-                // A single-destination snapshot keeps its pre-multi-destination meaning for a replica that names no connection (an agent that predates the field): the provider's
-                // default connection. Several destinations never fall back: whatever the agent names must BE one of them.
-                var snapshot = run.Configuration.ResolveEffectiveDestinations();
-                var named = (completion.Artifact?.Replicas.Select(replica => replica.StorageProvider) ?? []).Concat(completion.Destinations?.Select(report => report.StorageProvider) ?? [])
-                    .ToHashSet(StringComparer.Ordinal);
-                foreach (var provider in snapshot.Count == 1 ? named.Where(p => !snapshot.Any(d => d.StorageProvider == p && d.StorageConnectionId is not null)) : [])
+                // A snapshot that predates storage connections names none: its copies belong to the tenant's default for the provider. Publishing what already ran is never refused.
+                foreach (var destination in run.Configuration.Destinations.Where(d => d.StorageConnectionId is null))
                 {
-                    connections[provider] = await StorageTargetGate.ForPublishAsync(context, command.TenantId, run.Configuration, provider, command.Now, cancellationToken);
+                    connections[destination.StorageProvider] = await StorageTargetGate.ForPublishAsync(context, command.TenantId, destination.StorageProvider, command.Now, cancellationToken);
                 }
             });
     }
@@ -431,12 +424,10 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
             _ => throw new ArgumentException("Invalid terminal outcome.")
         };
         // Every destination is looked up in the RUN'S SNAPSHOT: what the agent names that the snapshot does not contain is refused, never created.
-        var snapshot = run.Configuration.ResolveEffectiveDestinations();
+        var snapshot = run.Configuration.Destinations;
         (BackupDestination Destination, Guid Connection) Resolve(string provider, Guid? named)
         {
             var candidates = snapshot.Where(d => d.StorageProvider == provider && (named is null || d.StorageConnectionId == named)).ToArray();
-            if (candidates.Length == 0 && named is null && snapshot.Count == 1 && connections.TryGetValue(provider, out var legacy))
-                return (new BackupDestination(provider, legacy) { StorageExecutionLocation = run.Configuration.StorageExecutionLocation }, legacy);
             if (candidates.Length != 1) throw new ArgumentException("The destination is not part of the run snapshot.");
             var connection = candidates[0].StorageConnectionId ?? connections.GetValueOrDefault(provider);
             return connection == Guid.Empty ? throw new ArgumentException("The destination has no storage connection.") : (candidates[0], connection);

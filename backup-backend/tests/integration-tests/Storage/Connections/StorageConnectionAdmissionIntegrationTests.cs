@@ -213,15 +213,12 @@ public sealed class StorageConnectionAdmissionIntegrationTests(PostgreSqlFixture
         var agent = await _world.Quota.AgentAsync();
         var stranger = await _world.TenantAsync();
         var (_, foreignCentral) = await _world.DefaultsAsync(stranger);
-        var configuration = BackupStoreHarness.Configuration() with
-        {
-            StorageProvider = "central", StorageExecutionLocation = BackupStorageExecutionLocation.Backend, StorageConnectionId = foreignCentral.Id
-        };
+        var configuration = BackupStoreHarness.Configuration("central", BackupStorageExecutionLocation.Backend, foreignCentral.Id);
         var job = new BackupJob(Guid.NewGuid(), agent.TenantId, "Alien", agent.AgentId, configuration, ConnectionWorld.Now, null, BackupOverlapPolicy.Queue);
 
         var rejection = await Assert.ThrowsAsync<InvalidBackupJobException>(() => _world.Quota.RunStore().CreateJobAsync(job, default));
 
-        Assert.Equal("configuration.storageConnectionId", rejection.Field);
+        Assert.Equal("configuration.destinations[0].storageConnectionId", rejection.Field);
     }
 
     [Fact]
@@ -230,15 +227,12 @@ public sealed class StorageConnectionAdmissionIntegrationTests(PostgreSqlFixture
         var agent = await _world.Quota.AgentAsync();
         var (local, _) = await _world.DefaultsAsync(agent.TenantId);
         // The job's provider is central, but the connection is the local one.
-        var configuration = BackupStoreHarness.Configuration() with
-        {
-            StorageProvider = "central", StorageExecutionLocation = BackupStorageExecutionLocation.Backend, StorageConnectionId = local.Id
-        };
+        var configuration = BackupStoreHarness.Configuration("central", BackupStorageExecutionLocation.Backend, local.Id);
         var job = new BackupJob(Guid.NewGuid(), agent.TenantId, "Mismatch", agent.AgentId, configuration, ConnectionWorld.Now, null, BackupOverlapPolicy.Queue);
 
         var rejection = await Assert.ThrowsAsync<InvalidBackupJobException>(() => _world.Quota.RunStore().CreateJobAsync(job, default));
 
-        Assert.Equal("configuration.storageConnectionId", rejection.Field);
+        Assert.Equal("configuration.destinations[0].storageConnectionId", rejection.Field);
     }
 
     [Fact]
@@ -250,10 +244,10 @@ public sealed class StorageConnectionAdmissionIntegrationTests(PostgreSqlFixture
         var (_, foreignCentral) = await _world.DefaultsAsync(stranger);
 
         var rejection = await Assert.ThrowsAsync<InvalidBackupJobException>(() => _world.Quota.RunStore().UpdateJobAsync(agent.TenantId, job.Id,
-            new BackupJobUpdate(job.Name, job.AgentId, job.Configuration with { StorageConnectionId = foreignCentral.Id }, null, null), default));
+            new BackupJobUpdate(job.Name, job.AgentId, BackupStoreHarness.Configuration("central", BackupStorageExecutionLocation.Backend, foreignCentral.Id), null, null), default));
 
-        Assert.Equal("configuration.storageConnectionId", rejection.Field);
-        Assert.Null((await _world.Quota.RunStore().GetJobAsync(agent.TenantId, job.Id, default))!.Configuration.StorageConnectionId);
+        Assert.Equal("configuration.destinations[0].storageConnectionId", rejection.Field);
+        Assert.Null((await _world.Quota.RunStore().GetJobAsync(agent.TenantId, job.Id, default))!.Configuration.Destinations.Single(d => d.IsPrimary).StorageConnectionId);
     }
 
     [Fact]
@@ -263,11 +257,11 @@ public sealed class StorageConnectionAdmissionIntegrationTests(PostgreSqlFixture
         var job = await _world.Quota.JobAsync(agent);
         var target = await _world.AddAsync(agent.TenantId, "Vanishing", "central", StorageOwnership.PlatformManaged);
         var targeted = await _world.Quota.RunStore().UpdateJobAsync(agent.TenantId, job.Id,
-            new BackupJobUpdate(job.Name, job.AgentId, job.Configuration with { StorageConnectionId = target.Id }, null, null), default);
-        Assert.Equal(target.Id, targeted!.Configuration.StorageConnectionId);
+            new BackupJobUpdate(job.Name, job.AgentId, BackupStoreHarness.Configuration("central", BackupStorageExecutionLocation.Backend, target.Id), null, null), default);
+        Assert.Equal(target.Id, targeted!.Configuration.Destinations.Single(d => d.IsPrimary).StorageConnectionId);
         // Simulate a stale imported job reference without bypassing the store's in-use deletion guard.
         await ConnectionWorld.ExecuteAsync(fixture.ConnectionString,
-            """UPDATE backup_jobs SET "Configuration" = jsonb_set("Configuration", '{StorageConnectionId}', to_jsonb(@id::text)) WHERE "Id" = @job""",
+            """UPDATE backup_jobs SET "Configuration" = jsonb_set("Configuration", '{Destinations,0,StorageConnectionId}', to_jsonb(@id::text)) WHERE "Id" = @job""",
             ("id", Guid.NewGuid().ToString("D")), ("job", job.Id));
 
         var started = await _world.Quota.RunStore().StartRunAsync(agent.TenantId, job.Id, "run-ghost", ConnectionWorld.Now, default);
@@ -286,7 +280,7 @@ public sealed class StorageConnectionAdmissionIntegrationTests(PostgreSqlFixture
         var started = await _world.Quota.RunStore().StartRunAsync(agent.TenantId, job.Id, "run-snapshot", ConnectionWorld.Now, default);
 
         Assert.Equal(BackupStartOutcome.Started, started.Outcome);
-        Assert.Equal(central.Id, started.Run!.Configuration.StorageConnectionId);
+        Assert.Equal(central.Id, started.Run!.Configuration.Destinations.Single(d => d.IsPrimary).StorageConnectionId);
 
         var claim = await BackupStoreHarness.ClaimAsync(_world.Quota.RunStore(), agent, ConnectionWorld.Now);
         await BackupStoreHarness.StartAttemptAsync(_world.Quota.RunStore(), claim!, ConnectionWorld.Now);

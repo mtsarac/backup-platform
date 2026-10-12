@@ -395,6 +395,15 @@ Managed Storage reuses the existing Central root: configure `Backups__Storage__C
 `Agent__Backup__CentralStorage__RootDirectory` / `TenantScope` on the Agent. Physical paths stay operator configuration, not tenant API fields.
 Local and Central each allow one connection per tenant until distinct physical destinations are supported.
 
+A job and its run snapshots name their storage only in `configuration.destinations`: at least one entry, exactly one `isPrimary`, each with
+`storageProvider`, an explicit `storageExecutionLocation` (`Backend` or `Agent`) and, for SFTP/Google Drive, a `storageConnectionId` (omitted on a
+job it means the tenant's default connection for that provider; a run always snapshots the resolved id). There are no single-destination fields.
+Every new backup run requires an Agent that declares `backup.multi-destination` (it executes destination-list snapshots); an Agent that does not is
+refused at admission and cannot claim queued runs, so it can never write to a destination the snapshot did not name. Backend relay calls must name
+their destination with the `X-Storage-Destination` header, and completions report every destination they transferred to.
+Upgrading rewrites stored job and run configurations to this shape (`CanonicalBackupDestinations`): the former single destination becomes the
+primary entry with the same provider, connection and execution location.
+
 Persist and back up `Secrets__DataProtection__KeysDirectory`; backend nodes that share ciphertext must share the key ring.
 Losing the keys makes existing credentials unreadable. API responses expose only secret presence, field names and the last update time.
 

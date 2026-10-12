@@ -106,10 +106,11 @@ def backup(options):
         raise FixtureFailure('The dev-linux-agent is not online (scripts/dev/agent.sh start).')
     configuration = {'engine': 'mssql', 'host': '127.0.0.1', 'port': SQL_PORT, 'database': SOURCE_DB, 'integratedSecurity': False,
                      'databaseCredentialReference': SQL_REFERENCE, 'trustServerCertificate': True, 'encrypt': True,
-                     'stagingReference': 'default', 'storageProvider': options.provider, 'storageTarget': 'default', 'storagePrefix': '',
-                     'copyOnly': True, 'checksumPolicy': 'Required', 'compressionPolicy': 'Preferred'}
-    if options.provider == 'google-drive':
-        configuration.update({'storageConnectionId': connection['id'], 'storageExecutionLocation': 'Backend'})
+                     'stagingReference': 'default', 'storageTarget': 'default', 'storagePrefix': '',
+                     'copyOnly': True, 'checksumPolicy': 'Required', 'compressionPolicy': 'Preferred', 'requiredVerifiedReplicaCount': 1}
+    drive = options.provider == 'google-drive'
+    configuration['destinations'] = [{'storageProvider': options.provider, 'storageConnectionId': connection['id'] if drive else None,
+                                      'storageExecutionLocation': 'Backend' if drive else 'Agent', 'isPrimary': True}]
     before = quota(api, tenant)
     _, job = api.call('POST', tenant + '/backup-jobs', {'name': f'Acceptance {options.provider} {time.strftime("%H%M%S")}',
                                                        'agentId': agent['agentId'], 'overlapPolicy': 'Skip', 'configuration': configuration})

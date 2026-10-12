@@ -33,8 +33,7 @@ public sealed class StorageRelayHardeningTests(PostgreSqlFixture fixture) : ICla
             configuration = new BackupExecutionConfiguration
             {
                 Database = "master", Host = "sql-server", IntegratedSecurity = true,
-                StorageProvider = "google-drive",
-                StorageConnectionId = connectionId, StorageExecutionLocation = "Backend"
+                Destinations = [BackupTestDestinations.Relayed("google-drive", connectionId, primary: true)]
             }
         });
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
@@ -48,6 +47,7 @@ public sealed class StorageRelayHardeningTests(PostgreSqlFixture fixture) : ICla
         request.Headers.Add("X-Backup-Agent-Protocol", "1.0");
         request.Headers.Add(TaskStorageProtocol.LeaseHeader, claim.LeaseToken.ToString("D"));
         request.Headers.Add(TaskStorageProtocol.KeyHeader, key);
+        request.Headers.Add(TaskStorageProtocol.DestinationHeader, connectionId.ToString("D"));
         request.Headers.Add(TaskStorageProtocol.ChecksumHeader, new string('z', 64));
         request.Content = new ByteArrayContent([1, 2, 3]);
         request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
@@ -76,8 +76,8 @@ public sealed class StorageRelayHardeningTests(PostgreSqlFixture fixture) : ICla
             name = "Lease fence", agentId = scenario.Agent.AgentId,
             configuration = new BackupExecutionConfiguration
             {
-                Database = "master", Host = "sql-server", IntegratedSecurity = true, StorageProvider = "google-drive",
-                StorageConnectionId = connectionId, StorageExecutionLocation = "Backend"
+                Database = "master", Host = "sql-server", IntegratedSecurity = true,
+                Destinations = [BackupTestDestinations.Relayed("google-drive", connectionId, primary: true)]
             }
         });
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
@@ -100,6 +100,7 @@ public sealed class StorageRelayHardeningTests(PostgreSqlFixture fixture) : ICla
         request.Headers.Add("X-Backup-Agent-Protocol", "1.0");
         request.Headers.Add(TaskStorageProtocol.LeaseHeader, claim.LeaseToken.ToString("D"));
         request.Headers.Add(TaskStorageProtocol.KeyHeader, key);
+        request.Headers.Add(TaskStorageProtocol.DestinationHeader, connectionId.ToString("D"));
         if (operation == "verify")
             request.Content = System.Net.Http.Json.JsonContent.Create(new TaskStorageVerifyRequest(3, new string('a', 64)));
         var pending = scenario.World.Anonymous.SendAsync(request);

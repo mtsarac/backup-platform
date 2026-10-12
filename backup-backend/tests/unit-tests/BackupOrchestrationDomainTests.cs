@@ -160,8 +160,8 @@ public sealed class BackupOrchestrationDomainTests
         return run;
     }
     private static BackupConfiguration Configuration() => new("mssql", "Database", "localhost", null, true, null,
-        true, false, "default", "local", "", true, "Preferred", "Preferred")
-        { StorageExecutionLocation = BackupStorageExecutionLocation.Backend };
+        true, false, "default", "", true, "Preferred", "Preferred")
+        { Destinations = [new BackupDestination("local", null, true) { StorageExecutionLocation = BackupStorageExecutionLocation.Backend }] };
     private static BackupArtifact Artifact(BackupRun run) => new(Guid.NewGuid(), run.TenantId, run.CurrentAttempt.Id,
         100, SourceHash, ArtifactHash, "sha256", Now, "{}", "{}");
     private static BackupReplica Replica(BackupArtifact artifact, string key = "backup-key") => new(Guid.NewGuid(), artifact.TenantId,

@@ -233,7 +233,7 @@ internal static class TenantUsageEngine
         PlatformDbContext context, TenantId tenantId, BackupConfiguration configuration, QuotaPolicy policy, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var copies = 0;
-        foreach (var destination in configuration.ResolveEffectiveDestinations())
+        foreach (var destination in configuration.Destinations)
         {
             var connection = destination.StorageConnectionId is { } id
                 ? await context.StorageConnections.AsNoTracking().SingleOrDefaultAsync(row => row.TenantId == tenantId && row.Id == id, cancellationToken)

@@ -147,7 +147,7 @@ public sealed class AgentReplicaDeletionApiTests(PostgreSqlFixture database) : I
         using var created = await scenario.CreateJobRawAsync(new
         {
             name = "Agent-local retention", agentId = scenario.Agent.AgentId,
-            configuration = new BackupExecutionConfiguration { Database = "master", Host = "sql-server", IntegratedSecurity = true, StorageExecutionLocation = "Agent" },
+            configuration = new BackupExecutionConfiguration { Database = "master", Host = "sql-server", IntegratedSecurity = true, Destinations = BackupTestDestinations.LocalAgent },
             retention = Policy(true, 2, 2)
         });
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
