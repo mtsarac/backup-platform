@@ -13,8 +13,6 @@ public sealed class AutomaticReplicaRepairWorker(
     TimeProvider time,
     ILogger<AutomaticReplicaRepairWorker> logger) : BackgroundService
 {
-    public const int MaxGlobalConcurrentRepairs = 4;
-    public const int MaxTenantConcurrentRepairs = 2;
     private static readonly TimeSpan DefaultScanInterval = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan StaleCheckInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan DiscoveryInterval = TimeSpan.FromMinutes(1);
@@ -148,7 +146,7 @@ public sealed class AutomaticReplicaRepairWorker(
         var executed = 0;
         while (!cancellationToken.IsCancellationRequested && !_workerStoppingCts.IsCancellationRequested)
         {
-            if (_runningTasks.Count >= MaxGlobalConcurrentRepairs)
+            if (_runningTasks.Count >= IReplicaRepairStore.MaxGlobalConcurrentRepairs)
             {
                 break;
             }
@@ -158,9 +156,7 @@ public sealed class AutomaticReplicaRepairWorker(
                 time.GetUtcNow(),
                 TimeSpan.FromMinutes(10),
                 cancellationToken,
-                tenantId,
-                maxGlobalConcurrent: MaxGlobalConcurrentRepairs,
-                maxTenantConcurrent: MaxTenantConcurrentRepairs);
+                tenantId);
             if (claimed is null)
             {
                 break;

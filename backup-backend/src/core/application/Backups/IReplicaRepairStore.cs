@@ -5,6 +5,9 @@ namespace BackupPlatform.Application.Backups;
 
 public interface IReplicaRepairStore
 {
+    const int MaxGlobalConcurrentRepairs = 4;
+    const int MaxTenantConcurrentRepairs = 2;
+
     Task<ReplicaRepairAdmissionResult> AdmitRepairAsync(
         TenantId tenantId,
         Guid artifactId,
@@ -100,9 +103,7 @@ public interface IReplicaRepairStore
         DateTimeOffset now,
         TimeSpan leaseDuration,
         CancellationToken cancellationToken,
-        TenantId? tenantId = null,
-        int? maxGlobalConcurrent = null,
-        int? maxTenantConcurrent = null);
+        TenantId? tenantId = null);
 
     Task<int> RecoverStaleRepairsAsync(
         DateTimeOffset now,
@@ -114,10 +115,6 @@ public interface IReplicaRepairStore
         int maxBatch,
         CancellationToken cancellationToken,
         TenantId? tenantId = null);
-
-    Task<int> GetActiveRepairsCountAsync(
-        TenantId? tenantId,
-        CancellationToken cancellationToken);
 
     Task<bool> RequestCancellationAsync(
         TenantId tenantId,

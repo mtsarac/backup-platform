@@ -11,6 +11,9 @@ namespace BackupPlatform.Infrastructure.Backups;
 
 public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbContext> options) : IReplicaRepairStore
 {
+    // Both claim paths serialize admission across all nodes before counting capacity.
+    private const long ClaimLockKey = 0x4250_5252_434C_4D01;
+
     public Task<ReplicaRepairAdmissionResult> AdmitRepairAsync(
         TenantId tenantId,
         Guid artifactId,
@@ -278,38 +281,34 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        var operation = await context.ReplicaRepairOperations
-            .SingleOrDefaultAsync(r => r.TenantId == tenantId && r.Id == operationId, cancellationToken);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        await context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({ClaimLockKey})", cancellationToken);
+        var operation = await context.ReplicaRepairOperations.FromSqlInterpolated($"""
+            SELECT *, xmin FROM replica_repair_operations
+            WHERE "TenantId" = {tenantId.Value} AND "Id" = {operationId}
+            FOR UPDATE
+            """).SingleOrDefaultAsync(cancellationToken);
 
-        if (operation is null) return null;
-
-        if (operation.Status == ReplicaRepairStatus.Pending)
+        if (operation is null || operation.Status != ReplicaRepairStatus.Pending) return null;
+        if (operation.CancellationRequestedAt != null)
         {
-            if (operation.CancellationRequestedAt != null)
-            {
-                operation.CancelPending(now);
-                await context.SaveChangesAsync(cancellationToken);
-                return null;
-            }
-            operation.Claim(leaseToken, leaseOwner, now, leaseDuration);
+            operation.CancelPending(now);
             await context.SaveChangesAsync(cancellationToken);
-            return operation;
+            await transaction.CommitAsync(cancellationToken);
+            return null;
         }
+        if (operation.NextRetryAt > now) return null;
 
-        if (operation.Status == ReplicaRepairStatus.InProgress && operation.LeaseExpiresAt <= now)
-        {
-            if (operation.CancellationRequestedAt != null)
-            {
-                operation.CancelStale(now);
-                await context.SaveChangesAsync(cancellationToken);
-                return null;
-            }
-            operation.Claim(leaseToken, leaseOwner, now, leaseDuration);
-            await context.SaveChangesAsync(cancellationToken);
-            return operation;
-        }
+        // Expired leases still occupy capacity until recovery fences the old transfer.
+        var active = context.ReplicaRepairOperations.Where(r => r.Status == ReplicaRepairStatus.InProgress);
+        if (await active.CountAsync(cancellationToken) >= IReplicaRepairStore.MaxGlobalConcurrentRepairs ||
+            await active.CountAsync(r => r.TenantId == tenantId, cancellationToken) >= IReplicaRepairStore.MaxTenantConcurrentRepairs)
+            return null;
 
-        return null;
+        operation.Claim(leaseToken, leaseOwner, now, leaseDuration);
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return operation;
     }
 
     public async Task<ReplicaRepairLeaseRenewal> RenewLeaseAsync(
@@ -518,31 +517,26 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         DateTimeOffset now,
         TimeSpan leaseDuration,
         CancellationToken cancellationToken,
-        TenantId? tenantId = null,
-        int? maxGlobalConcurrent = null,
-        int? maxTenantConcurrent = null)
+        TenantId? tenantId = null)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var tx = await context.Database.BeginTransactionAsync(cancellationToken);
+        await context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({ClaimLockKey})", cancellationToken);
 
-        if (maxGlobalConcurrent.HasValue)
-        {
-            var activeGlobal = await context.ReplicaRepairOperations
-                .CountAsync(r => r.Status == ReplicaRepairStatus.InProgress && r.LeaseExpiresAt > now, cancellationToken);
-            if (activeGlobal >= maxGlobalConcurrent.Value)
-            {
-                await tx.RollbackAsync(cancellationToken);
-                return null;
-            }
-        }
+        // Expired leases still occupy capacity until recovery fences the old transfer.
+        if (await context.ReplicaRepairOperations.CountAsync(r => r.Status == ReplicaRepairStatus.InProgress, cancellationToken) >=
+            IReplicaRepairStore.MaxGlobalConcurrentRepairs)
+            return null;
 
         var dueId = await context.Database.SqlQuery<Guid>($"""
-            SELECT "Id" AS "Value" FROM replica_repair_operations
-            WHERE "Status" = 'Pending' AND ("NextRetryAt" IS NULL OR "NextRetryAt" <= {now})
-              AND ({tenantId == null} OR "TenantId" = {(tenantId == null ? Guid.Empty : tenantId.Value)})
-            ORDER BY COALESCE("NextRetryAt", "CreatedAt") ASC
+            SELECT pending."Id" AS "Value" FROM replica_repair_operations pending
+            WHERE pending."Status" = 'Pending' AND (pending."NextRetryAt" IS NULL OR pending."NextRetryAt" <= {now})
+              AND ({tenantId == null} OR pending."TenantId" = {(tenantId == null ? Guid.Empty : tenantId.Value)})
+              AND (SELECT COUNT(*) FROM replica_repair_operations active
+                   WHERE active."Status" = 'InProgress' AND active."TenantId" = pending."TenantId") < {IReplicaRepairStore.MaxTenantConcurrentRepairs}
+            ORDER BY COALESCE(pending."NextRetryAt", pending."CreatedAt") ASC, pending."Id"
             LIMIT 1
-            FOR UPDATE SKIP LOCKED
+            FOR UPDATE OF pending SKIP LOCKED
             """).SingleOrDefaultAsync(cancellationToken);
 
         if (dueId == Guid.Empty) return null;
@@ -558,20 +552,6 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
             await context.SaveChangesAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);
             return null;
-        }
-
-        if (maxTenantConcurrent.HasValue)
-        {
-            var activeTenant = await context.ReplicaRepairOperations
-                .CountAsync(r => r.TenantId == operation.TenantId && r.Status == ReplicaRepairStatus.InProgress && r.LeaseExpiresAt > now, cancellationToken);
-            if (activeTenant >= maxTenantConcurrent.Value)
-            {
-                // Defer next retry without consuming AttemptCount
-                operation.DeferRetry(now.AddSeconds(15));
-                await context.SaveChangesAsync(cancellationToken);
-                await tx.CommitAsync(cancellationToken);
-                return null;
-            }
         }
 
         var leaseToken = Guid.NewGuid();
@@ -804,16 +784,6 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         await transaction.CommitAsync(cancellationToken);
         return created;
     }
-    public async Task<int> GetActiveRepairsCountAsync(TenantId? tenantId, CancellationToken cancellationToken)
-    {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        var query = context.ReplicaRepairOperations
-            .Where(r => r.Status == ReplicaRepairStatus.InProgress);
-        if (tenantId != null)
-            query = query.Where(r => r.TenantId == tenantId);
-        return await query.CountAsync(cancellationToken);
-    }
-
     public async Task<bool> RequestCancellationAsync(
         TenantId tenantId,
         Guid operationId,

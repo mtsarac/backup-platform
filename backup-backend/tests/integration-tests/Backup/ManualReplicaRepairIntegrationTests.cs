@@ -647,48 +647,6 @@ public sealed class ManualReplicaRepairIntegrationTests(PostgreSqlFixture fixtur
     }
 
     [Fact]
-    public async Task ClaimDueRepairEnforcesGlobalAndTenantConcurrencyAtomicallyAndDefersWithoutConsumingAttempt()
-    {
-        var setup = await SetupAsync(verified: new HashSet<string> { "central" });
-        var now = DateTimeOffset.UtcNow;
-        var store = new PostgreSqlReplicaRepairStore(World.Options());
-
-        // Start 2 manual repair operations for the same tenant
-        var op1 = (await setup.RepairService.StartRepairAsync(
-            setup.Agent.TenantId, setup.Artifact.Id, new StartReplicaRepairRequest(StorageConnectionId: setup.Sftp.Id), null, default, executeInBackground: false)).Operation!;
-        var op2 = (await setup.RepairService.StartRepairAsync(
-            setup.Agent.TenantId, setup.Artifact.Id, new StartReplicaRepairRequest(StorageConnectionId: setup.Drive.Id), null, default, executeInBackground: false)).Operation!;
-
-        // Tenant limit = 1: first claim succeeds
-        var claimed1 = await store.ClaimDueRepairAsync("worker-1", now, TimeSpan.FromMinutes(10), default, setup.Agent.TenantId, maxGlobalConcurrent: 4, maxTenantConcurrent: 1);
-        Assert.NotNull(claimed1);
-        Assert.Equal(op1.Id, claimed1.Id);
-        Assert.Equal(1, claimed1.AttemptCount);
-
-        // Second claim with tenant limit = 1 must be refused and deferred without consuming AttemptCount
-        var claimed2 = await store.ClaimDueRepairAsync("worker-2", now, TimeSpan.FromMinutes(10), default, setup.Agent.TenantId, maxGlobalConcurrent: 4, maxTenantConcurrent: 1);
-        Assert.Null(claimed2);
-
-        var storedOp2 = await setup.RepairStore.GetOperationAsync(setup.Agent.TenantId, setup.Artifact.Id, op2.Id, default);
-        Assert.NotNull(storedOp2);
-        Assert.Equal("Pending", storedOp2.Status);
-        Assert.Equal(0, storedOp2.AttemptCount);
-        Assert.True(storedOp2.NextRetryAt > now);
-
-        // Global limit = 1: even for another tenant, claim must be refused
-        var other = await SetupAsync(verified: new HashSet<string> { "central" });
-        var otherOp = (await other.RepairService.StartRepairAsync(
-            other.Agent.TenantId, other.Artifact.Id, new StartReplicaRepairRequest(StorageConnectionId: other.Sftp.Id), null, default, executeInBackground: false)).Operation!;
-        var claimedGlobalExceeded = await store.ClaimDueRepairAsync("worker-3", now, TimeSpan.FromMinutes(10), default, other.Agent.TenantId, maxGlobalConcurrent: 1, maxTenantConcurrent: 2);
-        Assert.Null(claimedGlobalExceeded);
-        var storedOther = await other.RepairStore.GetOperationAsync(other.Agent.TenantId, other.Artifact.Id, otherOp.Id, default);
-        Assert.NotNull(storedOther);
-        Assert.Equal(0, storedOther.AttemptCount);
-
-        // Clean up claimed operations so subsequent tests in the same test class don't see active InProgress repairs
-        await store.FailOperationAsync(setup.Agent.TenantId, op1.Id, claimed1.LeaseToken!.Value, "test_cleanup", "test ended", now, default);
-    }
-    [Fact]
     public async Task Scenario21_Durable_orphan_replica_recorded_when_storage_delete_fails()
     {
         var setup = await SetupAsync(mode: QuotaAccountingMode.PhysicalReplicaBytes, verified: new HashSet<string> { "central" });

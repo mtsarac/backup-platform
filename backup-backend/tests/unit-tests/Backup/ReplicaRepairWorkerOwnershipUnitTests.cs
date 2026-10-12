@@ -415,21 +415,25 @@ public sealed class ReplicaRepairWorkerOwnershipUnitTests
             return Task.FromResult(new ReplicaRepairAdmissionResult(true, null, null));
         }
 
-        public Task<ReplicaRepairOperation?> ClaimDueRepairAsync(string leaseOwner, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken, TenantId? tenantId = null, int? maxGlobalConcurrent = null, int? maxTenantConcurrent = null)
+        public Task<ReplicaRepairOperation?> ClaimDueRepairAsync(string leaseOwner, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken, TenantId? tenantId = null)
         {
             if (CurrentOperation is null || CurrentOperation.Status != ReplicaRepairStatus.Pending) return Task.FromResult<ReplicaRepairOperation?>(null);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (tenantId is not null && CurrentOperation.TenantId != tenantId) return Task.FromResult<ReplicaRepairOperation?>(null);
             if (CurrentOperation.CancellationRequestedAt != null)
             {
                 CurrentOperation.CancelPending(now);
                 return Task.FromResult<ReplicaRepairOperation?>(null);
             }
+            if (CurrentOperation.NextRetryAt > now) return Task.FromResult<ReplicaRepairOperation?>(null);
             CurrentOperation.Claim(Guid.NewGuid(), leaseOwner, now, leaseDuration);
             return Task.FromResult<ReplicaRepairOperation?>(CurrentOperation);
         }
 
         public Task<ReplicaRepairOperation?> ClaimOperationAsync(TenantId tenantId, Guid operationId, Guid leaseToken, string leaseOwner, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken)
         {
-            if (CurrentOperation is null) return Task.FromResult<ReplicaRepairOperation?>(null);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (CurrentOperation is null || CurrentOperation.TenantId != tenantId || CurrentOperation.Id != operationId) return Task.FromResult<ReplicaRepairOperation?>(null);
             if (CurrentOperation.Status == ReplicaRepairStatus.Pending)
             {
                 if (CurrentOperation.CancellationRequestedAt != null)
@@ -437,6 +441,7 @@ public sealed class ReplicaRepairWorkerOwnershipUnitTests
                     CurrentOperation.CancelPending(now);
                     return Task.FromResult<ReplicaRepairOperation?>(null);
                 }
+                if (CurrentOperation.NextRetryAt > now) return Task.FromResult<ReplicaRepairOperation?>(null);
                 CurrentOperation.Claim(leaseToken, leaseOwner, now, leaseDuration);
                 return Task.FromResult<ReplicaRepairOperation?>(CurrentOperation);
             }
@@ -492,8 +497,6 @@ public sealed class ReplicaRepairWorkerOwnershipUnitTests
         public Task<int> RecoverStaleRepairsAsync(DateTimeOffset now, TimeSpan initialRetryDelay, CancellationToken cancellationToken) => Task.FromResult(0);
 
         public Task<IReadOnlyList<ReplicaRepairOperation>> DiscoverEligibleRepairsAsync(DateTimeOffset now, int maxBatch, CancellationToken cancellationToken, TenantId? tenantId = null) => Task.FromResult<IReadOnlyList<ReplicaRepairOperation>>([]);
-
-        public Task<int> GetActiveRepairsCountAsync(TenantId? tenantId, CancellationToken cancellationToken) => Task.FromResult(0);
 
         public Task<ReplicaRepairOperationView?> GetOperationAsync(TenantId tenantId, Guid artifactId, Guid operationId, CancellationToken cancellationToken)
         {

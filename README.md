@@ -183,6 +183,9 @@ The Restore Wizard uses the same source eligibility, precheck and explicit overw
 
 Discovery schedules missing destinations from the backup run's stored configuration, globally or for one tenant. Retryable work
 stays Pending with its retry schedule; terminal, cancelled and exhausted repair history is never automatically restarted.
+Manual and automatic repairs share database-enforced limits of four InProgress operations globally and two per tenant.
+Both claim paths serialize admission across backend nodes; expired InProgress leases keep their slots until recovery.
+Waiting operations stay Pending without consuming attempts, and a saturated tenant does not block another tenant's due work.
 The chosen backend source is durably pinned under a live fenced lease before opening it. Repair verifies source SHA-256 and
 destination readback, and never deletes an existing destination object that rejected the upload with AlreadyExists.
 Repair quota checks belong to the managed-service admission policy and count only additional bytes within the configured scope; they do not reserve repair capacity.
