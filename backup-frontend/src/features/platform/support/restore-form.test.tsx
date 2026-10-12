@@ -28,7 +28,7 @@ describe('support NewDatabase restore', () => {
     expect(screen.getByText('Customer production SQL Server target.')).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: /Offline/ })).not.toBeInTheDocument()
     expect(screen.getByRole('option', { name: /customer-sql:1433 · CustomerDB/ })).toBeInTheDocument()
-    expect(screen.queryByText(/Replace Existing/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Mevcut veritabanının üzerine yaz/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/Mod|Credential|Host/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Restore başlat' })).toBeDisabled()
     expect(screen.queryByText('never render backend exception text')).not.toBeInTheDocument()

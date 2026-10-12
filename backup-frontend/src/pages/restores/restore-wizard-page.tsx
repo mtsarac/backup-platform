@@ -32,10 +32,10 @@ function StepBadge({ step, current, title }: { step: number; current: number; ti
 
 function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
   return (
-    <section className="space-y-4 rounded-lg border border-border bg-surface p-4 sm:p-6">
+    <section className="space-y-4 rounded-lg border-2 border-border bg-surface p-4 sm:p-6">
       <div>
-        <h2 className="text-lg font-semibold text-text-heading">{title}</h2>
-        {description && <p className="mt-1 text-sm text-text-muted">{description}</p>}
+        <h2 className="text-xl font-semibold text-text-heading">{title}</h2>
+        {description && <p className="mt-1 text-base text-text-muted">{description}</p>}
       </div>
       {children}
     </section>
@@ -67,8 +67,8 @@ export function RestoreWizardPage() {
         <ArrowLeft className="size-4" /> Backup detaylarına dön
       </Link>
       <header>
-        <h1 className="text-2xl font-semibold text-text-heading">Backup Geri Yükleme Sihirbazı</h1>
-        <p className="mt-1 text-sm text-text-muted">
+        <h1 className="text-3xl font-semibold text-text-heading">Backup Geri Yükleme Sihirbazı</h1>
+        <p className="mt-1 text-base text-text-muted">
           Doğrulanmış MSSQL backup'ını hedef SQL Server instance'ına güvenli ve denetlenebilir adımlarla geri yükleyin.
         </p>
       </header>
@@ -409,25 +409,25 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
               <div className="grid gap-3 sm:grid-cols-2">
                 <button
                   type="button"
-                  className={`rounded-lg border p-4 text-left transition-colors ${mode === 'NewDatabase' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border bg-surface'}`}
+                  className={`rounded-lg border-2 p-4 text-left transition-colors ${mode === 'NewDatabase' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border bg-surface'}`}
                   onClick={() => setMode('NewDatabase')}
                 >
-                  <p className="font-semibold text-text-heading">New Database (Varsayılan · Güvenli)</p>
-                  <p className="mt-1 text-xs text-text-muted">
+                  <p className="font-semibold text-text-heading">Yeni bir veritabanı olarak geri yükle (Önerilen · Güvenli)</p>
+                  <p className="mt-1 text-base text-text-muted">
                     Mevcut veritabanlarına asla dokunmaz. Belirleyeceğiniz yeni bir adla sıfırdan veritabanı açar.
                   </p>
                 </button>
 
                 <button
                   type="button"
-                  className={`rounded-lg border p-4 text-left transition-colors ${mode === 'ReplaceExistingDatabase' ? 'border-destructive bg-destructive/5 ring-1 ring-destructive' : 'border-border bg-surface'}`}
+                  className={`rounded-lg border-2 p-4 text-left transition-colors ${mode === 'ReplaceExistingDatabase' ? 'border-destructive bg-destructive/5 ring-1 ring-destructive' : 'border-border bg-surface'}`}
                   onClick={() => {
                     setMode('ReplaceExistingDatabase')
                     void triggerDiscovery()
                   }}
                 >
-                  <p className="font-semibold text-destructive">Replace Existing Database (Riskli · Üzerine Yaz)</p>
-                  <p className="mt-1 text-xs text-text-muted">
+                  <p className="font-semibold text-destructive">Mevcut veritabanının üzerine yaz (Riskli)</p>
+                  <p className="mt-1 text-base text-text-muted">
                     Hedef sunucudaki mevcut veritabanının üzerine yazar. Eski veriler kalıcı olarak kaybolur!
                   </p>
                 </button>

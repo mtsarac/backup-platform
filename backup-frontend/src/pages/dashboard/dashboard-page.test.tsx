@@ -41,7 +41,7 @@ describe('dashboard replication monitoring', () => {
     renderDashboard()
     expect(screen.getByRole('alert')).toHaveTextContent('1 backup son 24 saatte kullanılabilir yedek üretti, ancak gereken doğrulanmış replika sayısına ulaşamadı.')
     expect(screen.getByRole('link', { name: 'Replikasyon sonuçlarını inceleyin.' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs?status=Succeeded')
-    expect(screen.getByText('Başarılı · Succeeded')).toBeInTheDocument()
+    expect(screen.getAllByText('Başarılı').length).toBeGreaterThan(0)
     expect(screen.getByText('Yetersiz doğrulanmış replika')).toBeInTheDocument()
     expect(within(screen.getByText('Yedek üretildi · son 24 saat').parentElement!.parentElement!).getByText('1')).toBeInTheDocument()
   })
@@ -66,7 +66,7 @@ describe('dashboard replication monitoring', () => {
   it('keeps legacy responses without a replication count readable', () => {
     state.data.recentRuns = [makeRun({ status: 'Succeeded' })]
     renderDashboard()
-    expect(screen.getByText('Başarılı · Succeeded')).toBeInTheDocument()
+    expect(screen.getAllByText('Başarılı').length).toBeGreaterThan(0)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })

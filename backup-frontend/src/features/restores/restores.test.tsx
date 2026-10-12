@@ -268,7 +268,7 @@ describe('RestoresPage', () => {
     expect(screen.getByRole('heading', { name: /Geri yükleme geçmişi/i })).toBeInTheDocument()
     expect(await screen.findByText('RestoredSalesDB')).toBeInTheDocument()
     expect(screen.getByText('Yeni Database')).toBeInTheDocument()
-    expect(screen.getByText('Çalışıyor')).toBeInTheDocument()
+    expect(screen.getAllByText('Çalışıyor').length).toBeGreaterThan(0)
   })
 })
 
@@ -445,7 +445,7 @@ describe('RestoreWizardPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Devam et: Restore Modu/i }))
 
     // Switch to ReplaceExistingDatabase
-    const replaceModeBtn = screen.getByText(/Replace Existing Database/i)
+    const replaceModeBtn = screen.getByText(/Mevcut veritabanının üzerine yaz \(Riskli\)/i)
     fireEvent.click(replaceModeBtn)
 
     expect(screen.getByText(/DİKKAT: Veri Kaybı Riski!/i)).toBeInTheDocument()
