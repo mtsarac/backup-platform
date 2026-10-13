@@ -39,9 +39,9 @@ public sealed class BackupArtifactService(IBackupRetentionStore store, IBackupSc
     }
 
     /// <summary>Undoes a soft delete while no physical delete has begun.</summary>
-    public async Task<ArtifactCancelDeleteResponse> CancelDeleteAsync(TenantId tenantId, Guid artifactId, CancellationToken cancellationToken)
+    public async Task<ArtifactCancelDeleteResponse> CancelDeleteAsync(TenantId tenantId, Guid artifactId, CancellationToken cancellationToken, Guid? requestedByUserId = null)
     {
-        var result = await store.CancelDeleteAsync(tenantId, artifactId, time.GetUtcNow(), cancellationToken);
+        var result = await store.CancelDeleteAsync(tenantId, artifactId, time.GetUtcNow(), cancellationToken, requestedByUserId);
         return new ArtifactCancelDeleteResponse(result.Kind, ToView(result.Artifact));
     }
 
@@ -51,11 +51,12 @@ public sealed class BackupArtifactService(IBackupRetentionStore store, IBackupSc
     /// or below the platform minimums. The policy is resolved from the job as the store loads it under its lock, so a concurrent change cannot be
     /// merged over a stale read, and it only shapes backups accepted from now on: existing artifacts keep the expiration they were given.
     /// </summary>
-    public async Task<BackupJobView?> ChangeJobRetentionAsync(TenantId tenantId, Guid jobId, BackupRetentionPolicyRequest request, CancellationToken cancellationToken)
+    public async Task<BackupJobView?> ChangeJobRetentionAsync(TenantId tenantId, Guid jobId, BackupRetentionPolicyRequest request, CancellationToken cancellationToken, UserId? actor = null)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var job = await jobs.ModifyJobAsync(tenantId, jobId, target => target.ChangeRetention(BackupOrchestrator.ToDomain(request, options, target.RetentionPolicy)), cancellationToken);
-        return job is null ? null : BackupOrchestrator.ToView(job, time.GetUtcNow());
+        var now = time.GetUtcNow();
+        var job = await jobs.ModifyJobAsync(tenantId, jobId, target => target.ChangeRetention(BackupOrchestrator.ToDomain(request, options, target.RetentionPolicy)), cancellationToken, actor, now);
+        return job is null ? null : BackupOrchestrator.ToView(job, now);
     }
 
     private static BackupArtifactView? ToView(BackupArtifactRecord? record) => record is null ? null : Map(record);

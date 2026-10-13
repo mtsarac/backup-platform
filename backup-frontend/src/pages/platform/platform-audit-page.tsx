@@ -11,7 +11,7 @@ export function PlatformAuditPage() {
   const query = usePlatformAudit({ tenantId, page, pageSize: PLATFORM_PAGE_SIZE })
   const data = query.data
   return <div className="space-y-4">
-    <div><h1 className="text-2xl font-semibold text-text-heading">Audit</h1><p className="mt-1 text-sm text-text-muted">PlatformAdmin tarafından yapılan yönetim işlemleri.</p></div>
+    <div><h1 className="text-2xl font-semibold text-text-heading">Audit</h1><p className="mt-1 text-sm text-text-muted">Kullanıcı, agent ve sistem işlemlerinin denetim kayıtları.</p></div>
     {tenantId && <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface p-3 text-sm"><span>Tek bir tenant'a göre filtreleniyor.</span><Button variant="outline" size="sm" onClick={() => update({ tenantId: '' })}>Tenant filtresini kaldır</Button></div>}
     <PlatformQueryState isPending={query.isPending} error={query.error}>
       {data && <>

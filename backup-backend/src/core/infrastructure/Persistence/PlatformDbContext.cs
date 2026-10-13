@@ -91,6 +91,7 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<GoogleDriveOAuthState> GoogleDriveOAuthStates => Set<GoogleDriveOAuthState>();
     public DbSet<GoogleDriveFileMetadata> GoogleDriveFileMetadata => Set<GoogleDriveFileMetadata>();
     public DbSet<GoogleDriveStagingReservation> GoogleDriveStagingReservations => Set<GoogleDriveStagingReservation>();
+    public DbSet<BackupStorageCleanup> BackupStorageCleanups => Set<BackupStorageCleanup>();
 
     /// <summary>Explicit unfiltered context for trusted platform operations only.</summary>
     /// <remarks>Does not authorize the caller. Future application boundaries must authorize its use.</remarks>
@@ -101,6 +102,8 @@ public sealed class PlatformDbContext : DbContext
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(PlatformDbContext).Assembly);
         modelBuilder.Entity<Tenant>().HasQueryFilter(tenant =>
             IsPlatformOperations || (CurrentTenantId != null && tenant.Id == CurrentTenantId));
+        modelBuilder.Entity<AuditEvent>().HasQueryFilter(audit =>
+            IsPlatformOperations || (CurrentTenantId != null && audit.TenantId == CurrentTenantId));
         var configureFilter = typeof(PlatformDbContext).GetMethod(nameof(ConfigureTenantFilter), BindingFlags.Instance | BindingFlags.NonPublic)!;
         foreach (var entityType in modelBuilder.Model.GetEntityTypes())
         {

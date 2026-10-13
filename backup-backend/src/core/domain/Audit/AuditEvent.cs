@@ -10,7 +10,10 @@ namespace BackupPlatform.Domain.Audit;
 public enum AuditActorKind
 {
     PlatformAdmin = 1,
-    TenantAdministrator = 2
+    TenantAdministrator = 2,
+    System = 3,
+    User = 4,
+    Anonymous = 5
 }
 
 public static class AuditActions
@@ -22,6 +25,46 @@ public static class AuditActions
     public const string MembershipRemoved = "membership.removed";
     public const string EnrollmentPolicyChanged = "agent_enrollment.policy_changed";
     public const string UserCreated = "user.created";
+
+    // Authentication events
+    public const string UserLoginSucceeded = "auth.login_succeeded";
+    public const string UserLoginFailed = "auth.login_failed";
+    public const string UserLogout = "auth.logout";
+
+    // Agent lifecycle events
+    public const string AgentEnrollmentTokenCreated = "agent.enrollment_token_created";
+    public const string AgentEnrollmentTokenRevoked = "agent.enrollment_token_revoked";
+    public const string AgentEnrolled = "agent.enrolled";
+    public const string AgentCredentialRotationStarted = "agent.credential_rotation_started";
+    public const string AgentCredentialRotationConfirmed = "agent.credential_rotation_confirmed";
+    public const string AgentRevoked = "agent.revoked";
+
+    // Backup job lifecycle events
+    public const string BackupJobCreated = "backup_job.created";
+    public const string BackupJobUpdated = "backup_job.updated";
+    public const string BackupJobScheduleChanged = "backup_job.schedule_changed";
+    public const string BackupJobScheduleRemoved = "backup_job.schedule_removed";
+    public const string BackupJobRetentionChanged = "backup_job.retention_changed";
+    public const string BackupJobEnabled = "backup_job.enabled";
+    public const string BackupJobDisabled = "backup_job.disabled";
+
+    // Backup run lifecycle events
+    public const string BackupRunTriggered = "backup_run.triggered";
+    public const string BackupRunRetryRequested = "backup_run.retry_requested";
+    public const string BackupRunCancelRequested = "backup_run.cancel_requested";
+    public const string BackupRunCompleted = "backup_run.completed";
+    public const string BackupRunAttemptCompleted = "backup_run.attempt_completed";
+    public const string BackupScheduleOccurrenceDecided = "backup_schedule.occurrence_decided";
+
+    // Retention / replica deletion events
+    public const string BackupArtifactDeleteRequested = "backup_artifact.delete_requested";
+    public const string BackupArtifactDeleteCancelled = "backup_artifact.delete_cancelled";
+    public const string BackupReplicaPhysicalDeleteCompleted = "backup_replica.physical_delete_completed";
+    public const string BackupArtifactRetentionApplied = "backup_artifact.retention_applied";
+    public const string BackupReplicaPhysicalDeleteFailed = "backup_replica.physical_delete_failed";
+    public const string BackupReplicaOrphanRecorded = "backup_replica.orphan_recorded";
+    public const string BackupReplicaQuarantined = "backup_replica.quarantined";
+    public const string BackupStorageOrphanDeleteCompleted = "backup_storage.orphan_delete_completed";
 }
 
 /// <summary>

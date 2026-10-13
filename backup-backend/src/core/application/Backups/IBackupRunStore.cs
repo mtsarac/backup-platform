@@ -70,17 +70,17 @@ public sealed record BackupJobUpdate(string Name, AgentId AgentId, BackupConfigu
 /// </summary>
 public interface IBackupRunStore
 {
-    Task<BackupJob?> CreateJobAsync(BackupJob job, CancellationToken cancellationToken);
+    Task<BackupJob?> CreateJobAsync(BackupJob job, CancellationToken cancellationToken, UserId? actor = null);
     Task<BackupJob?> GetJobAsync(TenantId tenantId, Guid jobId, CancellationToken cancellationToken);
-    Task<BackupJob?> UpdateJobAsync(TenantId tenantId, Guid jobId, BackupJobUpdate update, CancellationToken cancellationToken);
+    Task<BackupJob?> UpdateJobAsync(TenantId tenantId, Guid jobId, BackupJobUpdate update, CancellationToken cancellationToken, UserId? actor = null, DateTimeOffset? now = null);
     /// <summary>Idempotent per (tenant, job, key). Applies the job's overlap policy: Skip refuses, Queue enqueues.</summary>
-    Task<BackupStartResult> StartRunAsync(TenantId tenantId, Guid jobId, string idempotencyKey, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<BackupStartResult> StartRunAsync(TenantId tenantId, Guid jobId, string idempotencyKey, DateTimeOffset now, CancellationToken cancellationToken, UserId? actor = null);
     Task<IReadOnlyList<BackupRun>> ListRunsAsync(TenantId tenantId, Guid? jobId, int limit, CancellationToken cancellationToken);
     Task<BackupRun?> GetRunAsync(TenantId tenantId, Guid runId, CancellationToken cancellationToken);
     /// <summary>Cancels Pending and RetryPending runs outright; requests cooperative cancellation of Leased/Running ones.</summary>
-    Task<BackupRun?> RequestCancellationAsync(TenantId tenantId, Guid runId, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<BackupRun?> RequestCancellationAsync(TenantId tenantId, Guid runId, DateTimeOffset now, CancellationToken cancellationToken, UserId? actor = null);
     /// <summary>Operator retry: a new attempt on the same run, immediately, within the policy's attempt budget. Not related to the manual-start Idempotency-Key.</summary>
-    Task<BackupRetryResult> RetryRunAsync(TenantId tenantId, Guid runId, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<BackupRetryResult> RetryRunAsync(TenantId tenantId, Guid runId, DateTimeOffset now, CancellationToken cancellationToken, UserId? actor = null);
     /// <summary>
     /// Claims the agent's next eligible attempt if the agent, tenant and global limits all have a free slot; null otherwise.
     /// Order is attempt eligibility, run creation, run id.

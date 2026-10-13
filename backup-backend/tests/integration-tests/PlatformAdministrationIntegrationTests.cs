@@ -57,7 +57,7 @@ public sealed class PlatformAdministrationIntegrationTests(PostgreSqlFixture fix
         // The rejected calls changed nothing, in particular not the caller's own membership.
         await using var context = fixture.CreatePlatformContext();
         Assert.Equal(role, (await context.TenantMemberships.SingleAsync(row => row.TenantId == setup.Tenant.Id && row.UserId == setup.Account.UserId)).Role);
-        Assert.False(await context.AuditEvents.AnyAsync(row => row.ActorUserId == setup.Account.UserId));
+        Assert.False(await context.AuditEvents.AnyAsync(row => row.ActorUserId == setup.Account.UserId && row.Action != AuditActions.UserLoginSucceeded));
     }
 
     [Fact]

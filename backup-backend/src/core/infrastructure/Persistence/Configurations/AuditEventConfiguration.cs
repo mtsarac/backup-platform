@@ -15,7 +15,7 @@ internal sealed class AuditEventConfiguration : IEntityTypeConfiguration<AuditEv
     {
         builder.ToTable("audit_events", table =>
         {
-            table.HasCheckConstraint("ck_audit_events_actor_kind", "\"ActorKind\" IN (1, 2)");
+            table.HasCheckConstraint("ck_audit_events_actor_kind", "\"ActorKind\" IN (1, 2, 3, 4, 5)");
             table.HasCheckConstraint("ck_audit_events_text", "length(\"Action\") > 0 AND length(\"TargetType\") > 0 AND length(\"TargetId\") > 0");
         });
         builder.HasKey(auditEvent => auditEvent.Id);

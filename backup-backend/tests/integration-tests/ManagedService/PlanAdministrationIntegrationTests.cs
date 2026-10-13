@@ -44,7 +44,7 @@ public sealed class PlanAdministrationIntegrationTests(PostgreSqlFixture fixture
         Assert.Equal(plansBefore, (await CallAsync(platform, HttpMethod.Get, "/api/platform/plans?pageSize=100")).Json.GetProperty("totalCount").GetInt32());
         Assert.Empty(await RowsOfAsync(fixture, setup.Tenant.Id));
         await using var context = fixture.CreatePlatformContext();
-        Assert.False(await context.AuditEvents.AnyAsync(row => row.ActorUserId == setup.Account.UserId));
+        Assert.False(await context.AuditEvents.AnyAsync(row => row.ActorUserId == setup.Account.UserId && row.Action != AuditActions.UserLoginSucceeded));
     }
 
     [Fact]

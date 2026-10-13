@@ -170,7 +170,7 @@ public sealed class PostgreSqlSupportAccessStore(DbContextOptions<PlatformDbCont
                     }, sessionId));
             }
         }
-        PostgreSqlRestoreStore.AddSupportTerminalAudits(context);
+        PostgreSqlRestoreStore.AddTerminalAudits(context);
         return touched;
     }
 

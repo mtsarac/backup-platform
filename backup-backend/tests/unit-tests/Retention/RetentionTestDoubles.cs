@@ -85,7 +85,13 @@ internal sealed class FakeRetentionStore(CallJournal? journal = null) : IBackupR
     public Dictionary<Guid, BackupAttemptActivity> Attempts { get; } = [];
     public List<(string Provider, string[] Keys)> ReferenceQueries { get; } = [];
     public List<Guid[]> ActivityQueries { get; } = [];
-
+    public List<(string Provider, string Name, TenantId? Scope, ManagedStorageKey Key, string ObjectKey, DateTimeOffset Now)> SweptDeletions { get; } = [];
+    public Dictionary<Guid, (ClaimedStorageCleanup Claimed, bool Completed)> Cleanups { get; } = [];
+    public Func<Guid, bool> CompleteCleanupResult { get; set; } = _ => true;
+    public Func<Guid, Exception?> CompleteCleanupFault { get; set; } = _ => null;
+    public List<(Guid Id, Guid Token, DateTimeOffset Now)> CleanupCompletions { get; } = [];
+    public List<PendingStorageCleanup> PendingCleanups { get; } = [];
+    public Func<string, string, TenantId?, ManagedStorageKey, string, DateTimeOffset, ClaimedStorageCleanup?>? OnBeginSweptDeletion { get; set; }
     /// <summary>Runs after each reference query is answered (1-based number of the query): lets a test make a reference appear mid-sweep.</summary>
     public Action<int>? AfterReferenceQuery { get; set; }
 
@@ -99,6 +105,7 @@ internal sealed class FakeRetentionStore(CallJournal? journal = null) : IBackupR
     public Func<TenantId, Guid?, int, IReadOnlyList<BackupArtifactRecord>> OnListArtifacts { get; set; } = (_, _, _) => throw new NotSupportedException();
     public Func<TenantId, BackupArtifactQuery, BackupArtifactPage<BackupArtifactRecord>> OnQueryArtifacts { get; set; } = (_, _) => throw new NotSupportedException();
     public List<(TenantId Tenant, Guid ArtifactId, Guid? User, DateTimeOffset Now)> DeleteRequests { get; } = [];
+    public List<(TenantId Tenant, Guid ArtifactId, Guid? User, DateTimeOffset Now)> CancelRequests { get; } = [];
     public List<(TenantId Tenant, Guid? JobId, int Limit)> ListCalls { get; } = [];
 
     public Task<BackupRetentionApplication> ApplyExpiredRetentionAsync(DateTimeOffset now, int limit, CancellationToken cancellationToken)
@@ -136,8 +143,11 @@ internal sealed class FakeRetentionStore(CallJournal? journal = null) : IBackupR
         return Task.FromResult(OnRequestDelete(tenantId, artifactId, now));
     }
 
-    public Task<BackupArtifactCancelResult> CancelDeleteAsync(TenantId tenantId, Guid artifactId, DateTimeOffset now, CancellationToken cancellationToken) =>
-        Task.FromResult(OnCancelDelete(tenantId, artifactId, now));
+    public Task<BackupArtifactCancelResult> CancelDeleteAsync(TenantId tenantId, Guid artifactId, DateTimeOffset now, CancellationToken cancellationToken, Guid? requestedByUserId = null)
+    {
+        CancelRequests.Add((tenantId, artifactId, requestedByUserId, now));
+        return Task.FromResult(OnCancelDelete(tenantId, artifactId, now));
+    }
 
     public Task<BackupArtifactRecord?> GetArtifactAsync(TenantId tenantId, Guid artifactId, CancellationToken cancellationToken) =>
         Task.FromResult(OnGetArtifact(tenantId, artifactId));
@@ -164,6 +174,67 @@ internal sealed class FakeRetentionStore(CallJournal? journal = null) : IBackupR
         ActivityQueries.Add([.. attemptIds]);
         IReadOnlyDictionary<Guid, BackupAttemptActivity> found = attemptIds.Where(Attempts.ContainsKey).ToDictionary(id => id, id => Attempts[id]);
         return Task.FromResult(found);
+    }
+
+    public Task<ClaimedStorageCleanup?> BeginSweptDeletionAsync(
+        string storageProvider, string storageName, TenantId? storageScope, ManagedStorageKey key, string objectKey,
+        DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        SweptDeletions.Add((storageProvider, storageName, storageScope, key, objectKey, now));
+        _journal.Add($"begin-sweep:{objectKey}");
+        if (OnBeginSweptDeletion is not null)
+            return Task.FromResult(OnBeginSweptDeletion(storageProvider, storageName, storageScope, key, objectKey, now));
+        var id = Guid.NewGuid();
+        var token = Guid.NewGuid();
+        var claimed = new ClaimedStorageCleanup(
+            id, new TenantId(key.TenantId), key.JobId, key.RunId, key.AttemptId,
+            storageProvider, storageName, Guid.NewGuid().ToString("N"), objectKey, key.IsPartial, token);
+        Cleanups[id] = (claimed, false);
+        return Task.FromResult<ClaimedStorageCleanup?>(claimed);
+    }
+
+    public Task<IReadOnlyList<PendingStorageCleanup>> ListPendingSweptDeletionsAsync(
+        string storageProvider, string storageName, TenantId? storageScope, DateTimeOffset now, int limit, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        _journal.Add($"list-pending-cleanups:{storageName}");
+        IReadOnlyList<PendingStorageCleanup> items = PendingCleanups
+            .Where(p => p.StorageProvider == storageProvider && p.StorageName == storageName && (storageScope == null || p.TenantId == storageScope))
+            .Take(limit)
+            .ToList();
+        return Task.FromResult(items);
+    }
+
+    public Task<ClaimedStorageCleanup?> ClaimPendingSweptDeletionAsync(
+        Guid cleanupId, TenantId? storageScope, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        _journal.Add($"claim-pending-cleanup:{cleanupId}");
+        var existing = PendingCleanups.FirstOrDefault(p => p.Id == cleanupId && (storageScope == null || p.TenantId == storageScope));
+        if (existing is null) return Task.FromResult<ClaimedStorageCleanup?>(null);
+        var token = Guid.NewGuid();
+        var claimed = new ClaimedStorageCleanup(
+            existing.Id, existing.TenantId, existing.JobId, existing.RunId, existing.AttemptId,
+            existing.StorageProvider, existing.StorageName, existing.TargetIdentity, existing.Key, existing.IsPartial, token);
+        Cleanups[existing.Id] = (claimed, false);
+        return Task.FromResult<ClaimedStorageCleanup?>(claimed);
+    }
+
+    public Task<bool> CompleteSweptDeletionAsync(Guid cleanupId, Guid leaseToken, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        _journal.Add($"complete-cleanup:{cleanupId}");
+        if (CompleteCleanupFault(cleanupId) is { } fault) throw fault;
+        if (!CompleteCleanupResult(cleanupId)) return Task.FromResult(false);
+        CleanupCompletions.Add((cleanupId, leaseToken, now));
+        if (Cleanups.TryGetValue(cleanupId, out var state) && state.Claimed.LeaseToken == leaseToken)
+        {
+            Cleanups[cleanupId] = (state.Claimed, true);
+            PendingCleanups.RemoveAll(p => p.Id == cleanupId);
+            return Task.FromResult(true);
+        }
+        return Task.FromResult(false);
     }
 
     public Task<int> PruneScheduleOccurrencesAsync(DateTimeOffset decidedBefore, int limit, CancellationToken cancellationToken)

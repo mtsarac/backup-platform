@@ -17,7 +17,7 @@ public sealed class AgentManagementService(IAgentRegistryStore store, TimeProvid
         ArgumentNullException.ThrowIfNull(agentId);
         ArgumentNullException.ThrowIfNull(actor);
         var now = timeProvider.GetUtcNow();
-        var commit = await store.RevokeAgentAsync(tenantId, agentId, now, cancellationToken).ConfigureAwait(false);
+        var commit = await store.RevokeAgentAsync(tenantId, agentId, actor, now, cancellationToken).ConfigureAwait(false);
         if (commit is null)
         {
             return null;

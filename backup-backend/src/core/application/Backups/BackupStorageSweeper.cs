@@ -56,6 +56,10 @@ public sealed class BackupStorageSweeper(
 
     private async Task SweepStorageAsync(BackupManagedStorage storage, DateTimeOffset now, Tally tally, CancellationToken cancellationToken)
     {
+        // 1. Recover pending cleanups previously committed before crash or retry
+        await RecoverPendingCleanupsAsync(storage, now, tally, cancellationToken);
+        if (tally.Truncated) return;
+
         // The provider returns nothing younger than this, so a file that is still being written is never even seen; each entry is checked against
         // the threshold of its own kind again below.
         var enumerateBefore = now - (options.OrphanMinimumAge < options.PartialUploadMinimumAge ? options.OrphanMinimumAge : options.PartialUploadMinimumAge);
@@ -97,6 +101,30 @@ public sealed class BackupStorageSweeper(
                 try { await enumerator.DisposeAsync(); }
                 catch (Exception exception) when (exception is not OperationCanceledException) { /* a failing listing is already counted */ }
             }
+        }
+    }
+
+    private async Task RecoverPendingCleanupsAsync(BackupManagedStorage storage, DateTimeOffset now, Tally tally, CancellationToken cancellationToken)
+    {
+        var pending = await store.ListPendingSweptDeletionsAsync(
+            storage.ProviderId.Value, storage.Name, storage.TenantScope, now, ChunkSize, cancellationToken);
+        if (pending.Count == 0) return;
+
+        foreach (var item in pending)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (tally.Deleted >= options.MaxSweepDeletionsPerRun)
+            {
+                tally.Truncated = true;
+                return;
+            }
+
+            // Claim the item with lease fencing
+            var claimed = await store.ClaimPendingSweptDeletionAsync(
+                item.Id, storage.TenantScope, now, options.DeleteLeaseDuration, cancellationToken);
+            if (claimed is null) continue;
+
+            await FinalizeCleanupAsync(storage, claimed, tally, cancellationToken);
         }
     }
 
@@ -187,21 +215,54 @@ public sealed class BackupStorageSweeper(
 
     private async Task DeleteAsync(BackupManagedStorage storage, StorageEntry entry, ManagedStorageKey key, Tally tally, CancellationToken cancellationToken)
     {
+        // Persist cleanup intent before remote I/O
+        var claimed = await store.BeginSweptDeletionAsync(
+            storage.ProviderId.Value, storage.Name, storage.TenantScope, key, entry.Key.Value, time.GetUtcNow(), options.DeleteLeaseDuration, cancellationToken);
+        if (claimed is null)
+        {
+            // Another node owns it or it was already completed
+            return;
+        }
+
+        await FinalizeCleanupAsync(storage, claimed, tally, cancellationToken);
+    }
+
+    private async Task FinalizeCleanupAsync(BackupManagedStorage storage, ClaimedStorageCleanup cleanup, Tally tally, CancellationToken cancellationToken)
+    {
+        var storageKey = new StorageObjectKey(cleanup.Key);
         try
         {
-            // False: it vanished since the listing (somebody else removed it); nothing of ours to count.
-            if (!await storage.Provider.DeleteAsync(entry.Key, cancellationToken)) return;
+            if (!storage.Provider.Capabilities.Supports(StorageCapabilityIds.VerifyAbsence))
+            {
+                tally.Failed++;
+                return;
+            }
+
+            // Delete if still present; false return is fine if object already absent
+            await storage.Provider.DeleteAsync(storageKey, cancellationToken);
+            if (await storage.Provider.ExistsAsync(storageKey, cancellationToken))
+            {
+                tally.Failed++;
+                return;
+            }
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             tally.Failed++;
-            logger.LogWarning("Could not delete a leftover file of backup attempt {AttemptId} from storage {Storage}: {Failure}.", key.AttemptId, storage.Name, Describe(exception));
+            logger.LogWarning("Could not delete a leftover file of backup attempt {AttemptId} from storage {Storage}: {Failure}.", cleanup.AttemptId, storage.Name, Describe(exception));
             return;
         }
 
-        if (key.IsPartial) tally.PartialUploadsDeleted++;
+        var completed = await store.CompleteSweptDeletionAsync(cleanup.Id, cleanup.LeaseToken, time.GetUtcNow(), cancellationToken);
+        if (!completed)
+        {
+            tally.Failed++;
+            return;
+        }
+
+        if (cleanup.IsPartial) tally.PartialUploadsDeleted++;
         else tally.OrphansDeleted++;
-        logger.LogInformation("Deleted {Kind} of backup attempt {AttemptId} from storage {Storage}.", key.IsPartial ? "an unpublished upload" : "an orphaned backup file", key.AttemptId, storage.Name);
+        logger.LogInformation("Deleted {Kind} of backup attempt {AttemptId} from storage {Storage}.", cleanup.IsPartial ? "an unpublished upload" : "an orphaned backup file", cleanup.AttemptId, storage.Name);
     }
 
     /// <summary>A log-safe reason: the failure kind or type, never the message (a provider message may carry a path).</summary>

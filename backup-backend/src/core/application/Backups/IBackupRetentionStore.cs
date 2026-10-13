@@ -1,3 +1,4 @@
+using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 
@@ -45,6 +46,13 @@ public sealed record BackupAttemptActivity(Guid AttemptId, TenantId TenantId, Gu
     /// <summary>A repair may still be writing files of an otherwise terminal backup attempt.</summary>
     public bool RepairIsActive { get; init; }
 }
+public sealed record ClaimedStorageCleanup(
+    Guid Id, TenantId TenantId, Guid JobId, Guid RunId, Guid AttemptId, string StorageProvider, string StorageName,
+    string TargetIdentity, string Key, bool IsPartial, Guid LeaseToken);
+
+public sealed record PendingStorageCleanup(
+    Guid Id, TenantId TenantId, Guid JobId, Guid RunId, Guid AttemptId, string StorageProvider, string StorageName,
+    string TargetIdentity, string Key, bool IsPartial);
 
 /// <summary>
 /// Durable retention state transitions and the queries the sweeps need. Every method is atomic and safe to call from any number of backend
@@ -65,7 +73,7 @@ public interface IBackupRetentionStore
     /// </summary>
     Task<IReadOnlyList<ClaimedReplicaDeletion>> ClaimDueDeletionsAsync(string owner, DateTimeOffset now, TimeSpan lease, int limit, CancellationToken cancellationToken);
 
-    /// <summary>Marks the replica Deleted. False when the lease token no longer matches (somebody else took the delete over) or the replica is not Deleting.</summary>
+    /// <summary>Records verified absence as Deleted. False when the lease token no longer matches or the replica is not Deleting.</summary>
     Task<bool> CompleteDeletionAsync(Guid replicaId, Guid leaseToken, DateTimeOffset now, CancellationToken cancellationToken);
 
     /// <summary>Marks the delete failed and schedules its retry. False when the lease token no longer matches.</summary>
@@ -75,7 +83,7 @@ public interface IBackupRetentionStore
     Task<BackupArtifactDeleteResult> RequestDeleteAsync(TenantId tenantId, Guid artifactId, Guid? requestedByUserId, DateTimeOffset now, CancellationToken cancellationToken);
 
     /// <summary>DeletePending back to Available. Refused once a physical delete has begun. Race-safe against the delete workers and against the retention scan.</summary>
-    Task<BackupArtifactCancelResult> CancelDeleteAsync(TenantId tenantId, Guid artifactId, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<BackupArtifactCancelResult> CancelDeleteAsync(TenantId tenantId, Guid artifactId, DateTimeOffset now, CancellationToken cancellationToken, Guid? requestedByUserId = null);
 
     Task<BackupArtifactRecord?> GetArtifactAsync(TenantId tenantId, Guid artifactId, CancellationToken cancellationToken);
 
@@ -90,6 +98,21 @@ public interface IBackupRetentionStore
     /// <summary>The attempts among <paramref name="attemptIds"/> that exist, with the state of their run. Unknown ids are simply absent.</summary>
     Task<IReadOnlyDictionary<Guid, BackupAttemptActivity>> GetAttemptActivityAsync(IReadOnlyCollection<Guid> attemptIds, CancellationToken cancellationToken);
 
+    /// <summary>Persists durable cleanup intent before physical delete; recovers or claims an existing record if already present.</summary>
+    Task<ClaimedStorageCleanup?> BeginSweptDeletionAsync(
+        string storageProvider, string storageName, TenantId? storageScope, ManagedStorageKey key, string objectKey,
+        DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken);
+
+    /// <summary>Lists pending sweep cleanups that can be recovered or retried for the storage.</summary>
+    Task<IReadOnlyList<PendingStorageCleanup>> ListPendingSweptDeletionsAsync(
+        string storageProvider, string storageName, TenantId? storageScope, DateTimeOffset now, int limit, CancellationToken cancellationToken);
+
+    /// <summary>Re-claims an existing pending sweep cleanup under a fresh lease token.</summary>
+    Task<ClaimedStorageCleanup?> ClaimPendingSweptDeletionAsync(
+        Guid cleanupId, TenantId? storageScope, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken);
+
+    /// <summary>Records verified absence and marks the cleanup completed, appending the opaque audit event atomically.</summary>
+    Task<bool> CompleteSweptDeletionAsync(Guid cleanupId, Guid leaseToken, DateTimeOffset now, CancellationToken cancellationToken);
     /// <summary>
     /// Deletes up to <paramref name="limit"/> decided schedule occurrences whose decision is older than <paramref name="decidedBefore"/>, except the
     /// newest occurrence of every job (the scheduler's watermark) and any occurrence whose run has not finished. Returns the rows deleted.

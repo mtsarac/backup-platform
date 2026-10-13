@@ -1,3 +1,4 @@
+using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
@@ -287,8 +288,8 @@ internal sealed class FlakyRetentionStore(IBackupRetentionStore inner) : IBackup
     public Task<BackupArtifactDeleteResult> RequestDeleteAsync(TenantId tenantId, Guid artifactId, Guid? requestedByUserId, DateTimeOffset now, CancellationToken cancellationToken) =>
         inner.RequestDeleteAsync(tenantId, artifactId, requestedByUserId, now, cancellationToken);
 
-    public Task<BackupArtifactCancelResult> CancelDeleteAsync(TenantId tenantId, Guid artifactId, DateTimeOffset now, CancellationToken cancellationToken) =>
-        inner.CancelDeleteAsync(tenantId, artifactId, now, cancellationToken);
+    public Task<BackupArtifactCancelResult> CancelDeleteAsync(TenantId tenantId, Guid artifactId, DateTimeOffset now, CancellationToken cancellationToken, Guid? requestedByUserId = null) =>
+        inner.CancelDeleteAsync(tenantId, artifactId, now, cancellationToken, requestedByUserId);
 
     public Task<BackupArtifactRecord?> GetArtifactAsync(TenantId tenantId, Guid artifactId, CancellationToken cancellationToken) =>
         inner.GetArtifactAsync(tenantId, artifactId, cancellationToken);
@@ -305,6 +306,17 @@ internal sealed class FlakyRetentionStore(IBackupRetentionStore inner) : IBackup
     public Task<IReadOnlyDictionary<Guid, BackupAttemptActivity>> GetAttemptActivityAsync(IReadOnlyCollection<Guid> attemptIds, CancellationToken cancellationToken) =>
         inner.GetAttemptActivityAsync(attemptIds, cancellationToken);
 
+    public Task<ClaimedStorageCleanup?> BeginSweptDeletionAsync(string storageProvider, string storageName, TenantId? storageScope, ManagedStorageKey key, string objectKey, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken) =>
+        inner.BeginSweptDeletionAsync(storageProvider, storageName, storageScope, key, objectKey, now, leaseDuration, cancellationToken);
+
+    public Task<IReadOnlyList<PendingStorageCleanup>> ListPendingSweptDeletionsAsync(string storageProvider, string storageName, TenantId? storageScope, DateTimeOffset now, int limit, CancellationToken cancellationToken) =>
+        inner.ListPendingSweptDeletionsAsync(storageProvider, storageName, storageScope, now, limit, cancellationToken);
+
+    public Task<ClaimedStorageCleanup?> ClaimPendingSweptDeletionAsync(Guid cleanupId, TenantId? storageScope, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken) =>
+        inner.ClaimPendingSweptDeletionAsync(cleanupId, storageScope, now, leaseDuration, cancellationToken);
+
+    public Task<bool> CompleteSweptDeletionAsync(Guid cleanupId, Guid leaseToken, DateTimeOffset now, CancellationToken cancellationToken) =>
+        inner.CompleteSweptDeletionAsync(cleanupId, leaseToken, now, cancellationToken);
     public Task<int> PruneScheduleOccurrencesAsync(DateTimeOffset decidedBefore, int limit, CancellationToken cancellationToken) =>
         inner.PruneScheduleOccurrencesAsync(decidedBefore, limit, cancellationToken);
 }

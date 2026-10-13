@@ -196,6 +196,21 @@ public sealed class BackupRetentionServiceTests
         Assert.DoesNotContain(rig.Journal.Entries, entry => entry.StartsWith("delete:", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task AProviderThatCannotVerifyAbsenceNeverDeletesOrPublishesCompletion()
+    {
+        var rig = new Rig();
+        var claim = rig.Due();
+        rig.Storage.Capabilities = new StorageCapabilities([StorageCapabilityIds.Delete]);
+
+        await rig.Service.RunCycleAsync(CancellationToken.None);
+
+        Assert.True(rig.Storage.Has(claim.Key));
+        Assert.Empty(rig.Store.Completions);
+        Assert.Equal("delete_not_verified", Assert.Single(rig.Store.Failures).Code);
+        Assert.DoesNotContain(rig.Journal.Entries, entry => entry.StartsWith("delete:", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData("../outside.bak")]
     [InlineData("/etc/passwd")]
@@ -224,18 +239,6 @@ public sealed class BackupRetentionServiceTests
         Assert.Equal("delete_not_verified", Assert.Single(rig.Store.Failures).Code);
         Assert.Empty(rig.Store.Completions);
         Assert.Equal(0, result.Deleted);
-    }
-
-    [Fact]
-    public async Task AbsenceIsOnlyCheckedOnProvidersThatCanProveIt()
-    {
-        var rig = new Rig();
-        var claim = rig.Due();
-        rig.Storage.Capabilities = new StorageCapabilities([StorageCapabilityIds.Delete]);
-
-        await rig.Service.RunCycleAsync(CancellationToken.None);
-
-        Assert.Equal(["apply", "claim", $"delete:{claim.Key}", $"complete:{claim.ReplicaId}"], rig.Journal.Entries);
     }
 
     [Fact]

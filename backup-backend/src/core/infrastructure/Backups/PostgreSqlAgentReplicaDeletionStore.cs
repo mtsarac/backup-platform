@@ -1,7 +1,9 @@
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Contracts.Backups;
+using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Backups;
+using BackupPlatform.Domain.Identity;
 using BackupPlatform.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -54,6 +56,7 @@ public sealed class PostgreSqlAgentReplicaDeletionStore(DbContextOptions<Platfor
             if (failure is not null)
             {
                 replica.CompleteAgentDeletion(replica.DeleteOperationId!.Value, replica.DeleteLeaseToken!.Value, now, false, failure, null);
+                RecordDeletionOutcome(context, replica, identity, now, false, failure);
                 continue;
             }
             task = new DeleteReplicaTaskSnapshot
@@ -98,6 +101,7 @@ public sealed class PostgreSqlAgentReplicaDeletionStore(DbContextOptions<Platfor
             ? now + retention.DeleteRetryDelay(replica.DeleteAttempts) : null;
         if (!replica.CompleteAgentDeletion(request.OperationId, request.LeaseToken, now, request.AbsenceVerified, request.FailureCode, next))
             return BackupMutationResult.Conflict;
+        RecordDeletionOutcome(context, replica, identity, now, request.AbsenceVerified, request.FailureCode);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return BackupMutationResult.Accepted;
@@ -112,6 +116,23 @@ public sealed class PostgreSqlAgentReplicaDeletionStore(DbContextOptions<Platfor
 
     private static bool IsRetryable(string code) => code is DeleteReplicaFailureCodes.IoError or
         DeleteReplicaFailureCodes.DeleteNotVerified or DeleteReplicaFailureCodes.Unexpected;
+
+    private static void RecordDeletionOutcome(PlatformDbContext context, BackupReplica replica, AgentIdentity identity,
+        DateTimeOffset now, bool absenceVerified, string? failureCode) =>
+        context.AuditEvents.Add(AuditEvent.Record(
+            now, UserId.System, AuditActorKind.System,
+            absenceVerified ? AuditActions.BackupReplicaPhysicalDeleteCompleted : AuditActions.BackupReplicaPhysicalDeleteFailed,
+            replica.TenantId, "backup_replica", replica.Id.ToString("D"),
+            new Dictionary<string, object?>
+            {
+                ["artifactId"] = replica.ArtifactId.ToString("D"),
+                ["agentId"] = identity.AgentId.Value.ToString("D"),
+                ["result"] = absenceVerified ? "deleted" : replica.DeleteNextAttemptAt.HasValue ? "retry_scheduled" : "failed",
+                ["absenceVerified"] = absenceVerified,
+                ["failureCode"] = failureCode,
+                ["attempt"] = replica.DeleteAttempts,
+                ["nextAttemptAt"] = replica.DeleteNextAttemptAt
+            }));
 
     private static async Task<BackupReplica?> LockReplicaAsync(PlatformDbContext context, AgentIdentity identity, Guid replicaId,
         CancellationToken cancellationToken)

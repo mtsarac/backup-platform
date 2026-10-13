@@ -16,8 +16,8 @@ public sealed record RetentionCycleResult(int ArtifactsExamined, int ReplicasMar
 /// <summary>
 /// The backend-owned half of retention: it expires backups, dispatches agent-owned removals and physically deletes only backend-owned replicas.
 /// Every decision is made by <see cref="IBackupRetentionStore"/> in the database, so any number of nodes may run this at once; this class
-/// talks to the storage. A replica is recorded Deleted only after the provider reported the object gone (and, where the provider can prove
-/// absence, after that was checked), never before; any failure is recorded with a stable code and retried at a bounded cadence.
+/// talks to the storage. A replica is recorded Deleted only after the provider proved the object absent,
+/// never before; any failure is recorded with a stable code and retried at a bounded cadence.
 /// </summary>
 public sealed class BackupRetentionService(
     IBackupRetentionStore store, IBackupStorageResolver storages, BackupRetentionOptions options, BackupNodeIdentity node, TimeProvider time,
@@ -114,11 +114,12 @@ public sealed class BackupRetentionService(
             var provider = storages.Resolve(claim.TenantId, claim.StorageProvider, claim.StorageTarget);
             if (provider is null) return BackupDeleteFailureCodes.StorageNotConfigured;
             if (!provider.Capabilities.Supports(StorageCapabilityIds.Delete)) return BackupDeleteFailureCodes.DeleteNotSupported;
+            if (!provider.Capabilities.Supports(StorageCapabilityIds.VerifyAbsence)) return BackupDeleteFailureCodes.DeleteNotVerified;
             if (!StorageObjectKey.TryCreate(claim.Key, out var key) || key is null) return BackupDeleteFailureCodes.InvalidLocation;
 
             // False means the object was already absent: the delete is idempotent, so that is success.
             await provider.DeleteAsync(key, cancellationToken);
-            if (provider.Capabilities.Supports(StorageCapabilityIds.VerifyAbsence) && await provider.ExistsAsync(key, cancellationToken))
+            if (await provider.ExistsAsync(key, cancellationToken))
             {
                 return BackupDeleteFailureCodes.DeleteNotVerified;
             }

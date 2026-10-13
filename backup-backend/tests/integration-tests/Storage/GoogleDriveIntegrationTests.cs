@@ -406,8 +406,9 @@ public sealed class GoogleDriveIntegrationTests(PostgreSqlFixture fixture) : ICl
         private readonly Dictionary<string, (string Name, long TotalSize, MemoryStream Stream, Dictionary<string, string> Properties)> _sessions = [];
         private readonly Dictionary<string, string> _fileNames = [];
         private readonly Dictionary<string, Dictionary<string, string>> _fileProperties = [];
+        private readonly Dictionary<string, string> _uploadFileIds = [];
         private int _sessionSeq;
-
+        private int _generatedIdSeq;
         public void SimulateExternalDelete() => _files.Clear();
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -444,6 +445,14 @@ public sealed class GoogleDriveIntegrationTests(PostgreSqlFixture fixture) : ICl
             if (uri.Contains("oauth2.googleapis.com/revoke"))
             {
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+            }
+            if (uri.Contains("/drive/v3/files/generateIds") && request.Method == HttpMethod.Get)
+            {
+                var generatedId = $"gen-{++_generatedIdSeq}";
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = JsonContent.Create(new { ids = new[] { generatedId } })
+                });
             }
 
             // Folder search or create
@@ -482,9 +491,11 @@ public sealed class GoogleDriveIntegrationTests(PostgreSqlFixture fixture) : ICl
                 var sid = $"sess-{++_sessionSeq}";
                 var total = long.Parse(request.Headers.GetValues("X-Upload-Content-Length").First());
                 using var metadata = JsonDocument.Parse(request.Content!.ReadAsStringAsync(cancellationToken).Result);
+                var requestedFileId = metadata.RootElement.TryGetProperty("id", out var idProp) ? idProp.GetString() : null;
+                var effectiveFileId = string.IsNullOrWhiteSpace(requestedFileId) ? $"fid-{sid}" : requestedFileId;
+                _uploadFileIds[sid] = effectiveFileId;
                 _sessions[sid] = (metadata.RootElement.GetProperty("name").GetString()!, total, new MemoryStream(),
                     metadata.RootElement.GetProperty("appProperties").EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetString()!));
-
                 var response = new HttpResponseMessage(HttpStatusCode.OK);
                 response.Headers.Location = new Uri($"https://fake-upload.googleapis.com/{sid}");
                 return Task.FromResult(response);
@@ -504,7 +515,7 @@ public sealed class GoogleDriveIntegrationTests(PostgreSqlFixture fixture) : ICl
 
                 if (session.Stream.Length >= session.TotalSize)
                 {
-                    var fileId = $"fid-{sid}";
+                    var fileId = _uploadFileIds.TryGetValue(sid, out var assignedId) ? assignedId : $"fid-{sid}";
                     _files[fileId] = session.Stream.ToArray();
                     _fileNames[fileId] = session.Name;
                     _fileProperties[fileId] = session.Properties;

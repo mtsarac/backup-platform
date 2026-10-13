@@ -46,3 +46,15 @@ The status banner reports successful backups in the last 24 hours, not a guarant
 Backup job storage configuration uses only `destinations` and `requiredVerifiedReplicaCount`; the primary target is selected by `isPrimary`, not array position. Removed top-level storage fields are not submitted. `Quarantined` replicas require ownership review and are not verified restore/download sources; `TargetConflict` is explained without exposing provider exception details.
 
 Text size (100%, 125%, 150%) and high contrast persist in browser local storage and are applied before React mounts. Restore request retries retain an idempotency key for unchanged input; correcting target, mode or options creates a new request identity.
+
+## Test feedback
+
+`bun run test` executes the full suite with two `vmThreads` workers. This reuses jsdom setup while retaining
+file isolation and mock restoration, rather than constructing an environment for every test file.
+For a focused development check, pass a test file or directory, for example:
+
+```bash
+bun run test src/features/platform/audit-table.test.tsx
+```
+
+Full tests, typechecking, lint and the production build remain the acceptance checks.

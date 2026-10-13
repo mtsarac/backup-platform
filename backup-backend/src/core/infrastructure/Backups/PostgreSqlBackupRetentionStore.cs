@@ -1,4 +1,8 @@
+using System.Security.Cryptography;
+using System.Text;
+using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Infrastructure.Persistence;
@@ -48,7 +52,18 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
                     .SingleOrDefaultAsync(entity => entity.TenantId == candidate.TenantId && entity.Id == candidate.Id, cancellationToken);
                 if (artifact is null) continue;
                 // The domain decides expiry and pin again, now that nobody can change the artifact under it.
+                var previouslyApplied = artifact.RetentionAppliedAt;
                 var applied = artifact.ApplyRetention(now);
+                if (previouslyApplied is null && artifact.RetentionAppliedAt is not null)
+                    context.AuditEvents.Add(AuditEvent.Record(
+                        now, UserId.System, AuditActorKind.System, AuditActions.BackupArtifactRetentionApplied, artifact.TenantId,
+                        "backup_artifact", artifact.Id.ToString("D"),
+                        new Dictionary<string, object?>
+                        {
+                            ["result"] = applied > 0 ? "delete_pending" : "no_available_replicas",
+                            ["reason"] = "RetentionExpired",
+                            ["replicasMoved"] = applied
+                        }));
                 await context.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
                 moved += applied;
@@ -147,6 +162,18 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
                 m.TenantId == replica.TenantId && m.ConnectionId == replica.StorageConnectionId && m.StorageKey == replica.Key)
                 .ExecuteDeleteAsync(cancellationToken);
         }
+        context.AuditEvents.Add(AuditEvent.Record(
+            now, UserId.System, AuditActorKind.System, AuditActions.BackupReplicaPhysicalDeleteCompleted, replica.TenantId,
+            "backup_replica", replicaId.ToString("D"),
+            new Dictionary<string, object?>
+            {
+                ["artifactId"] = replica.ArtifactId.ToString("D"),
+                ["storageProvider"] = SafeStorageProvider(replica.StorageProvider),
+                ["storageConnectionId"] = replica.StorageConnectionId.ToString("D"),
+                ["result"] = "deleted",
+                ["absenceVerified"] = true,
+                ["attempt"] = replica.DeleteAttempts
+            }));
         try
         {
             await context.SaveChangesAsync(cancellationToken);
@@ -159,12 +186,53 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
         return true;
     }
 
-    public Task<bool> FailDeletionAsync(Guid replicaId, Guid leaseToken, DateTimeOffset now, string failureCode, DateTimeOffset nextAttemptAt, CancellationToken cancellationToken) =>
-        TransitionReplicaAsync(replicaId, replica => replica.FailDelete(leaseToken, now, failureCode, nextAttemptAt), cancellationToken);
+    public async Task<bool> FailDeletionAsync(Guid replicaId, Guid leaseToken, DateTimeOffset now, string failureCode, DateTimeOffset nextAttemptAt, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var replica = await context.BackupReplicas.SingleOrDefaultAsync(entity => entity.Id == replicaId, cancellationToken);
+        if (replica is null || !replica.FailDelete(leaseToken, now, failureCode, nextAttemptAt)) return false;
+        var safeCode = failureCode is BackupDeleteFailureCodes.StorageNotConfigured or BackupDeleteFailureCodes.DeleteNotSupported or
+            BackupDeleteFailureCodes.InvalidLocation or BackupDeleteFailureCodes.AccessDenied or BackupDeleteFailureCodes.StorageUnavailable or
+            BackupDeleteFailureCodes.IoError or BackupDeleteFailureCodes.DeleteNotVerified or BackupDeleteFailureCodes.Unexpected
+            ? failureCode : BackupDeleteFailureCodes.Unexpected;
+        context.AuditEvents.Add(AuditEvent.Record(
+            now, UserId.System, AuditActorKind.System, AuditActions.BackupReplicaPhysicalDeleteFailed, replica.TenantId,
+            "backup_replica", replicaId.ToString("D"),
+            new Dictionary<string, object?>
+            {
+                ["artifactId"] = replica.ArtifactId.ToString("D"),
+                ["result"] = "retry_scheduled",
+                ["absenceVerified"] = false,
+                ["failureCode"] = safeCode,
+                ["attempt"] = replica.DeleteAttempts,
+                ["nextAttemptAt"] = replica.DeleteNextAttemptAt
+            }));
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return false;
+        }
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
 
     public async Task<BackupArtifactDeleteResult> RequestDeleteAsync(TenantId tenantId, Guid artifactId, Guid? requestedByUserId, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var result = await MutateArtifactAsync(tenantId, artifactId, artifact => artifact.RequestDelete(now, requestedByUserId), cancellationToken);
+        var result = await MutateArtifactAsync(tenantId, artifactId, artifact => artifact.RequestDelete(now, requestedByUserId), cancellationToken,
+            (context, artifact, outcome) =>
+            {
+                if (outcome != BackupArtifactDeleteOutcome.Requested) return;
+                var actorId = requestedByUserId.HasValue ? new UserId(requestedByUserId.Value) : UserId.System;
+                var actorKind = requestedByUserId.HasValue ? AuditActorKind.TenantAdministrator : AuditActorKind.System;
+                context.AuditEvents.Add(AuditEvent.Record(
+                    now, actorId, actorKind, AuditActions.BackupArtifactDeleteRequested, tenantId,
+                    "backup_artifact", artifactId.ToString("D"),
+                    new Dictionary<string, object?> { ["result"] = "delete_pending", ["reason"] = "Manual" }));
+            });
         if (result is null) return new BackupArtifactDeleteResult(BackupArtifactDeleteKind.NotFound, null);
         var kind = result.Outcome switch
         {
@@ -175,9 +243,19 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
         return new BackupArtifactDeleteResult(kind, result.Record);
     }
 
-    public async Task<BackupArtifactCancelResult> CancelDeleteAsync(TenantId tenantId, Guid artifactId, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task<BackupArtifactCancelResult> CancelDeleteAsync(TenantId tenantId, Guid artifactId, DateTimeOffset now, CancellationToken cancellationToken, Guid? requestedByUserId = null)
     {
-        var result = await MutateArtifactAsync(tenantId, artifactId, artifact => artifact.CancelDelete(now), cancellationToken);
+        var result = await MutateArtifactAsync(tenantId, artifactId, artifact => artifact.CancelDelete(now), cancellationToken,
+            (context, artifact, restored) =>
+            {
+                if (restored == 0) return;
+                var actorId = requestedByUserId.HasValue ? new UserId(requestedByUserId.Value) : UserId.System;
+                var actorKind = requestedByUserId.HasValue ? AuditActorKind.TenantAdministrator : AuditActorKind.System;
+                context.AuditEvents.Add(AuditEvent.Record(
+                    now, actorId, actorKind, AuditActions.BackupArtifactDeleteCancelled, tenantId,
+                    "backup_artifact", artifactId.ToString("D"),
+                    new Dictionary<string, object?> { ["result"] = "restored", ["replicasRestored"] = restored }));
+            });
         if (result is null) return new BackupArtifactCancelResult(BackupArtifactCancelKind.NotFound, null);
         return new BackupArtifactCancelResult(result.Outcome > 0 ? BackupArtifactCancelKind.Restored : BackupArtifactCancelKind.NothingToCancel, result.Record);
     }
@@ -314,23 +392,6 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
             """, cancellationToken);
     }
 
-    private async Task<bool> TransitionReplicaAsync(Guid replicaId, Func<BackupReplica, bool> transition, CancellationToken cancellationToken)
-    {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        var replica = await context.BackupReplicas.SingleOrDefaultAsync(entity => entity.Id == replicaId, cancellationToken);
-        if (replica is null || !transition(replica)) return false;
-        try
-        {
-            await context.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            // Another node changed the row after it was read (a takeover after lease expiry): this holder no longer owns the delete.
-            return false;
-        }
-        return true;
-    }
-
     private sealed record Mutation<TOutcome>(TOutcome Outcome, BackupArtifactRecord Record);
 
     /// <summary>
@@ -338,7 +399,7 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
     /// claimed a replica between the read and the write; the transaction is rolled back and re-run from a fresh read so the outcome reflects what
     /// committed (a cancel then finds nothing left to cancel). Null: no such artifact in this tenant.
     /// </summary>
-    private async Task<Mutation<TOutcome>?> MutateArtifactAsync<TOutcome>(TenantId tenantId, Guid artifactId, Func<BackupArtifact, TOutcome> mutate, CancellationToken cancellationToken)
+    private async Task<Mutation<TOutcome>?> MutateArtifactAsync<TOutcome>(TenantId tenantId, Guid artifactId, Func<BackupArtifact, TOutcome> mutate, CancellationToken cancellationToken, Action<PlatformDbContext, BackupArtifact, TOutcome>? onCommit = null)
     {
         for (var attempt = 1; ; attempt++)
         {
@@ -349,6 +410,7 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
                 .SingleOrDefaultAsync(entity => entity.TenantId == tenantId && entity.Id == artifactId, cancellationToken);
             if (artifact is null) return null;
             var outcome = mutate(artifact);
+            onCommit?.Invoke(context, artifact, outcome);
             try
             {
                 await context.SaveChangesAsync(cancellationToken);
@@ -361,6 +423,130 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
             var owners = await ResolveOwnersAsync(context, tenantId, [artifact.AttemptId], cancellationToken);
             return new Mutation<TOutcome>(outcome, ToRecord(artifact, owners));
         }
+    }
+
+    private static string SafeStorageProvider(string provider) => provider is "local" or "central" or "sftp" or "google-drive" ? provider : "other";
+
+    public async Task<ClaimedStorageCleanup?> BeginSweptDeletionAsync(
+        string storageProvider, string storageName, TenantId? storageScope, ManagedStorageKey key, string objectKey,
+        DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(storageProvider);
+        ArgumentException.ThrowIfNullOrWhiteSpace(storageName);
+        if (!ManagedBackupLayout.TryParseStorageKey(objectKey, out var parsed) || parsed != key) return null;
+        if (storageScope is { } scope && scope.Value != key.TenantId) return null;
+        now = now.ToUniversalTime();
+        var digest = SHA256.HashData(Encoding.UTF8.GetBytes($"{storageProvider}\n{storageName}\n{objectKey}"));
+        var targetIdentity = Convert.ToHexStringLower(digest);
+        var tenantId = new TenantId(key.TenantId);
+
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var lockKey = BitConverter.ToInt64(digest);
+        await context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({lockKey})", cancellationToken);
+
+        // Terminal check: if already completed and audited, do not issue fresh intent
+        var existing = await context.BackupStorageCleanups
+            .SingleOrDefaultAsync(c => c.StorageProvider == storageProvider && c.StorageName == storageName && c.TargetIdentity == targetIdentity, cancellationToken);
+        if (existing is not null)
+        {
+            if (existing.Status == BackupStorageCleanupStatus.Completed) return null;
+            if (existing.Claim(Guid.NewGuid(), now, leaseDuration))
+            {
+                await context.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return new ClaimedStorageCleanup(
+                    existing.Id, existing.TenantId, existing.JobId, existing.RunId, existing.AttemptId,
+                    existing.StorageProvider, existing.StorageName, existing.TargetIdentity, existing.Key, existing.IsPartial, existing.LeaseToken!.Value);
+            }
+            return null;
+        }
+
+        var activity = await (from attempt in context.BackupRunAttempts
+                              join run in context.BackupRuns on new { attempt.RunId, attempt.TenantId } equals new { RunId = run.Id, run.TenantId }
+                              where attempt.Id == key.AttemptId && attempt.TenantId == tenantId &&
+                                  run.Id == key.RunId && run.JobId == key.JobId
+                              select attempt.Id).SingleOrDefaultAsync(cancellationToken);
+        if (activity == Guid.Empty) return null;
+
+        var cleanup = new BackupStorageCleanup(
+            Guid.NewGuid(), tenantId, key.JobId, key.RunId, key.AttemptId, storageProvider, storageName, targetIdentity,
+            objectKey, key.IsPartial, now, Guid.NewGuid(), now + leaseDuration);
+        context.BackupStorageCleanups.Add(cleanup);
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new ClaimedStorageCleanup(
+            cleanup.Id, cleanup.TenantId, cleanup.JobId, cleanup.RunId, cleanup.AttemptId,
+            cleanup.StorageProvider, cleanup.StorageName, cleanup.TargetIdentity, cleanup.Key, cleanup.IsPartial, cleanup.LeaseToken!.Value);
+    }
+
+    public async Task<IReadOnlyList<PendingStorageCleanup>> ListPendingSweptDeletionsAsync(
+        string storageProvider, string storageName, TenantId? storageScope, DateTimeOffset now, int limit, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(storageProvider);
+        ArgumentException.ThrowIfNullOrWhiteSpace(storageName);
+        now = now.ToUniversalTime();
+        var take = Math.Clamp(limit, 1, MaxClaimBatch);
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var query = context.BackupStorageCleanups.AsNoTracking()
+            .Where(c => c.StorageProvider == storageProvider && c.StorageName == storageName && c.Status == BackupStorageCleanupStatus.Pending
+                && (c.LeaseExpiresAt == null || c.LeaseExpiresAt <= now));
+        if (storageScope is { } scope)
+        {
+            query = query.Where(c => c.TenantId == scope);
+        }
+        var list = await query.OrderBy(c => c.CreatedAt).ThenBy(c => c.Id).Take(take)
+            .Select(c => new PendingStorageCleanup(
+                c.Id, c.TenantId, c.JobId, c.RunId, c.AttemptId, c.StorageProvider, c.StorageName, c.TargetIdentity, c.Key, c.IsPartial))
+            .ToListAsync(cancellationToken);
+        return list;
+    }
+
+    public async Task<ClaimedStorageCleanup?> ClaimPendingSweptDeletionAsync(
+        Guid cleanupId, TenantId? storageScope, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken)
+    {
+        now = now.ToUniversalTime();
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var cleanup = await context.BackupStorageCleanups
+            .SingleOrDefaultAsync(c => c.Id == cleanupId && (storageScope == null || c.TenantId == storageScope), cancellationToken);
+        if (cleanup is null || !cleanup.Claim(Guid.NewGuid(), now, leaseDuration)) return null;
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new ClaimedStorageCleanup(
+            cleanup.Id, cleanup.TenantId, cleanup.JobId, cleanup.RunId, cleanup.AttemptId,
+            cleanup.StorageProvider, cleanup.StorageName, cleanup.TargetIdentity, cleanup.Key, cleanup.IsPartial, cleanup.LeaseToken!.Value);
+    }
+
+    public async Task<bool> CompleteSweptDeletionAsync(Guid cleanupId, Guid leaseToken, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        now = now.ToUniversalTime();
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var cleanup = await context.BackupStorageCleanups.SingleOrDefaultAsync(c => c.Id == cleanupId, cancellationToken);
+        if (cleanup is null || !cleanup.Complete(leaseToken, now)) return false;
+
+        var auditExists = await context.AuditEvents.AnyAsync(audit => audit.Action == AuditActions.BackupStorageOrphanDeleteCompleted &&
+            audit.TargetId == cleanup.TargetIdentity && audit.TenantId == cleanup.TenantId, cancellationToken);
+        if (!auditExists)
+        {
+            context.AuditEvents.Add(AuditEvent.Record(
+                now, UserId.System, AuditActorKind.System, AuditActions.BackupStorageOrphanDeleteCompleted, cleanup.TenantId,
+                "backup_storage_object", cleanup.TargetIdentity,
+                new Dictionary<string, object?>
+                {
+                    ["attemptId"] = cleanup.AttemptId.ToString("D"),
+                    ["runId"] = cleanup.RunId.ToString("D"),
+                    ["jobId"] = cleanup.JobId.ToString("D"),
+                    ["storageProvider"] = SafeStorageProvider(cleanup.StorageProvider),
+                    ["result"] = "deleted",
+                    ["absenceVerified"] = true,
+                    ["kind"] = cleanup.IsPartial ? "partial_upload" : "orphan"
+                }));
+        }
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
     }
 
     /// <summary>

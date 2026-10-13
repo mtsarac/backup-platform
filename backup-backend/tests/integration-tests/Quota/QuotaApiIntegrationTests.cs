@@ -441,7 +441,7 @@ public sealed class QuotaApiIntegrationTests(PostgreSqlFixture fixture) : IClass
         Assert.Equal(policiesBefore, seeded.GetArrayLength());
         Assert.Equal((1, "Default (logical, all storage)"), (seeded[0].GetProperty("version").GetInt32(), seeded[0].GetProperty("name").GetString()));
         await using var context = fixture.CreatePlatformContext();
-        Assert.False(await context.AuditEvents.AnyAsync(row => row.ActorUserId == setup.Account.UserId));
+        Assert.False(await context.AuditEvents.AnyAsync(row => row.ActorUserId == setup.Account.UserId && row.Action != AuditActions.UserLoginSucceeded));
         Assert.Null(await _quota.StoredUsageAsync(setup.Tenant.Id));
     }
 

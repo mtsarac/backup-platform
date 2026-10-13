@@ -248,7 +248,12 @@ public sealed class PostgreSqlPlatformAdministrationStore(DbContextOptions<Platf
             .ToDictionaryAsync(tenant => tenant.Id, tenant => tenant.Name, cancellationToken);
         return new PagedResult<PlatformAuditItem>(
             rows.Select(row => new PlatformAuditItem(
-                row.Id, row.At, row.ActorUserId, actors.GetValueOrDefault(row.ActorUserId), row.ActorKind, row.Action,
+                row.Id, row.At, row.ActorUserId, row.ActorKind switch
+                {
+                    AuditActorKind.System => "System",
+                    AuditActorKind.Anonymous => "Anonymous",
+                    _ => actors.GetValueOrDefault(row.ActorUserId)
+                }, row.ActorKind, row.Action,
                 row.TenantId, row.TenantId is null ? null : tenants.GetValueOrDefault(row.TenantId), row.TargetType, row.TargetId, row.DetailsJson)).ToList(),
             total, page, pageSize);
     }
