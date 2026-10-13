@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Storage;
@@ -13,6 +15,17 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
 {
     // Both claim paths serialize admission across all nodes before counting capacity.
     private const long ClaimLockKey = 0x4250_5252_434C_4D01;
+
+    private const int DiscoveryScanLimit = 50;
+    // Shared across the worker's per-tick scopes; a restart begins a new pass.
+    private static readonly ConcurrentDictionary<(string Database, Guid Tenant), DiscoveryProgress> DiscoveryCursors = new();
+
+    private sealed class DiscoveryProgress
+    {
+        public SemaphoreSlim Gate { get; } = new(1, 1);
+        public DateTimeOffset? CreatedAt { get; set; }
+        public Guid Id { get; set; }
+    }
 
     public Task<ReplicaRepairAdmissionResult> AdmitRepairAsync(
         TenantId tenantId,
@@ -103,28 +116,14 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
             return new(false, ReplicaRepairFailureCodes.AlreadyVerified, "Target destination already has a live verified replica.");
 
         var effectiveConnectionId = targetDestination.StorageConnectionId ?? Guid.Empty;
-        var activeRepairs = await context.ReplicaRepairOperations
-            .Where(r => r.TenantId == tenantId && r.ArtifactId == artifactId && r.StorageConnectionId == effectiveConnectionId
+        var hasActiveRepair = await context.ReplicaRepairOperations
+            .AnyAsync(r => r.TenantId == tenantId && r.ArtifactId == artifactId && r.StorageConnectionId == effectiveConnectionId
                 && (excludeOperationId == null || r.Id != excludeOperationId)
-                && (r.Status == ReplicaRepairStatus.Pending || r.Status == ReplicaRepairStatus.InProgress))
-            .ToListAsync(cancellationToken);
+                && (r.Status == ReplicaRepairStatus.Pending || r.Status == ReplicaRepairStatus.InProgress), cancellationToken);
 
-        foreach (var repair in activeRepairs)
-        {
-            if (repair.Status == ReplicaRepairStatus.InProgress && repair.LeaseExpiresAt <= now)
-            {
-                repair.MarkStaleFailed("lease_expired", "Repair lease expired before completion.", now);
-            }
-            else
-            {
-                await context.SaveChangesAsync(cancellationToken);
-                return new(false, "repair_already_in_progress", "A repair is already in progress for this destination.");
-            }
-        }
-        if (activeRepairs.Count > 0)
-        {
-            await context.SaveChangesAsync(cancellationToken);
-        }
+        // Only recovery can fence an expired transfer and account for its target before retrying.
+        if (hasActiveRepair)
+            return new(false, "repair_already_in_progress", "A repair is already in progress for this destination.");
 
         var allCandidateSources = ReplicaRepairSourceEvaluator.SelectCandidateSources(artifact, now);
         var candidateSources = allCandidateSources.Where(source =>
@@ -141,19 +140,38 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
             return new(true, null, null, artifact, targetDestination, selectedSource, candidateSources);
 
         // A new repair is only pre-checked here; CreateOperationAsync reserves under the tenant lock. An existing operation is re-reserved
-        // atomically, so its hold follows the current policy and artifact state.
-        var own = excludeOperationId is { } ownId
-            ? await context.ReplicaRepairOperations.SingleOrDefaultAsync(r => r.TenantId == tenantId && r.Id == ownId, cancellationToken)
-            : null;
+        // atomically under its own row lock, matching the canonical lock order (operation -> tenant) to prevent deadlocks with cancellation.
         BackupAdmissionDecision quotaDecision;
-        if (own is { IsTerminal: false })
+        if (excludeOperationId is { } ownId)
         {
             await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-            quotaDecision = await ReserveQuotaAsync(context, own, now, cancellationToken);
-            if (quotaDecision.Allowed)
+            var locked = await context.Database.SqlQuery<Guid>($"""
+                SELECT "Id" AS "Value" FROM replica_repair_operations
+                WHERE "TenantId" = {tenantId.Value} AND "Id" = {ownId}
+                FOR UPDATE
+                """).ToListAsync(cancellationToken);
+            if (locked.Count > 0)
             {
-                await context.SaveChangesAsync(cancellationToken);
+                var own = await context.ReplicaRepairOperations.SingleAsync(r => r.TenantId == tenantId && r.Id == ownId, cancellationToken);
+                if (!own.IsTerminal)
+                {
+                    quotaDecision = await ReserveQuotaAsync(context, own, now, cancellationToken);
+                    if (quotaDecision.Allowed)
+                    {
+                        await context.SaveChangesAsync(cancellationToken);
+                    }
+                    await transaction.CommitAsync(cancellationToken);
+                }
+                else
+                {
+                    await transaction.CommitAsync(cancellationToken);
+                    quotaDecision = BackupAdmissionDecision.Admitted;
+                }
+            }
+            else
+            {
                 await transaction.CommitAsync(cancellationToken);
+                quotaDecision = BackupAdmissionDecision.Admitted;
             }
         }
         else
@@ -254,6 +272,7 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
             .SingleOrDefaultAsync(r => r.TenantId == tenantId && r.Id == operationId, cancellationToken);
 
         if (operation is null || !operation.HasLease(leaseToken, now)) return false;
+        if (operation.TargetKey != targetKey && !ManagedBackupLayout.IsPartialSibling(operation.TargetKey, targetKey)) return false;
 
         // Fencing: If a live Verified replica already exists on this destination, never delete!
         var hasVerified = await context.BackupReplicas
@@ -264,9 +283,6 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
                 r.Status != BackupReplicaStatus.Deleted, cancellationToken);
         if (hasVerified) return false;
 
-        // Fencing: Atomically extend lease by 2 minutes so no competing worker can claim during deletion
-        operation.RenewLease(leaseToken, now, TimeSpan.FromMinutes(2));
-        await context.SaveChangesAsync(cancellationToken);
         return true;
     }
 
@@ -467,6 +483,44 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         return false;
     }
 
+    public async Task<bool> FailTargetConflictAsync(
+        TenantId tenantId, Guid operationId, Guid leaseToken, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var artifactId = await context.ReplicaRepairOperations.AsNoTracking()
+            .Where(r => r.TenantId == tenantId && r.Id == operationId)
+            .Select(r => r.ArtifactId).SingleOrDefaultAsync(cancellationToken);
+        if (artifactId == Guid.Empty) return false;
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        await context.Database.SqlQuery<Guid>($"""
+            SELECT "Id" AS "Value" FROM backup_artifacts
+            WHERE "TenantId" = {tenantId.Value} AND "Id" = {artifactId} FOR NO KEY UPDATE
+            """).ToListAsync(cancellationToken);
+        await context.Database.SqlQuery<Guid>($"""
+            SELECT "Id" AS "Value" FROM replica_repair_operations
+            WHERE "TenantId" = {tenantId.Value} AND "Id" = {operationId} FOR UPDATE
+            """).ToListAsync(cancellationToken);
+        var operation = await context.ReplicaRepairOperations.SingleAsync(r => r.TenantId == tenantId && r.Id == operationId, cancellationToken);
+        if (!operation.HasLease(leaseToken, now) || string.IsNullOrEmpty(operation.TargetKey)) return false;
+        var artifact = await context.BackupArtifacts.Include(a => a.Replicas)
+            .SingleAsync(a => a.TenantId == tenantId && a.Id == artifactId, cancellationToken);
+        var target = operation.StorageProvider is "sftp" or "google-drive" && operation.StorageConnectionId != Guid.Empty
+            ? operation.StorageConnectionId.ToString("D") : operation.StorageProvider;
+        if (!artifact.Replicas.Any(r => r.StorageConnectionId == operation.StorageConnectionId && r.Key == operation.TargetKey))
+        {
+            var conflict = new BackupReplica(Guid.NewGuid(), tenantId, artifact.Id, operation.StorageProvider, target,
+                operation.TargetKey, Math.Max(1, operation.TotalBytes), artifact.ArtifactChecksum, artifact.ChecksumAlgorithm,
+                "Failed", "RepairTargetConflict", now, null, BackupStorageExecutionLocation.Backend, null,
+                storageConnectionId: operation.StorageConnectionId);
+            artifact.AddQuarantinedReplica(conflict);
+            context.BackupReplicas.Add(conflict);
+        }
+        operation.Fail(leaseToken, ReplicaRepairFailureCodes.TargetConflict, "Target object conflicts with expected content; ownership requires reconciliation.", now);
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
     public async Task RecordRepairOrphanAsync(
         TenantId tenantId,
         Guid artifactId,
@@ -477,7 +531,8 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         long sizeBytes,
         string checksum,
         DateTimeOffset now,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool quarantine = false)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         var artifact = await context.BackupArtifacts
@@ -485,6 +540,26 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
             .SingleOrDefaultAsync(a => a.TenantId == tenantId && a.Id == artifactId, cancellationToken);
 
         if (artifact is null) return;
+
+        var existing = artifact.Replicas.FirstOrDefault(r => r.TenantId == tenantId && r.StorageConnectionId == storageConnectionId && r.Key == key)
+            ?? await context.BackupReplicas.FirstOrDefaultAsync(r => r.TenantId == tenantId && r.StorageConnectionId == storageConnectionId && r.Key == key, cancellationToken);
+        if (existing is not null)
+        {
+            if (existing.VerificationState != "Verified")
+            {
+                if (quarantine)
+                {
+                    if (existing.Status == BackupReplicaStatus.Available)
+                        existing.Quarantine();
+                }
+                else
+                {
+                    existing.ReopenOrphan(now);
+                }
+            }
+            await context.SaveChangesAsync(cancellationToken);
+            return;
+        }
 
         var orphan = new BackupReplica(
             Guid.NewGuid(),
@@ -497,14 +572,18 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
             checksum,
             "sha256",
             "Failed",
-            "RepairCleanupFailed",
+            quarantine ? "RepairTargetConflict" : "RepairCleanupFailed",
             now,
             verifiedAt: null,
             BackupStorageExecutionLocation.Backend,
             owningAgentId: null,
             storageConnectionId: storageConnectionId);
 
-        artifact.AddOrphanReplica(orphan, now);
+        if (quarantine)
+            artifact.AddQuarantinedReplica(orphan);
+        else
+            artifact.AddOrphanReplica(orphan, now);
+
         if (!context.BackupReplicas.Local.Contains(orphan) && !await context.BackupReplicas.AnyAsync(r => r.Id == orphan.Id, cancellationToken))
         {
             context.BackupReplicas.Add(orphan);
@@ -566,100 +645,60 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         TimeSpan initialRetryDelay,
         CancellationToken cancellationToken)
     {
-        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        var stale = await context.ReplicaRepairOperations
+        await using var scan = PlatformDbContext.CreateForPlatformOperations(options);
+        var stale = await scan.ReplicaRepairOperations.AsNoTracking()
             .Where(r => r.Status == ReplicaRepairStatus.InProgress && r.LeaseExpiresAt <= now)
-            .OrderBy(r => r.LeaseExpiresAt)
-            .Take(50)
-            .ToListAsync(cancellationToken);
-
+            .OrderBy(r => r.LeaseExpiresAt).Take(50)
+            .Select(r => new { r.Id, r.TenantId, r.ArtifactId }).ToListAsync(cancellationToken);
         var count = 0;
-        foreach (var op in stale)
+        foreach (var candidate in stale)
         {
-            if (op.CancellationRequestedAt != null)
+            await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+            await context.Database.SqlQuery<Guid>($"""
+                SELECT "Id" AS "Value" FROM backup_artifacts
+                WHERE "TenantId" = {candidate.TenantId.Value} AND "Id" = {candidate.ArtifactId} FOR NO KEY UPDATE
+                """).ToListAsync(cancellationToken);
+            var locked = await context.Database.SqlQuery<Guid>($"""
+                SELECT "Id" AS "Value" FROM replica_repair_operations
+                WHERE "TenantId" = {candidate.TenantId.Value} AND "Id" = {candidate.Id} FOR UPDATE SKIP LOCKED
+                """).ToListAsync(cancellationToken);
+            if (locked.Count == 0) continue;
+            var op = await context.ReplicaRepairOperations.SingleAsync(r => r.TenantId == candidate.TenantId && r.Id == candidate.Id, cancellationToken);
+            if (op.Status != ReplicaRepairStatus.InProgress || op.LeaseExpiresAt > now) continue;
+            // Preserve every old target before a retry persists its distinct key.
+            if (!string.IsNullOrEmpty(op.TargetKey))
             {
-                op.CancelStale(now);
-                if (!string.IsNullOrEmpty(op.TargetKey))
+                var artifact = await context.BackupArtifacts.Include(a => a.Replicas)
+                    .SingleAsync(a => a.TenantId == op.TenantId && a.Id == op.ArtifactId, cancellationToken);
+                if (!artifact.Replicas.Any(r => r.StorageConnectionId == op.StorageConnectionId && r.Key == op.TargetKey))
                 {
-                    var artifact = await context.BackupArtifacts
-                        .Include(a => a.Replicas)
-                        .SingleOrDefaultAsync(a => a.TenantId == op.TenantId && a.Id == op.ArtifactId, cancellationToken);
-                    if (artifact is not null && !artifact.Replicas.Any(r => r.StorageProvider == op.StorageProvider && r.StorageConnectionId == op.StorageConnectionId && r.VerificationState == "Verified" && r.Status != BackupReplicaStatus.Deleted))
-                    {
-                        var orphan = new BackupReplica(
-                            Guid.NewGuid(),
-                            op.TenantId,
-                            op.ArtifactId,
-                            op.StorageProvider,
-                            op.StorageConnectionId == Guid.Empty ? op.StorageProvider : op.StorageConnectionId.ToString("D"),
-                            op.TargetKey,
-                            Math.Max(1, op.TotalBytes),
-                            artifact.ArtifactChecksum,
-                            artifact.ChecksumAlgorithm,
-                            "Failed",
-                            "RepairCrashRecovery",
-                            now,
-                            verifiedAt: null,
-                            BackupStorageExecutionLocation.Backend,
-                            owningAgentId: null,
-                            storageConnectionId: op.StorageConnectionId);
+                    var orphan = new BackupReplica(Guid.NewGuid(), op.TenantId, op.ArtifactId, op.StorageProvider,
+                        op.StorageProvider is "sftp" or "google-drive" && op.StorageConnectionId != Guid.Empty
+                            ? op.StorageConnectionId.ToString("D") : op.StorageProvider,
+                        op.TargetKey, Math.Max(1, op.TotalBytes), artifact.ArtifactChecksum, artifact.ChecksumAlgorithm,
+                        "Failed", "RepairCrashRecovery", now, null, BackupStorageExecutionLocation.Backend, null,
+                        storageConnectionId: op.StorageConnectionId);
+                    var ownedName = op.LeaseToken is { } token ? ManagedBackupLayout.RepairFileName(op.Id, token) : null;
+                    if (ownedName is not null && (op.TargetKey == ownedName || op.TargetKey.EndsWith($"/{ownedName}", StringComparison.Ordinal)))
                         artifact.AddOrphanReplica(orphan, now);
-                        if (!context.BackupReplicas.Local.Contains(orphan) && !await context.BackupReplicas.AnyAsync(r => r.Id == orphan.Id, cancellationToken))
-                        {
-                            context.BackupReplicas.Add(orphan);
-                        }
-                    }
+                    else
+                        artifact.AddQuarantinedReplica(orphan);
+                    context.BackupReplicas.Add(orphan);
                 }
-                count++;
-                continue;
             }
-
-            if (op.AttemptCount < op.MaxAttempts)
+            if (op.CancellationRequestedAt != null)
+                op.CancelStale(now);
+            else if (op.AttemptCount < op.MaxAttempts)
             {
                 var delay = TimeSpan.FromSeconds(Math.Min(3600, initialRetryDelay.TotalSeconds * Math.Pow(2, Math.Max(0, op.AttemptCount - 1))));
                 op.RecoverStale("lease_expired", "Repair lease expired before completion; recovery retry scheduled.", now + delay, now);
             }
             else
-            {
                 op.MarkStaleFailed("lease_expired", "Repair lease expired and maximum retry attempts exhausted.", now);
-                if (!string.IsNullOrEmpty(op.TargetKey))
-                {
-                    var artifact = await context.BackupArtifacts
-                        .Include(a => a.Replicas)
-                        .SingleOrDefaultAsync(a => a.TenantId == op.TenantId && a.Id == op.ArtifactId, cancellationToken);
-                    if (artifact is not null && !artifact.Replicas.Any(r => r.StorageProvider == op.StorageProvider && r.StorageConnectionId == op.StorageConnectionId && r.VerificationState == "Verified" && r.Status != BackupReplicaStatus.Deleted))
-                    {
-                        var orphan = new BackupReplica(
-                            Guid.NewGuid(),
-                            op.TenantId,
-                            op.ArtifactId,
-                            op.StorageProvider,
-                            op.StorageConnectionId == Guid.Empty ? op.StorageProvider : op.StorageConnectionId.ToString("D"),
-                            op.TargetKey,
-                            Math.Max(1, op.TotalBytes),
-                            artifact.ArtifactChecksum,
-                            artifact.ChecksumAlgorithm,
-                            "Failed",
-                            "RepairCrashRecovery",
-                            now,
-                            verifiedAt: null,
-                            BackupStorageExecutionLocation.Backend,
-                            owningAgentId: null,
-                            storageConnectionId: op.StorageConnectionId);
-                        artifact.AddOrphanReplica(orphan, now);
-                        if (!context.BackupReplicas.Local.Contains(orphan) && !await context.BackupReplicas.AnyAsync(r => r.Id == orphan.Id, cancellationToken))
-                        {
-                            context.BackupReplicas.Add(orphan);
-                        }
-                    }
-                }
-            }
-            count++;
-        }
-
-        if (count > 0)
-        {
             await context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            count++;
         }
         return count;
     }
@@ -670,141 +709,146 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         CancellationToken cancellationToken,
         TenantId? tenantId = null)
     {
+        if (maxBatch <= 0) return [];
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-
-        const int ScanBatchSize = 50;
-        DateTimeOffset? cursorCreatedAt = null;
-        Guid? cursorId = null;
-        var created = new List<ReplicaRepairOperation>();
-        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-
-        while (created.Count < maxBatch)
+        var connection = context.Database.GetDbConnection();
+        var progress = DiscoveryCursors.GetOrAdd(
+            ($"{connection.DataSource}/{connection.Database}", tenantId?.Value ?? Guid.Empty), _ => new DiscoveryProgress());
+        await progress.Gate.WaitAsync(cancellationToken);
+        try
         {
-            var query = context.BackupArtifacts
-                .Include(a => a.Replicas)
-                .Where(a => (tenantId == null || a.TenantId == tenantId)
-                    && a.AcceptedAt != null
-                    && (a.RetentionExpiresAt == null || a.RetentionExpiresAt > now || a.RetentionPinnedAt != null));
+            var scopeId = tenantId?.Value ?? Guid.Empty;
+            var hasCursor = progress.CreatedAt.HasValue;
+            var cursorTime = progress.CreatedAt ?? now;
+            var cursorId = progress.Id;
+            // Filter before taking the page: healthy artifacts and terminal repair history consume no work or row locks.
+            var candidates = await context.BackupArtifacts.FromSqlInterpolated($"""
+                SELECT artifact.*, artifact.xmin
+                FROM backup_artifacts artifact
+                JOIN backup_run_attempts attempt ON attempt."TenantId" = artifact."TenantId" AND attempt."Id" = artifact."AttemptId"
+                JOIN backup_runs run ON run."TenantId" = attempt."TenantId" AND run."Id" = attempt."RunId"
+                WHERE ({scopeId} = '00000000-0000-0000-0000-000000000000'::uuid OR artifact."TenantId" = {scopeId})
+                    AND artifact."AcceptedAt" IS NOT NULL
+                    AND (artifact."RetentionExpiresAt" IS NULL OR artifact."RetentionExpiresAt" > {now} OR artifact."RetentionPinnedAt" IS NOT NULL)
+                    AND attempt."Status" IN (4, 5, 6, 7)
+                    AND (NOT {hasCursor} OR (artifact."CreatedAt", artifact."Id") < ({cursorTime}, {cursorId}))
+                    AND EXISTS (
+                        SELECT 1 FROM backup_replicas source
+                        WHERE source."TenantId" = artifact."TenantId" AND source."ArtifactId" = artifact."Id"
+                            AND source."VerificationState" = 'Verified' AND source."VerifiedAt" IS NOT NULL
+                            AND source."Status" = 'Available' AND source."ExecutionLocation" = 'Backend'
+                            AND (source."DeleteLeaseExpiresAt" IS NULL OR source."DeleteLeaseExpiresAt" <= {now})
+                            AND source."DeleteNextAttemptAt" IS NULL)
+                    AND EXISTS (
+                        SELECT 1 FROM jsonb_array_elements(run."Configuration"->'Destinations') destination
+                        WHERE (COALESCE((destination->>'StorageConnectionId')::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+                            = '00000000-0000-0000-0000-000000000000'::uuid OR EXISTS (
+                                SELECT 1 FROM storage_connections target
+                                WHERE target."TenantId" = artifact."TenantId" AND target."Id" = (destination->>'StorageConnectionId')::uuid
+                                    AND target."Enabled" AND NOT target."AdministrativelyDisabled"))
+                            AND NOT EXISTS (
+                            SELECT 1 FROM backup_replicas replica
+                            WHERE replica."TenantId" = artifact."TenantId" AND replica."ArtifactId" = artifact."Id"
+                                AND replica."VerificationState" = 'Verified' AND replica."Status" <> 'Deleted'
+                                AND CASE WHEN COALESCE((destination->>'StorageConnectionId')::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+                                    <> '00000000-0000-0000-0000-000000000000'::uuid
+                                    THEN replica."StorageConnectionId" = (destination->>'StorageConnectionId')::uuid
+                                    ELSE lower(replica."StorageProvider") = lower(destination->>'StorageProvider') END)
+                            AND NOT EXISTS (
+                                SELECT 1 FROM replica_repair_operations repair
+                                WHERE repair."TenantId" = artifact."TenantId" AND repair."ArtifactId" = artifact."Id"
+                                    AND repair."StorageConnectionId" = COALESCE((destination->>'StorageConnectionId')::uuid,
+                                        '00000000-0000-0000-0000-000000000000'::uuid)))
+                ORDER BY artifact."CreatedAt" DESC, artifact."Id" DESC
+                LIMIT {DiscoveryScanLimit}
+                """).AsNoTracking().ToListAsync(cancellationToken);
 
-            if (cursorCreatedAt.HasValue && cursorId.HasValue)
-            {
-                var cTime = cursorCreatedAt.Value;
-                var cId = cursorId.Value;
-                query = query.Where(a => a.CreatedAt < cTime || (a.CreatedAt == cTime && a.Id < cId));
-            }
-
-            var candidateArtifacts = await query
-                .OrderByDescending(a => a.CreatedAt)
-                .ThenByDescending(a => a.Id)
-                .Take(ScanBatchSize)
-                .ToListAsync(cancellationToken);
-
-            if (candidateArtifacts.Count == 0) break;
-
-            var last = candidateArtifacts[^1];
-            cursorCreatedAt = last.CreatedAt;
-            cursorId = last.Id;
-
-            foreach (var artifact in candidateArtifacts)
+            var created = new List<ReplicaRepairOperation>();
+            var examined = 0;
+            foreach (var candidate in candidates)
             {
                 if (created.Count >= maxBatch) break;
-            var lockedArtifacts = await context.Database.SqlQuery<Guid>($"""
-                SELECT "Id" AS "Value" FROM backup_artifacts
-                WHERE "TenantId" = {artifact.TenantId.Value} AND "Id" = {artifact.Id} FOR NO KEY UPDATE
-                """).ToListAsync(cancellationToken);
-            if (lockedArtifacts.Count == 0) continue;
-
-            var attempt = await context.BackupRunAttempts
-                .AsNoTracking()
-                .SingleOrDefaultAsync(at => at.TenantId == artifact.TenantId && at.Id == artifact.AttemptId, cancellationToken);
-            if (attempt is null || !attempt.IsTerminal) continue;
-
-            var run = await context.BackupRuns
-                .AsNoTracking()
-                .SingleOrDefaultAsync(r => r.TenantId == artifact.TenantId && r.Id == attempt.RunId, cancellationToken);
-            if (run is null) continue;
-
-            var destinations = run.Configuration.Destinations;
-
-            foreach (var dest in destinations)
-            {
-                if (created.Count >= maxBatch) break;
-
-                var connId = dest.StorageConnectionId ?? Guid.Empty;
-                var isVerified = artifact.Replicas.Any(r =>
-                    ((dest.StorageConnectionId != null && dest.StorageConnectionId != Guid.Empty)
-                        ? r.StorageConnectionId == dest.StorageConnectionId
-                        : string.Equals(r.StorageProvider, dest.StorageProvider, StringComparison.OrdinalIgnoreCase))
-                    && r.VerificationState == "Verified" && r.Status != BackupReplicaStatus.Deleted);
-
-                if (isVerified) continue;
-
-                var existingOp = await context.ReplicaRepairOperations
-                    .Where(r => r.TenantId == artifact.TenantId && r.ArtifactId == artifact.Id && r.StorageConnectionId == connId)
-                    .OrderByDescending(r => r.CreatedAt)
-                    .FirstOrDefaultAsync(cancellationToken);
-
-                // Retryable failures remain Pending; terminal history is never revived by discovery.
-                if (existingOp is not null) continue;
-
-                // Quota is decided by the reservation below, in this transaction; a second connection must not touch the usage rows it holds.
-                var admission = await EvaluateRepairAsync(
-                    artifact.TenantId, artifact.Id, dest.StorageConnectionId, dest.StorageProvider, now, excludeOperationId: null, checkQuota: false, cancellationToken);
-                if (!admission.Allowed || admission.SelectedSource is null) continue;
-                var lockedSources = await context.Database.SqlQuery<Guid>($"""
-                    SELECT "Id" AS "Value" FROM backup_replicas
-                    WHERE "TenantId" = {artifact.TenantId.Value} AND "ArtifactId" = {artifact.Id} AND "Id" = {admission.SelectedSource.Id} FOR UPDATE
+                // Advance even on denial or contention, so later candidates get a turn on the next scoped tick.
+                progress.CreatedAt = candidate.CreatedAt;
+                progress.Id = candidate.Id;
+                examined++;
+                await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+                var locked = await context.Database.SqlQuery<Guid>($"""
+                    SELECT "Id" AS "Value" FROM backup_artifacts
+                    WHERE "TenantId" = {candidate.TenantId.Value} AND "Id" = {candidate.Id}
+                    FOR NO KEY UPDATE SKIP LOCKED
                     """).ToListAsync(cancellationToken);
-                if (lockedSources.Count == 0) continue;
-                var source = await context.BackupReplicas.AsNoTracking().SingleAsync(entity => entity.TenantId == artifact.TenantId && entity.Id == admission.SelectedSource.Id, cancellationToken);
-                if (!ReplicaRepairSourceEvaluator.IsEligibleSource(source, now) || source.ExecutionLocation != BackupStorageExecutionLocation.Backend) continue;
+                if (locked.Count == 0) continue;
+                var artifact = await context.BackupArtifacts.AsNoTracking().Include(a => a.Replicas)
+                    .SingleAsync(a => a.TenantId == candidate.TenantId && a.Id == candidate.Id, cancellationToken);
+                var attempt = await context.BackupRunAttempts.AsNoTracking()
+                    .SingleAsync(a => a.TenantId == artifact.TenantId && a.Id == artifact.AttemptId, cancellationToken);
+                if (!attempt.IsTerminal) continue;
+                var run = await context.BackupRuns.AsNoTracking()
+                    .SingleAsync(r => r.TenantId == artifact.TenantId && r.Id == attempt.RunId, cancellationToken);
 
-                var newOp = new ReplicaRepairOperation(
-                    Guid.NewGuid(),
-                    artifact.TenantId,
-                    artifact.Id,
-                    connId,
-                    dest.StorageProvider,
-                    admission.SelectedSource.Id,
-                    now,
-                    requestedByUserId: null,
-                    totalBytes: artifact.SizeBytes,
-                    maxAttempts: 5,
-                    nextRetryAt: now);
-
-                // Saved per operation so the next candidate of the tenant sees this hold.
-                if (!(await ReserveQuotaAsync(context, newOp, now, cancellationToken)).Allowed) continue;
-                context.ReplicaRepairOperations.Add(newOp);
-                await context.SaveChangesAsync(cancellationToken);
-                created.Add(newOp);
+                foreach (var destination in run.Configuration.Destinations)
+                {
+                    if (created.Count >= maxBatch) break;
+                    var destinationId = destination.StorageConnectionId ?? Guid.Empty;
+                    if (await context.ReplicaRepairOperations.AnyAsync(r => r.TenantId == artifact.TenantId
+                        && r.ArtifactId == artifact.Id && r.StorageConnectionId == destinationId, cancellationToken)) continue;
+                    var admission = await EvaluateRepairAsync(artifact.TenantId, artifact.Id, destination.StorageConnectionId,
+                        destination.StorageProvider, now, excludeOperationId: null, checkQuota: false, cancellationToken);
+                    if (!admission.Allowed || admission.SelectedSource is null) continue;
+                    var lockedSources = await context.Database.SqlQuery<Guid>($"""
+                        SELECT "Id" AS "Value" FROM backup_replicas
+                        WHERE "TenantId" = {artifact.TenantId.Value} AND "ArtifactId" = {artifact.Id}
+                            AND "Id" = {admission.SelectedSource.Id} FOR UPDATE SKIP LOCKED
+                        """).ToListAsync(cancellationToken);
+                    if (lockedSources.Count == 0) continue;
+                    var source = await context.BackupReplicas.AsNoTracking()
+                        .SingleAsync(r => r.TenantId == artifact.TenantId && r.Id == admission.SelectedSource.Id, cancellationToken);
+                    if (!ReplicaRepairSourceEvaluator.IsEligibleSource(source, now)
+                        || source.ExecutionLocation != BackupStorageExecutionLocation.Backend) continue;
+                    var operation = new ReplicaRepairOperation(Guid.NewGuid(), artifact.TenantId, artifact.Id, destinationId,
+                        destination.StorageProvider, source.Id, now, totalBytes: artifact.SizeBytes, maxAttempts: 5, nextRetryAt: now);
+                    if (!(await ReserveQuotaAsync(context, operation, now, cancellationToken)).Allowed) continue;
+                    context.ReplicaRepairOperations.Add(operation);
+                    await context.SaveChangesAsync(cancellationToken);
+                    created.Add(operation);
+                }
+                await transaction.CommitAsync(cancellationToken);
+                context.ChangeTracker.Clear();
             }
+            // Wrap only after exhausting this page; a full page resumes strictly after its last examined key.
+            if (examined == candidates.Count && candidates.Count < DiscoveryScanLimit)
+                progress.CreatedAt = null;
+            return created;
         }
-    }
-
-        await transaction.CommitAsync(cancellationToken);
-        return created;
+        finally
+        {
+            progress.Gate.Release();
+        }
     }
     public async Task<bool> RequestCancellationAsync(
         TenantId tenantId,
+        Guid artifactId,
         Guid operationId,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        var operation = await context.ReplicaRepairOperations
-            .SingleOrDefaultAsync(r => r.TenantId == tenantId && r.Id == operationId, cancellationToken);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var operation = await context.ReplicaRepairOperations.FromSqlInterpolated($"""
+            SELECT *, xmin FROM replica_repair_operations
+            WHERE "TenantId" = {tenantId.Value} AND "ArtifactId" = {artifactId} AND "Id" = {operationId}
+            FOR UPDATE
+            """).SingleOrDefaultAsync(cancellationToken);
 
         if (operation is null || operation.IsTerminal) return false;
 
-        if (operation.Status == ReplicaRepairStatus.Pending)
-        {
-            operation.CancelPending(now);
-            await context.SaveChangesAsync(cancellationToken);
-            return true;
-        }
-
         operation.RequestCancellation(now);
+        if (operation.Status == ReplicaRepairStatus.Pending)
+            operation.CancelPending(now);
+
         await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return true;
     }
 

@@ -235,6 +235,19 @@ public sealed class ReplicationComplianceUnitTests
         Destinations = destinations
     };
 
+    [Theory]
+    [InlineData(1024, true)]
+    [InlineData(1025, false)]
+    public void CompletionAcceptsLeaseSizedKeysWithoutRemovingTheKeyLengthCap(int length, bool accepted)
+    {
+        var key = string.Join('/', Enumerable.Repeat(new string('a', 128), 7).Append(new string('b', length - 903)));
+        var request = Completion(
+            [ReplicaOf("central", Central) with { Key = key }, ReplicaOf("sftp", Sftp)],
+            [Verified("central", Central) with { Key = key }, Verified("sftp", Sftp), Failed("google-drive", Drive)]);
+
+        Assert.Equal(accepted, BackupInputValidation.IsValidCompletion(request, Snapshot(2)));
+    }
+
     [Fact]
     public void A_complete_partial_success_is_accepted()
     {

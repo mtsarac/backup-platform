@@ -76,6 +76,14 @@ public interface IReplicaRepairStore
         DateTimeOffset now,
         CancellationToken cancellationToken);
 
+    /// <summary>Atomically records an unowned conflicting target in quarantine and fails the lease holder.</summary>
+    Task<bool> FailTargetConflictAsync(
+        TenantId tenantId,
+        Guid operationId,
+        Guid leaseToken,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+
     Task<bool> ScheduleRetryAsync(
         TenantId tenantId,
         Guid operationId,
@@ -96,7 +104,8 @@ public interface IReplicaRepairStore
         long sizeBytes,
         string checksum,
         DateTimeOffset now,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        bool quarantine = false);
 
     Task<ReplicaRepairOperation?> ClaimDueRepairAsync(
         string leaseOwner,
@@ -118,6 +127,7 @@ public interface IReplicaRepairStore
 
     Task<bool> RequestCancellationAsync(
         TenantId tenantId,
+        Guid artifactId,
         Guid operationId,
         DateTimeOffset now,
         CancellationToken cancellationToken);

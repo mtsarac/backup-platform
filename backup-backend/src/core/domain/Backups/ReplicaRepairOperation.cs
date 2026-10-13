@@ -92,7 +92,7 @@ public sealed class ReplicaRepairOperation : ITenantOwned
     {
         if (IsTerminal) throw new InvalidOperationException("Cannot update target intent on a terminal repair operation.");
         BackupGuard.Id(sourceReplicaId);
-        BackupGuard.Text(targetKey, 512);
+        BackupGuard.RelativeKey(targetKey);
         SourceReplicaId = sourceReplicaId;
         TargetKey = targetKey;
     }

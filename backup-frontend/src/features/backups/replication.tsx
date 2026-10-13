@@ -60,8 +60,9 @@ function DestinationRow({
     <li className="flex flex-wrap items-start justify-between gap-2 rounded-md border border-border bg-surface-2 p-3 text-sm">
       <div className="space-y-1">
         <p className="font-medium text-text">{providerLabels[destination.storageProvider] ?? destination.storageProvider}{destination.isPrimary && <span className="ml-2 text-xs text-text-muted">Birincil</span>}</p>
-        {destination.state === 'Failed' && destination.failureCode && <p className="text-error">{destination.failureReason ?? failureMessage(destination.failureCode)} <span className="text-text-muted">· {destination.failureCode}</span></p>}
-        {destination.objectMayRemain && <p className="text-warning">Hedefte tamamlanmamış bir dosya kalmış olabilir; saklama süreci bu dosyayı da kaldırır.</p>}
+        {destination.state === 'Failed' && destination.failureCode && <p className="text-error">{destination.failureCode === 'TargetConflict' ? failureMessage(destination.failureCode) : (destination.failureReason ?? failureMessage(destination.failureCode))} <span className="text-text-muted">· {destination.failureCode}</span></p>}
+        {destination.objectMayRemain && destination.replicaStatus !== 'Quarantined' && <p className="text-warning">Hedefte tamamlanmamış bir dosya kalmış olabilir; saklama süreci bu dosyayı da kaldırır.</p>}
+        {destination.replicaStatus === 'Quarantined' && <p className="text-warning">Bu replika karantinaya alınmıştır; sahipliği doğrulanmadan otomatik veya manuel olarak silinmez.</p>}
         {isAutoPending && (
           <p className="text-xs text-amber-500 font-medium">
             Otomatik yeniden deneme bekleniyor (Deneme {repairOperation?.attemptCount ?? 0} / {repairOperation?.maxAttempts ?? 5})

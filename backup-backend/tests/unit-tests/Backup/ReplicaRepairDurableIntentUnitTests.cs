@@ -77,7 +77,6 @@ public sealed class ReplicaRepairDurableIntentUnitTests
         Assert.NotNull(store.CompletedReplica);
         Assert.Equal("Verified", store.CompletedReplica.VerificationState);
         Assert.NotNull(store.PinnedTargetKey);
-        Assert.Equal(sourceReplica.Key, store.PinnedTargetKey);
         Assert.Empty(provider.DeletedKeys);
         Assert.Equal(0, store.RecordedOrphanCount);
     }
@@ -118,7 +117,7 @@ public sealed class ReplicaRepairDurableIntentUnitTests
         Assert.Null(result.TargetReplicaId);
         Assert.Null(store.CompletedReplica);
         Assert.True(store.CanCleanupChecked);
-        Assert.Equal(sourceReplica.Key, Assert.Single(provider.DeletedKeys));
+        Assert.Equal(store.PinnedTargetKey, Assert.Single(provider.DeletedKeys));
         Assert.Equal(corruptSource ? 0 : 1, provider.VerifyCalls);
         Assert.Equal(0, store.RecordedOrphanCount);
     }
@@ -157,7 +156,7 @@ public sealed class ReplicaRepairDurableIntentUnitTests
         Assert.Null(store.CompletedReplica);
         Assert.True(store.CanCleanupChecked);
         Assert.Equal(1, store.RecordedOrphanCount);
-        Assert.Equal(sourceReplica.Key, store.LastRecordedOrphanKey);
+        Assert.Equal(store.PinnedTargetKey, store.LastRecordedOrphanKey);
     }
 
     [Fact]
@@ -420,7 +419,7 @@ public sealed class ReplicaRepairDurableIntentUnitTests
             return Task.FromResult(newReplica);
         }
 
-        public Task RecordRepairOrphanAsync(TenantId tenantId, Guid artifactId, Guid storageConnectionId, string storageProvider, string storageTarget, string key, long sizeBytes, string checksum, DateTimeOffset now, CancellationToken cancellationToken)
+        public Task RecordRepairOrphanAsync(TenantId tenantId, Guid artifactId, Guid storageConnectionId, string storageProvider, string storageTarget, string key, long sizeBytes, string checksum, DateTimeOffset now, CancellationToken cancellationToken, bool quarantine = false)
         {
             RecordedOrphanCount++;
             LastRecordedOrphanKey = key;
@@ -435,6 +434,9 @@ public sealed class ReplicaRepairDurableIntentUnitTests
             Status = ReplicaRepairStatus.Failed;
             return Task.FromResult(true);
         }
+        public Task<bool> FailTargetConflictAsync(TenantId tenantId, Guid operationId, Guid leaseToken, DateTimeOffset now, CancellationToken cancellationToken) =>
+            FailOperationAsync(tenantId, operationId, leaseToken, ReplicaRepairFailureCodes.TargetConflict, null, now, cancellationToken);
+
         public Task<bool> ScheduleRetryAsync(TenantId tenantId, Guid operationId, Guid leaseToken, string failureCode, string? reason, DateTimeOffset nextRetryAt, DateTimeOffset now, CancellationToken cancellationToken)
         {
             FailureCode = failureCode;
@@ -442,7 +444,7 @@ public sealed class ReplicaRepairDurableIntentUnitTests
             return Task.FromResult(true);
         }
         public Task<bool> UpdateProgressAsync(TenantId tenantId, Guid operationId, Guid leaseToken, long transferredBytes, long totalBytes, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(true);
-        public Task<bool> RequestCancellationAsync(TenantId tenantId, Guid operationId, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task<bool> RequestCancellationAsync(TenantId tenantId, Guid artifactId, Guid operationId, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(true);
         public Task<ReplicaRepairAdmissionResult> AdmitRepairAsync(TenantId tenantId, Guid artifactId, Guid? storageConnectionId, string? storageProvider, DateTimeOffset now, CancellationToken cancellationToken, Guid? excludeOperationId = null) => throw new NotSupportedException();
         public Task<ReplicaRepairAdmissionResult> CreateOperationAsync(ReplicaRepairOperation operation, CancellationToken cancellationToken) => Task.FromResult(new ReplicaRepairAdmissionResult(true, null, null));
         public Task<ReplicaRepairOperation?> ClaimOperationAsync(TenantId tenantId, Guid operationId, Guid leaseToken, string leaseOwner, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken) => throw new NotSupportedException();

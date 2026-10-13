@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.StorageProviders.Abstractions;
@@ -105,35 +106,34 @@ public sealed class ReplicaRepairService(
         }
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(externalToken);
-        _activeLocalCts[operationId] = cts;
         var leaseLost = false;
         var heartbeatFailed = false;
         var userCancellationRequested = false;
 
-        admission ??= await store.AdmitRepairAsync(
-            tenantId,
-            artifactId,
-            claimed.StorageConnectionId == Guid.Empty ? null : claimed.StorageConnectionId,
-            claimed.StorageProvider,
-            now,
-            cts.Token,
-            excludeOperationId: operationId);
-
-        if (!admission.Allowed || admission.Artifact is null || admission.TargetDestination is null)
-        {
-            var code = admission.DenialCode ?? ReplicaRepairFailureCodes.InternalError;
-            var reason = admission.DenialReason ?? "Admission re-evaluation failed.";
-            await FailOrRetryAsync(claimed, leaseToken, code, reason, CancellationToken.None);
-            _activeLocalCts.TryRemove(operationId, out _);
-            return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
-        }
-
-        var artifact = admission.Artifact;
-        var targetDestination = admission.TargetDestination;
-        var candidateSources = admission.CandidateSources ?? [];
-
         try
         {
+            _activeLocalCts[operationId] = cts;
+            admission ??= await store.AdmitRepairAsync(
+                tenantId,
+                artifactId,
+                claimed.StorageConnectionId == Guid.Empty ? null : claimed.StorageConnectionId,
+                claimed.StorageProvider,
+                now,
+                cts.Token,
+                excludeOperationId: operationId);
+
+            if (!admission.Allowed || admission.Artifact is null || admission.TargetDestination is null)
+            {
+                var code = admission.DenialCode ?? ReplicaRepairFailureCodes.InternalError;
+                var reason = admission.DenialReason ?? "Admission re-evaluation failed.";
+                await FailOrRetryAsync(claimed, leaseToken, code, reason, CancellationToken.None);
+                return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+            }
+
+            var artifact = admission.Artifact;
+            var targetDestination = admission.TargetDestination;
+            var candidateSources = admission.CandidateSources ?? [];
+
             var destinationTarget = targetDestination.StorageProvider is "sftp" or "google-drive" && targetDestination.StorageConnectionId is { } connId && connId != Guid.Empty
                 ? connId.ToString("D")
                 : targetDestination.StorageProvider;
@@ -174,7 +174,7 @@ public sealed class ReplicaRepairService(
                 }
 
                 var slash = candidate.Key.LastIndexOf('/');
-                var fileName = slash >= 0 ? candidate.Key[(slash + 1)..] : candidate.Key;
+                var fileName = ManagedBackupLayout.RepairFileName(operationId, leaseToken);
                 var targetScope = slash >= 0 ? candidate.Key[..slash] : "";
                 var candidateTargetKey = string.IsNullOrEmpty(targetScope) ? fileName : $"{targetScope}/{fileName}";
 
@@ -360,6 +360,14 @@ public sealed class ReplicaRepairService(
                         logger.LogInformation("Repair operation {OperationId} stopped due to host shutdown.", operationId);
                         return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
                     }
+                    if (!cts.Token.IsCancellationRequested && !userCancellationRequested)
+                    {
+                        logger.LogWarning("Repair operation {OperationId} transfer timed out internally. Scheduling retry.", operationId);
+                        await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, targetKey);
+                        await FailOrRetryAsync(claimed, leaseToken, ReplicaRepairFailureCodes.OperationTimedOut,
+                            "Transfer deadline exceeded.", CancellationToken.None);
+                        return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                    }
 
                     logger.LogInformation("Repair operation {OperationId} was cancelled by user request (observedInHeartbeat={InHeartbeat}).", operationId, userCancellationRequested);
                     await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, targetKey);
@@ -369,11 +377,33 @@ public sealed class ReplicaRepairService(
                 catch (StorageException sex)
                 {
                     logger.LogError(sex, "Destination storage put/verify failed for repair {OperationId}: {Message}", operationId, sex.Message);
-                    if (sex.Kind != StorageFailureKind.AlreadyExists)
-                        await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, targetKey);
+                    if (sex.Kind == StorageFailureKind.AlreadyExists)
+                    {
+                        await store.FailTargetConflictAsync(tenantId, operationId, leaseToken, time.GetUtcNow(), CancellationToken.None);
+                        return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
+                    }
+                    var cleanupKey = sex.RemainingObjectKey?.Value ?? targetKey;
+                    if (!putCompleted && !sex.ObjectMayRemain)
+                    {
+                        await store.RecordRepairOrphanAsync(
+                            tenantId,
+                            artifact.Id,
+                            targetDestination.StorageConnectionId ?? Guid.Empty,
+                            targetDestination.StorageProvider,
+                            destinationTarget,
+                            cleanupKey,
+                            artifact.SizeBytes,
+                            artifact.ArtifactChecksum,
+                            time.GetUtcNow(),
+                            CancellationToken.None,
+                            quarantine: true);
+                    }
+                    else
+                    {
+                        await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, cleanupKey);
+                    }
                     var code = sex.Kind switch
                     {
-                        StorageFailureKind.AlreadyExists => ReplicaRepairFailureCodes.AlreadyVerified,
                         StorageFailureKind.InsufficientSpace => ReplicaRepairFailureCodes.QuotaExceeded,
                         StorageFailureKind.Timeout => ReplicaRepairFailureCodes.OperationTimedOut,
                         StorageFailureKind.NotFound or StorageFailureKind.AccessDenied or StorageFailureKind.Io => ReplicaRepairFailureCodes.StorageWriteFailed,
@@ -385,10 +415,7 @@ public sealed class ReplicaRepairService(
                 catch (Exception ex)
                 {
                     logger.LogError(ex, "Unexpected error in repair execution {OperationId}: {Message}", operationId, ex.Message);
-                    if (putCompleted)
-                    {
-                        await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, targetKey);
-                    }
+                    await TryCleanupOrRecordOrphanAsync(destinationProvider, tenantId, operationId, leaseToken, artifact, targetDestination, destinationTarget, targetKey, recordOrphanIfCleanupFenced: putCompleted);
                     await FailOrRetryAsync(claimed, leaseToken, ReplicaRepairFailureCodes.InternalError,
                         $"Internal error: {ex.GetType().Name}: {ex.Message}", CancellationToken.None);
                     return await store.GetOperationAsync(tenantId, artifactId, operationId, CancellationToken.None);
@@ -422,7 +449,7 @@ public sealed class ReplicaRepairService(
         }
         finally
         {
-            _activeLocalCts.TryRemove(operationId, out _);
+            _activeLocalCts.TryRemove(new KeyValuePair<Guid, CancellationTokenSource>(operationId, cts));
         }
     }
 
@@ -432,12 +459,15 @@ public sealed class ReplicaRepairService(
         Guid operationId,
         CancellationToken cancellationToken)
     {
+        if (!await store.RequestCancellationAsync(tenantId, artifactId, operationId, time.GetUtcNow(), cancellationToken))
+            return false;
+
         if (_activeLocalCts.TryGetValue(operationId, out var cts))
         {
             try { cts.Cancel(); } catch { /* ignore */ }
         }
 
-        return await store.RequestCancellationAsync(tenantId, operationId, time.GetUtcNow(), cancellationToken);
+        return true;
     }
 
     public Task<ReplicaRepairOperationView?> GetRepairAsync(
@@ -485,7 +515,8 @@ public sealed class ReplicaRepairService(
         BackupArtifact artifact,
         BackupDestination targetDestination,
         string destinationTarget,
-        string targetKey)
+        string targetKey,
+        bool recordOrphanIfCleanupFenced = false)
     {
         var canCleanup = await store.CanCleanupTargetAsync(
             tenantId, operationId, leaseToken, targetKey, time.GetUtcNow(), CancellationToken.None);
@@ -493,6 +524,20 @@ public sealed class ReplicaRepairService(
         {
             logger.LogWarning("Fenced cleanup skipped for operation {OperationId}, key {Key}. Lease not held or verified replica exists.",
                 operationId, targetKey);
+            if (recordOrphanIfCleanupFenced)
+            {
+                await store.RecordRepairOrphanAsync(
+                    tenantId,
+                    artifact.Id,
+                    targetDestination.StorageConnectionId ?? Guid.Empty,
+                    targetDestination.StorageProvider,
+                    destinationTarget,
+                    targetKey,
+                    artifact.SizeBytes,
+                    artifact.ArtifactChecksum,
+                    time.GetUtcNow(),
+                    CancellationToken.None);
+            }
             return;
         }
 

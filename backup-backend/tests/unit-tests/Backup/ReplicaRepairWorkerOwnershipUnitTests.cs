@@ -211,7 +211,7 @@ public sealed class ReplicaRepairWorkerOwnershipUnitTests
         Assert.Equal(0, op.AttemptCount);
 
         // Cancel before claimed
-        var cancelled = await fakeStore.RequestCancellationAsync(Tenant, op.Id, T0.AddSeconds(5), default);
+        var cancelled = await fakeStore.RequestCancellationAsync(Tenant, artifact.Id, op.Id, T0.AddSeconds(5), default);
         Assert.True(cancelled);
         Assert.Equal(ReplicaRepairStatus.Cancelled, op.Status);
         Assert.True(op.IsTerminal);
@@ -456,15 +456,16 @@ public sealed class ReplicaRepairWorkerOwnershipUnitTests
             return Task.FromResult(ReplicaRepairLeaseRenewal.Active(isCancelled));
         }
 
-        public Task<bool> RequestCancellationAsync(TenantId tenantId, Guid operationId, DateTimeOffset now, CancellationToken cancellationToken)
+        public Task<bool> RequestCancellationAsync(TenantId tenantId, Guid artifactId, Guid operationId, DateTimeOffset now, CancellationToken cancellationToken)
         {
-            if (CurrentOperation is null || CurrentOperation.IsTerminal) return Task.FromResult(false);
+            if (CurrentOperation is null || CurrentOperation.TenantId != tenantId || CurrentOperation.ArtifactId != artifactId ||
+                CurrentOperation.Id != operationId || CurrentOperation.IsTerminal) return Task.FromResult(false);
+            CurrentOperation.RequestCancellation(now);
             if (CurrentOperation.Status == ReplicaRepairStatus.Pending)
             {
                 CurrentOperation.CancelPending(now);
                 return Task.FromResult(true);
             }
-            CurrentOperation.RequestCancellation(now);
             CancellationRequestedInDb = true;
             return Task.FromResult(true);
         }
@@ -490,9 +491,12 @@ public sealed class ReplicaRepairWorkerOwnershipUnitTests
 
         public Task<bool> FailOperationAsync(TenantId tenantId, Guid operationId, Guid leaseToken, string failureCode, string? reason, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(true);
 
+        public Task<bool> FailTargetConflictAsync(TenantId tenantId, Guid operationId, Guid leaseToken, DateTimeOffset now, CancellationToken cancellationToken) =>
+            FailOperationAsync(tenantId, operationId, leaseToken, ReplicaRepairFailureCodes.TargetConflict, null, now, cancellationToken);
+
         public Task<bool> ScheduleRetryAsync(TenantId tenantId, Guid operationId, Guid leaseToken, string failureCode, string? reason, DateTimeOffset nextRetryAt, DateTimeOffset now, CancellationToken cancellationToken) => Task.FromResult(true);
 
-        public Task RecordRepairOrphanAsync(TenantId tenantId, Guid artifactId, Guid storageConnectionId, string storageProvider, string storageTarget, string key, long sizeBytes, string checksum, DateTimeOffset now, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task RecordRepairOrphanAsync(TenantId tenantId, Guid artifactId, Guid storageConnectionId, string storageProvider, string storageTarget, string key, long sizeBytes, string checksum, DateTimeOffset now, CancellationToken cancellationToken, bool quarantine = false) => Task.CompletedTask;
 
         public Task<int> RecoverStaleRepairsAsync(DateTimeOffset now, TimeSpan initialRetryDelay, CancellationToken cancellationToken) => Task.FromResult(0);
 

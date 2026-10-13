@@ -185,14 +185,27 @@ Late responses cannot re-enable stale destructive restores or navigate after lea
 
 ## Automatic replica repair
 
-Discovery schedules missing destinations from the backup run's stored configuration, globally or for one tenant. Retryable work
-stays Pending with its retry schedule; terminal, cancelled and exhausted repair history is never automatically restarted.
+Discovery schedules missing destinations from the backup run's stored configuration, globally or for one tenant. SQL filters healthy
+artifacts and destinations with repair history before a bounded scan of at most 50 candidates per tick. Transactions and locks cover
+individual actionable artifacts. A process-shared keyset cursor survives new worker scopes and advances past denied/contended candidates;
+restarting the process starts a new pass. Retryable work stays Pending; terminal, cancelled and exhausted history is never automatically restarted.
 Manual and automatic repairs share database-enforced limits of four InProgress operations globally and two per tenant.
 Both claim paths serialize admission across backend nodes; expired InProgress leases keep their slots until recovery.
-Waiting operations stay Pending without consuming attempts, and a saturated tenant does not block another tenant's due work.
-The chosen backend source is durably pinned under a live fenced lease before opening it. Repair verifies source SHA-256 and
-destination readback, and never deletes an existing destination object that rejected the upload with AlreadyExists.
-Repair quota checks belong to the managed-service admission policy and count only additional bytes within the configured scope; they do not reserve repair capacity.
+Admission never terminalizes expired work. Recovery preserves its previous target before scheduling a retry.
+The chosen backend source and lease-specific target key are durably pinned before opening the source. New leases never reuse old target keys,
+so a delayed old cleanup cannot delete a takeover's copy. Active repair targets and partial uploads remain protected from orphan sweeps.
+Source SHA-256 and destination readback must verify before publication. AlreadyExists is TargetConflict, not AlreadyVerified: the operation
+and a non-restorable, quota-counted Quarantined replica are recorded atomically. Automatic and manual artifact deletion cannot remove quarantined
+objects; ownership/content reconciliation is required. Legacy non-exclusive crash targets are also quarantined instead of blindly deleted.
+Cancellation persists intent for the matching tenant, artifact and operation before signaling a local transfer.
+Repair quota holds reserve additional bytes under the tenant lock and remain counted until the operation becomes terminal.
+
+Apply `RepairTargetQuarantine` and `RepairTargetKeyCapacity` before deploying this repair change. Quarantine preserves existing replicas,
+backfills untracked terminal target conflicts, corrects their failure code, and invalidates only affected derived quota projections so the next
+usage/admission read rebuilds them. TargetKey capacity is 1024 characters, matching storage keys, so lease isolation preserves existing long scopes.
+Downgrading is refused while quarantined replicas or target keys longer than the older capacity exist; ownership and durable intent are never truncated.
+The shared provider key and backend completion limits are also 1024; the 128-character segment and 512-character job-prefix bounds remain.
+Deploy backend and agents together for this shared contract: older agents still reject keys longer than 512 characters.
 
 Apply the `ReplicaFallbackPinning` migration before running replica fallback: its PostgreSQL guards permit only live, pre-transfer
 download source changes, reject restore source changes after hand-off, and revalidate moved restore pins.
