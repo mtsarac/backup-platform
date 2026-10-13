@@ -12,8 +12,8 @@ internal static class BackupRunTestSupport
     private static readonly string ArtifactHash = new('b', 64);
 
     public static BackupConfiguration Configuration() => new("mssql", "Database", "localhost", null, true, null,
-        true, false, "default", "local", "", true, "Preferred", "Preferred")
-        { StorageExecutionLocation = BackupStorageExecutionLocation.Backend };
+        true, false, "default", "", true, "Preferred", "Preferred")
+        { Destinations = [new BackupDestination("local", null, true) { StorageExecutionLocation = BackupStorageExecutionLocation.Backend }] };
 
     /// <summary>A run with a deterministic policy: 10s initial delay, doubling, no jitter, 10 minute cap.</summary>
     public static BackupRetryPolicy Policy(int maxAttempts = 3, BackupBackoffStrategy backoff = BackupBackoffStrategy.Exponential, double jitter = 0) => new()

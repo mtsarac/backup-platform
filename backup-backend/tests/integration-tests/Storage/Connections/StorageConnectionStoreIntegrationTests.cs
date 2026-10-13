@@ -229,10 +229,10 @@ public sealed class StorageConnectionStoreIntegrationTests(PostgreSqlFixture fix
         var job = await CreateJobTargetingAsync(agent, target.Id);
         var started = await _world.Quota.RunStore().StartRunAsync(agent.TenantId, job.Id, "run-1", ConnectionWorld.Now, default);
         Assert.Equal(BackupStartOutcome.Started, started.Outcome);
-        Assert.Equal(target.Id, started.Run!.Configuration.StorageConnectionId);
+        Assert.Equal(target.Id, started.Run!.Configuration.Destinations.Single(d => d.IsPrimary).StorageConnectionId);
         // The job no longer names the connection; the run created earlier still does.
-        var moved = await _world.Quota.RunStore().UpdateJobAsync(agent.TenantId, job.Id, new BackupJobUpdate(job.Name, job.AgentId, job.Configuration with { StorageConnectionId = null }, null, null), default);
-        Assert.Null(moved!.Configuration.StorageConnectionId);
+        var moved = await _world.Quota.RunStore().UpdateJobAsync(agent.TenantId, job.Id, new BackupJobUpdate(job.Name, job.AgentId, job.Configuration with { Destinations = [new BackupDestination("central", null, true) { StorageExecutionLocation = BackupStorageExecutionLocation.Backend }] }, null, null), default);
+        Assert.Null(moved!.Configuration.Destinations.Single(d => d.IsPrimary).StorageConnectionId);
 
         var result = await _world.Store().DeleteAsync(target.Id, agent.TenantId, await _world.PlatformActorAsync(), ConnectionWorld.Now, default);
 
@@ -371,7 +371,7 @@ public sealed class StorageConnectionStoreIntegrationTests(PostgreSqlFixture fix
 
     private async Task<BackupJob> CreateJobTargetingAsync(StoreAgent agent, Guid connectionId)
     {
-        var configuration = BackupStoreHarness.Configuration() with { StorageExecutionLocation = BackupStorageExecutionLocation.Backend, StorageProvider = "central", StorageConnectionId = connectionId };
+        var configuration = BackupStoreHarness.Configuration("central", BackupStorageExecutionLocation.Backend, connectionId);
         var job = new BackupJob(Guid.NewGuid(), agent.TenantId, "Targeted", agent.AgentId, configuration, ConnectionWorld.Now, null, BackupOverlapPolicy.Queue);
         return (await _world.Quota.RunStore().CreateJobAsync(job, default))!;
     }

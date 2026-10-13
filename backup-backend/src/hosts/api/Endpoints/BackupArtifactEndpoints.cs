@@ -77,6 +77,7 @@ public static class BackupArtifactEndpoints
         ITenantContext tenant,
         ICurrentUser user,
         ReplicaRepairService service,
+        BackupPlatform.Api.Backups.AutomaticReplicaRepairWorker? worker,
         CancellationToken cancellationToken)
     {
         var result = await service.StartRepairAsync(tenant.TenantId!, artifactId, request, user.UserId?.Value, cancellationToken);
@@ -95,7 +96,7 @@ public static class BackupArtifactEndpoints
                 _ => Results.BadRequest(new { error = result.Code ?? "repair_failed", message = result.Message ?? "Failed to start replica repair." })
             };
         }
-
+        worker?.TriggerScan();
         return Results.Accepted($"/api/tenants/{tenant.TenantId!.Value}/backup-artifacts/{artifactId}/repairs/{result.Operation!.Id}", result.Operation);
     }
 

@@ -28,8 +28,8 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
   const defaultTarget = connections.find(item => item.providerType === primary.storageProvider && item.isDefault)
   const defaultReason = connectionUnavailableReason(defaultTarget, provider)
   const selectedMissing = primary.storageConnectionId && !target
-  const requiredCount = configuration.requiredVerifiedReplicaCount
 
+  const requiredCount = configuration.requiredVerifiedReplicaCount
   function replacePrimaryTarget(next: Pick<BackupDestination, 'storageProvider' | 'storageConnectionId' | 'storageExecutionLocation'>) {
     onChange({ ...configuration, destinations: destinations.map(d => d === primary ? { ...d, ...next } : d) })
   }

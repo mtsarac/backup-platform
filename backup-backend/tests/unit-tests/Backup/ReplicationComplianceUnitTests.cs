@@ -20,9 +20,8 @@ public sealed class ReplicationComplianceUnitTests
     private static readonly Guid Sftp = Guid.NewGuid();
     private static readonly Guid Drive = Guid.NewGuid();
 
-    private static BackupConfiguration Snapshot(int required) => new("mssql", "Sales", "sql.local", 1433, true, null, true, false, "default", "central", "", true, "Preferred", "Preferred")
+    private static BackupConfiguration Snapshot(int required) => new("mssql", "Sales", "sql.local", 1433, true, null, true, false, "default", "", true, "Preferred", "Preferred")
     {
-        StorageConnectionId = Central,
         Destinations =
         [
             new BackupDestination("central", Central, true),
@@ -236,6 +235,19 @@ public sealed class ReplicationComplianceUnitTests
         Destinations = destinations
     };
 
+    [Theory]
+    [InlineData(1024, true)]
+    [InlineData(1025, false)]
+    public void CompletionAcceptsLeaseSizedKeysWithoutRemovingTheKeyLengthCap(int length, bool accepted)
+    {
+        var key = string.Join('/', Enumerable.Repeat(new string('a', 128), 7).Append(new string('b', length - 903)));
+        var request = Completion(
+            [ReplicaOf("central", Central) with { Key = key }, ReplicaOf("sftp", Sftp)],
+            [Verified("central", Central) with { Key = key }, Verified("sftp", Sftp), Failed("google-drive", Drive)]);
+
+        Assert.Equal(accepted, BackupInputValidation.IsValidCompletion(request, Snapshot(2)));
+    }
+
     [Fact]
     public void A_complete_partial_success_is_accepted()
     {
@@ -323,26 +335,24 @@ public sealed class ReplicationComplianceUnitTests
     }
 
     [Fact]
-    public void An_agent_that_predates_destination_reports_is_understood_only_for_a_single_destination_run()
+    public void A_completion_with_an_artifact_must_report_every_snapshot_destination()
     {
-        var legacySnapshot = new BackupConfiguration("mssql", "Sales", "sql.local", 1433, true, null, true, false, "default", "central", "", true, "Preferred", "Preferred");
-        var legacy = Completion([ReplicaOf("central", Central) with { StorageConnectionId = null }], []);
+        var single = Snapshot(1) with { Destinations = [new BackupDestination("central", Central, true)] };
+        var reported = Completion([ReplicaOf("central", Central)], [Verified("central", Central)]);
 
-        Assert.True(BackupInputValidation.IsValidCompletion(legacy, legacySnapshot));
-        Assert.False(BackupInputValidation.IsValidCompletion(legacy, Snapshot(1)));
+        Assert.True(BackupInputValidation.IsValidCompletion(reported, single));
+        Assert.False(BackupInputValidation.IsValidCompletion(reported with { Destinations = [] }, single));
     }
 
     [Fact]
-    public void An_old_run_and_job_json_without_destinations_still_loads_as_one_primary_destination()
+    public void A_configuration_without_destinations_is_invalid_and_old_json_is_not_reinterpreted()
     {
         const string oldJson = "{\"Engine\":\"mssql\",\"Database\":\"Sales\",\"Host\":\"sql.local\",\"Port\":1433,\"IntegratedSecurity\":true,\"DatabaseCredentialReference\":null,\"Encrypt\":true,\"TrustServerCertificate\":false," +
             "\"StagingReference\":\"default\",\"StorageProvider\":\"central\",\"StoragePrefix\":\"\",\"CopyOnly\":true,\"ChecksumPolicy\":\"Preferred\",\"CompressionPolicy\":\"Preferred\",\"StorageConnectionId\":null,\"StorageExecutionLocation\":1}";
 
-        var configuration = JsonSerializer.Deserialize<BackupConfiguration>(oldJson, (JsonSerializerOptions?)null)!.Validate();
+        var configuration = JsonSerializer.Deserialize<BackupConfiguration>(oldJson, (JsonSerializerOptions?)null)!;
 
-        var only = Assert.Single(configuration.ResolveEffectiveDestinations());
-        Assert.Equal("central", only.StorageProvider);
-        Assert.True(only.IsPrimary);
-        Assert.Equal(1, configuration.RequiredVerifiedReplicaCount);
+        Assert.Empty(configuration.Destinations);
+        Assert.Throws<ArgumentException>(() => configuration.Validate());
     }
 }

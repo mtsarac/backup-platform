@@ -8,24 +8,23 @@ namespace BackupPlatform.UnitTests.Backup;
 
 public sealed class MultiStorageConfigurationUnitTests
 {
-    private static BackupConfiguration CreateLegacy(string provider = "local", Guid? connectionId = null) =>
-        new("mssql", "SalesDB", "sql.local", 1433, true, null, true, false, "default", provider, "", true, "Preferred", "Preferred")
-        {
-            StorageConnectionId = connectionId
-        };
+    private static BackupConfiguration CreateLegacy() =>
+        new("mssql", "SalesDB", "sql.local", 1433, true, null, true, false, "default", "", true, "Preferred", "Preferred");
 
     [Fact]
-    public void LegacyConfiguration_ResolvesEffectiveSinglePrimaryDestination()
+    public void ConfigurationWithoutDestinations_IsInvalid()
+    {
+        Assert.Throws<ArgumentException>(() => CreateLegacy().Validate());
+    }
+
+    [Fact]
+    public void SingleDestinationConfiguration_ValidatesAndDefaultsReplicaCount()
     {
         var connId = Guid.NewGuid();
-        var config = CreateLegacy("sftp", connId);
+        var config = (CreateLegacy() with { Destinations = [new BackupDestination("sftp", connId, IsPrimary: true)] }).Validate();
 
-        var effective = config.ResolveEffectiveDestinations();
-
-        var dest = Assert.Single(effective);
-        Assert.Equal("sftp", dest.StorageProvider);
+        var dest = Assert.Single(config.Destinations);
         Assert.Equal(connId, dest.StorageConnectionId);
-        Assert.True(dest.IsPrimary);
         Assert.Equal(1, config.RequiredVerifiedReplicaCount);
     }
 
@@ -177,8 +176,8 @@ public sealed class MultiStorageConfigurationUnitTests
             Engine = "mssql", Database = "DB", Host = "host", IntegratedSecurity = true,
             Destinations =
             [
-                new BackupDestinationContract { StorageProvider = "local", IsPrimary = false },
-                new BackupDestinationContract { StorageProvider = "central", IsPrimary = false }
+                new BackupDestinationContract { StorageProvider = "local", StorageExecutionLocation = "Agent", IsPrimary = false },
+                new BackupDestinationContract { StorageProvider = "central", StorageExecutionLocation = "Backend", IsPrimary = false }
             ],
             RequiredVerifiedReplicaCount = 1
         };
@@ -192,7 +191,7 @@ public sealed class MultiStorageConfigurationUnitTests
         {
             Destinations =
             [
-                new BackupDestinationContract { StorageProvider = "local", IsPrimary = true }
+                new BackupDestinationContract { StorageProvider = "local", StorageExecutionLocation = "Agent", IsPrimary = true }
             ],
             RequiredVerifiedReplicaCount = 2
         };
@@ -201,7 +200,7 @@ public sealed class MultiStorageConfigurationUnitTests
     }
 
     [Fact]
-    public void LegacyJsonPayloadWithoutDestinations_DeserializesWithDefaultEmptyAndResolvesPrimary()
+    public void LegacyJsonPayloadWithoutDestinations_DeserializesEmptyAndIsInvalid()
     {
         var legacyJson = """
         {
@@ -221,41 +220,47 @@ public sealed class MultiStorageConfigurationUnitTests
         var deserialized = JsonSerializer.Deserialize<BackupConfiguration>(legacyJson);
         Assert.NotNull(deserialized);
         Assert.Empty(deserialized.Destinations);
-        Assert.Equal(1, deserialized.RequiredVerifiedReplicaCount);
-
-        var effective = deserialized.ResolveEffectiveDestinations();
-        var primary = Assert.Single(effective);
-        Assert.Equal("central", primary.StorageProvider);
-        Assert.True(primary.IsPrimary);
+        Assert.Throws<ArgumentException>(() => deserialized.Validate());
     }
+
     [Fact]
-    public void Configuration_WithExplicitDestinations_SyncsPrimaryFieldsWithCanonicalPrimary()
+    public void JobRequestWithoutDestinations_IsRejectedOnTheDestinationsField()
+    {
+        var wire = new BackupExecutionConfiguration { Engine = "mssql", Database = "DB", Host = "host", IntegratedSecurity = true };
+
+        var error = Assert.Throws<InvalidBackupJobException>(() =>
+            BackupInputValidation.Validate(new CreateBackupJobRequest("Job", Guid.NewGuid(), wire)));
+        Assert.Equal("configuration.destinations", error.Field);
+    }
+
+    [Fact]
+    public void DestinationWithoutExecutionLocation_IsRejected()
+    {
+        var wire = new BackupExecutionConfiguration
+        {
+            Engine = "mssql", Database = "DB", Host = "host", IntegratedSecurity = true,
+            Destinations = [new BackupDestinationContract { StorageProvider = "central", IsPrimary = true }]
+        };
+
+        var error = Assert.Throws<InvalidBackupJobException>(() =>
+            BackupInputValidation.Validate(new CreateBackupJobRequest("Job", Guid.NewGuid(), wire)));
+        Assert.Equal("configuration.destinations[0].storageExecutionLocation", error.Field);
+    }
+
+    [Fact]
+    public void ToWire_ProjectsDestinationsOnly()
     {
         var destinations = new List<BackupDestination>
         {
             new("sftp", Guid.NewGuid(), IsPrimary: false),
             new("central", Guid.NewGuid(), IsPrimary: true)
         };
-
-        var config = new BackupConfiguration(
-            Engine: "mssql", Database: "DB", Host: "host", Port: null,
-            IntegratedSecurity: true, DatabaseCredentialReference: null,
-            Encrypt: true, TrustServerCertificate: false, StagingReference: "default",
-            StorageProvider: "central", StoragePrefix: "",
-            CopyOnly: true, ChecksumPolicy: "Required", CompressionPolicy: "Preferred")
-        {
-            StorageExecutionLocation = BackupStorageExecutionLocation.Backend,
-            StorageConnectionId = destinations[1].StorageConnectionId,
-            Destinations = destinations,
-            RequiredVerifiedReplicaCount = 2
-        };
-        config.Validate();
+        var config = (CreateLegacy() with { Destinations = destinations, RequiredVerifiedReplicaCount = 2 }).Validate();
 
         var wire = BackupOrchestrator.ToWire(config);
-        Assert.Equal("central", wire.StorageProvider);
-        Assert.Equal(destinations[1].StorageConnectionId, wire.StorageConnectionId);
         Assert.Equal(2, wire.Destinations.Count);
         Assert.Equal(2, wire.RequiredVerifiedReplicaCount);
         Assert.True(wire.Destinations[1].IsPrimary);
+        Assert.Equal("Backend", wire.Destinations[1].StorageExecutionLocation);
     }
 }

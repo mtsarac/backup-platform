@@ -1,6 +1,7 @@
 export type OptionPolicy = 'Disabled' | 'Preferred' | 'Required'
 export interface BackupDestination {
   storageProvider: string
+  /** null / absent = the tenant's default connection for `storageProvider`; runs always snapshot the resolved id. */
   storageConnectionId?: string | null
   storageExecutionLocation: 'Agent' | 'Backend'
   isPrimary: boolean
@@ -10,7 +11,7 @@ export interface BackupConfiguration {
   integratedSecurity: boolean; databaseCredentialReference: string | null
   encrypt: boolean; trustServerCertificate: boolean; stagingReference: string
   storagePrefix: string
-  /** At least one destination; exactly one isPrimary. This list is the only source of storage targets. */
+  /** At least one; exactly one `isPrimary`. This list is the only source of storage targets. */
   destinations: BackupDestination[]
   requiredVerifiedReplicaCount: number
   copyOnly: boolean; checksumPolicy: OptionPolicy; compressionPolicy: OptionPolicy

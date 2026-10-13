@@ -16,6 +16,7 @@ public sealed record ManagedStorageKey(string Prefix, Guid TenantId, Guid JobId,
 /// name or location does not match is somebody else's and is never touched.
 /// <list type="bullet">
 /// <item><description>Staged and stored artifact: <c>{database}_{yyyyMMddTHHmmssZ}_{8 hex}_FULL.bak</c>.</description></item>
+/// <item><description>Repair target: <c>repair_{operation:N}_{lease:N}_FULL.bak</c>; a new lease never reuses an older owner's key.</description></item>
 /// <item><description>Storage key: <c>[{prefix}/]{tenant:N}/{job:N}/{run:N}/{attempt:N}/{artifact name}</c>. The four identifiers are what lets the
 /// backend prove which attempt a stored file belongs to.</description></item>
 /// <item><description>Unpublished upload: <c>.{artifact name}.{32 hex}.partial</c>, or SFTP's deterministic <c>.{artifact name}.partial</c>, in the same directory.</description></item>
@@ -25,10 +26,11 @@ public static class ManagedBackupLayout
 {
     private const int MaxDatabaseNameLength = 48;
     private const string ArtifactPattern = @"[A-Za-z0-9_\-]{1,48}_[0-9]{8}T[0-9]{6}Z_[0-9a-f]{8}_FULL\.bak";
+    private const string RepairPattern = @"repair_[0-9a-f]{32}_[0-9a-f]{32}_FULL\.bak";
 
     // \z, not $: in .NET `$` also matches before a trailing newline, and a name with a newline is not a managed name.
-    private static readonly Regex ArtifactName = new($@"^{ArtifactPattern}\z", RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
-    private static readonly Regex PartialName = new($@"^\.{ArtifactPattern}(?:\.[0-9a-f]{{32}})?\.partial\z", RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+    private static readonly Regex ArtifactName = new($@"^(?:{ArtifactPattern}|{RepairPattern})\z", RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+    private static readonly Regex PartialName = new($@"^\.(?:{ArtifactPattern}|{RepairPattern})(?:\.[0-9a-f]{{32}})?\.partial\z", RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
 
     /// <summary>
     /// The staged file name. It is derived from untrusted input (the database name), so it is reduced to a safe, portable alphabet;
@@ -63,11 +65,29 @@ public static class ManagedBackupLayout
     public static string AttemptScope(Guid tenantId, Guid jobId, Guid runId, Guid attemptId) =>
         string.Create(CultureInfo.InvariantCulture, $"{tenantId:N}/{jobId:N}/{runId:N}/{attemptId:N}");
 
-    /// <summary>True when <paramref name="fileName"/> is exactly a name <see cref="StagedFileName"/> can produce.</summary>
+    /// <summary>A target name isolated from every other repair lease, including retries after a crash.</summary>
+    public static string RepairFileName(Guid operationId, Guid leaseToken) =>
+        string.Create(CultureInfo.InvariantCulture, $"repair_{operationId:N}_{leaseToken:N}_FULL.bak");
+
+    /// <summary>True when <paramref name="fileName"/> is a managed staged artifact or lease-isolated repair target.</summary>
     public static bool IsManagedArtifactName(string? fileName) => fileName is not null && fileName.Length <= 128 && ArtifactName.IsMatch(fileName);
 
     /// <summary>True when <paramref name="fileName"/> is the temporary name a storage engine gives an unpublished upload of a managed artifact.</summary>
     public static bool IsManagedPartialName(string? fileName) => fileName is not null && fileName.Length <= 192 && PartialName.IsMatch(fileName);
+
+    /// <summary>True when <paramref name="candidateKey"/> is a temporary partial upload sibling of <paramref name="targetKey"/>.</summary>
+    public static bool IsPartialSibling(string? targetKey, string? candidateKey)
+    {
+        if (string.IsNullOrEmpty(targetKey) || string.IsNullOrEmpty(candidateKey)) return false;
+        var targetSlash = targetKey.LastIndexOf('/');
+        var candidateSlash = candidateKey.LastIndexOf('/');
+        var targetScope = targetSlash >= 0 ? targetKey[..targetSlash] : "";
+        var candidateScope = candidateSlash >= 0 ? candidateKey[..candidateSlash] : "";
+        if (!string.Equals(targetScope, candidateScope, StringComparison.Ordinal)) return false;
+        var targetName = targetSlash >= 0 ? targetKey[(targetSlash + 1)..] : targetKey;
+        var candidateName = candidateSlash >= 0 ? candidateKey[(candidateSlash + 1)..] : candidateKey;
+        return candidateName.StartsWith($".{targetName}", StringComparison.Ordinal) && candidateName.EndsWith(".partial", StringComparison.Ordinal);
+    }
 
     /// <summary>
     /// Recognises a storage key of the managed layout. Anything else (too few segments, identifiers that are not 32-digit lowercase

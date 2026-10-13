@@ -65,25 +65,77 @@ public sealed class SftpStorageProviderConfigurationTests
         Assert.Equal(ValidFingerprint, SftpConfiguration.NormalizeHostKeyFingerprint(options.HostKeyFingerprint));
     }
 
-    [Fact]
-    public void NetworkValidator_Rejects_LoopbackAndPrivateIp_WhenNotAllowed()
+    [Theory]
+    [InlineData("127.0.0.1")]
+    [InlineData("::ffff:127.0.0.1")]
+    [InlineData("::1")]
+    [InlineData("10.1.2.3")]
+    [InlineData("::ffff:10.1.2.3")]
+    [InlineData("172.16.0.1")]
+    [InlineData("::ffff:172.16.0.1")]
+    [InlineData("192.168.1.1")]
+    [InlineData("::ffff:192.168.1.1")]
+    [InlineData("169.254.169.254")]
+    [InlineData("::ffff:169.254.169.254")]
+    [InlineData("100.64.0.1")]
+    [InlineData("::ffff:100.64.0.1")]
+    [InlineData("fe80::1")]
+    [InlineData("fd00::1")]
+    public void NetworkValidator_Rejects_PrivateAndRestrictedIps_DirectAndMapped_WhenNotAllowed(string ipString)
     {
-        var loopback = IPAddress.Loopback;
-        var ex = Assert.Throws<StorageException>(() => SftpNetworkValidator.AssertIpPermitted(loopback, []));
+        var ip = IPAddress.Parse(ipString);
+        Assert.True(SftpNetworkValidator.IsPrivateOrRestricted(ip));
+        var ex = Assert.Throws<StorageException>(() => SftpNetworkValidator.AssertIpPermitted(ip, []));
+        Assert.Equal(StorageFailureKind.NetworkDenied, ex.Kind);
+    }
+
+    [Theory]
+    [InlineData("93.184.216.34")]
+    [InlineData("::ffff:93.184.216.34")]
+    [InlineData("2606:4700:4700::1111")]
+    public void NetworkValidator_Allows_PublicIps_DirectAndMapped(string ipString)
+    {
+        var ip = IPAddress.Parse(ipString);
+        Assert.False(SftpNetworkValidator.IsPrivateOrRestricted(ip));
+        SftpNetworkValidator.AssertIpPermitted(ip, []);
+    }
+
+    [Theory]
+    [InlineData("10.1.2.3", "10.0.0.0/8")]
+    [InlineData("::ffff:10.1.2.3", "10.0.0.0/8")]
+    [InlineData("10.1.2.3", "::ffff:10.0.0.0/104")]
+    [InlineData("::ffff:10.1.2.3", "::ffff:10.0.0.0/104")]
+    [InlineData("192.168.1.50", "192.168.0.0/16")]
+    [InlineData("::ffff:192.168.1.50", "192.168.0.0/16")]
+    [InlineData("fd00::1", "fd00::/8")]
+    public void NetworkValidator_Allows_RestrictedIps_WhenExplicitlyAllowedInCidr(string ipString, string cidr)
+    {
+        var ip = IPAddress.Parse(ipString);
+        SftpNetworkValidator.AssertIpPermitted(ip, [cidr]);
+    }
+
+    [Fact]
+    public async Task ResolveAndPinAsync_NormalizesAndPins_DirectAndMappedHosts()
+    {
+        var allowedNetwork = new SftpNetworkOptions { AllowedPrivateNetworks = ["10.0.0.0/8"] };
+        var restrictedNetwork = new SftpNetworkOptions { AllowedPrivateNetworks = [] };
+
+        var mappedPermitted = await SftpNetworkValidator.ResolveAndPinAsync("::ffff:10.1.2.3", allowedNetwork, CancellationToken.None);
+        Assert.Equal(IPAddress.Parse("10.1.2.3"), mappedPermitted);
+
+        var directPermitted = await SftpNetworkValidator.ResolveAndPinAsync("10.1.2.3", allowedNetwork, CancellationToken.None);
+        Assert.Equal(IPAddress.Parse("10.1.2.3"), directPermitted);
+
+        var ex = await Assert.ThrowsAsync<StorageException>(() =>
+            SftpNetworkValidator.ResolveAndPinAsync("::ffff:10.1.2.3", restrictedNetwork, CancellationToken.None));
         Assert.Equal(StorageFailureKind.NetworkDenied, ex.Kind);
 
-        var privateIp = IPAddress.Parse("10.1.2.3");
-        var ex2 = Assert.Throws<StorageException>(() => SftpNetworkValidator.AssertIpPermitted(privateIp, []));
-        Assert.Equal(StorageFailureKind.NetworkDenied, ex2.Kind);
-    }
+        var publicMapped = await SftpNetworkValidator.ResolveAndPinAsync("::ffff:93.184.216.34", restrictedNetwork, CancellationToken.None);
+        Assert.Equal(IPAddress.Parse("93.184.216.34"), publicMapped);
 
-    [Fact]
-    public void NetworkValidator_Allows_PrivateIp_WhenInOperatorCidr()
-    {
-        var privateIp = IPAddress.Parse("10.1.2.3");
-        SftpNetworkValidator.AssertIpPermitted(privateIp, ["10.0.0.0/8"]);
+        var publicBracketed = await SftpNetworkValidator.ResolveAndPinAsync("[::ffff:93.184.216.34]", restrictedNetwork, CancellationToken.None);
+        Assert.Equal(IPAddress.Parse("93.184.216.34"), publicBracketed);
     }
-
     [Fact]
     public void PathResolver_Enforces_TenantScope()
     {

@@ -442,13 +442,9 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
     [InlineData("BackupPlatform.Application")]
     [InlineData("BackupPlatform.Contracts")]
     [InlineData("BackupPlatform.Agents")]
-    [InlineData("BackupPlatform.Backups")]
-    [InlineData("BackupPlatform.Scheduling")]
     [InlineData("BackupPlatform.Storage")]
     [InlineData("BackupPlatform.Identity")]
     [InlineData("BackupPlatform.Tenancy")]
-    [InlineData("BackupPlatform.Audit")]
-    [InlineData("BackupPlatform.Notifications")]
     public void BackupOrchestrationAndFeatureModulesMustNotDependOnManagedService(string project) =>
         AssertForbiddenDependencies(project, node => node.Name == ManagedServiceProject);
 

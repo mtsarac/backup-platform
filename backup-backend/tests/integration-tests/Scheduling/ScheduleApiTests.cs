@@ -16,7 +16,7 @@ public sealed class ScheduleApiTests(PostgreSqlFixture fixture) : IClassFixture<
     {
         name = "Scheduled full backup",
         agentId,
-        configuration = new BackupPlatform.Contracts.Backups.BackupExecutionConfiguration { Database = "master", Host = "sql-server", IntegratedSecurity = true },
+        configuration = new BackupPlatform.Contracts.Backups.BackupExecutionConfiguration { Database = "master", Host = "sql-server", IntegratedSecurity = true, Destinations = BackupTestDestinations.LocalBackend },
         overlapPolicy = overlap,
         schedule
     };

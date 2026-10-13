@@ -40,7 +40,7 @@ internal sealed class BackupApiScenario : IAsyncDisposable
         var world = await AgentWorld.CreateAsync(database, limits: new AgentRateLimitOptions { PollPerAgent = 1000 }, clock: clock, configuration: configuration);
         var setup = await world.CreateTenantAsync();
         if (entitled) await world.EntitleAsync(setup.Tenant);
-        return new BackupApiScenario(world, setup, await world.EnrollAsync(setup));
+        return new BackupApiScenario(world, setup, await world.DeclareBackupCapabilityAsync(await world.EnrollAsync(setup)));
     }
 
     public ValueTask DisposeAsync() => World.DisposeAsync();
@@ -60,7 +60,7 @@ internal sealed class BackupApiScenario : IAsyncDisposable
         agentId,
         configuration = new BackupExecutionConfiguration
         {
-            Database = "master", Host = "sql-server", IntegratedSecurity = true, StorageExecutionLocation = "Backend"
+            Database = "master", Host = "sql-server", IntegratedSecurity = true, Destinations = BackupTestDestinations.LocalBackend
         },
         retryPolicy,
         overlapPolicy
@@ -137,7 +137,18 @@ internal sealed class BackupApiScenario : IAsyncDisposable
     public Task<HttpResponseMessage> ProgressRawAsync(TaskClaim claim, Guid? token = null) =>
         AgentCallAsync(claim, "progress", new BackupTaskProgressRequest { LeaseToken = token ?? claim.LeaseToken, Stage = "BackingUp", Percent = 10 });
 
-    public Task<HttpResponseMessage> CompleteRawAsync(TaskClaim claim, BackupTaskCompletionRequest request) => AgentCallAsync(claim, "complete", request);
+    public Task<HttpResponseMessage> CompleteRawAsync(TaskClaim claim, BackupTaskCompletionRequest request) => AgentCallAsync(claim, "complete", WithDestinationReports(request));
+
+    // An agent reports every destination it transferred to; a test that only names the artifact's replicas sends the report a real agent would.
+    private static BackupTaskCompletionRequest WithDestinationReports(BackupTaskCompletionRequest request) =>
+        request.Destinations.Count != 0 || request.Artifact is not { } artifact ? request : request with
+        {
+            Destinations = [.. artifact.Replicas.Select(replica => new BackupTaskDestinationResult
+            {
+                StorageProvider = replica.StorageProvider, StorageConnectionId = replica.StorageConnectionId, State = "Verified", Upload = "Succeeded",
+                Verification = "Verified", Key = replica.Key, StartedAt = replica.CreatedAt, CompletedAt = replica.VerifiedAt ?? replica.CreatedAt
+            })]
+        };
 
     public Task<HttpResponseMessage> FailRawAsync(TaskClaim claim, string code, Guid? token = null) =>
         CompleteRawAsync(claim, new BackupTaskCompletionRequest { LeaseToken = token ?? claim.LeaseToken, Status = "Failed", FailureCode = code });

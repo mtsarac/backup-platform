@@ -43,7 +43,7 @@ internal static class RetentionApiSupport
         agentId = scenario.Agent.AgentId,
         configuration = new BackupExecutionConfiguration
         {
-            Database = "master", Host = "sql-server", IntegratedSecurity = true, StorageExecutionLocation = "Backend"
+            Database = "master", Host = "sql-server", IntegratedSecurity = true, Destinations = BackupTestDestinations.LocalBackend
         },
         retention
     };

@@ -52,10 +52,7 @@ public sealed class StorageConnectionPlatformLockAdmissionIntegrationTests(Postg
     {
         var agent = await _world.Quota.AgentAsync();
         var (local, _) = await _world.DefaultsAsync(agent.TenantId);
-        var configuration = BackupStoreHarness.Configuration() with
-        {
-            StorageProvider = "local", StorageExecutionLocation = BackupStorageExecutionLocation.Agent, StorageConnectionId = local.Id
-        };
+        var configuration = BackupStoreHarness.Configuration("local", BackupStorageExecutionLocation.Agent, local.Id);
         var schedule = BackupSchedule.Create(true, "0 * * * *", "UTC", TimeSpan.FromMinutes(30), ConnectionWorld.Now);
         var job = (await _world.Quota.RunStore().CreateJobAsync(new BackupJob(Guid.NewGuid(), agent.TenantId, "Locked scheduled target",
             agent.AgentId, configuration, ConnectionWorld.Now, null, BackupOverlapPolicy.Skip, schedule), default))!;
@@ -149,7 +146,7 @@ public sealed class StorageConnectionPlatformLockAdmissionIntegrationTests(Postg
             configuration = new BackupExecutionConfiguration
             {
                 Database = "master", Host = "sql-server", IntegratedSecurity = true,
-                StorageProvider = providerType, StorageExecutionLocation = location, StorageConnectionId = connectionId
+                Destinations = [new BackupDestinationContract { StorageProvider = providerType, StorageExecutionLocation = location, StorageConnectionId = connectionId, IsPrimary = true }]
             },
             retryPolicy = new { maxAttempts = 3, initialDelaySeconds = 30.0, maxDelaySeconds = 600.0, backoff = "Fixed", jitter = 0.0 }
         });

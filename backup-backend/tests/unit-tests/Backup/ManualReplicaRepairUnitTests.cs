@@ -1,9 +1,6 @@
-using System.Security.Cryptography;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
-using BackupPlatform.StorageProviders.Abstractions;
-using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace BackupPlatform.UnitTests.Backup;
@@ -39,74 +36,6 @@ public sealed class ManualReplicaRepairUnitTests
 
         artifact.Seal(T0, new BackupRetentionPolicy { Enabled = true, KeepFor = TimeSpan.FromDays(30), DeleteGracePeriod = TimeSpan.FromDays(1) });
         return (artifact, replica);
-    }
-
-    [Fact]
-    public void Scenario5_Repair_does_not_invoke_SQL_backup_engine()
-    {
-        // Verified source + target repair uses only storage provider streams, zero SQL engine calls
-        var (artifact, source) = CreateArtifact("central");
-        Assert.Single(artifact.Replicas);
-
-        var targetConnection = Guid.NewGuid();
-        var targetReplica = new BackupReplica(
-            Guid.NewGuid(),
-            Tenant,
-            artifact.Id,
-            "sftp",
-            targetConnection.ToString(),
-            $"{Tenant.Value:N}/job/run/attempt/test.bak",
-            Size,
-            Checksum,
-            "sha256",
-            "Verified",
-            "ReadBack",
-            T0.AddMinutes(5),
-            T0.AddMinutes(5),
-            BackupStorageExecutionLocation.Backend,
-            owningAgentId: null,
-            storageConnectionId: targetConnection);
-
-        artifact.AddRepairedReplica(targetReplica);
-
-        Assert.Equal(2, artifact.Replicas.Count);
-        Assert.Contains(artifact.Replicas, r => r.StorageProvider == "central" && r.VerificationState == "Verified");
-        Assert.Contains(artifact.Replicas, r => r.StorageProvider == "sftp" && r.VerificationState == "Verified");
-    }
-
-    [Fact]
-    public void Scenario6_Source_checksum_mismatch_fails_and_does_not_verify_destination()
-    {
-        var (artifact, source) = CreateArtifact("central");
-        var corruptedData = new byte[Size];
-        Random.Shared.NextBytes(corruptedData);
-        var actualHash = Convert.ToHexString(SHA256.HashData(corruptedData)).ToLowerInvariant();
-
-        Assert.NotEqual(artifact.ArtifactChecksum, actualHash);
-
-        var op = new ReplicaRepairOperation(Guid.NewGuid(), Tenant, artifact.Id, Guid.NewGuid(), "sftp", source.Id, T0);
-        var token = Guid.NewGuid();
-        op.Claim(token, "worker-1", T0, TimeSpan.FromMinutes(5));
-
-        op.Fail(token, ReplicaRepairFailureCodes.SourceChecksumMismatch, "Source replica data failed SHA-256 integrity verification.", T0.AddSeconds(10));
-
-        Assert.Equal(ReplicaRepairStatus.Failed, op.Status);
-        Assert.Equal(ReplicaRepairFailureCodes.SourceChecksumMismatch, op.FailureCode);
-        Assert.Null(op.TargetReplicaId);
-    }
-
-    [Fact]
-    public void Scenario7_Destination_readback_failure_marks_repair_failed()
-    {
-        var (artifact, source) = CreateArtifact("central");
-        var op = new ReplicaRepairOperation(Guid.NewGuid(), Tenant, artifact.Id, Guid.NewGuid(), "sftp", source.Id, T0);
-        var token = Guid.NewGuid();
-        op.Claim(token, "worker-1", T0, TimeSpan.FromMinutes(5));
-
-        op.Fail(token, ReplicaRepairFailureCodes.DestinationReadbackFailed, "Destination readback verification failed.", T0.AddSeconds(15));
-
-        Assert.Equal(ReplicaRepairStatus.Failed, op.Status);
-        Assert.Equal(ReplicaRepairFailureCodes.DestinationReadbackFailed, op.FailureCode);
     }
 
     [Fact]

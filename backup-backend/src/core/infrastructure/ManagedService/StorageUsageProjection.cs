@@ -3,6 +3,7 @@ using BackupPlatform.Domain.Identity;
 using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.ManagedService.Quota;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace BackupPlatform.Infrastructure.ManagedService;
 
@@ -29,7 +30,7 @@ internal sealed class StorageUsageProjection
     {
     }
 
-    /// <summary>Null when the save touches neither a replica's existence/status nor a run's ending: nothing to project.</summary>
+    /// <summary>Null when the save touches neither a replica's existence/status, a run's ending nor a repair's quota hold: nothing to project.</summary>
     public static StorageUsageProjection? Capture(PlatformDbContext context)
     {
         context.ChangeTracker.DetectChanges();
@@ -53,6 +54,10 @@ internal sealed class StorageUsageProjection
                 case BackupArtifact artifact when entry.State == EntityState.Deleted:
                     projection ??= new StorageUsageProjection();
                     projection.Tenant(artifact.TenantId).Artifact(artifact.Id).DeletedSize = artifact.SizeBytes;
+                    break;
+                case ReplicaRepairOperation repair when RepairHoldChanged(entry, repair):
+                    projection ??= new StorageUsageProjection();
+                    projection.Tenant(repair.TenantId).RepairHoldChanged = true;
                     break;
                 case BackupRun run when entry.State == EntityState.Modified && run.IsTerminal
                     && entry.Property(nameof(BackupRun.Status)).OriginalValue is BackupStatus original && !BackupRun.IsTerminalStatus(original):
@@ -96,7 +101,7 @@ internal sealed class StorageUsageProjection
             {
                 await TenantUsageEngine.AdjustUsedAsync(context, change.TenantId, delta, cancellationToken);
             }
-            if (released > 0 || delta != 0)
+            if (released > 0 || delta != 0 || change.RepairHoldChanged)
             {
                 await TenantUsageEngine.RefreshReservedAsync(context, change.TenantId, cancellationToken);
             }
@@ -128,6 +133,16 @@ internal sealed class StorageUsageProjection
             - QuotaAccounting.Contribution(policy, reverted.Values.Select(saved.ToFact));
     }
 
+    /// <summary>A repair hold appears with a created or re-reserved operation and ends with its status; a status change of an operation that never held bytes moves nothing.</summary>
+    private static bool RepairHoldChanged(EntityEntry entry, ReplicaRepairOperation repair)
+    {
+        if (entry.State == EntityState.Added) return repair.ReservedQuotaBytes > 0;
+        var reserved = entry.Property(nameof(ReplicaRepairOperation.ReservedQuotaBytes));
+        return entry.State == EntityState.Modified
+            && (reserved.IsModified || entry.Property(nameof(ReplicaRepairOperation.Status)).IsModified)
+            && (repair.ReservedQuotaBytes > 0 || (long)reserved.OriginalValue! > 0);
+    }
+
     private TenantChange Tenant(TenantId tenantId)
     {
         if (!_tenants.TryGetValue(tenantId.Value, out var change))
@@ -142,6 +157,7 @@ internal sealed class StorageUsageProjection
         public TenantId TenantId { get; } = tenantId;
         public SortedDictionary<Guid, ArtifactChange> Artifacts { get; } = [];
         public HashSet<Guid> EndedRuns { get; } = [];
+        public bool RepairHoldChanged { get; set; }
 
         public ArtifactChange Artifact(Guid artifactId)
         {

@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Backups;
@@ -26,7 +27,7 @@ internal static class RetentionKit
     public static async Task<BackupJob> AddJobAsync(BackupStoreHarness harness, StoreAgent agent, BackupRetentionPolicy? retention = null,
         BackupStorageExecutionLocation executionLocation = BackupStorageExecutionLocation.Backend, string storagePrefix = "")
     {
-        var configuration = BackupStoreHarness.Configuration() with { StorageExecutionLocation = executionLocation, StoragePrefix = storagePrefix };
+        var configuration = BackupStoreHarness.Configuration("local", executionLocation) with { StoragePrefix = storagePrefix };
         var job = new BackupJob(Guid.NewGuid(), agent.TenantId, "Database", agent.AgentId, configuration, BackupStoreHarness.T0,
             retryPolicy: null, BackupOverlapPolicy.Queue, schedule: null, retention);
         return (await harness.Store().CreateJobAsync(job, default))!;
@@ -42,6 +43,7 @@ internal static class RetentionKit
     {
         var store = harness.Store();
         var run = await harness.StartRunAsync(store, job, Guid.NewGuid().ToString("N"), acceptedAt - TimeSpan.FromMinutes(5));
+        await harness.SnapshotDestinationsAsync(run.Id, [storageProvider]);
         // Claim and start inside the harness' two-minute lease so the completion at acceptedAt is still accepted.
         var claim = await BackupStoreHarness.ClaimAsync(store, agent, acceptedAt - TimeSpan.FromSeconds(60))
             ?? throw new InvalidOperationException("The agent could not claim the seeded run.");

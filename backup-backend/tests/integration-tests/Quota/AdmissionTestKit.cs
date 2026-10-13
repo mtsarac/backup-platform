@@ -69,7 +69,7 @@ internal static class AdmissionTestKit
     public static async Task<BackupJob> CreateJobAsync(
         QuotaWorld world, StoreAgent agent, BackupOverlapPolicy overlap = BackupOverlapPolicy.Queue, BackupRetryPolicy? retry = null)
     {
-        var configuration = BackupStoreHarness.Configuration() with { StorageExecutionLocation = BackupStorageExecutionLocation.Backend, StorageProvider = "central" };
+        var configuration = BackupStoreHarness.Configuration("central", BackupStorageExecutionLocation.Backend);
         var job = new BackupJob(Guid.NewGuid(), agent.TenantId, "Database", agent.AgentId, configuration, T0, retry, overlap);
         return (await world.RunStore().CreateJobAsync(job, default))!;
     }

@@ -79,16 +79,21 @@ public sealed class StorageObjectKeyTests
         Assert.Throws<ArgumentException>(() => new StorageObjectKey("ok/" + new string('a', 129)));
     }
 
-    [Fact]
-    public void TotalLengthBoundaryIs512()
+    [Theory]
+    [InlineData(512, true)]
+    [InlineData(1024, true)]
+    [InlineData(1025, false)]
+    public void KeyLengthPreservesOldScopesAndBoundsRepairScopes(int length, bool accepted)
     {
-        var atLimit = string.Join('/', new string('a', 128), new string('b', 128), new string('c', 128), new string('d', 125));
-        var overLimit = string.Join('/', new string('a', 128), new string('b', 128), new string('c', 128), new string('d', 126));
+        var segments = length / (StorageObjectKey.MaxSegmentLength + 1);
+        var remainder = length - segments * (StorageObjectKey.MaxSegmentLength + 1);
+        var value = string.Join('/', Enumerable.Repeat(new string('a', StorageObjectKey.MaxSegmentLength), segments).Append(new string('b', remainder)));
 
-        Assert.Equal(StorageObjectKey.MaxLength, atLimit.Length);
-        Assert.Equal(StorageObjectKey.MaxLength + 1, overLimit.Length);
-        Assert.Equal(atLimit, new StorageObjectKey(atLimit).Value);
-        Assert.Throws<ArgumentException>(() => new StorageObjectKey(overLimit));
+        Assert.Equal(accepted, StorageObjectKey.TryCreate(value, out var key));
+        if (accepted)
+            Assert.Equal(value, key!.Value);
+        else
+            Assert.Throws<ArgumentException>(() => new StorageObjectKey(value));
     }
 
     [Fact]

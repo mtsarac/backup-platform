@@ -27,8 +27,7 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
         var credential = configuration.IntegratedSecurity
             ? IntegratedDatabaseCredential.Instance
             : await ResolveCredentialAsync(configuration.DatabaseCredentialReference!, cancellationToken).ConfigureAwait(false);
-        var destinations = EffectiveDestinations(configuration);
-        var targets = destinations.Select(destination => new BackupPipelineDestination(
+        var targets = configuration.Destinations.Select(destination => new BackupPipelineDestination(
             new StorageProviderId(destination.StorageProvider),
             destination.StorageProvider is "sftp" or "google-drive"
                 ? (storageFactory ?? throw new ArgumentException("Backend-relayed storage is not configured.")).CreateBackup(task, destination)
@@ -41,22 +40,10 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
         {
             StorageOverride = primary.StorageOverride,
             MaxArtifactBytes = task.MaxArtifactBytes,
-            Destinations = configuration.Destinations.Count > 0 ? targets : [],
+            Destinations = targets,
             RequiredVerifiedReplicas = Math.Max(1, configuration.RequiredVerifiedReplicaCount)
         };
     }
-
-    /// <summary>The snapshot's destinations; a snapshot that predates them names its one destination in the legacy fields.</summary>
-    private static IReadOnlyList<BackupDestinationContract> EffectiveDestinations(BackupExecutionConfiguration configuration) =>
-        configuration.Destinations is { Count: > 0 } listed
-            ? listed
-            : [new BackupDestinationContract
-            {
-                StorageProvider = configuration.StorageProvider,
-                StorageConnectionId = configuration.StorageConnectionId,
-                StorageExecutionLocation = configuration.StorageExecutionLocation,
-                IsPrimary = true
-            }];
 
     private async ValueTask<DatabaseCredential> ResolveCredentialAsync(string reference, CancellationToken cancellationToken)
     {
@@ -85,7 +72,7 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
         {
             throw new ArgumentException("The backup configuration is unsupported.");
         }
-        var destinations = EffectiveDestinations(configuration);
+        var destinations = configuration.Destinations ?? throw new ArgumentException("The destination set is invalid.");
         if (destinations.Count(destination => destination.IsPrimary) != 1
             || configuration.RequiredVerifiedReplicaCount < 1 || configuration.RequiredVerifiedReplicaCount > destinations.Count
             || destinations.Select(destination => (destination.StorageProvider, destination.StorageConnectionId)).Distinct().Count() != destinations.Count)
@@ -98,6 +85,10 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
             if (destination.StorageProvider is not ("local" or "central" or "sftp" or "google-drive"))
             {
                 throw new ArgumentException("The destination storage provider is unsupported.");
+            }
+            if (destination.StorageExecutionLocation is not ("Backend" or "Agent"))
+            {
+                throw new ArgumentException("The destination storage execution location is unsupported.");
             }
             if ((destination.StorageProvider is "sftp" or "google-drive") && (destination.StorageExecutionLocation != "Backend"
                 || destination.StorageConnectionId is null || destination.StorageConnectionId == Guid.Empty || configuration.StoragePrefix != string.Empty))

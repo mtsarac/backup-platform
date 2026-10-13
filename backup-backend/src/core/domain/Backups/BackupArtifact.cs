@@ -84,6 +84,16 @@ public sealed class BackupArtifact : ITenantOwned
             _replicas.Add(replica);
         }
     }
+    /// <summary>Records a conflicting target for reconciliation without enrolling it in automatic deletion.</summary>
+    public void AddQuarantinedReplica(BackupReplica replica)
+    {
+        ArgumentNullException.ThrowIfNull(replica);
+        if (!_sealed || replica.ArtifactId != Id || replica.TenantId != TenantId)
+            throw new ArgumentException("Replica does not match a sealed artifact.");
+        replica.Quarantine();
+        _replicas.Add(replica);
+    }
+
     /// <summary>Registers an unverified or failed orphan replica from an incomplete repair attempt onto a sealed artifact for durable retention cleanup.</summary>
     public void AddOrphanReplica(BackupReplica replica, DateTimeOffset now)
     {
@@ -100,7 +110,7 @@ public sealed class BackupArtifact : ITenantOwned
             var existing = _replicas[existingKeyIndex];
             if (existing.VerificationState != "Verified")
             {
-                existing.RequestDelete(now, BackupDeleteReason.RetentionExpired, TimeSpan.Zero, null);
+                existing.ReopenOrphan(now);
             }
         }
         else

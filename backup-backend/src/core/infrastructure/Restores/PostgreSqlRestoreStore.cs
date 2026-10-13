@@ -202,11 +202,43 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
     public async Task<RestoreClaim?> ClaimNextAsync(TenantId tenantId, AgentId agentId, DateTimeOffset now, TimeSpan leaseDuration, TimeSpan unclaimedExpiry, CancellationToken cancellationToken)
     {
         now = now.ToUniversalTime();
+        var unreadableReplicas = new HashSet<Guid>();
+        while (true)
+        {
+            var probeCandidate = await PrepareNextClaimAsync(tenantId, agentId, now, leaseDuration, unclaimedExpiry, unreadableReplicas, cancellationToken);
+            if (probeCandidate.Outcome != ClaimPreparationOutcome.ProbeNeeded)
+                return probeCandidate.Claim;
+
+            if (!await CanReadAsync(probeCandidate.CandidateReplica!, cancellationToken))
+            {
+                unreadableReplicas.Add(probeCandidate.CandidateReplica!.Id);
+                continue;
+            }
+
+            var finalized = await FinalizeClaimAsync(tenantId, agentId, probeCandidate.OperationId, probeCandidate.CandidateReplica!.Id,
+                now, leaseDuration, cancellationToken);
+            if (finalized.Outcome == ClaimFinalizeOutcome.Claimed)
+                return finalized.Claim;
+        }
+    }
+
+    private enum ClaimPreparationOutcome { Empty, Busy, Claimed, ProbeNeeded }
+    private sealed record ClaimPreparationResult(ClaimPreparationOutcome Outcome, RestoreClaim? Claim = null, Guid OperationId = default, BackupReplica? CandidateReplica = null);
+
+    private enum ClaimFinalizeOutcome { Claimed, Retry }
+    private sealed record ClaimFinalizeResult(ClaimFinalizeOutcome Outcome, RestoreClaim? Claim = null);
+
+    private async Task<ClaimPreparationResult> PrepareNextClaimAsync(
+        TenantId tenantId, AgentId agentId, DateTimeOffset now, TimeSpan leaseDuration, TimeSpan unclaimedExpiry,
+        HashSet<Guid> unreadableReplicas, CancellationToken cancellationToken)
+    {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-        if (!await PostgreSqlBackupRunStore.LockAgentAsync(context, tenantId, agentId, cancellationToken)) return null;
-        if (!await context.Agents.AnyAsync(agent => agent.TenantId == tenantId && agent.Id == agentId && agent.Status == AgentStatus.Active, cancellationToken)) return null;
-        // An expired lease means the agent that held it is gone: end it now, so it neither blocks this claim nor keeps its replica pinned.
+        if (!await PostgreSqlBackupRunStore.LockAgentAsync(context, tenantId, agentId, cancellationToken))
+            return new(ClaimPreparationOutcome.Empty);
+        if (!await context.Agents.AnyAsync(agent => agent.TenantId == tenantId && agent.Id == agentId && agent.Status == AgentStatus.Active, cancellationToken))
+            return new(ClaimPreparationOutcome.Empty);
+
         var held = await Operations(context).Where(operation => operation.TenantId == tenantId && operation.AgentId == agentId &&
             (operation.Status == RestoreStatus.Leased || operation.Status == RestoreStatus.Running)).ToListAsync(cancellationToken);
         foreach (var operation in held) operation.Expire(now);
@@ -215,68 +247,178 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         foreach (var operation in pending) operation.ExpireUnclaimed(now, unclaimedExpiry);
         AddSupportTerminalAudits(context);
         await context.SaveChangesAsync(cancellationToken);
-        // A restore never runs beside another job of its agent: one live restore attempt, or one live (unexpired) backup attempt, and nothing is handed out.
+
         var busy = held.Any(operation => !operation.IsTerminal) || await context.BackupRunAttempts.AsNoTracking().AnyAsync(attempt => attempt.TenantId == tenantId &&
             attempt.AgentId == agentId && (attempt.Status == BackupStatus.Leased || attempt.Status == BackupStatus.Running) && attempt.LeaseExpiresAt > now, cancellationToken);
         if (busy)
         {
             await transaction.CommitAsync(cancellationToken);
-            return null;
+            return new(ClaimPreparationOutcome.Busy);
         }
-        RestoreClaim? claim = null;
+
         var supported = await context.AgentCapabilities.AsNoTracking()
             .Where(capability => capability.TenantId == tenantId && capability.AgentId == agentId && capability.Support == CapabilitySupport.Supported)
             .Select(capability => capability.Identifier).ToListAsync(cancellationToken);
+
         foreach (var next in pending.Where(operation => operation.Status == RestoreStatus.Pending))
         {
             if (!supported.Contains(RestoreAgentCapability.ForPurpose(next.Purpose), StringComparer.Ordinal)) continue;
-            BackupReplica? replica = null;
-            if (next.Pin.IsActive && await LockArtifactAsync(context, tenantId, next.ArtifactId, cancellationToken))
-            {
-                var artifact = await context.BackupArtifacts.AsNoTracking().Include(entity => entity.Replicas)
-                    .SingleAsync(entity => entity.TenantId == tenantId && entity.Id == next.ArtifactId, cancellationToken);
-                var candidates = artifact.Replicas
-                    .Where(candidate => candidate.Id == next.ReplicaId && candidate.Status is BackupReplicaStatus.Available or BackupReplicaStatus.DeletePending ||
-                        RestoreSourceEvaluator.Evaluate(artifact, candidate, agentId, now).Eligible)
-                    .OrderBy(candidate => candidate.Id == next.ReplicaId ? 0 : 1)
-                    .ThenBy(candidate => candidate.ExecutionLocation == BackupStorageExecutionLocation.Agent ? 0 : 1)
-                    .ThenBy(candidate => ReplicaRepairSourceEvaluator.GetProviderPriority(candidate.StorageProvider))
-                    .ThenByDescending(candidate => candidate.CreatedAt);
-                foreach (var candidate in candidates)
-                {
-                    if (!await LockReplicaAsync(context, tenantId, next.ArtifactId, candidate.Id, cancellationToken)) continue;
-                    var locked = await context.BackupReplicas.AsNoTracking()
-                        .SingleAsync(entity => entity.TenantId == tenantId && entity.ArtifactId == next.ArtifactId && entity.Id == candidate.Id, cancellationToken);
-                    var decision = RestoreSourceEvaluator.Evaluate(artifact, locked, agentId, now);
-                    var alreadyPinned = locked.Id == next.ReplicaId &&
-                        locked.Status is BackupReplicaStatus.Available or BackupReplicaStatus.DeletePending &&
-                        locked.VerificationState == "Verified" && locked.VerifiedAt is not null;
-                    if ((!alreadyPinned && !decision.Eligible) || !await CanReadAsync(locked, cancellationToken)) continue;
-                    if (!alreadyPinned)
-                    {
-                        if (!next.SwitchReplica(locked, decision.Access!.Value)) continue;
-                        AddAudit(context, next, now, null, "restore.replica_fallback", next.SupportSessionId);
-                    }
-                    replica = locked;
-                    break;
-                }
-            }
-            var token = Guid.NewGuid();
-            next.Claim(token, now, leaseDuration);
+            if (!next.Pin.IsActive || !await LockArtifactAsync(context, tenantId, next.ArtifactId, cancellationToken)) continue;
 
-            // The pin keeps the replica out of every delete claim, so this holds unless the database was changed behind the platform's back. If it does not hold, the
-            // restore must not be handed to an agent: it ends here, failed, with the target untouched and the pin released.
-            if (next.Pin.IsActive && replica is { Status: BackupReplicaStatus.Available or BackupReplicaStatus.DeletePending })
+            var artifact = await context.BackupArtifacts.AsNoTracking().Include(entity => entity.Replicas)
+                .SingleAsync(entity => entity.TenantId == tenantId && entity.Id == next.ArtifactId, cancellationToken);
+            var candidates = artifact.Replicas
+                .Where(candidate => !unreadableReplicas.Contains(candidate.Id) &&
+                    (candidate.Id == next.ReplicaId && candidate.Status is BackupReplicaStatus.Available or BackupReplicaStatus.DeletePending ||
+                     RestoreSourceEvaluator.Evaluate(artifact, candidate, agentId, now).Eligible))
+                .OrderBy(candidate => candidate.Id == next.ReplicaId ? 0 : 1)
+                .ThenBy(candidate => candidate.ExecutionLocation == BackupStorageExecutionLocation.Agent ? 0 : 1)
+                .ThenBy(candidate => ReplicaRepairSourceEvaluator.GetProviderPriority(candidate.StorageProvider))
+                .ThenByDescending(candidate => candidate.CreatedAt);
+
+            BackupReplica? chosenCandidate = null;
+            foreach (var candidate in candidates)
             {
-                claim = new RestoreClaim(next, next.CurrentAttempt, replica);
+                if (!await LockReplicaAsync(context, tenantId, next.ArtifactId, candidate.Id, cancellationToken)) continue;
+                var locked = await context.BackupReplicas.AsNoTracking()
+                    .SingleAsync(entity => entity.TenantId == tenantId && entity.ArtifactId == next.ArtifactId && entity.Id == candidate.Id, cancellationToken);
+                var decision = RestoreSourceEvaluator.Evaluate(artifact, locked, agentId, now);
+                var alreadyPinned = locked.Id == next.ReplicaId &&
+                    locked.Status is BackupReplicaStatus.Available or BackupReplicaStatus.DeletePending &&
+                    locked.VerificationState == "Verified" && locked.VerifiedAt is not null;
+                if (!alreadyPinned && !decision.Eligible) continue;
+
+                chosenCandidate = locked;
                 break;
             }
-            next.Complete(token, now, new RestoreCompletion(RestoreStatus.Failed, RestoreFailureCodes.ReplicaUnavailable, RestoreTargetState.NotModified, null));
+
+            if (chosenCandidate is not null)
+            {
+                if (chosenCandidate.ExecutionLocation == BackupStorageExecutionLocation.Agent || storage is null)
+                {
+                    var token = Guid.NewGuid();
+                    if (chosenCandidate.Id != next.ReplicaId)
+                    {
+                        var decision = RestoreSourceEvaluator.Evaluate(artifact, chosenCandidate, agentId, now);
+                        if (next.SwitchReplica(chosenCandidate, decision.Access!.Value))
+                            AddAudit(context, next, now, null, "restore.replica_fallback", next.SupportSessionId);
+                    }
+                    next.Claim(token, now, leaseDuration);
+                    var claim = new RestoreClaim(next, next.CurrentAttempt, chosenCandidate);
+                    AddSupportTerminalAudits(context);
+                    await context.SaveChangesAsync(cancellationToken);
+                    await transaction.CommitAsync(cancellationToken);
+                    return new(ClaimPreparationOutcome.Claimed, claim);
+                }
+
+                await transaction.CommitAsync(cancellationToken);
+                return new(ClaimPreparationOutcome.ProbeNeeded, OperationId: next.Id, CandidateReplica: chosenCandidate);
+            }
+
+            // No readable/eligible replicas remain for this pending operation. Mark it Failed and release pin.
+            var failToken = Guid.NewGuid();
+            next.Claim(failToken, now, leaseDuration);
+            next.Complete(failToken, now, new RestoreCompletion(RestoreStatus.Failed, RestoreFailureCodes.ReplicaUnavailable, RestoreTargetState.NotModified, null));
+            AddSupportTerminalAudits(context);
+            await context.SaveChangesAsync(cancellationToken);
+            continue;
         }
+
+        await transaction.CommitAsync(cancellationToken);
+        return new(ClaimPreparationOutcome.Empty);
+    }
+
+    private async Task<ClaimFinalizeResult> FinalizeClaimAsync(
+        TenantId tenantId, AgentId agentId, Guid operationId, Guid candidateReplicaId,
+        DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        if (!await PostgreSqlBackupRunStore.LockAgentAsync(context, tenantId, agentId, cancellationToken))
+            return new(ClaimFinalizeOutcome.Retry);
+        if (!await context.Agents.AnyAsync(agent => agent.TenantId == tenantId && agent.Id == agentId && agent.Status == AgentStatus.Active, cancellationToken))
+            return new(ClaimFinalizeOutcome.Retry);
+
+        var held = await Operations(context).Where(operation => operation.TenantId == tenantId && operation.AgentId == agentId &&
+            (operation.Status == RestoreStatus.Leased || operation.Status == RestoreStatus.Running)).ToListAsync(cancellationToken);
+        foreach (var operation in held) operation.Expire(now);
+        var busy = held.Any(operation => !operation.IsTerminal) || await context.BackupRunAttempts.AsNoTracking().AnyAsync(attempt => attempt.TenantId == tenantId &&
+            attempt.AgentId == agentId && (attempt.Status == BackupStatus.Leased || attempt.Status == BackupStatus.Running) && attempt.LeaseExpiresAt > now, cancellationToken);
+        if (busy)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return new(ClaimFinalizeOutcome.Retry);
+        }
+
+        var op = await Operations(context).SingleOrDefaultAsync(o => o.TenantId == tenantId && o.Id == operationId && o.AgentId == agentId, cancellationToken);
+        if (op is null || op.Status != RestoreStatus.Pending || !op.Pin.IsActive || op.CancellationRequestedAt is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return new(ClaimFinalizeOutcome.Retry);
+        }
+
+        var supported = await context.AgentCapabilities.AsNoTracking()
+            .Where(capability => capability.TenantId == tenantId && capability.AgentId == agentId && capability.Support == CapabilitySupport.Supported)
+            .Select(capability => capability.Identifier).ToListAsync(cancellationToken);
+        if (!supported.Contains(RestoreAgentCapability.ForPurpose(op.Purpose), StringComparer.Ordinal))
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return new(ClaimFinalizeOutcome.Retry);
+        }
+
+        if (!await LockArtifactAsync(context, tenantId, op.ArtifactId, cancellationToken) ||
+            !await LockReplicaAsync(context, tenantId, op.ArtifactId, candidateReplicaId, cancellationToken))
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return new(ClaimFinalizeOutcome.Retry);
+        }
+
+        var artifact = await context.BackupArtifacts.AsNoTracking().Include(entity => entity.Replicas)
+            .SingleAsync(entity => entity.TenantId == tenantId && entity.Id == op.ArtifactId, cancellationToken);
+        var lockedReplica = await context.BackupReplicas.AsNoTracking()
+            .SingleOrDefaultAsync(entity => entity.TenantId == tenantId && entity.ArtifactId == op.ArtifactId && entity.Id == candidateReplicaId, cancellationToken);
+        if (lockedReplica is null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return new(ClaimFinalizeOutcome.Retry);
+        }
+
+        var decision = RestoreSourceEvaluator.Evaluate(artifact, lockedReplica, agentId, now);
+        var alreadyPinned = lockedReplica.Id == op.ReplicaId &&
+            lockedReplica.Status is BackupReplicaStatus.Available or BackupReplicaStatus.DeletePending &&
+            lockedReplica.VerificationState == "Verified" && lockedReplica.VerifiedAt is not null;
+        if (!alreadyPinned && !decision.Eligible)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return new(ClaimFinalizeOutcome.Retry);
+        }
+
+        if (!alreadyPinned)
+        {
+            if (!op.SwitchReplica(lockedReplica, decision.Access!.Value))
+            {
+                await transaction.CommitAsync(cancellationToken);
+                return new(ClaimFinalizeOutcome.Retry);
+            }
+            AddAudit(context, op, now, null, "restore.replica_fallback", op.SupportSessionId);
+        }
+
+        var token = Guid.NewGuid();
+        op.Claim(token, now, leaseDuration);
+        if (op.Pin.IsActive && lockedReplica.Status is BackupReplicaStatus.Available or BackupReplicaStatus.DeletePending)
+        {
+            var claim = new RestoreClaim(op, op.CurrentAttempt, lockedReplica);
+            AddSupportTerminalAudits(context);
+            await context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return new(ClaimFinalizeOutcome.Claimed, claim);
+        }
+
+        op.Complete(token, now, new RestoreCompletion(RestoreStatus.Failed, RestoreFailureCodes.ReplicaUnavailable, RestoreTargetState.NotModified, null));
         AddSupportTerminalAudits(context);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return claim;
+        return new(ClaimFinalizeOutcome.Retry);
     }
     private async Task<bool> CanReadAsync(BackupReplica replica, CancellationToken cancellationToken)
     {

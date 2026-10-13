@@ -45,3 +45,4 @@ coverage/
 # Local tooling state
 .omo/
 .superpowers/
+.serena/

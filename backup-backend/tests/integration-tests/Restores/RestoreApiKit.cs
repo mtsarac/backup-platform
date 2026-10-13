@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using BackupPlatform.Api.Restores;
+using BackupPlatform.Contracts.Agents;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Tenancy;
 using Microsoft.Extensions.DependencyInjection;
@@ -40,24 +41,27 @@ internal sealed class RestoreApiScenario : IAsyncDisposable
 
     public ValueTask DisposeAsync() => Backup.DisposeAsync();
 
+    // A snapshot sync replaces the agent's capability rows, and every backup run needs this one.
+    private static AgentCapabilityReport MultiDestination => AgentWorld.CapabilityReport(BackupTaskProtocol.MultiDestinationCapability);
+
     /// <summary>The agent reports (as a capability sync does) that it can restore.</summary>
     public async Task SyncCapabilityAsync(EnrolledAgent agent, string support = "Supported")
     {
-        using var response = await World.SyncCapabilitiesAsync(agent, AgentWorld.CapabilitySnapshot(AgentWorld.CapabilityReport(Capability, support)));
+        using var response = await World.SyncCapabilitiesAsync(agent, AgentWorld.CapabilitySnapshot(AgentWorld.CapabilityReport(Capability, support), MultiDestination));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     public async Task SyncCapabilitiesAsync(EnrolledAgent agent, params string[] capabilities)
     {
         using var response = await World.SyncCapabilitiesAsync(agent,
-            AgentWorld.CapabilitySnapshot(capabilities.Select(capability => AgentWorld.CapabilityReport(capability)).ToArray()));
+            AgentWorld.CapabilitySnapshot(capabilities.Select(capability => AgentWorld.CapabilityReport(capability)).Append(MultiDestination).ToArray()));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     /// <summary>An enrolled sibling agent of the same tenant, optionally able to restore.</summary>
     public async Task<EnrolledAgent> AddAgentAsync(bool restoreCapable = true)
     {
-        var agent = await World.EnrollAsync(Backup.Setup);
+        var agent = await World.DeclareBackupCapabilityAsync(await World.EnrollAsync(Backup.Setup));
         if (restoreCapable) await SyncCapabilityAsync(agent);
         return agent;
     }
@@ -79,7 +83,7 @@ internal sealed class RestoreApiScenario : IAsyncDisposable
             agentId = owner.AgentId,
             configuration = new BackupExecutionConfiguration
             {
-                Database = "master", Host = "sql-server", IntegratedSecurity = true, StorageProvider = provider, StorageExecutionLocation = location
+                Database = "master", Host = "sql-server", IntegratedSecurity = true, Destinations = [agentLocal || backendLocal ? BackupTestDestinations.Local(location: location) : BackupTestDestinations.Central()]
             }
         };
         using var created = await Backup.CreateJobRawAsync(body);

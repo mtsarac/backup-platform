@@ -197,6 +197,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
     setDiscoveryError(null)
     invalidatePrecheck()
     setConfirmOverwriteInput('')
+
   }
 
   function changeDatabaseName(value: string) {
@@ -231,6 +232,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
         }
     invalidatePrecheck()
     setConfirmOverwriteInput('')
+
     setDiscoveryOperation(null)
     setDiscoveryError(null)
     discoveryAttemptRef.current = attempt

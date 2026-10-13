@@ -133,7 +133,7 @@ public sealed class BackupFailureCodesTests
     private static BackupRun NewRunningRun(out Guid token)
     {
         var run = new BackupRun(Guid.NewGuid(), BackupPlatform.Domain.Identity.TenantId.New(), Guid.NewGuid(), BackupPlatform.Domain.Identity.AgentId.New(),
-            new BackupConfiguration("mssql", "Database", "localhost", null, true, null, true, false, "default", "local", "", true, "Preferred", "Preferred"),
+            new BackupConfiguration("mssql", "Database", "localhost", null, true, null, true, false, "default", "", true, "Preferred", "Preferred") { Destinations = [new BackupDestination("local", null, true)] },
             "key", Now);
         run.QueueFirstAttempt(Guid.NewGuid(), Now);
         token = Guid.NewGuid();

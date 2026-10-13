@@ -1005,6 +1005,8 @@ public sealed class BackupRetryPersistenceTests(PostgreSqlFixture fixture) : ICl
             var agent = new BackupPlatform.Domain.Agents.Agent(agentId, tenantId, new AgentSoftware(AgentPlatform.Linux, new Version(1, 0), new AgentProtocolVersion(1, 0)));
             agent.RecordEnrollment();
             context.Agents.Add(agent);
+            context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(agentId, tenantId,
+                BackupPlatform.Contracts.Backups.BackupTaskProtocol.MultiDestinationCapability, BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, null, "fixture", Now));
             await context.SaveChangesAsync();
             return agentId;
         }
@@ -1142,6 +1144,5 @@ public sealed class BackupRetryPersistenceTests(PostgreSqlFixture fixture) : ICl
     private static Completion Success(DateTimeOffset createdAt) => new("Succeeded", null, new BackupArtifactResult(100, SourceHash, ArtifactHash,
         "sha256", createdAt, "{\"DatabaseName\":\"Database\"}", "{\"CopyOnly\":true}",
         [new BackupReplicaResult("local", "default", "tenant/job/run/attempt/backup.bak", 100, ArtifactHash, "sha256", "Verified", "ReadBack", createdAt, createdAt)]));
-    private static BackupConfiguration Configuration() => new("mssql", "Database", "localhost", null, true, null,
-        true, false, "default", "local", "", true, "Preferred", "Preferred");
+    private static BackupConfiguration Configuration() => BackupStoreHarness.Configuration();
 }

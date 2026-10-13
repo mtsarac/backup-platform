@@ -46,7 +46,7 @@ public sealed class MsSqlRestoreAcceptanceTests(PostgreSqlFixture database, ITes
             {
                 Host = hostName, Port = sourcePort, Database = sourceName,
                 DatabaseCredentialReference = "sql_smoke", TrustServerCertificate = true,
-                StagingReference = "default", StorageProvider = "local", StoragePrefix = "restore-smoke",
+                StagingReference = "default", Destinations = BackupTestDestinations.LocalAgent, StoragePrefix = "restore-smoke",
                 CopyOnly = true, ChecksumPolicy = "Required", CompressionPolicy = "Preferred"
             };
             using var jobResponse = await tenant.Admin.SendAsync(HttpMethod.Post,

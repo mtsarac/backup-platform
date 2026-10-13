@@ -16,16 +16,21 @@ public static class SftpNetworkValidator
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        var unbracketedHost = host.StartsWith('[') && host.EndsWith(']') && host.Length > 2
+            ? host[1..^1]
+            : host;
+
         IPAddress[] addresses;
-        if (IPAddress.TryParse(host, out var parsedIp))
+        if (IPAddress.TryParse(unbracketedHost, out var parsedIp))
         {
-            addresses = [parsedIp];
+            addresses = [Normalize(parsedIp)];
         }
         else
         {
             try
             {
-                addresses = await Dns.GetHostAddressesAsync(host, cancellationToken).ConfigureAwait(false);
+                var resolved = await Dns.GetHostAddressesAsync(host, cancellationToken).ConfigureAwait(false);
+                addresses = resolved.Select(Normalize).ToArray();
             }
             catch (SocketException ex)
             {
@@ -39,11 +44,17 @@ public static class SftpNetworkValidator
         }
 
         var selected = addresses.FirstOrDefault(ip => ip.AddressFamily == AddressFamily.InterNetwork)
-            ?? addresses.First();
+            ?? addresses[0];
 
         AssertIpPermitted(selected, network.AllowedPrivateNetworks);
 
         return selected;
+    }
+
+    public static IPAddress Normalize(IPAddress ip)
+    {
+        ArgumentNullException.ThrowIfNull(ip);
+        return ip.IsIPv4MappedToIPv6 ? ip.MapToIPv4() : ip;
     }
 
     public static void AssertIpPermitted(IPAddress ip, string[] allowedPrivateNetworks)
@@ -51,7 +62,8 @@ public static class SftpNetworkValidator
         ArgumentNullException.ThrowIfNull(ip);
         ArgumentNullException.ThrowIfNull(allowedPrivateNetworks);
 
-        var isPrivate = IsPrivateOrRestricted(ip);
+        var normalizedIp = Normalize(ip);
+        var isPrivate = IsPrivateOrRestricted(normalizedIp);
         if (!isPrivate)
         {
             return;
@@ -60,9 +72,17 @@ public static class SftpNetworkValidator
         // Check if matching any explicit operator CIDR
         foreach (var cidr in allowedPrivateNetworks)
         {
-            if (IPNetwork.TryParse(cidr, out var network) && network.Contains(ip))
+            if (IPNetwork.TryParse(cidr, out var network))
             {
-                return;
+                if (network.BaseAddress.IsIPv4MappedToIPv6 && network.PrefixLength >= 96)
+                {
+                    network = new IPNetwork(network.BaseAddress.MapToIPv4(), network.PrefixLength - 96);
+                }
+
+                if (network.Contains(normalizedIp))
+                {
+                    return;
+                }
             }
         }
 
@@ -73,6 +93,9 @@ public static class SftpNetworkValidator
 
     public static bool IsPrivateOrRestricted(IPAddress ip)
     {
+        ArgumentNullException.ThrowIfNull(ip);
+        ip = Normalize(ip);
+
         if (IPAddress.IsLoopback(ip))
         {
             return true;

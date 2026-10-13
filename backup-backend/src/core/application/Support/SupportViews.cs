@@ -70,7 +70,7 @@ public static class SupportViews
         details.ValueKind == JsonValueKind.Object && details.TryGetProperty("result", out var result) && result.ValueKind == JsonValueKind.String ? result.GetString() : null;
 
     public static SupportJobView ToView(BackupJobView job) => new(job.Id, job.AgentId, job.AgentName, job.Name, job.BackupType, job.Enabled, job.Configuration.Engine,
-        job.Configuration.Database, job.Configuration.StorageProvider, job.Schedule, job.Retention, job.LastRun);
+        job.Configuration.Database, job.Configuration.Destinations.Single(d => d.IsPrimary).StorageProvider, job.Schedule, job.Retention, job.LastRun);
 
     public static SupportRunView ToView(BackupRunView run) => new(run.Id, run.JobId, run.JobName, run.AgentId, run.AgentName, run.Status, run.BackupType, run.TriggerType,
         run.CurrentAttemptNumber, run.CreatedAt, run.StartedAt, run.CompletedAt, run.ReasonCode, run.Reason,

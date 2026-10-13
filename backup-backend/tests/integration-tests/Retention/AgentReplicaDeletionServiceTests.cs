@@ -75,7 +75,7 @@ public sealed class AgentReplicaDeletionServiceTests
             await using (var context = world.Harness.Database.CreatePlatformContext())
             {
                 var job = await context.BackupJobs.FindAsync(seed.Job.Id);
-                job!.Reconfigure(job.Configuration with { StoragePrefix = "changed", StorageExecutionLocation = BackupStorageExecutionLocation.Backend });
+                job!.Reconfigure(BackupStoreHarness.Configuration("local", BackupStorageExecutionLocation.Backend) with { StoragePrefix = "changed" });
                 await context.SaveChangesAsync();
             }
             clock.Advance(TimeSpan.FromSeconds(1));

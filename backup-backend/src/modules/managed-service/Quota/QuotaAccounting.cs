@@ -61,8 +61,4 @@ public static class QuotaAccounting
         }
         return accumulator.TotalBytes;
     }
-
-    /// <summary>What a run is expected to add, judged from the replicas a previous run of the same job wrote: their status is ignored (the new copies start Available).</summary>
-    public static long Estimate(QuotaPolicy policy, IEnumerable<ReplicaFact> previousReplicas) =>
-        Contribution(policy, previousReplicas.Select(replica => replica with { Status = BackupReplicaStatus.Available }));
 }

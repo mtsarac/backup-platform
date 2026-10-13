@@ -1,9 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
-using BackupPlatform.Agents.Capabilities;
 using BackupPlatform.Contracts.Agents;
 using BackupPlatform.Contracts.Backups;
-using BackupPlatform.Domain.Capabilities;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Storage;
 using Microsoft.EntityFrameworkCore;
@@ -32,19 +30,10 @@ public sealed class MultiDestinationRelayAuthorizationTests(PostgreSqlFixture fi
         return id;
     }
 
-    private static async Task GrantCapabilityAsync(PostgreSqlFixture fixture, EnrolledAgent agent)
-    {
-        await using var db = fixture.CreatePlatformContext();
-        db.AgentCapabilities.Add(new AgentCapabilityRecord(new AgentId(agent.AgentId), new TenantId(agent.TenantId), BackupTaskProtocol.MultiDestinationCapability,
-            CapabilitySupport.Supported, null, "revision-1", DateTimeOffset.UtcNow));
-        await db.SaveChangesAsync();
-    }
-
     private async Task<Arrangement> ArrangeAsync(BackupApiScenario scenario, bool multi = true)
     {
         var sftp = await AddConnectionAsync(fixture, scenario.Setup.Tenant.Id, "sftp", "Relay SFTP");
         var drive = await AddConnectionAsync(fixture, scenario.Setup.Tenant.Id, "google-drive", "Relay Drive");
-        await GrantCapabilityAsync(fixture, scenario.Agent);
         var destinations = multi
             ? new[]
             {
@@ -58,8 +47,7 @@ public sealed class MultiDestinationRelayAuthorizationTests(PostgreSqlFixture fi
             name = "Replicated", agentId = scenario.Agent.AgentId,
             configuration = new BackupExecutionConfiguration
             {
-                Database = "master", Host = "sql-server", IntegratedSecurity = true, StorageExecutionLocation = "Backend",
-                StorageProvider = destinations[0].StorageProvider, StorageConnectionId = destinations[0].StorageConnectionId,
+                Database = "master", Host = "sql-server", IntegratedSecurity = true,
                 Destinations = destinations, RequiredVerifiedReplicaCount = multi ? 2 : 1
             }
         });
@@ -171,15 +159,20 @@ public sealed class MultiDestinationRelayAuthorizationTests(PostgreSqlFixture fi
     }
 
     [Fact]
-    public async Task A_call_without_a_destination_is_understood_only_for_a_single_destination_run()
+    public async Task A_call_without_a_destination_is_a_bad_request_for_single_and_multi_destination_runs()
     {
         await using var multiScenario = await BackupApiScenario.CreateAsync(fixture);
         var multi = await ArrangeAsync(multiScenario);
         await using var singleScenario = await BackupApiScenario.CreateAsync(fixture);
         var single = await ArrangeAsync(singleScenario, multi: false);
 
-        await AssertRefusedAsync(await UploadAsync(multi, null), "destination_not_authorized");
-        AssertAuthorized(await UploadAsync(single, null));
+        foreach (var arrangement in new[] { multi, single })
+        {
+            using var response = await UploadAsync(arrangement, null);
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            Assert.Equal("invalid_request", AgentWorld.ReadJson(response).GetProperty("error").GetString());
+            Assert.Contains("destination header", AgentWorld.ReadJson(response).GetProperty("message").GetString());
+        }
         AssertAuthorized(await UploadAsync(single, single.Central));
     }
 

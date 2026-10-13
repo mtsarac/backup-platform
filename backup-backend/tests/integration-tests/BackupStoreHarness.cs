@@ -78,6 +78,9 @@ internal sealed class BackupStoreHarness(PostgreSqlFixture database)
         var agent = new BackupPlatform.Domain.Agents.Agent(agentId, tenantId, new AgentSoftware(AgentPlatform.Linux, new Version(1, 0), new AgentProtocolVersion(1, 0)));
         agent.RecordEnrollment();
         context.Agents.Add(agent);
+        // Every run is a destination-list snapshot, so admission and claim need an agent that declares it; tests about the missing capability remove the row.
+        context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(agentId, tenantId,
+            BackupPlatform.Contracts.Backups.BackupTaskProtocol.MultiDestinationCapability, BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, null, "fixture", T0));
         await context.SaveChangesAsync();
         return agentId;
     }
@@ -124,8 +127,32 @@ internal sealed class BackupStoreHarness(PostgreSqlFixture database)
         [new BackupReplicaResult("local", "default", "tenant/job/run/attempt/backup.bak", 100, ArtifactHash, "sha256", "Verified", "ReadBack", createdAt, createdAt)]));
 
     public static BackupConfiguration Configuration() => new("mssql", "Database", "localhost", null, true, null,
-        true, false, "default", "local", "", true, "Preferred", "Preferred")
-        { StorageExecutionLocation = BackupStorageExecutionLocation.Backend };
+        true, false, "default", "", true, "Preferred", "Preferred")
+        { Destinations = [new BackupDestination("local", null, true) { StorageExecutionLocation = BackupStorageExecutionLocation.Backend }] };
+
+    /// <summary>The default configuration with exactly one primary destination.</summary>
+    public static BackupConfiguration Configuration(string provider, BackupStorageExecutionLocation location, Guid? connectionId = null) =>
+        Configuration() with { Destinations = [new BackupDestination(provider, connectionId, true) { StorageExecutionLocation = location }] };
+
+    /// <summary>
+    /// A completion is validated against the run's snapshot, so a test that seeds copies on providers other than its job's default names them there: the first
+    /// provider is the primary, "local" keeps the job's execution location, the others are backend-relayed, and every connection is left to the tenant's
+    /// default for its provider (as for a snapshot that predates storage connections). A snapshot that already names every provider is left as it is.
+    /// </summary>
+    public async Task SnapshotDestinationsAsync(Guid runId, IReadOnlyList<string> providers)
+    {
+        await using var context = Database.CreatePlatformContext();
+        await context.Database.ExecuteSqlInterpolatedAsync($$"""
+            UPDATE backup_runs SET "Configuration" = jsonb_set("Configuration", ARRAY['Destinations'], (
+                SELECT jsonb_agg(jsonb_build_object('IsPrimary', named.position = 1, 'StorageProvider', named.provider, 'StorageConnectionId', 'null'::jsonb,
+                    'StorageExecutionLocation', CASE WHEN named.provider = 'local' THEN "Configuration" #> ARRAY['Destinations', '0', 'StorageExecutionLocation'] ELSE '1'::jsonb END)
+                    ORDER BY named.position)
+                FROM unnest({{providers.ToArray()}}::text[]) WITH ORDINALITY AS named(provider, position)))
+            WHERE "Id" = {{runId}} AND NOT (
+                SELECT bool_and(EXISTS (SELECT 1 FROM jsonb_array_elements("Configuration" -> 'Destinations') existing WHERE existing ->> 'StorageProvider' = wanted))
+                FROM unnest({{providers.ToArray()}}::text[]) AS wanted)
+            """);
+    }
 
     /// <summary>Live slots straight from the table (independent of the store's own query): Leased/Running attempts whose lease has not expired at <paramref name="at"/>.</summary>
     public static async Task<IReadOnlyList<(Guid Tenant, Guid Agent, long Count)>> LiveSlotsAsync(string connectionString, DateTimeOffset at)

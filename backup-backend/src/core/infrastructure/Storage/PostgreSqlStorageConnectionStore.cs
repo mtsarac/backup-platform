@@ -239,10 +239,12 @@ public sealed class PostgreSqlStorageConnectionStore(
         if (await context.BackupReplicas.AnyAsync(replica => replica.TenantId == owner && replica.StorageConnectionId == id, cancellationToken))
             return true;
         var text = id.ToString("D");
-        return (await context.Database.SqlQuery<int>($"""
-            SELECT (SELECT count(*) FROM backup_jobs WHERE "TenantId" = {owner.Value} AND "Configuration" ->> 'StorageConnectionId' = {text})::int
-                 + (SELECT count(*) FROM backup_runs WHERE "TenantId" = {owner.Value} AND "Configuration" ->> 'StorageConnectionId' = {text})::int AS "Value"
-            """).SingleAsync(cancellationToken)) > 0;
+        return await context.Database.SqlQuery<bool>($"""
+            SELECT EXISTS (SELECT 1 FROM backup_jobs job, jsonb_array_elements(job."Configuration" -> 'Destinations') destination
+                           WHERE job."TenantId" = {owner.Value} AND destination ->> 'StorageConnectionId' = {text})
+                OR EXISTS (SELECT 1 FROM backup_runs run, jsonb_array_elements(run."Configuration" -> 'Destinations') destination
+                           WHERE run."TenantId" = {owner.Value} AND destination ->> 'StorageConnectionId' = {text}) AS "Value"
+            """).SingleAsync(cancellationToken);
     }
 
     /// <summary>Under the tenant lock: usage recomputed from the sources with the tenant's current policy, written in the caller's transaction.</summary>

@@ -87,12 +87,17 @@ describe('iş formu', () => {
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalled())
     expect(vi.mocked(saveBackupJob).mock.calls[0][1].retention).toBeUndefined()
   })
-  it('gönderilen yapılandırmada storageConnectionId varsayılan olarak null gider', async () => {
+  it('yeni iş tek bir birincil local hedefle ve varsayılan bağlantı (null) ile gönderilir', async () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
     renderPage()
     await submit()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalled())
-    expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration.destinations[0].storageConnectionId).toBeNull()
+    const configuration = vi.mocked(saveBackupJob).mock.calls[0][1].configuration
+    expect(configuration.destinations).toEqual([{ storageProvider: 'local', storageConnectionId: null, storageExecutionLocation: 'Agent', isPrimary: true }])
+    expect(configuration.requiredVerifiedReplicaCount).toBe(1)
+    expect(configuration).not.toHaveProperty('storageProvider')
+    expect(configuration).not.toHaveProperty('storageConnectionId')
+    expect(configuration).not.toHaveProperty('storageExecutionLocation')
   })
   it('varsayılan hedef devre dışıysa yeni iş kaydında varsayılan seçimi engeli aşamaz', async () => {
     vi.mocked(getTenantConnections).mockResolvedValue({ items: [makeConnection({ enabled: false }), makeManaged()] })
@@ -107,7 +112,7 @@ describe('iş formu', () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
     await submit()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalled())
-    expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration.destinations[0]).toMatchObject({ storageProvider: 'central', storageConnectionId: null, storageExecutionLocation: 'Backend' })
+    expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration.destinations).toEqual([{ storageProvider: 'central', storageConnectionId: null, storageExecutionLocation: 'Backend', isPrimary: true }])
   })
   it('tüm bağlantıları sahiplik ve kullanılabilirlikle listeler; kilitli, kapalı, planlanan ve desteklenmeyen hedefleri seçtirmez', async () => {
     vi.mocked(getTenantConnections).mockResolvedValue({ items: [
@@ -138,7 +143,7 @@ describe('iş formu', () => {
     expect(screen.getByLabelText('Storage Provider')).toHaveValue('central')
     await submit()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalled())
-    expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration.destinations[0]).toMatchObject({ storageProvider: 'central', storageConnectionId: 'conn-central', storageExecutionLocation: 'Backend' })
+    expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration.destinations).toEqual([{ storageProvider: 'central', storageConnectionId: 'conn-central', storageExecutionLocation: 'Backend', isPrimary: true }])
     expect(vi.mocked(saveBackupJob).mock.calls[0][0]).toBe('tenant-a')
   })
   it.each(['disabled', 'locked', 'missing', 'unsupported'] as const)('düzenlemede mevcut %s hedef kimliğini korur ve değiştirmeden kaydedebilir', async state => {
@@ -155,7 +160,7 @@ describe('iş formu', () => {
     fireEvent.change(screen.getByLabelText('İş adı'), { target: { value: 'Changed name' } })
     await submit()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalled())
-    expect(vi.mocked(saveBackupJob).mock.calls[0]).toEqual(['tenant-a', expect.objectContaining({ name: 'Changed name', configuration: expect.objectContaining({ destinations: [expect.objectContaining({ storageConnectionId: 'conn-local', storageProvider: 'local' })] }) }), 'job-a'])
+    expect(vi.mocked(saveBackupJob).mock.calls[0]).toEqual(['tenant-a', expect.objectContaining({ name: 'Changed name', configuration: expect.objectContaining({ destinations: [{ storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true }] }) }), 'job-a'])
   })
   it('başka sağlayıcıya geçip geri gelse bile mevcut açık kimliği otomatik olarak geri atamaz', async () => {
     renderPage('/tenants/tenant-a/backup-jobs/job-a/edit')

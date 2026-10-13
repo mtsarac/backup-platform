@@ -162,7 +162,7 @@ public sealed class BackupStorageSweeper(
             }
 
             // Whatever its kind, a file of a run that is queued, leased, running or waiting for a retry is left alone until the run is over.
-            if (attempt.RunIsActive || attempt.AttemptIsLive)
+            if (attempt.RunIsActive || attempt.AttemptIsLive || attempt.RepairIsActive)
             {
                 tally.KeptActive++;
                 continue;

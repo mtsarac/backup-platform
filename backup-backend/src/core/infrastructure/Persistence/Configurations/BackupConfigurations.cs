@@ -238,7 +238,7 @@ internal sealed class BackupReplicaConfiguration : IEntityTypeConfiguration<Back
         builder.ToTable("backup_replicas", table =>
         {
             table.HasCheckConstraint("ck_backup_replica_size", "\"SizeBytes\" > 0");
-            table.HasCheckConstraint("ck_backup_replica_status", "\"Status\" IN ('Available','DeletePending','Deleting','DeleteFailed','Deleted')");
+            table.HasCheckConstraint("ck_backup_replica_status", "\"Status\" IN ('Available','DeletePending','Deleting','DeleteFailed','Deleted','Quarantined')");
             table.HasCheckConstraint("ck_backup_replica_executor",
                 "(\"ExecutionLocation\" = 'Backend' AND \"OwningAgentId\" IS NULL AND \"DeleteOperationId\" IS NULL AND \"DeleteCompletionToken\" IS NULL) OR " +
                 "(\"ExecutionLocation\" = 'Agent' AND \"StorageProvider\" = 'local' AND \"OwningAgentId\" IS NOT NULL AND \"OwningAgentId\" <> '00000000-0000-0000-0000-000000000000'::uuid)");
@@ -249,7 +249,7 @@ internal sealed class BackupReplicaConfiguration : IEntityTypeConfiguration<Back
                 "(\"Status\" = 'DeleteFailed' AND NOT \"DeleteCompletionAbsenceVerified\" AND \"DeleteCompletionFailureCode\" = \"DeleteFailureCode\")))");
             table.HasCheckConstraint("ck_backup_replica_lifecycle",
                 "(\"DeleteReason\" IS NULL OR \"DeleteReason\" IN ('RetentionExpired','Manual')) AND (\"DeleteRequestedByUserId\" IS NULL OR \"DeleteReason\" = 'Manual') AND (" +
-                "(\"Status\" = 'Available' AND \"DeleteRequestedAt\" IS NULL AND \"DeleteReason\" IS NULL AND \"DeleteAfter\" IS NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL AND \"DeleteLeaseExpiresAt\" IS NULL " +
+                "(\"Status\" IN ('Available','Quarantined') AND \"DeleteRequestedAt\" IS NULL AND \"DeleteReason\" IS NULL AND \"DeleteAfter\" IS NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL AND \"DeleteLeaseExpiresAt\" IS NULL " +
                 "AND \"DeleteNextAttemptAt\" IS NULL AND \"DeleteFailureCode\" IS NULL AND \"DeletedAt\" IS NULL AND \"DeleteAttempts\" = 0) " +
                 "OR (\"Status\" = 'DeletePending' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeleteAfter\" IS NOT NULL AND \"DeleteAfter\" >= \"DeleteRequestedAt\" AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL " +
                 "AND \"DeleteLeaseExpiresAt\" IS NULL AND \"DeleteNextAttemptAt\" IS NULL AND \"DeleteFailureCode\" IS NULL AND \"DeletedAt\" IS NULL AND \"DeleteAttempts\" = 0) " +
@@ -379,16 +379,19 @@ internal sealed class ReplicaRepairOperationConfiguration : IEntityTypeConfigura
         {
             table.HasCheckConstraint("ck_replica_repair_operations_status", "\"Status\" IN ('Pending','InProgress','Succeeded','Failed','Cancelled')");
             table.HasCheckConstraint("ck_replica_repair_operations_bytes", "\"TransferredBytes\" >= 0 AND \"TotalBytes\" >= 0 AND \"TransferredBytes\" <= \"TotalBytes\"");
+            table.HasCheckConstraint("ck_replica_repair_operations_reserved", "\"ReservedQuotaBytes\" >= 0");
             table.HasCheckConstraint("ck_replica_repair_operations_terminal", "(\"Status\" IN ('Succeeded','Failed','Cancelled')) = (\"CompletedAt\" IS NOT NULL)");
         });
 
         builder.Property(repair => repair.StorageProvider).HasMaxLength(128).IsRequired();
+        builder.Property(repair => repair.TargetKey).HasMaxLength(1024);
         builder.Property(repair => repair.Status).HasConversion<string>().HasMaxLength(32).IsRequired();
         builder.Property(repair => repair.LeaseOwner).HasMaxLength(128);
         builder.Property(repair => repair.FailureCode).HasMaxLength(128);
         builder.Property(repair => repair.FailureReason).HasMaxLength(512);
         builder.Property(repair => repair.AttemptCount).IsRequired();
         builder.Property(repair => repair.MaxAttempts).IsRequired();
+        builder.Property(repair => repair.ReservedQuotaBytes).HasColumnType("bigint").IsRequired();
         builder.Property(repair => repair.NextRetryAt);
         builder.Property(repair => repair.LastAttemptAt);
         builder.Property(repair => repair.LastFailureCode).HasMaxLength(64);

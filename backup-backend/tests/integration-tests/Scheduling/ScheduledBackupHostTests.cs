@@ -144,7 +144,7 @@ public sealed class ScheduledBackupHostTests(PostgreSqlFixture database, ITestOu
         {
             name = "Scheduled",
             agentId = scenario.Agent.AgentId,
-            configuration = new BackupExecutionConfiguration { Database = "master", Host = "sql-server", IntegratedSecurity = true },
+            configuration = new BackupExecutionConfiguration { Database = "master", Host = "sql-server", IntegratedSecurity = true, Destinations = BackupTestDestinations.LocalAgent },
             schedule = new { cronExpression = "*/2 * * * * *", timeZone = "UTC", missedRunGraceSeconds = 60 }
         };
         using var created = await scenario.CreateJobRawAsync(body);
@@ -174,7 +174,7 @@ public sealed class ScheduledBackupHostTests(PostgreSqlFixture database, ITestOu
         {
             name = "Scheduled",
             agentId = scenario.Agent.AgentId,
-            configuration = new BackupExecutionConfiguration { Database = "master", Host = "sql-server", IntegratedSecurity = true },
+            configuration = new BackupExecutionConfiguration { Database = "master", Host = "sql-server", IntegratedSecurity = true, Destinations = BackupTestDestinations.LocalAgent },
             overlapPolicy = overlap,
             schedule = new { cronExpression = cron, timeZone = "UTC", missedRunGraceSeconds = 60 }
         };

@@ -164,6 +164,7 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
         var seed = await SeedAsync();
         var store = Store();
         var run = (await store.StartRunAsync(seed.TenantId, seed.JobId, "multiple-replicas", Now, default)).Run!;
+        await new BackupStoreHarness(fixture).SnapshotDestinationsAsync(run.Id, ["local", "central"]);
         var claim = (await store.ClaimNextAsync(seed.TenantId, seed.AgentId, Now, Lease, default))!;
         var command = Command(claim, Now);
         Assert.Equal(BackupMutationResult.Accepted, await store.StartAttemptAsync(command, default));
@@ -235,7 +236,7 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
     [Fact]
     public async Task MultiDestinationJobIsAdmittedOnlyForAnAgentThatDeclaresMultiDestinationExecution()
     {
-        var seed = await SeedAsync();
+        var seed = await SeedAsync(declareMultiDestination: false);
         var store = Store();
         var multiConfig = Configuration() with
         {
@@ -266,6 +267,17 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
         Assert.Equal(["local", "central"], admitted.Run!.Configuration.Destinations.Select(d => d.StorageProvider));
         Assert.All(admitted.Run.Configuration.Destinations, d => Assert.NotNull(d.StorageConnectionId));
         Assert.Equal(2, admitted.Run.Configuration.RequiredVerifiedReplicaCount);
+    }
+    [Fact]
+    public async Task AgentWithoutMultiDestinationCapabilityIsDeniedEvenForASingleDestination()
+    {
+        var seed = await SeedAsync(declareMultiDestination: false);
+
+        var refused = await Store().StartRunAsync(seed.TenantId, seed.JobId, "single-run", Now, default);
+
+        Assert.Equal(BackupStartOutcome.AdmissionDenied, refused.Outcome);
+        Assert.Equal(BackupAdmissionDenialCodes.AgentMultiDestinationUnsupported, refused.DenialCode);
+        Assert.Null(refused.Run);
     }
     [Theory]
     [InlineData("job-agent")]
@@ -352,7 +364,7 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
         Assert.Equal(sqlState, error.SqlState);
         Assert.Equal(constraint, error.ConstraintName);
     }
-    private async Task<Seed> SeedAsync(PostgreSqlFixture? database = null)
+    private async Task<Seed> SeedAsync(PostgreSqlFixture? database = null, bool declareMultiDestination = true)
     {
         var tenantId = TenantId.New();
         var agentId = AgentId.New();
@@ -362,6 +374,8 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
             var agent = new BackupPlatform.Domain.Agents.Agent(agentId, tenantId, new AgentSoftware(AgentPlatform.Linux, new Version(1, 0), new AgentProtocolVersion(1, 0)));
             agent.RecordEnrollment();
             context.Agents.Add(agent);
+            if (declareMultiDestination) context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(agentId, tenantId,
+                BackupPlatform.Contracts.Backups.BackupTaskProtocol.MultiDestinationCapability, BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, null, "fixture", Now));
             await context.SaveChangesAsync();
         }
         var job = (await Store(database).CreateJobAsync(new BackupJob(Guid.NewGuid(), tenantId, "Database", agentId, Configuration(), Now, overlapPolicy: BackupOverlapPolicy.Queue), default))!;
@@ -383,9 +397,7 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
     private static Completion Success(DateTimeOffset createdAt) => new("Succeeded", null, new BackupArtifactResult(100, SourceHash, ArtifactHash,
         "sha256", createdAt, "{\"DatabaseName\":\"Database\",\"Nested\":{\"a\":1,\"b\":2}}", "{\"CopyOnly\":true}",
         [new BackupReplicaResult("local", "default", "tenant/job/run/attempt/backup.bak", 100, ArtifactHash, "sha256", "Verified", "ReadBack", createdAt, createdAt)]));
-    private static BackupConfiguration Configuration() => new("mssql", "Database", "localhost", null, true, null,
-        true, false, "default", "local", "", true, "Preferred", "Preferred")
-        { StorageExecutionLocation = BackupStorageExecutionLocation.Backend };
+    private static BackupConfiguration Configuration() => BackupStoreHarness.Configuration();
     private sealed record Seed(TenantId TenantId, AgentId AgentId, Guid JobId);
     private sealed record CompletedSeed(TenantId TenantId, AgentId AgentId, Guid JobId, BackupRun Run);
 }

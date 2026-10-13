@@ -98,40 +98,20 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
 
     private static BackupConfiguration ToDomain(BackupExecutionConfiguration c)
     {
-        var destinations = c.Destinations is { Count: > 0 }
-            ? c.Destinations.Select(d => new BackupDestination(
-                d.StorageProvider,
-                d.StorageConnectionId,
-                d.IsPrimary)
-            {
-                StorageExecutionLocation = d.StorageExecutionLocation switch
-                {
-                    "Backend" => BackupStorageExecutionLocation.Backend,
-                    "Agent" => BackupStorageExecutionLocation.Agent,
-                    _ => d.StorageProvider == "local" ? BackupStorageExecutionLocation.Agent : BackupStorageExecutionLocation.Backend
-                }
-            }).ToArray()
-            : Array.Empty<BackupDestination>();
-
-        // Determine canonical primary destination
-        var primary = destinations.FirstOrDefault(d => d.IsPrimary)
-                      ?? (destinations.Length > 0 ? destinations[0] : null);
-
-        var provider = primary?.StorageProvider ?? c.StorageProvider;
-        var connectionId = primary?.StorageConnectionId ?? c.StorageConnectionId;
-        var location = primary?.StorageExecutionLocation ?? (c.StorageExecutionLocation switch
+        var destinations = (c.Destinations ?? []).Select(d => new BackupDestination(d.StorageProvider, d.StorageConnectionId, d.IsPrimary)
         {
-            "Backend" => BackupStorageExecutionLocation.Backend,
-            "Agent" => BackupStorageExecutionLocation.Agent,
-            _ => provider == "local" ? BackupStorageExecutionLocation.Agent : BackupStorageExecutionLocation.Backend
-        });
+            StorageExecutionLocation = d.StorageExecutionLocation switch
+            {
+                "Backend" => BackupStorageExecutionLocation.Backend,
+                "Agent" => BackupStorageExecutionLocation.Agent,
+                _ => throw new ArgumentException("Invalid storage execution location for destination.")
+            }
+        }).ToArray();
 
         return new(c.Engine, c.Database, c.Host, c.Port,
-            c.IntegratedSecurity, c.DatabaseCredentialReference, c.Encrypt, c.TrustServerCertificate, c.StagingReference, provider,
+            c.IntegratedSecurity, c.DatabaseCredentialReference, c.Encrypt, c.TrustServerCertificate, c.StagingReference,
             c.StoragePrefix, c.CopyOnly, c.ChecksumPolicy, c.CompressionPolicy)
         {
-            StorageConnectionId = connectionId,
-            StorageExecutionLocation = location,
             Destinations = destinations,
             RequiredVerifiedReplicaCount = c.RequiredVerifiedReplicaCount > 0 ? c.RequiredVerifiedReplicaCount : 1
         };
@@ -259,7 +239,7 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
             waiting.Length == 0 ? null : waiting.Min(r => r.DeleteAfter), waiting.OrderBy(r => r.DeleteAfter).FirstOrDefault()?.DeleteReason?.ToString(),
             runId, jobId, artifact.AttemptId, CancelDeleteAllowed: artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.DeletePending && replica.VerificationState == "Verified"), BackupType: artifact.BackupType,
             BackupMetadata: BackupMetadataProjection.Read(artifact.SourceMetadataJson, artifact.AppliedOptionsJson),
-            Replication: snapshot is null ? null : ToView(BackupReplicationEvaluator.ForArtifact(snapshot.RequiredVerifiedReplicaCount, snapshot.ResolveEffectiveDestinations().Count, artifact.Replicas)));
+            Replication: snapshot is null ? null : ToView(BackupReplicationEvaluator.ForArtifact(snapshot.RequiredVerifiedReplicaCount, snapshot.Destinations.Count, artifact.Replicas)));
     }
 
     public static BackupReplicaView ToView(BackupReplica r) => new(r.Id, r.StorageProvider, r.StorageTarget, r.Key, r.SizeBytes, r.Checksum, r.ChecksumAlgorithm,
@@ -351,10 +331,9 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
     {
         Engine = c.Engine, Database = c.Database, Host = c.Host, Port = c.Port, IntegratedSecurity = c.IntegratedSecurity,
         DatabaseCredentialReference = c.DatabaseCredentialReference, Encrypt = c.Encrypt, TrustServerCertificate = c.TrustServerCertificate,
-        StagingReference = c.StagingReference, StorageProvider = c.StorageProvider, StoragePrefix = c.StoragePrefix,
-        StorageExecutionLocation = c.StorageExecutionLocation.ToString(), StorageConnectionId = c.StorageConnectionId,
+        StagingReference = c.StagingReference, StoragePrefix = c.StoragePrefix,
         CopyOnly = c.CopyOnly, ChecksumPolicy = c.ChecksumPolicy, CompressionPolicy = c.CompressionPolicy,
-        Destinations = c.ResolveEffectiveDestinations().Select(d => new BackupDestinationContract
+        Destinations = c.Destinations.Select(d => new BackupDestinationContract
         {
             StorageProvider = d.StorageProvider,
             StorageConnectionId = d.StorageConnectionId,

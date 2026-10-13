@@ -153,7 +153,7 @@ public static class BackupReplicationEvaluator
         // Nothing was transferred (the engine failed first, the attempt was lost or cancelled before a copy existed): there is no replication to judge, only a run status.
         if (!attempt.IsTerminal || (attempt.Artifacts.Count == 0 && attempt.DestinationOutcomes.Count == 0)) return null;
         var replicas = attempt.Artifacts.SelectMany(artifact => artifact.Replicas).ToArray();
-        var destinations = snapshot.ResolveEffectiveDestinations().Select(destination =>
+        var destinations = snapshot.Destinations.Select(destination =>
         {
             bool Matches(string provider, Guid? connection) =>
                 provider == destination.StorageProvider && (destination.StorageConnectionId is null || connection == destination.StorageConnectionId);

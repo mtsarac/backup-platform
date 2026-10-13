@@ -1,6 +1,7 @@
 using System.Text.Json;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Backups;
+using BackupPlatform.StorageProviders.Abstractions;
 
 namespace BackupPlatform.Application.Backups;
 
@@ -21,7 +22,7 @@ public static class BackupInputValidation
     public static bool IsValidKey(string? key) => key is { Length: > 0 and <= 128 } && key.All(c => c is >= '!' and <= '~') && !key.StartsWith("scheduled-", StringComparison.OrdinalIgnoreCase);
     private static bool Text(string? value, int maximum) => !string.IsNullOrWhiteSpace(value) && value.Length <= maximum && !value.Any(char.IsControl);
     private static bool Reference(string? value) => Text(value, 128) && value!.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.');
-    private static bool SafeKey(string? value) => value == string.Empty || value is { Length: <= 512 } && !value.StartsWith('/') && !value.Contains('\\') &&
+    private static bool SafeKey(string? value) => value == string.Empty || value is { Length: <= StorageObjectKey.MaxLength } && !value.StartsWith('/') && !value.Contains('\\') &&
         !value.Split('/').Any(s => s is "" or "." or "..") && value.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.' or '/');
 
     /// <summary>Safe field-level errors; never exposes configuration values or parser exception messages.</summary>
@@ -36,15 +37,12 @@ public static class BackupInputValidation
         Check(Text(c.Host, 253) && c.Host.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '.' or '-' or '_' or '\\' or ':'), "configuration.host");
         Check(c.Port is null or >= 1 and <= 65535, "configuration.port");
         Check(c.StagingReference == "default", "configuration.stagingReference");
-        Check(SafeKey(c.StoragePrefix), "configuration.storagePrefix");
+        Check(c.StoragePrefix is { Length: <= 512 } && SafeKey(c.StoragePrefix), "configuration.storagePrefix");
         Check(c.ChecksumPolicy is "Required" or "Preferred" or "Disabled", "configuration.checksumPolicy");
         Check(c.CompressionPolicy is "Required" or "Preferred" or "Disabled", "configuration.compressionPolicy");
         Check(c.IntegratedSecurity ? c.DatabaseCredentialReference is null : Text(c.DatabaseCredentialReference, 64) && c.DatabaseCredentialReference!.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '-' or '_'), "configuration.databaseCredentialReference");
 
-        var destinations = c.Destinations is { Count: > 0 }
-            ? c.Destinations
-            : [new BackupDestinationContract { StorageProvider = c.StorageProvider, StorageConnectionId = c.StorageConnectionId, StorageExecutionLocation = c.StorageExecutionLocation, IsPrimary = true }];
-
+        var destinations = c.Destinations ?? [];
         Check(destinations.Count is > 0 and <= MaxDestinations, "configuration.destinations");
         Check(destinations.Count(d => d.IsPrimary) == 1, "configuration.destinations", "primary_destination_required");
         Check(destinations.Select(d => (d.StorageProvider, d.StorageConnectionId)).Distinct().Count() == destinations.Count, "configuration.destinations", "duplicate_destination");
@@ -52,9 +50,9 @@ public static class BackupInputValidation
         for (var i = 0; i < destinations.Count; i++)
         {
             var d = destinations[i];
-            var prefix = c.Destinations is { Count: > 0 } ? $"configuration.destinations[{i}]." : "configuration.";
+            var prefix = $"configuration.destinations[{i}].";
             Check(d.StorageProvider is "local" or "central" or "sftp" or "google-drive", $"{prefix}storageProvider");
-            Check(d.StorageExecutionLocation is null or "Backend" or "Agent" && (d.StorageExecutionLocation != "Agent" || d.StorageProvider == "local"), $"{prefix}storageExecutionLocation");
+            Check(d.StorageExecutionLocation is "Backend" or "Agent" && (d.StorageExecutionLocation != "Agent" || d.StorageProvider == "local"), $"{prefix}storageExecutionLocation");
             Check(d.StorageProvider is not ("sftp" or "google-drive") || c.StoragePrefix == string.Empty, "configuration.storagePrefix");
             Check(d.StorageProvider is not ("sftp" or "google-drive") || d.StorageConnectionId is { } connection && connection != Guid.Empty, $"{prefix}storageConnectionId");
         }
@@ -93,7 +91,7 @@ public static class BackupInputValidation
     public static bool IsValidCompletion(BackupTaskCompletionRequest request, BackupConfiguration configuration)
     {
         if (request.LeaseToken == Guid.Empty || request.Destinations is not { Count: <= MaxDestinations } || request.Destinations.Any(d => d is null)) return false;
-        var snapshot = configuration.ResolveEffectiveDestinations();
+        var snapshot = configuration.Destinations;
         if (request.Status == "Cancelled" && request.FailureCode is not (null or "Cancelled")) return false;
         if (request.Status == "Failed" && (request.FailureCode is null || !BackupFailureCodes.IsAgentReportable(request.FailureCode))) return false;
         if (request.Status is "Failed" or "Cancelled" && request.Artifact is null)
@@ -106,7 +104,7 @@ public static class BackupInputValidation
         return a.Replicas.All(r => r is not null && Destination(snapshot, r.StorageProvider, r.StorageConnectionId) is { } destination && Reference(r.StorageTarget) &&
             (destination.StorageExecutionLocation != BackupStorageExecutionLocation.Agent || r.StorageTarget == r.StorageProvider) &&
             (destination.StorageProvider is not ("sftp" or "google-drive") || r.StorageTarget == destination.StorageConnectionId?.ToString("D")) &&
-            Text(r.Key, 512) && SafeKey(r.Key) && r.SizeBytes == a.SizeBytes && r.ChecksumAlgorithm == a.ChecksumAlgorithm &&
+            Text(r.Key, StorageObjectKey.MaxLength) && SafeKey(r.Key) && r.SizeBytes == a.SizeBytes && r.ChecksumAlgorithm == a.ChecksumAlgorithm &&
             Checksum(r.Checksum) && r.Checksum.Equals(a.ArtifactChecksum, StringComparison.OrdinalIgnoreCase) && r.VerificationState == "Verified" &&
             r.VerificationMethod is "ReadBack" or "ServerSideChecksum" && r.CreatedAt != default && r.VerifiedAt is not null && r.VerifiedAt >= r.CreatedAt) &&
             a.Replicas.Select(r => (r.StorageProvider, r.StorageTarget, r.Key)).Distinct().Count() == a.Replicas.Count &&
@@ -122,12 +120,12 @@ public static class BackupInputValidation
     }
 
     /// <summary>
-    /// Empty is legal when nothing was transferred (a failure before the transfer) and for a single-destination run reported by an agent that predates the field.
+    /// Empty is legal only when nothing was transferred (a failure before the transfer).
     /// Otherwise every snapshot destination appears exactly once, and a destination is Verified exactly when the artifact has its replica.
     /// </summary>
     private static bool ValidDestinations(IReadOnlyList<BackupTaskDestinationResult> reported, IReadOnlyList<BackupDestination> snapshot, BackupTaskArtifact? artifact)
     {
-        if (reported.Count == 0) return artifact is null || snapshot.Count == 1;
+        if (reported.Count == 0) return artifact is null;
         if (reported.Count != snapshot.Count) return false;
         var seen = new HashSet<BackupDestination>();
         foreach (var d in reported)
@@ -135,7 +133,7 @@ public static class BackupInputValidation
             if (d is null || Destination(snapshot, d.StorageProvider, d.StorageConnectionId) is not { } destination || !seen.Add(destination)) return false;
             if (d.State is not ("Verified" or "Failed" or "Cancelled") || d.Upload is not ("Succeeded" or "Failed" or "NotAttempted") ||
                 d.Verification is not ("Verified" or "Failed" or "NotRun") || d.StartedAt == default || d.CompletedAt < d.StartedAt) return false;
-            if (d.Key is not null && !(Text(d.Key, 512) && SafeKey(d.Key) && d.Key.Length > 0)) return false;
+            if (d.Key is not null && !(Text(d.Key, StorageObjectKey.MaxLength) && SafeKey(d.Key) && d.Key.Length > 0)) return false;
             if (d.ObjectMayRemain && (d.Key is null || d.Upload != "Succeeded" || d.State == "Verified")) return false;
             if (d.State == "Verified")
             {

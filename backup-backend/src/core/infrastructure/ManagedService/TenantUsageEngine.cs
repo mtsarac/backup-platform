@@ -106,6 +106,15 @@ internal static class TenantUsageEngine
             var remaining = Math.Max(0, reservation.Bytes - consumed);
             total = total > long.MaxValue - remaining ? long.MaxValue : total + remaining;
         }
+        // A repair's hold lives exactly as long as the operation is open, so reconcile and the save hook agree without a release step.
+        var repairs = await context.ReplicaRepairOperations.AsNoTracking()
+            .Where(row => row.TenantId == tenantId && row.ReservedQuotaBytes > 0
+                && (row.Status == ReplicaRepairStatus.Pending || row.Status == ReplicaRepairStatus.InProgress))
+            .Select(row => row.ReservedQuotaBytes).ToListAsync(cancellationToken);
+        foreach (var held in repairs)
+        {
+            total = total > long.MaxValue - held ? long.MaxValue : total + held;
+        }
         return total;
     }
 
@@ -224,7 +233,7 @@ internal static class TenantUsageEngine
         PlatformDbContext context, TenantId tenantId, BackupConfiguration configuration, QuotaPolicy policy, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var copies = 0;
-        foreach (var destination in configuration.ResolveEffectiveDestinations())
+        foreach (var destination in configuration.Destinations)
         {
             var connection = destination.StorageConnectionId is { } id
                 ? await context.StorageConnections.AsNoTracking().SingleOrDefaultAsync(row => row.TenantId == tenantId && row.Id == id, cancellationToken)

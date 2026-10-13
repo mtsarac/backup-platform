@@ -4,21 +4,12 @@ namespace BackupPlatform.Domain.Backups;
 public sealed record BackupConfiguration(
     string Engine, string Database, string Host, int? Port, bool IntegratedSecurity,
     string? DatabaseCredentialReference, bool Encrypt, bool TrustServerCertificate,
-    string StagingReference, string StorageProvider, string StoragePrefix, bool CopyOnly,
+    string StagingReference, string StoragePrefix, bool CopyOnly,
     string ChecksumPolicy, string CompressionPolicy)
 {
-    public BackupStorageExecutionLocation StorageExecutionLocation { get; init; } =
-        StorageProvider == "local" ? BackupStorageExecutionLocation.Agent : BackupStorageExecutionLocation.Backend;
-
     /// <summary>
-    /// The storage connection a run writes to. A JOB may leave it null (the tenant's default connection for <see cref="StorageProvider"/>); a RUN always
-    /// snapshots the resolved id when it is created, so retries and replica publication use the destination the run was admitted against.
-    /// </summary>
-    public Guid? StorageConnectionId { get; init; }
-
-    /// <summary>
-    /// Configured storage destinations for multi-storage replication.
-    /// If empty or not provided, falls back to the canonical single destination defined by StorageProvider and StorageConnectionId.
+    /// The only destination source: non-empty, exactly one primary. A destination's connection may be null on a JOB (the tenant's default connection
+    /// for its provider); a RUN snapshots the resolved id at admission so retries and replica publication use the destination the run was admitted against.
     /// </summary>
     public IReadOnlyList<BackupDestination> Destinations { get; init; } = [];
 
@@ -37,17 +28,12 @@ public sealed record BackupConfiguration(
         if (!IntegratedSecurity) BackupGuard.Text(DatabaseCredentialReference, 128);
         if (DatabaseCredentialReference is not null) BackupGuard.Reference(DatabaseCredentialReference);
         if (StagingReference != "default") throw new ArgumentException("Unknown staging reference.");
-        BackupGuard.Reference(StorageProvider);
-        if (StorageConnectionId == Guid.Empty) throw new ArgumentException("A storage connection identifier must not be empty.");
-        if (StorageExecutionLocation is not (BackupStorageExecutionLocation.Backend or BackupStorageExecutionLocation.Agent) ||
-            StorageExecutionLocation == BackupStorageExecutionLocation.Agent && StorageProvider != "local")
-            throw new ArgumentException("Invalid storage execution location.");
         if (StoragePrefix.Length != 0) BackupGuard.RelativeKey(StoragePrefix);
         if (ChecksumPolicy is not ("Required" or "Preferred" or "Disabled") ||
             CompressionPolicy is not ("Required" or "Preferred" or "Disabled"))
             throw new ArgumentException("Invalid backup option policy.");
 
-        var effectiveDestinations = ResolveEffectiveDestinations();
+        var effectiveDestinations = Destinations;
         if (effectiveDestinations.Count == 0)
             throw new ArgumentException("At least one storage destination is required.");
 
@@ -73,30 +59,17 @@ public sealed record BackupConfiguration(
         return this;
     }
 
-    /// <summary>
-    /// Resolves canonical destinations list. If Destinations is empty, derives single primary destination from legacy fields (including the configured
-    /// execution location: a legacy job's location is whatever it says, not what its provider would default to).
-    /// </summary>
-    public IReadOnlyList<BackupDestination> ResolveEffectiveDestinations()
-    {
-        if (Destinations is { Count: > 0 })
-            return Destinations;
-
-        return [new BackupDestination(StorageProvider, StorageConnectionId, IsPrimary: true) { StorageExecutionLocation = StorageExecutionLocation }];
-    }
-
     // Value equality for the destination list (a record compares collections by reference, so two loads of the same snapshot would differ).
     public bool Equals(BackupConfiguration? other) => other is not null && Engine == other.Engine && Database == other.Database && Host == other.Host && Port == other.Port &&
         IntegratedSecurity == other.IntegratedSecurity && DatabaseCredentialReference == other.DatabaseCredentialReference && Encrypt == other.Encrypt &&
-        TrustServerCertificate == other.TrustServerCertificate && StagingReference == other.StagingReference && StorageProvider == other.StorageProvider &&
+        TrustServerCertificate == other.TrustServerCertificate && StagingReference == other.StagingReference &&
         StoragePrefix == other.StoragePrefix && CopyOnly == other.CopyOnly && ChecksumPolicy == other.ChecksumPolicy && CompressionPolicy == other.CompressionPolicy &&
-        StorageExecutionLocation == other.StorageExecutionLocation && StorageConnectionId == other.StorageConnectionId &&
         RequiredVerifiedReplicaCount == other.RequiredVerifiedReplicaCount && Destinations.SequenceEqual(other.Destinations);
 
     public override int GetHashCode()
     {
         var hash = new HashCode();
-        hash.Add(Engine); hash.Add(Database); hash.Add(Host); hash.Add(Port); hash.Add(StorageProvider); hash.Add(StorageConnectionId); hash.Add(RequiredVerifiedReplicaCount);
+        hash.Add(Engine); hash.Add(Database); hash.Add(Host); hash.Add(Port); hash.Add(RequiredVerifiedReplicaCount);
         foreach (var destination in Destinations) hash.Add(destination);
         return hash.ToHashCode();
     }

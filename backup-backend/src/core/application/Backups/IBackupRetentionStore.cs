@@ -41,6 +41,9 @@ public sealed record BackupAttemptActivity(Guid AttemptId, TenantId TenantId, Gu
 
     /// <summary>The attempt itself holds (or may still use) a lease.</summary>
     public bool AttemptIsLive => AttemptStatus is BackupStatus.Pending or BackupStatus.Leased or BackupStatus.Running;
+
+    /// <summary>A repair may still be writing files of an otherwise terminal backup attempt.</summary>
+    public bool RepairIsActive { get; init; }
 }
 
 /// <summary>
