@@ -67,6 +67,7 @@ const messages: Record<string, string> = {
   NoVerifiedSourceAvailable: 'Onarım için doğrulanmış ve erişilebilir kaynak replika bulunamadı.',
   UnsupportedSource: 'Seçilen kaynak depolama türü arka plandan aktarımı desteklemiyor.',
   AlreadyVerified: 'Bu hedefte zaten doğrulanmış bir replika mevcut.',
+  TargetConflict: 'Hedefte beklenen içerikle uyuşmayan bir dosya var. Sahipliği doğrulanmadan silinmez; inceleme için karantinaya alındı.',
   ArtifactExpired: 'Yedekleme saklama süresi dolduğu için onarım başlatılamaz.',
   repair_already_in_progress: 'Bu hedef için devam eden bir onarım işlemi zaten var.',
   unauthorized_destination: 'Hedef depolama, bu yedeğin yapılandırma hedefleri arasında yer almıyor.',

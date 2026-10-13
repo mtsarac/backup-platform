@@ -1,5 +1,5 @@
 import { ownershipLabel } from '@/features/storage/labels'
-import type { BackupConfiguration } from '@/features/backup-jobs/types'
+import type { BackupConfiguration, BackupDestination } from '@/features/backup-jobs/types'
 import type { ConnectionView, ProviderDescriptor } from './types'
 
 export function connectionUnavailableReason(connection: ConnectionView | undefined, provider: ProviderDescriptor | undefined): string | null {
@@ -12,10 +12,14 @@ export function connectionUnavailableReason(connection: ConnectionView | undefin
   return null
 }
 
-export function resolveJobConnection(configuration: BackupConfiguration, connections: readonly ConnectionView[]) {
-  return connections.find(connection => configuration.storageConnectionId
-    ? connection.id === configuration.storageConnectionId
-    : connection.providerType === configuration.storageProvider && connection.isDefault)
+export function primaryDestination(configuration: BackupConfiguration): BackupDestination {
+  return configuration.destinations.find(destination => destination.isPrimary) ?? configuration.destinations[0]
+}
+
+export function resolveDestinationConnection(destination: BackupDestination, connections: readonly ConnectionView[]) {
+  return connections.find(connection => destination.storageConnectionId
+    ? connection.id === destination.storageConnectionId
+    : connection.providerType === destination.storageProvider && connection.isDefault)
 }
 
 /** Shared catalog labels; selection rules differ for backup execution and quota accounting. */

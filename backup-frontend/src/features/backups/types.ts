@@ -1,4 +1,5 @@
 import type { BackupArtifact, ReplicationHealth } from '@/features/artifacts/types'
+import type { BackupDestination } from '@/features/backup-jobs/types'
 
 export type BackupRunStatus = 'Pending' | 'Leased' | 'Running' | 'RetryPending' | 'CancellationRequested' | 'Succeeded' | 'Failed' | 'Cancelled' | 'AgentLost'
 export type BackupTrigger = 'Manual' | 'Scheduled' | 'Retry' | 'ManualRetry' | 'AutomaticRetry'
@@ -50,9 +51,8 @@ export interface BackupRun {
     engine: string
     host: string
     port: number
-    storageProvider: string
-    /** The connection resolved when the run was created. */
-    storageConnectionId?: string | null
+    /** Destination snapshot taken when the run was created; connection IDs are resolved. */
+    destinations: BackupDestination[]
   }
   currentAttemptNumber: number
   createdAt: string

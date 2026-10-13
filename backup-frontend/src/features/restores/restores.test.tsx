@@ -313,6 +313,22 @@ describe('RestoreDetailPage', () => {
 })
 
 describe('RestoreWizardPage', () => {
+  it('uses a new precheck idempotency key after correcting wizard input', async () => {
+    const precheck = { ...sampleRestore, id: 'precheck-correction', purpose: 'Precheck' as const, status: 'Succeeded' as const }
+    vi.mocked(RestoreApi.startRestorePrecheck).mockResolvedValue(precheck)
+    vi.mocked(RestoreApi.getRestore).mockResolvedValue(precheck)
+    renderWithClient(<Routes><Route path="/tenants/:tenantId/artifacts/:id/restore" element={<RestoreWizardPage />} /></Routes>, '/tenants/tenant-a/artifacts/artifact-1/restore')
+    fireEvent.click(await screen.findByRole('button', { name: /Devam et: Restore Modu/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /Mod Ayarlarına Dön/i }))
+    fireEvent.change(screen.getByLabelText('Yeni Veritabanı Adı'), { target: { value: 'CorrectedDB' } })
+    fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i }))
+    await waitFor(() => expect(RestoreApi.startRestorePrecheck).toHaveBeenCalledTimes(2))
+    const calls = vi.mocked(RestoreApi.startRestorePrecheck).mock.calls
+    expect(calls[1][2].databaseName).toBe('CorrectedDB')
+    expect(calls[1][3]).not.toBe(calls[0][3])
+  })
+
   it.each(['CentralStorage', 'BackendRelayed', 'AgentLocal'] as const)('uses the eligible %s agent through precheck and execution', async (sourceAccess) => {
     const precheckResult: RestoreView = {
       ...sampleRestore,

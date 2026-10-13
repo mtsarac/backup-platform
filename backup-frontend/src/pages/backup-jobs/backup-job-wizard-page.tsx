@@ -8,13 +8,13 @@ import { useTenant } from '@/features/tenancy/use-tenant'
 import { getAgents } from '@/features/agents/api'
 import { useBackupJob, useJobOccurrences, useSaveBackupJob } from '@/features/backup-jobs/hooks'
 import { useTenantConnections, useTenantProviders } from '@/features/storage-connections/hooks'
-import { connectionUnavailableReason, resolveJobConnection } from '@/features/storage-connections/job-connection-picker-utils'
+import { connectionUnavailableReason, primaryDestination, resolveDestinationConnection } from '@/features/storage-connections/job-connection-picker-utils'
 import { MultiDestinationPicker } from '@/features/storage-connections/multi-destination-picker'
 import type { BackupJob, BackupJobInput, BackupConfiguration, Schedule, RetryPolicy, RetentionPolicy } from '@/features/backup-jobs/types'
 import { ApiError } from '@/lib/api/client'
 import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
 
-const initialConfiguration: BackupConfiguration = { engine: 'mssql', database: '', host: '', port: null, integratedSecurity: true, databaseCredentialReference: null, encrypt: true, trustServerCertificate: false, stagingReference: 'default', storageProvider: 'local', storageConnectionId: null, storagePrefix: '', storageExecutionLocation: 'Agent', copyOnly: true, checksumPolicy: 'Required', compressionPolicy: 'Preferred' }
+const initialConfiguration: BackupConfiguration = { engine: 'mssql', database: '', host: '', port: null, integratedSecurity: true, databaseCredentialReference: null, encrypt: true, trustServerCertificate: false, stagingReference: 'default', storagePrefix: '', destinations: [{ storageProvider: 'local', storageConnectionId: null, storageExecutionLocation: 'Agent', isPrimary: true }], requiredVerifiedReplicaCount: 1, copyOnly: true, checksumPolicy: 'Required', compressionPolicy: 'Preferred' }
 const initialSchedule: Schedule = { enabled: true, cronExpression: '0 2 * * *', timeZone: 'Europe/Istanbul', missedRunGraceSeconds: 3600, overlapPolicy: 'Skip' }
 const initialRetry: RetryPolicy = { maxAttempts: 3, initialDelaySeconds: 30, maxDelaySeconds: 300, backoff: 'Exponential', jitter: 0.2 }
 const initialRetention: RetentionPolicy = { enabled: true, keepForSeconds: 1209600, deleteGracePeriodSeconds: 86400 }
@@ -58,9 +58,11 @@ function JobForm({ job }: { job?: BackupJob }) {
   const providers = useTenantProviders()
   const connectionItems = connections.data?.items ?? []
   const providerItems = providers.data?.items ?? []
-  const target = resolveJobConnection(configuration, connectionItems)
+  const primary = primaryDestination(configuration)
+  const target = resolveDestinationConnection(primary, connectionItems)
   const targetProvider = providerItems.find(item => item.providerType === target?.providerType)
-  const existingTarget = Boolean(job && (job.configuration.storageConnectionId ?? null) === (configuration.storageConnectionId ?? null) && job.configuration.storageProvider === configuration.storageProvider)
+  const savedPrimary = job && primaryDestination(job.configuration)
+  const existingTarget = Boolean(savedPrimary && (savedPrimary.storageConnectionId ?? null) === (primary.storageConnectionId ?? null) && savedPrimary.storageProvider === primary.storageProvider)
   const pickerPending = connections.isPending || providers.isPending
   const pickerError = connections.error ?? providers.error
   const targetBlocked = !existingTarget && Boolean(connectionUnavailableReason(target, targetProvider))
@@ -121,7 +123,7 @@ function JobForm({ job }: { job?: BackupJob }) {
       {selection('configuration.compressionPolicy', 'Sıkıştırma (Compression)', configuration.compressionPolicy, policies, value => setConfiguration({ ...configuration, compressionPolicy: value as BackupConfiguration['compressionPolicy'] }))}
     </Section>
     <Section title="Depolama ve yürütme">
-      <MultiDestinationPicker configuration={configuration} connections={connectionItems} providers={providerItems} pending={pickerPending} error={pickerError} fieldError={errors['configuration.storageConnectionId'] ?? errors.storageConnectionId ?? errors['configuration.storageProvider'] ?? errors['configuration.destinations'] ?? errors['configuration.requiredVerifiedReplicaCount']} existingTarget={existingTarget} onChange={setConfiguration} onRefresh={refreshConnections} />
+      <MultiDestinationPicker configuration={configuration} connections={connectionItems} providers={providerItems} pending={pickerPending} error={pickerError} fieldError={Object.entries(errors).find(([field]) => field.startsWith('configuration.destinations'))?.[1] ?? errors['configuration.requiredVerifiedReplicaCount']} existingTarget={existingTarget} onChange={setConfiguration} onRefresh={refreshConnections} />
     </Section>
     <Section title="Depolama ayrıntıları" advanced={withErrors('configuration.storagePrefix', 'configuration.stagingReference')}>
       {text('configuration.storagePrefix', 'Hedef öneki (göreli anahtar)', configuration.storagePrefix, storagePrefix => setConfiguration({ ...configuration, storagePrefix }))}

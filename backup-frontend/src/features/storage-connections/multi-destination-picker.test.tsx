@@ -110,13 +110,34 @@ const dummyConnections: ConnectionView[] = [
 ]
 
 describe('MultiDestinationPicker', () => {
+  it('renders a canonical API response whose primary is not the first destination', () => {
+    const configuration = {
+      engine: 'mssql', database: 'TestDB', host: 'localhost', port: null,
+      integratedSecurity: true, databaseCredentialReference: null,
+      encrypt: true, trustServerCertificate: false, stagingReference: 'default',
+      storagePrefix: '', copyOnly: true, checksumPolicy: 'Required', compressionPolicy: 'Preferred',
+      destinations: [
+        { storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: false },
+        { storageProvider: 'sftp', storageConnectionId: 'conn-sftp-1', storageExecutionLocation: 'Backend', isPrimary: true },
+      ],
+      requiredVerifiedReplicaCount: 1,
+    } as BackupConfiguration
+    const onChange = vi.fn()
+    render(<MultiDestinationPicker configuration={configuration} connections={dummyConnections} providers={dummyProviders} pending={false} error={null} existingTarget={true} onChange={onChange} onRefresh={() => {}} />)
+    expect(screen.getByLabelText('Storage Provider')).toHaveValue('sftp')
+    expect(screen.getByLabelText('Depolama bağlantısı')).toHaveValue('conn-sftp-1')
+    fireEvent.change(screen.getByLabelText('Depolama bağlantısı'), { target: { value: 'conn-local' } })
+    expect(onChange.mock.calls[0][0].destinations[0]).toEqual(configuration.destinations![0])
+    expect(onChange.mock.calls[0][0].destinations[1]).toMatchObject({ storageConnectionId: 'conn-local', isPrimary: true })
+    expect(onChange.mock.calls[0][0]).not.toHaveProperty('storageProvider')
+  })
+
   it('renders primary destination and allows adding a second destination', () => {
     const config: BackupConfiguration = {
       engine: 'mssql', database: 'TestDB', host: 'localhost', port: null,
       integratedSecurity: true, databaseCredentialReference: null,
       encrypt: true, trustServerCertificate: false, stagingReference: 'default',
-      storageProvider: 'local', storageConnectionId: 'conn-local', storagePrefix: '',
-      storageExecutionLocation: 'Agent', copyOnly: true,
+      storagePrefix: '', copyOnly: true,
       checksumPolicy: 'Required', compressionPolicy: 'Preferred',
       destinations: [
         { storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true }
@@ -161,8 +182,7 @@ describe('MultiDestinationPicker', () => {
       engine: 'mssql', database: 'TestDB', host: 'localhost', port: null,
       integratedSecurity: true, databaseCredentialReference: null,
       encrypt: true, trustServerCertificate: false, stagingReference: 'default',
-      storageProvider: 'local', storageConnectionId: 'conn-local', storagePrefix: '',
-      storageExecutionLocation: 'Agent', copyOnly: true,
+      storagePrefix: '', copyOnly: true,
       checksumPolicy: 'Required', compressionPolicy: 'Preferred',
       destinations: [
         { storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true },
@@ -193,8 +213,7 @@ describe('MultiDestinationPicker', () => {
 
     expect(onChange).toHaveBeenCalled()
     const updatedPrimary = onChange.mock.calls[0][0] as BackupConfiguration
-    expect(updatedPrimary.storageProvider).toBe('sftp')
-    expect(updatedPrimary.storageConnectionId).toBe('conn-sftp-1')
+    expect(updatedPrimary.destinations[1]).toMatchObject({ storageProvider: 'sftp', storageConnectionId: 'conn-sftp-1' })
     expect(updatedPrimary.destinations?.[1].isPrimary).toBe(true)
     expect(updatedPrimary.destinations?.[0].isPrimary).toBe(false)
 
@@ -212,8 +231,7 @@ describe('MultiDestinationPicker', () => {
       engine: 'mssql', database: 'TestDB', host: 'localhost', port: null,
       integratedSecurity: true, databaseCredentialReference: null,
       encrypt: true, trustServerCertificate: false, stagingReference: 'default',
-      storageProvider: 'local', storageConnectionId: 'conn-local', storagePrefix: '',
-      storageExecutionLocation: 'Agent', copyOnly: true,
+      storagePrefix: '', copyOnly: true,
       checksumPolicy: 'Required', compressionPolicy: 'Preferred',
       destinations: [
         { storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true },

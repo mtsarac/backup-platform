@@ -17,6 +17,7 @@ const statuses: Record<string, { label: string; tone: 'neutral' | 'success' | 'w
   offline: { label: 'Çevrimdışı', tone: 'neutral' },
   unknown: { label: 'Bağlantı bilinmiyor', tone: 'neutral' },
   Available: { label: 'Kullanılabilir', tone: 'success' },
+  Quarantined: { label: 'Karantinada · sahiplik incelemesi gerekli', tone: 'warning' },
   DeletePending: { label: 'Silme bekliyor', tone: 'warning' },
   DeleteFailed: { label: 'Silme başarısız', tone: 'error' },
   Deleted: { label: 'Silindi', tone: 'neutral' },

@@ -9,11 +9,10 @@ export interface BackupConfiguration {
   engine: 'mssql'; database: string; host: string; port: number | null
   integratedSecurity: boolean; databaseCredentialReference: string | null
   encrypt: boolean; trustServerCertificate: boolean; stagingReference: string
-  storageProvider: string; storagePrefix: string; storageExecutionLocation: 'Agent' | 'Backend'
-  /** null / absent = the tenant's default connection for `storageProvider`; runs always snapshot the resolved id. */
-  storageConnectionId?: string | null
-  destinations?: BackupDestination[]
-  requiredVerifiedReplicaCount?: number
+  storagePrefix: string
+  /** At least one destination; exactly one isPrimary. This list is the only source of storage targets. */
+  destinations: BackupDestination[]
+  requiredVerifiedReplicaCount: number
   copyOnly: boolean; checksumPolicy: OptionPolicy; compressionPolicy: OptionPolicy
 }
 export interface RetryPolicy { maxAttempts: number; initialDelaySeconds: number; maxDelaySeconds: number; backoff: string; jitter: number }

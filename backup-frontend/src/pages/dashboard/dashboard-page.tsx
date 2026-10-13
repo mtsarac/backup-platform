@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { AlertCircle, Database, HardDrive, LayoutGrid, List, Monitor, PlayCircle, ShieldAlert, ShieldCheck } from 'lucide-react'
+import { AlertCircle, Database, HardDrive, LayoutGrid, List, Monitor, PlayCircle, ShieldAlert } from 'lucide-react'
 import { useState, type ElementType } from 'react'
 import { apiRequest, tenantPath } from '@/lib/api/client'
 import { failureMessage } from '@/lib/api/failure-messages'
@@ -28,8 +28,8 @@ function KpiCard({ label, value, icon: Icon, danger, hint }: { label: string; va
 const VIEW_KEY = 'backup-dashboard-view'
 
 function StatusBanner({ issues, succeeded, href }: { issues: number; succeeded: number; href: string }) {
-  if (issues > 0) return <section role="status" className="flex flex-wrap items-center gap-4 rounded-lg border-2 border-error bg-error-subtle p-6"><ShieldAlert className="size-12 shrink-0 text-error" /><div className="min-w-0 flex-1"><p className="text-2xl font-semibold text-error">Dikkat edilmesi gereken {issues} durum var</p><p className="mt-1 text-base text-text">Önceki yedekleriniz korunur. Ayrıntılar için yedekleri inceleyin.</p></div><Link to={href} className="inline-flex h-12 items-center rounded-lg bg-primary px-4 text-base font-medium text-primary-foreground">Yedekleri incele</Link></section>
-  if (succeeded > 0) return <section role="status" className="flex items-center gap-4 rounded-lg border-2 border-success bg-success-subtle p-6"><ShieldCheck className="size-12 shrink-0 text-success" /><div><p className="text-2xl font-semibold text-success">Sistem güvende</p><p className="mt-1 text-base text-text">Son 24 saatte {succeeded} yedek başarıyla alındı.</p></div></section>
+  if (issues > 0) return <section role="status" className="flex flex-wrap items-center gap-4 rounded-lg border-2 border-error bg-error-subtle p-6"><ShieldAlert className="size-12 shrink-0 text-error" /><div className="min-w-0 flex-1"><p className="text-2xl font-semibold text-error">{issues} kategoride uyarı var</p><p className="mt-1 text-base text-text">Başarısız yedek, storage, replikasyon ve silme sayaçları değerlendirilir; bu sayı toplam hata sayısı değildir.</p></div><Link to={href} className="inline-flex h-12 items-center rounded-lg bg-primary px-4 text-base font-medium text-primary-foreground">Yedekleri incele</Link></section>
+  if (succeeded > 0) return <section role="status" className="flex items-center gap-4 rounded-lg border-2 border-success bg-success-subtle p-6"><HardDrive className="size-12 shrink-0 text-success" /><div><p className="text-2xl font-semibold text-success">Son 24 saatte {succeeded} başarılı yedek</p><p className="mt-1 text-base text-text">Bu sonuç, tüm agent bağlantılarının veya planlı görevlerin sağlıklı olduğunu göstermez.</p></div></section>
   return <section role="status" className="flex items-center gap-4 rounded-lg border-2 border-warning bg-warning-subtle p-6"><ShieldAlert className="size-12 shrink-0 text-warning" /><div><p className="text-2xl font-semibold text-warning">Son 24 saatte yedek alınmadı</p><p className="mt-1 text-base text-text">Planlı görevlerinizin çalıştığından emin olun.</p></div></section>
 }
 export function DashboardPage() {

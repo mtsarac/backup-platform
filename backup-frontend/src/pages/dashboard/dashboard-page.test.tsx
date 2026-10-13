@@ -25,8 +25,11 @@ function renderDashboard() {
 
 beforeEach(() => {
   localStorage.clear()
+  state.data.agents.offline = 0
   state.data.runs.failedLast24Hours = 0
   state.data.runs.succeededLast24Hours = 1
+  state.data.runs.storageFailedLast24Hours = 0
+  state.data.artifacts.deleteFailed = 0
   state.data.runs.replicationInsufficientLast24Hours = undefined
   state.data.recentRuns = []
 })
@@ -72,16 +75,31 @@ describe('dashboard replication monitoring', () => {
 })
 
 describe('dashboard simplified status', () => {
-  it('shows the safe banner when nothing needs attention', () => {
+  it('reports categories rather than overlapping error totals', () => {
+    state.data.runs.failedLast24Hours = 8
+    state.data.runs.storageFailedLast24Hours = 6
+    state.data.runs.replicationInsufficientLast24Hours = 3
+    state.data.artifacts.deleteFailed = 2
     renderDashboard()
-    expect(screen.getByRole('status')).toHaveTextContent('Sistem güvende')
+    expect(screen.getByRole('status')).toHaveTextContent('4 kategoride uyarı var')
+    expect(screen.getByRole('status')).toHaveTextContent('bu sayı toplam hata sayısı değildir')
+    expect(screen.queryByText('Sistem güvende')).not.toBeInTheDocument()
   })
 
-  it('counts distinct attention conditions in the banner', () => {
-    state.data.runs.failedLast24Hours = 2
+  it('limits a success statement to the measured KPI even with an offline agent', () => {
+    state.data.runs.succeededLast24Hours = 7
+    state.data.agents.offline = 1
     renderDashboard()
-    expect(screen.getByRole('status')).toHaveTextContent('Dikkat edilmesi gereken 1 durum var')
+    expect(screen.getByRole('status')).toHaveTextContent('Son 24 saatte 7 başarılı yedek')
+    expect(screen.getByRole('status')).toHaveTextContent('tüm agent bağlantılarının veya planlı görevlerin sağlıklı olduğunu göstermez')
   })
+
+  it('reports no successful backup when the KPI is zero', () => {
+    state.data.runs.succeededLast24Hours = 0
+    renderDashboard()
+    expect(screen.getByRole('status')).toHaveTextContent('Son 24 saatte yedek alınmadı')
+  })
+
 
   it('defaults to card view and switches to the table', async () => {
     state.data.recentRuns = [makeRun({ status: 'Succeeded' })]

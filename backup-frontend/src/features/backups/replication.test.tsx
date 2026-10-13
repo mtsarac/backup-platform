@@ -41,6 +41,14 @@ beforeEach(() => {
 })
 
 describe('replication compliance rendering', () => {
+  it('explains quarantined conflicts without promising deletion or exposing backend exception text', () => {
+    const conflict = { ...destination('sftp', 'Failed', 'TargetConflict'), replicaStatus: 'Quarantined', objectMayRemain: true, failureReason: 'provider-secret-exception' }
+    render(<ReplicationSection replication={healthOf('Degraded', 2, 2, [conflict])} />)
+    expect(screen.getByText(/Sahipliği doğrulanmadan silinmez/)).toBeInTheDocument()
+    expect(screen.queryByText(/saklama süreci bu dosyayı da kaldırır/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/provider-secret-exception/)).not.toBeInTheDocument()
+  })
+
   it.each([
     ['Healthy', 3, 'Replikasyon sağlıklı'],
     ['Degraded', 2, 'Kısmi replikasyon · politika karşılandı'],

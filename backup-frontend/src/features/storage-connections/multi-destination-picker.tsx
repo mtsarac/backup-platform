@@ -2,7 +2,7 @@ import type { BackupConfiguration, BackupDestination } from '@/features/backup-j
 import { ownershipLabel } from '@/features/storage/labels'
 import { errorMessage } from '@/lib/api/failure-messages'
 import type { ConnectionView, ProviderDescriptor } from './types'
-import { connectionUnavailableReason, resolveJobConnection } from './job-connection-picker-utils'
+import { connectionUnavailableReason, primaryDestination, resolveDestinationConnection } from './job-connection-picker-utils'
 
 const selectClass = 'h-9 w-full rounded-md border border-border bg-surface-2 px-3 text-sm outline-none focus:border-ring disabled:opacity-60'
 
@@ -19,59 +19,32 @@ interface Props {
 }
 
 export function MultiDestinationPicker({ configuration, connections, providers, pending, error, fieldError, existingTarget, onChange, onRefresh }: Props) {
-  const target = resolveJobConnection(configuration, connections)
-  const provider = providers.find(item => item.providerType === configuration.storageProvider)
+  const destinations = configuration.destinations
+  const primary = primaryDestination(configuration)
+  const target = resolveDestinationConnection(primary, connections)
+  const provider = providers.find(item => item.providerType === primary.storageProvider)
   const targetProvider = providers.find(item => item.providerType === target?.providerType)
   const reason = connectionUnavailableReason(target, targetProvider)
-  const defaultTarget = connections.find(item => item.providerType === configuration.storageProvider && item.isDefault)
+  const defaultTarget = connections.find(item => item.providerType === primary.storageProvider && item.isDefault)
   const defaultReason = connectionUnavailableReason(defaultTarget, provider)
-  const selectedMissing = configuration.storageConnectionId && !target
+  const selectedMissing = primary.storageConnectionId && !target
+  const requiredCount = configuration.requiredVerifiedReplicaCount
 
-  const destinations: BackupDestination[] = (configuration.destinations && configuration.destinations.length > 0)
-    ? configuration.destinations
-    : [{
-        storageProvider: configuration.storageProvider,
-        storageConnectionId: configuration.storageConnectionId ?? null,
-        storageExecutionLocation: configuration.storageExecutionLocation,
-        isPrimary: true
-      }]
-
-  const requiredCount = configuration.requiredVerifiedReplicaCount ?? 1
+  function replacePrimaryTarget(next: Pick<BackupDestination, 'storageProvider' | 'storageConnectionId' | 'storageExecutionLocation'>) {
+    onChange({ ...configuration, destinations: destinations.map(d => d === primary ? { ...d, ...next } : d) })
+  }
 
   function chooseConnection(id: string) {
     if (!id) {
       if (!defaultReason && provider?.executionLocation) {
-        const nextDestinations = destinations.map((d, i) => i === 0 ? {
-          ...d,
-          storageProvider: configuration.storageProvider,
-          storageConnectionId: null,
-          storageExecutionLocation: provider.executionLocation!
-        } : d)
-        onChange({
-          ...configuration,
-          storageConnectionId: null,
-          storageExecutionLocation: provider.executionLocation,
-          destinations: nextDestinations
-        })
+        replacePrimaryTarget({ storageProvider: primary.storageProvider, storageConnectionId: null, storageExecutionLocation: provider.executionLocation })
       }
       return
     }
     const connection = connections.find(item => item.id === id)
     const descriptor = providers.find(item => item.providerType === connection?.providerType)
     if (connection && descriptor?.executionLocation && !connectionUnavailableReason(connection, descriptor)) {
-      const nextDestinations = destinations.map((d, i) => i === 0 ? {
-        ...d,
-        storageProvider: connection.providerType,
-        storageConnectionId: connection.id,
-        storageExecutionLocation: descriptor.executionLocation!
-      } : d)
-      onChange({
-        ...configuration,
-        storageConnectionId: connection.id,
-        storageProvider: connection.providerType,
-        storageExecutionLocation: descriptor.executionLocation,
-        destinations: nextDestinations
-      })
+      replacePrimaryTarget({ storageProvider: connection.providerType, storageConnectionId: connection.id, storageExecutionLocation: descriptor.executionLocation })
     }
   }
 
@@ -80,13 +53,8 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
     if (nextCount > newDestinations.length) nextCount = newDestinations.length
     if (nextCount < 1) nextCount = 1
 
-    const primary = newDestinations.find(d => d.isPrimary) ?? newDestinations[0]
-
     onChange({
       ...configuration,
-      storageProvider: primary.storageProvider,
-      storageConnectionId: primary.storageConnectionId ?? null,
-      storageExecutionLocation: primary.storageExecutionLocation,
       destinations: newDestinations,
       requiredVerifiedReplicaCount: nextCount
     })
@@ -132,44 +100,32 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
   return (
     <>
       <div className="space-y-1">
-        <label htmlFor="configuration.storageProvider" className="block text-sm font-medium text-text-heading">Storage Provider</label>
-        <select id="configuration.storageProvider" className={selectClass} value={configuration.storageProvider} disabled={pending || Boolean(error)} onChange={event => {
+        <label htmlFor="primary-storage-provider" className="block text-sm font-medium text-text-heading">Storage Provider</label>
+        <select id="primary-storage-provider" className={selectClass} value={primary.storageProvider} disabled={pending || Boolean(error)} onChange={event => {
           const descriptor = providers.find(item => item.providerType === event.target.value)
           if (descriptor?.availability === 'Available' && descriptor.executionLocation && descriptor.topology) {
-            const nextDestinations = destinations.map((d, i) => i === 0 ? {
-              ...d,
-              storageProvider: descriptor.providerType,
-              storageConnectionId: null,
-              storageExecutionLocation: descriptor.executionLocation!
-            } : d)
-            onChange({
-              ...configuration,
-              storageProvider: descriptor.providerType,
-              storageConnectionId: null,
-              storageExecutionLocation: descriptor.executionLocation,
-              destinations: nextDestinations
-            })
+            replacePrimaryTarget({ storageProvider: descriptor.providerType, storageConnectionId: null, storageExecutionLocation: descriptor.executionLocation })
           }
         }}>
-          {!provider && <option value={configuration.storageProvider} disabled>{configuration.storageProvider} · Sağlayıcı bulunamadı</option>}
+          {!provider && <option value={primary.storageProvider} disabled>{primary.storageProvider} · Sağlayıcı bulunamadı</option>}
           {providers.map(item => <option key={item.providerType} value={item.providerType} disabled={item.availability !== 'Available' || !item.executionLocation || !item.topology}>{item.displayName}{item.availability !== 'Available' ? ' · Yakında / kullanılamıyor' : ''}</option>)}
         </select>
       </div>
       <div className="space-y-1">
-        <label htmlFor="configuration.storageConnectionId" className="block text-sm font-medium text-text-heading">Depolama bağlantısı</label>
-        <select id="configuration.storageConnectionId" className={selectClass} value={configuration.storageConnectionId ?? ''} disabled={pending || Boolean(error)} aria-invalid={Boolean(fieldError)} aria-describedby="storage-connection-help configuration.storageConnectionId-error" onChange={event => chooseConnection(event.target.value)}>
-          <option value="" disabled={Boolean(defaultReason)}>Varsayılan · {provider?.displayName ?? configuration.storageProvider} · {defaultTarget?.name ?? 'Bağlantı yok'}{defaultTarget ? ` · ${ownershipLabel(defaultTarget.ownership)}` : ''}{defaultReason ? ` · ${defaultReason}` : ' · Kullanılabilir'}</option>
-          {selectedMissing && <option value={configuration.storageConnectionId!} disabled>Mevcut bağlantı · {configuration.storageConnectionId} · Bağlantı bulunamadı</option>}
+        <label htmlFor="primary-storage-connection" className="block text-sm font-medium text-text-heading">Depolama bağlantısı</label>
+        <select id="primary-storage-connection" className={selectClass} value={primary.storageConnectionId ?? ''} disabled={pending || Boolean(error)} aria-invalid={Boolean(fieldError)} aria-describedby="storage-connection-help primary-storage-connection-error" onChange={event => chooseConnection(event.target.value)}>
+          <option value="" disabled={Boolean(defaultReason)}>Varsayılan · {provider?.displayName ?? primary.storageProvider} · {defaultTarget?.name ?? 'Bağlantı yok'}{defaultTarget ? ` · ${ownershipLabel(defaultTarget.ownership)}` : ''}{defaultReason ? ` · ${defaultReason}` : ' · Kullanılabilir'}</option>
+          {selectedMissing && <option value={primary.storageConnectionId!} disabled>Mevcut bağlantı · {primary.storageConnectionId} · Bağlantı bulunamadı</option>}
           {connections.map(connection => {
             const descriptor = providers.find(item => item.providerType === connection.providerType)
             const unavailable = connectionUnavailableReason(connection, descriptor)
             return <option key={connection.id} value={connection.id} disabled={Boolean(unavailable)}>{connection.name} · {connection.providerDisplayName} · {ownershipLabel(connection.ownership)} · {unavailable ?? 'Kullanılabilir'}</option>
           })}
         </select>
-        {fieldError && <p id="configuration.storageConnectionId-error" role="alert" className="text-sm text-destructive">{fieldError}</p>}
+        {fieldError && <p id="primary-storage-connection-error" role="alert" className="text-sm text-destructive">{fieldError}</p>}
         <p id="storage-connection-help" className="text-xs text-text-muted">Varsayılan seçimi bu sağlayıcının tenant varsayılanına gider. Açık seçim bağlantı kimliğini korur. Son uygunluk kontrolünü sunucu yapar.</p>
       </div>
-      <div className="space-y-1"><span className="block text-sm font-medium text-text-heading">Depolama yürütme konumu</span><p className="text-sm">{configuration.storageExecutionLocation}</p><p className="text-xs text-text-muted">Yeni hedef seçildiğinde sağlayıcının yürütme konumu uygulanır.</p></div>
+      <div className="space-y-1"><span className="block text-sm font-medium text-text-heading">Depolama yürütme konumu</span><p className="text-sm">{primary.storageExecutionLocation}</p><p className="text-xs text-text-muted">Yeni hedef seçildiğinde sağlayıcının yürütme konumu uygulanır.</p></div>
       {pending && <p role="status" className="text-sm">Depolama bağlantıları yükleniyor…</p>}
       {error ? <div role="alert" className="text-sm text-destructive">{errorMessage(error)} <button type="button" className="underline" onClick={onRefresh}>Bağlantıları yeniden yükle</button></div> : !pending && reason && <p role="status" className="text-sm text-warning md:col-span-2">{target ? `“${target.name}” depolama hedefi` : 'Depolama hedefi'}: {reason}. {existingTarget ? "Mevcut hedef kimliği korunarak iş kaydedilebilir, ancak hedef kullanılabilir olana kadar yeni backup'lar (manuel ve zamanlanmış) başlatılamaz. Mevcut backup'lar etkilenmez." : 'Yeni iş veya yeni hedef için kullanılabilir bir bağlantı seçin; varsayılan seçimi bu engeli aşmaz.'}</p>}
 
