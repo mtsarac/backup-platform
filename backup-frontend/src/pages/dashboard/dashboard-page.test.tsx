@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeRun } from '@/features/backups/test-data'
@@ -23,6 +24,12 @@ function renderDashboard() {
 }
 
 beforeEach(() => {
+  localStorage.clear()
+  state.data.agents.offline = 0
+  state.data.runs.failedLast24Hours = 0
+  state.data.runs.succeededLast24Hours = 1
+  state.data.runs.storageFailedLast24Hours = 0
+  state.data.artifacts.deleteFailed = 0
   state.data.runs.replicationInsufficientLast24Hours = undefined
   state.data.recentRuns = []
 })
@@ -37,7 +44,7 @@ describe('dashboard replication monitoring', () => {
     renderDashboard()
     expect(screen.getByRole('alert')).toHaveTextContent('1 backup son 24 saatte kullanılabilir yedek üretti, ancak gereken doğrulanmış replika sayısına ulaşamadı.')
     expect(screen.getByRole('link', { name: 'Replikasyon sonuçlarını inceleyin.' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs?status=Succeeded')
-    expect(screen.getByText('Başarılı · Succeeded')).toBeInTheDocument()
+    expect(screen.getAllByText('Başarılı').length).toBeGreaterThan(0)
     expect(screen.getByText('Yetersiz doğrulanmış replika')).toBeInTheDocument()
     expect(within(screen.getByText('Yedek üretildi · son 24 saat').parentElement!.parentElement!).getByText('1')).toBeInTheDocument()
   })
@@ -62,7 +69,43 @@ describe('dashboard replication monitoring', () => {
   it('keeps legacy responses without a replication count readable', () => {
     state.data.recentRuns = [makeRun({ status: 'Succeeded' })]
     renderDashboard()
-    expect(screen.getByText('Başarılı · Succeeded')).toBeInTheDocument()
+    expect(screen.getAllByText('Başarılı').length).toBeGreaterThan(0)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+describe('dashboard simplified status', () => {
+  it('reports categories rather than overlapping error totals', () => {
+    state.data.runs.failedLast24Hours = 8
+    state.data.runs.storageFailedLast24Hours = 6
+    state.data.runs.replicationInsufficientLast24Hours = 3
+    state.data.artifacts.deleteFailed = 2
+    renderDashboard()
+    expect(screen.getByRole('status')).toHaveTextContent('4 kategoride uyarı var')
+    expect(screen.getByRole('status')).toHaveTextContent('bu sayı toplam hata sayısı değildir')
+    expect(screen.queryByText('Sistem güvende')).not.toBeInTheDocument()
+  })
+
+  it('limits a success statement to the measured KPI even with an offline agent', () => {
+    state.data.runs.succeededLast24Hours = 7
+    state.data.agents.offline = 1
+    renderDashboard()
+    expect(screen.getByRole('status')).toHaveTextContent('Son 24 saatte 7 başarılı yedek')
+    expect(screen.getByRole('status')).toHaveTextContent('tüm agent bağlantılarının veya planlı görevlerin sağlıklı olduğunu göstermez')
+  })
+
+  it('reports no successful backup when the KPI is zero', () => {
+    state.data.runs.succeededLast24Hours = 0
+    renderDashboard()
+    expect(screen.getByRole('status')).toHaveTextContent('Son 24 saatte yedek alınmadı')
+  })
+
+
+  it('defaults to card view and switches to the table', async () => {
+    state.data.recentRuns = [makeRun({ status: 'Succeeded' })]
+    renderDashboard()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Liste' }))
+    expect(screen.getByRole('table')).toBeInTheDocument()
   })
 })

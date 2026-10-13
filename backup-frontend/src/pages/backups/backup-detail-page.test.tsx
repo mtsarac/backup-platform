@@ -41,7 +41,7 @@ describe('run detail controls and attention', () => {
     await screen.findByText('İptal isteği iletildi. Ajanın işlemi durdurması bekleniyor.')
     expect(state.cancel.mutateAsync).toHaveBeenCalledTimes(1)
     expect(screen.queryByText('Çalıştırma iptal edildi.')).not.toBeInTheDocument()
-    expect(screen.getAllByText('Çalışıyor · Running').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Çalışıyor').length).toBeGreaterThan(0)
   })
 
   it('drops the pending-cancellation notice once the agent has acknowledged and the run is Cancelled', async () => {
@@ -106,7 +106,8 @@ describe('run detail controls and attention', () => {
   it.each(runStatuses)('visibly distinguishes %s with eligible controls', async (status) => {
     state.query.data = makeRun({ status })
     renderDetail()
-    if (status !== 'AgentLost') expect(screen.getAllByText(new RegExp(`· ${status}$`)).length).toBeGreaterThan(0)
+    const label = { Pending: 'Sırada bekliyor', Leased: 'Agent görevi aldı', Running: 'Çalışıyor', RetryPending: 'Yeniden denenecek', CancellationRequested: 'İptal isteniyor', Succeeded: 'Başarılı', Failed: 'Başarısız', Cancelled: 'İptal edildi', AgentLost: '' }[status]
+    if (label) expect(screen.getAllByText(label).length).toBeGreaterThan(0)
     if (['Succeeded', 'Cancelled', 'CancellationRequested'].includes(status)) {
       expect(screen.queryByRole('button', { name: 'Yeniden dene' })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'İptal et' })).not.toBeInTheDocument()

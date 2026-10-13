@@ -14,73 +14,77 @@
 
   /* shadcn semantic colors mapped to our palette */
   --background: #ffffff;
-  --foreground: #3d4350;
+  --foreground: #0f172a;
   --card: #ffffff;
-  --card-foreground: #111318;
+  --card-foreground: #0f172a;
   --popover: #ffffff;
-  --popover-foreground: #111318;
-  --primary: #0ea5e9;
+  --popover-foreground: #0f172a;
+  --primary: #1d4ed8;
   --primary-foreground: #ffffff;
-  --secondary: #f7f8fa;
-  --secondary-foreground: #111318;
-  --muted: #f7f8fa;
-  --muted-foreground: #6b7280;
-  --accent: rgba(14, 165, 233, 0.1);
-  --accent-foreground: #0ea5e9;
-  --destructive: #dc2626;
-  --border: #e1e4ea;
-  --input: #e1e4ea;
-  --ring: #0ea5e9;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #334155;
+  --accent: rgba(29, 78, 216, 0.1);
+  --accent-foreground: #1d4ed8;
+  --destructive: #b91c1c;
+  --border: #cbd5e1;
+  --input: #cbd5e1;
+  --ring: #2563eb;
   --radius: 0.5rem;
 
   /* backup-specific surface/text */
   --surface: #ffffff;
-  --surface-2: #f7f8fa;
-  --text: #3d4350;
-  --text-heading: #111318;
-  --text-muted: #6b7280;
+  --surface-2: #f8fafc;
+  --text: #0f172a;
+  --text-heading: #0f172a;
+  --text-muted: #334155;
 
   /* status colors */
-  --success: #16a34a;
-  --success-subtle: rgba(22, 163, 74, 0.1);
-  --warning: #d97706;
-  --warning-subtle: rgba(217, 119, 6, 0.1);
-  --error: #dc2626;
-  --error-subtle: rgba(220, 38, 38, 0.1);
+  --success: #15803d;
+  --success-subtle: rgba(21, 128, 61, 0.1);
+  --warning: #b45309;
+  --warning-subtle: rgba(180, 83, 9, 0.1);
+  --error: #b91c1c;
+  --error-subtle: rgba(185, 28, 28, 0.1);
   --info: #6366f1;
   --info-subtle: rgba(99, 102, 241, 0.1);
 }
 
-.dark,
-@media (prefers-color-scheme: dark) {
-  :root:not(.light) {
-    color-scheme: dark;
+:root.dark {
+  color-scheme: dark;
 
-    --background: #16171d;
-    --foreground: #9ca3af;
-    --card: #1f2028;
-    --card-foreground: #f3f4f6;
-    --popover: #1f2028;
-    --popover-foreground: #f3f4f6;
-    --primary: #38bdf8;
-    --primary-foreground: #0b0f19;
-    --secondary: #2e303a;
-    --secondary-foreground: #f3f4f6;
-    --muted: #2e303a;
-    --muted-foreground: #9ca3af;
-    --accent: rgba(56, 189, 248, 0.15);
-    --accent-foreground: #38bdf8;
-    --destructive: #f87171;
-    --border: #2e303a;
-    --input: #2e303a;
-    --ring: #38bdf8;
+  --background: #121316;
+  --foreground: #f1f5f9;
+  --card: #1f2028;
+  --card-foreground: #f1f5f9;
+  --popover: #1f2028;
+  --popover-foreground: #f1f5f9;
+  --primary: #60a5fa;
+  --primary-foreground: #0b0f19;
+  --secondary: #2e303a;
+  --secondary-foreground: #f1f5f9;
+  --muted: #2e303a;
+  --muted-foreground: #cbd5e1;
+  --accent: rgba(96, 165, 250, 0.18);
+  --accent-foreground: #93c5fd;
+  --destructive: #fca5a5;
+  --border: #475569;
+  --input: #475569;
+  --ring: #93c5fd;
 
-    --surface: #16171d;
-    --surface-2: #1f2028;
-    --text: #9ca3af;
-    --text-heading: #f3f4f6;
-    --text-muted: #6b7280;
-  }
+  --surface: #121316;
+  --surface-2: #1f2028;
+  --text: #f1f5f9;
+  --text-heading: #f1f5f9;
+  --text-muted: #cbd5e1;
+
+  --success: #4ade80;
+  --success-subtle: rgba(74, 222, 128, 0.15);
+  --warning: #fbbf24;
+  --warning-subtle: rgba(251, 191, 36, 0.15);
+  --error: #fca5a5;
+  --error-subtle: rgba(252, 165, 165, 0.15);
 }
 
 @theme {
@@ -134,6 +138,8 @@
 
 body {
   margin: 0;
+  font-size: 1rem;
+  line-height: 1.6;
   font-family: var(--font-sans);
   color: var(--foreground);
   background: var(--surface-2);
@@ -149,4 +155,38 @@ body {
   * {
     @apply border-border outline-ring/50;
   }
+
+  :focus-visible {
+    outline: 3px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+/* High-contrast mode: toggled by the A11y toolbar via .hc on <html>. */
+:root.hc {
+  --foreground: #000000;
+  --card-foreground: #000000;
+  --popover-foreground: #000000;
+  --muted-foreground: #0f172a;
+  --text: #000000;
+  --text-heading: #000000;
+  --text-muted: #0f172a;
+  --border: #0f172a;
+  --input: #0f172a;
+  --primary: #1e3a8a;
+  --ring: #1e3a8a;
+}
+
+:root.dark.hc {
+  --foreground: #ffffff;
+  --card-foreground: #ffffff;
+  --popover-foreground: #ffffff;
+  --muted-foreground: #f8fafc;
+  --text: #ffffff;
+  --text-heading: #ffffff;
+  --text-muted: #f8fafc;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --primary: #93c5fd;
+  --ring: #bfdbfe;
 }

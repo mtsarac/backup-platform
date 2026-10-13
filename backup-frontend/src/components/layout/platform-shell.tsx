@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Menu, Moon, Sun } from 'lucide-react'
 import { Outlet } from 'react-router-dom'
+import { A11yToolbar } from './a11y-toolbar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/features/auth/use-auth'
@@ -17,13 +18,14 @@ function PlatformTopBar({ onMenuToggle }: { onMenuToggle: () => void }) {
   return <>
     <header className="flex min-h-14 min-w-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-surface px-4 py-2 sm:px-6">
       <div className="flex min-w-0 items-center gap-3">
-        <Button variant="ghost" size="icon" className="lg:hidden" onClick={onMenuToggle} aria-label="Menüyü aç"><Menu className="size-5" /></Button>
+        <Button variant="ghost" size="icon" className="lg:hidden" onClick={onMenuToggle} aria-label="Menüyü aç"><Menu /></Button>
         <span className="text-sm font-medium text-text-heading">Platform yönetimi</span>
       </div>
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         <Badge tone="warning">PlatformAdmin</Badge>
         <span className="hidden text-sm text-text-muted sm:inline">{user?.displayName}</span>
-        <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Tema değiştir">{resolvedTheme === 'light' ? <Moon className="size-4" /> : <Sun className="size-4" />}</Button>
+        <A11yToolbar />
+        <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Tema değiştir">{resolvedTheme === 'light' ? <Moon /> : <Sun />}</Button>
         <Button variant="ghost" size="sm" disabled={busy} onClick={() => { void signOut() }}>Çıkış</Button>
       </div>
     </header>

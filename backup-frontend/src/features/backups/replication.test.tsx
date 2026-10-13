@@ -41,6 +41,14 @@ beforeEach(() => {
 })
 
 describe('replication compliance rendering', () => {
+  it('explains quarantined conflicts without promising deletion or exposing backend exception text', () => {
+    const conflict = { ...destination('sftp', 'Failed', 'TargetConflict'), replicaStatus: 'Quarantined', objectMayRemain: true, failureReason: 'provider-secret-exception' }
+    render(<ReplicationSection replication={healthOf('Degraded', 2, 2, [conflict])} />)
+    expect(screen.getByText(/Sahipliği doğrulanmadan silinmez/)).toBeInTheDocument()
+    expect(screen.queryByText(/saklama süreci bu dosyayı da kaldırır/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/provider-secret-exception/)).not.toBeInTheDocument()
+  })
+
   it.each([
     ['Healthy', 3, 'Replikasyon sağlıklı'],
     ['Degraded', 2, 'Kısmi replikasyon · politika karşılandı'],
@@ -82,7 +90,7 @@ describe('replication compliance rendering', () => {
   it('a Succeeded run with a degraded replication never shows a bare success', () => {
     state.run = makeRun({ status: 'Succeeded', replication: healthOf('Degraded', 2) })
     renderDetail()
-    expect(screen.getAllByText('Başarılı · Succeeded').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Başarılı').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Kısmi replikasyon · politika karşılandı').length).toBeGreaterThan(0)
     expect(screen.getByRole('region', { name: 'Replikasyon' })).toBeInTheDocument()
   })
@@ -90,7 +98,7 @@ describe('replication compliance rendering', () => {
   it('the run list shows the replication verdict beside the run status', () => {
     state.page = { items: [makeRun({ status: 'Succeeded', replication: healthOf('InsufficientReplicas', 1) })], totalCount: 1, page: 1, pageSize: 25 }
     render(<MemoryRouter><BackupsPage /></MemoryRouter>)
-    expect(screen.getByText('Başarılı · Succeeded')).toBeInTheDocument()
+    expect(screen.getAllByText('Başarılı').length).toBeGreaterThan(0)
     expect(screen.getByText('Yetersiz doğrulanmış replika')).toBeInTheDocument()
   })
 

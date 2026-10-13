@@ -21,13 +21,13 @@ function PlatformSidebarContent({ onClose }: { onClose?: () => void }) {
   return <>
     <div className="flex h-14 items-center justify-between border-b border-border px-4">
       <div className="flex items-center gap-2"><div className="flex size-7 items-center justify-center rounded bg-primary text-primary-foreground"><ShieldCheck className="size-4" /></div><span className="font-semibold text-text-heading">Platform Administration</span></div>
-      {onClose && <Button variant="ghost" size="icon" onClick={onClose} aria-label="Menüyü kapat"><X className="size-5" /></Button>}
+      {onClose && <Button variant="ghost" size="icon" onClick={onClose} aria-label="Menüyü kapat"><X /></Button>}
     </div>
     <nav aria-label="Platform navigation" className="flex-1 overflow-auto p-3">
       <ul className="space-y-0.5">{items.map(item => <li key={item.path}>
-        <NavLink to={item.path} end={item.end} onClick={onClose} className={({ isActive }) => `flex items-center gap-3 rounded-md px-3 py-2 text-sm ${isActive ? 'border-l-2 border-primary bg-accent/50 font-medium text-accent-foreground' : 'text-text hover:bg-surface-2'}`}><item.icon className="size-4" />{item.label}</NavLink>
+        <NavLink to={item.path} end={item.end} onClick={onClose} className={({ isActive }) => `flex items-center gap-3 rounded-md px-3 min-h-12 text-base ${isActive ? 'border-l-2 border-primary bg-accent/50 font-medium text-accent-foreground' : 'text-text hover:bg-surface-2'}`}><item.icon className="size-6" />{item.label}</NavLink>
       </li>)}</ul>
-      <div className="mt-4 border-t border-border pt-3"><NavLink to="/" onClick={onClose} className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-text hover:bg-surface-2"><ArrowLeft className="size-4" />Tenant arayüzüne dön</NavLink></div>
+      <div className="mt-4 border-t border-border pt-3"><NavLink to="/" onClick={onClose} className="flex items-center gap-3 rounded-md px-3 min-h-12 text-base text-text hover:bg-surface-2"><ArrowLeft className="size-6" />Tenant arayüzüne dön</NavLink></div>
     </nav>
   </>
 }

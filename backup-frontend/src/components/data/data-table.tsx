@@ -15,6 +15,8 @@ interface DataTableProps<T> {
   keyExtractor: (row: T) => string
   emptyMessage?: string
   className?: string
+  /** 'cards' renders each row as a roomy stacked card instead of a table row. */
+  layout?: 'table' | 'cards'
 }
 
 export function DataTable<T>({
@@ -23,7 +25,29 @@ export function DataTable<T>({
   keyExtractor,
   emptyMessage = 'Kayıt bulunamadı.',
   className,
+  layout = 'table',
 }: DataTableProps<T>) {
+  if (layout === 'cards') {
+    if (rows.length === 0) {
+      return <p className="rounded-lg border border-border bg-surface px-4 py-8 text-center text-text-muted">{emptyMessage}</p>
+    }
+    return (
+      <ul className={cn('space-y-3', className)}>
+        {rows.map((row) => (
+          <li key={keyExtractor(row)} className="rounded-lg border-2 border-border bg-surface p-4">
+            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+              {columns.map((column) => (
+                <div key={column.key} className="min-w-0">
+                  <dt className="text-sm font-medium text-text-muted">{column.header}</dt>
+                  <dd className="mt-0.5 break-words text-base text-text">{column.render(row)}</dd>
+                </div>
+              ))}
+            </dl>
+          </li>
+        ))}
+      </ul>
+    )
+  }
   return (
     <div
       className={cn(
@@ -31,7 +55,7 @@ export function DataTable<T>({
         className
       )}
     >
-      <table className="w-full border-collapse text-sm">
+      <table className="w-full border-collapse text-base">
         <thead>
           <tr className="border-b border-border bg-surface-2 text-left text-text-muted">
             {columns.map((column) => (

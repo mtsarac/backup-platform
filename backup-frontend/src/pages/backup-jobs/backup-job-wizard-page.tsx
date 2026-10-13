@@ -18,15 +18,18 @@ const initialConfiguration: BackupConfiguration = { engine: 'mssql', database: '
 const initialSchedule: Schedule = { enabled: true, cronExpression: '0 2 * * *', timeZone: 'Europe/Istanbul', missedRunGraceSeconds: 3600, overlapPolicy: 'Skip' }
 const initialRetry: RetryPolicy = { maxAttempts: 3, initialDelaySeconds: 30, maxDelaySeconds: 300, backoff: 'Exponential', jitter: 0.2 }
 const initialRetention: RetentionPolicy = { enabled: true, keepForSeconds: 1209600, deleteGracePeriodSeconds: 86400 }
-const inputClass = 'h-9 w-full rounded-md border border-border bg-surface-2 px-3 text-sm outline-none focus:border-ring disabled:opacity-60'
+const inputClass = 'h-12 w-full rounded-md border-2 border-border bg-surface-2 px-4 text-base focus:border-primary disabled:opacity-60'
 
 function Field({ name, label, errors, children }: { name: string; label: string; errors: Record<string, string>; children: ReactNode }) {
   const message = errors[name] ?? errors[name.split('.').at(-1) ?? name]
-  return <div className="space-y-1"><label htmlFor={name} className="block text-sm font-medium text-text-heading">{label}</label>{children}{message && <p id={`${name}-error`} role="alert" className="text-sm text-destructive">{message}</p>}</div>
+  return <div className="space-y-1"><label htmlFor={name} className="block text-base font-medium text-text-heading">{label}</label>{children}{message && <p id={`${name}-error`} role="alert" className="text-sm text-destructive">{message}</p>}</div>
 }
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return <section className="space-y-4 rounded-lg border border-border bg-surface p-4 sm:p-6"><h2 className="text-lg font-medium text-text-heading">{title}</h2><div className="grid gap-4 md:grid-cols-2">{children}</div></section>
+function Section({ title, children, advanced }: { title: string; children: ReactNode; advanced?: string[] | true }) {
+  const body = <div className="grid gap-4 md:grid-cols-2">{children}</div>
+  if (advanced) return <details open={advanced === true ? undefined : advanced.length > 0 || undefined} className="rounded-lg border-2 border-border bg-surface p-4 sm:p-6"><summary className="cursor-pointer text-lg font-semibold text-text-heading">{title} <span className="text-base font-normal text-text-muted">(isteğe bağlı, teknik ekipler için)</span></summary><div className="mt-4">{body}</div></details>
+  return <section className="space-y-4 rounded-lg border-2 border-border bg-surface p-4 sm:p-6"><h2 className="text-xl font-semibold text-text-heading">{title}</h2>{body}</section>
 }
+const schedulePresets = [['Her gece 02:00', '0 2 * * *'], ['Her sabah 08:00', '0 8 * * *'], ['Günde 2 kez (08:00 ve 20:00)', '0 8,20 * * *']] as const
 export function BackupJobWizardPage() {
   const { id = '' } = useParams()
   const { tenantId, canOperate } = useTenant()
@@ -81,6 +84,7 @@ function JobForm({ job }: { job?: BackupJob }) {
   function selection(name: string, label: string, value: string, options: readonly (readonly [string, string])[], onChange: (value: string) => void) {
     return <Field name={name} label={label} errors={errors}><select id={name} className={inputClass} value={value} aria-invalid={Boolean(errors[name])} aria-describedby={`${name}-error`} onChange={event => onChange(event.target.value)}>{options.map(([key, text]) => <option key={key} value={key}>{text}</option>)}</select></Field>
   }
+  const withErrors = (...names: string[]) => names.filter(name => errors[name])
   const policies = [['Disabled', 'Off — kapalı'], ['Preferred', 'IfSupported — destekleniyorsa'], ['Required', 'Required — zorunlu']] as const
   return <form noValidate className="space-y-5" onSubmit={event => {
     event.preventDefault()
@@ -106,40 +110,45 @@ function JobForm({ job }: { job?: BackupJob }) {
     <Section title="MSSQL kaynak ve bağlantı">
       {text('configuration.host', 'SQL Server host / instance', configuration.host, host => setConfiguration({ ...configuration, host }))}
       {text('configuration.database', 'Database', configuration.database, database => setConfiguration({ ...configuration, database }))}
-      {number('configuration.port', 'Port (isteğe bağlı)', configuration.port, port => setConfiguration({ ...configuration, port }))}
       {text('configuration.databaseCredentialReference', 'Kimlik bilgisi referansı (parola değil)', configuration.databaseCredentialReference ?? '', databaseCredentialReference => setConfiguration({ ...configuration, databaseCredentialReference: databaseCredentialReference || null }), configuration.integratedSecurity)}
-      {check('Windows / integrated security', configuration.integratedSecurity, integratedSecurity => setConfiguration({ ...configuration, integratedSecurity }))}
+      {check('Windows kimlik doğrulaması (integrated security)', configuration.integratedSecurity, integratedSecurity => setConfiguration({ ...configuration, integratedSecurity }))}
+      {number('configuration.port', 'Port (isteğe bağlı)', configuration.port, port => setConfiguration({ ...configuration, port }))}
       {check('Bağlantıyı şifrele', configuration.encrypt, encrypt => setConfiguration({ ...configuration, encrypt }))}
       {check('Sunucu sertifikasına güven', configuration.trustServerCertificate, trustServerCertificate => setConfiguration({ ...configuration, trustServerCertificate }))}
       <p className="text-sm text-text-muted md:col-span-2">Bu form parola kabul etmez. Kimlik bilgileri Agent yapılandırmasında tutulur; yalnızca referans adı gönderilir.</p>
     </Section>
-    <Section title="Yedekleme seçenekleri">
-      {check('COPY_ONLY', configuration.copyOnly, copyOnly => setConfiguration({ ...configuration, copyOnly }))}
-      {selection('configuration.checksumPolicy', 'CHECKSUM', configuration.checksumPolicy, policies, value => setConfiguration({ ...configuration, checksumPolicy: value as BackupConfiguration['checksumPolicy'] }))}
-      {selection('configuration.compressionPolicy', 'Compression', configuration.compressionPolicy, policies, value => setConfiguration({ ...configuration, compressionPolicy: value as BackupConfiguration['compressionPolicy'] }))}
+    <Section title="Yedekleme seçenekleri" advanced={withErrors('configuration.copyOnly', 'configuration.checksumPolicy', 'configuration.compressionPolicy')}>
+      {check('Kopya yedek (COPY_ONLY: mevcut yedek zincirini etkilemez)', configuration.copyOnly, copyOnly => setConfiguration({ ...configuration, copyOnly }))}
+      {selection('configuration.checksumPolicy', 'Bütünlük doğrulaması (CHECKSUM)', configuration.checksumPolicy, policies, value => setConfiguration({ ...configuration, checksumPolicy: value as BackupConfiguration['checksumPolicy'] }))}
+      {selection('configuration.compressionPolicy', 'Sıkıştırma (Compression)', configuration.compressionPolicy, policies, value => setConfiguration({ ...configuration, compressionPolicy: value as BackupConfiguration['compressionPolicy'] }))}
     </Section>
     <Section title="Depolama ve yürütme">
       <MultiDestinationPicker configuration={configuration} connections={connectionItems} providers={providerItems} pending={pickerPending} error={pickerError} fieldError={Object.entries(errors).find(([field]) => field.startsWith('configuration.destinations'))?.[1] ?? errors['configuration.requiredVerifiedReplicaCount']} existingTarget={existingTarget} onChange={setConfiguration} onRefresh={refreshConnections} />
+    </Section>
+    <Section title="Depolama ayrıntıları" advanced={withErrors('configuration.storagePrefix', 'configuration.stagingReference')}>
       {text('configuration.storagePrefix', 'Hedef öneki (göreli anahtar)', configuration.storagePrefix, storagePrefix => setConfiguration({ ...configuration, storagePrefix }))}
-      {text('configuration.stagingReference', 'Staging referansı', configuration.stagingReference, stagingReference => setConfiguration({ ...configuration, stagingReference }))}
+      {text('configuration.stagingReference', 'Geçici alan referansı (staging)', configuration.stagingReference, stagingReference => setConfiguration({ ...configuration, stagingReference }))}
     </Section>
     <Section title="Zamanlama">
       {check('Zamanlama kullan', scheduled, setScheduled)}
       {scheduled && <>{check('Zamanlama etkin', schedule.enabled, value => setSchedule({ ...schedule, enabled: value }))}
-      {text('cronExpression', 'Cron ifadesi', schedule.cronExpression, cronExpression => setSchedule({ ...schedule, cronExpression }))}
-      {text('timeZone', 'Saat dilimi (IANA / sistem adı)', schedule.timeZone, timeZone => setSchedule({ ...schedule, timeZone }))}
-      {number('missedRunGraceSeconds', 'Kaçırılan çalışma toleransı (saniye)', schedule.missedRunGraceSeconds, value => setSchedule({ ...schedule, missedRunGraceSeconds: value ?? 0 }))}</>}
-      {selection('overlapPolicy', 'Çakışma politikası', overlap, [['Skip', 'Skip — etkin çalışma varsa atla'], ['Queue', 'Queue — kuyruğa al']], value => setOverlap(value as 'Skip' | 'Queue'))}
+      <div role="group" aria-label="Hazır zamanlamalar" className="flex flex-wrap gap-2 md:col-span-2">{schedulePresets.map(([label, cron]) => <Button key={cron} type="button" variant={schedule.cronExpression === cron ? 'default' : 'outline'} aria-pressed={schedule.cronExpression === cron} onClick={() => setSchedule({ ...schedule, cronExpression: cron })}>{label}</Button>)}</div></>}
       {job && <p className="text-sm text-text-muted md:col-span-2">Kaydedilmiş zamanlamanın sonraki çalışması: {job.nextOccurrenceAt ?? job.schedule?.nextOccurrenceAt ? new Date((job.nextOccurrenceAt ?? job.schedule?.nextOccurrenceAt)!).toLocaleString('tr-TR') : 'Planlanmamış'}. Değişiklikler kaydedildikten sonra sunucu tarafından hesaplanır.</p>}
     </Section>
-    <Section title="Yeniden deneme">
+    <Section title="Gelişmiş zamanlama" advanced={withErrors('cronExpression', 'timeZone', 'missedRunGraceSeconds', 'overlapPolicy')}>
+      {text('cronExpression', 'Cron ifadesi', schedule.cronExpression, cronExpression => setSchedule({ ...schedule, cronExpression }))}
+      {text('timeZone', 'Saat dilimi (IANA / sistem adı)', schedule.timeZone, timeZone => setSchedule({ ...schedule, timeZone }))}
+      {number('missedRunGraceSeconds', 'Kaçırılan çalışma toleransı (saniye)', schedule.missedRunGraceSeconds, value => setSchedule({ ...schedule, missedRunGraceSeconds: value ?? 0 }))}
+      {selection('overlapPolicy', 'Önceki çalışma sürerken yeni zamanlama', overlap, [['Skip', 'Atla'], ['Queue', 'Kuyruğa al']], value => setOverlap(value as 'Skip' | 'Queue'))}
+    </Section>
+    <Section title="Yeniden deneme" advanced={withErrors('retryPolicy.maxAttempts', 'retryPolicy.initialDelaySeconds', 'retryPolicy.maxDelaySeconds', 'retryPolicy.backoff', 'retryPolicy.jitter')}>
       {number('retryPolicy.maxAttempts', 'Toplam deneme sayısı', retry.maxAttempts, value => setRetry({ ...retry, maxAttempts: value ?? 0 }))}
       {number('retryPolicy.initialDelaySeconds', 'İlk gecikme (saniye)', retry.initialDelaySeconds, value => setRetry({ ...retry, initialDelaySeconds: value ?? 0 }))}
       {number('retryPolicy.maxDelaySeconds', 'En uzun gecikme (saniye)', retry.maxDelaySeconds, value => setRetry({ ...retry, maxDelaySeconds: value ?? 0 }))}
       {selection('retryPolicy.backoff', 'Gecikme stratejisi', retry.backoff, [['Fixed', 'Fixed — sabit'], ['Exponential', 'Exponential — üstel']], backoff => setRetry({ ...retry, backoff }))}
-      {number('retryPolicy.jitter', 'Jitter oranı', retry.jitter, value => setRetry({ ...retry, jitter: value ?? 0 }))}
+      {number('retryPolicy.jitter', 'Rastgele gecikme oranı (jitter)', retry.jitter, value => setRetry({ ...retry, jitter: value ?? 0 }))}
     </Section>
-    <Section title="Saklama politikası">
+    <Section title="Saklama politikası" advanced={withErrors('retention.keepForSeconds', 'retention.deleteGracePeriodSeconds')}>
       {!canAdmin && <p className="text-sm text-text-muted md:col-span-2">Saklama politikasını yalnızca Owner / Admin değiştirebilir. {job ? 'Mevcut politika korunur.' : 'Sunucunun varsayılan politikası uygulanır.'}</p>}
       {check('Saklama süresi etkin', retention.enabled, value => setRetention({ ...retention, enabled: value }), !canAdmin)}
       {number('retention.keepForSeconds', 'KeepFor — saklama süresi (saniye)', retention.keepForSeconds, value => setRetention({ ...retention, keepForSeconds: value ?? 0 }), !canAdmin)}
@@ -148,6 +157,6 @@ function JobForm({ job }: { job?: BackupJob }) {
     </Section>
     {job && <section className="space-y-3 rounded-lg border border-border bg-surface p-4"><h2 className="text-lg font-medium">Son zamanlama oluşumları</h2><QueryState isPending={occurrences.isPending} error={occurrences.error} empty={occurrences.data?.length === 0}><ul className="space-y-2 text-sm">{occurrences.data?.map(item => <li key={item.id}>{new Date(item.scheduledAt).toLocaleString('tr-TR')} · {item.outcome} · {item.outcome === 'AdmissionDenied' ? failureMessage(item.reason) : item.reason}{item.runId && <> · <Link className="text-primary underline" to={`/tenants/${tenantId}/backup-runs/${item.runId}`}>Çalıştırmayı aç</Link></>}</li>)}</ul></QueryState></section>}
     {save.error && <div role="alert" className="rounded-md border border-destructive/30 p-3 text-sm">{errorMessage(save.error)}</div>}
-    <div className="flex justify-end"><Button type="submit" disabled={save.isPending || cannotSave}>{save.isPending ? 'Kaydediliyor…' : 'Kaydet'}</Button></div>
+    <div className="flex justify-end"><Button type="submit" size="lg" disabled={save.isPending || cannotSave}>{save.isPending ? 'Kaydediliyor…' : 'Kaydet'}</Button></div>
   </form>
 }
