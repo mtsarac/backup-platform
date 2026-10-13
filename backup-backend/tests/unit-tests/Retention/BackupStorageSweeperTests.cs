@@ -174,6 +174,27 @@ public sealed class BackupStorageSweeperTests
     }
 
     [Fact]
+    public async Task RepairFilesOfATerminalBackupStayPinnedUntilRepairEnds()
+    {
+        var rig = new Rig();
+        var attempt = rig.Register(BackupStatus.Succeeded);
+        var name = ManagedBackupLayout.RepairFileName(Guid.NewGuid(), Guid.NewGuid());
+        var target = rig.Object(attempt, Old, name);
+        var partial = Rig.KeyFor(attempt, $".{name}.partial");
+        rig.Storage.AddPartial(partial, Now - Old, false);
+        rig.Store.Attempts[attempt.Id] = rig.Store.Attempts[attempt.Id] with { RepairIsActive = true };
+
+        await rig.SweepAsync();
+        Assert.True(rig.Storage.Has(target));
+        Assert.True(rig.Storage.Has(partial));
+
+        rig.Store.Attempts[attempt.Id] = rig.Store.Attempts[attempt.Id] with { RepairIsActive = false };
+        await rig.SweepAsync();
+        Assert.False(rig.Storage.Has(target));
+        Assert.False(rig.Storage.Has(partial));
+    }
+
+    [Fact]
     public async Task ReferencesAreLookedUpUnderTheProviderIdOfTheSweptStorage()
     {
         var rig = new Rig(provider: StorageProviderId.Central);

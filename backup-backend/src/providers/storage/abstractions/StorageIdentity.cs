@@ -31,7 +31,7 @@ public sealed record StorageProviderId
 /// </summary>
 public sealed record StorageObjectKey
 {
-    public const int MaxLength = 512;
+    public const int MaxLength = 1024;
     public const int MaxSegmentLength = 128;
 
     private static readonly HashSet<string> ReservedWindowsNames = new(StringComparer.OrdinalIgnoreCase)

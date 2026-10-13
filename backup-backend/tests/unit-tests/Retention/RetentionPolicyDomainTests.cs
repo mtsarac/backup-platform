@@ -11,7 +11,7 @@ internal static class RetentionDomain
     private static readonly string SourceHash = new('a', 64);
     private static readonly string ArtifactHash = new('b', 64);
 
-    private static BackupConfiguration BackendConfiguration() => Configuration() with { StorageExecutionLocation = BackupStorageExecutionLocation.Backend };
+    private static BackupConfiguration BackendConfiguration() => Configuration();
 
     public static BackupRun NewRun(BackupRetentionPolicy? policy, DateTimeOffset createdAt)
     {
@@ -166,7 +166,7 @@ public sealed class RetentionPolicyDomainTests
     {
         var original = RetentionDomain.Policy(TimeSpan.FromDays(30), TimeSpan.FromHours(24));
         var job = new BackupJob(Guid.NewGuid(), TenantId.New(), "Database", AgentId.New(),
-            Configuration() with { StorageExecutionLocation = BackupStorageExecutionLocation.Backend }, Now, retentionPolicy: original);
+            Configuration(), Now, retentionPolicy: original);
         var firstRun = new BackupRun(Guid.NewGuid(), job.TenantId, job.Id, job.AgentId, job.Configuration, "first", Now, retentionPolicy: job.RetentionPolicy);
         firstRun.QueueFirstAttempt(Guid.NewGuid(), Now);
         var firstArtifact = RetentionDomain.Complete(firstRun, RetentionDomain.Accepted, Now);
@@ -190,7 +190,7 @@ public sealed class RetentionPolicyDomainTests
     {
         var original = RetentionDomain.Policy(TimeSpan.FromDays(30));
         var job = new BackupJob(Guid.NewGuid(), TenantId.New(), "Database", AgentId.New(),
-            Configuration() with { StorageExecutionLocation = BackupStorageExecutionLocation.Backend }, Now, retentionPolicy: original);
+            Configuration(), Now, retentionPolicy: original);
 
         Assert.Throws<ArgumentException>(() => job.ChangeRetention(new BackupRetentionPolicy { KeepFor = TimeSpan.Zero }));
 

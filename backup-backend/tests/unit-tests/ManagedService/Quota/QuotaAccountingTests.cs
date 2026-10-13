@@ -232,25 +232,4 @@ public sealed class QuotaAccountingTests
         Assert.Equal(2 * Gb, accumulator.TotalBytes);
         Assert.Throws<ArgumentNullException>(() => QuotaAccounting.NewAccumulator(null!));
     }
-
-    [Fact]
-    public void EstimateJudgesThePreviousRunByItsSizeWhateverStatusItsCopiesHaveNow()
-    {
-        var artifact = Guid.NewGuid();
-        var previous = new[]
-        {
-            Replica(artifact, "central", BackupReplicaStatus.DeletePending),
-            Replica(artifact, "sftp", BackupReplicaStatus.DeleteFailed)
-        };
-        Assert.Equal(2 * Gb, QuotaAccounting.Estimate(Policy(QuotaAccountingMode.LogicalArtifactBytes, QuotaScopeRule.All), previous));
-        Assert.Equal(4 * Gb, QuotaAccounting.Estimate(Policy(QuotaAccountingMode.PhysicalReplicaBytes, QuotaScopeRule.All), previous));
-    }
-
-    [Fact]
-    public void EstimateStillAppliesThePolicyScopeAndIsZeroWithoutHistory()
-    {
-        var sftpOnly = new[] { Replica(Guid.NewGuid(), "sftp") };
-        Assert.Equal(0, QuotaAccounting.Estimate(Policy(QuotaAccountingMode.LogicalArtifactBytes, PlatformOnly), sftpOnly));
-        Assert.Equal(0, QuotaAccounting.Estimate(Policy(QuotaAccountingMode.LogicalArtifactBytes, QuotaScopeRule.All), []));
-    }
 }

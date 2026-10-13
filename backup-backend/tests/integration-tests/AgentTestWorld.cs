@@ -11,6 +11,7 @@ using BackupPlatform.Agents.Capabilities;
 using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Contracts.Agents;
+using BackupPlatform.Domain.Capabilities;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Identity;
@@ -307,6 +308,16 @@ internal sealed class AgentWorld : IAsyncDisposable
         return new EnrolledAgent(
             json.GetProperty("agentId").GetGuid(), credential.GetProperty("credentialId").GetGuid(),
             credential.GetProperty("secret").GetString()!, setup.Tenant.Id.Value, request.InstallationId);
+    }
+
+    /// <summary>Declares the destination-list capability every new backup run requires; tests about the capability itself do not call this.</summary>
+    public async Task<EnrolledAgent> DeclareBackupCapabilityAsync(EnrolledAgent agent)
+    {
+        await using var context = Database.CreatePlatformContext();
+        context.AgentCapabilities.Add(new AgentCapabilityRecord(new AgentId(agent.AgentId), new TenantId(agent.TenantId),
+            BackupPlatform.Contracts.Backups.BackupTaskProtocol.MultiDestinationCapability, CapabilitySupport.Supported, null, "fixture", DateTimeOffset.UtcNow));
+        await context.SaveChangesAsync();
+        return agent;
     }
 
     public static async Task<HttpResponseMessage> AgentCallAsync(

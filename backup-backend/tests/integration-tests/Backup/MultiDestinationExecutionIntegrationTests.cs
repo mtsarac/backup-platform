@@ -42,22 +42,23 @@ public sealed class MultiDestinationExecutionIntegrationTests(PostgreSqlFixture 
         var drive = await _connections.AddAsync(agent.TenantId, "drive-1", "google-drive");
         var configuration = BackupStoreHarness.Configuration() with
         {
-            StorageProvider = "central", StorageConnectionId = central.Id, StorageExecutionLocation = BackupStorageExecutionLocation.Backend,
             Destinations = [new BackupDestination("central", central.Id, true), new BackupDestination("sftp", sftp.Id), new BackupDestination("google-drive", drive.Id)],
             RequiredVerifiedReplicaCount = required
         };
         var schedule = scheduled ? BackupSchedule.Create(true, "0 * * * *", "UTC", TimeSpan.FromMinutes(30), T0, false) : null;
         var job = new BackupJob(Guid.NewGuid(), agent.TenantId, "Replicated", agent.AgentId, configuration, T0, null, BackupOverlapPolicy.Queue, schedule);
         job = (await World.RunStore().CreateJobAsync(job, default))!;
-        if (capable) await SetCapabilityAsync(agent, CapabilitySupport.Supported);
+        await SetCapabilityAsync(agent, capable ? CapabilitySupport.Supported : null);
         return new Multi(agent, job, central, sftp, drive);
     }
 
-    private async Task SetCapabilityAsync(StoreAgent agent, CapabilitySupport support)
+    // The harness declares the capability on every agent; null removes it (an agent that never reported it).
+    private async Task SetCapabilityAsync(StoreAgent agent, CapabilitySupport? support)
     {
         await using var context = fixture.CreatePlatformContext();
         await context.AgentCapabilities.Where(row => row.AgentId == agent.AgentId).ExecuteDeleteAsync();
-        context.AgentCapabilities.Add(new AgentCapabilityRecord(agent.AgentId, agent.TenantId, BackupTaskProtocol.MultiDestinationCapability, support, null, "revision-1", T0));
+        if (support is { } declared)
+            context.AgentCapabilities.Add(new AgentCapabilityRecord(agent.AgentId, agent.TenantId, BackupTaskProtocol.MultiDestinationCapability, declared, null, "revision-1", T0));
         await context.SaveChangesAsync();
     }
 

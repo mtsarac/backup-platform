@@ -31,7 +31,7 @@ public sealed class BackupConcurrencyLimitApiTests(PostgreSqlFixture fixture) : 
     public async Task ConfiguredTenantLimitStopsOneTenantsAgentsFromRunningMoreBackupsThanAllowed()
     {
         await using var scenario = await BackupApiScenario.CreateAsync(fixture, Settings(("AgentMaxConcurrentBackups", "5"), ("TenantMaxConcurrentBackups", "1")));
-        var second = await scenario.World.EnrollAsync(scenario.Setup);
+        var second = await scenario.World.DeclareBackupCapabilityAsync(await scenario.World.EnrollAsync(scenario.Setup));
         await scenario.StartRunAsync(await scenario.CreateJobAsync());
         var secondRun = await scenario.StartRunAsync(await scenario.CreateJobAsync(agent: second));
 

@@ -16,5 +16,6 @@ public static class ReplicaRepairFailureCodes
     public const string ArtifactExpired = "ArtifactExpired";
     public const string DestinationNotConfigured = "DestinationNotConfigured";
     public const string AlreadyVerified = "AlreadyVerified";
+    public const string TargetConflict = "TargetConflict";
     public const string InternalError = "InternalError";
 }

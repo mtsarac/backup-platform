@@ -115,8 +115,7 @@ describe('MultiDestinationPicker', () => {
       engine: 'mssql', database: 'TestDB', host: 'localhost', port: null,
       integratedSecurity: true, databaseCredentialReference: null,
       encrypt: true, trustServerCertificate: false, stagingReference: 'default',
-      storageProvider: 'local', storageConnectionId: 'conn-local', storagePrefix: '',
-      storageExecutionLocation: 'Agent', copyOnly: true,
+      storagePrefix: '', copyOnly: true,
       checksumPolicy: 'Required', compressionPolicy: 'Preferred',
       destinations: [
         { storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true }
@@ -148,7 +147,7 @@ describe('MultiDestinationPicker', () => {
     expect(onChange).toHaveBeenCalled()
     const updated = onChange.mock.calls[0][0] as BackupConfiguration
     expect(updated.destinations).toHaveLength(2)
-    expect(updated.destinations?.[1]).toMatchObject({
+    expect(updated.destinations[1]).toMatchObject({
       storageProvider: 'sftp',
       storageConnectionId: 'conn-sftp-1',
       storageExecutionLocation: 'Backend',
@@ -161,8 +160,7 @@ describe('MultiDestinationPicker', () => {
       engine: 'mssql', database: 'TestDB', host: 'localhost', port: null,
       integratedSecurity: true, databaseCredentialReference: null,
       encrypt: true, trustServerCertificate: false, stagingReference: 'default',
-      storageProvider: 'local', storageConnectionId: 'conn-local', storagePrefix: '',
-      storageExecutionLocation: 'Agent', copyOnly: true,
+      storagePrefix: '', copyOnly: true,
       checksumPolicy: 'Required', compressionPolicy: 'Preferred',
       destinations: [
         { storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true },
@@ -193,10 +191,9 @@ describe('MultiDestinationPicker', () => {
 
     expect(onChange).toHaveBeenCalled()
     const updatedPrimary = onChange.mock.calls[0][0] as BackupConfiguration
-    expect(updatedPrimary.storageProvider).toBe('sftp')
-    expect(updatedPrimary.storageConnectionId).toBe('conn-sftp-1')
-    expect(updatedPrimary.destinations?.[1].isPrimary).toBe(true)
-    expect(updatedPrimary.destinations?.[0].isPrimary).toBe(false)
+    expect(updatedPrimary.destinations.find(d => d.isPrimary)).toMatchObject({ storageProvider: 'sftp', storageConnectionId: 'conn-sftp-1' })
+    expect(updatedPrimary.destinations[1].isPrimary).toBe(true)
+    expect(updatedPrimary.destinations[0].isPrimary).toBe(false)
 
     // Remove SFTP destination
     const removeBtn = screen.getByRole('button', { name: /SFTP hedefini kaldır/i })
@@ -207,13 +204,38 @@ describe('MultiDestinationPicker', () => {
     expect(updatedRemoved.requiredVerifiedReplicaCount).toBe(1)
   })
 
+  it('edits the primary destination in place and leaves replicas untouched', () => {
+    const config: BackupConfiguration = {
+      engine: 'mssql', database: 'TestDB', host: 'localhost', port: null,
+      integratedSecurity: true, databaseCredentialReference: null,
+      encrypt: true, trustServerCertificate: false, stagingReference: 'default',
+      storagePrefix: '', copyOnly: true,
+      checksumPolicy: 'Required', compressionPolicy: 'Preferred',
+      destinations: [
+        { storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: false },
+        { storageProvider: 'sftp', storageConnectionId: 'conn-sftp-1', storageExecutionLocation: 'Backend', isPrimary: true }
+      ],
+      requiredVerifiedReplicaCount: 2
+    }
+    const onChange = vi.fn()
+    render(<MultiDestinationPicker configuration={config} connections={dummyConnections} providers={dummyProviders} pending={false} error={null} existingTarget={true} onChange={onChange} onRefresh={() => {}} />)
+
+    expect(screen.getByLabelText('Depolama bağlantısı')).toHaveValue('conn-sftp-1')
+    fireEvent.change(screen.getByLabelText('Storage Provider'), { target: { value: 'central' } })
+
+    const updated = onChange.mock.calls[0][0] as BackupConfiguration
+    expect(updated.destinations).toEqual([
+      config.destinations[0],
+      { storageProvider: 'central', storageConnectionId: null, storageExecutionLocation: 'Backend', isPrimary: true }
+    ])
+  })
+
   it('shows execution guard warning when >1 destination is configured', () => {
     const config: BackupConfiguration = {
       engine: 'mssql', database: 'TestDB', host: 'localhost', port: null,
       integratedSecurity: true, databaseCredentialReference: null,
       encrypt: true, trustServerCertificate: false, stagingReference: 'default',
-      storageProvider: 'local', storageConnectionId: 'conn-local', storagePrefix: '',
-      storageExecutionLocation: 'Agent', copyOnly: true,
+      storagePrefix: '', copyOnly: true,
       checksumPolicy: 'Required', compressionPolicy: 'Preferred',
       destinations: [
         { storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true },

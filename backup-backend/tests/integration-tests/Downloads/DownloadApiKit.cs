@@ -40,7 +40,7 @@ internal sealed class DownloadApiScenario : IAsyncDisposable
             configuration = new BackupPlatform.Contracts.Backups.BackupExecutionConfiguration
             {
                 Database = "master", Host = "sql-server", IntegratedSecurity = true,
-                StorageProvider = provider, StorageExecutionLocation = agentLocal ? "Agent" : "Backend"
+                Destinations = [agentLocal ? BackupTestDestinations.Local() : BackupTestDestinations.Central()]
             }
         });
         Assert.Equal(HttpStatusCode.Created, jobResponse.StatusCode);

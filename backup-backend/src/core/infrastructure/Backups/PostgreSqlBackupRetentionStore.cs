@@ -255,6 +255,11 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
                 .Where(replica => replica.StorageProvider == storageProvider && chunk.Contains(replica.Key))
                 .Select(replica => replica.Key).Distinct().ToListAsync(cancellationToken);
             referenced.UnionWith(found);
+            var targets = await context.ReplicaRepairOperations.AsNoTracking()
+                .Where(repair => repair.StorageProvider == storageProvider && repair.TargetKey != null && chunk.Contains(repair.TargetKey)
+                    && (repair.Status == ReplicaRepairStatus.Pending || repair.Status == ReplicaRepairStatus.InProgress))
+                .Select(repair => repair.TargetKey!).ToListAsync(cancellationToken);
+            referenced.UnionWith(targets);
         }
         return referenced;
     }
@@ -269,10 +274,21 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
             var rows = await (from attempt in context.BackupRunAttempts.AsNoTracking()
                               join run in context.BackupRuns.AsNoTracking() on new { attempt.RunId, attempt.TenantId } equals new { RunId = run.Id, run.TenantId }
                               where chunk.Contains(attempt.Id)
-                              select new { AttemptId = attempt.Id, attempt.TenantId, run.JobId, attempt.RunId, AttemptStatus = attempt.Status, RunStatus = run.Status })
+                              select new
+                              {
+                                  AttemptId = attempt.Id, attempt.TenantId, run.JobId, attempt.RunId,
+                                  AttemptStatus = attempt.Status, RunStatus = run.Status,
+                                  RepairIsActive = context.ReplicaRepairOperations.Any(repair => repair.TenantId == attempt.TenantId
+                                      && (repair.Status == ReplicaRepairStatus.Pending || repair.Status == ReplicaRepairStatus.InProgress)
+                                      && context.BackupArtifacts.Any(artifact => artifact.TenantId == attempt.TenantId
+                                          && artifact.Id == repair.ArtifactId && artifact.AttemptId == attempt.Id))
+                              })
                 .ToListAsync(cancellationToken);
             foreach (var row in rows)
-                activity[row.AttemptId] = new BackupAttemptActivity(row.AttemptId, row.TenantId, row.JobId, row.RunId, row.AttemptStatus, row.RunStatus);
+                activity[row.AttemptId] = new BackupAttemptActivity(row.AttemptId, row.TenantId, row.JobId, row.RunId, row.AttemptStatus, row.RunStatus)
+                {
+                    RepairIsActive = row.RepairIsActive
+                };
         }
         return activity;
     }

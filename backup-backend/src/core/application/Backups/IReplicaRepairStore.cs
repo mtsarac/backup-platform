@@ -5,6 +5,9 @@ namespace BackupPlatform.Application.Backups;
 
 public interface IReplicaRepairStore
 {
+    const int MaxGlobalConcurrentRepairs = 4;
+    const int MaxTenantConcurrentRepairs = 2;
+
     Task<ReplicaRepairAdmissionResult> AdmitRepairAsync(
         TenantId tenantId,
         Guid artifactId,
@@ -13,7 +16,8 @@ public interface IReplicaRepairStore
         DateTimeOffset now,
         CancellationToken cancellationToken,
         Guid? excludeOperationId = null);
-    Task<ReplicaRepairOperation> CreateOperationAsync(
+    /// <summary>Persists a new operation together with its quota reservation; a denied reservation creates nothing.</summary>
+    Task<ReplicaRepairAdmissionResult> CreateOperationAsync(
         ReplicaRepairOperation operation,
         CancellationToken cancellationToken);
 
@@ -26,9 +30,19 @@ public interface IReplicaRepairStore
         TimeSpan leaseDuration,
         CancellationToken cancellationToken);
 
-    Task<bool> PinSourceAsync(TenantId tenantId, Guid operationId, Guid leaseToken, Guid sourceReplicaId, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<bool> PinSourceAsync(TenantId tenantId, Guid operationId, Guid leaseToken, Guid sourceReplicaId, string targetKey, DateTimeOffset now, CancellationToken cancellationToken);
 
-    Task<bool> RenewLeaseAsync(
+    Task<bool> PinSourceAsync(TenantId tenantId, Guid operationId, Guid leaseToken, Guid sourceReplicaId, DateTimeOffset now, CancellationToken cancellationToken) =>
+        PinSourceAsync(tenantId, operationId, leaseToken, sourceReplicaId, "default.bak", now, cancellationToken);
+    Task<bool> CanCleanupTargetAsync(
+        TenantId tenantId,
+        Guid operationId,
+        Guid leaseToken,
+        string targetKey,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+
+    Task<ReplicaRepairLeaseRenewal> RenewLeaseAsync(
         TenantId tenantId,
         Guid operationId,
         Guid leaseToken,
@@ -62,6 +76,14 @@ public interface IReplicaRepairStore
         DateTimeOffset now,
         CancellationToken cancellationToken);
 
+    /// <summary>Atomically records an unowned conflicting target in quarantine and fails the lease holder.</summary>
+    Task<bool> FailTargetConflictAsync(
+        TenantId tenantId,
+        Guid operationId,
+        Guid leaseToken,
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+
     Task<bool> ScheduleRetryAsync(
         TenantId tenantId,
         Guid operationId,
@@ -82,7 +104,8 @@ public interface IReplicaRepairStore
         long sizeBytes,
         string checksum,
         DateTimeOffset now,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        bool quarantine = false);
 
     Task<ReplicaRepairOperation?> ClaimDueRepairAsync(
         string leaseOwner,
@@ -102,12 +125,9 @@ public interface IReplicaRepairStore
         CancellationToken cancellationToken,
         TenantId? tenantId = null);
 
-    Task<int> GetActiveRepairsCountAsync(
-        TenantId? tenantId,
-        CancellationToken cancellationToken);
-
     Task<bool> RequestCancellationAsync(
         TenantId tenantId,
+        Guid artifactId,
         Guid operationId,
         DateTimeOffset now,
         CancellationToken cancellationToken);

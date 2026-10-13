@@ -25,8 +25,7 @@ public sealed class MultiDestinationTaskTests
         Configuration = new BackupExecutionConfiguration
         {
             Database = "Sales", Host = "sql.example.test", Port = 1433, IntegratedSecurity = true,
-            Destinations = destinations, RequiredVerifiedReplicaCount = 2,
-            StorageProvider = destinations[0].StorageProvider, StorageConnectionId = destinations[0].StorageConnectionId, StorageExecutionLocation = destinations[0].StorageExecutionLocation
+            Destinations = destinations, RequiredVerifiedReplicaCount = 2
         }
     };
 
@@ -91,22 +90,17 @@ public sealed class MultiDestinationTaskTests
     }
 
     [Fact]
-    public async Task A_legacy_snapshot_without_destinations_still_runs_as_one_destination_through_the_legacy_fields()
+    public async Task A_snapshot_without_destinations_is_refused_not_read_through_legacy_fields()
     {
-        var snapshot = Snapshot(ThreeDestinations[0]) with { };
+        var snapshot = Snapshot(ThreeDestinations[0]);
         snapshot = snapshot with { Configuration = snapshot.Configuration with { Destinations = [], RequiredVerifiedReplicaCount = 1 } };
 
-        var request = await Factory().CreateAsync(snapshot, default);
-
-        Assert.Empty(request.Destinations);
-        Assert.Null(request.MaxArtifactBytes);
-        var only = Assert.Single(request.EffectiveDestinations);
-        Assert.Equal("central", only.Storage.Value);
+        await Assert.ThrowsAsync<ArgumentException>(async () => await Factory().CreateAsync(snapshot, default));
     }
 
     public static TheoryData<string> Unsupported => new()
     {
-        "unknown-provider", "relayed-on-agent", "relayed-without-connection", "required-too-high", "no-primary", "duplicate"
+        "unknown-provider", "relayed-on-agent", "relayed-without-connection", "missing-location", "required-too-high", "no-primary", "duplicate"
     };
 
     [Theory]
@@ -118,6 +112,7 @@ public sealed class MultiDestinationTaskTests
             "unknown-provider" => [ThreeDestinations[0], new BackupDestinationContract { StorageProvider = "s3", StorageConnectionId = Guid.NewGuid(), StorageExecutionLocation = "Backend" }],
             "relayed-on-agent" => [ThreeDestinations[0], ThreeDestinations[1] with { StorageExecutionLocation = "Agent" }],
             "relayed-without-connection" => [ThreeDestinations[0], ThreeDestinations[1] with { StorageConnectionId = null }],
+            "missing-location" => [ThreeDestinations[0], ThreeDestinations[1] with { StorageExecutionLocation = null }],
             "no-primary" => [ThreeDestinations[0] with { IsPrimary = false }, ThreeDestinations[1]],
             "duplicate" => [ThreeDestinations[0], ThreeDestinations[0] with { IsPrimary = false }],
             _ => new[] { ThreeDestinations[0], ThreeDestinations[1] }

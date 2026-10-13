@@ -31,7 +31,7 @@ public sealed class BackupArtifactServiceTests
 
     private static BackupJob Job(TenantId tenant, BackupRetentionPolicy policy) =>
         new(Guid.NewGuid(), tenant, "job", AgentId.New(),
-            BackupRunTestSupport.Configuration() with { StorageExecutionLocation = BackupStorageExecutionLocation.Backend }, Now, retentionPolicy: policy);
+            BackupRunTestSupport.Configuration(), Now, retentionPolicy: policy);
 
     private static BackupRetentionPolicy Policy(bool enabled = true, double keepDays = 10, double graceHours = 2) =>
         new() { Enabled = enabled, KeepFor = TimeSpan.FromDays(keepDays), DeleteGracePeriod = TimeSpan.FromHours(graceHours) };

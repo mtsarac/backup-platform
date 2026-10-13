@@ -107,26 +107,31 @@ public sealed class PostgreSqlBackupAdmissionPolicy(
         return BackupAdmissionDecision.Admitted;
     }
 
-    /// <summary>Checks only the additional counted bytes of a repair; it neither admits a new run nor creates a reservation.</summary>
+    /// <summary>
+    /// Decides the additional counted bytes of a repair. Without <paramref name="reserveOn"/> it only reads (an early answer); with it, the caller
+    /// holds the tenant lock in its transaction, and an allowed decision sets the hold on the operation so the check and the reservation are one
+    /// step. The operation's own current hold is excluded, so a repair that is re-admitted never competes with itself.
+    /// </summary>
     internal static async Task<BackupAdmissionDecision> AdmitReplicaRepairAsync(
         PlatformDbContext context,
         TenantId tenantId,
         BackupArtifact artifact,
-        BackupDestination targetDestination,
+        string storageProvider,
+        Guid storageConnectionId,
         StorageConnection? connection,
         DateTimeOffset now,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ReplicaRepairOperation? reserveOn = null)
     {
         var entitlement = await PostgreSqlTenantEntitlementReader.ResolveAsync(context, tenantId, now, cancellationToken);
         var policy = await TenantUsageEngine.ResolvePolicyAsync(context, tenantId, cancellationToken);
+        long additionalBytes = 0;
 
         if (policy.EnforcementMode != QuotaEnforcementMode.None && entitlement.StorageLimit is { IsUnlimited: false })
         {
-            long additionalBytes = 0;
-            var providerType = targetDestination.StorageProvider;
             var ownership = connection?.Ownership ?? StorageOwnership.PlatformManaged;
             var quotaScope = connection?.QuotaScope ?? StorageQuotaScopes.DefaultFor(ownership);
-            var targetFacts = new ReplicaStorageFacts(providerType, ownership, quotaScope, targetDestination.StorageConnectionId ?? Guid.Empty);
+            var targetFacts = new ReplicaStorageFacts(storageProvider, ownership, quotaScope, storageConnectionId);
 
             if (policy.AccountingMode == QuotaAccountingMode.PhysicalReplicaBytes)
             {
@@ -148,12 +153,14 @@ public sealed class PostgreSqlBackupAdmissionPolicy(
             if (additionalBytes > 0)
             {
                 var (usage, _) = await TenantUsageEngine.EnsureCurrentAsync(context, tenantId, policy, now, cancellationToken);
-                var decision = QuotaAdmissionDecision.Decide(entitlement, policy, usage.UsedBytes, usage.ReservedBytes, additionalBytes);
+                var ownHold = reserveOn is not null && context.Entry(reserveOn).State != EntityState.Detached ? reserveOn.ReservedQuotaBytes : 0;
+                var decision = QuotaAdmissionDecision.Decide(entitlement, policy, usage.UsedBytes, Math.Max(0, usage.ReservedBytes - ownHold), additionalBytes);
                 if (!decision.Allowed)
                     return BackupAdmissionDecision.Denied(decision.DenialCode!);
             }
         }
 
+        reserveOn?.ReserveQuota(additionalBytes);
         return BackupAdmissionDecision.Admitted;
     }
 

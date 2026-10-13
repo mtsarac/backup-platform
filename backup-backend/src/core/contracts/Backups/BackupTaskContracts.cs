@@ -1,6 +1,6 @@
 namespace BackupPlatform.Contracts.Backups;
 
-/// <summary>Capability an agent advertises when it executes every destination of a multi-destination backup (one artifact, N independently verified replicas) and reports each one.</summary>
+/// <summary>Capability an agent advertises when it executes destination-list snapshots: every destination of a backup (one artifact, N independently verified replicas) and reports each one. Required for every new run.</summary>
 public static class BackupTaskProtocol
 {
     public const string MultiDestinationCapability = "backup.multi-destination";
@@ -19,14 +19,11 @@ public sealed record BackupExecutionConfiguration
     public bool Encrypt { get; init; } = true;
     public bool TrustServerCertificate { get; init; }
     public string StagingReference { get; init; } = "default";
-    public string StorageProvider { get; init; } = "local";
-    public string? StorageExecutionLocation { get; init; }
-    /// <summary>The destination connection. A job may omit it (the tenant's default for <see cref="StorageProvider"/>); a run always carries the resolved one.</summary>
-    public Guid? StorageConnectionId { get; init; }
     public string StoragePrefix { get; init; } = string.Empty;
     public bool CopyOnly { get; init; } = true;
     public string ChecksumPolicy { get; init; } = "Preferred";
     public string CompressionPolicy { get; init; } = "Preferred";
+    /// <summary>The only destination source (at least one, exactly one primary). A job may leave a destination's connection null (the tenant default for its provider); a run always carries the resolved one.</summary>
     public IReadOnlyList<BackupDestinationContract> Destinations { get; init; } = [];
     public int RequiredVerifiedReplicaCount { get; init; } = 1;
 }
@@ -35,6 +32,7 @@ public sealed record BackupDestinationContract
 {
     public string StorageProvider { get; init; } = "local";
     public Guid? StorageConnectionId { get; init; }
+    /// <summary>"Backend" or "Agent"; required, never inferred from the provider.</summary>
     public string? StorageExecutionLocation { get; init; }
     public bool IsPrimary { get; init; }
 }
@@ -131,7 +129,7 @@ public sealed record BackupTaskReplica
 {
     public string StorageProvider { get; init; } = string.Empty;
     public string StorageTarget { get; init; } = string.Empty;
-    /// <summary>The snapshot destination this copy lives on. Null from agents that predate multi-destination runs (legal for single-destination runs only).</summary>
+    /// <summary>The snapshot destination this copy lives on. May be omitted only when the replica's provider identifies exactly one snapshot destination.</summary>
     public Guid? StorageConnectionId { get; init; }
     public string Key { get; init; } = string.Empty;
     public long SizeBytes { get; init; }

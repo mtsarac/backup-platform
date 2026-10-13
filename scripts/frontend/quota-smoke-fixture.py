@@ -113,15 +113,16 @@ def setup(options):
     _, token = tenant_admin.call('POST', f'/api/tenants/{tenant_id}/agent-enrollment-tokens', {})
     _, enrolled = Api(options.server, options.certificate).call('POST', '/api/agent/enroll', {
         'enrollmentToken': token['token'], 'installationId': str(uuid.uuid4()), 'agentVersion': '1.2.3', 'protocolVersion': '1.0',
-        'platform': 'linux', 'hostName': 'quota-smoke-host', 'capabilities': ['backup.file-system', 'backup.quota-bounded-upload']})
+        'platform': 'linux', 'hostName': 'quota-smoke-host', 'capabilities': ['backup.file-system', 'backup.quota-bounded-upload', 'backup.multi-destination']})
     agent = {'agentId': enrolled['agentId'], 'credentialId': enrolled['credential']['credentialId'], 'secret': enrolled['credential']['secret']}
-    reports = [{'identifier': key, 'support': 'Supported'} for key in ('backup.file-system', 'backup.quota-bounded-upload')]
+    reports = [{'identifier': key, 'support': 'Supported'} for key in ('backup.file-system', 'backup.multi-destination', 'backup.quota-bounded-upload')]
     canonical = ''.join(f'{len(report["identifier"])}:{report["identifier"]};9:Supported;0;\n' for report in reports)
     tenant_admin.call('PUT', '/api/agent/capabilities',
                       {'revision': 'c1-' + hashlib.sha256(canonical.encode()).hexdigest()[:48], 'capabilities': reports}, agent_headers(agent))
     _, job = tenant_admin.call('POST', f'/api/tenants/{tenant_id}/backup-jobs', {
         'name': 'Quota smoke backup', 'agentId': agent['agentId'], 'overlapPolicy': 'Queue',
-        'configuration': {'engine': 'mssql', 'database': 'master', 'host': 'sql-server', 'integratedSecurity': True, 'storageExecutionLocation': 'Backend'}})
+        'configuration': {'engine': 'mssql', 'database': 'master', 'host': 'sql-server', 'integratedSecurity': True, 'requiredVerifiedReplicaCount': 1,
+                          'destinations': [{'storageProvider': 'local', 'storageConnectionId': None, 'storageExecutionLocation': 'Backend', 'isPrimary': True}]}})
     state = {'tenantId': tenant_id, 'tenantName': tenant['name'], 'tenantAdmin': {'login': login, 'password': password}, 'agent': agent, 'jobId': job['id']}
     write_private(options.state, state)
     print(json.dumps({'tenantId': tenant_id, 'tenantName': tenant['name'], 'tenantAdminLogin': login, 'jobId': job['id'], 'state': options.state}))

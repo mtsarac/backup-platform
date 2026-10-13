@@ -3,9 +3,8 @@ using System.Collections;
 namespace BackupPlatform.StorageProviders.Abstractions;
 
 /// <summary>
-/// How bytes reach the storage. <see cref="AgentDirect"/>: the agent process itself writes to the storage (a disk or a share the
-/// agent can open). <see cref="BackendRelayed"/> is reserved for providers that stream through the backend; it is part of the
-/// contract so such a provider can be added without changing callers, and no provider implements it yet.
+/// How bytes reach the storage. <see cref="AgentDirect"/> means the agent accesses the provider itself;
+/// <see cref="BackendRelayed"/> means the backend streams data to and from the provider.
 /// </summary>
 public enum StorageTopology
 {
@@ -40,7 +39,7 @@ public sealed record StorageCapabilityId
     public override string ToString() => Value;
 }
 
-/// <summary>The storage capability identifiers (plan §5). A provider lists exactly those it genuinely supports.</summary>
+/// <summary>The storage capability identifiers. A provider lists exactly those it genuinely supports.</summary>
 public static class StorageCapabilityIds
 {
     public static StorageCapabilityId Delete { get; } = new("storage.delete");
@@ -99,7 +98,7 @@ public sealed class StorageCapabilities : IReadOnlyCollection<StorageCapabilityI
 /// <summary>What <see cref="IStorageProvider.PutAsync"/> does when the key is already taken. There is no implicit default behaviour: the caller states it.</summary>
 public enum StorageOverwritePolicy
 {
-    /// <summary>The write fails with <see cref="StorageFailureKind.AlreadyExists"/> and the existing object is untouched.</summary>
+    /// <summary>A conflicting existing object fails with <see cref="StorageFailureKind.AlreadyExists"/> and is untouched. Providers may adopt an identical owned object idempotently.</summary>
     Fail = 0,
 
     /// <summary>The new content replaces the old atomically, only after it was received and validated completely.</summary>
@@ -107,8 +106,8 @@ public enum StorageOverwritePolicy
 }
 
 /// <summary>
-/// Conditions of a write. When <see cref="ExpectedChecksum"/> or <see cref="ExpectedLength"/> is set, the provider validates the
-/// bytes it actually received before the object becomes visible under its key; a mismatch fails the write and leaves nothing behind.
+/// Conditions of a write. When <see cref="ExpectedChecksum"/> or <see cref="ExpectedLength"/> is set, a successful
+/// write must match the bytes actually received. A failed write may retain owned data requiring cleanup.
 /// </summary>
 public sealed record StoragePutOptions(
     StorageOverwritePolicy Overwrite,
@@ -199,10 +198,8 @@ public sealed class StorageException : Exception
 }
 
 /// <summary>
-/// The MVP storage operations: write, exists, metadata, verify and delete. The interface stays small on purpose; multipart,
-/// resume and server-side copy are capabilities a future provider can advertise and callers can discover, not methods every
-/// provider must implement. All operations are stream based (no whole-object buffering), honour the token, and use
-/// <see cref="StorageException"/> for expected failures.
+/// Storage operations for backup, restore and maintenance. Reads and writes stream without whole-object buffering,
+/// honour cancellation, and use <see cref="StorageException"/> for expected failures. Capabilities describe supported operations.
 /// </summary>
 public interface IStorageProvider
 {
@@ -213,9 +210,12 @@ public interface IStorageProvider
     StorageCapabilities Capabilities { get; }
 
     /// <summary>
-    /// Stores <paramref name="content"/> under <paramref name="key"/>. The object either appears complete or not at all: an
-    /// interrupted, cancelled, failed or integrity-mismatching write leaves nothing under the final key and no partial data behind.
-    /// <paramref name="progress"/> receives the cumulative bytes written. The returned metadata includes the checksum of the bytes written.
+    /// Stores <paramref name="content"/> under <paramref name="key"/> and validates the supplied length/checksum expectations before success.
+    /// Failed or cancelled writes may retain owned data: <see cref="StorageException.ObjectMayRemain"/> and
+    /// <see cref="StorageException.RemainingObjectKey"/> identify cleanup obligations. Caller cancellation remains
+    /// <see cref="OperationCanceledException"/> and may carry that storage failure in <see cref="Exception.Data"/>.
+    /// With <see cref="StorageOverwritePolicy.Fail"/>, an existing published object is never overwritten or deleted.
+    /// <paramref name="progress"/> receives the cumulative bytes written.
     /// </summary>
     Task<StorageObjectMetadata> PutAsync(
         StorageObjectKey key,
@@ -248,10 +248,10 @@ public interface IStorageProvider
 
     /// <summary>
     /// Lists the entries stored below <paramref name="prefix"/> (the whole provider scope when null), recursively, that were last
-    /// modified BEFORE <paramref name="modifiedBefore"/>. Younger entries are never returned, so a caller that only ever acts on old entries
-    /// cannot touch something that is still being written. Only entries whose location is expressible as a <see cref="StorageObjectKey"/> are
-    /// returned; anything else in the storage is not ours and is silently left out. Links are never followed or returned. A missing prefix
-    /// lists nothing. Providers without <see cref="StorageCapabilityIds.Enumerate"/> throw <see cref="StorageException"/> with
+    /// modified BEFORE <paramref name="modifiedBefore"/>. Younger entries are never returned; callers must still respect
+    /// active-operation ownership and <see cref="StorageEntry.InUse"/> before deleting an entry. Only entries whose location
+    /// is expressible as a <see cref="StorageObjectKey"/> are returned; anything else in the storage is silently left out.
+    /// Links are never followed or returned. A missing prefix lists nothing. Providers without <see cref="StorageCapabilityIds.Enumerate"/> throw <see cref="StorageException"/> with
     /// <see cref="StorageFailureKind.NotSupported"/>. This exists for maintenance sweeps (orphan and unpublished-upload cleanup); it is not a browsing API.
     /// </summary>
     IAsyncEnumerable<StorageEntry> EnumerateAsync(StorageObjectKey? prefix, DateTimeOffset modifiedBefore, CancellationToken cancellationToken);

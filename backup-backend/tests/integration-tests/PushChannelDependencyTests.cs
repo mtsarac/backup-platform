@@ -12,7 +12,8 @@ public sealed class PushChannelDependencyTests
     private static readonly string[] ForbiddenNamespacePrefixes =
     [
         "BackupPlatform.BackupProviders", "BackupPlatform.StorageProviders", "BackupPlatform.SnapshotProviders", "BackupPlatform.SecretProviders",
-        "BackupPlatform.Backups", "BackupPlatform.Storage", "BackupPlatform.Scheduling"
+        "BackupPlatform.Domain.Backups", "BackupPlatform.Application.Backups", "BackupPlatform.Infrastructure.Backups",
+        "BackupPlatform.Infrastructure.Scheduling", "BackupPlatform.Storage"
     ];
 
     private const BindingFlags AllMembers = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;

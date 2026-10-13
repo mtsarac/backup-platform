@@ -14,7 +14,7 @@ public sealed class BackupUiApiTests(PostgreSqlFixture fixture) : IClassFixture<
         var first = await scenario.StartRunAsync(job);
         var session = await scenario.SessionAsync(TenantRole.Operator);
         var body = new { name = "Updated job", agentId = scenario.Agent.AgentId,
-            configuration = new BackupExecutionConfiguration { Database = "updated-database", Host = "sql-server", IntegratedSecurity = true },
+            configuration = new BackupExecutionConfiguration { Database = "updated-database", Host = "sql-server", IntegratedSecurity = true, Destinations = BackupTestDestinations.LocalAgent },
             retryPolicy = new { maxAttempts = 5 }, overlapPolicy = "Queue" };
         using var edited = await session.SendAsync(HttpMethod.Put, scenario.Root + $"/backup-jobs/{job}", body);
         Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
@@ -66,7 +66,7 @@ public sealed class BackupUiApiTests(PostgreSqlFixture fixture) : IClassFixture<
         var job = await scenario.CreateJobAsync();
         var hostile = "password-secret/../../outside";
         var body = new { name = "Invalid", agentId = scenario.Agent.AgentId,
-            configuration = new BackupExecutionConfiguration { Database = "master", Host = "sql-server", IntegratedSecurity = true, StoragePrefix = hostile } };
+            configuration = new BackupExecutionConfiguration { Database = "master", Host = "sql-server", IntegratedSecurity = true, Destinations = BackupTestDestinations.LocalAgent, StoragePrefix = hostile } };
         using var response = await scenario.Admin.SendAsync(HttpMethod.Put, scenario.Root + $"/backup-jobs/{job}", body);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal("configuration.storagePrefix", AgentWorld.ReadJson(response).GetProperty("field").GetString());
@@ -165,7 +165,7 @@ public sealed class BackupUiApiTests(PostgreSqlFixture fixture) : IClassFixture<
     {
         name,
         agentId,
-        configuration = new BackupExecutionConfiguration { Database = "master", Host = "sql-server", IntegratedSecurity = true, StorageExecutionLocation = "Backend" },
+        configuration = new BackupExecutionConfiguration { Database = "master", Host = "sql-server", IntegratedSecurity = true, Destinations = BackupTestDestinations.LocalBackend },
         schedule,
         removeSchedule,
         retention,

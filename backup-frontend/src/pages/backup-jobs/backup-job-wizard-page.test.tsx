@@ -28,7 +28,7 @@ async function submit() {
 function makeJob(storageConnectionId: string | null = 'conn-local'): BackupJob {
   return {
     id: 'job-a', backupType: 'Full', createdAt: '2026-10-01T08:00:00Z', name: 'ERP backup', agentId: 'agent-a', enabled: true, overlapPolicy: 'Skip', schedule: null, nextOccurrenceAt: null, lastRun: null,
-    configuration: { engine: 'mssql', database: 'ERP', host: 'sql', port: null, integratedSecurity: true, databaseCredentialReference: null, encrypt: true, trustServerCertificate: false, stagingReference: 'default', storageProvider: 'local', storageConnectionId, storagePrefix: '', storageExecutionLocation: 'Agent', copyOnly: true, checksumPolicy: 'Required', compressionPolicy: 'Preferred' },
+    configuration: { engine: 'mssql', database: 'ERP', host: 'sql', port: null, integratedSecurity: true, databaseCredentialReference: null, encrypt: true, trustServerCertificate: false, stagingReference: 'default', storagePrefix: '', destinations: [{ storageProvider: 'local', storageConnectionId, storageExecutionLocation: 'Agent', isPrimary: true }], requiredVerifiedReplicaCount: 1, copyOnly: true, checksumPolicy: 'Required', compressionPolicy: 'Preferred' },
     retryPolicy: { maxAttempts: 3, initialDelaySeconds: 30, maxDelaySeconds: 300, backoff: 'Exponential', jitter: 0.2 },
     retention: { enabled: true, keepForSeconds: 1209600, deleteGracePeriodSeconds: 86400 },
   }
@@ -87,12 +87,17 @@ describe('iş formu', () => {
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalled())
     expect(vi.mocked(saveBackupJob).mock.calls[0][1].retention).toBeUndefined()
   })
-  it('gönderilen yapılandırmada storageConnectionId varsayılan olarak null gider', async () => {
+  it('yeni iş tek bir birincil local hedefle ve varsayılan bağlantı (null) ile gönderilir', async () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
     renderPage()
     await submit()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalled())
-    expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration.storageConnectionId).toBeNull()
+    const configuration = vi.mocked(saveBackupJob).mock.calls[0][1].configuration
+    expect(configuration.destinations).toEqual([{ storageProvider: 'local', storageConnectionId: null, storageExecutionLocation: 'Agent', isPrimary: true }])
+    expect(configuration.requiredVerifiedReplicaCount).toBe(1)
+    expect(configuration).not.toHaveProperty('storageProvider')
+    expect(configuration).not.toHaveProperty('storageConnectionId')
+    expect(configuration).not.toHaveProperty('storageExecutionLocation')
   })
   it('varsayılan hedef devre dışıysa yeni iş kaydında varsayılan seçimi engeli aşamaz', async () => {
     vi.mocked(getTenantConnections).mockResolvedValue({ items: [makeConnection({ enabled: false }), makeManaged()] })
@@ -107,7 +112,7 @@ describe('iş formu', () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
     await submit()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalled())
-    expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration).toMatchObject({ storageProvider: 'central', storageConnectionId: null, storageExecutionLocation: 'Backend' })
+    expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration.destinations).toEqual([{ storageProvider: 'central', storageConnectionId: null, storageExecutionLocation: 'Backend', isPrimary: true }])
   })
   it('tüm bağlantıları sahiplik ve kullanılabilirlikle listeler; kilitli, kapalı, planlanan ve desteklenmeyen hedefleri seçtirmez', async () => {
     vi.mocked(getTenantConnections).mockResolvedValue({ items: [
@@ -138,7 +143,7 @@ describe('iş formu', () => {
     expect(screen.getByLabelText('Storage Provider')).toHaveValue('central')
     await submit()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalled())
-    expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration).toMatchObject({ storageProvider: 'central', storageConnectionId: 'conn-central', storageExecutionLocation: 'Backend' })
+    expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration.destinations).toEqual([{ storageProvider: 'central', storageConnectionId: 'conn-central', storageExecutionLocation: 'Backend', isPrimary: true }])
     expect(vi.mocked(saveBackupJob).mock.calls[0][0]).toBe('tenant-a')
   })
   it.each(['disabled', 'locked', 'missing', 'unsupported'] as const)('düzenlemede mevcut %s hedef kimliğini korur ve değiştirmeden kaydedebilir', async state => {
@@ -155,7 +160,7 @@ describe('iş formu', () => {
     fireEvent.change(screen.getByLabelText('İş adı'), { target: { value: 'Changed name' } })
     await submit()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalled())
-    expect(vi.mocked(saveBackupJob).mock.calls[0]).toEqual(['tenant-a', expect.objectContaining({ name: 'Changed name', configuration: expect.objectContaining({ storageConnectionId: 'conn-local', storageProvider: 'local' }) }), 'job-a'])
+    expect(vi.mocked(saveBackupJob).mock.calls[0]).toEqual(['tenant-a', expect.objectContaining({ name: 'Changed name', configuration: expect.objectContaining({ destinations: [{ storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true }] }) }), 'job-a'])
   })
   it('başka sağlayıcıya geçip geri gelse bile mevcut açık kimliği otomatik olarak geri atamaz', async () => {
     renderPage('/tenants/tenant-a/backup-jobs/job-a/edit')
@@ -168,7 +173,7 @@ describe('iş formu', () => {
   })
   it.each(['storage_connection_disabled', 'storage_connection_unavailable'])('sonradan %s hatasında API durumunu yeniler; kimliği korur ve sahte başarı sunmaz', async code => {
     vi.mocked(getTenantConnections).mockResolvedValueOnce({ items: [makeConnection(), makeManaged()] }).mockResolvedValue({ items: [makeConnection(), makeManaged({ administrativelyDisabled: true })] })
-    vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(409, { code, field: 'configuration.storageConnectionId' }))
+    vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(409, { code, field: 'configuration.destinations[0].storageConnectionId' }))
     const { cache } = renderPage()
     const select = screen.getByLabelText('Depolama bağlantısı')
     await waitFor(() => expect(select).toBeEnabled())
@@ -178,7 +183,7 @@ describe('iş formu', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Kaydet' })).toBeDisabled())
     expect(select).toHaveValue('conn-central')
     expect(within(select).getByRole('option', { selected: true })).toBeDisabled()
-    expect(document.getElementById('configuration.storageConnectionId-error')).toHaveTextContent('Hedef depolama bağlantısı')
+    expect(document.getElementById('primary-storage-connection-error')).toHaveTextContent('Hedef depolama bağlantısı')
     expect(cache.getQueryData(['tenant', 'tenant-a', 'storage-connections', 'list'])).toEqual({ items: [makeConnection(), makeManaged({ administrativelyDisabled: true })] })
     expect(screen.getByRole('heading', { name: 'Yeni yedekleme işi' })).toBeInTheDocument()
     expect(saveBackupJob).toHaveBeenCalledTimes(1)

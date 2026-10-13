@@ -62,7 +62,7 @@ backup-backend/
   BackupPlatform.sln               Directory.Build.props, Directory.Packages.props, dotnet-tools.json
   .env.example                     every backend/agent/test setting, documented (no values)
   src/core/                        domain, application, contracts, infrastructure (EF Core / PostgreSQL)
-  src/modules/                     identity, tenancy, agents, backups, storage (scheduling, audit, notifications: placeholders)
+  src/modules/                     identity, tenancy, agents, managed-service, storage
   src/agent/                       core, transport, platform-windows, platform-linux
   src/providers/                   backup (abstractions, mssql), storage (abstractions, local, central), secret, snapshot
   src/hosts/                       api (ASP.NET Core backend), agent (Agent.Host)
@@ -178,14 +178,34 @@ configure appropriate directory/file ACLs (and Unix group/umask), not just agent
 Backend policy is configured with `Restores__LeaseDuration` (default 120 seconds), `Restores__UnclaimedExpiry` (one hour) and
 `Restores__SweepInterval` (15 seconds). Unclaimed expired requests release their pins rather than unexpectedly restoring much later.
 The Restore Wizard uses the same source eligibility, precheck and explicit overwrite contracts as the API.
+Each new wizard discovery, precheck/recheck or restore attempt gets its own idempotency key. A transport/5xx failure
+can retry the same captured request with the same key; a definitive rejection or changed inputs starts a new attempt.
+Agent, target, database, mode and option changes invalidate affected results and overwrite confirmation.
+Late responses cannot re-enable stale destructive restores or navigate after leaving the wizard.
 
 ## Automatic replica repair
 
-Discovery schedules missing destinations from the backup run's stored configuration, globally or for one tenant. Retryable work
-stays Pending with its retry schedule; terminal, cancelled and exhausted repair history is never automatically restarted.
-The chosen backend source is durably pinned under a live fenced lease before opening it. Repair verifies source SHA-256 and
-destination readback, and never deletes an existing destination object that rejected the upload with AlreadyExists.
-Repair quota checks belong to the managed-service admission policy and count only additional bytes within the configured scope; they do not reserve repair capacity.
+Discovery schedules missing destinations from the backup run's stored configuration, globally or for one tenant. SQL filters healthy
+artifacts and destinations with repair history before a bounded scan of at most 50 candidates per tick. Transactions and locks cover
+individual actionable artifacts. A process-shared keyset cursor survives new worker scopes and advances past denied/contended candidates;
+restarting the process starts a new pass. Retryable work stays Pending; terminal, cancelled and exhausted history is never automatically restarted.
+Manual and automatic repairs share database-enforced limits of four InProgress operations globally and two per tenant.
+Both claim paths serialize admission across backend nodes; expired InProgress leases keep their slots until recovery.
+Admission never terminalizes expired work. Recovery preserves its previous target before scheduling a retry.
+The chosen backend source and lease-specific target key are durably pinned before opening the source. New leases never reuse old target keys,
+so a delayed old cleanup cannot delete a takeover's copy. Active repair targets and partial uploads remain protected from orphan sweeps.
+Source SHA-256 and destination readback must verify before publication. AlreadyExists is TargetConflict, not AlreadyVerified: the operation
+and a non-restorable, quota-counted Quarantined replica are recorded atomically. Automatic and manual artifact deletion cannot remove quarantined
+objects; ownership/content reconciliation is required. Legacy non-exclusive crash targets are also quarantined instead of blindly deleted.
+Cancellation persists intent for the matching tenant, artifact and operation before signaling a local transfer.
+Repair quota holds reserve additional bytes under the tenant lock and remain counted until the operation becomes terminal.
+
+Apply `RepairTargetQuarantine` and `RepairTargetKeyCapacity` before deploying this repair change. Quarantine preserves existing replicas,
+backfills untracked terminal target conflicts, corrects their failure code, and invalidates only affected derived quota projections so the next
+usage/admission read rebuilds them. TargetKey capacity is 1024 characters, matching storage keys, so lease isolation preserves existing long scopes.
+Downgrading is refused while quarantined replicas or target keys longer than the older capacity exist; ownership and durable intent are never truncated.
+The shared provider key and backend completion limits are also 1024; the 128-character segment and 512-character job-prefix bounds remain.
+Deploy backend and agents together for this shared contract: older agents still reject keys longer than 512 characters.
 
 Apply the `ReplicaFallbackPinning` migration before running replica fallback: its PostgreSQL guards permit only live, pre-transfer
 download source changes, reject restore source changes after hand-off, and revalidate moved restore pins.
@@ -208,6 +228,11 @@ replicas are refused. Central reads use the existing optional `storage.read` pro
 storage resolver. The backend verifies an opened seekable file before response headers and hashes again while transferring;
 corrupt bytes can never produce a successful `Completed` session. A generated `backup-{artifactId}.bak` filename never uses
 persisted filesystem paths or browser input.
+For non-seekable sources, the final byte is withheld until exact EOF and SHA-256 verification. A corrupt, short or oversized
+source therefore cannot finish a successful response with the declared Content-Length: it returns an error before streaming,
+or aborts an incomplete body afterward. A corrupt prefix may already have been sent; clients must reject incomplete downloads.
+`TransferredBytes` counts bytes actually written, not bytes read for verification. Streaming uses one pooled 64 KiB buffer,
+without a whole-file memory buffer or an additional disk spool.
 
 Before headers are sent, an open failure or seekable checksum mismatch can fall back to another matching, verified, Available
 backend replica. The live session's hold switches atomically before the alternative is opened; tenant, user, checksum and size
@@ -249,6 +274,10 @@ artifact usage accounting, backup execution, restore execution or the job's rete
 | Real MSSQL + published Agent.Host | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName~AgentSmokeTests" -- xUnit.MaxParallelThreads=1` | everything above plus `BACKUP_PLATFORM_TEST_AGENT_HOST_PATH` |
 | Local restore acceptance | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName~MsSqlRestoreAcceptanceTests" -- xUnit.MaxParallelThreads=1` | PostgreSQL, published Agent.Host, two SQL instances with the same test login and shared staging; target port below |
 | Windows platform (DPAPI, ACLs, reparse points) | `dotnet test tests/windows-tests -c Release` | Windows; elsewhere every test is reported as *skipped*, never passed |
+
+Replica repair fault tests execute `ReplicaRepairService` with controlled source/readback failures and assert fenced cleanup
+and no replica publication. Worker integration uses scoped stores/services and awaits tracked completion instead of timer settling,
+then checks the persisted operation, destination bytes and unchanged backup run/artifact counts.
 
 Environment variables of the integration tests (values are yours; never commit them):
 
@@ -352,6 +381,15 @@ Every tenant owns two system default connections, created by the migration and o
 (the Central provider, platform-managed, scope `managed`). Existing replicas were assigned to them by the upgrade, so downloads, restores, retention and quota are unchanged.
 SFTP and Google Drive are backend-relayed tenant-managed providers, with pinned SFTP host identity and tenant/connection-bound Drive object ownership.
 
+Agent relay uploads, verification and deletion preserve their PostgreSQL session advisory lock against retention.
+Per backend node, admission allows up to `min(4, MaxPoolSize - 4)` simultaneous lock-holding transfers, never below zero,
+and at most two per tenant. Four connections remain available for normal API traffic and transfer re-fence/intent transactions.
+`MaxPoolSize` comes from the platform PostgreSQL connection string; values of four or fewer reject these transfers.
+Saturation returns `429 retry_later` with `Retry-After: 1`, without queuing another lock connection or touching remote storage.
+Request cancellation and host shutdown cancel admitted work; its lock connection closes before admission is released.
+Uncertain lock acquisition or failed unlock discards the associated connection pool to avoid leaking session locks,
+which can temporarily require other pooled connections to reconnect. Transfer locks are not replaced by a new durable lease protocol.
+
 | API | Access / behavior |
 |---|---|
 | `GET /api/tenants/{tenantId}/storage-providers`, `/storage-connections[/{id}]` | Viewer or higher; own tenant only (another tenant's id is `404`); every view carries server-computed `permissions` |
@@ -369,6 +407,15 @@ Managed Storage reuses the existing Central root: configure `Backups__Storage__C
 `Backups__Storage__Central__TenantScopes__<tenantId>` on the backend, with the matching
 `Agent__Backup__CentralStorage__RootDirectory` / `TenantScope` on the Agent. Physical paths stay operator configuration, not tenant API fields.
 Local and Central each allow one connection per tenant until distinct physical destinations are supported.
+
+A job and its run snapshots name their storage only in `configuration.destinations`: at least one entry, exactly one `isPrimary`, each with
+`storageProvider`, an explicit `storageExecutionLocation` (`Backend` or `Agent`) and, for SFTP/Google Drive, a `storageConnectionId` (omitted on a
+job it means the tenant's default connection for that provider; a run always snapshots the resolved id). There are no single-destination fields.
+Every new backup run requires an Agent that declares `backup.multi-destination` (it executes destination-list snapshots); an Agent that does not is
+refused at admission and cannot claim queued runs, so it can never write to a destination the snapshot did not name. Backend relay calls must name
+their destination with the `X-Storage-Destination` header, and completions report every destination they transferred to.
+Upgrading rewrites stored job and run configurations to this shape (`CanonicalBackupDestinations`): the former single destination becomes the
+primary entry with the same provider, connection and execution location.
 
 Persist and back up `Secrets__DataProtection__KeysDirectory`; backend nodes that share ciphertext must share the key ring.
 Losing the keys makes existing credentials unreadable. API responses expose only secret presence, field names and the last update time.

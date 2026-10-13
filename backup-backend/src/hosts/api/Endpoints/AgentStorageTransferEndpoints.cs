@@ -41,7 +41,7 @@ public static class AgentStorageTransferEndpoints
     }
 
     private static async Task<IResult> UploadAsync(Guid attemptId, HttpRequest request, ICurrentAgent agent,
-        IBackupRunStore runStore, IStorageConnectionStore connections, IBackupStorageResolver resolver, PlatformDbContext db, CancellationToken cancellationToken)
+        IBackupRunStore runStore, IStorageConnectionStore connections, IBackupStorageResolver resolver, PlatformDbContext db, AgentTransferAdmission admission, CancellationToken cancellationToken)
     {
         var fence = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: true, cancellationToken);
         if (fence.Failure is { } failure) return failure;
@@ -53,19 +53,19 @@ public static class AgentStorageTransferEndpoints
         var provider = resolver.Resolve(agent.Identity!.TenantId, fence.ProviderType!, fence.ConnectionId!.Value.ToString("D"));
         if (provider is null) return Results.Conflict(new AgentApiError { Error = "storage_not_configured", Message = "The storage connection is unavailable." });
 
-        return await WithAdvisoryLockAsync(db, fence.ConnectionId.Value, fence.Key!, async () =>
+        return await WithAdvisoryLockAsync(db, admission, request, agent.Identity!.TenantId, fence.ConnectionId.Value, fence.Key!, async token =>
         {
-            var verified = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: true, cancellationToken);
+            var verified = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: true, token);
             if (verified.Failure is { } failedAgain) return failedAgain;
             var command = new BackupLeaseCommand(agent.Identity!.TenantId, agent.Identity.AgentId, attemptId,
                 Guid.Parse(request.Headers[TaskStorageProtocol.LeaseHeader]!), DateTimeOffset.UtcNow);
-            if (await runStore.RecordTransferAsync(command, new BackupTransferIntent(fence.ConnectionId.Value, fence.Key!, request.ContentLength!.Value, expectedChecksum), cancellationToken)
+            if (await runStore.RecordTransferAsync(command, new BackupTransferIntent(fence.ConnectionId.Value, fence.Key!, request.ContentLength!.Value, expectedChecksum), token)
                 != BackupMutationResult.Accepted)
                 return Results.Conflict(new AgentApiError { Error = "lease_conflict", Message = "The upload intent could not be recorded safely." });
             try
             {
                 var options = new StoragePutOptions(StorageOverwritePolicy.Fail, new ContentChecksum(ChecksumAlgorithm.Sha256, expectedChecksum), request.ContentLength);
-                var meta = await provider.PutAsync(new StorageObjectKey(fence.Key!), request.Body, options, null, cancellationToken);
+                var meta = await provider.PutAsync(new StorageObjectKey(fence.Key!), request.Body, options, null, token);
                 return Results.Ok(new TaskStorageResponse
                 {
                     Exists = true, SizeBytes = meta.SizeBytes, Checksum = meta.Checksum?.Hex, LastModifiedUtc = meta.LastModifiedUtc
@@ -110,20 +110,20 @@ public static class AgentStorageTransferEndpoints
     }
 
     private static async Task<IResult> VerifyBackupAsync(Guid attemptId, TaskStorageVerifyRequest body, HttpRequest request, ICurrentAgent agent,
-        IBackupRunStore runStore, IStorageConnectionStore connections, IBackupStorageResolver resolver, PlatformDbContext db, CancellationToken cancellationToken)
+        IBackupRunStore runStore, IStorageConnectionStore connections, IBackupStorageResolver resolver, PlatformDbContext db, AgentTransferAdmission admission, CancellationToken cancellationToken)
     {
         var fence = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: false, cancellationToken);
         if (fence.Failure is { } failure) return failure;
         var provider = resolver.Resolve(agent.Identity!.TenantId, fence.ProviderType!, fence.ConnectionId!.Value.ToString("D"));
         if (provider is null) return Results.Conflict(new AgentApiError { Error = "storage_not_configured", Message = "Storage not configured." });
-        return await WithAdvisoryLockAsync(db, fence.ConnectionId.Value, fence.Key!, async () =>
+        return await WithAdvisoryLockAsync(db, admission, request, agent.Identity!.TenantId, fence.ConnectionId.Value, fence.Key!, async token =>
         {
-            var verified = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: false, cancellationToken);
+            var verified = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: false, token);
             if (verified.Failure is { } failedAgain) return failedAgain;
             try
             {
                 var expectation = new StorageVerificationExpectation(body.SizeBytes, new ContentChecksum(ChecksumAlgorithm.Sha256, body.Checksum));
-                var result = await provider.VerifyAsync(new StorageObjectKey(fence.Key!), expectation, cancellationToken);
+                var result = await provider.VerifyAsync(new StorageObjectKey(fence.Key!), expectation, token);
                 return Results.Ok(new TaskStorageResponse
                 {
                     Exists = result.Status != StorageVerificationStatus.Missing,
@@ -138,19 +138,19 @@ public static class AgentStorageTransferEndpoints
     }
 
     private static async Task<IResult> DeleteBackupAsync(Guid attemptId, HttpRequest request, ICurrentAgent agent,
-        IBackupRunStore runStore, IStorageConnectionStore connections, IBackupStorageResolver resolver, PlatformDbContext db, CancellationToken cancellationToken)
+        IBackupRunStore runStore, IStorageConnectionStore connections, IBackupStorageResolver resolver, PlatformDbContext db, AgentTransferAdmission admission, CancellationToken cancellationToken)
     {
         var fence = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: false, cancellationToken);
         if (fence.Failure is { } failure) return failure;
         var provider = resolver.Resolve(agent.Identity!.TenantId, fence.ProviderType!, fence.ConnectionId!.Value.ToString("D"));
         if (provider is null) return Results.Conflict(new AgentApiError { Error = "storage_not_configured", Message = "Storage not configured." });
-        return await WithAdvisoryLockAsync(db, fence.ConnectionId.Value, fence.Key!, async () =>
+        return await WithAdvisoryLockAsync(db, admission, request, agent.Identity!.TenantId, fence.ConnectionId.Value, fence.Key!, async token =>
         {
-            var verified = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: false, cancellationToken);
+            var verified = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: false, token);
             if (verified.Failure is { } failedAgain) return failedAgain;
             try
             {
-                var existed = await provider.DeleteAsync(new StorageObjectKey(fence.Key!), cancellationToken);
+                var existed = await provider.DeleteAsync(new StorageObjectKey(fence.Key!), token);
                 return Results.Ok(new TaskStorageResponse { Exists = existed });
             }
             catch (StorageException ex) { return StorageError(ex); }
@@ -192,18 +192,20 @@ public static class AgentStorageTransferEndpoints
     }
 
     private static async Task<IResult> VerifyRestoreAsync(Guid attemptId, TaskStorageVerifyRequest body, HttpRequest request, ICurrentAgent agent,
-        IRestoreStore restoreStore, IDownloadStore downloadStore, IBackupStorageResolver resolver, PlatformDbContext db, CancellationToken cancellationToken)
+        IRestoreStore restoreStore, IDownloadStore downloadStore, IBackupStorageResolver resolver, PlatformDbContext db, AgentTransferAdmission admission, CancellationToken cancellationToken)
     {
         var fence = await FenceRestoreAsync(attemptId, request, agent, restoreStore, downloadStore, cancellationToken);
         if (fence.Failure is { } failure) return failure;
         var provider = resolver.Resolve(agent.Identity!.TenantId, fence.ProviderType!, fence.ConnectionId!.Value.ToString("D"));
         if (provider is null) return Results.Conflict(new AgentApiError { Error = "storage_not_configured", Message = "Storage not configured." });
-        return await WithAdvisoryLockAsync(db, fence.ConnectionId.Value, fence.Key!, async () =>
+        return await WithAdvisoryLockAsync(db, admission, request, agent.Identity!.TenantId, fence.ConnectionId.Value, fence.Key!, async token =>
         {
+            var verified = await FenceRestoreAsync(attemptId, request, agent, restoreStore, downloadStore, token);
+            if (verified.Failure is { } failedAgain) return failedAgain;
             try
             {
                 var expectation = new StorageVerificationExpectation(body.SizeBytes, new ContentChecksum(ChecksumAlgorithm.Sha256, body.Checksum));
-                var result = await provider.VerifyAsync(new StorageObjectKey(fence.Key!), expectation, cancellationToken);
+                var result = await provider.VerifyAsync(new StorageObjectKey(fence.Key!), expectation, token);
                 return Results.Ok(new TaskStorageResponse
                 {
                     Exists = result.Status != StorageVerificationStatus.Missing,
@@ -222,7 +224,7 @@ public static class AgentStorageTransferEndpoints
     /// token), the destination named by <see cref="TaskStorageProtocol.DestinationHeader"/> against the run's SNAPSHOT (a connection id the snapshot does not
     /// contain, or one that is not backend-relayed, is refused), the key against the run's own layout, and the connection against what it is NOW (it must still
     /// be the tenant's and of the snapshot's provider; a write additionally needs it enabled). The destination header is a selector, never an authority.
-    /// A call without the header (an agent that predates multi-destination runs) is understood only for a single-destination run.
+    /// A call without the header is refused.
     /// </summary>
     private static async Task<(IResult? Failure, Guid? ConnectionId, string? Key, string? ProviderType)> FenceBackupAsync(
         Guid attemptId, HttpRequest request, ICurrentAgent agent, IBackupRunStore store, IStorageConnectionStore connections, bool write, CancellationToken cancellationToken)
@@ -232,13 +234,8 @@ public static class AgentStorageTransferEndpoints
         if (!Guid.TryParse(request.Headers[TaskStorageProtocol.LeaseHeader], out var lease) || lease == Guid.Empty
             || request.Headers[TaskStorageProtocol.KeyHeader].FirstOrDefault() is not { Length: > 0 } key)
             return (Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "Missing lease or key headers." }), null, null, null);
-        Guid? named = null;
-        if (request.Headers.TryGetValue(TaskStorageProtocol.DestinationHeader, out var header))
-        {
-            if (!Guid.TryParse(header.FirstOrDefault(), out var parsed) || parsed == Guid.Empty)
-                return (Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "The destination header is invalid." }), null, null, null);
-            named = parsed;
-        }
+        if (!Guid.TryParse(request.Headers[TaskStorageProtocol.DestinationHeader].FirstOrDefault(), out var named) || named == Guid.Empty)
+            return (Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "The destination header is missing or invalid." }), null, null, null);
 
         var claim = await store.GetAttemptAsync(agent.Identity.TenantId, agent.Identity.AgentId, attemptId, cancellationToken);
         if (claim is null || claim.Run.CurrentAttempt.Id != attemptId || !claim.Attempt.HasLease(lease, DateTimeOffset.UtcNow))
@@ -246,10 +243,7 @@ public static class AgentStorageTransferEndpoints
         if (write && claim.MaxArtifactBytes is { } maximum && (request.ContentLength is null || request.ContentLength.Value > maximum))
             return (Results.Conflict(new AgentApiError { Error = "quota_exceeded", Message = "The artifact exceeds this run's reserved storage capacity." }), null, null, null);
 
-        var snapshot = claim.Run.Configuration.ResolveEffectiveDestinations();
-        var destination = named is { } id
-            ? snapshot.SingleOrDefault(candidate => candidate.StorageConnectionId == id)
-            : snapshot.Count == 1 ? snapshot[0] : null;
+        var destination = claim.Run.Configuration.Destinations.SingleOrDefault(candidate => candidate.StorageConnectionId == named);
         if (destination is not { StorageProvider: "sftp" or "google-drive", StorageExecutionLocation: BackupStorageExecutionLocation.Backend, StorageConnectionId: { } connectionId })
             return (Results.Conflict(new AgentApiError { Error = "destination_not_authorized", Message = "The destination is not part of this run." }), null, null, null);
 
@@ -296,25 +290,59 @@ public static class AgentStorageTransferEndpoints
             FailureKind = exception.Kind.ToString(), ObjectMayRemain = exception.ObjectMayRemain, RemainingObjectKey = exception.RemainingObjectKey?.Value
         });
 
-    private static async Task<IResult> WithAdvisoryLockAsync(PlatformDbContext db, Guid connectionId, string key, Func<Task<IResult>> action, CancellationToken cancellationToken)
+    private static async Task<IResult> WithAdvisoryLockAsync(PlatformDbContext db, AgentTransferAdmission admission,
+        HttpRequest request, TenantId tenant, Guid connectionId, string key, Func<CancellationToken, Task<IResult>> action, CancellationToken cancellationToken)
     {
-        var connection = (NpgsqlConnection)db.Database.GetDbConnection();
-        if (connection.State != System.Data.ConnectionState.Open) await connection.OpenAsync(cancellationToken);
-        var lockId = BackupTransferLock.Id(connectionId, key);
-        await using (var acquire = new NpgsqlCommand("SELECT pg_advisory_lock(@id);", connection))
+        using var permit = admission.TryAcquire(tenant);
+        if (permit is not { IsAcquired: true })
         {
-            acquire.Parameters.AddWithValue("id", lockId);
-            await acquire.ExecuteNonQueryAsync(cancellationToken);
+            await AgentRateLimiting.WriteRateLimitedAsync(request.HttpContext, TimeSpan.FromSeconds(1), cancellationToken);
+            return Results.Empty;
         }
+
+        using var stopping = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, admission.Stopping);
+        var connection = (NpgsqlConnection)db.Database.GetDbConnection();
+        var lockId = BackupTransferLock.Id(connectionId, key);
         try
         {
-            return await action();
+            try
+            {
+                if (connection.State != System.Data.ConnectionState.Open) await connection.OpenAsync(stopping.Token);
+                await using var acquire = new NpgsqlCommand("SELECT pg_advisory_lock(@id);", connection);
+                acquire.Parameters.AddWithValue("id", lockId);
+                await acquire.ExecuteNonQueryAsync(stopping.Token);
+            }
+            catch
+            {
+                // Cancellation can race the server acquiring the lock: never pool a session with uncertain ownership.
+                NpgsqlConnection.ClearPool(connection);
+                throw;
+            }
+
+            try
+            {
+                return await action(stopping.Token);
+            }
+            finally
+            {
+                try
+                {
+                    await using var release = new NpgsqlCommand("SELECT pg_advisory_unlock(@id);", connection);
+                    release.Parameters.AddWithValue("id", lockId);
+                    if (!Equals(true, await release.ExecuteScalarAsync(CancellationToken.None)))
+                        throw new InvalidOperationException("The storage transfer advisory lock was not owned.");
+                }
+                catch
+                {
+                    // ClearPool also discards this checked-out session on close, even with No Reset On Close enabled.
+                    NpgsqlConnection.ClearPool(connection);
+                    throw;
+                }
+            }
         }
         finally
         {
-            await using var release = new NpgsqlCommand("SELECT pg_advisory_unlock(@id);", connection);
-            release.Parameters.AddWithValue("id", lockId);
-            await release.ExecuteNonQueryAsync(CancellationToken.None);
+            await connection.CloseAsync();
         }
     }
 

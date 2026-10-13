@@ -13,7 +13,8 @@ public enum BackupReplicaStatus
     DeletePending,
     Deleting,
     DeleteFailed,
-    Deleted
+    Deleted,
+    Quarantined
 }
 
 public enum BackupStorageExecutionLocation { Backend = 1, Agent = 2 }
@@ -26,7 +27,7 @@ public enum BackupStorageExecutionLocation { Backend = 1, Agent = 2 }
 public static class BackupReplicaStorage
 {
     public static readonly IReadOnlyList<BackupReplicaStatus> OccupyingStatuses =
-        [BackupReplicaStatus.Available, BackupReplicaStatus.DeletePending, BackupReplicaStatus.Deleting, BackupReplicaStatus.DeleteFailed];
+        [BackupReplicaStatus.Available, BackupReplicaStatus.DeletePending, BackupReplicaStatus.Deleting, BackupReplicaStatus.DeleteFailed, BackupReplicaStatus.Quarantined];
 
     public static bool Occupies(BackupReplicaStatus status) => status != BackupReplicaStatus.Deleted;
 }
@@ -134,6 +135,32 @@ public sealed class BackupReplica : ITenantOwned
     /// </summary>
     public bool IsRestorable(DateTimeOffset now) => VerificationState == "Verified" &&
         (Status == BackupReplicaStatus.Available || (Status == BackupReplicaStatus.DeletePending && DeleteAfter > now));
+
+    /// <summary>Preserves a conflicting object without authorizing deletion of bytes whose ownership is unknown.</summary>
+    public void Quarantine()
+    {
+        if (Status != BackupReplicaStatus.Available || VerificationState == "Verified")
+            throw new InvalidOperationException("Only an unverified, untouched object can be quarantined.");
+        Status = BackupReplicaStatus.Quarantined;
+    }
+
+    /// <summary>Re-registers an unverified orphan that had previously been deleted or recorded, ensuring unconfirmed late writes remain accounted for retention cleanup.</summary>
+    public void ReopenOrphan(DateTimeOffset now)
+    {
+        if (VerificationState == "Verified") throw new InvalidOperationException("A verified replica cannot become an orphan.");
+        Status = BackupReplicaStatus.DeletePending;
+        DeleteRequestedAt = BackupGuard.Timestamp(now);
+        DeleteReason = BackupDeleteReason.RetentionExpired;
+        DeleteRequestedByUserId = null;
+        DeleteAfter = BackupGuard.Timestamp(now);
+        DeleteLeaseToken = null;
+        DeleteLeaseOwner = null;
+        DeleteLeaseExpiresAt = null;
+        DeleteNextAttemptAt = null;
+        DeleteFailureCode = null;
+        DeletedAt = null;
+        DeleteAttempts = 0;
+    }
 
     /// <summary>Available to DeletePending. False (and no change) in any other state, so concurrent requesters cannot both win.</summary>
     internal bool RequestDelete(DateTimeOffset now, BackupDeleteReason reason, TimeSpan grace, Guid? requestedBy)

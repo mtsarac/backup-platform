@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+/// <reference lib="es2024.promise" />
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -11,6 +12,7 @@ import * as RestoreApi from './api'
 import * as AgentApi from '@/features/agents/api'
 import * as ArtifactApi from '@/features/artifacts/api'
 import type { RestorePage, RestoreTargetsResponse, RestoreView } from './types'
+import { ApiError } from '@/lib/api/client'
 
 const tenancy = vi.hoisted(() => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => tenancy }))
@@ -193,6 +195,57 @@ const sampleRestorePage: RestorePage = {
   pageSize: 25,
 }
 
+const passedPrecheck: RestoreView = {
+  ...sampleRestore,
+  id: 'precheck-current',
+  purpose: 'Precheck',
+  status: 'Succeeded',
+  result: {
+    preCheck: [{ checkId: 'target.safe', status: 'Passed', reasonCode: 'ok', message: 'Current target checked.' }],
+    warnings: [], sourceBackup: null, targetServer: null, fileMappings: [],
+    startedAt: null, finishedAt: null, restoreStartedAt: null, restoreFinishedAt: null,
+    checksumVerified: true, backupVerified: true, databaseState: 'ONLINE', targetStateNote: null,
+  },
+}
+
+const discoveredDatabases: RestoreView = {
+  ...passedPrecheck,
+  id: 'discovery-current',
+  purpose: 'Discovery',
+  result: {
+    ...passedPrecheck.result!,
+    discovery: {
+      instance: { engine: 'MSSQL', serverName: 'localhost', instanceName: null, version: null, edition: null, hostPlatform: null },
+      databases: [
+        { name: 'SalesDB', isSystem: false, availability: 'ONLINE' },
+        { name: 'OtherDB', isSystem: false, availability: 'ONLINE' },
+      ],
+    },
+  },
+}
+
+function renderWizard() {
+  return renderWithClient(
+    <Routes>
+      <Route path="/tenants/:tenantId/artifacts/:id/restore" element={<RestoreWizardPage />} />
+      <Route path="/tenants/:tenantId/artifacts/:id" element={<p>Backup details opened</p>} />
+      <Route path="/tenants/:tenantId/restores/:id" element={<p>Restore execution opened</p>} />
+    </Routes>,
+    '/tenants/tenant-a/artifacts/artifact-1/restore',
+  )
+}
+
+async function openModeSettings() {
+  fireEvent.click(await screen.findByRole('button', { name: /Devam et: Restore Modu/i }))
+}
+
+async function selectReplaceDatabase() {
+  fireEvent.click(screen.getByRole('button', { name: /Replace Existing Database/i }))
+  const databases = await screen.findByRole('combobox', { name: 'Üzerine Yazılacak Veritabanı' })
+  fireEvent.change(databases, { target: { value: 'SalesDB' } })
+  fireEvent.change(screen.getByRole('textbox', { name: /Onaylamak için veritabanı adını/i }), { target: { value: 'SalesDB' } })
+}
+
 function renderWithClient(ui: React.ReactElement, initialRoute = '/') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
@@ -210,7 +263,9 @@ beforeEach(() => {
   tenancy.canOperate = true
 
   vi.mocked(RestoreApi.getRestores).mockResolvedValue(sampleRestorePage)
-  vi.mocked(RestoreApi.getRestore).mockResolvedValue(sampleRestore)
+  vi.mocked(RestoreApi.getRestore).mockImplementation((_tenant, id) => Promise.resolve(
+    id === discoveredDatabases.id ? discoveredDatabases : id === passedPrecheck.id ? passedPrecheck : sampleRestore,
+  ))
   vi.mocked(RestoreApi.getRestoreTargets).mockResolvedValue(sampleTargets)
   vi.mocked(AgentApi.getAgents).mockResolvedValue([
     {
@@ -232,6 +287,7 @@ beforeEach(() => {
   vi.mocked(ArtifactApi.getArtifact).mockResolvedValue(sampleArtifact)
   vi.mocked(RestoreApi.startRestorePrecheck).mockResolvedValue(sampleRestore)
   vi.mocked(RestoreApi.startRestore).mockResolvedValue(sampleRestore)
+  vi.mocked(RestoreApi.startRestoreDiscovery).mockResolvedValue(discoveredDatabases)
 })
 
 afterEach(() => {
@@ -313,6 +369,310 @@ describe('RestoreDetailPage', () => {
 })
 
 describe('RestoreWizardPage', () => {
+  it('starts an explicit recheck with a fresh operation key and gates execution until it finishes', async () => {
+    const recheck = Promise.withResolvers<RestoreView>()
+    vi.mocked(RestoreApi.startRestorePrecheck)
+      .mockResolvedValueOnce(passedPrecheck)
+      .mockReturnValueOnce(recheck.promise)
+    vi.mocked(RestoreApi.getRestore).mockResolvedValue(passedPrecheck)
+    renderWizard()
+    await openModeSettings()
+    fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i }))
+    expect(await screen.findByText('Current target checked.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Yeniden Kontrol Et/i }))
+    await waitFor(() => expect(RestoreApi.startRestorePrecheck).toHaveBeenCalledTimes(2))
+    const [first, second] = vi.mocked(RestoreApi.startRestorePrecheck).mock.calls
+    expect(second[3]).not.toBe(first[3])
+    expect(second[2]).toEqual(first[2])
+    expect(screen.queryByText('Current target checked.')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Olarak Restore Başlat/i })).toBeDisabled()
+    await act(async () => { recheck.resolve({ ...passedPrecheck, id: 'precheck-fresh' }) })
+    expect(await screen.findByRole('button', { name: /Olarak Restore Başlat/i })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: /Olarak Restore Başlat/i }))
+    await waitFor(() => expect(RestoreApi.startRestore).toHaveBeenCalled())
+    expect(vi.mocked(RestoreApi.startRestore).mock.calls[0][2].precheckId).toBe('precheck-fresh')
+  })
+
+  it.each([new TypeError('network lost'), new ApiError(503)])('retries an ambiguous precheck with the same key and payload: %s', async (failure) => {
+    vi.mocked(RestoreApi.startRestorePrecheck).mockRejectedValueOnce(failure).mockResolvedValueOnce(passedPrecheck)
+    vi.mocked(RestoreApi.getRestore).mockResolvedValue(passedPrecheck)
+    renderWizard()
+    await openModeSettings()
+    fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i }))
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Tekrar Dene/i }))
+    expect(await screen.findByText('Current target checked.')).toBeInTheDocument()
+    const [first, second] = vi.mocked(RestoreApi.startRestorePrecheck).mock.calls
+    expect(second[3]).toBe(first[3])
+    expect(second[2]).toBe(first[2])
+  })
+
+  it('starts a fresh precheck after a definitive rejection', async () => {
+    vi.mocked(RestoreApi.startRestorePrecheck).mockRejectedValueOnce(new ApiError(409)).mockResolvedValueOnce(passedPrecheck)
+    renderWizard()
+    await openModeSettings()
+    fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i }))
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i }))
+    expect(await screen.findByText('Current target checked.')).toBeInTheDocument()
+    const [first, second] = vi.mocked(RestoreApi.startRestorePrecheck).mock.calls
+    expect(second[3]).not.toBe(first[3])
+  })
+
+  it('abandons an ambiguous precheck attempt after database A→B→A rather than replaying its key', async () => {
+    vi.mocked(RestoreApi.startRestorePrecheck).mockRejectedValueOnce(new TypeError('response lost')).mockResolvedValueOnce(passedPrecheck)
+    renderWizard()
+    await openModeSettings()
+    fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i }))
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    const database = screen.getByRole('textbox', { name: 'Yeni Veritabanı Adı' })
+    fireEvent.change(database, { target: { value: 'OtherDB' } })
+    fireEvent.change(database, { target: { value: 'SalesDB_restored' } })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i }))
+    expect(await screen.findByText('Current target checked.')).toBeInTheDocument()
+    const [first, fresh] = vi.mocked(RestoreApi.startRestorePrecheck).mock.calls
+    expect(fresh[3]).not.toBe(first[3])
+    expect(fresh[2]).toEqual(first[2])
+  })
+
+  it('retries ambiguous discovery unchanged, but a fresh refresh gets a new key and clears the selection', async () => {
+    vi.mocked(RestoreApi.startRestoreDiscovery)
+      .mockRejectedValueOnce(new TypeError('connection lost'))
+      .mockResolvedValue(discoveredDatabases)
+    renderWizard()
+    await openModeSettings()
+    fireEvent.click(screen.getByRole('button', { name: /Replace Existing Database/i }))
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Tekrar Dene' }))
+    const databases = await screen.findByRole('combobox', { name: 'Üzerine Yazılacak Veritabanı' })
+    fireEvent.change(databases, { target: { value: 'SalesDB' } })
+    fireEvent.change(screen.getByRole('textbox', { name: /Onaylamak için/i }), { target: { value: 'SalesDB' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Sunucudan Yenile' }))
+    expect(await screen.findByRole('combobox', { name: 'Üzerine Yazılacak Veritabanı' })).toHaveValue('')
+    expect(screen.getByRole('textbox', { name: /Onaylamak için/i })).toHaveValue('')
+    const [first, retry, fresh] = vi.mocked(RestoreApi.startRestoreDiscovery).mock.calls
+    expect(retry[3]).toBe(first[3])
+    expect(retry[2]).toBe(first[2])
+    expect(fresh[3]).not.toBe(first[3])
+    expect(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i })).toBeDisabled()
+  })
+
+  it('retries ambiguous execution with the same key and immutable payload, then uses a fresh key after input changes', async () => {
+    vi.mocked(RestoreApi.startRestorePrecheck).mockResolvedValue(passedPrecheck)
+    vi.mocked(RestoreApi.startRestore)
+      .mockRejectedValueOnce(new TypeError('response lost'))
+      .mockRejectedValueOnce(new ApiError(503))
+      .mockResolvedValueOnce(sampleRestore)
+    renderWizard()
+    await openModeSettings()
+    fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /Olarak Restore Başlat/i }))
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Tekrar Dene' }))
+    await waitFor(() => expect(RestoreApi.startRestore).toHaveBeenCalledTimes(2))
+    expect(await screen.findByRole('button', { name: 'Tekrar Dene' })).toBeEnabled()
+    const [first, retry] = vi.mocked(RestoreApi.startRestore).mock.calls
+    expect(retry[3]).toBe(first[3])
+    expect(retry[2]).toBe(first[2])
+    fireEvent.click(screen.getByRole('button', { name: /Mod Ayarlarına Dön/i }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Yeni Veritabanı Adı' }), { target: { value: 'ChangedDB' } })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /Olarak Restore Başlat/i }))
+    expect(await screen.findByText('Restore execution opened')).toBeInTheDocument()
+    const fresh = vi.mocked(RestoreApi.startRestore).mock.calls[2]
+    expect(fresh[3]).not.toBe(first[3])
+    expect(fresh[2].databaseName).toBe('ChangedDB')
+    expect(first[2].databaseName).toBe('SalesDB_restored')
+  })
+
+  it.each(['database', 'mode', 'checksum', 'verify backup', 'terminate connections'] as const)(
+    'invalidates an in-flight destructive precheck on %s A→B→A and ignores its late response',
+    async (field) => {
+      const obsolete = Promise.withResolvers<RestoreView>()
+      vi.mocked(RestoreApi.startRestorePrecheck).mockReturnValueOnce(obsolete.promise).mockResolvedValueOnce(passedPrecheck)
+      renderWizard()
+      await openModeSettings()
+      await selectReplaceDatabase()
+      const run = screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i })
+      fireEvent.click(run)
+      fireEvent.click(run)
+      await waitFor(() => expect(RestoreApi.startRestorePrecheck).toHaveBeenCalledTimes(1))
+      if (field === 'database') {
+        const databases = screen.getByRole('combobox', { name: 'Üzerine Yazılacak Veritabanı' })
+        fireEvent.change(databases, { target: { value: 'OtherDB' } })
+        fireEvent.change(databases, { target: { value: 'SalesDB' } })
+      } else if (field === 'mode') {
+        fireEvent.click(screen.getByRole('button', { name: /New Database/i }))
+        fireEvent.click(screen.getByRole('button', { name: /Replace Existing Database/i }))
+        fireEvent.change(await screen.findByRole('combobox', { name: 'Üzerine Yazılacak Veritabanı' }), { target: { value: 'SalesDB' } })
+      } else {
+        const name = field === 'checksum' ? 'SHA-256 Checksum Doğrula'
+          : field === 'verify backup' ? 'RESTORE VERIFYONLY Çalıştır'
+          : 'Mevcut aktif bağlantıları sonlandır (WITH ROLLBACK IMMEDIATE)'
+        fireEvent.click(screen.getByRole('checkbox', { name }))
+        fireEvent.click(screen.getByRole('checkbox', { name }))
+      }
+      expect(screen.getByRole('textbox', { name: /Onaylamak için/i })).toHaveValue('')
+      await act(async () => { obsolete.resolve(passedPrecheck) })
+      expect(screen.queryByText('Current target checked.')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Olarak Restore Başlat/i })).not.toBeInTheDocument()
+      expect(RestoreApi.startRestore).not.toHaveBeenCalled()
+      fireEvent.change(screen.getByRole('textbox', { name: /Onaylamak için/i }), { target: { value: 'SalesDB' } })
+      await waitFor(() => expect(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i })).toBeEnabled())
+      fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i }))
+      expect(await screen.findByText('Current target checked.')).toBeInTheDocument()
+      const [first, second] = vi.mocked(RestoreApi.startRestorePrecheck).mock.calls
+      expect(second[3]).not.toBe(first[3])
+      expect(second[2]).toEqual(first[2])
+    },
+  )
+
+  it.each(['agent', 'configured target', 'target type', 'host', 'port', 'credential', 'encrypt', 'trust certificate'] as const)(
+    'clears discovery, selection and precheck on target %s A→B→A and ignores obsolete polling',
+    async (field) => {
+      const obsoletePoll = Promise.withResolvers<RestoreView>()
+      vi.mocked(RestoreApi.getRestoreTargets).mockResolvedValue({
+        ...sampleTargets,
+        agents: [sampleTargets.agents[0], { ...sampleTargets.agents[0], agentId: 'agent-other' }],
+        targets: [sampleTargets.targets[0], { ...sampleTargets.targets[0], jobId: 'job-other', target: { ...sampleTargets.targets[0].target, host: 'other-server' } }],
+      })
+      vi.mocked(RestoreApi.startRestorePrecheck).mockResolvedValue({ ...passedPrecheck, status: 'Running', result: null })
+      vi.mocked(RestoreApi.getRestore).mockImplementation((_tenant, id) => id === passedPrecheck.id ? obsoletePoll.promise : Promise.resolve(discoveredDatabases))
+      renderWizard()
+      await screen.findByRole('combobox', { name: 'Agent' })
+      const custom = !['agent', 'configured target', 'target type'].includes(field)
+      if (custom) fireEvent.click(screen.getByRole('radio', { name: 'Özel Bağlantı' }))
+      await openModeSettings()
+      await selectReplaceDatabase()
+      fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i }))
+      expect(await screen.findByRole('button', { name: /Olarak Restore Başlat/i })).toBeDisabled()
+      await waitFor(() => expect(RestoreApi.getRestore).toHaveBeenCalledWith('tenant-a', passedPrecheck.id, expect.anything()))
+      fireEvent.click(screen.getByRole('button', { name: /Mod Ayarlarına Dön/i }))
+      fireEvent.click(screen.getByRole('button', { name: /← Geri/i }))
+      if (field === 'agent' || field === 'configured target') {
+        const select = screen.getByRole('combobox', { name: field === 'agent' ? 'Agent' : 'Bağlantı' })
+        const original = field === 'agent' ? 'agent-1' : '0'
+        fireEvent.change(select, { target: { value: field === 'agent' ? 'agent-other' : '1' } })
+        fireEvent.change(select, { target: { value: original } })
+      } else if (field === 'target type') {
+        fireEvent.click(screen.getByRole('radio', { name: 'Özel Bağlantı' }))
+        fireEvent.click(screen.getByRole('radio', { name: /Kayıtlı İş Bağlantısı/i }))
+      } else if (field === 'encrypt' || field === 'trust certificate') {
+        const name = field === 'encrypt' ? 'Bağlantıyı Şifrele' : 'Sunucu Sertifikasına Güven'
+        fireEvent.click(screen.getByRole('checkbox', { name }))
+        fireEvent.click(screen.getByRole('checkbox', { name }))
+      } else {
+        const name = field === 'host' ? 'Host / Instance' : field === 'port' ? 'Port (İsteğe bağlı)' : 'Credential Referansı'
+        const input = screen.getByLabelText(name)
+        const original = field === 'host' ? 'localhost' : field === 'port' ? '1433' : 'sql_smoke'
+        fireEvent.change(input, { target: { value: field === 'port' ? '1444' : 'changed-value' } })
+        fireEvent.change(input, { target: { value: original } })
+      }
+      await openModeSettings()
+      expect(screen.queryByRole('combobox', { name: 'Üzerine Yazılacak Veritabanı' })).not.toBeInTheDocument()
+      expect(screen.getByRole('textbox', { name: 'Üzerine Yazılacak Veritabanı' })).toHaveValue('')
+      expect(screen.getByRole('textbox', { name: /Onaylamak için/i })).toHaveValue('')
+      await act(async () => { obsoletePoll.resolve(passedPrecheck) })
+      expect(screen.queryByText('Current target checked.')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Olarak Restore Başlat/i })).not.toBeInTheDocument()
+      expect(RestoreApi.startRestore).not.toHaveBeenCalled()
+    },
+  )
+
+  it('ignores a late destructive precheck rejection after database changes', async () => {
+    const obsolete = Promise.withResolvers<RestoreView>()
+    vi.mocked(RestoreApi.startRestorePrecheck).mockReturnValueOnce(obsolete.promise)
+    renderWizard()
+    await openModeSettings()
+    await selectReplaceDatabase()
+    fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i }))
+    await waitFor(() => expect(RestoreApi.startRestorePrecheck).toHaveBeenCalledTimes(1))
+    fireEvent.change(screen.getByRole('combobox', { name: 'Üzerine Yazılacak Veritabanı' }), { target: { value: 'OtherDB' } })
+    await act(async () => { obsolete.reject(new ApiError(503)) })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Tekrar Dene' })).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i })).toBeDisabled())
+  })
+
+  it('ignores late discovery polling after target changes', async () => {
+    const obsolete = Promise.withResolvers<RestoreView>()
+    vi.mocked(RestoreApi.startRestoreDiscovery).mockResolvedValueOnce({ ...discoveredDatabases, status: 'Running', result: null })
+    vi.mocked(RestoreApi.getRestore).mockReturnValueOnce(obsolete.promise)
+    renderWizard()
+    await openModeSettings()
+    const replace = screen.getByRole('button', { name: /Replace Existing Database/i })
+    fireEvent.click(replace)
+    fireEvent.click(replace)
+    await waitFor(() => expect(RestoreApi.startRestoreDiscovery).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(RestoreApi.getRestore).toHaveBeenCalled())
+    fireEvent.click(screen.getByRole('button', { name: /← Geri/i }))
+    fireEvent.click(screen.getByRole('radio', { name: 'Özel Bağlantı' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Host / Instance' }), { target: { value: 'other-server' } })
+    await openModeSettings()
+    await act(async () => { obsolete.resolve(discoveredDatabases) })
+    expect(screen.queryByRole('combobox', { name: 'Üzerine Yazılacak Veritabanı' })).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Üzerine Yazılacak Veritabanı' })).toHaveValue('')
+    expect(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i })).toBeDisabled()
+  })
+
+  it.each(['success', 'error'] as const)('ignores a late discovery %s after target A→B→A', async (completion) => {
+    const obsolete = Promise.withResolvers<RestoreView>()
+    vi.mocked(RestoreApi.startRestoreDiscovery).mockReturnValueOnce(obsolete.promise)
+    renderWizard()
+    await openModeSettings()
+    fireEvent.click(screen.getByRole('button', { name: /Replace Existing Database/i }))
+    await waitFor(() => expect(RestoreApi.startRestoreDiscovery).toHaveBeenCalledTimes(1))
+    fireEvent.click(screen.getByRole('button', { name: /← Geri/i }))
+    const agent = screen.getByRole('combobox', { name: 'Agent' })
+    fireEvent.change(agent, { target: { value: 'agent-2' } })
+    fireEvent.change(agent, { target: { value: 'agent-1' } })
+    await openModeSettings()
+    await act(async () => {
+      if (completion === 'success') obsolete.resolve(discoveredDatabases)
+      else obsolete.reject(new ApiError(503))
+    })
+    expect(screen.queryByRole('combobox', { name: 'Üzerine Yazılacak Veritabanı' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Üzerine Yazılacak Veritabanı' })).toHaveValue('')
+    expect(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i })).toBeDisabled()
+  })
+
+  it('ignores execution completion after its inputs change', async () => {
+    const obsolete = Promise.withResolvers<RestoreView>()
+    vi.mocked(RestoreApi.startRestorePrecheck).mockResolvedValue(passedPrecheck)
+    vi.mocked(RestoreApi.startRestore).mockReturnValueOnce(obsolete.promise)
+    renderWizard()
+    await openModeSettings()
+    fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i }))
+    const execute = await screen.findByRole('button', { name: /Olarak Restore Başlat/i })
+    fireEvent.click(execute)
+    fireEvent.click(execute)
+    await waitFor(() => expect(RestoreApi.startRestore).toHaveBeenCalledTimes(1))
+    fireEvent.click(screen.getByRole('button', { name: /Mod Ayarlarına Dön/i }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Yeni Veritabanı Adı' }), { target: { value: 'ChangedDB' } })
+    await act(async () => { obsolete.resolve(sampleRestore) })
+    expect(screen.queryByText('Restore execution opened')).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Yeni Veritabanı Adı' })).toHaveValue('ChangedDB')
+  })
+
+  it('does not navigate back to a late execution after leaving the wizard', async () => {
+    const obsolete = Promise.withResolvers<RestoreView>()
+    vi.mocked(RestoreApi.startRestorePrecheck).mockResolvedValue(passedPrecheck)
+    vi.mocked(RestoreApi.startRestore).mockReturnValueOnce(obsolete.promise)
+    renderWizard()
+    await openModeSettings()
+    fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /Olarak Restore Başlat/i }))
+    await waitFor(() => expect(RestoreApi.startRestore).toHaveBeenCalledTimes(1))
+    fireEvent.click(screen.getByRole('link', { name: /Backup detaylarına dön/i }))
+    expect(await screen.findByText('Backup details opened')).toBeInTheDocument()
+    await act(async () => { obsolete.resolve(sampleRestore) })
+    expect(screen.getByText('Backup details opened')).toBeInTheDocument()
+    expect(screen.queryByText('Restore execution opened')).not.toBeInTheDocument()
+  })
+
   it.each(['CentralStorage', 'BackendRelayed', 'AgentLocal'] as const)('uses the eligible %s agent through precheck and execution', async (sourceAccess) => {
     const precheckResult: RestoreView = {
       ...sampleRestore,
@@ -454,13 +814,14 @@ describe('RestoreWizardPage', () => {
     const precheckBtn = screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i })
     expect(precheckBtn).toBeDisabled()
 
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Üzerine Yazılacak Veritabanı' }), { target: { value: 'SalesDB' } })
     // Type wrong confirmation
-    const confirmInput = screen.getByPlaceholderText(/SalesDB_restored/i)
+    const confirmInput = screen.getByRole('textbox', { name: /Onaylamak için/i })
     fireEvent.change(confirmInput, { target: { value: 'wrong-db-name' } })
     expect(precheckBtn).toBeDisabled()
 
     // Type exact match
-    fireEvent.change(confirmInput, { target: { value: 'SalesDB_restored' } })
+    fireEvent.change(confirmInput, { target: { value: 'SalesDB' } })
     expect(precheckBtn).toBeEnabled()
   })
 })

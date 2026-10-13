@@ -1,8 +1,6 @@
 using BackupPlatform.Application.Backups;
-using BackupPlatform.Agents.Capabilities;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Backups;
-using BackupPlatform.Domain.Capabilities;
 using BackupPlatform.IntegrationTests.Storage.Connections;
 using BackupPlatform.ManagedService.Quota;
 using Microsoft.EntityFrameworkCore;
@@ -21,10 +19,6 @@ public sealed class HardQuotaDestinationIntegrationTests(PostgreSqlFixture fixtu
         var policy = await World.CreatePolicyAsync(mode, scope);
         var agent = await World.AgentAsync(limit, policy.Key);
         var job = await World.JobAsync(agent);
-        await using var context = fixture.CreatePlatformContext();
-        context.AgentCapabilities.Add(new AgentCapabilityRecord(agent.AgentId, agent.TenantId,
-            BackupTaskProtocol.MultiDestinationCapability, CapabilitySupport.Supported, null, "quota", T0));
-        await context.SaveChangesAsync();
         return (agent, job);
     }
 
@@ -34,7 +28,6 @@ public sealed class HardQuotaDestinationIntegrationTests(PostgreSqlFixture fixtu
         var sftp = await _connections.AddAsync(agent.TenantId, "quota-sftp", "sftp");
         var configuration = job.Configuration with
         {
-            StorageConnectionId = central.Id,
             Destinations = [new BackupDestination("central", central.Id, true), new BackupDestination("sftp", sftp.Id)]
         };
         return (await World.RunStore().UpdateJobAsync(agent.TenantId, job.Id,
@@ -134,11 +127,11 @@ public sealed class HardQuotaDestinationIntegrationTests(PostgreSqlFixture fixtu
         var store = World.RunStore();
         var run = await StartAsync(store, job, "orphan-budget", T0.AddMinutes(1));
         var claim = await ClaimStartedAsync(store, agent, T0.AddMinutes(1));
-        var sftp = job.Configuration.ResolveEffectiveDestinations().Single(destination => destination.StorageProvider == "sftp");
+        var sftp = job.Configuration.Destinations.Single(destination => destination.StorageProvider == "sftp");
         var at = T0.AddMinutes(2);
         var artifact = QuotaWorld.Success(100, [], at).Artifact!;
         var completion = new BackupPlatform.Application.Backups.BackupCompletion("Failed", BackupFailureCodes.ReplicaVerificationFailed, artifact,
-            [new BackupDestinationReport("central", job.Configuration.StorageConnectionId, "Failed", "Failed", "NotRun",
+            [new BackupDestinationReport("central", job.Configuration.Destinations.Single(destination => destination.IsPrimary).StorageConnectionId, "Failed", "Failed", "NotRun",
                 BackupFailureCodes.StorageWriteFailed, null, false, at, at),
              new BackupDestinationReport("sftp", sftp.StorageConnectionId, "Failed", "Succeeded", "Failed",
                 BackupFailureCodes.ReplicaVerificationFailed,
@@ -166,7 +159,7 @@ public sealed class HardQuotaDestinationIntegrationTests(PostgreSqlFixture fixtu
         await World.PublishAsync(World.RunStore(), agent, job, 100, [ReplicaSpec.Central], T0);
         await using (var context = fixture.CreatePlatformContext())
         {
-            await context.AgentCapabilities.Where(row => row.AgentId == agent.AgentId).ExecuteDeleteAsync();
+            await context.AgentCapabilities.Where(row => row.AgentId == agent.AgentId && row.Identifier == BackupTaskProtocol.QuotaBoundedUploadCapability).ExecuteDeleteAsync();
         }
         var result = await World.RunStore().StartRunAsync(agent.TenantId, job.Id, "old-agent", T0.AddMinutes(1), default);
         Assert.Equal(allowed ? BackupStartOutcome.Started : BackupStartOutcome.AdmissionDenied, result.Outcome);
@@ -181,7 +174,7 @@ public sealed class HardQuotaDestinationIntegrationTests(PostgreSqlFixture fixtu
         var decision = await World.Admission().AdmitNewRunAsync(
             new BackupAdmissionRequest(agent.TenantId, job.Id, Guid.NewGuid(), BackupTriggerTypes.Manual, T0.AddMinutes(1))
             {
-                Configuration = job.Configuration with { StorageConnectionId = Guid.NewGuid() }
+                Configuration = job.Configuration with { Destinations = [new BackupDestination("central", Guid.NewGuid(), true) { StorageExecutionLocation = BackupStorageExecutionLocation.Backend }] }
             }, default);
         Assert.False(decision.Allowed);
         Assert.Equal(BackupAdmissionDenialCodes.QuotaSizeUnknown, decision.DenialCode);
@@ -196,7 +189,7 @@ public sealed class HardQuotaDestinationIntegrationTests(PostgreSqlFixture fixtu
         await StartAsync(World.RunStore(), job, "queued", T0.AddMinutes(1));
         await using (var context = fixture.CreatePlatformContext())
         {
-            await context.AgentCapabilities.Where(row => row.AgentId == agent.AgentId).ExecuteDeleteAsync();
+            await context.AgentCapabilities.Where(row => row.AgentId == agent.AgentId && row.Identifier == BackupTaskProtocol.QuotaBoundedUploadCapability).ExecuteDeleteAsync();
         }
         Assert.Null(await BackupStoreHarness.ClaimAsync(World.RunStore(), agent, T0.AddMinutes(1)));
         Assert.Equal(100L, Assert.Single(await UnreleasedAsync(fixture, agent.TenantId)).Bytes);
@@ -209,7 +202,7 @@ public sealed class HardQuotaDestinationIntegrationTests(PostgreSqlFixture fixtu
         var job = await World.JobAsync(agent);
         await using (var context = fixture.CreatePlatformContext())
         {
-            await context.AgentCapabilities.Where(row => row.AgentId == agent.AgentId).ExecuteDeleteAsync();
+            await context.AgentCapabilities.Where(row => row.AgentId == agent.AgentId && row.Identifier == BackupTaskProtocol.QuotaBoundedUploadCapability).ExecuteDeleteAsync();
         }
         await StartAsync(World.RunStore(), job, "old-unlimited", T0);
         Assert.Null((await ClaimStartedAsync(World.RunStore(), agent, T0)).MaxArtifactBytes);

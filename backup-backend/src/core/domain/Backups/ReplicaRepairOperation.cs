@@ -22,7 +22,8 @@ public sealed class ReplicaRepairOperation : ITenantOwned
         Guid? requestedByUserId = null,
         long totalBytes = 0,
         int maxAttempts = 5,
-        DateTimeOffset? nextRetryAt = null)
+        DateTimeOffset? nextRetryAt = null,
+        string? targetKey = null)
     {
         BackupGuard.Id(id);
         BackupGuard.Id(artifactId);
@@ -40,6 +41,7 @@ public sealed class ReplicaRepairOperation : ITenantOwned
         TotalBytes = Math.Max(0, totalBytes);
         MaxAttempts = Math.Clamp(maxAttempts, 1, 10);
         NextRetryAt = nextRetryAt is { } retry ? BackupGuard.Timestamp(retry) : null;
+        TargetKey = targetKey;
         Status = ReplicaRepairStatus.Pending;
     }
     public Guid Id { get; private set; }
@@ -49,6 +51,7 @@ public sealed class ReplicaRepairOperation : ITenantOwned
     public string StorageProvider { get; private set; }
     public Guid? SourceReplicaId { get; private set; }
     public Guid? TargetReplicaId { get; private set; }
+    public string? TargetKey { get; private set; }
     public ReplicaRepairStatus Status { get; private set; }
     public string? LeaseOwner { get; private set; }
     public Guid? LeaseToken { get; private set; }
@@ -68,9 +71,31 @@ public sealed class ReplicaRepairOperation : ITenantOwned
     public DateTimeOffset? CompletedAt { get; private set; }
     public DateTimeOffset? CancellationRequestedAt { get; private set; }
 
+    /// <summary>
+    /// Counted storage bytes held against the tenant's quota for this repair. The hold exists only while the operation is Pending or InProgress:
+    /// its status is the single authority, so no terminal path has to release it.
+    /// </summary>
+    public long ReservedQuotaBytes { get; private set; }
+
     public bool IsTerminal => Status is ReplicaRepairStatus.Succeeded or ReplicaRepairStatus.Failed or ReplicaRepairStatus.Cancelled;
     public bool IsExhausted => AttemptCount >= MaxAttempts && Status == ReplicaRepairStatus.Failed;
     public bool HasLease(Guid token, DateTimeOffset now) => token != Guid.Empty && LeaseToken == token && LeaseExpiresAt > now && !IsTerminal;
+
+    public void ReserveQuota(long bytes)
+    {
+        if (IsTerminal) throw new InvalidOperationException("Cannot reserve quota for a terminal repair operation.");
+        ArgumentOutOfRangeException.ThrowIfNegative(bytes);
+        ReservedQuotaBytes = bytes;
+    }
+
+    public void SetTargetIntent(Guid sourceReplicaId, string targetKey)
+    {
+        if (IsTerminal) throw new InvalidOperationException("Cannot update target intent on a terminal repair operation.");
+        BackupGuard.Id(sourceReplicaId);
+        BackupGuard.RelativeKey(targetKey);
+        SourceReplicaId = sourceReplicaId;
+        TargetKey = targetKey;
+    }
 
     public void SetSourceReplica(Guid sourceReplicaId)
     {
@@ -78,7 +103,6 @@ public sealed class ReplicaRepairOperation : ITenantOwned
         BackupGuard.Id(sourceReplicaId);
         SourceReplicaId = sourceReplicaId;
     }
-
     public void Claim(Guid token, string owner, DateTimeOffset now, TimeSpan duration)
     {
         if (Status != ReplicaRepairStatus.Pending) throw new InvalidOperationException("Only a pending repair can be claimed.");
@@ -215,6 +239,17 @@ public sealed class ReplicaRepairOperation : ITenantOwned
         Status = ReplicaRepairStatus.Cancelled;
         FailureCode = ReplicaRepairFailureCodes.Cancelled;
         FailureReason = "Repair operation was cancelled before start.";
+        CompletedAt = BackupGuard.Timestamp(now);
+        NextRetryAt = null;
+        ClearLease();
+    }
+
+    public void CancelStale(DateTimeOffset now)
+    {
+        if (IsTerminal) return;
+        Status = ReplicaRepairStatus.Cancelled;
+        FailureCode = ReplicaRepairFailureCodes.Cancelled;
+        FailureReason = "Repair operation was cancelled.";
         CompletedAt = BackupGuard.Timestamp(now);
         NextRetryAt = null;
         ClearLease();

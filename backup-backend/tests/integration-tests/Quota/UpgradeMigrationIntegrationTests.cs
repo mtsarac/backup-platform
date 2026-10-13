@@ -44,6 +44,14 @@ public sealed class UpgradedQuotaDatabase : IAsyncLifetime
     public bool DeniedOutcomeRejectedBeforeUpgrade { get; private set; }
     public long UsageRowsRightAfterMigration { get; private set; }
     public long ReservationRowsRightAfterMigration { get; private set; }
+    public long SnapshotsRightAfterMigration { get; private set; }
+    public long NonCanonicalSnapshotsRightAfterMigration { get; private set; }
+
+    private const string NotCanonical = """
+        ("Configuration" ?| ARRAY['StorageProvider', 'StorageConnectionId', 'StorageExecutionLocation']
+         OR "Configuration"->'Destinations' IS DISTINCT FROM
+            '[{"IsPrimary": true, "StorageProvider": "central", "StorageConnectionId": null, "StorageExecutionLocation": 1}]'::jsonb)
+        """;
 
     internal DbContextOptions<PlatformDbContext> Options() => new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(ConnectionString).Options;
 
@@ -114,6 +122,11 @@ public sealed class UpgradedQuotaDatabase : IAsyncLifetime
         }
         UsageRowsRightAfterMigration = await ScalarAsync("SELECT count(*) FROM tenant_storage_usage");
         ReservationRowsRightAfterMigration = await ScalarAsync("SELECT count(*) FROM quota_reservations");
+        SnapshotsRightAfterMigration = await ScalarAsync("SELECT (SELECT count(*) FROM backup_jobs) + (SELECT count(*) FROM backup_runs)");
+        // Provider, execution location and the absent connection (the tenant default) survive the rewrite: the destination keeps its identity.
+        NonCanonicalSnapshotsRightAfterMigration = await ScalarAsync($$"""
+            SELECT (SELECT count(*) FROM backup_jobs WHERE {{NotCanonical}}) + (SELECT count(*) FROM backup_runs WHERE {{NotCanonical}})
+            """);
     }
 
     public async Task DisposeAsync()
@@ -198,10 +211,19 @@ public sealed class UpgradedQuotaDatabase : IAsyncLifetime
         {
             await CopyRowsAsync(from, to, table, "TenantId", tenantId);
         }
-        // Runs of the previous release carry no storage connection in their configuration snapshot; the copy must not smuggle one in from the new schema.
-        await using var strip = new NpgsqlCommand("UPDATE backup_runs SET \"Configuration\" = \"Configuration\" - 'StorageConnectionId' WHERE \"TenantId\" = @tenant", to);
-        strip.Parameters.AddWithValue("tenant", tenantId);
-        await strip.ExecuteNonQueryAsync();
+        // The previous release wrote the one destination of a job or run in single-destination keys, without a Destinations list and without a storage
+        // connection (runs and jobs predate connections): rewrite the copied snapshots to exactly that shape, so the upgrade has to backfill them.
+        foreach (var table in new[] { "backup_jobs", "backup_runs" })
+        {
+            await using var legacy = new NpgsqlCommand($$"""
+                UPDATE {{table}} SET "Configuration" = ("Configuration" - 'Destinations') || (
+                    SELECT jsonb_build_object('StorageProvider', d->'StorageProvider', 'StorageConnectionId', 'null'::jsonb, 'StorageExecutionLocation', d->'StorageExecutionLocation')
+                    FROM jsonb_array_elements("Configuration"->'Destinations') d WHERE (d->>'IsPrimary')::boolean)
+                WHERE "TenantId" = @tenant
+                """, to);
+            legacy.Parameters.AddWithValue("tenant", tenantId);
+            await legacy.ExecuteNonQueryAsync();
+        }
     }
 
     /// <summary>Copies every column of the tenant's rows as stored (system columns such as xmin are not part of SELECT *).</summary>
@@ -283,6 +305,13 @@ public sealed class UpgradeMigrationIntegrationTests(UpgradedQuotaDatabase upgra
         // Backfilling every tenant would hold long locks on a big database: usage is computed per tenant, on first use.
         Assert.Equal(0, upgraded.UsageRowsRightAfterMigration);
         Assert.Equal(0, upgraded.ReservationRowsRightAfterMigration);
+    }
+
+    [Fact]
+    public void SingleDestinationSnapshotsOfThePreviousReleaseBecomeTheirOnePrimaryDestination()
+    {
+        Assert.True(upgraded.SnapshotsRightAfterMigration > 0);
+        Assert.Equal(0, upgraded.NonCanonicalSnapshotsRightAfterMigration);
     }
 
     [Fact]
@@ -371,6 +400,7 @@ public sealed class UpgradeMigrationIntegrationTests(UpgradedQuotaDatabase upgra
     public async Task ATenantOnTheFiveGbPlanReservesHistoryAfterItsAgentAdvertisesBoundedUploads()
     {
         var tenant = upgraded.FiveGbAdmit;
+        await DeclareMultiDestinationAsync(tenant);
         await using (var context = PlatformDbContext.CreateForPlatformOperations(upgraded.Options()))
         {
             context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(new AgentId(tenant.AgentId), tenant.TenantId,
@@ -394,6 +424,7 @@ public sealed class UpgradeMigrationIntegrationTests(UpgradedQuotaDatabase upgra
     public async Task ALegacyUnlimitedTenantKeepsBackingUpAfterTheUpgrade()
     {
         var tenant = upgraded.LegacyAdmit;
+        await DeclareMultiDestinationAsync(tenant);
 
         var started = await upgraded.RunStore().StartRunAsync(tenant.TenantId, tenant.JobId, $"after-upgrade-{Guid.NewGuid():N}", Now, default);
 
@@ -402,6 +433,16 @@ public sealed class UpgradeMigrationIntegrationTests(UpgradedQuotaDatabase upgra
         var status = await upgraded.Usage().GetQuotaStatusAsync(tenant.TenantId, Now, default);
         Assert.Equal(3 * Gb, status!.UsedBytes);
         Assert.Equal(QuotaState.Unlimited, status.State);
+    }
+
+    // The copied agents carry no capability rows; every new run is a destination-list snapshot and needs this one.
+    private async Task DeclareMultiDestinationAsync(UpgradedTenant tenant)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(upgraded.Options());
+        context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(new AgentId(tenant.AgentId), tenant.TenantId,
+            BackupPlatform.Contracts.Backups.BackupTaskProtocol.MultiDestinationCapability,
+            BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, null, "upgraded", Now));
+        await context.SaveChangesAsync();
     }
 
     private async Task<TenantStorageUsage> StoredAsync(TenantId tenantId)
