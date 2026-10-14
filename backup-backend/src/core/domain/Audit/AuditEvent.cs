@@ -65,6 +65,9 @@ public static class AuditActions
     public const string BackupReplicaOrphanRecorded = "backup_replica.orphan_recorded";
     public const string BackupReplicaQuarantined = "backup_replica.quarantined";
     public const string BackupStorageOrphanDeleteCompleted = "backup_storage.orphan_delete_completed";
+
+    // Transfer policy events
+    public const string UploadBandwidthLimitChanged = "upload_bandwidth.limit_changed";
 }
 
 /// <summary>

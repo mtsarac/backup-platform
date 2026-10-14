@@ -318,6 +318,7 @@ of another tenant, must be denied. Never aim a smoke restore at an existing data
 scripts/integration/run-sftp-smoke.sh
 scripts/integration/run-sftp-smoke.sh --no-build
 scripts/integration/run-sftp-smoke.sh --provider-only   # disposable real SFTP deletion/failure/restart regressions only
+BP_SMOKE_UPLOAD_LIMIT=64000 scripts/integration/run-sftp-smoke.sh   # Faz 2A: the relayed upload is paced to 64 000 B/s and must not finish faster than that allows
 ```
 
 Disposable integration smoke for backend-relayed SFTP storage:

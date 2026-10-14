@@ -8,6 +8,9 @@ public sealed record BackupLeaseCommand(TenantId TenantId, AgentId AgentId, Guid
     public string? SoftwareVersion { get; init; }
     public string? ProtocolVersion { get; init; }
     public string? Platform { get; init; }
+
+    /// <summary>Which concurrent upload of the attempt an upload-bandwidth call is about; null means the attempt's only upload. Each upload holds its own slice of the tenant limit.</summary>
+    public Guid? UploadId { get; init; }
 }
 public sealed record BackupProgress(string Stage, double? Percent);
 public sealed record BackupCompletion(string Outcome, string? ReasonCode, BackupArtifactResult? Artifact, IReadOnlyList<BackupDestinationReport>? Destinations = null);

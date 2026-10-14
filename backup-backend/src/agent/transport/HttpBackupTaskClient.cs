@@ -25,6 +25,9 @@ public sealed class HttpBackupTaskClient : IBackupTaskClient
     public Task<AgentBackendResult<BackupTaskLeaseResponse>> RenewAsync(AgentLocalIdentity identity, Guid attemptId, BackupTaskLeaseRequest request, CancellationToken cancellationToken) =>
         _client.SendAsync<BackupTaskLeaseResponse>(identity, HttpMethod.Post, Path(attemptId, "lease"), Content(request), cancellationToken);
 
+    public Task<AgentBackendResult<UploadPolicyResponse>> GetUploadPolicyAsync(AgentLocalIdentity identity, Guid attemptId, UploadPolicyRequest request, CancellationToken cancellationToken) =>
+        _client.SendAsync<UploadPolicyResponse>(identity, HttpMethod.Post, Path(attemptId, "upload-policy"), Content(request), cancellationToken);
+
     public Task<AgentBackendResult<bool>> ReportProgressAsync(AgentLocalIdentity identity, Guid attemptId, BackupTaskProgressRequest request, CancellationToken cancellationToken) =>
         _client.SendEmptyAsync(identity, Path(attemptId, "progress"), Content(request), cancellationToken);
 

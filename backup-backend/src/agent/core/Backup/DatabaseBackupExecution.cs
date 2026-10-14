@@ -1,6 +1,7 @@
 using BackupPlatform.BackupProviders.Abstractions.Database;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.StorageProviders.Abstractions;
+using BackupPlatform.StorageProviders.Abstractions.Transfer;
 using Microsoft.Extensions.Logging;
 
 namespace BackupPlatform.Agent.Core.Backup;
@@ -318,7 +319,7 @@ internal sealed class DatabaseBackupExecution
                     "The requested storage provider is not available on this agent.", kind: BackupFailureKind.StorageWriteFailed, cause: BackupFailureCause.Unsupported);
             }
 
-            await UploadAsync(storage, transfer, bounded.Token).ConfigureAwait(false);
+            await UploadAsync(storage, transfer, bounded, bounded.Token).ConfigureAwait(false);
             replica = await VerifyReplicaAsync(storage, transfer, bounded.Token).ConfigureAwait(false);
         }
         catch (StageFailedException exception)
@@ -354,7 +355,7 @@ internal sealed class DatabaseBackupExecution
             replica, failure, transfer.Stored, transfer.Key, objectMayRemain, startedAt, _time.GetUtcNow());
     }
 
-    private async Task UploadAsync(IStorageProvider storage, Transfer transfer, CancellationToken cancellationToken)
+    private async Task UploadAsync(IStorageProvider storage, Transfer transfer, CancellationTokenSource destinationDeadline, CancellationToken cancellationToken)
     {
         const BackupExecutionStage stage = BackupExecutionStage.Uploading;
         _tracker.Enter(stage);
@@ -390,14 +391,31 @@ internal sealed class DatabaseBackupExecution
                     "The staged artifact changed after it was hashed, so it cannot be uploaded.", kind: BackupFailureKind.StorageWriteFailed);
             }
 
-            StorageObjectMetadata stored;
+            IUploadBandwidthSession? pacing;
             try
             {
+                pacing = _request.UploadBandwidth is { } bandwidth ? await bandwidth.BeginAsync(storage.Topology, cancellationToken).ConfigureAwait(false) : null;
+            }
+            catch (UploadPolicyException exception)
+            {
+                throw Fail(stage, BackupPipelineReasons.UploadPolicyUnavailable, "The upload limits could not be obtained, so the upload was not started.",
+                    exception, BackupFailureKind.StorageWriteFailed, BackupFailureCause.StorageUnavailable);
+            }
+
+            StorageObjectMetadata stored;
+            await using var pacingScope = pacing;
+            try
+            {
+                if (pacing is not null)
+                {
+                    // A paced upload is slow on purpose: it must not run into the time allowed for an unpaced one.
+                    destinationDeadline.CancelAfter((_request.DestinationTimeout ?? DatabaseBackupPipelineRequest.DefaultDestinationTimeout) + pacing.DeadlineAllowance(artifact.SizeBytes));
+                }
                 var progress = new CallbackProgress<long>(bytes => _tracker.Report(
                     stage, artifact.SizeBytes > 0 ? bytes * 100.0 / artifact.SizeBytes : 100, bytes, artifact.SizeBytes));
                 stored = await storage.PutAsync(
                     transfer.Key,
-                    stream,
+                    pacing?.Wrap(stream) ?? stream,
                     new StoragePutOptions(_request.Overwrite, artifact.Checksum, artifact.SizeBytes),
                     progress,
                     cancellationToken).ConfigureAwait(false);

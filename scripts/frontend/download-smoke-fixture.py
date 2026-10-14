@@ -86,6 +86,9 @@ def backup(options):
     configuration['destinations'] = [destination]
     _, job = api.call('POST', path + '/backup-jobs', {'name': 'Real download ' + options.provider, 'agentId': agent_id,
                                                    'overlapPolicy': 'Skip', 'configuration': configuration})
+    if options.upload_limit:
+        api.call('PUT', path + f'/upload-bandwidth/jobs/{job["id"]}', {'bytesPerSecond': options.upload_limit})
+    started_at = time.monotonic()
     _, run = api.call('POST', path + f'/backup-jobs/{job["id"]}/runs', {}, headers={'Idempotency-Key': 'download-smoke-' + uuid.uuid4().hex}, expect=(200, 201, 202))
     run_id = run.get('id', run.get('run', {}).get('id'))
     if not run_id:
@@ -98,6 +101,12 @@ def backup(options):
             if len(artifacts) != 1:
                 raise FixtureFailure('Real backup did not publish exactly one artifact.')
             artifact = artifacts[0]
+            if options.upload_limit:
+                # The whole run (engine backup, hashing, upload, read-back) took at least as long as the upload alone is allowed to.
+                elapsed, allowed = time.monotonic() - started_at, (artifact['sizeBytes'] - options.upload_limit / 10) / options.upload_limit
+                print(json.dumps({'uploadLimitBytesPerSecond': options.upload_limit, 'sizeBytes': artifact['sizeBytes'], 'elapsedSeconds': round(elapsed, 2), 'fastestAllowedSeconds': round(allowed, 2)}))
+                if elapsed < allowed:
+                    raise FixtureFailure('The paced upload finished faster than its limit allows.')
             state['agents'][options.provider] = agent_id
             state['artifacts'][options.provider] = {'id': artifact['id'], 'checksum': artifact['artifactChecksum'],
                                                     'sizeBytes': artifact['sizeBytes'], 'jobId': job['id'], 'runId': run_id}
@@ -168,6 +177,7 @@ def main():
     second.add_argument('--sql-port', type=int, default=1433)
     second.add_argument('--database', default='master')
     second.add_argument('--timeout', type=int, default=240)
+    second.add_argument('--upload-limit', type=int, default=0, help='Job upload limit in bytes per second (0 = none).')
     third = commands.add_parser('verify')
     third.add_argument('--provider', choices=('central', 'local', 'sftp'), required=True)
     third.add_argument('--output', required=True)

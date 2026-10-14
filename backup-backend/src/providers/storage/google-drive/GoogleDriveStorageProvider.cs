@@ -72,7 +72,7 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
             throw new StorageException(StorageFailureKind.InvalidConfiguration, "Google Drive staging is not configured.");
         cancellationToken.ThrowIfCancellationRequested();
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        deadline.CancelAfter(_options.UploadTimeout);
+        deadline.CancelAfter(_options.UploadTimeout + options.TransferAllowance);
         try
         {
             return await PutCoreAsync(key, content, options, progress, deadline.Token).ConfigureAwait(false);

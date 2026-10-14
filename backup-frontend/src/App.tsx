@@ -15,6 +15,7 @@ import { BackupJobsPage } from './pages/backup-jobs/backup-jobs-page'
 import { BackupJobWizardPage } from './pages/backup-jobs/backup-job-wizard-page'
 import { BackupsPage } from './pages/backups/backups-page'
 import { BackupDetailPage } from './pages/backups/backup-detail-page'
+import { UploadBandwidthPage } from './pages/upload-bandwidth/upload-bandwidth-page'
 import { StoragePage } from './pages/storage/storage-page'
 import { ArtifactsPage } from './pages/artifacts/artifacts-page'
 import { ArtifactDetailPage } from './pages/artifacts/artifact-detail-page'
@@ -57,6 +58,7 @@ function AppRoutes() {
         <Route path="backup-runs" element={<BackupsPage />} />
         <Route path="backup-runs/:id" element={<BackupDetailPage />} />
         <Route path="storage" element={<StoragePage />} />
+        <Route path="upload-bandwidth" element={<UploadBandwidthPage />} />
         <Route path="artifacts" element={<ArtifactsPage />} />
         <Route path="artifacts/:id" element={<ArtifactDetailPage />} />
         <Route path="artifacts/:id/restore" element={<RestoreWizardPage />} />

@@ -134,7 +134,7 @@ public sealed class SftpStorageProvider : IStorageProvider
             using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             long totalWritten = 0;
 
-            using (var transferCts = new CancellationTokenSource(_network.TransferTimeout))
+            using (var transferCts = new CancellationTokenSource(_network.TransferTimeout + options.TransferAllowance))
             using (var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, transferCts.Token))
             {
                 await using (var remoteStream = await client.OpenAsync(tempRemotePath, FileMode.CreateNew, FileAccess.Write, linkedCts.Token).ConfigureAwait(false))

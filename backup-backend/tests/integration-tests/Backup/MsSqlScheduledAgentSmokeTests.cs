@@ -32,7 +32,7 @@ public sealed class MsSqlScheduledAgentSmokeTests(PostgreSqlFixture database, IT
         await using var world = await AgentWorld.CreateAsync(database, clock: new MutableClock(live: true), kestrel: true, configuration: Backend(seconds: false));
         var tenant = await world.CreateTenantAsync();
         await world.EntitleAsync(tenant.Tenant);
-        var agent = await world.EnrollAsync(tenant);
+        var agent = await world.DeclareBackupCapabilityAsync(await world.EnrollAsync(tenant));
         await using var host = await AgentHostSmokeProcess.StartAsync(world, agent, output.WriteLine);
         await WaitForAgentAsync(world, agent, host);
 
@@ -97,7 +97,7 @@ public sealed class MsSqlScheduledAgentSmokeTests(PostgreSqlFixture database, IT
         {
             tenant = await first.CreateTenantAsync();
             await first.EntitleAsync(tenant.Tenant);
-            agent = await first.EnrollAsync(tenant);
+            agent = await first.DeclareBackupCapabilityAsync(await first.EnrollAsync(tenant));
             await using var firstHost = await AgentHostSmokeProcess.StartAsync(first, agent, output.WriteLine);
             await WaitForAgentAsync(first, agent, firstHost);
             await WaitForSecondAsync(5, 35); // far from a minute boundary: nothing runs between the job's creation and the shutdown
@@ -147,7 +147,7 @@ public sealed class MsSqlScheduledAgentSmokeTests(PostgreSqlFixture database, IT
         await using var world = await AgentWorld.CreateAsync(database, clock: new MutableClock(live: true), kestrel: true, configuration: Backend(seconds: true));
         var tenant = await world.CreateTenantAsync();
         await world.EntitleAsync(tenant.Tenant);
-        var agent = await world.EnrollAsync(tenant);
+        var agent = await world.DeclareBackupCapabilityAsync(await world.EnrollAsync(tenant));
         await using var host = await AgentHostSmokeProcess.StartAsync(world, agent, output.WriteLine);
         await WaitForAgentAsync(world, agent, host);
         var job = await CreateJobAsync(tenant, agent, MsSqlManualAgentSmokeTests.Configuration(sql, sql.DatabaseName),
@@ -192,7 +192,7 @@ public sealed class MsSqlScheduledAgentSmokeTests(PostgreSqlFixture database, IT
         await using var world = await AgentWorld.CreateAsync(database, clock: new MutableClock(live: true), kestrel: true, configuration: Backend(seconds: true));
         var tenant = await world.CreateTenantAsync();
         await world.EntitleAsync(tenant.Tenant);
-        var agent = await world.EnrollAsync(tenant);
+        var agent = await world.DeclareBackupCapabilityAsync(await world.EnrollAsync(tenant));
         await using var host = await AgentHostSmokeProcess.StartAsync(world, agent, output.WriteLine);
         await WaitForAgentAsync(world, agent, host);
         var job = await CreateJobAsync(tenant, agent, MsSqlManualAgentSmokeTests.Configuration(sql, sql.DatabaseName),

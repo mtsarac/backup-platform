@@ -135,8 +135,9 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
             if (replica.StorageProvider is "sftp" or "google-drive")
             {
                 // A timed-out attempt can still have a remote PUT in flight; do not publish absence ahead of that writer.
+                // Taken for this transaction only (the row stays locked until commit, so a writer waits for it): a live writer lease means skip.
                 var transferLock = BackupTransferLock.Id(replica.StorageConnectionId, replica.Key);
-                if (!await context.Database.SqlQuery<bool>($"SELECT pg_try_advisory_xact_lock({transferLock}) AS \"Value\"").SingleAsync(cancellationToken)) continue;
+                if (!await BackupTransferLeases.TryTakeAsync(context, transferLock, Guid.NewGuid(), TimeSpan.Zero, cancellationToken)) continue;
             }
             // The domain re-validates due-ness on the locked, freshly read row.
             if (!replica.BeginDelete(Guid.NewGuid(), owner, now, lease)) continue;

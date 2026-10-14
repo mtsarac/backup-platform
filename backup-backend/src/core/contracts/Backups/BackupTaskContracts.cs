@@ -5,6 +5,9 @@ public static class BackupTaskProtocol
 {
     public const string MultiDestinationCapability = "backup.multi-destination";
     public const string QuotaBoundedUploadCapability = "backup.quota-bounded-upload";
+
+    /// <summary>The agent paces its upload bytes to the limits the backend sets (<see cref="UploadPolicyResponse"/>). A run that a limit applies to is never given to an agent without it.</summary>
+    public const string UploadBandwidthLimitCapability = "backup.upload-bandwidth-limit";
 }
 
 /// <summary>Immutable execution input. Credential material is resolved locally by reference, never carried in this envelope.</summary>

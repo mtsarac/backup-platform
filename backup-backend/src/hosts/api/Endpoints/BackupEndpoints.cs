@@ -166,7 +166,7 @@ public static class BackupEndpoints
         BackupAdmissionDenialCodes.StorageConnectionDisabled => "The job's storage connection is disabled; no run was started. Existing backups on it stay available.",
         BackupAdmissionDenialCodes.StorageConnectionUnavailable => "The job's storage connection does not exist for this tenant and provider; no run was started.",
         BackupAdmissionDenialCodes.MultiDestinationExecutionNotSupported => "This occurrence was recorded while multi-destination backup execution was not available; no run was started.",
-        BackupAdmissionDenialCodes.AgentMultiDestinationUnsupported => "The job's agent does not support multi-destination backups; update the agent. No run was started.",
+        BackupAdmissionDenialCodes.AgentMultiDestinationUnsupported => "The job's agent has not reported support for multi-destination backups: it is outdated, or it has not finished connecting yet (a new agent reports within seconds of its first heartbeat). Retry shortly or update the agent. No run was started.",
         BackupAdmissionDenialCodes.DestinationCombinationUnsupported => "The job's storage destinations resolve to the same connection more than once; no run was started.",
         _ => "The tenant's storage quota is used up; no run was started."
     };

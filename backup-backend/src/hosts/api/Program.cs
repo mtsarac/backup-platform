@@ -39,6 +39,7 @@ app.MapStorageConnectionEndpoints();
 app.MapBackupEndpoints();
 app.MapBackupArtifactEndpoints();
 app.MapBackupTaskEndpoints();
+app.MapUploadBandwidthEndpoints();
 app.MapRestoreEndpoints();
 app.MapRestoreTaskEndpoints();
 app.MapDownloadEndpoints();

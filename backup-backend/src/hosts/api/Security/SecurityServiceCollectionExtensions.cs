@@ -59,6 +59,7 @@ public static class SecurityServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<DbContextOptions<PlatformDbContext>>(CreateDatabaseOptions);
         services.AddSingleton<AgentTransferAdmission>();
+        services.AddSingleton<BackupPlatform.Infrastructure.Backups.BackupTransferLeaseService>();
         services.AddScoped<ITenantContext>(ResolveTenantContext);
         services.AddScoped<PlatformDbContext>();
         services.AddScoped<ICurrentUser, HttpCurrentUser>();
@@ -89,6 +90,8 @@ public static class SecurityServiceCollectionExtensions
         services.AddScoped<IBackupRunStore, PostgreSqlBackupRunStore>();
         services.AddScoped<IBackupUiStore, PostgreSqlBackupUiStore>();
         services.AddScoped<BackupOrchestrator>();
+        services.AddScoped<IUploadBandwidthStore, PostgreSqlUploadBandwidthStore>();
+        services.AddScoped<UploadBandwidthService>();
         services.AddHostedService<StaleBackupDetector>();
         services.AddSingleton<BackupRetryWorker>();
         services.AddHostedService(provider => provider.GetRequiredService<BackupRetryWorker>());
