@@ -646,10 +646,10 @@ public static class StorageTestMessages
         StorageTestCodes.NotSupported => "The storage does not support what the test needs.",
         StorageTestCodes.IoError => "The storage could not be read or written.",
         StorageTestCodes.HostKeyMismatch => "The remote SSH host key does not match the configured fingerprint.",
-        StorageTestCodes.AuthenticationFailed => "The SFTP credentials were rejected by the server.",
-        StorageTestCodes.Timeout => "The connection to the SFTP server timed out.",
+        StorageTestCodes.AuthenticationFailed => "The storage credentials were rejected by the provider.",
+        StorageTestCodes.Timeout => "The connection to the storage provider timed out.",
         StorageTestCodes.NetworkDenied => "Access to this network destination is not permitted by operator policy.",
-        StorageTestCodes.NetworkUnavailable => "The SFTP server could not be reached over the network.",
+        StorageTestCodes.NetworkUnavailable => "The storage provider could not be reached over the network.",
         _ => "The connection test failed unexpectedly."
     };
 }

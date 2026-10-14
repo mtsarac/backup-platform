@@ -305,4 +305,10 @@ public sealed class ConnectionTesterTests : IDisposable
         Assert.Equal(StorageTestMessages.For(StorageTestCodes.AgentSideStorage), result.Message);
     }
 
+    [Theory]
+    [InlineData(StorageTestCodes.AuthenticationFailed)]
+    [InlineData(StorageTestCodes.Timeout)]
+    [InlineData(StorageTestCodes.NetworkUnavailable)]
+    public void SharedFailureMessagesDoNotNameOneProvider(string code) =>
+        Assert.DoesNotContain("SFTP", StorageTestMessages.For(code), StringComparison.OrdinalIgnoreCase);
 }

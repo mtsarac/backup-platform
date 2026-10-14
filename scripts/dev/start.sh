@@ -91,7 +91,7 @@ if ! dev_pid_alive api; then
     GoogleDrive__RedirectUri="$BP_DEV_API_URL/api/platform/google-drive/oauth/callback" GoogleDrive__FrontendOrigin="$BP_DEV_FRONTEND_URL" \
     GoogleDrive__StagingDirectory="$BP_DEV_HOME/gdrive-staging" \
     Secrets__DataProtection__KeysDirectory="$BP_DEV_HOME/dp-keys" \
-    ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS="$BP_DEV_API_URL;$BP_DEV_API_TLS_URL" \
+    ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS="$BP_DEV_API_URL;$BP_DEV_API_TLS_URL${BP_DEV_PUBLIC_HOST:+;https://$BP_DEV_PUBLIC_HOST:$BP_DEV_API_HTTPS_PORT}" \
     ASPNETCORE_Kestrel__Certificates__Default__Path="$BP_DEV_HOME/cert.pfx" ASPNETCORE_Kestrel__Certificates__Default__Password="$BP_DEV_CERT_PASSWORD" \
     Backups__Retention__MinimumDeleteGracePeriod=00:00:01 Backups__Retention__DefaultDeleteGracePeriod=00:00:10 Backups__Retention__ScanInterval=00:00:05 \
         dev_spawn api dotnet "$BP_DEV_API_DLL"
