@@ -22,9 +22,13 @@ public sealed class ApiAntiforgeryMiddleware(RequestDelegate next)
         await next(context);
     }
 
-    /// <summary>Agent API routes never accept a browser session (they authenticate with their own header scheme), so cookie CSRF cannot apply.</summary>
+    /// <summary>
+    /// Agent API routes never accept a browser session (they authenticate with their own header scheme), so cookie CSRF cannot apply; neither does it to an
+    /// endpoint that opted out with <c>DisableAntiforgery</c> because its only credential is a token in the request itself (the email recipient links).
+    /// </summary>
     private static bool RequiresValidation(HttpContext context) => context.Request.Path.StartsWithSegments("/api")
         && context.GetEndpoint()?.Metadata.GetMetadata<AgentApiEndpoint>() is null
+        && context.GetEndpoint()?.Metadata.GetMetadata<IAntiforgeryMetadata>() is not { RequiresValidation: false }
         && !HttpMethods.IsGet(context.Request.Method)
         && !HttpMethods.IsHead(context.Request.Method)
         && !HttpMethods.IsOptions(context.Request.Method)

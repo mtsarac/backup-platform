@@ -45,6 +45,8 @@ Storage connections (M7a) live in `src/features/storage-connections/` (wire type
 
 Upload bandwidth (Faz 2A) lives in `src/features/upload-bandwidth/` and `src/pages/upload-bandwidth/` (sidebar 'Upload Bandwidth', `/tenants/:tenantId/upload-bandwidth`). One GET document (min/max, tenant limit, agents/jobs that have a limit) plus `PUT .../tenant|agents/{id}|jobs/{id}` with `bytesPerSecond` (`null` = Unlimited); editing is Owner/Admin only, others read-only. Units are decimal and explicit (`units.ts`: 1 Mbit/s = 125,000 B/s, 1 MB/s = 1,000,000 B/s); parsing uses exact BigInt arithmetic against the server-provided min/max.
 
+Notifications (N1) live in `src/features/notifications/` (tenant policy/channels/delivery history, Owner/Admin only: nav entry gated by `canAdmin`, page renders a notice and makes no request otherwise) and `src/features/platform/notifications/` (PlatformAdmin SMTP + SMS gateway settings at `/platform/notification-transports`). Secrets are write-only password inputs cleared on submit, mutations carrying them use `gcTime: 0`, and responses only expose `hasSecret`. SMS is `UYGULANDI — DOĞRULANMADI` (generic HTTP JSON adapter only, no real provider verified) and intentionally has no dedicated tests.
+
 ## CODE MAP
 | Symbol | Type | Location | Role |
 |--------|------|----------|------|

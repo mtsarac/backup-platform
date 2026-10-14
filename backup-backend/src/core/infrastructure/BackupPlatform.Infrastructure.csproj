@@ -7,6 +7,7 @@
     <ProjectReference Include="..\..\modules\agents\BackupPlatform.Agents.csproj" />
     <ProjectReference Include="..\..\modules\managed-service\BackupPlatform.ManagedService.csproj" />
     <ProjectReference Include="..\..\modules\storage\BackupPlatform.Storage.csproj" />
+    <ProjectReference Include="..\..\modules\notifications\BackupPlatform.Notifications.csproj" />
     <ProjectReference Include="..\..\providers\secret\abstractions\BackupPlatform.SecretProviders.Abstractions.csproj" />
     <ProjectReference Include="..\..\providers\storage\abstractions\BackupPlatform.StorageProviders.Abstractions.csproj" />
   </ItemGroup>

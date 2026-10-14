@@ -11,6 +11,7 @@ using BackupPlatform.Domain.Downloads;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Restores;
 using BackupPlatform.Domain.Storage;
+using BackupPlatform.Domain.Notifications;
 using BackupPlatform.Domain.Support;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Identity;
@@ -96,6 +97,12 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<UploadBandwidthLimit> UploadBandwidthLimits => Set<UploadBandwidthLimit>();
     public DbSet<UploadBandwidthGrant> UploadBandwidthGrants => Set<UploadBandwidthGrant>();
     public DbSet<BackupTransferLease> BackupTransferLeases => Set<BackupTransferLease>();
+    public DbSet<NotificationChannel> NotificationChannels => Set<NotificationChannel>();
+    public DbSet<NotificationPolicy> NotificationPolicies => Set<NotificationPolicy>();
+    public DbSet<NotificationCondition> NotificationConditions => Set<NotificationCondition>();
+    public DbSet<NotificationEvent> NotificationEvents => Set<NotificationEvent>();
+    public DbSet<NotificationDelivery> NotificationDeliveries => Set<NotificationDelivery>();
+    public DbSet<NotificationTransportSettings> NotificationTransports => Set<NotificationTransportSettings>();
 
     /// <summary>Explicit unfiltered context for trusted platform operations only.</summary>
     /// <remarks>Does not authorize the caller. Future application boundaries must authorize its use.</remarks>
@@ -214,6 +221,10 @@ public sealed class PlatformDbContext : DbContext
             if (!IsPlatformOperations && entry.Entity is SupportAccessSession)
             {
                 throw new InvalidOperationException("Support access sessions require explicit platform operations.");
+            }
+            if (!IsPlatformOperations && entry.Entity is NotificationChannel or NotificationPolicy or NotificationCondition or NotificationEvent or NotificationDelivery or NotificationTransportSettings)
+            {
+                throw new InvalidOperationException("Notification writes require explicit platform operations.");
             }
             if (!IsPlatformOperations && entry.Entity is AuditEvent)
             {

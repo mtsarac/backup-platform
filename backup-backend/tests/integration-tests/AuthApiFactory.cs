@@ -41,7 +41,9 @@ internal sealed class AuthApiFactory(
             ["ConnectionStrings:Platform"] = connectionString,
             ["Backups:Scheduling:Enabled"] = "false",
             ["Backups:Retention:Enabled"] = "false",
-            ["ManagedService:Quota:MaintenanceEnabled"] = "false"
+            ["ManagedService:Quota:MaintenanceEnabled"] = "false",
+            ["Notifications:Enabled"] = "false",
+            ["Notifications:PublicBaseUrl"] = "https://backup.example.com"
         };
         foreach (var (key, value) in configuration ?? new Dictionary<string, string?>()) settings[key] = value;
         builder.ConfigureAppConfiguration((_, builderConfiguration) => builderConfiguration.AddInMemoryCollection(settings));

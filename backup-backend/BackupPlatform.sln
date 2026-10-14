@@ -149,6 +149,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "google-drive", "google-driv
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BackupPlatform.StorageProviders.GoogleDrive", "src\providers\storage\google-drive\BackupPlatform.StorageProviders.GoogleDrive.csproj", "{E58B1F43-5869-42DA-BADA-3EF0B58B9242}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BackupPlatform.Notifications", "src\modules\notifications\BackupPlatform.Notifications.csproj", "{517AEE5C-D059-4DF4-A2A7-EA63042B7585}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -543,6 +545,18 @@ Global
 		{E58B1F43-5869-42DA-BADA-3EF0B58B9242}.Release|x64.Build.0 = Release|Any CPU
 		{E58B1F43-5869-42DA-BADA-3EF0B58B9242}.Release|x86.ActiveCfg = Release|Any CPU
 		{E58B1F43-5869-42DA-BADA-3EF0B58B9242}.Release|x86.Build.0 = Release|Any CPU
+		{517AEE5C-D059-4DF4-A2A7-EA63042B7585}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{517AEE5C-D059-4DF4-A2A7-EA63042B7585}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{517AEE5C-D059-4DF4-A2A7-EA63042B7585}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{517AEE5C-D059-4DF4-A2A7-EA63042B7585}.Debug|x64.Build.0 = Debug|Any CPU
+		{517AEE5C-D059-4DF4-A2A7-EA63042B7585}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{517AEE5C-D059-4DF4-A2A7-EA63042B7585}.Debug|x86.Build.0 = Debug|Any CPU
+		{517AEE5C-D059-4DF4-A2A7-EA63042B7585}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{517AEE5C-D059-4DF4-A2A7-EA63042B7585}.Release|Any CPU.Build.0 = Release|Any CPU
+		{517AEE5C-D059-4DF4-A2A7-EA63042B7585}.Release|x64.ActiveCfg = Release|Any CPU
+		{517AEE5C-D059-4DF4-A2A7-EA63042B7585}.Release|x64.Build.0 = Release|Any CPU
+		{517AEE5C-D059-4DF4-A2A7-EA63042B7585}.Release|x86.ActiveCfg = Release|Any CPU
+		{517AEE5C-D059-4DF4-A2A7-EA63042B7585}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -619,5 +633,6 @@ Global
 		{6CD156B9-8874-4DF1-92FF-BDE631234A22} = {456CD1E2-C52F-5E17-9D56-7CB7B1BE6C4B}
 		{744CC783-0CC7-9765-399C-59CCBDF2A2BD} = {E49D6A69-42C7-7E21-719F-CF7CE880A98E}
 		{E58B1F43-5869-42DA-BADA-3EF0B58B9242} = {744CC783-0CC7-9765-399C-59CCBDF2A2BD}
+		{517AEE5C-D059-4DF4-A2A7-EA63042B7585} = {EC447DCF-ABFA-6E24-52A5-D7FD48A5C558}
 	EndGlobalSection
 EndGlobal

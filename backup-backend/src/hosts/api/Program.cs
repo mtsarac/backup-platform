@@ -8,13 +8,14 @@ using Microsoft.EntityFrameworkCore;
 
 var isBootstrap = args.Contains("--bootstrap-user", StringComparer.Ordinal);
 var builder = WebApplication.CreateBuilder(isBootstrap ? args.Where(argument => argument != "--bootstrap-user").ToArray() : args);
-// Hosting's request-start messages include OAuth callback query credentials.
+// Hosting's request-start messages include the query string: OAuth callback credentials and the one-click unsubscribe token (NotificationRecipientApiIntegrationTests pins this).
 builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
 builder.Services.AddPlatformSecurity();
 
 var app = builder.Build();
 _ = app.Services.GetRequiredService<DbContextOptions<PlatformDbContext>>();
 _ = app.Services.GetRequiredService<AgentTransferAdmission>();
+_ = app.Services.GetRequiredService<BackupPlatform.Notifications.NotificationOptions>();
 _ = app.Services.GetRequiredService<BackupPlatform.Agents.Connectivity.AgentConnectivityOptions>();
 _ = app.Services.GetRequiredService<BackupPlatform.Application.Backups.BackupExecutionOptions>();
 _ = app.Services.GetRequiredService<BackupPlatform.Application.Backups.BackupSchedulingOptions>();
@@ -36,6 +37,8 @@ app.MapPlatformEndpoints();
 app.MapManagedServicePlatformEndpoints();
 app.MapQuotaEndpoints();
 app.MapStorageConnectionEndpoints();
+app.MapNotificationEndpoints();
+app.MapNotificationRecipientEndpoints();
 app.MapBackupEndpoints();
 app.MapBackupArtifactEndpoints();
 app.MapBackupTaskEndpoints();
