@@ -17,6 +17,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The isolated SMTP/HTTPS servers and fakes are shared with the notification unit tests. -->
+    <Compile Include="../unit-tests/Notifications/Support/*.cs" Link="Notifications/Support/%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../../src/core/infrastructure/BackupPlatform.Infrastructure.csproj" />
     <!-- Aliased: the Agent.Core namespace would otherwise shadow the Agent domain entity in this project. -->
     <ProjectReference Include="../../src/agent/core/BackupPlatform.Agent.Core.csproj" Aliases="AgentCore" />

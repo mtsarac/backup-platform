@@ -33,6 +33,7 @@
     <ProjectReference Include="../../src/providers/storage/sftp/BackupPlatform.StorageProviders.Sftp.csproj" />
     <ProjectReference Include="../../src/providers/storage/google-drive/BackupPlatform.StorageProviders.GoogleDrive.csproj" />
     <ProjectReference Include="../../src/modules/storage/BackupPlatform.Storage.csproj" />
+    <ProjectReference Include="../../src/modules/notifications/BackupPlatform.Notifications.csproj" />
     <ProjectReference Include="../../src/providers/secret/abstractions/BackupPlatform.SecretProviders.Abstractions.csproj" />
     <ProjectReference Include="../../src/providers/secret/data-protection/BackupPlatform.SecretProviders.DataProtection.csproj" />
     <ProjectReference Include="../../src/hosts/api/BackupPlatform.Api.csproj" />
