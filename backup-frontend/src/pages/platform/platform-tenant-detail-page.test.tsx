@@ -23,8 +23,8 @@ const users: PlatformUser[] = [
 ]
 const audit: PlatformAuditEntry = { id: 'audit-1', at: '2026-10-06T08:00:00Z', actorUserId: 'admin-id', actorDisplayName: 'Platform Operatörü', actorKind: 'PlatformAdmin', action: 'membership.role_changed', tenantId: 'tenant-a', tenantName: 'Acme A.Ş.', targetType: 'Membership', targetId: 'user-1', details: { role: 'Admin', changed: true, note: null } }
 
-function mount() {
-  return renderPlatform(<PlatformTenantDetailPage />, { path: '/platform/tenants/tenant-a', route: '/platform/tenants/:tenantId' })
+function mount(tab = '') {
+  return renderPlatform(<PlatformTenantDetailPage />, { path: `/platform/tenants/tenant-a${tab ? `?tab=${tab}` : ''}`, route: '/platform/tenants/:tenantId' })
 }
 
 beforeEach(() => {
@@ -45,14 +45,18 @@ describe('platform tenant detail', () => {
     expect(await screen.findByRole('heading', { name: 'Acme A.Ş.' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: "Bu tenant'ın Agent'ları" })).toHaveAttribute('href', '/platform/agents?tenantId=tenant-a')
     expect(screen.getByRole('link', { name: 'Tüm audit kayıtları' })).toHaveAttribute('href', '/platform/audit?tenantId=tenant-a')
-    expect(await screen.findByRole('heading', { name: 'Destek erişimi' })).toBeInTheDocument()
-    expect(supportApi.getSessions).toHaveBeenCalledWith({ tenantId: 'tenant-a', page: 1, pageSize: 5 }, expect.any(AbortSignal))
-    expect(await screen.findByText('Ayşe Yılmaz')).toBeInTheDocument()
-    expect(screen.getByText('Can Demir')).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: 'Ayşe Yılmaz rolü' })).toHaveValue('Owner')
     expect(await screen.findByText('Üyelik rolü değiştirildi')).toBeInTheDocument()
     expect(screen.getByText('Evet')).toBeInTheDocument()
     expect(api.getAudit).toHaveBeenCalledWith({ tenantId: 'tenant-a', page: 1, pageSize: 10 }, expect.any(AbortSignal))
+    expect(supportApi.getSessions).not.toHaveBeenCalled()
+    expect(api.getMemberships).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('tab', { name: 'Destek erişimi' }))
+    expect(await screen.findByRole('heading', { name: 'Destek erişimi' })).toBeInTheDocument()
+    expect(supportApi.getSessions).toHaveBeenCalledWith({ tenantId: 'tenant-a', page: 1, pageSize: 5 }, expect.any(AbortSignal))
+    await userEvent.click(screen.getByRole('tab', { name: 'Üyeler' }))
+    expect(await screen.findByText('Ayşe Yılmaz')).toBeInTheDocument()
+    expect(screen.getByText('Can Demir')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Ayşe Yılmaz rolü' })).toHaveValue('Owner')
   })
 
   it('renames the tenant', async () => {
@@ -69,7 +73,7 @@ describe('platform tenant detail', () => {
 
   it('asks for confirmation before changing the enrollment policy', async () => {
     vi.mocked(api.setTenantEnrollment).mockResolvedValue({ tenantId: 'tenant-a', enabled: false, changed: true })
-    mount()
+    mount('agents')
     await userEvent.click(await screen.findByRole('switch', { name: 'Yeni Agent kayıtlarına izin ver' }))
     const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveTextContent('Agent kaydı kapatılsın mı?')
@@ -82,7 +86,7 @@ describe('platform tenant detail', () => {
 
   it('adds a member chosen from the searchable user list', async () => {
     vi.mocked(api.addMembership).mockResolvedValue({ userId: 'user-3', displayName: 'Deniz Kaya', loginIdentifier: 'deniz', role: 'Operator' })
-    mount()
+    mount('members')
     await screen.findByText('Ayşe Yılmaz')
     await userEvent.type(screen.getByRole('searchbox', { name: 'Kullanıcı ara' }), 'den')
     await userEvent.click(screen.getByRole('button', { name: 'Ara' }))
@@ -98,7 +102,7 @@ describe('platform tenant detail', () => {
 
   it('reports an existing member (409) and a missing user (404) with safe messages', async () => {
     vi.mocked(api.addMembership).mockRejectedValueOnce(new ApiError(409, { error: 'already_member' })).mockRejectedValueOnce(new ApiError(404, { error: 'user_not_found' }))
-    mount()
+    mount('members')
     await screen.findByText('Ayşe Yılmaz')
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Kullanıcı' }), 'user-3')
     await userEvent.click(screen.getByRole('button', { name: 'Üye ekle' }))
@@ -109,7 +113,7 @@ describe('platform tenant detail', () => {
 
   it('changes a member role', async () => {
     vi.mocked(api.changeMembershipRole).mockResolvedValue({ ...can, role: 'Admin' })
-    mount()
+    mount('members')
     await screen.findByText('Can Demir')
     vi.mocked(api.getMemberships).mockResolvedValue(paged([ayse, { ...can, role: 'Admin' }]))
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Can Demir rolü' }), 'Admin')
@@ -120,7 +124,7 @@ describe('platform tenant detail', () => {
 
   it('removes a member only after confirmation', async () => {
     vi.mocked(api.removeMembership).mockResolvedValue(undefined)
-    mount()
+    mount('members')
     await screen.findByText('Can Demir')
     await userEvent.click(screen.getByRole('button', { name: 'Can Demir üyeliğini kaldır' }))
     const dialog = await screen.findByRole('dialog')
@@ -140,9 +144,9 @@ describe('platform tenant detail', () => {
 
   it('paginates memberships through the memberPage URL parameter', async () => {
     vi.mocked(api.getMemberships).mockResolvedValue(paged([ayse], { totalCount: 40 }))
-    mount()
+    mount('members')
     await userEvent.click(await screen.findByRole('button', { name: 'Sonraki' }))
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('?memberPage=2'))
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('?tab=members&memberPage=2'))
     expect(api.getMemberships).toHaveBeenLastCalledWith('tenant-a', { page: 2, pageSize: 25 }, expect.any(AbortSignal))
   })
 
@@ -153,7 +157,7 @@ describe('platform tenant detail', () => {
       makeConnection({ permissions: { ...noPermissions, canSetQuotaScope: true, canToggle: true } }),
     ] })
     vi.mocked(connectionApi.createPlatformConnection).mockResolvedValue(makeManaged())
-    mount()
+    mount('storage')
     expect(await screen.findByRole('heading', { name: 'Depolama bağlantıları' })).toBeInTheDocument()
     expect(connectionApi.getPlatformTenantConnections).toHaveBeenCalledWith('tenant-a', expect.any(AbortSignal))
     const managed = within((await screen.findByText('Managed Storage')).closest('tr') as HTMLElement)
@@ -174,7 +178,7 @@ describe('platform tenant detail', () => {
 
   it('shows the authorization state for the connections section on 403', async () => {
     vi.mocked(connectionApi.getPlatformTenantConnections).mockRejectedValue(new ApiError(403))
-    mount()
+    mount('storage')
     expect(await screen.findByRole('heading', { name: 'Depolama bağlantıları' })).toBeInTheDocument()
     expect(await screen.findByText('Bu alan için yetkiniz yok')).toBeInTheDocument()
   })

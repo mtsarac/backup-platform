@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/lib/api/client'
 import { errorMessage } from '@/lib/api/failure-messages'
@@ -34,10 +34,24 @@ beforeEach(() => {
 })
 
 describe('run detail controls and attention', () => {
+  it('resets the selected tab and cancellation confirmation when navigating to another run', async () => {
+    const router = createMemoryRouter([{ path: '/tenants/:tenantId/backup-runs/:id', element: <BackupDetailPage /> }], { initialEntries: ['/tenants/tenant-a/backup-runs/first'] })
+    render(<RouterProvider router={router} />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Zamanlama ve politika' }))
+    fireEvent.click(screen.getByRole('button', { name: 'İptal et' }))
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+    await act(async () => { await router.navigate('/tenants/tenant-a/backup-runs/second') })
+    expect(screen.getByRole('tab', { name: 'Özet' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(state.cancel.mutateAsync).not.toHaveBeenCalled()
+  })
+
   it('uses cooperative cancellation response without prematurely claiming Cancelled', async () => {
     state.cancel.mutateAsync.mockResolvedValue(makeRun({ status: 'CancellationRequested' }))
     renderDetail()
     fireEvent.click(screen.getByRole('button', { name: 'İptal et' }))
+    expect(state.cancel.mutateAsync).not.toHaveBeenCalled()
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'İptali onayla' }))
     await screen.findByText('İptal isteği iletildi. Ajanın işlemi durdurması bekleniyor.')
     expect(state.cancel.mutateAsync).toHaveBeenCalledTimes(1)
     expect(screen.queryByText('Çalıştırma iptal edildi.')).not.toBeInTheDocument()
@@ -48,6 +62,7 @@ describe('run detail controls and attention', () => {
     state.cancel.mutateAsync.mockResolvedValue(makeRun({ status: 'CancellationRequested' }))
     const view = renderDetail()
     fireEvent.click(screen.getByRole('button', { name: 'İptal et' }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'İptali onayla' }))
     await screen.findByText('İptal isteği iletildi. Ajanın işlemi durdurması bekleniyor.')
     state.query.data = makeRun({ status: 'Cancelled' })
     view.rerender(<MemoryRouter initialEntries={['/tenants/tenant-a/backup-runs/run-id']}><Routes><Route path="/tenants/:tenantId/backup-runs/:id" element={<BackupDetailPage />} /></Routes></MemoryRouter>)
@@ -90,6 +105,7 @@ describe('run detail controls and attention', () => {
     run.attempts[0].progressPercent = 0
     state.query.data = run
     const view = renderDetail()
+    fireEvent.click(screen.getByRole('tab', { name: /^Denemeler/ }))
     expect(screen.getByText('1. deneme · Elle yeniden deneme')).toBeInTheDocument()
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0')
     expect(screen.getByText('Yedek oluşturuluyor')).toBeInTheDocument()
@@ -98,6 +114,7 @@ describe('run detail controls and attention', () => {
     run.attempts[0].progressPercent = null
     run.attempts[0].trigger = 'AutomaticRetry'
     view.rerender(<MemoryRouter><BackupDetailPage /></MemoryRouter>)
+    fireEvent.click(screen.getByRole('tab', { name: /^Denemeler/ }))
     expect(screen.getByText('1. deneme · Otomatik yeniden deneme')).toBeInTheDocument()
     expect(screen.getByText('İlerleme: Yüzde bildirilmedi')).toBeInTheDocument()
     expect(screen.getByRole('progressbar')).not.toHaveAttribute('aria-valuenow')

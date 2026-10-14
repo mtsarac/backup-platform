@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
+import { Field } from '@/components/ui/field'
+import { Notice } from '@/components/ui/notice'
+import { Section } from '@/components/ui/section'
+import { selectClass } from '@/features/platform/styles'
 import { nativeDownloadUrl } from '@/features/artifacts/native-download-url'
 import { artifactSize } from '@/features/artifacts/format'
 import { failureMessage } from '@/lib/api/failure-messages'
@@ -40,17 +44,18 @@ function DownloadController({ scope, artifactId, eligible }: { scope: SupportSco
   const selected = availability.data?.replicas.find(replica => replica.replicaId === replicaId)
   const busy = prepare.isPending || Boolean(download && !status.error && safeUrl && !['Completed', 'Failed', 'Cancelled'].includes(status.data?.state ?? ''))
   const error = availability.error || prepare.error || status.error
-  return <section aria-label="Download Backup" className="space-y-3 rounded-lg border border-border bg-surface p-4">
-    <h3 className="font-medium">Download Backup</h3>
-    {!scope.enabled && <p className="text-sm text-text-muted">Etkin, sahibi olduğunuz ve DownloadBackup izni taşıyan bir destek oturumu gerekir.</p>}
-    {!eligible && <p className="text-sm text-text-muted">Bu Artifact kullanılabilir değil; indirme kapalı.</p>}
+  return <Section title="Download Backup" description="Dosya tarayıcınız tarafından indirilir; içerik bu arayüzde tutulmaz.">
+    <div className="space-y-4">
+    {!scope.enabled && <Notice>Etkin, sahibi olduğunuz ve DownloadBackup izni taşıyan bir destek oturumu gerekir.</Notice>}
+    {!eligible && <Notice>Bu Artifact kullanılabilir değil; indirme kapalı.</Notice>}
     {enabled && <SupportQueryState isPending={availability.isPending} error={error}>{availability.data && <>
       <p className="text-sm">{artifactSize(availability.data.sizeBytes)} · Checksum: <code className="break-all">{availability.data.checksum}</code></p>
-      <label className="block text-sm">Replica<select className="mt-1 block w-full rounded-lg border border-border bg-surface p-2" value={replicaId} disabled={busy} onChange={event => setReplicaId(event.target.value)}><option value="">Otomatik · kullanılabilir Replica</option>{availability.data.replicas.map(replica => <option key={replica.replicaId} value={replica.replicaId} disabled={!replica.available}>{replica.storageProvider}{!replica.available ? ` · ${failureMessage(replica.reason)}` : ''}</option>)}</select></label>
-      {!availability.data.available && <p role="status">İndirme kullanılamıyor: {failureMessage(availability.data.reason)}</p>}
+      <Field label="Replica">{(control) => <select {...control} className={`${selectClass} w-full`} value={replicaId} disabled={busy} onChange={event => setReplicaId(event.target.value)}><option value="">Otomatik · kullanılabilir Replica</option>{availability.data.replicas.map(replica => <option key={replica.replicaId} value={replica.replicaId} disabled={!replica.available}>{replica.storageProvider}{!replica.available ? ` · ${failureMessage(replica.reason)}` : ''}</option>)}</select>}</Field>
+      {!availability.data.available && <Notice tone="warning">İndirme kullanılamıyor: {failureMessage(availability.data.reason)}</Notice>}
     </>}</SupportQueryState>}
     <Button disabled={!enabled || busy || Boolean(error) || !availability.data?.available || Boolean(selected && !selected.available)} onClick={() => { if (submitting.current || !enabled) return; submitting.current = true; started.current = false; prepare.mutate() }}>{busy ? 'İndirme hazırlanıyor…' : 'Download'}</Button>
-    {download && !safeUrl && <p role="alert" className="text-sm text-error">İndirme bağlantısı güvenli değil. Yeni bir indirme başlatın.</p>}
+    {download && !safeUrl && <Notice tone="error">İndirme bağlantısı güvenli değil. Yeni bir indirme başlatın.</Notice>}
     {status.data && <p role={status.data.state === 'Failed' ? 'alert' : 'status'} className="text-sm">{status.data.state === 'Failed' ? failureMessage(status.data.failureCode) : status.data.state === 'Preparing' ? 'İndirme hazırlanıyor…' : status.data.state === 'Ready' || status.data.state === 'Streaming' ? 'İndirme başlatıldı. Dosyayı tarayıcınız kaydediyor.' : status.data.state === 'Completed' ? 'İndirme tamamlandı.' : 'İndirme iptal edildi.'} · {artifactSize(status.data.transferredBytes)}</p>}
-  </section>
+    </div>
+  </Section>
 }

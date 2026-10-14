@@ -5,6 +5,13 @@ import { DataTable, type Column } from '@/components/data/data-table'
 import { Pagination } from '@/components/data/pagination'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
+import { Notice } from '@/components/ui/notice'
+import { PageHeader } from '@/components/ui/page-header'
+import { Section } from '@/components/ui/section'
+import { platformCrumb } from '@/features/platform/crumbs'
+import { bareTableClass } from '@/features/platform/list-empty'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
 import { agentDate } from '@/features/agents/format'
 import { formatCapacity, allocatedPercent } from '@/features/storage/format'
@@ -14,7 +21,7 @@ import type { StorageUsageRow, QuotaState, EntitlementStatus } from '@/features/
 import { platformPaths } from '@/features/platform/paths'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { SearchForm } from '@/features/platform/search-form'
-import { linkClass, selectClass } from '@/features/platform/styles'
+import { linkClass } from '@/features/platform/styles'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { useStorageUsage, useReconcileUsage, useRebuildUsage } from '@/features/platform/storage/hooks'
@@ -112,8 +119,8 @@ export function PlatformStoragePage() {
         const percent = allocatedPercent(used, reserved, limit)
 
         return (
-          <div className="min-w-[160px] space-y-1">
-            <div className="text-xs">
+          <div className="min-w-0 space-y-1">
+            <div className="text-sm tabular-nums">
               <span className="font-semibold text-text-heading">{formatCapacity(committed)}</span>
               {limit !== null && (
                 <span className="text-text-muted"> / {formatCapacity(limit)}</span>
@@ -129,7 +136,7 @@ export function PlatformStoragePage() {
               />
             )}
             {percent !== null && (
-              <div className="text-[11px] text-text-muted">%%{percent} ayrılmış</div>
+              <div className="text-sm text-text-muted">%{percent} ayrılmış</div>
             )}
           </div>
         )
@@ -201,86 +208,28 @@ export function PlatformStoragePage() {
   ]
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-text-heading">Depolama ve Kota Yönetimi</h1>
-          <p className="mt-1 text-sm text-text-muted">
-            Tüm tenant'ların depolama kullanımını, rezerve alanlarını ve kota durumlarını izleyin.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={() => void query.refetch()}
-            disabled={query.isFetching}
-          >
-            <RefreshCw className={`size-4 ${query.isFetching ? 'animate-spin' : ''}`} />
-            Yenile
-          </Button>
-          <Link
-            to={platformPaths.quotaPolicies}
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-sm font-medium hover:bg-muted"
-          >
-            <ShieldCheck className="size-4" />
-            Kota Politikaları
-          </Link>
-        </div>
-      </div>
-
-      {statusMessage && (
-        <p role="status" className="rounded-md border border-success/30 bg-success-subtle p-3 text-sm text-success">
-          {statusMessage}
-        </p>
-      )}
-
-      <div className="flex flex-wrap items-end gap-3">
-        <SearchForm
-          label="Tenant ara"
-          value={search}
-          onSearch={(val) => update({ search: val })}
-          placeholder="Tenant adı..."
-        />
-        <label className="text-sm text-text-muted">
-          Kota durumu
-          <select
-            className={selectClass}
-            value={quotaState ?? ''}
-            onChange={(e) => update({ quotaState: e.target.value })}
-          >
-            <option value="">Tümü</option>
-            <option value="Normal">Normal</option>
-            <option value="Warning">Warning</option>
-            <option value="Critical">Critical</option>
-            <option value="OverQuota">OverQuota</option>
-            <option value="Unlimited">Unlimited</option>
-          </select>
-        </label>
-        <label className="text-sm text-text-muted">
-          Abonelik
-          <select
-            className={selectClass}
-            value={subscriptionStatus ?? ''}
-            onChange={(e) => update({ subscriptionStatus: e.target.value })}
-          >
-            <option value="">Tümü</option>
-            <option value="Active">Etkin</option>
-            <option value="Suspended">Askıda</option>
-            <option value="Expired">Süresi doldu</option>
-            <option value="NoSubscription">Abonelik yok</option>
-          </select>
-        </label>
-      </div>
+    <div className="space-y-6">
+      <PageHeader crumbs={[platformCrumb]} title="Depolama ve Kota Yönetimi" description="Tüm tenant'ların depolama kullanımını, rezerve alanlarını ve kota durumlarını izleyin." actions={<>
+        <Button variant="outline" onClick={() => void query.refetch()} disabled={query.isFetching}><RefreshCw aria-hidden="true" className={`size-4 ${query.isFetching ? 'animate-spin motion-reduce:animate-none' : ''}`} />Yenile</Button>
+        <Link to={platformPaths.quotaPolicies} className={buttonVariants({ variant: 'outline' })}><ShieldCheck aria-hidden="true" className="size-4" />Kota Politikaları</Link>
+      </>} />
+      {statusMessage && <Notice tone="success">{statusMessage}</Notice>}
+      <Filters label="Depolama kullanım filtreleri" onClear={search || quotaState || subscriptionStatus ? () => update({ search: '', quotaState: '', subscriptionStatus: '' }) : undefined}>
+        <SearchForm className="sm:col-span-2" label="Tenant ara" value={search} onSearch={(value) => update({ search: value })} placeholder="Tenant adı..." />
+        <FilterField label="Kota durumu"><select className={filterControlClass} value={quotaState ?? ''} onChange={(event) => update({ quotaState: event.target.value })}>
+          <option value="">Tümü</option><option value="Normal">Normal</option><option value="Warning">Warning</option><option value="Critical">Critical</option><option value="OverQuota">OverQuota</option><option value="Unlimited">Unlimited</option>
+        </select></FilterField>
+        <FilterField label="Abonelik"><select className={filterControlClass} value={subscriptionStatus ?? ''} onChange={(event) => update({ subscriptionStatus: event.target.value })}>
+          <option value="">Tümü</option><option value="Active">Etkin</option><option value="Suspended">Askıda</option><option value="Expired">Süresi doldu</option><option value="NoSubscription">Abonelik yok</option>
+        </select></FilterField>
+      </Filters>
 
       <PlatformQueryState isPending={query.isPending} error={query.error}>
         {data && (
-          <>
-            <DataTable
-              rows={data.items}
-              columns={columns}
-              keyExtractor={(r) => r.tenantId}
-              emptyMessage="Kriterlere uygun tenant kullanımı bulunamadı."
-            />
+          <div className="space-y-4">
+            <Section title="Tenant kullanımı" description="Kullanılan ve rezerve alanın toplamı etkin limit ile karşılaştırılır. Reconcile ve Rebuild kullanım kayıtlarını günceller; Backup dosyalarını silmez." flush className="overflow-hidden">
+              <DataTable className={bareTableClass} rows={data.items} columns={columns} keyExtractor={(row) => row.tenantId} emptyMessage="Kriterlere uygun tenant kullanımı bulunamadı." />
+            </Section>
             {data.totalCount > 0 && (
               <Pagination
                 label="Kullanım sayfaları"
@@ -291,7 +240,7 @@ export function PlatformStoragePage() {
                 onPageChange={(next) => update({ page: next })}
               />
             )}
-          </>
+          </div>
         )}
       </PlatformQueryState>
 

@@ -1,46 +1,24 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
-import { ArrowLeft, CheckCircle2, AlertTriangle, XCircle, RotateCcw } from 'lucide-react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { CheckCircle2, XCircle } from 'lucide-react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { QueryState } from '@/components/data/query-state'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
+import { Notice } from '@/components/ui/notice'
+import { PageHeader } from '@/components/ui/page-header'
+import { Fact, Facts, Section } from '@/components/ui/section'
+import { Stepper } from '@/components/ui/stepper'
+import { inputClass, selectClass } from '@/features/platform/styles'
+import { PrecheckResults } from '@/features/restores/precheck-results'
 import { useArtifact } from '@/features/artifacts/hooks'
 import type { BackupArtifact } from '@/features/artifacts/types'
 import { artifactSize } from '@/features/artifacts/format'
 import { useRestore, useRestoreTargets, useStartRestore, useStartRestoreDiscovery, useStartRestorePrecheck } from '@/features/restores/hooks'
-import { restoreErrorMessage, restoreFailureMessage, restoreModeLabel, safeRestoreCode } from '@/features/restores/presentation'
+import { restoreErrorMessage, restoreFailureMessage, restoreModeLabel } from '@/features/restores/presentation'
 import type { RestoreMode, RestoreOptions, RestoreTarget, RestoreTargetsResponse, RestoreView, StartRestoreDiscoveryVariables, StartRestorePrecheckVariables, StartRestoreVariables } from '@/features/restores/types'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { ApiError } from '@/lib/api/client'
 
-const inputClass = 'h-9 w-full rounded-md border border-border bg-surface-2 px-3 text-sm outline-none focus:border-ring disabled:opacity-60'
-const selectClass = 'h-9 w-full rounded-md border border-border bg-surface-2 px-3 text-sm outline-none focus:border-ring disabled:opacity-60'
-
-function StepBadge({ step, current, title }: { step: number; current: number; title: string }) {
-  const isDone = current > step
-  const isCurrent = current === step
-  return (
-    <div className={`flex items-center gap-2 text-sm font-medium ${isCurrent ? 'text-primary' : isDone ? 'text-text' : 'text-text-muted'}`}>
-      <span className={`flex size-6 items-center justify-center rounded-full text-xs font-semibold ${isCurrent ? 'bg-primary text-primary-foreground' : isDone ? 'bg-surface-2 text-text border border-border' : 'bg-surface-2 text-text-muted'}`}>
-        {step}
-      </span>
-      <span>{title}</span>
-    </div>
-  )
-}
-
-function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
-  return (
-    <section className="space-y-4 rounded-lg border-2 border-border bg-surface p-4 sm:p-6">
-      <div>
-        <h2 className="text-xl font-semibold text-text-heading">{title}</h2>
-        {description && <p className="mt-1 text-base text-text-muted">{description}</p>}
-      </div>
-      {children}
-    </section>
-  )
-}
 
 export function RestoreWizardPage() {
   const { id = '' } = useParams<{ id: string }>()
@@ -49,29 +27,18 @@ export function RestoreWizardPage() {
   const targetsQuery = useRestoreTargets(id)
 
   if (!canOperate) {
-    return (
-      <div className="space-y-4 p-6">
-        <Link className="inline-flex items-center gap-1 text-sm text-primary hover:underline" to={`/tenants/${tenantId}/artifacts/${id}`}>
-          <ArrowLeft className="size-4" /> Backup detaylarına dön
-        </Link>
-        <div role="alert" className="rounded-lg border border-error/30 bg-error-subtle p-4 text-sm text-error">
-          Bu sayfada geri yükleme (Restore) işlemi yapma yetkiniz yok. Restore başlatma yalnızca Owner, Admin ve Operator rollerine açıktır. Viewer rolü salt okunurdur.
-        </div>
-      </div>
-    )
+    return <div className="space-y-6">
+      <PageHeader title="Backup Geri Yükleme Sihirbazı" crumbs={[{ label: 'Backup dosyaları', to: `/tenants/${tenantId}/artifacts` }, { label: 'Backup detayları', to: `/tenants/${tenantId}/artifacts/${id}` }, { label: 'Geri yükleme' }]} />
+      <Notice tone="error">Bu sayfada geri yükleme (Restore) işlemi yapma yetkiniz yok. Restore başlatma yalnızca Owner, Admin ve Operator rollerine açıktır. Viewer rolü salt okunurdur.</Notice>
+    </div>
   }
 
   return (
     <div className="space-y-6">
-      <Link className="inline-flex items-center gap-1 text-sm text-primary hover:underline" to={`/tenants/${tenantId}/artifacts/${id}`}>
-        <ArrowLeft className="size-4" /> Backup detaylarına dön
-      </Link>
-      <header>
-        <h1 className="text-3xl font-semibold text-text-heading">Backup Geri Yükleme Sihirbazı</h1>
-        <p className="mt-1 text-base text-text-muted">
-          Doğrulanmış MSSQL backup'ını hedef SQL Server instance'ına güvenli ve denetlenebilir adımlarla geri yükleyin.
-        </p>
-      </header>
+      <PageHeader title="Backup Geri Yükleme Sihirbazı"
+        description="Doğrulanmış MSSQL backup'ını hedef SQL Server Instance'a güvenli ve denetlenebilir adımlarla geri yükleyin."
+        crumbs={[{ label: 'Backup dosyaları', to: `/tenants/${tenantId}/artifacts` }, { label: artifactQuery.data?.databaseName ?? 'Backup detayları', to: `/tenants/${tenantId}/artifacts/${id}` }, { label: 'Geri yükleme' }]}
+      />
       <QueryState isPending={artifactQuery.isPending || targetsQuery.isPending} error={artifactQuery.error || targetsQuery.error}>
         {artifactQuery.data && targetsQuery.data && (
           <RestoreWizard
@@ -175,7 +142,6 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
   const precheckItems = precheckData?.result?.preCheck ?? []
   const precheckFailed = precheckData?.status === 'Failed' || precheckItems.some((item) => item.status === 'Failed')
   const precheckPassed = precheckData?.status === 'Succeeded' && !precheckFailed
-  const precheckWarnings = precheckItems.filter((item) => item.status === 'Warning')
   const replaceConfirmed = mode !== 'ReplaceExistingDatabase' || (confirmOverwriteInput.trim() === targetDatabaseName.trim() && targetDatabaseName.trim().length > 0)
 
   function invalidateExecution() {
@@ -327,22 +293,18 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
 
   return (
     <div className="space-y-6">
-      <nav aria-label="Sihirbaz adımları" className="flex flex-wrap items-center gap-6 rounded-lg border border-border bg-surface p-4">
-        <StepBadge step={1} current={step} title="Hedef & Instance" />
-        <StepBadge step={2} current={step} title="Restore Modu" />
-        <StepBadge step={3} current={step} title="Ön Kontrol (Precheck)" />
-        <StepBadge step={4} current={step} title="Onay & Başlat" />
-      </nav>
+      <Stepper steps={['Hedef ve Instance', 'Restore modu', 'Ön kontrol (Precheck)', 'Onay ve başlat']} current={step - 1} />
 
       {/* Artifact Summary */}
-      <section aria-label="Kaynak Backup Bilgisi" className="rounded-lg border border-border bg-surface-2 p-4 text-sm">
+      <section aria-label="Kaynak Backup Bilgisi" className="space-y-2 rounded-xl border border-border bg-surface-2 p-4 text-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 font-medium">
-          <span>Kaynak: {artifact.databaseName ?? 'Bilinmeyen DB'} · {artifactSize(artifact.sizeBytes)}</span>
+          <span className="min-w-0 break-words">Kaynak: {artifact.databaseName ?? 'Bilinmeyen Database'} · {artifactSize(artifact.sizeBytes)}</span>
           <StatusPill status={artifact.state} />
         </div>
-        <p className="mt-1 text-xs text-text-muted">
-          Artifact ID: {artifact.id} · Tür: {artifact.backupType} · Replikalar: {artifact.replicas.map((r) => `${r.storageProvider} (${r.status})`).join(', ')}
-        </p>
+        <details>
+          <summary className="cursor-pointer text-text-muted">Kaynak ayrıntıları · {artifact.replicas.length} Replica</summary>
+          <p className="mt-2 break-all text-sm text-text-muted">Artifact ID: <code>{artifact.id}</code> · Tür: {artifact.backupType} · Replikalar: {artifact.replicas.map((r) => `${r.storageProvider} (${r.status})`).join(', ')}</p>
+        </details>
       </section>
 
       {/* Step 1: Target Agent & SQL Instance */}
@@ -353,7 +315,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
               <label htmlFor={`${instancePrefix}-agent`} className="block text-sm font-medium">Agent</label>
               <select
                 id={`${instancePrefix}-agent`}
-                className={selectClass}
+                className={`${selectClass} w-full`}
                 value={selectedAgentId}
                 onChange={(e) => { invalidateDiscovery(); setSelectedAgentId(e.target.value) }}
               >
@@ -381,7 +343,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
                       <XCircle className="size-4 shrink-0 mt-0.5" />
                       <div>
                         <p className="font-medium">Bu Agent seçilemez veya backup'a erişemez:</p>
-                        <p className="mt-1 text-xs">{activeAgent.rejectionMessage ?? restoreFailureMessage(activeAgent.rejectionCode)}</p>
+                        <p className="mt-1 text-sm">{restoreFailureMessage(activeAgent.rejectionCode)}</p>
                       </div>
                     </div>
                   )}
@@ -392,7 +354,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
 
           <Section title="2. Hedef SQL Instance" description="Geri yüklemenin yapılacağı SQL Server bağlantı referansı.">
             <div className="space-y-4">
-              <div className="flex gap-4 text-sm">
+              <div className="flex flex-wrap gap-4 text-sm">
                 <label className="flex items-center gap-2">
                   <input
                     type="radio"
@@ -419,7 +381,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
                   <label htmlFor={`${instancePrefix}-target-select`} className="block text-sm font-medium">Bağlantı</label>
                   <select
                     id={`${instancePrefix}-target-select`}
-                    className={selectClass}
+                    className={`${selectClass} w-full`}
                     value={selectedTargetIndex}
                     onChange={(e) => { invalidateDiscovery(); setSelectedTargetIndex(Number(e.target.value)) }}
                   >
@@ -465,7 +427,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
                       placeholder="Agent credential referansı (örn. sql_smoke)"
                     />
                   </div>
-                  <div className="flex items-center gap-4 sm:col-span-2 text-sm">
+                  <div className="flex flex-wrap items-center gap-4 text-sm sm:col-span-2">
                     <label className="flex items-center gap-2">
                       <input
                         type="checkbox"
@@ -507,6 +469,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
               <div className="grid gap-3 sm:grid-cols-2">
                 <button
                   type="button"
+                  aria-pressed={mode === 'NewDatabase'}
                   className={`rounded-lg border-2 p-4 text-left transition-colors ${mode === 'NewDatabase' ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border bg-surface'}`}
                   onClick={() => {
                     if (mode === 'NewDatabase') return
@@ -522,7 +485,8 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
 
                 <button
                   type="button"
-                  className={`rounded-lg border-2 p-4 text-left transition-colors ${mode === 'ReplaceExistingDatabase' ? 'border-destructive bg-destructive/5 ring-1 ring-destructive' : 'border-border bg-surface'}`}
+                  aria-pressed={mode === 'ReplaceExistingDatabase'}
+                  className={`rounded-lg border-2 p-4 text-left transition-colors ${mode === 'ReplaceExistingDatabase' ? 'border-error bg-error-subtle ring-1 ring-error' : 'border-border bg-surface'}`}
                   disabled={startDiscovery.isPending}
                   onClick={() => {
                     if (pendingRef.current.discovery) return
@@ -533,7 +497,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
                     void triggerDiscovery()
                   }}
                 >
-                  <p className="font-semibold text-destructive">Mevcut veritabanının üzerine yaz (Riskli)</p>
+                  <p className="font-semibold text-error">Mevcut veritabanının üzerine yaz (Riskli)</p>
                   <p className="mt-1 text-base text-text-muted">
                     Hedef sunucudaki mevcut veritabanının üzerine yazar. Eski veriler kalıcı olarak kaybolur!
                   </p>
@@ -555,19 +519,13 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
               )}
 
               {mode === 'ReplaceExistingDatabase' && (
-                <div className="space-y-4 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-                  <div className="flex items-start gap-2 text-destructive">
-                    <AlertTriangle className="size-5 shrink-0 mt-0.5" />
-                    <div>
-                      <h3 className="font-semibold">DİKKAT: Veri Kaybı Riski!</h3>
-                      <p className="text-sm">
-                        Bu işlem hedef veritabanının içeriğini tamamen silecektir. İşlem geri alınamaz.
-                      </p>
-                    </div>
-                  </div>
+                <div className="space-y-4 rounded-xl border border-error/40 bg-surface p-4">
+                  <Notice tone="warning" title="DİKKAT: Veri Kaybı Riski!">
+                    Bu işlem hedef veritabanının içeriğini tamamen silecektir. İşlem geri alınamaz.
+                  </Notice>
 
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <label htmlFor={`${instancePrefix}-replace-db-select`} className="block text-sm font-medium">Üzerine Yazılacak Veritabanı</label>
                       <Button variant="outline" size="sm" onClick={() => void triggerDiscovery()} disabled={startDiscovery.isPending || discoveryQuery.isFetching}>
                         {startDiscovery.isPending || discoveryQuery.isFetching ? 'Taranıyor…' : discoveryRetryable ? 'Tekrar Dene' : 'Sunucudan Yenile'}
@@ -577,7 +535,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
                     {discoveryData?.result?.discovery ? (
                       <select
                         id={`${instancePrefix}-replace-db-select`}
-                        className={selectClass}
+                        className={`${selectClass} w-full`}
                         value={targetDatabaseName}
                         onChange={(e) => changeDatabaseName(e.target.value)}
                       >
@@ -603,18 +561,18 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
                   </div>
 
                   <div className="space-y-2">
-                    <label htmlFor={`${instancePrefix}-confirm-overwrite`} className="block text-sm font-medium text-destructive">
-                      Onaylamak için veritabanı adını (<span className="font-mono font-bold">{targetDatabaseName}</span>) birebir yazın:
+                    <label htmlFor={`${instancePrefix}-confirm-overwrite`} className="block break-words text-sm font-medium text-error">
+                      Onaylamak için veritabanı adını (<span className="break-all font-mono font-bold">{targetDatabaseName}</span>) birebir yazın:
                     </label>
                     <input
                       id={`${instancePrefix}-confirm-overwrite`}
-                      className={`${inputClass} border-destructive/50 focus:border-destructive`}
+                      className={`${inputClass} border-error/50`}
                       value={confirmOverwriteInput}
                       onChange={(e) => { invalidateExecution(); setConfirmOverwriteInput(e.target.value) }}
                       placeholder={targetDatabaseName}
                     />
                     {confirmOverwriteInput.length > 0 && confirmOverwriteInput !== targetDatabaseName && (
-                      <p className="text-xs text-destructive">Girdiğiniz ad hedef veritabanı adı ile eşleşmiyor.</p>
+                      <p className="text-sm text-error">Girdiğiniz ad hedef veritabanı adı ile eşleşmiyor.</p>
                     )}
                   </div>
                 </div>
@@ -641,7 +599,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
                     <span>RESTORE VERIFYONLY Çalıştır</span>
                   </label>
                   {mode === 'ReplaceExistingDatabase' && (
-                    <label className="flex items-center gap-2 sm:col-span-2 text-destructive">
+                    <label className="flex items-center gap-2 text-error sm:col-span-2">
                       <input
                         type="checkbox"
                         checked={options.terminateActiveConnections ?? false}
@@ -656,10 +614,10 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
           </Section>
 
           {precheckError != null && (
-            <div role="alert" className="rounded-lg border border-error/30 bg-error-subtle p-4 text-sm text-error">{restoreErrorMessage(precheckError)}</div>
+            <Notice tone="error">{restoreErrorMessage(precheckError)}</Notice>
           )}
 
-          <div className="flex justify-between gap-3">
+          <div className="flex flex-wrap justify-between gap-3">
             <Button variant="outline" onClick={() => setStep(1)}>← Geri</Button>
             <Button
               disabled={!eligibleForRestore || !effectiveTarget.host || !targetDatabaseName.trim() || !replaceConfirmed || startPrecheck.isPending || startRestore.isPending}
@@ -676,87 +634,8 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
         <div className="space-y-5">
           <Section title="Ön Kontrol (Precheck) Sonuçları" description="Hedef SQL Server üzerinde hiçbir değişiklik yapılmadan çalıştırılan uyumluluk ve güvenlik kontrolleri.">
             <QueryState isPending={(startPrecheck.isPending || (!!precheckOperationId && precheckQuery.isPending)) && !precheckData} error={precheckError || (currentPrecheck && precheckQuery.error)}>
-              {precheckData && (
-                <div className="space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">Durum:</span>
-                      <StatusPill status={precheckData.status} />
-                    </div>
-                    <Button variant="outline" size="sm" onClick={() => void triggerPrecheck(true)} disabled={startPrecheck.isPending || startRestore.isPending}>
-                      <RotateCcw className="size-3.5 mr-1" /> Yeniden Kontrol Et
-                    </Button>
-                  </div>
-
-                  {precheckFailed && (
-                    <div role="alert" className="rounded-lg border border-error/30 bg-error-subtle p-4 text-sm text-error">
-                      <div className="flex items-center gap-2 font-semibold">
-                        <XCircle className="size-5 shrink-0" />
-                        <span>Ön kontrol başarısız oldu! Restore başlatılamaz.</span>
-                      </div>
-                      <p className="mt-1 text-xs">
-                        {precheckData.reason ?? 'Aşağıdaki kontrollerden en az biri başarısız oldu. Hataları giderdikten sonra tekrar deneyin.'}
-                      </p>
-                    </div>
-                  )}
-
-                  {precheckPassed && precheckWarnings.length > 0 && (
-                    <div role="status" className="rounded-lg border border-warning/30 bg-warning-subtle p-4 text-sm text-warning">
-                      <div className="flex items-center gap-2 font-semibold">
-                        <AlertTriangle className="size-5 shrink-0" />
-                        <span>Ön kontrol uyarılarla geçti.</span>
-                      </div>
-                      <p className="mt-1 text-xs">Aşağıdaki uyarıları inceleyerek devam edebilirsiniz.</p>
-                    </div>
-                  )}
-
-                  {precheckPassed && precheckWarnings.length === 0 && (
-                    <div role="status" className="rounded-lg border border-success/30 bg-success-subtle p-4 text-sm text-success">
-                      <div className="flex items-center gap-2 font-semibold">
-                        <CheckCircle2 className="size-5 shrink-0" />
-                        <span>Tüm ön kontroller başarıyla tamamlandı. Geri yükleme güvenle başlatılabilir.</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Precheck Items List */}
-                  <div className="rounded-lg border border-border overflow-hidden">
-                    <table className="w-full text-left text-sm">
-                      <thead className="bg-surface-2 text-xs font-semibold uppercase text-text-muted">
-                        <tr>
-                          <th className="p-3">Kontrol</th>
-                          <th className="p-3">Durum</th>
-                          <th className="p-3">Açıklama</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border">
-                        {precheckItems.map((item, idx) => (
-                          <tr key={`${item.checkId}-${idx}`} className="hover:bg-surface-2/50">
-                            <td className="p-3 font-mono text-xs">{safeRestoreCode(item.checkId)}</td>
-                            <td className="p-3">
-                              {item.status === 'Passed' && <span className="inline-flex items-center gap-1 text-xs font-medium text-success"><CheckCircle2 className="size-3.5" /> Geçti</span>}
-                              {item.status === 'Warning' && <span className="inline-flex items-center gap-1 text-xs font-medium text-warning"><AlertTriangle className="size-3.5" /> Uyarı</span>}
-                              {item.status === 'Failed' && <span className="inline-flex items-center gap-1 text-xs font-medium text-error"><XCircle className="size-3.5" /> Başarısız</span>}
-                              {item.status === 'Skipped' && <span className="text-xs text-text-muted">Atlandı</span>}
-                            </td>
-                            <td className="p-3 text-xs text-text-muted">{item.message || safeRestoreCode(item.reasonCode)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Header / Version info */}
-                  {precheckData.result?.sourceBackup && (
-                    <div className="grid gap-2 sm:grid-cols-2 text-xs rounded-lg border border-border bg-surface-2 p-3">
-                      <div>Kaynak DB: <span className="font-semibold">{precheckData.result.sourceBackup.databaseName}</span></div>
-                      <div>Hedef SQL Sürümü: <span className="font-semibold">{precheckData.result.targetServer?.version ?? 'Bilinmiyor'}</span></div>
-                      <div>Header Doğrulandı: <span className="font-semibold">{precheckData.result.backupVerified ? 'Evet' : 'Hayır'}</span></div>
-                      <div>Checksum Doğrulandı: <span className="font-semibold">{precheckData.result.checksumVerified ? 'Evet' : 'Hayır'}</span></div>
-                    </div>
-                  )}
-                </div>
-              )}
+              {precheckData && <PrecheckResults data={precheckData} failed={precheckFailed} passed={precheckPassed}
+                onRecheck={() => void triggerPrecheck(true)} recheckDisabled={startPrecheck.isPending || startRestore.isPending} />}
             </QueryState>
             {precheckError != null && (
               <Button variant="outline" size="sm" onClick={() => void triggerPrecheck()} disabled={startPrecheck.isPending || startRestore.isPending}>
@@ -765,13 +644,25 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
             )}
           </Section>
 
-          {executionError != null && (
-            <div role="alert" className="rounded-lg border border-error/30 bg-error-subtle p-4 text-sm text-error">
-              {executionError instanceof ApiError ? restoreErrorMessage(executionError) : 'Geri yükleme başlatılamadı.'}
+          <Section title="Başlatmadan önce" description="Onayınızdan sonra Agent hedef SQL Server üzerinde Restore çalıştırır.">
+            <div className="space-y-4">
+              <Facts>
+                <Fact label="Kaynak Database">{artifact.databaseName ?? 'Bilinmeyen Database'}</Fact>
+                <Fact label="Hedef Database">{targetDatabaseName}</Fact>
+                <Fact label="Agent">{activeAgent?.hostName ?? selectedAgentId}</Fact>
+                <Fact label="Hedef SQL Server Instance">{effectiveTarget.host}{effectiveTarget.port ? `:${effectiveTarget.port}` : ''}</Fact>
+                <Fact label="Restore modu">{restoreModeLabel(mode)}</Fact>
+                <Fact label="Ön kontrol">{precheckPassed ? 'Geçti' : 'Başarılı ön kontrol bekleniyor'}</Fact>
+              </Facts>
+              {mode === 'ReplaceExistingDatabase' && <Notice tone="warning" title="Mevcut Database'in üzerine yazılacak">
+                <p><strong className="break-all">{targetDatabaseName}</strong> içindeki eski veriler kalıcı olarak kaybolur. İşlem geri alınamaz; iptal etmek eski içeriği geri getirmez.</p>
+                <p className="mt-1">Database adı ile verdiğiniz onay: <code className="break-all">{confirmOverwriteInput}</code></p>
+              </Notice>}
             </div>
-          )}
+          </Section>
+          {executionError != null && <Notice tone="error">{executionError instanceof ApiError ? restoreErrorMessage(executionError) : 'Geri yükleme başlatılamadı.'}</Notice>}
 
-          <div className="flex justify-between gap-3">
+          <div className="flex flex-wrap justify-between gap-3">
             <Button variant="outline" onClick={() => setStep(2)}>← Mod Ayarlarına Dön</Button>
             <Button
               variant={mode === 'ReplaceExistingDatabase' ? 'destructive' : 'default'}

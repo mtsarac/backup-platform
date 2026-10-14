@@ -3,11 +3,14 @@ import { DataTable, type Column } from '@/components/data/data-table'
 import { Pagination } from '@/components/data/pagination'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
+import { PageHeader } from '@/components/ui/page-header'
+import { platformCrumb } from '@/features/platform/crumbs'
+import { ListEmpty } from '@/features/platform/list-empty'
 import { agentDate } from '@/features/agents/format'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { SearchForm } from '@/features/platform/search-form'
-import { selectClass } from '@/features/platform/styles'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { usePlans, useSetPlanEnabled } from '@/features/platform/plans/hooks'
 import { CreatePlanDialog, EditPlanDialog } from '@/features/platform/plans/plan-form-dialog'
@@ -44,22 +47,20 @@ export function PlatformPlansPage() {
         <Button variant="outline" size="sm" aria-label={`${plan.name} planını ${plan.enabled ? 'devre dışı bırak' : 'etkinleştir'}`} onClick={() => { setEnabled.reset(); setToggling(plan) }}>{plan.enabled ? 'Devre dışı bırak' : 'Etkinleştir'}</Button>
       </div> },
   ]
-  return <div className="space-y-4">
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><h1 className="text-2xl font-semibold text-text-heading">Plans</h1><p className="mt-1 text-sm text-text-muted">Depolama planlarını yönetin. 1 GB = 1.000.000.000 bayt (ondalık).</p></div>
-      <Button onClick={() => setCreating(true)}>Yeni plan</Button>
-    </div>
-    <div className="flex flex-wrap items-end gap-3">
-      <SearchForm label="Plan ara" value={search} onSearch={(value) => update({ search: value })} placeholder="Plan adı" />
-      <label className="text-sm text-text-muted">Durum<select className={selectClass} value={enabled ?? ''} onChange={(event) => update({ enabled: event.target.value })}>
+  return <div className="space-y-6">
+    <PageHeader crumbs={[platformCrumb]} title="Plans" description="Depolama planlarını yönetin. 1 GB = 1.000.000.000 bayt (ondalık)." actions={<Button onClick={() => setCreating(true)}>Yeni plan</Button>} />
+    <Filters label="Plan filtreleri" onClear={filtered ? () => update({ search: '', enabled: '' }) : undefined}>
+      <SearchForm className="sm:col-span-2" label="Plan ara" value={search} onSearch={(value) => update({ search: value })} placeholder="Plan adı" />
+      <FilterField label="Durum"><select className={filterControlClass} value={enabled ?? ''} onChange={(event) => update({ enabled: event.target.value })}>
         <option value="">Tümü</option><option value="true">Etkin</option><option value="false">Devre dışı</option>
-      </select></label>
-    </div>
+      </select></FilterField>
+    </Filters>
     <PlatformQueryState isPending={query.isPending} error={query.error}>
-      {data && <>
-        <DataTable rows={data.items} columns={columns} keyExtractor={(plan) => plan.planId} emptyMessage={filtered ? 'Filtreye uygun plan bulunamadı.' : 'Henüz plan yok.'} />
+      {data && <div className="space-y-4">
+        {!filtered && data.totalCount === 0 ? <ListEmpty title="Henüz plan yok." action={<Button onClick={() => setCreating(true)}>Yeni plan</Button>}>Bir plan oluşturun, sonra tenant'ın Abonelik bölümünden atayın.</ListEmpty>
+          : <DataTable rows={data.items} columns={columns} keyExtractor={(plan) => plan.planId} emptyMessage={filtered ? 'Filtreye uygun plan bulunamadı.' : 'Henüz plan yok.'} />}
         {data.totalCount > 0 && <Pagination label="Plan sayfaları" page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
-      </>}
+      </div>}
     </PlatformQueryState>
     {creating && <CreatePlanDialog onClose={() => setCreating(false)} />}
     {editing && <EditPlanDialog plan={editing} onClose={() => setEditing(null)} />}

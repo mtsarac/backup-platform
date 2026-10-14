@@ -1,6 +1,8 @@
 import { DataTable, type Column } from '@/components/data/data-table'
 import { Pagination } from '@/components/data/pagination'
+import { Section } from '@/components/ui/section'
 import { agentDate } from '@/features/agents/format'
+import { bareTableClass } from '../list-empty'
 import { PlatformQueryState } from '../platform-query-state'
 import { useListParams } from '../use-list-params'
 import { useSubscriptionHistory } from './hooks'
@@ -26,12 +28,11 @@ export function SubscriptionHistory({ tenantId }: { tenantId: string }) {
   const query = useSubscriptionHistory(tenantId, { page, pageSize: HISTORY_PAGE_SIZE }, true)
   const data = query.data
   return <div className="space-y-3">
-    <h3 className="font-medium text-text-heading">Abonelik geçmişi</h3>
-    <PlatformQueryState isPending={query.isPending} error={query.error}>
-      {data && <>
-        <DataTable rows={data.items} columns={columns} keyExtractor={(row) => row.subscriptionId} emptyMessage="Abonelik geçmişi yok." />
-        {data.totalCount > 0 && <Pagination label="Abonelik geçmişi sayfaları" page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ subPage: next })} />}
-      </>}
-    </PlatformQueryState>
+    <Section title="Abonelik geçmişi" description="Değiştirilen ve süresi dolan abonelikler korunur." flush className="overflow-hidden">
+      <PlatformQueryState isPending={query.isPending} error={query.error}>
+        {data && <DataTable className={bareTableClass} rows={data.items} columns={columns} keyExtractor={(row) => row.subscriptionId} emptyMessage="Abonelik geçmişi yok." />}
+      </PlatformQueryState>
+    </Section>
+    {data && data.totalCount > 0 && <Pagination label="Abonelik geçmişi sayfaları" page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ subPage: next })} />}
   </div>
 }

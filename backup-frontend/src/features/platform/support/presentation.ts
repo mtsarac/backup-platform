@@ -3,6 +3,12 @@ import type { SupportPermission, SupportScope, SupportSession, SupportStatus } f
 export const supportPermissions: readonly SupportPermission[] = ['ViewBackupMetadata', 'DownloadBackup', 'RestoreBackup']
 export const supportStatuses: readonly SupportStatus[] = ['Active', 'Expired', 'Closed', 'Revoked']
 export const permissionLabels: Record<SupportPermission, string> = { ViewBackupMetadata: 'Backup metadata görüntüle · ViewBackupMetadata', DownloadBackup: 'Backup indir · DownloadBackup', RestoreBackup: 'Yeni Database geri yükle · RestoreBackup' }
+export const permissionShortLabels: Record<SupportPermission, string> = { ViewBackupMetadata: 'Metadata görüntüleme', DownloadBackup: 'Download', RestoreBackup: 'Yeni Database restore' }
+export const permissionDescriptions: Record<SupportPermission, string> = {
+  ViewBackupMetadata: 'Müşterinin Backup Job, Backup Run ve Artifact bilgilerini okur; Backup dosyasını indirme izni vermez.',
+  DownloadBackup: 'Artifact dosyasını indirmeye izin verir.',
+  RestoreBackup: 'Yalnızca yeni Database oluşturur; mevcut Database değiştirilmez.',
+}
 export const statusLabels: Record<SupportStatus, string> = { Active: 'Etkin', Expired: 'Süresi doldu', Closed: 'Kapatıldı', Revoked: 'Erişim geri alındı' }
 export const endedMessages: Record<Exclude<SupportStatus, 'Active'>, string> = {
   Expired: 'Destek oturumunun süresi doldu. Müşteri verilerine erişim ve tüm işlemler kapalıdır.',

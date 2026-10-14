@@ -12,9 +12,20 @@ import { catalog, makeConnection, makeManaged } from '@/features/storage-connect
 import type { ConnectionView } from '@/features/storage-connections/types'
 import { BackupJobWizardPage } from './backup-job-wizard-page'
 
-vi.mock('@/features/agents/api', () => ({ getAgents: vi.fn().mockResolvedValue([]) }))
+vi.mock('@/features/agents/api', () => ({ getAgents: vi.fn().mockResolvedValue([{ agentId: 'agent-a', hostName: 'SQL Agent', operationalStatus: 'Online' }]) }))
 vi.mock('@/features/storage-connections/api')
 vi.mock('@/features/backup-jobs/api', () => ({ getBackupJob: vi.fn(), getOccurrences: vi.fn(), saveBackupJob: vi.fn() }))
+
+/** Fills the required fields of steps 1-2 and lands on the Depolama step. */
+async function reachStorage(name: string) {
+  await screen.findByRole('option', { name: /SQL Agent/ })
+  fireEvent.change(screen.getByLabelText('İş adı'), { target: { value: name } })
+  fireEvent.change(screen.getByLabelText('Agent'), { target: { value: 'agent-a' } })
+  fireEvent.click(screen.getByRole('button', { name: 'İleri' }))
+  fireEvent.change(screen.getByLabelText('SQL Server host / instance'), { target: { value: 'sql' } })
+  fireEvent.change(screen.getByLabelText('Database'), { target: { value: 'ERP' } })
+  fireEvent.click(screen.getByRole('button', { name: 'İleri' }))
+}
 
 function PickerShell() {
   const { switchTenant } = useTenant()
@@ -50,15 +61,16 @@ describe('job connection picker tenant lifecycle', () => {
     vi.mocked(getTenantProviders).mockImplementation(tenantId => Promise.resolve({ items: tenantId === 'tenant-a' ? catalog : [catalog[0]] }))
     cache.setQueryData(['tenant', 'tenant-a', 'backup-jobs', 'job-a'], { name: 'A private job' })
     mount(cache)
+    await reachStorage('A private form')
     await waitFor(() => expect(screen.getByLabelText('Depolama bağlantısı')).toBeEnabled())
     fireEvent.change(screen.getByLabelText('Depolama bağlantısı'), { target: { value: 'conn-central' } })
-    fireEvent.change(screen.getByLabelText('İş adı'), { target: { value: 'A private form' } })
     void cache.refetchQueries({ queryKey: storageConnectionKeys.tenantList('tenant-a') })
     await waitFor(() => expect(lateRequest.signal).toBeDefined())
     await userEvent.click(screen.getByRole('button', { name: action }))
+    await waitFor(() => expect(screen.getByLabelText('İş adı')).toHaveValue(''))
+    await reachStorage('B form')
     await waitFor(() => expect(screen.getByRole('option', { name: /B private Local · Local/ })).toBeInTheDocument())
     expect(screen.getByLabelText('Depolama bağlantısı')).toHaveValue('')
-    expect(screen.getByLabelText('İş adı')).toHaveValue('')
     expect(screen.getByLabelText('Storage Provider')).toHaveValue('local')
     expect(screen.queryByRole('option', { name: /Managed Storage/ })).not.toBeInTheDocument()
     expect(screen.getByRole('option', { name: /B private Local · Local/ })).toBeInTheDocument()

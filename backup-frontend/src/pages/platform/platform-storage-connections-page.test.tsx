@@ -214,7 +214,7 @@ describe('Managed target ekle', () => {
     await user.type(within(dialog).getByLabelText('Secret key'), 'sk-1')
     await user.click(within(dialog).getByRole('button', { name: 'Managed target ekle' }))
     await waitFor(() => expect(api.createPlatformConnection).toHaveBeenCalledWith('tenant-a', {
-      providerType: 'fake-s3', name: 'S3', configuration: { bucket: 'b1', useTls: false }, secret: { accessKey: 'ak-1', secretKey: 'sk-1' }, ownership: 'PlatformManaged', quotaScope: 'managed-s3',
+      providerType: 'fake-s3', name: 'S3', configuration: { bucket: 'b1', useTls: 'false' }, secret: { accessKey: 'ak-1', secretKey: 'sk-1' }, ownership: 'PlatformManaged', quotaScope: 'managed-s3',
     }))
   })
 

@@ -7,6 +7,7 @@ import type { BackupArtifact, ReplicaRepairOperation, StartReplicaRepairRequest 
 import { ArtifactDetailPage } from '@/pages/artifacts/artifact-detail-page'
 
 const state = vi.hoisted(() => ({
+  canOperate: true,
   artifact: undefined as BackupArtifact | undefined,
   repairOp: undefined as ReplicaRepairOperation | undefined,
   startRepairFn: vi.fn(),
@@ -14,7 +15,7 @@ const state = vi.hoisted(() => ({
 }))
 
 vi.mock('@/features/tenancy/use-tenant', () => ({
-  useTenant: () => ({ tenantId: 'tenant-1', canAdmin: true, canOperate: true }),
+  useTenant: () => ({ tenantId: 'tenant-1', canAdmin: true, canOperate: state.canOperate }),
 }))
 
 vi.mock('@/features/artifacts/hooks', () => ({
@@ -150,10 +151,21 @@ function renderPage() {
 
 describe('Manual replica repair frontend flow', () => {
   beforeEach(() => {
+    state.canOperate = true
     state.artifact = undefined
     state.repairOp = undefined
     state.startRepairFn.mockClear()
     state.cancelRepairFn.mockClear()
+  })
+
+  it('does not expose replica repair or repair cancellation to Viewer', () => {
+    state.canOperate = false
+    state.artifact = sampleArtifact('Failed', true)
+    renderPage()
+    expect(screen.queryByRole('button', { name: 'Onar' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Onarımı iptal et' })).not.toBeInTheDocument()
+    expect(state.startRepairFn).not.toHaveBeenCalled()
+    expect(state.cancelRepairFn).not.toHaveBeenCalled()
   })
 
   it('renders Repair button for failed destination when verified source exists', async () => {
@@ -204,6 +216,9 @@ describe('Manual replica repair frontend flow', () => {
     const user = userEvent.setup()
     const repairButton = screen.getByRole('button', { name: /^onar$/i })
     await user.click(repairButton)
+    expect(state.startRepairFn).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog')).toHaveTextContent('Kaynak Replica korunur.')
+    await user.click(screen.getByRole('button', { name: 'Onarımı başlat' }))
 
     expect(state.startRepairFn).toHaveBeenCalledWith({
       storageConnectionId: 'sftp-conn',

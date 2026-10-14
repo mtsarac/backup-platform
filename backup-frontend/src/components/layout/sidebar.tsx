@@ -1,45 +1,30 @@
-import { useEffect, useRef } from 'react'
-import { Activity, Bell, Database, Gauge, HardDrive, Upload, LayoutDashboard, Monitor, KeyRound, RotateCcw, ShieldCheck, X } from 'lucide-react'
-import { NavLink } from 'react-router-dom'
-import { Button } from '@/components/ui/button'
+import { Activity, Bell, Database, DatabaseBackup, Gauge, HardDrive, LayoutDashboard, Monitor, RotateCcw, ShieldCheck, Upload } from 'lucide-react'
 import { useAuth } from '@/features/auth/use-auth'
 import { useTenant } from '@/features/tenancy/use-tenant'
+import { SidebarFrame, type NavGroup } from './nav'
 
-const items = [
-  { label: 'Dashboard', path: '', icon: LayoutDashboard },
-  { label: 'Agents', path: '/agents', icon: Monitor },
-  { label: 'Backup Jobs', path: '/backup-jobs', icon: Database },
-  { label: 'Backup Runs', path: '/backup-runs', icon: Activity },
-  { label: 'Artifacts', path: '/artifacts', icon: HardDrive },
-  { label: 'Restores', path: '/restores', icon: RotateCcw },
-  { label: 'Storage', path: '/storage', icon: Gauge },
-  { label: 'Upload Bandwidth', path: '/upload-bandwidth', icon: Upload },
-]
-function SidebarContent({ onClose }: { onClose?: () => void }) {
+export function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen?: boolean; onMobileClose?: () => void }) {
   const { tenantId, canAdmin } = useTenant()
   const { user } = useAuth()
-  return <>
-    <div className="flex h-14 items-center justify-between border-b border-border px-4">
-      <div className="flex items-center gap-2"><div className="flex size-7 items-center justify-center rounded bg-primary text-primary-foreground"><HardDrive className="size-4" /></div><span className="font-semibold text-text-heading">Backup Yönetimi</span></div>
-      {onClose && <Button variant="ghost" size="icon" onClick={onClose} aria-label="Menüyü kapat"><X /></Button>}
-    </div>
-    <nav aria-label="Ana navigation" className="flex-1 overflow-auto p-3"><div className="mb-1 px-3 text-sm font-medium text-text-muted">Yönetim</div>
-      <ul className="space-y-0.5">{[...items, ...(canAdmin ? [{ label: 'Enrollment', path: '/enrollment', icon: KeyRound }, { label: 'Bildirimler', path: '/notifications', icon: Bell }, { label: 'Support Access', path: '/support-access', icon: ShieldCheck }] : [])].map(item => <li key={item.path}>
-        <NavLink to={`/tenants/${tenantId}${item.path}`} end={!item.path} onClick={onClose} className={({ isActive }) => `flex items-center gap-3 rounded-md px-3 min-h-12 text-base ${isActive ? 'border-l-2 border-primary bg-accent/50 font-medium text-accent-foreground' : 'text-text hover:bg-surface-2'}`}><item.icon className="size-6" />{item.label}</NavLink>
-      </li>)}</ul>
-      {user?.isPlatformAdmin && <><div className="mb-1 mt-4 px-3 text-xs font-medium text-text-muted">Platform</div>
-        <ul><li><NavLink to="/platform" onClick={onClose} className="flex items-center gap-3 rounded-md px-3 min-h-12 text-base text-text hover:bg-surface-2"><ShieldCheck className="size-6" />Platform Administration</NavLink></li></ul></>}
-    </nav>
-  </>
-}
-export function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen?: boolean; onMobileClose?: () => void }) {
-  const dialog = useRef<HTMLDialogElement>(null)
-  useEffect(() => {
-    if (mobileOpen && !dialog.current?.open) dialog.current?.showModal()
-    if (!mobileOpen && dialog.current?.open) dialog.current.close()
-  }, [mobileOpen])
-  return <>
-    <aside className="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-border bg-surface lg:flex"><SidebarContent /></aside>
-    <dialog ref={dialog} aria-label="Ana menü" onCancel={onMobileClose} onClose={onMobileClose} className="fixed inset-y-0 left-0 m-0 h-svh max-h-none w-60 border-r border-border bg-surface p-0 text-text backdrop:bg-black/50"><SidebarContent onClose={onMobileClose} /></dialog>
-  </>
+  const base = `/tenants/${tenantId}`
+  const groups: NavGroup[] = [
+    { items: [{ label: 'Dashboard', to: base, icon: LayoutDashboard, end: true }] },
+    { heading: 'Yedekleme', items: [
+      { label: 'Backup Jobs', to: `${base}/backup-jobs`, icon: Database },
+      { label: 'Backup Runs', to: `${base}/backup-runs`, icon: Activity },
+      { label: 'Artifacts', to: `${base}/artifacts`, icon: HardDrive },
+      { label: 'Restores', to: `${base}/restores`, icon: RotateCcw },
+    ] },
+    { heading: 'Altyapı', items: [
+      { label: 'Agents', to: `${base}/agents`, icon: Monitor },
+      { label: 'Storage', to: `${base}/storage`, icon: Gauge },
+      { label: 'Upload Bandwidth', to: `${base}/upload-bandwidth`, icon: Upload },
+    ] },
+    ...(canAdmin ? [{ heading: 'Çalışma alanı', items: [
+      { label: 'Bildirimler', to: `${base}/notifications`, icon: Bell },
+      { label: 'Support Access', to: `${base}/support-access`, icon: ShieldCheck },
+    ] }] : []),
+    ...(user?.isPlatformAdmin ? [{ heading: 'Platform', items: [{ label: 'Platform Administration', to: '/platform', icon: ShieldCheck }] }] : []),
+  ]
+  return <SidebarFrame mobileOpen={mobileOpen} onMobileClose={onMobileClose} dialogLabel="Ana menü" label="Ana navigation" brand={{ icon: DatabaseBackup, title: 'Backup Platform', caption: 'Yönetim konsolu' }} groups={groups} />
 }

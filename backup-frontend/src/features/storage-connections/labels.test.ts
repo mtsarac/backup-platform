@@ -55,7 +55,7 @@ describe('presentation helpers', () => {
   })
 
   it('summarises configuration with descriptor labels, falling back to the field name', () => {
-    const connection = makeConnection({ configuration: { bucket: 'a', useTls: false, port: null, extra: 'x' } })
+    const connection = makeConnection({ configuration: { bucket: 'a', useTls: 'false', port: '', extra: 'x' } })
     expect(configurationSummary(connection, fakeProvider)).toEqual([
       { name: 'bucket', label: 'Bucket', value: 'a' }, { name: 'useTls', label: 'TLS kullan', value: 'Hayır' }, { name: 'port', label: 'Port', value: '—' }, { name: 'extra', label: 'extra', value: 'x' },
     ])

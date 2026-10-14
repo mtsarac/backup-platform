@@ -39,9 +39,12 @@ describe('run history filters and pagination', () => {
 
   it('shows required run columns, tenant detail links, and no raw ids', () => {
     render(<MemoryRouter><BackupsPage /></MemoryRouter>)
-    for (const name of ['İş', 'Veritabanı', 'Tetikleyici', 'Planlanan zaman', 'Başlangıç', 'Süre', 'Durum', 'Deneme sayısı']) {
+    for (const name of ['İş', 'Tetikleyici', 'Başlangıç', 'Süre', 'Durum']) {
       expect(screen.getByRole('columnheader', { name })).toBeInTheDocument()
     }
+    expect(screen.getByText('Uygulama · SQL ajanı')).toBeInTheDocument()
+    expect(screen.getByText('Planlanan: —')).toBeInTheDocument()
+    expect(screen.getByText('Deneme 1 / 3')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Günlük SQL yedeği' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-id')
     expect(screen.queryByText('job-id')).not.toBeInTheDocument()
     expect(screen.queryByText('agent-id')).not.toBeInTheDocument()

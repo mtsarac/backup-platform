@@ -7,11 +7,11 @@ export function FormDialog({ title, description, submitLabel, pendingLabel, pend
   title: string; description?: ReactNode; submitLabel: string; pendingLabel: string; pending: boolean; error?: string
   disabled?: boolean; onSubmit: () => void; onClose: () => void; children: ReactNode
 }) {
-  function submit(event: FormEvent) { event.preventDefault(); if (!pending) onSubmit() }
+  function submit(event: FormEvent) { event.preventDefault(); if (!pending && !disabled) onSubmit() }
   return <Dialog.Root open onOpenChange={(next) => { if (!next && !pending) onClose() }} disablePointerDismissal={pending}>
     <Dialog.Portal>
       <Dialog.Backdrop className="fixed inset-0 z-40 bg-black/50" />
-      <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 space-y-4 overflow-y-auto rounded-xl border border-border bg-surface p-6 shadow-xl">
+      <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 space-y-4 overflow-y-auto rounded-xl border border-border bg-surface p-6 shadow-overlay">
         <Dialog.Title className="text-lg font-semibold text-text-heading">{title}</Dialog.Title>
         {description && <Dialog.Description className="text-sm text-text-muted">{description}</Dialog.Description>}
         <form onSubmit={submit} className="space-y-4">

@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
+import { Field } from '@/components/ui/field'
 import { FormDialog } from '@/features/platform/plans/form-dialog'
 import { inputClass, selectClass } from '@/features/platform/styles'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { ApiError } from '@/lib/api/client'
 import { useCreateChannel, useSetChannelSecret, useUpdateChannel } from './hooks'
 import { authenticationLabels, kindLabels } from './labels'
-import { channelKinds, webhookAuthentications, type ChannelKind, type NotificationChannel, type WebhookAuthentication } from './types'
+import { channelKinds, webhookAuthentications } from './types'
+import type { ChannelKind, NotificationChannel, WebhookAuthentication } from './types'
 
 const targetHints: Record<ChannelKind, { label: string; placeholder: string }> = {
   email: { label: 'E-posta adresi', placeholder: 'ops@example.com' },
@@ -15,9 +17,9 @@ const targetHints: Record<ChannelKind, { label: string; placeholder: string }> =
 const invalidField = (error: unknown, field: string) => error instanceof ApiError && error.field === field
 
 function AuthenticationSelect({ value, onChange }: { value: WebhookAuthentication; onChange: (value: WebhookAuthentication) => void }) {
-  return <label className="block text-sm text-text-muted">Kimlik doğrulama
-    <select className={selectClass} value={value} onChange={(event) => onChange(event.target.value as WebhookAuthentication)}>{webhookAuthentications.map((item) => <option key={item} value={item}>{authenticationLabels[item]}</option>)}</select>
-  </label>
+  return <Field label="Kimlik doğrulama">
+    {(control) => <select {...control} className={`${selectClass} w-full`} value={value} onChange={(event) => onChange(event.target.value as WebhookAuthentication)}>{webhookAuthentications.map((item) => <option key={item} value={item}>{authenticationLabels[item]}</option>)}</select>}
+  </Field>
 }
 
 /** Mounted only while open. The secret is typed once, sent, and cleared from state on submit. */
@@ -41,22 +43,19 @@ export function AddChannelDialog({ onClose }: { onClose: () => void }) {
 
   return <FormDialog title="Kanal ekle" submitLabel="Kanal ekle" pendingLabel="Ekleniyor…" pending={create.isPending} disabled={!name.trim() || !target.trim()}
     error={create.error ? errorMessage(create.error) : undefined} onSubmit={submit} onClose={onClose}>
-    <label className="block text-sm text-text-muted">Tür
-      <select className={selectClass} value={kind} onChange={(event) => setKind(event.target.value as ChannelKind)}>{channelKinds.map((item) => <option key={item} value={item}>{kindLabels[item]}</option>)}</select>
-    </label>
-    <label className="block text-sm text-text-muted">Ad
-      <input className={inputClass} value={name} maxLength={100} required aria-invalid={invalidField(create.error, 'name')} onChange={(event) => setName(event.target.value)} />
-    </label>
-    <label className="block text-sm text-text-muted">{hint.label}
-      <input className={inputClass} value={target} placeholder={hint.placeholder} required aria-invalid={invalidField(create.error, 'target')} onChange={(event) => setTarget(event.target.value)} />
-    </label>
-    {kind === 'email' && <p className="text-xs text-text-muted">Adrese bir onay e-postası gönderilir. Adres sahibi bağlantıya tıklayıp onaylayana kadar bildirim gönderilmez; her e-postada abonelikten çıkma bağlantısı bulunur.</p>}
-    {webhook && <p className="text-xs text-text-muted">Webhook adresi yalnızca 443 numaralı HTTPS portunu kullanabilir (platform yöneticisi başka port tanımlamadıysa).</p>}
+    <Field label="Tür">
+      {(control) => <select {...control} className={`${selectClass} w-full`} value={kind} onChange={(event) => setKind(event.target.value as ChannelKind)}>{channelKinds.map((item) => <option key={item} value={item}>{kindLabels[item]}</option>)}</select>}
+    </Field>
+    <Field label="Ad">
+      {(control) => <input {...control} className={inputClass} value={name} maxLength={100} required aria-invalid={invalidField(create.error, 'name')} onChange={(event) => setName(event.target.value)} />}
+    </Field>
+    <Field label={hint.label} hint={kind === 'email' ? 'Adrese bir onay e-postası gönderilir. Adres sahibi bağlantıya tıklayıp onaylayana kadar bildirim gönderilmez; her e-postada abonelikten çıkma bağlantısı bulunur.' : webhook ? 'Webhook adresi yalnızca 443 numaralı HTTPS portunu kullanabilir (platform yöneticisi başka port tanımlamadıysa).' : undefined}>
+      {(control) => <input {...control} className={inputClass} value={target} placeholder={hint.placeholder} required aria-invalid={invalidField(create.error, 'target')} onChange={(event) => setTarget(event.target.value)} />}
+    </Field>
     {webhook && <AuthenticationSelect value={authentication} onChange={setAuthentication} />}
-    {webhook && authentication !== 'none' && <label className="block text-sm text-text-muted">{authentication === 'bearer' ? 'Bearer token' : 'HMAC imza anahtarı'}
-      <input className={inputClass} type="password" autoComplete="new-password" value={secret} aria-invalid={invalidField(create.error, 'secret')} onChange={(event) => setSecret(event.target.value)} />
-      <span className="text-xs">Yalnızca bir kez girilir ve bir daha gösterilmez. Şimdi girmezseniz sonradan ayarlayın; ayarlanana kadar gönderimler başarısız olur.</span>
-    </label>}
+    {webhook && authentication !== 'none' && <Field label={authentication === 'bearer' ? 'Bearer token' : 'HMAC imza anahtarı'} hint="Yalnızca bir kez girilir ve bir daha gösterilmez. Şimdi girmezseniz sonradan ayarlayın; ayarlanana kadar gönderimler başarısız olur.">
+      {(control) => <input {...control} className={inputClass} type="password" autoComplete="new-password" value={secret} aria-invalid={invalidField(create.error, 'secret')} onChange={(event) => setSecret(event.target.value)} />}
+    </Field>}
   </FormDialog>
 }
 
@@ -80,14 +79,14 @@ export function EditChannelDialog({ channel, onClose }: { channel: NotificationC
   return <FormDialog title={`Kanalı düzenle: ${channel.name}`} submitLabel="Kaydet" pendingLabel="Kaydediliyor…" pending={update.isPending} disabled={!name.trim()}
     description={webhook && authentication === 'none' && channel.authentication !== 'none' ? 'Kimlik doğrulamayı kapatmak kayıtlı secret’ı siler.' : undefined}
     error={update.error ? errorMessage(update.error) : undefined} onSubmit={submit} onClose={onClose}>
-    <label className="block text-sm text-text-muted">Ad
-      <input className={inputClass} value={name} maxLength={100} required aria-invalid={invalidField(update.error, 'name')} onChange={(event) => setName(event.target.value)} />
-    </label>
-    <label className="block text-sm text-text-muted">{hint.label}
-      <input className={inputClass} value={target} placeholder={`Mevcut: ${channel.targetDisplay} · boş bırakılırsa korunur`} aria-invalid={invalidField(update.error, 'target')} onChange={(event) => setTarget(event.target.value)} />
-    </label>
+    <Field label="Ad">
+      {(control) => <input {...control} className={inputClass} value={name} maxLength={100} required aria-invalid={invalidField(update.error, 'name')} onChange={(event) => setName(event.target.value)} />}
+    </Field>
+    <Field label={hint.label} hint={`Mevcut: ${channel.targetDisplay} · boş bırakılırsa korunur`}>
+      {(control) => <input {...control} className={inputClass} value={target} placeholder={hint.placeholder} aria-invalid={invalidField(update.error, 'target')} onChange={(event) => setTarget(event.target.value)} />}
+    </Field>
     {webhook && <AuthenticationSelect value={authentication} onChange={setAuthentication} />}
-    {webhook && authentication !== 'none' && authentication !== channel.authentication && <p className="text-xs text-text-muted">Kaydettikten sonra “Secret ayarla” ile secret girin; ayarlanana kadar gönderimler başarısız olur.</p>}
+    {webhook && authentication !== 'none' && authentication !== channel.authentication && <p className="text-sm text-text-muted">Kaydettikten sonra “Secret ayarla” ile secret girin; ayarlanana kadar gönderimler başarısız olur.</p>}
   </FormDialog>
 }
 
@@ -105,8 +104,8 @@ export function ChannelSecretDialog({ channel, onClose }: { channel: Notificatio
 
   return <FormDialog title={`${channel.name}: ${channel.authentication === 'bearer' ? 'Bearer token' : 'HMAC anahtarı'} ayarla`} submitLabel="Secret’ı kaydet" pendingLabel="Kaydediliyor…" pending={set.isPending} disabled={!value}
     description="Değer yalnızca gönderilir; bir daha gösterilmez." error={set.error ? errorMessage(set.error) : undefined} onSubmit={submit} onClose={onClose}>
-    <label className="block text-sm text-text-muted">Yeni secret
-      <input className={inputClass} type="password" autoComplete="new-password" value={value} aria-invalid={invalidField(set.error, 'value')} onChange={(event) => setValue(event.target.value)} />
-    </label>
+    <Field label="Yeni secret">
+      {(control) => <input {...control} className={inputClass} type="password" autoComplete="new-password" value={value} aria-invalid={invalidField(set.error, 'value')} onChange={(event) => setValue(event.target.value)} />}
+    </Field>
   </FormDialog>
 }

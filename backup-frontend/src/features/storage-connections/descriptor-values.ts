@@ -1,13 +1,13 @@
-import type { ConfigField, ConnectionConfiguration, SecretField, SecretValues } from './types'
+import type { ConfigField, ConnectionConfiguration, ProviderDescriptor, SecretField, SecretValues, TenantCreateConnectionInput } from './types'
 
-/** Text and Number are kept as typed strings; Boolean as a boolean. Converted to wire values only on submit. */
+/** Text and Number stay as typed strings; Boolean is held as a checkbox value until submission. */
 export type FieldValues = Record<string, string | boolean>
 
 export function initialFieldValues(fields: readonly ConfigField[], configuration: ConnectionConfiguration = {}, providerType?: string): FieldValues {
   return Object.fromEntries(fields.map((field) => {
-    const current = configuration[field.name] ?? (providerType === 'sftp' ? ({ port: 22, authenticationType: 'password' } as ConnectionConfiguration)[field.name] : undefined)
-    if (field.kind === 'Boolean') return [field.name, current === true]
-    return [field.name, current === null || current === undefined ? '' : String(current)]
+    const current = configuration[field.name] ?? (providerType === 'sftp' ? ({ port: '22', authenticationType: 'password' } as ConnectionConfiguration)[field.name] : undefined)
+    if (field.kind === 'Boolean') return [field.name, current === 'true']
+    return [field.name, current ?? '']
   }))
 }
 
@@ -16,12 +16,12 @@ function typed(values: FieldValues, name: string) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-/** Optional empty Text/Number fields are left out; Boolean always has a value. */
+/** The API takes a string dictionary, including Number and Boolean descriptors. Optional empty fields are omitted. */
 export function buildConfiguration(fields: readonly ConfigField[], values: FieldValues): ConnectionConfiguration {
   const configuration: ConnectionConfiguration = {}
   for (const field of fields) {
-    if (field.kind === 'Boolean') configuration[field.name] = values[field.name] === true
-    else if (typed(values, field.name) !== '') configuration[field.name] = field.kind === 'Number' ? Number(typed(values, field.name)) : typed(values, field.name)
+    if (field.kind === 'Boolean') configuration[field.name] = String(values[field.name] === true)
+    else if (typed(values, field.name) !== '') configuration[field.name] = typed(values, field.name)
   }
   return configuration
 }
@@ -53,4 +53,13 @@ export function activeSecretFields(providerType: string, configuration: FieldVal
 
 export function hasSecretInput(values: Record<string, string>): boolean {
   return Object.values(values).some(Boolean)
+}
+/** `configuration`/`secret` are omitted entirely when the provider declares no such fields or nothing was entered. */
+export function providerPayload(provider: ProviderDescriptor, name: string, config: FieldValues, secret: Record<string, string>): TenantCreateConnectionInput {
+  const input: TenantCreateConnectionInput = { providerType: provider.providerType, name: name.trim() }
+  if (provider.configFields.length > 0) input.configuration = buildConfiguration(provider.configFields, config)
+  const fields = activeSecretFields(provider.providerType, config, provider.secretFields)
+  const credentials = buildSecretValues(fields, secret)
+  if (hasSecretInput(credentials)) input.secret = credentials
+  return input
 }

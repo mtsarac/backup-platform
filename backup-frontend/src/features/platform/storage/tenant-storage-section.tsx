@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { RefreshCw, RotateCcw, AlertTriangle } from 'lucide-react'
+import { RefreshCw, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Notice } from '@/components/ui/notice'
+import { Fact, Facts, Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
 import { agentDate } from '@/features/agents/format'
 import { accountingModeLabels, enforcementModeLabels, scopeLabels } from '@/features/storage/labels'
@@ -47,13 +49,7 @@ export function TenantStorageSection({ tenantId, tenantName }: { tenantId: strin
   }
 
   return (
-    <section className="space-y-4 rounded-lg border border-border bg-surface p-4" aria-labelledby="storage-heading">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <h2 id="storage-heading" className="font-medium text-text-heading">Depolama ve Kota</h2>
-          {quota && <StandingBadge quota={quota} />}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+    <Section title={<span className="inline-flex flex-wrap items-center gap-2">Depolama ve Kota {quota && <StandingBadge quota={quota} />}</span>} description="Kullanılan ve rezerve alan; geçerli politika ve Backup başlatma durumu." actions={<>
           <Button
             variant="outline"
             size="sm"
@@ -85,49 +81,26 @@ export function TenantStorageSection({ tenantId, tenantName }: { tenantId: strin
             <RotateCcw className="size-3.5" />
             Rebuild
           </Button>
-        </div>
-      </div>
-
-      {lastResult && (
-        <p role="status" className="rounded-md border border-success/30 bg-success-subtle p-2 text-sm text-success">
-          {lastResult}
-        </p>
-      )}
+      </>}>
+      <div className="space-y-4">
+      {lastResult && <Notice tone="success">{lastResult}</Notice>}
 
       <PlatformQueryState isPending={query.isPending} error={query.error}>
         {quota && (
           <div className="space-y-4">
             <QuotaSummary quota={quota} />
 
-            <div className="grid gap-3 rounded-lg border border-border bg-surface-2 p-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
-              <div>
-                <span className="text-text-muted">Kota Politikası:</span>{' '}
-                <Link to={platformPaths.quotaPolicies} className="font-medium text-primary hover:underline">
-                  {quota.policy.key} (v{quota.policy.version})
-                </Link>
-              </div>
-              <div>
-                <span className="text-text-muted">Hesaplama Modu:</span>{' '}
-                <span className="font-medium">{accountingModeLabels[quota.accountingMode]}</span>
-              </div>
-              <div>
-                <span className="text-text-muted">Uygulama Modu:</span>{' '}
-                <span className="font-medium">{enforcementModeLabels[quota.enforcementMode]}</span>
-              </div>
-              <div>
-                <span className="text-text-muted">Kapsam:</span>{' '}
-                <span className="font-medium">{scopeLabels(quota.includedStorageScopes).join('; ')}</span>
-              </div>
-            </div>
+            <details className="rounded-lg bg-surface-2 p-4">
+              <summary className="cursor-pointer text-sm font-medium text-text-heading">Kota politikası ve kapsam</summary>
+              <div className="pt-4"><Facts columns={2}>
+                <Fact label="Kota Politikası"><Link to={platformPaths.quotaPolicies} className="font-medium text-primary hover:underline">{quota.policy.key} (v{quota.policy.version})</Link></Fact>
+                <Fact label="Hesaplama Modu">{accountingModeLabels[quota.accountingMode]}</Fact>
+                <Fact label="Uygulama Modu">{enforcementModeLabels[quota.enforcementMode]}</Fact>
+                <Fact label="Kapsam">{scopeLabels(quota.includedStorageScopes).join('; ')}</Fact>
+              </Facts></div>
+            </details>
 
-            {!quota.newBackupsAllowed && (
-              <div className="flex items-center gap-2 rounded-md border border-error/30 bg-error-subtle p-2.5 text-xs text-error">
-                <AlertTriangle className="size-4 shrink-0" />
-                <span>
-                  Yeni backup başlatma engellendi (red kodu: <code>{quota.denialCode ?? 'bilinmiyor'}</code>).
-                </span>
-              </div>
-            )}
+            {!quota.newBackupsAllowed && <Notice tone="error">Yeni backup başlatma engellendi (red kodu: <code>{quota.denialCode ?? 'bilinmiyor'}</code>).</Notice>}
 
             <div className="text-xs text-text-muted">
               Son hesaplama zamanı: {agentDate(quota.calculatedAt)}
@@ -157,6 +130,7 @@ export function TenantStorageSection({ tenantId, tenantName }: { tenantId: strin
         error={rebuild.error ? errorMessage(rebuild.error) : undefined}
         onConfirm={runRebuild}
       />
-    </section>
+      </div>
+    </Section>
   )
 }

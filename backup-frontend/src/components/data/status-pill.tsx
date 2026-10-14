@@ -26,5 +26,5 @@ const statuses: Record<string, { label: string; tone: 'neutral' | 'success' | 'w
 }
 export function StatusPill({ status }: { status: string }) {
   const meta = statuses[status] ?? { label: status, tone: 'neutral' as const }
-  return <Badge tone={meta.tone}>{meta.label}</Badge>
+  return <Badge tone={meta.tone} dot>{meta.label}</Badge>
 }

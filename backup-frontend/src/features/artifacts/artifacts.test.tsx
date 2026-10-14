@@ -1,6 +1,6 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ArtifactsPage } from '@/pages/artifacts/artifacts-page'
 import { ArtifactDetailPage } from '@/pages/artifacts/artifact-detail-page'
@@ -54,6 +54,20 @@ afterEach(() => { cleanup(); vi.clearAllMocks() })
 beforeEach(() => { permissions.canAdmin = true })
 
 describe('Backup dosyaları', () => {
+  it('clears the selected tab and destructive confirmation when navigating to another Artifact', async () => {
+    request.mockResolvedValue(artifact())
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    const router = createMemoryRouter([{ path: '/tenants/:tenantId/artifacts/:id', element: <ArtifactDetailPage /> }], { initialEntries: ['/tenants/tenant-a/artifacts/artifact-a'] })
+    render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
+    fireEvent.click(await screen.findByRole('tab', { name: 'MSSQL metadata' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Silme isteği oluştur' }))
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+    await act(async () => { await router.navigate('/tenants/tenant-a/artifacts/artifact-b') })
+    expect(await screen.findByRole('tab', { name: 'Özet' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(request.mock.calls.some(([, options]) => options?.method === 'DELETE')).toBe(false)
+  })
+
   it('silmeden önce erişilebilir onay ister ve fiziksel silme yerine bekleme süresini başlatır', async () => {
     let current = artifact()
     request.mockImplementation(async (_path, options) => {
@@ -92,7 +106,9 @@ describe('Backup dosyaları', () => {
   it('Agent bekleyişini açıkça gösterir ve henüz başlanmamış silmeyi iptal edilebilir tutar', async () => {
     request.mockResolvedValue(pending({ waitingForAgent: true, deleteFailureCode: 'agent_unavailable', deleteNextAttemptAt: '2099-10-06T10:05:00Z' }))
     mount()
-    await screen.findByText(/Fiziksel silme için Agent bekleniyor/)
+    await screen.findByRole('button', { name: 'Silmeyi iptal et' })
+    fireEvent.click(screen.getByRole('tab', { name: 'Replikalar' }))
+    expect(await screen.findByText(/Fiziksel silme için Agent bekleniyor/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Silmeyi iptal et' })).toBeInTheDocument()
     expect(screen.getByText('Sonraki silme denemesi')).toBeInTheDocument()
     expect(screen.getByText('Silme yürütücüsü')).toBeInTheDocument()
@@ -103,6 +119,8 @@ describe('Backup dosyaları', () => {
     mount()
     await screen.findByText(/Fiziksel silme başladığı için/)
     expect(screen.queryByRole('button', { name: 'Silmeyi iptal et' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'Replikalar' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Silme tamamlanamadı')
     expect(screen.queryByText(/password=hidden/)).not.toBeInTheDocument()
   })
 
@@ -110,7 +128,8 @@ describe('Backup dosyaları', () => {
     request.mockResolvedValue(artifact({ state: 'Deleted', replicas: [{ ...replica, status: 'Deleted', usable: false, deletedAt: '2026-10-06T10:00:00Z' }] }))
     mount()
     await screen.findByText(/Bu kayıt yalnızca yedekleme geçmişidir/)
-    expect(screen.getByText(/Fiziksel dosya kaldırıldı/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'Replikalar' }))
+    expect(await screen.findByText(/Fiziksel dosya kaldırıldı/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Silme isteği oluştur' })).not.toBeInTheDocument()
     expect(screen.queryByText('replica-internal')).not.toBeInTheDocument()
     expect(screen.queryByText('not-shown-key')).not.toBeInTheDocument()

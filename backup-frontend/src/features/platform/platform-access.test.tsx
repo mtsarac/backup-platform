@@ -8,9 +8,11 @@ import { ThemeProvider } from '@/components/theme-provider'
 import { TenantSelectPage } from '@/pages/tenancy/tenant-select-page'
 import { PlatformDashboardPage } from '@/pages/platform/platform-dashboard-page'
 import * as api from './api'
-import { platformAdmin, renderPlatform, tenantOwner } from './test-utils'
+import * as storageApi from './storage/api'
+import { paged, platformAdmin, renderPlatform, tenantOwner } from './test-utils'
 
 vi.mock('./api')
+vi.mock('./storage/api')
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true, tenant: { tenantId: 'tenant-a', name: 'Acme', role: 'Owner' } }) }))
 
 const tree = <Route path="/platform" element={<PlatformAdminRoute />}>
@@ -21,6 +23,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   localStorage.setItem('backup-theme', 'light')
   vi.mocked(api.getSummary).mockResolvedValue({ tenants: 3, users: 7, agents: { total: 10, online: 6, offline: 2, unknown: 1, disabled: 1, revoked: 0 }, enabledBackupJobs: 9, failedRunsLast24Hours: 2 })
+  vi.mocked(storageApi.getStorageUsage).mockResolvedValue(paged([]))
 })
 
 describe('Platform Administration entry points', () => {
@@ -54,6 +57,7 @@ describe('PlatformAdminRoute guard', () => {
     expect(screen.queryByRole('navigation', { name: 'Platform navigation' })).not.toBeInTheDocument()
     expect(screen.queryByText('Platform Dashboard')).not.toBeInTheDocument()
     for (const fn of Object.values(api)) if (typeof fn === 'function') expect(fn).not.toHaveBeenCalled()
+    expect(storageApi.getStorageUsage).not.toHaveBeenCalled()
   })
 
   it('renders the platform shell and dashboard for a PlatformAdmin without tenant selector', async () => {
@@ -86,5 +90,9 @@ describe('platform dashboard', () => {
     expect(screen.getByText('Çevrimdışı').nextSibling).toHaveTextContent('2')
     expect(screen.getByText('Devre dışı').nextSibling).toHaveTextContent('1')
     expect(screen.getByText('İptal edilmiş').nextSibling).toHaveTextContent('0')
+    expect(screen.getByRole('link', { name: "Çevrimdışı Agent'ları listele" })).toHaveAttribute('href', '/platform/agents?connectivity=offline')
+    expect(await screen.findByText('Henüz depolama kullanım kaydı yok.')).toBeInTheDocument()
+    expect(storageApi.getStorageUsage).toHaveBeenCalledWith({ page: 1, pageSize: 5 }, expect.any(AbortSignal))
+    expect(screen.getByRole('link', { name: 'Tüm depolama kullanımı' })).toHaveAttribute('href', '/platform/storage')
   })
 })

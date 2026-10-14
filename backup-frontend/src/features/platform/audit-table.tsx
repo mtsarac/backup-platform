@@ -92,7 +92,7 @@ function Details({ details }: { details: PlatformAuditEntry['details'] }) {
   return <dl className="space-y-0.5 text-xs">{entries.map(([key, value]) => <div key={key} className="flex flex-wrap gap-1"><dt className="text-text-muted">{key}:</dt><dd className="break-all">{detailValue(value)}</dd></div>)}</dl>
 }
 
-export function AuditTable({ rows, emptyMessage, showTenant = true }: { rows: readonly PlatformAuditEntry[]; emptyMessage: string; showTenant?: boolean }) {
+export function AuditTable({ rows, emptyMessage, showTenant = true, className }: { rows: readonly PlatformAuditEntry[]; emptyMessage: string; showTenant?: boolean; className?: string }) {
   const columns: Column<PlatformAuditEntry>[] = [
     { key: 'at', header: 'Zaman', render: (entry) => agentDate(entry.at) },
     { key: 'action', header: 'İşlem', wrap: true, render: (entry) => <span className="font-medium">{auditActionLabel(entry.action)}</span> },
@@ -101,5 +101,5 @@ export function AuditTable({ rows, emptyMessage, showTenant = true }: { rows: re
     { key: 'target', header: 'Hedef', wrap: true, render: (entry) => entry.targetType },
     { key: 'details', header: 'Ayrıntılar', wrap: true, render: (entry) => <Details details={entry.details} /> },
   ]
-  return <DataTable rows={rows} columns={columns} keyExtractor={(entry) => entry.id} emptyMessage={emptyMessage} />
+  return <DataTable rows={rows} columns={columns} keyExtractor={(entry) => entry.id} emptyMessage={emptyMessage} className={className} />
 }

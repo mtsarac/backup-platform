@@ -1,9 +1,13 @@
 import { useState } from 'react'
-import { ArrowLeft } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { QueryState } from '@/components/data/query-state'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Notice } from '@/components/ui/notice'
+import { PageHeader } from '@/components/ui/page-header'
+import { Fact, Facts, Section } from '@/components/ui/section'
+import { Tabs } from '@/components/ui/tabs'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
 import { useArtifact } from '@/features/artifacts/hooks'
 import { formatTimestamp } from '@/features/backups/presentation'
@@ -33,6 +37,7 @@ function RestoreDetail({ id }: { id: string }) {
   const artifact = useArtifact(tenantId, restore?.artifactId ?? '')
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [notice, setNotice] = useState('')
+  const [tab, setTab] = useState<'summary' | 'details' | 'attempts' | 'checks'>('summary')
   const mayCancel = Boolean(restore && canOperate && canCancelRestore(restore.status, restore.cancellationRequestedAt))
   async function confirmCancel() {
     if (!mayCancel || cancel.isPending) return
@@ -45,41 +50,69 @@ function RestoreDetail({ id }: { id: string }) {
       // The mutation error is mapped to a safe message in the confirmation dialog.
     }
   }
-  return <div className="space-y-5">
-    <Link to={`/tenants/${tenantId}/restores`} className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"><ArrowLeft className="size-4" />Geri yükleme geçmişine dön</Link>
+  return <div className="space-y-6">
     <QueryState isPending={query.isPending} error={query.error} empty={!query.isPending && !restore}>
       {restore && <>
-        <header className="flex flex-wrap items-start justify-between gap-4">
-          <div><h1 className="text-2xl font-semibold text-text-heading">{restore.purpose === 'Precheck' ? 'Geri yükleme ön kontrolü' : restore.purpose === 'Discovery' ? 'Hedef Database keşfi' : 'Geri yükleme'} · {restore.databaseName}</h1><p className="mt-1 text-sm text-text-muted">{restoreModeLabel(restore.mode)} · {restore.target.host}{restore.target.port ? `:${restore.target.port}` : ''}</p></div>
-          <div className="flex items-center gap-2"><StatusPill status={restore.status} />{mayCancel && <Button variant="destructive" disabled={cancel.isPending} onClick={() => { cancel.reset(); setConfirmOpen(true) }}>İptal et</Button>}</div>
-        </header>
-        {notice && (isActiveRestore(restore.status) || restore.status === 'Cancelled') && <p role="status" className="rounded-lg border border-border bg-surface p-3 text-sm">{notice}</p>}
-        {restore.cancellationRequestedAt && isActiveRestore(restore.status) && <p role="status" className="rounded-lg border border-border bg-surface p-4 text-sm">İptal istendi; işlem henüz sona ermedi. Agent sonucu ve hedef Database durumu bekleniyor.</p>}
-        {['Failed', 'Cancelled', 'AgentLost'].includes(restore.status) && <section aria-label="Geri yükleme sonucu uyarısı" className="rounded-lg border border-error/30 bg-error-subtle p-4 text-sm"><p className="font-medium text-error">Cancelled, Failed veya AgentLost durumu Database'in sağlıklı olduğunu göstermez. Hedef Database durumunu kontrol edin; elle müdahale gerekebilir.</p>{restore.failureCode && <><p className="mt-2">{restoreFailureMessage(restore.failureCode)}</p><p className="mt-1 text-text-muted">Hata kodu: {safeRestoreCode(restore.failureCode)}</p></>}</section>}
-        <section aria-labelledby="restore-target-state" className="space-y-2 rounded-lg border border-border bg-surface p-5"><h2 id="restore-target-state" className="text-lg font-semibold text-text-heading">Hedef Database durumu</h2><p className="font-medium">{targetStateLabel(restore.targetState)}</p><p className="text-sm text-text-muted">{targetStateDescription(restore.targetState)}</p>{restore.result && <p className="text-sm">SQL Server Database durumu: {databaseStateLabel(restore.result.databaseState)}</p>}</section>
-        <section aria-labelledby="restore-summary" className="rounded-lg border border-border bg-surface p-5">
-          <h2 id="restore-summary" className="mb-4 text-lg font-semibold text-text-heading">Restore özeti</h2>
-          <dl className="grid gap-4 text-sm sm:grid-cols-2 xl:grid-cols-3">
-            <div><dt className="text-text-muted">Kaynak Artifact</dt><dd className="mt-1"><Link className="text-primary hover:underline" to={`/tenants/${tenantId}/artifacts/${restore.artifactId}`}>{restore.sourceDatabaseName ?? restore.result?.sourceBackup?.databaseName ?? artifact.data?.databaseName ?? 'Artifact'} · {restore.artifactId}</Link>{(restore.sourceJobName ?? artifact.data?.jobName) && <p>{restore.sourceJobName ?? artifact.data?.jobName}</p>}{artifact.error && <p className="mt-1 text-text-muted">Kaynak ayrıntıları yüklenemedi. Restore kaydı kullanılabilir.</p>}</dd></div>
-            {[
-              ['Hedef Database', restore.databaseName], ['Agent', restore.agentId], ['Mod', restoreModeLabel(restore.mode)],
-              ['Oluşturulma', formatTimestamp(restore.createdAt)], ['Başlangıç', formatTimestamp(restore.startedAt)], ['Bitiş', formatTimestamp(restore.completedAt)],
-              ['İptal isteği', formatTimestamp(restore.cancellationRequestedAt)], ['Deneme sayısı', String(restore.attempts.length)],
-              ['Kaynak erişimi', restore.sourceAccess === 'AgentLocal' ? 'Agent yerel Replica' : 'Merkezi Storage'],
-              ['Replica koruması', restore.replicaPinned ? 'Restore için silmeye karşı korunuyor' : 'Restore koruması sona erdi'],
-              ['Checksum doğrulama isteği', restore.options.verifyChecksum ? 'Evet' : 'Hayır'], ['Backup doğrulama isteği', restore.options.verifyBackup ? 'Evet' : 'Hayır'],
-              ['Aktif bağlantıları sonlandır', restore.options.terminateActiveConnections ? 'Evet' : 'Hayır'],
-            ].map(([label, value]) => <div key={label}><dt className="text-text-muted">{label}</dt><dd className="mt-1 break-words font-medium">{value}</dd></div>)}
-          </dl>
-        </section>
-        <section aria-labelledby="restore-progress" className="space-y-4 rounded-lg border border-border bg-surface p-5"><h2 id="restore-progress" className="text-lg font-semibold text-text-heading">İlerleme</h2><RestoreProgress stage={restore.progress.stage} percent={restore.progress.percent} at={restore.progress.at} label="Restore ilerlemesi" /></section>
-        <section aria-labelledby="restore-attempts" className="space-y-3"><h2 id="restore-attempts" className="text-lg font-semibold text-text-heading">Denemeler</h2>{restore.attempts.length === 0 && <p className="text-sm text-text-muted">Henüz deneme oluşturulmadı.</p>}{restore.attempts.map((attempt) => <article key={attempt.id} aria-label={`${attempt.number}. deneme`} className="space-y-4 rounded-lg border border-border bg-surface p-5">
-          <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-medium">{attempt.number}. deneme</h3><StatusPill status={attempt.status} /></div>
-          <dl className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">{[['Oluşturulma', formatTimestamp(attempt.createdAt)], ['Agent tarafından alınma', formatTimestamp(attempt.leasedAt)], ['Başlangıç', formatTimestamp(attempt.startedAt)], ['Bitiş', formatTimestamp(attempt.completedAt)], ['Hedef Database durumu', targetStateLabel(attempt.targetState)]].map(([label, value]) => <div key={label}><dt className="text-text-muted">{label}</dt><dd className="mt-1">{value}</dd></div>)}</dl>
-          <RestoreProgress stage={attempt.progressStage} percent={attempt.progressPercent} at={attempt.progressAt} label={`${attempt.number}. deneme ilerlemesi`} />
-          {attempt.failureCode && <p className="text-sm text-error">{restoreFailureMessage(attempt.failureCode)} Hata kodu: {safeRestoreCode(attempt.failureCode)}</p>}
-        </article>)}</section>
-        {restore.result && <section aria-labelledby="restore-checks" className="space-y-3 rounded-lg border border-border bg-surface p-5"><h2 id="restore-checks" className="text-lg font-semibold text-text-heading">Doğrulama sonucu</h2><p className="text-sm">Checksum doğrulandı: {restore.result.checksumVerified ? 'Evet' : 'Hayır'} · Backup doğrulandı: {restore.result.backupVerified ? 'Evet' : 'Hayır'}</p><ul className="space-y-2 text-sm">{restore.result.preCheck.map((check, index) => <li key={`${check.checkId}:${index}`}>{safeRestoreCode(check.checkId)} · {({ Passed: 'Geçti', Warning: 'Uyarı', Failed: 'Başarısız', Skipped: 'Atlandı' })[check.status]} · {safeRestoreCode(check.reasonCode)}</li>)}</ul>{restore.result.warnings.map((warning, index) => <p key={`${warning.code}:${index}`} className="text-sm text-warning">Uyarı: {safeRestoreCode(warning.code)}</p>)}</section>}
+        <PageHeader title={`${restore.purpose === 'Precheck' ? 'Geri yükleme ön kontrolü' : restore.purpose === 'Discovery' ? 'Hedef Database keşfi' : 'Geri yükleme'} · ${restore.databaseName}`}
+          crumbs={[{ label: 'Geri yükleme geçmişi', to: `/tenants/${tenantId}/restores` }, { label: restore.databaseName }]}
+          description={`${restoreModeLabel(restore.mode)} · ${restore.target.host}${restore.target.port ? `:${restore.target.port}` : ''}`}
+          meta={<><StatusPill status={restore.status} /><span className="text-sm text-text-muted">{formatTimestamp(restore.createdAt)}</span></>}
+          actions={mayCancel && <Button variant="destructive" disabled={cancel.isPending} onClick={() => { cancel.reset(); setConfirmOpen(true) }}>İptal et</Button>} />
+        {notice && (isActiveRestore(restore.status) || restore.status === 'Cancelled') && <Notice>{notice}</Notice>}
+        {restore.cancellationRequestedAt && isActiveRestore(restore.status) && <Notice tone="warning">İptal istendi; işlem henüz sona ermedi. Agent sonucu ve hedef Database durumu bekleniyor.</Notice>}
+        {['Failed', 'Cancelled', 'AgentLost'].includes(restore.status) && <section aria-label="Geri yükleme sonucu uyarısı"><Notice tone="warning" title="Hedef Database'i kontrol edin">
+          <p>Cancelled, Failed veya AgentLost durumu Database'in sağlıklı olduğunu göstermez. Hedef Database durumunu kontrol edin; elle müdahale gerekebilir.</p>
+          {restore.failureCode && <><p className="mt-2">{restoreFailureMessage(restore.failureCode)}</p><p className="mt-1 text-text-muted">Hata kodu: {safeRestoreCode(restore.failureCode)}</p></>}
+        </Notice></section>}
+        <Tabs label="Restore bölümleri" idPrefix="restore" value={tab} onChange={setTab} items={[
+          { value: 'summary', label: 'Özet' }, { value: 'details', label: 'Kaynak ve seçenekler' }, { value: 'attempts', label: 'Denemeler' }, { value: 'checks', label: 'Doğrulama sonucu' },
+        ]} />
+        <div role="tabpanel" id={`restore-panel-${tab}`} aria-labelledby={`restore-tab-${tab}`} className="space-y-6">
+          {tab === 'summary' && <>
+            <Section title="Hedef Database durumu" description={targetStateDescription(restore.targetState)}>
+              <p className="font-medium text-text-heading">{targetStateLabel(restore.targetState)}</p>
+              {restore.result && <p className="mt-2 text-sm">SQL Server Database durumu: {databaseStateLabel(restore.result.databaseState)}</p>}
+            </Section>
+            <Section title="İlerleme"><RestoreProgress stage={restore.progress.stage} percent={restore.progress.percent} at={restore.progress.at} label="Restore ilerlemesi" /></Section>
+            <Section title="Restore özeti"><Facts columns={3}>
+              <Fact label="Hedef Database">{restore.databaseName}</Fact>
+              <Fact label="Mod">{restoreModeLabel(restore.mode)}</Fact>
+              <Fact label="Deneme sayısı">{restore.attempts.length}</Fact>
+              <Fact label="Oluşturulma">{formatTimestamp(restore.createdAt)}</Fact>
+              <Fact label="Başlangıç">{formatTimestamp(restore.startedAt)}</Fact>
+              <Fact label="Bitiş">{formatTimestamp(restore.completedAt)}</Fact>
+              <Fact label="İptal isteği">{formatTimestamp(restore.cancellationRequestedAt)}</Fact>
+            </Facts></Section>
+          </>}
+          {tab === 'details' && <Section title="Kaynak ve seçenekler"><Facts>
+            <Fact label="Kaynak Artifact"><Link className="font-medium text-primary hover:underline" to={`/tenants/${tenantId}/artifacts/${restore.artifactId}`}>{restore.sourceDatabaseName ?? restore.result?.sourceBackup?.databaseName ?? artifact.data?.databaseName ?? 'Artifact ayrıntıları'}</Link>
+              <p className="mt-1 break-all font-mono text-xs text-text-muted">{restore.artifactId}</p>
+              {(restore.sourceJobName ?? artifact.data?.jobName) && <p className="mt-1 text-sm">{restore.sourceJobName ?? artifact.data?.jobName}</p>}
+              {artifact.error && <p className="mt-1 text-sm text-text-muted">Kaynak ayrıntıları yüklenemedi. Restore kaydı kullanılabilir.</p>}
+            </Fact>
+            <Fact label="Agent"><Link className="break-all font-mono text-sm text-primary hover:underline" to={`/tenants/${tenantId}/agents/${restore.agentId}`}>{restore.agentId}</Link></Fact>
+            <Fact label="Kaynak erişimi">{restore.sourceAccess === 'AgentLocal' ? 'Agent yerel Replica' : 'Merkezi Storage'}</Fact>
+            <Fact label="Replica koruması">{restore.replicaPinned ? 'Restore için silmeye karşı korunuyor' : 'Restore koruması sona erdi'}</Fact>
+            <Fact label="Checksum doğrulama isteği">{restore.options.verifyChecksum ? 'Evet' : 'Hayır'}</Fact>
+            <Fact label="Backup doğrulama isteği">{restore.options.verifyBackup ? 'Evet' : 'Hayır'}</Fact>
+            <Fact label="Aktif bağlantıları sonlandır">{restore.options.terminateActiveConnections ? 'Evet' : 'Hayır'}</Fact>
+          </Facts></Section>}
+          {tab === 'attempts' && <Section title="Denemeler">
+            {restore.attempts.length === 0 ? <EmptyState title="Henüz deneme oluşturulmadı.">Agent görevi aldığında deneme bilgileri burada görünür.</EmptyState> : <ol className="divide-y divide-border">{restore.attempts.map((attempt) => <li key={attempt.id} className="py-5 first:pt-0 last:pb-0"><article aria-label={`${attempt.number}. deneme`} className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-medium">{attempt.number}. deneme</h3><StatusPill status={attempt.status} /></div>
+              <Facts columns={3}>{[['Oluşturulma', formatTimestamp(attempt.createdAt)], ['Agent tarafından alınma', formatTimestamp(attempt.leasedAt)], ['Başlangıç', formatTimestamp(attempt.startedAt)], ['Bitiş', formatTimestamp(attempt.completedAt)], ['Hedef Database durumu', targetStateLabel(attempt.targetState)]].map(([label, value]) => <Fact key={label} label={label}>{value}</Fact>)}</Facts>
+              <RestoreProgress stage={attempt.progressStage} percent={attempt.progressPercent} at={attempt.progressAt} label={`${attempt.number}. deneme ilerlemesi`} />
+              {attempt.failureCode && <Notice tone="error">{restoreFailureMessage(attempt.failureCode)} Hata kodu: {safeRestoreCode(attempt.failureCode)}</Notice>}
+            </article></li>)}</ol>}
+          </Section>}
+          {tab === 'checks' && <Section title="Doğrulama sonucu">
+            {restore.result ? <div className="space-y-4">
+              <Facts><Fact label="Checksum doğrulandı">{restore.result.checksumVerified ? 'Evet' : 'Hayır'}</Fact><Fact label="Backup doğrulandı">{restore.result.backupVerified ? 'Evet' : 'Hayır'}</Fact></Facts>
+              <ul className="divide-y divide-border text-sm">{restore.result.preCheck.map((check, index) => <li key={`${check.checkId}:${index}`} className="flex flex-wrap justify-between gap-2 py-3"><span className="min-w-0 break-words">{safeRestoreCode(check.checkId)} · {safeRestoreCode(check.reasonCode)}</span><span className="font-medium">{({ Passed: 'Geçti', Warning: 'Uyarı', Failed: 'Başarısız', Skipped: 'Atlandı' })[check.status]}</span></li>)}</ul>
+              {restore.result.warnings.map((warning, index) => <Notice key={`${warning.code}:${index}`} tone="warning">Uyarı: {safeRestoreCode(warning.code)}</Notice>)}
+            </div> : <EmptyState title="Doğrulama sonucu henüz bildirilmedi.">Agent sonucu gönderdiğinde kontrol ayrıntıları burada görünür.</EmptyState>}
+          </Section>}
+        </div>
       </>}
     </QueryState>
     {query.error && <Button variant="outline" onClick={() => void query.refetch()}>Tekrar dene</Button>}

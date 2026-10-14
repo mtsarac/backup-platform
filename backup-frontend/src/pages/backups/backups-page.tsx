@@ -1,20 +1,25 @@
 import { useState } from 'react'
+import { Activity } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { DataTable } from '@/components/data/data-table'
 import type { Column } from '@/components/data/data-table'
+import { Pagination } from '@/components/data/pagination'
 import { QueryState } from '@/components/data/query-state'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
+import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
+import { Notice } from '@/components/ui/notice'
+import { PageHeader } from '@/components/ui/page-header'
 import { useAgents } from '@/features/agents/hooks'
 import { useBackupJobs } from '@/features/backup-jobs/hooks'
 import { useBackups } from '@/features/backups/hooks'
 import { dateFilterInstant, formatDuration, formatTimestamp, runStatuses, runStatusLabels, triggerLabel } from '@/features/backups/presentation'
 import { ReplicationBadge } from '@/features/backups/replication'
 import type { BackupRun, BackupRunFilters, BackupRunStatus, BackupTrigger } from '@/features/backups/types'
+import { linkClass } from '@/features/platform/styles'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { errorMessage } from '@/lib/api/failure-messages'
-
-const controlClass = 'h-9 w-full rounded-lg border border-border bg-surface px-3 text-sm text-text focus-visible:outline-2 focus-visible:outline-primary'
 
 export function BackupsPage() {
   const { tenantId } = useTenant()
@@ -28,71 +33,67 @@ export function BackupsPage() {
   const pageSize = filters.pageSize ?? 25
   const invalidDateRange = Boolean(fromDay && toDay && fromDay > toDay)
   const updateFilters = (patch: Partial<BackupRunFilters>) => setFilters((current) => ({ ...current, ...patch, page: 1 }))
+  const clearFilters = () => { setFilters({ page: 1, pageSize: 25 }); setFromDay(''); setToDay('') }
   const columns: Column<BackupRun>[] = [
-    { key: 'job', header: 'İş', render: (run) => <Link className="font-medium text-primary hover:underline" to={`/tenants/${tenantId}/backup-runs/${run.id}`}>{run.jobName ?? jobs.data?.find((job) => job.id === run.jobId)?.name ?? 'Yedekleme işi'}</Link> },
-    { key: 'database', header: 'Veritabanı', render: (run) => run.configuration.database },
-    { key: 'agent', header: 'Ajan', render: (run) => run.agentName ?? agents.data?.find((agent) => agent.agentId === run.agentId)?.hostName ?? 'Ajan' },
-    { key: 'trigger', header: 'Tetikleyici', render: (run) => triggerLabel(run.triggerType) },
-    { key: 'scheduled', header: 'Planlanan zaman', render: (run) => formatTimestamp(run.scheduledFor) },
+    { key: 'job', header: 'İş', wrap: true, render: (run) => <div className="space-y-0.5">
+      <Link className={linkClass} to={`/tenants/${tenantId}/backup-runs/${run.id}`}>{run.jobName ?? jobs.data?.find((job) => job.id === run.jobId)?.name ?? 'Backup Job'}</Link>
+      <p className="text-sm text-text-muted">{run.configuration.database} · {run.agentName ?? agents.data?.find((agent) => agent.agentId === run.agentId)?.hostName ?? 'Agent'}</p>
+    </div> },
+    { key: 'status', header: 'Durum', render: (run) => <div className="flex flex-col items-start gap-1">
+      <StatusPill status={run.status} /><ReplicationBadge replication={run.replication} />
+      <span className="text-sm text-text-muted">Deneme {run.currentAttemptNumber} / {run.retry.maxAttempts}</span>
+    </div> },
+    { key: 'trigger', header: 'Tetikleyici', wrap: true, render: (run) => <div>{triggerLabel(run.triggerType)}<p className="text-sm text-text-muted">Planlanan: {formatTimestamp(run.scheduledFor)}</p></div> },
     { key: 'started', header: 'Başlangıç', render: (run) => formatTimestamp(run.startedAt) },
     { key: 'duration', header: 'Süre', render: (run) => formatDuration(run.startedAt, run.completedAt) },
-    { key: 'status', header: 'Durum', render: (run) => <div className="flex flex-col items-start gap-1"><StatusPill status={run.status} /><ReplicationBadge replication={run.replication} /></div> },
-    { key: 'attempts', header: 'Deneme sayısı', render: (run) => `${run.currentAttemptNumber} / ${run.retry.maxAttempts}` },
   ]
+  const filterError = jobs.error ?? agents.error
 
   return (
-    <div className="space-y-5">
-      <header>
-        <h1 className="text-2xl font-semibold text-text-heading">Yedekleme geçmişi</h1>
-        <p className="mt-1 text-sm text-text-muted">İş çalıştırmaları, denemeler ve sonuçları. Aktif kayıtlar görünür sekmede güncellenir.</p>
-      </header>
-      <section aria-label="Yedekleme filtreleri" className="grid gap-3 rounded-lg border border-border bg-surface p-4 sm:grid-cols-2 xl:grid-cols-3">
-        <label className="space-y-1 text-sm">Durum
-          <select aria-label="Durum" className={controlClass} value={filters.status ?? ''} onChange={(event) => updateFilters({ status: event.target.value as BackupRunStatus | '' })}>
+    <div className="space-y-6">
+      <PageHeader title="Yedekleme geçmişi" description="Backup Job çalıştırmaları, denemeleri ve sonuçları. Aktif kayıtlar görünür sekmede güncellenir." />
+      <Filters label="Yedekleme filtreleri" onClear={clearFilters}
+        footer={<span className="text-sm text-text-muted">Tarihler yerel saat diliminizdeki oluşturulma günlerini kapsar.</span>}>
+        <FilterField label="Durum">
+          <select aria-label="Durum" className={filterControlClass} value={filters.status ?? ''} onChange={(event) => updateFilters({ status: event.target.value as BackupRunStatus | '' })}>
             <option value="">Tüm durumlar</option>
             {runStatuses.map((status) => <option key={status} value={status}>{runStatusLabels[status]}</option>)}
           </select>
-        </label>
-        <label className="space-y-1 text-sm">İş
-          <select aria-label="İş" className={controlClass} value={filters.jobId ?? ''} onChange={(event) => updateFilters({ jobId: event.target.value })} disabled={jobs.isPending || Boolean(jobs.error)}>
+        </FilterField>
+        <FilterField label="İş">
+          <select aria-label="İş" className={filterControlClass} value={filters.jobId ?? ''} onChange={(event) => updateFilters({ jobId: event.target.value })} disabled={jobs.isPending || Boolean(jobs.error)}>
             <option value="">Tüm işler</option>
             {jobs.data?.map((job) => <option key={job.id} value={job.id}>{job.name}</option>)}
           </select>
-        </label>
-        <label className="space-y-1 text-sm">Ajan
-          <select aria-label="Ajan" className={controlClass} value={filters.agentId ?? ''} onChange={(event) => updateFilters({ agentId: event.target.value })} disabled={agents.isPending || Boolean(agents.error)}>
+        </FilterField>
+        <FilterField label="Ajan">
+          <select aria-label="Ajan" className={filterControlClass} value={filters.agentId ?? ''} onChange={(event) => updateFilters({ agentId: event.target.value })} disabled={agents.isPending || Boolean(agents.error)}>
             <option value="">Tüm ajanlar</option>
             {agents.data?.map((agent) => <option key={agent.agentId} value={agent.agentId}>{agent.hostName ?? 'Adsız ajan'}</option>)}
           </select>
-        </label>
-        <label className="space-y-1 text-sm">Tetikleyici
-          <select aria-label="Tetikleyici" className={controlClass} value={filters.trigger ?? ''} onChange={(event) => updateFilters({ trigger: event.target.value as BackupTrigger | '' })}>
+        </FilterField>
+        <FilterField label="Tetikleyici">
+          <select aria-label="Tetikleyici" className={filterControlClass} value={filters.trigger ?? ''} onChange={(event) => updateFilters({ trigger: event.target.value as BackupTrigger | '' })}>
             <option value="">Tüm tetikleyiciler</option><option value="Manual">Elle başlatıldı</option><option value="Scheduled">Zamanlanmış</option><option value="Retry">Yeniden denenmiş çalıştırmalar</option>
           </select>
-        </label>
-        <label className="space-y-1 text-sm">Oluşturulma başlangıcı
-          <input aria-label="Oluşturulma başlangıcı" type="date" max={toDay || undefined} className={controlClass} value={fromDay} onChange={(event) => { setFromDay(event.target.value); updateFilters({ from: dateFilterInstant(event.target.value) }) }} />
-        </label>
-        <label className="space-y-1 text-sm">Oluşturulma sonu
-          <input aria-label="Oluşturulma sonu" type="date" min={fromDay || undefined} className={controlClass} value={toDay} onChange={(event) => { setToDay(event.target.value); updateFilters({ to: dateFilterInstant(event.target.value, true) }) }} />
-        </label>
-        <div className="flex flex-wrap items-center gap-3 sm:col-span-2 xl:col-span-3">
-          <Button variant="outline" onClick={() => { setFilters({ page: 1, pageSize: 25 }); setFromDay(''); setToDay('') }}>Filtreleri temizle</Button>
-          <span className="text-xs text-text-muted">Tarihler yerel saat diliminizdeki oluşturulma günlerini kapsar.</span>
-        </div>
-        {invalidDateRange && <p role="alert" className="text-sm text-error sm:col-span-2 xl:col-span-3">Başlangıç tarihi bitiş tarihinden sonra olamaz.</p>}
-        {(jobs.error || agents.error) && <p role="alert" className="text-sm text-error sm:col-span-2 xl:col-span-3">Filtre seçenekleri yüklenemedi: {errorMessage(jobs.error ?? agents.error)}</p>}
-      </section>
-      <QueryState isPending={backups.isPending} error={backups.error} empty={backups.data?.totalCount === 0}>
-        <DataTable rows={backups.data?.items ?? []} columns={columns} keyExtractor={(run) => run.id} emptyMessage="Bu filtrelerde yedekleme kaydı bulunamadı." />
+        </FilterField>
+        <FilterField label="Oluşturulma başlangıcı">
+          <input aria-label="Oluşturulma başlangıcı" type="date" max={toDay || undefined} className={filterControlClass} value={fromDay} onChange={(event) => { setFromDay(event.target.value); updateFilters({ from: dateFilterInstant(event.target.value) }) }} />
+        </FilterField>
+        <FilterField label="Oluşturulma sonu">
+          <input aria-label="Oluşturulma sonu" type="date" min={fromDay || undefined} className={filterControlClass} value={toDay} onChange={(event) => { setToDay(event.target.value); updateFilters({ to: dateFilterInstant(event.target.value, true) }) }} />
+        </FilterField>
+      </Filters>
+      {invalidDateRange && <Notice tone="error">Başlangıç tarihi bitiş tarihinden sonra olamaz.</Notice>}
+      {filterError && <Notice tone="error">Filtre seçenekleri yüklenemedi: {errorMessage(filterError)}</Notice>}
+      <QueryState isPending={backups.isPending} error={backups.error}>
+        {backups.data && (backups.data.totalCount === 0
+          ? <div className="rounded-xl border border-border bg-surface"><EmptyState icon={Activity} title="Bu filtrelerde Backup Run bulunamadı." action={<Button variant="outline" onClick={clearFilters}>Filtreleri temizle</Button>}>Filtreleri değiştirin veya temizleyin. Yeni çalıştırmalar Backup Job&apos;lardan başlatılır.</EmptyState></div>
+          : <>
+            <DataTable rows={backups.data.items} columns={columns} keyExtractor={(run) => run.id} />
+            <Pagination label="Yedekleme sayfaları" page={page} pageSize={pageSize} totalCount={backups.data.totalCount} disabled={backups.isFetching} onPageChange={(next) => setFilters((current) => ({ ...current, page: next }))} />
+          </>)}
       </QueryState>
-      {backups.data && backups.data.totalCount > 0 && <nav aria-label="Yedekleme sayfaları" className="flex flex-wrap items-center justify-between gap-3 text-sm">
-        <span className="text-text-muted">{backups.data.totalCount} kayıt · Sayfa {page} / {Math.max(1, Math.ceil(backups.data.totalCount / pageSize))}</span>
-        <div className="flex gap-2">
-          <Button variant="outline" disabled={page <= 1 || backups.isFetching} onClick={() => setFilters((current) => ({ ...current, page: page - 1 }))}>Önceki</Button>
-          <Button variant="outline" disabled={page * pageSize >= backups.data.totalCount || backups.isFetching} onClick={() => setFilters((current) => ({ ...current, page: page + 1 }))}>Sonraki</Button>
-        </div>
-      </nav>}
     </div>
   )
 }

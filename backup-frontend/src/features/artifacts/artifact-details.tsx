@@ -1,101 +1,132 @@
-import type { ReactNode } from 'react'
 import { StatusPill } from '@/components/data/status-pill'
+import { Notice } from '@/components/ui/notice'
+import { Fact, Facts, Section } from '@/components/ui/section'
 import { failureMessage } from '@/lib/api/failure-messages'
 import { artifactDate, artifactSize, artifactState, deletionReason } from './format'
 import type { BackupArtifact, BackupReplica } from './types'
 import { ReplicationSummary } from '@/features/backups/replication'
 
-function Metadata({ label, children }: { label: string; children: ReactNode }) {
-  return <div className="min-w-0"><dt className="text-sm text-text-muted">{label}</dt><dd className="mt-1 break-words text-sm text-text">{children}</dd></div>
-}
-
 /** Metadata presentation also accepts the deliberately redacted platform support projection. */
-interface ArtifactPresentation extends Omit<BackupArtifact, 'attemptId' | 'replicas'> {
+export interface ArtifactPresentation extends Omit<BackupArtifact, 'attemptId' | 'replicas'> {
   replicas: (Pick<BackupReplica, 'id' | 'storageProvider' | 'sizeBytes' | 'checksum' | 'checksumAlgorithm' | 'verificationState' | 'verificationMethod' | 'createdAt' | 'verifiedAt' | 'status' | 'usable' | 'deleteRequestedAt' | 'deleteAfter' | 'deletedAt'> & Partial<BackupReplica> & { executionLocation?: string })[]
 }
 
+export function ArtifactDeletedNotice({ artifact }: { artifact: ArtifactPresentation }) {
+  if (artifact.state !== 'Deleted') return null
+  return <Notice tone="info">Fiziksel dosyalar silindi. Bu kayıt yalnızca yedekleme geçmişidir; kullanılabilir bir Backup değildir.</Notice>
+}
+
+/** What this Backup is: the facts a reader needs first. */
+export function ArtifactSummary({ artifact }: { artifact: ArtifactPresentation }) {
+  return <Section title="Backup bilgileri" description="Bu dosyanın kaynağı, boyutu ve durumu.">
+    <Facts columns={3}>
+      <Fact label="Durum"><StatusPill status={artifactState(artifact)} /></Fact>
+      {artifact.replication && <Fact label="Replikasyon"><ReplicationSummary replication={artifact.replication} /></Fact>}
+      <Fact label="Backup tipi">{artifact.backupType ?? '—'}</Fact>
+      <Fact label="Database">{artifact.databaseName || '—'}</Fact>
+      <Fact label="Backup Job">{artifact.jobName || '—'}</Fact>
+      <Fact label="Agent">{artifact.agentName || '—'}</Fact>
+      <Fact label="Boyut">{artifactSize(artifact.sizeBytes)}</Fact>
+      <Fact label="Oluşturulma">{artifactDate(artifact.createdAt)}</Fact>
+      <Fact label="Kabul edilme">{artifactDate(artifact.acceptedAt)}</Fact>
+    </Facts>
+  </Section>
+}
+
+export function ArtifactIntegrity({ artifact }: { artifact: ArtifactPresentation }) {
+  return <Section title="Bütünlük" description="Kaynak ve kayıtlı dosyanın checksum değerleri.">
+    <Facts columns={1}>
+      <Fact label="Checksum algoritması">{artifact.checksumAlgorithm}</Fact>
+      <Fact label="Kaynak checksum"><code className="break-all font-mono text-sm">{artifact.sourceChecksum}</code></Fact>
+      <Fact label="Backup checksum"><code className="break-all font-mono text-sm">{artifact.artifactChecksum}</code></Fact>
+    </Facts>
+  </Section>
+}
+
+export function ArtifactRetention({ artifact }: { artifact: ArtifactPresentation }) {
+  return <Section title="Saklama ve silme" description="Dosyanın ne kadar saklanacağı ve silme sürecinin durumu.">
+    <Facts>
+      <Fact label="Saklama süresi sonu">{artifact.retentionExpiresAt ? artifactDate(artifact.retentionExpiresAt) : 'Süre sınırı yok'}</Fact>
+      <Fact label="Otomatik silme koruması">{artifact.retentionPinnedAt ? `Etkin · ${artifactDate(artifact.retentionPinnedAt)}` : 'Yok'}</Fact>
+      <Fact label="Fiziksel silme en erken">{artifactDate(artifact.deleteAfter)}</Fact>
+      <Fact label="Silme nedeni">{deletionReason(artifact.deleteReason)}</Fact>
+    </Facts>
+  </Section>
+}
+
+export function ArtifactMetadata({ artifact }: { artifact: ArtifactPresentation }) {
+  const meta = artifact.backupMetadata
+  return <Section title="MSSQL backup metadata" description="SQL Server'ın bu backup için bildirdiği teknik bilgiler.">
+    {meta ? <Facts columns={3}>
+      <Fact label="Engine">{meta.engine ?? '—'}</Fact>
+      <Fact label="SQL backup başladı">{artifactDate(meta.backupStartedAt)}</Fact>
+      <Fact label="SQL backup tamamlandı">{artifactDate(meta.backupFinishedAt)}</Fact>
+      <Fact label="SQL Server">{meta.instance?.serverName ?? '—'}</Fact>
+      <Fact label="SQL Server Instance">{meta.instance?.instanceName ?? '—'}</Fact>
+      <Fact label="SQL Server version">{meta.instance?.version ?? '—'}</Fact>
+      <Fact label="SQL Server edition">{meta.instance?.edition ?? '—'}</Fact>
+      <Fact label="SQL Server platform">{meta.instance?.hostPlatform ?? '—'}</Fact>
+      <Fact label="Recovery model">{meta.sqlDetails?.recoveryModel ?? '—'}</Fact>
+      <Fact label="Compatibility level">{meta.sqlDetails?.compatibilityLevel ?? '—'}</Fact>
+      <Fact label="User access">{meta.sqlDetails?.userAccess ?? '—'}</Fact>
+      <Fact label="Transparent data encryption">{meta.sqlDetails?.transparentDataEncryption ?? 'Bildirilmedi'}</Fact>
+      <Fact label="Backup doğrulaması">{meta.verification?.state ?? '—'} · {meta.verification?.method ?? '—'}</Fact>
+      <Fact label="Doğrulama başladı">{artifactDate(meta.verification?.startedAt)}</Fact>
+      <Fact label="Doğrulama tamamlandı">{artifactDate(meta.verification?.finishedAt)}</Fact>
+      {([['COPY_ONLY', meta.appliedOptions?.copyOnly], ['CHECKSUM', meta.appliedOptions?.checksum], ['Compression', meta.appliedOptions?.compression]] as const).map(([label, applied]) => <Fact key={label} label={label}>{applied == null ? 'Bildirilmedi' : applied ? 'Uygulandı' : 'Uygulanmadı'}</Fact>)}
+    </Facts> : <p className="text-sm text-text-muted">Bu history kaydında MSSQL backup metadata bulunmuyor.</p>}
+  </Section>
+}
+
+export function ArtifactReplicas({ artifact }: { artifact: ArtifactPresentation }) {
+  return <section aria-label="Replikalar" className="space-y-3">
+    <h2 className="text-base font-semibold text-text-heading">Replikalar <span className="font-normal text-text-muted">({artifact.replicas.length})</span></h2>
+    {artifact.replicas.length === 0 && <p className="text-sm text-text-muted">Replika kaydı bulunamadı.</p>}
+    {artifact.replicas.map((replica, index) => {
+      const deleting = Boolean(replica.waitingForAgent || replica.deleteFailureCode || replica.deleteRequestedAt)
+      return <article key={replica.id} className="space-y-4 rounded-xl border border-border bg-surface p-5 shadow-card" aria-label={`Replika ${index + 1}`}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className="font-medium text-text-heading">Replika {index + 1} · {replica.storageProvider}</h3>
+          <StatusPill status={replica.status} />
+        </div>
+        {replica.waitingForAgent && <Notice tone="warning">Fiziksel silme için Agent bekleniyor. Agent yeniden bağlandığında silme işlemi devam edecek.</Notice>}
+        {replica.status === 'Deleted' && <p className="text-sm text-text-muted">Fiziksel dosya kaldırıldı. Silinme: {artifactDate(replica.deletedAt)}</p>}
+        {replica.deleteFailureCode && !replica.waitingForAgent && <Notice tone="error">Silme tamamlanamadı: {failureMessage(replica.deleteFailureCode)}</Notice>}
+        <Facts columns={3}>
+          {replica.storageTarget !== undefined && <Fact label="Depolama hedefi">{replica.storageTarget}</Fact>}
+          <Fact label="Oluşturulma">{artifactDate(replica.createdAt)}</Fact>
+          <Fact label="Boyut">{artifactSize(replica.sizeBytes)}</Fact>
+          <Fact label="Kullanılabilir">{replica.status === 'Deleted' ? 'Hayır · geçmiş kaydı' : replica.usable ? 'Evet · dosya korunuyor' : 'Hayır'}</Fact>
+          <Fact label="Doğrulama durumu"><StatusPill status={replica.verificationState} /></Fact>
+          <Fact label="Doğrulama yöntemi">{replica.verificationMethod}</Fact>
+          <Fact label="Doğrulama zamanı">{artifactDate(replica.verifiedAt)}</Fact>
+        </Facts>
+        <details className="rounded-lg border border-border bg-surface-2 px-4 py-3" open={deleting}>
+          <summary className="min-h-6 cursor-pointer text-sm font-medium text-text-heading">Checksum ve silme ayrıntıları</summary>
+          <div className="pt-4"><Facts columns={3}>
+            <Fact label="Checksum"><code className="break-all font-mono text-sm">{replica.checksum}</code></Fact>
+            <Fact label="Checksum algoritması">{replica.checksumAlgorithm}</Fact>
+            <Fact label="Silme yürütücüsü">{(replica.executionLocation ?? replica.deletionExecutor) === 'Agent' ? 'Agent' : 'Backend'}</Fact>
+            <Fact label="Silme istendi">{artifactDate(replica.deleteRequestedAt)}</Fact>
+            <Fact label="Fiziksel silme en erken">{artifactDate(replica.deleteAfter)}</Fact>
+            {replica.deleteNextAttemptAt !== undefined && <Fact label="Sonraki silme denemesi">{artifactDate(replica.deleteNextAttemptAt)}</Fact>}
+            {replica.deleteAttempts !== undefined && <Fact label="Silme denemesi">{replica.deleteAttempts}</Fact>}
+            {replica.deleteReason !== undefined && <Fact label="Silme nedeni">{deletionReason(replica.deleteReason)}</Fact>}
+          </Facts></div>
+        </details>
+      </article>
+    })}
+  </section>
+}
+
+/** Everything about one Backup, stacked: used where there is no room for tabs (Backup Run attempts, platform support). */
 export function ArtifactDetails({ artifact }: { artifact: ArtifactPresentation }) {
-  return (
-    <div className="space-y-6">
-      {artifact.state === 'Deleted' && (
-        <p role="status" className="rounded-lg border border-border bg-surface-2 p-4 text-sm text-text-muted">
-          Fiziksel dosyalar silindi. Bu kayıt yalnızca yedekleme geçmişidir; kullanılabilir bir Backup değildir.
-        </p>
-      )}
-      <section className="rounded-lg border border-border bg-surface p-5" aria-label="Backup bilgileri">
-        <h2 className="mb-4 font-semibold text-text">Backup bilgileri</h2>
-        <dl className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          <Metadata label="Durum"><StatusPill status={artifactState(artifact)} /></Metadata>
-          {artifact.replication && <Metadata label="Replikasyon"><ReplicationSummary replication={artifact.replication} /></Metadata>}
-          <Metadata label="Backup tipi">{artifact.backupType ?? '—'}</Metadata>
-          <Metadata label="Database">{artifact.databaseName || '—'}</Metadata>
-          <Metadata label="Backup Job">{artifact.jobName || '—'}</Metadata>
-          <Metadata label="Agent">{artifact.agentName || '—'}</Metadata>
-          <Metadata label="Boyut">{artifactSize(artifact.sizeBytes)}</Metadata>
-          <Metadata label="Oluşturulma">{artifactDate(artifact.createdAt)}</Metadata>
-          <Metadata label="Kabul edilme">{artifactDate(artifact.acceptedAt)}</Metadata>
-          <Metadata label="Saklama süresi sonu">{artifact.retentionExpiresAt ? artifactDate(artifact.retentionExpiresAt) : 'Süre sınırı yok'}</Metadata>
-          <Metadata label="Otomatik silme koruması">{artifact.retentionPinnedAt ? `Etkin · ${artifactDate(artifact.retentionPinnedAt)}` : 'Yok'}</Metadata>
-          <Metadata label="Fiziksel silme en erken">{artifactDate(artifact.deleteAfter)}</Metadata>
-          <Metadata label="Silme nedeni">{deletionReason(artifact.deleteReason)}</Metadata>
-          <Metadata label="Checksum algoritması">{artifact.checksumAlgorithm}</Metadata>
-          <Metadata label="Kaynak checksum"><code className="break-all">{artifact.sourceChecksum}</code></Metadata>
-          <Metadata label="Backup checksum"><code className="break-all">{artifact.artifactChecksum}</code></Metadata>
-        </dl>
-      </section>
-      <section className="rounded-lg border border-border bg-surface p-5" aria-label="MSSQL backup metadata">
-        <h2 className="mb-4 font-semibold text-text">MSSQL backup metadata</h2>
-        {artifact.backupMetadata ? <dl className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          <Metadata label="Engine">{artifact.backupMetadata.engine ?? '—'}</Metadata>
-          <Metadata label="SQL backup başladı">{artifactDate(artifact.backupMetadata.backupStartedAt)}</Metadata>
-          <Metadata label="SQL backup tamamlandı">{artifactDate(artifact.backupMetadata.backupFinishedAt)}</Metadata>
-          <Metadata label="SQL Server">{artifact.backupMetadata.instance?.serverName ?? '—'}</Metadata>
-          <Metadata label="SQL Server Instance">{artifact.backupMetadata.instance?.instanceName ?? '—'}</Metadata>
-          <Metadata label="SQL Server version">{artifact.backupMetadata.instance?.version ?? '—'}</Metadata>
-          <Metadata label="SQL Server edition">{artifact.backupMetadata.instance?.edition ?? '—'}</Metadata>
-          <Metadata label="SQL Server platform">{artifact.backupMetadata.instance?.hostPlatform ?? '—'}</Metadata>
-          <Metadata label="Recovery model">{artifact.backupMetadata.sqlDetails?.recoveryModel ?? '—'}</Metadata>
-          <Metadata label="Compatibility level">{artifact.backupMetadata.sqlDetails?.compatibilityLevel ?? '—'}</Metadata>
-          <Metadata label="User access">{artifact.backupMetadata.sqlDetails?.userAccess ?? '—'}</Metadata>
-          <Metadata label="Transparent data encryption">{artifact.backupMetadata.sqlDetails?.transparentDataEncryption ?? 'Bildirilmedi'}</Metadata>
-          <Metadata label="Backup doğrulaması">{artifact.backupMetadata.verification?.state ?? '—'} · {artifact.backupMetadata.verification?.method ?? '—'}</Metadata>
-          <Metadata label="Doğrulama başladı">{artifactDate(artifact.backupMetadata.verification?.startedAt)}</Metadata>
-          <Metadata label="Doğrulama tamamlandı">{artifactDate(artifact.backupMetadata.verification?.finishedAt)}</Metadata>
-          {([['COPY_ONLY', artifact.backupMetadata.appliedOptions?.copyOnly], ['CHECKSUM', artifact.backupMetadata.appliedOptions?.checksum], ['Compression', artifact.backupMetadata.appliedOptions?.compression]] as const).map(([label, applied]) => <Metadata key={label} label={label}>{applied == null ? 'Bildirilmedi' : applied ? 'Uygulandı' : 'Uygulanmadı'}</Metadata>)}
-        </dl> : <p className="text-sm text-text-muted">Bu history kaydında MSSQL backup metadata bulunmuyor.</p>}
-      </section>
-      <section aria-label="Replikalar" className="space-y-3">
-        <h2 className="font-semibold text-text">Replikalar <span className="text-text-muted">({artifact.replicas.length})</span></h2>
-        {artifact.replicas.length === 0 && <p className="text-sm text-text-muted">Replika kaydı bulunamadı.</p>}
-        {artifact.replicas.map((replica, index) => (
-          <article key={replica.id} className="rounded-lg border border-border bg-surface p-5" aria-label={`Replika ${index + 1}`}>
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h3 className="font-medium text-text">Replika {index + 1} · {replica.storageProvider}</h3>
-              <StatusPill status={replica.status} />
-            </div>
-            {replica.waitingForAgent && <p role="status" className="mb-4 rounded-md bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">Fiziksel silme için Agent bekleniyor. Agent yeniden bağlandığında silme işlemi devam edecek.</p>}
-            {replica.status === 'Deleted' && <p className="mb-4 text-sm text-text-muted">Fiziksel dosya kaldırıldı. Silinme: {artifactDate(replica.deletedAt)}</p>}
-            {replica.deleteFailureCode && !replica.waitingForAgent && <p role="status" className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">Silme tamamlanamadı: {failureMessage(replica.deleteFailureCode)}</p>}
-            <dl className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {replica.storageTarget !== undefined && <Metadata label="Depolama hedefi">{replica.storageTarget}</Metadata>}
-              <Metadata label="Oluşturulma">{artifactDate(replica.createdAt)}</Metadata>
-              <Metadata label="Boyut">{artifactSize(replica.sizeBytes)}</Metadata>
-              <Metadata label="Kullanılabilir">{replica.status === 'Deleted' ? 'Hayır · geçmiş kaydı' : replica.usable ? 'Evet · dosya korunuyor' : 'Hayır'}</Metadata>
-              <Metadata label="Doğrulama durumu"><StatusPill status={replica.verificationState} /></Metadata>
-              <Metadata label="Doğrulama yöntemi">{replica.verificationMethod}</Metadata>
-              <Metadata label="Doğrulama zamanı">{artifactDate(replica.verifiedAt)}</Metadata>
-              <Metadata label="Checksum"><code className="break-all">{replica.checksum}</code></Metadata>
-              <Metadata label="Checksum algoritması">{replica.checksumAlgorithm}</Metadata>
-              <Metadata label="Silme yürütücüsü">{(replica.executionLocation ?? replica.deletionExecutor) === 'Agent' ? 'Agent' : 'Backend'}</Metadata>
-              <Metadata label="Silme istendi">{artifactDate(replica.deleteRequestedAt)}</Metadata>
-              <Metadata label="Fiziksel silme en erken">{artifactDate(replica.deleteAfter)}</Metadata>
-              {replica.deleteNextAttemptAt !== undefined && <Metadata label="Sonraki silme denemesi">{artifactDate(replica.deleteNextAttemptAt)}</Metadata>}
-              {replica.deleteAttempts !== undefined && <Metadata label="Silme denemesi">{replica.deleteAttempts}</Metadata>}
-              {replica.deleteReason !== undefined && <Metadata label="Silme nedeni">{deletionReason(replica.deleteReason)}</Metadata>}
-            </dl>
-          </article>
-        ))}
-      </section>
-    </div>
-  )
+  return <div className="space-y-6">
+    <ArtifactDeletedNotice artifact={artifact} />
+    <ArtifactSummary artifact={artifact} />
+    <ArtifactIntegrity artifact={artifact} />
+    <ArtifactRetention artifact={artifact} />
+    <ArtifactMetadata artifact={artifact} />
+    <ArtifactReplicas artifact={artifact} />
+  </div>
 }

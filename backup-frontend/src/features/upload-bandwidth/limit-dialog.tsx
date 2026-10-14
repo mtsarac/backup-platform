@@ -1,10 +1,12 @@
 import { useState } from 'react'
+import { Field } from '@/components/ui/field'
 import { FormDialog } from '@/features/platform/plans/form-dialog'
 import { inputClass, selectClass } from '@/features/platform/styles'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { useSetUploadBandwidth } from './hooks'
 import type { BandwidthTarget } from './types'
-import { bandwidthErrorMessage, bandwidthUnits, formatBandwidth, parseBandwidth, toInput, type BandwidthUnitId } from './units'
+import { bandwidthErrorMessage, bandwidthUnits, formatBandwidth, parseBandwidth, toInput } from './units'
+import type { BandwidthUnitId } from './units'
 
 const scopeHelp = {
   tenant: 'Tenant genelinde eş zamanlı tüm yüklemelerin toplamı için üst sınırdır; tüm Agent\'lardaki yüklemeler bu sınırı adil paylaşır.',
@@ -30,22 +32,20 @@ export function LimitDialog({ target, name, current, minimum, maximum, onClose }
   }
   return <FormDialog title={`Yükleme hız sınırı: ${name}`} description={scopeHelp[target.scope]} submitLabel="Kaydet" pendingLabel="Kaydediliyor…" pending={save.isPending} disabled={invalid}
     error={save.error ? errorMessage(save.error) : undefined} onSubmit={submit} onClose={onClose}>
-    <label className="flex items-center gap-2 text-sm text-text">
-      <input type="checkbox" checked={unlimited} onChange={event => setUnlimited(event.target.checked)} />
+    <label className="flex min-h-11 items-center gap-3 text-[0.9375rem] text-text">
+      <input type="checkbox" className="size-5 accent-primary" checked={unlimited} onChange={event => setUnlimited(event.target.checked)} />
       Limitsiz (sınır yok)
     </label>
-    <div className="grid grid-cols-[1fr_auto] gap-3">
-      <label className="block text-sm text-text-muted">Hız sınırı
-        <input className={inputClass} inputMode="decimal" value={text} disabled={unlimited} aria-invalid={showInvalid} aria-describedby="bandwidth-hint" onChange={event => setText(event.target.value)} />
-      </label>
-      <label className="block text-sm text-text-muted">Birim
-        <select className={selectClass} value={unit} disabled={unlimited} onChange={event => setUnit(event.target.value as BandwidthUnitId)}>
+    <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+      <Field label="Hız sınırı" error={showInvalid ? bandwidthErrorMessage(parsed.error, minimum, maximum) : undefined}>
+        {control => <input {...control} className={inputClass} inputMode="decimal" value={text} disabled={unlimited} onChange={event => setText(event.target.value)} />}
+      </Field>
+      <Field label="Birim">
+        {control => <select {...control} className={`${selectClass} w-full`} value={unit} disabled={unlimited} onChange={event => setUnit(event.target.value as BandwidthUnitId)}>
           {bandwidthUnits.map(item => <option key={item.id} value={item.id}>{item.id}</option>)}
-        </select>
-      </label>
+        </select>}
+      </Field>
     </div>
-    <p id="bandwidth-hint" className={`text-xs ${showInvalid ? 'text-error' : 'text-text-muted'}`}>
-      {showInvalid ? bandwidthErrorMessage(parsed.error, minimum, maximum) : `1 Mbit/s = 125.000 B/s · 1 MB/s = 1.000.000 B/s. En az ${formatBandwidth(minimum)}, en çok ${formatBandwidth(maximum)}.`}
-    </p>
+    <p className="text-sm text-text-muted">1 Mbit/s = 125.000 B/s · 1 MB/s = 1.000.000 B/s. En az {formatBandwidth(minimum)}, en çok {formatBandwidth(maximum)}.</p>
   </FormDialog>
 }

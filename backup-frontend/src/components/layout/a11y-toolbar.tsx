@@ -15,10 +15,10 @@ export function A11yToolbar() {
     applyA11yPrefs(nextScale, nextContrast)
   }
 
-  return <div role="group" aria-label="Erişilebilirlik araçları" className="flex items-center gap-1">
-    <Button variant="outline" size="icon" aria-label="Yazıyı küçült" disabled={index === 0} onClick={() => update(FONT_SCALES[index - 1], highContrast)}>A-</Button>
-    <span className="min-w-12 text-center text-sm font-medium" aria-live="polite">%{scale}</span>
-    <Button variant="outline" size="icon" aria-label="Yazıyı büyüt" disabled={index === FONT_SCALES.length - 1} onClick={() => update(FONT_SCALES[index + 1], highContrast)}>A+</Button>
-    <Button variant={highContrast ? 'default' : 'outline'} size="icon" aria-label="Yüksek kontrast" aria-pressed={highContrast} onClick={() => update(scale, !highContrast)}><Contrast /></Button>
+  return <div role="group" aria-label="Erişilebilirlik araçları" className="flex items-center gap-1 rounded-lg border border-border bg-surface-2 p-0.5">
+    <Button variant="ghost" size="icon-sm" aria-label="Yazıyı küçült" disabled={index === 0} onClick={() => update(FONT_SCALES[index - 1], highContrast)}>A-</Button>
+    <span className="min-w-10 text-center text-xs font-medium text-text-muted" aria-live="polite">%{scale}</span>
+    <Button variant="ghost" size="icon-sm" aria-label="Yazıyı büyüt" disabled={index === FONT_SCALES.length - 1} onClick={() => update(FONT_SCALES[index + 1], highContrast)}>A+</Button>
+    <Button variant={highContrast ? 'default' : 'ghost'} size="icon-sm" aria-label="Yüksek kontrast" aria-pressed={highContrast} onClick={() => update(scale, !highContrast)}><Contrast /></Button>
   </div>
 }

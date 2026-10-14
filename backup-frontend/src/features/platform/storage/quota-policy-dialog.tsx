@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Field } from '@/components/ui/field'
 import { ApiError } from '@/lib/api/client'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { FormDialog } from '@/features/platform/plans/form-dialog'
@@ -114,6 +115,7 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
   return (
     <FormDialog
       title={isEditing ? `Politikayı düzenle: ${policy?.name}` : 'Yeni Kota Politikası'}
+      description={isEditing ? 'Değişiklikler bu politikayı kullanan tenant’ların kullanımını yeniden hesaplatabilir. Ek kapsam seçicileri korunur.' : 'Kotaya dahil edilen depolama alanlarını, kullanım eşiklerini ve yeni Backup davranışını tanımlayın.'}
       submitLabel={isEditing ? 'Kaydet' : 'Oluştur'}
       pendingLabel={isEditing ? 'Kaydediliyor…' : 'Oluşturuluyor…'}
       pending={mutation.isPending}
@@ -122,198 +124,48 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
       onSubmit={handleSubmit}
       onClose={onClose}
     >
-      {!isEditing && (
-        <label className="block text-sm text-text-muted">
-          Politika Anahtarı (Key)
-          <input
-            className={inputClass}
-            value={key}
-            maxLength={64}
-            required
-            aria-invalid={errField === 'key'}
-            onChange={(e) => setKey(e.target.value)}
-            placeholder="ornek-politika-key"
-          />
-          <span className="mt-1 block text-xs">Benzersiz kimlik. Oluşturulduktan sonra değiştirilemez.</span>
-        </label>
-      )}
-
-      <label className="block text-sm text-text-muted">
-        Politika Adı
-        <input
-          className={inputClass}
-          value={name}
-          maxLength={100}
-          required
-          aria-invalid={errField === 'name'}
-          onChange={(e) => setName(e.target.value)}
-        />
-      </label>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-sm text-text-muted">
-          Hesaplama Modu (Accounting)
-          <select
-            className={selectClass}
-            value={accountingMode}
-            onChange={(e) => setAccountingMode(e.target.value as AccountingMode)}
-          >
-            <option value="LogicalArtifactBytes">Logical (Artifact boyutu)</option>
-            <option value="PhysicalReplicaBytes">Physical (Replika kopyaları dahil)</option>
-          </select>
-        </label>
-
-        <label className="block text-sm text-text-muted">
-          Uygulama Modu (Enforcement)
-          <select
-            className={selectClass}
-            value={enforcementMode}
-            onChange={(e) => setEnforcementMode(e.target.value as EnforcementMode)}
-          >
-            <option value="BlockNewBackups">BlockNewBackups (Yeni backup engellenir)</option>
-            <option value="WarnOnly">WarnOnly (Yalnızca uyar)</option>
-            <option value="None">None (Uygulanmaz)</option>
-          </select>
-        </label>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-sm text-text-muted">
-          Warning Eşiği (%)
-          <input
-            className={inputClass}
-            type="number"
-            min={1}
-            max={99}
-            value={warningThreshold}
-            required
-            onChange={(e) => setWarningThreshold(Number(e.target.value))}
-          />
-        </label>
-
-        <label className="block text-sm text-text-muted">
-          Critical Eşiği (%)
-          <input
-            className={inputClass}
-            type="number"
-            min={1}
-            max={100}
-            value={criticalThreshold}
-            required
-            onChange={(e) => setCriticalThreshold(Number(e.target.value))}
-          />
-        </label>
-      </div>
-
-      <div className="space-y-2 rounded-lg border border-border bg-surface-2 p-3">
-        <label className="block text-sm font-medium text-text-heading">
-          Depolama Kapsamı (Included Storage Scopes)
-          <select
-            className={`mt-1 ${selectClass}`}
-            value={scopeKind}
-            onChange={(e) => {
-              setScopeKind(e.target.value as ScopeKind)
-              setScopeError(null)
-            }}
-          >
-            <option value="all">Tüm depolama alanları (All)</option>
-            <option value="providerType">Provider Türü (ProviderType - örn. central, local)</option>
-            <option value="ownershipType">Sahiplik Türü (OwnershipType - PlatformManaged / TenantManaged)</option>
-            <option value="quotaScope">Kota Kapsamı (QuotaScope - örn. managed, tenant)</option>
-            <option value="storageConnection">Depolama Bağlantısı (StorageConnection)</option>
-          </select>
-        </label>
-
-        {scopeKind === 'all' && (
-          <p className="text-xs text-text-muted">
-            Tüm replikalar ve depolama sağlayıcıları kotaya dahil edilir.
-          </p>
-        )}
-
-        {scopeKind === 'providerType' && (
-          <label className="block text-xs text-text-muted">
-            Provider Anahtarları (virgülle ayırın):
-            <input
-              className={`mt-1 ${inputClass}`}
-              value={providerTypes}
-              onChange={(e) => setProviderTypes(e.target.value)}
-              placeholder="central, local"
-            />
-            <span className="mt-1 block text-[11px] text-text-muted">
-              Desteklenen sistem provider anahtarları: <code>central</code>, <code>local</code>.
-            </span>
-          </label>
-        )}
-
-        {scopeKind === 'ownershipType' && (
-          <div className="space-y-1 text-xs">
-            <span className="text-text-muted">Dahil edilecek sahiplik türleri:</span>
-            <div className="flex flex-wrap gap-4 pt-1">
-              <label className="flex items-center gap-1.5 text-text">
-                <input
-                  type="checkbox"
-                  checked={ownershipTypes.includes('PlatformManaged')}
-                  onChange={() => toggleOwnership('PlatformManaged')}
-                />
-                PlatformManaged (Platform yönetimli / central)
-              </label>
-              <label className="flex items-center gap-1.5 text-text">
-                <input
-                  type="checkbox"
-                  checked={ownershipTypes.includes('TenantManaged')}
-                  onChange={() => toggleOwnership('TenantManaged')}
-                />
-                TenantManaged (Tenant yönetimli / local)
-              </label>
-            </div>
-          </div>
-        )}
-
-        {scopeKind === 'quotaScope' && (
-          <label className="block text-xs text-text-muted">
-            Kota kapsamı etiketleri (virgülle ayırın):
-            <input
-              className={`mt-1 ${inputClass}`}
-              value={quotaScopes}
-              onChange={(e) => setQuotaScopes(e.target.value)}
-              placeholder="managed, tenant"
-              aria-invalid={scopeError !== null}
-            />
-            <span className="mt-1 block text-[11px] text-text-muted">
-              Bir depolama bağlantısının kota kapsamı etiketiyle eşleşir. Küçük harf, rakam ve “-”; her etiket 1-64 karakter.
-            </span>
-          </label>
-        )}
-
-        {scopeKind === 'storageConnection' && (
-          <div className="space-y-2">
-            <QuotaConnectionPicker
-              values={connectionIds.split(/[,\n]+/).map(v => v.trim()).filter(Boolean)}
-              onChange={(selected) => setConnectionIds(selected.join('\n'))}
-              invalid={scopeError !== null}
-            />
-            <label className="block text-xs text-text-muted">
-              Depolama bağlantısı kimlikleri (her satıra veya virgülle bir GUID):
-              <textarea
-                className={`mt-1 h-20 font-mono ${inputClass}`}
-                value={connectionIds}
-                onChange={(e) => setConnectionIds(e.target.value)}
-                placeholder={'3f2b8c1e-0d4a-4b6e-9a7c-5e1d2f3a4b5c\n11111111-2222-3333-4444-555555555555'}
-                aria-invalid={scopeError !== null}
-              />
-            </label>
-          </div>
-        )}
-      </div>
-
-      <label className="flex items-center gap-2 text-sm text-text">
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(e) => setEnabled(e.target.checked)}
-        />
-        Etkin politika (planlarda seçilebilir)
-      </label>
+      <fieldset className="space-y-4">
+        <legend className="mb-3 text-sm font-semibold text-text-heading">Kimlik ve durum</legend>
+        {!isEditing && <Field label="Politika Anahtarı (Key)" hint="Benzersiz kimlik. Oluşturulduktan sonra değiştirilemez.">
+          {(control) => <input {...control} className={inputClass} value={key} maxLength={64} required aria-invalid={errField === 'key'} onChange={(event) => setKey(event.target.value)} placeholder="ornek-politika-key" />}
+        </Field>}
+        <Field label="Politika Adı">{(control) => <input {...control} className={inputClass} value={name} maxLength={100} required aria-invalid={errField === 'name'} onChange={(event) => setName(event.target.value)} />}</Field>
+        <label className="flex min-h-8 items-center gap-2 text-sm text-text"><input className="size-4" type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />Etkin politika (planlarda seçilebilir)</label>
+      </fieldset>
+      <fieldset className="space-y-4 border-t border-border pt-4">
+        <legend className="pt-4 text-sm font-semibold text-text-heading">Hesaplama ve eşikler</legend>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Hesaplama Modu (Accounting)">{(control) => <select {...control} className={`${selectClass} w-full`} value={accountingMode} onChange={(event) => setAccountingMode(event.target.value as AccountingMode)}>
+            <option value="LogicalArtifactBytes">Logical (Artifact boyutu)</option><option value="PhysicalReplicaBytes">Physical (Replika kopyaları dahil)</option>
+          </select>}</Field>
+          <Field label="Uygulama Modu (Enforcement)">{(control) => <select {...control} className={`${selectClass} w-full`} value={enforcementMode} onChange={(event) => setEnforcementMode(event.target.value as EnforcementMode)}>
+            <option value="BlockNewBackups">BlockNewBackups (Yeni backup engellenir)</option><option value="WarnOnly">WarnOnly (Yalnızca uyar)</option><option value="None">None (Uygulanmaz)</option>
+          </select>}</Field>
+          <Field label="Warning Eşiği (%)">{(control) => <input {...control} className={inputClass} type="number" min={1} max={99} value={warningThreshold} required onChange={(event) => setWarningThreshold(Number(event.target.value))} />}</Field>
+          <Field label="Critical Eşiği (%)">{(control) => <input {...control} className={inputClass} type="number" min={1} max={100} value={criticalThreshold} required onChange={(event) => setCriticalThreshold(Number(event.target.value))} />}</Field>
+        </div>
+      </fieldset>
+      <fieldset className="space-y-4 border-t border-border pt-4">
+        <legend className="pt-4 text-sm font-semibold text-text-heading">Depolama kapsamı</legend>
+        <Field label="Depolama Kapsamı (Included Storage Scopes)">{(control) => <select {...control} className={`${selectClass} w-full`} value={scopeKind} onChange={(event) => { setScopeKind(event.target.value as ScopeKind); setScopeError(null) }}>
+          <option value="all">Tüm depolama alanları (All)</option><option value="providerType">Provider Türü (ProviderType - örn. central, local)</option><option value="ownershipType">Sahiplik Türü (OwnershipType - PlatformManaged / TenantManaged)</option><option value="quotaScope">Kota Kapsamı (QuotaScope - örn. managed, tenant)</option><option value="storageConnection">Depolama Bağlantısı (StorageConnection)</option>
+        </select>}</Field>
+        {scopeKind === 'all' && <p className="text-sm text-text-muted">Tüm replikalar ve depolama sağlayıcıları kotaya dahil edilir.</p>}
+        {scopeKind === 'providerType' && <Field label="Provider Anahtarları (virgülle ayırın):" hint={<>Desteklenen sistem provider anahtarları: <code>central</code>, <code>local</code>.</>}>
+          {(control) => <input {...control} className={inputClass} value={providerTypes} onChange={(event) => setProviderTypes(event.target.value)} placeholder="central, local" />}
+        </Field>}
+        {scopeKind === 'ownershipType' && <div className="space-y-2 text-sm"><p className="text-text-muted">Dahil edilecek sahiplik türleri:</p><div className="space-y-2">
+          <label className="flex min-h-8 items-center gap-2"><input className="size-4" type="checkbox" checked={ownershipTypes.includes('PlatformManaged')} onChange={() => toggleOwnership('PlatformManaged')} />PlatformManaged (Platform yönetimli / central)</label>
+          <label className="flex min-h-8 items-center gap-2"><input className="size-4" type="checkbox" checked={ownershipTypes.includes('TenantManaged')} onChange={() => toggleOwnership('TenantManaged')} />TenantManaged (Tenant yönetimli / local)</label>
+        </div></div>}
+        {scopeKind === 'quotaScope' && <Field label="Kota kapsamı etiketleri (virgülle ayırın):" hint="Bir depolama bağlantısının kota kapsamı etiketiyle eşleşir. Küçük harf, rakam ve “-”; her etiket 1-64 karakter.">
+          {(control) => <input {...control} className={inputClass} value={quotaScopes} onChange={(event) => setQuotaScopes(event.target.value)} placeholder="managed, tenant" aria-invalid={scopeError !== null} />}
+        </Field>}
+        {scopeKind === 'storageConnection' && <div className="space-y-3">
+          <QuotaConnectionPicker values={connectionIds.split(/[,\n]+/).map(value => value.trim()).filter(Boolean)} onChange={(selected) => setConnectionIds(selected.join('\n'))} invalid={scopeError !== null} />
+          <Field label="Depolama bağlantısı kimlikleri (her satıra veya virgülle bir GUID):">{(control) => <textarea {...control} className={`${inputClass} h-24 font-mono`} value={connectionIds} onChange={(event) => setConnectionIds(event.target.value)} placeholder={'3f2b8c1e-0d4a-4b6e-9a7c-5e1d2f3a4b5c\n11111111-2222-3333-4444-555555555555'} aria-invalid={scopeError !== null} />}</Field>
+        </div>}
+      </fieldset>
     </FormDialog>
   )
 }

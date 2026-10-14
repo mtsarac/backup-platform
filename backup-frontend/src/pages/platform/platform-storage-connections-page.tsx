@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Plus, RefreshCw } from 'lucide-react'
 import { Pagination } from '@/components/data/pagination'
 import { Button } from '@/components/ui/button'
+import { PageHeader } from '@/components/ui/page-header'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { SearchForm } from '@/features/platform/search-form'
 import { selectClass } from '@/features/platform/styles'
@@ -40,26 +41,22 @@ export function PlatformStorageConnectionsPage() {
   const [adding, setAdding] = useState(false)
   const data = query.data
 
-  return <div className="space-y-4">
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <h1 className="text-2xl font-semibold text-text-heading">Depolama hedefleri</h1>
-        <p className="mt-1 text-sm text-text-muted">Managed targets: tenant'ların backup hedefleri. Varsayılan görünüm platform yönetimli hedefleri gösterir.</p>
-      </div>
-      <div className="flex items-center gap-2">
+  return <div className="space-y-6">
+    <PageHeader title="Depolama hedefleri" crumbs={[{ label: 'Platform', to: '/platform' }, { label: 'Storage Targets' }]}
+      description="Tenant'ların backup hedefleri. Varsayılan görünüm platform yönetimli hedefleri gösterir."
+      actions={<>
         <Button variant="outline" onClick={() => void query.refetch()} disabled={query.isFetching}><RefreshCw className={`size-4 ${query.isFetching ? 'animate-spin' : ''}`} aria-hidden="true" />Yenile</Button>
         <Button onClick={() => setAdding(true)}><Plus className="size-4" aria-hidden="true" />Managed target ekle</Button>
-      </div>
-    </div>
+      </>} />
 
-    <details className="rounded-lg border border-border bg-surface p-3 text-sm text-text-muted">
+    <details className="rounded-xl border border-border bg-surface p-4 text-sm text-text-muted shadow-card">
       <summary className="cursor-pointer font-medium text-text-heading">Platform kilidi ne yapar?</summary>
       <p className="mt-2">Platform yalnızca yönetim kilidini koyar veya kaldırır; tenant'ın etkin / devre dışı tercihini değiştirmez. Durum filtresi bu iki kontrolün birleşimi olan etkin kullanılabilirliğe göre çalışır.</p>
       <ul className="mt-2 list-inside list-disc space-y-1">{disableEffects.map((effect) => <li key={effect}>{effect}</li>)}</ul>
     </details>
 
-    <div className="flex flex-wrap items-end gap-3">
-      <SearchForm label="Tenant ara" value={search} onSearch={(value) => update({ search: value })} placeholder="Tenant adı…" />
+    <section aria-label="Depolama hedefi filtreleri" className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-surface p-4 shadow-card">
+      <SearchForm label="Tenant ara" value={search} onSearch={(value) => update({ search: value })} placeholder="Tenant adı…" className="min-w-full sm:min-w-60" />
       <label className="text-sm text-text-muted">Sahiplik
         <select className={selectClass} value={ownershipFilter(ownership) ?? 'all'} onChange={(event) => update({ ownership: event.target.value === 'PlatformManaged' ? undefined : event.target.value })}>
           <option value="PlatformManaged">Platform yönetimli</option>
@@ -80,7 +77,7 @@ export function PlatformStorageConnectionsPage() {
           <option value="false">Devre dışı</option>
         </select>
       </label>
-    </div>
+    </section>
     {tenantId && <p className="flex flex-wrap items-center gap-2 text-sm text-text-muted">Tek bir tenant'a göre filtrelendi. <Button variant="outline" size="sm" onClick={() => update({ tenantId: undefined })}>Tenant filtresini kaldır</Button></p>}
 
     <PlatformQueryState isPending={query.isPending} error={query.error}>

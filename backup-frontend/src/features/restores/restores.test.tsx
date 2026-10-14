@@ -310,6 +310,19 @@ describe('RestoreDetailPage', () => {
     expect(await screen.findByText(/Cancelled, Failed veya AgentLost durumu Database'in sağlıklı olduğunu göstermez/i)).toBeInTheDocument()
     expect(screen.getByText(/Kısmen geri yüklendi · PartiallyRestored/i)).toBeInTheDocument()
   })
+
+  it('keeps source safety options and attempt progress accessible in their tabs', async () => {
+    renderWithClient(<Routes><Route path="/tenants/:tenantId/restores/:id" element={<RestoreDetailPage />} /></Routes>, '/tenants/tenant-a/restores/restore-1')
+    expect(await screen.findByRole('heading', { name: /Geri yükleme · RestoredSalesDB/i })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'Kaynak ve seçenekler' }))
+    expect(screen.getByText('Restore için silmeye karşı korunuyor')).toBeInTheDocument()
+    expect(screen.getByText('Aktif bağlantıları sonlandır')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'Denemeler' }))
+    expect(screen.getByRole('article', { name: '1. deneme' })).toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: '1. deneme ilerlemesi' })).toHaveAttribute('aria-valuenow', '65.5')
+    fireEvent.click(screen.getByRole('tab', { name: 'Doğrulama sonucu' }))
+    expect(screen.getByText('Doğrulama sonucu henüz bildirilmedi.')).toBeInTheDocument()
+  })
 })
 
 describe('RestoreWizardPage', () => {

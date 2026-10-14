@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { StatusPill } from '@/components/data/status-pill'
+import { Field } from '@/components/ui/field'
+import { Notice } from '@/components/ui/notice'
+import { Section } from '@/components/ui/section'
+import { Stepper } from '@/components/ui/stepper'
 import { artifactSize } from '@/features/artifacts/format'
 import { inputClass, selectClass } from '@/features/platform/styles'
 import { isActiveRestore, restoreFailureMessage, safeRestoreCode } from '@/features/restores/presentation'
@@ -61,13 +65,15 @@ function RestoreForm({ session, artifactId, targets, onStarted }: { session: Sup
     if (restoreKey.current.body !== body) restoreKey.current = { body, key: crypto.randomUUID() }
     start.mutate({ input: request, idempotencyKey: restoreKey.current.key }, { onSuccess: result => { if (mounted.current) onStarted(result.id) }, onSettled: () => { submitting.current = false } })
   }
-  return <section aria-label="Support Restore" className="space-y-5 rounded-lg border border-border bg-surface p-5">
-    <header><h2 className="text-lg font-semibold">Yeni Database geri yükleme</h2><p className="mt-1 text-sm text-text-muted">Kaynak: {targets.sourceDatabase} · {artifactSize(targets.sizeBytes)} · NewDatabase</p></header>
-    <div role="alert" className="space-y-2 rounded-lg border border-warning/40 bg-warning-subtle p-4 text-warning"><p className="font-semibold">{customerWarning}</p>{targets.environment.warning && targets.environment.warning !== customerWarning && <p className="text-sm">{targets.environment.warning}</p>}<p className="text-sm">Hedef tenant'ın gerçek SQL Server bağlantısıdır. Mevcut Database'ler değiştirilmez; yalnızca yeni Database oluşturulur.</p></div>
+  return <section aria-label="Support Restore">
+    <Section title="Yeni Database geri yükleme" description={<>Kaynak: {targets.sourceDatabase} · {artifactSize(targets.sizeBytes)} · NewDatabase</>}>
+    <div className="space-y-5">
+    <Stepper steps={['Hedef ve Precheck', 'Sonucu onayla', 'Restore başlat']} current={passed ? acknowledged ? 2 : 1 : 0} />
+    <Notice tone="warning" title={customerWarning}>{targets.environment.warning && targets.environment.warning !== customerWarning && <p>{targets.environment.warning}</p>}<p>Hedef tenant'ın gerçek SQL Server bağlantısıdır. Mevcut Database'ler değiştirilmez; yalnızca yeni Database oluşturulur.</p></Notice>
     <fieldset disabled={busy || !scope.enabled} className="grid gap-4 sm:grid-cols-2">
-      <label className="text-sm">Agent<select className={`${selectClass} w-full`} value={agentId} onChange={event => { const id = event.target.value; setAgentId(id); setTargetJobId(targets.targets.find(item => item.agentId === id)?.jobId ?? ''); setAcknowledged(false) }}><option value="">Agent seçin</option>{eligibleAgents.map(agent => <option key={agent.agentId} value={agent.agentId}>{agent.hostName ?? agent.agentId} · {agent.sourceAccess}</option>)}</select></label>
-      <label className="text-sm">Hedef SQL Server<select className={`${selectClass} w-full`} value={targetJobId} onChange={event => { setTargetJobId(event.target.value); setAcknowledged(false) }}><option value="">Hedef seçin</option>{targets.targets.filter(item => item.agentId === agentId).map(item => <option key={item.jobId} value={item.jobId}>{item.jobName} · {item.host}{item.port ? `:${item.port}` : ''} · {item.database}</option>)}</select></label>
-      <label className="text-sm sm:col-span-2">Yeni Database adı<input className={inputClass} value={databaseName} maxLength={128} onChange={event => { setDatabaseName(event.target.value); setAcknowledged(false) }} /></label>
+      <Field label="Agent">{(control) => <select {...control} className={`${selectClass} w-full`} value={agentId} onChange={event => { const id = event.target.value; setAgentId(id); setTargetJobId(targets.targets.find(item => item.agentId === id)?.jobId ?? ''); setAcknowledged(false) }}><option value="">Agent seçin</option>{eligibleAgents.map(agent => <option key={agent.agentId} value={agent.agentId}>{agent.hostName ?? agent.agentId} · {agent.sourceAccess}</option>)}</select>}</Field>
+      <Field label="Hedef SQL Server">{(control) => <select {...control} className={`${selectClass} w-full`} value={targetJobId} onChange={event => { setTargetJobId(event.target.value); setAcknowledged(false) }}><option value="">Hedef seçin</option>{targets.targets.filter(item => item.agentId === agentId).map(item => <option key={item.jobId} value={item.jobId}>{item.jobName} · {item.host}{item.port ? `:${item.port}` : ''} · {item.database}</option>)}</select>}</Field>
+      <div className="sm:col-span-2"><Field label="Yeni Database adı">{(control) => <input {...control} className={inputClass} value={databaseName} maxLength={128} onChange={event => { setDatabaseName(event.target.value); setAcknowledged(false) }} />}</Field></div>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={verifyChecksum} onChange={event => { setVerifyChecksum(event.target.checked); setAcknowledged(false) }} />Checksum doğrula</label>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={verifyBackup} onChange={event => { setVerifyBackup(event.target.checked); setAcknowledged(false) }} />Backup doğrula · RESTORE VERIFYONLY</label>
     </fieldset>
@@ -78,5 +84,7 @@ function RestoreForm({ session, artifactId, targets, onStarted }: { session: Sup
     {checked && operation.data && <section aria-label="Precheck sonucu" className="space-y-2 rounded-lg border border-border bg-surface-2 p-4"><StatusPill status={operation.data.status} />{!matching && <p role="status">Ayarlar değişti. Start için yeniden başarılı Precheck gerekir.</p>}<ul className="space-y-1 text-sm">{operation.data.result?.preCheck.map((check, index) => <li key={`${check.checkId}:${index}`}>{safeRestoreCode(check.checkId)} · {check.status} · {check.status === 'Failed' ? restoreFailureMessage(check.reasonCode) : check.message || safeRestoreCode(check.reasonCode)}</li>)}</ul>{operation.data.failureCode && <p className="text-sm text-error">{restoreFailureMessage(operation.data.failureCode)}</p>}{passed && <p className="text-sm text-success">Precheck başarılı. Canlı ortam uyarısını onaylayarak başlatabilirsiniz.</p>}</section>}
     <label className="flex items-start gap-2 rounded-lg border border-warning/30 p-4 text-sm"><input type="checkbox" className="mt-0.5" checked={acknowledged} disabled={!scope.enabled || start.isPending} onChange={event => setAcknowledged(event.target.checked)} />Bu işlemin müşterinin canlı ortamında çalışabileceğini anladım ve yeni Database geri yüklemesini onaylıyorum.</label>
     <Button disabled={!scope.enabled || !eligible || !passed || !acknowledged || busy || Boolean(operation.error)} onClick={startRestore}>{start.isPending ? 'Restore başlatılıyor…' : 'Restore başlat'}</Button>
+    </div>
+    </Section>
   </section>
 }

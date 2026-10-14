@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/badge'
 import { agentDate } from '@/features/agents/format'
 import { formatCapacity, formatExactBytes } from '@/features/storage/format'
 import { ownershipLabel } from '@/features/storage/labels'
-import { capabilityLabel, availabilityMeta, ownershipTone, secretStatusLabel, testMessage, testStatusMeta } from './labels'
+import { capabilityLabel, availabilityMeta, connectionHealth, ownershipTone, secretStatusLabel, testMessage, testStatusMeta } from './labels'
 import type { ConnectionOwnership, ConnectionTest, ConnectionView, ProviderAvailability } from './types'
 
 export function OwnershipBadge({ ownership }: { ownership: ConnectionOwnership }) {
@@ -11,6 +11,11 @@ export function OwnershipBadge({ ownership }: { ownership: ConnectionOwnership }
 
 export function EnabledBadge({ enabled }: { enabled: boolean }) {
   return <Badge tone={enabled ? 'success' : 'warning'}>{enabled ? 'Etkin' : 'Devre dışı'}</Badge>
+}
+
+export function HealthBadge({ connection }: { connection: Parameters<typeof connectionHealth>[0] }) {
+  const health = connectionHealth(connection)
+  return <Badge tone={health.tone} dot>{health.label}</Badge>
 }
 
 export function ConnectionState({ connection }: { connection: Pick<ConnectionView, 'enabled' | 'effectiveEnabled' | 'administrativelyDisabled'> }) {

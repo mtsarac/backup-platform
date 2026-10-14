@@ -1,6 +1,10 @@
 import { useState } from 'react'
+import { BellOff } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Notice } from '@/components/ui/notice'
+import { Section } from '@/components/ui/section'
 import { QueryState } from '@/components/data/query-state'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
 import { agentDate } from '@/features/agents/format'
@@ -24,16 +28,16 @@ function ChannelCard({ channel }: { channel: NotificationChannel }) {
   const last = channel.lastDelivery
   const unconfirmed = channel.kind === 'email' && channel.recipientVerified === false
 
-  return <li><article aria-label={channel.name} className="space-y-3 rounded-lg border border-border bg-surface-2 p-4">
+  return <li className="py-4 first:pt-0 last:pb-0"><article aria-label={channel.name} className="space-y-3">
     <div className="flex flex-wrap items-start justify-between gap-2">
-      <div className="min-w-0"><h3 className="break-words font-medium text-text-heading">{channel.name}</h3><p className="break-all text-xs text-text-muted">{kindLabels[channel.kind]} · {channel.targetDisplay}</p></div>
-      <div className="flex flex-wrap gap-1"><Badge tone={channel.enabled ? 'success' : 'warning'}>{channel.enabled ? 'Etkin' : 'Devre dışı'}</Badge>{unconfirmed && <Badge tone="warning">Adres onayı bekleniyor</Badge>}</div>
+      <div className="min-w-0"><h3 className="break-words font-medium text-text-heading">{channel.name}</h3><p className="break-all text-sm text-text-muted">{kindLabels[channel.kind]} · {channel.targetDisplay}</p></div>
+      <div className="flex flex-wrap gap-1"><Badge dot tone={channel.enabled ? 'success' : 'warning'}>{channel.enabled ? 'Etkin' : 'Devre dışı'}</Badge>{unconfirmed && <Badge tone="warning">Adres onayı bekleniyor</Badge>}</div>
     </div>
-    <dl className="grid gap-2 text-sm sm:grid-cols-2">
+    <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
       {channel.kind === 'webhook' && <div><dt className="text-text-muted">Kimlik doğrulama</dt><dd>{authenticationLabels[channel.authentication]}{usesSecret && <> · {channel.hasSecret ? 'Secret kayıtlı' : <span className="text-warning">Secret ayarlanmadı</span>}</>}</dd></div>}
       <div><dt className="text-text-muted">Son gönderim</dt><dd>{last ? <>{deliveryStatusLabels[last.status].label} · {agentDate(last.at)}{last.errorCode && <> · <code>{last.errorCode}</code></>}</> : 'Henüz gönderim yok'}</dd></div>
     </dl>
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap gap-2">
       <Button variant="outline" size="sm" aria-label={label('düzenle')} onClick={() => { setDialog('edit') }}>Düzenle</Button>
       <Button variant="outline" size="sm" aria-label={label(channel.enabled ? 'devre dışı bırak' : 'etkinleştir')} disabled={toggle.isPending} onClick={() => toggle.mutate({ id: channel.id, enabled: !channel.enabled })}>{channel.enabled ? 'Devre dışı bırak' : 'Etkinleştir'}</Button>
       <Button variant="outline" size="sm" aria-label={label(unconfirmed ? 'onay isteğini yeniden gönder' : 'test gönder')} disabled={test.isPending} onClick={() => test.mutate(channel.id)}>{test.isPending ? 'Gönderiliyor…' : unconfirmed ? 'Onay isteğini yeniden gönder' : 'Test gönder'}</Button>
@@ -41,9 +45,9 @@ function ChannelCard({ channel }: { channel: NotificationChannel }) {
       {usesSecret && channel.hasSecret && <Button variant="outline" size="sm" aria-label={label('secret temizle')} onClick={() => { clearSecret.reset(); setDialog('clearSecret') }}>Secret temizle</Button>}
       <Button variant="destructive" size="sm" aria-label={label('sil')} onClick={() => { remove.reset(); setDialog('delete') }}>Sil</Button>
     </div>
-    {toggle.error && <p role="alert" className="text-xs text-error">{errorMessage(toggle.error)}</p>}
-    {test.error && <p role="alert" className="text-xs text-error">{errorMessage(test.error)}</p>}
-    {test.isSuccess && <p role="status" className="text-xs text-success">{unconfirmed ? 'Onay isteği adrese gönderilmek üzere kuyruğa alındı; sonucu aşağıdaki geçmişte görün.' : 'Test bildirimi kuyruğa alındı; sonucu aşağıdaki geçmişte görün.'}</p>}
+    {toggle.error && <Notice tone="error">{errorMessage(toggle.error)}</Notice>}
+    {test.error && <Notice tone="error">{errorMessage(test.error)}</Notice>}
+    {test.isSuccess && <Notice tone="success">{unconfirmed ? 'Onay isteği adrese gönderilmek üzere kuyruğa alındı; sonucu Gönderim geçmişi sekmesinde görün.' : 'Test bildirimi kuyruğa alındı; sonucu Gönderim geçmişi sekmesinde görün.'}</Notice>}
     {dialog === 'edit' && <EditChannelDialog channel={channel} onClose={close} />}
     {dialog === 'secret' && <ChannelSecretDialog channel={channel} onClose={close} />}
     <ConfirmDialog open={dialog === 'clearSecret'} onClose={close} title={`“${channel.name}” secret’ı temizlensin mi?`} confirmLabel="Secret’ı temizle"
@@ -60,15 +64,13 @@ function ChannelCard({ channel }: { channel: NotificationChannel }) {
 export function ChannelsSection() {
   const channels = useNotificationChannels()
   const [adding, setAdding] = useState(false)
-  return <section className="space-y-4 rounded-lg border border-border bg-surface p-4" aria-labelledby="notification-channels-heading">
-    <div className="flex flex-wrap items-start justify-between gap-2">
-      <div><h2 id="notification-channels-heading" className="font-medium text-text-heading">Kanallar</h2>
-        <p className="mt-1 text-sm text-text-muted">Bildirimlerin gönderileceği adresler. Hedefler güvenlik için yalnızca kısaltılmış biçimde gösterilir.</p></div>
-      <Button onClick={() => setAdding(true)}>Kanal ekle</Button>
-    </div>
-    <QueryState isPending={channels.isPending} error={channels.error} empty={channels.data?.items.length === 0}>
-      <ul className="grid gap-3 lg:grid-cols-2">{channels.data?.items.map((channel) => <ChannelCard key={channel.id} channel={channel} />)}</ul>
+  const addButton = <Button onClick={() => setAdding(true)}>Kanal ekle</Button>
+  return <Section title="Kanallar" description="Bildirimlerin gönderileceği adresler. Hedefler güvenlik için yalnızca kısaltılmış biçimde gösterilir." actions={channels.data?.items.length ? addButton : undefined}>
+    <QueryState isPending={channels.isPending} error={channels.error}>
+      {channels.data && (channels.data.items.length === 0
+        ? <EmptyState icon={BellOff} title="Henüz bildirim kanalı yok." action={addButton}>E-posta, webhook veya SMS kanalı ekleyerek uyarıları almaya başlayın.</EmptyState>
+        : <ul className="divide-y divide-border">{channels.data.items.map((channel) => <ChannelCard key={channel.id} channel={channel} />)}</ul>)}
     </QueryState>
     {adding && <AddChannelDialog onClose={() => setAdding(false)} />}
-  </section>
+  </Section>
 }

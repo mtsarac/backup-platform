@@ -7,6 +7,7 @@ import { openGoogleOAuthPopup } from './google-oauth'
 import { connectionErrorMessage, disableEffects, enableEffect } from './labels'
 import type { ConnectionView, ProviderDescriptor, SecretField } from './types'
 
+export type ActionGroup = 'edit' | 'test' | 'credentials' | 'toggle' | 'delete'
 type Dialog = 'edit' | 'secret' | 'clearSecret' | 'toggle' | 'delete' | 'disconnectGoogle'
 
 /** The descriptor's secret fields, or the names the connection reports when the provider catalog is not loaded. */
@@ -18,7 +19,7 @@ function secretFieldsOf(connection: ConnectionView, descriptor?: ProviderDescrip
  * Every button follows `connection.permissions` and nothing else: the API computed them for this caller on this route, so the same component
  * serves a tenant Admin, a PlatformAdmin and a read-only Viewer (who simply gets no buttons).
  */
-export function ConnectionActions({ connection, descriptor, ops }: { connection: ConnectionView; descriptor?: ProviderDescriptor; ops: ConnectionOps }) {
+export function ConnectionActions({ connection, descriptor, ops, show = ['edit', 'test', 'credentials', 'toggle', 'delete'] }: { connection: ConnectionView; descriptor?: ProviderDescriptor; ops: ConnectionOps; show?: readonly ActionGroup[] }) {
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const { permissions } = connection
   const secretFields = secretFieldsOf(connection, descriptor)
@@ -44,12 +45,12 @@ export function ConnectionActions({ connection, descriptor, ops }: { connection:
     })
   }
 
-  return <div className="space-y-1.5">
-    <div className="flex flex-wrap gap-1.5">
-      {(permissions.canEdit || permissions.canSetQuotaScope) && <Button variant="outline" size="sm" aria-label={label('düzenle')} onClick={() => open('edit', ops.update.reset)}>Düzenle</Button>}
-      {permissions.canToggle && <Button variant="outline" size="sm" aria-label={label(toggleLabel.toLocaleLowerCase('tr-TR'))} disabled={cannotEnable} title={cannotEnable ? 'Platform kilidi kaldırılmadan etkinleştirilemez' : undefined} onClick={() => open('toggle', ops.setEnabled.reset)}>{toggleLabel}</Button>}
-      {permissions.canTest && <Button variant="outline" size="sm" aria-label={label('test et')} disabled={testing} onClick={() => ops.test.mutate(connection)}>{testing ? 'Test ediliyor…' : 'Test et'}</Button>}
-      {connection.providerType === 'google-drive' ? (
+  return <div className="space-y-2">
+    <div className="flex flex-wrap gap-2">
+      {show.includes('edit') && (permissions.canEdit || permissions.canSetQuotaScope) && <Button variant="outline" size="sm" aria-label={label('düzenle')} onClick={() => open('edit', ops.update.reset)}>Düzenle</Button>}
+      {show.includes('toggle') && permissions.canToggle && <Button variant="outline" size="sm" aria-label={label(toggleLabel.toLocaleLowerCase('tr-TR'))} disabled={cannotEnable} title={cannotEnable ? 'Platform kilidi kaldırılmadan etkinleştirilemez' : undefined} onClick={() => open('toggle', ops.setEnabled.reset)}>{toggleLabel}</Button>}
+      {show.includes('test') && permissions.canTest && <Button variant="outline" size="sm" aria-label={label('test et')} disabled={testing} onClick={() => ops.test.mutate(connection)}>{testing ? 'Test ediliyor…' : 'Test et'}</Button>}
+      {!show.includes('credentials') ? null : connection.providerType === 'google-drive' ? (
         permissions.canManageSecret && <>
           <Button variant="outline" size="sm" aria-label={label(connection.hasSecret ? 'yeniden bağla' : 'google hesabını bağla')} disabled={connectGoogle.isPending} onClick={startGoogleOAuth}>
             {connectGoogle.isPending ? 'Yönlendiriliyor…' : connection.hasSecret ? 'Yeniden bağla' : 'Google Hesabını Bağla'}
@@ -62,9 +63,10 @@ export function ConnectionActions({ connection, descriptor, ops }: { connection:
           {permissions.canManageSecret && connection.hasSecret && <Button variant="outline" size="sm" aria-label={label('kimlik bilgisini temizle')} onClick={() => open('clearSecret', ops.clearSecret.reset)}>Kimlik bilgisini temizle</Button>}
         </>
       )}
-      {permissions.canDelete && <Button variant="destructive" size="sm" aria-label={label('sil')} onClick={() => open('delete', ops.remove.reset)}>Sil</Button>}
+      {show.includes('delete') && permissions.canDelete && <Button variant="destructive" size="sm" aria-label={label('sil')} onClick={() => open('delete', ops.remove.reset)}>Sil</Button>}
     </div>
-    {testError && <p role="alert" className="text-xs text-error">{testError}</p>}
+    {show.includes('test') && testError && <p role="alert" className="text-sm text-error">{testError}</p>}
+    {show.includes('credentials') && Boolean(connectGoogle.error) && <p role="alert" className="text-sm text-error">{connectionErrorMessage(connectGoogle.error)}</p>}
 
     {dialog === 'edit' && <EditConnectionDialog connection={connection} configFields={descriptor?.configFields ?? []} ops={ops} onClose={close} />}
     {dialog === 'secret' && <SecretDialog connection={connection} fields={secretFields} ops={ops} onClose={close} />}

@@ -16,14 +16,15 @@ interface KpiCardProps {
   value: ReactNode
   icon?: ReactNode
   tone?: Tone
+  hint?: ReactNode
   className?: string
 }
 
-export function KpiCard({ label, value, icon, tone, className }: KpiCardProps) {
+export function KpiCard({ label, value, icon, tone, hint, className }: KpiCardProps) {
   return (
     <div
       className={cn(
-        'rounded-lg border border-border bg-surface p-4',
+        'rounded-xl border border-border bg-surface p-4 shadow-card',
         className
       )}
     >
@@ -35,9 +36,10 @@ export function KpiCard({ label, value, icon, tone, className }: KpiCardProps) {
           </span>
         )}
       </div>
-      <div className="mt-1 text-2xl font-semibold text-text-heading">
+      <div className={cn('mt-1 text-3xl font-semibold tabular-nums', tone === 'error' || tone === 'warning' ? toneClasses[tone] : 'text-text-heading')}>
         {value}
       </div>
+      {hint && <p className="mt-0.5 text-sm text-text-muted">{hint}</p>}
     </div>
   )
 }

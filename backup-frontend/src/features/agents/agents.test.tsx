@@ -85,16 +85,18 @@ describe('Agent read views', () => {
     vi.mocked(api.getAgent).mockResolvedValue({ ...agent, capabilities, capabilitiesRevision: 'c1-abc', capabilitiesReportedAt: '2026-10-06T12:00:00Z' })
     const list = mount(<ClientsPage />)
     const row = (await screen.findByRole('link', { name: 'SQL-01' })).closest('tr')!
-    expect(within(row).getByText('MSSQL Full Backup')).toBeInTheDocument()
-    expect(within(row).getByText('CHECKSUM')).toBeInTheDocument()
-    expect(within(row).getByText('2 yetenek desteklenmiyor veya bilinmiyor')).toBeInTheDocument()
+    expect(within(row).getByText('4 yetenek')).toBeInTheDocument()
+    expect(within(row).getByText('2 destekleniyor')).toBeInTheDocument()
+    expect(within(row).queryByText('MSSQL Full Backup')).not.toBeInTheDocument()
     list.unmount()
     mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    fireEvent.click(await screen.findByRole('tab', { name: 'Yetenekler' }))
     const section = (await screen.findByRole('heading', { name: 'Bildirilen yetenekler' })).closest('section')!
     expect(within(section).getAllByText('Destekleniyor')).toHaveLength(2)
     expect(within(section).getByText('Desteklenmiyor')).toBeInTheDocument()
     expect(within(section).getByText('Bilinmiyor')).toBeInTheDocument()
     expect(within(section).getByText('vendor.custom-feature')).toBeInTheDocument()
+    expect(within(section).getByText('MSSQL Full Backup')).toBeInTheDocument()
     expect(screen.getByText('c1-abc')).toBeInTheDocument()
   })
 
