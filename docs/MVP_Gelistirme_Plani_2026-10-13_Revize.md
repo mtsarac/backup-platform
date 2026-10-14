@@ -32,7 +32,7 @@ MVP, ileride eklenecek PostgreSQL, Linux agent implementasyonu, gelişmiş resto
 
 **Ürün modeli:** Yüz yüze/doğrudan satış; PlatformAdmin tarafından elle plan/abonelik atama. **Online checkout, payment gateway, billing provider ve uygulama içi faturalama kapsam dışı**; mevcut `Plan`/`TenantSubscription`/quota teknik kullanım için korunur.
 
-**Sıradaki işlemler:** A0 kritik audit, A1 canlı provider/Windows acceptance ve roadmap **Faz 2A — Upload Bandwidth Limiting** çalışma dalında tamamlandı (Faz 2B/2C başlanmadı). Sıradaki yüksek öncelikler N1 bildirim, R1 izole restore testi ve E1 artifact şifreleme. Production/staging dağıtımı bu geliştirme planının kapsamı değildir.
+**Sıradaki işlemler:** A0 kritik audit, A1 canlı provider/Windows acceptance ve roadmap **Faz 2A — Upload Bandwidth Limiting** ve sertleştirme/canlı kabulü (**2A.1**: relay'de backend-tarafı pacing, kısa ömürlü transfer lease'i, Windows→Drive paced/paralel/iptal/retry kabulü) çalışma dalında tamamlandı (Faz 2B/2C başlanmadı). Sıradaki yüksek öncelikler N1 bildirim, R1 izole restore testi ve E1 artifact şifreleme. Production/staging dağıtımı bu geliştirme planının kapsamı değildir.
 
 ---
 

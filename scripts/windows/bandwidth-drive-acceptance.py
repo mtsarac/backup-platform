@@ -138,10 +138,10 @@ def grants(tenant_id):
 
 
 def locks():
-    """(advisory locks, rows of backup_transfer_leases or None while that table does not exist)."""
+    """(advisory locks, LIVE rows of backup_transfer_leases or None while that table does not exist). Expired rows are markers (retention) or dead holders: harmless, pruned later."""
     advisory = int(pg("SELECT count(*) FROM pg_locks WHERE locktype='advisory'")[0][0])
     table = pg("SELECT to_regclass('public.backup_transfer_leases')")
-    return advisory, int(pg('SELECT count(*) FROM backup_transfer_leases')[0][0]) if table and table[0][0] else None
+    return advisory, int(pg('SELECT count(*) FROM backup_transfer_leases WHERE "ExpiresAt" > clock_timestamp()')[0][0]) if table and table[0][0] else None
 
 
 class Sampler(threading.Thread):
@@ -290,7 +290,7 @@ class Bench:
         finally:
             self.set_limit('tenant', self.tenant_id, self.original_tenant)
 
-    def tenant(self, d):
+    def tenant_split(self, d):
         a = self.args
         if 'l' not in self.agents:
             raise NotRun('dev-linux-agent is not online in the dev tenant (scripts/dev/agent.sh start).')
@@ -332,6 +332,10 @@ class Bench:
             run = self.start(job)
             self.upload_started(run, d)
             d['grantsDuringUpload'] = grants(self.tenant_id)[1]
+            during = locks()  # the paced relay upload runs for minutes: it must hold a lease row, never a session advisory lock
+            d['advisoryLocksDuringUpload'], d['liveTransferLeasesDuringUpload'] = during
+            need(during[0] <= before[0], 'A session advisory lock is held while the upload runs.')
+            need(during[1] is None or during[1] >= 1, 'No live transfer lease while the upload runs.')
             self.api.call('POST', f'{self.tenant}/backup-runs/{run}/cancel', {}, headers={'Idempotency-Key': 'bw-' + uuid.uuid4().hex}, expect=(200, 202, 204))
             detail = self.finish(run)
             deadline = time.monotonic() + a.settle_timeout
@@ -342,7 +346,7 @@ class Bench:
                     break
                 time.sleep(1)
         leftovers = a1d.staging()
-        d.update(status=detail['status'], attempts=states, grantRowsAfter=rows, advisoryLocksBeforeAfter=[before[0], after[0]], transferLeasesBeforeAfter=[before[1], after[1]], stagingLeftovers=leftovers)
+        d.update(runStatus=detail['status'], attempts=states, grantRowsAfter=rows, advisoryLocksBeforeAfter=[before[0], after[0]], transferLeasesBeforeAfter=[before[1], after[1]], stagingLeftovers=leftovers)
         need(detail['status'] == 'Cancelled', f'The run ended as {detail["status"]}, not Cancelled.')
         need(all(s[2] == 'Deleted' for s in states), 'A partial artifact was not Deleted.')
         need(not leftovers, 'Staging files remain on the Windows Agent.')
@@ -359,7 +363,7 @@ class Bench:
         d['interruption'] = 'Restart-Service BackupAgent -Force'
         detail = self.finish(run)
         states = self.drive.states(detail)
-        d.update(status=detail['status'], attempts=states)
+        d.update(runStatus=detail['status'], attempts=states)
         need(detail['status'] == 'Succeeded', f'The run ended as {detail["status"]} after the interruption.')
         need(len(detail['attempts']) >= 2 and detail['attempts'][0]['status'] in ('AgentLost', 'Failed'), 'Attempt 1 was not interrupted (AgentLost/Failed) with a retry attempt after it.')
         need(all(s[2] == 'Deleted' for s in states if s[1] != 'Succeeded'), 'The interrupted attempt left an artifact that is not Deleted.')
@@ -526,7 +530,7 @@ def main():
         try:
             record('sweep-leftovers', 'PASS', **bench.sweep_leftovers())
             table = {'baseline': bench.baseline, 'low': lambda d: bench.limited(d, args.small_mb, args.low_limit, 'low'),
-                     'medium': lambda d: bench.limited(d, args.big_mb, args.medium_limit, 'medium'), 'tenant': bench.tenant, 'cancel': bench.cancel, 'retry': bench.retry}
+                     'medium': lambda d: bench.limited(d, args.big_mb, args.medium_limit, 'medium'), 'tenant': bench.tenant_split, 'cancel': bench.cancel, 'retry': bench.retry}
             for name in args.scenarios:
                 scenario(name, table[name])
         finally:
