@@ -37,6 +37,8 @@ export interface NotificationChannel {
   name: string
   targetDisplay: string
   enabled: boolean
+  /** E-posta kanallarında adres sahibinin onayı; diğer türlerde null. Onaylanmamış adrese bildirim gitmez. */
+  recipientVerified: boolean | null
   authentication: WebhookAuthentication
   hasSecret: boolean
   secretUpdatedAt: string | null
@@ -58,7 +60,7 @@ export interface UpdateChannelInput { name?: string; target?: string; authentica
 export interface NotificationDelivery {
   id: string
   eventId: string
-  eventType: EventType | 'test'
+  eventType: EventType | 'test' | 'recipient_verification'
   phase: 'raised' | 'recovered' | 'test'
   severity: Severity
   subjectKind: string

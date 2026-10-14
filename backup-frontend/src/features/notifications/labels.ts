@@ -4,13 +4,14 @@ import type { ChannelKind, DeliveryStatus, EventType, Severity, WebhookAuthentic
 
 type BadgeTone = NonNullable<ComponentProps<typeof Badge>['tone']>
 
-export const eventTypeLabels: Record<EventType | 'test', string> = {
+export const eventTypeLabels: Record<EventType | 'test' | 'recipient_verification', string> = {
   backup_failed: 'Backup başarısız',
   backup_stale: 'Backup güncel değil',
   agent_offline: 'Agent çevrimdışı',
   quota_critical: 'Kota kritik',
   replica_degraded: 'Replica bozuldu',
   test: 'Test bildirimi',
+  recipient_verification: 'E-posta onay isteği',
 }
 export const severityLabels: Record<Severity, string> = { info: 'Bilgi', warning: 'Uyarı', critical: 'Kritik' }
 export const kindLabels: Record<ChannelKind, string> = { email: 'E-posta', webhook: 'Webhook', sms: 'SMS' }

@@ -22,11 +22,12 @@ function ChannelCard({ channel }: { channel: NotificationChannel }) {
   const label = (text: string) => `${channel.name} kanalı: ${text}`
   const usesSecret = channel.kind === 'webhook' && channel.authentication !== 'none'
   const last = channel.lastDelivery
+  const unconfirmed = channel.kind === 'email' && channel.recipientVerified === false
 
   return <li><article aria-label={channel.name} className="space-y-3 rounded-lg border border-border bg-surface-2 p-4">
     <div className="flex flex-wrap items-start justify-between gap-2">
       <div className="min-w-0"><h3 className="break-words font-medium text-text-heading">{channel.name}</h3><p className="break-all text-xs text-text-muted">{kindLabels[channel.kind]} · {channel.targetDisplay}</p></div>
-      <Badge tone={channel.enabled ? 'success' : 'warning'}>{channel.enabled ? 'Etkin' : 'Devre dışı'}</Badge>
+      <div className="flex flex-wrap gap-1"><Badge tone={channel.enabled ? 'success' : 'warning'}>{channel.enabled ? 'Etkin' : 'Devre dışı'}</Badge>{unconfirmed && <Badge tone="warning">Adres onayı bekleniyor</Badge>}</div>
     </div>
     <dl className="grid gap-2 text-sm sm:grid-cols-2">
       {channel.kind === 'webhook' && <div><dt className="text-text-muted">Kimlik doğrulama</dt><dd>{authenticationLabels[channel.authentication]}{usesSecret && <> · {channel.hasSecret ? 'Secret kayıtlı' : <span className="text-warning">Secret ayarlanmadı</span>}</>}</dd></div>}
@@ -35,14 +36,14 @@ function ChannelCard({ channel }: { channel: NotificationChannel }) {
     <div className="flex flex-wrap gap-1.5">
       <Button variant="outline" size="sm" aria-label={label('düzenle')} onClick={() => { setDialog('edit') }}>Düzenle</Button>
       <Button variant="outline" size="sm" aria-label={label(channel.enabled ? 'devre dışı bırak' : 'etkinleştir')} disabled={toggle.isPending} onClick={() => toggle.mutate({ id: channel.id, enabled: !channel.enabled })}>{channel.enabled ? 'Devre dışı bırak' : 'Etkinleştir'}</Button>
-      <Button variant="outline" size="sm" aria-label={label('test gönder')} disabled={test.isPending} onClick={() => test.mutate(channel.id)}>{test.isPending ? 'Gönderiliyor…' : 'Test gönder'}</Button>
+      <Button variant="outline" size="sm" aria-label={label(unconfirmed ? 'onay isteğini yeniden gönder' : 'test gönder')} disabled={test.isPending} onClick={() => test.mutate(channel.id)}>{test.isPending ? 'Gönderiliyor…' : unconfirmed ? 'Onay isteğini yeniden gönder' : 'Test gönder'}</Button>
       {usesSecret && <Button variant="outline" size="sm" aria-label={label('secret ayarla')} onClick={() => { setDialog('secret') }}>{channel.hasSecret ? 'Secret yenile' : 'Secret ayarla'}</Button>}
       {usesSecret && channel.hasSecret && <Button variant="outline" size="sm" aria-label={label('secret temizle')} onClick={() => { clearSecret.reset(); setDialog('clearSecret') }}>Secret temizle</Button>}
       <Button variant="destructive" size="sm" aria-label={label('sil')} onClick={() => { remove.reset(); setDialog('delete') }}>Sil</Button>
     </div>
     {toggle.error && <p role="alert" className="text-xs text-error">{errorMessage(toggle.error)}</p>}
     {test.error && <p role="alert" className="text-xs text-error">{errorMessage(test.error)}</p>}
-    {test.isSuccess && <p role="status" className="text-xs text-success">Test bildirimi kuyruğa alındı; sonucu aşağıdaki geçmişte görün.</p>}
+    {test.isSuccess && <p role="status" className="text-xs text-success">{unconfirmed ? 'Onay isteği adrese gönderilmek üzere kuyruğa alındı; sonucu aşağıdaki geçmişte görün.' : 'Test bildirimi kuyruğa alındı; sonucu aşağıdaki geçmişte görün.'}</p>}
     {dialog === 'edit' && <EditChannelDialog channel={channel} onClose={close} />}
     {dialog === 'secret' && <ChannelSecretDialog channel={channel} onClose={close} />}
     <ConfirmDialog open={dialog === 'clearSecret'} onClose={close} title={`“${channel.name}” secret’ı temizlensin mi?`} confirmLabel="Secret’ı temizle"

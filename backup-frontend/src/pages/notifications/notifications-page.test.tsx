@@ -19,7 +19,7 @@ const policy = (overrides: Partial<NotificationPolicy> = {}): NotificationPolicy
   transports: { email: { available: true }, sms: { available: false } }, ...overrides,
 })
 const channel = (overrides: Partial<NotificationChannel> = {}): NotificationChannel => ({
-  id: 'c-mail', kind: 'email', name: 'Ops mailbox', targetDisplay: 'ops@example.com', enabled: true, authentication: 'none', hasSecret: false, secretUpdatedAt: null,
+  id: 'c-mail', kind: 'email', name: 'Ops mailbox', targetDisplay: 'ops@example.com', enabled: true, recipientVerified: true, authentication: 'none', hasSecret: false, secretUpdatedAt: null,
   createdAt: '2026-10-01T08:00:00Z', updatedAt: '2026-10-01T08:00:00Z', lastDelivery: null, ...overrides,
 })
 const delivery = (overrides: Partial<NotificationDelivery> = {}): NotificationDelivery => ({
@@ -38,7 +38,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   access.canAdmin = true
   vi.mocked(api.getPolicy).mockResolvedValue(policy())
-  vi.mocked(api.getChannels).mockResolvedValue({ items: [channel(), channel({ id: 'c-hook', kind: 'webhook', name: 'Pager', targetDisplay: 'https://hooks.example.com/…', authentication: 'bearer', hasSecret: true })] })
+  vi.mocked(api.getChannels).mockResolvedValue({ items: [channel(), channel({ id: 'c-hook', kind: 'webhook', name: 'Pager', recipientVerified: null, targetDisplay: 'https://hooks.example.com/…', authentication: 'bearer', hasSecret: true })] })
   vi.mocked(api.getDeliveries).mockResolvedValue({ items: [delivery()], totalCount: 1, page: 1, pageSize: 25 })
 })
 
@@ -110,6 +110,19 @@ describe('channels', () => {
     expect(card('Pager').getByText(/Secret kayıtlı/)).toBeInTheDocument()
     expect(card('Pager').getByRole('button', { name: 'Pager kanalı: secret temizle' })).toBeInTheDocument()
     expect(card('Ops mailbox').queryByRole('button', { name: /secret/i })).not.toBeInTheDocument()
+  })
+
+  it('marks an email address that has not confirmed and offers to resend the confirmation instead of a test', async () => {
+    vi.mocked(api.getChannels).mockResolvedValue({ items: [channel({ recipientVerified: false })] })
+    vi.mocked(api.testChannel).mockResolvedValue({ deliveryId: 'd9' })
+    const user = userEvent.setup()
+    mount()
+    await screen.findByRole('article', { name: 'Ops mailbox' })
+    expect(card('Ops mailbox').getByText('Adres onayı bekleniyor')).toBeInTheDocument()
+    expect(card('Ops mailbox').queryByRole('button', { name: 'Ops mailbox kanalı: test gönder' })).not.toBeInTheDocument()
+    await user.click(card('Ops mailbox').getByRole('button', { name: 'Ops mailbox kanalı: onay isteğini yeniden gönder' }))
+    expect(await card('Ops mailbox').findByRole('status')).toHaveTextContent('Onay isteği')
+    expect(api.testChannel).toHaveBeenCalledWith('tenant-a', 'c-mail')
   })
 
   it('shows a friendly error for a rate-limited test', async () => {

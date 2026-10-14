@@ -50,6 +50,8 @@ export function AddChannelDialog({ onClose }: { onClose: () => void }) {
     <label className="block text-sm text-text-muted">{hint.label}
       <input className={inputClass} value={target} placeholder={hint.placeholder} required aria-invalid={invalidField(create.error, 'target')} onChange={(event) => setTarget(event.target.value)} />
     </label>
+    {kind === 'email' && <p className="text-xs text-text-muted">Adrese bir onay e-postası gönderilir. Adres sahibi bağlantıya tıklayıp onaylayana kadar bildirim gönderilmez; her e-postada abonelikten çıkma bağlantısı bulunur.</p>}
+    {webhook && <p className="text-xs text-text-muted">Webhook adresi yalnızca 443 numaralı HTTPS portunu kullanabilir (platform yöneticisi başka port tanımlamadıysa).</p>}
     {webhook && <AuthenticationSelect value={authentication} onChange={setAuthentication} />}
     {webhook && authentication !== 'none' && <label className="block text-sm text-text-muted">{authentication === 'bearer' ? 'Bearer token' : 'HMAC imza anahtarı'}
       <input className={inputClass} type="password" autoComplete="new-password" value={secret} aria-invalid={invalidField(create.error, 'secret')} onChange={(event) => setSecret(event.target.value)} />
