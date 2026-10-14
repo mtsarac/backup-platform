@@ -1763,6 +1763,519 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BackupPlatform.Domain.Notifications.NotificationChannel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Authentication")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("NormalizedTarget")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("SecretReference")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset?>("SecretUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Target")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<Guid>("TenantId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("Id", "TenantId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "NormalizedName")
+                        .IsUnique()
+                        .HasDatabaseName("ux_notification_channels_name");
+
+                    b.HasIndex("TenantId", "Kind", "NormalizedTarget")
+                        .IsUnique()
+                        .HasDatabaseName("ux_notification_channels_target");
+
+                    b.ToTable("notification_channels", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_notification_channels_auth", "\"Authentication\" IN ('None','Bearer','Hmac') AND (\"Kind\" = 'Webhook' OR \"Authentication\" = 'None')");
+
+                            t.HasCheckConstraint("ck_notification_channels_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_notification_channels_kind", "\"Kind\" IN ('Email','Webhook','Sms')");
+
+                            t.HasCheckConstraint("ck_notification_channels_name", "length(btrim(\"Name\")) BETWEEN 1 AND 100 AND \"NormalizedName\" = lower(btrim(\"Name\"))");
+
+                            t.HasCheckConstraint("ck_notification_channels_secret", "(\"SecretReference\" IS NULL AND \"SecretUpdatedAt\" IS NULL) OR (\"Authentication\" <> 'None' AND length(\"SecretReference\") BETWEEN 1 AND 128 AND \"SecretUpdatedAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_notification_channels_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Notifications.NotificationCondition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Activations")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("ActiveSince")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset?>("LastNotifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("LastObservedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Notified")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("NotifiedSeverity")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("SubjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SubjectKind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("SubjectName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("SuppressedCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("Id", "TenantId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "Key")
+                        .IsUnique()
+                        .HasDatabaseName("ux_notification_conditions_key");
+
+                    b.HasIndex("TenantId", "Type")
+                        .HasDatabaseName("ix_notification_conditions_active")
+                        .HasFilter("\"IsActive\"");
+
+                    b.ToTable("notification_conditions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_notification_conditions_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_notification_conditions_key", "length(\"Key\") BETWEEN 1 AND 200");
+
+                            t.HasCheckConstraint("ck_notification_conditions_severity", "\"Severity\" IN ('Info','Warning','Critical') AND \"NotifiedSeverity\" IN ('Info','Warning','Critical')");
+
+                            t.HasCheckConstraint("ck_notification_conditions_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Notifications.NotificationDelivery", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ChannelId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ChannelKind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("ChannelName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("LastAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("LeaseExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LeaseOwner")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset?>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("SentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("TargetDisplay")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid>("TenantId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("Id", "TenantId");
+
+                    b.HasIndex("LeaseExpiresAt")
+                        .HasDatabaseName("ix_notification_deliveries_lease")
+                        .HasFilter("\"Status\" = 'InProgress'");
+
+                    b.HasIndex("NextAttemptAt")
+                        .HasDatabaseName("ix_notification_deliveries_due")
+                        .HasFilter("\"Status\" = 'Pending'");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("EventId", "ChannelId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_notification_deliveries_event_channel");
+
+                    b.HasIndex("EventId", "TenantId");
+
+                    b.HasIndex("TenantId", "CreatedAt")
+                        .HasDatabaseName("ix_notification_deliveries_history");
+
+                    b.HasIndex("TenantId", "ChannelId", "CreatedAt")
+                        .HasDatabaseName("ix_notification_deliveries_channel");
+
+                    b.ToTable("notification_deliveries", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_notification_deliveries_attempts", "\"AttemptCount\" >= 0");
+
+                            t.HasCheckConstraint("ck_notification_deliveries_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_notification_deliveries_kind", "\"ChannelKind\" IN ('Email','Webhook','Sms')");
+
+                            t.HasCheckConstraint("ck_notification_deliveries_state", "(\"Status\" = 'Pending' AND \"NextAttemptAt\" IS NOT NULL AND \"LeaseOwner\" IS NULL AND \"CompletedAt\" IS NULL) OR (\"Status\" = 'InProgress' AND \"LeaseOwner\" IS NOT NULL AND \"LeaseExpiresAt\" IS NOT NULL AND \"CompletedAt\" IS NULL) OR (\"Status\" IN ('Sent','Failed','Suppressed','Cancelled') AND \"NextAttemptAt\" IS NULL AND \"LeaseOwner\" IS NULL AND \"CompletedAt\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_notification_deliveries_status", "\"Status\" IN ('Pending','InProgress','Sent','Failed','Suppressed','Cancelled')");
+
+                            t.HasCheckConstraint("ck_notification_deliveries_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Notifications.NotificationEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DedupKey")
+                        .IsRequired()
+                        .HasMaxLength(232)
+                        .HasColumnType("character varying(232)");
+
+                    b.Property<string>("Facts")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("FactsJson");
+
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Phase")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Severity")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid?>("SubjectId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SubjectKind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("SubjectName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("TenantId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_notification_events_created");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "CreatedAt")
+                        .HasDatabaseName("ix_notification_events_recent");
+
+                    b.HasIndex("TenantId", "DedupKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_notification_events_dedup");
+
+                    b.ToTable("notification_events", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_notification_events_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_notification_events_phase", "\"Phase\" IN ('Raised','Recovered','Test')");
+
+                            t.HasCheckConstraint("ck_notification_events_severity", "\"Severity\" IN ('Info','Warning','Critical')");
+
+                            t.HasCheckConstraint("ck_notification_events_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Notifications.NotificationPolicy", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("ActiveSince")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("AgentOfflineAfterMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ChannelKinds")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("ChannelKindsJson");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("EventTypes")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("EventTypesJson");
+
+                    b.Property<int>("MaxNotificationsPerHour")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MinimumSeverity")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<bool>("RecoveryNotifications")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("ReminderIntervalHours")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StaleAfterHours")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("Id", "TenantId");
+
+                    b.HasIndex("Enabled")
+                        .HasDatabaseName("ix_notification_policies_enabled")
+                        .HasFilter("\"Enabled\"");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_notification_policies_tenant");
+
+                    b.ToTable("notification_policies", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_notification_policies_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_notification_policies_severity", "\"MinimumSeverity\" IN ('Info','Warning','Critical')");
+
+                            t.HasCheckConstraint("ck_notification_policies_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_notification_policies_thresholds", "\"StaleAfterHours\" BETWEEN 1 AND 720 AND \"AgentOfflineAfterMinutes\" BETWEEN 5 AND 1440 AND \"ReminderIntervalHours\" BETWEEN 0 AND 168 AND \"MaxNotificationsPerHour\" BETWEEN 1 AND 200");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Notifications.NotificationTransportSettings", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Configuration")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("ConfigurationJson");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("SecretReference")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset?>("SecretUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("notification_transport_settings", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_notification_transport_settings_key", "\"Key\" IN ('email','sms')");
+
+                            t.HasCheckConstraint("ck_notification_transport_settings_secret", "(\"SecretReference\" IS NULL) = (\"SecretUpdatedAt\" IS NULL)");
+                        });
+                });
+
             modelBuilder.Entity("BackupPlatform.Domain.Restores.RestoreAttempt", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3380,6 +3893,58 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .HasForeignKey("SupportSessionId", "TenantId")
                         .HasPrincipalKey("Id", "TenantId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Notifications.NotificationChannel", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Notifications.NotificationCondition", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Notifications.NotificationDelivery", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Notifications.NotificationEvent", null)
+                        .WithMany()
+                        .HasForeignKey("EventId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Notifications.NotificationEvent", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Notifications.NotificationPolicy", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("BackupPlatform.Domain.Restores.RestoreAttempt", b =>
