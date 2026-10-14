@@ -791,7 +791,7 @@ Minimum sayfalar:
 
 ### Notifications
 
-MVP'de yalnızca system/internal notification event'leri; Email/Teams/Slack/Telegram yoktu (tarihsel MVP sınırı). **Post-MVP N1 (2026-10-14, çalışma dalı):** durable outbox'lı email, generic HTTPS webhook ve SMS bildirimleri eklendi (roadmap Bölüm 26). N1 güvenlik incelemesinde e-posta alıcıları için **adres sahibi onayı + kendi kendine unsubscribe** (imzalı bağlantı, `List-Unsubscribe`), webhook/SMS için **yalnız 443 (operatör eklemedikçe) port politikası** ve tenant başına hız sınırı eklendi; operatör `Notifications:PublicBaseUrl` vermeden e-posta gönderilmez. SMS `IMPLEMENTED — NOT VERIFIED` kalır (alıcı doğrulaması yok). Teams/Slack/Telegram/push hâlâ yok.
+MVP'de yalnızca system/internal notification event'leri; Email/Teams/Slack/Telegram yoktu (tarihsel MVP sınırı). **Post-MVP N1 (2026-10-14, çalışma dalı):** durable outbox'lı email, generic HTTPS webhook ve SMS bildirimleri eklendi (roadmap Bölüm 26). N1 güvenlik incelemesinde e-posta alıcıları için **adres sahibi onayı + kendi kendine unsubscribe** (imzalı bağlantı, `List-Unsubscribe`), webhook/SMS için **yalnız 443 (operatör eklemedikçe) port politikası** ve tenant başına hız sınırı eklendi; operatör `Notifications:PublicBaseUrl` vermeden e-posta gönderilmez. **N1.1:** alıcı bağlantılarına hız sınırı (geçerli one-click unsubscribe sınırlanmaz), token'ın fragment'ta taşınması + log/proxy sızıntı azaltma ve belgeleme, ve iptal edilen agent/devre dışı iş için yanlış "Recovered" bildiriminin kaldırılması eklendi. SMS `IMPLEMENTED — NOT VERIFIED` kalır (alıcı doğrulaması yok). Teams/Slack/Telegram/push hâlâ yok.
 
 ---
 
