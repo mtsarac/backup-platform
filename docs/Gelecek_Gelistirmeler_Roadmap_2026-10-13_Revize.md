@@ -46,13 +46,14 @@ Temel prensip:
 | Plans, Subscriptions, Support Access/Support Restore | Completed (tanımlı kapsam) | Support session, audit, kontrollü müşteri ortamına restore; izole support SQL ortamı Future. |
 | Accessible dashboard ve restore/backup wizard | Completed | PR #5 `main` içine birleştirildi; success KPI kapsamı ve warning kategori etiketleri düzeltildi. |
 | Kritik olay audit'i | **Completed — A0 / A0.1, çalışma dalı** | 2026-10-14: olay/servis/transaction/actor/tenant/test matrisi Bölüm 1B'de; `backup_storage_cleanups` durable orphan cleanup ledger ile crash-safe audit; `feat/a0-audit-trail-completion`. |
+| Bildirimler (email, webhook, SMS) | **Completed — N1 (email + webhook); SMS `IMPLEMENTED — NOT VERIFIED`, çalışma dalı `feature/n1-notifications`** | 2026-10-14: durable event/outbox + lease'li delivery worker, tenant policy/kanal/alıcı API + UI, SMTP/HTTPS webhook/generic HTTP SMS adaptörü; kayıt ve kanıt Bölüm 26'da. |
 | CI ve güvenlik hardening | Completed (otomatik kontroller) | `main` Fast CI başarılı; bu, gerçek Windows/Google Drive ve tüm dış servis kabul testlerinin yerine geçmez. |
 
 ## Henüz tamamlanmamış ana alanlar
 
-**A0 audit kapanışı ve Faz 2A (upload bandwidth limiting) çalışma dalında tamamlandı** (Bölüm 1B, Bölüm 4). **Sıradaki:** N1 bildirimleri, R1 izole restore testi ve E1 artifact şifreleme (Bölüm 35); Faz 2B/2C bu iterasyonda başlanmadı.
+**A0 audit kapanışı, Faz 2A (upload bandwidth limiting) ve N1 bildirimleri (email + webhook + SMS) tamamlandı** (Bölüm 1B, Bölüm 4, Bölüm 26). N1'de **SMS `IMPLEMENTED — NOT VERIFIED`**'dır (hiçbir gerçek SMS sağlayıcısına karşı çalıştırılmadı; SMS'e özel test bilinçli olarak yazılmadı). **Sıradaki:** R1 izole restore testi ve E1 artifact şifreleme (Bölüm 35); Faz 2B/2C bu iterasyonda başlanmadı.
 
-**Planlı:** Faz 2B zaman profilleri ve 2C pause/resume/recovery; **erken öncelikli** minimum email/webhook bildirimleri, izole MSSQL restore-test otomasyonu ve backup artifact şifreleme; MSSQL Differential/Log/PITR; File/Folder Backup ve File Restore; Windows VSS; Linux systemd installer; Docker runtime/discovery; PostgreSQL backup; S3/SMB/FTPS; provider kapasite izleme; tam 3-2-1 ve ileri audit. Ayrıntılı **teslim sırası** Bölüm 35'tedir; faz numarası öncelik demek değildir.
+**Planlı:** Faz 2B zaman profilleri ve 2C pause/resume/recovery; **erken öncelikli** izole MSSQL restore-test otomasyonu ve backup artifact şifreleme; MSSQL Differential/Log/PITR; File/Folder Backup ve File Restore; Windows VSS; Linux systemd installer; Docker runtime/discovery; PostgreSQL backup; S3/SMB/FTPS; provider kapasite izleme; tam 3-2-1 ve ileri audit; Teams/Slack/Telegram/push bildirimleri. Ayrıntılı **teslim sırası** Bölüm 35'tedir; faz numarası öncelik demek değildir.
 
 **Kabul durumu:** Gerçek Google Drive OAuth/API ve Windows Agent/MSSQL kabulü 2026-10-14'te A1 ile çalıştırıldı (Bölüm 1B, senaryo matrisi); kapsam dışı kalanlar orada `NOT RUN` olarak listelidir. 2026-10-14'te ayrıca açık Win11 VM'de runtime-only DPAPI probe smoke geçmişti. VM'de .NET 10.0.12 ve SQL Server çalışıyor; SDK yok. İzole A1 smoke Agent'ı kaldırıldı; dev tenant'a bağlı `dev-windows-agent` bilerek kurulu bırakıldı (`scripts/windows/dev-windows-agent.sh uninstall`).
 
@@ -718,7 +719,7 @@ Hedef, AKINSOFT benzeri yedekleme ürünlerinin temel kullanıcı fonksiyonları
 | PostgreSQL backup | Planned | Faz 13. |
 | S3 / SMB/NAS / FTPS | Planned | Faz 16/18 ve provider genişlemesi. |
 | OneDrive / Dropbox | Future | 2A.12. |
-| Email/webhook notification (minimum) | Planned — erken öncelik | Faz 24 içindeki küçük N1 dilimi; Teams/Slack/Telegram sonraya. |
+| Email/webhook/SMS notification (N1) | Completed — Email/Webhook; SMS `IMPLEMENTED — NOT VERIFIED` | Faz 24 içindeki N1 dilimi (Bölüm 26); Teams/Slack/Telegram/push sonraya. |
 | Otomatik izole MSSQL restore testi | Planned — erken öncelik | Faz 20 içindeki R1 dilimi, restore gerçekten çalışır mı kanıtı. |
 | Artifact encryption | Planned — güvenlik önceliği | Yeni E1 tasarım/uygulama dilimi; özellikle üçüncü taraf storage. |
 
@@ -1527,17 +1528,17 @@ Daha sonra gelişmiş modeller eklenebilir.
 
 # 26. Faz 24 — Bildirim Provider'ları
 
-**Durum: Planned — `N1` erken ürün dilimi.** 2026-10-13 itibarıyla repo'da bağımsız çalışan notification provider/worker modülü yok; tarihsel MVP tasarımında söz edilen internal notification modülü silinmiş olabilir. Önce mevcut domain olaylarını ve durable transaction/outbox imkanını incele; olmayan modülü var sayma.
+**Durum: N1 Completed (Email + Webhook doğrulandı), SMS `IMPLEMENTED — NOT VERIFIED` — 2026-10-14, çalışma dalı `feature/n1-notifications`.** Teams/Slack/Telegram/push bu fazın sonraki adımlarıdır (**Planned**, N1 kapsamı dışı). Uygulama kaydı, kararlar ve kanıt aşağıdadır.
 
-**N1 (ilk teslim):** başarısız veya uzun süredir başarılı olamayan backup, offline agent, kritik kota ve replica yetersizliği olaylarını **email ve/veya generic HTTPS webhook** üzerinden tenant ayarına göre ulaştırma; delivery history, retry/backoff, suppression/dedup ve unsubscribe/disable. Güvenlik için webhook URL izinleri, SSRF/DNS/private-IP önlemleri, secret redaction ve tenant izolasyonu zorunludur. Teams/Slack/Telegram adaptörleri yalnız ihtiyaç olduğunda eklenir. **N1 kabulü:** başarısız gönderim, aynı olayın tekrar gelmesi, tenant/policy değişimi, burst rate limit, kapalı provider, restart ve sistemin backup akışını bildirim arızasında durdurmaması.
+**N1 (teslim):** başarısız veya uzun süredir başarılı olamayan backup, offline agent, kritik kota ve replica yetersizliği/degraded olaylarını **email, generic HTTPS webhook ve SMS** üzerinden tenant politikasına göre ulaştırma; durable event/outbox, delivery history, retry/backoff, dedup/suppression, burst koruması ve kanal devre dışı bırakma/silme. Güvenlik: SSRF/DNS-rebinding/private-IP/redirect önlemleri, secret redaction, tenant izolasyonu. **N1 kabulü:** başarısız gönderim, aynı olayın tekrar gelmesi, tenant/policy değişimi, burst rate limit, kapalı provider, restart ve sistemin backup akışını bildirim arızasında durdurmaması.
 
-İlk tasarım, MVP'nin eksik görünen `NotificationEvent` altyapısının gerçekte hangi parçasının bulunduğunu ayrı doğrular; yoksa sınırları dar yeni modül kurar.
+Başlangıç incelemesi: repo'da çalışan bir notification modülü yoktu (yalnız `src/modules/notifications/obj` artığı); `AuditEvent` yönetim değişikliği kaydıdır, outbox değildir. Olay kaynakları zaten vardı ve **yeniden tanımlanmadı**: başarısızlık `BackupRun` durumları, agent liveness `AgentConnectivityOptions.OfflineTimeout`, kota `QuotaState`, replica sağlığı `BackupReplicationEvaluator`. Bu yüzden dar yeni modül kuruldu.
 
-Sıra:
+Sıra (N1 sonrası, hepsi **Planned**):
 
-1. Email
-2. Teams / Slack webhook
-3. Telegram
+1. Teams / Slack webhook adaptörleri
+2. Telegram
+3. Push bildirimleri
 
 ## Tasarım
 
@@ -1558,6 +1559,45 @@ Destek:
 - event type,
 - rate limiting,
 - duplicate suppression.
+
+### N1 — Uygulama kaydı, kararlar ve kanıt (**Completed — 2026-10-14, `feature/n1-notifications`**)
+
+**Kanal bazlı durum (birbirinden ayrı):**
+
+| Kanal | Uygulama | Doğrulama | Not |
+|---|---|---|---|
+| Email (SMTP) | Implemented | **PASS** — izole SMTP sunucusuna gerçek soket (düz, implicit TLS, STARTTLS + AUTH; 4xx/5xx; kapalı relay; private adres reddi) ve PostgreSQL entegrasyonu; tarayıcıdan gerçek stack'te gönderim | SMTP sunucusu/kimlik **platform** ayarıdır (PlatformAdmin); alıcılar tenant'a aittir. |
+| Webhook (HTTPS) | Implemented | **PASS** — izole HTTPS sunucusuna gerçek istek (bearer, HMAC, idempotency, 4xx/5xx/429, redirect, SSRF, proxy bypass) ve PostgreSQL entegrasyonu | Endpoint ve kimlik doğrulama tenant'a aittir. |
+| SMS | Implemented | **`IMPLEMENTED — NOT VERIFIED`** | Kullanıcı kararıyla SMS'e özel unit/integration/gerçek gönderim testi **yazılmadı ve çalıştırılmadı**; hiçbir gerçek sağlayıcıya karşı denenmedi. Ortak altyapı testleri (durable outbox, claim/lease, retry, burst, tenant izolasyonu, DI/worker kompozisyonu) SMS'i yalnız dolaylı kapsar. PASS veya production-ready denmez. |
+
+**SMS entegrasyon sınırları:** Tek adaptör `generic-http`: yapılandırılan HTTPS uç noktasına `{"to","text","from"?,"messageId"}` JSON `POST` eder, herhangi bir 2xx'i "kabul edildi" sayar; kimlik doğrulama none/bearer/basic/tek özel header. **Hiçbir satıcının (Twilio, Vonage, operatör SMPP vb.) API'siyle eşleşmez**; farklı istek şekli gereken satıcı için `ISmsProvider` adaptörü yazılmalı ve gerçek hesapla doğrulanmalıdır. Gerçek sağlayıcı kimliği/credential'ı uydurulmadı. Telefon numarası E.164 (`+905551112233`) olarak doğrulanır, API/UI'da maskeli gösterilir; SMS metni tek satır ve ≤160 karakterdir (uzun adlar kısaltılır).
+
+**Mimari kararlar:**
+
+1. **Modül sınırı:** `BackupPlatform.Notifications` (`src/modules/notifications`) yalnız Domain, Application ve SecretProviders.Abstractions'a bağlıdır; backup/restore, agent, storage, ManagedService ve provider projeleri bildirimi bilmez, bildirim modülü de onları bilmez (`NotificationsBoundaryTests`). Gerçekleri okuyan detector'lar altyapıdadır (`PostgreSqlNotificationObservationSource`) ve **yalnız okur**: backup orchestration'a bildirim çağrısı gömülmedi, bu yüzden SMTP/webhook/SMS arızasının backup/restore'a ulaşan bir kod yolu yoktur.
+2. **Durable outbox:** `notification_events` + `notification_deliveries` + `notification_conditions` tek per-tenant transaction'da (`pg_advisory_xact_lock`) yazılır; event dedup anahtarı tenant başına unique, delivery (event, kanal) unique, delivery→event bileşik FK tenant'ı taşır. Aynı olguyu gören her sweep/node no-op olur.
+3. **Durum makinesi (`NotificationCondition`):** Raise → (escalation / reminder) → Recover; flap cooldown (15 dk), recovery yalnız bildirilmiş condition için; detector bir tür için eksik küme dönerse (okuma hatası) **recovery sayılmaz**. Tek-seferlik olay (başarısız run) yalnız politika açıldıktan sonrakiler için bildirilir (`ActiveSince`), bu yüzden politika açmak geçmişi yağdırmaz.
+4. **Delivery worker:** `FOR UPDATE SKIP LOCKED` ile lease'li claim, `(owner, attempt)` ile fenced tamamlama, crash sonrası lease devri, son denemede ölen worker için `attempts_exhausted`, exponential backoff + ±%20 jitter + `Retry-After` (tavan 1 saat), varsayılan 6 deneme. Gönderim **at-least-once**'tır; webhook/SMS `Idempotency-Key`, email `Message-Id` delivery id'sinden türetilir.
+5. **Burst/rate/concurrency:** tenant politikası saatlik tavan (varsayılan 30, üst sınır 200) aşılırsa event kaydedilir ama delivery `Suppressed/burst_limited` olur (geçmişte görünür); process başına `MaxConcurrentDeliveries` (4) ve batch; kanal başına 5 test/saat; tenant başına 20 kanal; send timeout lease'in 1/3'ünü aşamaz (başlangıçta doğrulanır).
+6. **SSRF/ağ (`NotificationNetworkGuard`):** webhook, SMTP relay ve SMS gateway aynı kapıdan geçer: DNS cevaplarının **tümü** public olmalı, bağlantı doğrulanan IP'ye yapılır (DNS rebinding yok), IPv4-mapped/NAT64/6to4 gömülü adresler açılır, yalnız `https`, URL'de userinfo/query/fragment yok, redirect **izlenmez**, ortam proxy'si **kullanılmaz**, yanıt gövdesi okunmaz. Operatör `Notifications:AllowedPrivateNetworks` CIDR'leriyle istisna verir (varsayılan boş).
+7. **Secret:** SMTP parolası, webhook bearer/HMAC anahtarı, SMS credential'ı `ISecretStore` (Data Protection) içindedir; yeni secret satırdan önce yazılır, eski secret commit sonrası silinir. API/audit/log/UI'ya değer çıkmaz; webhook URL'si yalnız `https://host/…` olarak maskeli gösterilir (path token olabilir). SMTP: STARTTLS zorunlu (downgrade yok), `none` yalnız kimlik bilgisi yokken; sertifika doğrulaması platform varsayılanı.
+8. **API/yetki:** `/api/tenants/{id}/notifications/*` yalnız TenantAdministrator; `/api/platform/notification-transports/*` yalnız PlatformAdmin; her tenant isteği üye tenant'a bağlanır (başka tenant'ın kanal/id'si 404). Her değişiklik aynı transaction'da audit'lenir; audit adres/URL/secret taşımaz.
+9. **Mesajlar:** tür, önem, görünen ad (tek satıra indirilir), birkaç skaler fact (başarısızlık kodu, saat/dakika, yüzde, replica sayıları). Yol, host, veritabanı adı, provider çıktısı **yok**.
+10. **Kapsam sınırları (bilinçli):** Teams/Slack/Telegram/push yok; recipient-başlatmalı unsubscribe bağlantısı yok (yetkili tenant yöneticisi kanalı devre dışı bırakır/siler); alıcı sahiplik doğrulaması yok.
+
+**Değişen modüller:** `src/core/domain/Notifications`, `src/modules/notifications`, `src/core/infrastructure/Notifications` + EF yapılandırması + migration `NotificationsN1` (yalnız ekleyici, 6 tablo), `src/hosts/api` (endpoint, iki hosted worker, DI, `appsettings.json > Notifications`), `Directory.Packages.props` (MailKit 4.18.0), frontend `features/notifications`, `features/platform/notifications`, tenant ve platform sayfaları.
+
+**Doğrulama (son kod, çalıştırılan):** Release build `-warnaserror` temiz; unit **3879** (N1: 109), architecture **151** (N1: 28), Fast Agent **375**, frontend **610** (typecheck, lint [yalnız önceden var olan 2 uyarı], build PASS). Odaklı PostgreSQL (N1 notification integration **54**: tenant/kanal/politika/audit, claim/lease/fencing, dedup ve eşzamanlı sweep, detector'lar, gerçek SMTP + HTTPS teslimi, outage/restart/backoff, burst, hosted worker kompozisyonu, API yetki/izolasyon/secret sızıntısı) + komşu mevcut suite'ler (fixture isolation, persistence, UploadBandwidth, Audit, StorageConnection migration, AgentConnectivity, BackupOrchestration/Retry/TransferLease/ConcurrencyLimit, PlatformAdministration) **301/301 PASS**. Migration: pending-model temiz, `Down` → `Up` turu, idempotent script boş veritabanına uygulandı. Gerçek stack smoke (tarayıcı + gerçek API + PostgreSQL + gerçek SMTP alıcısı): platform SMTP ayarı → tenant kanalı → test gönderimi → `Gönderildi` geçmişi ve alınan ileti PASS. **Tam PostgreSQL suite'i (1.580 test) çalıştırılmadı; önceki NOT VERIFIED kaydı aynen geçerlidir.** A1/2A `NOT RUN` kalemleri değişmedi.
+
+**Kalan riskler / NOT RUN:**
+
+- **SMS: `IMPLEMENTED — NOT VERIFIED`** (yukarıda). Gerçek SMS sağlayıcısı, vendor adaptörü ve gerçek gönderim `NOT RUN`.
+- Gerçek harici SMTP sağlayıcısı (ör. kurumsal relay, STARTTLS sertifika zinciri) ve üçüncü taraf webhook alıcısı `NOT RUN`; TLS testleri izole sunucuların self-signed sertifikasını açık bir test seam'iyle kabul eder (production'da seam yok).
+- Alıcı doğrulaması yok: tenant yöneticisi herhangi bir adrese mesaj aktarabilir; kanal başına test limiti (5/saat), saatlik politika tavanı ve kanal sayısı sınırı kötüye kullanımı sınırlar ama **ortak SMTP relay'inin spam vektörü olma riskini ortadan kaldırmaz**.
+- Webhook/SMS uç noktası için port kısıtı yok (public host üzerinde herhangi bir port).
+- Çok node'lu ölçekte sweep tenant başına her dakika ~5 sorgu çalıştırır (kota okuması gerektiğinde projeksiyon hesaplayabilir); büyük tenant sayısında profil gerekir (`NOT RUN`, yük ölçülmedi).
+- `replica_degraded` işin **son başarılı** run'ının replica sağlığını değerlendirir; eski artifact'lar kapsam dışıdır. Geçmiş (90 gün) bakım turu saatte bir çalışır.
+- Production/staging dağıtımı, PR ve release yapılmadı.
 
 ---
 
@@ -1751,7 +1791,7 @@ A0 — MVP operasyon audit matrisi ve eksik kayıtlar                [Completed:
         ↓
 Faz 2A — Upload bandwidth limiting                               [Completed: çalışma dalı]
         ↓
-N1 (Faz 24) — Email/webhook bildirimleri + R1 (Faz 20) restore testi  [Öne çekildi]
+N1 (Faz 24) — Email/webhook/SMS bildirimleri  [Completed; SMS NOT VERIFIED]  →  R1 (Faz 20) restore testi  [Next]
         ↓
 E1 — Artifact şifreleme mimarisi / ilk güvenli vertical slice      [Öne çekildi]
         ↓
@@ -1772,8 +1812,8 @@ Aşağıda **öncelik sırası** verilir; eski `Faz` numaraları ve `M` dilimler
 |---|---|---|---|
 | 0 | **A0 — Kritik audit matrisi ve eksik event'ler** | MVP madde 33; veri/actor/tenant güvenliği, atomik yazım, DB testleri; Bölüm 1B kanıt/sınırlar | **Completed — çalışma dalı, 2026-10-14** |
 | 1 | **Faz 2A — Upload bandwidth limiting** | Per-agent/tenant/job, bounded stream, paralel transfer ölçümü, relay/SFTP regresyon | **Completed — çalışma dalı, 2026-10-14** (kanıt ve kalan riskler Bölüm 4) |
-| 2 | **N1 (Faz 24) — Email + generic webhook alarm** | Durable event/dispatch, dedup, retry, SSRF koruması, tenant policy, CI | **Next** — öncelikli |
-| 3 | **R1 (Faz 20) — İzole MSSQL restore testi** | Disposable SQL, tutarlı veri doğrulama, fail/cleanup/retry, tenant izolasyonu | Planned — öncelikli |
+| 2 | **N1 (Faz 24) — Email + generic webhook (+ SMS) bildirimi** | Durable event/dispatch, dedup, retry, SSRF koruması, tenant policy, CI | **Completed — çalışma dalı, 2026-10-14** (Email/Webhook PASS; **SMS `IMPLEMENTED — NOT VERIFIED`**; kanıt ve riskler Bölüm 26) |
+| 3 | **R1 (Faz 20) — İzole MSSQL restore testi** | Disposable SQL, tutarlı veri doğrulama, fail/cleanup/retry, tenant izolasyonu | **Next** — öncelikli |
 | 4 | **E1 — Artifact encryption** | Önce tehdit modeli/anahtar yaşam döngüsü, sonra streaming encrypt/decrypt + restore | Planned — güvenlik |
 | 5 | **Faz 10–12 — MSSQL Differential / Transaction Log / PITR** | Full/log base chain, LSN, restore ordering, retention-safe pin, MSSQL E2E | Planned — MSSQL ürün değeri |
 | 6 | **Faz 3 ve 9 — File/Folder Backup + Restore** | Include/exclude, symlink, partial warnings, manifest, güvenli restore; VSS sonra | Planned — ikinci kaynak |
