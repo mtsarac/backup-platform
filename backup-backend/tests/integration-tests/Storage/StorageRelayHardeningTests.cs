@@ -2,6 +2,9 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.AspNetCore.Http.Metadata;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using BackupPlatform.Agents;
@@ -128,5 +131,18 @@ public sealed class StorageRelayHardeningTests(PostgreSqlFixture fixture) : ICla
         using var response = await pending;
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Equal("lease_conflict", AgentWorld.ReadJson(response).GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task RelayedUploadsAreNotCappedAtKestrelsDefaultRequestBodyLimit()
+    {
+        // Kestrel rejects bodies above ~28.6 MB unless the endpoint opts out; the relay bounds uploads by the declared length and the attempt's reservation instead.
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture);
+        var upload = scenario.World.Factory.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>().Single(endpoint =>
+            endpoint.RoutePattern.RawText == "/api/agent/tasks/{attemptId:guid}/storage/content"
+            && endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Contains("PUT"));
+        var limit = upload.Metadata.GetMetadata<IRequestSizeLimitMetadata>();
+        Assert.NotNull(limit);
+        Assert.Null(limit.MaxRequestBodySize);
     }
 }

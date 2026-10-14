@@ -5,11 +5,13 @@
   download backend-authorized download of that artifact, SHA-256 compared to the artifact checksum
   restore  precheck + NewDatabase restore into <source>_restored (never an existing database), then MSSQL row check
   delete   delete request -> retention worker -> replica gone, quota back to its previous value
+  retry    (google-drive) disable the connection during a ~120 MB upload, then re-enable and retry the failed run; run `delete` afterwards
 
 --provider google-drive needs a tenant connection that finished OAuth (hasSecret=true); nothing is mocked or simulated here.
 State between steps lives in $BP_DEV_HOME/acceptance-<provider>.json (0600, no secrets). Passwords come from the accounts file and are never printed.
 """
 import argparse
+import contextlib
 import hashlib
 import importlib.util
 import json
@@ -86,7 +88,8 @@ def quota(api, tenant):
 def pick_connection(api, tenant, provider):
     _, document = api.call('GET', tenant + '/storage-connections')
     connections = document['items'] if isinstance(document, dict) else document
-    candidates = [c for c in connections if c['providerType'] == provider and c['effectiveEnabled']]
+    candidates = [c for c in connections if c['providerType'] == provider and c['effectiveEnabled']
+                  and (not os.environ.get('ACCEPTANCE_CONNECTION_NAME') or c['name'] == os.environ['ACCEPTANCE_CONNECTION_NAME'])]
     if provider == 'google-drive':
         candidates = [c for c in candidates if c['hasSecret']]
         if not candidates:
@@ -96,24 +99,51 @@ def pick_connection(api, tenant, provider):
     return candidates[0]
 
 
+@contextlib.contextmanager
+def unlimited_while_unsized():
+    """A fresh job has no size history, which a hard quota refuses by design (quota_size_unknown); bootstrap it through the documented
+    explicit unlimited override and always restore the plan's own limit afterwards."""
+    accounts = bootstrap.read_accounts(ACCOUNTS)
+    platform = Api(SERVER, str(HOME / 'cert.pem'))
+    platform.login(accounts['platform_admin_login'], accounts['platform_admin_password'])
+    _, tenants = platform.call('GET', '/api/platform/tenants?search=Local%20Development%20Tenant&pageSize=100')
+    tenant_id = bootstrap.find_by(tenants['items'], 'name', bootstrap.TENANT_NAME)['tenantId']
+    path = f'/api/platform/tenants/{tenant_id}/subscription/storage-limit-override'
+    platform.call('PUT', path, {'kind': 'unlimited'})
+    try:
+        yield
+    finally:
+        platform.call('PUT', path, {'kind': 'none'})
+
+
 def backup(options):
-    api, tenant = session()
-    connection = pick_connection(api, tenant, options.provider)
+    with unlimited_while_unsized():
+        backup_unbounded(options)
+
+
+def create_job(api, tenant, connection, provider, database):
     _, document = api.call('GET', tenant + '/agents')
     agents = document if isinstance(document, list) else document['items']
     agent = next((a for a in agents if a['hostName'] == 'dev-linux-agent' and a['connectivity'] == 'online'), None)
     if agent is None:
         raise FixtureFailure('The dev-linux-agent is not online (scripts/dev/agent.sh start).')
-    configuration = {'engine': 'mssql', 'host': '127.0.0.1', 'port': SQL_PORT, 'database': SOURCE_DB, 'integratedSecurity': False,
+    configuration = {'engine': 'mssql', 'host': '127.0.0.1', 'port': SQL_PORT, 'database': database, 'integratedSecurity': False,
                      'databaseCredentialReference': SQL_REFERENCE, 'trustServerCertificate': True, 'encrypt': True,
                      'stagingReference': 'default', 'storageTarget': 'default', 'storagePrefix': '',
                      'copyOnly': True, 'checksumPolicy': 'Required', 'compressionPolicy': 'Preferred', 'requiredVerifiedReplicaCount': 1}
-    drive = options.provider == 'google-drive'
-    configuration['destinations'] = [{'storageProvider': options.provider, 'storageConnectionId': connection['id'] if drive else None,
+    drive = provider == 'google-drive'
+    configuration['destinations'] = [{'storageProvider': provider, 'storageConnectionId': connection['id'] if drive else None,
                                       'storageExecutionLocation': 'Backend' if drive else 'Agent', 'isPrimary': True}]
-    before = quota(api, tenant)
-    _, job = api.call('POST', tenant + '/backup-jobs', {'name': f'Acceptance {options.provider} {time.strftime("%H%M%S")}',
+    _, job = api.call('POST', tenant + '/backup-jobs', {'name': f'Acceptance {provider} {time.strftime("%H%M%S")}',
                                                        'agentId': agent['agentId'], 'overlapPolicy': 'Skip', 'configuration': configuration})
+    return agent, job
+
+
+def backup_unbounded(options):
+    api, tenant = session()
+    connection = pick_connection(api, tenant, options.provider)
+    before = quota(api, tenant)
+    agent, job = create_job(api, tenant, connection, options.provider, SOURCE_DB)
     _, run = api.call('POST', tenant + f'/backup-jobs/{job["id"]}/runs', {}, headers={'Idempotency-Key': 'dev-acc-' + uuid.uuid4().hex}, expect=(200, 201, 202))
     run_id = run.get('id', run.get('run', {}).get('id'))
     detail = wait('Backup run', lambda: api.call('GET', tenant + f'/backup-runs/{run_id}')[1],
@@ -130,6 +160,46 @@ def backup(options):
     out(step='backup', status='Succeeded', artifactId=artifact['id'], sizeBytes=artifact['sizeBytes'], sha256=artifact['artifactChecksum'],
         replicas=full.get('replicas'), usedBytesBefore=before['usedBytes'], usedBytesAfter=after['usedBytes'],
         usageIncreased=after['usedBytes'] > before['usedBytes'])
+
+
+def restart_api():
+    subprocess.run(['bash', '-c', f'source "{HERE}/common.sh"; dev_kill api'], check=True, capture_output=True)
+    subprocess.run([str(HERE / 'start.sh'), '--no-build', '--no-agent'], check=True, capture_output=True)
+
+
+def retry(options):
+    """Real Drive interruption and recovery: the API is restarted while a ~120 MB upload is in flight; the run's own retry policy must finish it with
+    exactly one verified artifact and the interrupted attempt's partial object must not stay catalogued. Run `delete` afterwards."""
+    subprocess.run([str(HERE / 'mssql-test-db.sh'), 'create-big'], capture_output=True, check=True)
+    with unlimited_while_unsized():
+        api, tenant = session()
+        connection = pick_connection(api, tenant, 'google-drive')
+        agent, job = create_job(api, tenant, connection, 'google-drive', SOURCE_DB + '_big')
+        _, run = api.call('POST', tenant + f'/backup-jobs/{job["id"]}/runs', {}, headers={'Idempotency-Key': 'dev-retry-' + uuid.uuid4().hex}, expect=(200, 201, 202))
+        run_id = run.get('id', run.get('run', {}).get('id'))
+        fetch = lambda: api.call('GET', tenant + f'/backup-runs/{run_id}')[1]
+        wait('Upload in flight', fetch, lambda d: d['status'] == 'Running', lambda d: d['status'] in ('Failed', 'Cancelled', 'AgentLost', 'Succeeded'), timeout=60, interval=0.2)
+        time.sleep(float(os.environ.get('A1_UPLOAD_HEAD_START', '10')))
+        restart_api()
+        done = wait('Run after the backend restart', fetch, lambda d: d['status'] == 'Succeeded', lambda d: d['status'] in ('Failed', 'Cancelled', 'AgentLost', 'Skipped'), timeout=1200, interval=3)
+        outcome = []
+        for attempt in done['attempts']:
+            for item in attempt['artifacts']:
+                _, detail = api.call('GET', tenant + f'/backup-artifacts/{item["id"]}')
+                outcome.append({'attempt': attempt['number'], 'attemptStatus': attempt['status'], 'trigger': attempt['trigger'], 'reason': attempt.get('reasonCode'),
+                                'artifactState': detail['state'], 'replicas': [(r['status'], r['verificationState']) for r in detail['replicas']]})
+        out(step='interrupted', attempts=outcome)
+        if len(done['attempts']) < 2:
+            raise FixtureFailure('The backend restart did not interrupt the upload; lower A1_UPLOAD_HEAD_START or enlarge the database.')
+        artifacts = [item for attempt in done['attempts'] if attempt['status'] == 'Succeeded' for item in attempt['artifacts']]
+        if len(artifacts) != 1:
+            raise FixtureFailure('The retried run did not publish exactly one artifact.')
+        artifact = artifacts[0]
+        _, full = api.call('GET', tenant + f'/backup-artifacts/{artifact["id"]}')
+        states = [(r['status'], r['verificationState']) for r in full.get('replicas', [])]
+        save(options, {'artifactId': artifact['id'], 'checksum': artifact['artifactChecksum'], 'sizeBytes': artifact['sizeBytes'], 'jobId': job['id'],
+                       'runId': run_id, 'agentId': agent['agentId'], 'connectionId': connection['id'], 'usedBefore': 0})
+        out(step='retry', status='Succeeded', attempts=len(done['attempts']), sizeBytes=artifact['sizeBytes'], sha256=artifact['artifactChecksum'], replicaStates=states)
 
 
 def download(options):
@@ -156,6 +226,8 @@ def download(options):
 def restore(options):
     api, tenant = session()
     state = load(options)
+    # NewDatabase restores refuse an existing target by design (TargetDatabaseExists); only this step's own previous copy is dropped.
+    subprocess.run([str(HERE / 'mssql-test-db.sh'), 'drop-restored', RESTORED_DB], capture_output=True, check=True)
     path = tenant + f'/backup-artifacts/{state["artifactId"]}'
     request = {'agentId': state['agentId'], 'target': {'host': '127.0.0.1', 'port': SQL_PORT, 'databaseCredentialReference': SQL_REFERENCE, 'trustServerCertificate': True},
                'databaseName': RESTORED_DB, 'mode': 'NewDatabase'}
@@ -203,10 +275,10 @@ def smoke(options):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('step', choices=('backup', 'download', 'restore', 'delete', 'all', 'smoke'))
+    parser.add_argument('step', choices=('backup', 'download', 'restore', 'delete', 'retry', 'all', 'smoke'))
     parser.add_argument('--provider', choices=('google-drive', 'local'), default='google-drive')
     options = parser.parse_args()
-    steps = {'backup': backup, 'download': download, 'restore': restore, 'delete': delete, 'smoke': smoke}
+    steps = {'backup': backup, 'download': download, 'restore': restore, 'delete': delete, 'retry': retry, 'smoke': smoke}
     try:
         for name in (('backup', 'download', 'restore', 'delete') if options.step == 'all' else [options.step]):
             steps[name](options)

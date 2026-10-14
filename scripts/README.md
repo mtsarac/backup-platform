@@ -199,6 +199,13 @@ AgentId after restart. Assign the smoke user an explicit tenant Admin membership
 
 These are acceptance helpers, not a package downloader, production installer wrapper or systemd installer.
 
+### A1 Windows lifecycle acceptance
+
+On top of a running `scripts/frontend/run-download-smoke.sh` stack (its owned Windows service, tenant and state file), `scripts/windows/run-a1-acceptance.sh SERVER CERTIFICATE STATE_FILE WINDOWS_ROOT [--only SCENARIO]`
+creates isolated `bp_a1_win_*` databases on the VM's SQL Server and runs: service/DPAPI, heartbeat/capability sync, Full Backup with stored-file SHA-256, restore discovery, NewDatabase restore with content proof,
+cancellation of a running ~648 MB backup, service restart during a run and a real network cut (libvirt `domif-setlink` on the `win11` NIC, so it needs libvirt access; a Windows Firewall rule does not cut established connections).
+It prints one PASS/FAIL JSON line per scenario and drops only its own databases. Stop the stack with SIGTERM to the `run-download-smoke.sh --configured` process so it uninstalls the owned service.
+
 
 ## Browser smoke environment
 
@@ -328,8 +335,8 @@ scripts/dev/start.sh [--no-build] [--no-agent]   # idempotent: MSSQL container, 
 scripts/dev/status.sh
 scripts/dev/stop.sh                              # stops processes + bp-dev-mssql only; keeps every piece of data
 scripts/dev/agent.sh start|stop|status
-scripts/dev/mssql-test-db.sh create|verify DB|drop-restored DB
-scripts/dev/acceptance.py backup|download|restore|delete|all --provider local|google-drive
+scripts/dev/mssql-test-db.sh create|create-big|verify DB|drop-restored DB
+scripts/dev/acceptance.py backup|download|restore|delete|retry|all --provider local|google-drive   # ACCEPTANCE_CONNECTION_NAME selects a Drive connection by name
 ```
 
 - Frontend `http://localhost:5173` (Vite, `/api` proxied to `https://localhost:7179`); API `http://localhost:5252` (the Google OAuth callback) and `https://localhost:7179` (Agent).

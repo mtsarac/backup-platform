@@ -25,7 +25,8 @@ public static class AgentStorageTransferEndpoints
         var backup = endpoints.MapGroup("/api/agent/tasks/{attemptId:guid}/storage")
             .WithMetadata(new AgentApiEndpoint(), new RequiresAgentProtocol())
             .RequireAuthorization(AuthorizationPolicies.Agent);
-        backup.MapPut("/content", UploadAsync).DisableAntiforgery();
+        // Artifacts exceed Kestrel's default request size; the declared length and the attempt's reservation bound the upload instead.
+        backup.MapPut("/content", UploadAsync).DisableAntiforgery().WithMetadata(new DisableRequestSizeLimitAttribute());
         backup.MapGet("/content", ReadBackupAsync);
         backup.MapGet("/metadata", GetBackupMetadataAsync);
         backup.MapPost("/verify", VerifyBackupAsync);
