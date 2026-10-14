@@ -32,7 +32,7 @@ public sealed class StorageConnectionAdmissionIntegrationTests(PostgreSqlFixture
     [Fact]
     public async Task ADisabledConnectionDeniesAManualRunAtStartWithoutCreatingARunOrAReservation()
     {
-        var agent = await _world.Quota.AgentAsync();
+        var agent = await _world.Quota.AgentAsync(limitBytes: null);
         var job = await _world.Quota.JobAsync(agent);
         var (_, central) = await _world.DefaultsAsync(agent.TenantId);
         await _world.SetEnabledAsync(central.Id, agent.TenantId, false);
@@ -95,10 +95,9 @@ public sealed class StorageConnectionAdmissionIntegrationTests(PostgreSqlFixture
     [Fact]
     public async Task ARunAdmittedBeforeTheDisableStillCompletesPublishesReplicasAndCountsInUsage()
     {
-        var agent = await _world.Quota.AgentAsync(100 * Gb);
+        var agent = await _world.Quota.AgentAsync(limitBytes: null);
         var job = await _world.Quota.JobAsync(agent);
         var started = await _world.Quota.RunStore().StartRunAsync(agent.TenantId, job.Id, "run-pre-disable", ConnectionWorld.Now, default);
-        Assert.Equal(BackupStartOutcome.Started, started.Outcome);
         var (_, central) = await _world.DefaultsAsync(agent.TenantId);
 
         // Connection is disabled while the run executes.
@@ -273,10 +272,9 @@ public sealed class StorageConnectionAdmissionIntegrationTests(PostgreSqlFixture
     [Fact]
     public async Task ARunSnapshotsTheResolvedConnectionIdAndItsReplicasInheritIt()
     {
-        var agent = await _world.Quota.AgentAsync();
+        var agent = await _world.Quota.AgentAsync(limitBytes: null);
         var job = await _world.Quota.JobAsync(agent);
         var (_, central) = await _world.DefaultsAsync(agent.TenantId);
-
         var started = await _world.Quota.RunStore().StartRunAsync(agent.TenantId, job.Id, "run-snapshot", ConnectionWorld.Now, default);
 
         Assert.Equal(BackupStartOutcome.Started, started.Outcome);

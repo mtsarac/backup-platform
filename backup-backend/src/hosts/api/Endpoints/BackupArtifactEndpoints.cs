@@ -47,7 +47,8 @@ public static class BackupArtifactEndpoints
 
     private static async Task<IResult> DeleteAsync(Guid artifactId, ITenantContext tenant, ICurrentUser user, BackupArtifactService service, CancellationToken cancellationToken)
     {
-        var response = await service.RequestDeleteAsync(tenant.TenantId!, artifactId, user.UserId?.Value, cancellationToken);
+        if (user.UserId is not { } actor) return Results.Unauthorized();
+        var response = await service.RequestDeleteAsync(tenant.TenantId!, artifactId, actor.Value, cancellationToken);
         return response.Kind switch
         {
             // Asking again while the delete is already pending or under way is the same request: idempotent, not an error.
@@ -59,9 +60,10 @@ public static class BackupArtifactEndpoints
         };
     }
 
-    private static async Task<IResult> CancelDeleteAsync(Guid artifactId, ITenantContext tenant, BackupArtifactService service, CancellationToken cancellationToken)
+    private static async Task<IResult> CancelDeleteAsync(Guid artifactId, ITenantContext tenant, ICurrentUser user, BackupArtifactService service, CancellationToken cancellationToken)
     {
-        var response = await service.CancelDeleteAsync(tenant.TenantId!, artifactId, cancellationToken);
+        if (user.UserId is not { } actor) return Results.Unauthorized();
+        var response = await service.CancelDeleteAsync(tenant.TenantId!, artifactId, cancellationToken, actor.Value);
         return response.Kind switch
         {
             BackupArtifactCancelKind.Restored => Results.Ok(response.Artifact),

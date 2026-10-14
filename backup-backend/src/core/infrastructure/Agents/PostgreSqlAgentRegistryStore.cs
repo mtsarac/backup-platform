@@ -1,7 +1,9 @@
 using BackupPlatform.Agents.Credentials;
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Domain.Agents;
+using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Identity;
+using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -51,6 +53,16 @@ public sealed class PostgreSqlAgentRegistryStore(DbContextOptions<PlatformDbCont
         }
         var issued = AgentCredential.IssuePending(state.Agent.Id, state.Agent.TenantId, decision.NextGeneration, now, pendingLifetime);
         context.AgentCredentials.Add(issued.Credential);
+        context.AuditEvents.Add(AuditEvent.Record(
+            now, UserId.System, AuditActorKind.System, AuditActions.AgentCredentialRotationStarted, caller.TenantId,
+            "agent", caller.AgentId.ToString(),
+            new Dictionary<string, object?>
+            {
+                ["credentialGeneration"] = decision.NextGeneration,
+                ["pendingCredentialId"] = issued.Credential.Id.ToString("D"),
+                ["replacedPending"] = decision.ReplacedPending is not null,
+                ["result"] = "pending"
+            }));
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new RotationBeginCommit(RotationBeginOutcome.Ready, issued, decision.ReplacedPending?.Id);
@@ -76,6 +88,16 @@ public sealed class PostgreSqlAgentRegistryStore(DbContextOptions<PlatformDbCont
                 }
                 decision.Pending!.Activate(now);
                 state.Agent.RecordCredentialRotation();
+                context.AuditEvents.Add(AuditEvent.Record(
+                    now, UserId.System, AuditActorKind.System, AuditActions.AgentCredentialRotationConfirmed, caller.TenantId,
+                    "agent", caller.AgentId.ToString(),
+                    new Dictionary<string, object?>
+                    {
+                        ["credentialGeneration"] = state.Agent.CredentialGeneration,
+                        ["activatedCredentialId"] = decision.Pending!.Id.ToString("D"),
+                        ["supersededCredentialId"] = decision.Superseded?.Id.ToString("D"),
+                        ["result"] = "confirmed"
+                    }));
                 await context.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
                 return new RotationConfirmCommit(decision.Outcome, state.Agent.CredentialGeneration, decision.Superseded?.Id);
@@ -86,7 +108,7 @@ public sealed class PostgreSqlAgentRegistryStore(DbContextOptions<PlatformDbCont
         }
     }
 
-    public async Task<AgentRevocationCommit?> RevokeAgentAsync(TenantId tenantId, AgentId agentId, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task<AgentRevocationCommit?> RevokeAgentAsync(TenantId tenantId, AgentId agentId, UserId? actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
@@ -104,6 +126,10 @@ public sealed class PostgreSqlAgentRegistryStore(DbContextOptions<PlatformDbCont
             credential.Revoke(AgentCredentialRevocationReason.AgentRevoked, now);
         }
         state.Agent.Revoke();
+        context.AuditEvents.Add(AuditEvent.Record(
+            now, actor ?? UserId.System, actor is null ? AuditActorKind.System : AuditActorKind.TenantAdministrator,
+            AuditActions.AgentRevoked, tenantId, "agent", agentId.ToString(),
+            new Dictionary<string, object?> { ["credentialsRevoked"] = state.Credentials.Count, ["result"] = "revoked" }));
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new AgentRevocationCommit(true, state.Credentials.Count);

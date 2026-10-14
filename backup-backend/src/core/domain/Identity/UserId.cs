@@ -16,5 +16,9 @@ public sealed record UserId
 
     public static UserId New() => new(Guid.NewGuid());
 
+    /// <summary>Well-known identity used when background workers or the platform engine act without a human user.</summary>
+    public static readonly UserId System = new(Guid.Parse("00000000-0000-0000-0000-000000000001"));
+    /// <summary>Audit sentinel for unauthenticated requests; never an authenticated account.</summary>
+    public static readonly UserId Anonymous = new(Guid.Parse("00000000-0000-0000-0000-000000000002"));
     public override string ToString() => Value.ToString("D");
 }

@@ -10,13 +10,14 @@ while (($#)); do
     case "$1" in
         --no-build) build_args+=(--no-build) ;;
         --filter)
-            (($# >= 2)) || fail '--filter needs a dotnet test filter expression.'
+            (($# >= 2)) && [[ -n $2 && $2 != -* ]] || fail '--filter needs a nonempty dotnet test filter expression.'
             extra_filter=$2
             shift ;;
         -h|--help)
             printf '%s\n' 'Usage: run-postgres-tests.sh [--no-build] [--filter EXPRESSION]' \
-                'Requires BACKUP_PLATFORM_TEST_CONNECTION_STRING; runs the existing PostgreSQL filter in Release.' \
-                '--filter narrows that selection (e.g. FullyQualifiedName~ManagedService); it never widens it.'
+                'Explicit PostgreSQL acceptance: requires BACKUP_PLATFORM_TEST_CONNECTION_STRING; runs the existing PostgreSQL filter in Release.' \
+                '--filter narrows that selection (e.g. FullyQualifiedName~ManagedService); it never widens it.' \
+                'Builds only the integration test project and its dependencies; --no-build explicitly reuses existing Release output.'
             exit 0 ;;
         *) fail 'Unknown option; use --help.' ;;
     esac

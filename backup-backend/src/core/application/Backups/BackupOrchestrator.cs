@@ -49,7 +49,7 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
 {
     public static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(120);
 
-    public async Task<BackupJobView?> CreateJobAsync(TenantId tenantId, CreateBackupJobRequest request, CancellationToken cancellationToken)
+    public async Task<BackupJobView?> CreateJobAsync(TenantId tenantId, CreateBackupJobRequest request, CancellationToken cancellationToken, UserId? actor = null)
     {
         BackupInputValidation.Validate(request);
         var configuration = ToDomain(request.Configuration);
@@ -60,7 +60,7 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         var newJob = new BackupJob(Guid.NewGuid(), tenantId, request.Name.Trim(), new AgentId(request.AgentId), configuration, now,
             ToDomain(request.RetryPolicy), overlap, schedule, ToDomain(request.Retention, retention ?? new BackupRetentionOptions(), null));
         if (request.Enabled is false) newJob.Disable();
-        var job = await store.CreateJobAsync(newJob, cancellationToken);
+        var job = await store.CreateJobAsync(newJob, cancellationToken, actor);
         return job is null ? null : ToView(job, now);
     }
 
@@ -68,7 +68,7 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
     /// Validates everything first, then applies general fields, schedule, retention and enabled state to the job loaded under the agent lock, in one
     /// transaction. Any invalid part (or a retention change the caller may not make) leaves the job untouched.
     /// </summary>
-    public async Task<BackupJobView?> UpdateJobAsync(TenantId tenantId, Guid jobId, UpdateBackupJobRequest request, CancellationToken cancellationToken)
+    public async Task<BackupJobView?> UpdateJobAsync(TenantId tenantId, Guid jobId, UpdateBackupJobRequest request, CancellationToken cancellationToken, UserId? actor = null)
     {
         var validation = new CreateBackupJobRequest(request.Name, request.AgentId, request.Configuration, request.RetryPolicy, request.OverlapPolicy, request.Schedule, request.Retention);
         BackupInputValidation.Validate(validation);
@@ -92,7 +92,7 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         var command = new BackupJobUpdate(request.Name, new AgentId(request.AgentId), ToDomain(request.Configuration),
             request.RetryPolicy is null ? null : ToDomain(request.RetryPolicy),
             request.OverlapPolicy is null ? null : ToDomain(request.OverlapPolicy), ApplyRest);
-        var job = await store.UpdateJobAsync(tenantId, jobId, command, cancellationToken);
+        var job = await store.UpdateJobAsync(tenantId, jobId, command, cancellationToken, actor, now);
         return job is null ? null : ToView(job, now);
     }
 
@@ -117,20 +117,20 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         };
     }
 
-    public Task<BackupStartResult> StartRunAsync(TenantId tenantId, Guid jobId, string key, CancellationToken cancellationToken)
+    public Task<BackupStartResult> StartRunAsync(TenantId tenantId, Guid jobId, string key, CancellationToken cancellationToken, UserId? actor = null)
     {
         if (!BackupInputValidation.IsValidKey(key))
         {
             throw new ArgumentException("A bounded Idempotency-Key is required.");
         }
-        return store.StartRunAsync(tenantId, jobId, key, time.GetUtcNow(), cancellationToken);
+        return store.StartRunAsync(tenantId, jobId, key, time.GetUtcNow(), cancellationToken, actor);
     }
 
-    public Task<BackupRun?> CancelAsync(TenantId tenantId, Guid runId, CancellationToken cancellationToken) =>
-        store.RequestCancellationAsync(tenantId, runId, time.GetUtcNow(), cancellationToken);
+    public Task<BackupRun?> CancelAsync(TenantId tenantId, Guid runId, CancellationToken cancellationToken, UserId? actor = null) =>
+        store.RequestCancellationAsync(tenantId, runId, time.GetUtcNow(), cancellationToken, actor);
 
-    public Task<BackupRetryResult> RetryAsync(TenantId tenantId, Guid runId, CancellationToken cancellationToken) =>
-        store.RetryRunAsync(tenantId, runId, time.GetUtcNow(), cancellationToken);
+    public Task<BackupRetryResult> RetryAsync(TenantId tenantId, Guid runId, CancellationToken cancellationToken, UserId? actor = null) =>
+        store.RetryRunAsync(tenantId, runId, time.GetUtcNow(), cancellationToken, actor);
 
     public async Task<BackupTaskSnapshot?> ClaimAsync(AgentIdentity identity, CancellationToken cancellationToken)
     {

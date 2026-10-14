@@ -98,26 +98,26 @@ public sealed class BackupScheduleService(
     }
 
     /// <summary>Sets, replaces (a request) or removes (null) the job's schedule. Null when the job does not exist.</summary>
-    public async Task<BackupJobView?> ChangeScheduleAsync(TenantId tenantId, Guid jobId, BackupScheduleRequest? request, CancellationToken cancellationToken)
+    public async Task<BackupJobView?> ChangeScheduleAsync(TenantId tenantId, Guid jobId, BackupScheduleRequest? request, CancellationToken cancellationToken, UserId? actor = null)
     {
         var now = time.GetUtcNow();
         var overlap = request?.OverlapPolicy is null ? (BackupOverlapPolicy?)null : BackupOrchestrator.ToDomain(request.OverlapPolicy);
         var job = await schedules.ModifyJobAsync(tenantId, jobId, target =>
-            target.ChangeSchedule(request is null ? null : ToDomain(request, target.Schedule, now, options), overlap), cancellationToken);
+            target.ChangeSchedule(request is null ? null : ToDomain(request, target.Schedule, now, options), overlap), cancellationToken, actor, now);
         if (job is null) return null;
         await TrySynchronizeAsync(tenantId, jobId, cancellationToken);
         return BackupOrchestrator.ToView(job, now);
     }
 
     /// <summary>Enables or disables the whole job (manual and scheduled starts alike). Null when the job does not exist.</summary>
-    public async Task<BackupJobView?> SetEnabledAsync(TenantId tenantId, Guid jobId, bool enabled, CancellationToken cancellationToken)
+    public async Task<BackupJobView?> SetEnabledAsync(TenantId tenantId, Guid jobId, bool enabled, CancellationToken cancellationToken, UserId? actor = null)
     {
         var now = time.GetUtcNow();
         var job = await schedules.ModifyJobAsync(tenantId, jobId, target =>
         {
             if (enabled) target.Enable(now);
             else target.Disable();
-        }, cancellationToken);
+        }, cancellationToken, actor, now);
         if (job is null) return null;
         await TrySynchronizeAsync(tenantId, jobId, cancellationToken);
         return BackupOrchestrator.ToView(job, now);

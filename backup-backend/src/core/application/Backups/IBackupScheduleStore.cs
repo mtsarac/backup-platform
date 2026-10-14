@@ -42,7 +42,7 @@ public interface IBackupScheduleStore
     Task<IReadOnlyList<BackupScheduleOccurrence>> ListOccurrencesAsync(TenantId tenantId, Guid jobId, int limit, CancellationToken cancellationToken);
 
     /// <summary>Applies <paramref name="change"/> to the job under the agent lock and saves it. Null when the job does not exist.</summary>
-    Task<BackupJob?> ModifyJobAsync(TenantId tenantId, Guid jobId, Action<BackupJob> change, CancellationToken cancellationToken);
+    Task<BackupJob?> ModifyJobAsync(TenantId tenantId, Guid jobId, Action<BackupJob> change, CancellationToken cancellationToken, UserId? actor = null, DateTimeOffset? now = null);
 }
 
 /// <summary>A one-shot wake-up the scheduler should hold for a job.</summary>

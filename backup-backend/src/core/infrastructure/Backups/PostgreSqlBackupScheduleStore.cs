@@ -1,6 +1,7 @@
 using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Domain.Agents;
+using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Infrastructure.Persistence;
@@ -76,6 +77,10 @@ public sealed class PostgreSqlBackupScheduleStore(DbContextOptions<PlatformDbCon
                 run = BackupRun.ForScheduledOccurrence(runId, job, instant, now, target.Configuration);
                 run.QueueFirstAttempt(Guid.NewGuid(), now);
                 context.BackupRuns.Add(run);
+                context.AuditEvents.Add(AuditEvent.Record(
+                    now, UserId.System, AuditActorKind.System, AuditActions.BackupRunTriggered, tenantId,
+                    "backup_run", run.Id.ToString("D"),
+                    new Dictionary<string, object?> { ["jobId"] = jobId.ToString("D"), ["runId"] = run.Id.ToString("D"), ["trigger"] = "Scheduled", ["result"] = "started", ["scheduledFor"] = instant, ["attemptId"] = run.CurrentAttempt.Id.ToString("D") }));
                 recorded.Add(new BackupScheduleOccurrence(Guid.NewGuid(), tenantId, jobId, instant, BackupOccurrenceOutcome.RunCreated, BackupOccurrenceReasons.RunCreated, run.Id, now));
             }
             else
@@ -84,6 +89,18 @@ public sealed class PostgreSqlBackupScheduleStore(DbContextOptions<PlatformDbCon
             }
         }
         context.BackupScheduleOccurrences.AddRange(recorded);
+        foreach (var occurrence in recorded)
+            context.AuditEvents.Add(AuditEvent.Record(
+                now, UserId.System, AuditActorKind.System, AuditActions.BackupScheduleOccurrenceDecided, tenantId,
+                "backup_schedule_occurrence", occurrence.Id.ToString("D"),
+                new Dictionary<string, object?>
+                {
+                    ["jobId"] = jobId.ToString("D"), ["runId"] = occurrence.RunId?.ToString("D"),
+                    ["scheduledFor"] = occurrence.ScheduledAt, ["result"] = occurrence.Outcome.ToString(),
+                    ["reason"] = occurrence.Outcome == BackupOccurrenceOutcome.AdmissionDenied
+                        ? BackupAdmissionDenialCodes.IsKnown(occurrence.Reason) ? occurrence.Reason : "unknown_denial"
+                        : occurrence.Outcome.ToString()
+                }));
         try
         {
             await context.SaveChangesAsync(cancellationToken);
@@ -135,7 +152,11 @@ public sealed class PostgreSqlBackupScheduleStore(DbContextOptions<PlatformDbCon
             if (!await PostgreSqlBackupRunStore.LockAgentAsync(context, candidate.TenantId, candidate.AgentId, cancellationToken)) continue;
             // Re-read under the lock: an agent that claimed the run, or a cancellation, may have got there first.
             var run = await PostgreSqlBackupRunStore.Runs(context).SingleOrDefaultAsync(run => run.TenantId == candidate.TenantId && run.Id == candidate.Id && run.AgentId == candidate.AgentId, cancellationToken);
-            if (run is null || !run.ExpireUnclaimed(now)) continue;
+            if (run is null) continue;
+            var wasTerminal = run.IsTerminal;
+            var attemptWasTerminal = run.CurrentAttempt.IsTerminal;
+            if (!run.ExpireUnclaimed(now)) continue;
+            BackupAudit.RecordCompletion(context, run, wasTerminal, attemptWasTerminal, now);
             try { await context.SaveChangesAsync(cancellationToken); }
             catch (DbUpdateConcurrencyException) { continue; }
             await transaction.CommitAsync(cancellationToken);
@@ -151,8 +172,9 @@ public sealed class PostgreSqlBackupScheduleStore(DbContextOptions<PlatformDbCon
             .OrderByDescending(occurrence => occurrence.ScheduledAt).Take(Math.Clamp(limit, 1, 200)).ToListAsync(cancellationToken);
     }
 
-    public async Task<BackupJob?> ModifyJobAsync(TenantId tenantId, Guid jobId, Action<BackupJob> change, CancellationToken cancellationToken)
+    public async Task<BackupJob?> ModifyJobAsync(TenantId tenantId, Guid jobId, Action<BackupJob> change, CancellationToken cancellationToken, UserId? actor = null, DateTimeOffset? now = null)
     {
+        var at = now ?? DateTimeOffset.UtcNow;
         while (true)
         {
             await using var context = PlatformDbContext.CreateForPlatformOperations(options);
@@ -163,7 +185,9 @@ public sealed class PostgreSqlBackupScheduleStore(DbContextOptions<PlatformDbCon
             var job = await context.BackupJobs.SingleOrDefaultAsync(job => job.TenantId == tenantId && job.Id == jobId, cancellationToken);
             if (job is null) return null;
             if (job.AgentId != owner) continue;
+            var before = BackupAudit.Capture(job);
             change(job);
+            BackupAudit.RecordJobChanges(context, job, before, actor, at);
             await context.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return job;

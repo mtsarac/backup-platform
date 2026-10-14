@@ -28,5 +28,5 @@ public interface IAgentRegistryStore
     Task<RotationConfirmCommit> ConfirmRotationAsync(AgentIdentity caller, DateTimeOffset now, CancellationToken cancellationToken);
 
     /// <summary>Null when the agent does not exist in the tenant. Terminal; revokes every non-revoked credential.</summary>
-    Task<AgentRevocationCommit?> RevokeAgentAsync(TenantId tenantId, AgentId agentId, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<AgentRevocationCommit?> RevokeAgentAsync(TenantId tenantId, AgentId agentId, UserId? actor, DateTimeOffset now, CancellationToken cancellationToken);
 }

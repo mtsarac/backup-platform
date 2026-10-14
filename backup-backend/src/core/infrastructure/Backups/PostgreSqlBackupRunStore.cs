@@ -1,6 +1,7 @@
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Agents;
+using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Restores;
@@ -30,7 +31,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
     /// <summary>A sample in [0,1) for retry jitter.</summary>
     private double Jitter() => jitter is null ? Random.Shared.NextDouble() : Math.Clamp(jitter(), 0, 0.999999);
 
-    public async Task<BackupJob?> CreateJobAsync(BackupJob job, CancellationToken cancellationToken)
+    public async Task<BackupJob?> CreateJobAsync(BackupJob job, CancellationToken cancellationToken, UserId? actor = null)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
@@ -38,6 +39,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         if (!await context.Agents.AnyAsync(agent => agent.Id == job.AgentId && agent.TenantId == job.TenantId && agent.Status == AgentStatus.Active, cancellationToken)) return null;
         await StorageTargetGate.EnsureJobTargetAsync(context, job.TenantId, job.Configuration, cancellationToken);
         context.BackupJobs.Add(job);
+        BackupAudit.AddJobEvent(context, job, actor, job.CreatedAt, AuditActions.BackupJobCreated);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return job;
@@ -47,15 +49,16 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         return await context.BackupJobs.AsNoTracking().SingleOrDefaultAsync(job => job.TenantId == tenantId && job.Id == jobId, cancellationToken);
     }
-    public async Task<BackupJob?> UpdateJobAsync(TenantId tenantId, Guid jobId, BackupJobUpdate update, CancellationToken cancellationToken)
+    public async Task<BackupJob?> UpdateJobAsync(TenantId tenantId, Guid jobId, BackupJobUpdate update, CancellationToken cancellationToken, UserId? actor = null, DateTimeOffset? now = null)
     {
+        var at = now ?? DateTimeOffset.UtcNow;
         while (true)
         {
-            var (job, stale) = await UpdateJobOnceAsync(tenantId, jobId, update, cancellationToken);
+            var (job, stale) = await UpdateJobOnceAsync(tenantId, jobId, update, actor, at, cancellationToken);
             if (!stale) return job;
         }
     }
-    private async Task<(BackupJob? Job, bool Stale)> UpdateJobOnceAsync(TenantId tenantId, Guid jobId, BackupJobUpdate update, CancellationToken cancellationToken)
+    private async Task<(BackupJob? Job, bool Stale)> UpdateJobOnceAsync(TenantId tenantId, Guid jobId, BackupJobUpdate update, UserId? actor, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         var owner = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && job.Id == jobId)
@@ -74,22 +77,24 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         if (update.AgentId != owner && !await context.Agents.AnyAsync(agent => agent.Id == update.AgentId && agent.TenantId == tenantId && agent.Status == AgentStatus.Active, cancellationToken)) return (null, false);
         // Omitted policies keep the values committed so far, read under the lock rather than from an earlier snapshot.
         await StorageTargetGate.EnsureJobTargetAsync(context, tenantId, update.Configuration, cancellationToken);
+        var before = BackupAudit.Capture(job);
         job.Update(update.Name, update.AgentId, update.Configuration, update.RetryPolicy ?? job.RetryPolicy, update.OverlapPolicy ?? job.OverlapPolicy);
         update.ApplyUnderLock?.Invoke(job);
+        BackupAudit.RecordJobChanges(context, job, before, actor, now);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return (job, false);
     }
-    public async Task<BackupStartResult> StartRunAsync(TenantId tenantId, Guid jobId, string idempotencyKey, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task<BackupStartResult> StartRunAsync(TenantId tenantId, Guid jobId, string idempotencyKey, DateTimeOffset now, CancellationToken cancellationToken, UserId? actor = null)
     {
         while (true)
         {
-            var result = await StartRunOnceAsync(tenantId, jobId, idempotencyKey, now, cancellationToken);
+            var result = await StartRunOnceAsync(tenantId, jobId, idempotencyKey, now, cancellationToken, actor);
             if (result is not null) return result;
         }
     }
     /// <summary>Null when the job moved to another agent between reading its owner and locking it; the caller starts over.</summary>
-    private async Task<BackupStartResult?> StartRunOnceAsync(TenantId tenantId, Guid jobId, string idempotencyKey, DateTimeOffset now, CancellationToken cancellationToken)
+    private async Task<BackupStartResult?> StartRunOnceAsync(TenantId tenantId, Guid jobId, string idempotencyKey, DateTimeOffset now, CancellationToken cancellationToken, UserId? actor)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         var owner = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && job.Id == jobId).Select(job => job.AgentId).SingleOrDefaultAsync(cancellationToken);
@@ -127,6 +132,10 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
             var run = new BackupRun(runId, tenantId, job.Id, owner, target.Configuration!, idempotencyKey, now, job.RetryPolicy, job.OverlapPolicy, retentionPolicy: job.RetentionPolicy);
             run.QueueFirstAttempt(Guid.NewGuid(), now);
             context.BackupRuns.Add(run);
+            context.AuditEvents.Add(AuditEvent.Record(
+                now, actor ?? UserId.System, BackupAudit.ActorKind(actor), AuditActions.BackupRunTriggered, tenantId,
+                "backup_run", run.Id.ToString("D"),
+                new Dictionary<string, object?> { ["jobId"] = job.Id.ToString("D"), ["runId"] = run.Id.ToString("D"), ["trigger"] = "Manual", ["result"] = "started", ["attemptId"] = run.CurrentAttempt.Id.ToString("D") }));
             try { await context.SaveChangesAsync(cancellationToken); }
             catch (DbUpdateException exception) when (IsUniqueViolation(exception))
             {
@@ -155,7 +164,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         return await Runs(context).AsNoTracking().SingleOrDefaultAsync(run => run.TenantId == tenantId && run.Id == runId, cancellationToken);
     }
-    public async Task<BackupRun?> RequestCancellationAsync(TenantId tenantId, Guid runId, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task<BackupRun?> RequestCancellationAsync(TenantId tenantId, Guid runId, DateTimeOffset now, CancellationToken cancellationToken, UserId? actor = null)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         var owner = await context.BackupRuns.AsNoTracking().Where(run => run.TenantId == tenantId && run.Id == runId).Select(run => run.AgentId).SingleOrDefaultAsync(cancellationToken);
@@ -164,12 +173,21 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         if (!await LockAgentAsync(context, tenantId, owner, cancellationToken)) return null;
         // Loaded under the lock, so a failure or retry that committed first is already visible and cancellation wins from here on.
         var run = await Runs(context).SingleAsync(run => run.TenantId == tenantId && run.Id == runId && run.AgentId == owner, cancellationToken);
+        var wasTerminal = run.IsTerminal;
+        var attemptWasTerminal = run.CurrentAttempt.IsTerminal;
+        var requestedAt = run.CancellationRequestedAt;
         run.RequestCancellation(now);
+        if (requestedAt != run.CancellationRequestedAt)
+            context.AuditEvents.Add(AuditEvent.Record(
+                now, actor ?? UserId.System, BackupAudit.ActorKind(actor), AuditActions.BackupRunCancelRequested, tenantId,
+                "backup_run", runId.ToString("D"),
+                new Dictionary<string, object?> { ["jobId"] = run.JobId.ToString("D"), ["runId"] = run.Id.ToString("D"), ["attemptId"] = run.CurrentAttempt.Id.ToString("D"), ["result"] = "requested" }));
+        BackupAudit.RecordCompletion(context, run, wasTerminal, attemptWasTerminal, now);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return run;
     }
-    public async Task<BackupRetryResult> RetryRunAsync(TenantId tenantId, Guid runId, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task<BackupRetryResult> RetryRunAsync(TenantId tenantId, Guid runId, DateTimeOffset now, CancellationToken cancellationToken, UserId? actor = null)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         var owner = await context.BackupRuns.AsNoTracking().Where(run => run.TenantId == tenantId && run.Id == runId).Select(run => run.AgentId).SingleOrDefaultAsync(cancellationToken);
@@ -190,6 +208,10 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
             _ => reopens ? BackupRetryOutcome.OverlapActive : BackupRetryOutcome.Started
         };
         if (outcome != BackupRetryOutcome.Started) return new BackupRetryResult(outcome, run); // nothing is saved: the transaction rolls back
+        context.AuditEvents.Add(AuditEvent.Record(
+            now, actor ?? UserId.System, BackupAudit.ActorKind(actor), AuditActions.BackupRunRetryRequested, tenantId,
+            "backup_run", runId.ToString("D"),
+            new Dictionary<string, object?> { ["jobId"] = run.JobId.ToString("D"), ["runId"] = run.Id.ToString("D"), ["attemptId"] = run.CurrentAttempt.Id.ToString("D"), ["retry"] = "Manual", ["result"] = "started" }));
         try { await context.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateException exception) when (IsUniqueViolation(exception))
         {
@@ -211,7 +233,13 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         if (!await context.Agents.AnyAsync(agent => agent.TenantId == tenantId && agent.Id == agentId && agent.Status == AgentStatus.Active, cancellationToken)) return null;
         var held = await Runs(context).Where(run => run.TenantId == tenantId && run.AgentId == agentId &&
             (run.Status == BackupStatus.Leased || run.Status == BackupStatus.Running)).ToListAsync(cancellationToken);
-        foreach (var run in held) run.Expire(now, Jitter());
+        foreach (var run in held)
+        {
+            var wasTerminal = run.IsTerminal;
+            var attemptWasTerminal = run.CurrentAttempt.IsTerminal;
+            run.Expire(now, Jitter());
+            BackupAudit.RecordCompletion(context, run, wasTerminal, attemptWasTerminal, now);
+        }
         await context.SaveChangesAsync(cancellationToken);
         // A backup never runs beside a restore of the same agent: a live (unexpired Leased/Running) restore attempt holds the agent whatever the slot limits say. Decided under the
         // same agent lock the restore claim takes, so exactly one of the two can ever hold the agent. An expired restore lease does not count: the restore sweep will end it.
@@ -370,6 +398,10 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
             // Re-read under the lock: a concurrent worker, a manual retry or a cancellation may already have moved the run on.
             var run = await Runs(context).SingleOrDefaultAsync(run => run.TenantId == candidate.TenantId && run.Id == candidate.Id && run.AgentId == candidate.AgentId, cancellationToken);
             if (run is null || !run.StartScheduledRetry(Guid.NewGuid(), now)) continue;
+            context.AuditEvents.Add(AuditEvent.Record(
+                now, UserId.System, AuditActorKind.System, AuditActions.BackupRunRetryRequested, run.TenantId,
+                "backup_run", run.Id.ToString("D"),
+                new Dictionary<string, object?> { ["jobId"] = run.JobId.ToString("D"), ["runId"] = run.Id.ToString("D"), ["attemptId"] = run.CurrentAttempt.Id.ToString("D"), ["retry"] = "Automatic", ["result"] = "started" }));
             try { await context.SaveChangesAsync(cancellationToken); }
             catch (DbUpdateException) { continue; } // lost a race the lock did not cover (another instance); the winner's attempt stands
             await transaction.CommitAsync(cancellationToken);
@@ -388,9 +420,12 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         // Only the run's current attempt can be addressed: once a retry exists, every callback of an older attempt is stale.
         if (run.CurrentAttempt.Id != command.AttemptId) return BackupMutationResult.Conflict;
         if (prepare is not null) await prepare(context, run);
+        var wasTerminal = run.IsTerminal;
+        var attemptWasTerminal = run.CurrentAttempt.IsTerminal;
         try { mutate(run); }
         catch (InvalidOperationException) { return BackupMutationResult.Conflict; }
         catch (ArgumentException) { return BackupMutationResult.Conflict; }
+        BackupAudit.RecordCompletion(context, run, wasTerminal, attemptWasTerminal, command.Now);
         try { await context.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateConcurrencyException) { return BackupMutationResult.Conflict; }
         await transaction.CommitAsync(cancellationToken);

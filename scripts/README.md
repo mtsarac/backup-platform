@@ -94,15 +94,41 @@ scripts/database/with-disposable-databases.sh --restore -- ./scripts/integration
 ## Test entry points
 
 ```bash
-scripts/integration/run-backend-tests.sh
-scripts/integration/run-backend-tests.sh --connectivity
-scripts/integration/run-postgres-tests.sh
-scripts/integration/run-postgres-tests.sh --filter 'FullyQualifiedName~ManagedService'
+scripts/integration/run-backend-tests.sh                         # default fast development feedback; no PostgreSQL
+scripts/integration/run-backend-tests.sh --project unit --filter 'FullyQualifiedName~Retention'
+scripts/integration/run-backend-tests.sh --project agent --filter 'FullyQualifiedName~DeleteReplica'
+scripts/integration/run-backend-tests.sh --connectivity          # all unit/architecture/agent tests
+scripts/integration/run-postgres-tests.sh --filter 'FullyQualifiedName~RetentionAudit|FullyQualifiedName~AgentReplicaDeletionAudit'
+scripts/integration/run-postgres-tests.sh                        # intentional full PostgreSQL selection
 scripts/integration/run-mssql-tests.sh
 scripts/integration/run-mssql-tests.sh --provider --agent --restore
 scripts/integration/run-full-acceptance.sh
 scripts/integration/run-full-acceptance.sh --configured
 ```
+
+The default development loop runs all backend unit and architecture tests, plus Agent tests excluding the existing
+`ConnectivityServiceTests` external-connectivity selection. It does **not** start PostgreSQL acceptance or infer
+which tests cover changed files. Choose the feature's PostgreSQL slice explicitly when database behavior changes;
+before acceptance, intentionally run the full relevant suites, including the safety regressions.
+
+`--project unit|architecture|agent` runs only that named project; `--filter` requires an explicit project and is
+passed unchanged to `dotnet test`. A named Agent project has no connectivity exclusion: use an explicit filter
+for a focused selection or run it unfiltered for the entire Agent suite. Build/restore is project-scoped, including
+its required dependencies, rather than a full-solution build.
+
+Both backend and PostgreSQL runners build current Release output by default. Add `--no-build` **only** after a
+successful build of the matching test project/dependencies and before any further relevant edits. It is an
+explicit reuse option, not an automatic optimization or an assertion that binaries are current. No runner removes
+or weakens tests; every selected test must execute and pass through the shared TRX verifier.
+
+PostgreSQL fixtures migrate one private schema template per test process, then clone a separate database for each
+fixture. Tenant rows, transaction/lease state and migration changes never share a database between fixtures.
+The source rejects connections after migration, so a migration round-trip or cleanup in one clone cannot mutate
+later clones. Normal process exit drops the template; forced termination may leave test databases, as before.
+
+Frontend tests use two `vmThreads` workers to reuse expensive jsdom environments while retaining file isolation.
+Run `bun run test` from `backup-frontend`, or append a test-file path for an explicit focused selection.
+These startup optimizations do not remove cases or change full-acceptance filters.
 
 Storage connections smoke (real Central backup -> download -> restore, with the connection upgrade applied to the real replica in between):
 
@@ -129,6 +155,10 @@ DPAPI decryptability, Agent authentication, heartbeat, capabilities or frontend 
 python3 scripts/integration/test-script-contracts.py
 python3 scripts/integration/test-script-contracts.py --windows
 ```
+
+The local contract self-check invokes the actual backend/PostgreSQL runner scripts with a disposable fake
+`dotnet` executable to prove argument routing, help/error exits, explicit build reuse, failure propagation and
+TRX rejection. It performs no .NET builds or database tests and does not substitute for the selected real suites.
 
 The Windows contract selection uses the real configured SSH VM: remote errors must propagate, streamed
 PowerShell scripts must finish without stdin EOF, literal arguments must not execute, and a binary SFTP transfer

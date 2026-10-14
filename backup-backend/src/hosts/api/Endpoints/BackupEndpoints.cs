@@ -1,6 +1,7 @@
 using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Application.Identity;
 using BackupPlatform.Application.Tenancy;
 using Microsoft.AspNetCore.Authorization;
 using BackupPlatform.Domain.Backups;
@@ -33,12 +34,12 @@ public static class BackupEndpoints
     }
 
     private static async Task<IResult> CreateJobAsync(CreateBackupJobRequest request, HttpContext context, ITenantContext tenant, IAuthorizationService authorization,
-        BackupOrchestrator service, BackupScheduleService schedules, CancellationToken cancellationToken)
+        BackupOrchestrator service, BackupScheduleService schedules, ICurrentUser currentUser, CancellationToken cancellationToken)
     {
         if (request.Retention is not null && !await IsAdministratorAsync(authorization, context)) return RetentionForbidden();
         try
         {
-            var job = await service.CreateJobAsync(tenant.TenantId!, request, cancellationToken);
+            var job = await service.CreateJobAsync(tenant.TenantId!, request, cancellationToken, currentUser.UserId!);
             if (job is null) return Results.NotFound();
             if (job.Schedule is not null) await schedules.TrySynchronizeAsync(tenant.TenantId!, job.Id, cancellationToken);
             return Results.Created($"/api/tenants/{tenant.TenantId!.Value}/backup-jobs/{job.Id}", job);
@@ -58,13 +59,13 @@ public static class BackupEndpoints
         Results.Ok(await store.ListJobsAsync(tenant.TenantId!, time.GetUtcNow(), cancellationToken));
 
     private static async Task<IResult> UpdateJobAsync(Guid jobId, UpdateBackupJobRequest request, HttpContext context, ITenantContext tenant, IAuthorizationService authorization,
-        BackupOrchestrator service, BackupScheduleService schedules, CancellationToken cancellationToken)
+        BackupOrchestrator service, BackupScheduleService schedules, ICurrentUser currentUser, CancellationToken cancellationToken)
     {
         // Retention keeps its administrator-only rule even though it now travels in the same request: an operator simply does not send it.
         if (request.Retention is not null && !await IsAdministratorAsync(authorization, context)) return RetentionForbidden();
         try
         {
-            var job = await service.UpdateJobAsync(tenant.TenantId!, jobId, request, cancellationToken);
+            var job = await service.UpdateJobAsync(tenant.TenantId!, jobId, request, cancellationToken, currentUser.UserId!);
             if (job is null) return Results.NotFound();
             await schedules.TrySynchronizeAsync(tenant.TenantId!, jobId, cancellationToken);
             return Results.Ok(job);
@@ -88,43 +89,43 @@ public static class BackupEndpoints
             summary.Runs, summary.Artifacts, summary.RecentRuns, summary.UpcomingJobs });
     }
 
-    private static async Task<IResult> ChangeScheduleAsync(Guid jobId, BackupScheduleRequest request, ITenantContext tenant, BackupScheduleService schedules, CancellationToken cancellationToken)
+    private static async Task<IResult> ChangeScheduleAsync(Guid jobId, BackupScheduleRequest request, ITenantContext tenant, BackupScheduleService schedules, ICurrentUser currentUser, CancellationToken cancellationToken)
     {
         try
         {
-            var job = await schedules.ChangeScheduleAsync(tenant.TenantId!, jobId, request, cancellationToken);
+            var job = await schedules.ChangeScheduleAsync(tenant.TenantId!, jobId, request, cancellationToken, currentUser.UserId!);
             return job is null ? Results.NotFound() : Results.Ok(job);
         }
         catch (InvalidBackupScheduleException exception) { return InvalidSchedule(exception); }
         catch (ArgumentException) { return Invalid("Invalid schedule."); }
     }
 
-    private static async Task<IResult> RemoveScheduleAsync(Guid jobId, ITenantContext tenant, BackupScheduleService schedules, CancellationToken cancellationToken)
+    private static async Task<IResult> RemoveScheduleAsync(Guid jobId, ITenantContext tenant, BackupScheduleService schedules, ICurrentUser currentUser, CancellationToken cancellationToken)
     {
-        var job = await schedules.ChangeScheduleAsync(tenant.TenantId!, jobId, null, cancellationToken);
+        var job = await schedules.ChangeScheduleAsync(tenant.TenantId!, jobId, null, cancellationToken, currentUser.UserId!);
         return job is null ? Results.NotFound() : Results.Ok(job);
     }
 
-    private static async Task<IResult> EnableAsync(Guid jobId, ITenantContext tenant, BackupScheduleService schedules, CancellationToken cancellationToken)
+    private static async Task<IResult> EnableAsync(Guid jobId, ITenantContext tenant, BackupScheduleService schedules, ICurrentUser currentUser, CancellationToken cancellationToken)
     {
-        var job = await schedules.SetEnabledAsync(tenant.TenantId!, jobId, true, cancellationToken);
+        var job = await schedules.SetEnabledAsync(tenant.TenantId!, jobId, true, cancellationToken, currentUser.UserId!);
         return job is null ? Results.NotFound() : Results.Ok(job);
     }
 
     /// <summary>Administrators only: a shorter keep period makes FUTURE backups expire sooner. Existing backups keep the expiration they were accepted with.</summary>
-    private static async Task<IResult> ChangeRetentionAsync(Guid jobId, BackupRetentionPolicyRequest request, ITenantContext tenant, BackupArtifactService service, CancellationToken cancellationToken)
+    private static async Task<IResult> ChangeRetentionAsync(Guid jobId, BackupRetentionPolicyRequest request, ITenantContext tenant, BackupArtifactService service, ICurrentUser currentUser, CancellationToken cancellationToken)
     {
         try
         {
-            var job = await service.ChangeJobRetentionAsync(tenant.TenantId!, jobId, request, cancellationToken);
+            var job = await service.ChangeJobRetentionAsync(tenant.TenantId!, jobId, request, cancellationToken, currentUser.UserId!);
             return job is null ? Results.NotFound() : Results.Ok(job);
         }
         catch (ArgumentException) { return Results.BadRequest(new { error = "invalid_request", field = "retention", code = "invalid_value", message = "Invalid retention policy." }); }
     }
 
-    private static async Task<IResult> DisableAsync(Guid jobId, ITenantContext tenant, BackupScheduleService schedules, CancellationToken cancellationToken)
+    private static async Task<IResult> DisableAsync(Guid jobId, ITenantContext tenant, BackupScheduleService schedules, ICurrentUser currentUser, CancellationToken cancellationToken)
     {
-        var job = await schedules.SetEnabledAsync(tenant.TenantId!, jobId, false, cancellationToken);
+        var job = await schedules.SetEnabledAsync(tenant.TenantId!, jobId, false, cancellationToken, currentUser.UserId!);
         return job is null ? Results.NotFound() : Results.Ok(job);
     }
 
@@ -136,11 +137,11 @@ public static class BackupEndpoints
     }
 
     private static async Task<IResult> StartRunAsync(Guid jobId, HttpContext context, ITenantContext tenant, BackupOrchestrator service,
-        IAgentPushDispatcher push, ILogger<BackupOrchestrator> logger, CancellationToken cancellationToken)
+        IAgentPushDispatcher push, ILogger<BackupOrchestrator> logger, ICurrentUser currentUser, CancellationToken cancellationToken)
     {
         var keys = context.Request.Headers["Idempotency-Key"];
         if (keys.Count != 1 || !BackupInputValidation.IsValidKey(keys[0])) return Invalid("A valid Idempotency-Key is required (1-128 printable ASCII characters).");
-        var result = await service.StartRunAsync(tenant.TenantId!, jobId, keys[0]!, cancellationToken);
+        var result = await service.StartRunAsync(tenant.TenantId!, jobId, keys[0]!, cancellationToken, currentUser.UserId!);
         switch (result.Outcome)
         {
             case BackupStartOutcome.NotFound:
@@ -190,18 +191,18 @@ public static class BackupEndpoints
     }
 
     private static async Task<IResult> CancelAsync(Guid runId, ITenantContext tenant, BackupOrchestrator service,
-        IAgentPushDispatcher push, ILogger<BackupOrchestrator> logger, CancellationToken cancellationToken)
+        IAgentPushDispatcher push, ILogger<BackupOrchestrator> logger, ICurrentUser currentUser, CancellationToken cancellationToken)
     {
-        var run = await service.CancelAsync(tenant.TenantId!, runId, cancellationToken);
+        var run = await service.CancelAsync(tenant.TenantId!, runId, cancellationToken, currentUser.UserId!);
         if (run is null) return Results.NotFound();
         await HintAsync(push, run.AgentId, "CancellationRequested", logger);
         return Results.Ok(BackupOrchestrator.ToView(run));
     }
 
     private static async Task<IResult> RetryAsync(Guid runId, ITenantContext tenant, BackupOrchestrator service,
-        IAgentPushDispatcher push, ILogger<BackupOrchestrator> logger, CancellationToken cancellationToken)
+        IAgentPushDispatcher push, ILogger<BackupOrchestrator> logger, ICurrentUser currentUser, CancellationToken cancellationToken)
     {
-        var result = await service.RetryAsync(tenant.TenantId!, runId, cancellationToken);
+        var result = await service.RetryAsync(tenant.TenantId!, runId, cancellationToken, currentUser.UserId!);
         switch (result.Outcome)
         {
             case BackupRetryOutcome.NotFound:

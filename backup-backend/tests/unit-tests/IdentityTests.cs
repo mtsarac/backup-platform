@@ -172,7 +172,7 @@ public sealed class IdentityTests
             return Task.CompletedTask;
         }
 
-        public Task CreateSessionAsync(UserSession session, CancellationToken cancellationToken)
+        public Task CreateSessionAsync(UserSession session, DateTimeOffset now, CancellationToken cancellationToken)
         {
             Sessions.Add(session.Id, session);
             return Task.CompletedTask;
@@ -189,5 +189,7 @@ public sealed class IdentityTests
             }
             return Task.CompletedTask;
         }
+        public Task RecordLoginFailureAsync(UserId? targetUserId, DateTimeOffset now, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
     }
 }

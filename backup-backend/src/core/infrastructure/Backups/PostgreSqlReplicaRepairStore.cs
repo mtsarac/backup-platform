@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Contracts.Backups;
+using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Storage;
@@ -514,6 +515,7 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
                 storageConnectionId: operation.StorageConnectionId);
             artifact.AddQuarantinedReplica(conflict);
             context.BackupReplicas.Add(conflict);
+            RecordOrphanTransition(context, conflict, now, "target_conflict");
         }
         operation.Fail(leaseToken, ReplicaRepairFailureCodes.TargetConflict, "Target object conflicts with expected content; ownership requires reconciliation.", now);
         await context.SaveChangesAsync(cancellationToken);
@@ -535,6 +537,11 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         bool quarantine = false)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        await context.Database.SqlQuery<Guid>($"""
+            SELECT "Id" AS "Value" FROM backup_artifacts
+            WHERE "TenantId" = {tenantId.Value} AND "Id" = {artifactId} FOR NO KEY UPDATE
+            """).ToListAsync(cancellationToken);
         var artifact = await context.BackupArtifacts
             .Include(a => a.Replicas)
             .SingleOrDefaultAsync(a => a.TenantId == tenantId && a.Id == artifactId, cancellationToken);
@@ -550,14 +557,19 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
                 if (quarantine)
                 {
                     if (existing.Status == BackupReplicaStatus.Available)
+                    {
                         existing.Quarantine();
+                        RecordOrphanTransition(context, existing, now, "target_conflict");
+                    }
                 }
-                else
+                else if (existing.Status != BackupReplicaStatus.DeletePending)
                 {
                     existing.ReopenOrphan(now);
+                    RecordOrphanTransition(context, existing, now, "cleanup_unconfirmed");
                 }
             }
             await context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
             return;
         }
 
@@ -588,7 +600,9 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         {
             context.BackupReplicas.Add(orphan);
         }
+        RecordOrphanTransition(context, orphan, now, quarantine ? "target_conflict" : "cleanup_unconfirmed");
         await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task<ReplicaRepairOperation?> ClaimDueRepairAsync(
@@ -685,6 +699,7 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
                     else
                         artifact.AddQuarantinedReplica(orphan);
                     context.BackupReplicas.Add(orphan);
+                    RecordOrphanTransition(context, orphan, now, "lease_expired");
                 }
             }
             if (op.CancellationRequestedAt != null)
@@ -702,6 +717,19 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         }
         return count;
     }
+
+    private static void RecordOrphanTransition(PlatformDbContext context, BackupReplica replica, DateTimeOffset now, string reason) =>
+        context.AuditEvents.Add(AuditEvent.Record(
+            now, UserId.System, AuditActorKind.System,
+            replica.Status == BackupReplicaStatus.Quarantined ? AuditActions.BackupReplicaQuarantined : AuditActions.BackupReplicaOrphanRecorded,
+            replica.TenantId, "backup_replica", replica.Id.ToString("D"),
+            new Dictionary<string, object?>
+            {
+                ["artifactId"] = replica.ArtifactId.ToString("D"),
+                ["storageConnectionId"] = replica.StorageConnectionId.ToString("D"),
+                ["result"] = replica.Status == BackupReplicaStatus.Quarantined ? "quarantined" : "delete_pending",
+                ["reason"] = reason
+            }));
 
     public async Task<IReadOnlyList<ReplicaRepairOperation>> DiscoverEligibleRepairsAsync(
         DateTimeOffset now,

@@ -2,6 +2,7 @@
 """Exercise evidence rejection and, optionally, the real Windows SSH wrappers."""
 import argparse
 import hashlib
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -60,6 +61,154 @@ class RuntimeCleanup(unittest.TestCase):
             ], capture_output=True, text=True, timeout=10)
             self.assertEqual(result.returncode, 7)
             self.assertFalse(owned.exists())
+
+
+class BackendRunners(unittest.TestCase):
+    """Exercise real runner routing and fail-closed evidence without building .NET."""
+
+    def setUp(self):
+        self.runtime = tempfile.TemporaryDirectory(prefix='bp-runner-contract-')
+        self.addCleanup(self.runtime.cleanup)
+        self.root = Path(self.runtime.name)
+        self.bin = self.root / 'bin'
+        self.bin.mkdir()
+        self.log = self.root / 'dotnet-calls.jsonl'
+        fake_dotnet = self.bin / 'dotnet'
+        fake_dotnet.write_text('''#!/usr/bin/env python3
+import json
+import os
+from pathlib import Path
+import sys
+
+arguments = sys.argv[1:]
+with open(os.environ['BP_CONTRACT_CALLS'], 'a') as calls:
+    calls.write(json.dumps(arguments) + '\\n')
+failure = int(os.environ.get('BP_CONTRACT_DOTNET_EXIT', '0'))
+if failure:
+    sys.exit(failure)
+directory = Path(arguments[arguments.index('--results-directory') + 1])
+outcome = os.environ.get('BP_CONTRACT_OUTCOME', 'Passed')
+total = 0 if outcome == 'Empty' else 1
+executed = 0 if outcome in ('Empty', 'NotExecuted') else 1
+passed = 1 if outcome == 'Passed' else 0
+rows = '' if outcome == 'Empty' else f'<UnitTestResult outcome=\"{outcome}\" />'
+(directory / 'result.trx').write_text(f'<TestRun xmlns=\"http://microsoft.com/schemas/VisualStudio/TeamTest/2010\"><Results>{rows}</Results><ResultSummary><Counters total=\"{total}\" executed=\"{executed}\" passed=\"{passed}\" /></ResultSummary></TestRun>')
+''')
+        fake_dotnet.chmod(0o700)
+        self.environment = {
+            **os.environ,
+            'PATH': str(self.bin) + os.pathsep + os.environ['PATH'],
+            'BP_CREDENTIAL_FILE': str(self.root / 'absent-credentials'),
+            'BP_CONTRACT_CALLS': str(self.log),
+            'BACKUP_PLATFORM_TEST_CONNECTION_STRING': 'Host=contract-not-used',
+            'TMPDIR': str(self.root),
+        }
+        self.environment.pop('BP_COMMON_LOADED', None)
+
+    def invoke(self, runner, *arguments, **overrides):
+        return subprocess.run(
+            [str(REPO / 'scripts/integration' / runner), *arguments],
+            env={**self.environment, **overrides}, capture_output=True, text=True, timeout=10)
+
+    def calls(self):
+        return [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
+
+    def test_help_requires_neither_dotnet_execution_nor_database_credentials(self):
+        for runner in ('run-backend-tests.sh', 'run-postgres-tests.sh'):
+            with self.subTest(runner=runner):
+                result = self.invoke(runner, '--help', BACKUP_PLATFORM_TEST_CONNECTION_STRING='')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn('Usage:', result.stdout)
+        self.assertEqual(self.calls(), [])
+
+    def test_invalid_or_ambiguous_selections_fail_before_running_tests(self):
+        options = [
+            ('run-backend-tests.sh', '--project'),
+            ('run-backend-tests.sh', '--project', 'integration'),
+            ('run-backend-tests.sh', '--filter', 'FullyQualifiedName~Retention'),
+            ('run-backend-tests.sh', '--project', 'unit', '--filter'),
+            ('run-backend-tests.sh', '--project', 'unit', '--filter', ''),
+            ('run-backend-tests.sh', '--project', 'agent', '--connectivity'),
+            ('run-postgres-tests.sh', '--filter'),
+            ('run-postgres-tests.sh', '--filter', ''),
+            ('run-postgres-tests.sh', '--filter', '--no-build'),
+        ]
+        for runner, *arguments in options:
+            with self.subTest(arguments=arguments):
+                self.assertNotEqual(self.invoke(runner, *arguments).returncode, 0)
+        self.assertEqual(self.calls(), [])
+
+    def test_default_is_unit_architecture_and_filtered_agent_without_postgres(self):
+        result = self.invoke('run-backend-tests.sh')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        calls = self.calls()
+        self.assertEqual([next(a for a in call if a.startswith('tests/')) for call in calls],
+                         ['tests/unit-tests', 'tests/architecture-tests', 'tests/agent-tests'])
+        self.assertTrue(all('--no-build' not in call for call in calls))
+        self.assertTrue(all('--filter' not in call for call in calls[:2]))
+        self.assertEqual(calls[2][calls[2].index('--filter') + 1],
+                         'FullyQualifiedName!~ConnectivityServiceTests')
+
+    def test_full_backend_selection_keeps_connectivity(self):
+        result = self.invoke('run-backend-tests.sh', '--connectivity')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(len(self.calls()), 3)
+        self.assertTrue(all('--filter' not in call for call in self.calls()))
+
+    def test_named_filtered_project_routes_one_build_and_reuses_only_explicitly(self):
+        expression = 'FullyQualifiedName~Retention|FullyQualifiedName~DeleteReplica'
+        for no_build in (False, True):
+            with self.subTest(no_build=no_build):
+                self.log.unlink(missing_ok=True)
+                options = ['--project', 'unit', '--filter', expression]
+                if no_build:
+                    options.append('--no-build')
+                result = self.invoke('run-backend-tests.sh', *options)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                calls = self.calls()
+                self.assertEqual(len(calls), 1)
+                self.assertIn('tests/unit-tests', calls[0])
+                self.assertEqual(calls[0][calls[0].index('--filter') + 1], expression)
+                self.assertEqual('--no-build' in calls[0], no_build)
+
+    def test_named_agent_project_does_not_silently_exclude_connectivity(self):
+        result = self.invoke('run-backend-tests.sh', '--project', 'agent')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(len(self.calls()), 1)
+        self.assertIn('tests/agent-tests', self.calls()[0])
+        self.assertNotIn('--filter', self.calls()[0])
+
+    def test_postgres_filter_narrows_the_existing_acceptance_selection(self):
+        expression = 'FullyQualifiedName~RetentionAudit|FullyQualifiedName~AgentReplicaDeletionAudit'
+        result = self.invoke('run-postgres-tests.sh', '--filter', expression, '--no-build')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        calls = self.calls()
+        self.assertEqual(len(calls), 1)
+        self.assertIn('tests/integration-tests', calls[0])
+        self.assertIn('--no-build', calls[0])
+        self.assertEqual(calls[0][calls[0].index('--filter') + 1],
+                         f'(FullyQualifiedName!~MsSql&FullyQualifiedName!~BackupPipelineSmoke)&({expression})')
+
+    def test_unfiltered_postgres_keeps_the_full_existing_acceptance_selection(self):
+        result = self.invoke('run-postgres-tests.sh')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        calls = self.calls()
+        self.assertEqual(len(calls), 1)
+        self.assertIn('tests/integration-tests', calls[0])
+        self.assertNotIn('--no-build', calls[0])
+        self.assertEqual(calls[0][calls[0].index('--filter') + 1],
+                         'FullyQualifiedName!~MsSql&FullyQualifiedName!~BackupPipelineSmoke')
+
+    def test_original_failure_stops_the_selection_and_is_preserved(self):
+        result = self.invoke('run-backend-tests.sh', BP_CONTRACT_DOTNET_EXIT='7')
+        self.assertEqual(result.returncode, 7, result.stdout + result.stderr)
+        self.assertEqual(len(self.calls()), 1)
+
+    def test_empty_skipped_and_failed_evidence_remain_failures(self):
+        for outcome in ('Empty', 'NotExecuted', 'Failed'):
+            with self.subTest(outcome=outcome):
+                result = self.invoke('run-backend-tests.sh', '--project', 'unit', BP_CONTRACT_OUTCOME=outcome)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 class WindowsTransport(unittest.TestCase):
@@ -126,6 +275,7 @@ if __name__ == '__main__':
     options = parser.parse_args()
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(TestEvidence)
     suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(RuntimeCleanup))
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(BackendRunners))
     if options.windows:
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(WindowsTransport))
     result = unittest.TextTestRunner(verbosity=2).run(suite)

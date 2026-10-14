@@ -15,10 +15,15 @@ public sealed class BackupArtifactServiceTests
 
     private sealed class FakeJobs(BackupJob? job) : IBackupScheduleStore
     {
-        public Task<BackupJob?> ModifyJobAsync(TenantId tenantId, Guid jobId, Action<BackupJob> change, CancellationToken cancellationToken)
+        public UserId? Actor { get; private set; }
+        public DateTimeOffset? ChangedAt { get; private set; }
+
+        public Task<BackupJob?> ModifyJobAsync(TenantId tenantId, Guid jobId, Action<BackupJob> change, CancellationToken cancellationToken, UserId? actor = null, DateTimeOffset? now = null)
         {
             if (job is null || job.TenantId != tenantId || job.Id != jobId) return Task.FromResult<BackupJob?>(null);
             change(job);
+            Actor = actor;
+            ChangedAt = now;
             return Task.FromResult<BackupJob?>(job);
         }
 
@@ -251,6 +256,34 @@ public sealed class BackupArtifactServiceTests
         Assert.Equal(BackupArtifactDeleteKind.Requested, response.Kind);
         Assert.Equal(record.JobId, response.Artifact!.JobId);
         Assert.Equal((tenant, record.Artifact.Id, (Guid?)user, Now.AddHours(3)), Assert.Single(store.DeleteRequests));
+    }
+
+    [Fact]
+    public async Task RetentionChangesCarryTheRequestingUserAndTheBackendClock()
+    {
+        var tenant = TenantId.New();
+        var job = Job(tenant, Policy());
+        var jobs = new FakeJobs(job);
+        var actor = UserId.New();
+        var service = new BackupArtifactService(new FakeRetentionStore(), jobs, new(), new SettableClock(Now));
+
+        await service.ChangeJobRetentionAsync(tenant, job.Id, new(Enabled: false), default, actor);
+
+        Assert.Equal(actor, jobs.Actor);
+        Assert.Equal(Now, jobs.ChangedAt);
+    }
+
+    [Fact]
+    public async Task CancellingADeleteCarriesTheActualRequestingUser()
+    {
+        var tenant = TenantId.New();
+        var record = Record(tenant);
+        var actor = Guid.NewGuid();
+        var store = new FakeRetentionStore { OnCancelDelete = (_, _, _) => new(BackupArtifactCancelKind.Restored, record) };
+
+        await Service(null, store).CancelDeleteAsync(tenant, record.Artifact.Id, default, actor);
+
+        Assert.Equal((tenant, record.Artifact.Id, (Guid?)actor, Now), Assert.Single(store.CancelRequests));
     }
 
     [Fact]

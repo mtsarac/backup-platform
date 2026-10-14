@@ -86,6 +86,43 @@ public sealed class BackupStorageSweeperTests
         Assert.Equal(new StorageSweepReport(1, 0, 0, 0, 0, 1, 0, 0, 0, false), report);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OnlyVerifiedAbsenceCanPublishALeftoverRemoval(bool cannotVerify)
+    {
+        var rig = new Rig();
+        var key = rig.Object(rig.Register(BackupStatus.Failed), Old);
+        if (cannotVerify)
+            rig.Storage.Capabilities = new StorageCapabilities([StorageCapabilityIds.Delete, StorageCapabilityIds.Enumerate]);
+        else
+            rig.Storage.KeepAfterDelete.Add(key);
+
+        var report = await rig.SweepAsync();
+
+        Assert.True(rig.Storage.Has(key));
+        Assert.Equal(1, report.Failed);
+        Assert.Equal(0, report.OrphansDeleted);
+        Assert.Empty(rig.Store.CleanupCompletions);
+    }
+
+    [Fact]
+    public async Task AVerifiedRemovalCarriesTheRealAttemptAndIsNotRepeatedAfterTheFileIsGone()
+    {
+        var rig = new Rig();
+        var attempt = rig.Register(BackupStatus.Failed);
+        var key = rig.Object(attempt, Old);
+
+        await rig.SweepAsync();
+        await rig.SweepAsync();
+
+        var removal = Assert.Single(rig.Store.SweptDeletions);
+        Assert.Equal(attempt.Tenant, removal.Key.TenantId);
+        Assert.Equal(attempt.Id, removal.Key.AttemptId);
+        Assert.Equal(key, removal.ObjectKey);
+        Assert.Equal(Now, removal.Now);
+    }
+
     [Fact]
     public async Task AKeyBelowAConfiguredPrefixIsRecognisedToo()
     {
@@ -606,7 +643,7 @@ public sealed class BackupStorageSweeperTests
     }
 
     [Fact]
-    public async Task AFileSomebodyElseDeletedFirstIsNeitherADeletionNorAFailure()
+    public async Task AFileSomebodyElseDeletedFirstCompletesDurableCleanupWhenAbsenceIsVerified()
     {
         var rig = new Rig();
         var key = rig.Object(rig.Register(BackupStatus.Failed), Old);
@@ -615,8 +652,63 @@ public sealed class BackupStorageSweeperTests
         var report = await rig.SweepAsync();
 
         Assert.False(rig.Storage.Has(key));
+        Assert.Equal(1, report.OrphansDeleted);
+        Assert.Equal(0, report.Failed);
+        Assert.Single(rig.Store.CleanupCompletions);
+    }
+
+    [Fact]
+    public async Task APreCrashPersistedCleanupRecoversAndCompletesEvenIfEnumerationNoLongerYieldsIt()
+    {
+        var rig = new Rig();
+        var attempt = rig.Register(BackupStatus.Failed);
+        var key = Rig.KeyFor(attempt);
+        // Physical file was deleted before crash or vanished, never returned by enumeration:
+        var cleanupId = Guid.NewGuid();
+        var pending = new PendingStorageCleanup(
+            cleanupId, new TenantId(attempt.Tenant), attempt.Job, attempt.Run, attempt.Id,
+            "local", "main", Guid.NewGuid().ToString("N"), key, false);
+        rig.Store.PendingCleanups.Add(pending);
+
+        var report = await rig.SweepAsync();
+
+        Assert.Equal(1, report.OrphansDeleted);
+        Assert.Equal(0, report.Failed);
+        Assert.Contains(rig.Journal.Entries, e => e.StartsWith("exists:", StringComparison.Ordinal));
+        Assert.Contains(rig.Journal.Entries, e => e == $"complete-cleanup:{cleanupId}");
+        Assert.Single(rig.Store.CleanupCompletions);
+    }
+
+    [Fact]
+    public async Task AuditPersistenceFailureRollsBackCleanupCompletionAndLeavesItRetryable()
+    {
+        var rig = new Rig();
+        var attempt = rig.Register(BackupStatus.Failed);
+        var key = rig.Object(attempt, Old);
+        rig.Store.CompleteCleanupResult = _ => false;
+
+        var report = await rig.SweepAsync();
+
+        Assert.Equal(1, report.Failed);
+        Assert.Equal(0, report.OrphansDeleted);
+        Assert.Empty(rig.Store.CleanupCompletions);
+    }
+
+    [Fact]
+    public async Task ConcurrentOrDuplicateSweepExecutionIsLeaseFenced()
+    {
+        var rig = new Rig();
+        var attempt = rig.Register(BackupStatus.Failed);
+        var key = rig.Object(attempt, Old);
+        // Simulate another node currently holding active lease on this cleanup
+        rig.Store.OnBeginSweptDeletion = (_, _, _, _, _, _) => null;
+
+        var report = await rig.SweepAsync();
+
+        Assert.True(rig.Storage.Has(key));
         Assert.Equal(0, report.OrphansDeleted);
         Assert.Equal(0, report.Failed);
+        Assert.Empty(rig.Store.CleanupCompletions);
     }
 
     [Fact]

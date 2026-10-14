@@ -224,7 +224,7 @@ public sealed class StorageConnectionStoreIntegrationTests(PostgreSqlFixture fix
     [Fact]
     public async Task ADeleteIsRefusedWhileARunSnapshotNamesTheConnectionEvenAfterTheJobMovedAway()
     {
-        var agent = await _world.Quota.AgentAsync();
+        var agent = await _world.Quota.AgentAsync(limitBytes: null);
         var target = await _world.AddAsync(agent.TenantId, "Second central", "central", StorageOwnership.PlatformManaged);
         var job = await CreateJobTargetingAsync(agent, target.Id);
         var started = await _world.Quota.RunStore().StartRunAsync(agent.TenantId, job.Id, "run-1", ConnectionWorld.Now, default);
