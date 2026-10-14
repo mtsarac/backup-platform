@@ -887,7 +887,7 @@ Provider desteklemiyorsa özellik capability üzerinden devre dışı kalmalıd�
 - **AgentDirect hedeflerde sınır Agent'a güvenir** (backend baytları görmez).
 - **Yuva doygunluğu:** yavaşlatılmış relay upload'ı admission yuvasını (tenant 2, düğüm 4) tutar; bir tenant'ın iki yavaş upload'ı kendi verify/delete işlemlerini `429` ile geciktirebilir. DB bağlantısı tutulmadığı için yuva sayıları ileride güvenle artırılabilir; bu işte değiştirilmedi ve canlı doygunluk ölçülmedi (B12).
 - Canlı ölçümlerin Windows→Drive yolu ≈ 324 KB/s'de doygun; yüksek hız (MB/s) limitlerinin doğruluğu canlı Drive'da gösterilemedi (yerel ölçüm: %100,5–101).
-- Dev ortamında 3 + 2 + 1 `BW accept *` job'ı devre dışı kaldı (job silme API'si yok); yalnız dev tenant'ında, temizlenmesi için PlatformAdmin DB işlemi gerekir.
+- Dev tenant'ında çok sayıda `BW accept *` job'ı devre dışı olarak kaldı (job silme API'si yok); silinmesi PlatformAdmin DB işlemi gerektirir.
 - Tam PostgreSQL suite'i yeniden çalıştırılmadı (A0 zaman aşımı açığı sürüyor).
 
 **Faz 2A kararı: READY (kabul koşullarıyla).** Faz 2A kabul senaryolarının tümü (üst hız sınırı, paralel tenant toplamı, tenant bağımsızlığı, job precedence, limitsiz regresyon, cancel/retry/restart/lease kaybı, SFTP + relay, checksum/boyut değişmezliği) deterministik testle ve gerçek akışlarla kanıtlandı; NOT RUN kalemleri (B10–B12) kabul kriteri değil, risk olarak kayıtlıdır.

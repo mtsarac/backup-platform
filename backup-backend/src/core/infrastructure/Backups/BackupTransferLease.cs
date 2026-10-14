@@ -59,8 +59,6 @@ public sealed class BackupTransferLeaseService(DbContextOptions<PlatformDbContex
     private async Task<bool> TryAcquireAsync(long lockId, Guid owner, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(dbOptions);
-        // Rows of long-dead holders are not worth keeping; the sweep rides on acquisition because that is when the table is touched anyway.
-        await context.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM backup_transfer_leases WHERE \"ExpiresAt\" < clock_timestamp() - interval '1 hour'", cancellationToken).ConfigureAwait(false);
         return await BackupTransferLeases.TryTakeAsync(context, lockId, owner, _timing.Ttl, cancellationToken).ConfigureAwait(false);
     }
 
@@ -169,6 +167,8 @@ internal static class BackupTransferLeases
     public static async Task<bool> TryTakeAsync(PlatformDbContext context, long lockId, Guid owner, TimeSpan ttl, CancellationToken cancellationToken)
     {
         var seconds = ttl.TotalSeconds;
+        // Rows of long-dead holders and of past retention claims are not worth keeping; the sweep rides on every take because that is when the table is touched anyway.
+        await context.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM backup_transfer_leases WHERE \"ExpiresAt\" < clock_timestamp() - interval '1 hour'", cancellationToken).ConfigureAwait(false);
         return await context.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO backup_transfer_leases ("LockId", "OwnerId", "ExpiresAt")
             VALUES ({lockId}, {owner}, clock_timestamp() + make_interval(secs => {seconds}))

@@ -353,26 +353,19 @@ public sealed class MultiDestinationExecutionIntegrationTests(PostgreSqlFixture 
         var expired = claim.Attempt.LeaseExpiresAt!.Value.AddSeconds(1);
         await World.RunStore().ExpireStaleAsync(expired, default);
         Assert.Equal(BackupStatus.AgentLost, (await ReloadAsync(multi, started.Id)).Attempts.Single(attempt => attempt.Id == claim.Attempt.Id).Status);
-        await using var writer = new NpgsqlConnection(fixture.ConnectionString);
-        await writer.OpenAsync();
         var finalKey = Key("sftp", claim);
         var slash = finalKey.LastIndexOf('/');
         var partialKey = finalKey[..(slash + 1)] + "." + finalKey[(slash + 1)..] + ".partial";
         var lockId = BackupPlatform.Infrastructure.Backups.BackupTransferLock.Id(multi.Sftp.Id, partialKey);
-        await using (var acquire = new NpgsqlCommand("SELECT pg_advisory_lock(@id)", writer))
-        {
-            acquire.Parameters.AddWithValue("id", lockId);
-            await acquire.ExecuteNonQueryAsync();
-        }
+        // A remote writer of the partial object still holds a live transfer lease on it.
+        await using (var writer = fixture.CreatePlatformContext())
+            await writer.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO backup_transfer_leases (\"LockId\",\"OwnerId\",\"ExpiresAt\") VALUES ({lockId}, {Guid.NewGuid()}, clock_timestamp() + interval '5 minutes')");
         var restarted = new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRetentionStore(World.Options());
         var first = (await restarted.ClaimDueDeletionsAsync("restarted", expired, TimeSpan.FromMinutes(1), 100, default))
             .Where(deletion => deletion.TenantId == multi.Agent.TenantId).ToArray();
         Assert.Equal("google-drive", Assert.Single(first).StorageProvider);
-        await using (var release = new NpgsqlCommand("SELECT pg_advisory_unlock(@id)", writer))
-        {
-            release.Parameters.AddWithValue("id", lockId);
-            await release.ExecuteNonQueryAsync();
-        }
+        await using (var release = fixture.CreatePlatformContext())
+            await release.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM backup_transfer_leases WHERE \"LockId\" = {lockId}");
         var second = (await restarted.ClaimDueDeletionsAsync("restarted", expired, TimeSpan.FromMinutes(1), 100, default))
             .Where(deletion => deletion.TenantId == multi.Agent.TenantId).ToArray();
         Assert.Equal("sftp", Assert.Single(second).StorageProvider);
