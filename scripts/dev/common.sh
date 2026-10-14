@@ -28,9 +28,11 @@ dev_prepare_state() {
     fi
     # shellcheck disable=SC1091
     source "$BP_DEV_HOME/secrets.env"
-    if [[ ! -f $BP_DEV_HOME/cert.pfx ]]; then
+    [[ -z ${BP_DEV_PUBLIC_HOST:-} || $BP_DEV_PUBLIC_HOST =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || fail 'BP_DEV_PUBLIC_HOST must be an IPv4 address.'
+    # BP_DEV_PUBLIC_HOST (optional IPv4, e.g. the libvirt host 192.168.122.1) makes the API reachable from a VM: it joins the certificate SAN and the TLS listener.
+    if [[ ! -f $BP_DEV_HOME/cert.pfx ]] || { [[ -n ${BP_DEV_PUBLIC_HOST:-} ]] && ! openssl x509 -in "$BP_DEV_HOME/cert.pem" -noout -ext subjectAltName | grep -q "IP Address:$BP_DEV_PUBLIC_HOST"; }; then
         openssl req -x509 -newkey rsa:2048 -nodes -keyout "$BP_DEV_HOME/key.pem" -out "$BP_DEV_HOME/cert.pem" -days 800 \
-            -subj '/CN=Backup Platform local development' -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1' \
+            -subj '/CN=Backup Platform local development' -addext "subjectAltName=DNS:localhost,IP:127.0.0.1${BP_DEV_PUBLIC_HOST:+,IP:$BP_DEV_PUBLIC_HOST}" \
             -addext 'basicConstraints=critical,CA:TRUE' -addext 'keyUsage=critical,digitalSignature,keyEncipherment,keyCertSign' >/dev/null 2>&1
         openssl pkcs12 -export -inkey "$BP_DEV_HOME/key.pem" -in "$BP_DEV_HOME/cert.pem" -out "$BP_DEV_HOME/cert.pfx" -passout "pass:$BP_DEV_CERT_PASSWORD" >/dev/null 2>&1
         chmod 600 "$BP_DEV_HOME/key.pem" "$BP_DEV_HOME/cert.pfx"

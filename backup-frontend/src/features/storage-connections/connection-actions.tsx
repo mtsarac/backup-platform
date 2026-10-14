@@ -87,7 +87,7 @@ export function ConnectionActions({ connection, descriptor, ops }: { connection:
       pending={ops.remove.isPending} error={ops.remove.error ? connectionErrorMessage(ops.remove.error) : undefined}
       onConfirm={() => ops.remove.mutate(connection, { onSuccess: close })} />
     <ConfirmDialog open={dialog === 'disconnectGoogle'} onClose={close} title={`“${connection.name}” Google bağlantısı kesilsin mi?`} confirmLabel="Bağlantıyı kes"
-      description="Kayıtlı Google erişim izni iptal edilir. Yeniden yetkilendirilene kadar bu hedefe erişim gerektiren işlemler başarısız olabilir."
+      description="Kayıtlı Google erişim izni iptal edilir. Aynı Google hesabını ve uygulamayı kullanan diğer bağlantıların da erişimi iptal olabilir; bunlar yeniden yetkilendirilmelidir. Yeniden yetkilendirilene kadar bu hedefe erişim gerektiren işlemler başarısız olabilir."
       pending={disconnectGoogle.isPending} error={disconnectGoogle.error ? connectionErrorMessage(disconnectGoogle.error) : undefined}
       onConfirm={() => disconnectGoogle.mutate({ tenantId: connection.tenantId, connectionId: connection.id }, { onSuccess: close })} />
   </div>

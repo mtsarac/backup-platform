@@ -199,6 +199,25 @@ AgentId after restart. Assign the smoke user an explicit tenant Admin membership
 
 These are acceptance helpers, not a package downloader, production installer wrapper or systemd installer.
 
+### A1 Windows lifecycle acceptance
+
+On top of a running `scripts/frontend/run-download-smoke.sh` stack (its owned Windows service, tenant and state file), `scripts/windows/run-a1-acceptance.sh SERVER CERTIFICATE STATE_FILE WINDOWS_ROOT [--only SCENARIO]`
+creates isolated `bp_a1_win_*` databases on the VM's SQL Server and runs: service/DPAPI, heartbeat/capability sync, Full Backup with stored-file SHA-256, restore discovery, NewDatabase restore with content proof,
+cancellation of a running ~648 MB backup, service restart during a run and a real network cut (libvirt `domif-setlink` on the `win11` NIC, so it needs libvirt access; a Windows Firewall rule does not cut established connections).
+It prints one PASS/FAIL JSON line per scenario and drops only its own databases. Stop the stack with SIGTERM to the `run-download-smoke.sh --configured` process so it uninstalls the owned service.
+
+### Windows Agent on the persistent dev stack (A1)
+
+```bash
+export BP_DEV_PUBLIC_HOST=192.168.122.1                 # libvirt host IPv4: adds it to the dev certificate SAN and the TLS listener (opt-in; restart the dev API and Agent after the first use)
+scripts/dev/start.sh
+scripts/windows/dev-windows-agent.sh install            # publish win-x64, enroll 'dev-windows-agent' into the dev tenant, SQL reference sql_smoke, trusts the dev certificate on the VM
+scripts/windows/run-a1-acceptance-drive.sh              # Windows Agent -> Google Drive: backup, ReadBack, download, restore, service restart and cancel during upload, delete
+scripts/windows/dev-windows-agent.sh uninstall          # removes the owned service, identity, trusted certificate and files
+```
+
+Needs a connected Drive connection (`ACCEPTANCE_CONNECTION_NAME` selects one by name). Revoking one Google Drive connection invalidates every token of the same Google account and OAuth client, so disconnect only the last connection you intend to keep using.
+
 
 ## Browser smoke environment
 
@@ -328,8 +347,8 @@ scripts/dev/start.sh [--no-build] [--no-agent]   # idempotent: MSSQL container, 
 scripts/dev/status.sh
 scripts/dev/stop.sh                              # stops processes + bp-dev-mssql only; keeps every piece of data
 scripts/dev/agent.sh start|stop|status
-scripts/dev/mssql-test-db.sh create|verify DB|drop-restored DB
-scripts/dev/acceptance.py backup|download|restore|delete|all --provider local|google-drive
+scripts/dev/mssql-test-db.sh create|create-big|verify DB|drop-restored DB
+scripts/dev/acceptance.py backup|download|restore|delete|retry|all --provider local|google-drive   # ACCEPTANCE_CONNECTION_NAME selects a Drive connection by name
 ```
 
 - Frontend `http://localhost:5173` (Vite, `/api` proxied to `https://localhost:7179`); API `http://localhost:5252` (the Google OAuth callback) and `https://localhost:7179` (Agent).

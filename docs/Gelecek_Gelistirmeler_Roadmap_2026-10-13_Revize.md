@@ -39,7 +39,7 @@ Temel prensip:
 | MSSQL discovery ve Full Backup | Completed | Manuel/zamanlanmış Full; verify, checksum, staging, replica doğrulama. |
 | MSSQL Full Restore | Completed | API + Agent + Restore Wizard; yeni isim, cross-instance, explicit overwrite, retention pin. Differential/log chain/PITR yok. |
 | Scheduling, retry, cancellation, concurrency, lease | Completed | PostgreSQL authoritative kararlar, agent çalışma sahipliği ve recovery. |
-| Local/Central/Managed/SFTP/Google Drive storage | Completed (temel kapsam) | Central managed connection olarak kullanılır; gerçek Google Drive canlı API kabulü Acceptance Pending. |
+| Local/Central/Managed/SFTP/Google Drive storage | Completed (temel kapsam) | Central managed connection olarak kullanılır; canlı Google Drive kabulü A1'de geçti (Linux ve Windows Agent; 122 MB upload bug'ı düzeltildi), multi-destination canlı koşusu ve Windows Agent'tan SFTP `NOT RUN`. |
 | Multi-destination, replica health, repair ve quota | Completed (temel kapsam) | Canonical destinations, atomic repair quota, lease-fenced cleanup, durable quarantine. Tam 3-2-1 sınıf/lokasyon policy engine ayrı faz. |
 | Retention, soft delete, verified physical cleanup | Completed | Orphan/partial cleanup ve korumalı replica/restore pin akışları. |
 | Backup Browser/Download, Storage/Quota UI | Completed | Owner/Admin download, doğrulama, tenant ve PlatformAdmin yönetimi. |
@@ -54,7 +54,7 @@ Temel prensip:
 
 **Planlı:** Faz 2B zaman profilleri ve 2C pause/resume/recovery; **erken öncelikli** minimum email/webhook bildirimleri, izole MSSQL restore-test otomasyonu ve backup artifact şifreleme; MSSQL Differential/Log/PITR; File/Folder Backup ve File Restore; Windows VSS; Linux systemd installer; Docker runtime/discovery; PostgreSQL backup; S3/SMB/FTPS; provider kapasite izleme; tam 3-2-1 ve ileri audit. Ayrıntılı **teslim sırası** Bölüm 35'tedir; faz numarası öncelik demek değildir.
 
-**Kabul bekleyen ortamlar:** Gerçek Google Drive OAuth + API ve Windows Agent service-account/MSSQL end-to-end kabulü. 2026-10-14'te açık Win11 VM'de runtime-only DPAPI probe smoke geçti (cross-process round trip, pending credential persistence, plaintext absence, corruption refusal, delete); bu dar kabul, tam Windows suite'i veya MSSQL backup/restore kabulü değildir. VM'de .NET 10.0.12 ve SQL Server çalışıyor; SDK ve kurulu Agent service yok.
+**Kabul durumu:** Gerçek Google Drive OAuth/API ve Windows Agent/MSSQL kabulü 2026-10-14'te A1 ile çalıştırıldı (Bölüm 1B, senaryo matrisi); kapsam dışı kalanlar orada `NOT RUN` olarak listelidir. 2026-10-14'te ayrıca açık Win11 VM'de runtime-only DPAPI probe smoke geçmişti. VM'de .NET 10.0.12 ve SQL Server çalışıyor; SDK yok. İzole A1 smoke Agent'ı kaldırıldı; dev tenant'a bağlı `dev-windows-agent` bilerek kurulu bırakıldı (`scripts/windows/dev-windows-agent.sh uninstall`).
 
 **Belge kullanımı:** Aşağıdaki fazlardaki “yapılacaklar” maddeleri tarihsel gereksinimleri de içerir. Bir fazın kodda tamamlanması maddelerin silinmesi anlamına gelmez; durum notları uygulanan kapsamı belirtir. **Teknik iş kimliği `Faz 1–30`, managed-service dilimi `M0–M8`, yatay MVP kapanışı `A0`** şeklindedir. `# 3. Faz 1` biçimindeki başlıklarda baştaki sayı **belge bölümü**, ikinci sayı **faz kimliğidir**. Mevcut referansların kırılmaması için başlıklar yeniden numaralandırılmaz. Bölüm 35 tek aktif öncelik listesidir.
 
@@ -104,6 +104,53 @@ Mevcut append-only `AuditEvent` altyapısı genişletildi; platform, membership,
 **Açık doğrulama açığı (NOT VERIFIED):** Tam PostgreSQL suite'i (1.580 test; yerel/CI filtresi MSSQL ve `BackupPipelineSmoke` hariç) **30 dakikalık zaman aşımına ulaştı ve hiç tamamlanmadı**; tamamı için PASS iddiası yoktur ve final entegrasyonda yeniden çalıştırılmadı. Kapsam yerine kanıt dilimleriyle doğrulandı: unit, architecture, Fast Agent PASS; final entegrasyonda A0 + orphan ledger + identity/agent/restore/retention/sweeper + GoogleDrive + StorageConnection + fixture isolation odaklı PostgreSQL seçimi **165/165 PASS**; idempotent migration scripti boş veritabanına uygulandı, son migration'ın `Down` → yeniden `Up` turu ve pending-model kontrolü PASS. Final incelemede `DurableOrphanCleanupLedger.Down` içinde audit `ActorKind` check'ini `(1, 2, 3)`'e daraltan artık satırlar bulundu ve kaldırıldı (önceki migration `Down` bilinçli olarak genişletilmiş check'i korur; 4/5 değerli append-only kayıt varken rollback kırılırdı). Canlı Google Drive OAuth/API ve Windows MSSQL end-to-end kabulü A1 sınırıdır. **A0 / A0.1 sonrası Faz 2A otomatik başlatılmadı.**
 
 **Ayrı takip işi — PostgreSQL suite süresi (ölçülmedi, ürün özelliği değildir):** Süre nedeni henüz profillenmedi; aşağıdakiler doğrulanmamış hipotezlerdir ve ilk adım ölçümdür. (1) Önce `--logger trx` ile sınıf/test bazlı süre dağılımı çıkar. (2) `run-postgres-tests.sh` `xUnit.MaxParallelThreads=2` ile çalıştırır; tek paylaşımlı PostgreSQL üzerinde koleksiyon paralelliği ve konteyner I/O sınırı ölçülmeli. (3) ~98 sınıf kendi `PostgreSqlFixture` veritabanını `CREATE DATABASE … TEMPLATE` ile klonlar; sınıf sayısı × klon maliyeti ve template bağlantı beklemesi ölçülmeli. (4) Entegrasyon testlerinde 31 `Task.Delay`/`Thread.Sleep` kullanımı gerçek-zamanlı bekleme olarak incelenmeli (deterministik saat/orchestration). (5) Uzun testler için `--blame-hang-timeout` ile takılma ve gerçek yavaşlık ayrıştırılmalı. Kabul: test izolasyonu/kapsamı azaltılmadan, tam PostgreSQL suite'in CI zaman bütçesinde tamamlandığı ölçülü kanıt; sonuçlar `NOT RUN`/`PASS` olarak ayrı raporlanır.
+
+## A1 — Canlı Google Drive & Windows 11 acceptance (**Completed — 2026-10-14, çalışma dalı `test/a1-live-provider-acceptance`; kapsam dışı kalanlar `NOT RUN`**)
+
+Gerçek Google hesabı (yalnız `drive.file` scope; uygulamanın oluşturduğu `Backup Platform/<tenant>/…` klasörü) ve gerçek Windows 11 VM'de (libvirt `win11`, .NET runtime 10.0.12, SQL Server 17.0.1000.7 named instance, SDK yok; self-contained `win-x64` Agent publish) çalıştırıldı. SQL işlemleri yalnız `bp_a1_win_*` / `bp_google_drive_acceptance*` test veritabanlarında yapıldı; credential içerikleri çıktıya/log'a/Git'e yazılmadı. Mevcut araçlar yeniden kullanıldı: `scripts/dev/acceptance.py` (+ `retry` adımı), `scripts/frontend/run-download-smoke.sh` (gerçek Windows service enrollment + `master` backup + download), yeni `scripts/windows/run-a1-acceptance.sh` / `a1-windows-acceptance.py` (yaşam döngüsü senaryoları).
+
+| # | Senaryo | Sonuç | Kanıt / not |
+|---|---|---|---|
+| D1 | Taze OAuth (kullanıcı tarayıcıda, Librewolf dışı): bağlantı oluştur + izin | **PASS** | Yalnız `refreshToken` secret alanı kaydedildi, `reauthorizationRequired=false`, bağlantı testi `Succeeded` (canlı Drive API çağrısı). |
+| D2 | Token refresh | **PASS (dolaylı)** | 9 Ekim'de alınmış refresh token API yeniden başlatıldıktan sonra (access-token cache boş) başarıyla kullanıldı; yeni bağlantı da API restart sonrası yüklemeyi sürdürdü. Refresh'e özel log/telemetri yok. |
+| D3 | Upload + ReadBack doğrulama + SHA-256 (577.536 B) | **PASS** | Replica `Verified/ReadBack`, artifact checksum = replica checksum; eski ve yeni bağlantıda. |
+| D4 | 122 MB upload (>Kestrel varsayılan 28,6 MB limiti) | **FAIL → düzeltildi → PASS** | Bug 1 (aşağıda). Düzeltme sonrası yükleme, indirme SHA-256 eşleşmesi, silme PASS (eski + yeni bağlantı). |
+| D5 | Backend-authorized download + SHA-256/uzunluk | **PASS** | 577 KB ve 122 MB; lifecycle `Completed`, aktarılan bayt tam. |
+| D6 | Drive replica'sından restore (NewDatabase, precheck + içerik checksum eşitliği) | **PASS** | Yeni bağlantıdaki ilk koşu leftover `_restored` DB'ye çarptı: ürün `TargetDatabaseExists` ile doğru reddetti (araç eksikliği, düzeltildi); temiz koşuda kaynak = restore (`ONLINE 5 -1308801917`). |
+| D7 | Kesintili yükleme + otomatik retry | **PASS** | Yükleme sürerken API süreci öldürülüp yeniden başlatıldı: attempt 1 `Failed/StorageUnavailable`, orphan artifact `Deleted`, attempt 2 `AutomaticRetry` `Succeeded`, tek `Verified` replica, indirme SHA-256 eşleşti (eski ve yeni bağlantıda). Retry politikası tükenince manuel retry `retry_not_allowed/attempts_exhausted` döndü (tasarım gereği). |
+| D8 | Cleanup: delete → retention worker → absence | **PASS** | Artifact `Deleted`, replica doğrulanmış yokluk sonrası `Deleted`, kota geri indi. |
+| D9 | Disconnect / token revoke | **PASS** | `hasSecret=false`, `reauthorizationRequired=true`, sonraki bağlantı testi fail-closed (`secret_unavailable`). Google tarafında iptal de gözlendi: aynı hesaptaki diğer bağlantı da `authentication_failed` / `reauthorizationRequired=true` oldu (aşağıdaki gözlem). |
+| W1 | Windows Agent kurulum/enrollment + Windows Service | **PASS** | `NT SERVICE\BackupAgent`, `Auto`, `Running`; gerçek enrollment CLI + tek kullanımlık token. |
+| W2 | DPAPI | **PASS** | `agent-identity.bin` DPAPI blob başlığı (`01000000d08c9ddf`), service restart sonrası aynı AgentId ile kimlik doğrulama (çözme kanıtı); önceki A0 probe'u plaintext yokluğu/corruption'ı ayrıca kapsıyordu. |
+| W3 | Heartbeat + capability sync | **PASS** | `Online`, yeni heartbeat gözlendi; 14 capability (`mssql.backup.full`, `mssql.restore.*`, `backup.multi-destination`, `storage.download`, …), revizyon raporlandı. |
+| W4 | MSSQL discovery | **PASS** | `restore-discovery` `Succeeded`, `canDiscover/canRestore=true`. |
+| W5 | Gerçek Full Backup | **PASS** | İzole DB (508 KB) ve `master`; VM diskindeki dosyanın SHA-256'sı artifact checksum'ı ile eşit; staging'de artık dosya yok. |
+| W6 | Restore (NewDatabase) | **PASS** | Precheck + restore `Succeeded`; kaynak ve restore `ONLINE`, `CHECKSUM_AGG` eşit. |
+| W7 | İptal (çalışan ~648 MB backup) | **PASS** | Run `Cancelled`, artifact yok, staging/storage'a artık dosya kalmadı. |
+| W8 | Service restart + recovery (çalışan backup sırasında) | **PASS** | Kesilen run 2 attempt ile `Succeeded`; aynı AgentId `online`, takip eden backup başarılı, staging temiz. |
+| W9 | Ağ kesintisi (libvirt NIC `link down` ≥45 sn + `link up`) | **PASS** | Agent `offline` göründü, ağ dönünce `online`; kesilen run 2 attempt ile `Succeeded`; takip eden backup başarılı. Not: Windows Firewall outbound block kuralı kurulu bağlantıları kesmedi (agent online kaldı) — test tekniği, ürün hatası değil. |
+| W10 | Temizlik | **PASS** | Service, `BackupAgentSmoke-*` dizini, güvenilen test sertifikası ve firewall kuralı VM'den kaldırıldı; disposable container/DB'ler silindi. |
+| W11 | Windows Agent → Drive: Full Backup + ReadBack | **PASS** | Aynı dev tenant'a (`dev-windows-agent`, BackendRelayed, VM'deki SQL Server'dan) izole DB (508 KB): replica `Verified/ReadBack`, checksum eşit, staging temiz. |
+| W12 | Windows Agent → Drive: backend download | **PASS** | SHA-256 ve uzunluk artifact ile eşit. |
+| W13 | Drive replica'sından Windows Agent'ta restore (NewDatabase) | **PASS** | Precheck + restore `Succeeded`, `CHECKSUM_AGG` eşit. |
+| W14 | ~154 MB Drive upload sırasında Windows service restart | **PASS** | Attempt 1 `AgentLost` (artifact `Deleted`), attempt 2 `Succeeded/Available`; indirme SHA-256 eşit; staging temiz. |
+| W15 | Drive upload sırasında iptal | **PASS** | Run `Cancelled`, yarım artifact `Deleted`, staging temiz. |
+| W16 | Windows Agent → Drive silme/cleanup | **PASS** | İki artifact `Deleted`. |
+
+**Bulunan ve düzeltilen gerçek hatalar**
+
+1. **Backend-relayed upload ~28,6 MB'ın üzerinde reddediliyordu.** `PUT /api/agent/tasks/{attemptId}/storage/content` Kestrel'in varsayılan request body limitine takılıyor; Agent'ta `StorageException: The storage relay is unavailable` → tüm attempt'ler `StorageUnavailable` ile 2 sn içinde başarısız. Google Drive/SFTP (BackendRelayed) için büyük her artifact etkileniyordu; önceki smoke'lar yalnız <1 MB artifact kullanmıştı. Düzeltme: endpoint'e `DisableRequestSizeLimitAttribute` (indirme endpoint'iyle aynı desen; sınır bildirilen uzunluk + attempt rezervasyonu + provider sınırıdır). Regresyon: `StorageRelayHardeningTests.RelayedUploadsAreNotCappedAtKestrelsDefaultRequestBodyLimit` (düzeltme öncesi kırmızı, sonrası yeşil); 122 MB gerçek Drive yüklemesiyle canlı doğrulandı.
+2. **2026-10-13 akşamı yayımlanan NuGet advisory'leri (GHSA-334f-vvp4-7g6p, GHSA-846f-f764-76mx, GHSA-2fmv-rv2c-59x7) `-warnaserror` restore'u kırıyordu** (`Microsoft.AspNetCore.SignalR.Common` 10.0.12, `System.Security.Cryptography.Pkcs` 9.0.18; Agent publish/build NU1902/NU1903). Yeni bir Fast CI koşusu kırmızı olurdu. Düzeltme: `SignalR.Client` ve `Logging.Abstractions` 10.0.13, `Pkcs` için transitive pin 10.0.13 (`CentralPackageTransitivePinningEnabled`).
+
+**Araç düzeltmeleri (ürün kodu değil):** `acceptance.py` taze job'ın boyut geçmişi olmadığı için `quota_size_unknown` ile reddediliyordu (sert quota tasarımı doğru); artık belgelenmiş explicit unlimited override ile önyükler ve plan limitini `finally` ile geri yükler. `restore` adımı kendi önceki `_restored` kopyasını düşürür. `ACCEPTANCE_CONNECTION_NAME` bağlantıyı adla seçer.
+
+3. **Provider-bağımsız bağlantı testi mesajları SFTP'yi adlandırıyordu.** İptal edilmiş Drive token'ı için bağlantı testi `authentication_failed` döndürürken kullanıcıya "The SFTP credentials were rejected by the server." gösteriyordu (`Timeout`/`NetworkUnavailable` aynı sorunu taşıyordu). Mesajlar provider-nötr yapıldı; regresyon: `ConnectionTesterTests.SharedFailureMessagesDoNotNameOneProvider`.
+
+**Google tarafı iptal gözlemi (D9'u tamamlar):** Bir bağlantıyı disconnect etmek (token revoke) Google'da aynı hesap + OAuth client için verilen **tüm** token'ları geçersiz kıldı; aynı hesaptaki diğer Drive bağlantısı da kendiliğinden `reauthorizationRequired=true` / `authentication_failed` oldu (ürün Google tarafı iptali doğru tespit etti). Operasyonel sonuç: aynı Google hesabına bağlı birden fazla tenant bağlantısı birbirinin disconnect'inden etkilenir; kullanıcı yeniden OAuth yaptı.
+
+**Relay upload limit güvenlik incelemesi (PR öncesi):** Limit kalkınca üst sınırlar şunlardır: (1) `Content-Length` zorunlu ve pozitif; uzunluksuz (chunked) gövde provider'a ulaşmadan `400 invalid_request` (regresyon: `MalformedUploadsAreRejectedBeforeResolvingOrWritingStorage`); Kestrel gövdeyi bildirilen uzunlukla sınırlar. (2) Sonlu quota/rezervasyonda `claim.MaxArtifactBytes` aşan uzunluk gövde okunmadan `409 quota_exceeded` (`MultiDestinationRelayAuthorizationTests`). (3) Lease ve hedef kilit içinde yeniden doğrulanır; upload intent'i (orphan temizliği için) yazma öncesi kalıcılaşır ve kesilen attempt'in yarım artifact'ı canlı koşuda `Deleted` oldu. (4) Eşzamanlılık tenant başına 2, node başına en fazla 4 slot; Kestrel `MinRequestBodyDataRate` varsayılanı yerinde. (5) Drive: durable staging rezervasyonu + kapasite sınırı + `UploadTimeout` (1 sa); SFTP gövdeyi akıtır. **Kalan sınır:** `MaxArtifactBytes` yoksa (limitsiz plan/WarnOnly) üst sınır yalnız bildirilen uzunluk ve hedef kapasitesidir; kimliği doğrulanmış, lease sahibi agent bu durumda büyük gövde akıtabilir (Drive'da staging kapasitesi, SFTP'de uzak sunucu sınırlar). Agent credential'ı güvenilir ilke kabul edilir; ayrı bir mutlak üst sınır ürün kararıdır. **Drive disconnect UI uyarısı** mevcuttu ama paylaşılan Google grant'ını anmıyordu; onay diyaloğuna "aynı Google hesabını ve uygulamayı kullanan diğer bağlantıların da erişimi iptal olabilir" uyarısı eklendi (`google-drive.test.tsx`).
+
+**NOT RUN / kalan riskler (A1 sınırı):** Windows Agent'tan **SFTP** (BackendRelayed) hedefi (Drive geçti, W11–W16); `multi-destination-acceptance.sh` (Drive + SFTP + local bir arada); backend restart'ının çalışan Windows run'ı üzerindeki etkisi; Windows'ta domain/özel service account ve overwrite-restore; Drive kapasite/kota aşımı; Drive'da gerçek ağ kesintisi (yalnız backend restart ve Windows service restart enjekte edildi); yük/throughput (en büyük artifact 154 MB Drive, ~648 MB Windows local); tam PostgreSQL suite'i (yukarıdaki NOT VERIFIED açığı sürüyor). Kullanıcının Drive'ında boş `Backup Platform/<tenant>` klasörleri kalır (yalnız uygulamanın oluşturduğu içerik silindi); dev stack'te `bp_google_drive_acceptance*` fixture veritabanları durur. Dev Windows Agent (`dev-windows-agent`, `scripts/windows/dev-windows-agent.sh uninstall` ile kaldırılır) VM'de kurulu bırakıldı; dev Windows Agent'ın servis kayıt defterinde (yalnız SYSTEM/Administrators erişimli) test SQL kimliği ve LocalMachine\Root'ta dev sertifikası bulunur.
 
 ## Geliştirme hijyeni ve belge güvenliği
 
@@ -442,7 +489,7 @@ Artifact
 | Managed Storage | Completed (Central yapılandırması) | PlatformManaged | Ayrı teknik provider değil; Central storage connection'ının ownership/quota scope varyantı. |
 | SFTP | Completed (temel) | TenantManaged | Network policy, bağlantı testi, upload/readback/verify, cancellation/cleanup. |
 | SMB/NAS | Planned (Faz 18) | TenantManaged | Uygulama yok. |
-| Google Drive | Completed (temel); Acceptance Pending | TenantManaged | OAuth ve resumable upload kodu var; canlı Google Drive kabulü eksik. Provider kapasite izlemesi ayrı Faz 21. |
+| Google Drive | Completed (temel); canlı acceptance A1'de geçti | TenantManaged | OAuth ve resumable upload gerçek hesapla doğrulandı (Bölüm 1B). Provider kapasite izlemesi ayrı Faz 21. |
 | FTPS | Planned | TenantManaged | Plain FTP'ye tercih edilir. |
 | FTP | Planned (legacy) | TenantManaged | Güvenlik kısıtları aşağıda. |
 | S3-compatible | Planned (Faz 16) | PlatformManaged / TenantManaged | Uygulama yok. |
@@ -660,7 +707,7 @@ Hedef, AKINSOFT benzeri yedekleme ürünlerinin temel kullanıcı fonksiyonları
 |---|---|---|
 | Scheduled backup | Completed | MSSQL Full job'ları için. |
 | Detailed history/log | Completed (çekirdek) | Run/attempt, artifact/replica, Backup Browser ve kontrollü download var; ileri raporlama Future. |
-| Local / Central / SFTP / Google Drive storage | Completed (temel) | Google Drive canlı servis kabulü bekliyor. |
+| Local / Central / SFTP / Google Drive storage | Completed (temel) | Google Drive canlı kabulü A1'de geçti (Linux ve Windows Agent; Bölüm 1B); Windows Agent'tan SFTP `NOT RUN`. |
 | MSSQL Full Restore | Completed | API + Agent + UI; file restore ve chain/PITR ayrı faz. |
 | Compression | Partial | MSSQL native compression var; File/Folder artifact compression bekliyor. |
 | Multi-destination ve replica repair | Completed (temel) | Quarantine, atomic admission, doğrulanmış kopya sayısı; tam 3-2-1 policy ayrı faz. |
@@ -1284,7 +1331,7 @@ Windows ve Linux agent senaryoları ayrı test edilmelidir.
 
 # 21. Faz 19 — Google Drive / Cloud Drive Provider
 
-**Durum: Completed (Google Drive temel provider); Acceptance Pending.** Tenant-owned OAuth bağlantısı, güvenli token yönetimi, staging ve resumable upload implementasyonu mevcut. Canlı Google Drive API hesabıyla uçtan uca kabul henüz çalıştırılmadı; provider-reported kapasite izleme Faz 21'e kalır.
+**Durum: Completed (Google Drive temel provider); canlı acceptance A1'de geçti (2026-10-14).** Tenant-owned OAuth bağlantısı, güvenli token yönetimi, staging ve resumable upload gerçek hesapla, hem Linux hem Windows Agent'tan doğrulandı (Bölüm 1B; 122 MB upload bug'ı düzeltildi; Google tarafı token iptali tespit edildi). Drive kapasite/kota aşımı ve Drive'da gerçek ağ kesintisi `NOT RUN`; provider-reported kapasite izleme Faz 21'e kalır.
 
 ## Yapılacaklar
 
@@ -1648,7 +1695,7 @@ Aşağıda **öncelik sırası** verilir; eski `Faz` numaraları ve `M` dilimler
 | 7 | **Faz 2B/2C — Transfer profilleri ve recovery** | Profil/DST, pause/resume, provider gerçek capability ve durable checkpoint | Planned — ihtiyaçla öne alınabilir |
 | 8 | **Faz 15/16/17/18 — 3-2-1, S3, Object Lock, SMB/NAS** | Provider-specific safety, encryption/key policy, immutable retention, failure acceptance | Planned |
 | 9 | **Faz 4–7/13/21–23/25–30** | VSS/Linux installer/snapshot, Docker, PostgreSQL, monitoring/health/anomaly, updates, advanced security/reports | Future / ihtiyaç bazlı |
-| Ayrı | **A1 — Canlı provider & Windows acceptance** | Gerçek Drive OAuth/API ve Windows DPAPI/MSSQL VM `NOT RUN` kapanışı | Acceptance Pending; deployment değil |
+| Ayrı | **A1 — Canlı provider & Windows acceptance** | Gerçek Drive OAuth/API ve Windows DPAPI/MSSQL VM kapanışı; senaryo matrisi Bölüm 1B | **Completed — çalışma dalı, 2026-10-14** (`NOT RUN` kalemleri Bölüm 1B'de); deployment değil |
 | Ayrı | **O1 — Veri yaşam döngüsü / platform DR / uyumluluk / observability** | Test ortamları, saklama ve silme politikası, DB restore tatbikatı, metrics | Planned — çapraz |
 | Kapsam dışı | **M9 — Online billing / checkout / ödeme provider'ı** | Yüz yüze/doğrudan satış kararı | Not planned |
 

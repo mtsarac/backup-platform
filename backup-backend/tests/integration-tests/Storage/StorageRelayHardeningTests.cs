@@ -2,6 +2,9 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.AspNetCore.Http.Metadata;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using BackupPlatform.Agents;
@@ -14,8 +17,10 @@ namespace BackupPlatform.IntegrationTests.Storage;
 
 public sealed class StorageRelayHardeningTests(PostgreSqlFixture fixture) : IClassFixture<PostgreSqlFixture>
 {
-    [Fact]
-    public async Task NonHexChecksumIsRejectedBeforeResolvingOrWritingStorage()
+    [Theory]
+    [InlineData("zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz", false)]
+    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", true)]
+    public async Task MalformedUploadsAreRejectedBeforeResolvingOrWritingStorage(string checksum, bool chunked)
     {
         await using var scenario = await BackupApiScenario.CreateAsync(fixture);
         var connectionId = Guid.NewGuid();
@@ -48,8 +53,10 @@ public sealed class StorageRelayHardeningTests(PostgreSqlFixture fixture) : ICla
         request.Headers.Add(TaskStorageProtocol.LeaseHeader, claim.LeaseToken.ToString("D"));
         request.Headers.Add(TaskStorageProtocol.KeyHeader, key);
         request.Headers.Add(TaskStorageProtocol.DestinationHeader, connectionId.ToString("D"));
-        request.Headers.Add(TaskStorageProtocol.ChecksumHeader, new string('z', 64));
-        request.Content = new ByteArrayContent([1, 2, 3]);
+        request.Headers.Add(TaskStorageProtocol.ChecksumHeader, checksum);
+        // A declared length is the only bound on an upload once the request size limit is removed: a body without one must never reach the provider.
+        // (With a finite reservation the fence refuses it earlier as quota_exceeded; this run has none.)
+        request.Content = chunked ? new UnknownLengthContent([1, 2, 3]) : new ByteArrayContent([1, 2, 3]);
         request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
         using var response = await scenario.World.Anonymous.SendAsync(request);
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -128,5 +135,24 @@ public sealed class StorageRelayHardeningTests(PostgreSqlFixture fixture) : ICla
         using var response = await pending;
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Equal("lease_conflict", AgentWorld.ReadJson(response).GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task RelayedUploadsAreNotCappedAtKestrelsDefaultRequestBodyLimit()
+    {
+        // Kestrel rejects bodies above ~28.6 MB unless the endpoint opts out; the relay bounds uploads by the declared length and the attempt's reservation instead.
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture);
+        var upload = scenario.World.Factory.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>().Single(endpoint =>
+            endpoint.RoutePattern.RawText == "/api/agent/tasks/{attemptId:guid}/storage/content"
+            && endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Contains("PUT"));
+        var limit = upload.Metadata.GetMetadata<IRequestSizeLimitMetadata>();
+        Assert.NotNull(limit);
+        Assert.Null(limit.MaxRequestBodySize);
+    }
+    // A seekable StreamContent would let HttpClient send Content-Length; this one always goes out chunked.
+    private sealed class UnknownLengthContent(byte[] bytes) : HttpContent
+    {
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context) => stream.WriteAsync(bytes).AsTask();
+        protected override bool TryComputeLength(out long length) { length = 0; return false; }
     }
 }

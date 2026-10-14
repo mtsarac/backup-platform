@@ -32,7 +32,7 @@ MVP, ileride eklenecek PostgreSQL, Linux agent implementasyonu, gelişmiş resto
 
 **Ürün modeli:** Yüz yüze/doğrudan satış; PlatformAdmin tarafından elle plan/abonelik atama. **Online checkout, payment gateway, billing provider ve uygulama içi faturalama kapsam dışı**; mevcut `Plan`/`TenantSubscription`/quota teknik kullanım için korunur.
 
-**Sıradaki işlemler:** A0 kritik audit kapanışı çalışma dalında tamamlandı; sıradaki yeni özellik roadmap **Faz 2A — Upload Bandwidth Limiting**. Bu iterasyonda Faz 2A'ya başlanmadı. Sonraki yüksek öncelikler N1 bildirim, R1 izole restore testi ve E1 artifact şifreleme. Production/staging dağıtımı bu geliştirme planının kapsamı değildir.
+**Sıradaki işlemler:** A0 kritik audit ve A1 canlı provider/Windows acceptance çalışma dalında tamamlandı; sıradaki yeni özellik roadmap **Faz 2A — Upload Bandwidth Limiting**. Bu iterasyonda Faz 2A'ya başlanmadı. Sonraki yüksek öncelikler N1 bildirim, R1 izole restore testi ve E1 artifact şifreleme. Production/staging dağıtımı bu geliştirme planının kapsamı değildir.
 
 ---
 
@@ -1066,7 +1066,7 @@ Bu belge ilk MVP'nin tarihsel planıdır; yukarıdaki teknik kararlar ve 35 madd
 
 - Bölüm 12'nin 1–32 ve 34–35 kriterlerinin büyük bölümüne karşılık gelen ürün kodu ve otomatik testler bulunmaktadır; her birinin **güncel branch üzerinde gerçek Windows Agent + MSSQL ile uçtan uca yürütüldüğü** ayrıca belgelenmelidir.
 - **Madde 33 (kritik audit olayları): A0 çalışma dalında kapatıldı.** Bölüm 10 ve roadmap Bölüm 1B minimum olay matrisi, atomik mutation/audit, gerçek actor, tenant isolation, replay ve sır saklama kanıtını ayrı ayrı kaydeder; full-suite veya gerçek-provider kabulü olarak yorumlanmaz.
-- Geçmiş raporlarda PostgreSQL integration ve SFTP container smoke başarıları var; Windows DPAPI/MSSQL VM kabulü NOT RUN idi. 2026-10-14'te yalnız dar DPAPI probe smoke geçti; **canlı Google Drive OAuth/API**, Windows service-account/cross-account suite'i ve **Windows MSSQL E2E** halen NOT RUN. Kodun varlığı bu riskleri tek başına kapatmaz.
+- Geçmiş raporlarda PostgreSQL integration ve SFTP container smoke başarıları vardı. **A1 (2026-10-14, çalışma dalı):** gerçek Google Drive (taze OAuth, refresh, 577 KB ve 122 MB upload/ReadBack/download/restore kaynağı/kesintili yükleme + otomatik retry/silme/revoke ve Google tarafı iptal tespiti) ve gerçek Windows 11 VM (service kurulum/enrollment, DPAPI, heartbeat/capability sync, MSSQL discovery, Full Backup, NewDatabase restore, iptal, service restart ve ağ kesintisi recovery; ayrıca aynı dev tenant'a bağlı Windows Agent'tan Drive'a backup/download/restore/restart/iptal/silme) senaryoları **PASS**; senaryo matrisi roadmap Bölüm 1B'dedir. A1 üç gerçek hata buldu ve düzeltti (backend-relayed upload ~28,6 MB sınırı; yeni NuGet advisory'leri nedeniyle kırılan `-warnaserror` restore; SFTP'yi adlandıran provider-bağımsız bağlantı testi mesajları). **NOT RUN:** Windows Agent'tan SFTP hedefi, multi-destination canlı koşusu, Windows domain/özel service account ve overwrite-restore, Drive'da gerçek ağ kesintisi, Drive kota aşımı, tam PostgreSQL suite'i (NOT VERIFIED). 35 kriterin her biri tek bir Windows E2E koşusunda ayrı ayrı imzalanmış değildir; kodun varlığı bu riskleri tek başına kapatmaz.
 - Bu belge bir **deployment readiness/onay belgesi değildir**; halen geliştirme dönemi devam etmektedir.
 
 ## 14.3 Henüz uygulanmayan ileri özellikler
@@ -1089,7 +1089,7 @@ FileSystem backup ve snapshot modüllerinin `.csproj` iskeletlerinin bulunması 
 
 ## 14.6 Sıradaki geliştirme ve kabul ilkesi
 
-**A0 kritik audit kapanışı çalışma dalında tamamlandı**; **sıradaki yeni ürün geliştirmesi Faz 2A (gerçek upload bandwidth limiting)**, bu iterasyonda başlamadı. Kullanıcı isteğiyle test kurulum maliyeti ve odaklı geliştirme runner'ları iyileştirildi; integrity/tenant/race test kapsamı azaltılmadı. Ardından roadmap Bölüm 35'te **N1** (email/webhook alarm), **R1** (izole MSSQL restore test otomasyonu), **E1** (artifact şifreleme) öne alınır.
+**A0 kritik audit ve A1 canlı provider/Windows acceptance kapanışı çalışma dalında tamamlandı**; **sıradaki yeni ürün geliştirmesi Faz 2A (gerçek upload bandwidth limiting)**, bu iterasyonda başlamadı. Kullanıcı isteğiyle test kurulum maliyeti ve odaklı geliştirme runner'ları iyileştirildi; integrity/tenant/race test kapsamı azaltılmadı. Ardından roadmap Bölüm 35'te **N1** (email/webhook alarm), **R1** (izole MSSQL restore test otomasyonu), **E1** (artifact şifreleme) öne alınır.
 
 Her teslimatta: ilgili servis/senaryo için unit+DB/provider/Windows test kapsamı, tenant/secret güvenliği, cancel/retry/restart/failure akışları, geriye uyumluluk ve `NOT RUN` kabul listesi raporlanmalıdır. Kod varlığı tek başına “gerçek ortam kabulü geçti” anlamına gelmez. Deployment ve release kararı verilmez.
 
