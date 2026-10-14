@@ -12,9 +12,10 @@ using BackupPlatform.Storage;
 using BackupPlatform.Infrastructure.Backups;
 using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.StorageProviders.Abstractions;
+using BackupPlatform.StorageProviders.Abstractions.Transfer;
+using BackupPlatform.Api.Backups;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
 
 namespace BackupPlatform.Api.Endpoints;
 
@@ -42,7 +43,7 @@ public static class AgentStorageTransferEndpoints
     }
 
     private static async Task<IResult> UploadAsync(Guid attemptId, HttpRequest request, ICurrentAgent agent,
-        IBackupRunStore runStore, IStorageConnectionStore connections, IBackupStorageResolver resolver, PlatformDbContext db, AgentTransferAdmission admission, UploadBandwidthService bandwidth, CancellationToken cancellationToken)
+        IBackupRunStore runStore, IStorageConnectionStore connections, IBackupStorageResolver resolver, BackupTransferLeaseService leases, AgentTransferAdmission admission, UploadBandwidthService bandwidth, CancellationToken cancellationToken)
     {
         var fence = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: true, cancellationToken);
         if (fence.Failure is { } failure) return failure;
@@ -54,7 +55,21 @@ public static class AgentStorageTransferEndpoints
         var provider = resolver.Resolve(agent.Identity!.TenantId, fence.ProviderType!, fence.ConnectionId!.Value.ToString("D"));
         if (provider is null) return Results.Conflict(new AgentApiError { Error = "storage_not_configured", Message = "The storage connection is unavailable." });
 
-        return await WithAdvisoryLockAsync(db, admission, request, agent.Identity!.TenantId, fence.ConnectionId.Value, fence.Key!, async token =>
+        // The relay paces the body it reads (the agent does not pace relayed uploads, so a limit does not depend on the agent's cooperation). The pacer is obtained
+        // BEFORE admission and the storage lock: waiting for a free slice of the tenant limit must not hold either.
+        UploadPacer pacer;
+        try
+        {
+            var leaseCommand = new BackupLeaseCommand(agent.Identity!.TenantId, agent.Identity.AgentId, attemptId, Guid.Parse(request.Headers[TaskStorageProtocol.LeaseHeader]!), DateTimeOffset.UtcNow);
+            pacer = await UploadPacer.BeginAsync(new RelayUploadPolicySource(bandwidth, leaseCommand, TimeProvider.System), TimeProvider.System, cancellationToken);
+        }
+        catch (UploadPolicyException exception)
+        {
+            return PolicyUnavailable(exception);
+        }
+        await using var pacing = pacer;
+
+        return await WithTransferLeaseAsync(leases, admission, request, agent.Identity!.TenantId, fence.ConnectionId.Value, fence.Key!, async token =>
         {
             var verified = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: true, token);
             if (verified.Failure is { } failedAgain) return failedAgain;
@@ -65,18 +80,23 @@ public static class AgentStorageTransferEndpoints
                 return Results.Conflict(new AgentApiError { Error = "lease_conflict", Message = "The upload intent could not be recorded safely." });
             try
             {
-                // The agent throttles what it sends (this relay never throttles again); a slow-by-policy body must not trip the provider's total-transfer limit.
-                var allowance = await bandwidth.DeadlineAllowanceAsync(agent.Identity!.TenantId, agent.Identity.AgentId, attemptId, request.ContentLength!.Value, token);
+                // A paced upload is slow on purpose: widen the provider's total-transfer deadline by the throttled time.
+                var allowance = UploadPolicyResponse.DeadlineAllowance(request.ContentLength!.Value, pacing.MinimumBytesPerSecond);
                 var options = new StoragePutOptions(StorageOverwritePolicy.Fail, new ContentChecksum(ChecksumAlgorithm.Sha256, expectedChecksum), request.ContentLength, allowance);
-                var meta = await provider.PutAsync(new StorageObjectKey(fence.Key!), request.Body, options, null, token);
+                var meta = await provider.PutAsync(new StorageObjectKey(fence.Key!), pacing.Wrap(request.Body), options, null, token);
                 return Results.Ok(new TaskStorageResponse
                 {
                     Exists = true, SizeBytes = meta.SizeBytes, Checksum = meta.Checksum?.Hex, LastModifiedUtc = meta.LastModifiedUtc
                 });
             }
             catch (StorageException ex) { return StorageError(ex); }
+            catch (UploadPolicyException ex) { return PolicyUnavailable(ex); }
         }, cancellationToken);
     }
+
+    private static IResult PolicyUnavailable(UploadPolicyException exception) => exception.Transient
+        ? Results.StatusCode(StatusCodes.Status503ServiceUnavailable)
+        : Results.Conflict(new AgentApiError { Error = "lease_conflict", Message = "The task lease no longer permits this upload." });
 
     private static async Task<IResult> ReadBackupAsync(Guid attemptId, HttpRequest request, ICurrentAgent agent,
         IBackupRunStore runStore, IStorageConnectionStore connections, IBackupStorageResolver resolver, CancellationToken cancellationToken)
@@ -113,13 +133,13 @@ public static class AgentStorageTransferEndpoints
     }
 
     private static async Task<IResult> VerifyBackupAsync(Guid attemptId, TaskStorageVerifyRequest body, HttpRequest request, ICurrentAgent agent,
-        IBackupRunStore runStore, IStorageConnectionStore connections, IBackupStorageResolver resolver, PlatformDbContext db, AgentTransferAdmission admission, CancellationToken cancellationToken)
+        IBackupRunStore runStore, IStorageConnectionStore connections, IBackupStorageResolver resolver, BackupTransferLeaseService leases, AgentTransferAdmission admission, CancellationToken cancellationToken)
     {
         var fence = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: false, cancellationToken);
         if (fence.Failure is { } failure) return failure;
         var provider = resolver.Resolve(agent.Identity!.TenantId, fence.ProviderType!, fence.ConnectionId!.Value.ToString("D"));
         if (provider is null) return Results.Conflict(new AgentApiError { Error = "storage_not_configured", Message = "Storage not configured." });
-        return await WithAdvisoryLockAsync(db, admission, request, agent.Identity!.TenantId, fence.ConnectionId.Value, fence.Key!, async token =>
+        return await WithTransferLeaseAsync(leases, admission, request, agent.Identity!.TenantId, fence.ConnectionId.Value, fence.Key!, async token =>
         {
             var verified = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: false, token);
             if (verified.Failure is { } failedAgain) return failedAgain;
@@ -141,13 +161,13 @@ public static class AgentStorageTransferEndpoints
     }
 
     private static async Task<IResult> DeleteBackupAsync(Guid attemptId, HttpRequest request, ICurrentAgent agent,
-        IBackupRunStore runStore, IStorageConnectionStore connections, IBackupStorageResolver resolver, PlatformDbContext db, AgentTransferAdmission admission, CancellationToken cancellationToken)
+        IBackupRunStore runStore, IStorageConnectionStore connections, IBackupStorageResolver resolver, BackupTransferLeaseService leases, AgentTransferAdmission admission, CancellationToken cancellationToken)
     {
         var fence = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: false, cancellationToken);
         if (fence.Failure is { } failure) return failure;
         var provider = resolver.Resolve(agent.Identity!.TenantId, fence.ProviderType!, fence.ConnectionId!.Value.ToString("D"));
         if (provider is null) return Results.Conflict(new AgentApiError { Error = "storage_not_configured", Message = "Storage not configured." });
-        return await WithAdvisoryLockAsync(db, admission, request, agent.Identity!.TenantId, fence.ConnectionId.Value, fence.Key!, async token =>
+        return await WithTransferLeaseAsync(leases, admission, request, agent.Identity!.TenantId, fence.ConnectionId.Value, fence.Key!, async token =>
         {
             var verified = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: false, token);
             if (verified.Failure is { } failedAgain) return failedAgain;
@@ -195,13 +215,13 @@ public static class AgentStorageTransferEndpoints
     }
 
     private static async Task<IResult> VerifyRestoreAsync(Guid attemptId, TaskStorageVerifyRequest body, HttpRequest request, ICurrentAgent agent,
-        IRestoreStore restoreStore, IDownloadStore downloadStore, IBackupStorageResolver resolver, PlatformDbContext db, AgentTransferAdmission admission, CancellationToken cancellationToken)
+        IRestoreStore restoreStore, IDownloadStore downloadStore, IBackupStorageResolver resolver, BackupTransferLeaseService leases, AgentTransferAdmission admission, CancellationToken cancellationToken)
     {
         var fence = await FenceRestoreAsync(attemptId, request, agent, restoreStore, downloadStore, cancellationToken);
         if (fence.Failure is { } failure) return failure;
         var provider = resolver.Resolve(agent.Identity!.TenantId, fence.ProviderType!, fence.ConnectionId!.Value.ToString("D"));
         if (provider is null) return Results.Conflict(new AgentApiError { Error = "storage_not_configured", Message = "Storage not configured." });
-        return await WithAdvisoryLockAsync(db, admission, request, agent.Identity!.TenantId, fence.ConnectionId.Value, fence.Key!, async token =>
+        return await WithTransferLeaseAsync(leases, admission, request, agent.Identity!.TenantId, fence.ConnectionId.Value, fence.Key!, async token =>
         {
             var verified = await FenceRestoreAsync(attemptId, request, agent, restoreStore, downloadStore, token);
             if (verified.Failure is { } failedAgain) return failedAgain;
@@ -293,7 +313,12 @@ public static class AgentStorageTransferEndpoints
             FailureKind = exception.Kind.ToString(), ObjectMayRemain = exception.ObjectMayRemain, RemainingObjectKey = exception.RemainingObjectKey?.Value
         });
 
-    private static async Task<IResult> WithAdvisoryLockAsync(PlatformDbContext db, AgentTransferAdmission admission,
+    /// <summary>
+    /// Runs one storage operation on one key under a short-lived DATABASE LEASE (not a pinned connection or session lock), inside the node's admission budget. The
+    /// operation's token is cancelled when the host stops, the request aborts, or the lease could not be renewed (another writer may own the key then): that last
+    /// case is answered as a lease conflict.
+    /// </summary>
+    private static async Task<IResult> WithTransferLeaseAsync(BackupTransferLeaseService leases, AgentTransferAdmission admission,
         HttpRequest request, TenantId tenant, Guid connectionId, string key, Func<CancellationToken, Task<IResult>> action, CancellationToken cancellationToken)
     {
         using var permit = admission.TryAcquire(tenant);
@@ -304,48 +329,15 @@ public static class AgentStorageTransferEndpoints
         }
 
         using var stopping = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, admission.Stopping);
-        var connection = (NpgsqlConnection)db.Database.GetDbConnection();
-        var lockId = BackupTransferLock.Id(connectionId, key);
+        await using var hold = await leases.AcquireAsync(connectionId, key, stopping.Token);
+        using var working = CancellationTokenSource.CreateLinkedTokenSource(stopping.Token, hold.Lost);
         try
         {
-            try
-            {
-                if (connection.State != System.Data.ConnectionState.Open) await connection.OpenAsync(stopping.Token);
-                await using var acquire = new NpgsqlCommand("SELECT pg_advisory_lock(@id);", connection);
-                acquire.Parameters.AddWithValue("id", lockId);
-                await acquire.ExecuteNonQueryAsync(stopping.Token);
-            }
-            catch
-            {
-                // Cancellation can race the server acquiring the lock: never pool a session with uncertain ownership.
-                NpgsqlConnection.ClearPool(connection);
-                throw;
-            }
-
-            try
-            {
-                return await action(stopping.Token);
-            }
-            finally
-            {
-                try
-                {
-                    await using var release = new NpgsqlCommand("SELECT pg_advisory_unlock(@id);", connection);
-                    release.Parameters.AddWithValue("id", lockId);
-                    if (!Equals(true, await release.ExecuteScalarAsync(CancellationToken.None)))
-                        throw new InvalidOperationException("The storage transfer advisory lock was not owned.");
-                }
-                catch
-                {
-                    // ClearPool also discards this checked-out session on close, even with No Reset On Close enabled.
-                    NpgsqlConnection.ClearPool(connection);
-                    throw;
-                }
-            }
+            return await action(working.Token);
         }
-        finally
+        catch (OperationCanceledException) when (hold.Lost.IsCancellationRequested && !stopping.IsCancellationRequested)
         {
-            await connection.CloseAsync();
+            return Results.Conflict(new AgentApiError { Error = "lease_conflict", Message = "The storage transfer lease was lost." });
         }
     }
 

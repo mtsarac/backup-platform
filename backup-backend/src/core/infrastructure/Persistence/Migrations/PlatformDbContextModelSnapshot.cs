@@ -2704,6 +2704,24 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BackupPlatform.Infrastructure.Backups.BackupTransferLease", b =>
+                {
+                    b.Property<long>("LockId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("LockId");
+
+                    b.HasIndex("ExpiresAt");
+
+                    b.ToTable("backup_transfer_leases", (string)null);
+                });
+
             modelBuilder.Entity("BackupPlatform.Infrastructure.Secrets.SecretCiphertextRecord", b =>
                 {
                     b.Property<string>("Name")

@@ -39,7 +39,7 @@ public sealed class UploadBandwidthServiceTests
     {
         _store.Limits = new AttemptUploadLimits(null, null, null);
 
-        var policy = await Service().PolicyAsync(Lease(), false, default);
+        var policy = await Service().PolicyAsync(Lease(), UploadSliceAction.Renew, default);
 
         Assert.Null(policy!.EffectiveBytesPerSecond);
         Assert.Null(policy.MinimumBytesPerSecond);
@@ -52,7 +52,7 @@ public sealed class UploadBandwidthServiceTests
     {
         _store.Limits = new AttemptUploadLimits(null, null, 1_000_000, TenantShare: null);
 
-        var policy = await Service().PolicyAsync(Lease(), false, default);
+        var policy = await Service().PolicyAsync(Lease(), UploadSliceAction.Renew, default);
 
         Assert.Equal(0, policy!.TenantShareBytesPerSecond);
         Assert.Equal(0, policy.EffectiveBytesPerSecond);
@@ -65,13 +65,13 @@ public sealed class UploadBandwidthServiceTests
     {
         // Job and agent limits apply whole; the tenant limit may be split across every upload the tenant may run at once (5 here).
         _store.Limits = new AttemptUploadLimits(Job: 900_000, Agent: 800_000, Tenant: 2_000_000, TenantShare: 1_000_000);
-        Assert.Equal(400_000, (await Service(5).PolicyAsync(Lease(), false, default))!.MinimumBytesPerSecond);
+        Assert.Equal(400_000, (await Service(5).PolicyAsync(Lease(), UploadSliceAction.Renew, default))!.MinimumBytesPerSecond);
 
         _store.Limits = new AttemptUploadLimits(Job: 300_000, Agent: null, Tenant: 2_000_000, TenantShare: 1_000_000);
-        Assert.Equal(300_000, (await Service(5).PolicyAsync(Lease(), false, default))!.MinimumBytesPerSecond);
+        Assert.Equal(300_000, (await Service(5).PolicyAsync(Lease(), UploadSliceAction.Renew, default))!.MinimumBytesPerSecond);
 
         _store.Limits = new AttemptUploadLimits(null, null, 16_000, 16_000);
-        Assert.Equal(UploadBandwidth.MinimumShareBytesPerSecond, (await Service(100).PolicyAsync(Lease(), false, default))!.MinimumBytesPerSecond);
+        Assert.Equal(UploadBandwidth.MinimumShareBytesPerSecond, (await Service(100).PolicyAsync(Lease(), UploadSliceAction.Renew, default))!.MinimumBytesPerSecond);
     }
 
     [Fact]
@@ -79,20 +79,7 @@ public sealed class UploadBandwidthServiceTests
     {
         _store.Limits = null;
 
-        Assert.Null(await Service().PolicyAsync(Lease(), false, default));
-    }
-
-    [Fact]
-    public async Task The_relay_allowance_is_size_over_the_minimum_rate_and_zero_when_unlimited()
-    {
-        _store.Limits = new AttemptUploadLimits(null, null, null);
-        Assert.Equal(TimeSpan.Zero, await Service().DeadlineAllowanceAsync(_tenant, _agent, Guid.NewGuid(), 1L << 40, default));
-
-        _store.Limits = new AttemptUploadLimits(1_000_000, null, null);
-        Assert.Equal(TimeSpan.FromSeconds(50), await Service().DeadlineAllowanceAsync(_tenant, _agent, Guid.NewGuid(), 50_000_000, default));
-
-        _store.Limits = null;
-        Assert.Equal(TimeSpan.Zero, await Service().DeadlineAllowanceAsync(_tenant, _agent, Guid.NewGuid(), 50_000_000, default));
+        Assert.Null(await Service().PolicyAsync(Lease(), UploadSliceAction.Renew, default));
     }
 
     private sealed class FakeStore : IUploadBandwidthStore
@@ -111,8 +98,6 @@ public sealed class UploadBandwidthServiceTests
             return Task.FromResult(true);
         }
 
-        public Task<AttemptUploadLimits?> GrantAsync(BackupLeaseCommand lease, bool release, TimeSpan grantTtl, CancellationToken cancellationToken) => Task.FromResult(Limits);
-
-        public Task<AttemptUploadLimits?> ReadAsync(TenantId tenantId, AgentId agentId, Guid attemptId, CancellationToken cancellationToken) => Task.FromResult(Limits);
+        public Task<AttemptUploadLimits?> GrantAsync(BackupLeaseCommand lease, UploadSliceAction action, TimeSpan grantTtl, CancellationToken cancellationToken) => Task.FromResult(Limits);
     }
 }

@@ -125,7 +125,7 @@ public sealed class StorageTransferAdmissionTests(PostgreSqlFixture fixture) : I
     }
 
     [Fact]
-    public async Task Retention_cannot_claim_the_upload_intent_until_the_writer_releases_its_session_lock()
+    public async Task Retention_cannot_claim_the_upload_intent_until_the_writer_releases_its_transfer_lease()
     {
         await using var world = await RelayWorld.CreateAsync(fixture, 5);
         var target = await world.TargetAsync();
@@ -190,7 +190,7 @@ public sealed class StorageTransferAdmissionTests(PostgreSqlFixture fixture) : I
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task Request_cancellation_or_host_shutdown_returns_the_lock_connection(bool shutdown)
+    public async Task Request_cancellation_or_host_shutdown_releases_the_transfer_lease(bool shutdown)
     {
         await using var world = await RelayWorld.CreateAsync(fixture, 5);
         var target = await world.TargetAsync();
@@ -203,7 +203,7 @@ public sealed class StorageTransferAdmissionTests(PostgreSqlFixture fixture) : I
             if (shutdown) world.World.Factory.Services.GetRequiredService<IHostApplicationLifetime>().StopApplication();
             else cancellation.Cancel();
             await gate.Exited.Task.WaitAsync(Deadline);
-            await world.WaitForNoLocksAsync();
+            await world.WaitForNoLeasesAsync(target.ConnectionId, target.Key);
             try
             {
                 using var response = await pending.WaitAsync(Deadline);
@@ -226,60 +226,79 @@ public sealed class StorageTransferAdmissionTests(PostgreSqlFixture fixture) : I
     }
 
     [Fact]
-    public async Task Cancellation_while_waiting_for_a_lock_does_not_pool_an_uncertain_session()
+    public async Task Cancellation_while_waiting_for_another_writers_lease_leaves_that_lease_alone()
     {
         await using var world = await RelayWorld.CreateAsync(fixture, 5);
         var target = await world.TargetAsync();
-        await using var blocker = new NpgsqlConnection(fixture.ConnectionString);
-        await blocker.OpenAsync();
-        await using var acquire = new NpgsqlCommand("SELECT pg_advisory_lock(@id)", blocker);
-        acquire.Parameters.AddWithValue("id", BackupTransferLock.Id(target.ConnectionId, target.Key));
-        await acquire.ExecuteNonQueryAsync();
+        await world.HoldLeaseAsync(target.ConnectionId, target.Key, TimeSpan.FromMinutes(5));
         using var cancellation = new CancellationTokenSource();
         var pending = world.SendAsync(target, "verify", cancellation.Token);
         try
         {
-            await world.WaitForLockAsync(granted: false);
+            await Task.Delay(700);
+            Assert.False(pending.IsCompleted, "a verification waits for the key's live lease");
             cancellation.Cancel();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending.WaitAsync(Deadline));
-            await world.WaitForNoLocksAsync();
             Assert.Equal(0, world.Provider.Calls);
+            Assert.Equal(1, await world.LeaseCountAsync(target.ConnectionId, target.Key));
             await world.AssertPoolReturnedAsync();
         }
         finally
         {
             cancellation.Cancel();
-            await using var release = new NpgsqlCommand("SELECT pg_advisory_unlock(@id)", blocker);
-            release.Parameters.AddWithValue("id", BackupTransferLock.Id(target.ConnectionId, target.Key));
-            await release.ExecuteNonQueryAsync().WaitAsync(Deadline);
+            await world.DeleteLeaseAsync(target.ConnectionId, target.Key);
         }
         using var next = await world.SendAsync(target, "verify").WaitAsync(Deadline);
         Assert.Equal(HttpStatusCode.OK, next.StatusCode);
+        await world.WaitForNoLeasesAsync(target.ConnectionId, target.Key);
     }
 
     [Fact]
-    public async Task Unlock_failure_is_reported_and_the_broken_session_is_not_reused()
+    public async Task No_database_connection_or_lock_is_held_while_a_transfer_runs()
     {
         await using var world = await RelayWorld.CreateAsync(fixture, 5);
         var target = await world.TargetAsync();
         var gate = world.Provider.Block(target.Key);
-        var pending = world.SendAsync(target, "verify");
+        var pending = world.SendAsync(target, "upload");
         try
         {
             await gate.Entered.Task.WaitAsync(Deadline);
-            await using var observer = new NpgsqlConnection(fixture.ConnectionString);
-            await observer.OpenAsync();
-            await using var terminate = new NpgsqlCommand("SELECT pg_terminate_backend(a.pid) FROM pg_stat_activity a WHERE a.application_name=@name AND EXISTS (SELECT 1 FROM pg_locks l WHERE l.pid=a.pid AND l.locktype='advisory' AND l.granted)", observer);
-            terminate.Parameters.AddWithValue("name", world.ApplicationName);
-            Assert.Equal(true, await terminate.ExecuteScalarAsync().WaitAsync(Deadline));
+            // The provider call is in flight (it may take hours when paced): the lease row is the only thing holding the key.
+            Assert.Equal(1, await world.LeaseCountAsync(target.ConnectionId, target.Key));
+            Assert.Equal(0, await world.ActiveSessionsAsync());
+            await world.AssertPoolReturnedAsync();
         }
         finally
         {
             gate.Release.TrySetResult();
         }
-        await Assert.ThrowsAnyAsync<NpgsqlException>(() => pending.WaitAsync(Deadline));
-        using var next = await world.SendAsync(AnotherKey(target), "verify").WaitAsync(Deadline);
-        Assert.Equal(HttpStatusCode.OK, next.StatusCode);
+        using var response = await pending.WaitAsync(Deadline);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await world.WaitForNoLeasesAsync(target.ConnectionId, target.Key);
+    }
+
+    [Theory]
+    [InlineData("upload")]
+    [InlineData("verify")]
+    public async Task A_holder_whose_lease_was_taken_over_stops_its_provider_call_and_answers_a_lease_conflict(string operation)
+    {
+        await using var world = await RelayWorld.CreateAsync(fixture, 5, new BackupTransferLeaseOptions(TimeSpan.FromSeconds(6), TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)));
+        var target = await world.TargetAsync();
+        var gate = world.Provider.Block(target.Key);
+        var pending = world.SendAsync(target, operation);
+        try
+        {
+            await gate.Entered.Task.WaitAsync(Deadline);
+            await world.TakeOverLeaseAsync(target.ConnectionId, target.Key);
+            await gate.Exited.Task.WaitAsync(Deadline);
+        }
+        finally
+        {
+            gate.Release.TrySetResult();
+        }
+        using var response = await pending.WaitAsync(Deadline);
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("lease_conflict", AgentWorld.ReadJson(response).GetProperty("error").GetString());
         await world.AssertPoolReturnedAsync();
     }
 
@@ -320,23 +339,18 @@ public sealed class StorageTransferAdmissionTests(PostgreSqlFixture fixture) : I
             using var response = await verifying.WaitAsync(Deadline);
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         }
-        await using var blocker = new NpgsqlConnection(fixture.ConnectionString);
-        await blocker.OpenAsync();
-        await using var acquire = new NpgsqlCommand("SELECT pg_advisory_lock(@id)", blocker);
-        acquire.Parameters.AddWithValue("id", BackupTransferLock.Id(source.ConnectionId, source.Key));
-        await acquire.ExecuteNonQueryAsync();
+        await world.HoldLeaseAsync(source.ConnectionId, source.Key, TimeSpan.FromMinutes(5));
         var waiting = world.SendRestoreAsync(source, restore);
         try
         {
-            await world.WaitForLockAsync(granted: false);
+            await Task.Delay(700);
+            Assert.False(waiting.IsCompleted);
             await using var db = fixture.CreatePlatformContext();
             await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE restore_attempts SET \"LeaseToken\"={Guid.NewGuid()} WHERE \"Id\"={restore.AttemptId}");
         }
         finally
         {
-            await using var release = new NpgsqlCommand("SELECT pg_advisory_unlock(@id)", blocker);
-            release.Parameters.AddWithValue("id", BackupTransferLock.Id(source.ConnectionId, source.Key));
-            await release.ExecuteNonQueryAsync().WaitAsync(Deadline);
+            await world.DeleteLeaseAsync(source.ConnectionId, source.Key);
         }
         using var fenced = await waiting.WaitAsync(Deadline);
         Assert.Equal(HttpStatusCode.Conflict, fenced.StatusCode);
@@ -356,7 +370,7 @@ public sealed class StorageTransferAdmissionTests(PostgreSqlFixture fixture) : I
         public string ApplicationName { get; } = applicationName;
         public BlockingProvider Provider { get; } = provider;
 
-        public static async Task<RelayWorld> CreateAsync(PostgreSqlFixture fixture, int poolSize)
+        public static async Task<RelayWorld> CreateAsync(PostgreSqlFixture fixture, int poolSize, BackupTransferLeaseOptions? leaseTiming = null)
         {
             var name = $"relay-admission-{Guid.NewGuid():N}";
             var connectionString = new NpgsqlConnectionStringBuilder(fixture.ConnectionString)
@@ -372,6 +386,11 @@ public sealed class StorageTransferAdmissionTests(PostgreSqlFixture fixture) : I
                 services.AddSingleton(options);
                 services.RemoveAll<IBackupStorageResolver>();
                 services.AddSingleton<IBackupStorageResolver>(new RelayResolver(provider));
+                if (leaseTiming is not null)
+                {
+                    services.RemoveAll<BackupTransferLeaseService>();
+                    services.AddSingleton(new BackupTransferLeaseService(options, leaseTiming));
+                }
             });
             return new RelayWorld(fixture, world, options, connectionString, name, provider);
         }
@@ -496,8 +515,52 @@ public sealed class StorageTransferAdmissionTests(PostgreSqlFixture fixture) : I
             return await World.Anonymous.SendAsync(request);
         }
 
-        public Task WaitForLockAsync(bool granted) => WaitForLocksAsync(exists: true, granted);
-        public Task WaitForNoLocksAsync() => WaitForLocksAsync(exists: false, granted: null);
+        public async Task WaitForNoLeasesAsync(Guid connectionId, string key)
+        {
+            using var deadline = new CancellationTokenSource(Deadline);
+            while (await LeaseCountAsync(connectionId, key) != 0) await Task.Delay(50, deadline.Token);
+        }
+
+        /// <summary>Leases on this key (the database is shared with other tests, so the whole table says nothing).</summary>
+        public async Task<long> LeaseCountAsync(Guid connectionId, string key)
+        {
+            await using var db = fixture.CreatePlatformContext();
+            var lockId = BackupTransferLock.Id(connectionId, key);
+            return await db.Database.SqlQuery<long>($"SELECT count(*) AS \"Value\" FROM backup_transfer_leases WHERE \"LockId\" = {lockId}").SingleAsync();
+        }
+
+        /// <summary>A live lease of some other writer on the key.</summary>
+        public async Task HoldLeaseAsync(Guid connectionId, string key, TimeSpan ttl)
+        {
+            await using var db = fixture.CreatePlatformContext();
+            var lockId = BackupTransferLock.Id(connectionId, key);
+            var seconds = ttl.TotalSeconds;
+            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO backup_transfer_leases (\"LockId\",\"OwnerId\",\"ExpiresAt\") VALUES ({lockId}, {Guid.NewGuid()}, clock_timestamp() + make_interval(secs => {seconds}))");
+        }
+
+        public async Task TakeOverLeaseAsync(Guid connectionId, string key)
+        {
+            await using var db = fixture.CreatePlatformContext();
+            var lockId = BackupTransferLock.Id(connectionId, key);
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE backup_transfer_leases SET \"OwnerId\" = {Guid.NewGuid()} WHERE \"LockId\" = {lockId}");
+        }
+
+        public async Task DeleteLeaseAsync(Guid connectionId, string key)
+        {
+            await using var db = fixture.CreatePlatformContext();
+            var lockId = BackupTransferLock.Id(connectionId, key);
+            await db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM backup_transfer_leases WHERE \"LockId\" = {lockId}");
+        }
+
+        /// <summary>Sessions of the backend (by application name) that are running a statement or sitting in a transaction right now.</summary>
+        public async Task<long> ActiveSessionsAsync()
+        {
+            await using var connection = new NpgsqlConnection(fixture.ConnectionString);
+            await connection.OpenAsync();
+            await using var query = new NpgsqlCommand("SELECT count(*) FROM pg_stat_activity WHERE application_name=@name AND state <> 'idle'", connection);
+            query.Parameters.AddWithValue("name", ApplicationName);
+            return (long)(await query.ExecuteScalarAsync())!;
+        }
 
         public async Task WaitForAdmissionAsync(TenantId tenant)
         {
@@ -510,17 +573,6 @@ public sealed class StorageTransferAdmissionTests(PostgreSqlFixture fixture) : I
                 if (permit is { IsAcquired: true }) return;
                 await Task.Yield();
             }
-        }
-
-        private async Task WaitForLocksAsync(bool exists, bool? granted)
-        {
-            using var deadline = new CancellationTokenSource(Deadline);
-            await using var connection = new NpgsqlConnection(fixture.ConnectionString);
-            await connection.OpenAsync(deadline.Token);
-            await using var query = new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM pg_locks l JOIN pg_stat_activity a ON a.pid=l.pid WHERE a.application_name=@name AND l.locktype='advisory' AND (@granted IS NULL OR l.granted=@granted))", connection);
-            query.Parameters.AddWithValue("name", ApplicationName);
-            query.Parameters.AddWithValue("granted", NpgsqlTypes.NpgsqlDbType.Boolean, granted is { } value ? (object)value : DBNull.Value);
-            while (!Equals(exists, await query.ExecuteScalarAsync(deadline.Token))) { }
         }
 
         public async Task AssertPoolReturnedAsync()

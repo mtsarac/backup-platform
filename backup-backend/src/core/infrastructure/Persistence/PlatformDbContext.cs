@@ -14,6 +14,7 @@ using BackupPlatform.Domain.Storage;
 using BackupPlatform.Domain.Support;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Identity;
+using BackupPlatform.Infrastructure.Backups;
 using BackupPlatform.Infrastructure.ManagedService;
 using BackupPlatform.ManagedService.Plans;
 using BackupPlatform.ManagedService.Quota;
@@ -94,6 +95,7 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<BackupStorageCleanup> BackupStorageCleanups => Set<BackupStorageCleanup>();
     public DbSet<UploadBandwidthLimit> UploadBandwidthLimits => Set<UploadBandwidthLimit>();
     public DbSet<UploadBandwidthGrant> UploadBandwidthGrants => Set<UploadBandwidthGrant>();
+    public DbSet<BackupTransferLease> BackupTransferLeases => Set<BackupTransferLease>();
 
     /// <summary>Explicit unfiltered context for trusted platform operations only.</summary>
     /// <remarks>Does not authorize the caller. Future application boundaries must authorize its use.</remarks>

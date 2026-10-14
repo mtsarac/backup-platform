@@ -10,7 +10,7 @@ using Xunit.Abstractions;
 
 namespace BackupPlatform.IntegrationTests.Backup;
 
-/// <summary>Real HTTPS API, real published Agent.Host and real SQL Server. Missing runtime configuration fails explicitly.</summary>
+/// <summary>Real HTTPS API, real published Agent.Host and real SQL Server. Missing runtime configuration fails explicitly. The agent's capability row is declared by the fixture: a run is admitted only once the agent has reported its capabilities (<see cref="MsSqlCapabilitySyncSmokeTests"/> covers the real sync).</summary>
 public sealed class MsSqlManualAgentSmokeTests(PostgreSqlFixture database, ITestOutputHelper output) : IClassFixture<PostgreSqlFixture>
 {
     [Fact]
@@ -21,7 +21,7 @@ public sealed class MsSqlManualAgentSmokeTests(PostgreSqlFixture database, ITest
         await using var world = await AgentWorld.CreateAsync(database, clock: new MutableClock(live: true), kestrel: true);
         var tenant = await world.CreateTenantAsync();
         await world.EntitleAsync(tenant.Tenant);
-        var agent = await world.EnrollAsync(tenant);
+        var agent = await world.DeclareBackupCapabilityAsync(await world.EnrollAsync(tenant));
         var configuration = Configuration(sql, sql.DatabaseName);
         var job = await CreateJobAsync(tenant, agent, configuration);
         var run = await StartRunAsync(tenant, job, "one-logical-execution");
@@ -80,7 +80,7 @@ public sealed class MsSqlManualAgentSmokeTests(PostgreSqlFixture database, ITest
         await using var world = await AgentWorld.CreateAsync(database, clock: new MutableClock(live: true), kestrel: true);
         var tenant = await world.CreateTenantAsync();
         await world.EntitleAsync(tenant.Tenant);
-        var agent = await world.EnrollAsync(tenant);
+        var agent = await world.DeclareBackupCapabilityAsync(await world.EnrollAsync(tenant));
         var missingDatabase = "bp_absent_" + Guid.NewGuid().ToString("N");
         var job = await CreateJobAsync(tenant, agent, Configuration(sql, missingDatabase));
         var run = await StartRunAsync(tenant, job, "real-precheck-failure");

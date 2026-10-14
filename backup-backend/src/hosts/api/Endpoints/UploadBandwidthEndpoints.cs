@@ -64,8 +64,9 @@ public static class UploadBandwidthEndpoints
     private static async Task<IResult> PolicyAsync(Guid attemptId, UploadPolicyRequest request, ICurrentAgent agent, BackupOrchestrator orchestrator,
         UploadBandwidthService service, CancellationToken cancellationToken)
     {
-        if (request.LeaseToken == Guid.Empty) return BackupTaskEndpoints.Invalid();
-        var policy = await service.PolicyAsync(orchestrator.Command(agent.Identity!, attemptId, request.LeaseToken), request.Release, cancellationToken);
+        if (request.LeaseToken == Guid.Empty || request is { Release: true, Observe: true }) return BackupTaskEndpoints.Invalid();
+        var action = request.Release ? UploadSliceAction.Release : request.Observe ? UploadSliceAction.Observe : UploadSliceAction.Renew;
+        var policy = await service.PolicyAsync(orchestrator.Command(agent.Identity!, attemptId, request.LeaseToken), action, cancellationToken);
         return policy is null ? BackupTaskEndpoints.Mutation(BackupMutationResult.Conflict) : Results.Ok(policy);
     }
 }

@@ -59,6 +59,7 @@ public static class SecurityServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<DbContextOptions<PlatformDbContext>>(CreateDatabaseOptions);
         services.AddSingleton<AgentTransferAdmission>();
+        services.AddSingleton<BackupPlatform.Infrastructure.Backups.BackupTransferLeaseService>();
         services.AddScoped<ITenantContext>(ResolveTenantContext);
         services.AddScoped<PlatformDbContext>();
         services.AddScoped<ICurrentUser, HttpCurrentUser>();

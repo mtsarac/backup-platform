@@ -1,13 +1,16 @@
 namespace BackupPlatform.Contracts.Backups;
 
 /// <summary>
-/// The agent asks, before and while it uploads, how fast it may. <see cref="Release"/> ends the upload: its slice of the tenant limit is given
-/// back at once instead of when it expires. Lease-fenced like every other task call.
+/// The agent asks, before and while it uploads bytes only it can see (AgentDirect storage), how fast it may. <see cref="Release"/> ends the upload: its slice
+/// of the tenant limit is given back at once instead of when it expires. Lease-fenced like every other task call.
 /// </summary>
 public sealed record UploadPolicyRequest
 {
     public Guid LeaseToken { get; init; }
     public bool Release { get; init; }
+
+    /// <summary>Only learn the ceilings (to widen a deadline): no slice is taken, renewed or waited for. The backend paces the uploads it relays itself.</summary>
+    public bool Observe { get; init; }
 }
 
 /// <summary>

@@ -3,6 +3,7 @@ using BackupPlatform.Agent.Core.Connectivity;
 using BackupPlatform.Agent.Core.Tasks;
 using BackupPlatform.AgentTests.Support;
 using BackupPlatform.Contracts.Backups;
+using BackupPlatform.StorageProviders.Abstractions;
 using BackupPlatform.StorageProviders.Abstractions.Transfer;
 using Microsoft.Extensions.Time.Testing;
 
@@ -46,7 +47,7 @@ public sealed class UploadBandwidthGovernorTests
     public async Task The_lowest_ceiling_that_applies_is_the_rate()
     {
         _client.OnUploadPolicy = _ => Policy(job: 5_000_000, agent: 2_000_000, share: 9_000_000);
-        await using var session = await _governor.BeginAsync(default);
+        await using var session = await _governor.BeginAsync(StorageTopology.AgentDirect, default);
 
         Assert.Equal(TransferRateLimiter.Chunk(2_000_000), await ReadAsync(session));
         var request = Assert.Single(_client.UploadPolicies);
@@ -57,7 +58,7 @@ public sealed class UploadBandwidthGovernorTests
     [Fact]
     public async Task Without_any_limit_the_stream_is_read_at_full_size_and_no_slice_is_released()
     {
-        await using (var session = await _governor.BeginAsync(default))
+        await using (var session = await _governor.BeginAsync(StorageTopology.AgentDirect, default))
         {
             Assert.Equal(1 << 20, await ReadAsync(session));
             Assert.Equal(TimeSpan.Zero, session.DeadlineAllowance(1L << 40));
@@ -70,7 +71,7 @@ public sealed class UploadBandwidthGovernorTests
     public async Task A_limit_set_while_the_upload_runs_reaches_it_at_the_next_renewal()
     {
         _client.OnUploadPolicy = _ => Policy(refresh: 15);
-        await using var session = await _governor.BeginAsync(default);
+        await using var session = await _governor.BeginAsync(StorageTopology.AgentDirect, default);
         Assert.Equal(1 << 20, await ReadAsync(session));
 
         _client.OnUploadPolicy = _ => Policy(job: 100_000, refresh: 15);
@@ -84,7 +85,7 @@ public sealed class UploadBandwidthGovernorTests
     {
         _client.OnUploadPolicy = _ => Failure(AgentBackendFailureKind.Rejected);
 
-        await Assert.ThrowsAsync<UploadBandwidthUnavailableException>(() => _governor.BeginAsync(default));
+        await Assert.ThrowsAsync<UploadPolicyException>(() => _governor.BeginAsync(StorageTopology.AgentDirect, default));
 
         Assert.Single(_client.UploadPolicies);
     }
@@ -93,15 +94,15 @@ public sealed class UploadBandwidthGovernorTests
     public async Task The_start_retries_a_transient_failure_a_few_times_and_then_fails_closed()
     {
         _client.OnUploadPolicy = _ => Failure(AgentBackendFailureKind.Transient);
-        var start = _governor.BeginAsync(default);
+        var start = _governor.BeginAsync(StorageTopology.AgentDirect, default);
         for (var i = 0; i < 5 && !start.IsCompleted; i++) await SettleAsync(TimeSpan.FromSeconds(3));
 
-        await Assert.ThrowsAsync<UploadBandwidthUnavailableException>(() => start);
+        await Assert.ThrowsAsync<UploadPolicyException>(() => start);
         Assert.Equal(3, _client.UploadPolicies.Count);
 
         var calls = 0;
         _client.OnUploadPolicy = _ => ++calls == 1 ? Failure(AgentBackendFailureKind.RateLimited) : Policy(job: 1_000_000);
-        var recovered = _governor.BeginAsync(default);
+        var recovered = _governor.BeginAsync(StorageTopology.AgentDirect, default);
         for (var i = 0; i < 5 && !recovered.IsCompleted; i++) await SettleAsync(TimeSpan.FromSeconds(3));
         await using var session = await recovered;
         Assert.Equal(TransferRateLimiter.Chunk(1_000_000), await ReadAsync(session));
@@ -111,7 +112,7 @@ public sealed class UploadBandwidthGovernorTests
     public async Task The_upload_does_not_begin_until_a_slice_is_free()
     {
         _client.OnUploadPolicy = _ => Policy(share: 0);
-        var start = _governor.BeginAsync(default);
+        var start = _governor.BeginAsync(StorageTopology.AgentDirect, default);
         await SettleAsync(TimeSpan.FromSeconds(3));
         await SettleAsync(TimeSpan.FromSeconds(3));
         Assert.False(start.IsCompleted, "with no slice the request would sit open without a byte flowing");
@@ -130,7 +131,7 @@ public sealed class UploadBandwidthGovernorTests
     {
         _client.OnUploadPolicy = request => request.Release ? Policy() : Policy(share: 0);
         using var cancel = new CancellationTokenSource();
-        var start = _governor.BeginAsync(cancel.Token);
+        var start = _governor.BeginAsync(StorageTopology.AgentDirect, cancel.Token);
         await SettleAsync(TimeSpan.FromSeconds(1));
 
         await cancel.CancelAsync();
@@ -144,17 +145,17 @@ public sealed class UploadBandwidthGovernorTests
     {
         var calls = 0;
         _client.OnUploadPolicy = _ => ++calls == 1 ? Policy(share: 0) : Failure(AgentBackendFailureKind.Rejected);
-        var start = _governor.BeginAsync(default);
+        var start = _governor.BeginAsync(StorageTopology.AgentDirect, default);
         await SettleAsync(TimeSpan.FromSeconds(3));
 
-        await Assert.ThrowsAsync<UploadBandwidthUnavailableException>(() => start);
+        await Assert.ThrowsAsync<UploadPolicyException>(() => start);
     }
 
     [Fact]
     public async Task A_slice_that_cannot_be_renewed_in_time_stops_the_transfer_and_a_renewal_resumes_it()
     {
         _client.OnUploadPolicy = _ => Policy(share: 500_000, valid: 10);
-        await using var session = await _governor.BeginAsync(default);
+        await using var session = await _governor.BeginAsync(StorageTopology.AgentDirect, default);
         Assert.Equal(TransferRateLimiter.Chunk(500_000), await ReadAsync(session));
 
         _client.OnUploadPolicy = _ => Failure(AgentBackendFailureKind.Transient);
@@ -172,19 +173,19 @@ public sealed class UploadBandwidthGovernorTests
     public async Task A_lost_lease_fails_the_transfer_at_its_next_read()
     {
         _client.OnUploadPolicy = _ => Policy(job: 1_000_000);
-        await using var session = await _governor.BeginAsync(default);
+        await using var session = await _governor.BeginAsync(StorageTopology.AgentDirect, default);
 
         _client.OnUploadPolicy = _ => Failure(AgentBackendFailureKind.Rejected);
         await SettleAsync(TimeSpan.FromSeconds(3));
 
-        await Assert.ThrowsAsync<UploadBandwidthUnavailableException>(() => ReadAsync(session));
+        await Assert.ThrowsAsync<UploadPolicyException>(() => ReadAsync(session));
     }
 
     [Fact]
     public async Task Ending_the_upload_gives_the_slice_back_and_stops_asking()
     {
         _client.OnUploadPolicy = request => request.Release ? Policy() : Policy(share: 500_000);
-        var session = await _governor.BeginAsync(default);
+        var session = await _governor.BeginAsync(StorageTopology.AgentDirect, default);
         await session.DisposeAsync();
 
         Assert.True(Assert.Single(_client.UploadPolicies, request => request.Release).Release);
@@ -197,8 +198,36 @@ public sealed class UploadBandwidthGovernorTests
     public async Task The_deadline_is_widened_by_size_over_the_lowest_rate()
     {
         _client.OnUploadPolicy = _ => Policy(job: 1_000_000);
-        await using var session = await _governor.BeginAsync(default);
+        await using var session = await _governor.BeginAsync(StorageTopology.AgentDirect, default);
 
         Assert.Equal(TimeSpan.FromSeconds(100), session.DeadlineAllowance(100_000_000));
+    }
+    [Fact]
+    public async Task A_relayed_destination_is_not_paced_by_the_agent_and_only_widens_its_deadline()
+    {
+        _client.OnUploadPolicy = _ => Policy(job: 1_000_000, share: 500_000);
+        await using var session = await _governor.BeginAsync(StorageTopology.BackendRelayed, default);
+
+        var source = new MemoryStream(new byte[1 << 20]);
+        Assert.Same(source, session.Wrap(source));
+        Assert.Equal(1 << 20, await ReadAsync(session));
+        Assert.Equal(TimeSpan.FromSeconds(100), session.DeadlineAllowance(100_000_000));
+        var request = Assert.Single(_client.UploadPolicies);
+        Assert.True(request.Observe);
+        Assert.False(request.Release);
+
+        await SettleAsync(TimeSpan.FromMinutes(5));
+        await session.DisposeAsync();
+        Assert.Single(_client.UploadPolicies);
+    }
+
+    [Fact]
+    public async Task A_relayed_destination_does_not_wait_for_a_slice_and_still_fails_closed_without_a_policy()
+    {
+        _client.OnUploadPolicy = _ => Policy(share: 0);
+        await using (await _governor.BeginAsync(StorageTopology.BackendRelayed, default)) { }
+
+        _client.OnUploadPolicy = _ => Failure(AgentBackendFailureKind.Rejected);
+        await Assert.ThrowsAsync<UploadPolicyException>(() => _governor.BeginAsync(StorageTopology.BackendRelayed, default));
     }
 }

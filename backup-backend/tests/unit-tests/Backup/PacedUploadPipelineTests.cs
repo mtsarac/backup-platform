@@ -41,6 +41,17 @@ public sealed class PacedUploadPipelineTests : IDisposable
     }
 
     [Fact]
+    public async Task Each_destination_tells_the_policy_which_topology_it_has_so_relayed_bytes_are_left_to_the_backend()
+    {
+        var storage = new InMemoryStorage(_h);
+        var bandwidth = new FakeBandwidth();
+
+        await _h.RunAsync(Request(bandwidth, storage));
+
+        Assert.Equal(StorageTopology.AgentDirect, Assert.Single(bandwidth.Seen));
+    }
+
+    [Fact]
     public async Task Without_a_policy_the_upload_is_not_wrapped()
     {
         var storage = new InMemoryStorage(_h);
@@ -108,6 +119,8 @@ public sealed class PacedUploadPipelineTests : IDisposable
         Assert.Equal(1, bandwidth.Disposed);
     }
 
+    private sealed class Topologies : List<StorageTopology>;
+
     private sealed class FakeBandwidth(long? rate = null) : IUploadBandwidth
     {
         public bool Unavailable { get; init; }
@@ -115,9 +128,12 @@ public sealed class PacedUploadPipelineTests : IDisposable
         public int Begun;
         public int Disposed;
 
-        public Task<IUploadBandwidthSession> BeginAsync(CancellationToken cancellationToken)
+        public Topologies Seen { get; } = new();
+
+        public Task<IUploadBandwidthSession> BeginAsync(StorageTopology destination, CancellationToken cancellationToken)
         {
-            if (Unavailable) throw new UploadBandwidthUnavailableException("down");
+            Seen.Add(destination);
+            if (Unavailable) throw new UploadPolicyException("down");
             Interlocked.Increment(ref Begun);
             return Task.FromResult<IUploadBandwidthSession>(new Session(this, new TransferRateLimiter(rate)));
         }

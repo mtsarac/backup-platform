@@ -231,7 +231,7 @@ public sealed class MsSqlRetentionAgentSmokeTests(PostgreSqlFixture database, IT
                     });
                 var tenant = await world.CreateTenantAsync();
                 await world.EntitleAsync(tenant.Tenant);
-                var agent = await world.EnrollAsync(tenant);
+                var agent = await world.DeclareBackupCapabilityAsync(await world.EnrollAsync(tenant));
                 using var created = await tenant.Admin.SendAsync(HttpMethod.Post, $"/api/tenants/{tenant.Tenant.Id.Value}/backup-jobs", new
                 {
                     name = "Retention smoke",

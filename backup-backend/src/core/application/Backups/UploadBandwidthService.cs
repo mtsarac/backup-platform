@@ -10,6 +10,19 @@ public sealed record UploadBandwidthSettings(long? Tenant, IReadOnlyDictionary<G
 /// <summary>Every ceiling that applies to one attempt's upload, as stored. <see cref="TenantShare"/> is only set for a granted slice.</summary>
 public sealed record AttemptUploadLimits(long? Job, long? Agent, long? Tenant, long? TenantShare = null);
 
+/// <summary>What a call about a running attempt's upload does to its slice of the tenant limit.</summary>
+public enum UploadSliceAction
+{
+    /// <summary>Takes or renews the slice (when a tenant limit exists).</summary>
+    Renew,
+
+    /// <summary>Gives the slice back.</summary>
+    Release,
+
+    /// <summary>Only reads the ceilings; no slice is taken.</summary>
+    Observe
+}
+
 public interface IUploadBandwidthStore
 {
     Task<UploadBandwidthSettings> GetAsync(TenantId tenantId, CancellationToken cancellationToken);
@@ -18,13 +31,10 @@ public interface IUploadBandwidthStore
     Task<bool> SetAsync(TenantId tenantId, UploadBandwidthScope scope, Guid scopeId, long? bytesPerSecond, UserId actor, DateTimeOffset now, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Renews (or with <paramref name="release"/> gives back) this running attempt's slice of the tenant limit. Decided in the database, serialized per tenant, so
-    /// any number of backend nodes agree. Null when the lease does not hold a running attempt of this agent.
+    /// Applies <paramref name="action"/> to this running attempt's slice of the tenant limit and returns the ceilings. A slice is decided in the database, serialized
+    /// per tenant, so any number of backend nodes agree; without a tenant limit nothing is locked. Null when the lease does not hold a running attempt of this agent.
     /// </summary>
-    Task<AttemptUploadLimits?> GrantAsync(BackupLeaseCommand lease, bool release, TimeSpan grantTtl, CancellationToken cancellationToken);
-
-    /// <summary>The limits that apply to an attempt, without taking a slice. Null when the attempt is not this agent's.</summary>
-    Task<AttemptUploadLimits?> ReadAsync(TenantId tenantId, AgentId agentId, Guid attemptId, CancellationToken cancellationToken);
+    Task<AttemptUploadLimits?> GrantAsync(BackupLeaseCommand lease, UploadSliceAction action, TimeSpan grantTtl, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -55,9 +65,9 @@ public sealed class UploadBandwidthService(IUploadBandwidthStore store, BackupEx
     }
 
     /// <summary>The answer to an agent's policy call; null when the lease is not a running attempt of this agent.</summary>
-    public async Task<UploadPolicyResponse?> PolicyAsync(BackupLeaseCommand lease, bool release, CancellationToken cancellationToken)
+    public async Task<UploadPolicyResponse?> PolicyAsync(BackupLeaseCommand lease, UploadSliceAction action, CancellationToken cancellationToken)
     {
-        var limits = await store.GrantAsync(lease, release, GrantTtl, cancellationToken);
+        var limits = await store.GrantAsync(lease, action, GrantTtl, cancellationToken);
         if (limits is null) return null;
         var limited = limits is { Job: not null } or { Agent: not null } or { Tenant: not null };
         return new UploadPolicyResponse
@@ -69,16 +79,6 @@ public sealed class UploadBandwidthService(IUploadBandwidthStore store, BackupEx
             RefreshAfterSeconds = (int)(limits.Tenant is null ? IdleRenewalInterval : RenewalInterval).TotalSeconds,
             ValidForSeconds = (int)GrantTtl.TotalSeconds
         };
-    }
-
-    /// <summary>
-    /// Extra time a provider's total-transfer deadline needs because the sender is deliberately held to a rate: the transfer takes at least
-    /// <paramref name="sizeBytes"/> over the lowest rate it can be held to. Zero when nothing limits the attempt.
-    /// </summary>
-    public async Task<TimeSpan> DeadlineAllowanceAsync(TenantId tenantId, AgentId agentId, Guid attemptId, long sizeBytes, CancellationToken cancellationToken)
-    {
-        var limits = await store.ReadAsync(tenantId, agentId, attemptId, cancellationToken);
-        return UploadPolicyResponse.DeadlineAllowance(sizeBytes, limits is null ? null : Floor(tenantId, limits));
     }
 
     /// <summary>

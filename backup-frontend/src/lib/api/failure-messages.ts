@@ -44,7 +44,7 @@ const messages: Record<string, string> = {
   storage_connection_disabled: 'Hedef depolama bağlantısı devre dışı; yeni backup başlatılamaz.',
   storage_connection_unavailable: 'Hedef depolama bağlantısı bulunamadı veya bu Job\'un Storage Provider\'ına ait değil; yeni backup başlatılamaz.',
   multi_destination_execution_not_supported: 'Bu zamanlanmış çalışma, çoklu hedefli yedekleme desteklenmeden önce kaydedilmişti; çalıştırma başlatılmadı ve otomatik olarak yeniden denenmez.',
-  agent_multi_destination_unsupported: 'İşin Agent\'ı çoklu hedefli yedeklemeyi desteklemiyor; Agent\'ı güncelleyin. Yeni backup başlatılamadı.',
+  agent_multi_destination_unsupported: 'İşin Agent\'ı çoklu hedefli yedekleme desteği bildirmedi: Agent eski olabilir veya bağlantısını henüz tamamlamamış olabilir (yeni Agent ilk heartbeat\'inden birkaç saniye sonra bildirir). Kısa süre sonra yeniden deneyin ya da Agent\'ı güncelleyin. Yeni backup başlatılamadı.',
   destination_combination_unsupported: 'İşin hedefleri aynı depolama bağlantısına çözülüyor; her hedef ayrı bir bağlantı olmalı. Yeni backup başlatılamadı.',
   storage_connection_not_found: 'Depolama bağlantısı bulunamadı. Liste güncel olmayabilir.',
   storage_connection_name_taken: 'Bu ada sahip bir depolama bağlantısı zaten var.',

@@ -41,7 +41,7 @@ public sealed class UploadBandwidthStoreIntegrationTests(PostgreSqlFixture fixtu
     }
 
     private async Task<long> GrantedAsync(BackupClaim claim, DateTimeOffset at) =>
-        (await Bandwidth.GrantAsync(Command(claim, at), false, Ttl, default))!.TenantShare!.Value;
+        (await Bandwidth.GrantAsync(Command(claim, at), UploadSliceAction.Renew, Ttl, default))!.TenantShare!.Value;
 
     private async Task<long> TotalGrantedAsync(TenantId tenant)
     {
@@ -118,11 +118,13 @@ public sealed class UploadBandwidthStoreIntegrationTests(PostgreSqlFixture fixtu
         await SetAsync(tenant, UploadBandwidthScope.Job, job.Id, 1_000_000);
         await SetAsync(tenant, UploadBandwidthScope.Job, otherJob.Id, 9_000_000);
 
-        var mine = await Bandwidth.GrantAsync(Command(claim, T0.AddSeconds(1)), false, Ttl, default);
+        var mine = await Bandwidth.GrantAsync(Command(claim, T0.AddSeconds(1)), UploadSliceAction.Renew, Ttl, default);
         Assert.Equal(new AttemptUploadLimits(1_000_000, 2_000_000, null), mine);
-        Assert.Equal(new AttemptUploadLimits(9_000_000, null, null), await Bandwidth.GrantAsync(Command(otherClaim, T0.AddSeconds(1)), false, Ttl, default));
-        Assert.Equal(mine, await Bandwidth.ReadAsync(tenant, agent.AgentId, claim.Attempt.Id, default));
-        Assert.Null(await Bandwidth.ReadAsync(tenant, AgentId.New(), claim.Attempt.Id, default));
+        Assert.Equal(new AttemptUploadLimits(9_000_000, null, null), await Bandwidth.GrantAsync(Command(otherClaim, T0.AddSeconds(1)), UploadSliceAction.Renew, Ttl, default));
+        // Observing reads the ceilings of the lease holder and takes no slice (and so locks nothing): it is what an agent does for an upload the backend paces.
+        Assert.Equal(mine, await Bandwidth.GrantAsync(Command(claim, T0.AddSeconds(2)), UploadSliceAction.Observe, Ttl, default));
+        Assert.Null(await Bandwidth.GrantAsync(Command(claim, T0.AddSeconds(2)) with { AgentId = AgentId.New() }, UploadSliceAction.Observe, Ttl, default));
+        Assert.Null(await Bandwidth.GrantAsync(Command(claim, T0.AddSeconds(2)) with { LeaseToken = Guid.NewGuid() }, UploadSliceAction.Observe, Ttl, default));
         Assert.Equal(0, await TotalGrantedAsync(tenant));
     }
 
@@ -144,9 +146,23 @@ public sealed class UploadBandwidthStoreIntegrationTests(PostgreSqlFixture fixtu
         Assert.Equal(Limit, await TotalGrantedAsync(tenant));
 
         // The first one ends: its slice returns at once and the other takes the whole limit on its next renewal.
-        await Bandwidth.GrantAsync(Command(first, T0.AddSeconds(5)), release: true, Ttl, default);
+        await Bandwidth.GrantAsync(Command(first, T0.AddSeconds(5)), UploadSliceAction.Release, Ttl, default);
         Assert.Equal(Limit / 2, await TotalGrantedAsync(tenant));
         Assert.Equal(Limit, await GrantedAsync(second, T0.AddSeconds(7)));
+    }
+
+    [Fact]
+    public async Task Observing_never_takes_or_keeps_a_slice_even_under_a_tenant_limit()
+    {
+        var tenant = await _kit.AddTenantAsync();
+        await SetAsync(tenant, UploadBandwidthScope.Tenant, tenant.Value, Limit);
+        var (claim, _, _) = await RunningAsync(tenant, T0);
+
+        var observed = await Bandwidth.GrantAsync(Command(claim, T0.AddSeconds(1)), UploadSliceAction.Observe, Ttl, default);
+
+        Assert.Equal(Limit, observed!.Tenant);
+        Assert.Null(observed.TenantShare);
+        Assert.Equal(0, await TotalGrantedAsync(tenant));
     }
 
     [Fact]
@@ -160,7 +176,7 @@ public sealed class UploadBandwidthStoreIntegrationTests(PostgreSqlFixture fixtu
 
         Assert.Equal(Limit, await GrantedAsync(mine, T0.AddSeconds(1)));
 
-        var unlimited = await Bandwidth.GrantAsync(Command(theirs, T0.AddSeconds(1)), false, Ttl, default);
+        var unlimited = await Bandwidth.GrantAsync(Command(theirs, T0.AddSeconds(1)), UploadSliceAction.Renew, Ttl, default);
         Assert.Null(unlimited!.Tenant);
         Assert.Null(unlimited.TenantShare);
         Assert.Equal(0, await TotalGrantedAsync(two));
@@ -186,7 +202,7 @@ public sealed class UploadBandwidthStoreIntegrationTests(PostgreSqlFixture fixtu
         Assert.Equal(Limit / 2, await GrantedAsync(third, T0.AddSeconds(3)));
         Assert.Equal(Limit / 2, await GrantedAsync(third, T0.AddSeconds(8)));
         Assert.Equal(Limit, await GrantedAsync(third, T0.AddSeconds(12)));
-        Assert.Null(await Bandwidth.GrantAsync(Command(first, T0.AddSeconds(13)), false, Ttl, default));
+        Assert.Null(await Bandwidth.GrantAsync(Command(first, T0.AddSeconds(13)), UploadSliceAction.Renew, Ttl, default));
     }
 
     [Fact]
@@ -197,11 +213,11 @@ public sealed class UploadBandwidthStoreIntegrationTests(PostgreSqlFixture fixtu
         var (running, agent, job) = await RunningAsync(tenant, T0);
         var command = Command(running, T0.AddSeconds(1));
 
-        Assert.Null(await Bandwidth.GrantAsync(command with { LeaseToken = Guid.NewGuid() }, false, Ttl, default));
-        Assert.Null(await Bandwidth.GrantAsync(command with { LeaseToken = Guid.Empty }, false, Ttl, default));
-        Assert.Null(await Bandwidth.GrantAsync(command with { AgentId = AgentId.New() }, false, Ttl, default));
-        Assert.Null(await Bandwidth.GrantAsync(command with { TenantId = TenantId.New() }, false, Ttl, default));
-        Assert.Null(await Bandwidth.GrantAsync(command with { Now = T0 + Lease + TimeSpan.FromSeconds(1) }, false, Ttl, default));
+        Assert.Null(await Bandwidth.GrantAsync(command with { LeaseToken = Guid.NewGuid() }, UploadSliceAction.Renew, Ttl, default));
+        Assert.Null(await Bandwidth.GrantAsync(command with { LeaseToken = Guid.Empty }, UploadSliceAction.Renew, Ttl, default));
+        Assert.Null(await Bandwidth.GrantAsync(command with { AgentId = AgentId.New() }, UploadSliceAction.Renew, Ttl, default));
+        Assert.Null(await Bandwidth.GrantAsync(command with { TenantId = TenantId.New() }, UploadSliceAction.Renew, Ttl, default));
+        Assert.Null(await Bandwidth.GrantAsync(command with { Now = T0 + Lease + TimeSpan.FromSeconds(1) }, UploadSliceAction.Renew, Ttl, default));
         Assert.Equal(0, await TotalGrantedAsync(tenant));
 
         // Claimed but never started: not an upload yet.
@@ -210,7 +226,7 @@ public sealed class UploadBandwidthStoreIntegrationTests(PostgreSqlFixture fixtu
         var store = _kit.Store(Limits());
         await _kit.StartRunAsync(store, queued, Guid.NewGuid().ToString(), T0);
         var leased = (await ClaimAsync(store, pending, T0))!;
-        Assert.Null(await Bandwidth.GrantAsync(Command(leased, T0.AddSeconds(1)), false, Ttl, default));
+        Assert.Null(await Bandwidth.GrantAsync(Command(leased, T0.AddSeconds(1)), UploadSliceAction.Renew, Ttl, default));
         Assert.NotNull(agent);
         Assert.NotNull(job);
     }
@@ -225,7 +241,7 @@ public sealed class UploadBandwidthStoreIntegrationTests(PostgreSqlFixture fixtu
         Assert.Equal(Limit, await TotalGrantedAsync(tenant));
 
         await SetAsync(tenant, UploadBandwidthScope.Tenant, tenant.Value, null);
-        var policy = await Bandwidth.GrantAsync(Command(claim, T0.AddSeconds(2)), false, Ttl, default);
+        var policy = await Bandwidth.GrantAsync(Command(claim, T0.AddSeconds(2)), UploadSliceAction.Renew, Ttl, default);
 
         Assert.Null(policy!.TenantShare);
         Assert.Equal(0, await TotalGrantedAsync(tenant));
@@ -243,7 +259,7 @@ public sealed class UploadBandwidthStoreIntegrationTests(PostgreSqlFixture fixtu
         {
             var at = T0.AddSeconds(1 + round * 3);
             // Separate store instances: what separate backend processes would hold.
-            await Task.WhenAll(claims.Select(claim => new PostgreSqlUploadBandwidthStore(fixture.Options).GrantAsync(Command(claim, at), false, Ttl, default)));
+            await Task.WhenAll(claims.Select(claim => new PostgreSqlUploadBandwidthStore(fixture.Options).GrantAsync(Command(claim, at), UploadSliceAction.Renew, Ttl, default)));
             Assert.True(await TotalGrantedAsync(tenant) <= Limit, $"round {round}");
         }
 
@@ -256,12 +272,15 @@ public sealed class UploadBandwidthStoreIntegrationTests(PostgreSqlFixture fixtu
         Assert.All(shares, share => Assert.Equal(Limit / 6, share));
     }
 
+    private async Task<BackupJob> AddJobAsync(StoreAgent agent, BackupStorageExecutionLocation location) =>
+        (await _kit.Store().CreateJobAsync(new BackupJob(Guid.NewGuid(), agent.TenantId, "Database", agent.AgentId,
+            BackupStoreHarness.Configuration(location == BackupStorageExecutionLocation.Agent ? "local" : "central", location), T0), default))!;
+
     [Fact]
-    public async Task A_run_a_limit_applies_to_waits_for_an_agent_that_can_pace_its_uploads()
+    public async Task A_run_with_an_agent_written_destination_that_a_limit_applies_to_waits_for_an_agent_that_can_pace()
     {
         var agent = await _kit.AddAgentAsync();
-        var job = await _kit.AddJobAsync(agent);
-        var other = await _kit.AddJobAsync(agent);
+        var job = await AddJobAsync(agent, BackupStorageExecutionLocation.Agent);
         var store = _kit.Store(Limits());
         await _kit.StartRunAsync(store, job, "a", T0);
         await SetAsync(agent.TenantId, UploadBandwidthScope.Job, job.Id, 1_000_000);
@@ -275,15 +294,27 @@ public sealed class UploadBandwidthStoreIntegrationTests(PostgreSqlFixture fixtu
             await context.SaveChangesAsync();
         }
         Assert.NotNull(await ClaimAsync(store, agent, T0.AddSeconds(1)));
-        Assert.NotNull(other);
+    }
+
+    [Fact]
+    public async Task A_run_whose_destinations_the_backend_relays_is_claimed_by_any_agent_because_the_backend_paces_it()
+    {
+        var agent = await _kit.AddAgentAsync();
+        var relayed = await AddJobAsync(agent, BackupStorageExecutionLocation.Backend);
+        var store = _kit.Store(Limits());
+        await _kit.StartRunAsync(store, relayed, "r", T0);
+        await SetAsync(agent.TenantId, UploadBandwidthScope.Tenant, agent.TenantId.Value, 1_000_000);
+        await SetAsync(agent.TenantId, UploadBandwidthScope.Job, relayed.Id, 1_000_000);
+
+        Assert.Equal(relayed.Id, (await ClaimAsync(store, agent, T0))!.Run.JobId);
     }
 
     [Fact]
     public async Task A_run_no_limit_applies_to_starts_on_an_agent_without_the_capability()
     {
         var agent = await _kit.AddAgentAsync();
-        var limited = await _kit.AddJobAsync(agent);
-        var free = await _kit.AddJobAsync(agent);
+        var limited = await AddJobAsync(agent, BackupStorageExecutionLocation.Agent);
+        var free = await AddJobAsync(agent, BackupStorageExecutionLocation.Agent);
         var store = _kit.Store(Limits());
         await _kit.StartRunAsync(store, free, "free", T0);
         await SetAsync(agent.TenantId, UploadBandwidthScope.Job, limited.Id, 1_000_000);

@@ -1,6 +1,7 @@
 using BackupPlatform.BackupProviders.Abstractions.Database;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.StorageProviders.Abstractions;
+using BackupPlatform.StorageProviders.Abstractions.Transfer;
 using Microsoft.Extensions.Logging;
 
 namespace BackupPlatform.Agent.Core.Backup;
@@ -393,9 +394,9 @@ internal sealed class DatabaseBackupExecution
             IUploadBandwidthSession? pacing;
             try
             {
-                pacing = _request.UploadBandwidth is { } bandwidth ? await bandwidth.BeginAsync(cancellationToken).ConfigureAwait(false) : null;
+                pacing = _request.UploadBandwidth is { } bandwidth ? await bandwidth.BeginAsync(storage.Topology, cancellationToken).ConfigureAwait(false) : null;
             }
-            catch (UploadBandwidthUnavailableException exception)
+            catch (UploadPolicyException exception)
             {
                 throw Fail(stage, BackupPipelineReasons.UploadPolicyUnavailable, "The upload limits could not be obtained, so the upload was not started.",
                     exception, BackupFailureKind.StorageWriteFailed, BackupFailureCause.StorageUnavailable);

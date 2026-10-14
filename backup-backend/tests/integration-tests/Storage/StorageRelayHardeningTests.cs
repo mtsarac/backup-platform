@@ -66,7 +66,7 @@ public sealed class StorageRelayHardeningTests(PostgreSqlFixture fixture) : ICla
     [Theory]
     [InlineData("verify")]
     [InlineData("content")]
-    public async Task LeaseLostWhileWaitingForStorageLockRejectsVerificationAndDeletion(string operation)
+    public async Task LeaseLostWhileWaitingForStorageLeaseRejectsVerificationAndDeletion(string operation)
     {
         await using var scenario = await BackupApiScenario.CreateAsync(fixture);
         var connectionId = Guid.NewGuid();
@@ -93,14 +93,10 @@ public sealed class StorageRelayHardeningTests(PostgreSqlFixture fixture) : ICla
         var claim = await scenario.ClaimAsync();
         var key = ManagedBackupLayout.AttemptScope(scenario.Setup.Tenant.Id.Value, jobId, runId, claim.AttemptId)
             + "/" + ManagedBackupLayout.StagedFileName("master", DateTimeOffset.UtcNow, Guid.NewGuid());
+        // Another writer holds a live transfer lease on the key, so the request must wait for it.
         var lockId = BitConverter.ToInt64(SHA256.HashData(Encoding.UTF8.GetBytes($"{connectionId:N}:{key}")), 0);
-        await using var held = new NpgsqlConnection(fixture.ConnectionString);
-        await held.OpenAsync();
-        await using (var acquire = new NpgsqlCommand("SELECT pg_advisory_lock(@id)", held))
-        {
-            acquire.Parameters.AddWithValue("id", lockId);
-            await acquire.ExecuteNonQueryAsync();
-        }
+        await using (var other = fixture.CreatePlatformContext())
+            await other.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO backup_transfer_leases (\"LockId\",\"OwnerId\",\"ExpiresAt\") VALUES ({lockId}, {Guid.NewGuid()}, clock_timestamp() + interval '5 minutes')");
         using var request = new HttpRequestMessage(operation == "verify" ? HttpMethod.Post : HttpMethod.Delete,
             $"/api/agent/tasks/{claim.AttemptId}/storage/{operation}");
         request.Headers.TryAddWithoutValidation("Authorization", AgentAuthorizationScheme.FormatHeaderValue(scenario.Agent.CredentialId, scenario.Agent.Secret));
@@ -113,25 +109,18 @@ public sealed class StorageRelayHardeningTests(PostgreSqlFixture fixture) : ICla
         var pending = scenario.World.Anonymous.SendAsync(request);
         try
         {
-            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            await using var waiting = new NpgsqlCommand(
-                "SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND NOT granted AND classid::bigint=@high AND objid::bigint=@low)", held);
-            waiting.Parameters.AddWithValue("high", (long)(uint)((ulong)lockId >> 32));
-            waiting.Parameters.AddWithValue("low", (long)(uint)lockId);
-            while (!Equals(true, await waiting.ExecuteScalarAsync(deadline.Token)))
-            {
-                Assert.False(pending.IsCompleted, "The request must reach the storage lock before its lease is replaced.");
-            }
+            await Task.Delay(700);
+            Assert.False(pending.IsCompleted, "The request must be waiting for the storage lease before its attempt lease is replaced.");
             await using var db = fixture.CreatePlatformContext();
             await db.BackupRunAttempts.Where(row => row.Id == claim.AttemptId)
                 .ExecuteUpdateAsync(set => set.SetProperty(row => row.LeaseToken, Guid.NewGuid()));
         }
         finally
         {
-            await using var release = new NpgsqlCommand("SELECT pg_advisory_unlock(@id)", held);
-            release.Parameters.AddWithValue("id", lockId);
-            await release.ExecuteNonQueryAsync();
+            await using var cleanup = fixture.CreatePlatformContext();
+            await cleanup.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM backup_transfer_leases WHERE \"LockId\" = {lockId}");
         }
+
         using var response = await pending;
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Equal("lease_conflict", AgentWorld.ReadJson(response).GetProperty("error").GetString());
