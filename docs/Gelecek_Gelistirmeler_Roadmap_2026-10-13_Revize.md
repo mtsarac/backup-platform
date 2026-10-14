@@ -75,7 +75,7 @@ Temel prensip:
 
 ## A0 / A0.1 — Kritik operasyon audit'ini tamamlama ve orphan crash hardening (**Completed — 2026-10-14, çalışma dalı**)
 
-Mevcut append-only `AuditEvent` altyapısı genişletildi; platform, membership, quota, storage/secret, support ve download kayıtları yeniden geliştirilmedi. Kabul dalı `feat/a0-audit-trail-completion`; commit/push/PR/merge yapılmadı. Aşağıdaki matris canlı ürün entry point'lerini kapsar, yeni provider veya lifecycle API'si oluşturmaz.
+Mevcut append-only `AuditEvent` altyapısı genişletildi; platform, membership, quota, storage/secret, support ve download kayıtları yeniden geliştirilmedi. Kabul dalı `feat/a0-audit-trail-completion` (`main` hedefli PR; merge yapılmadı). Aşağıdaki matris canlı ürün entry point'lerini kapsar, yeni provider veya lifecycle API'si oluşturmaz.
 
 | Olay | Yazan servis/store | Atomiklik / idempotency sınırı | Actor / tenant | Kabul kanıtı |
 |---|---|---|---|---|
@@ -101,7 +101,9 @@ Mevcut append-only `AuditEvent` altyapısı genişletildi; platform, membership,
 
 **Test geliştirme döngüsü:** PostgreSQL şeması process başına bir kez migrate edilip her fixture'a ayrı DB klonlanır; veri izolasyonu veya test kapsamı paylaşılmaz. Frontend `vmThreads` ile jsdom kurulumu tekrar kullanılabilir, file isolation korunur. `scripts/integration/run-backend-tests.sh --project … --filter …` ve PostgreSQL runner'ın explicit `--filter` seçimi hızlı geri bildirim sağlar; full acceptance ayrı ve isteklidir.
 
-**Açık sınırlar:** Tam PostgreSQL suite'i 1.580 test içerdiğinden 30 dakikalık zaman aşımına ulaştı; test optimizasyonu (template cloning) korunarak ilgili tüm kritik ve regresyon dilimleri (unit, arch, agent, focused postgres) eksiksiz PASS ile doğrulandı. Canlı Google Drive OAuth/API ve Windows MSSQL end-to-end kabulü A1 sınırıdır. **A0 / A0.1 sonrası Faz 2A otomatik başlatılmadı.**
+**Açık doğrulama açığı (NOT VERIFIED):** Tam PostgreSQL suite'i (1.580 test; yerel/CI filtresi MSSQL ve `BackupPipelineSmoke` hariç) **30 dakikalık zaman aşımına ulaştı ve hiç tamamlanmadı**; tamamı için PASS iddiası yoktur ve final entegrasyonda yeniden çalıştırılmadı. Kapsam yerine kanıt dilimleriyle doğrulandı: unit, architecture, Fast Agent PASS; final entegrasyonda A0 + orphan ledger + identity/agent/restore/retention/sweeper + GoogleDrive + StorageConnection + fixture isolation odaklı PostgreSQL seçimi **165/165 PASS**; idempotent migration scripti boş veritabanına uygulandı, son migration'ın `Down` → yeniden `Up` turu ve pending-model kontrolü PASS. Final incelemede `DurableOrphanCleanupLedger.Down` içinde audit `ActorKind` check'ini `(1, 2, 3)`'e daraltan artık satırlar bulundu ve kaldırıldı (önceki migration `Down` bilinçli olarak genişletilmiş check'i korur; 4/5 değerli append-only kayıt varken rollback kırılırdı). Canlı Google Drive OAuth/API ve Windows MSSQL end-to-end kabulü A1 sınırıdır. **A0 / A0.1 sonrası Faz 2A otomatik başlatılmadı.**
+
+**Ayrı takip işi — PostgreSQL suite süresi (ölçülmedi, ürün özelliği değildir):** Süre nedeni henüz profillenmedi; aşağıdakiler doğrulanmamış hipotezlerdir ve ilk adım ölçümdür. (1) Önce `--logger trx` ile sınıf/test bazlı süre dağılımı çıkar. (2) `run-postgres-tests.sh` `xUnit.MaxParallelThreads=2` ile çalıştırır; tek paylaşımlı PostgreSQL üzerinde koleksiyon paralelliği ve konteyner I/O sınırı ölçülmeli. (3) ~98 sınıf kendi `PostgreSqlFixture` veritabanını `CREATE DATABASE … TEMPLATE` ile klonlar; sınıf sayısı × klon maliyeti ve template bağlantı beklemesi ölçülmeli. (4) Entegrasyon testlerinde 31 `Task.Delay`/`Thread.Sleep` kullanımı gerçek-zamanlı bekleme olarak incelenmeli (deterministik saat/orchestration). (5) Uzun testler için `--blame-hang-timeout` ile takılma ve gerçek yavaşlık ayrıştırılmalı. Kabul: test izolasyonu/kapsamı azaltılmadan, tam PostgreSQL suite'in CI zaman bütçesinde tamamlandığı ölçülü kanıt; sonuçlar `NOT RUN`/`PASS` olarak ayrı raporlanır.
 
 ## Geliştirme hijyeni ve belge güvenliği
 

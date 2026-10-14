@@ -73,15 +73,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
         {
             migrationBuilder.DropTable(
                 name: "backup_storage_cleanups");
-
-            migrationBuilder.DropCheckConstraint(
-                name: "ck_audit_events_actor_kind",
-                table: "audit_events");
-
-            migrationBuilder.AddCheckConstraint(
-                name: "ck_audit_events_actor_kind",
-                table: "audit_events",
-                sql: "\"ActorKind\" IN (1, 2, 3)");
         }
     }
 }
