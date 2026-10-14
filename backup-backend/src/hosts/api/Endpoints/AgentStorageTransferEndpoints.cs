@@ -43,7 +43,7 @@ public static class AgentStorageTransferEndpoints
     }
 
     private static async Task<IResult> UploadAsync(Guid attemptId, HttpRequest request, ICurrentAgent agent,
-        IBackupRunStore runStore, IStorageConnectionStore connections, IBackupStorageResolver resolver, BackupTransferLeaseService leases, AgentTransferAdmission admission, UploadBandwidthService bandwidth, CancellationToken cancellationToken)
+        IBackupRunStore runStore, IStorageConnectionStore connections, IBackupStorageResolver resolver, BackupTransferLeaseService leases, AgentTransferAdmission admission, UploadBandwidthService bandwidth, ILoggerFactory loggers, CancellationToken cancellationToken)
     {
         var fence = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: true, cancellationToken);
         if (fence.Failure is { } failure) return failure;
@@ -83,7 +83,11 @@ public static class AgentStorageTransferEndpoints
                 // A paced upload is slow on purpose: widen the provider's total-transfer deadline by the throttled time.
                 var allowance = UploadPolicyResponse.DeadlineAllowance(request.ContentLength!.Value, pacing.MinimumBytesPerSecond);
                 var options = new StoragePutOptions(StorageOverwritePolicy.Fail, new ContentChecksum(ChecksumAlgorithm.Sha256, expectedChecksum), request.ContentLength, allowance);
+                var watch = System.Diagnostics.Stopwatch.StartNew();
                 var meta = await provider.PutAsync(new StorageObjectKey(fence.Key!), pacing.Wrap(request.Body), options, null, token);
+                // The upload alone (relay body to provider), kept apart from the separate read-back verification and from any wait for a slice: this is what a limit is judged on.
+                loggers.CreateLogger("BackupPlatform.Api.RelayUpload").LogInformation("Relayed upload finished: attempt {AttemptId} bytes {Bytes} seconds {Seconds:F2} minimum rate {MinimumBytesPerSecond}",
+                    attemptId, request.ContentLength, watch.Elapsed.TotalSeconds, pacing.MinimumBytesPerSecond);
                 return Results.Ok(new TaskStorageResponse
                 {
                     Exists = true, SizeBytes = meta.SizeBytes, Checksum = meta.Checksum?.Hex, LastModifiedUtc = meta.LastModifiedUtc

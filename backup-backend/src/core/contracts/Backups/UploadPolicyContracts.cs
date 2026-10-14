@@ -11,6 +11,9 @@ public sealed record UploadPolicyRequest
 
     /// <summary>Only learn the ceilings (to widen a deadline): no slice is taken, renewed or waited for. The backend paces the uploads it relays itself.</summary>
     public bool Observe { get; init; }
+
+    /// <summary>Which of the attempt's concurrent uploads this is; empty means its only one. Each upload holds its own slice of the tenant limit.</summary>
+    public Guid UploadId { get; init; }
 }
 
 /// <summary>

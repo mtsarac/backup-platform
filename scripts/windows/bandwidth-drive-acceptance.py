@@ -251,6 +251,16 @@ class Bench:
         need(rows, 'No destination outcome row for the attempt.')
         return float(rows[0][0]), float(rows[0][1])
 
+    def relay_upload(self, attempt_id):
+        """Seconds the backend relay spent on the upload ALONE (request body to Drive), from its 'Relayed upload finished' log line; None if absent.
+        The destination window also holds the separate read-back verification (and engine/hash work for nothing else), so limits are judged on this."""
+        pattern = re.compile(r'Relayed upload finished: attempt ' + re.escape(str(uuid.UUID(attempt_id))) + r' bytes (\d+) seconds ([0-9.]+)')
+        for line in reversed((HOME / 'log' / 'api.log').read_text(errors='replace').splitlines()):
+            found = pattern.search(line)
+            if found:
+                return int(found.group(1)), float(found.group(2))
+        return None
+
     def measure(self, detail):
         """Facts of the succeeded attempt: size, upload window, effective rate, replica proof. Registers the artifact for cleanup."""
         need(detail['status'] == 'Succeeded', f'The run ended as {detail["status"]}.')
@@ -260,15 +270,20 @@ class Bench:
         start, end = self.window(attempt['id'])
         measured = {'attempt': attempt['number'], 'sizeBytes': artifact['sizeBytes'], 'uploadSeconds': round(end - start, 2), 'startEpoch': start, 'endEpoch': end,
                     'effectiveBytesPerSecond': round(artifact['sizeBytes'] / max(end - start, 1e-6)), 'verification': f'{replica["verificationState"]}/{replica["verificationMethod"]}'}
+        relay = self.relay_upload(attempt['id'])
+        need(relay is not None, 'The backend log has no "Relayed upload finished" line for the attempt (is the dev API on this build and logging Information?).')
+        measured.update(relayBytes=relay[0], relayUploadSeconds=relay[1], relayUploadBytesPerSecond=round(relay[0] / max(relay[1], 1e-6)),
+                        readBackAndOtherSeconds=round((end - start) - relay[1], 2))
         need(replica['verificationState'] == 'Verified' and replica['verificationMethod'] == 'ReadBack', f'The replica is {measured["verification"]}, not Verified/ReadBack.')
         need(replica['checksum'].lower() == artifact['artifactChecksum'].lower(), 'The replica checksum differs from the artifact checksum.')
         return measured
 
     def assert_paced(self, d, limit):
         a = self.args
-        size, seconds = d['sizeBytes'], d['uploadSeconds']
+        # Judged on the upload alone (relay log), not on the destination window that also contains the read-back.
+        size, seconds = d['relayBytes'], d['relayUploadSeconds']
         low, high = (size - a.burst) / limit - a.tolerance, a.upper_factor * size / limit + a.overhead
-        d.update(limitBytesPerSecond=limit, percentOfLimit=round(100 * d['effectiveBytesPerSecond'] / limit, 1), minSeconds=round(low, 2), maxSeconds=round(high, 2))
+        d.update(limitBytesPerSecond=limit, percentOfLimit=round(100 * d['relayUploadBytesPerSecond'] / limit, 1), minSeconds=round(low, 2), maxSeconds=round(high, 2))
         need(seconds >= low, f'The upload took {seconds}s, faster than the limit allows (>= {low:.1f}s): the pace was not enforced.')
         need(seconds <= high, f'The upload took {seconds}s, more than {a.upper_factor}x the ideal (<= {high:.1f}s).')
 
@@ -315,7 +330,7 @@ class Bench:
         total = sum(m['sizeBytes'] for m in measured)
         combined = (total - a.burst) / (end - start)
         leftovers = {'windows': a1d.staging(), 'linux': linux_staging()}
-        d.update(sizesBytes=[m['sizeBytes'] for m in measured], uploadSeconds=[m['uploadSeconds'] for m in measured], overlapSeconds=round(overlap, 2),
+        d.update(sizesBytes=[m['sizeBytes'] for m in measured], uploadSeconds=[m['uploadSeconds'] for m in measured], relayUploadSeconds=[m['relayUploadSeconds'] for m in measured], relayUploadBytesPerSecond=[m['relayUploadBytesPerSecond'] for m in measured], overlapSeconds=round(overlap, 2),
                  totalBytes=total, wallSeconds=round(end - start, 2), combinedBytesPerSecond=round(total / (end - start)), combinedMinusBurstBytesPerSecond=round(combined),
                  limitBytesPerSecond=a.tenant_limit, percentOfLimit=round(100 * total / (end - start) / a.tenant_limit, 1), stagingLeftovers=leftovers)
         need(overlap >= a.min_overlap, f'The uploads overlapped only {overlap:.1f}s (< {a.min_overlap}s): the shared limit was not exercised.')

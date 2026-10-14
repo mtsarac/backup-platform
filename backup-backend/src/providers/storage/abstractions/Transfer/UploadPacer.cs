@@ -44,13 +44,13 @@ public sealed class UploadPacer : IAsyncDisposable
     private DateTimeOffset _validUntil;
     private bool _sliceTaken;
 
-    private UploadPacer(IUploadPolicySource source, TimeProvider time, UploadPacingPolicy policy)
+    private UploadPacer(IUploadPolicySource source, TimeProvider time, UploadPacingPolicy policy, DateTimeOffset asked)
     {
         _source = source;
         _time = time;
         _limiter = new TransferRateLimiter(time: time);
         _policy = policy;
-        Apply(policy);
+        Apply(policy, asked);
         _renewal = RenewAsync(_stop.Token);
     }
 
@@ -70,10 +70,11 @@ public sealed class UploadPacer : IAsyncDisposable
                 TimeSpan delay;
                 try
                 {
+                    var asked = time.GetUtcNow();
                     var policy = await source.FetchAsync(release: false, cancellationToken).ConfigureAwait(false);
                     registered |= policy.HoldsSlice;
                     // Registered as waiting, the upload is given a slice at the next renewal.
-                    if (policy.BytesPerSecond != 0) return new UploadPacer(source, time, policy);
+                    if (policy.BytesPerSecond != 0) return new UploadPacer(source, time, policy, asked);
                     delay = policy.RefreshAfter;
                 }
                 catch (UploadPolicyException exception) when (exception.Transient && ++failures < StartAttempts)
@@ -93,13 +94,16 @@ public sealed class UploadPacer : IAsyncDisposable
     /// <summary>The stream to upload from: reads of <paramref name="source"/> are paced; length and position pass through.</summary>
     public Stream Wrap(Stream source) => new ThrottledStream(source, _limiter);
 
-    private void Apply(UploadPacingPolicy policy)
+    // The slice is promised from the moment the policy owner was ASKED (it stamps its expiry then), not from when the answer arrived.
+    private void Apply(UploadPacingPolicy policy, DateTimeOffset asked)
     {
         Volatile.Write(ref _policy, policy);
         _sliceTaken |= policy.HoldsSlice;
-        _validUntil = _time.GetUtcNow() + policy.ValidFor;
+        _validUntil = asked + policy.ValidFor;
         _limiter.SetRate(policy.BytesPerSecond);
     }
+
+    private static TimeSpan Max(TimeSpan a, TimeSpan b) => a > b ? a : b;
 
     private async Task RenewAsync(CancellationToken cancellationToken)
     {
@@ -109,13 +113,20 @@ public sealed class UploadPacer : IAsyncDisposable
             while (true)
             {
                 await Task.Delay(delay, _time, cancellationToken).ConfigureAwait(false);
+                var asked = _time.GetUtcNow();
+                using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 try
                 {
-                    Apply(await _source.FetchAsync(release: false, cancellationToken).ConfigureAwait(false));
+                    var fetch = _source.FetchAsync(release: false, attempt.Token);
+                    // A renewal that hangs must not outlive the slice: past _validUntil the policy owner may have given it to another upload, so the transfer is held
+                    // (and the renewal abandoned) even though the call has not answered.
+                    var policy = _policy.HoldsSlice ? await fetch.WaitAsync(Max(_validUntil - asked, TimeSpan.Zero), _time, cancellationToken).ConfigureAwait(false) : await fetch.ConfigureAwait(false);
+                    Apply(policy, asked);
                     delay = _policy.RefreshAfter;
                 }
-                catch (UploadPolicyException exception) when (exception.Transient)
+                catch (Exception exception) when (exception is TimeoutException || exception is UploadPolicyException { Transient: true })
                 {
+                    await attempt.CancelAsync().ConfigureAwait(false);
                     delay = RetryDelay;
                     // The slice was only promised until _validUntil; past it the slice belongs to someone else.
                     if (_policy.HoldsSlice && _time.GetUtcNow() >= _validUntil) _limiter.SetRate(0);

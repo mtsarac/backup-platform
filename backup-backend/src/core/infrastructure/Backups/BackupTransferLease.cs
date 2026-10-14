@@ -102,6 +102,9 @@ public sealed class TransferLeaseHold : IAsyncDisposable
         _service = service;
         _lockId = lockId;
         _owner = owner;
+        // The fence is a timer of its own, never a check inside the renewal loop: a renewal that hangs or fails slowly cannot postpone it. It is re-armed only
+        // by a successful renewal, so the holder is told to stop Ttl - SelfFenceMargin after the database last promised the lease, whatever happens meanwhile.
+        _lost.CancelAfter(timing.Ttl - timing.SelfFenceMargin);
         _renewal = RenewAsync(timing, _stop.Token);
     }
 
@@ -109,16 +112,16 @@ public sealed class TransferLeaseHold : IAsyncDisposable
 
     private async Task RenewAsync(BackupTransferLeaseOptions timing, CancellationToken cancellationToken)
     {
-        var sinceRenewal = System.Diagnostics.Stopwatch.StartNew();
         var wait = timing.RenewEvery;
         try
         {
             while (true)
             {
                 await Task.Delay(wait, cancellationToken).ConfigureAwait(false);
+                var asked = System.Diagnostics.Stopwatch.StartNew();
                 try
                 {
-                    // A hung database call must not hide a lost lease: each attempt is bounded by the renewal interval.
+                    // A hung database call must not outlast its turn: each attempt is bounded by the renewal interval.
                     using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                     attempt.CancelAfter(timing.RenewEvery);
                     if (!await _service.RenewAsync(_lockId, _owner, attempt.Token).ConfigureAwait(false))
@@ -126,18 +129,13 @@ public sealed class TransferLeaseHold : IAsyncDisposable
                         await _lost.CancelAsync().ConfigureAwait(false);
                         return;
                     }
-                    sinceRenewal.Restart();
+                    // The database stamped the new expiry when the statement ran, at most `asked` ago: count the fence from the moment the request was made.
+                    _lost.CancelAfter(Max(timing.Ttl - timing.SelfFenceMargin - asked.Elapsed, TimeSpan.Zero));
                     wait = timing.RenewEvery;
                 }
                 catch (Exception) when (!cancellationToken.IsCancellationRequested)
                 {
-                    // Database trouble: keep trying, but stop the work while the lease is still ours by the database clock.
-                    if (sinceRenewal.Elapsed >= timing.Ttl - timing.SelfFenceMargin)
-                    {
-                        await _lost.CancelAsync().ConfigureAwait(false);
-                        return;
-                    }
-                    wait = TimeSpan.FromSeconds(1);
+                    wait = TimeSpan.FromSeconds(1); // database trouble: keep trying; the fence timer is already running
                 }
             }
         }
@@ -146,14 +144,16 @@ public sealed class TransferLeaseHold : IAsyncDisposable
         }
     }
 
+    private static TimeSpan Max(TimeSpan a, TimeSpan b) => a > b ? a : b;
+
     public async ValueTask DisposeAsync()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
         await _stop.CancelAsync().ConfigureAwait(false);
         await _renewal.ConfigureAwait(false);
         _stop.Dispose();
-        // A lease that was lost is not ours to delete.
-        if (!_lost.IsCancellationRequested) await _service.ReleaseAsync(_lockId, _owner).ConfigureAwait(false);
+        // Owner-checked: a lease that was taken over is not ours to delete, one that merely ran into the fence still is.
+        await _service.ReleaseAsync(_lockId, _owner).ConfigureAwait(false);
         _lost.Dispose();
     }
 }
@@ -167,8 +167,11 @@ internal static class BackupTransferLeases
     public static async Task<bool> TryTakeAsync(PlatformDbContext context, long lockId, Guid owner, TimeSpan ttl, CancellationToken cancellationToken)
     {
         var seconds = ttl.TotalSeconds;
-        // Rows of long-dead holders and of past retention claims are not worth keeping; the sweep rides on every take because that is when the table is touched anyway.
-        await context.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM backup_transfer_leases WHERE \"ExpiresAt\" < clock_timestamp() - interval '1 hour'", cancellationToken).ConfigureAwait(false);
+        // Rows of long-dead holders and of past retention claims are not worth keeping; the sweep rides on every take because that is when the table is touched anyway. SKIP LOCKED: a concurrent sweep or a retention transaction that holds rows never makes another take wait (or deadlock) on them.
+        await context.Database.ExecuteSqlInterpolatedAsync($"""
+            DELETE FROM backup_transfer_leases WHERE "LockId" IN (
+                SELECT "LockId" FROM backup_transfer_leases WHERE "ExpiresAt" < clock_timestamp() - interval '1 hour' FOR UPDATE SKIP LOCKED)
+            """, cancellationToken).ConfigureAwait(false);
         return await context.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO backup_transfer_leases ("LockId", "OwnerId", "ExpiresAt")
             VALUES ({lockId}, {owner}, clock_timestamp() + make_interval(secs => {seconds}))

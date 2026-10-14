@@ -79,18 +79,20 @@ public sealed class UploadBandwidthLimit : ITenantOwned
 }
 
 /// <summary>
-/// The slice of a tenant limit that one running attempt was last told to use. It is a lease: the agent renews it every few seconds and it simply
-/// expires when the agent, its network, the backend or the attempt goes away, so a crash can never keep a slice locked.
+/// The slice of a tenant limit that one running UPLOAD was last told to use (an attempt may have several at once, one per destination, and each is limited
+/// separately). It is a lease: the uploader renews it every few seconds and it simply expires when the uploader, its network, the backend or the attempt
+/// goes away, so a crash can never keep a slice locked.
 /// </summary>
 public sealed class UploadBandwidthGrant : ITenantOwned
 {
     private UploadBandwidthGrant() { TenantId = null!; }
 
-    public UploadBandwidthGrant(TenantId tenantId, Guid attemptId, long bytesPerSecond, DateTimeOffset now, DateTimeOffset expiresAt)
+    public UploadBandwidthGrant(TenantId tenantId, Guid uploadId, Guid attemptId, long bytesPerSecond, DateTimeOffset now, DateTimeOffset expiresAt)
     {
         ArgumentNullException.ThrowIfNull(tenantId);
-        if (attemptId == Guid.Empty || bytesPerSecond < 0 || expiresAt <= now) throw new ArgumentException("The grant is invalid.");
+        if (uploadId == Guid.Empty || attemptId == Guid.Empty || bytesPerSecond < 0 || expiresAt <= now) throw new ArgumentException("The grant is invalid.");
         TenantId = tenantId;
+        UploadId = uploadId;
         AttemptId = attemptId;
         BytesPerSecond = bytesPerSecond;
         UpdatedAt = now;
@@ -98,6 +100,7 @@ public sealed class UploadBandwidthGrant : ITenantOwned
     }
 
     public TenantId TenantId { get; private set; }
+    public Guid UploadId { get; private set; }
     public Guid AttemptId { get; private set; }
 
     /// <summary>0 means registered as uploading but no slice is free yet: the upload waits.</summary>

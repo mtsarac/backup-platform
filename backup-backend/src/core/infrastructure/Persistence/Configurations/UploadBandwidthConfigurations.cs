@@ -23,7 +23,7 @@ internal sealed class UploadBandwidthGrantConfiguration : IEntityTypeConfigurati
     {
         builder.ToTable("upload_bandwidth_grants", table => table.HasCheckConstraint("ck_upload_bandwidth_grants_rate", "\"BytesPerSecond\" >= 0"));
         builder.Property(grant => grant.TenantId).HasConversion<TenantIdConverter>().IsRequired();
-        builder.HasKey(grant => grant.AttemptId);
+        builder.HasKey(grant => grant.UploadId);
         // The tenant's live grants are read, summed and pruned together on every renewal.
         builder.HasIndex(grant => new { grant.TenantId, grant.ExpiresAt });
     }

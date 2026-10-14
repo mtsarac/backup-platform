@@ -125,6 +125,24 @@ public sealed class BackupTransferLeaseIntegrationTests(PostgreSqlFixture fixtur
         await hold.DisposeAsync();
     }
 
+    // The fence is a timer of its own: a renewal that HANGS (database stalls rather than refuses) must not postpone it past the lease time.
+    [Fact]
+    public async Task A_renewal_that_hangs_cannot_postpone_the_fence_beyond_the_lease_time()
+    {
+        var connection = Guid.NewGuid();
+        var stall = new RenewalOutage { Hang = true };
+        var timing = new BackupTransferLeaseOptions(TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(1.5));
+        var hold = await Service(timing, stall).AcquireAsync(connection, "stall", default);
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        stall.Active = true;
+
+        await hold.Lost.WhenCancelledAsync().WaitAsync(Deadline);
+
+        // Fence = Ttl - margin = 2.5 s after the last promise. A check inside the renewal loop would only run after the hung attempt (RenewEvery = 2 s) ended: > 4 s.
+        Assert.InRange(watch.Elapsed, TimeSpan.FromSeconds(1.5), TimeSpan.FromSeconds(3.5));
+        await hold.DisposeAsync();
+    }
+
     [Fact]
     public async Task Leases_of_long_dead_holders_are_swept_when_the_table_is_next_used()
     {
@@ -142,10 +160,17 @@ public sealed class BackupTransferLeaseIntegrationTests(PostgreSqlFixture fixtur
     {
         public volatile bool Active;
 
-        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        /// <summary>Stall renewals instead of refusing them (until their own cancellation).</summary>
+        public bool Hang { get; init; }
+
+        public override async ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
-            if (Active && command.CommandText.Contains("UPDATE backup_transfer_leases", StringComparison.Ordinal)) throw new InvalidOperationException("database unreachable");
-            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+            if (Active && command.CommandText.Contains("UPDATE backup_transfer_leases", StringComparison.Ordinal))
+            {
+                if (Hang) await Task.Delay(Timeout.Infinite, cancellationToken);
+                throw new InvalidOperationException("database unreachable");
+            }
+            return await base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
         }
     }
 }

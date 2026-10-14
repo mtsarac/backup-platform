@@ -66,6 +66,7 @@ public sealed class PostgreSqlUploadBandwidthStore(DbContextOptions<PlatformDbCo
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         var now = lease.Now;
+        var uploadId = lease.UploadId ?? lease.AttemptId;
         var jobId = await RunningJobAsync(context, lease.TenantId, lease.AgentId, lease.AttemptId, lease.LeaseToken, now, cancellationToken);
         if (jobId is null) return null;
         var limits = await LimitsAsync(context, lease.TenantId, lease.AgentId, jobId.Value, cancellationToken);
@@ -73,25 +74,29 @@ public sealed class PostgreSqlUploadBandwidthStore(DbContextOptions<PlatformDbCo
         if (action == UploadSliceAction.Release || limits.Tenant is null)
         {
             // Nothing to divide: no lock either. A slice left over from before the tenant limit was removed is simply dropped.
-            await context.UploadBandwidthGrants.Where(grant => grant.TenantId == lease.TenantId && grant.AttemptId == lease.AttemptId).ExecuteDeleteAsync(cancellationToken);
+            await context.UploadBandwidthGrants.Where(grant => grant.TenantId == lease.TenantId && grant.UploadId == uploadId).ExecuteDeleteAsync(cancellationToken);
             return limits;
         }
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         await context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({"upload-bandwidth:" + lease.TenantId.Value.ToString("N")}, 0))", cancellationToken);
         // The lease was checked before the lock; it is checked again here so a slice is never granted to an attempt that ended while this call waited.
         if (await RunningJobAsync(context, lease.TenantId, lease.AgentId, lease.AttemptId, lease.LeaseToken, now, cancellationToken) is null) return null;
-        // Pruned before this attempt's own grant is loaded: a grant that lapsed because renewals were missed is simply re-created.
-        await context.UploadBandwidthGrants.Where(grant => grant.TenantId == lease.TenantId && grant.ExpiresAt <= now).ExecuteDeleteAsync(cancellationToken);
-        var mine = await context.UploadBandwidthGrants.SingleOrDefaultAsync(grant => grant.TenantId == lease.TenantId && grant.AttemptId == lease.AttemptId, cancellationToken);
+        // Slices are leases between uploaders on DIFFERENT nodes, so their expiry is judged by the database clock alone: a node whose own clock runs ahead must not
+        // see another node's live slice as expired and hand itself the whole limit. (The attempt's own lease above is checked against the caller's clock like
+        // every other lifecycle call.)
+        var dbNow = await context.Database.SqlQuery<DateTimeOffset>($"SELECT clock_timestamp() AS \"Value\"").SingleAsync(cancellationToken);
+        // Pruned before this upload's own grant is loaded: a grant that lapsed because renewals were missed is simply re-created.
+        await context.UploadBandwidthGrants.Where(grant => grant.TenantId == lease.TenantId && grant.ExpiresAt <= dbNow).ExecuteDeleteAsync(cancellationToken);
+        var mine = await context.UploadBandwidthGrants.SingleOrDefaultAsync(grant => grant.TenantId == lease.TenantId && grant.UploadId == uploadId, cancellationToken);
         // Only uploads that are alive count: a grant whose attempt ended or lost its lease frees its slice at once, not when it expires.
         var others = await (from grant in context.UploadBandwidthGrants.AsNoTracking()
                             join attempt in context.BackupRunAttempts.AsNoTracking() on grant.AttemptId equals attempt.Id
-                            where grant.TenantId == lease.TenantId && grant.AttemptId != lease.AttemptId && grant.ExpiresAt > now
+                            where grant.TenantId == lease.TenantId && grant.UploadId != uploadId && grant.ExpiresAt > dbNow
                                 && attempt.Status == BackupStatus.Running && attempt.LeaseExpiresAt > now
                             select grant.BytesPerSecond).ToListAsync(cancellationToken);
         var share = UploadBandwidth.Share(limits.Tenant.Value, others.Count, others.Sum());
-        if (mine is null) context.UploadBandwidthGrants.Add(new UploadBandwidthGrant(lease.TenantId, lease.AttemptId, share, now, now + grantTtl));
-        else mine.Renew(share, now, now + grantTtl);
+        if (mine is null) context.UploadBandwidthGrants.Add(new UploadBandwidthGrant(lease.TenantId, uploadId, lease.AttemptId, share, dbNow, dbNow + grantTtl));
+        else mine.Renew(share, dbNow, dbNow + grantTtl);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return limits with { TenantShare = share };

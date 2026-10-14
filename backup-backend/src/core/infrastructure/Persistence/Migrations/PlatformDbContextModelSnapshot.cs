@@ -1578,8 +1578,11 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("BackupPlatform.Domain.Backups.UploadBandwidthGrant", b =>
                 {
-                    b.Property<Guid>("AttemptId")
+                    b.Property<Guid>("UploadId")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AttemptId")
                         .HasColumnType("uuid");
 
                     b.Property<long>("BytesPerSecond")
@@ -1594,7 +1597,7 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.HasKey("AttemptId");
+                    b.HasKey("UploadId");
 
                     b.HasIndex("TenantId", "ExpiresAt");
 

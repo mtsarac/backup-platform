@@ -12,26 +12,30 @@ namespace BackupPlatform.Agent.Core.Tasks;
 /// never sees those bytes); a relayed destination is paced by the backend, so the agent only reads the policy once to know how much to widen its deadline.
 /// </summary>
 public sealed class UploadBandwidthGovernor(IBackupTaskClient client, IAgentCredentialStore identities, Guid attemptId, Guid leaseToken, TimeProvider time)
-    : IUploadBandwidth, IUploadPolicySource
+    : IUploadBandwidth
 {
     public async Task<IUploadBandwidthSession> BeginAsync(StorageTopology destination, CancellationToken cancellationToken)
     {
         if (destination == StorageTopology.AgentDirect)
-            return new PacedSession(await UploadPacer.BeginAsync(this, time, cancellationToken).ConfigureAwait(false));
-        var policy = await FetchAsync(UploadPolicyRequestMode.Observe, cancellationToken).ConfigureAwait(false);
+            return new PacedSession(await UploadPacer.BeginAsync(new UploadSource(this, Guid.NewGuid()), time, cancellationToken).ConfigureAwait(false));
+        var policy = await FetchAsync(UploadPolicyRequestMode.Observe, Guid.Empty, cancellationToken).ConfigureAwait(false);
         return new ObservedSession(policy.MinimumBytesPerSecond);
     }
 
-    Task<UploadPacingPolicy> IUploadPolicySource.FetchAsync(bool release, CancellationToken cancellationToken) =>
-        FetchAsync(release ? UploadPolicyRequestMode.Release : UploadPolicyRequestMode.Renew, cancellationToken);
+    /// <summary>One paced upload: it holds its own slice of the tenant limit, whatever else the attempt uploads.</summary>
+    private sealed class UploadSource(UploadBandwidthGovernor owner, Guid uploadId) : IUploadPolicySource
+    {
+        public Task<UploadPacingPolicy> FetchAsync(bool release, CancellationToken cancellationToken) =>
+            owner.FetchAsync(release ? UploadPolicyRequestMode.Release : UploadPolicyRequestMode.Renew, uploadId, cancellationToken);
+    }
 
     private enum UploadPolicyRequestMode { Renew, Release, Observe }
 
-    private async Task<UploadPacingPolicy> FetchAsync(UploadPolicyRequestMode mode, CancellationToken cancellationToken)
+    private async Task<UploadPacingPolicy> FetchAsync(UploadPolicyRequestMode mode, Guid uploadId, CancellationToken cancellationToken)
     {
         var identity = await identities.LoadAsync(cancellationToken).ConfigureAwait(false)
             ?? throw new UploadPolicyException("The local identity is unavailable, so the upload limits cannot be obtained.");
-        var request = new UploadPolicyRequest { LeaseToken = leaseToken, Release = mode == UploadPolicyRequestMode.Release, Observe = mode == UploadPolicyRequestMode.Observe };
+        var request = new UploadPolicyRequest { LeaseToken = leaseToken, Release = mode == UploadPolicyRequestMode.Release, Observe = mode == UploadPolicyRequestMode.Observe, UploadId = uploadId };
         var result = await client.GetUploadPolicyAsync(identity, attemptId, request, cancellationToken).ConfigureAwait(false);
         if (!result.IsSuccess)
             throw new UploadPolicyException("The upload limits could not be obtained from the backend.",

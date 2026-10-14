@@ -165,6 +165,44 @@ public sealed class UploadBandwidthStoreIntegrationTests(PostgreSqlFixture fixtu
         Assert.Equal(0, await TotalGrantedAsync(tenant));
     }
 
+    // A modified agent (or a multi-destination attempt) may run several uploads of one attempt at once: each is an upload of its own, so the tenant total
+    // still holds. Keying slices by attempt would have let every extra upload run at the whole limit.
+    [Fact]
+    public async Task Concurrent_uploads_of_one_attempt_each_hold_their_own_slice_and_never_exceed_the_tenant_limit()
+    {
+        var tenant = await _kit.AddTenantAsync();
+        await SetAsync(tenant, UploadBandwidthScope.Tenant, tenant.Value, Limit);
+        var (claim, _, _) = await RunningAsync(tenant, T0);
+        var first = Command(claim, T0.AddSeconds(1)) with { UploadId = Guid.NewGuid() };
+        var second = Command(claim, T0.AddSeconds(1)) with { UploadId = Guid.NewGuid() };
+
+        Assert.Equal(Limit, (await Bandwidth.GrantAsync(first, UploadSliceAction.Renew, Ttl, default))!.TenantShare);
+        Assert.Equal(0, (await Bandwidth.GrantAsync(second, UploadSliceAction.Renew, Ttl, default))!.TenantShare);
+        Assert.True(await TotalGrantedAsync(tenant) <= Limit);
+        Assert.Equal(Limit / 2, (await Bandwidth.GrantAsync(first, UploadSliceAction.Renew, Ttl, default))!.TenantShare);
+        Assert.Equal(Limit / 2, (await Bandwidth.GrantAsync(second, UploadSliceAction.Renew, Ttl, default))!.TenantShare);
+        Assert.Equal(Limit, await TotalGrantedAsync(tenant));
+
+        await Bandwidth.GrantAsync(first, UploadSliceAction.Release, Ttl, default);
+        Assert.Equal(Limit / 2, await TotalGrantedAsync(tenant));
+    }
+
+    // Another node's clock may run far ahead of this one's: slices are leases between nodes, so only the database clock decides whether one is still live.
+    [Fact]
+    public async Task A_node_with_a_clock_far_in_the_future_cannot_see_another_nodes_live_slice_as_expired()
+    {
+        var tenant = await _kit.AddTenantAsync();
+        await SetAsync(tenant, UploadBandwidthScope.Tenant, tenant.Value, Limit);
+        var (first, _, _) = await RunningAsync(tenant, T0);
+        var (second, _, _) = await RunningAsync(tenant, T0);
+        Assert.Equal(Limit, await GrantedAsync(first, T0.AddSeconds(1)));
+
+        // The second upload's node believes it is a minute later than every other node (the attempt lease, judged by the caller's clock, is still valid at T0 + 1 min).
+        var skewed = Command(second, T0.AddSeconds(60));
+        Assert.Equal(0, (await Bandwidth.GrantAsync(skewed, UploadSliceAction.Renew, Ttl, default))!.TenantShare);
+        Assert.True(await TotalGrantedAsync(tenant) <= Limit);
+    }
+
     [Fact]
     public async Task Other_tenants_are_independent()
     {
@@ -201,6 +239,9 @@ public sealed class UploadBandwidthStoreIntegrationTests(PostgreSqlFixture fixtu
         // third renews every few seconds.
         Assert.Equal(Limit / 2, await GrantedAsync(third, T0.AddSeconds(3)));
         Assert.Equal(Limit / 2, await GrantedAsync(third, T0.AddSeconds(8)));
+        // second never renews: its slice lapses by the DATABASE clock (aged here instead of waiting ten real seconds).
+        await using (var db = fixture.CreatePlatformContext())
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE upload_bandwidth_grants SET \"ExpiresAt\" = clock_timestamp() - interval '1 second' WHERE \"AttemptId\" = {second.Attempt.Id}");
         Assert.Equal(Limit, await GrantedAsync(third, T0.AddSeconds(12)));
         Assert.Null(await Bandwidth.GrantAsync(Command(first, T0.AddSeconds(13)), UploadSliceAction.Renew, Ttl, default));
     }

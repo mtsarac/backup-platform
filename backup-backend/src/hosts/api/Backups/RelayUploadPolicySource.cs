@@ -9,12 +9,15 @@ namespace BackupPlatform.Api.Backups;
 /// </summary>
 public sealed class RelayUploadPolicySource(UploadBandwidthService service, BackupLeaseCommand lease, TimeProvider time) : IUploadPolicySource
 {
+    // Every relayed request is its own upload with its own slice, however many the attempt (or a modified agent) runs at once.
+    private readonly Guid _uploadId = Guid.NewGuid();
+
     public async Task<UploadPacingPolicy> FetchAsync(bool release, CancellationToken cancellationToken)
     {
         UploadPolicyResponseView? policy;
         try
         {
-            var response = await service.PolicyAsync(lease with { Now = time.GetUtcNow() }, release ? UploadSliceAction.Release : UploadSliceAction.Renew, cancellationToken);
+            var response = await service.PolicyAsync(lease with { Now = time.GetUtcNow(), UploadId = _uploadId }, release ? UploadSliceAction.Release : UploadSliceAction.Renew, cancellationToken);
             policy = response is null ? null : new(response.EffectiveBytesPerSecond, response.TenantShareBytesPerSecond is not null, response.MinimumBytesPerSecond,
                 TimeSpan.FromSeconds(response.RefreshAfterSeconds), TimeSpan.FromSeconds(response.ValidForSeconds));
         }
