@@ -113,7 +113,7 @@ public sealed class NotificationConfirmationEngineTests
     public async Task An_alert_is_not_lost_while_the_only_email_address_is_unconfirmed_it_goes_out_once_that_address_confirms()
     {
         var time = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(Start);
-        var engine = new NotificationEngine(new FakeNotificationStore(), new NoSource(), new NotificationOptions(), time, Microsoft.Extensions.Logging.Abstractions.NullLogger<NotificationEngine>.Instance);
+        var engine = new NotificationEngine(new FakeNotificationStore(), new StubSource(), new NotificationOptions(), time, Microsoft.Extensions.Logging.Abstractions.NullLogger<NotificationEngine>.Instance);
         var session = new InMemorySession { Policy = EnabledPolicy(Start, policy => policy.Update(true, NotificationEventTypes.Selectable, NotificationSeverity.Warning, [NotificationChannelKind.Email], true, 48, 15, 24, 30, Start)) };
         var channel = Email(confirmed: false);
         session.Channels.Add(channel);
@@ -132,7 +132,7 @@ public sealed class NotificationConfirmationEngineTests
     public async Task Unconfirmed_and_unsubscribed_addresses_get_no_delivery_while_confirmed_channels_still_do()
     {
         var time = new Microsoft.Extensions.Time.Testing.FakeTimeProvider(Start);
-        var engine = new NotificationEngine(new FakeNotificationStore(), new NoSource(), new NotificationOptions(), time, Microsoft.Extensions.Logging.Abstractions.NullLogger<NotificationEngine>.Instance);
+        var engine = new NotificationEngine(new FakeNotificationStore(), new StubSource(), new NotificationOptions(), time, Microsoft.Extensions.Logging.Abstractions.NullLogger<NotificationEngine>.Instance);
         var session = new InMemorySession { Policy = EnabledPolicy(Start) };
         var unsubscribed = Email("gone@example.com", "Gone");
         unsubscribed.Unsubscribe(Start);
@@ -141,10 +141,5 @@ public sealed class NotificationConfirmationEngineTests
         await engine.ApplyAsync(session, [Set(NotificationEventTypes.AgentOffline, true, Condition(NotificationEventTypes.AgentOffline, "agent_offline:a"))], time.GetUtcNow());
 
         Assert.Equal(["Hook", "Ops"], session.Deliveries.Select(delivery => delivery.ChannelName).Order());
-    }
-
-    private sealed class NoSource : INotificationObservationSource
-    {
-        public Task<IReadOnlyList<ObservationSet>> CollectAsync(NotificationPolicy policy, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

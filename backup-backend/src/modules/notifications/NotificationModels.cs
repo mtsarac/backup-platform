@@ -97,6 +97,14 @@ public interface INotificationObservationSource
     /// transient read error can never be mistaken for "everything recovered".
     /// </summary>
     Task<IReadOnlyList<ObservationSet>> CollectAsync(NotificationPolicy policy, DateTimeOffset now, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Which of <paramref name="subjectIds"/> (subjects of conditions of <paramref name="type"/> that are no longer observed) no longer exist or were taken out of
+    /// service on purpose: an agent that was revoked, disabled or deleted, a job that was disabled or deleted. Their conditions ended because an administrator
+    /// closed them, not because the problem went away, so ending them must not announce a recovery. A read failure throws (the sweep is repeated); it is never
+    /// answered with "nobody was retired".
+    /// </summary>
+    Task<IReadOnlySet<Guid>> RetiredSubjectsAsync(TenantId tenantId, string type, IReadOnlyCollection<Guid> subjectIds, CancellationToken cancellationToken);
 }
 
 /// <summary>One tenant's notification state inside ONE transaction that is serialized per tenant on every node. Nothing is saved unless the unit of work completes.</summary>

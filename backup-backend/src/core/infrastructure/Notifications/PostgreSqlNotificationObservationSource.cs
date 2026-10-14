@@ -1,6 +1,7 @@
 using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Backups;
+using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Notifications;
 using BackupPlatform.Infrastructure.Backups;
 using BackupPlatform.Infrastructure.Persistence;
@@ -51,6 +52,29 @@ public sealed class PostgreSqlNotificationObservationSource(
             }
         }
         return sets;
+    }
+
+    public async Task<IReadOnlySet<Guid>> RetiredSubjectsAsync(TenantId tenantId, string type, IReadOnlyCollection<Guid> subjectIds, CancellationToken cancellationToken)
+    {
+        if (subjectIds.Count == 0) return new HashSet<Guid>();
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        // The same definitions the detectors observe with: an agent counts while it is Active, a job while it is Enabled. Anything else (or gone) was taken out of service.
+        HashSet<Guid> inService;
+        switch (type)
+        {
+            case NotificationEventTypes.AgentOffline:
+                var agentIds = subjectIds.Select(id => new AgentId(id)).ToList();
+                inService = (await context.Agents.AsNoTracking().Where(agent => agent.TenantId == tenantId && agentIds.Contains(agent.Id) && agent.Status == AgentStatus.Active)
+                    .Select(agent => agent.Id).ToListAsync(cancellationToken)).Select(id => id.Value).ToHashSet();
+                break;
+            case NotificationEventTypes.BackupStale or NotificationEventTypes.ReplicaDegraded:
+                inService = (await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && subjectIds.Contains(job.Id) && job.Enabled)
+                    .Select(job => job.Id).ToListAsync(cancellationToken)).ToHashSet();
+                break;
+            default:
+                return new HashSet<Guid>(); // quota (the tenant itself) and one-shot types have no subject that can be taken out of service
+        }
+        return subjectIds.Where(id => !inService.Contains(id)).ToHashSet();
     }
 
     private async Task<IReadOnlyList<NotificationObservation>> FailedRunsAsync(NotificationPolicy policy, DateTimeOffset now, CancellationToken cancellationToken)

@@ -115,3 +115,14 @@ internal sealed class FakeRecipientTokens : IRecipientTokens
             ? new RecipientClaim(new TenantId(tenant), channel, (RecipientAction)action, parts[3]) : null;
     }
 }
+
+/// <summary>An observation source for engine tests that feed observation sets by hand: only the subjects a test marks as retired are reported as taken out of service.</summary>
+internal sealed class StubSource : INotificationObservationSource
+{
+    public HashSet<Guid> Retired { get; } = [];
+
+    public Task<IReadOnlyList<ObservationSet>> CollectAsync(NotificationPolicy policy, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+    public Task<IReadOnlySet<Guid>> RetiredSubjectsAsync(TenantId tenantId, string type, IReadOnlyCollection<Guid> subjectIds, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlySet<Guid>>(subjectIds.Where(Retired.Contains).ToHashSet());
+}

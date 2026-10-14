@@ -28,6 +28,9 @@ public sealed class NotificationRecipientIntegrationTests : IAsyncLifetime
         public Task<IReadOnlyList<ObservationSet>> CollectAsync(NotificationPolicy policy, DateTimeOffset at, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<ObservationSet>>([new ObservationSet(NotificationEventTypes.AgentOffline, true,
                 [new NotificationObservation("agent_offline:a", NotificationEventTypes.AgentOffline, NotificationSeverity.Critical, new NotificationSubject("agent", Guid.NewGuid(), "build-01"), now())])]);
+
+        public Task<IReadOnlySet<Guid>> RetiredSubjectsAsync(TenantId tenantId, string type, IReadOnlyCollection<Guid> subjectIds, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlySet<Guid>>(new HashSet<Guid>());
     }
 
     [Fact]

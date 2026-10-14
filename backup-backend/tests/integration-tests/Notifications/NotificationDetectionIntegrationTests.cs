@@ -122,6 +122,78 @@ public sealed class NotificationDetectionIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task An_offline_agent_that_is_revoked_ends_its_condition_silently_while_another_agents_real_return_is_still_announced()
+    {
+        var (revoked, _) = await AgentWithJobAsync([NotificationEventTypes.AgentOffline]);
+        var returning = new StoreAgent(revoked.TenantId, await Kit.AddAgentToAsync(revoked.TenantId));
+        await _world.HeartbeatAsync(revoked, Now);
+        await _world.HeartbeatAsync(returning, Now);
+        _world.Clock.Advance(TimeSpan.FromMinutes(20));
+        Assert.Equal(2, await SweepAsync());
+
+        await using (var context = _database.CreatePlatformContext())
+            await context.Database.ExecuteSqlInterpolatedAsync($"UPDATE agents SET \"Status\" = 4 WHERE \"Id\" = {revoked.AgentId.Value}");
+        await _world.HeartbeatAsync(returning, Now);
+        Assert.Equal(1, await SweepAsync());
+        Assert.Equal(0, await SweepAsync());
+
+        var events = await _world.EventsAsync(revoked.TenantId);
+        var recovery = Assert.Single(events, e => e.Phase == NotificationPhase.Recovered);
+        Assert.Equal(returning.AgentId.Value, recovery.SubjectId);
+        Assert.Equal(2, events.Count(e => e.Phase == NotificationPhase.Raised));
+        await using var check = _database.CreatePlatformContext();
+        Assert.All(await check.NotificationConditions.AsNoTracking().Where(c => c.TenantId == revoked.TenantId).ToListAsync(), c => Assert.False(c.IsActive));
+    }
+
+    [Fact]
+    public async Task A_stale_job_that_is_disabled_ends_its_condition_silently_and_one_that_succeeds_again_is_announced()
+    {
+        var (agent, job) = await AgentWithJobAsync([NotificationEventTypes.BackupStale]);
+        Assert.Equal(1, await SweepAsync());
+
+        await using (var context = _database.CreatePlatformContext())
+            await context.Database.ExecuteSqlInterpolatedAsync($"UPDATE backup_jobs SET \"Enabled\" = false WHERE \"Id\" = {job.Id}");
+        _world.Clock.Advance(TimeSpan.FromMinutes(1));
+        Assert.Equal(0, await SweepAsync());
+        Assert.Equal(0, await SweepAsync());
+
+        Assert.Equal([NotificationPhase.Raised], (await _world.EventsAsync(agent.TenantId)).Select(e => e.Phase));
+
+        // Switched on again and succeeding, the same job is a fresh condition that can recover for real.
+        await using (var context = _database.CreatePlatformContext())
+            await context.Database.ExecuteSqlInterpolatedAsync($"UPDATE backup_jobs SET \"Enabled\" = true WHERE \"Id\" = {job.Id}");
+        _world.Clock.Advance(TimeSpan.FromMinutes(20));
+        Assert.Equal(1, await SweepAsync());
+        var store = Kit.Store();
+        await Kit.StartRunAsync(store, job, "ok", Now);
+        var claim = await ClaimAsync(store, agent, Now);
+        await StartAttemptAsync(store, claim!, Now);
+        await CompleteAsync(store, claim!, Success(Now), Now);
+        _world.Clock.Advance(TimeSpan.FromMinutes(1));
+        Assert.Equal(1, await SweepAsync());
+
+        Assert.Equal([NotificationPhase.Raised, NotificationPhase.Raised, NotificationPhase.Recovered], (await _world.EventsAsync(agent.TenantId)).Select(e => e.Phase));
+    }
+
+    [Fact]
+    public async Task The_retired_check_never_reports_a_subject_that_is_still_in_service_and_reports_unknown_ones()
+    {
+        var (agent, job) = await AgentWithJobAsync();
+        var source = _world.Source();
+        var ghost = Guid.NewGuid();
+
+        var agents = await source.RetiredSubjectsAsync(agent.TenantId, NotificationEventTypes.AgentOffline, [agent.AgentId.Value, ghost], default);
+        var jobs = await source.RetiredSubjectsAsync(agent.TenantId, NotificationEventTypes.BackupStale, [job.Id, ghost], default);
+        var otherTenant = await source.RetiredSubjectsAsync(await Kit.AddTenantAsync(), NotificationEventTypes.AgentOffline, [agent.AgentId.Value], default);
+        var quota = await source.RetiredSubjectsAsync(agent.TenantId, NotificationEventTypes.QuotaCritical, [agent.TenantId.Value], default);
+
+        Assert.Equal([ghost], agents);
+        Assert.Equal([ghost], jobs);
+        Assert.Equal([agent.AgentId.Value], otherTenant); // another tenant's agent is not "in service" for this tenant: isolation holds
+        Assert.Empty(quota);
+    }
+
+    [Fact]
     public async Task A_job_without_a_recent_success_is_reported_stale_and_a_new_success_resolves_it()
     {
         var (agent, job) = await AgentWithJobAsync([NotificationEventTypes.BackupStale]);

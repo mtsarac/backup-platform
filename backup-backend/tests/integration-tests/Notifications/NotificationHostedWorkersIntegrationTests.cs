@@ -47,18 +47,20 @@ public sealed class NotificationHostedWorkersIntegrationTests : IAsyncLifetime
         await WaitForMessagesAsync(smtp, 1);
         var confirmation = ParseMessage(smtp.Messages[0]);
         Assert.Equal("[Backup Platform] Confirm your email address", confirmation.Subject);
-        var confirmLink = LinkPath(confirmation);
-        using (var preview = await scenario.World.Anonymous.GetAsync(confirmLink))
+        var (confirmPath, confirmToken) = PageLink(confirmation);
+        using (var page = await scenario.World.Anonymous.GetAsync(confirmPath))
         {
-            Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
-            Assert.Contains("<button", await preview.Content.ReadAsStringAsync());
+            Assert.Equal(HttpStatusCode.OK, page.StatusCode);
+            var html = await page.Content.ReadAsStringAsync();
+            Assert.Contains("<button", html);
+            Assert.DoesNotContain(confirmToken, html);
         }
         Assert.False(await RecipientVerifiedAsync(scenario, channelPath));
 
-        // Confirming is a POST without any session; a replay of the same link is harmless.
+        // Confirming is a POST of the form the page builds from the fragment, without any session; a replay of the same link is harmless.
         for (var attempt = 0; attempt < 2; attempt++)
         {
-            using var confirmed = await scenario.World.Anonymous.PostAsync(confirmLink, null);
+            using var confirmed = await scenario.World.Anonymous.PostAsync(confirmPath, new FormUrlEncodedContent([new("token", confirmToken)]));
             Assert.Equal(HttpStatusCode.OK, confirmed.StatusCode);
         }
         Assert.True(await RecipientVerifiedAsync(scenario, channelPath));
@@ -79,16 +81,17 @@ public sealed class NotificationHostedWorkersIntegrationTests : IAsyncLifetime
         Assert.Equal(("sent", "email", "backup_failed", 1), (item.GetProperty("status").GetString(), item.GetProperty("channelKind").GetString(),
             item.GetProperty("eventType").GetString(), item.GetProperty("attempts").GetInt32()));
 
-        // The recipient can walk away without any login: the link of the alert itself (or the one-click header) unsubscribes and stops the channel.
+        // The recipient can walk away without any login: the mail client's one-click POST (token in the header URL's query) unsubscribes and stops the channel.
         var unsubscribe = alert.Headers["List-Unsubscribe"]!.Trim('<', '>');
-        using var oneClick = await scenario.World.Anonymous.PostAsync(unsubscribe[Root.Length..], new StringContent("List-Unsubscribe=One-Click"));
+        Assert.StartsWith(Root + "/api/notifications/recipient/unsubscribe?token=", unsubscribe);
+        using var oneClick = await scenario.World.Anonymous.PostAsync(unsubscribe[Root.Length..], new FormUrlEncodedContent([new("List-Unsubscribe", "One-Click")]));
         Assert.Equal(HttpStatusCode.OK, oneClick.StatusCode);
         using var after = await scenario.Admin.GetAsync(channelPath);
         var state = JsonDocument.Parse(await after.Content.ReadAsStringAsync()).RootElement;
         Assert.False(state.GetProperty("enabled").GetBoolean());
         Assert.False(state.GetProperty("recipientVerified").GetBoolean());
 
-        using var forged = await scenario.World.Anonymous.PostAsync("/api/notifications/recipient?token=not-a-token", null);
+        using var forged = await scenario.World.Anonymous.PostAsync("/api/notifications/recipient/unsubscribe?token=not-a-token", null);
         Assert.Equal(HttpStatusCode.BadRequest, forged.StatusCode);
     }
 
@@ -96,9 +99,15 @@ public sealed class NotificationHostedWorkersIntegrationTests : IAsyncLifetime
 
     private static MimeMessage ParseMessage(string raw) => MimeMessage.Load(new MemoryStream(Encoding.UTF8.GetBytes(raw)));
 
-    /// <summary>The first recipient link of a mail (the confirmation link comes before the unsubscribe link), as a path the test client can call.</summary>
-    private static string LinkPath(MimeMessage message) =>
-        message.TextBody!.Split('\n').Select(line => line.Trim()).First(line => line.StartsWith(Root + "/api/notifications/recipient?token=", StringComparison.Ordinal))[Root.Length..];
+    /// <summary>The first recipient link of a mail (the confirmation link comes before the unsubscribe link): the page path a browser requests and the token that stays in the fragment.</summary>
+    private static (string Path, string Token) PageLink(MimeMessage message)
+    {
+        var link = message.TextBody!.Split('\n').Select(line => line.Trim()).First(line => line.StartsWith(Root + "/api/notifications/recipient/", StringComparison.Ordinal));
+        var fragment = link.IndexOf("#token=", StringComparison.Ordinal);
+        Assert.True(fragment > 0, "the token must travel in the URL fragment");
+        Assert.DoesNotContain("?", link);
+        return (link[Root.Length..fragment], Uri.UnescapeDataString(link[(fragment + "#token=".Length)..]));
+    }
 
     private static async Task WaitForMessagesAsync(TestSmtpServer smtp, int count)
     {

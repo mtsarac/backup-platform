@@ -69,6 +69,21 @@ public sealed class NotificationOptions
     /// <summary>Tests and recipient confirmations one tenant may request per hour across all its channels (a deleted and re-created channel does not reset it).</summary>
     public int TestNotificationsPerTenantPerHour { get; init; } = 20;
 
+    /// <summary>Window of the recipient-link limits below.</summary>
+    public TimeSpan RecipientLinkWindow { get; init; } = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// Requests one confirmation or unsubscribe token may make per window, valid or replayed. A mail provider's one-click unsubscribe is a single request
+    /// per token, so this never touches it; it bounds what someone holding a token can do to the database.
+    /// </summary>
+    public int RecipientLinkAttemptsPerToken { get; init; } = 10;
+
+    /// <summary>
+    /// Requests with a missing, forged or expired token one network client may make per window before it is answered 429. Only invalid requests count and
+    /// valid tokens are never limited by client address (behind a reverse proxy every client shares the proxy's address unless forwarded headers are configured).
+    /// </summary>
+    public int RecipientLinkInvalidPerClient { get; init; } = 20;
+
     public bool IsHttpsPortAllowed(int port) => port == 443 || AdditionalHttpsPorts.Contains(port);
 
     public IReadOnlyList<string> Validate()
@@ -90,6 +105,7 @@ public sealed class NotificationOptions
             if (!System.Net.IPNetwork.TryParse(network, out _)) problems.Add($"AllowedPrivateNetworks entry '{network}' is not a CIDR range.");
         if (AdditionalHttpsPorts.Any(port => port is < 1 or > 65535)) problems.Add("AdditionalHttpsPorts entries must be between 1 and 65535.");
         if (TestNotificationsPerTenantPerHour < 1) problems.Add("TestNotificationsPerTenantPerHour must be at least 1.");
+        if (RecipientLinkWindow < TimeSpan.FromSeconds(1) || RecipientLinkAttemptsPerToken < 1 || RecipientLinkInvalidPerClient < 1) problems.Add("RecipientLinkWindow must be at least one second and the recipient link limits at least 1.");
         if (PublicBaseUrl is not null && (!Uri.TryCreate(PublicBaseUrl, UriKind.Absolute, out var url) || url.Scheme is not ("https" or "http") || url.Query.Length > 0 || url.Fragment.Length > 0 || url.UserInfo.Length > 0))
             problems.Add("PublicBaseUrl must be an absolute http(s) URL without credentials, query or fragment.");
         return problems;

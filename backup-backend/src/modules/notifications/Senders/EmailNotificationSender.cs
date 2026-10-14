@@ -37,16 +37,18 @@ public sealed class EmailNotificationSender(
 
         var rendered = NotificationMessageFormatter.Render(work.Event);
         var fingerprint = RecipientLinks.Fingerprint(work.Target);
-        string Link(RecipientAction action) => RecipientLinks.Url(options, tokens.Issue(new RecipientClaim(work.TenantId, work.ChannelId, action, fingerprint)));
-        var unsubscribe = Link(RecipientAction.Unsubscribe);
-        var text = work.Event.Type == NotificationEventTypes.RecipientVerification ? $"{rendered.Text}\n\nTo confirm this address, open:\n{Link(RecipientAction.Confirm)}" : rendered.Text;
+        string Token(RecipientAction action) => tokens.Issue(new RecipientClaim(work.TenantId, work.ChannelId, action, fingerprint));
+        var unsubscribeToken = Token(RecipientAction.Unsubscribe);
+        var unsubscribe = RecipientLinks.PageUrl(options, RecipientAction.Unsubscribe, unsubscribeToken);
+        var text = work.Event.Type == NotificationEventTypes.RecipientVerification
+            ? $"{rendered.Text}\n\nTo confirm this address, open:\n{RecipientLinks.PageUrl(options, RecipientAction.Confirm, Token(RecipientAction.Confirm))}" : rendered.Text;
         var message = new MimeMessage();
         message.From.Add(new MailboxAddress(settings.FromName ?? NotificationMessageFormatter.Product, settings.FromAddress));
         message.To.Add(MailboxAddress.Parse(work.Target));
         message.Subject = rendered.Subject;
         message.MessageId = $"{work.DeliveryId:N}@{settings.FromAddress[(settings.FromAddress.LastIndexOf('@') + 1)..]}";
         message.Headers.Add("Auto-Submitted", "auto-generated");
-        message.Headers.Add("List-Unsubscribe", $"<{unsubscribe}>");
+        message.Headers.Add("List-Unsubscribe", $"<{RecipientLinks.OneClickUrl(options, unsubscribeToken)}>");
         message.Headers.Add("List-Unsubscribe-Post", "List-Unsubscribe=One-Click");
         message.Body = new TextPart("plain") { Text = $"{text}\n\nTo stop receiving these emails, open:\n{unsubscribe}" };
 

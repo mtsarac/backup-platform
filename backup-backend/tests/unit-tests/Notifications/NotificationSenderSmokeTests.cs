@@ -270,10 +270,14 @@ public sealed class SmtpDeliverySmokeTests
 
         var message = Parse(Assert.Single(server.Messages));
         var header = message.Headers["List-Unsubscribe"]!;
-        Assert.StartsWith("<https://backup.example.com/api/notifications/recipient?token=", header);
+        Assert.StartsWith("<https://backup.example.com/api/notifications/recipient/unsubscribe?token=", header);
         Assert.Equal("List-Unsubscribe=One-Click", message.Headers["List-Unsubscribe-Post"]);
-        Assert.Contains(header.Trim('<', '>'), message.TextBody);
-        Assert.Equal(new RecipientClaim(work.TenantId, work.ChannelId, RecipientAction.Unsubscribe, RecipientLinks.Fingerprint("ops@example.com")), ClaimOf(header));
+        // The person-facing link carries the same unsubscribe token in the fragment, so it is not part of any request line.
+        Assert.DoesNotContain("?token=", message.TextBody);
+        var page = message.TextBody!.Split('\n').Select(line => line.Trim()).Single(line => line.Contains("/recipient/unsubscribe#token="));
+        var expected = new RecipientClaim(work.TenantId, work.ChannelId, RecipientAction.Unsubscribe, RecipientLinks.Fingerprint("ops@example.com"));
+        Assert.Equal(expected, ClaimOf(page));
+        Assert.Equal(expected, ClaimOf(header));
     }
 
     [Fact]
@@ -289,7 +293,9 @@ public sealed class SmtpDeliverySmokeTests
         var message = Parse(Assert.Single(server.Messages));
         Assert.Equal("[Backup Platform] Confirm your email address", message.Subject);
         Assert.DoesNotContain("bank", message.TextBody);
-        var confirm = message.TextBody!.Split('\n').Select(line => line.Trim()).Single(line => line.Contains("token=") && ClaimOf(line).Action == RecipientAction.Confirm);
+        // The link a person opens keeps its token in the fragment (never sent to a server, so in no access log); the body has no query-string token at all.
+        Assert.DoesNotContain("?token=", message.TextBody);
+        var confirm = message.TextBody!.Split('\n').Select(line => line.Trim()).Single(line => line.Contains("/recipient/confirm#token="));
         Assert.Equal(new RecipientClaim(work.TenantId, work.ChannelId, RecipientAction.Confirm, RecipientLinks.Fingerprint("ops@example.com")), ClaimOf(confirm));
     }
 

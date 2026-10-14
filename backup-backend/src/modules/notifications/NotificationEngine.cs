@@ -42,12 +42,12 @@ public sealed class NotificationEngine(
         var sets = await source.CollectAsync(policy, now, cancellationToken);
         if (sets.Count == 0) return 0;
         var written = 0;
-        await store.InTenantSessionAsync(policy.TenantId, async session => written = await ApplyAsync(session, sets, now), cancellationToken);
+        await store.InTenantSessionAsync(policy.TenantId, async session => written = await ApplyAsync(session, sets, now, cancellationToken), cancellationToken);
         return written;
     }
 
     /// <summary>Applies observations to one tenant inside <paramref name="session"/>. Public so the persistence tests drive the exact production path.</summary>
-    public async Task<int> ApplyAsync(INotificationSession session, IReadOnlyList<ObservationSet> sets, DateTimeOffset now)
+    public async Task<int> ApplyAsync(INotificationSession session, IReadOnlyList<ObservationSet> sets, DateTimeOffset now, CancellationToken cancellationToken = default)
     {
         // The policy is re-read under the tenant lock: a change made after the sweep started is honoured, not raced.
         var policy = await session.GetPolicyAsync();
@@ -82,10 +82,12 @@ public sealed class NotificationEngine(
                 if (decision is NotificationConditionDecision.Raise or NotificationConditionDecision.Remind)
                     await emitter.EmitAsync(NotificationPhase.Raised, observation.Type, observation.Severity, observation.Subject, observation.Facts, condition.EventKey(decision), observation.OccurredAt);
             }
-            foreach (var condition in await session.ListActiveConditionsAsync(set.Type))
+            var ended = (await session.ListActiveConditionsAsync(set.Type)).Where(condition => !seen.Contains(condition.Key)).ToList();
+            // A condition that ends because its subject was revoked, deleted or disabled was closed by an administrator: nothing recovered, so nothing is announced.
+            IReadOnlySet<Guid> retired = ended.Count == 0 ? new HashSet<Guid>() : await source.RetiredSubjectsAsync(policy.TenantId, set.Type, ended.Where(condition => condition.SubjectId is not null).Select(condition => condition.SubjectId!.Value).ToList(), cancellationToken);
+            foreach (var condition in ended)
             {
-                if (seen.Contains(condition.Key)) continue;
-                var recoveryAdmitted = policy.RecoveryNotifications && emitter.Admits(condition.Type, NotificationSeverity.Critical);
+                var recoveryAdmitted = policy.RecoveryNotifications && emitter.Admits(condition.Type, NotificationSeverity.Critical) && !(condition.SubjectId is { } id && retired.Contains(id));
                 if (condition.ObserveResolved(recoveryAdmitted, now) == NotificationConditionDecision.Recover)
                     await emitter.EmitAsync(NotificationPhase.Recovered, condition.Type, NotificationSeverity.Info,
                         new NotificationSubject(condition.SubjectKind, condition.SubjectId, condition.SubjectName), null, condition.EventKey(NotificationConditionDecision.Recover), now);

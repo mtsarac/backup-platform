@@ -34,8 +34,21 @@ public static class RecipientLinks
     /// <summary>Ties a token to the address it was mailed to: after the channel is re-pointed, a link sent to the previous owner no longer works.</summary>
     public static string Fingerprint(string target) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(target.ToLowerInvariant())))[..16];
 
-    public static string Url(NotificationOptions options, string token) =>
-        $"{options.PublicBaseUrl!.TrimEnd('/')}/api/notifications/recipient?token={Uri.EscapeDataString(token)}";
+    public static string Route(RecipientAction action) => action == RecipientAction.Confirm ? "confirm" : "unsubscribe";
+
+    /// <summary>
+    /// The link a person opens. The token sits in the URL FRAGMENT, which a browser never sends: it reaches no proxy, CDN or API access log. The page reads it
+    /// from the fragment and posts it in a request body.
+    /// </summary>
+    public static string PageUrl(NotificationOptions options, RecipientAction action, string token) =>
+        $"{options.PublicBaseUrl!.TrimEnd('/')}/api/notifications/recipient/{Route(action)}#token={Uri.EscapeDataString(token)}";
+
+    /// <summary>
+    /// The URL of the <c>List-Unsubscribe</c> header (RFC 8058 one-click): a mail client POSTs to it without a browser, so here the token must travel in the query.
+    /// It is an unsubscribe token (it can only stop mail, never start it) and operators should keep query strings out of access logs for this path.
+    /// </summary>
+    public static string OneClickUrl(NotificationOptions options, string token) =>
+        $"{options.PublicBaseUrl!.TrimEnd('/')}/api/notifications/recipient/{Route(RecipientAction.Unsubscribe)}?token={Uri.EscapeDataString(token)}";
 }
 
 public enum RecipientOutcome

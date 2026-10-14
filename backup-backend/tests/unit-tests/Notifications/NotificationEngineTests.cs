@@ -15,18 +15,14 @@ public sealed class NotificationEngineTests
     private readonly FakeTimeProvider _time = new(Start);
     private readonly NotificationEngine _engine;
     private readonly InMemorySession _session = new();
+    private readonly StubSource _source = new();
 
     public NotificationEngineTests()
     {
-        _engine = new NotificationEngine(new FakeNotificationStore(), new NoSource(), Options, _time, NullLogger<NotificationEngine>.Instance);
+        _engine = new NotificationEngine(new FakeNotificationStore(), _source, Options, _time, NullLogger<NotificationEngine>.Instance);
         _session.Policy = EnabledPolicy(Start);
         _session.Channels.Add(Email());
         _session.Channels.Add(Webhook());
-    }
-
-    private sealed class NoSource : INotificationObservationSource
-    {
-        public Task<IReadOnlyList<ObservationSet>> CollectAsync(NotificationPolicy policy, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private Task<int> ApplyAsync(params ObservationSet[] sets) => _engine.ApplyAsync(_session, sets, _time.GetUtcNow());
@@ -75,6 +71,23 @@ public sealed class NotificationEngineTests
         Assert.Equal([NotificationPhase.Raised, NotificationPhase.Recovered], _session.Events.Select(e => e.Phase));
         Assert.Equal("build-01", _session.Events[1].SubjectName);
         Assert.Equal(NotificationSeverity.Info, _session.Events[1].Severity);
+    }
+
+    [Fact]
+    public async Task A_condition_an_administrator_closed_ends_silently_while_a_real_recovery_is_still_announced()
+    {
+        await ApplyAsync(Offline("agent_offline:revoked", "agent_offline:healed"));
+        _source.Retired.Add(_session.Conditions.Single(condition => condition.Key == "agent_offline:revoked").SubjectId!.Value);
+        _time.Advance(TimeSpan.FromMinutes(30));
+
+        await ApplyAsync(Offline());
+        await ApplyAsync(Offline());
+
+        Assert.Equal(2, _session.Events.Count(e => e.Phase == NotificationPhase.Raised));
+        var healed = _session.Conditions.Single(condition => condition.Key == "agent_offline:healed");
+        var recovery = Assert.Single(_session.Events, e => e.Phase == NotificationPhase.Recovered);
+        Assert.Equal(healed.SubjectId, recovery.SubjectId);
+        Assert.All(_session.Conditions, condition => Assert.False(condition.IsActive));
     }
 
     [Fact]

@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 var isBootstrap = args.Contains("--bootstrap-user", StringComparer.Ordinal);
 var builder = WebApplication.CreateBuilder(isBootstrap ? args.Where(argument => argument != "--bootstrap-user").ToArray() : args);
-// Hosting's request-start messages include OAuth callback query credentials.
+// Hosting's request-start messages include the query string: OAuth callback credentials and the one-click unsubscribe token (NotificationRecipientApiIntegrationTests pins this).
 builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
 builder.Services.AddPlatformSecurity();
 
