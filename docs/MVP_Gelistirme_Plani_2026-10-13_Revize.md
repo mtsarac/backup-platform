@@ -32,7 +32,7 @@ MVP, ileride eklenecek PostgreSQL, Linux agent implementasyonu, gelişmiş resto
 
 **Ürün modeli:** Yüz yüze/doğrudan satış; PlatformAdmin tarafından elle plan/abonelik atama. **Online checkout, payment gateway, billing provider ve uygulama içi faturalama kapsam dışı**; mevcut `Plan`/`TenantSubscription`/quota teknik kullanım için korunur.
 
-**Sıradaki işlemler:** A0 kritik audit ve A1 canlı provider/Windows acceptance çalışma dalında tamamlandı; sıradaki yeni özellik roadmap **Faz 2A — Upload Bandwidth Limiting**. Bu iterasyonda Faz 2A'ya başlanmadı. Sonraki yüksek öncelikler N1 bildirim, R1 izole restore testi ve E1 artifact şifreleme. Production/staging dağıtımı bu geliştirme planının kapsamı değildir.
+**Sıradaki işlemler:** A0 kritik audit, A1 canlı provider/Windows acceptance ve roadmap **Faz 2A — Upload Bandwidth Limiting** çalışma dalında tamamlandı (Faz 2B/2C başlanmadı). Sıradaki yüksek öncelikler N1 bildirim, R1 izole restore testi ve E1 artifact şifreleme. Production/staging dağıtımı bu geliştirme planının kapsamı değildir.
 
 ---
 
@@ -1071,7 +1071,7 @@ Bu belge ilk MVP'nin tarihsel planıdır; yukarıdaki teknik kararlar ve 35 madd
 
 ## 14.3 Henüz uygulanmayan ileri özellikler
 
-Bandwidth limiting/profilleri ve upload pause/resume; File/Folder Backup ve File Restore; Windows VSS ve Linux snapshot; Docker runtime; Linux systemd installer; MSSQL Differential/Transaction Log/PITR; PostgreSQL backup; S3/SMB/FTPS; tam 3-2-1 storage-class/off-site policy; otomatik restore testleri (R1); bildirim kanalları (N1); kapasite/health/anomaly; auto-update; artifact encryption (E1); ileri audit/raporlama. **Online billing/provider bu eksikler listesine dahil değildir: bilinçli biçimde kapsam dışıdır.**
+Bandwidth profilleri (2B) ve upload pause/resume (2C) — byte-temelli upload limiti (2A) tamamlandı; File/Folder Backup ve File Restore; Windows VSS ve Linux snapshot; Docker runtime; Linux systemd installer; MSSQL Differential/Transaction Log/PITR; PostgreSQL backup; S3/SMB/FTPS; tam 3-2-1 storage-class/off-site policy; otomatik restore testleri (R1); bildirim kanalları (N1); kapasite/health/anomaly; auto-update; artifact encryption (E1); ileri audit/raporlama. **Online billing/provider bu eksikler listesine dahil değildir: bilinçli biçimde kapsam dışıdır.**
 
 FileSystem backup ve snapshot modüllerinin `.csproj` iskeletlerinin bulunması bu özelliklerin tamamlandığı anlamına gelmez. SFTP ve Google Drive ise önceki 2026-10-07 listelerinin tersine temel işlevleriyle kodda vardır.
 
@@ -1089,7 +1089,7 @@ FileSystem backup ve snapshot modüllerinin `.csproj` iskeletlerinin bulunması 
 
 ## 14.6 Sıradaki geliştirme ve kabul ilkesi
 
-**A0 kritik audit ve A1 canlı provider/Windows acceptance kapanışı çalışma dalında tamamlandı**; **sıradaki yeni ürün geliştirmesi Faz 2A (gerçek upload bandwidth limiting)**, bu iterasyonda başlamadı. Kullanıcı isteğiyle test kurulum maliyeti ve odaklı geliştirme runner'ları iyileştirildi; integrity/tenant/race test kapsamı azaltılmadı. Ardından roadmap Bölüm 35'te **N1** (email/webhook alarm), **R1** (izole MSSQL restore test otomasyonu), **E1** (artifact şifreleme) öne alınır.
+**A0 kritik audit, A1 canlı provider/Windows acceptance kapanışı ve Faz 2A (gerçek upload bandwidth limiting) çalışma dalında tamamlandı**; Faz 2B/2C başlamadı. Kullanıcı isteğiyle test kurulum maliyeti ve odaklı geliştirme runner'ları iyileştirildi; integrity/tenant/race test kapsamı azaltılmadı. Ardından roadmap Bölüm 35'te **N1** (email/webhook alarm), **R1** (izole MSSQL restore test otomasyonu), **E1** (artifact şifreleme) öne alınır.
 
 Her teslimatta: ilgili servis/senaryo için unit+DB/provider/Windows test kapsamı, tenant/secret güvenliği, cancel/retry/restart/failure akışları, geriye uyumluluk ve `NOT RUN` kabul listesi raporlanmalıdır. Kod varlığı tek başına “gerçek ortam kabulü geçti” anlamına gelmez. Deployment ve release kararı verilmez.
 

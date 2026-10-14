@@ -50,7 +50,7 @@ Temel prensip:
 
 ## Henüz tamamlanmamış ana alanlar
 
-**A0 audit kapanışı çalışma dalında tamamlandı** (Bölüm 1B). **Sıradaki yeni ürün özelliği:** Faz 2A — Agent/tenant/job seviyesinde gerçek byte-temelli bandwidth limiting (Bölüm 4); bu iterasyonda başlanmadı.
+**A0 audit kapanışı ve Faz 2A (upload bandwidth limiting) çalışma dalında tamamlandı** (Bölüm 1B, Bölüm 4). **Sıradaki:** N1 bildirimleri, R1 izole restore testi ve E1 artifact şifreleme (Bölüm 35); Faz 2B/2C bu iterasyonda başlanmadı.
 
 **Planlı:** Faz 2B zaman profilleri ve 2C pause/resume/recovery; **erken öncelikli** minimum email/webhook bildirimleri, izole MSSQL restore-test otomasyonu ve backup artifact şifreleme; MSSQL Differential/Log/PITR; File/Folder Backup ve File Restore; Windows VSS; Linux systemd installer; Docker runtime/discovery; PostgreSQL backup; S3/SMB/FTPS; provider kapasite izleme; tam 3-2-1 ve ileri audit. Ayrıntılı **teslim sırası** Bölüm 35'tedir; faz numarası öncelik demek değildir.
 
@@ -713,7 +713,7 @@ Hedef, AKINSOFT benzeri yedekleme ürünlerinin temel kullanıcı fonksiyonları
 | Multi-destination ve replica repair | Completed (temel) | Quarantine, atomic admission, doğrulanmış kopya sayısı; tam 3-2-1 policy ayrı faz. |
 | Quota, Plans, Usage ve Support Access | Completed (temel) | Satış yüz yüze; online billing yapılmayacak. İzole support restore ortamı ayrı Future. |
 | File/Folder backup ve include/exclude | Planned | Faz 3, yalnız proje iskeleti. |
-| Bandwidth limiting / transfer policies | **Next (2A)** | Faz 2A sıradaki ürün dilimi; 2B/2C ihtiyaca göre daha sonra. |
+| Bandwidth limiting / transfer policies | **Completed (2A, çalışma dalı) / Planned (2B/2C)** | Faz 2A: agent/tenant/job byte-temelli upload limiti (Bölüm 4); 2B/2C ihtiyaca göre daha sonra. |
 | MSSQL Differential/Transaction Log/PITR | Planned | Faz 10–12. |
 | PostgreSQL backup | Planned | Faz 13. |
 | S3 / SMB/NAS / FTPS | Planned | Faz 16/18 ve provider genişlemesi. |
@@ -809,9 +809,9 @@ Provider desteklemiyorsa özellik capability üzerinden devre dışı kalmalıd�
 
 # 4. Faz 2 — Bandwidth ve transfer politikaları
 
-**Durum: Next ürün özelliği (A0 audit kapanışından sonra).** API request rate limitleri ve transfer eşzamanlılık bütçesi mevcut olsa da bunlar **byte/saniye trafik sınırlaması değildir**. Mevcut `IStorageProvider`/AgentDirect/BackendRelayed yolları incelenerek, MSSQL backup, replica repair, download/restore ve retention güvenliği bozulmadan bu faz parçalara ayrılır.
+**Durum: Faz 2A tamamlandı (çalışma dalı); 2B/2C Planned.** API request rate limitleri ve transfer eşzamanlılık bütçesi mevcut olsa da bunlar **byte/saniye trafik sınırlaması değildir**. Mevcut `IStorageProvider`/AgentDirect/BackendRelayed yolları incelenerek, MSSQL backup, replica repair, download/restore ve retention güvenliği bozulmadan bu faz parçalara ayrılır.
 
-## Faz 2A — Byte-temelli upload bandwidth limiting (**sıradaki ürün dilimi; A0 sonrası**)
+## Faz 2A — Byte-temelli upload bandwidth limiting (**Completed — 2026-10-14, çalışma dalı `feature/faz-2a-upload-bandwidth-limiting`; uygulama kaydı aşağıda**)
 
 - Agent, tenant ve job bazlı hız sınırları için açık policy hiyerarşisi ve override kuralları (birim **bit/s veya byte/s net tanımlı**, `Unlimited` destekli).
 - Aynı tenant'ın paralel upload'larının toplam sınırı aşmaması; yalnız request başına throttle uygulamak yeterli değildir.
@@ -823,6 +823,36 @@ Provider desteklemiyorsa özellik capability üzerinden devre dışı kalmalıd�
 - Default davranış mevcut sınırsız aktarımın geriye dönük karşılığı olmalı; tenant izolasyonu ve admin yetkileri korunmalı.
 
 **Faz 2A kabul senaryoları:** Kontrollü saat/byte ölçümü ile düşük/orta/büyük stream'de üst hız sınırı; iki paralel upload'ın aynı tenant toplam sınırını aşmaması; farklı tenant'ların birbirinden bağımsız davranması; job override precedence; sınırsız mod regresyonu; cancel/retry/restart/lease kaybı; SFTP + backend relay yolları; aynı içerik için checksum ve boyut doğrulamasının değişmemesi. Başlangıçta deterministik test, ardından izole ağ smoke kullanılır.
+
+### Faz 2A — Uygulama kaydı, kararlar ve kanıt
+
+**Politika modeli.** Üç bağımsız **tavan** vardır: *tenant* (tenant'ın tüm eş zamanlı upload'larının toplamı, tüm Agent'lar dahil), *agent* (o Agent'ın upload'ı) ve *job* (o job'ın bir çalıştırması). Hepsi aynı anda geçerlidir; **en kısıtlayıcı olan kazanır**. Job limiti yalnız sıkılaştırır, agent/tenant tavanını aşamaz ("override" gevşetme değil sıkılaştırma anlamındadır; limit atlatma yolu yoktur). `Unlimited` = o kapsamda satır yok (`null`); sihirli sayı yoktur. Birim **bayt/saniye, ondalık**: 1 Mbit/s = 125.000 B/s, 1 MB/s = 1.000.000 B/s; izin verilen aralık **16.000 B/s – 100.000.000.000 B/s** (alt sınır, proxy/idle timeout'larını ve Kestrel'in 240 B/s minimum veri hızını rahat aşar). Limitler `upload_bandwidth_limits` tablosunda `(TenantId, Scope, ScopeId)` anahtarıyla tutulur; değişiklik tenant Owner/Admin'e aittir, aynı transaction'da audit olayı (`upload_bandwidth.limit_changed`, önceki/yeni değer) yazılır, başka tenant'ın agent/job'ı `404` döner. Limit değişikliği çalışan upload'a en geç yenileme aralığı (tenant limiti varken 3 sn, yoksa 15 sn) içinde ulaşır; run snapshot'ına kopyalanmaz.
+
+**Uygulama noktası (çift throttle yok).** Sınır **Agent'ta, kaynak akışında** uygulanır: pipeline `IStorageProvider.PutAsync`'e verdiği artifact akışını `ThrottledStream` ile sarar. Böylece AgentDirect (Local/Central) ve BackendRelayed (SFTP, Google Drive) **aynı noktada ve yalnız bir kez** sınırlanır; relay yalnızca gelen gövdeyi okur, tekrar throttle etmez. Artifact diskten tekrar kopyalanmaz, RAM'e alınmaz; yalnızca upload bayt'ları sınırlanır (DB backup, checksum, heartbeat, lease yenileme, admin API, read-back doğrulama ve restore/download etkilenmez). Sınırlayıcı (`TransferRateLimiter`) sürekli dolan token bucket'tır: küçük ve düzenli dilimler (≤ 64 KiB, hızın onda biri), alt sınır `rate × T + kova` (kova ≈ bir dilim + 50 ms), çalışırken hız değiştirilebilir, `null` ise bare-stream yolu (state machine yok). Agent bir backup'ı seri yürüttüğü için agent tavanı o upload'a bütün olarak uygulanır.
+
+**Tenant toplamı ve çok düğümlü koordinasyon.** Tenant tavanı, tenant'ın canlı upload'ları arasında **veritabanında** bölünür: Agent, `POST /api/agent/tasks/{attemptId}/upload-policy` ile (lease-fenced) kendi dilimini alır ve yeniler (`upload_bandwidth_grants`, TTL 10 sn = üç kaçan yenileme). Karar tenant başına `pg_advisory_xact_lock` altında verilir; hiçbir düğüm bellekte durum tutmaz. Dilim = eşit pay, fakat **diğerlerinin verilmiş dilimlerinden kalan** miktarı aşamaz: yeni gelen upload, mevcut upload küçültülmüş dilimini alana kadar `0` alır ve **beklenir** (böylece verilen dilimlerin toplamı hiçbir adımda tenant limitini aşmaz; rastgele geliş/gidiş dizileriyle testli). Bitmiş/lease'i düşmüş attempt'in dilimi anında serbest kalır; Agent normal bitişte dilimi geri verir; çöken Agent'ın dilimi TTL ile kendiliğinden düşer. Dilim yenilenemezse (backend ulaşılamaz, TTL doldu) Agent aktarımı **durdurur** (backend dilimi başkasına vermiş olabilir); lease reddedilirse aktarım bir sonraki okumada hata verir. Slice yokken (0) upload **başlamaz** (açık ama bayt akmayan istek Kestrel/proxy minimum-veri-hızı kontrolüne takılırdı). Job'un hız sınırı yüzünden kullanamadığı pay yeniden dağıtılmaz (eşit bölüşüm).
+
+**Başlangıç güvenliği ve uyumluluk.** Politika alınamazsa upload **başlamaz** (fail-closed; `upload-policy-unavailable`, `StorageUnavailable`). Limiti uygulayamayan Agent'a limit geçerli bir run verilmez: yeni capability `backup.upload-bandwidth-limit` claim sırasında (MultiDestination ile aynı desen) denetlenir; limit olmayan run'lar etkilenmez. Limitsiz kullanımda akış pass-through'dur.
+
+**Timeout etkileşimleri.** Agent hedef timeout'u (varsayılan 6 sa) ve backend provider'ların toplam-aktarım sınırları (Google Drive `UploadTimeout` 1 sa, SFTP `TransferTimeout` 1 sa) kasıtlı yavaşlatılmış upload'u "takılmış" saymasın diye `size / en-düşük-hız` kadar (en çok 24 sa) genişletilir (`UploadPolicyResponse.DeadlineAllowance`; relay bunu DB'den kendisi hesaplar, Agent'ın beyanına güvenmez; `StoragePutOptions.TransferAllowance` — yeni provider zorunlu metot eklenmeden). En düşük hız: job/agent limiti olduğu gibi, tenant limiti `limit / tenant eşzamanlı backup üst sınırı`. İdle, istek-başı ve bağlantı timeout'ları genişletilmez. Kestrel `MinRequestBodyDataRate` (240 B/s, 5 sn tolerans) 16 KB/s alt sınırdan çok düşüktür; gerçek Kestrel üzerinde 5 sn'yi aşan en düşük limitli upload testle doğrulandı.
+
+**Kapsam dışı (bilinçli).** Faz 2B/2C; restore/download; backend kaynaklı replica repair upload'ı (veri merkezi trafiği, müşteri uplink'i değil); provider API rate limitleri. Politika backup engine'inden ve provider'dan ayrıdır: yeni engine/provider `IUploadBandwidth` oturumunu pipeline'dan alır, interface'e metot eklenmez.
+
+**Arayüz.** `GET /api/tenants/{id}/upload-bandwidth` (Viewer+), `PUT …/upload-bandwidth/tenant`, `…/agents/{agentId}`, `…/jobs/{jobId}` (Admin+; gövde `{ "bytesPerSecond": n | null }`; aralık dışı `400 out_of_range`). Frontend: yan menüde **Upload Bandwidth** (tenant kartı, agent ve job tabloları; Mbit/s, MB/s, KB/s, B/s birimleri; bit/bayt karışıklığına karşı her zaman B/s karşılığı gösterilir).
+
+**Doğrulama (2026-10-14).** Release build (`-warnaserror`) temiz; unit **3769**, architecture **123**, Fast Agent **373** PASS; frontend **58 dosya / 564 test**, typecheck/lint (yalnız önceden var olan 2 uyarı)/test PASS. Odaklı PostgreSQL seçimi (Audit, Migration, BackupConcurrency, StorageRelay, StorageTransferAdmission, AgentCapability, BackupOrchestration, BackupRetry, MultiDestination, BackupOverlap, HardQuota ve yeni UploadBandwidth) **418/418 PASS** (UploadBandwidth: 11 store + 14 API/relay/Kestrel testi bu seçimin içindedir); son kod durumunda UploadBandwidth/StorageRelay/AgentCapability/BackupConcurrency/MultiDestination/Audit seçimi ayrıca yeniden çalıştırıldı (**221/221 PASS**). Migration `UploadBandwidthLimits` yalnız ekleyicidir (iki yeni tablo, veri değişmez): `has-pending-model-changes` temiz, `Up → Down → Up` ve idempotent script boş veritabanında PASS. Yeni testler: limiter (alt/orta/üst hız, paylaşım, hız değişimi, held, Fail, iptal; FakeTimeProvider), stream (bayt eşitliği, refund, passthrough), politika matematiği (rastgele dizilerde Σslice ≤ limit), service, governor (fail-closed, yenileme, TTL aşımı, lease kaybı, release, slice bekleme), pipeline (aynı baytlar, fail-closed, deadline genişletme), store (tenant izolasyonu, audit, lease/expiry/terminal, çok-düğüm eşzamanlı yenileme, claim kapısı), API (roller, aralık, 404, policy çağrısı, relay allowance) ve gerçek-Kestrel smoke.
+
+**İzole transfer smoke'ları.** (1) Gerçek Linux Agent + gerçek MSSQL + gerçek HTTPS API, Local depolama: 1.748.992 B artifact, job limiti 250.000 B/s (2 Mbit/s) → upload **6,99 sn** (tavanın izin verdiği en hızlı 6,85 sn; limitsiz 0,11 sn), SHA-256 kaynak/artifact/replica eşit. (2) Gerçek Linux Agent → BackendRelayed → gerçek SFTP (`BP_SMOKE_UPLOAD_LIMIT=64000`, `run-sftp-smoke.sh`): 532.480 B, **11,0 sn** (en hızlı izinli 8,22 sn), remote dosya/indirme/restore/retention akışı **SFTP_SMOKE_OK**. (3) Gerçek Kestrel + relay endpoint: 96.000 B, 16.000 B/s, >5 sn, bayt-bayt aynı. (4) Arayüz gerçek API'ye karşı tarayıcıda: tenant 10 Mbit/s → `1.250.000`, job 4 Mbit/s → `500.000`, aralık dışı değer istemcide engellendi.
+
+**Performans (yerel, sayfa önbelleğinde 1 GiB dosya, 64 KiB okuma).** Ham `FileStream` ≈ 5,3–6,2 GB/s; limitsiz `ThrottledStream` ≈ 5,4–6,1 GB/s (ölçüm gürültüsü içinde: −4,7 / +12,2 / +0,9 %); limit 100 GB/s (sınırlı yol) ≈ 4,6–5,6 GB/s. Hız doğruluğu: 10 Mbit/s → %101,0, 100 Mbit/s → %100,5, 1 Gbit/s → %100,6 (başlangıç kovası kaynaklı +%0,5–1); tek başına limiter 12,5–500 MB/s arasında %101,1–101,2. 1 GiB'lik limitsiz geçişte ek bellek yok (toplam ayrılan ≈ 16 MB, gen0 GC 0–1). İki ölçümde bulunan hata düzeltildi: `TimeSpan` kesmesi yüksek hızda ~%12 hız kaybı yapıyordu; sub-ms bekleme meşgul-döngüye dönüyordu (min. 2 ms bekleme).
+
+**Kalan riskler / doğrulanmayanlar.**
+- **Agent işbirlikçidir:** değiştirilmiş veya eski bir Agent politikayı yok sayabilir; backend relay ikinci kez throttle etmez. Capability kapısı yalnız claim anındaki limiti kapsar; eski bir Agent'ın çalışırken eklenen limiti uygulanmaz.
+- **Toplam sınırı, Agent'lar dilimi uyguladığı ölçüde kesindir:** kayıtlı dilimlerin toplamı limiti aşmaz, ancak yanıtın kaybolması/uygulama gecikmesi (ms–sn) anlık sapma yaratabilir; kullanılmayan pay yeniden dağıtılmaz.
+- **Uzun aktarımlar kaynak tutar:** yavaşlatılmış relay upload'ı süresince relay admission yuvası (tenant 2, düğüm 4) ve bir PostgreSQL bağlantısı (advisory lock) tutulur; 24 sa allowance üst sınırını aşacak boyut/limit kombinasyonları provider timeout'una takılır. Aktarım ortasında backend 10 sn'den uzun ulaşılamazsa gövde akmaz ve relay/proxy isteği düşürebilir (hedef başarısız, retry politikası devralır; güvenli yön).
+- **Canlı Drive ve Windows limitle çalıştırılmadı (NOT RUN):** Drive chunk okumasının düşük limitte (16 KB/s'de 1 MiB ≈ 64 sn) davranışı yalnız kod incelemesiyle değerlendirildi `[INFERENCE]`; SFTP gerçek, Drive yalnız relay/deadline testleriyle kapsandı. A1'in diğer NOT RUN kalemleri (Windows→SFTP, multi-destination acceptance, backend restart ile Windows run, Drive kapasite/ağ kesintisi, 154 MB üzeri yük) **aynen geçerlidir**.
+- **Tam PostgreSQL suite'i yeniden çalıştırılmadı** (A0'daki 30 dakikalık zaman aşımı açığı sürüyor); doğrulama odaklı seçimlerle yapıldı. Advisory-lock'un gereği mutasyon testiyle ayrıca ispatlanmadı.
+- Gerçek Agent smoke'unda, yetenek satırı henüz yokken run başlatmak `409 agent_multi_destination_unsupported` verdi (bu işten bağımsız, mevcut admission kapısı); yeni `MsSqlPacedUploadAgentSmokeTests` yetenekleri fixture ile beyan eder. Mevcut `MsSql*AgentSmokeTests` sınıfları bu işte çalıştırılmadı ve aynı kapıya takılıp takılmadıkları doğrulanmadı `[INFERENCE]`.
 
 ## Faz 2B — Saat bazlı transfer profilleri (**Planned**)
 
@@ -1664,7 +1694,7 @@ MVP MSSQL Full + Restore / Managed Service / Multi-Destination    [Completed, te
         ↓
 A0 — MVP operasyon audit matrisi ve eksik kayıtlar                [Completed: çalışma dalı]
         ↓
-Faz 2A — Upload bandwidth limiting                               [NEXT: yeni ürün özelliği]
+Faz 2A — Upload bandwidth limiting                               [Completed: çalışma dalı]
         ↓
 N1 (Faz 24) — Email/webhook bildirimleri + R1 (Faz 20) restore testi  [Öne çekildi]
         ↓
@@ -1686,8 +1716,8 @@ Aşağıda **öncelik sırası** verilir; eski `Faz` numaraları ve `M` dilimler
 | Öncelik | İş kimliği ve kapsam | Kabul / bağımlılık | Durum |
 |---|---|---|---|
 | 0 | **A0 — Kritik audit matrisi ve eksik event'ler** | MVP madde 33; veri/actor/tenant güvenliği, atomik yazım, DB testleri; Bölüm 1B kanıt/sınırlar | **Completed — çalışma dalı, 2026-10-14** |
-| 1 | **Faz 2A — Upload bandwidth limiting** | Per-agent/tenant/job, bounded stream, paralel transfer ölçümü, relay/SFTP regresyon | **Next: yeni ürün özelliği** |
-| 2 | **N1 (Faz 24) — Email + generic webhook alarm** | Durable event/dispatch, dedup, retry, SSRF koruması, tenant policy, CI | Planned — öncelikli |
+| 1 | **Faz 2A — Upload bandwidth limiting** | Per-agent/tenant/job, bounded stream, paralel transfer ölçümü, relay/SFTP regresyon | **Completed — çalışma dalı, 2026-10-14** (kanıt ve kalan riskler Bölüm 4) |
+| 2 | **N1 (Faz 24) — Email + generic webhook alarm** | Durable event/dispatch, dedup, retry, SSRF koruması, tenant policy, CI | **Next** — öncelikli |
 | 3 | **R1 (Faz 20) — İzole MSSQL restore testi** | Disposable SQL, tutarlı veri doğrulama, fail/cleanup/retry, tenant izolasyonu | Planned — öncelikli |
 | 4 | **E1 — Artifact encryption** | Önce tehdit modeli/anahtar yaşam döngüsü, sonra streaming encrypt/decrypt + restore | Planned — güvenlik |
 | 5 | **Faz 10–12 — MSSQL Differential / Transaction Log / PITR** | Full/log base chain, LSN, restore ordering, retention-safe pin, MSSQL E2E | Planned — MSSQL ürün değeri |
