@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Activity, Database, Gauge, HardDrive, LayoutDashboard, Monitor, KeyRound, RotateCcw, ShieldCheck, X } from 'lucide-react'
+import { Activity, Database, Gauge, HardDrive, Upload, LayoutDashboard, Monitor, KeyRound, RotateCcw, ShieldCheck, X } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/features/auth/use-auth'
@@ -13,6 +13,7 @@ const items = [
   { label: 'Artifacts', path: '/artifacts', icon: HardDrive },
   { label: 'Restores', path: '/restores', icon: RotateCcw },
   { label: 'Storage', path: '/storage', icon: Gauge },
+  { label: 'Upload Bandwidth', path: '/upload-bandwidth', icon: Upload },
 ]
 function SidebarContent({ onClose }: { onClose?: () => void }) {
   const { tenantId, canAdmin } = useTenant()
