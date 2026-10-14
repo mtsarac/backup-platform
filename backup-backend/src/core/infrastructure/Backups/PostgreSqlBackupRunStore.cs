@@ -271,6 +271,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         BackupRun? next = null;
         bool? supportsMultiDestination = null;
         bool? supportsQuotaBound = null;
+        bool? supportsUploadLimits = null;
         long? maxArtifactBytes = null;
         foreach (var candidateId in candidateIds)
         {
@@ -278,6 +279,12 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
             // A retry or a queued run reaches an agent without passing admission again, so the capability is fenced here too: such a run waits for an agent that can execute it.
             supportsMultiDestination ??= await StorageTargetGate.SupportsMultiDestinationAsync(context, tenantId, agentId, cancellationToken);
             if (supportsMultiDestination != true) continue;
+            // A limit that the agent cannot follow would be silently ignored, so such a run waits for an agent that can pace its uploads.
+            if (await PostgreSqlUploadBandwidthStore.AnyAsync(context, tenantId, agentId, candidate.JobId, cancellationToken))
+            {
+                supportsUploadLimits ??= await PostgreSqlUploadBandwidthStore.SupportsAsync(context, tenantId, agentId, cancellationToken);
+                if (supportsUploadLimits != true) continue;
+            }
             var bound = await TenantUsageEngine.ReadRunMaxArtifactBytesAsync(context, candidate, now, cancellationToken);
             if (bound is not null)
             {

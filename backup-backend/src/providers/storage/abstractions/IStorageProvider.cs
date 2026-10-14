@@ -109,10 +109,16 @@ public enum StorageOverwritePolicy
 /// Conditions of a write. When <see cref="ExpectedChecksum"/> or <see cref="ExpectedLength"/> is set, a successful
 /// write must match the bytes actually received. A failed write may retain owned data requiring cleanup.
 /// </summary>
+/// <param name="TransferAllowance">
+/// Extra time the provider's limit on the TOTAL duration of the transfer is widened by, because the sender is deliberately held to a
+/// bandwidth limit and a slow-by-policy upload must not be mistaken for a stalled one. Idle, per-request and connection limits are not
+/// widened. Zero (the default) changes nothing.
+/// </param>
 public sealed record StoragePutOptions(
     StorageOverwritePolicy Overwrite,
     ContentChecksum? ExpectedChecksum = null,
-    long? ExpectedLength = null);
+    long? ExpectedLength = null,
+    TimeSpan TransferAllowance = default);
 
 /// <summary>A stored object as the provider knows it. <see cref="Checksum"/> is null when the provider cannot state it without reading the content again.</summary>
 public sealed record StorageObjectMetadata(

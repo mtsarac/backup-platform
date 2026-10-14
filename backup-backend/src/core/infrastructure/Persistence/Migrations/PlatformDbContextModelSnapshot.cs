@@ -1576,6 +1576,60 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.UploadBandwidthGrant", b =>
+                {
+                    b.Property<Guid>("AttemptId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("BytesPerSecond")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("AttemptId");
+
+                    b.HasIndex("TenantId", "ExpiresAt");
+
+                    b.ToTable("upload_bandwidth_grants", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_upload_bandwidth_grants_rate", "\"BytesPerSecond\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.UploadBandwidthLimit", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Scope")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("ScopeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("BytesPerSecond")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("TenantId", "Scope", "ScopeId");
+
+                    b.ToTable("upload_bandwidth_limits", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_upload_bandwidth_limits_range", "\"BytesPerSecond\" BETWEEN 16000 AND 100000000000");
+                        });
+                });
+
             modelBuilder.Entity("BackupPlatform.Domain.Downloads.DownloadSession", b =>
                 {
                     b.Property<Guid>("Id")

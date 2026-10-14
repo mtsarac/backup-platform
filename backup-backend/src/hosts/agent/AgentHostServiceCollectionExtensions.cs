@@ -50,7 +50,8 @@ public static class AgentHostServiceCollectionExtensions
         services.AddSingleton(provider => new BackupTaskRequestFactory(
             provider.GetRequiredService<IBackupTaskCredentialResolver>(),
             provider.GetServices<StagingArea>(),
-            provider.GetService<ITaskStorageProviderFactory>()));
+            provider.GetService<ITaskStorageProviderFactory>(),
+            PacedUploads(provider)));
         services.AddSingleton<BackupTaskWorker>();
         services.AddSingleton(provider => new RestoreTaskRequestFactory(
             provider.GetRequiredService<IBackupTaskCredentialResolver>(),
@@ -69,5 +70,13 @@ public static class AgentHostServiceCollectionExtensions
         services.AddSingleton<IAgentConnectivityStatus>(static provider => provider.GetRequiredService<AgentConnectivityService>());
         services.AddHostedService<AgentConnectivityWorker>();
         return services;
+    }
+
+    private static Func<BackupPlatform.Contracts.Backups.BackupTaskSnapshot, BackupPlatform.Agent.Core.Backup.IUploadBandwidth> PacedUploads(IServiceProvider provider)
+    {
+        var client = provider.GetRequiredService<IBackupTaskClient>();
+        var identities = provider.GetRequiredService<IAgentCredentialStore>();
+        var time = provider.GetRequiredService<TimeProvider>();
+        return task => new UploadBandwidthGovernor(client, identities, task.AttemptId, task.LeaseToken, time);
     }
 }

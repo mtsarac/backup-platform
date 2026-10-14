@@ -7,7 +7,7 @@ namespace BackupPlatform.Agent.Core.Tasks;
 
 /// <summary>Resolves only host-registered staging and local credential names; task input can never choose a staging path.</summary>
 public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver credentials, IEnumerable<StagingArea> stagingAreas,
-    ITaskStorageProviderFactory? storageFactory = null)
+    ITaskStorageProviderFactory? storageFactory = null, Func<BackupTaskSnapshot, IUploadBandwidth>? uploadBandwidth = null)
 {
     private readonly StagingArea? _staging = stagingAreas.SingleOrDefault();
 
@@ -41,6 +41,7 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
             StorageOverride = primary.StorageOverride,
             MaxArtifactBytes = task.MaxArtifactBytes,
             Destinations = targets,
+            UploadBandwidth = uploadBandwidth?.Invoke(task),
             RequiredVerifiedReplicas = Math.Max(1, configuration.RequiredVerifiedReplicaCount)
         };
     }

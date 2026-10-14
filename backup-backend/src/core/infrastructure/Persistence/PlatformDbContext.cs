@@ -92,6 +92,8 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<GoogleDriveFileMetadata> GoogleDriveFileMetadata => Set<GoogleDriveFileMetadata>();
     public DbSet<GoogleDriveStagingReservation> GoogleDriveStagingReservations => Set<GoogleDriveStagingReservation>();
     public DbSet<BackupStorageCleanup> BackupStorageCleanups => Set<BackupStorageCleanup>();
+    public DbSet<UploadBandwidthLimit> UploadBandwidthLimits => Set<UploadBandwidthLimit>();
+    public DbSet<UploadBandwidthGrant> UploadBandwidthGrants => Set<UploadBandwidthGrant>();
 
     /// <summary>Explicit unfiltered context for trusted platform operations only.</summary>
     /// <remarks>Does not authorize the caller. Future application boundaries must authorize its use.</remarks>

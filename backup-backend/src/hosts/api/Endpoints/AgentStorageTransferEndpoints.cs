@@ -42,7 +42,7 @@ public static class AgentStorageTransferEndpoints
     }
 
     private static async Task<IResult> UploadAsync(Guid attemptId, HttpRequest request, ICurrentAgent agent,
-        IBackupRunStore runStore, IStorageConnectionStore connections, IBackupStorageResolver resolver, PlatformDbContext db, AgentTransferAdmission admission, CancellationToken cancellationToken)
+        IBackupRunStore runStore, IStorageConnectionStore connections, IBackupStorageResolver resolver, PlatformDbContext db, AgentTransferAdmission admission, UploadBandwidthService bandwidth, CancellationToken cancellationToken)
     {
         var fence = await FenceBackupAsync(attemptId, request, agent, runStore, connections, write: true, cancellationToken);
         if (fence.Failure is { } failure) return failure;
@@ -65,7 +65,9 @@ public static class AgentStorageTransferEndpoints
                 return Results.Conflict(new AgentApiError { Error = "lease_conflict", Message = "The upload intent could not be recorded safely." });
             try
             {
-                var options = new StoragePutOptions(StorageOverwritePolicy.Fail, new ContentChecksum(ChecksumAlgorithm.Sha256, expectedChecksum), request.ContentLength);
+                // The agent throttles what it sends (this relay never throttles again); a slow-by-policy body must not trip the provider's total-transfer limit.
+                var allowance = await bandwidth.DeadlineAllowanceAsync(agent.Identity!.TenantId, agent.Identity.AgentId, attemptId, request.ContentLength!.Value, token);
+                var options = new StoragePutOptions(StorageOverwritePolicy.Fail, new ContentChecksum(ChecksumAlgorithm.Sha256, expectedChecksum), request.ContentLength, allowance);
                 var meta = await provider.PutAsync(new StorageObjectKey(fence.Key!), request.Body, options, null, token);
                 return Results.Ok(new TaskStorageResponse
                 {

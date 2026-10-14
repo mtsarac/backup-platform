@@ -172,7 +172,8 @@ export BACKUP_AGENT_SECRET_sql_smoke
 (cd "$work/agent" && exec ./BackupPlatform.Agent.Host) >"$work/agent.log" 2>&1 &
 agent_pid=$!
 python3 "${download[@]}" backup --provider sftp --storage-connection-id "$connection_id" --agent-name "SFTP smoke $suffix" \
-    --sql-host "$BACKUP_PLATFORM_TEST_MSSQL_HOST" --sql-port "$BACKUP_PLATFORM_TEST_MSSQL_PORT" --database "$source_database"
+    --sql-host "$BACKUP_PLATFORM_TEST_MSSQL_HOST" --sql-port "$BACKUP_PLATFORM_TEST_MSSQL_PORT" --database "$source_database" \
+    ${BP_SMOKE_UPLOAD_LIMIT:+--upload-limit "$BP_SMOKE_UPLOAD_LIMIT"}
 python3 "${fixture[@]}" inspect
 python3 "${download[@]}" verify --provider sftp --output "$work/download.bak"
 for mode in disable lock; do

@@ -119,6 +119,8 @@ internal sealed class TaskClient(TimeProvider time) : IBackupTaskClient
     public Func<AgentBackendResult<BackupTaskLeaseResponse>>? OnRenew { get; set; }
     public Func<AgentBackendResult<bool>>? OnProgress { get; set; }
     public Func<int, AgentBackendResult<bool>>? OnComplete { get; set; }
+    public ConcurrentQueue<UploadPolicyRequest> UploadPolicies { get; } = new();
+    public Func<UploadPolicyRequest, AgentBackendResult<UploadPolicyResponse>>? OnUploadPolicy { get; set; }
 
     private AgentBackendResult<BackupTaskLeaseResponse> Lease() => AgentBackendResult<BackupTaskLeaseResponse>.Success(
         new BackupTaskLeaseResponse { LeaseExpiresAt = time.GetUtcNow().AddSeconds(120) });
@@ -130,6 +132,11 @@ internal sealed class TaskClient(TimeProvider time) : IBackupTaskClient
     }
     public Task<AgentBackendResult<BackupTaskLeaseResponse>> RenewAsync(AgentLocalIdentity identity, Guid attemptId, BackupTaskLeaseRequest request, CancellationToken cancellationToken) =>
         Task.FromResult(OnRenew?.Invoke() ?? Lease());
+    public Task<AgentBackendResult<UploadPolicyResponse>> GetUploadPolicyAsync(AgentLocalIdentity identity, Guid attemptId, UploadPolicyRequest request, CancellationToken cancellationToken)
+    {
+        UploadPolicies.Enqueue(request);
+        return Task.FromResult(OnUploadPolicy?.Invoke(request) ?? AgentBackendResult<UploadPolicyResponse>.Success(new UploadPolicyResponse()));
+    }
     public Task<AgentBackendResult<bool>> ReportProgressAsync(AgentLocalIdentity identity, Guid attemptId, BackupTaskProgressRequest request, CancellationToken cancellationToken)
     {
         Progress.Enqueue(request);

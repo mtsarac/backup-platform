@@ -107,6 +107,9 @@ public sealed record DatabaseBackupPipelineRequest
     public TimeSpan? DestinationTimeout { get; init; }
 
     public static readonly TimeSpan DefaultDestinationTimeout = TimeSpan.FromHours(6);
+
+    /// <summary>Paces the upload bytes of every destination to the backend's limits; null uploads at full speed. The timeout of a paced destination is widened by <see cref="IUploadBandwidthSession.DeadlineAllowance"/>.</summary>
+    public IUploadBandwidth? UploadBandwidth { get; init; }
 }
 
 /// <summary>One copy target of an execution. <see cref="StorageOverride"/> is a task-scoped (lease-bound, relayed) provider; <see cref="ConnectionId"/> is the snapshot destination it belongs to.</summary>
