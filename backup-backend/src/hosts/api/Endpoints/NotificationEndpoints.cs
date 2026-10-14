@@ -142,7 +142,7 @@ public static class NotificationEndpoints
 
     private static object ToResponse(NotificationChannelView view) => new
     {
-        id = view.Id, kind = view.Kind, name = view.Name, targetDisplay = view.TargetDisplay, enabled = view.Enabled, authentication = view.Authentication,
+        id = view.Id, kind = view.Kind, name = view.Name, targetDisplay = view.TargetDisplay, enabled = view.Enabled, recipientVerified = view.RecipientVerified, authentication = view.Authentication,
         hasSecret = view.HasSecret, secretUpdatedAt = view.SecretUpdatedAt, createdAt = view.CreatedAt, updatedAt = view.UpdatedAt, lastDelivery = view.LastDelivery
     };
 

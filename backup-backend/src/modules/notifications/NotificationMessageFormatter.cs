@@ -17,6 +17,11 @@ public static class NotificationMessageFormatter
 
     public static RenderedMessage Render(NotificationEventSnapshot e)
     {
+        // A confirmation request goes to an address nobody has agreed for yet, so it is fixed text: no tenant-chosen name can turn it into someone else's message.
+        if (e.Type == NotificationEventTypes.RecipientVerification)
+            return new RenderedMessage($"[{Product}] Confirm your email address",
+                $"An administrator of a {Product} account asked to send backup alert emails to this address. Nothing is sent until you confirm.\n\n" +
+                "If you did not expect this, ignore this email.", $"[{Product}] Confirm your email address");
         var name = Flatten(e.SubjectName);
         var (title, detail) = e.Phase switch
         {

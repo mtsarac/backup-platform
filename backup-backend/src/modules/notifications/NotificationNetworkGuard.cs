@@ -24,11 +24,14 @@ public sealed class NotificationNetworkGuard(NotificationOptions options)
     private static readonly IPNetwork[] Restricted = new[]
     {
         "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.0.0.0/24", "192.0.2.0/24", "192.168.0.0/16",
-        "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "224.0.0.0/4", "240.0.0.0/4",
-        "::/96", "100::/64", "2001::/32", "2001:db8::/32", "fc00::/7", "fe80::/10", "fec0::/10", "ff00::/8"
+        "192.88.99.0/24", "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "224.0.0.0/4", "240.0.0.0/4",
+        "::/96", "64:ff9b:1::/48", "100::/64", "2001::/32", "2001:db8::/32", "3fff::/20", "5f00::/16", "fc00::/7", "fe80::/10", "fec0::/10", "ff00::/8"
     }.Select(IPNetwork.Parse).ToArray();
 
     private readonly IPNetwork[] _allowed = options.AllowedPrivateNetworks.Select(IPNetwork.Parse).ToArray();
+
+    /// <summary>HTTPS (webhook, SMS gateway) may only reach port 443 or an operator-allowed one; the SMTP relay is the operator's own setting and is not limited here.</summary>
+    public bool IsHttpsPortAllowed(int port) => options.IsHttpsPortAllowed(port);
 
     /// <summary>True for loopback, private, link-local, carrier-grade NAT, multicast, reserved and documentation space, including IPv4 hidden inside an IPv6 address.</summary>
     public static bool IsRestricted(IPAddress address)

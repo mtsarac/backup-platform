@@ -59,7 +59,7 @@ internal sealed class InMemorySession : INotificationSession
     public void AddCondition(NotificationCondition condition) => Conditions.Add(condition);
     public Task<bool> EventExistsAsync(string dedupKey) => Task.FromResult(PriorEvents.Any(prior => prior.Key == dedupKey) || Events.Any(e => e.DedupKey == dedupKey));
     public Task<int> CountEventsSinceAsync(DateTimeOffset since) => Task.FromResult(PriorEvents.Count(prior => prior.At >= since));
-    public Task<int> CountTestsSinceAsync(Guid channelId, DateTimeOffset since) => Task.FromResult(0);
+    public Task<int> CountTestsSinceAsync(Guid? channelId, DateTimeOffset since) => Task.FromResult(0);
     public void AddEvent(NotificationEvent notificationEvent) => Events.Add(notificationEvent);
     public void AddDelivery(NotificationDelivery delivery) => Deliveries.Add(delivery);
     public void Audit(NotificationActor actor, string action, string targetType, string targetId, IReadOnlyDictionary<string, object?> details) { }
@@ -79,8 +79,13 @@ internal static class NotificationTestData
         return policy;
     }
 
-    public static NotificationChannel Email(string address = "ops@example.com", string name = "Ops") =>
-        new(Guid.NewGuid(), Tenant, NotificationChannelKind.Email, name, address, WebhookAuthentication.None, Start);
+    /// <summary>An email channel; confirmed by default (as every channel that receives alerts is), unconfirmed when <paramref name="confirmed"/> is false.</summary>
+    public static NotificationChannel Email(string address = "ops@example.com", string name = "Ops", bool confirmed = true)
+    {
+        var channel = new NotificationChannel(Guid.NewGuid(), Tenant, NotificationChannelKind.Email, name, address, WebhookAuthentication.None, Start);
+        if (confirmed) channel.ConfirmRecipient(Start);
+        return channel;
+    }
 
     public static NotificationChannel Webhook(string url = "https://hooks.example.com/n", string name = "Hook", WebhookAuthentication auth = WebhookAuthentication.None) =>
         new(Guid.NewGuid(), Tenant, NotificationChannelKind.Webhook, name, url, auth, Start);
@@ -96,4 +101,17 @@ internal static class NotificationTestData
         new(Guid.NewGuid(), Tenant, attempt, kind, Guid.NewGuid(), target, auth, secretReference,
             new NotificationEventSnapshot(Guid.NewGuid(), type, phase, NotificationSeverity.Critical, "agent", Guid.NewGuid(), subjectName,
                 facts ?? new Dictionary<string, string> { ["minutes"] = "42" }, Start), null);
+}
+
+/// <summary>Readable, unsigned tokens: the contract under test is what the module puts in them and does with them, not the cryptography (that is the host's Data Protection).</summary>
+internal sealed class FakeRecipientTokens : IRecipientTokens
+{
+    public string Issue(RecipientClaim claim) => $"{claim.TenantId.Value:N}.{claim.ChannelId:N}.{(int)claim.Action}.{claim.TargetFingerprint}";
+
+    public RecipientClaim? Read(string? token)
+    {
+        var parts = token?.Split('.');
+        return parts is { Length: 4 } && Guid.TryParseExact(parts[0], "N", out var tenant) && Guid.TryParseExact(parts[1], "N", out var channel) && int.TryParse(parts[2], out var action)
+            ? new RecipientClaim(new TenantId(tenant), channel, (RecipientAction)action, parts[3]) : null;
+    }
 }

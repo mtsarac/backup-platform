@@ -1,4 +1,5 @@
 using System.Globalization;
+using MimeKit;
 using System.Net.Security;
 using System.Security.Cryptography;
 using System.Text;
@@ -15,17 +16,17 @@ namespace BackupPlatform.UnitTests.Notifications;
 /// <summary>Real delivery over real sockets to isolated loopback servers: what actually goes on the wire, and what happens when the far side misbehaves.</summary>
 public sealed class WebhookDeliverySmokeTests : IDisposable
 {
-    private static readonly NotificationOptions Loopback = new() { AllowedPrivateNetworks = ["127.0.0.0/8"] };
-
     private readonly InMemorySecrets _secrets = new();
     private readonly FakeTimeProvider _time = new(Start);
     private readonly List<IDisposable> _disposables = [];
 
     public void Dispose() => _disposables.ForEach(disposable => disposable.Dispose());
 
-    private WebhookNotificationSender Sender(NotificationOptions? options = null)
+    /// <summary>The sender under test, allowed to reach <paramref name="port"/> (a test server's random port) and, unless <paramref name="allowLoopback"/> is false, the loopback range.</summary>
+    private WebhookNotificationSender Sender(int port, bool allowLoopback = true)
     {
-        var client = new NotificationHttpClient(new NotificationNetworkGuard(options ?? Loopback),
+        var options = new NotificationOptions { AllowedPrivateNetworks = allowLoopback ? ["127.0.0.0/8"] : [], AdditionalHttpsPorts = [port] };
+        var client = new NotificationHttpClient(new NotificationNetworkGuard(options),
             handler => handler.SslOptions.RemoteCertificateValidationCallback = (_, _, _, _) => true);
         _disposables.Add(client);
         return new WebhookNotificationSender(client, _secrets, _time);
@@ -37,7 +38,7 @@ public sealed class WebhookDeliverySmokeTests : IDisposable
         await using var server = new TestHttpsServer();
         var work = Work(NotificationChannelKind.Webhook, server.Url(), facts: new Dictionary<string, string> { ["minutes"] = "42" });
 
-        var outcome = await Sender().SendAsync(work, CancellationToken.None);
+        var outcome = await Sender(server.Port).SendAsync(work, CancellationToken.None);
 
         Assert.Equal(SendStatus.Sent, outcome.Status);
         var request = Assert.Single(server.Requests);
@@ -63,7 +64,7 @@ public sealed class WebhookDeliverySmokeTests : IDisposable
         _secrets.Set("nc-1", "super-secret-token");
         var work = Work(NotificationChannelKind.Webhook, server.Url(), WebhookAuthentication.Bearer, "nc-1");
 
-        var outcome = await Sender().SendAsync(work, CancellationToken.None);
+        var outcome = await Sender(server.Port).SendAsync(work, CancellationToken.None);
 
         Assert.Equal("Bearer super-secret-token", Assert.Single(server.Requests).Headers["authorization"]);
         Assert.Equal((SendStatus.Failed, "http_400"), (outcome.Status, outcome.Code));
@@ -77,7 +78,7 @@ public sealed class WebhookDeliverySmokeTests : IDisposable
         _secrets.Set("nc-2", "signing-key");
         var work = Work(NotificationChannelKind.Webhook, server.Url(), WebhookAuthentication.Hmac, "nc-2");
 
-        await Sender().SendAsync(work, CancellationToken.None);
+        await Sender(server.Port).SendAsync(work, CancellationToken.None);
 
         var request = Assert.Single(server.Requests);
         var timestamp = request.Headers["x-backup-timestamp"];
@@ -93,8 +94,8 @@ public sealed class WebhookDeliverySmokeTests : IDisposable
     {
         await using var server = new TestHttpsServer();
 
-        var noReference = await Sender().SendAsync(Work(NotificationChannelKind.Webhook, server.Url(), WebhookAuthentication.Bearer, null), CancellationToken.None);
-        var unreadable = await Sender().SendAsync(Work(NotificationChannelKind.Webhook, server.Url(), WebhookAuthentication.Bearer, "gone"), CancellationToken.None);
+        var noReference = await Sender(server.Port).SendAsync(Work(NotificationChannelKind.Webhook, server.Url(), WebhookAuthentication.Bearer, null), CancellationToken.None);
+        var unreadable = await Sender(server.Port).SendAsync(Work(NotificationChannelKind.Webhook, server.Url(), WebhookAuthentication.Bearer, "gone"), CancellationToken.None);
 
         Assert.Equal((SendStatus.Failed, "secret_missing"), (noReference.Status, noReference.Code));
         Assert.Equal((SendStatus.Failed, "secret_unavailable"), (unreadable.Status, unreadable.Code));
@@ -114,7 +115,7 @@ public sealed class WebhookDeliverySmokeTests : IDisposable
     {
         await using var server = new TestHttpsServer(_ => new TestResponse(status));
 
-        var outcome = await Sender().SendAsync(Work(NotificationChannelKind.Webhook, server.Url()), CancellationToken.None);
+        var outcome = await Sender(server.Port).SendAsync(Work(NotificationChannelKind.Webhook, server.Url()), CancellationToken.None);
 
         Assert.Equal(expected, outcome.Status);
     }
@@ -124,7 +125,7 @@ public sealed class WebhookDeliverySmokeTests : IDisposable
     {
         await using var server = new TestHttpsServer(_ => new TestResponse(429, new Dictionary<string, string> { ["Retry-After"] = "120" }));
 
-        var outcome = await Sender().SendAsync(Work(NotificationChannelKind.Webhook, server.Url()), CancellationToken.None);
+        var outcome = await Sender(server.Port).SendAsync(Work(NotificationChannelKind.Webhook, server.Url()), CancellationToken.None);
 
         Assert.Equal((SendStatus.Retry, "http_429", (TimeSpan?)TimeSpan.FromSeconds(120)), (outcome.Status, outcome.Code, outcome.RetryAfter));
     }
@@ -135,7 +136,7 @@ public sealed class WebhookDeliverySmokeTests : IDisposable
         await using var internalService = new TestHttpsServer();
         await using var server = new TestHttpsServer(_ => new TestResponse(302, new Dictionary<string, string> { ["Location"] = internalService.Url("/admin") }));
 
-        var outcome = await Sender().SendAsync(Work(NotificationChannelKind.Webhook, server.Url()), CancellationToken.None);
+        var outcome = await Sender(server.Port).SendAsync(Work(NotificationChannelKind.Webhook, server.Url()), CancellationToken.None);
 
         Assert.Equal((SendStatus.Failed, "redirect_not_followed"), (outcome.Status, outcome.Code));
         Assert.Empty(internalService.Requests);
@@ -146,7 +147,7 @@ public sealed class WebhookDeliverySmokeTests : IDisposable
     {
         await using var server = new TestHttpsServer();
 
-        var outcome = await Sender(new NotificationOptions()).SendAsync(Work(NotificationChannelKind.Webhook, server.Url()), CancellationToken.None);
+        var outcome = await Sender(server.Port, allowLoopback: false).SendAsync(Work(NotificationChannelKind.Webhook, server.Url()), CancellationToken.None);
 
         Assert.Equal((SendStatus.Failed, NotificationNetworkException.Denied), (outcome.Status, outcome.Code));
         Assert.Empty(server.Requests);
@@ -157,7 +158,7 @@ public sealed class WebhookDeliverySmokeTests : IDisposable
     {
         await using var server = new TestHttpsServer();
 
-        var outcome = await Sender(new NotificationOptions()).SendAsync(Work(NotificationChannelKind.Webhook, $"https://localhost:{server.Port}/hook"), CancellationToken.None);
+        var outcome = await Sender(server.Port, allowLoopback: false).SendAsync(Work(NotificationChannelKind.Webhook, $"https://localhost:{server.Port}/hook"), CancellationToken.None);
 
         Assert.Equal((SendStatus.Failed, NotificationNetworkException.Denied), (outcome.Status, outcome.Code));
         Assert.Empty(server.Requests);
@@ -172,7 +173,7 @@ public sealed class WebhookDeliverySmokeTests : IDisposable
         Environment.SetEnvironmentVariable("HTTPS_PROXY", proxy.Url("/").TrimEnd('/'));
         try
         {
-            var outcome = await Sender(new NotificationOptions()).SendAsync(Work(NotificationChannelKind.Webhook, "https://10.255.255.1/hook"), CancellationToken.None);
+            var outcome = await Sender(proxy.Port, allowLoopback: false).SendAsync(Work(NotificationChannelKind.Webhook, "https://10.255.255.1/hook"), CancellationToken.None);
 
             Assert.Equal((SendStatus.Failed, NotificationNetworkException.Denied), (outcome.Status, outcome.Code));
             Assert.Empty(proxy.Requests);
@@ -188,17 +189,29 @@ public sealed class WebhookDeliverySmokeTests : IDisposable
     {
         var server = new TestHttpsServer();
         var url = server.Url();
+        var port = server.Port;
         await server.DisposeAsync();
 
-        var outcome = await Sender().SendAsync(Work(NotificationChannelKind.Webhook, url), CancellationToken.None);
+        var outcome = await Sender(port).SendAsync(Work(NotificationChannelKind.Webhook, url), CancellationToken.None);
 
         Assert.Equal(SendStatus.Retry, outcome.Status);
+    }
+
+    [Fact]
+    public async Task A_port_other_than_443_that_the_operator_did_not_allow_is_refused_without_connecting()
+    {
+        await using var server = new TestHttpsServer();
+
+        var outcome = await Sender(port: 443).SendAsync(Work(NotificationChannelKind.Webhook, server.Url()), CancellationToken.None);
+
+        Assert.Equal((SendStatus.Failed, NotificationNetworkException.Denied), (outcome.Status, outcome.Code));
+        Assert.Empty(server.Requests);
     }
 }
 
 public sealed class SmtpDeliverySmokeTests
 {
-    private static readonly NotificationOptions Loopback = new() { AllowedPrivateNetworks = ["127.0.0.0/8"] };
+    private static readonly NotificationOptions Loopback = new() { AllowedPrivateNetworks = ["127.0.0.0/8"], PublicBaseUrl = "https://backup.example.com" };
 
     private static (EmailNotificationSender Sender, InMemorySecrets Secrets) Create(TestSmtpServer server, SmtpSecurity security, string? username = null, string? password = null, NotificationOptions? options = null)
     {
@@ -217,7 +230,8 @@ public sealed class SmtpDeliverySmokeTests
             secrets.Set("nt-email-1", password);
         }
         store.Transports[NotificationTransports.Email] = settings;
-        return (new EmailNotificationSender(store, secrets, new NotificationNetworkGuard(options ?? Loopback), client => client.ServerCertificateValidationCallback = (_, _, _, _) => true), secrets);
+        var effective = options ?? Loopback;
+        return (new EmailNotificationSender(store, secrets, new NotificationNetworkGuard(effective), new FakeRecipientTokens(), effective, client => client.ServerCertificateValidationCallback = (_, _, _, _) => true), secrets);
     }
 
     private static DeliveryWork Mail(string to = "ops@example.com") => Work(NotificationChannelKind.Email, to, type: NotificationEventTypes.BackupFailed, subjectName: "nightly",
@@ -239,6 +253,56 @@ public sealed class SmtpDeliverySmokeTests
         Assert.Contains($"Message-Id: <{work.DeliveryId:N}@example.com>", message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("disk_full", message);
         Assert.Contains("Auto-Submitted: auto-generated", message);
+    }
+
+    private static MimeMessage Parse(string raw) => MimeMessage.Load(new MemoryStream(Encoding.UTF8.GetBytes(raw)));
+
+    private static RecipientClaim ClaimOf(string url) => new FakeRecipientTokens().Read(Uri.UnescapeDataString(url[(url.IndexOf("token=", StringComparison.Ordinal) + 6)..].TrimEnd('>')))!;
+
+    [Fact]
+    public async Task Every_message_carries_an_unsubscribe_link_bound_to_its_channel_and_address_and_a_one_click_header()
+    {
+        await using var server = new TestSmtpServer();
+        var (sender, _) = Create(server, SmtpSecurity.None);
+        var work = Mail();
+
+        await sender.SendAsync(work, CancellationToken.None);
+
+        var message = Parse(Assert.Single(server.Messages));
+        var header = message.Headers["List-Unsubscribe"]!;
+        Assert.StartsWith("<https://backup.example.com/api/notifications/recipient?token=", header);
+        Assert.Equal("List-Unsubscribe=One-Click", message.Headers["List-Unsubscribe-Post"]);
+        Assert.Contains(header.Trim('<', '>'), message.TextBody);
+        Assert.Equal(new RecipientClaim(work.TenantId, work.ChannelId, RecipientAction.Unsubscribe, RecipientLinks.Fingerprint("ops@example.com")), ClaimOf(header));
+    }
+
+    [Fact]
+    public async Task A_confirmation_request_is_fixed_text_with_a_confirm_link_and_never_the_tenants_wording()
+    {
+        await using var server = new TestSmtpServer();
+        var (sender, _) = Create(server, SmtpSecurity.None);
+        var work = Work(NotificationChannelKind.Email, "ops@example.com", type: NotificationEventTypes.RecipientVerification, phase: NotificationPhase.Test, subjectName: "Your bank: verify your card here");
+
+        var outcome = await sender.SendAsync(work, CancellationToken.None);
+
+        Assert.Equal(SendStatus.Sent, outcome.Status);
+        var message = Parse(Assert.Single(server.Messages));
+        Assert.Equal("[Backup Platform] Confirm your email address", message.Subject);
+        Assert.DoesNotContain("bank", message.TextBody);
+        var confirm = message.TextBody!.Split('\n').Select(line => line.Trim()).Single(line => line.Contains("token=") && ClaimOf(line).Action == RecipientAction.Confirm);
+        Assert.Equal(new RecipientClaim(work.TenantId, work.ChannelId, RecipientAction.Confirm, RecipientLinks.Fingerprint("ops@example.com")), ClaimOf(confirm));
+    }
+
+    [Fact]
+    public async Task Without_a_public_url_there_is_no_unsubscribe_link_and_so_no_email_is_sent()
+    {
+        await using var server = new TestSmtpServer();
+        var (sender, _) = Create(server, SmtpSecurity.None, options: new NotificationOptions { AllowedPrivateNetworks = Loopback.AllowedPrivateNetworks });
+
+        var outcome = await sender.SendAsync(Mail(), CancellationToken.None);
+
+        Assert.Equal((SendStatus.Failed, "public_url_not_configured"), (outcome.Status, outcome.Code));
+        Assert.Equal(0, server.Connections);
     }
 
     [Theory]
@@ -313,7 +377,7 @@ public sealed class SmtpDeliverySmokeTests
     public async Task A_relay_on_a_private_address_is_refused_unless_the_operator_allowed_that_range()
     {
         await using var server = new TestSmtpServer();
-        var (sender, _) = Create(server, SmtpSecurity.None, options: new NotificationOptions());
+        var (sender, _) = Create(server, SmtpSecurity.None, options: new NotificationOptions { PublicBaseUrl = Loopback.PublicBaseUrl });
 
         var outcome = await sender.SendAsync(Mail(), CancellationToken.None);
 
@@ -326,7 +390,7 @@ public sealed class SmtpDeliverySmokeTests
     {
         await using var server = new TestSmtpServer();
         var (_, _) = Create(server, SmtpSecurity.None);
-        var unconfigured = new EmailNotificationSender(new FakeNotificationStore(), new InMemorySecrets(), new NotificationNetworkGuard(Loopback));
+        var unconfigured = new EmailNotificationSender(new FakeNotificationStore(), new InMemorySecrets(), new NotificationNetworkGuard(Loopback), new FakeRecipientTokens(), Loopback);
 
         var outcome = await unconfigured.SendAsync(Mail(), CancellationToken.None);
 

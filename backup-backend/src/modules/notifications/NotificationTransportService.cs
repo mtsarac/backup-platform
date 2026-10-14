@@ -9,7 +9,7 @@ namespace BackupPlatform.Notifications;
 /// channels: the credential is written before the row references it, replaced credentials are deleted after the commit, and a view only says whether
 /// a credential is set.
 /// </summary>
-public sealed class NotificationTransportService(INotificationStore store, ISecretStore secrets, TimeProvider time, ILogger<NotificationTransportService> logger)
+public sealed class NotificationTransportService(INotificationStore store, ISecretStore secrets, NotificationOptions options, TimeProvider time, ILogger<NotificationTransportService> logger)
 {
     public async Task<IReadOnlyList<NotificationTransportView>> ListAsync(CancellationToken cancellationToken) =>
     [
@@ -32,6 +32,8 @@ public sealed class NotificationTransportService(INotificationStore store, ISecr
         var values = key == NotificationTransports.Email
             ? NotificationTransportRules.ValidateEmail(command.Values, command.Enabled)
             : NotificationTransportRules.ValidateSms(command.Values, command.Enabled);
+        if (key == NotificationTransports.Sms && values.TryGetValue("endpoint", out var endpoint) && !options.IsHttpsPortAllowed(new Uri(endpoint).Port))
+            throw new InvalidNotificationException("endpoint", "port_not_allowed");
         var now = time.GetUtcNow();
         var result = await store.MutateTransportAsync(key, actor, settings =>
         {

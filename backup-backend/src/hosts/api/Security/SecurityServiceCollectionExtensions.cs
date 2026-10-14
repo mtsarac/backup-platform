@@ -335,6 +335,8 @@ public static class SecurityServiceCollectionExtensions
         services.AddScoped<NotificationDeliveryProcessor>();
         services.AddScoped<NotificationAdministrationService>();
         services.AddScoped<NotificationTransportService>();
+        services.AddSingleton<IRecipientTokens, DataProtectionRecipientTokens>();
+        services.AddScoped<NotificationRecipientService>();
         services.AddScoped<INotificationSender, EmailNotificationSender>();
         services.AddScoped<INotificationSender, WebhookNotificationSender>();
         services.AddScoped<INotificationSender, SmsNotificationSender>();

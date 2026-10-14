@@ -30,8 +30,9 @@ public sealed class NotificationDeliverySmokeIntegrationTests : IAsyncLifetime
     private async Task<StoreAgent> OfflineAgentTenantAsync(TestSmtpServer smtp, TestHttpsServer hook, string[]? types = null, int perHour = 30)
     {
         var agent = await Kit.AddAgentAsync();
-        await _world.ConfigureSmtpAsync(smtp.Port);
+        // The address is confirmed before the relay is configured, so no confirmation mail is queued beside the alerts under test.
         await _world.AddEmailAsync(agent.TenantId, "ops@example.com");
+        await _world.ConfigureSmtpAsync(smtp.Port);
         await _world.AddWebhookAsync(agent.TenantId, hook.Url(), authentication: "bearer", secret: "hook-token");
         await _world.EnableAsync(agent.TenantId, types ?? [NotificationEventTypes.AgentOffline], perHour: perHour);
         await _world.HeartbeatAsync(agent, Now);

@@ -28,6 +28,7 @@ public sealed class NotificationHttpClient : IDisposable
             ConnectTimeout = TimeSpan.FromSeconds(10),
             ConnectCallback = async (context, cancellationToken) =>
             {
+                if (!guard.IsHttpsPortAllowed(context.DnsEndPoint.Port)) throw new NotificationNetworkException(NotificationNetworkException.Denied);
                 var socket = await guard.ConnectAsync(context.DnsEndPoint.Host, context.DnsEndPoint.Port, cancellationToken).ConfigureAwait(false);
                 return new NetworkStream(socket, ownsSocket: true);
             }

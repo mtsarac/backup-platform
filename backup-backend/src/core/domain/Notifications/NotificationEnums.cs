@@ -56,6 +56,8 @@ public static class NotificationEventTypes
     public const string ReplicaDegraded = "replica_degraded";
     /// <summary>Not selectable in a policy; used only by the channel test.</summary>
     public const string Test = "test";
+    /// <summary>Not selectable in a policy; the one message an unconfirmed email recipient may receive (a confirmation request with a link, nothing else).</summary>
+    public const string RecipientVerification = "recipient_verification";
 
     public static IReadOnlyList<string> Selectable { get; } = [BackupFailed, BackupStale, AgentOffline, QuotaCritical, ReplicaDegraded];
 
@@ -70,4 +72,5 @@ public static class NotificationDeliveryCodes
     public const string ChannelRemoved = "channel_removed";
     public const string PolicyDisabled = "policy_disabled";
     public const string AttemptsExhausted = "attempts_exhausted";
+    public const string RecipientUnverified = "recipient_unverified";
 }

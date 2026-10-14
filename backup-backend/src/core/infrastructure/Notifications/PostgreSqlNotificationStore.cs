@@ -252,8 +252,8 @@ public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbConte
         public Task<int> CountEventsSinceAsync(DateTimeOffset since) =>
             context.NotificationEvents.CountAsync(notificationEvent => notificationEvent.TenantId == tenantId && notificationEvent.CreatedAt >= since && notificationEvent.Phase != NotificationPhase.Test);
 
-        public Task<int> CountTestsSinceAsync(Guid channelId, DateTimeOffset since) =>
-            context.NotificationDeliveries.CountAsync(delivery => delivery.TenantId == tenantId && delivery.ChannelId == channelId && delivery.CreatedAt >= since
+        public Task<int> CountTestsSinceAsync(Guid? channelId, DateTimeOffset since) =>
+            context.NotificationDeliveries.CountAsync(delivery => delivery.TenantId == tenantId && (channelId == null || delivery.ChannelId == channelId) && delivery.CreatedAt >= since
                 && context.NotificationEvents.Any(notificationEvent => notificationEvent.Id == delivery.EventId && notificationEvent.TenantId == delivery.TenantId && notificationEvent.Phase == NotificationPhase.Test));
 
         public void AddEvent(NotificationEvent notificationEvent) => context.NotificationEvents.Add(notificationEvent);
@@ -304,6 +304,7 @@ public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbConte
             var policyAllows = e.Phase == NotificationPhase.Test || policy is { Enabled: true } && policy.ChannelKinds.Contains(delivery.ChannelKind);
             DeliverySkip? skip = channel is null || channel.TenantId != delivery.TenantId ? new(NotificationDeliveryStatus.Cancelled, NotificationDeliveryCodes.ChannelRemoved)
                 : !channel.Enabled ? new(NotificationDeliveryStatus.Suppressed, NotificationDeliveryCodes.ChannelDisabled)
+                : channel.AwaitsConfirmation && e.Type != NotificationEventTypes.RecipientVerification ? new(NotificationDeliveryStatus.Suppressed, NotificationDeliveryCodes.RecipientUnverified)
                 : !policyAllows ? new(NotificationDeliveryStatus.Cancelled, NotificationDeliveryCodes.PolicyDisabled) : null;
             return new DeliveryWork(delivery.Id, delivery.TenantId, delivery.AttemptCount, delivery.ChannelKind, delivery.ChannelId, skip is null ? channel!.Target : null,
                 channel?.Authentication ?? WebhookAuthentication.None, skip is null ? channel!.SecretReference : null,

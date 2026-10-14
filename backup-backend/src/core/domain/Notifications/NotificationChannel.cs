@@ -60,6 +60,15 @@ public sealed class NotificationChannel : ITenantOwned
 
     public bool HasSecret => SecretReference is not null;
 
+    /// <summary>Email only: when the owner of the address confirmed it wants this tenant's alerts. Null until then; webhook and SMS channels never have one.</summary>
+    public DateTimeOffset? RecipientVerifiedAt { get; private set; }
+
+    /// <summary>Alerts may be sent: enabled, and for email a confirmed recipient (an unconfirmed address could be anyone's inbox).</summary>
+    public bool IsDeliverable => Enabled && (Kind != NotificationChannelKind.Email || RecipientVerifiedAt is not null);
+
+    /// <summary>Email channels wait for the recipient's confirmation; the other kinds have none.</summary>
+    public bool AwaitsConfirmation => Kind == NotificationChannelKind.Email && RecipientVerifiedAt is null;
+
     public static (string Display, string Normalized) Names(string? name)
     {
         var display = name?.Trim();
@@ -97,6 +106,27 @@ public sealed class NotificationChannel : ITenantOwned
         var (value, normalized) = Targets(Kind, target);
         if (Target == value) return false;
         (Target, NormalizedTarget) = (value, normalized);
+        // A new address has not agreed to receive anything yet.
+        RecipientVerifiedAt = null;
+        Touch(now);
+        return true;
+    }
+
+    /// <summary>The address's owner followed the confirmation link. Only email recipients are confirmed; false when nothing changed.</summary>
+    public bool ConfirmRecipient(DateTimeOffset now)
+    {
+        if (Kind != NotificationChannelKind.Email || RecipientVerifiedAt is not null) return false;
+        RecipientVerifiedAt = BackupGuard.Timestamp(now);
+        Touch(now);
+        return true;
+    }
+
+    /// <summary>The address's owner refused further mail: the channel stops and must be confirmed again before it can send. False when nothing changed.</summary>
+    public bool Unsubscribe(DateTimeOffset now)
+    {
+        if (Kind != NotificationChannelKind.Email || (!Enabled && RecipientVerifiedAt is null)) return false;
+        Enabled = false;
+        RecipientVerifiedAt = null;
         Touch(now);
         return true;
     }

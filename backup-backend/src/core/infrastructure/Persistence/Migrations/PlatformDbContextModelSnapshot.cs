@@ -1799,6 +1799,9 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
 
+                    b.Property<DateTimeOffset?>("RecipientVerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("SecretReference")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
@@ -1847,6 +1850,8 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_notification_channels_kind", "\"Kind\" IN ('Email','Webhook','Sms')");
 
                             t.HasCheckConstraint("ck_notification_channels_name", "length(btrim(\"Name\")) BETWEEN 1 AND 100 AND \"NormalizedName\" = lower(btrim(\"Name\"))");
+
+                            t.HasCheckConstraint("ck_notification_channels_recipient_verified", "\"RecipientVerifiedAt\" IS NULL OR \"Kind\" = 'Email'");
 
                             t.HasCheckConstraint("ck_notification_channels_secret", "(\"SecretReference\" IS NULL AND \"SecretUpdatedAt\" IS NULL) OR (\"Authentication\" <> 'None' AND length(\"SecretReference\") BETWEEN 1 AND 128 AND \"SecretUpdatedAt\" IS NOT NULL)");
 

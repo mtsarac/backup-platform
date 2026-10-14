@@ -40,6 +40,7 @@ internal sealed class NotificationChannelConfiguration : IEntityTypeConfiguratio
             table.HasCheckConstraint("ck_notification_channels_auth", "\"Authentication\" IN ('None','Bearer','Hmac') AND (\"Kind\" = 'Webhook' OR \"Authentication\" = 'None')");
             table.HasCheckConstraint("ck_notification_channels_name", "length(btrim(\"Name\")) BETWEEN 1 AND 100 AND \"NormalizedName\" = lower(btrim(\"Name\"))");
             table.HasCheckConstraint("ck_notification_channels_secret", "(\"SecretReference\" IS NULL AND \"SecretUpdatedAt\" IS NULL) OR (\"Authentication\" <> 'None' AND length(\"SecretReference\") BETWEEN 1 AND 128 AND \"SecretUpdatedAt\" IS NOT NULL)");
+            table.HasCheckConstraint("ck_notification_channels_recipient_verified", "\"RecipientVerifiedAt\" IS NULL OR \"Kind\" = 'Email'");
         });
         builder.Property(channel => channel.Kind).HasConversion<string>().HasMaxLength(16).IsRequired();
         builder.Property(channel => channel.Name).HasMaxLength(NotificationChannel.MaximumNameLength).IsRequired();
@@ -52,7 +53,10 @@ internal sealed class NotificationChannelConfiguration : IEntityTypeConfiguratio
         builder.Property(channel => channel.SecretUpdatedAt).HasColumnType("timestamp with time zone");
         builder.Property(channel => channel.CreatedAt).HasColumnType("timestamp with time zone").IsRequired();
         builder.Property(channel => channel.UpdatedAt).HasColumnType("timestamp with time zone").IsRequired();
+        builder.Property(channel => channel.RecipientVerifiedAt).HasColumnType("timestamp with time zone");
         builder.Ignore(channel => channel.HasSecret);
+        builder.Ignore(channel => channel.IsDeliverable);
+        builder.Ignore(channel => channel.AwaitsConfirmation);
         builder.HasIndex(channel => new { channel.TenantId, channel.NormalizedName }).IsUnique().HasDatabaseName("ux_notification_channels_name");
         builder.HasIndex(channel => new { channel.TenantId, channel.Kind, channel.NormalizedTarget }).IsUnique().HasDatabaseName("ux_notification_channels_target");
     }

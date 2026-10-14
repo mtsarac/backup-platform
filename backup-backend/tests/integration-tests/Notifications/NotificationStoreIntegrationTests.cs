@@ -44,9 +44,9 @@ public sealed class NotificationStoreIntegrationTests : IAsyncLifetime
     {
         var a = await TenantAsync();
         var b = await TenantAsync();
-        await _world.ConfigureSmtpAsync(1);
         var channel = await _world.AddEmailAsync(a);
         await _world.AddEmailAsync(b, "other@example.com");
+        await _world.ConfigureSmtpAsync(1);
         Assert.Equal(NotificationOutcome.Changed, (await _world.Admin().RequestTestAsync(a, channel.Id, _world.Actor, default)).Outcome);
 
         var own = await _world.Admin().ListDeliveriesAsync(a, null, null, null, 1, 25, default);
@@ -116,11 +116,13 @@ public sealed class NotificationStoreIntegrationTests : IAsyncLifetime
 
         var audit = await _world.AuditAsync(tenant);
 
-        Assert.Equal([NotificationAuditActions.ChannelCreated, NotificationAuditActions.ChannelDisabled, NotificationAuditActions.PolicyUpdated, NotificationAuditActions.ChannelDeleted],
-            audit.Select(row => row.Action));
+        Assert.Equal([NotificationAuditActions.ChannelCreated, NotificationAuditActions.ChannelRecipientConfirmed, NotificationAuditActions.ChannelDisabled, NotificationAuditActions.PolicyUpdated,
+            NotificationAuditActions.ChannelDeleted], audit.Select(row => row.Action));
+        var confirmation = Assert.Single(audit, row => row.Action == NotificationAuditActions.ChannelRecipientConfirmed);
+        Assert.Equal((UserId.System, BackupPlatform.Domain.Audit.AuditActorKind.Anonymous), (confirmation.ActorUserId, confirmation.ActorKind));
         Assert.All(audit, row =>
         {
-            Assert.Equal(_world.Actor.UserId, row.ActorUserId);
+            if (row != confirmation) Assert.Equal(_world.Actor.UserId, row.ActorUserId);
             Assert.Equal(tenant, row.TenantId);
             Assert.DoesNotContain("private.person", row.DetailsJson);
         });

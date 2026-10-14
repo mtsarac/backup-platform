@@ -54,6 +54,23 @@ public sealed class NotificationOptions
     /// </summary>
     public string[] AllowedPrivateNetworks { get; init; } = [];
 
+    /// <summary>
+    /// HTTPS ports a tenant webhook or the SMS gateway may use besides 443, which is always allowed. Empty by default, so a webhook on a public host
+    /// cannot be used to probe other services on it (SSH, databases, admin panels).
+    /// </summary>
+    public int[] AdditionalHttpsPorts { get; init; } = [];
+
+    /// <summary>
+    /// The absolute URL recipients reach this API at (for example <c>https://backup.example.com</c>); confirmation and unsubscribe links in email are built
+    /// from it. Without it no email is sent, because every email must carry an unsubscribe link.
+    /// </summary>
+    public string? PublicBaseUrl { get; init; }
+
+    /// <summary>Tests and recipient confirmations one tenant may request per hour across all its channels (a deleted and re-created channel does not reset it).</summary>
+    public int TestNotificationsPerTenantPerHour { get; init; } = 20;
+
+    public bool IsHttpsPortAllowed(int port) => port == 443 || AdditionalHttpsPorts.Contains(port);
+
     public IReadOnlyList<string> Validate()
     {
         var problems = new List<string>();
@@ -71,6 +88,10 @@ public sealed class NotificationOptions
         if (MaxNotificationsPerHourCeiling < 1) problems.Add("MaxNotificationsPerHourCeiling must be at least 1.");
         foreach (var network in AllowedPrivateNetworks)
             if (!System.Net.IPNetwork.TryParse(network, out _)) problems.Add($"AllowedPrivateNetworks entry '{network}' is not a CIDR range.");
+        if (AdditionalHttpsPorts.Any(port => port is < 1 or > 65535)) problems.Add("AdditionalHttpsPorts entries must be between 1 and 65535.");
+        if (TestNotificationsPerTenantPerHour < 1) problems.Add("TestNotificationsPerTenantPerHour must be at least 1.");
+        if (PublicBaseUrl is not null && (!Uri.TryCreate(PublicBaseUrl, UriKind.Absolute, out var url) || url.Scheme is not ("https" or "http") || url.Query.Length > 0 || url.Fragment.Length > 0 || url.UserInfo.Length > 0))
+            problems.Add("PublicBaseUrl must be an absolute http(s) URL without credentials, query or fragment.");
         return problems;
     }
 

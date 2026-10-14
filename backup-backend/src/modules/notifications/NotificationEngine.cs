@@ -52,7 +52,8 @@ public sealed class NotificationEngine(
         // The policy is re-read under the tenant lock: a change made after the sweep started is honoured, not raced.
         var policy = await session.GetPolicyAsync();
         if (policy is not { Enabled: true }) return 0;
-        var channels = (await session.ListChannelsAsync()).Where(channel => channel.Enabled && policy.ChannelKinds.Contains(channel.Kind)).ToList();
+        // An email address that never confirmed (or unsubscribed) gets no alerts: it could be anyone's inbox.
+        var channels = (await session.ListChannelsAsync()).Where(channel => channel.IsDeliverable && policy.ChannelKinds.Contains(channel.Kind)).ToList();
         var emitter = new Emitter(session, policy, channels, options, now);
         var reminder = TimeSpan.FromHours(policy.ReminderIntervalHours);
 

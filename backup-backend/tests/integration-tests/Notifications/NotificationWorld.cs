@@ -51,11 +51,17 @@ internal sealed class InMemorySecretStore : ISecretStore
 /// </summary>
 internal sealed class NotificationWorld(PostgreSqlFixture database)
 {
-    public static readonly NotificationOptions Loopback = new() { AllowedPrivateNetworks = ["127.0.0.0/8"], MaxAttempts = 4, BackoffBase = TimeSpan.FromSeconds(30) };
+    /// <summary>Loopback is reachable and so is every unprivileged port (the isolated test servers listen on random ones); the production default is 443 only.</summary>
+    public static readonly NotificationOptions Loopback = new()
+    {
+        AllowedPrivateNetworks = ["127.0.0.0/8"], AdditionalHttpsPorts = [.. Enumerable.Range(1024, 64512)], PublicBaseUrl = "https://backup.example.com",
+        MaxAttempts = 4, BackoffBase = TimeSpan.FromSeconds(30)
+    };
 
     public PostgreSqlFixture Database { get; } = database;
     public MutableClock Clock { get; } = new();
     public InMemorySecretStore Secrets { get; } = new();
+    public FakeRecipientTokens Tokens { get; } = new();
     public QuotaWorld Quota { get; } = new(database);
     public NotificationOptions Options { get; init; } = Loopback;
     public NotificationActor Actor { get; } = new(UserId.New(), AuditActorKind.TenantAdministrator);
@@ -66,7 +72,7 @@ internal sealed class NotificationWorld(PostgreSqlFixture database)
     public NotificationAdministrationService Admin(INotificationStore? store = null) =>
         new(store ?? Store(), Secrets, Options, Clock, NullLogger<NotificationAdministrationService>.Instance);
 
-    public NotificationTransportService Transports() => new(Store(), Secrets, Clock, NullLogger<NotificationTransportService>.Instance);
+    public NotificationTransportService Transports() => new(Store(), Secrets, Options, Clock, NullLogger<NotificationTransportService>.Instance);
 
     public PostgreSqlNotificationObservationSource Source() =>
         new(Quota.Options(), Quota.Usage(), new AgentConnectivityOptions(), NullLogger<PostgreSqlNotificationObservationSource>.Instance);
@@ -82,11 +88,13 @@ internal sealed class NotificationWorld(PostgreSqlFixture database)
         var http = new NotificationHttpClient(guard, handler => handler.SslOptions.RemoteCertificateValidationCallback = (_, _, _, _) => true);
         INotificationSender[] senders =
         [
-            new EmailNotificationSender(store, Secrets, guard, client => client.ServerCertificateValidationCallback = (_, _, _, _) => true),
+            new EmailNotificationSender(store, Secrets, guard, Tokens, Options, client => client.ServerCertificateValidationCallback = (_, _, _, _) => true),
             new WebhookNotificationSender(http, Secrets, Clock)
         ];
         return new NotificationDeliveryProcessor(store, senders, options ?? Options, Clock, NullLogger<NotificationDeliveryProcessor>.Instance);
     }
+
+    public NotificationRecipientService Recipients() => new(Store(), Tokens, Clock);
 
     public async Task<NotificationPolicyView> EnableAsync(TenantId tenant, string[]? eventTypes = null, string severity = "warning", string[]? kinds = null,
         bool recovery = true, int staleHours = 48, int offlineMinutes = 15, int reminderHours = 24, int perHour = 30)
@@ -97,12 +105,18 @@ internal sealed class NotificationWorld(PostgreSqlFixture database)
         return result.Value!;
     }
 
-    public async Task<NotificationChannelView> AddEmailAsync(TenantId tenant, string address = "ops@example.com", string name = "Ops")
+    /// <summary>Adds an email channel and, unless <paramref name="confirm"/> is false, has its owner confirm the address (an unconfirmed address receives no alerts).</summary>
+    public async Task<NotificationChannelView> AddEmailAsync(TenantId tenant, string address = "ops@example.com", string name = "Ops", bool confirm = true)
     {
         var result = await Admin().CreateChannelAsync(tenant, new CreateChannelCommand("email", name, address, null, null), Actor, default);
         Assert.Equal(NotificationOutcome.Changed, result.Outcome);
+        if (confirm) Assert.Equal(RecipientOutcome.Confirmed, await RecipientActionAsync(tenant, result.Value!.Id, address, RecipientAction.Confirm));
         return result.Value!;
     }
+
+    /// <summary>What the owner of <paramref name="address"/> does with the link mailed to it.</summary>
+    public Task<RecipientOutcome> RecipientActionAsync(TenantId tenant, Guid channelId, string address, RecipientAction action) =>
+        Recipients().ApplyAsync(Tokens.Issue(new RecipientClaim(tenant, channelId, action, RecipientLinks.Fingerprint(address))), default);
 
     public async Task<NotificationChannelView> AddWebhookAsync(TenantId tenant, string url, string name = "Hook", string? authentication = null, string? secret = null)
     {

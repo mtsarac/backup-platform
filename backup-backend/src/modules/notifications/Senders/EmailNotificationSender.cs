@@ -13,15 +13,19 @@ namespace BackupPlatform.Notifications.Senders;
 /// validated address = connected address) and handed to the client, so the relay host cannot be pointed at an internal service by a DNS trick. TLS is
 /// REQUIRED unless the operator chose no encryption (which is refused when credentials are configured), and server certificates are validated by
 /// the platform defaults. The message id is derived from the delivery id, so a redelivery after a crash is recognizable to the recipient's server.
+/// Every message carries a signed unsubscribe link (also as a one-click <c>List-Unsubscribe</c> header); the claim ties it to the address it was sent to.
 /// </summary>
 /// <param name="configureClient">A seam for tests (for example to trust a test certificate); production composes none.</param>
-public sealed class EmailNotificationSender(INotificationStore store, ISecretProvider secrets, NotificationNetworkGuard guard, Action<SmtpClient>? configureClient = null) : INotificationSender
+public sealed class EmailNotificationSender(
+    INotificationStore store, ISecretProvider secrets, NotificationNetworkGuard guard, IRecipientTokens tokens, NotificationOptions options, Action<SmtpClient>? configureClient = null) : INotificationSender
 {
     public NotificationChannelKind Kind => NotificationChannelKind.Email;
 
     public async Task<SendOutcome> SendAsync(DeliveryWork work, CancellationToken cancellationToken)
     {
         if (work.Target is null || NotificationTargets.Normalize(NotificationChannelKind.Email, work.Target) is null) return SendOutcome.Permanent("invalid_recipient");
+        // No unsubscribe link, no email: every message must give its recipient a way out.
+        if (options.PublicBaseUrl is null) return SendOutcome.Permanent("public_url_not_configured");
         var transport = await store.GetTransportAsync(NotificationTransports.Email, cancellationToken);
         if (NotificationTransportRules.ReadEmail(transport) is not { } settings) return SendOutcome.Permanent("transport_unavailable");
         string? password = null;
@@ -32,13 +36,19 @@ public sealed class EmailNotificationSender(INotificationStore store, ISecretPro
         }
 
         var rendered = NotificationMessageFormatter.Render(work.Event);
+        var fingerprint = RecipientLinks.Fingerprint(work.Target);
+        string Link(RecipientAction action) => RecipientLinks.Url(options, tokens.Issue(new RecipientClaim(work.TenantId, work.ChannelId, action, fingerprint)));
+        var unsubscribe = Link(RecipientAction.Unsubscribe);
+        var text = work.Event.Type == NotificationEventTypes.RecipientVerification ? $"{rendered.Text}\n\nTo confirm this address, open:\n{Link(RecipientAction.Confirm)}" : rendered.Text;
         var message = new MimeMessage();
         message.From.Add(new MailboxAddress(settings.FromName ?? NotificationMessageFormatter.Product, settings.FromAddress));
         message.To.Add(MailboxAddress.Parse(work.Target));
         message.Subject = rendered.Subject;
         message.MessageId = $"{work.DeliveryId:N}@{settings.FromAddress[(settings.FromAddress.LastIndexOf('@') + 1)..]}";
         message.Headers.Add("Auto-Submitted", "auto-generated");
-        message.Body = new TextPart("plain") { Text = rendered.Text };
+        message.Headers.Add("List-Unsubscribe", $"<{unsubscribe}>");
+        message.Headers.Add("List-Unsubscribe-Post", "List-Unsubscribe=One-Click");
+        message.Body = new TextPart("plain") { Text = $"{text}\n\nTo stop receiving these emails, open:\n{unsubscribe}" };
 
         Socket? socket = null;
         try

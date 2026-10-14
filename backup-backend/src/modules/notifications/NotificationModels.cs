@@ -16,6 +16,9 @@ public static class NotificationAuditActions
     public const string ChannelSecretRotated = "notification_channel.secret_rotated";
     public const string ChannelSecretCleared = "notification_channel.secret_cleared";
     public const string ChannelTestRequested = "notification_channel.test_requested";
+    public const string ChannelVerificationRequested = "notification_channel.verification_requested";
+    public const string ChannelRecipientConfirmed = "notification_channel.recipient_confirmed";
+    public const string ChannelRecipientUnsubscribed = "notification_channel.recipient_unsubscribed";
     public const string PolicyUpdated = "notification_policy.updated";
     public const string TransportUpdated = "notification_transport.updated";
     public const string TransportSecretRotated = "notification_transport.secret_rotated";
@@ -108,7 +111,8 @@ public interface INotificationSession
     Task<bool> EventExistsAsync(string dedupKey);
     /// <summary>Events (tests excluded) created since <paramref name="since"/>, not counting those added in this session.</summary>
     Task<int> CountEventsSinceAsync(DateTimeOffset since);
-    Task<int> CountTestsSinceAsync(Guid channelId, DateTimeOffset since);
+    /// <summary>Tests and recipient confirmations requested since <paramref name="since"/>: for one channel, or for the whole tenant when <paramref name="channelId"/> is null.</summary>
+    Task<int> CountTestsSinceAsync(Guid? channelId, DateTimeOffset since);
     void AddEvent(NotificationEvent notificationEvent);
     void AddDelivery(NotificationDelivery delivery);
     void Audit(NotificationActor actor, string action, string targetType, string targetId, IReadOnlyDictionary<string, object?> details);
@@ -161,7 +165,7 @@ public sealed record DeliveryResult(NotificationDeliveryStatus Status, string? C
 // ---- views -----------------------------------------------------------------------------------------------------------------------------
 
 public sealed record NotificationChannelView(
-    Guid Id, string Kind, string Name, string TargetDisplay, bool Enabled, string Authentication, bool HasSecret, DateTimeOffset? SecretUpdatedAt,
+    Guid Id, string Kind, string Name, string TargetDisplay, bool Enabled, bool? RecipientVerified, string Authentication, bool HasSecret, DateTimeOffset? SecretUpdatedAt,
     DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, LastDeliveryView? LastDelivery);
 
 public sealed record LastDeliveryView(string Status, DateTimeOffset At, string? ErrorCode);

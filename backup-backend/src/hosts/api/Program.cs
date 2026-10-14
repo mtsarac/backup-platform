@@ -38,6 +38,7 @@ app.MapManagedServicePlatformEndpoints();
 app.MapQuotaEndpoints();
 app.MapStorageConnectionEndpoints();
 app.MapNotificationEndpoints();
+app.MapNotificationRecipientEndpoints();
 app.MapBackupEndpoints();
 app.MapBackupArtifactEndpoints();
 app.MapBackupTaskEndpoints();

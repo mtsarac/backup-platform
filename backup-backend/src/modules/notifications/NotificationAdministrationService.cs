@@ -48,7 +48,7 @@ public sealed class NotificationAdministrationService(
 
     private async Task<NotificationPolicyView> ToViewAsync(NotificationPolicy policy, bool hasRow, CancellationToken cancellationToken)
     {
-        var email = NotificationTransportRules.ReadEmail(await store.GetTransportAsync(NotificationTransports.Email, cancellationToken)) is not null;
+        var email = NotificationTransportRules.ReadEmail(await store.GetTransportAsync(NotificationTransports.Email, cancellationToken)) is not null && options.PublicBaseUrl is not null;
         var sms = NotificationTransportRules.ReadSms(await store.GetTransportAsync(NotificationTransports.Sms, cancellationToken)) is not null;
         return new NotificationPolicyView(policy.Enabled, policy.EventTypes, Lower(policy.MinimumSeverity), policy.ChannelKinds.Select(Lower).ToList(), policy.RecoveryNotifications,
             policy.StaleAfterHours, policy.AgentOfflineAfterMinutes, policy.ReminderIntervalHours, policy.MaxNotificationsPerHour, hasRow ? policy.UpdatedAt : null, email, sms);
@@ -67,7 +67,7 @@ public sealed class NotificationAdministrationService(
         var kind = ParseEnum<NotificationChannelKind>(command.Kind, "kind");
         var authentication = command.Authentication is null ? WebhookAuthentication.None : ParseEnum<WebhookAuthentication>(command.Authentication, "authentication");
         if (kind != NotificationChannelKind.Webhook && authentication != WebhookAuthentication.None) throw new InvalidNotificationException("authentication", "not_supported");
-        var target = NotificationTargets.Normalize(kind, command.Target) ?? throw new InvalidNotificationException("target", "invalid_value");
+        var target = PermittedTarget(kind, command.Target);
         NotificationChannel.Names(command.Name);
         var secret = ValidateSecret(command.Secret, authentication);
         var now = time.GetUtcNow();
@@ -83,24 +83,25 @@ public sealed class NotificationAdministrationService(
         try { result = await store.CreateChannelAsync(channel, actor, options.MaxChannelsPerTenant, cancellationToken); }
         catch { await DiscardAsync(reference); throw; }
         if (result.Outcome != NotificationOutcome.Changed) await DiscardAsync(reference);
+        if (result.Outcome == NotificationOutcome.Changed && kind == NotificationChannelKind.Email) await RequestTestAsync(tenantId, channel.Id, actor, cancellationToken);
         return Respond(result);
     }
 
     public async Task<NotificationResult<NotificationChannelView>> UpdateChannelAsync(TenantId tenantId, Guid id, UpdateChannelCommand command, NotificationActor actor, CancellationToken cancellationToken)
     {
         if (await KindOfAsync(tenantId, id, cancellationToken) is not { } kind) return new(NotificationOutcome.NotFound);
-        var target = command.Target is null ? null : NotificationTargets.Normalize(kind, command.Target);
-        if (command.Target is not null && target is null) throw new InvalidNotificationException("target", "invalid_value");
+        var target = command.Target is null ? null : PermittedTarget(kind, command.Target);
         if (command.Name is not null) NotificationChannel.Names(command.Name);
         var authentication = command.Authentication is null ? (WebhookAuthentication?)null : ParseEnum<WebhookAuthentication>(command.Authentication, "authentication");
         var now = time.GetUtcNow();
+        var retargeted = false;
         var result = await store.MutateChannelAsync(tenantId, id, actor, channel =>
         {
             if (authentication is not null && channel.Kind != NotificationChannelKind.Webhook && authentication != WebhookAuthentication.None)
                 throw new InvalidNotificationException("authentication", "not_supported");
             var fields = new List<string>();
             if (command.Name is not null && channel.Rename(command.Name, now)) fields.Add("name");
-            if (target is not null && channel.Retarget(target, now)) fields.Add("target");
+            if (target is not null && channel.Retarget(target, now)) { fields.Add("target"); retargeted = true; }
             string? obsolete = null;
             if (authentication is { } wanted)
             {
@@ -110,6 +111,7 @@ public sealed class NotificationAdministrationService(
             return fields.Count == 0 ? null : new ChannelChange(NotificationAuditActions.ChannelUpdated, obsolete, new Dictionary<string, object?> { ["fields"] = fields });
         }, cancellationToken);
         await DiscardAsync(result.ObsoleteSecret);
+        if (retargeted && result.Outcome == NotificationOutcome.Changed && result.Record!.Channel is { Enabled: true, AwaitsConfirmation: true }) await RequestTestAsync(tenantId, id, actor, cancellationToken);
         return Respond(result);
     }
 
@@ -146,8 +148,11 @@ public sealed class NotificationAdministrationService(
     public async Task<NotificationResult<NotificationChannelView>> SetEnabledAsync(TenantId tenantId, Guid id, bool enabled, NotificationActor actor, CancellationToken cancellationToken)
     {
         var now = time.GetUtcNow();
-        return Respond(await store.MutateChannelAsync(tenantId, id, actor,
-            channel => channel.SetEnabled(enabled, now) ? new ChannelChange(enabled ? NotificationAuditActions.ChannelEnabled : NotificationAuditActions.ChannelDisabled) : null, cancellationToken));
+        var result = await store.MutateChannelAsync(tenantId, id, actor,
+            channel => channel.SetEnabled(enabled, now) ? new ChannelChange(enabled ? NotificationAuditActions.ChannelEnabled : NotificationAuditActions.ChannelDisabled) : null, cancellationToken);
+        // Turning a channel back on after its recipient unsubscribed asks that address again; nothing is sent to it before it confirms.
+        if (enabled && result.Outcome == NotificationOutcome.Changed && result.Record!.Channel.AwaitsConfirmation) await RequestTestAsync(tenantId, id, actor, cancellationToken);
+        return Respond(result);
     }
 
     public async Task<NotificationOutcome> DeleteChannelAsync(TenantId tenantId, Guid id, NotificationActor actor, CancellationToken cancellationToken)
@@ -159,7 +164,8 @@ public sealed class NotificationAdministrationService(
 
     /// <summary>
     /// Queues a test notification for one channel through the normal pipeline (so it exercises retry, history and rate limits like a real one),
-    /// regardless of the tenant's policy. Limited per channel per hour.
+    /// regardless of the tenant's policy. For an email address that has not confirmed yet it queues the confirmation request instead. Limited per
+    /// channel and per tenant per hour.
     /// </summary>
     public async Task<NotificationResult<TestRequestView>> RequestTestAsync(TenantId tenantId, Guid channelId, NotificationActor actor, CancellationToken cancellationToken)
     {
@@ -170,23 +176,27 @@ public sealed class NotificationAdministrationService(
         {
             if (await session.GetChannelAsync(channelId) is not { } channel) return;
             if (!channel.Enabled) throw new InvalidNotificationException("channel", "disabled");
-            if (NotificationTransports.KeyOf(channel.Kind) is { } key && !NotificationTransportRules.IsAvailable(await store.GetTransportAsync(key, cancellationToken)))
+            // Nothing but a confirmation request may go to an address that has not confirmed: a test would be free text to a stranger.
+            var verifying = channel.AwaitsConfirmation;
+            var ready = NotificationTransports.KeyOf(channel.Kind) is not { } key || NotificationTransportRules.IsAvailable(await store.GetTransportAsync(key, cancellationToken));
+            if (!ready || channel.Kind == NotificationChannelKind.Email && options.PublicBaseUrl is null)
             {
                 outcome = NotificationOutcome.TransportNotConfigured;
                 return;
             }
-            if (await session.CountTestsSinceAsync(channelId, now - TimeSpan.FromHours(1)) >= options.TestNotificationsPerChannelPerHour)
+            var since = now - TimeSpan.FromHours(1);
+            if (await session.CountTestsSinceAsync(channelId, since) >= options.TestNotificationsPerChannelPerHour || await session.CountTestsSinceAsync(null, since) >= options.TestNotificationsPerTenantPerHour)
             {
                 outcome = NotificationOutcome.TestRateLimited;
                 return;
             }
             var subject = new NotificationSubject("channel", channel.Id, channel.Name);
-            var notificationEvent = new NotificationEvent(Guid.NewGuid(), tenantId, NotificationEventTypes.Test, NotificationPhase.Test, NotificationSeverity.Info, subject, null,
-                $"test:{Guid.NewGuid():N}", now, now);
+            var notificationEvent = new NotificationEvent(Guid.NewGuid(), tenantId, verifying ? NotificationEventTypes.RecipientVerification : NotificationEventTypes.Test, NotificationPhase.Test,
+                NotificationSeverity.Info, subject, null, $"{(verifying ? "verify" : "test")}:{Guid.NewGuid():N}", now, now);
             var delivery = new NotificationDelivery(Guid.NewGuid(), tenantId, notificationEvent.Id, channel.Id, channel.Kind, channel.Name, NotificationTargets.Display(channel.Kind, channel.Target), now);
             session.AddEvent(notificationEvent);
             session.AddDelivery(delivery);
-            session.Audit(actor, NotificationAuditActions.ChannelTestRequested, NotificationAuditActions.ChannelTarget, channel.Id.ToString("D"),
+            session.Audit(actor, verifying ? NotificationAuditActions.ChannelVerificationRequested : NotificationAuditActions.ChannelTestRequested, NotificationAuditActions.ChannelTarget, channel.Id.ToString("D"),
                 new Dictionary<string, object?> { ["kind"] = channel.Kind.ToString(), ["name"] = channel.Name, ["deliveryId"] = delivery.Id.ToString("D") });
             deliveryId = delivery.Id;
             outcome = NotificationOutcome.Changed;
@@ -208,6 +218,14 @@ public sealed class NotificationAdministrationService(
     }
 
     // ---- helpers ------------------------------------------------------------------------------------------------------------------------
+
+    /// <summary>The normalized target; a webhook may only use HTTPS port 443 or an operator-allowed port (an endpoint on a public host must not become a port scanner).</summary>
+    private string PermittedTarget(NotificationChannelKind kind, string? input)
+    {
+        var target = NotificationTargets.Normalize(kind, input) ?? throw new InvalidNotificationException("target", "invalid_value");
+        if (kind == NotificationChannelKind.Webhook && !options.IsHttpsPortAllowed(new Uri(target).Port)) throw new InvalidNotificationException("target", "port_not_allowed");
+        return target;
+    }
 
     private async Task<NotificationChannelKind?> KindOfAsync(TenantId tenantId, Guid id, CancellationToken cancellationToken) =>
         (await store.GetChannelAsync(tenantId, id, cancellationToken))?.Channel.Kind;
@@ -235,7 +253,8 @@ public sealed class NotificationAdministrationService(
     private static NotificationChannelView ToView(NotificationChannelRecord record)
     {
         var channel = record.Channel;
-        return new(channel.Id, Lower(channel.Kind), channel.Name, NotificationTargets.Display(channel.Kind, channel.Target), channel.Enabled, Lower(channel.Authentication),
+        return new(channel.Id, Lower(channel.Kind), channel.Name, NotificationTargets.Display(channel.Kind, channel.Target), channel.Enabled,
+            channel.Kind == NotificationChannelKind.Email ? channel.RecipientVerifiedAt is not null : null, Lower(channel.Authentication),
             channel.HasSecret, channel.SecretUpdatedAt, channel.CreatedAt, channel.UpdatedAt,
             record.Last is { } last ? new LastDeliveryView(Snake(last.Status), last.At, last.ErrorCode) : null);
     }
