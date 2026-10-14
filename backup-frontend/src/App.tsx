@@ -38,6 +38,8 @@ import { PlatformAuditPage } from './pages/platform/platform-audit-page'
 import { PlatformSupportSessionsPage } from './pages/platform/platform-support-sessions-page'
 import { PlatformSupportSessionPage } from './pages/platform/platform-support-session-page'
 import { SupportAccessPage } from './pages/support-access/support-access-page'
+import { NotificationsPage } from './pages/notifications/notifications-page'
+import { PlatformNotificationTransportsPage } from './pages/platform/platform-notification-transports-page'
 
 function AppRoutes() {
   const { isAuthenticated, isLoading, error, refresh } = useAuth()
@@ -65,6 +67,7 @@ function AppRoutes() {
         <Route path="restores" element={<RestoresPage />} />
         <Route path="restores/:id" element={<RestoreDetailPage />} />
         <Route path="support-access" element={<SupportAccessPage />} />
+        <Route path="notifications" element={<NotificationsPage />} />
         <Route path="*" element={<p>Sayfa bulunamadı.</p>} />
       </Routes></AppShell></TenantProvider>} />
       <Route path="/platform" element={<PlatformAdminRoute />}>
@@ -82,6 +85,7 @@ function AppRoutes() {
           <Route path="audit" element={<PlatformAuditPage />} />
           <Route path="support-sessions" element={<PlatformSupportSessionsPage />} />
           <Route path="support-sessions/:sessionId" element={<PlatformSupportSessionPage />} />
+          <Route path="notification-transports" element={<PlatformNotificationTransportsPage />} />
           <Route path="*" element={<p>Sayfa bulunamadı.</p>} />
         </Route>
       </Route>

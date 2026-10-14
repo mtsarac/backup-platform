@@ -132,9 +132,15 @@ const messages: Record<string, string> = {
   session_not_active: 'Destek oturumu artık etkin değil.',
   idempotency_conflict: 'Bu istek anahtarı farklı bir işlem için kullanıldı. Formu kapatıp yeniden açın.',
   view_required: 'Download ve Restore izinleri Backup metadata görüntüleme iznini gerektirir.',
+  notification_channel_not_found: 'Bildirim kanalı bulunamadı. Liste güncel olmayabilir.',
+  notification_channel_name_taken: 'Bu ada sahip bir bildirim kanalı zaten var.',
+  notification_channel_target_taken: 'Bu hedef (adres, URL veya numara) için zaten bir bildirim kanalı var.',
+  notification_channel_limit_reached: 'Bildirim kanalı sınırına ulaşıldı. Kullanılmayan bir kanalı silin.',
+  notification_test_rate_limited: 'Bu kanal için saatlik test sınırına (5) ulaşıldı. Daha sonra tekrar deneyin.',
+  transport_not_configured: 'Bu kanal türü için platform aktarımı yapılandırılmamış. Platform yöneticisine başvurun.',
 }
 // Codes whose text must win over the generic 403/404 wording.
-const statusSpecificCodes: Record<string, true> = { tenant_not_found: true, user_not_found: true, membership_not_found: true, agent_not_found: true, plan_not_found: true, quota_policy_not_found: true, subscription_not_found: true, platform_admin_required: true, enrollment_disabled: true, storage_connection_not_found: true, platform_managed_provider: true }
+const statusSpecificCodes: Record<string, true> = { tenant_not_found: true, user_not_found: true, membership_not_found: true, agent_not_found: true, plan_not_found: true, quota_policy_not_found: true, subscription_not_found: true, platform_admin_required: true, enrollment_disabled: true, storage_connection_not_found: true, platform_managed_provider: true, notification_channel_not_found: true }
 export function failureMessage(code?: string | null): string {
   if (!code) return 'İşlem başarısız oldu.'
   return messages[code] ?? (/^[A-Za-z0-9_.-]{1,80}$/.test(code) ? `İşlem başarısız oldu (${code}).` : 'İşlem başarısız oldu.')
