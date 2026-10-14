@@ -41,6 +41,10 @@ using BackupPlatform.Infrastructure.Storage;
 using BackupPlatform.SecretProviders.Abstractions;
 using BackupPlatform.SecretProviders.DataProtection;
 using BackupPlatform.Storage;
+using BackupPlatform.Api.Notifications;
+using BackupPlatform.Infrastructure.Notifications;
+using BackupPlatform.Notifications;
+using BackupPlatform.Notifications.Senders;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
@@ -98,6 +102,7 @@ public static class SecurityServiceCollectionExtensions
         AddBackupRetention(services);
         AddStorageConnections(services);
         AddRestores(services);
+        AddNotifications(services);
         services.AddScoped<IDownloadStore, PostgreSqlDownloadStore>();
         services.AddScoped<DownloadService>();
         services.AddScoped<DownloadStreamer>();
@@ -308,6 +313,36 @@ public static class SecurityServiceCollectionExtensions
         services.AddScoped<RestoreTargetsReader>();
         services.AddSingleton<StaleRestoreDetector>();
         services.AddHostedService(provider => provider.GetRequiredService<StaleRestoreDetector>());
+    }
+
+    /// <summary>
+    /// Notifications: operator limits (configuration section <c>Notifications</c>), the persistence, the detectors, the senders and the two background
+    /// loops. Nothing here is referenced by backup or restore code; the loops are registered even when disabled and then do nothing.
+    /// </summary>
+    private static void AddNotifications(IServiceCollection services)
+    {
+        services.TryAddSingleton(provider =>
+        {
+            var options = provider.GetRequiredService<IConfiguration>().GetSection("Notifications").Get<NotificationOptions>() ?? new NotificationOptions();
+            options.ThrowIfInvalid();
+            return options;
+        });
+        services.TryAddSingleton<NotificationNetworkGuard>();
+        services.TryAddSingleton<NotificationHttpClient>(provider => new NotificationHttpClient(provider.GetRequiredService<NotificationNetworkGuard>()));
+        services.AddScoped<INotificationStore, PostgreSqlNotificationStore>();
+        services.AddScoped<INotificationObservationSource, PostgreSqlNotificationObservationSource>();
+        services.AddScoped<NotificationEngine>();
+        services.AddScoped<NotificationDeliveryProcessor>();
+        services.AddScoped<NotificationAdministrationService>();
+        services.AddScoped<NotificationTransportService>();
+        services.AddScoped<INotificationSender, EmailNotificationSender>();
+        services.AddScoped<INotificationSender, WebhookNotificationSender>();
+        services.AddScoped<INotificationSender, SmsNotificationSender>();
+        services.AddSingleton<ISmsProvider, GenericHttpSmsProvider>();
+        services.AddSingleton<NotificationDetectionWorker>();
+        services.AddHostedService(provider => provider.GetRequiredService<NotificationDetectionWorker>());
+        services.AddSingleton<NotificationDeliveryWorker>();
+        services.AddHostedService(provider => provider.GetRequiredService<NotificationDeliveryWorker>());
     }
 
     private static ITenantContext ResolveTenantContext(IServiceProvider services)
