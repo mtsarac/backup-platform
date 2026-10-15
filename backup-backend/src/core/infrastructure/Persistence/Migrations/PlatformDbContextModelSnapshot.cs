@@ -1633,6 +1633,314 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BackupPlatform.Domain.Discovery.DiscoveredDatabase", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("FirstSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FullBackup")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("FullBackupReasonCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("InstanceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsSystem")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Presence")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("TenantId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("Id", "TenantId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("InstanceId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ux_discovery_databases_instance_name");
+
+                    b.HasIndex("InstanceId", "TenantId");
+
+                    b.ToTable("discovery_databases", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_discovery_databases_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_discovery_databases_presence", "\"Presence\" IN ('Present','Missing')");
+
+                            t.HasCheckConstraint("ck_discovery_databases_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Discovery.DiscoveredInstance", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Access")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("AccessReasonCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("AgentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContainerImage")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("ContainerName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("CredentialReference")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset?>("DatabasesCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Edition")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<bool>("Encrypt")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Engine")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("FirstSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FullBackup")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("FullBackupReasonCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Host")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("HostPlatform")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("InstanceKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("InstanceName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<bool>("IntegratedSecurity")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("LastChangeAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastChangeKind")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MissCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Port")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Presence")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Reachability")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("TenantId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("TrustServerCertificate")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Version")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("AgentId", "InstanceKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_discovery_instances_agent_key");
+
+                    b.HasIndex("AgentId", "TenantId");
+
+                    b.ToTable("discovery_instances", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_discovery_instances_binding", "NOT (\"IntegratedSecurity\" AND \"CredentialReference\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_discovery_instances_engine", "\"Engine\" IN ('mssql','postgres')");
+
+                            t.HasCheckConstraint("ck_discovery_instances_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_discovery_instances_port", "\"Port\" IS NULL OR \"Port\" BETWEEN 1 AND 65535");
+
+                            t.HasCheckConstraint("ck_discovery_instances_presence", "\"Presence\" IN ('Present','Missing')");
+
+                            t.HasCheckConstraint("ck_discovery_instances_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Discovery.DiscoveryAgentState", b =>
+                {
+                    b.Property<Guid>("AgentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IncludeDocker")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LastFailureCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("LastOutcome")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("LastScanAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("LastSuccessfulScanAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("NextScanDueAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RequestedInstanceKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("ScanId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ScanIntervalMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ScanReason")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("ScanRequestReason")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTimeOffset?>("ScanRequestedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("ScanStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SourcesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("AgentId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("AgentId", "TenantId");
+
+                    b.ToTable("discovery_agent_states", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_discovery_agent_states_ids", "\"AgentId\" <> '00000000-0000-0000-0000-000000000000'::uuid AND \"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_discovery_agent_states_interval", "\"ScanIntervalMinutes\" BETWEEN 15 AND 10080");
+                        });
+                });
+
             modelBuilder.Entity("BackupPlatform.Domain.Downloads.DownloadSession", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3926,6 +4234,48 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .HasForeignKey("SourceReplicaId", "TenantId")
                         .HasPrincipalKey("Id", "TenantId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Discovery.DiscoveredDatabase", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Discovery.DiscoveredInstance", null)
+                        .WithMany()
+                        .HasForeignKey("InstanceId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Discovery.DiscoveredInstance", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Agents.Agent", null)
+                        .WithMany()
+                        .HasForeignKey("AgentId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Discovery.DiscoveryAgentState", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Agents.Agent", null)
+                        .WithMany()
+                        .HasForeignKey("AgentId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("BackupPlatform.Domain.Downloads.DownloadSession", b =>

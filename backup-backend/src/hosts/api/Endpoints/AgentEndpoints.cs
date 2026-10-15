@@ -96,7 +96,8 @@ public static class AgentEndpoints
 
     private static async Task<IResult> HeartbeatAsync(
         AgentHeartbeatRequest request, HttpContext context, ICurrentAgent currentAgent, AgentConnectivityService service,
-        AgentCapabilityService capabilities, AgentConnectivityOptions options, AgentSecurityOptions security, CancellationToken cancellationToken)
+        AgentCapabilityService capabilities, BackupPlatform.Application.Discovery.DiscoveryService discovery, ILogger<AgentConnectivityService> logger,
+        AgentConnectivityOptions options, AgentSecurityOptions security, CancellationToken cancellationToken)
     {
         var protocol = context.Features.Get<AgentProtocolFeature>()!.Version;
         var result = await service.RecordHeartbeatAsync(currentAgent.Identity!, protocol, request, cancellationToken);
@@ -105,13 +106,22 @@ public static class AgentEndpoints
             return Error(StatusCodes.Status400BadRequest, AgentErrorCodes.InvalidRequest, $"Invalid field: {result.InvalidField}.");
         }
         var syncRequested = await capabilities.IsSyncRequestedAsync(currentAgent.Identity!, request.CapabilityRevision, cancellationToken);
+        string? scanReason = null;
+        try { scanReason = await discovery.GetScanReasonAsync(currentAgent.Identity!, cancellationToken); }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // Discovery is optional work: its failure must never fail the heartbeat that keeps backups and restores scheduled.
+            logger.LogWarning("Discovery scan state unavailable: Agent={AgentId} Code=discovery_state_failed Type={ExceptionType}.",
+                currentAgent.Identity!.AgentId.Value, exception.GetType().Name);
+        }
         return Results.Ok(new AgentHeartbeatResponse
         {
             ServerTime = result.ServerTime,
             HeartbeatIntervalSeconds = (int)options.HeartbeatInterval.TotalSeconds,
             OfflineTimeoutSeconds = (int)options.OfflineTimeout.TotalSeconds,
             Protocol = AgentProtocolMiddleware.ToWire(security.Protocol),
-            CapabilitySyncRequested = syncRequested
+            CapabilitySyncRequested = syncRequested,
+            DiscoveryScanReason = scanReason
         });
     }
 

@@ -33,6 +33,7 @@ app.MapAuthenticationEndpoints();
 app.MapUserEndpoints();
 app.MapAgentEndpoints();
 app.MapAgentAdministrationEndpoints();
+app.MapDiscoveryEndpoints();
 app.MapPlatformEndpoints();
 app.MapManagedServicePlatformEndpoints();
 app.MapQuotaEndpoints();

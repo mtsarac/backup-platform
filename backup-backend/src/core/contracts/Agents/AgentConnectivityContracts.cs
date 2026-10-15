@@ -66,6 +66,8 @@ public sealed record AgentHeartbeatResponse
     public AgentServerProtocol Protocol { get; init; } = new();
     /// <summary>True when the reported capability revision is unknown or differs from the stored snapshot: the agent should <c>PUT /api/agent/capabilities</c>.</summary>
     public bool CapabilitySyncRequested { get; init; }
+    /// <summary>One of <c>BackupPlatform.Contracts.Discovery.DiscoveryScanReasons</c> when the backend wants a database discovery scan: the agent should <c>POST /api/agent/discovery/scans</c> to claim it. Null when none is due.</summary>
+    public string? DiscoveryScanReason { get; init; }
 }
 
 /// <summary>Generic claimed-work envelope. Push messages only hint that an authoritative poll may find work.</summary>

@@ -6,8 +6,10 @@ using BackupPlatform.Api.Quota;
 using BackupPlatform.ManagedService.Quota;
 using BackupPlatform.Api.Restores;
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Application.Discovery;
 using BackupPlatform.Application.Restores;
 using BackupPlatform.Infrastructure.Backups;
+using BackupPlatform.Infrastructure.Discovery;
 using BackupPlatform.Infrastructure.Restores;
 using BackupPlatform.Api.Downloads;
 using BackupPlatform.Application.Downloads;
@@ -85,6 +87,8 @@ public static class SecurityServiceCollectionExtensions
         AddBrowserAuthentication(services);
         AddAgentSecurity(services);
         AddAgentConnectivity(services);
+        services.AddScoped<IDiscoveryStore, PostgreSqlDiscoveryStore>();
+        services.AddScoped<DiscoveryService>();
         services.TryAddSingleton(provider =>
         {
             var options = provider.GetRequiredService<IConfiguration>().GetSection("Backups").Get<BackupExecutionOptions>() ?? new BackupExecutionOptions();
