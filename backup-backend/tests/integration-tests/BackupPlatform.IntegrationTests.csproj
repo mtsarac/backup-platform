@@ -2,6 +2,8 @@
 
   <PropertyGroup>
     <IsPackable>false</IsPackable>
+    <!-- Every API host compiles dynamic code; PGO instrumentation of it costs far more CPU than the tiering it buys in short-lived test hosts. -->
+    <TieredPGO>false</TieredPGO>
   </PropertyGroup>
 
   <ItemGroup>

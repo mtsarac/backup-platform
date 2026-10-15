@@ -4,8 +4,12 @@ set -euo pipefail
 # shellcheck source=../lib/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 restore=0
-if [[ ${1:-} == --restore ]]; then restore=1; shift; fi
-[[ ${1:-} == -- ]] || fail 'Usage: with-disposable-databases.sh [--restore] -- COMMAND [ARG...]' 2
+postgres_only=0
+case ${1:-} in
+    --restore) restore=1; shift ;;
+    --postgres-only) postgres_only=1; shift ;;
+esac
+[[ ${1:-} == -- ]] || fail 'Usage: with-disposable-databases.sh [--restore | --postgres-only] -- COMMAND [ARG...]' 2
 shift
 (( $# > 0 )) || fail 'A command is required.' 2
 require_command docker
@@ -15,7 +19,9 @@ load_local_env
 export POSTGRES_IMAGE="${POSTGRES_IMAGE:-postgres:18}"
 export MSSQL_IMAGE="${MSSQL_IMAGE:-mcr.microsoft.com/mssql/server:2025-latest}"
 # Do not silently pull multi-GB images on a slow local connection.
-for image in "$POSTGRES_IMAGE" "$MSSQL_IMAGE"; do
+required_images=("$POSTGRES_IMAGE")
+(( postgres_only )) || required_images+=("$MSSQL_IMAGE")
+for image in "${required_images[@]}"; do
     docker image inspect "$image" >/dev/null 2>&1 || fail "Cached image required; explicitly pull it first: $image"
 done
 make_runtime_dir
@@ -37,7 +43,7 @@ export POSTGRES_HOST_PORT MSSQL_HOST_PORT
 # Names are unique and registered before startup so partial startup is also cleaned.
 BP_CLEANUP_CONTAINERS+=("$POSTGRES_CONTAINER" "$MSSQL_CONTAINER")
 run_redacted bash "${REPO_ROOT}/.github/scripts/start-postgres.sh"
-run_redacted bash "${REPO_ROOT}/.github/scripts/start-mssql.sh"
+(( postgres_only )) || run_redacted bash "${REPO_ROOT}/.github/scripts/start-mssql.sh"
 while IFS='=' read -r key value; do
     [[ $key == BACKUP_PLATFORM_TEST_* && $key =~ ^[A-Z_]+$ ]] || fail 'Unexpected CI environment key.'
     export "$key=$value"

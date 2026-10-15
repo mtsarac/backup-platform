@@ -89,7 +89,11 @@ them:
 ```bash
 scripts/database/with-disposable-databases.sh -- ./scripts/database/check-databases.sh
 scripts/database/with-disposable-databases.sh --restore -- ./scripts/integration/run-mssql-tests.sh --provider --agent --restore
+scripts/database/with-disposable-databases.sh --postgres-only -- ./scripts/integration/run-postgres-tests.sh   # fsync-off PostgreSQL only, no MSSQL
 ```
+
+`--postgres-only` is the fast way to run the full PostgreSQL suite (≈ 5.7 min versus ≈ 9 min against a durable `fsync=on` server, because
+every `DROP DATABASE` forces an immediate checkpoint).
 
 ## Test entry points
 
