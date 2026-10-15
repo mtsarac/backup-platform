@@ -116,9 +116,8 @@ public sealed class RetentionStoreQueryTests(PostgreSqlFixture fixture) : IClass
     {
         var agent = await _world.Harness.AddAgentAsync();
         var job = await RetentionKit.AddJobAsync(_world.Harness, agent, Policy);
-        var expected = new List<SeededBackup>();
-        for (var index = 0; index < 205; index++)
-            expected.Add(await RetentionKit.SeedAsync(_world.Harness, agent, job, T0.AddMinutes(index)));
+        var times = Enumerable.Range(0, 205).Select(index => T0.AddMinutes(index)).ToList();
+        var expected = await RetentionKit.SeedBatchAsync(_world.Harness, agent, job, times);
         var stranger = await _world.SeedAsync(Policy);
         var store = _world.Store();
         var query = new BackupArtifactQuery(JobId: job.Id, AgentId: agent.AgentId.Value, State: "Available", PageSize: 100);

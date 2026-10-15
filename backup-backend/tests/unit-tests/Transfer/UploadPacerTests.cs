@@ -29,7 +29,14 @@ public sealed class UploadPacerTests
 
         await SettleAsync(time, Refresh);          // the renewal is sent and hangs
         Assert.Equal(TransferRateLimiter.Chunk(500_000), await stream.ReadAsync(new byte[1 << 20]).AsTask().WaitAsync(TimeSpan.FromSeconds(10)));
-        await SettleAsync(time, Valid);            // past the promise
+        time.Advance(Valid);            // past the promise
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (pacer.CurrentBytesPerSecond != 0 && DateTime.UtcNow < deadline)
+        {
+            for (var i = 0; i < 20; i++) await Task.Yield();
+            await Task.Delay(5);
+        }
+        Assert.Equal(0, pacer.CurrentBytesPerSecond);
         var held = stream.ReadAsync(new byte[1 << 20]).AsTask();
         await SettleAsync(time, TimeSpan.FromSeconds(30));
 

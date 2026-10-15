@@ -68,11 +68,12 @@ public sealed class BackupTransferLeaseIntegrationTests(PostgreSqlFixture fixtur
     public async Task A_renewing_holder_keeps_the_key_far_beyond_one_lease_time()
     {
         var connection = Guid.NewGuid();
-        var service = Service();
+        var faster = new BackupTransferLeaseOptions(TimeSpan.FromSeconds(1), TimeSpan.FromMilliseconds(200), TimeSpan.FromMilliseconds(300));
+        var service = Service(faster);
         await using var hold = await service.AcquireAsync(connection, "long-transfer", default);
 
         var rival = service.AcquireAsync(connection, "long-transfer", default);
-        await Task.Delay(TimeSpan.FromSeconds(7)); // more than two lease times
+        await Task.Delay(TimeSpan.FromMilliseconds(2500)); // more than two lease times
         Assert.False(rival.IsCompleted);
         Assert.False(hold.Lost.IsCancellationRequested);
         await hold.DisposeAsync();

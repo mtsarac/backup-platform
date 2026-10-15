@@ -57,6 +57,9 @@ public sealed class UploadPacer : IAsyncDisposable
     /// <summary>The lowest rate the transfer can legitimately be held to under the current policy; null when unlimited. Widens deadlines by size / rate.</summary>
     public long? MinimumBytesPerSecond => Volatile.Read(ref _policy).MinimumBytesPerSecond;
 
+    /// <summary>The current effective rate of the upload limiter (null when unlimited, 0 when held).</summary>
+    public long? CurrentBytesPerSecond => _limiter.BytesPerSecond;
+
     /// <exception cref="UploadPolicyException">The policy could not be obtained.</exception>
     public static async Task<UploadPacer> BeginAsync(IUploadPolicySource source, TimeProvider time, CancellationToken cancellationToken)
     {

@@ -3,6 +3,7 @@ using BackupPlatform.Application.Backups;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
+using BackupPlatform.Domain.Storage;
 using Completion = BackupPlatform.Application.Backups.BackupCompletion;
 
 namespace BackupPlatform.IntegrationTests;
@@ -62,5 +63,57 @@ internal static class RetentionKit
         var artifact = context.BackupArtifacts.Where(candidate => candidate.AttemptId == attemptId).Select(candidate => candidate.Id).Single();
         var replica = context.BackupReplicas.Where(candidate => candidate.ArtifactId == artifact).Select(candidate => candidate.Id).Single();
         return new SeededBackup(agent.TenantId, job.Id, run.Id, attemptId, artifact, replica, storageProvider, storageTarget, storedKey, acceptedAt);
+    }
+
+    public static async Task<IReadOnlyList<SeededBackup>> SeedBatchAsync(
+        BackupStoreHarness harness, StoreAgent agent, BackupJob job, IReadOnlyList<DateTimeOffset> acceptedAts,
+        string storageProvider = "local", string storageTarget = "local")
+    {
+        var result = new List<SeededBackup>(acceptedAts.Count);
+        var runs = new List<BackupRun>(acceptedAts.Count);
+        await using var context = harness.Database.CreatePlatformContext();
+        var connection = await context.StorageConnections
+            .Where(c => c.TenantId == agent.TenantId && c.ProviderType == storageProvider)
+            .FirstOrDefaultAsync();
+        if (connection is null)
+        {
+            connection = new StorageConnection(Guid.NewGuid(), agent.TenantId, "Default " + storageProvider, storageProvider,
+                StorageOwnership.TenantManaged, "tenant", new Dictionary<string, string>(), true, acceptedAts[0]);
+            context.StorageConnections.Add(connection);
+            await context.SaveChangesAsync();
+        }
+        var connectionId = connection.Id;
+        for (var i = 0; i < acceptedAts.Count; i++)
+        {
+            var acceptedAt = acceptedAts[i];
+            var runId = Guid.NewGuid();
+            var attemptId = Guid.NewGuid();
+            var token = Guid.NewGuid();
+            var artifactId = Guid.NewGuid();
+            var replicaId = Guid.NewGuid();
+            var scope = ManagedBackupLayout.AttemptScope(agent.TenantId.Value, job.Id, runId, attemptId);
+            var prefix = job.Configuration.StoragePrefix;
+            var storedKey = $"{(prefix.Length == 0 ? "" : prefix + "/")}{scope}/{ManagedFileName}";
+            var agentReportedAt = acceptedAt - TimeSpan.FromDays(400);
+
+            var run = new BackupRun(runId, agent.TenantId, job.Id, agent.AgentId, job.Configuration, Guid.NewGuid().ToString("N"), acceptedAt - TimeSpan.FromMinutes(5), job.RetryPolicy, job.OverlapPolicy);
+            run.QueueFirstAttempt(attemptId, acceptedAt - TimeSpan.FromMinutes(5));
+            run.Claim(token, acceptedAt - TimeSpan.FromSeconds(60), TimeSpan.FromMinutes(10));
+            run.Start(token, acceptedAt - TimeSpan.FromSeconds(30), "1.0", "1.0", "linux");
+
+            var artifact = new BackupArtifact(artifactId, agent.TenantId, attemptId, 100, BackupStoreHarness.SourceHash, BackupStoreHarness.ArtifactHash, "sha256", agentReportedAt, "{\"DatabaseName\":\"Database\"}", "{\"CopyOnly\":true}");
+            var replica = new BackupReplica(replicaId, agent.TenantId, artifactId, storageProvider, storageTarget, storedKey, 100, BackupStoreHarness.ArtifactHash, "sha256", "Verified", "ReadBack", agentReportedAt, agentReportedAt, BackupStorageExecutionLocation.Backend, null, connectionId);
+            artifact.AddReplica(replica);
+
+            var domainCompletion = new BackupPlatform.Domain.Backups.BackupCompletion(BackupStatus.Succeeded, null, artifact, []);
+            run.Complete(token, acceptedAt, domainCompletion);
+            runs.Add(run);
+            result.Add(new SeededBackup(agent.TenantId, job.Id, runId, attemptId, artifactId, replicaId, storageProvider, storageTarget, storedKey, acceptedAt));
+        }
+
+        // Re-use opened context
+        context.BackupRuns.AddRange(runs);
+        await context.SaveChangesAsync();
+        return result;
     }
 }
