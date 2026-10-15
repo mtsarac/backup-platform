@@ -36,7 +36,7 @@ export function RestoreWizardPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Backup Geri Yükleme Sihirbazı"
-        description="Doğrulanmış MSSQL backup'ını hedef SQL Server Instance'a güvenli ve denetlenebilir adımlarla geri yükleyin."
+        description={targetsQuery.data?.engine === 'postgres' ? "PostgreSQL pg_dump custom arşivini pg_restore ile hedef PostgreSQL sunucusuna geri yükleyin." : "Doğrulanmış backup'ı aynı Database motoruna güvenli ve denetlenebilir adımlarla geri yükleyin."}
         crumbs={[{ label: 'Backup dosyaları', to: `/tenants/${tenantId}/artifacts` }, { label: artifactQuery.data?.databaseName ?? 'Backup detayları', to: `/tenants/${tenantId}/artifacts/${id}` }, { label: 'Geri yükleme' }]}
       />
       <QueryState isPending={artifactQuery.isPending || targetsQuery.isPending} error={artifactQuery.error || targetsQuery.error}>
@@ -67,6 +67,8 @@ interface RequestAttempt<Variables> {
 function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
   const navigate = useNavigate()
   const instancePrefix = useId()
+  const isPg = targets.engine === 'postgres'
+  const engineName = isPg ? 'PostgreSQL' : 'SQL Server'
   const defaultTarget = targets.targets[0]
   const defaultAgent = targets.agents.find((a) => a.canRestore && a.sourceEligible) ?? targets.agents[0]
 
@@ -76,15 +78,18 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
   const [selectedTargetIndex, setSelectedTargetIndex] = useState<number>(0)
   const [customTarget, setCustomTarget] = useState<RestoreTarget>({
     host: defaultTarget?.target.host ?? '',
-    port: defaultTarget?.target.port ?? null,
-    integratedSecurity: defaultTarget?.target.integratedSecurity ?? true,
+    port: defaultTarget?.target.port ?? (isPg ? 5432 : null),
+    integratedSecurity: defaultTarget?.target.integratedSecurity ?? !isPg,
     databaseCredentialReference: defaultTarget?.target.databaseCredentialReference ?? null,
     encrypt: defaultTarget?.target.encrypt ?? true,
-    trustServerCertificate: defaultTarget?.target.trustServerCertificate ?? true,
+    trustServerCertificate: defaultTarget?.target.trustServerCertificate ?? false,
   })
 
   const [mode, setMode] = useState<RestoreMode>('NewDatabase')
-  const [targetDatabaseName, setTargetDatabaseName] = useState<string>(artifact.databaseName ? `${artifact.databaseName}_restored` : 'RestoredDB')
+  const [targetDatabaseName, setTargetDatabaseName] = useState<string>(() => {
+    const name = artifact.databaseName ? `${artifact.databaseName}_restored` : 'RestoredDB'
+    return isPg && new TextEncoder().encode(name).length > 63 ? 'restored_db' : name
+  })
   const [confirmOverwriteInput, setConfirmOverwriteInput] = useState<string>('')
   const [options, setOptions] = useState<RestoreOptions>({
     terminateActiveConnections: false,
@@ -127,6 +132,8 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
   }, [targetType, targets.targets, selectedTargetIndex, customTarget])
 
   const eligibleForRestore = artifact.state === 'Available' && activeAgent?.canRestore && activeAgent?.sourceEligible
+  const targetValid = Boolean(effectiveTarget.host) && (!isPg || (!effectiveTarget.integratedSecurity && Boolean(effectiveTarget.databaseCredentialReference)))
+  const databaseNameValid = Boolean(targetDatabaseName.trim()) && (!isPg || new TextEncoder().encode(targetDatabaseName.trim()).length <= 63)
 
   const discoveryFingerprint = JSON.stringify([selectedAgentId, effectiveTarget])
   const precheckFingerprint = JSON.stringify([discoveryFingerprint, targetDatabaseName.trim(), mode, options])
@@ -184,7 +191,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
   }
 
   async function triggerDiscovery() {
-    if (!eligibleForRestore || !effectiveTarget.host || pendingRef.current.discovery) return
+    if (!eligibleForRestore || !targetValid || pendingRef.current.discovery) return
     const previous = discoveryAttemptRef.current
     const attempt: RequestAttempt<StartRestoreDiscoveryVariables> = previous && discoveryRetryable && previous.fingerprint === discoveryFingerprint
       ? previous
@@ -216,7 +223,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
   }
 
   async function triggerPrecheck(fresh = false) {
-    if (!eligibleForRestore || !effectiveTarget.host || !targetDatabaseName.trim() || !replaceConfirmed || pendingRef.current.precheck || pendingRef.current.execution) return
+    if (!eligibleForRestore || !targetValid || !databaseNameValid || !replaceConfirmed || pendingRef.current.precheck || pendingRef.current.execution) return
     const previous = precheckAttemptRef.current
     const attempt: RequestAttempt<StartRestorePrecheckVariables> = !fresh && previous && precheckRetryable && previous.fingerprint === precheckFingerprint
       ? previous
@@ -306,11 +313,12 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
           <p className="mt-2 break-all text-sm text-text-muted">Artifact ID: <code>{artifact.id}</code> · Tür: {artifact.backupType} · Replikalar: {artifact.replicas.map((r) => `${r.storageProvider} (${r.status})`).join(', ')}</p>
         </details>
       </section>
+      {isPg && <Notice tone="info" title="PostgreSQL Full Restore">Yalnızca güvendiğiniz platform arşivlerini geri yükleyin: pg_restore içindeki SQL, fonksiyonlar ve extension işlemleri hedefte superuser olarak çalışabilir. SHA-256 byte bütünlüğünü doğrular, kaynak SQL'in güvenliğini doğrulamaz. pg_dump cluster rollerini yedeklemez; hedef superuser kimlik bilgisi, kaynak sahiplikleri/ACL için gereken roller ve extension paketleri hazır olmalıdır. Hedef sürümü hem kaynak hem pg_dump sürümüyle aynı veya daha yeni olmalıdır. Önce geçici Database'e geri yüklenir, sonra hedef adı değiştirilir. Onaylı üzerine yazmada eski Database bağlantıları kapalı bp_old_* adıyla kurtarma için korunur; kontrol ve temizliği operatör yapmalıdır. WAL/PITR desteklenmez.</Notice>}
 
       {/* Step 1: Target Agent & SQL Instance */}
       {step === 1 && (
         <div className="space-y-5">
-          <Section title="1. Hedef Agent Seçimi" description="Backup dosyasını alıp SQL Server'a aktaracak Agent'ı seçin.">
+          <Section title="1. Hedef Agent Seçimi" description={`Backup dosyasını alıp ${engineName} sunucusuna aktaracak Agent'ı seçin.`}>
             <div className="space-y-3">
               <label htmlFor={`${instancePrefix}-agent`} className="block text-sm font-medium">Agent</label>
               <select
@@ -352,7 +360,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
             </div>
           </Section>
 
-          <Section title="2. Hedef SQL Instance" description="Geri yüklemenin yapılacağı SQL Server bağlantı referansı.">
+          <Section title={`2. Hedef ${engineName}`} description={`Geri yüklemenin yapılacağı ${engineName} bağlantı referansı.`}>
             <div className="space-y-4">
               <div className="flex flex-wrap gap-4 text-sm">
                 <label className="flex items-center gap-2">
@@ -397,13 +405,13 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
               {targetType === 'custom' && (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <label htmlFor={`${instancePrefix}-host`} className="block text-sm font-medium">Host / Instance</label>
+                    <label htmlFor={`${instancePrefix}-host`} className="block text-sm font-medium">{isPg ? 'PostgreSQL Host' : 'Host / Instance'}</label>
                     <input
                       id={`${instancePrefix}-host`}
                       className={inputClass}
                       value={customTarget.host}
                       onChange={(e) => changeCustomTarget({ ...customTarget, host: e.target.value })}
-                      placeholder="localhost veya SQLSERVER"
+                      placeholder={isPg ? 'localhost' : 'localhost veya SQLSERVER'}
                     />
                   </div>
                   <div>
@@ -414,7 +422,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
                       className={inputClass}
                       value={customTarget.port ?? ''}
                       onChange={(e) => changeCustomTarget({ ...customTarget, port: e.target.value ? Number(e.target.value) : null })}
-                      placeholder="1433"
+                      placeholder={isPg ? '5432' : '1433'}
                     />
                   </div>
                   <div className="sm:col-span-2">
@@ -452,7 +460,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
 
           <div className="flex justify-end gap-3">
             <Button
-              disabled={!eligibleForRestore || !effectiveTarget.host}
+              disabled={!eligibleForRestore || !targetValid}
               onClick={() => setStep(2)}
             >
               Devam et: Restore Modu →
@@ -499,7 +507,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
                 >
                   <p className="font-semibold text-error">Mevcut veritabanının üzerine yaz (Riskli)</p>
                   <p className="mt-1 text-base text-text-muted">
-                    Hedef sunucudaki mevcut veritabanının üzerine yazar. Eski veriler kalıcı olarak kaybolur!
+                    {isPg ? 'Hedef Database değiştirilir; eski Database bp_old_* adıyla kurtarma için korunur. Operatör temizliği gerekir.' : 'Hedef sunucudaki mevcut veritabanının üzerine yazar. Eski veriler kalıcı olarak kaybolur!'}
                   </p>
                 </button>
               </div>
@@ -514,14 +522,15 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
                     onChange={(e) => changeDatabaseName(e.target.value)}
                     placeholder="Yeni veritabanı adı"
                   />
-                  <p className="text-xs text-text-muted">Bu ad hedef SQL Server'da henüz var olmamalıdır.</p>
+                  <p className="text-xs text-text-muted">Bu ad hedef {engineName} sunucusunda henüz var olmamalıdır.{isPg && ' En fazla 63 UTF-8 byte.'}</p>
+                  {!databaseNameValid && isPg && <p role="alert" className="text-xs text-error">PostgreSQL Database adı zorunludur ve en fazla 63 UTF-8 byte olabilir.</p>}
                 </div>
               )}
 
               {mode === 'ReplaceExistingDatabase' && (
                 <div className="space-y-4 rounded-xl border border-error/40 bg-surface p-4">
                   <Notice tone="warning" title="DİKKAT: Veri Kaybı Riski!">
-                    Bu işlem hedef veritabanının içeriğini tamamen silecektir. İşlem geri alınamaz.
+                    {isPg ? 'Hedef Database değiştirilecektir. Eski Database bağlantıları kapalı bp_old_* adıyla korunur; kurtarma ve temizlik operatörün sorumluluğundadır.' : 'Bu işlem hedef veritabanının içeriğini tamamen silecektir. İşlem geri alınamaz.'}
                   </Notice>
 
                   <div className="space-y-2">
@@ -596,7 +605,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
                       checked={options.verifyBackup ?? true}
                       onChange={(e) => changeOptions({ ...options, verifyBackup: e.target.checked })}
                     />
-                    <span>RESTORE VERIFYONLY Çalıştır</span>
+                    <span>{isPg ? 'pg_restore Arşiv Doğrulaması' : 'RESTORE VERIFYONLY Çalıştır'}</span>
                   </label>
                   {mode === 'ReplaceExistingDatabase' && (
                     <label className="flex items-center gap-2 text-error sm:col-span-2">
@@ -605,7 +614,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
                         checked={options.terminateActiveConnections ?? false}
                         onChange={(e) => changeOptions({ ...options, terminateActiveConnections: e.target.checked })}
                       />
-                      <span>Mevcut aktif bağlantıları sonlandır (WITH ROLLBACK IMMEDIATE)</span>
+                      <span>{isPg ? 'Mevcut aktif bağlantıları sonlandır (pg_terminate_backend)' : 'Mevcut aktif bağlantıları sonlandır (WITH ROLLBACK IMMEDIATE)'}</span>
                     </label>
                   )}
                 </div>
@@ -620,7 +629,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
           <div className="flex flex-wrap justify-between gap-3">
             <Button variant="outline" onClick={() => setStep(1)}>← Geri</Button>
             <Button
-              disabled={!eligibleForRestore || !effectiveTarget.host || !targetDatabaseName.trim() || !replaceConfirmed || startPrecheck.isPending || startRestore.isPending}
+              disabled={!eligibleForRestore || !targetValid || !databaseNameValid || !replaceConfirmed || startPrecheck.isPending || startRestore.isPending}
               onClick={() => void triggerPrecheck()}
             >
               {startPrecheck.isPending ? 'Ön Kontrol Başlatılıyor…' : precheckRetryable ? 'Tekrar Dene' : 'Ön Kontrolü Çalıştır →'}
@@ -632,7 +641,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
       {/* Step 3 & 4: Precheck Results & Execution */}
       {step >= 3 && (
         <div className="space-y-5">
-          <Section title="Ön Kontrol (Precheck) Sonuçları" description="Hedef SQL Server üzerinde hiçbir değişiklik yapılmadan çalıştırılan uyumluluk ve güvenlik kontrolleri.">
+          <Section title="Ön Kontrol (Precheck) Sonuçları" description={`Hedef ${engineName} üzerinde hiçbir değişiklik yapılmadan çalıştırılan uyumluluk ve güvenlik kontrolleri.`}>
             <QueryState isPending={(startPrecheck.isPending || (!!precheckOperationId && precheckQuery.isPending)) && !precheckData} error={precheckError || (currentPrecheck && precheckQuery.error)}>
               {precheckData && <PrecheckResults data={precheckData} failed={precheckFailed} passed={precheckPassed}
                 onRecheck={() => void triggerPrecheck(true)} recheckDisabled={startPrecheck.isPending || startRestore.isPending} />}
@@ -644,18 +653,18 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
             )}
           </Section>
 
-          <Section title="Başlatmadan önce" description="Onayınızdan sonra Agent hedef SQL Server üzerinde Restore çalıştırır.">
+          <Section title="Başlatmadan önce" description={`Onayınızdan sonra Agent hedef ${engineName} üzerinde Restore çalıştırır.`}>
             <div className="space-y-4">
               <Facts>
                 <Fact label="Kaynak Database">{artifact.databaseName ?? 'Bilinmeyen Database'}</Fact>
                 <Fact label="Hedef Database">{targetDatabaseName}</Fact>
                 <Fact label="Agent">{activeAgent?.hostName ?? selectedAgentId}</Fact>
-                <Fact label="Hedef SQL Server Instance">{effectiveTarget.host}{effectiveTarget.port ? `:${effectiveTarget.port}` : ''}</Fact>
+                <Fact label={`Hedef ${engineName}`}>{effectiveTarget.host}{effectiveTarget.port ? `:${effectiveTarget.port}` : ''}</Fact>
                 <Fact label="Restore modu">{restoreModeLabel(mode)}</Fact>
                 <Fact label="Ön kontrol">{precheckPassed ? 'Geçti' : 'Başarılı ön kontrol bekleniyor'}</Fact>
               </Facts>
               {mode === 'ReplaceExistingDatabase' && <Notice tone="warning" title="Mevcut Database'in üzerine yazılacak">
-                <p><strong className="break-all">{targetDatabaseName}</strong> içindeki eski veriler kalıcı olarak kaybolur. İşlem geri alınamaz; iptal etmek eski içeriği geri getirmez.</p>
+                <p>{isPg ? 'Mevcut Database bp_old_* adıyla korunur ve doğrulanmış geçici Database hedef adını alır. Eski Database otomatik silinmez; operatör kurtarma ve temizlikten sorumludur.' : <><strong className="break-all">{targetDatabaseName}</strong> içindeki eski veriler kalıcı olarak kaybolur. İşlem geri alınamaz; iptal etmek eski içeriği geri getirmez.</>}</p>
                 <p className="mt-1">Database adı ile verdiğiniz onay: <code className="break-all">{confirmOverwriteInput}</code></p>
               </Notice>}
             </div>

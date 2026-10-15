@@ -56,25 +56,38 @@ export function ArtifactRetention({ artifact }: { artifact: ArtifactPresentation
 
 export function ArtifactMetadata({ artifact }: { artifact: ArtifactPresentation }) {
   const meta = artifact.backupMetadata
-  return <Section title="MSSQL backup metadata" description="SQL Server'ın bu backup için bildirdiği teknik bilgiler.">
+  const isPg = meta?.engine === 'postgres'
+  return <Section title={isPg ? 'PostgreSQL backup metadata' : 'Database backup metadata'} description={isPg ? 'pg_dump custom-format mantıksal Full Backup bilgileri.' : 'Database motorunun bu backup için bildirdiği teknik bilgiler.'}>
     {meta ? <Facts columns={3}>
       <Fact label="Engine">{meta.engine ?? '—'}</Fact>
-      <Fact label="SQL backup başladı">{artifactDate(meta.backupStartedAt)}</Fact>
-      <Fact label="SQL backup tamamlandı">{artifactDate(meta.backupFinishedAt)}</Fact>
-      <Fact label="SQL Server">{meta.instance?.serverName ?? '—'}</Fact>
-      <Fact label="SQL Server Instance">{meta.instance?.instanceName ?? '—'}</Fact>
-      <Fact label="SQL Server version">{meta.instance?.version ?? '—'}</Fact>
-      <Fact label="SQL Server edition">{meta.instance?.edition ?? '—'}</Fact>
-      <Fact label="SQL Server platform">{meta.instance?.hostPlatform ?? '—'}</Fact>
-      <Fact label="Recovery model">{meta.sqlDetails?.recoveryModel ?? '—'}</Fact>
-      <Fact label="Compatibility level">{meta.sqlDetails?.compatibilityLevel ?? '—'}</Fact>
-      <Fact label="User access">{meta.sqlDetails?.userAccess ?? '—'}</Fact>
-      <Fact label="Transparent data encryption">{meta.sqlDetails?.transparentDataEncryption ?? 'Bildirilmedi'}</Fact>
+      <Fact label="Backup başladı">{artifactDate(meta.backupStartedAt)}</Fact>
+      <Fact label="Backup tamamlandı">{artifactDate(meta.backupFinishedAt)}</Fact>
+      <Fact label="Sunucu">{meta.instance?.serverName ?? '—'}</Fact>
+      {!isPg && <Fact label="SQL Server Instance">{meta.instance?.instanceName ?? '—'}</Fact>}
+      <Fact label="Sunucu sürümü">{meta.instance?.version ?? '—'}</Fact>
+      {!isPg && <>
+        <Fact label="SQL Server edition">{meta.instance?.edition ?? '—'}</Fact>
+        <Fact label="SQL Server platform">{meta.instance?.hostPlatform ?? '—'}</Fact>
+        <Fact label="Recovery model">{meta.sqlDetails?.recoveryModel ?? '—'}</Fact>
+        <Fact label="Compatibility level">{meta.sqlDetails?.compatibilityLevel ?? '—'}</Fact>
+        <Fact label="User access">{meta.sqlDetails?.userAccess ?? '—'}</Fact>
+        <Fact label="Transparent data encryption">{meta.sqlDetails?.transparentDataEncryption ?? 'Bildirilmedi'}</Fact>
+      </>}
+      {isPg && <>
+        <Fact label="Arşiv biçimi">{meta.postgreSqlDetails?.archiveFormat ?? 'custom'} · logical Full</Fact>
+        <Fact label="pg_dump sürümü">{meta.postgreSqlDetails?.clientVersion ?? '—'}</Fact>
+        <Fact label="Encoding">{meta.postgreSqlDetails?.encoding ?? '—'}</Fact>
+        <Fact label="Collation">{meta.postgreSqlDetails?.collation ?? '—'}</Fact>
+        <Fact label="Sunucu data_checksums">{meta.postgreSqlDetails?.dataChecksums ?? '—'}</Fact>
+        <Fact label="Kaynak Database boyutu (byte)">{meta.postgreSqlDetails?.databaseSizeBytes ?? '—'}</Fact>
+        <Fact label="Extensions">{meta.postgreSqlDetails?.extensions || '—'}</Fact>
+      </>}
       <Fact label="Backup doğrulaması">{meta.verification?.state ?? '—'} · {meta.verification?.method ?? '—'}</Fact>
       <Fact label="Doğrulama başladı">{artifactDate(meta.verification?.startedAt)}</Fact>
       <Fact label="Doğrulama tamamlandı">{artifactDate(meta.verification?.finishedAt)}</Fact>
-      {([['COPY_ONLY', meta.appliedOptions?.copyOnly], ['CHECKSUM', meta.appliedOptions?.checksum], ['Compression', meta.appliedOptions?.compression]] as const).map(([label, applied]) => <Fact key={label} label={label}>{applied == null ? 'Bildirilmedi' : applied ? 'Uygulandı' : 'Uygulanmadı'}</Fact>)}
-    </Facts> : <p className="text-sm text-text-muted">Bu history kaydında MSSQL backup metadata bulunmuyor.</p>}
+      {!isPg && <Fact label="COPY_ONLY">{meta.appliedOptions?.copyOnly == null ? 'Bildirilmedi' : meta.appliedOptions.copyOnly ? 'Uygulandı' : 'Uygulanmadı'}</Fact>}
+      {([[isPg ? 'data_checksums' : 'CHECKSUM', meta.appliedOptions?.checksum], ['Compression', meta.appliedOptions?.compression]] as const).map(([label, applied]) => <Fact key={label} label={label}>{applied == null ? 'Bildirilmedi' : applied ? 'Uygulandı' : 'Uygulanmadı'}</Fact>)}
+    </Facts> : <p className="text-sm text-text-muted">Bu history kaydında Database backup metadata bulunmuyor.</p>}
   </Section>
 }
 

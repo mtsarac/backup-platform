@@ -44,8 +44,8 @@ export function PrecheckResults({ data, failed, passed, onRecheck, recheckDisabl
     <DataTable rows={items} columns={columns} keyExtractor={(item) => `${item.checkId}:${item.reasonCode}:${item.status}:${items.indexOf(item)}`} emptyMessage="Henüz kontrol sonucu bildirilmedi." />
     {source && <Facts columns={2}>
       <Fact label="Kaynak Database">{source.databaseName}</Fact>
-      <Fact label="Hedef SQL sürümü">{data.result?.targetServer?.version ?? 'Bilinmiyor'}</Fact>
-      <Fact label="Header doğrulandı">{data.result?.backupVerified ? 'Evet' : 'Hayır'}</Fact>
+      <Fact label="Hedef Database motoru sürümü">{data.result?.targetServer?.version ?? 'Bilinmiyor'}</Fact>
+      <Fact label="Backup doğrulandı">{data.result?.backupVerified ? 'Evet' : 'Hayır'}</Fact>
       <Fact label="Checksum doğrulandı">{data.result?.checksumVerified ? 'Evet' : 'Hayır'}</Fact>
     </Facts>}
   </div>

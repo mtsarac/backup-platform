@@ -54,12 +54,28 @@ afterEach(() => { cleanup(); vi.clearAllMocks() })
 beforeEach(() => { permissions.canAdmin = true })
 
 describe('Backup dosyaları', () => {
+  it('shows PostgreSQL archive facts without SQL Server physical backup metadata', async () => {
+    request.mockResolvedValue(artifact({ backupMetadata: {
+      engine: 'postgres', databaseName: 'sales', backupType: 'Full', backupStartedAt: null, backupFinishedAt: null,
+      instance: { serverName: 'pg-host', version: '18.6', instanceName: null, edition: null, hostPlatform: null }, sqlDetails: null,
+      verification: { state: 'Passed', method: 'pg_restore-full-read', startedAt: null, finishedAt: null },
+      appliedOptions: { copyOnly: false, checksum: true, compression: true },
+      postgreSqlDetails: { archiveFormat: 'custom', clientVersion: '18.6', encoding: 'UTF8', collation: 'C', dataChecksums: 'on', databaseSizeBytes: '16384', extensions: 'hstore' },
+    } }))
+    mount()
+    fireEvent.click(await screen.findByRole('tab', { name: /metadata/i }))
+    expect(screen.getByRole('heading', { name: /PostgreSQL/ })).toBeInTheDocument()
+    expect(screen.getByText('UTF8')).toBeInTheDocument()
+    expect(screen.getByText('hstore')).toBeInTheDocument()
+    expect(screen.queryByText('Recovery model')).not.toBeInTheDocument()
+    expect(screen.queryByText('SQL Server edition')).not.toBeInTheDocument()
+  })
   it('clears the selected tab and destructive confirmation when navigating to another Artifact', async () => {
     request.mockResolvedValue(artifact())
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
     const router = createMemoryRouter([{ path: '/tenants/:tenantId/artifacts/:id', element: <ArtifactDetailPage /> }], { initialEntries: ['/tenants/tenant-a/artifacts/artifact-a'] })
     render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
-    fireEvent.click(await screen.findByRole('tab', { name: 'MSSQL metadata' }))
+    fireEvent.click(await screen.findByRole('tab', { name: /metadata/i }))
     fireEvent.click(screen.getByRole('button', { name: 'Silme isteği oluştur' }))
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
     await act(async () => { await router.navigate('/tenants/tenant-a/artifacts/artifact-b') })

@@ -326,6 +326,29 @@ describe('RestoreDetailPage', () => {
 })
 
 describe('RestoreWizardPage', () => {
+  it('routes a custom PostgreSQL target with password authentication and rejects identifiers over 63 UTF-8 bytes', async () => {
+    vi.mocked(RestoreApi.getRestoreTargets).mockResolvedValue({ ...sampleTargets, engine: 'postgres', targets: [] })
+    renderWithClient(<Routes><Route path="/tenants/:tenantId/artifacts/:id/restore" element={<RestoreWizardPage />} /></Routes>, '/tenants/tenant-a/artifacts/artifact-1/restore')
+    const host = await screen.findByLabelText('PostgreSQL Host')
+    expect(screen.getByLabelText(/Port/)).toHaveValue(5432)
+    expect(screen.getByRole('button', { name: /Devam et: Restore Modu/i })).toBeDisabled()
+    fireEvent.change(host, { target: { value: 'pg-target' } })
+    fireEvent.change(screen.getByLabelText('Credential Referansı'), { target: { value: 'pg-restore' } })
+    fireEvent.click(screen.getByRole('button', { name: /Devam et: Restore Modu/i }))
+    expect(screen.queryByRole('checkbox', { name: /RESTORE VERIFYONLY/ })).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Yeni Veritabanı Adı'), { target: { value: '数'.repeat(22) } })
+    expect(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i })).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('Yeni Veritabanı Adı'), { target: { value: '数'.repeat(21) } })
+    fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i }))
+    await waitFor(() => expect(RestoreApi.startRestorePrecheck).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(RestoreApi.startRestorePrecheck).mock.calls[0].slice(0, 3)).toEqual([
+      'tenant-a', 'artifact-1', expect.objectContaining({
+        databaseName: '数'.repeat(21), target: expect.objectContaining({
+          host: 'pg-target', port: 5432, integratedSecurity: false, databaseCredentialReference: 'pg-restore',
+        }),
+      }),
+    ])
+  })
   it('uses a new precheck idempotency key after correcting wizard input', async () => {
     const precheck = { ...sampleRestore, id: 'precheck-correction', purpose: 'Precheck' as const, status: 'Succeeded' as const }
     vi.mocked(RestoreApi.startRestorePrecheck).mockResolvedValue(precheck)

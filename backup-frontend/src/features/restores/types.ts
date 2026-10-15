@@ -122,6 +122,7 @@ export interface RestoreConfiguredTarget {
   target: RestoreTarget
 }
 export interface RestoreTargetsResponse {
+  engine?: 'mssql' | 'postgres' | 'unsupported'
   artifactId: string
   sourceDatabase: string
   backupType: string

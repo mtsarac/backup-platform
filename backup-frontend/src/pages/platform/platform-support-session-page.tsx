@@ -90,7 +90,7 @@ function SessionOverview({ session }: { session: SupportSession }) {
   return <div className="space-y-5">
     <Notice tone="warning" title="Müşteri ortamındasınız">
       <p>Bu erişim yalnızca belirtilen tenant ve süre için geçerlidir; tüm veri erişimleri denetlenir.</p>
-      <p>ViewBackupMetadata metadata okumaya, DownloadBackup dosya indirmeye, RestoreBackup yalnızca yeni Database oluşturmaya izin verir. Restore hedefleri müşterinin gerçek SQL Server ortamıdır, izole değildir.</p>
+      <p>ViewBackupMetadata metadata okumaya, DownloadBackup dosya indirmeye, RestoreBackup yalnızca yeni Database oluşturmaya izin verir. Restore hedefleri müşterinin gerçek veritabanı sunucusudur, izole değildir.</p>
     </Notice>
     <Section title="Oturum özeti">
       <div className="space-y-4">

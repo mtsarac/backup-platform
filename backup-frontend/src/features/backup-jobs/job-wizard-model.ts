@@ -33,8 +33,12 @@ export function validateStep(step: number, values: StepValues): Record<string, s
     if (!values.agentId) errors.agentId = 'Bir Agent seçin.'
   } else if (step === 1) {
     const { host, database, port } = values.configuration
-    if (!host.trim()) errors['configuration.host'] = 'SQL Server host veya instance adını girin.'
+    if (!host.trim()) errors['configuration.host'] = 'Database sunucusunun host adını girin.'
     if (!database.trim()) errors['configuration.database'] = 'Database adını girin.'
+    if (values.configuration.engine === 'postgres') {
+      if (new TextEncoder().encode(database).length > 63) errors['configuration.database'] = 'PostgreSQL Database adı en fazla 63 UTF-8 byte olabilir.'
+      if (!values.configuration.databaseCredentialReference?.trim()) errors['configuration.databaseCredentialReference'] = 'Agent üzerindeki PostgreSQL kimlik bilgisi referansını girin.'
+    }
     if (port !== null && !(Number.isInteger(port) && port >= 1 && port <= 65535)) errors['configuration.port'] = 'Port 1 ile 65535 arasında bir tam sayı olmalı.'
   } else if (step === 3) {
     if (values.scheduled && !values.schedule.cronExpression.trim()) errors.cronExpression = 'Cron ifadesini girin veya hazır bir zamanlama seçin.'

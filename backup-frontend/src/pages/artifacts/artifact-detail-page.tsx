@@ -23,7 +23,7 @@ import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
 type ArtifactTab = 'summary' | 'replicas' | 'download' | 'retention' | 'metadata'
 const tabs: { value: ArtifactTab; label: string }[] = [
   { value: 'summary', label: 'Özet' }, { value: 'replicas', label: 'Replikalar' }, { value: 'download', label: 'İndirme' },
-  { value: 'retention', label: 'Saklama ve silme' }, { value: 'metadata', label: 'MSSQL metadata' },
+  { value: 'retention', label: 'Saklama ve silme' }, { value: 'metadata', label: 'Backup metadata' },
 ]
 
 function DeleteCountdown({ deleteAfter }: { deleteAfter: string }) {

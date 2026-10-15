@@ -34,11 +34,11 @@ export function restoreStageLabel(stage?: string | null): string {
 const restoreFailures: Record<string, string> = {
   ReplicaUnavailable: 'Replica geri yükleme için kullanılamıyor.', ArtifactTransferFailed: 'Artifact aktarımı tamamlanamadı.',
   ChecksumMismatch: 'Artifact checksum değeri eşleşmedi.', BackupInvalid: 'Backup doğrulaması başarısız oldu.',
-  BackupTypeUnsupported: 'Bu backup türü geri yükleme için desteklenmiyor.', IncompatibleVersion: 'Kaynak ve hedef SQL Server sürümleri uyumlu değil.',
+  BackupTypeUnsupported: 'Bu backup türü geri yükleme için desteklenmiyor.', IncompatibleVersion: 'Kaynak ve hedef Database motoru sürümleri uyumlu değil.',
   FileMappingFailed: 'Database dosya eşlemesi oluşturulamadı.', PreCheckFailed: 'Geri yükleme ön kontrolleri başarısız oldu.',
   TargetDatabaseExists: 'Hedef Database zaten var. Yeni Database modu üzerine yazmaz.', TargetDatabaseNotFound: 'Üzerine yazılacak hedef Database bulunamadı.',
   TargetInUse: 'Hedef Database kullanımda.', TargetProtected: 'Korunan hedef Database değiştirilemez.',
-  InsufficientDiskSpace: 'Hedefte yeterli disk alanı yok.', SqlRestoreFailed: 'SQL Server geri yükleme işlemi tamamlanamadı.',
+  InsufficientDiskSpace: 'Hedefte yeterli disk alanı yok.', SqlRestoreFailed: 'Database geri yükleme işlemi tamamlanamadı.',
   NotClaimed: 'Restore süresi içinde Agent tarafından alınmadı. Hedef değiştirilmedi.',
   precheck_rejected: 'Ön kontrol bu geri yükleme ile eşleşmiyor veya başarılı değil. Ön kontrolü yeniden çalıştırın.',
   agent_transfer_required: 'Replica başka bir Agent üzerinde. Agentlar arası aktarım desteklenmiyor.',

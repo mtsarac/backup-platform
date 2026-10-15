@@ -14,7 +14,7 @@ export function ArtifactRestoreAction({ tenantId, artifact }: { tenantId: string
     return <Notice tone="info" title="Geri yükleme yetkiniz yok">Geri yükleme (Restore Backup) işlemi Operator, Admin veya Owner rolü gerektirir. Viewer rolü bu işlem için yetkili değildir.</Notice>
   }
   const ineligibilityReason = restoreIneligibility(artifact)
-  return <Section title="Geri yükleme (Restore)" description="Bu backup dosyasını hedef SQL Server instance'ına yeni veritabanı olarak veya mevcut veritabanının üzerine geri yükleyin."
+  return <Section title="Geri yükleme (Restore)" description="Bu backup dosyasını aynı Database motorundaki hedef sunucuya yeni veritabanı olarak veya mevcut veritabanının üzerine geri yükleyin."
     actions={ineligibilityReason
       ? <Button disabled variant="outline">Restore Backup</Button>
       : <Link to={`/tenants/${tenantId}/artifacts/${artifact.id}/restore`}><Button className="inline-flex items-center gap-2"><RotateCcw aria-hidden="true" className="size-4" />Restore Backup</Button></Link>}>

@@ -60,7 +60,7 @@ export function BackupJobsPage() {
   const current = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)))
   const filtering = search !== '' || state !== 'all'
   return <div className="space-y-6">
-    <PageHeader title="Yedekleme işleri" description="MSSQL Full yedekleme, zamanlama ve saklama politikaları." actions={newJob} />
+    <PageHeader title="Yedekleme işleri" description="MSSQL ve PostgreSQL Full yedekleme, zamanlama ve saklama politikaları." actions={newJob} />
     {actionError !== null && <Notice tone="error" title="İşlem tamamlanamadı">{overlap ? <>Başka bir çalıştırma etkin olduğu için yeni çalışma başlatılmadı. <Link className={linkClass} to={`${base}/backup-runs/${overlap}`}>Etkin çalıştırmayı aç</Link></> : <>{errorMessage(actionError)} Ağ sonucu belirsizse aynı “Şimdi çalıştır” düğmesi aynı işlem anahtarıyla yeniden dener.</>}</Notice>}
     {startedRun && <Notice tone="success" title="Çalıştırma oluşturuldu">Backup Run kuyruğa alındı. <Link className={linkClass} to={`${base}/backup-runs/${startedRun}`}>Çalıştırmayı aç</Link></Notice>}
     <QueryState isPending={jobs.isPending} error={jobs.error}>

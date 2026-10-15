@@ -86,7 +86,7 @@ function AgentDetailContent({ tenantId, id, canAdmin }: { tenantId: string; id: 
               </Facts>
               {agent.capabilities.length ? <>
                 <CapabilityList capabilities={agent.capabilities} />
-                <p className="text-sm text-text-muted">Agent düzeyindeki destek, SQL Server Instance'ın gerçek desteğini garanti etmez; her çalıştırmadan önce pre-check yapılır.</p>
+                <p className="text-sm text-text-muted">Agent düzeyindeki destek, veritabanı sunucusunun gerçek desteğini garanti etmez; her çalıştırmadan önce pre-check yapılır.</p>
               </> : <p className="text-text-muted">Henüz bildirilmedi.</p>}
             </div>
           </Section>}

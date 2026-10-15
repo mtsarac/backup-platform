@@ -25,8 +25,9 @@ export function JobSummary(props: JobSummaryProps) {
       <Fact label="Durum">{props.enabled ? 'Etkin' : 'Devre dışı'}</Fact>
     </Facts>)}
     {block(1, <Facts>
-      <Fact label="SQL Server host / instance">{c.host || '—'}</Fact>
+      <Fact label={c.engine === 'postgres' ? 'PostgreSQL host' : 'SQL Server host / instance'}>{c.host || '—'}</Fact>
       <Fact label="Database">{c.database || '—'}</Fact>
+      <Fact label="Engine">{c.engine === 'postgres' ? 'PostgreSQL · pg_dump custom Full' : 'Microsoft SQL Server'}</Fact>
       <Fact label="Port">{c.port ?? 'Varsayılan'}</Fact>
       <Fact label="Kimlik doğrulama">{c.integratedSecurity ? 'Windows kimlik doğrulaması' : `Kimlik bilgisi referansı: ${c.databaseCredentialReference ?? '—'}`}</Fact>
       <Fact label="Bağlantı">{c.encrypt ? 'Şifreli' : 'Şifresiz'}{c.trustServerCertificate ? ' · sunucu sertifikasına güvenilir' : ''}</Fact>
@@ -47,8 +48,8 @@ export function JobSummary(props: JobSummaryProps) {
     </Facts>)}
     {block(4, <Facts>
       <Fact label="Saklama">{!props.canAdmin && props.nextRun === undefined ? 'Sunucunun varsayılan politikası uygulanır.' : retention.enabled ? `${formatSeconds(retention.keepForSeconds)} · silme bekleme ${formatSeconds(retention.deleteGracePeriodSeconds)}` : 'Süresiz'}{!props.canAdmin && <span className="block text-sm text-text-muted">Yalnızca Owner / Admin değiştirebilir.</span>}</Fact>
-      <Fact label="Kopya yedek (COPY_ONLY)">{c.copyOnly ? 'Açık' : 'Kapalı'}</Fact>
-      <Fact label="Bütünlük doğrulaması (CHECKSUM)">{policyText[c.checksumPolicy]}</Fact>
+      <Fact label="Kopya yedek (COPY_ONLY)">{c.engine === 'postgres' ? 'Mantıksal arşiv yedek zincirini değiştirmez' : c.copyOnly ? 'Açık' : 'Kapalı'}</Fact>
+      <Fact label={c.engine === 'postgres' ? 'Sayfa bütünlüğü (data_checksums)' : 'Bütünlük doğrulaması (CHECKSUM)'}>{policyText[c.checksumPolicy]}</Fact>
       <Fact label="Sıkıştırma (Compression)">{policyText[c.compressionPolicy]}</Fact>
     </Facts>)}
   </div>

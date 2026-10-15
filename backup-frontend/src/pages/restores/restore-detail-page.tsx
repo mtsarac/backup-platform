@@ -71,7 +71,7 @@ function RestoreDetail({ id }: { id: string }) {
           {tab === 'summary' && <>
             <Section title="Hedef Database durumu" description={targetStateDescription(restore.targetState)}>
               <p className="font-medium text-text-heading">{targetStateLabel(restore.targetState)}</p>
-              {restore.result && <p className="mt-2 text-sm">SQL Server Database durumu: {databaseStateLabel(restore.result.databaseState)}</p>}
+              {restore.result && <p className="mt-2 text-sm">Database durumu: {databaseStateLabel(restore.result.databaseState)}</p>}
             </Section>
             <Section title="İlerleme"><RestoreProgress stage={restore.progress.stage} percent={restore.progress.percent} at={restore.progress.at} label="Restore ilerlemesi" /></Section>
             <Section title="Restore özeti"><Facts columns={3}>
@@ -116,6 +116,6 @@ function RestoreDetail({ id }: { id: string }) {
       </>}
     </QueryState>
     {query.error && <Button variant="outline" onClick={() => void query.refetch()}>Tekrar dene</Button>}
-    <ConfirmDialog open={confirmOpen && mayCancel} onClose={() => setConfirmOpen(false)} title="Restore iptal edilsin mi?" description="İptal isteği Agent'a iletilir; SQL Server işlemi anında durmayabilir. Başlamış bir restore hedef Database'i kısmen geri yüklenmiş veya bilinmeyen durumda bırakabilir. Eski içerik geri gelmez; elle müdahale gerekebilir. İptal, Database'in sağlıklı olduğunu garanti etmez." pending={cancel.isPending} error={cancel.error ? restoreErrorMessage(cancel.error) : undefined} onConfirm={() => void confirmCancel()} />
+    <ConfirmDialog open={confirmOpen && mayCancel} onClose={() => setConfirmOpen(false)} title="Restore iptal edilsin mi?" description="İptal isteği Agent'a iletilir; Database motorunun işlemi anında durmayabilir. Başlamış bir restore hedef Database'i kısmen geri yüklenmiş veya bilinmeyen durumda bırakabilir. Elle müdahale gerekebilir. İptal, Database'in sağlıklı olduğunu garanti etmez." pending={cancel.isPending} error={cancel.error ? restoreErrorMessage(cancel.error) : undefined} onConfirm={() => void confirmCancel()} />
   </div>
 }

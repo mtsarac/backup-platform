@@ -51,7 +51,7 @@ function JobForm({ job }: { job?: BackupJob }) {
   const agents = useQuery({ queryKey: ['tenant', tenantId, 'agents'], queryFn: ({ signal }) => getAgents(tenantId, signal) })
   const [name, setName] = useState(job?.name ?? '')
   const [agentId, setAgentId] = useState(job?.agentId ?? '')
-  const [configuration, setConfiguration] = useState(job?.configuration ?? initialConfiguration)
+  const [configuration, setConfiguration] = useState(() => job?.configuration.engine === 'postgres' ? { ...job.configuration, copyOnly: false } : job?.configuration ?? initialConfiguration)
   const [retry, setRetry] = useState(job?.retryPolicy ?? initialRetry)
   const [retention, setRetention] = useState(job?.retention ?? initialRetention)
   const [schedule, setSchedule] = useState(job?.schedule ?? initialSchedule)
@@ -182,9 +182,10 @@ function JobForm({ job }: { job?: BackupJob }) {
       </Section>
       <Section title="Yedekleme seçenekleri">
         <FormGrid>
-          {check('Kopya yedek (COPY_ONLY: mevcut yedek zincirini etkilemez)', configuration.copyOnly, copyOnly => setConfiguration({ ...configuration, copyOnly }))}
-          {select('configuration.checksumPolicy', 'Bütünlük doğrulaması (CHECKSUM)', configuration.checksumPolicy, policies, value => setConfiguration({ ...configuration, checksumPolicy: value as BackupConfiguration['checksumPolicy'] }))}
+          {configuration.engine !== 'postgres' && check('Kopya yedek (COPY_ONLY: mevcut yedek zincirini etkilemez)', configuration.copyOnly, copyOnly => setConfiguration({ ...configuration, copyOnly }))}
+          {select('configuration.checksumPolicy', configuration.engine === 'postgres' ? 'Sayfa bütünlüğü (data_checksums)' : 'Bütünlük doğrulaması (CHECKSUM)', configuration.checksumPolicy, policies, value => setConfiguration({ ...configuration, checksumPolicy: value as BackupConfiguration['checksumPolicy'] }))}
           {select('configuration.compressionPolicy', 'Sıkıştırma (Compression)', configuration.compressionPolicy, policies, value => setConfiguration({ ...configuration, compressionPolicy: value as BackupConfiguration['compressionPolicy'] }))}
+          {configuration.engine === 'postgres' && <p className="text-sm text-text-muted md:col-span-2">pg_dump custom arşivi mevcut yedek zincirini değiştirmez; COPY_ONLY uygulanmaz. data_checksums sunucunun sayfa doğrulamasıdır: Required yalnızca etkin kümelerde çalışır, Preferred desteklenmiyorsa uyarır. Arşiv ve replikalar her durumda SHA-256 ile doğrulanır. Sıkıştırma pg_dump arşiv sıkıştırmasıdır.</p>}
         </FormGrid>
       </Section>
     </>}

@@ -38,7 +38,7 @@ export function PlatformAgentDetailPage() {
             <Section title="Sürümler"><Facts columns={3}>
               <Fact label="Agent yazılımı">{agent.agentVersion ?? '—'}</Fact><Fact label="Protokol">{agent.protocolVersion ?? '—'}</Fact><Fact label="Çalışma ortamı">{agent.runtimeVersion ?? '—'}</Fact><Fact label="Bildirilen yetenek revizyonu">{agent.capabilityRevision ?? '—'}</Fact>
             </Facts></Section>
-          </> : <Section title="Bildirilen yetenekler" description="Agent düzeyindeki destek, SQL Server Instance'ın gerçek desteğini garanti etmez.">
+          </> : <Section title="Bildirilen yetenekler" description="Agent düzeyindeki destek, veritabanı sunucusunun gerçek desteğini garanti etmez.">
             {agent.capabilitiesReportedAt === null ? <p className="text-text-muted">Henüz bildirilmedi.</p>
               : agent.capabilities.length === 0 ? <p className="text-text-muted">Agent yetenek bildirmedi. Son bildirim: {agentDate(agent.capabilitiesReportedAt)}.</p>
                 : <><CapabilityList capabilities={agent.capabilities} /><p className="mt-4 text-sm text-text-muted">Son bildirim: {agentDate(agent.capabilitiesReportedAt)}.</p></>}

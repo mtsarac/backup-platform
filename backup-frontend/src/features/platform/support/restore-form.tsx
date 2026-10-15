@@ -22,6 +22,8 @@ export function SupportRestoreForm({ session, artifactId, onStarted }: { session
 }
 function RestoreForm({ session, artifactId, targets, onStarted }: { session: SupportSession; artifactId: string; targets: SupportRestoreTargets; onStarted: (id: string) => void }) {
   const scope = supportScope(session, 'restore')
+  const isPg = targets.engine === 'postgres'
+  const engineName = isPg ? 'PostgreSQL' : 'SQL Server'
   const eligibleAgents = targets.agents.filter(agent => agent.canRestore && agent.canPrecheck && agent.sourceEligible && agent.status === 'Active' && agent.connectivity === 'online')
   const [agentId, setAgentId] = useState(eligibleAgents[0]?.agentId ?? '')
   const [targetJobId, setTargetJobId] = useState(targets.targets.find(target => target.agentId === eligibleAgents[0]?.agentId)?.jobId ?? '')
@@ -48,6 +50,7 @@ function RestoreForm({ session, artifactId, targets, onStarted }: { session: Sup
   function runPrecheck() {
     if (!scope.enabled || !eligible || submitting.current || busy) return
     if (!databaseName.trim() || databaseName.trim().length > 128) { setValidation('Yeni Database adı zorunludur ve en fazla 128 karakter olabilir.'); return }
+    if (isPg && new TextEncoder().encode(databaseName.trim()).length > 63) { setValidation('PostgreSQL Database adı en fazla 63 UTF-8 byte olabilir.'); return }
     setValidation('')
     submitting.current = true
     // Same request retains its key across failed transport retries. A completed check is a new operation.
@@ -69,13 +72,13 @@ function RestoreForm({ session, artifactId, targets, onStarted }: { session: Sup
     <Section title="Yeni Database geri yükleme" description={<>Kaynak: {targets.sourceDatabase} · {artifactSize(targets.sizeBytes)} · NewDatabase</>}>
     <div className="space-y-5">
     <Stepper steps={['Hedef ve Precheck', 'Sonucu onayla', 'Restore başlat']} current={passed ? acknowledged ? 2 : 1 : 0} />
-    <Notice tone="warning" title={customerWarning}>{targets.environment.warning && targets.environment.warning !== customerWarning && <p>{targets.environment.warning}</p>}<p>Hedef tenant'ın gerçek SQL Server bağlantısıdır. Mevcut Database'ler değiştirilmez; yalnızca yeni Database oluşturulur.</p></Notice>
+    <Notice tone="warning" title={customerWarning}>{targets.environment.warning && targets.environment.warning !== customerWarning && <p>{targets.environment.warning}</p>}<p>Hedef tenant'ın gerçek {engineName} bağlantısıdır. Mevcut Database'ler değiştirilmez; yalnızca yeni Database oluşturulur.</p>{isPg && <p>Yalnızca güvenilir platform arşivlerini kullanın: pg_restore arşiv SQL ve fonksiyonlarını hedefte superuser olarak çalıştırabilir. SHA-256 byte bütünlüğünü doğrular, SQL güvenliğini doğrulamaz. pg_dump cluster rollerini yedeklemez; kaynak sahiplikleri/ACL için gereken roller ve extension paketleri hazır olmalı; hedef sürümü hem kaynak hem pg_dump sürümünden eski olmamalıdır.</p>}</Notice>
     <fieldset disabled={busy || !scope.enabled} className="grid gap-4 sm:grid-cols-2">
       <Field label="Agent">{(control) => <select {...control} className={`${selectClass} w-full`} value={agentId} onChange={event => { const id = event.target.value; setAgentId(id); setTargetJobId(targets.targets.find(item => item.agentId === id)?.jobId ?? ''); setAcknowledged(false) }}><option value="">Agent seçin</option>{eligibleAgents.map(agent => <option key={agent.agentId} value={agent.agentId}>{agent.hostName ?? agent.agentId} · {agent.sourceAccess}</option>)}</select>}</Field>
-      <Field label="Hedef SQL Server">{(control) => <select {...control} className={`${selectClass} w-full`} value={targetJobId} onChange={event => { setTargetJobId(event.target.value); setAcknowledged(false) }}><option value="">Hedef seçin</option>{targets.targets.filter(item => item.agentId === agentId).map(item => <option key={item.jobId} value={item.jobId}>{item.jobName} · {item.host}{item.port ? `:${item.port}` : ''} · {item.database}</option>)}</select>}</Field>
+      <Field label={`Hedef ${engineName}`}>{(control) => <select {...control} className={`${selectClass} w-full`} value={targetJobId} onChange={event => { setTargetJobId(event.target.value); setAcknowledged(false) }}><option value="">Hedef seçin</option>{targets.targets.filter(item => item.agentId === agentId).map(item => <option key={item.jobId} value={item.jobId}>{item.jobName} · {item.host}{item.port ? `:${item.port}` : ''} · {item.database}</option>)}</select>}</Field>
       <div className="sm:col-span-2"><Field label="Yeni Database adı">{(control) => <input {...control} className={inputClass} value={databaseName} maxLength={128} onChange={event => { setDatabaseName(event.target.value); setAcknowledged(false) }} />}</Field></div>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={verifyChecksum} onChange={event => { setVerifyChecksum(event.target.checked); setAcknowledged(false) }} />Checksum doğrula</label>
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={verifyBackup} onChange={event => { setVerifyBackup(event.target.checked); setAcknowledged(false) }} />Backup doğrula · RESTORE VERIFYONLY</label>
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={verifyBackup} onChange={event => { setVerifyBackup(event.target.checked); setAcknowledged(false) }} />Backup doğrula · {isPg ? 'pg_restore arşiv doğrulaması' : 'RESTORE VERIFYONLY'}</label>
     </fieldset>
     {!eligible && <p role="status" className="text-sm">Uygun, çevrimiçi ve restore/precheck destekleyen bir Agent ve ona ait hedef gerekir. Yalnızca Full backup geri yüklenebilir.</p>}
     {validation && <p role="alert" className="text-sm text-error">{validation}</p>}

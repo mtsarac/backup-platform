@@ -58,6 +58,43 @@ beforeEach(() => {
   vi.mocked(getOccurrences).mockResolvedValue([])
 })
 describe('iş formu', () => {
+  it('does not resubmit the obsolete copy-only switch when editing a PostgreSQL job', async () => {
+    const job = makeJob()
+    vi.mocked(getBackupJob).mockResolvedValue({ ...job, configuration: {
+      ...job.configuration, engine: 'postgres', integratedSecurity: false, databaseCredentialReference: 'pg-local', port: 5432, copyOnly: true,
+    } })
+    vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
+    renderPage('/tenants/tenant-a/backup-jobs/job-a/edit')
+    await screen.findByRole('button', { name: 'Kaydet' })
+    await submit()
+    await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration).toMatchObject({ engine: 'postgres', copyOnly: false, databaseCredentialReference: 'pg-local' })
+  })
+  it('switches engine defaults and sends a password-authenticated PostgreSQL Full job with byte-safe names', async () => {
+    vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
+    renderPage()
+    await reach(1)
+    fireEvent.click(screen.getByRole('radio', { name: 'PostgreSQL' }))
+    expect(screen.getByLabelText(/Port/)).toHaveValue(5432)
+    expect(screen.queryByLabelText(/Windows kimlik/)).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('PostgreSQL host'), { target: { value: 'pg-host' } })
+    fireEvent.change(screen.getByLabelText('Database'), { target: { value: '数'.repeat(22) } })
+    fireEvent.change(screen.getByLabelText('Kimlik bilgisi referansı (parola değil)'), { target: { value: 'pg-local' } })
+    next()
+    expect(screen.getByLabelText('Database')).toHaveAttribute('aria-invalid', 'true')
+    expect(saveBackupJob).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText('Database'), { target: { value: '数'.repeat(21) } })
+    next(3)
+    expect(screen.queryByRole('checkbox', { name: /COPY_ONLY/ })).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/data_checksums/)).toHaveValue('Preferred')
+    next()
+    await submit()
+    await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration).toMatchObject({
+      engine: 'postgres', port: 5432, integratedSecurity: false, databaseCredentialReference: 'pg-local',
+      database: '数'.repeat(21), copyOnly: false, checksumPolicy: 'Preferred',
+    })
+  })
   it('Viewer rolüne düzenleme formunu sunmaz', () => {
     access.canOperate = false
     renderPage()
