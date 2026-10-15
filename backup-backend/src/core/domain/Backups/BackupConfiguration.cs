@@ -21,7 +21,7 @@ public sealed record BackupConfiguration(
 
     public BackupConfiguration Validate()
     {
-        if (Engine != "mssql") throw new ArgumentException("Unsupported database engine.");
+        if (Engine is not ("mssql" or "postgres")) throw new ArgumentException("Unsupported database engine.");
         BackupGuard.Text(Database, 128);
         BackupGuard.Text(Host, 255);
         if (Port is < 1 or > 65535) throw new ArgumentException("Invalid database port.");

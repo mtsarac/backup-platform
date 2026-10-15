@@ -7,13 +7,24 @@ interface SourceProps { configuration: BackupConfiguration; errors: FieldErrors;
 
 export function SourceStep({ configuration, errors, onChange }: SourceProps) {
   const { text, number, check } = fieldKit(errors)
-  return <Section title="MSSQL kaynak ve bağlantı" description="Yedeği alınacak SQL Server Instance ve Database.">
+  const isPg = configuration.engine === 'postgres'
+  return <Section title={isPg ? "PostgreSQL kaynak ve bağlantı" : "MSSQL kaynak ve bağlantı"} description={isPg ? "Yedeği alınacak PostgreSQL sunucusu ve veritabanı." : "Yedeği alınacak SQL Server Instance ve Database."}>
+    <div className="mb-4 flex gap-4">
+      <label className="flex items-center gap-2 cursor-pointer font-medium text-sm text-text-heading">
+        <input type="radio" name="engine" value="mssql" checked={!isPg} onChange={() => onChange({ ...configuration, engine: 'mssql', port: configuration.port === 5432 ? null : configuration.port })} className="size-4 accent-primary" />
+        Microsoft SQL Server
+      </label>
+      <label className="flex items-center gap-2 cursor-pointer font-medium text-sm text-text-heading">
+        <input type="radio" name="engine" value="postgres" checked={isPg} onChange={() => onChange({ ...configuration, engine: 'postgres', port: configuration.port ?? 5432, integratedSecurity: false })} className="size-4 accent-primary" />
+        PostgreSQL
+      </label>
+    </div>
     <FormGrid>
-      {text('configuration.host', 'SQL Server host / instance', configuration.host, host => onChange({ ...configuration, host }))}
+      {text('configuration.host', isPg ? 'PostgreSQL host' : 'SQL Server host / instance', configuration.host, host => onChange({ ...configuration, host }))}
       {text('configuration.database', 'Database', configuration.database, database => onChange({ ...configuration, database }))}
-      {text('configuration.databaseCredentialReference', 'Kimlik bilgisi referansı (parola değil)', configuration.databaseCredentialReference ?? '', databaseCredentialReference => onChange({ ...configuration, databaseCredentialReference: databaseCredentialReference || null }), configuration.integratedSecurity)}
-      {number('configuration.port', 'Port (isteğe bağlı)', configuration.port, port => onChange({ ...configuration, port }))}
-      {check('Windows kimlik doğrulaması (integrated security)', configuration.integratedSecurity, integratedSecurity => onChange({ ...configuration, integratedSecurity }))}
+      {text('configuration.databaseCredentialReference', 'Kimlik bilgisi referansı (parola değil)', configuration.databaseCredentialReference ?? '', databaseCredentialReference => onChange({ ...configuration, databaseCredentialReference: databaseCredentialReference || null }), !isPg && configuration.integratedSecurity)}
+      {number('configuration.port', isPg ? 'Port (varsayılan 5432)' : 'Port (isteğe bağlı)', configuration.port, port => onChange({ ...configuration, port }))}
+      {!isPg && check('Windows kimlik doğrulaması (integrated security)', configuration.integratedSecurity, integratedSecurity => onChange({ ...configuration, integratedSecurity }))}
       {check('Bağlantıyı şifrele', configuration.encrypt, encrypt => onChange({ ...configuration, encrypt }))}
       {check('Sunucu sertifikasına güven', configuration.trustServerCertificate, trustServerCertificate => onChange({ ...configuration, trustServerCertificate }))}
       <p className="text-sm text-text-muted md:col-span-2">Bu form parola kabul etmez. Kimlik bilgileri Agent yapılandırmasında tutulur; yalnızca referans adı gönderilir.</p>

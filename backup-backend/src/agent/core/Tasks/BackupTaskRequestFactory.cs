@@ -35,7 +35,8 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
             destination.StorageConnectionId,
             destination.IsPrimary)).ToArray();
         var primary = targets.Single(target => target.IsPrimary);
-        return new DatabaseBackupPipelineRequest(DatabaseEngineId.MsSql, connection, credential, configuration.Database,
+        var engineId = new DatabaseEngineId(configuration.Engine);
+        return new DatabaseBackupPipelineRequest(engineId, connection, credential, configuration.Database,
             staging, primary.Storage, prefix, options)
         {
             StorageOverride = primary.StorageOverride,
@@ -67,7 +68,7 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
     private static void ValidateConfiguration(BackupExecutionConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
-        if (configuration.Engine != "mssql" || configuration.StagingReference != "default"
+        if (configuration.Engine is not ("mssql" or "postgres") || configuration.StagingReference != "default"
             || string.IsNullOrWhiteSpace(configuration.Database) || configuration.Database.Length > 128
             || configuration.Database.Any(char.IsControl) || configuration.Host is null || configuration.Host.Length > 253)
         {

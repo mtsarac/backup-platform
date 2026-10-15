@@ -7,7 +7,7 @@ export interface BackupDestination {
   isPrimary: boolean
 }
 export interface BackupConfiguration {
-  engine: 'mssql'; database: string; host: string; port: number | null
+  engine: 'mssql' | 'postgres'; database: string; host: string; port: number | null
   integratedSecurity: boolean; databaseCredentialReference: string | null
   encrypt: boolean; trustServerCertificate: boolean; stagingReference: string
   storagePrefix: string

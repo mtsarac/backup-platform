@@ -18,6 +18,7 @@ public sealed record DatabaseEngineId
     }
 
     public static DatabaseEngineId MsSql { get; } = new("mssql");
+    public static DatabaseEngineId PostgreSql { get; } = new("postgres");
 
     public string Value { get; }
 

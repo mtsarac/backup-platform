@@ -32,7 +32,7 @@ public static class BackupInputValidation
         Check(Text(request.Name, 200), "name");
         Check(request.AgentId != Guid.Empty, "agentId");
         Check(c is not null, "configuration");
-        Check(c!.Engine == "mssql", "configuration.engine");
+        Check(c!.Engine is "mssql" or "postgres", "configuration.engine");
         Check(Text(c.Database, 128), "configuration.database");
         Check(Text(c.Host, 253) && c.Host.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '.' or '-' or '_' or '\\' or ':'), "configuration.host");
         Check(c.Port is null or >= 1 and <= 65535, "configuration.port");
