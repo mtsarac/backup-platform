@@ -1835,7 +1835,10 @@ Aşağıda **öncelik sırası** verilir; eski `Faz` numaraları ve `M` dilimler
 | 0 | **A0 — Kritik audit matrisi ve eksik event'ler** | MVP madde 33; veri/actor/tenant güvenliği, atomik yazım, DB testleri; Bölüm 1B kanıt/sınırlar | **Completed — çalışma dalı, 2026-10-14** |
 | 1 | **Faz 2A — Upload bandwidth limiting** | Per-agent/tenant/job, bounded stream, paralel transfer ölçümü, relay/SFTP regresyon | **Completed — çalışma dalı, 2026-10-14** (kanıt ve kalan riskler Bölüm 4) |
 | 2 | **N1 (Faz 24) — Email + generic webhook (+ SMS) bildirimi** | Durable event/dispatch, dedup, retry, SSRF koruması, tenant policy, CI | **Completed — çalışma dalı, 2026-10-14** (Email/Webhook PASS; **SMS `IMPLEMENTED — NOT VERIFIED`**; kanıt ve riskler Bölüm 26) |
-| 3 | **R1 (Faz 20) — İzole MSSQL restore testi** | Disposable SQL, tutarlı veri doğrulama, fail/cleanup/retry, tenant izolasyonu | **Next** — öncelikli |
+| 2A| **UI/UX Redesign & Storage Hub** | Tam frontend SaaS tasarımı, responsive 375/1440px, Storage sihirbazı ve detay akışı, 64 test dosyası / 622 test PASS, Chromium smoke | **Completed — çalışma dalı, 2026-10-15** |
+| 2B| **PostgreSQL Test Suite İzolasyonu & Profiling** | 1.695 testin 23,4 dakikada 0 hata ile tamamlanması, template poisoning kök neden çözümü | **Completed — çalışma dalı, 2026-10-15** |
+| 2C| **MSSQL Windows VM Full Backup & Replace Overwrite E2E** | Windows 11 VM SQL Server 2025 üzerinde NewDatabase ve ReplaceExistingDatabase (confirmOverwrite doğrulamalı) gerçek E2E PASS | **Completed — çalışma dalı, 2026-10-15** |
+| 3 | **R1 (Faz 20) — İzole MSSQL restore testi** | Tasarım ve kabul matrisi hazırlandı (`docs/R1_Restore_Verification_Design.md`), DR tatbikatı yapıldı | **Tasarım & DR Tamamlandı** — Otomasyon planlandı |
 | 4 | **E1 — Artifact encryption** | Önce tehdit modeli/anahtar yaşam döngüsü, sonra streaming encrypt/decrypt + restore | Planned — güvenlik |
 | 5 | **Faz 10–12 — MSSQL Differential / Transaction Log / PITR** | Full/log base chain, LSN, restore ordering, retention-safe pin, MSSQL E2E | Planned — MSSQL ürün değeri |
 | 6 | **Faz 3 ve 9 — File/Folder Backup + Restore** | Include/exclude, symlink, partial warnings, manifest, güvenli restore; VSS sonra | Planned — ikinci kaynak |

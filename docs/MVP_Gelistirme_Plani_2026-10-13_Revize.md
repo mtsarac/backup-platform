@@ -1058,6 +1058,10 @@ Bu belge ilk MVP'nin tarihsel planıdır; yukarıdaki teknik kararlar ve 35 madd
 | Repair/Retention hardening | Completed (kod ve test) | Lease fencing, durable orphan/quarantine, atomic quota/concurrency, cancelled/stale recovery. |
 | Kritik operasyon audit'i | **Completed — A0 / A0.1, çalışma dalı (2026-10-14)** | Bölüm 10 ve roadmap Bölüm 1B olay/servis/transaction/actor/tenant/test matrisi; durable orphan ledger (`backup_storage_cleanups`), explicit scope ve crash-window/gerçek-provider kabul sınırları korunur. |
 
+| Frontend UI/UX Redesign & Storage Hub | **Completed — çalışma dalı (2026-10-15)** | Yeni tasarım sistemi, responsive masaüstü/mobil, Storage çok adımlı sihirbaz ve detay sekmeleri, 64 test dosyası / 622 test PASS, gerçek Chromium doğrulaması. |
+| PostgreSQL Test İzolasyonu & Profiling | **Completed — çalışma dalı (2026-10-15)** | 1.695 entegrasyon testinin tamamı 23,4 dakikada 0 hata ile çalıştırıldı. Template veritabanı kirlenmesi giderildi. |
+| MSSQL Windows Full Backup & Overwrite E2E | **Completed — çalışma dalı (2026-10-15)** | Windows 11 VM SQL Server 2025 üzerinde NewDatabase ve ReplaceExistingDatabase (confirmOverwrite korumalı) canlı kabul testleri PASS. Precheck OverwritePolicy şema hatası düzeltildi. |
+| Platform Metadata DR Tatbikatı | **Completed — çalışma dalı (2026-10-15)** | `backup_platform_dev` veritabanının binary formatta tam dump ve restore tatbikatı icra edildi (`docs/Platform_Metadata_Disaster_Recovery.md`). |
 **Birleştirilen işler:** `fix/backup-safety-hardening` (PR #12) ve `feat/accessible-ui` (PR #5) artık `main` içindedir. Daha sonra bağımlılık/README güncellemeleri de entegre edilmiştir.
 
 ## 14.2 35 MVP kriteri için kabul yaklaşımı
