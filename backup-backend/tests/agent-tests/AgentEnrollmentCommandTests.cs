@@ -184,8 +184,9 @@ public sealed class AgentEnrollmentCommandTests : IDisposable
     [Fact]
     public void Enrollment_parser_supports_noninteractive_options_and_rejects_duplicates_without_secret_echo()
     {
-        var options = AgentEnrollmentCommand.Parse(["enroll", "--server", Server.AbsoluteUri, "--token", Token, "--name", "Host", "--non-interactive", "--store-directory", _directory]);
+        var options = AgentEnrollmentCommand.Parse(["enroll", "--server", Server.AbsoluteUri, "--token", Token, "--name", "Host", "--non-interactive", "--console", "--store-directory", _directory]);
         Assert.True(options.ContainsKey("--non-interactive"));
+        Assert.True(options.ContainsKey("--console"));
         Assert.Equal(_directory, options["--store-directory"]);
         var error = Assert.Throws<AgentEnrollmentException>(() => AgentEnrollmentCommand.Parse(["enroll", "--token", Token, "--token", Token]));
         Assert.DoesNotContain(Token, error.Message, StringComparison.Ordinal);

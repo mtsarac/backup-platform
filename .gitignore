@@ -25,7 +25,10 @@ __pycache__/
 !.env.example
 **/appsettings.Development.local.json
 **/appsettings.Local.json
-docs/
+docs/Archive.zip
+docs/archive/
+docs/*.json
+docs/*.txt
 
 # Logs
 *.log

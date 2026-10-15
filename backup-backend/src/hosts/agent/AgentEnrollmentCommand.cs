@@ -27,16 +27,18 @@ internal static class AgentEnrollmentCommand
             var directory = AgentCredentialStoreFactory.ResolveDirectory(options.GetValueOrDefault("--store-directory")
                 ?? Environment.GetEnvironmentVariable("Agent__CredentialStoreDirectory"));
 #if AGENT_PLATFORM_WINDOWS
-            return await WindowsEnrollmentCommand.RunInstallerAsync(new WindowsEnrollmentCommand.Input(
-                uri.AbsoluteUri, token!, name, directory), cancellationToken).ConfigureAwait(false);
-#else
+            if (!options.ContainsKey("--console"))
+            {
+                return await WindowsEnrollmentCommand.RunInstallerAsync(new WindowsEnrollmentCommand.Input(
+                    uri.AbsoluteUri, token!, name, directory), cancellationToken).ConfigureAwait(false);
+            }
+#endif
             using var lease = AgentEnrollmentLease.Acquire(directory);
             var store = AgentCredentialStoreFactory.Create(directory);
             using var http = CreateHttpClient();
             var identity = await new AgentEnrollment(http, store).EnrollAsync(uri, token!, name, cancellationToken).ConfigureAwait(false);
             Console.WriteLine($"Enrollment verified for agent {identity.AgentId:D}. Identity saved securely. Start this host with the same service account and store directory to connect.");
             return 0;
-#endif
         }
         catch (Exception exception) when (exception is AgentEnrollmentException or AgentCredentialStoreException or ArgumentException
             or UnauthorizedAccessException or IOException)
@@ -65,7 +67,7 @@ internal static class AgentEnrollmentCommand
         for (var index = 1; index < args.Length; index++)
         {
             var key = args[index];
-            if (key == "--non-interactive")
+            if (key is "--non-interactive" or "--console")
             {
                 if (!options.TryAdd(key, null)) { throw new AgentEnrollmentException("Duplicate enrollment option."); }
                 continue;
@@ -73,7 +75,7 @@ internal static class AgentEnrollmentCommand
             if (key is not ("--server" or "--token" or "--name" or "--store-directory") || index + 1 == args.Length
                 || args[index + 1].StartsWith("--", StringComparison.Ordinal) || !options.TryAdd(key, args[++index]))
             {
-                throw new AgentEnrollmentException("Usage: enroll --server https://backend/ [--token TOKEN] [--name NAME] [--store-directory ABSOLUTE_PATH] [--non-interactive].");
+                throw new AgentEnrollmentException("Usage: enroll --server https://backend/ [--token TOKEN] [--name NAME] [--store-directory ABSOLUTE_PATH] [--non-interactive] [--console].");
             }
         }
         return options;

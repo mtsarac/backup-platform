@@ -55,8 +55,18 @@ def configuration(sections):
         values["WINDOWS_SSH_TARGET"] = host
     values["WINDOWS_SSH_PORT"] = "22"
     values["WINDOWS_SSH_CONNECT_TIMEOUT"] = "10"
+    tools_dir = Path.home() / ".local/pg18/bin"
+    if tools_dir.is_dir() and "BACKUP_PLATFORM_TEST_POSTGRES_TOOLS_DIRECTORY" not in os.environ:
+        values["BACKUP_PLATFORM_TEST_POSTGRES_TOOLS_DIRECTORY"] = str(tools_dir)
+    old_tools_dir = Path.home() / ".local/pg16/bin"
+    if old_tools_dir.is_dir() and "BACKUP_PLATFORM_TEST_POSTGRES_OLD_TOOLS_DIRECTORY" not in os.environ:
+        values["BACKUP_PLATFORM_TEST_POSTGRES_OLD_TOOLS_DIRECTORY"] = str(old_tools_dir)
+    lib_dir = Path.home() / ".local/pg18/lib"
+    if lib_dir.is_dir():
+        current_ld = os.environ.get("LD_LIBRARY_PATH", "")
+        if str(lib_dir) not in current_ld.split(":"):
+            values["LD_LIBRARY_PATH"] = f"{lib_dir}:{current_ld}".rstrip(":")
     return values
-
 
 def redact(sections):
     secrets = {value for section in sections.values() for key, value in section.items()
@@ -93,6 +103,8 @@ def main():
 if __name__ == "__main__":
     try:
         main()
+    except BrokenPipeError:
+        pass
     except (OSError, ValueError):
         print("Local configuration operation failed; check file format and permissions (values withheld).", file=sys.stderr)
         sys.exit(2)

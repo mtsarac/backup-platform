@@ -597,8 +597,9 @@ def prepare(run):
 
 def run_all(options):
     run = Run(options)
-    prepare(run)
     only = set(options.only or [])
+    if only != {'windows'}:
+        prepare(run)
 
     def selected(name):
         return not only or name in only
