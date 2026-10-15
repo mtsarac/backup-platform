@@ -125,6 +125,17 @@ successful build of the matching test project/dependencies and before any furthe
 explicit reuse option, not an automatic optimization or an assertion that binaries are current. No runner removes
 or weakens tests; every selected test must execute and pass through the shared TRX verifier.
 
+### PostgreSQL provider tests (`Category=PostgreSqlProvider`)
+
+The PostgreSQL Full Backup/Restore provider tests run the **real** `pg_dump`/`pg_restore` against the configured PostgreSQL
+server (a superuser; every database and role they create is uniquely named and dropped). They are part of the full
+PostgreSQL selection, so these clients must be reachable:
+
+- `BACKUP_PLATFORM_TEST_POSTGRES_TOOLS_DIRECTORY`: directory with `pg_dump`/`pg_restore` at least as new as the server (otherwise the `PATH` is used).
+- `BACKUP_PLATFORM_TEST_POSTGRES_OLD_TOOLS_DIRECTORY`: **required** directory with clients *older* than the server (for example PostgreSQL 16 against 18). The tool-version and archive-version refusal tests use them and fail loudly when it is unset.
+
+Local development: extract the clients from a cached server image, or use wrappers that run `docker run --network=host <older image> pg_dump "$@"`. The agent finds its tools through `Agent:Backup:PostgreSql:ClientToolsDirectory` (absolute directory) or `PATH`.
+
 PostgreSQL fixtures migrate one private schema template per test process, then clone a separate database for each
 fixture. Tenant rows, transaction/lease state and migration changes never share a database between fixtures.
 The source rejects connections after migration, so a migration round-trip or cleanup in one clone cannot mutate

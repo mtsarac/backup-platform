@@ -151,6 +151,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BackupPlatform.StorageProvi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BackupPlatform.Notifications", "src\modules\notifications\BackupPlatform.Notifications.csproj", "{517AEE5C-D059-4DF4-A2A7-EA63042B7585}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BackupPlatform.BackupProviders.PostgreSql", "src\providers\backup\postgresql\BackupPlatform.BackupProviders.PostgreSql.csproj", "{B9822DE6-67AB-4FD6-B06F-F07E9F7730C6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -557,6 +559,18 @@ Global
 		{517AEE5C-D059-4DF4-A2A7-EA63042B7585}.Release|x64.Build.0 = Release|Any CPU
 		{517AEE5C-D059-4DF4-A2A7-EA63042B7585}.Release|x86.ActiveCfg = Release|Any CPU
 		{517AEE5C-D059-4DF4-A2A7-EA63042B7585}.Release|x86.Build.0 = Release|Any CPU
+		{B9822DE6-67AB-4FD6-B06F-F07E9F7730C6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B9822DE6-67AB-4FD6-B06F-F07E9F7730C6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B9822DE6-67AB-4FD6-B06F-F07E9F7730C6}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{B9822DE6-67AB-4FD6-B06F-F07E9F7730C6}.Debug|x64.Build.0 = Debug|Any CPU
+		{B9822DE6-67AB-4FD6-B06F-F07E9F7730C6}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{B9822DE6-67AB-4FD6-B06F-F07E9F7730C6}.Debug|x86.Build.0 = Debug|Any CPU
+		{B9822DE6-67AB-4FD6-B06F-F07E9F7730C6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B9822DE6-67AB-4FD6-B06F-F07E9F7730C6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B9822DE6-67AB-4FD6-B06F-F07E9F7730C6}.Release|x64.ActiveCfg = Release|Any CPU
+		{B9822DE6-67AB-4FD6-B06F-F07E9F7730C6}.Release|x64.Build.0 = Release|Any CPU
+		{B9822DE6-67AB-4FD6-B06F-F07E9F7730C6}.Release|x86.ActiveCfg = Release|Any CPU
+		{B9822DE6-67AB-4FD6-B06F-F07E9F7730C6}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -634,5 +648,6 @@ Global
 		{744CC783-0CC7-9765-399C-59CCBDF2A2BD} = {E49D6A69-42C7-7E21-719F-CF7CE880A98E}
 		{E58B1F43-5869-42DA-BADA-3EF0B58B9242} = {744CC783-0CC7-9765-399C-59CCBDF2A2BD}
 		{517AEE5C-D059-4DF4-A2A7-EA63042B7585} = {EC447DCF-ABFA-6E24-52A5-D7FD48A5C558}
+		{B9822DE6-67AB-4FD6-B06F-F07E9F7730C6} = {60149FDF-0D7E-B6FD-3A91-5BD80E2B8849}
 	EndGlobalSection
 EndGlobal

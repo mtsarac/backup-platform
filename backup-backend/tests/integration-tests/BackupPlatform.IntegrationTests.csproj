@@ -30,6 +30,7 @@
     <ProjectReference Include="../../src/hosts/api/BackupPlatform.Api.csproj" />
     <ProjectReference Include="../../src/providers/backup/abstractions/BackupPlatform.BackupProviders.Abstractions.csproj" />
     <ProjectReference Include="../../src/providers/backup/mssql/BackupPlatform.BackupProviders.MSSQL.csproj" />
+    <ProjectReference Include="../../src/providers/backup/postgresql/BackupPlatform.BackupProviders.PostgreSql.csproj" />
     <ProjectReference Include="../../src/providers/storage/abstractions/BackupPlatform.StorageProviders.Abstractions.csproj" />
     <ProjectReference Include="../../src/providers/storage/local/BackupPlatform.StorageProviders.Local.csproj" />
     <ProjectReference Include="../../src/providers/storage/central/BackupPlatform.StorageProviders.Central.csproj" />

@@ -468,7 +468,8 @@ internal sealed class DatabaseRestoreExecution
             result = await provider.InspectBackupAsync(
                 _request.Connection,
                 _request.Credential,
-                new RestoreInspectionRequest(_request.Staging.ServerDirectory.Combine(_stagedName!), _request.VerifyBackup, _request.VerifyTimeout),
+                new RestoreInspectionRequest(_request.Staging.ServerDirectory.Combine(_stagedName!), _request.VerifyBackup, _request.VerifyTimeout,
+                    new AgentPath(_staging.FilePath(_stagedName!))),
                 cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is not OperationCanceledException and not RestoreStageFailedException)
@@ -533,7 +534,8 @@ internal sealed class DatabaseRestoreExecution
                 _request.TerminateActiveConnections,
                 _inspection!,
                 _plan!,
-                _request.RestoreTimeout);
+                _request.RestoreTimeout,
+                new AgentPath(_staging.FilePath(_stagedName!)));
         }
         catch (ArgumentException exception)
         {

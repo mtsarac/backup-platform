@@ -64,6 +64,8 @@ public sealed class SqlServerRestorePlannerTests
         Assert.All(evaluation.Items, item => Assert.Equal(BackupPreCheckStatus.Passed, item.Status));
         var plan = evaluation.Plan!;
         Assert.Equal(["/var/opt/mssql/data/Restored_Sales_1.mdf", "/var/opt/mssql/log/Restored_Sales_log_1.ldf"], plan.Mappings.Select(mapping => mapping.TargetPath.Value));
+        Assert.NotNull(plan.Target.DefaultDataDirectory);
+        Assert.NotNull(plan.Target.DefaultLogDirectory);
         Assert.Equal("/var/opt/mssql/data", plan.Target.DefaultDataDirectory.Value);
         Assert.Equal("/var/opt/mssql/log", plan.Target.DefaultLogDirectory.Value);
         Assert.False(plan.Target.DatabaseExists);

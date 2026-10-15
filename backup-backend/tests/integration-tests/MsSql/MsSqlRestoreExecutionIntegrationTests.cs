@@ -22,6 +22,7 @@ public sealed class MsSqlRestoreExecutionIntegrationTests(MsSqlFixture fixture) 
         foreach (var mapping in request.Plan.Mappings)
         {
             var directory = mapping.Kind == RestoreFileKind.Log ? request.Plan.Target.DefaultLogDirectory : request.Plan.Target.DefaultDataDirectory;
+            Assert.NotNull(directory);
             Assert.StartsWith(directory.Value.TrimEnd('/', '\\') + (directory.Value.Contains('\\') ? "\\" : "/"), mapping.TargetPath.Value, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(mapping.TargetPath.Value, request.Inspection.Files.Select(file => file.SourcePhysicalName));
         }
