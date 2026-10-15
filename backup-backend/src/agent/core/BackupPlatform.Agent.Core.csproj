@@ -14,6 +14,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="BackupPlatform.UnitTests" />
     <InternalsVisibleTo Include="BackupPlatform.AgentTests" />
+    <InternalsVisibleTo Include="BackupPlatform.Agent.Platform.Linux" />
+    <InternalsVisibleTo Include="BackupPlatform.Agent.Platform.Windows" />
   </ItemGroup>
 
 

@@ -54,6 +54,9 @@ public sealed class AgentBackendResult<T>
         return new AgentBackendResult<T>(value, null);
     }
 
+    /// <summary>A successful answer that deliberately carries no value (HTTP 204 of a claim route: nothing to do).</summary>
+    public static AgentBackendResult<T> NoContent() => new(default, null);
+
     public static AgentBackendResult<T> Fail(AgentBackendFailure failure)
     {
         ArgumentNullException.ThrowIfNull(failure);

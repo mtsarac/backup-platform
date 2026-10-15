@@ -1,6 +1,7 @@
 using BackupPlatform.BackupProviders.MSSQL.Capabilities;
 using BackupPlatform.BackupProviders.PostgreSql;
 using BackupPlatform.Contracts.Agents;
+using BackupPlatform.Contracts.Discovery;
 using BackupPlatform.Contracts.Downloads;
 using BackupPlatform.Contracts.Restores;
 using BackupPlatform.Contracts.Backups;
@@ -57,6 +58,7 @@ public sealed class AgentCapabilityCatalog
         Supported(BackupTaskProtocol.MultiDestinationCapability),
         Supported(BackupTaskProtocol.QuotaBoundedUploadCapability),
         Supported(BackupTaskProtocol.UploadBandwidthLimitCapability),
+        Supported(DiscoveryProtocol.Capability),
         // Not implemented in this product yet, whatever the SQL Server instance could do.
         Unsupported(SqlServerCapabilityIds.DifferentialBackup.Value),
         Unsupported(SqlServerCapabilityIds.LogBackup.Value)

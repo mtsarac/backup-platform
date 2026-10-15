@@ -13,8 +13,15 @@ internal sealed class AgentHttpClient(HttpClient http, AgentBackendEndpoint endp
     public Task<AgentBackendResult<T>> SendAsync<T>(AgentLocalIdentity identity, HttpMethod method, string path, HttpContent? content, CancellationToken cancellationToken)
         where T : class => SendCoreAsync(identity, method, path, content, ReadSuccessAsync<T>, cancellationToken);
 
+    /// <summary>Like <see cref="SendAsync{T}"/>, but a 204 answer is a success without a value (the claim route had nothing to hand out).</summary>
+    public Task<AgentBackendResult<T?>> SendOptionalAsync<T>(AgentLocalIdentity identity, HttpMethod method, string path, HttpContent? content, CancellationToken cancellationToken)
+        where T : class => SendCoreAsync<T?>(identity, method, path, content, ReadOptionalSuccessAsync<T>, cancellationToken);
+
     public Task<AgentBackendResult<bool>> SendEmptyAsync(AgentLocalIdentity identity, string path, HttpContent content, CancellationToken cancellationToken) =>
-        SendCoreAsync(identity, HttpMethod.Post, path, content, static (_, _) => Task.FromResult(AgentBackendResult<bool>.Success(true)), cancellationToken);
+        SendEmptyAsync(identity, HttpMethod.Post, path, content, cancellationToken);
+
+    public Task<AgentBackendResult<bool>> SendEmptyAsync(AgentLocalIdentity identity, HttpMethod method, string path, HttpContent content, CancellationToken cancellationToken) =>
+        SendCoreAsync(identity, method, path, content, static (_, _) => Task.FromResult(AgentBackendResult<bool>.Success(true)), cancellationToken);
 
     private async Task<AgentBackendResult<T>> SendCoreAsync<T>(AgentLocalIdentity identity, HttpMethod method, string path, HttpContent? content,
         Func<HttpResponseMessage, CancellationToken, Task<AgentBackendResult<T>>> readSuccess, CancellationToken cancellationToken)
@@ -46,6 +53,18 @@ internal sealed class AgentHttpClient(HttpClient http, AgentBackendEndpoint endp
         return value is null
             ? AgentBackendResult<T>.Fail(new AgentBackendFailure(AgentBackendFailureKind.Transient, "the backend answer could not be read") { StatusCode = (int)response.StatusCode })
             : AgentBackendResult<T>.Success(value);
+    }
+
+    private static async Task<AgentBackendResult<T?>> ReadOptionalSuccessAsync<T>(HttpResponseMessage response, CancellationToken cancellationToken) where T : class
+    {
+        if (response.StatusCode == HttpStatusCode.NoContent)
+        {
+            return AgentBackendResult<T?>.NoContent();
+        }
+        var value = await ReadBodyAsync<T>(response, cancellationToken).ConfigureAwait(false);
+        return value is null
+            ? AgentBackendResult<T?>.Fail(new AgentBackendFailure(AgentBackendFailureKind.Transient, "the backend answer could not be read") { StatusCode = (int)response.StatusCode })
+            : AgentBackendResult<T?>.Success(value);
     }
 
     private async Task<AgentBackendFailure> ReadFailureAsync(HttpResponseMessage response, CancellationToken cancellationToken)

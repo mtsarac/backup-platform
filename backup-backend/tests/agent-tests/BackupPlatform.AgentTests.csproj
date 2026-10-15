@@ -20,6 +20,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The Linux detector lives in the Linux platform project, which only the Linux host build references. -->
+    <Compile Remove="LinuxSystemdDetectorTests.cs" Condition="'$(AgentPlatform)' == 'Windows'" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 
