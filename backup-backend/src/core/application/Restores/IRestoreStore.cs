@@ -1,4 +1,5 @@
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Contracts.Restores;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Restores;
@@ -20,6 +21,8 @@ public static class RestoreAgentCapability
         ("postgres", RestorePurpose.Execution) => "postgres.restore.full",
         ("postgres", RestorePurpose.Precheck) => "postgres.restore.precheck",
         ("postgres", RestorePurpose.Discovery) => "postgres.restore.discovery",
+        ("mssql", RestorePurpose.Verification) => RestoreTaskTypes.MssqlVerificationCapability,
+        ("postgres", RestorePurpose.Verification) => RestoreTaskTypes.PostgresVerificationCapability,
         _ => throw new ArgumentException("Unknown restore engine or purpose.")
     };
 }
@@ -73,7 +76,26 @@ public sealed record RestoreProgress(string Stage, double? Percent);
 /// <summary>The outcome of a start or a renewal: the lease the agent now holds and whether the user asked to cancel.</summary>
 public sealed record RestoreLeaseOutcome(BackupMutationResult Result, DateTimeOffset? LeaseExpiresAt = null, bool CancellationRequested = false);
 
-public sealed record RestoreQuery(RestoreStatus? Status = null, Guid? ArtifactId = null, Guid? AgentId = null, int Page = 1, int PageSize = 25, Guid? SupportSessionId = null);
+public sealed record RestoreQuery(RestoreStatus? Status = null, Guid? ArtifactId = null, Guid? AgentId = null, int Page = 1, int PageSize = 25, Guid? SupportSessionId = null,
+    RestorePurpose Purpose = RestorePurpose.Execution);
+
+/// <summary>A removal of a platform-created database leased to its agent: the operation (for the target and the name), the engine and the fencing token.</summary>
+public sealed record RestoreCleanupClaim(RestoreOperation Operation, Guid LeaseToken, string Engine);
+
+public enum RestoreCleanupRequestOutcome
+{
+    /// <summary>The removal (or retry) is scheduled; the target agent performs it.</summary>
+    Accepted,
+    NotFound,
+    /// <summary>The operation owes no removal an operator can ask for (nothing retained or pending, or an attempt is already in flight).</summary>
+    NotApplicable,
+    /// <summary>The operator did not repeat the database name of the rollback copy they are asking to remove.</summary>
+    ConfirmationMismatch,
+    /// <summary>A rollback copy is still inside its guarded retention period.</summary>
+    RetentionNotElapsed
+}
+
+public sealed record RestoreCleanupRequestResult(RestoreCleanupRequestOutcome Outcome, RestoreOperation? Operation = null, DateTimeOffset? RetainedUntil = null);
 
 public sealed record RestorePage(IReadOnlyList<RestoreOperation> Items, long TotalCount, int Page, int PageSize);
 
@@ -122,6 +144,23 @@ public interface IRestoreStore
 
     /// <summary>Terminal outcome. Idempotent: the same completion again is accepted without a change; a different one, or one under a lost lease, is a conflict.</summary>
     Task<BackupMutationResult> CompleteAsync(RestoreLeaseCommand command, RestoreCompletion completion, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Leases the oldest removal owed to <paramref name="agentId"/> (a terminal operation whose cleanup is Pending and due), under the agent's lock, and hands out nothing while
+    /// the agent holds a live restore or backup attempt. Increments the attempt count and replaces the lease token, so a stale agent's report is refused.
+    /// </summary>
+    Task<RestoreCleanupClaim?> ClaimCleanupAsync(TenantId tenantId, AgentId agentId, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken);
+
+    /// <summary>Records the agent's removal outcome for the lease it holds. Fenced by the lease token; a repeated report is accepted unchanged.</summary>
+    Task<BackupMutationResult> CompleteCleanupAsync(TenantId tenantId, AgentId agentId, Guid operationId, Guid leaseToken, bool removed, string? failureCode, DateTimeOffset now,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// An operator asks for the removal of a retained rollback copy (only after <paramref name="rollbackRetention"/> has passed since the restore completed) or for an immediate retry of
+    /// a pending removal. Never acts on a database itself: it only schedules the agent's work.
+    /// </summary>
+    Task<RestoreCleanupRequestResult> RequestCleanupAsync(TenantId tenantId, Guid restoreId, DateTimeOffset now, TimeSpan rollbackRetention, Guid? requestedByUserId,
+        CancellationToken cancellationToken);
 
     /// <summary>Expired Leased/Running attempts end AgentLost (target Unknown or NotModified by the stage reached) and release their pin. Returns the operations expired.</summary>
     Task<int> ExpireStaleAsync(DateTimeOffset now, CancellationToken cancellationToken);

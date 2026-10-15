@@ -81,7 +81,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         if (engine == "postgres" && command.Target.IntegratedSecurity) throw new InvalidRestoreRequestException("target.databaseCredentialReference");
         if (command.Purpose != RestorePurpose.Discovery)
         {
-            try { RestoreOperation.ValidateDatabaseName(command.DatabaseName, engine); }
+            try { RestoreOperation.ValidateDatabaseName(command.DatabaseName, engine, verification: command.Purpose == RestorePurpose.Verification); }
             catch (ArgumentException) { throw new InvalidRestoreRequestException("databaseName"); }
         }
         var capabilityIdentifier = RestoreAgentCapability.ForPurpose(command.Purpose, engine);
@@ -109,6 +109,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         {
             RestorePurpose.Precheck => "restore.precheck.requested",
             RestorePurpose.Discovery => "restore.discovery.requested",
+            RestorePurpose.Verification => "restore.verification.requested",
             _ => "restore.requested"
         }, operation.SupportSessionId);
         if (command.OverwriteConfirmed) AddAudit(context, operation, command.Now, command.RequestedByUserId, "restore.overwrite_confirmed");
@@ -169,7 +170,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
     public async Task<RestorePage> ListAsync(TenantId tenantId, RestoreQuery query, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
-        var operations = context.RestoreOperations.AsNoTracking().Where(operation => operation.TenantId == tenantId && operation.Purpose == RestorePurpose.Execution);
+        var operations = context.RestoreOperations.AsNoTracking().Where(operation => operation.TenantId == tenantId && operation.Purpose == query.Purpose);
         if (query.SupportSessionId is { } supportSessionId) operations = operations.Where(operation => operation.SupportSessionId == supportSessionId);
         if (query.Status is { } status) operations = operations.Where(operation => operation.Status == status);
         if (query.ArtifactId is { } artifactId) operations = operations.Where(operation => operation.ArtifactId == artifactId);
@@ -328,7 +329,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
             // No readable/eligible replicas remain for this pending operation. Mark it Failed and release pin.
             var failToken = Guid.NewGuid();
             next.Claim(failToken, now, leaseDuration);
-            next.Complete(failToken, now, new RestoreCompletion(RestoreStatus.Failed, RestoreFailureCodes.ReplicaUnavailable, RestoreTargetState.NotModified, null));
+            next.Complete(failToken, now, new RestoreCompletion(RestoreStatus.Failed, RestoreFailureCodes.ReplicaUnavailable, RestoreTargetState.NotModified, null, TemporaryDatabaseRemoved: true));
             AddTerminalAudits(context);
             await context.SaveChangesAsync(cancellationToken);
             continue;
@@ -425,7 +426,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
             return new(ClaimFinalizeOutcome.Claimed, claim);
         }
 
-        op.Complete(token, now, new RestoreCompletion(RestoreStatus.Failed, RestoreFailureCodes.ReplicaUnavailable, RestoreTargetState.NotModified, null));
+        op.Complete(token, now, new RestoreCompletion(RestoreStatus.Failed, RestoreFailureCodes.ReplicaUnavailable, RestoreTargetState.NotModified, null, TemporaryDatabaseRemoved: true));
         AddTerminalAudits(context);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -497,7 +498,8 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
             {
                 var result = RestoreInputValidation.ReadResult(completion.ResultJson);
                 if (operation.Purpose == RestorePurpose.Precheck && !SuccessfulPrecheck(result, operation.Options, engine) ||
-                    operation.Purpose == RestorePurpose.Discovery && result?.Discovery is null)
+                    operation.Purpose == RestorePurpose.Discovery && result?.Discovery is null ||
+                    operation.Purpose == RestorePurpose.Verification && !SuccessfulVerification(result))
                     throw new ArgumentException("A successful read-only operation requires its actual report.");
             }
             // A repeated completion is accepted when it says the same thing. The report is stored as jsonb, which normalises text (key order, spacing), so the
@@ -507,12 +509,95 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         }, cancellationToken);
     }
 
+    /// <summary>A verification only succeeds with the engine's own checks in the report and every one of them passed.</summary>
+    private static bool SuccessfulVerification(BackupPlatform.Contracts.Restores.RestoreTaskResult? result) =>
+        result?.Verification is { Checks.Count: > 0 } verification && verification.Checks.All(check => check.Status == "Passed");
+
     private static bool SameJson(string? stored, string? reported)
     {
         if (stored is null || reported is null) return stored is null && reported is null;
         try { return JsonNode.DeepEquals(JsonNode.Parse(stored), JsonNode.Parse(reported)); }
         catch (System.Text.Json.JsonException) { return false; }
     }
+
+    public async Task<RestoreCleanupClaim?> ClaimCleanupAsync(TenantId tenantId, AgentId agentId, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken)
+    {
+        now = now.ToUniversalTime();
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        if (!await PostgreSqlBackupRunStore.LockAgentAsync(context, tenantId, agentId, cancellationToken)) return null;
+        if (!await context.Agents.AnyAsync(agent => agent.TenantId == tenantId && agent.Id == agentId && agent.Status == AgentStatus.Active, cancellationToken)) return null;
+        // A removal is housekeeping: it never runs beside a live restore or backup of the same agent, and the pipeline's own finally block already drops its own database.
+        var busy = await context.RestoreAttempts.AsNoTracking().AnyAsync(attempt => attempt.TenantId == tenantId && attempt.AgentId == agentId &&
+                (attempt.Status == RestoreStatus.Leased || attempt.Status == RestoreStatus.Running) && attempt.LeaseExpiresAt > now, cancellationToken) ||
+            await context.BackupRunAttempts.AsNoTracking().AnyAsync(attempt => attempt.TenantId == tenantId && attempt.AgentId == agentId &&
+                (attempt.Status == BackupStatus.Leased || attempt.Status == BackupStatus.Running) && attempt.LeaseExpiresAt > now, cancellationToken);
+        if (busy) return null;
+        var owed = await Operations(context).Where(operation => operation.TenantId == tenantId && operation.AgentId == agentId && operation.Cleanup.State == RestoreCleanupState.Pending)
+            .OrderBy(operation => operation.CompletedAt).ThenBy(operation => operation.Id).ToListAsync(cancellationToken);
+        var next = owed.FirstOrDefault(operation => operation.IsTerminal && operation.Cleanup.CanLease(now));
+        if (next is null) return null;
+        var metadata = await context.BackupArtifacts.AsNoTracking().Where(artifact => artifact.TenantId == tenantId && artifact.Id == next.ArtifactId)
+            .Select(artifact => artifact.SourceMetadataJson).SingleOrDefaultAsync(cancellationToken);
+        var engine = metadata is null ? null : BackupArtifactEngine.Read(metadata);
+        if (engine is null) return null;
+        var token = Guid.NewGuid();
+        if (!next.TryLeaseCleanup(token, now, leaseDuration)) return null;
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new RestoreCleanupClaim(next, token, engine);
+    }
+
+    public async Task<BackupMutationResult> CompleteCleanupAsync(TenantId tenantId, AgentId agentId, Guid operationId, Guid leaseToken, bool removed, string? failureCode, DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        now = now.ToUniversalTime();
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        if (!await PostgreSqlBackupRunStore.LockAgentAsync(context, tenantId, agentId, cancellationToken)) return BackupMutationResult.NotFound;
+        var operation = await Operations(context).SingleOrDefaultAsync(entity => entity.TenantId == tenantId && entity.AgentId == agentId && entity.Id == operationId, cancellationToken);
+        if (operation is null || operation.Cleanup.Kind == RestoreCleanupKind.None) return BackupMutationResult.NotFound;
+        var before = operation.Cleanup.State;
+        try { operation.ReportCleanup(leaseToken, removed, failureCode, now); }
+        catch (InvalidOperationException) { return BackupMutationResult.Conflict; }
+        if (before != RestoreCleanupState.Completed) AddCleanupAudit(context, operation, now, null, removed ? "restore.cleanup.completed" : "restore.cleanup.failed");
+        try { await context.SaveChangesAsync(cancellationToken); }
+        catch (DbUpdateConcurrencyException) { return BackupMutationResult.Conflict; }
+        await transaction.CommitAsync(cancellationToken);
+        return BackupMutationResult.Accepted;
+    }
+
+    public async Task<RestoreCleanupRequestResult> RequestCleanupAsync(TenantId tenantId, Guid restoreId, DateTimeOffset now, TimeSpan rollbackRetention, Guid? requestedByUserId,
+        CancellationToken cancellationToken)
+    {
+        now = now.ToUniversalTime();
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var owner = await context.RestoreOperations.AsNoTracking().Where(operation => operation.TenantId == tenantId && operation.Id == restoreId)
+            .Select(operation => operation.AgentId).SingleOrDefaultAsync(cancellationToken);
+        if (owner is null) return new RestoreCleanupRequestResult(RestoreCleanupRequestOutcome.NotFound);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        if (!await PostgreSqlBackupRunStore.LockAgentAsync(context, tenantId, owner, cancellationToken)) return new RestoreCleanupRequestResult(RestoreCleanupRequestOutcome.NotFound);
+        var operation = await Operations(context).SingleOrDefaultAsync(entity => entity.TenantId == tenantId && entity.Id == restoreId && entity.AgentId == owner, cancellationToken);
+        if (operation is null) return new RestoreCleanupRequestResult(RestoreCleanupRequestOutcome.NotFound);
+        // A rollback copy is the only data left of a replaced database: it stays untouched until its guarded retention has passed, whatever the caller's role.
+        DateTimeOffset? retainedUntil = operation.Cleanup is { Kind: RestoreCleanupKind.RollbackCopy, State: RestoreCleanupState.Retained } && operation.CompletedAt is { } completedAt
+            ? completedAt + rollbackRetention : null;
+        if (retainedUntil > now) return new RestoreCleanupRequestResult(RestoreCleanupRequestOutcome.RetentionNotElapsed, operation, retainedUntil);
+        if (!operation.RequestCleanup(now, requestedByUserId)) return new RestoreCleanupRequestResult(RestoreCleanupRequestOutcome.NotApplicable, operation);
+        AddCleanupAudit(context, operation, now, requestedByUserId, "restore.cleanup.requested");
+        try { await context.SaveChangesAsync(cancellationToken); }
+        catch (DbUpdateConcurrencyException) { return new RestoreCleanupRequestResult(RestoreCleanupRequestOutcome.NotApplicable, operation); }
+        await transaction.CommitAsync(cancellationToken);
+        return new RestoreCleanupRequestResult(RestoreCleanupRequestOutcome.Accepted, operation, retainedUntil);
+    }
+
+    private static void AddCleanupAudit(PlatformDbContext context, RestoreOperation operation, DateTimeOffset now, Guid? actorId, string action) =>
+        context.AuditEvents.Add(AuditEvent.Record(now, actorId is { } user ? new UserId(user) : UserId.System, actorId is null ? AuditActorKind.System : AuditActorKind.User, action,
+            operation.TenantId, "restore", operation.Id.ToString("D"), new Dictionary<string, object?>
+            {
+                ["artifactId"] = operation.ArtifactId, ["agentId"] = operation.AgentId.Value, ["kind"] = operation.Cleanup.Kind.ToString(), ["database"] = operation.Cleanup.DatabaseName,
+                ["state"] = operation.Cleanup.State.ToString(), ["attempts"] = operation.Cleanup.Attempts, ["failure"] = operation.Cleanup.LastFailureCode
+            }));
 
     public async Task<int> ExpireStaleAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
@@ -636,11 +721,14 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
                     {
                         RestorePurpose.Precheck => "restore.precheck.completed",
                         RestorePurpose.Discovery => "restore.discovery.completed",
+                        RestorePurpose.Verification => "restore.verification.completed",
                         _ => "restore.completed"
                     }, operation.TenantId, "restore", operation.Id.ToString("D"), new Dictionary<string, object?>
                     {
                         ["artifactId"] = operation.ArtifactId, ["attemptId"] = operation.CurrentAttempt.Id,
-                        ["result"] = operation.Status.ToString(), ["targetState"] = operation.TargetState?.ToString()
+                        ["result"] = operation.Status.ToString(), ["targetState"] = operation.TargetState?.ToString(), ["failure"] = operation.FailureCode,
+                        ["outcome"] = RestoreService.VerificationOutcome(operation), ["cleanupState"] = operation.Cleanup.Kind == RestoreCleanupKind.None ? null : operation.Cleanup.State.ToString(),
+                        ["durationMs"] = operation.StartedAt is { } started && operation.CompletedAt is { } completed ? (long)(completed - started).TotalMilliseconds : null
                     }));
                 continue;
             }

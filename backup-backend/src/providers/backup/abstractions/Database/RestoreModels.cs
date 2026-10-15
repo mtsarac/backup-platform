@@ -6,7 +6,12 @@ public enum DatabaseRestoreMode
     /// <summary>Create a database that does not exist yet; an existing one is a failed pre-check.</summary>
     NewDatabase = 1,
     /// <summary>Overwrite an existing database. The only mode whose statement may carry the engine's overwrite option.</summary>
-    ReplaceExistingDatabase = 2
+    ReplaceExistingDatabase = 2,
+    /// <summary>
+    /// Create a disposable <c>bp_verify_*</c> database next to the target's other databases, only to prove the backup restores. Never replaces or publishes
+    /// under another name, and an engine may run it with the least privilege it needs (no owner/ACL preservation).
+    /// </summary>
+    IsolatedVerification = 3
 }
 
 /// <summary>
@@ -23,6 +28,8 @@ public enum RestoreExecutionStage
     PreparingTarget,
     Restoring,
     Finalizing,
+    Verifying,
+    CleaningUp,
     Completed,
     Failed,
     Cancelled
@@ -394,7 +401,8 @@ public sealed record DatabaseRestoreResult
         DateTimeOffset? restoreStartedAt,
         DateTimeOffset? restoreFinishedAt,
         IReadOnlyList<RestoreFileMapping> fileMappings,
-        IEnumerable<BackupWarning> warnings)
+        IEnumerable<BackupWarning> warnings,
+        string? retainedDatabaseName = null)
     {
         if (!Enum.IsDefined(status))
         {
@@ -431,6 +439,12 @@ public sealed record DatabaseRestoreResult
         RestoreFinishedAt = restoreFinishedAt;
         FileMappings = fileMappings;
         Warnings = warnings.ToArray();
+        if (retainedDatabaseName is not null && (status != DatabaseRestoreStatus.Succeeded || !RestoreDatabaseNames.IsRollbackName(retainedDatabaseName)))
+        {
+            throw new ArgumentException("Only a successful restore can retain a platform rollback database.", nameof(retainedDatabaseName));
+        }
+
+        RetainedDatabaseName = retainedDatabaseName;
     }
 
     public DatabaseRestoreStatus Status { get; }
@@ -448,6 +462,9 @@ public sealed record DatabaseRestoreResult
     public DateTimeOffset? RestoreFinishedAt { get; }
     public IReadOnlyList<RestoreFileMapping> FileMappings { get; }
     public IReadOnlyList<BackupWarning> Warnings { get; }
+
+    /// <summary>The <c>bp_old_*</c> rollback copy of the database this restore replaced (PostgreSQL), kept for the operator; null when none was kept.</summary>
+    public string? RetainedDatabaseName { get; }
 }
 
 /// <summary>

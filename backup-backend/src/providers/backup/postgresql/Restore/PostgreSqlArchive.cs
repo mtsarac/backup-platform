@@ -148,6 +148,26 @@ internal sealed partial class PostgreSqlArchive
         throw Failure(PostgreSqlReasons.ArchiveInvalid, "The archive database statement cannot be safely interpreted.");
     }
 
+    /// <summary>
+    /// The archive's <c>CREATE DATABASE</c> under a verification name, without <c>OWNER</c> and <c>TABLESPACE</c>: a verification keeps neither owners nor ACLs, and
+    /// the login that creates it (CREATEDB only) may not be allowed to assign another owner or create in the archive's tablespace. Encoding, locale and
+    /// template stay exactly as archived, so collation-dependent data restores identically.
+    /// </summary>
+    public static string RewriteVerificationCreateStatement(string statement, string source, string target) =>
+        DropOption(DropOption(RewriteDatabaseStatement(statement, source, target), "OWNER"), "TABLESPACE");
+
+    private static string DropOption(string statement, string option)
+    {
+        var matches = SqlToken().Matches(statement);
+        for (var index = 0; index + 2 < matches.Count; index++)
+        {
+            if (matches[index].Value != option || matches[index + 1].Value != "=") continue;
+            var last = matches[index + 2];
+            return statement[..matches[index].Index] + statement[(last.Index + last.Length)..];
+        }
+        return statement;
+    }
+
     private static string Unquote(string value) => value.StartsWith('"') && value.EndsWith('"')
         ? value[1..^1].Replace("\"\"", "\"", StringComparison.Ordinal) : value;
 

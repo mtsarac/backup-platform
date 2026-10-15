@@ -9,8 +9,11 @@ using Microsoft.Extensions.Logging;
 
 namespace BackupPlatform.BackupProviders.PostgreSql;
 
-/// <summary>Logical full restore, preserving ownership and ACLs. A superuser is required; cluster roles are never created from an archive.</summary>
-public sealed class PostgreSqlRestoreProvider : IDatabaseRestoreProvider
+/// <summary>
+/// Logical full restore, preserving ownership and ACLs. A superuser is required; cluster roles are never created from an archive.
+/// An <see cref="DatabaseRestoreMode.IsolatedVerification"/> restore is the exception: it keeps neither owners nor ACLs, so a login with only CREATEDB is enough.
+/// </summary>
+public sealed class PostgreSqlRestoreProvider : IDatabaseRestoreProvider, IRestoreVerificationProvider
 {
     private readonly ILogger<PostgreSqlRestoreProvider> _logger;
     private readonly PostgreSqlClientTools _tools;
@@ -29,7 +32,7 @@ public sealed class PostgreSqlRestoreProvider : IDatabaseRestoreProvider
         var items = new List<BackupPreCheckItem>();
         try
         {
-            ValidateName(request.DatabaseName);
+            ValidateName(request.DatabaseName, request.Mode);
             var tool = await RestoreToolAsync(cancellationToken).ConfigureAwait(false);
             items.Add(Pass("postgres.tools", "pg_restore is available."));
             var target = PostgreSqlConnectionTarget.Create(connection, credential);
@@ -64,12 +67,12 @@ public sealed class PostgreSqlRestoreProvider : IDatabaseRestoreProvider
         RestoreTargetInfo? targetInfo = null;
         try
         {
-            ValidateName(request.DatabaseName);
+            ValidateName(request.DatabaseName, request.Mode);
             var tool = await RestoreToolAsync(cancellationToken).ConfigureAwait(false);
             var target = PostgreSqlConnectionTarget.Create(connection, credential);
             await using var session = await PostgreSqlSession.OpenAsync(target, "postgres", _logger, cancellationToken).ConfigureAwait(false);
             targetInfo = await CheckTargetAsync(session, request.DatabaseName, request.Mode, request.TerminateActiveConnections, items, cancellationToken).ConfigureAwait(false);
-            await CheckArchiveAsync(session, request.Inspection, tool, items, cancellationToken).ConfigureAwait(false);
+            await CheckArchiveAsync(session, request.Inspection, tool, request.Mode, items, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception) when (IsExpected(exception)) { items.Add(FailedItem("postgres.restore-plan", exception)); }
         var report = new BackupPreCheckReport(items);
@@ -82,6 +85,14 @@ public sealed class PostgreSqlRestoreProvider : IDatabaseRestoreProvider
     public Task<DatabaseRestoreResult> ExecuteRestoreAsync(DatabaseConnectionSettings connection, DatabaseCredential credential,
         DatabaseRestoreRequest request, IProgress<RestoreProgress>? progress, CancellationToken cancellationToken) =>
         PostgreSqlRestoreExecutor.ExecuteAsync(this, connection, credential, request, progress, cancellationToken);
+
+    public Task<RestoreVerificationReport> VerifyDatabaseAsync(DatabaseConnectionSettings connection, DatabaseCredential credential,
+        RestoreVerificationRequest request, CancellationToken cancellationToken) =>
+        PostgreSqlRestoreVerifier.VerifyAsync(_logger, connection, credential, request, cancellationToken);
+
+    public Task<DatabaseDropResult> DropDatabaseAsync(DatabaseConnectionSettings connection, DatabaseCredential credential,
+        DatabaseDropRequest request, CancellationToken cancellationToken) =>
+        PostgreSqlRestoreVerifier.DropAsync(_logger, connection, credential, request, cancellationToken);
 
     internal ILogger Logger => _logger;
     internal TimeProvider Clock => _clock;
@@ -100,11 +111,18 @@ public sealed class PostgreSqlRestoreProvider : IDatabaseRestoreProvider
         return file.Value;
     }
 
-    internal static void ValidateName(string name)
+    /// <summary>A verification must target exactly a platform verification name; every other mode must stay out of the platform's reserved names.</summary>
+    internal static void ValidateName(string name, DatabaseRestoreMode mode)
     {
         if (!PostgreSqlIdentifiers.IsValidDatabaseName(name))
             throw PostgreSqlArchive.Failure(PostgreSqlReasons.DatabaseNameInvalid, "The target database name is invalid.");
-        if (PostgreSqlIdentifiers.IsProtectedDatabase(name) || name.StartsWith("bp_restore_", StringComparison.Ordinal) || name.StartsWith("bp_old_", StringComparison.Ordinal))
+        if (mode == DatabaseRestoreMode.IsolatedVerification)
+        {
+            if (!RestoreDatabaseNames.IsVerificationName(name))
+                throw PostgreSqlArchive.Failure(RestoreReasonCodes.TargetProtected, "A verification restore must target a platform verification database name.");
+            return;
+        }
+        if (PostgreSqlIdentifiers.IsProtectedDatabase(name) || name.StartsWith("bp_restore_", StringComparison.Ordinal) || RestoreDatabaseNames.IsReserved(name))
             throw PostgreSqlArchive.Failure(RestoreReasonCodes.TargetProtected, "System and restore recovery databases cannot be restore targets.");
     }
 
@@ -115,12 +133,16 @@ public sealed class PostgreSqlRestoreProvider : IDatabaseRestoreProvider
         var role = await PostgreSqlDiscovery.ReadRoleAsync(session, token).ConfigureAwait(false);
         if (server.Major < PostgreSqlDiscovery.MinimumServerMajor)
             throw PostgreSqlArchive.Failure(PostgreSqlReasons.ServerVersionUnsupported, "This PostgreSQL server version is not supported.", BackupFailureCause.Unsupported);
-        if (!role.IsSuperuser)
-            throw PostgreSqlArchive.Failure(PostgreSqlReasons.RestoreRolePrivilege, "PostgreSQL restore requires a superuser to preserve object owners, ACLs, large objects and extensions.", BackupFailureCause.PermissionDenied);
-        items.Add(Pass("postgres.restore-permission", "The login can preserve ownership, ACLs and extension privileges."));
+        var verification = mode == DatabaseRestoreMode.IsolatedVerification;
+        if (verification ? !role.IsSuperuser && !role.CanCreateDatabase : !role.IsSuperuser)
+            throw PostgreSqlArchive.Failure(PostgreSqlReasons.RestoreRolePrivilege,
+                verification ? "A PostgreSQL verification restore requires a login with the CREATEDB privilege (or a superuser)."
+                    : "PostgreSQL restore requires a superuser to preserve object owners, ACLs, large objects and extensions.", BackupFailureCause.PermissionDenied);
+        items.Add(Pass("postgres.restore-permission", verification ? "The login may create the disposable verification database."
+            : "The login can preserve ownership, ACLs and extension privileges."));
         var database = await PostgreSqlDiscovery.FindDatabaseAsync(session, name, token).ConfigureAwait(false);
         if (database?.IsSystem == true) throw PostgreSqlArchive.Failure(RestoreReasonCodes.TargetProtected, "The target is a protected database.");
-        if (mode == DatabaseRestoreMode.NewDatabase && database is not null)
+        if (mode is DatabaseRestoreMode.NewDatabase or DatabaseRestoreMode.IsolatedVerification && database is not null)
             throw PostgreSqlArchive.Failure(RestoreReasonCodes.TargetDatabaseExists, "A new restore never overwrites an existing database.");
         if (mode == DatabaseRestoreMode.ReplaceExistingDatabase && database is null)
             throw PostgreSqlArchive.Failure(RestoreReasonCodes.TargetDatabaseMissing, "Replacement requires an existing database and explicit upstream overwrite confirmation.");
@@ -132,7 +154,7 @@ public sealed class PostgreSqlRestoreProvider : IDatabaseRestoreProvider
     }
 
     internal static async Task CheckArchiveAsync(PostgreSqlSession session, RestoreBackupInspection inspection, PostgreSqlToolInfo tool,
-        List<BackupPreCheckItem> items, CancellationToken token)
+        DatabaseRestoreMode mode, List<BackupPreCheckItem> items, CancellationToken token)
     {
         if (inspection.Header.Kind != RestoreBackupKind.Database || inspection.EngineDetails is not { } details || !details.TryGetValue(PostgreSqlArchive.DatabaseSqlKey, out _)
             || !details.TryGetValue(PostgreSqlArchive.DumpMajorKey, out var majorText) || !int.TryParse(majorText, NumberStyles.None, CultureInfo.InvariantCulture, out var dumpMajor))
@@ -145,6 +167,14 @@ public sealed class PostgreSqlRestoreProvider : IDatabaseRestoreProvider
             if (await session.ScalarAsync("SELECT EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = @name)", token, ("name", extension)).ConfigureAwait(false) is not true)
                 throw PostgreSqlArchive.Failure(PostgreSqlReasons.ExtensionUnavailable, "An extension required by the archive is unavailable on the target.", BackupFailureCause.Unsupported);
         items.Add(Pass("postgres.archive-compatibility", "Source, archive writer, restore client, target version and extension availability are compatible."));
+        if (mode == DatabaseRestoreMode.IsolatedVerification)
+        {
+            items.Add(new BackupPreCheckItem("postgres.verification-scope", BackupPreCheckStatus.Warning, PostgreSqlWarningCodes.OwnershipNotPreserved,
+                "A verification intentionally does not preserve object owners, ACLs or database-level settings, and extensions that only a superuser may create fail the restore immediately."));
+            items.Add(new BackupPreCheckItem("postgres.archive-trust", BackupPreCheckStatus.Warning, "trusted-archive-required",
+                "Restore only trusted platform artifacts: archive schema SQL and extensions execute with the restore login's privileges."));
+            return;
+        }
         items.Add(new BackupPreCheckItem("postgres.roles", BackupPreCheckStatus.Warning, "role-definitions-not-in-archive",
             "Cluster role definitions are not included. All owner and ACL roles must already exist; missing roles fail safely on scratch before publication. Ownership and ACLs are never silently stripped."));
         items.Add(new BackupPreCheckItem("postgres.archive-trust", BackupPreCheckStatus.Warning, "trusted-archive-required",

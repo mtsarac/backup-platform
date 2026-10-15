@@ -32,7 +32,7 @@ MVP, ileride eklenecek PostgreSQL, Linux agent implementasyonu, gelişmiş resto
 
 **Ürün modeli:** Yüz yüze/doğrudan satış; PlatformAdmin tarafından elle plan/abonelik atama. **Online checkout, payment gateway, billing provider ve uygulama içi faturalama kapsam dışı**; mevcut `Plan`/`TenantSubscription`/quota teknik kullanım için korunur.
 
-**Sıradaki işlemler:** A0 kritik audit, A1 canlı provider/Windows acceptance ve roadmap **Faz 2A — Upload Bandwidth Limiting** ve sertleştirme/canlı kabulü (**2A.1**: relay'de backend-tarafı pacing, kısa ömürlü transfer lease'i, Windows→Drive paced/paralel/iptal/retry kabulü) ve nihai inceleme (upload başına slice, lease fence/pacer sertleştirmesi, DB saatli grant, upload-only hız ölçümü) çalışma dalında tamamlandı (Faz 2B/2C başlanmadı). **N1 bildirimleri 2026-10-14'te çalışma dalında tamamlandı** (email + webhook doğrulandı; SMS `IMPLEMENTED — NOT VERIFIED`). Sıradaki yüksek öncelikler R1 izole restore testi ve E1 artifact şifreleme. Production/staging dağıtımı bu geliştirme planının kapsamı değildir.
+**Sıradaki işlemler:** A0 kritik audit, A1 canlı provider/Windows acceptance ve roadmap **Faz 2A — Upload Bandwidth Limiting** ve sertleştirme/canlı kabulü (**2A.1**: relay'de backend-tarafı pacing, kısa ömürlü transfer lease'i, Windows→Drive paced/paralel/iptal/retry kabulü) ve nihai inceleme (upload başına slice, lease fence/pacer sertleştirmesi, DB saatli grant, upload-only hız ölçümü) çalışma dalında tamamlandı (Faz 2B/2C başlanmadı). **N1 bildirimleri 2026-10-14'te çalışma dalında tamamlandı** (email + webhook doğrulandı; SMS `IMPLEMENTED — NOT VERIFIED`). R1 izole restore doğrulaması (MSSQL ve PostgreSQL) çalışma dalında tamamlandı. Sıradaki yüksek öncelik E1 artifact şifreleme. Production/staging dağıtımı bu geliştirme planının kapsamı değildir.
 
 ---
 
@@ -1092,7 +1092,7 @@ FileSystem backup ve snapshot modüllerinin `.csproj` iskeletlerinin bulunması 
 
 ## 14.6 Sıradaki geliştirme ve kabul ilkesi
 
-**A0 kritik audit, A1 canlı provider/Windows acceptance kapanışı, Faz 2A (gerçek upload bandwidth limiting) ve N1 bildirimleri (email, webhook, SMS) çalışma dalında tamamlandı**; Faz 2B/2C başlamadı. **N1'de Email ve Webhook doğrulandı; SMS `IMPLEMENTED — NOT VERIFIED`'dır** (gerçek sağlayıcıya karşı çalıştırılmadı, SMS'e özel test yazılmadı; kayıt roadmap Bölüm 26). Kullanıcı isteğiyle test kurulum maliyeti ve odaklı geliştirme runner'ları iyileştirildi; integrity/tenant/race test kapsamı azaltılmadı. Ardından roadmap Bölüm 35'te **R1** (izole MSSQL restore test otomasyonu) ve **E1** (artifact şifreleme) öne alınır.
+**A0 kritik audit, A1 canlı provider/Windows acceptance kapanışı, Faz 2A (gerçek upload bandwidth limiting) ve N1 bildirimleri (email, webhook, SMS) çalışma dalında tamamlandı**; Faz 2B/2C başlamadı. **N1'de Email ve Webhook doğrulandı; SMS `IMPLEMENTED — NOT VERIFIED`'dır** (gerçek sağlayıcıya karşı çalıştırılmadı, SMS'e özel test yazılmadı; kayıt roadmap Bölüm 26). Kullanıcı isteğiyle test kurulum maliyeti ve odaklı geliştirme runner'ları iyileştirildi; integrity/tenant/race test kapsamı azaltılmadı. Ardından roadmap Bölüm 35'te **R1** (izole MSSQL ve PostgreSQL restore doğrulaması) tamamlandı ve **E1** (artifact şifreleme) öne alınır.
 
 Her teslimatta: ilgili servis/senaryo için unit+DB/provider/Windows test kapsamı, tenant/secret güvenliği, cancel/retry/restart/failure akışları, geriye uyumluluk ve `NOT RUN` kabul listesi raporlanmalıdır. Kod varlığı tek başına “gerçek ortam kabulü geçti” anlamına gelmez. Deployment ve release kararı verilmez.
 

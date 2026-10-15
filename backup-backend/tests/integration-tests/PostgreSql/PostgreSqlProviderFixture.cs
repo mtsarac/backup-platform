@@ -71,6 +71,15 @@ public sealed class PostgreSqlProviderFixture : IAsyncLifetime
         await ExecuteAsync(null, $"CREATE ROLE {Q(role)} NOLOGIN");
         return role;
     }
+    /// <summary>A login that is neither superuser, replication nor createrole; <paramref name="createDatabase"/> grants exactly CREATEDB. Dropped with the fixture.</summary>
+    public async Task<PasswordDatabaseCredential> LoginRoleAsync(bool createDatabase)
+    {
+        var role = $"bp_pglogin_{Guid.NewGuid():N}";
+        var password = Guid.NewGuid().ToString("N");
+        _roles.Add(role);
+        await ExecuteAsync(null, $"CREATE ROLE {Q(role)} LOGIN {(createDatabase ? "CREATEDB" : "NOCREATEDB")} NOSUPERUSER NOCREATEROLE NOREPLICATION PASSWORD '{password}'");
+        return new PasswordDatabaseCredential(role, new DatabaseSecret(password));
+    }
     public async Task<NpgsqlConnection> OpenAsync(string? database = null)
     {
         var builder = new NpgsqlConnectionStringBuilder(_admin) { Database = database ?? new NpgsqlConnectionStringBuilder(_admin).Database, Pooling = false };

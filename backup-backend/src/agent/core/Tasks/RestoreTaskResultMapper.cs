@@ -34,7 +34,8 @@ internal static class RestoreTaskResultMapper
         ArgumentNullException.ThrowIfNull(task);
         ArgumentNullException.ThrowIfNull(result);
 
-        var readOnly = task.Purpose is "Precheck" or "Discovery";
+        // A verification never changes a database the user owns: its own disposable database is accounted for by Verification.Cleanup.
+        var readOnly = task.Purpose is "Precheck" or "Discovery" or "Verification";
         var expectedState = readOnly ? DatabaseRestoreTargetState.NotModified : DatabaseRestoreTargetState.Online;
         // Read-only tasks can never claim a modified target, even when a provider breaks its contract.
         if ((readOnly && result.TargetState != DatabaseRestoreTargetState.NotModified)
@@ -59,8 +60,11 @@ internal static class RestoreTaskResultMapper
         };
     }
 
-    /// <summary>A terminal message for an attempt that stopped without a pipeline result (the snapshot was refused, the pipeline broke its contract).</summary>
-    public static RestoreTaskCompletionRequest Failure(Guid leaseToken, string failureCode, DatabaseRestoreTargetState targetState) => new()
+    /// <summary>
+    /// A terminal message for an attempt that stopped without a pipeline result (the snapshot was refused, the pipeline broke its contract).
+    /// <paramref name="nothingCreated"/> is only true when the agent can prove it never reached the point of creating a verification's disposable database; otherwise the removal stays owed.
+    /// </summary>
+    public static RestoreTaskCompletionRequest Failure(Guid leaseToken, string failureCode, DatabaseRestoreTargetState targetState, bool nothingCreated = false) => new()
     {
         LeaseToken = leaseToken,
         Status = failureCode == RestoreAgentFailureCodes.Cancelled ? nameof(DatabaseRestoreStatus.Cancelled) : nameof(DatabaseRestoreStatus.Failed),
@@ -68,7 +72,11 @@ internal static class RestoreTaskResultMapper
             ? failureCode
             : RestoreAgentFailureCodes.InternalError,
         TargetState = targetState.ToString(),
-        Result = new RestoreTaskResult { TargetStateNote = NoteFor(failureCode == RestoreAgentFailureCodes.Cancelled, targetState) }
+        Result = new RestoreTaskResult
+        {
+            TargetStateNote = NoteFor(failureCode == RestoreAgentFailureCodes.Cancelled, targetState),
+            Verification = nothingCreated ? new RestoreVerificationResult { Cleanup = RestoreVerificationCleanupOutcomes.NotCreated } : null
+        }
     };
 
     private static string? FailureCodeOf(DatabaseRestorePipelineResult result) => result.Status switch
@@ -140,9 +148,26 @@ internal static class RestoreTaskResultMapper
             ChecksumVerified = result.ChecksumVerified,
             BackupVerified = result.BackupVerified,
             DatabaseState = DatabaseStateOf(result.DatabaseState),
-            TargetStateNote = NoteFor(result.Status == DatabaseRestoreStatus.Cancelled, targetState)
+            TargetStateNote = NoteFor(result.Status == DatabaseRestoreStatus.Cancelled, targetState),
+            Verification = result.Verification is { } verification ? MapVerification(verification) : null,
+            RetainedDatabaseName = result.RetainedDatabaseName
         };
     }
+
+    private static RestoreVerificationResult MapVerification(RestoreVerificationOutcome outcome) => new()
+    {
+        Checks = outcome.Report?.Checks.Select(check => new RestorePreCheckItemResult(
+            Text(check.CheckId, MaxId), check.Passed ? "Passed" : "Failed", Text(check.ReasonCode, MaxId), Text(check.Message, MaxMessage))).ToList() ?? [],
+        UserTableCount = outcome.Report?.UserTableCount,
+        ReadableTableCount = outcome.Report?.ReadableTableCount,
+        Cleanup = outcome.Cleanup switch
+        {
+            VerificationCleanup.Dropped => RestoreVerificationCleanupOutcomes.Dropped,
+            VerificationCleanup.NotCreated => RestoreVerificationCleanupOutcomes.NotCreated,
+            _ => RestoreVerificationCleanupOutcomes.Failed
+        },
+        CleanupReasonCode = outcome.Cleanup == VerificationCleanup.Failed ? Text(outcome.CleanupReasonCode ?? RestorePipelineReasons.CleanupFailed, MaxId) : null
+    };
 
     private static RestoreDiscoveryResult MapDiscovery(DatabaseInstanceDiscovery discovery, int maxDatabases) => new()
     {

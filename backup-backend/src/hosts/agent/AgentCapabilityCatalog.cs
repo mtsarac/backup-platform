@@ -39,6 +39,8 @@ public sealed class AgentCapabilityCatalog
         Supported(SqlServerCapabilityIds.RestoreDatabase.Value),
         Supported(RestoreTaskTypes.PrecheckCapability),
         Supported(RestoreTaskTypes.DiscoveryCapability),
+        Supported(RestoreTaskTypes.MssqlVerificationCapability),
+        Supported(RestoreTaskTypes.PostgresVerificationCapability),
         Supported(PostgreSqlCapabilityIds.FullBackup.Value),
         Supported(PostgreSqlCapabilityIds.BackupChecksum.Value),
         Supported(PostgreSqlCapabilityIds.BackupCompression.Value),

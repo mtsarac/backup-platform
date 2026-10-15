@@ -11,6 +11,7 @@ import { Tabs } from '@/components/ui/tabs'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
 import { ArtifactDeletedNotice, ArtifactIntegrity, ArtifactMetadata, ArtifactReplicas, ArtifactRetention, ArtifactSummary } from '@/features/artifacts/artifact-details'
 import { ArtifactDownload } from '@/features/artifacts/artifact-download'
+import { ArtifactVerificationSection } from '@/features/restores/verification'
 import { ArtifactRestoreAction } from '@/features/artifacts/artifact-restore-action'
 import { restoreIneligibility } from '@/features/artifacts/restore-eligibility'
 import { artifactDate, artifactState, canCancelDeletion, deletionInProgress } from '@/features/artifacts/format'
@@ -180,6 +181,7 @@ function ArtifactDetail({ id }: { id: string }) {
                 {artifact.replication && <ReplicationSection replication={artifact.replication} onRepair={(destination) => { if (repairFinished) setActiveRepairId(null); setRepairError(null); setRepairDestination(destination) }} repairingDestinationId={repairFinished ? null : repairingDestId} canRepair={canRepair} repairs={repairsQuery.data} />}
                 <ArtifactIntegrity artifact={artifact} />
                 <ArtifactRestoreAction tenantId={tenantId} artifact={artifact} />
+                <ArtifactVerificationSection tenantId={tenantId} artifact={artifact} />
               </>}
               {tab === 'replicas' && <ArtifactReplicas artifact={artifact} />}
               {tab === 'download' && <ArtifactDownload tenantId={tenantId} artifactId={id} canAdmin={canAdmin} eligible={artifact.state === 'Available'} />}

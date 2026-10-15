@@ -32,6 +32,7 @@ public static class RestoreAgentFailureCodes
     public const string UnsupportedCapability = "UnsupportedCapability";
     public const string StagingInvalid = "StagingInvalid";
     public const string InternalError = "InternalError";
+    public const string VerificationFailed = "VerificationFailed";
 
     /// <summary>Not a failure: how a cancelled restore is reported (status Cancelled).</summary>
     public const string Cancelled = "Cancelled";
@@ -43,7 +44,7 @@ public static class RestoreAgentFailureCodes
         BackupInvalid, BackupTypeUnsupported, IncompatibleVersion, FileMappingFailed,
         PreCheckFailed, TargetDatabaseExists, TargetDatabaseNotFound, TargetInUse, TargetProtected, InsufficientDiskSpace,
         SqlRestoreFailed, DatabaseUnavailable, OperationTimedOut, AuthenticationFailed, PermissionDenied,
-        InvalidConfiguration, UnsupportedCapability, StagingInvalid, InternalError
+        InvalidConfiguration, UnsupportedCapability, StagingInvalid, InternalError, VerificationFailed
     ];
 }
 
@@ -73,6 +74,12 @@ public static class RestorePipelineReasons
     public const string ChecksumNotVerified = "checksum-not-verified";
     public const string Cancelled = "cancelled";
     public const string Unexpected = "unexpected";
+    public const string VerificationUnsupported = "verification-unsupported";
+    public const string VerificationError = "verification-error";
+    public const string VerificationFailed = "verification-failed";
+    public const string CleanupFailed = "cleanup-failed";
+    /// <summary>The stable reason a provider's own timeout is reported with.</summary>
+    public const string Timeout = "timeout";
 
     /// <summary>Check identifiers of the agent-side pre-check items (the engine-independent staging ids are <see cref="BackupPreCheckIds"/>).</summary>
     public static class Checks

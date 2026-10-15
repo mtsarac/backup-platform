@@ -154,6 +154,8 @@ public sealed class RestoreTaskWorkerTests
         Assert.Equal("Cancelled", completion.Status);
         Assert.Equal("Cancelled", completion.FailureCode);
         Assert.Equal("PartiallyRestored", completion.TargetState);
+        // The wording is engine-neutral and may change; what must never be lost is that a partially restored target is explained to the user.
+        Assert.False(string.IsNullOrWhiteSpace(completion.Result!.TargetStateNote));
     }
 
     [Fact]

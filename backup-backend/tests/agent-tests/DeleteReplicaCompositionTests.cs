@@ -39,7 +39,7 @@ public sealed class DeleteReplicaCompositionTests
         await using var deletions = new DeleteReplicaHarness();
         await using var restores = new RestoreTaskHarness();
         await using var downloads = new DownloadTaskHarness();
-        var dispatcher = new AgentTaskDispatcher(backups.Worker, restores.Worker, deletions.Worker, downloads.Worker);
+        var dispatcher = new AgentTaskDispatcher(backups.Worker, restores.Worker, deletions.Worker, downloads.Worker, restores.CleanupWorker);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         backups.Pipeline.Execute = async (request, _, token) =>
         {

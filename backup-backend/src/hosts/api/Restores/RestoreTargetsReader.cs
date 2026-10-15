@@ -10,7 +10,7 @@ using BackupPlatform.Domain.Restores;
 namespace BackupPlatform.Api.Restores;
 
 public sealed record RestoreTargetAgent(Guid AgentId, string? HostName, string Status, string Connectivity, bool CanRestore, bool CanPrecheck, bool CanDiscover,
-    bool SourceEligible, string? SourceAccess, string? RejectionCode, string? RejectionMessage);
+    bool SourceEligible, string? SourceAccess, string? RejectionCode, string? RejectionMessage, bool CanVerify = false);
 
 public sealed record RestoreTargetJob(Guid JobId, string JobName, Guid AgentId, string Database, RestoreTargetView Target);
 
@@ -45,7 +45,8 @@ public sealed class RestoreTargetsReader(IBackupRetentionStore retentionStore, I
                 engine is not null && Supports(RestoreAgentCapability.ForPurpose(RestorePurpose.Precheck, engine)),
                 engine is not null && Supports(RestoreAgentCapability.ForPurpose(RestorePurpose.Discovery, engine)),
                 selectedReplica is not null, sourceAccess, rejection is not null ? RestoreService.RejectionCode(rejection.Value) : null,
-                rejection is not null ? RestoreService.RejectionMessage(rejection.Value) : null);
+                rejection is not null ? RestoreService.RejectionMessage(rejection.Value) : null,
+                engine is not null && Supports(RestoreAgentCapability.ForPurpose(RestorePurpose.Verification, engine)));
         }).ToList();
 
         var targets = jobs.Where(job => job.Configuration is not null && job.Configuration.Engine == engine && !string.IsNullOrWhiteSpace(job.Configuration.Host))

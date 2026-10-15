@@ -12,6 +12,7 @@ import { ConfirmDialog } from '@/features/agents/confirm-dialog'
 import { useArtifact } from '@/features/artifacts/hooks'
 import { formatTimestamp } from '@/features/backups/presentation'
 import { useCancelRestore, useRestore } from '@/features/restores/hooks'
+import { RollbackCopyPanel, VerificationDetail } from '@/features/restores/verification-detail'
 import { canCancelRestore, databaseStateLabel, isActiveRestore, restoreErrorMessage, restoreFailureMessage, restoreModeLabel, restoreProgressPercent, restoreStageLabel, safeRestoreCode, targetStateDescription, targetStateLabel } from '@/features/restores/presentation'
 import { useTenant } from '@/features/tenancy/use-tenant'
 
@@ -53,14 +54,14 @@ function RestoreDetail({ id }: { id: string }) {
   return <div className="space-y-6">
     <QueryState isPending={query.isPending} error={query.error} empty={!query.isPending && !restore}>
       {restore && <>
-        <PageHeader title={`${restore.purpose === 'Precheck' ? 'Geri yükleme ön kontrolü' : restore.purpose === 'Discovery' ? 'Hedef Database keşfi' : 'Geri yükleme'} · ${restore.databaseName}`}
+        <PageHeader title={`${restore.purpose === 'Verification' ? 'Restore testi' : restore.purpose === 'Precheck' ? 'Geri yükleme ön kontrolü' : restore.purpose === 'Discovery' ? 'Hedef Database keşfi' : 'Geri yükleme'} · ${restore.databaseName}`}
           crumbs={[{ label: 'Geri yükleme geçmişi', to: `/tenants/${tenantId}/restores` }, { label: restore.databaseName }]}
           description={`${restoreModeLabel(restore.mode)} · ${restore.target.host}${restore.target.port ? `:${restore.target.port}` : ''}`}
           meta={<><StatusPill status={restore.status} /><span className="text-sm text-text-muted">{formatTimestamp(restore.createdAt)}</span></>}
           actions={mayCancel && <Button variant="destructive" disabled={cancel.isPending} onClick={() => { cancel.reset(); setConfirmOpen(true) }}>İptal et</Button>} />
         {notice && (isActiveRestore(restore.status) || restore.status === 'Cancelled') && <Notice>{notice}</Notice>}
         {restore.cancellationRequestedAt && isActiveRestore(restore.status) && <Notice tone="warning">İptal istendi; işlem henüz sona ermedi. Agent sonucu ve hedef Database durumu bekleniyor.</Notice>}
-        {['Failed', 'Cancelled', 'AgentLost'].includes(restore.status) && <section aria-label="Geri yükleme sonucu uyarısı"><Notice tone="warning" title="Hedef Database'i kontrol edin">
+        {['Failed', 'Cancelled', 'AgentLost'].includes(restore.status) && restore.purpose !== 'Verification' && <section aria-label="Geri yükleme sonucu uyarısı"><Notice tone="warning" title="Hedef Database'i kontrol edin">
           <p>Cancelled, Failed veya AgentLost durumu Database'in sağlıklı olduğunu göstermez. Hedef Database durumunu kontrol edin; elle müdahale gerekebilir.</p>
           {restore.failureCode && <><p className="mt-2">{restoreFailureMessage(restore.failureCode)}</p><p className="mt-1 text-text-muted">Hata kodu: {safeRestoreCode(restore.failureCode)}</p></>}
         </Notice></section>}
@@ -69,10 +70,12 @@ function RestoreDetail({ id }: { id: string }) {
         ]} />
         <div role="tabpanel" id={`restore-panel-${tab}`} aria-labelledby={`restore-tab-${tab}`} className="space-y-6">
           {tab === 'summary' && <>
-            <Section title="Hedef Database durumu" description={targetStateDescription(restore.targetState)}>
+            {restore.purpose === 'Verification' && <VerificationDetail restore={restore} />}
+            <RollbackCopyPanel restore={restore} />
+            {restore.purpose !== 'Verification' && <Section title="Hedef Database durumu" description={targetStateDescription(restore.targetState)}>
               <p className="font-medium text-text-heading">{targetStateLabel(restore.targetState)}</p>
               {restore.result && <p className="mt-2 text-sm">Database durumu: {databaseStateLabel(restore.result.databaseState)}</p>}
-            </Section>
+            </Section>}
             <Section title="İlerleme"><RestoreProgress stage={restore.progress.stage} percent={restore.progress.percent} at={restore.progress.at} label="Restore ilerlemesi" /></Section>
             <Section title="Restore özeti"><Facts columns={3}>
               <Fact label="Hedef Database">{restore.databaseName}</Fact>

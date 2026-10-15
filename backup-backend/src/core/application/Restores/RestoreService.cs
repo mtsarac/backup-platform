@@ -54,6 +54,11 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         CreateAsync(tenantId, artifactId, idempotencyKey, requestedByUserId,
             new StartRestoreRequest(request.AgentId, request.Target, request.DatabaseName, request.ReplicaId, request.Mode, Options: request.Options), RestorePurpose.Precheck, cancellationToken, supportSessionId);
 
+    /// <summary>Starts an isolated restore verification: the backend picks the disposable database name, so the caller names nothing and can overwrite nothing.</summary>
+    public Task<RestoreStartResult> VerifyAsync(TenantId tenantId, Guid artifactId, string idempotencyKey, Guid? requestedByUserId, StartRestoreVerificationRequest request, CancellationToken cancellationToken) =>
+        CreateAsync(tenantId, artifactId, idempotencyKey, requestedByUserId,
+            new StartRestoreRequest(request.AgentId, request.Target, string.Empty, request.ReplicaId, Options: request.Options), RestorePurpose.Verification, cancellationToken);
+
     public Task<RestoreStartResult> DiscoverAsync(TenantId tenantId, Guid artifactId, string idempotencyKey, Guid? requestedByUserId, StartRestoreDiscoveryRequest request, CancellationToken cancellationToken) =>
         CreateAsync(tenantId, artifactId, idempotencyKey, requestedByUserId,
             new StartRestoreRequest(request.AgentId, request.Target, string.Empty, request.ReplicaId), RestorePurpose.Discovery, cancellationToken);
@@ -66,13 +71,14 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         var validated = RestoreInputValidation.Validate(artifactId, request, purpose);
         // Through a support session a restore can only create a new database: this is checked here and again by the domain and by a database constraint.
         if (supportSessionId is not null && validated.Mode != RestoreMode.NewDatabase) throw new InvalidRestoreRequestException("mode", "replace_forbidden");
-        var command = new RestoreCommand(tenantId, artifactId, request.ReplicaId, new AgentId(request.AgentId), validated.Target, validated.DatabaseName, validated.Mode,
+        var databaseName = purpose == RestorePurpose.Verification ? PlatformDatabaseNames.NewVerificationName() : validated.DatabaseName;
+        var command = new RestoreCommand(tenantId, artifactId, request.ReplicaId, new AgentId(request.AgentId), validated.Target, databaseName, validated.Mode,
             validated.OverwriteConfirmed, validated.Options, idempotencyKey, validated.Fingerprint, requestedByUserId, time.GetUtcNow(), purpose, request.PrecheckId, supportSessionId);
         var result = await store.CreateAsync(command, cancellationToken);
         return result.Outcome switch
         {
-            RestoreCreateOutcome.Created => new RestoreStartResult(RestoreStartOutcome.Started, ToView(result.Operation!, includeResult: false)),
-            RestoreCreateOutcome.Replayed => new RestoreStartResult(RestoreStartOutcome.Replayed, ToView(result.Operation!, includeResult: false)),
+            RestoreCreateOutcome.Created => new RestoreStartResult(RestoreStartOutcome.Started, ToView(result.Operation!, includeResult: false, options.RollbackRetention, time.GetUtcNow())),
+            RestoreCreateOutcome.Replayed => new RestoreStartResult(RestoreStartOutcome.Replayed, ToView(result.Operation!, includeResult: false, options.RollbackRetention, time.GetUtcNow())),
             RestoreCreateOutcome.ArtifactNotFound => new RestoreStartResult(RestoreStartOutcome.ArtifactNotFound),
             RestoreCreateOutcome.AgentNotFound => new RestoreStartResult(RestoreStartOutcome.AgentNotFound),
             RestoreCreateOutcome.AgentNotActive => new RestoreStartResult(RestoreStartOutcome.AgentNotActive, Code: "agent_cannot_restore", Detail: "agent_not_active",
@@ -92,20 +98,37 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
     public async Task<RestoreView?> GetAsync(TenantId tenantId, Guid restoreId, CancellationToken cancellationToken)
     {
         var operation = await store.GetAsync(tenantId, restoreId, cancellationToken);
-        return operation is null ? null : ToView(operation, includeResult: true);
+        return operation is null ? null : ToView(operation, includeResult: true, options.RollbackRetention, time.GetUtcNow());
     }
 
     /// <summary>Newest first. The result of each restore is left out of the list: it can be large, and the detail view has it.</summary>
     public async Task<RestorePageView> ListAsync(TenantId tenantId, RestoreQuery query, CancellationToken cancellationToken)
     {
         var page = await store.ListAsync(tenantId, query with { Page = Math.Max(1, query.Page), PageSize = Math.Clamp(query.PageSize, 1, MaxListPageSize) }, cancellationToken);
-        return new RestorePageView([.. page.Items.Select(operation => ToView(operation, includeResult: false))], page.TotalCount, page.Page, page.PageSize);
+        return new RestorePageView([.. page.Items.Select(operation => ToView(operation, includeResult: false, options.RollbackRetention, time.GetUtcNow()))], page.TotalCount, page.Page, page.PageSize);
     }
 
     public async Task<RestoreView?> CancelAsync(TenantId tenantId, Guid restoreId, CancellationToken cancellationToken, Guid? requestedByUserId = null, Guid? supportSessionId = null)
     {
         var operation = await store.RequestCancellationAsync(tenantId, restoreId, time.GetUtcNow(), cancellationToken, requestedByUserId, supportSessionId);
-        return operation is null ? null : ToView(operation, includeResult: true);
+        return operation is null ? null : ToView(operation, includeResult: true, options.RollbackRetention, time.GetUtcNow());
+    }
+
+    /// <summary>
+    /// An operator asks to remove a retained rollback copy (<paramref name="kind"/> RollbackCopy, which also needs the exact database name) or to retry a pending verification
+    /// cleanup now. Only schedules the agent's work: the database is dropped by the target agent, which re-checks that the name is a platform-generated one.
+    /// </summary>
+    public async Task<(RestoreCleanupRequestOutcome Outcome, RestoreView? Restore)> RequestCleanupAsync(TenantId tenantId, Guid restoreId, RestoreCleanupKind kind, string? confirmDatabaseName,
+        Guid? requestedByUserId, CancellationToken cancellationToken)
+    {
+        var current = await store.GetAsync(tenantId, restoreId, cancellationToken);
+        if (current is null) return (RestoreCleanupRequestOutcome.NotFound, null);
+        if (current.Cleanup.Kind != kind) return (RestoreCleanupRequestOutcome.NotApplicable, null);
+        // Removing the only copy of a replaced database is the one irreversible step: the caller repeats its exact name.
+        if (kind == RestoreCleanupKind.RollbackCopy && !string.Equals(confirmDatabaseName, current.Cleanup.DatabaseName, StringComparison.Ordinal))
+            return (RestoreCleanupRequestOutcome.ConfirmationMismatch, null);
+        var result = await store.RequestCleanupAsync(tenantId, restoreId, time.GetUtcNow(), options.RollbackRetention, requestedByUserId, cancellationToken);
+        return (result.Outcome, result.Operation is null ? null : ToView(result.Operation, includeResult: false, options.RollbackRetention, time.GetUtcNow()));
     }
 
     // ---- the target agent ----
@@ -148,6 +171,35 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         return store.CompleteAsync(Command(identity, attemptId, request.LeaseToken), completion, cancellationToken);
     }
 
+    /// <summary>Leases the next removal owed to this agent, or null when none is due.</summary>
+    public async Task<RestoreCleanupSnapshot?> ClaimCleanupAsync(AgentIdentity identity, CancellationToken cancellationToken)
+    {
+        var claim = await store.ClaimCleanupAsync(identity.TenantId, identity.AgentId, time.GetUtcNow(), options.CleanupLeaseDuration, cancellationToken);
+        if (claim is null) return null;
+        var operation = claim.Operation;
+        var target = operation.Target;
+        return new RestoreCleanupSnapshot
+        {
+            Engine = claim.Engine, OperationId = operation.Id, TenantId = operation.TenantId.Value, LeaseToken = claim.LeaseToken, LeaseExpiresAt = operation.Cleanup.LeaseExpiresAt!.Value,
+            Kind = operation.Cleanup.Kind.ToString(), DatabaseName = operation.Cleanup.DatabaseName!,
+            Target = new RestoreTaskTarget
+            {
+                Host = target.Host, Port = target.Port, IntegratedSecurity = target.IntegratedSecurity, DatabaseCredentialReference = target.DatabaseCredentialReference,
+                Encrypt = target.Encrypt, TrustServerCertificate = target.TrustServerCertificate
+            }
+        };
+    }
+
+    /// <exception cref="ArgumentException">The report is malformed.</exception>
+    public Task<BackupMutationResult> CompleteCleanupAsync(AgentIdentity identity, Guid operationId, RestoreCleanupCompletionRequest request, CancellationToken cancellationToken)
+    {
+        if (request.LeaseToken == Guid.Empty) throw new ArgumentException("A lease token is required.");
+        var removed = request.Outcome switch { "Dropped" or "NotFound" => true, "Failed" => false, _ => throw new ArgumentException("Invalid cleanup outcome.") };
+        if (removed != (request.FailureCode is null) || request.FailureCode is { } code && !RestoreInputValidation.IsSafeCode(code))
+            throw new ArgumentException("A failed cleanup carries a stable failure code; a successful one carries none.");
+        return store.CompleteCleanupAsync(identity.TenantId, identity.AgentId, operationId, request.LeaseToken, removed, request.FailureCode, time.GetUtcNow(), cancellationToken);
+    }
+
     private RestoreLeaseCommand Command(AgentIdentity identity, Guid attemptId, Guid leaseToken) =>
         new(identity.TenantId, identity.AgentId, attemptId, leaseToken, time.GetUtcNow());
 
@@ -188,7 +240,8 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         };
     }
 
-    public static RestoreView ToView(RestoreOperation operation, bool includeResult)
+    /// <param name="rollbackRetention">When given (with <paramref name="now"/>), the cleanup view tells whether an operator may act; support callers leave it out, so they are never offered cleanup.</param>
+    public static RestoreView ToView(RestoreOperation operation, bool includeResult, TimeSpan? rollbackRetention = null, DateTimeOffset? now = null)
     {
         var attempts = operation.Attempts.OrderBy(attempt => attempt.Number).ToArray();
         var current = attempts.LastOrDefault();
@@ -204,8 +257,40 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
             operation.Pin.IsActive, includeResult ? RestoreInputValidation.ReadResult(operation.ResultJson) : null,
             [.. attempts.Select(attempt => new RestoreAttemptView(attempt.Id, attempt.Number, attempt.Status.ToString(), attempt.CreatedAt, attempt.LeasedAt, attempt.StartedAt,
                 attempt.CompletedAt, attempt.FailureCode, Reason(attempt.FailureCode), attempt.TargetState?.ToString(), attempt.ProgressStage, attempt.ProgressPercent, attempt.ProgressAt))],
-            operation.Purpose.ToString(), operation.PrecheckId);
+            operation.Purpose.ToString(), operation.PrecheckId, ToCleanupView(operation, rollbackRetention, now), VerificationOutcome(operation));
     }
+
+    /// <summary>Restored / Failed / NotRun for an ended verification; null while it is active and for every other purpose. A cancelled verification proved nothing either way.</summary>
+    public static string? VerificationOutcome(RestoreOperation operation) => operation.Purpose != RestorePurpose.Verification || !operation.IsTerminal ? null : operation.Status switch
+    {
+        RestoreStatus.Succeeded => "Restored",
+        RestoreStatus.Failed or RestoreStatus.AgentLost => "Failed",
+        _ => "NotRun"
+    };
+
+    private static RestoreCleanupView? ToCleanupView(RestoreOperation operation, TimeSpan? rollbackRetention, DateTimeOffset? now)
+    {
+        var cleanup = operation.Cleanup;
+        if (cleanup.Kind == RestoreCleanupKind.None) return null;
+        DateTimeOffset? retainedUntil = cleanup.Kind == RestoreCleanupKind.RollbackCopy && rollbackRetention is { } retention && operation.CompletedAt is { } completed ? completed + retention : null;
+        var canRequest = now is { } at && cleanup.CanBeRequested(at) && (cleanup.State != RestoreCleanupState.Retained || retainedUntil is null || retainedUntil <= at);
+        return new RestoreCleanupView(cleanup.Kind.ToString(), cleanup.State.ToString(), cleanup.DatabaseName, cleanup.Attempts, cleanup.NextAttemptAt, cleanup.LastFailureCode,
+            CleanupReason(cleanup.LastFailureCode), cleanup.NeedsAttention(now ?? DateTimeOffset.UtcNow), canRequest, retainedUntil);
+    }
+
+    /// <summary>Fixed sentences for the stable cleanup failure codes; engine text never reaches a user.</summary>
+    public static string? CleanupReason(string? code) => code switch
+    {
+        null => null,
+        "permission-denied" => "The agent's database login is not allowed to remove the database.",
+        "authentication-failed" => "The database credentials were rejected.",
+        "connection-failed" or "server-unreachable" => "The database server could not be reached.",
+        "timeout" => "Removing the database timed out.",
+        "database-in-use" => "The database still has active sessions.",
+        "rollback-marker-missing" => "The database is not marked as a platform rollback copy, so it was left alone.",
+        "unsupported-kind" => "This engine does not keep this kind of database.",
+        _ => "The database could not be removed."
+    };
 
     /// <summary>The fixed sentence for a failure code; every code in the closed vocabulary has its own, anything else is reported as an internal error.</summary>
     public static string? Reason(string? code) => code switch
@@ -224,12 +309,13 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         RestoreFailureCodes.TargetDatabaseNotFound => "The database to replace does not exist on the target server.",
         RestoreFailureCodes.TargetInUse => "The target database has active connections.",
         RestoreFailureCodes.TargetProtected => "The target database is protected and cannot be restored over.",
-        RestoreFailureCodes.InsufficientDiskSpace => "The target server does not have enough disk space for the restore.",
+        RestoreFailureCodes.InsufficientDiskSpace => "There is not enough disk space for the restore, on the agent's staging volume or on the target server.",
         RestoreFailureCodes.SqlRestoreFailed => "The database engine could not complete the restore.",
         RestoreFailureCodes.DatabaseUnavailable => "The database server could not be reached.",
         RestoreFailureCodes.OperationTimedOut => "A restore operation timed out.",
         RestoreFailureCodes.AuthenticationFailed => "The database credentials were rejected.",
         RestoreFailureCodes.PermissionDenied => "A required permission is missing.",
+        RestoreFailureCodes.VerificationFailed => "The backup restored, but the restored database did not pass its integrity or data-read checks.",
         RestoreFailureCodes.InvalidConfiguration => "The restore configuration is invalid.",
         RestoreFailureCodes.UnsupportedCapability => "The agent or the database does not support a requested restore capability.",
         RestoreFailureCodes.StagingInvalid => "The staging directory is not usable.",

@@ -55,6 +55,7 @@ public sealed class PostgreSqlProviderIntegrationTests(PostgreSqlProviderFixture
         await fixture.ExecuteAsync(null, $"ALTER DATABASE {PostgreSqlProviderFixture.Q(old)} ALLOW_CONNECTIONS true");
         Assert.Equal("original data must survive", await fixture.ScalarAsync<string>(old, "SELECT value FROM old_only"));
         Assert.Contains(result.Warnings, warning => warning.Code == PostgreSqlWarningCodes.RestoredDataRetained);
+        Assert.Equal(old, result.RetainedDatabaseName);
     }
 
     [Fact]

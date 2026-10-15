@@ -5,7 +5,9 @@ public enum RestorePurpose
 {
     Execution = 1,
     Precheck = 2,
-    Discovery = 3
+    Discovery = 3,
+    /// <summary>Restores into a disposable <c>bp_verify_*</c> database next to the target's own databases, proves it is usable and drops it. Never changes an existing database.</summary>
+    Verification = 4
 }
 
 /// <summary>
@@ -70,12 +72,14 @@ public static class RestoreStages
     public const string PreparingTarget = "PreparingTarget";
     public const string Restoring = "Restoring";
     public const string Finalizing = "Finalizing";
+    public const string Verifying = "Verifying";
+    public const string CleaningUp = "CleaningUp";
     public const string Completed = "Completed";
     public const string Failed = "Failed";
     public const string Cancelled = "Cancelled";
 
     public static IReadOnlyList<string> All { get; } =
-        [Preparing, DownloadingArtifact, VerifyingChecksum, InspectingBackup, PreparingTarget, Restoring, Finalizing, Completed, Failed, Cancelled];
+        [Preparing, DownloadingArtifact, VerifyingChecksum, InspectingBackup, PreparingTarget, Restoring, Finalizing, Verifying, CleaningUp, Completed, Failed, Cancelled];
 
     public static bool IsKnown(string? stage) => stage is not null && All.Contains(stage, StringComparer.Ordinal);
 

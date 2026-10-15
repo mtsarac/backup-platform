@@ -61,12 +61,14 @@ internal sealed class RestorePipelineHarness : IDisposable
         Guid? tenant = null,
         long? size = null,
         ContentChecksum? checksum = null,
-        StagingArea? staging = null) =>
+        StagingArea? staging = null,
+        string? database = null,
+        RestorePipelinePurpose purpose = RestorePipelinePurpose.Execution) =>
         new(
             DatabaseEngineId.MsSql,
             new DatabaseConnectionSettings(new DatabaseEndpoint("sql.test")),
             new PasswordDatabaseCredential("sa", new DatabaseSecret("SECRET-PASSWORD-123")),
-            Database,
+            database ?? Database,
             mode,
             staging ?? Staging,
             storage ?? StorageProviderId.Local,
@@ -76,7 +78,11 @@ internal sealed class RestorePipelineHarness : IDisposable
             checksum ?? ChecksumOf(BackupBytes),
             terminateActiveConnections,
             verifyChecksum,
-            verifyBackup);
+            verifyBackup,
+            purpose: purpose);
+
+    public DatabaseRestorePipelineRequest VerificationRequest(string? database = null) =>
+        Request(DatabaseRestoreMode.IsolatedVerification, database: database ?? "bp_verify_" + Guid.NewGuid().ToString("N"), purpose: RestorePipelinePurpose.Verification);
 
     public Task<DatabaseRestorePipelineResult> RunAsync(DatabaseRestorePipelineRequest? request = null, CancellationToken cancellationToken = default) =>
         Pipeline.RunRestoreAsync(request ?? Request(), new ListProgress(Progress), cancellationToken);
@@ -136,8 +142,31 @@ internal sealed class RestorePipelineHarness : IDisposable
     }
 }
 
-internal sealed class FakeRestoreProvider(RestorePipelineHarness harness) : IDatabaseRestoreProvider
+internal sealed class FakeRestoreProvider(RestorePipelineHarness harness) : IDatabaseRestoreProvider, IRestoreVerificationProvider
 {
+    public Func<RestoreVerificationRequest, CancellationToken, Task<RestoreVerificationReport>>? Verify { get; set; }
+    public Func<DatabaseDropRequest, CancellationToken, Task<DatabaseDropResult>>? Drop { get; set; }
+    public List<RestoreVerificationRequest> Verifications { get; } = [];
+    /// <summary>Every drop and whether the token it was given was already cancelled: a removal must never run on the cancelled run's token.</summary>
+    public List<(DatabaseDropRequest Request, bool TokenCancelled)> Drops { get; } = [];
+
+    public Task<RestoreVerificationReport> VerifyDatabaseAsync(DatabaseConnectionSettings connection, DatabaseCredential credential, RestoreVerificationRequest request, CancellationToken cancellationToken)
+    {
+        Verifications.Add(request);
+        return Verify is { } custom
+            ? custom(request, cancellationToken)
+            : Task.FromResult(new RestoreVerificationReport(
+                [new RestoreVerificationCheck(RestoreVerificationCheck.DatabaseOnline, true, "ok", "The restored database is online."),
+                 new RestoreVerificationCheck(RestoreVerificationCheck.Integrity, true, "ok", "The integrity check found no errors."),
+                 new RestoreVerificationCheck(RestoreVerificationCheck.DataReadable, true, "ok", "Every user table was read.")], 3, 3));
+    }
+
+    public Task<DatabaseDropResult> DropDatabaseAsync(DatabaseConnectionSettings connection, DatabaseCredential credential, DatabaseDropRequest request, CancellationToken cancellationToken)
+    {
+        Drops.Add((request, cancellationToken.IsCancellationRequested));
+        return Drop is { } custom ? custom(request, cancellationToken) : Task.FromResult(new DatabaseDropResult(DatabaseDropOutcome.Dropped));
+    }
+
     private readonly RestorePlan _plan = RestorePipelineHarness.Plan();
 
     public DatabaseEngineId Engine => DatabaseEngineId.MsSql;

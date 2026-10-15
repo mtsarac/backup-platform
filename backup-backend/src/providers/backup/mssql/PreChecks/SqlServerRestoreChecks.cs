@@ -109,12 +109,12 @@ internal static class SqlServerRestoreChecks
                 $"The database name must be 1 to {SqlServerDiscovery.MaxDatabaseNameLength.ToString(CultureInfo.InvariantCulture)} characters without control characters.")
             : Passed(SqlServerRestoreCheckIds.DatabaseName, SqlServerRestoreReasons.Ok, "The database name is valid.");
 
-    /// <summary>NewDatabase needs the name free, ReplaceExistingDatabase needs a database to replace.</summary>
+    /// <summary>NewDatabase and IsolatedVerification need the name free, ReplaceExistingDatabase needs a database to replace.</summary>
     public static BackupPreCheckItem CheckExists(DatabaseRestoreMode mode, SqlServerDatabaseInfo? database) => (mode, database) switch
     {
-        (DatabaseRestoreMode.NewDatabase, not null) => Failed(BackupPreCheckIds.DatabaseExists, RestoreReasonCodes.TargetDatabaseExists,
+        (DatabaseRestoreMode.NewDatabase or DatabaseRestoreMode.IsolatedVerification, not null) => Failed(BackupPreCheckIds.DatabaseExists, RestoreReasonCodes.TargetDatabaseExists,
             "A database with this name already exists on the target server; a new database is not created over it."),
-        (DatabaseRestoreMode.NewDatabase, null) => Passed(BackupPreCheckIds.DatabaseExists, SqlServerRestoreReasons.Ok, "No database with this name exists yet."),
+        (DatabaseRestoreMode.NewDatabase or DatabaseRestoreMode.IsolatedVerification, null) => Passed(BackupPreCheckIds.DatabaseExists, SqlServerRestoreReasons.Ok, "No database with this name exists yet."),
         (_, null) => Failed(BackupPreCheckIds.DatabaseExists, RestoreReasonCodes.TargetDatabaseMissing,
             "There is no database with this name on the target server (or the login cannot see it), so there is nothing to replace."),
         _ => Passed(BackupPreCheckIds.DatabaseExists, SqlServerRestoreReasons.Ok, "The database to replace exists.")
@@ -122,12 +122,23 @@ internal static class SqlServerRestoreChecks
 
     /// <summary>
     /// System databases and the engine's reserved names are never a restore target; neither is a database snapshot, nor a database that belongs to an
-    /// availability group or is mirrored (the engine refuses to restore over those). Null when the check does not apply (a new database with an ordinary name).
+    /// availability group or is mirrored (the engine refuses to restore over those). The platform's own <c>bp_verify_*</c> / <c>bp_old_*</c> names are reserved:
+    /// only an isolated verification may create a verification name, and nothing else may touch a reserved one. Null when the check does not apply (a new database with an ordinary name).
     /// </summary>
     public static BackupPreCheckItem? CheckProtected(string name, DatabaseRestoreMode mode, SqlServerRestoreTargetFacts facts)
     {
         const string id = SqlServerRestoreCheckIds.TargetProtected;
         var database = facts.Database;
+
+        if (mode == DatabaseRestoreMode.IsolatedVerification
+            ? !RestoreDatabaseNames.IsVerificationName(name)
+            : RestoreDatabaseNames.IsReserved(name))
+        {
+            return Failed(id, RestoreReasonCodes.TargetProtected,
+                mode == DatabaseRestoreMode.IsolatedVerification
+                    ? "A verification restore must target a platform verification database name."
+                    : "The database name is reserved for the platform's own verification and rollback databases.");
+        }
 
         if (ReservedDatabaseNames.Contains(name, StringComparer.OrdinalIgnoreCase) || database is { IsSystem: true })
         {

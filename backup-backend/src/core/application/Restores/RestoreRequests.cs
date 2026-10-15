@@ -21,6 +21,15 @@ public sealed record StartRestoreRequest(Guid AgentId, RestoreTargetRequest Targ
 public sealed record StartRestorePrecheckRequest(Guid AgentId, RestoreTargetRequest Target, string DatabaseName, Guid? ReplicaId = null, string? Mode = null,
     RestoreOptionsRequest? Options = null);
 
+/// <summary>
+/// Restores one artifact into a disposable database on the target, proves it is usable and drops it. The backend names the database; the caller never supplies a name,
+/// an overwrite mode or a confirmation, because a verification can only ever create a new, platform-named database.
+/// </summary>
+public sealed record StartRestoreVerificationRequest(Guid AgentId, RestoreTargetRequest Target, Guid? ReplicaId = null, RestoreOptionsRequest? Options = null);
+
+/// <summary>An operator's explicit removal request for a retained rollback copy: the database name must be repeated exactly.</summary>
+public sealed record RestoreCleanupRequest(string? ConfirmDatabaseName = null);
+
 public sealed record StartRestoreDiscoveryRequest(Guid AgentId, RestoreTargetRequest Target, Guid? ReplicaId = null);
 
 /// <summary>A request field is invalid. Carries the field and a stable code, never the offending value or a parser message.</summary>

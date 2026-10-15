@@ -52,7 +52,7 @@ Temel prensip:
 
 ## Henüz tamamlanmamış ana alanlar
 
-**A0 audit kapanışı, Faz 2A (upload bandwidth limiting) ve N1 bildirimleri (email + webhook + SMS) tamamlandı** (Bölüm 1B, Bölüm 4, Bölüm 26). N1'de **SMS `IMPLEMENTED — NOT VERIFIED`**'dır (hiçbir gerçek SMS sağlayıcısına karşı çalıştırılmadı; SMS'e özel test bilinçli olarak yazılmadı). **Sıradaki:** R1 izole restore testi ve E1 artifact şifreleme (Bölüm 35); Faz 2B/2C bu iterasyonda başlanmadı.
+**A0 audit kapanışı, Faz 2A (upload bandwidth limiting) ve N1 bildirimleri (email + webhook + SMS) tamamlandı** (Bölüm 1B, Bölüm 4, Bölüm 26). N1'de **SMS `IMPLEMENTED — NOT VERIFIED`**'dır (hiçbir gerçek SMS sağlayıcısına karşı çalıştırılmadı; SMS'e özel test bilinçli olarak yazılmadı). **R1 izole restore doğrulaması (MSSQL ve PostgreSQL) tamamlandı.** **Sıradaki:** E1 artifact şifreleme (Bölüm 35); Faz 2B/2C bu iterasyonda başlanmadı.
 
 **Planlı:** Faz 2B zaman profilleri ve 2C pause/resume/recovery; **erken öncelikli** izole MSSQL restore-test otomasyonu ve backup artifact şifreleme; MSSQL Differential/Log/PITR; File/Folder Backup ve File Restore; Windows VSS; Linux systemd installer; Docker runtime/discovery; PostgreSQL Physical/WAL/PITR; S3/SMB/FTPS; provider kapasite izleme; tam 3-2-1 ve ileri audit; Teams/Slack/Telegram/push bildirimleri. Ayrıntılı **teslim sırası** Bölüm 35'tedir; faz numarası öncelik demek değildir.
 
@@ -1443,7 +1443,7 @@ Cloud token'ları agent'a persistent verilmemelidir.
 
 # 22. Faz 20 — Restore Test Automation
 
-**Durum: Planned — küçük `R1` dilimi, yüksek öncelik.** Genel teknik sıra Faz 20 olarak kalır, fakat kullanıcı açısından güvenilir geri yükleme, yeni backup engine/provider sayısını artırmaktan önce gelir. Backup'ın var olması başarılı restore anlamına gelmez.
+**Durum: Completed — R1 izole restore doğrulaması çalışma dalında tamamlandı (2026-10-15).** `docs/R1_Restore_Verification_Design.md` kabul matrisi ve detayları içerir. Otomatik zamanlayıcı sonraki dilime bırakılmıştır.
 
 **R1 (ilk teslim):** Kullanıcının açıkça seçtiği/sahip olduğu artifact için disposable/izole test SQL ortamında Full restore + veri bütünlüğü/DB açılış kontrolü; güvenli cleanup, test sonucu ve audit. Otomatik zamanlayıcı ikinci küçük dilimde devreye alınır. Üretim veritabanına test restore yapılmaz. **R1 kabulü:** başarılı/yetersiz-kapasite/bozuk-artifact/SQL failure/cleanup failure; retry ve restart; bağımsız tenant; sonuç ekranında gerçek `Restored/Failed/NotRun` durumu.
 
@@ -1818,9 +1818,9 @@ A0 — MVP operasyon audit matrisi ve eksik kayıtlar                [Completed:
         ↓
 Faz 2A — Upload bandwidth limiting                               [Completed: çalışma dalı]
         ↓
-N1 (Faz 24) — Email/webhook/SMS bildirimleri  [Completed; SMS NOT VERIFIED]  →  R1 (Faz 20) restore testi  [Next]
+N1 (Faz 24) — Email/webhook/SMS bildirimleri  [Completed; SMS NOT VERIFIED]  →  R1 (Faz 20) restore testi  [Completed]
         ↓
-E1 — Artifact şifreleme mimarisi / ilk güvenli vertical slice      [Öne çekildi]
+E1 — Artifact şifreleme mimarisi / ilk güvenli vertical slice      [Next]
         ↓
 MSSQL Differential → Transaction Log → PITR; File/Folder Backup   [Planlı, karar kapısı]
         ↓
@@ -1844,7 +1844,7 @@ Aşağıda **öncelik sırası** verilir; eski `Faz` numaraları ve `M` dilimler
 | 2B| **PostgreSQL Test Suite Optimizasyonu & Profiling** | 1.695 entegrasyon testi 4 thread ile 33 dk 29 sn → 9 dk 04 sn (yerel PG, `fsync=on`) ve 5 dk 41 sn (disposable `fsync=off` PG), 1.695/1.695 PASS; kök neden test sürecinde host başına endpoint derleme + PBKDF2 + PGO, PostgreSQL tarafında `DROP DATABASE` checkpoint'i ("PostgreSQL suite süresi" paragrafı). UploadPacerTests üretim API'si eklenmeden deterministik hale getirildi. | **Completed — çalışma dalı, 2026-10-15** |
 | 2C| **MSSQL Windows VM Full Backup & Replace Overwrite E2E** | Windows 11 VM SQL Server 2025 üzerinde NewDatabase ve ReplaceExistingDatabase (confirmOverwrite doğrulamalı) gerçek E2E PASS | **Completed — çalışma dalı, 2026-10-15** |
 | 2D| **PostgreSQL Full Backup & Restore (Faz 13 ilk iterasyonu)** | Bağımsız provider, engine-aware restore routing, mevcut UI; gerçek Agent/API/Chromium + MSSQL regresyonu | **Completed — çalışma dalı, 2026-10-15** (kanıt Bölüm 15; kapsam dışı: WAL/PITR/Differential/Incremental) |
-| 3 | **R1 (Faz 20) — İzole MSSQL restore testi** | Tasarım ve kabul matrisi hazırlandı (`docs/R1_Restore_Verification_Design.md`), DR tatbikatı yapıldı | **Tasarım & DR Tamamlandı** — Otomasyon planlandı |
+| 3 | **R1 (Faz 20) — İzole MSSQL ve PostgreSQL restore doğrulaması** | Gerçek disposable DB, DBCC CHECKDB/tam okuma bütünlük kanıtı, güvenli cleanup, CREATEDB yetkisi, 25/25 senaryo PASS | **Completed — çalışma dalı, 2026-10-15** |
 | 4 | **E1 — Artifact encryption** | Önce tehdit modeli/anahtar yaşam döngüsü, sonra streaming encrypt/decrypt + restore | Planned — güvenlik |
 | 5 | **Faz 10–12 — MSSQL Differential / Transaction Log / PITR** | Full/log base chain, LSN, restore ordering, retention-safe pin, MSSQL E2E | Planned — MSSQL ürün değeri |
 | 6 | **Faz 3 ve 9 — File/Folder Backup + Restore** | Include/exclude, symlink, partial warnings, manifest, güvenli restore; VSS sonra | Planned — ikinci kaynak |

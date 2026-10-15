@@ -24,6 +24,13 @@ export interface StartRestoreRequest {
   options?: RestoreOptions
   precheckId?: string
 }
+export interface StartRestoreVerificationRequest {
+  agentId: string
+  target: RestoreTarget
+  replicaId?: string
+  options?: Pick<RestoreOptions, 'verifyChecksum' | 'verifyBackup'>
+}
+export interface StartRestoreVerificationVariables { artifactId: string; request: StartRestoreVerificationRequest; idempotencyKey: string }
 export type StartRestorePrecheckRequest = Omit<StartRestoreRequest, 'confirmOverwrite' | 'precheckId'>
 export interface RestoreProgress { stage: string | null; percent: number | null; at: string | null }
 export interface RestoreAttempt {
@@ -40,6 +47,26 @@ export interface RestoreAttempt {
   progressStage: string | null
   progressPercent: number | null
   progressAt: string | null
+}
+export type VerificationOutcome = 'Restored' | 'Failed' | 'NotRun'
+export interface VerificationResult {
+  checks: { checkId: string; status: 'Passed' | 'Failed'; reasonCode: string; message: string }[]
+  userTableCount: number | null
+  readableTableCount: number | null
+  cleanup: 'Dropped' | 'NotCreated' | 'Failed'
+  cleanupReasonCode: string | null
+}
+export interface RestoreCleanup {
+  kind: 'VerificationDatabase' | 'RollbackCopy'
+  state: 'Idle' | 'Retained' | 'Pending' | 'Completed'
+  databaseName: string | null
+  attempts: number
+  nextAttemptAt: string | null
+  lastFailureCode: string | null
+  reason: string | null
+  needsAttention: boolean
+  canRequest: boolean
+  retainedUntil: string | null
 }
 export interface RestoreResult {
   preCheck: { checkId: string; status: 'Passed' | 'Warning' | 'Failed' | 'Skipped'; reasonCode: string; message: string }[]
@@ -60,6 +87,8 @@ export interface RestoreResult {
   backupVerified: boolean
   databaseState: string | null
   targetStateNote: string | null
+  verification?: VerificationResult | null
+  retainedDatabaseName?: string | null
   discovery?: {
     instance: { engine: string; serverName: string; instanceName: string | null; version: string | null; edition: string | null; hostPlatform: string | null }
     databases: { name: string; isSystem: boolean; availability: string }[]
@@ -75,7 +104,7 @@ export interface RestoreView {
   mode: RestoreMode
   overwritePolicy: 'Forbidden' | 'ReplaceExisting'
   sourceAccess: 'AgentLocal' | 'CentralStorage'
-  purpose: 'Execution' | 'Precheck' | 'Discovery'
+  purpose: 'Execution' | 'Precheck' | 'Discovery' | 'Verification'
   target: RestoreTarget
   options: RestoreOptions
   createdAt: string
@@ -90,12 +119,14 @@ export interface RestoreView {
   replicaPinned: boolean
   result: RestoreResult | null
   attempts: RestoreAttempt[]
+  verificationOutcome?: VerificationOutcome | null
+  cleanup?: RestoreCleanup | null
   sourceDatabaseName?: string | null
   sourceJobName?: string | null
   sourceAgentName?: string | null
   artifactCreatedAt?: string | null
 }
-export interface RestoreFilters { page?: number; pageSize?: number; status?: RestoreStatus | ''; artifactId?: string; agentId?: string }
+export interface RestoreFilters { page?: number; pageSize?: number; status?: RestoreStatus | ''; artifactId?: string; agentId?: string; purpose?: 'Verification' }
 export interface RestorePage { items: RestoreView[]; totalCount: number; page: number; pageSize: number }
 export interface StartRestoreVariables { artifactId: string; request: StartRestoreRequest; idempotencyKey: string }
 export interface StartRestorePrecheckVariables { artifactId: string; request: StartRestorePrecheckRequest; idempotencyKey: string }
@@ -109,6 +140,7 @@ export interface RestoreTargetAgent {
   canRestore: boolean
   canPrecheck: boolean
   canDiscover: boolean
+  canVerify?: boolean
   sourceEligible: boolean
   sourceAccess: string | null
   rejectionCode: string | null

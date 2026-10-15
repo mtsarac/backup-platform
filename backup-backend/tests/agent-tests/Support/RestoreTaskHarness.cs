@@ -17,6 +17,7 @@ internal sealed class RestoreTaskHarness : IAsyncDisposable
 {
     private readonly CancellationTokenSource _stop = new();
     private Task? _running;
+    private Task? _cleanupRunning;
 
     public DeterministicTimeProvider Time { get; } = new();
     public FakeCredentialStore Store { get; } = new(TestIdentity.Create());
@@ -24,13 +25,16 @@ internal sealed class RestoreTaskHarness : IAsyncDisposable
     public RestorePipelineFake Pipeline { get; } = new();
     public TaskCredentials Credentials { get; } = new();
     public RestoreTaskWorker Worker { get; }
+    public VerificationProviderFake CleanupProvider { get; } = new();
+    public RestoreCleanupWorker CleanupWorker { get; }
 
     public RestoreTaskHarness(bool staging = true)
     {
         Client = new RestoreClient(Time);
-        Worker = new RestoreTaskWorker(Client, Store, Pipeline,
-            new RestoreTaskRequestFactory(Credentials, staging ? [StagingArea.SameHost(Path.GetTempPath())] : []),
+        var requests = new RestoreTaskRequestFactory(Credentials, staging ? [StagingArea.SameHost(Path.GetTempPath())] : []);
+        Worker = new RestoreTaskWorker(Client, Store, Pipeline, requests,
             new AgentSoftwareInfo("1.2.3", "linux", null, null), Time, NullLogger<RestoreTaskWorker>.Instance);
+        CleanupWorker = new RestoreCleanupWorker(Client, Store, [CleanupProvider], requests, Time, NullLogger<RestoreCleanupWorker>.Instance);
         Pipeline.Execute = (request, _, _) => Task.FromResult(Success(request));
     }
 
@@ -62,6 +66,20 @@ internal sealed class RestoreTaskHarness : IAsyncDisposable
         envelope with { Restore = change(envelope.Restore!) };
 
     public void Start() => _running = Worker.RunAsync(_stop.Token);
+
+    /// <summary>A leased removal of a platform database, as the poll would hand it out.</summary>
+    public AgentTaskEnvelope CleanupEnvelope(string? databaseName = null, string kind = "VerificationDatabase", string engine = "mssql", bool integrated = true)
+    {
+        var task = new RestoreCleanupSnapshot
+        {
+            Engine = engine, OperationId = Guid.NewGuid(), TenantId = Guid.NewGuid(), LeaseToken = Guid.NewGuid(), LeaseExpiresAt = Time.GetUtcNow().AddMinutes(15), Kind = kind,
+            DatabaseName = databaseName ?? (kind == "RollbackCopy" ? "bp_old_" + Guid.NewGuid().ToString("N") : "bp_verify_" + Guid.NewGuid().ToString("N")),
+            Target = new RestoreTaskTarget { Host = "sql.example.test", Port = 1433, IntegratedSecurity = integrated, DatabaseCredentialReference = integrated ? null : "sales-db" }
+        };
+        return new AgentTaskEnvelope { Id = task.LeaseToken.ToString(), Type = RestoreTaskTypes.DatabaseRestoreCleanup, RestoreCleanup = task };
+    }
+
+    public void StartCleanup() => _cleanupRunning = CleanupWorker.RunAsync(_stop.Token);
 
     public DatabaseRestorePipelineResult Success(DatabaseRestorePipelineRequest? request = null)
     {
@@ -103,6 +121,10 @@ internal sealed class RestoreTaskHarness : IAsyncDisposable
         {
             await _running.WaitAsync(TimeSpan.FromSeconds(10));
         }
+        if (_cleanupRunning is not null)
+        {
+            await _cleanupRunning.WaitAsync(TimeSpan.FromSeconds(10));
+        }
         _stop.Dispose();
     }
 }
@@ -138,6 +160,8 @@ internal sealed class RestoreClient(TimeProvider time) : IRestoreTaskClient
     public Func<AgentBackendResult<BackupTaskLeaseResponse>>? OnRenew { get; set; }
     public Func<AgentBackendResult<bool>>? OnProgress { get; set; }
     public Func<int, AgentBackendResult<bool>>? OnComplete { get; set; }
+    public ConcurrentQueue<(Guid OperationId, RestoreCleanupCompletionRequest Request)> CleanupCompletions { get; } = new();
+    public Func<int, AgentBackendResult<bool>>? OnCleanupComplete { get; set; }
 
     private AgentBackendResult<BackupTaskLeaseResponse> Lease() => AgentBackendResult<BackupTaskLeaseResponse>.Success(
         new BackupTaskLeaseResponse { LeaseExpiresAt = time.GetUtcNow().AddSeconds(120) });
@@ -163,4 +187,39 @@ internal sealed class RestoreClient(TimeProvider time) : IRestoreTaskClient
         CompletionCredentials.Enqueue(identity.Current.CredentialId);
         return Task.FromResult(OnComplete?.Invoke(Completions.Count) ?? AgentBackendResult<bool>.Success(true));
     }
+
+    public Task<AgentBackendResult<bool>> CompleteCleanupAsync(AgentLocalIdentity identity, Guid operationId, RestoreCleanupCompletionRequest request, CancellationToken cancellationToken)
+    {
+        CleanupCompletions.Enqueue((operationId, request));
+        return Task.FromResult(OnCleanupComplete?.Invoke(CleanupCompletions.Count) ?? AgentBackendResult<bool>.Success(true));
+    }
+}
+
+/// <summary>An engine provider that only knows how to drop and verify: the cleanup worker never touches the restore surface.</summary>
+internal sealed class VerificationProviderFake : IDatabaseRestoreProvider, IRestoreVerificationProvider
+{
+    public DatabaseEngineId Engine => DatabaseEngineId.MsSql;
+    public ConcurrentQueue<DatabaseDropRequest> Drops { get; } = new();
+    public Func<DatabaseDropRequest, CancellationToken, Task<DatabaseDropResult>> Drop { get; set; } = (_, _) => Task.FromResult(new DatabaseDropResult(DatabaseDropOutcome.Dropped));
+
+    public Task<DatabaseDropResult> DropDatabaseAsync(DatabaseConnectionSettings connection, DatabaseCredential credential, DatabaseDropRequest request, CancellationToken cancellationToken)
+    {
+        Drops.Enqueue(request);
+        return Drop(request, cancellationToken);
+    }
+
+    public Task<RestoreVerificationReport> VerifyDatabaseAsync(DatabaseConnectionSettings connection, DatabaseCredential credential, RestoreVerificationRequest request, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<BackupPreCheckReport> PreCheckRestoreAsync(DatabaseConnectionSettings connection, DatabaseCredential credential, RestorePreCheckRequest request, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<RestoreInspectionResult> InspectBackupAsync(DatabaseConnectionSettings connection, DatabaseCredential credential, RestoreInspectionRequest request, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<RestorePlanResult> PlanRestoreAsync(DatabaseConnectionSettings connection, DatabaseCredential credential, RestorePlanRequest request, CancellationToken cancellationToken) =>
+        throw new NotSupportedException();
+
+    public Task<DatabaseRestoreResult> ExecuteRestoreAsync(DatabaseConnectionSettings connection, DatabaseCredential credential, DatabaseRestoreRequest request, IProgress<RestoreProgress>? progress,
+        CancellationToken cancellationToken) => throw new NotSupportedException();
 }

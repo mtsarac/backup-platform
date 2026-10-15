@@ -129,7 +129,7 @@ internal static class SqlServerRestoreOutcomeRules
             return new SqlServerRestoreOutcome(DatabaseRestoreTargetState.NotModified, databaseState, warnings);
         }
 
-        if (input.Mode == DatabaseRestoreMode.NewDatabase)
+        if (input.Mode != DatabaseRestoreMode.ReplaceExistingDatabase)
         {
             if (after is null)
             {

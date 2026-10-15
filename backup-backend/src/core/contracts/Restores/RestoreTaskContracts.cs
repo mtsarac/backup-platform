@@ -8,6 +8,10 @@ public static class RestoreTaskTypes
     public const string DatabaseRestoreDiscovery = "database-restore-discovery";
     public const string PrecheckCapability = "mssql.restore.precheck";
     public const string DiscoveryCapability = "mssql.restore.discovery";
+    public const string DatabaseRestoreVerification = "database-restore-verification";
+    public const string DatabaseRestoreCleanup = "database-restore-cleanup";
+    public const string MssqlVerificationCapability = "mssql.restore.verification";
+    public const string PostgresVerificationCapability = "postgres.restore.verification";
 }
 
 /// <summary>
@@ -20,7 +24,7 @@ public sealed record RestoreTaskSnapshot
     public int Version { get; init; } = 1;
     /// <summary>Source artifact engine; absent only on legacy SQL Server snapshots.</summary>
     public string Engine { get; init; } = "mssql";
-    /// <summary><c>Execution</c>, <c>Precheck</c> or <c>Discovery</c>; paired with a distinct envelope task type.</summary>
+    /// <summary><c>Execution</c>, <c>Precheck</c>, <c>Discovery</c> or <c>Verification</c>; paired with a distinct envelope task type.</summary>
     public string Purpose { get; init; } = "Execution";
     public Guid OperationId { get; init; }
     public Guid AttemptId { get; init; }
@@ -107,6 +111,61 @@ public sealed record RestoreTaskResult
     public string? DatabaseState { get; init; }
     /// <summary>A fixed sentence describing what was left on the target when it is not simply a healthy online database.</summary>
     public string? TargetStateNote { get; init; }
+    /// <summary>What an isolated verification proved about the restored disposable database and what became of that database; null for every other purpose.</summary>
+    public RestoreVerificationResult? Verification { get; init; }
+    /// <summary>The <c>bp_old_*</c> rollback copy a replace restore kept (PostgreSQL); the platform removes it only when an operator asks.</summary>
+    public string? RetainedDatabaseName { get; init; }
+}
+
+/// <summary>
+/// The outcome of an isolated verification. <see cref="Checks"/> are the engine's own checks of the restored database (database online, integrity, data readable) with
+/// the platform's Passed / Failed items; <see cref="Cleanup"/> is what became of the disposable database. The sizes describe the read test.
+/// </summary>
+public sealed record RestoreVerificationResult
+{
+    public IReadOnlyList<RestorePreCheckItemResult> Checks { get; init; } = [];
+    public int? UserTableCount { get; init; }
+    public int? ReadableTableCount { get; init; }
+    /// <summary><c>Dropped</c>, <c>NotCreated</c> or <c>Failed</c>; anything but Dropped/NotCreated leaves the removal owed and tracked by the backend.</summary>
+    public string Cleanup { get; init; } = RestoreVerificationCleanupOutcomes.NotCreated;
+    /// <summary>A stable code when <see cref="Cleanup"/> is Failed.</summary>
+    public string? CleanupReasonCode { get; init; }
+}
+
+public static class RestoreVerificationCleanupOutcomes
+{
+    public const string Dropped = "Dropped";
+    public const string NotCreated = "NotCreated";
+    public const string Failed = "Failed";
+
+    public static bool IsRemoved(string? outcome) => outcome is Dropped or NotCreated;
+}
+
+/// <summary>
+/// A claimed removal of a platform-created database (a verification's disposable database or a retained rollback copy): references only, like a restore task. The lease
+/// token fences the report. <see cref="DatabaseName"/> must match the kind's reserved pattern or the agent refuses it.
+/// </summary>
+public sealed record RestoreCleanupSnapshot
+{
+    public int Version { get; init; } = 1;
+    public string Engine { get; init; } = "mssql";
+    public Guid OperationId { get; init; }
+    public Guid TenantId { get; init; }
+    public Guid LeaseToken { get; init; }
+    public DateTimeOffset LeaseExpiresAt { get; init; }
+    /// <summary><c>VerificationDatabase</c> or <c>RollbackCopy</c>.</summary>
+    public string Kind { get; init; } = string.Empty;
+    public string DatabaseName { get; init; } = string.Empty;
+    public required RestoreTaskTarget Target { get; init; }
+}
+
+public sealed record RestoreCleanupCompletionRequest
+{
+    public Guid LeaseToken { get; init; }
+    /// <summary><c>Dropped</c>, <c>NotFound</c> or <c>Failed</c>.</summary>
+    public string Outcome { get; init; } = string.Empty;
+    /// <summary>A stable machine code; required for Failed.</summary>
+    public string? FailureCode { get; init; }
 }
 
 /// <summary><see cref="Status"/> is <c>Passed</c>, <c>Warning</c>, <c>Failed</c> or <c>Skipped</c>; <see cref="ReasonCode"/> is stable and machine-readable.</summary>

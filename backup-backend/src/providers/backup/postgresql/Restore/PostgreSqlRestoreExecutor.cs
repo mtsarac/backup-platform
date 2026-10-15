@@ -13,6 +13,8 @@ internal static class PostgreSqlRestoreExecutor
     public static async Task<DatabaseRestoreResult> ExecuteAsync(PostgreSqlRestoreProvider provider, DatabaseConnectionSettings connection,
         DatabaseCredential credential, DatabaseRestoreRequest request, IProgress<RestoreProgress>? progress, CancellationToken cancellationToken)
     {
+        if (request.Mode == DatabaseRestoreMode.IsolatedVerification)
+            return await ExecuteVerificationAsync(provider, connection, credential, request, progress, cancellationToken).ConfigureAwait(false);
         var started = provider.Clock.GetUtcNow();
         DateTimeOffset? restoreStarted = null, restoreFinished = null;
         var warnings = new List<BackupWarning>();
@@ -34,7 +36,7 @@ internal static class PostgreSqlRestoreExecutor
         {
             var token = deadline.Token;
             token.ThrowIfCancellationRequested();
-            PostgreSqlRestoreProvider.ValidateName(request.DatabaseName);
+            PostgreSqlRestoreProvider.ValidateName(request.DatabaseName, request.Mode);
             var path = PostgreSqlRestoreProvider.AgentFile(request.AgentFile);
             var tool = await provider.RestoreToolAsync(token).ConfigureAwait(false);
             // Re-read the actual staged archive, rather than trusting a supplied plan or stale inspection.
@@ -46,7 +48,7 @@ internal static class PostgreSqlRestoreExecutor
             await session.ExecuteAsync("SELECT pg_advisory_lock(hashtextextended(@name, 710842))", MaintenanceTimeout, token, ("name", request.DatabaseName)).ConfigureAwait(false);
             var items = new List<BackupPreCheckItem>();
             await PostgreSqlRestoreProvider.CheckTargetAsync(session, request.DatabaseName, request.Mode, request.TerminateActiveConnections, items, token).ConfigureAwait(false);
-            await PostgreSqlRestoreProvider.CheckArchiveAsync(session, inspection, tool, items, token).ConfigureAwait(false);
+            await PostgreSqlRestoreProvider.CheckArchiveAsync(session, inspection, tool, request.Mode, items, token).ConfigureAwait(false);
             previousOid = await DatabaseOidAsync(session, request.DatabaseName, token).ConfigureAwait(false);
             var sql = inspection.EngineDetails![PostgreSqlArchive.DatabaseSqlKey].Split('\n');
             Report(RestoreExecutionStage.PreparingTarget);
@@ -60,16 +62,7 @@ internal static class PostgreSqlRestoreExecutor
             stage = RestoreExecutionStage.Restoring;
             restoreStarted = provider.Clock.GetUtcNow();
             Report(stage);
-            var result = await PostgreSqlProcessRunner.RunAsync(new PostgreSqlProcessSpec(tool.Path,
-                ["--exit-on-error", "--dbname", target.ToConninfo(scratch), "--", path],
-                new Dictionary<string, string> { ["PGPASSWORD"] = target.Password, ["LC_ALL"] = "C", ["PGCLIENTENCODING"] = "UTF8" }, request.RestoreTimeout),
-                null, null, token).ConfigureAwait(false);
-            if (result.TimedOut) throw PostgreSqlArchive.Failure(PostgreSqlReasons.RestoreTimeout, "The restore exceeded its time limit.", BackupFailureCause.Timeout);
-            if (result.ExitCode != 0)
-            {
-                var classified = PostgreSqlToolFailureClassifier.Classify(PostgreSqlToolKind.Restore, result.ErrorTail);
-                throw PostgreSqlArchive.Failure(classified.ReasonCode, classified.Message, classified.Cause);
-            }
+            await RunPgRestoreAsync(tool, target, scratch, path, ["--exit-on-error"], request.RestoreTimeout, token).ConfigureAwait(false);
             restoreFinished = provider.Clock.GetUtcNow();
             // pg_restore without --create deliberately targets scratch. Apply the archived database owner, ACL and settings explicitly.
             foreach (var statement in sql.Skip(1).Where(statement => !statement.StartsWith("COMMENT ON DATABASE ", StringComparison.Ordinal)))
@@ -165,7 +158,7 @@ internal static class PostgreSqlRestoreExecutor
                 warnings.Add(new BackupWarning(PostgreSqlWarningCodes.ConnectionsTerminated, "Existing target connections were terminated as explicitly permitted."));
             Report(RestoreExecutionStage.Completed);
             return new DatabaseRestoreResult(DatabaseRestoreStatus.Succeeded, null, DatabaseRestoreTargetState.Online, "ONLINE", started,
-                provider.Clock.GetUtcNow(), restoreStarted, restoreFinished, [], warnings);
+                provider.Clock.GetUtcNow(), restoreStarted, restoreFinished, [], warnings, previousOid is not null ? retired : null);
         }
         failure ??= new RestoreFailure(RestoreFailureKind.SqlRestoreFailed, stage, PostgreSqlReasons.RestoreFailed, "The restore did not complete.");
         return new DatabaseRestoreResult(failure.Kind == RestoreFailureKind.Cancelled ? DatabaseRestoreStatus.Cancelled : DatabaseRestoreStatus.Failed,
@@ -176,6 +169,121 @@ internal static class PostgreSqlRestoreExecutor
         {
             try { progress?.Report(new RestoreProgress(current, current == RestoreExecutionStage.Completed ? 100 : null, null, null, provider.Clock.GetUtcNow())); }
             catch { /* Reporting cannot change data safety or the execution outcome. */ }
+        }
+    }
+
+    /// <summary>
+    /// Restores into a disposable <c>bp_verify_*</c> database with the least privilege that works: the database is created directly under its final name
+    /// (nothing is scratched, renamed or published), and <c>--no-owner --no-acl</c> make every object belong to the restoring login, so CREATEDB suffices.
+    /// A failure leaves the database in place for the caller to drop; the result says whether it may exist.
+    /// </summary>
+    private static async Task<DatabaseRestoreResult> ExecuteVerificationAsync(PostgreSqlRestoreProvider provider, DatabaseConnectionSettings connection,
+        DatabaseCredential credential, DatabaseRestoreRequest request, IProgress<RestoreProgress>? progress, CancellationToken cancellationToken)
+    {
+        var started = provider.Clock.GetUtcNow();
+        DateTimeOffset? restoreStarted = null, restoreFinished = null;
+        PostgreSqlConnectionTarget? target = null;
+        PostgreSqlSession? session = null;
+        var creationAttempted = false;
+        var created = false;
+        var stage = RestoreExecutionStage.PreparingTarget;
+        RestoreFailure? failure = null;
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(request.RestoreTimeout);
+        try
+        {
+            var token = deadline.Token;
+            token.ThrowIfCancellationRequested();
+            PostgreSqlRestoreProvider.ValidateName(request.DatabaseName, request.Mode);
+            var path = PostgreSqlRestoreProvider.AgentFile(request.AgentFile);
+            var tool = await provider.RestoreToolAsync(token).ConfigureAwait(false);
+            var inspection = await PostgreSqlArchive.ReadAsync(path, tool, true, request.RestoreTimeout, provider.Clock, token).ConfigureAwait(false);
+            target = PostgreSqlConnectionTarget.Create(connection, credential);
+            session = await PostgreSqlSession.OpenAsync(target, "postgres", provider.Logger, token).ConfigureAwait(false);
+            await session.ExecuteAsync("SET standard_conforming_strings = on; SET statement_timeout = '30s'", MaintenanceTimeout, token).ConfigureAwait(false);
+            // Same key as a normal restore to this name: two operations never create or fill one database at once.
+            await session.ExecuteAsync("SELECT pg_advisory_lock(hashtextextended(@name, 710842))", MaintenanceTimeout, token, ("name", request.DatabaseName)).ConfigureAwait(false);
+            var items = new List<BackupPreCheckItem>();
+            await PostgreSqlRestoreProvider.CheckTargetAsync(session, request.DatabaseName, request.Mode, false, items, token).ConfigureAwait(false);
+            await PostgreSqlRestoreProvider.CheckArchiveAsync(session, inspection, tool, request.Mode, items, token).ConfigureAwait(false);
+            var create = PostgreSqlArchive.RewriteVerificationCreateStatement(inspection.EngineDetails![PostgreSqlArchive.DatabaseSqlKey].Split('\n')[0],
+                inspection.Header.DatabaseName, request.DatabaseName);
+            Report(RestoreExecutionStage.PreparingTarget);
+            creationAttempted = true;
+            using (var creation = new CancellationTokenSource(MaintenanceTimeout))
+            {
+                await session.ExecuteAsync(create, MaintenanceTimeout, creation.Token).ConfigureAwait(false);
+                created = true;
+                await MarkAsync(session, request.DatabaseName, "verification", request.DatabaseName, request.DatabaseName, creation.Token).ConfigureAwait(false);
+            }
+            stage = RestoreExecutionStage.Restoring;
+            restoreStarted = provider.Clock.GetUtcNow();
+            Report(stage);
+            // Tablespaces are a placement detail of the source server; a CREATEDB-only login may not use them.
+            await RunPgRestoreAsync(tool, target, request.DatabaseName, path, ["--exit-on-error", "--no-owner", "--no-acl", "--no-tablespaces"], request.RestoreTimeout, token).ConfigureAwait(false);
+            restoreFinished = provider.Clock.GetUtcNow();
+        }
+        catch (OperationCanceledException)
+        {
+            failure = cancellationToken.IsCancellationRequested
+                ? new RestoreFailure(RestoreFailureKind.Cancelled, stage, "cancelled", "The verification restore was cancelled.")
+                : new RestoreFailure(RestoreFailureKind.SqlRestoreFailed, stage, PostgreSqlReasons.RestoreTimeout, "The restore exceeded its time limit.", BackupFailureCause.Timeout);
+        }
+        catch (Exception exception) when (PostgreSqlRestoreProvider.IsExpected(exception))
+        {
+            failure = PostgreSqlRestoreProvider.Failure(exception, stage == RestoreExecutionStage.PreparingTarget ? RestoreFailureKind.PreCheckFailed : RestoreFailureKind.SqlRestoreFailed, stage);
+        }
+        finally
+        {
+            if (session is not null) await session.DisposeAsync().ConfigureAwait(false);
+        }
+
+        if (failure is null)
+        {
+            Report(RestoreExecutionStage.Completed);
+            return new DatabaseRestoreResult(DatabaseRestoreStatus.Succeeded, null, DatabaseRestoreTargetState.Online, "ONLINE", started,
+                provider.Clock.GetUtcNow(), restoreStarted, restoreFinished, [], []);
+        }
+
+        var targetState = created ? DatabaseRestoreTargetState.PartiallyRestored
+            : !creationAttempted ? DatabaseRestoreTargetState.NotModified
+            : await ProbeAfterUncertainCreateAsync(provider, target, request.DatabaseName).ConfigureAwait(false);
+        return new DatabaseRestoreResult(failure.Kind == RestoreFailureKind.Cancelled ? DatabaseRestoreStatus.Cancelled : DatabaseRestoreStatus.Failed,
+            failure, targetState, null, started, provider.Clock.GetUtcNow(), restoreStarted, restoreFinished, [], []);
+
+        void Report(RestoreExecutionStage current)
+        {
+            try { progress?.Report(new RestoreProgress(current, current == RestoreExecutionStage.Completed ? 100 : null, null, null, provider.Clock.GetUtcNow())); }
+            catch { /* Reporting cannot change data safety or the execution outcome. */ }
+        }
+    }
+
+    /// <summary>CREATE DATABASE was sent but never acknowledged: look, with a fresh connection, instead of guessing. Not reachable means unknown.</summary>
+    private static async Task<DatabaseRestoreTargetState> ProbeAfterUncertainCreateAsync(PostgreSqlRestoreProvider provider, PostgreSqlConnectionTarget? target, string name)
+    {
+        if (target is null) return DatabaseRestoreTargetState.Unknown;
+        using var probe = new CancellationTokenSource(MaintenanceTimeout);
+        try
+        {
+            await using var check = await PostgreSqlSession.OpenAsync(target, "postgres", provider.Logger, probe.Token).ConfigureAwait(false);
+            return await DatabaseOidAsync(check, name, probe.Token).ConfigureAwait(false) is null ? DatabaseRestoreTargetState.NotModified : DatabaseRestoreTargetState.PartiallyRestored;
+        }
+        catch (Exception exception) when (PostgreSqlRestoreProvider.IsExpected(exception) || exception is OperationCanceledException)
+        {
+            return DatabaseRestoreTargetState.Unknown;
+        }
+    }
+
+    private static async Task RunPgRestoreAsync(PostgreSqlToolInfo tool, PostgreSqlConnectionTarget target, string database, string path, string[] options,
+        TimeSpan timeout, CancellationToken token)
+    {
+        var result = await PostgreSqlProcessRunner.RunAsync(new PostgreSqlProcessSpec(tool.Path, [.. options, "--dbname", target.ToConninfo(database), "--", path],
+            new Dictionary<string, string> { ["PGPASSWORD"] = target.Password, ["LC_ALL"] = "C", ["PGCLIENTENCODING"] = "UTF8" }, timeout), null, null, token).ConfigureAwait(false);
+        if (result.TimedOut) throw PostgreSqlArchive.Failure(PostgreSqlReasons.RestoreTimeout, "The restore exceeded its time limit.", BackupFailureCause.Timeout);
+        if (result.ExitCode != 0)
+        {
+            var classified = PostgreSqlToolFailureClassifier.Classify(PostgreSqlToolKind.Restore, result.ErrorTail);
+            throw PostgreSqlArchive.Failure(classified.ReasonCode, classified.Message, classified.Cause);
         }
     }
 

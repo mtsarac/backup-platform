@@ -45,6 +45,9 @@ internal sealed class DatabaseRestoreExecution
     private bool _executeStarted;
     private DatabaseRestoreResult? _executeResult;
     private StagingCleanup _stagingCleanup = StagingCleanup.NotNeeded;
+    private RestoreVerificationReport? _verificationReport;
+    private VerificationCleanup _verificationCleanup = VerificationCleanup.NotCreated;
+    private string? _verificationCleanupReason;
 
     public DatabaseRestoreExecution(
         DatabaseRestorePipelineRequest request,
@@ -113,6 +116,9 @@ internal sealed class DatabaseRestoreExecution
                 exception);
         }
 
+        // Whatever happened, a verification's disposable database is dropped before anything else is reported: it is a full copy of a customer's data.
+        await CleanUpVerificationDatabaseAsync().ConfigureAwait(false);
+
         // Always, whatever happened: the staged copy is a full copy of a customer's database backup.
         CleanUpStagedCopy();
 
@@ -150,6 +156,11 @@ internal sealed class DatabaseRestoreExecution
             return;
         }
         await ExecuteAsync(provider, cancellationToken).ConfigureAwait(false);
+        if (_request.Purpose == RestorePipelinePurpose.Verification)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await VerifyAsync(provider, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private (IDatabaseRestoreProvider Provider, IStorageProvider Storage) ResolveProviders()
@@ -569,6 +580,88 @@ internal sealed class DatabaseRestoreExecution
         _tracker.Enter(RestoreExecutionStage.Finalizing);
     }
 
+    // ---- Verifying / CleaningUp -----------------------------------------------------------------------------------------------
+
+    private async Task VerifyAsync(IDatabaseRestoreProvider provider, CancellationToken cancellationToken)
+    {
+        const RestoreExecutionStage stage = RestoreExecutionStage.Verifying;
+        _tracker.Enter(stage);
+        if (provider is not IRestoreVerificationProvider verifier)
+        {
+            throw Fail(stage, RestoreAgentFailureCodes.UnsupportedCapability, RestorePipelineReasons.VerificationUnsupported,
+                "This agent cannot verify restored databases of the requested engine.");
+        }
+
+        RestoreVerificationReport report;
+        try
+        {
+            report = await verifier.VerifyDatabaseAsync(_request.Connection, _request.Credential,
+                new RestoreVerificationRequest(_request.DatabaseName, _request.VerifyTimeout), cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException and not RestoreStageFailedException)
+        {
+            throw Fail(stage, RestoreAgentFailureCodes.InternalError, RestorePipelineReasons.VerificationError,
+                "The restored database could not be verified. Details are in the agent log.", exception);
+        }
+
+        _verificationReport = report;
+        if (report.Passed)
+        {
+            return;
+        }
+
+        var failed = report.Checks.FirstOrDefault(check => !check.Passed);
+        var reason = failed?.ReasonCode ?? RestorePipelineReasons.VerificationFailed;
+        throw Fail(stage, reason == RestorePipelineReasons.Timeout ? RestoreAgentFailureCodes.OperationTimedOut : RestoreAgentFailureCodes.VerificationFailed,
+            reason, failed?.Message ?? "The restored database did not pass its verification checks.");
+    }
+
+    /// <summary>
+    /// Removes the disposable database once the verification ended, however it ended. Runs on its own bounded token, never the run's: a cancelled or timed-out restore is exactly
+    /// when a half-restored copy of customer data is left behind. Never throws; a failed removal is reported so the backend keeps it owed and retries.
+    /// </summary>
+    private async Task CleanUpVerificationDatabaseAsync()
+    {
+        if (_request.Purpose != RestorePipelinePurpose.Verification || !_executeStarted)
+        {
+            return;
+        }
+
+        try
+        {
+            if (_provider is not IRestoreVerificationProvider verifier)
+            {
+                _verificationCleanup = VerificationCleanup.Failed;
+                _verificationCleanupReason = RestorePipelineReasons.VerificationUnsupported;
+                return;
+            }
+
+            _tracker.Enter(RestoreExecutionStage.CleaningUp);
+            using var bound = new CancellationTokenSource(DatabaseDropRequest.DefaultTimeout);
+            var result = await verifier.DropDatabaseAsync(_request.Connection, _request.Credential,
+                new DatabaseDropRequest(_request.DatabaseName, DatabaseDropKind.VerificationDatabase), bound.Token).ConfigureAwait(false);
+            _verificationCleanup = result.Outcome switch
+            {
+                DatabaseDropOutcome.Dropped => VerificationCleanup.Dropped,
+                DatabaseDropOutcome.NotFound => VerificationCleanup.NotCreated,
+                _ => VerificationCleanup.Failed
+            };
+            _verificationCleanupReason = _verificationCleanup == VerificationCleanup.Failed ? result.ReasonCode ?? RestorePipelineReasons.CleanupFailed : null;
+        }
+        catch (Exception exception)
+        {
+            DatabaseRestorePipeline.LogCleanupFailed(_logger, exception, _tracker.Current ?? RestoreExecutionStage.CleaningUp, RestorePipelineReasons.CleanupFailed);
+            _verificationCleanup = VerificationCleanup.Failed;
+            _verificationCleanupReason = exception is OperationCanceledException ? RestorePipelineReasons.Timeout : RestorePipelineReasons.CleanupFailed;
+        }
+
+        if (_verificationCleanup == VerificationCleanup.Failed)
+        {
+            _warnings.Add(new BackupWarning(RestorePipelineReasons.CleanupFailed,
+                "The disposable verification database could not be removed. The platform keeps the removal owed and retries it."));
+        }
+    }
+
     // ---- results --------------------------------------------------------------------------------------------------------------
 
     private void CleanUpStagedCopy()
@@ -600,7 +693,10 @@ internal sealed class DatabaseRestoreExecution
             Status = status,
             FinalStage = finalStage,
             Failure = failure,
-            TargetState = executed?.TargetState ?? (_executeStarted ? DatabaseRestoreTargetState.Unknown : DatabaseRestoreTargetState.NotModified),
+            // A verification only ever creates its own disposable database, whose fate is Verification.Cleanup; no database the user owns is touched.
+            TargetState = _request.Purpose == RestorePipelinePurpose.Verification
+                ? DatabaseRestoreTargetState.NotModified
+                : executed?.TargetState ?? (_executeStarted ? DatabaseRestoreTargetState.Unknown : DatabaseRestoreTargetState.NotModified),
             DatabaseState = executed?.DatabaseState,
             StartedAt = _startedAt,
             FinishedAt = _time.GetUtcNow(),
@@ -614,7 +710,11 @@ internal sealed class DatabaseRestoreExecution
             ChecksumVerified = _checksumVerified,
             BackupVerified = _backupVerified,
             StagingCleanup = _stagingCleanup,
-            Stages = _tracker.Records.ToArray()
+            Stages = _tracker.Records.ToArray(),
+            Verification = _request.Purpose == RestorePipelinePurpose.Verification
+                ? new RestoreVerificationOutcome(_verificationReport, _verificationCleanup, _verificationCleanupReason)
+                : null,
+            RetainedDatabaseName = executed?.RetainedDatabaseName
         };
     }
 

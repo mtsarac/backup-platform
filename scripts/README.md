@@ -257,6 +257,24 @@ is reported as failure, not silently accepted. A forced SIGKILL/process-tree kil
 In that case the protected state file identifies the exact owned database for recovery; never drop every
 `bp_smoke_*` database or delete unrelated runtime roots.
 
+## R1 isolated restore verification smoke
+
+```bash
+scripts/frontend/run-r1-smoke.sh [--no-build] [--acceptance-only] [--windows] [--only SCENARIO...]
+```
+
+Starts disposable MSSQL + PostgreSQL containers and the owned browser stack (fresh platform database, HTTPS API, Vite), enrolls three real Linux Agents
+(SQL Server with a good and a wrong credential, PostgreSQL with a superuser for backups and a **CREATEDB-only** `bp_r1_verifier` role for verification, and a
+PostgreSQL agent whose staging volume is a 6 MB tmpfs inside `unshare -Urm`), takes real Full backups into central storage and runs
+`scripts/frontend/r1-acceptance.py`: healthy/bit-flipped/truncated/missing artifacts, wrong credential and unreachable server, insufficient staging capacity,
+cancel then retry, SIGKILL of the agent mid-verification, a stopped database server (failed cleanup, backoff, operator retry), an API restart during a
+verification, a PostgreSQL replace restore's `bp_old_*` rollback copy (kept, removed only by an administrator who repeats its name after the guarded
+retention, a decoy `bp_old_*` untouched), tenant isolation and roles. `--windows` additionally installs an owned Windows service Agent on the VM
+(same `Onboarding-Smoke.ps1` root rules as the download smoke) and runs healthy/corrupt/service-restart scenarios against the VM's SQL Server.
+Only databases named `bp_r1_*` and the platform's own `bp_verify_*` / `bp_old_*` databases of that run are ever created or dropped. Agents run under a
+supervisor so `kill -9` is a real crash; PostgreSQL client libraries are only exposed to `pg_dump`/`pg_restore` through wrappers. Without `--acceptance-only`
+the stack stays up after the API acceptance (`R1_SMOKE_READY`) for the real-browser smoke; set `BP_R1_LOG_DIR` to keep agent logs when a run fails.
+
 ## Quota browser smoke fixture
 
 ```bash

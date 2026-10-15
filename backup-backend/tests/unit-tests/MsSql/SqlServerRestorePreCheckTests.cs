@@ -201,6 +201,52 @@ public sealed class SqlServerRestorePreCheckTests
         }
     }
 
+    private static RestorePreCheckRequest Verification(string name) => new(name, DatabaseRestoreMode.IsolatedVerification, false, null);
+
+    [Fact]
+    public void AnIsolatedVerificationOnAFreeVerificationNameChecksExactlyWhatANewDatabaseChecks()
+    {
+        var verification = Run(Facts(), Verification(RestoreDatabaseNames.NewVerificationName()));
+
+        Assert.Equal(BackupPreCheckStatus.Passed, verification.Status);
+        Assert.Equal(Run(Facts(), NewDb()).Items.Select(item => item.CheckId), verification.Items.Select(item => item.CheckId));
+    }
+
+    [Fact]
+    public void AnIsolatedVerificationNeverPassesWhenTheVerificationDatabaseAlreadyExists()
+    {
+        var name = RestoreDatabaseNames.NewVerificationName();
+        var report = Run(Facts(MsSqlTestData.Database(name)), Verification(name));
+
+        Assert.Equal(BackupPreCheckStatus.Failed, report.Status);
+        Assert.Equal(RestoreReasonCodes.TargetDatabaseExists, Item(report, BackupPreCheckIds.DatabaseExists).ReasonCode);
+    }
+
+    [Theory]
+    [InlineData("Sales")]
+    [InlineData("bp_verify_short")]
+    [InlineData("BP_VERIFY_0123456789abcdef0123456789abcdef")]
+    [InlineData("bp_old_0123456789abcdef0123456789abcdef")]
+    public void AnIsolatedVerificationRefusesAnyNameThatIsNotAPlatformVerificationName(string name)
+    {
+        var protection = Item(Run(Facts(), Verification(name)), SqlServerRestoreCheckIds.TargetProtected);
+
+        Assert.Equal((BackupPreCheckStatus.Failed, RestoreReasonCodes.TargetProtected), (protection.Status, protection.ReasonCode));
+    }
+
+    [Theory]
+    [InlineData("bp_verify_0123456789abcdef0123456789abcdef", false)]
+    [InlineData("bp_verify_0123456789abcdef0123456789abcdef", true)]
+    [InlineData("BP_OLD_anything", false)]
+    [InlineData("bp_old_0123456789abcdef0123456789abcdef", true)]
+    public void EveryOtherModeRefusesTheReservedPlatformNames(string name, bool replace)
+    {
+        var request = replace ? Replace(name) : NewDb(name);
+        var protection = Item(Run(Facts(replace ? MsSqlTestData.Database(name) : null), request), SqlServerRestoreCheckIds.TargetProtected);
+
+        Assert.Equal((BackupPreCheckStatus.Failed, RestoreReasonCodes.TargetProtected), (protection.Status, protection.ReasonCode));
+    }
+
     [Fact]
     public void AReservedNameIsProtectedEvenWhenTheCatalogDoesNotListIt()
     {

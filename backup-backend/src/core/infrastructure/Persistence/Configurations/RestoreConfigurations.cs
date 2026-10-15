@@ -28,7 +28,7 @@ internal sealed class RestoreOperationConfiguration : IEntityTypeConfiguration<R
             table.HasCheckConstraint("ck_restore_operations_mode",
                 "(\"Mode\" = 'NewDatabase' AND \"OverwritePolicy\" = 'Forbidden') OR (\"Mode\" = 'ReplaceExistingDatabase' AND \"OverwritePolicy\" = 'ReplaceExisting')");
             table.HasCheckConstraint("ck_restore_operations_attempt", "\"CurrentAttemptNumber\" >= 1");
-            table.HasCheckConstraint("ck_restore_operations_purpose", "\"Purpose\" IN ('Execution','Precheck','Discovery')");
+            table.HasCheckConstraint("ck_restore_operations_purpose", "\"Purpose\" IN ('Execution','Precheck','Discovery','Verification')");
             table.HasCheckConstraint("ck_restore_operations_text",
                 "((\"Purpose\" = 'Discovery' AND \"DatabaseName\" = '') OR (\"Purpose\" <> 'Discovery' AND length(\"DatabaseName\") BETWEEN 1 AND 128)) AND length(\"IdempotencyKey\") BETWEEN 1 AND 128 AND length(\"RequestFingerprint\") BETWEEN 1 AND 128");
             table.HasCheckConstraint("ck_restore_operations_target",
@@ -41,6 +41,13 @@ internal sealed class RestoreOperationConfiguration : IEntityTypeConfiguration<R
             table.HasCheckConstraint("ck_restore_operations_outcome",
                 "(\"Status\" <> 'Succeeded' OR (((\"Purpose\" = 'Execution' AND \"TargetState\" = 'Online') OR (\"Purpose\" <> 'Execution' AND \"TargetState\" = 'NotModified')) AND \"FailureCode\" IS NULL)) AND " +
                 "(\"Status\" NOT IN ('Failed','Cancelled','AgentLost') OR (\"TargetState\" <> 'Online' AND \"FailureCode\" IS NOT NULL))");
+            // The cleanup record: the platform-created database an operation owes removal of. A verification always owns exactly its own disposable database; removal is only owed
+            // (Pending) once the operation ended, and a lease exists only while it is owed.
+            table.HasCheckConstraint("ck_restore_operations_cleanup",
+                "\"CleanupKind\" IN ('None','VerificationDatabase','RollbackCopy') AND \"CleanupState\" IN ('Idle','Retained','Pending','Completed') AND \"CleanupAttempts\" >= 0 AND " +
+                "(\"CleanupKind\" = 'None') = (\"CleanupDatabaseName\" IS NULL) AND (\"CleanupKind\" <> 'None' OR \"CleanupState\" = 'Idle') AND " +
+                "(\"Purpose\" = 'Verification') = (\"CleanupKind\" = 'VerificationDatabase') AND (\"CleanupKind\" <> 'VerificationDatabase' OR \"CleanupDatabaseName\" = \"DatabaseName\") AND " +
+                "(\"CleanupState\" IN ('Pending','Completed') OR \"CleanupLeaseToken\" IS NULL) AND (\"CleanupState\" NOT IN ('Pending','Completed','Retained') OR \"CompletedAt\" IS NOT NULL)");
             table.HasCheckConstraint("ck_restore_operations_result", "\"ResultJson\" IS NULL OR \"CompletedAt\" IS NOT NULL");
             // Whatever the application does, a restore requested through a support session can only create a new database and names its requester.
             table.HasCheckConstraint("ck_restore_operations_support", "\"SupportSessionId\" IS NULL OR (\"Mode\" = 'NewDatabase' AND \"RequestedByUserId\" IS NOT NULL)");
@@ -77,6 +84,19 @@ internal sealed class RestoreOperationConfiguration : IEntityTypeConfiguration<R
             options.Property(value => value.VerifyChecksum).HasColumnName("OptionVerifyChecksum");
             options.Property(value => value.VerifyBackup).HasColumnName("OptionVerifyBackup");
         });
+        builder.ComplexProperty(operation => operation.Cleanup, cleanup =>
+        {
+            cleanup.Property(value => value.Kind).HasColumnName("CleanupKind").HasConversion<string>().HasMaxLength(24);
+            cleanup.Property(value => value.DatabaseName).HasColumnName("CleanupDatabaseName").HasMaxLength(128);
+            cleanup.Property(value => value.State).HasColumnName("CleanupState").HasConversion<string>().HasMaxLength(16);
+            cleanup.Property(value => value.Attempts).HasColumnName("CleanupAttempts");
+            cleanup.Property(value => value.NextAttemptAt).HasColumnName("CleanupNextAttemptAt");
+            cleanup.Property(value => value.LeaseToken).HasColumnName("CleanupLeaseToken");
+            cleanup.Property(value => value.LeaseExpiresAt).HasColumnName("CleanupLeaseExpiresAt");
+            cleanup.Property(value => value.LastFailureCode).HasColumnName("CleanupLastFailureCode").HasMaxLength(64);
+            cleanup.Property(value => value.UpdatedAt).HasColumnName("CleanupUpdatedAt");
+            cleanup.Property(value => value.RequestedByUserId).HasColumnName("CleanupRequestedByUserId");
+        });
         builder.Ignore(operation => operation.CurrentAttempt);
         builder.Ignore(operation => operation.IsTerminal);
         builder.Ignore(operation => operation.IsActive);
@@ -99,6 +119,8 @@ internal sealed class RestoreOperationConfiguration : IEntityTypeConfiguration<R
         builder.HasIndex(operation => new { operation.TenantId, operation.Status, operation.CreatedAt });
         // The agent's claim and its busy checks look at one agent's operations by status.
         builder.HasIndex(operation => new { operation.TenantId, operation.AgentId, operation.Status, operation.CreatedAt });
+        // The cleanup claim: one agent's owed removals only.
+        builder.HasIndex(operation => new { operation.TenantId, operation.AgentId }).HasDatabaseName("ix_restore_operations_cleanup_pending").HasFilter("\"CleanupState\" = 'Pending'");
         // The unclaimed-restore sweep: pending operations, oldest first.
         builder.HasIndex(operation => new { operation.CreatedAt, operation.Id }).HasDatabaseName("ix_restore_operations_pending").HasFilter("\"Status\" = 'Pending'");
     }

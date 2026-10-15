@@ -58,6 +58,7 @@ public static class AgentHostServiceCollectionExtensions
             provider.GetServices<StagingArea>(),
             provider.GetService<ITaskStorageProviderFactory>()));
         services.AddSingleton<RestoreTaskWorker>();
+        services.AddSingleton<RestoreCleanupWorker>();
         services.TryAddSingleton<IDeleteReplicaProviderResolver, DeleteReplicaProviderResolver>();
         services.AddSingleton<DeleteReplicaTaskWorker>();
         services.AddSingleton<DownloadTaskWorker>();
@@ -65,6 +66,7 @@ public static class AgentHostServiceCollectionExtensions
         services.AddHostedService<AgentDeletionTaskHostedService>();
         services.AddHostedService<AgentBackupTaskHostedService>();
         services.AddHostedService<AgentRestoreTaskHostedService>();
+        services.AddHostedService<AgentRestoreCleanupHostedService>();
         services.AddHostedService<AgentDownloadTaskHostedService>();
         services.AddSingleton<AgentConnectivityService>();
         services.AddSingleton<IAgentConnectivityStatus>(static provider => provider.GetRequiredService<AgentConnectivityService>());

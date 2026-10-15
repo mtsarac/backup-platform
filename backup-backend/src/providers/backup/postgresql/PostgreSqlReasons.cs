@@ -49,6 +49,20 @@ public static class PostgreSqlReasons
     public const string TargetSwapFailed = "target-swap-failed";
     public const string ExtensionUnavailable = "extension-unavailable";
     public const string RoleMissing = "role-missing";
+    public const string ExtensionRequiresSuperuser = "extension-requires-superuser";
+}
+
+/// <summary>Reason codes of an isolated restore verification (its checks and the removal of the databases it creates). Messages are fixed sentences; these never change.</summary>
+public static class PostgreSqlVerificationReasons
+{
+    public const string Ok = "ok";
+    public const string IntegrityCheckFailed = "integrity-check-failed";
+    public const string TableUnreadable = "table-unreadable";
+    public const string Timeout = "timeout";
+    public const string ConnectionFailed = "connection-failed";
+    public const string DatabaseInUse = "database-in-use";
+    public const string DropFailed = "drop-failed";
+    public const string RollbackMarkerMissing = "rollback-marker-missing";
 }
 
 /// <summary>Warning codes of the PostgreSQL provider.</summary>

@@ -1,6 +1,6 @@
 import { ApiError } from '@/lib/api/client'
 import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
-import type { RestoreMode, RestoreStatus, RestoreTargetState } from './types'
+import type { RestoreCleanup, RestoreMode, RestoreStatus, RestoreTargetState, VerificationOutcome } from './types'
 
 export const restoreStatuses: readonly RestoreStatus[] = ['Pending', 'Leased', 'Running', 'Succeeded', 'Failed', 'Cancelled', 'AgentLost']
 export const restoreStatusLabels: Record<RestoreStatus, string> = {
@@ -27,7 +27,7 @@ export function restoreStageLabel(stage?: string | null): string {
   const labels: Record<string, string> = {
     Preparing: 'Hazırlanıyor', DownloadingArtifact: 'Artifact aktarılıyor', VerifyingChecksum: 'Checksum doğrulanıyor',
     InspectingBackup: 'Backup inceleniyor', PreparingTarget: 'Hedef hazırlanıyor', Restoring: 'Geri yükleniyor',
-    Finalizing: 'Tamamlanıyor', Completed: 'Tamamlandı', Failed: 'Başarısız', Cancelled: 'İptal edildi',
+    Finalizing: 'Tamamlanıyor', Verifying: 'Geri yüklenen Database doğrulanıyor', CleaningUp: 'Geçici Database kaldırılıyor', Completed: 'Tamamlandı', Failed: 'Başarısız', Cancelled: 'İptal edildi',
   }
   return stage ? labels[stage] ?? 'Bildirilen aşama tanınmıyor' : 'Henüz ilerleme bildirilmedi'
 }
@@ -39,6 +39,9 @@ const restoreFailures: Record<string, string> = {
   TargetDatabaseExists: 'Hedef Database zaten var. Yeni Database modu üzerine yazmaz.', TargetDatabaseNotFound: 'Üzerine yazılacak hedef Database bulunamadı.',
   TargetInUse: 'Hedef Database kullanımda.', TargetProtected: 'Korunan hedef Database değiştirilemez.',
   InsufficientDiskSpace: 'Hedefte yeterli disk alanı yok.', SqlRestoreFailed: 'Database geri yükleme işlemi tamamlanamadı.',
+  VerificationFailed: 'Backup geri yüklendi ancak geri yüklenen Database bütünlük veya veri okuma kontrollerinden geçemedi.',
+  confirmation_mismatch: 'Yazdığınız Database adı eşleşmiyor.', retention_not_elapsed: 'Rollback kopyasının koruma süresi henüz dolmadı.',
+  cleanup_not_applicable: 'Bu işlem için temizlik şu anda uygulanamaz.',
   NotClaimed: 'Restore süresi içinde Agent tarafından alınmadı. Hedef değiştirilmedi.',
   precheck_rejected: 'Ön kontrol bu geri yükleme ile eşleşmiyor veya başarılı değil. Ön kontrolü yeniden çalıştırın.',
   agent_transfer_required: 'Replica başka bir Agent üzerinde. Agentlar arası aktarım desteklenmiyor.',
@@ -60,4 +63,16 @@ export function databaseStateLabel(state?: string | null): string {
 }
 export function restoreProgressPercent(value?: number | null): number | undefined {
   return value != null && Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : undefined
+}
+export const verificationOutcomeLabels: Record<VerificationOutcome, string> = {
+  Restored: 'Başarılı · Restored', Failed: 'Başarısız · Failed', NotRun: 'Çalışmadı · NotRun',
+}
+export function verificationCheckLabel(checkId: string): string {
+  const labels: Record<string, string> = { 'database-online': 'Database çevrimiçi', integrity: 'Bütünlük kontrolü', 'data-readable': 'Veri okunabilir' }
+  return labels[checkId] ?? safeRestoreCode(checkId)
+}
+export function verificationCleanupText(cleanup: RestoreCleanup): string {
+  if (cleanup.state === 'Completed') return 'Geçici Database kaldırıldı'
+  if (cleanup.needsAttention) return 'Kaldırma dikkat gerektiriyor'
+  return `Kaldırma bekliyor, otomatik yeniden denenecek (deneme ${cleanup.attempts})`
 }

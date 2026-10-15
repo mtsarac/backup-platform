@@ -1,0 +1,69 @@
+import { useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Notice } from '@/components/ui/notice'
+import { Fact, Facts, Section } from '@/components/ui/section'
+import { ConfirmDialog } from '@/features/agents/confirm-dialog'
+import { formatDuration, formatTimestamp } from '@/features/backups/presentation'
+import { inputClass } from '@/features/platform/styles'
+import { useTenant } from '@/features/tenancy/use-tenant'
+import { useRemoveRollbackCopy, useRetryRestoreCleanup } from './hooks'
+import { isActiveRestore, restoreErrorMessage, restoreFailureMessage, safeRestoreCode, verificationCheckLabel, verificationCleanupText } from './presentation'
+import type { RestoreView } from './types'
+import { VerificationOutcomeBadge } from './verification'
+
+/** Detail of a disposable-database restore test: outcome, checks and whether the temporary database is gone. */
+export function VerificationDetail({ restore }: { restore: RestoreView }) {
+  const { canOperate } = useTenant()
+  const retry = useRetryRestoreCleanup(restore.id)
+  const verification = restore.result?.verification
+  const cleanup = restore.cleanup
+  return <>
+    <Section title="Restore testi sonucu" description="Test geçici bir Database'e geri yükler; kullanıcının Database'i değiştirilmez.">
+      <div className="space-y-4">
+        <Facts columns={3}>
+          <Fact label="Sonuç"><VerificationOutcomeBadge restore={restore} /></Fact>
+          <Fact label="Süre">{restore.completedAt ? formatDuration(restore.startedAt, restore.completedAt) : '—'}</Fact>
+          {verification && <Fact label="Tablolar">{verification.readableTableCount ?? '—'} okunabilir / {verification.userTableCount ?? '—'} kullanıcı tablosu</Fact>}
+        </Facts>
+        {restore.verificationOutcome === 'Failed' && (restore.reason || restore.failureCode) && <Notice tone="error">{restore.reason ?? restoreFailureMessage(restore.failureCode)}{restore.failureCode && <span className="block text-text-muted">Hata kodu: {safeRestoreCode(restore.failureCode)}</span>}</Notice>}
+        {verification && verification.checks.length > 0 && <ul aria-label="Doğrulama kontrolleri" className="divide-y divide-border text-sm">{verification.checks.map((check) => <li key={check.checkId} className="flex flex-wrap justify-between gap-2 py-3">
+          <span className="min-w-0 break-words">{verificationCheckLabel(check.checkId)} · {check.message}</span><span className="font-medium">{check.status === 'Passed' ? 'Geçti' : 'Başarısız'}</span></li>)}</ul>}
+      </div>
+    </Section>
+    {cleanup && <Section title="Geçici Database">
+      <div className="space-y-3">
+        <p className="text-sm">{verificationCleanupText(cleanup)}{cleanup.databaseName && <> · <code className="font-mono">{cleanup.databaseName}</code></>}</p>
+        {cleanup.reason && cleanup.state !== 'Completed' && <p className="text-sm text-text-muted">{cleanup.reason}</p>}
+        {cleanup.needsAttention && <Notice tone="warning">Otomatik denemeler tükendi. Geçici Database'in elle kaldırılması gerekebilir.</Notice>}
+        {cleanup.state === 'Pending' && !isActiveRestore(restore.status) && cleanup.nextAttemptAt && <p className="text-xs text-text-muted">Sonraki deneme: {formatTimestamp(cleanup.nextAttemptAt)}</p>}
+        {canOperate && cleanup.state === 'Pending' && cleanup.canRequest && <>
+          <Button variant="outline" disabled={retry.isPending} onClick={() => retry.mutate('')}>{retry.isPending ? 'İşleniyor…' : 'Temizliği yeniden dene'}</Button>
+          {retry.error && <p role="alert" className="text-sm text-error">{restoreErrorMessage(retry.error)}</p>}
+        </>}
+      </div>
+    </Section>}
+  </>
+}
+
+/** An ordinary replace restore keeps the previous database; only a tenant administrator may ask for its removal. */
+export function RollbackCopyPanel({ restore }: { restore: RestoreView }) {
+  const { canAdmin } = useTenant()
+  const remove = useRemoveRollbackCopy(restore.id)
+  const [open, setOpen] = useState(false)
+  const [typed, setTyped] = useState('')
+  const cleanup = restore.cleanup
+  if (cleanup?.kind !== 'RollbackCopy' || cleanup.state !== 'Retained') return null
+  const name = cleanup.databaseName ?? ''
+  async function confirm() {
+    if (typed !== name || remove.isPending) return
+    try { await remove.mutateAsync(typed); setOpen(false) } catch { /* shown in dialog */ }
+  }
+  return <Section title="Rollback kopyası" actions={canAdmin && cleanup.canRequest && <Button variant="destructive" onClick={() => { remove.reset(); setTyped(''); setOpen(true) }}>Rollback kopyasını kaldır</Button>}>
+    <p className="text-sm">Rollback kopyası saklanıyor: <code className="font-mono">{name}</code>. Otomatik olarak asla kaldırılmaz.</p>
+    {cleanup.retainedUntil && <p className="mt-1 text-sm text-text-muted">Koruma süresi sonu: {formatTimestamp(cleanup.retainedUntil)}</p>}
+    <ConfirmDialog open={open} onClose={() => setOpen(false)} title="Rollback kopyası kaldırılsın mı?" confirmLabel="Kalıcı olarak kaldır" confirmDisabled={typed !== name}
+      pending={remove.isPending} error={remove.error ? restoreErrorMessage(remove.error) : undefined} onConfirm={() => void confirm()}
+      description={<span className="block space-y-3"><span className="block">Bu işlem önceki Database'i kalıcı olarak siler ve geri alınamaz. Onaylamak için Database adını yazın: <code className="font-mono">{name}</code></span>
+        <input aria-label="Database adı onayı" className={inputClass} value={typed} onChange={(event) => setTyped(event.target.value)} autoComplete="off" /></span>} />
+  </Section>
+}

@@ -52,6 +52,12 @@ internal static class PostgreSqlToolFailureClassifier
             return new(PostgreSqlReasons.DumpLockTimeout, "The dump could not lock a table in time because another session held a conflicting lock.", BackupFailureCause.Timeout);
         }
 
+        // Before the generic permission rule: an untrusted extension is the one privilege a CREATEDB-only verification login can never obtain.
+        if (Has("permission denied to create extension") || Has("must be superuser to create this extension"))
+        {
+            return new(PostgreSqlReasons.ExtensionRequiresSuperuser, "An extension in the backup can only be created by a superuser, so it cannot be restored with this login.", BackupFailureCause.PermissionDenied);
+        }
+
         if (Has("permission denied") || Has("must be superuser") || Has("must be owner") || Has("insufficient privilege") || Has("must be member of"))
         {
             return new(PostgreSqlReasons.PermissionDenied, "The login lacks a privilege the operation needs.", BackupFailureCause.PermissionDenied);

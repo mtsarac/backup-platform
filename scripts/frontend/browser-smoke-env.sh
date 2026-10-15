@@ -210,7 +210,8 @@ printf 'SMOKE_FRONTEND_URL=http://localhost:%s\n' "$web_port"
 printf 'SMOKE_CREDENTIALS_FILE=%s\n' "$work_dir/credentials.json"
 printf 'SMOKE_STATE_FILE=%s\n' "$work_dir/smoke-state.json"
 printf 'SMOKE_READY\n'
-# Run until interrupted; fail early if either process dies.
-while kill -0 "${pids[0]}" 2>/dev/null && kill -0 "${pids[1]}" 2>/dev/null; do sleep 1; done
+# Run until interrupted; fail early if either process dies. An acceptance that restarts the API itself (r1-acceptance.py) first creates
+# api-restart-allowed next to the state file: the original API process may then be gone, and the replacement is owned by that run.
+while kill -0 "${pids[1]}" 2>/dev/null && { kill -0 "${pids[0]}" 2>/dev/null || [[ -e $work_dir/api-restart-allowed ]]; }; do sleep 1; done
 printf 'A smoke process exited; see %s\n' "$work_dir" >&2
 exit 1
