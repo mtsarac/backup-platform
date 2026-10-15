@@ -53,6 +53,7 @@ public sealed class ManagedServiceBoundaryTests(DependencyGraphFixture fixture) 
     [InlineData("BackupPlatform.StorageProviders.Central")]
     [InlineData("BackupPlatform.BackupProviders.Abstractions")]
     [InlineData("BackupPlatform.BackupProviders.MSSQL")]
+    [InlineData("BackupPlatform.BackupProviders.PostgreSql")]
     [InlineData("BackupPlatform.BackupProviders.FileSystem")]
     [InlineData("BackupPlatform.SecretProviders.Abstractions")]
     [InlineData("BackupPlatform.SecretProviders.DataProtection")]

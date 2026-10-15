@@ -231,6 +231,25 @@ public sealed class BackupArtifact : ITenantOwned
     }
 }
 
+/// <summary>Routes immutable artifacts; only metadata predating the engine field defaults to SQL Server.</summary>
+public static class BackupArtifactEngine
+{
+    public static string? Read(string metadata)
+    {
+        using var document = JsonDocument.Parse(metadata);
+        string? engine = "mssql";
+        var found = false;
+        foreach (var property in document.RootElement.EnumerateObject())
+        {
+            if (!property.Name.Equals("engine", StringComparison.OrdinalIgnoreCase)) continue;
+            if (found || property.Value.ValueKind != JsonValueKind.String) return null;
+            found = true;
+            engine = property.Value.GetString();
+        }
+        return engine is "mssql" or "postgres" ? engine : null;
+    }
+}
+
 /// <summary>The logical state of an artifact, derived from its replicas.</summary>
 public enum BackupArtifactState
 {

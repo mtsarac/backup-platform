@@ -78,7 +78,7 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
             RestoreCreateOutcome.AgentNotActive => new RestoreStartResult(RestoreStartOutcome.AgentNotActive, Code: "agent_cannot_restore", Detail: "agent_not_active",
                 Message: "The selected agent is not active, so it cannot run a restore."),
             RestoreCreateOutcome.AgentCannotRestore => new RestoreStartResult(RestoreStartOutcome.AgentCannotRestore, Code: "agent_cannot_restore", Detail: "capability_not_supported",
-                Message: "The selected agent has not reported that it can restore SQL Server databases."),
+                Message: "The selected agent has not reported that it can restore this database engine."),
             RestoreCreateOutcome.IdempotencyConflict => new RestoreStartResult(RestoreStartOutcome.IdempotencyConflict, Code: "idempotency_conflict",
                 Message: "This Idempotency-Key was already used for a different restore request."),
             RestoreCreateOutcome.PrecheckRejected => new RestoreStartResult(RestoreStartOutcome.PrecheckRejected, Code: "precheck_rejected",
@@ -160,6 +160,7 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         var replica = claim.Replica;
         return new RestoreTaskSnapshot
         {
+            Engine = claim.Engine,
             OperationId = operation.Id, AttemptId = attempt.Id, AttemptNumber = attempt.Number, TenantId = operation.TenantId.Value, Purpose = operation.Purpose.ToString(),
             LeaseToken = attempt.LeaseToken!.Value, LeaseExpiresAt = attempt.LeaseExpiresAt!.Value,
             ArtifactId = operation.ArtifactId, ReplicaId = operation.ReplicaId,
@@ -214,9 +215,9 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         RestoreFailureCodes.ArtifactTransferFailed => "The backup file could not be copied to the agent's staging directory.",
         RestoreFailureCodes.ChecksumMismatch => "The backup file does not match its recorded checksum; nothing was restored.",
         RestoreFailureCodes.StorageUnavailable => "The backup storage was temporarily unavailable.",
-        RestoreFailureCodes.BackupInvalid => "SQL Server reported the backup as unreadable or invalid.",
+        RestoreFailureCodes.BackupInvalid => "The database engine reported the backup as unreadable or invalid.",
         RestoreFailureCodes.BackupTypeUnsupported => "Only a single full database backup can be restored.",
-        RestoreFailureCodes.IncompatibleVersion => "The target SQL Server version cannot restore this backup.",
+        RestoreFailureCodes.IncompatibleVersion => "The target database engine version cannot restore this backup.",
         RestoreFailureCodes.FileMappingFailed => "The database files could not be mapped to locations on the target server.",
         RestoreFailureCodes.PreCheckFailed => "The restore pre-check failed; the target database was not touched.",
         RestoreFailureCodes.TargetDatabaseExists => "The target database already exists and this restore is not allowed to replace it.",
@@ -224,7 +225,7 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         RestoreFailureCodes.TargetInUse => "The target database has active connections.",
         RestoreFailureCodes.TargetProtected => "The target database is protected and cannot be restored over.",
         RestoreFailureCodes.InsufficientDiskSpace => "The target server does not have enough disk space for the restore.",
-        RestoreFailureCodes.SqlRestoreFailed => "SQL Server could not complete the restore.",
+        RestoreFailureCodes.SqlRestoreFailed => "The database engine could not complete the restore.",
         RestoreFailureCodes.DatabaseUnavailable => "The database server could not be reached.",
         RestoreFailureCodes.OperationTimedOut => "A restore operation timed out.",
         RestoreFailureCodes.AuthenticationFailed => "The database credentials were rejected.",
@@ -244,7 +245,7 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         null => null,
         RestoreTargetState.NotModified => "The target server was not modified.",
         RestoreTargetState.Online => "The restored database is online.",
-        RestoreTargetState.PartiallyRestored => "The restore did not complete: the target database may be in the RESTORING state, damaged or missing, and the previous contents of a replaced database are gone.",
+        RestoreTargetState.PartiallyRestored => "The restore did not complete: the target database may be damaged, missing or unusable. Check the target and any retained recovery databases before making changes.",
         _ => "The condition of the target database could not be established; check it before using it."
     };
 
@@ -267,7 +268,7 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         RestoreSourceRejection.ReplicaNotRestorable => "The replica can no longer be restored from: it was deleted, is being deleted, or its deletion grace period is over.",
         RestoreSourceRejection.ReplicaNotVerified => "The replica has not been verified, so it is not used for a restore.",
         RestoreSourceRejection.ChecksumUnavailable => "The replica has no recorded SHA-256 checksum to verify its bytes against.",
-        RestoreSourceRejection.BackupTypeUnsupported => "Only a full database backup can be restored.",
+        RestoreSourceRejection.BackupTypeUnsupported => "Only full backups from a supported database engine can be restored.",
         RestoreSourceRejection.AgentTransferRequired => "The only usable replica is stored on another agent's local disk. Transferring a backup between agents is not supported: " +
             "restore with the agent that owns the replica, or use a backup stored in central storage.",
         _ => "No replica of this backup is reachable by the selected agent."

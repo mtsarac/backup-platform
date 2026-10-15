@@ -34,6 +34,8 @@ public static class BackupInputValidation
         Check(c is not null, "configuration");
         Check(c!.Engine is "mssql" or "postgres", "configuration.engine");
         Check(Text(c.Database, 128), "configuration.database");
+        Check(c.Engine != "postgres" || c.Database == c.Database.Trim() && System.Text.Encoding.UTF8.GetByteCount(c.Database) <= 63, "configuration.database");
+        Check(c.Engine != "postgres" || !c.IntegratedSecurity, "configuration.integratedSecurity");
         Check(Text(c.Host, 253) && c.Host.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '.' or '-' or '_' or '\\' or ':'), "configuration.host");
         Check(c.Port is null or >= 1 and <= 65535, "configuration.port");
         Check(c.StagingReference == "default", "configuration.stagingReference");

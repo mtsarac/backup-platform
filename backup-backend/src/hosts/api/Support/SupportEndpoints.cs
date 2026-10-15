@@ -51,7 +51,7 @@ public static class SupportEndpoints
 {
     private const int DefaultPageSize = 25;
     private const int MaximumPageSize = 100;
-    public const string EnvironmentWarning = "These targets are the customer's own SQL Server environment and may be a production system. A support restore here is not an isolated Support Restore Environment.";
+    public const string EnvironmentWarning = "These targets are the customer's own database environment and may be a production system. A support restore here is not an isolated Support Restore Environment.";
 
     public static IEndpointRouteBuilder MapSupportEndpoints(this IEndpointRouteBuilder endpoints)
     {
@@ -367,7 +367,7 @@ public static class SupportEndpoints
         if (targets is null) return Results.NotFound(new { error = "artifact_not_found" });
         return Results.Ok(new
         {
-            artifactId = targets.ArtifactId, sourceDatabase = targets.SourceDatabase, backupType = targets.BackupType, sizeBytes = targets.SizeBytes,
+            artifactId = targets.ArtifactId, sourceDatabase = targets.SourceDatabase, backupType = targets.BackupType, sizeBytes = targets.SizeBytes, engine = targets.Engine,
             // The targets are the customer's real SQL Servers, taken from its backup jobs: say so, loudly, and never imply isolation.
             environment = new { kind = "CustomerEnvironment", isolated = false, warning = EnvironmentWarning },
             agents = targets.Agents.Select(agent => new
@@ -402,6 +402,9 @@ public static class SupportEndpoints
         if (!precheck && request.PrecheckId is null) return Invalid("precheckId", "required");
         var job = await deps.Jobs.GetJobAsync(context.TenantId, jobId, deps.Time.GetUtcNow(), cancellationToken);
         if (job is null) return Results.NotFound(new { error = "target_not_found" });
+        var allowedTargets = await deps.Targets.ReadAsync(context.TenantId, artifactId, cancellationToken);
+        if (allowedTargets is null) return Results.NotFound(new { error = "artifact_not_found" });
+        if (!allowedTargets.Targets.Any(target => target.JobId == jobId)) return Invalid("targetJobId", "engine_mismatch");
         var configuration = job.Configuration;
         var target = new RestoreTargetRequest(configuration.Host, configuration.Port, configuration.IntegratedSecurity, configuration.DatabaseCredentialReference, configuration.Encrypt,
             configuration.TrustServerCertificate);
@@ -553,11 +556,12 @@ public static class SupportEndpoints
 }
 
 /// <summary>Dependencies of the support restore routes, grouped so the route signatures stay readable.</summary>
-internal sealed class SupportRestoreDeps(RestoreService restores, IBackupUiStore jobs, IAgentPushDispatcher push, TimeProvider time, ILogger<RestoreService> logger)
+internal sealed class SupportRestoreDeps(RestoreService restores, IBackupUiStore jobs, IAgentPushDispatcher push, TimeProvider time, ILogger<RestoreService> logger, RestoreTargetsReader targets)
 {
     public RestoreService Restores { get; } = restores;
     public IBackupUiStore Jobs { get; } = jobs;
     public IAgentPushDispatcher Push { get; } = push;
     public TimeProvider Time { get; } = time;
     public ILogger<RestoreService> Logger { get; } = logger;
+    public RestoreTargetsReader Targets { get; } = targets;
 }

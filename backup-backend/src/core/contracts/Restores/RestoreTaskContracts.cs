@@ -18,6 +18,8 @@ public static class RestoreTaskTypes
 public sealed record RestoreTaskSnapshot
 {
     public int Version { get; init; } = 1;
+    /// <summary>Source artifact engine; absent only on legacy SQL Server snapshots.</summary>
+    public string Engine { get; init; } = "mssql";
     /// <summary><c>Execution</c>, <c>Precheck</c> or <c>Discovery</c>; paired with a distinct envelope task type.</summary>
     public string Purpose { get; init; } = "Execution";
     public Guid OperationId { get; init; }
@@ -99,9 +101,9 @@ public sealed record RestoreTaskResult
     public DateTimeOffset? RestoreFinishedAt { get; init; }
     /// <summary>True when the replica bytes were re-hashed during this restore and matched the recorded checksum.</summary>
     public bool ChecksumVerified { get; init; }
-    /// <summary>True when <c>RESTORE VERIFYONLY</c> was run on the staged copy and passed.</summary>
+    /// <summary>True when the engine's full archive verification was run on the staged copy and passed.</summary>
     public bool BackupVerified { get; init; }
-    /// <summary>The state SQL Server reports for the target database after the attempt (for example <c>ONLINE</c>, <c>RESTORING</c>); null when it could not be read.</summary>
+    /// <summary>The state the database engine reports after the attempt (for example <c>ONLINE</c>); null when it could not be read.</summary>
     public string? DatabaseState { get; init; }
     /// <summary>A fixed sentence describing what was left on the target when it is not simply a healthy online database.</summary>
     public string? TargetStateNote { get; init; }

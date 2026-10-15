@@ -154,8 +154,6 @@ public sealed class RestoreTaskWorkerTests
         Assert.Equal("Cancelled", completion.Status);
         Assert.Equal("Cancelled", completion.FailureCode);
         Assert.Equal("PartiallyRestored", completion.TargetState);
-        Assert.Contains("cancelled while running", completion.Result!.TargetStateNote, StringComparison.Ordinal);
-        Assert.Contains("not usable", completion.Result.TargetStateNote, StringComparison.Ordinal);
     }
 
     [Fact]

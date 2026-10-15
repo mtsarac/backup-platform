@@ -40,7 +40,7 @@ public static class RestoreInputValidation
             "target.databaseCredentialReference");
         if (purpose != RestorePurpose.Discovery)
         {
-            try { RestoreOperation.ValidateDatabaseName(request.DatabaseName); }
+            try { RestoreOperation.ValidateDatabaseNameSyntax(request.DatabaseName); }
             catch (ArgumentException) { throw new InvalidRestoreRequestException("databaseName"); }
         }
         else Check(request.DatabaseName == string.Empty, "databaseName");

@@ -27,6 +27,7 @@ public sealed class NotificationsBoundaryTests(DependencyGraphFixture fixture) :
     [InlineData("BackupPlatform.StorageProviders.GoogleDrive")]
     [InlineData("BackupPlatform.BackupProviders.Abstractions")]
     [InlineData("BackupPlatform.BackupProviders.MSSQL")]
+    [InlineData("BackupPlatform.BackupProviders.PostgreSql")]
     [InlineData("BackupPlatform.BackupProviders.FileSystem")]
     public void Features_and_providers_do_not_depend_on_notifications(string project) => AssertNotDependingOn(project, Notifications);
 

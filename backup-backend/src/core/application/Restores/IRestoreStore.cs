@@ -12,12 +12,15 @@ public static class RestoreAgentCapability
     public const string PrecheckIdentifier = "mssql.restore.precheck";
     public const string DiscoveryIdentifier = "mssql.restore.discovery";
 
-    public static string ForPurpose(RestorePurpose purpose) => purpose switch
+    public static string ForPurpose(RestorePurpose purpose, string engine = "mssql") => (engine, purpose) switch
     {
-        RestorePurpose.Execution => Identifier,
-        RestorePurpose.Precheck => PrecheckIdentifier,
-        RestorePurpose.Discovery => DiscoveryIdentifier,
-        _ => throw new ArgumentException("Unknown restore purpose.")
+        ("mssql", RestorePurpose.Execution) => Identifier,
+        ("mssql", RestorePurpose.Precheck) => PrecheckIdentifier,
+        ("mssql", RestorePurpose.Discovery) => DiscoveryIdentifier,
+        ("postgres", RestorePurpose.Execution) => "postgres.restore.full",
+        ("postgres", RestorePurpose.Precheck) => "postgres.restore.precheck",
+        ("postgres", RestorePurpose.Discovery) => "postgres.restore.discovery",
+        _ => throw new ArgumentException("Unknown restore engine or purpose.")
     };
 }
 
@@ -56,7 +59,7 @@ public sealed record RestoreCreateResult(RestoreCreateOutcome Outcome, RestoreOp
     Domain.Support.SupportAccessDenial? SupportDenial = null);
 
 /// <summary>A claimed restore attempt with the replica it reads (the persisted location, never a caller-supplied one).</summary>
-public sealed record RestoreClaim(RestoreOperation Operation, RestoreAttempt Attempt, BackupReplica Replica);
+public sealed record RestoreClaim(RestoreOperation Operation, RestoreAttempt Attempt, BackupReplica Replica, string Engine = "mssql");
 
 public sealed record RestoreLeaseCommand(TenantId TenantId, AgentId AgentId, Guid AttemptId, Guid LeaseToken, DateTimeOffset Now)
 {

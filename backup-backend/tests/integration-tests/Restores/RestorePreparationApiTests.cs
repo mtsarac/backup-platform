@@ -25,6 +25,25 @@ public sealed class RestorePreparationApiTests(PostgreSqlFixture fixture) : ICla
     };
 
     [Fact]
+    public async Task PostgreSqlTargetsUseArtifactEngineForCapabilitiesAndExcludeMssqlJobs()
+    {
+        await using var scenario = await CreatePreparationScenarioAsync();
+        var mssql = await scenario.AcceptBackupAsync();
+        await scenario.SyncCapabilitiesAsync(scenario.Agent, "postgres.backup.full", "postgres.restore.full", "postgres.restore.precheck", "postgres.restore.discovery");
+        var postgres = await scenario.AcceptBackupAsync(engine: "postgres");
+        using var response = await scenario.GetRawAsync($"/backup-artifacts/{postgres.ArtifactId}/restore-targets");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var targets = AgentWorld.ReadJson(response);
+        Assert.Equal("postgres", targets.GetProperty("engine").GetString());
+        var job = Assert.Single(targets.GetProperty("targets").EnumerateArray());
+        Assert.Equal(postgres.JobId, job.GetProperty("jobId").GetGuid());
+        Assert.NotEqual(mssql.JobId, job.GetProperty("jobId").GetGuid());
+        Assert.True(Assert.Single(targets.GetProperty("agents").EnumerateArray()).GetProperty("canRestore").GetBoolean());
+        await scenario.SyncCapabilitiesAsync(scenario.Agent, Capability, PrecheckCapability, DiscoveryCapability);
+        using var mismatched = await scenario.GetRawAsync($"/backup-artifacts/{postgres.ArtifactId}/restore-targets");
+        Assert.False(Assert.Single(AgentWorld.ReadJson(mismatched).GetProperty("agents").EnumerateArray()).GetProperty("canRestore").GetBoolean());
+    }
+    [Fact]
     public async Task SuccessfulPrecheckIsReadonlyPinsItsSourceAndNeverAppearsInExecutionHistory()
     {
         await using var scenario = await CreatePreparationScenarioAsync();

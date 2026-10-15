@@ -9,6 +9,16 @@ public sealed class BackupOrchestrationDomainTests
     private static readonly string SourceHash = new('a', 64);
     private static readonly string ArtifactHash = new('b', 64);
     [Fact]
+    public void PostgreSqlBackupConfigurationRequiresPasswordAuthenticationAndByteSafeIdentifiers()
+    {
+        var postgres = Configuration() with { Engine = "postgres", IntegratedSecurity = false, DatabaseCredentialReference = "pg-credential", Database = new string('a', 63) };
+        Assert.Equal(postgres, postgres.Validate());
+        Assert.Throws<ArgumentException>(() => (postgres with { IntegratedSecurity = true, DatabaseCredentialReference = null }).Validate());
+        Assert.Throws<ArgumentException>(() => (postgres with { Database = new string('a', 64) }).Validate());
+        Assert.Throws<ArgumentException>(() => (postgres with { Database = string.Concat(Enumerable.Repeat("数", 22)) }).Validate());
+        Assert.Throws<ArgumentException>(() => (postgres with { Database = " sales" }).Validate());
+    }
+    [Fact]
     public void RunSnapshotDoesNotChangeWhenJobConfigurationChanges()
     {
         var job = new BackupJob(Guid.NewGuid(), TenantId.New(), "Database", AgentId.New(), Configuration(), Now);

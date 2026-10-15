@@ -296,19 +296,23 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
         }
     }
 
-    [Fact]
-    public void MssqlProviderMayOnlyDependOnTheBackupProviderAbstractions()
+    [Theory]
+    [InlineData("BackupPlatform.BackupProviders.MSSQL")]
+    [InlineData("BackupPlatform.BackupProviders.PostgreSql")]
+    public void DatabaseProvidersMayOnlyDependOnTheBackupProviderAbstractions(string project)
     {
         foreach (var (configuration, graph) in fixture.Graphs)
         {
-            AssertForbiddenDependencies(configuration, graph, "BackupPlatform.BackupProviders.MSSQL",
+            AssertForbiddenDependencies(configuration, graph, project,
                 node => node.Name != "BackupPlatform.BackupProviders.Abstractions");
         }
     }
 
-    [Fact]
-    public void MssqlProviderMustNotDependOnStorageProviderImplementations() =>
-        AssertForbiddenDependencies("BackupPlatform.BackupProviders.MSSQL", node =>
+    [Theory]
+    [InlineData("BackupPlatform.BackupProviders.MSSQL")]
+    [InlineData("BackupPlatform.BackupProviders.PostgreSql")]
+    public void DatabaseProvidersMustNotDependOnStorageProviderImplementations(string project) =>
+        AssertForbiddenDependencies(project, node =>
             node.RelativePath.StartsWith("src/providers/storage/", StringComparison.Ordinal));
 
     [Fact]
@@ -332,6 +336,7 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
     [InlineData("BackupPlatform.Agent.Platform.Windows")]
     [InlineData("BackupPlatform.BackupProviders.Abstractions")]
     [InlineData("BackupPlatform.BackupProviders.MSSQL")]
+    [InlineData("BackupPlatform.BackupProviders.PostgreSql")]
     [InlineData("BackupPlatform.BackupProviders.FileSystem")]
     [InlineData("BackupPlatform.StorageProviders.Abstractions")]
     [InlineData("BackupPlatform.StorageProviders.Local")]

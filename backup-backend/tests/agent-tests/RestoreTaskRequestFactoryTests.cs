@@ -13,6 +13,24 @@ public sealed class RestoreTaskRequestFactoryTests
     private readonly TaskCredentials _credentials = new();
     private readonly StagingArea _staging = StagingArea.SameHost(Path.GetTempPath());
 
+    private sealed class IntegratedCredentials : IBackupTaskCredentialResolver
+    {
+        public ValueTask<DatabaseCredential> ResolveAsync(string reference, CancellationToken cancellationToken) =>
+            ValueTask.FromResult<DatabaseCredential>(IntegratedDatabaseCredential.Instance);
+    }
+
+    [Fact]
+    public async Task PostgreSqlRefusesANamedCredentialThatResolvesToIntegratedAuthentication()
+    {
+        var task = CreateSnapshot("AgentLocal", "local", "Agent", "local") with
+        {
+            Engine = "postgres", Target = new RestoreTaskTarget { Host = "pg-host", DatabaseCredentialReference = "pg-credential" }
+        };
+        var factory = new RestoreTaskRequestFactory(new IntegratedCredentials(), [_staging]);
+        await Assert.ThrowsAsync<RestoreTaskRequestException>(() => factory.CreateAsync(task, default).AsTask());
+        await Assert.ThrowsAsync<RestoreTaskRequestException>(() => factory.CreateDiscoveryAsync(task with { Purpose = "Discovery" }, default).AsTask());
+    }
+
     private sealed class FakeTaskStorageProviderFactory(IStorageProvider restoreProvider) : ITaskStorageProviderFactory
     {
         public int BackupCalls { get; private set; }
@@ -150,5 +168,40 @@ public sealed class RestoreTaskRequestFactoryTests
         Assert.Null(centralRequest.StorageOverride);
 
         Assert.Equal(0, factory.RestoreCalls);
+    }
+
+    [Theory]
+    [InlineData("Execution")]
+    [InlineData("Precheck")]
+    [InlineData("Discovery")]
+    public async Task PostgreSqlEngineRoutesEveryPurposeWithoutInferringFromTargetHostOrPort(string purpose)
+    {
+        var task = CreateSnapshot("AgentLocal", "local", "Agent", "local") with
+        {
+            Engine = "postgres", Purpose = purpose,
+            Target = new RestoreTaskTarget { Host = "sql-host", Port = 1433, DatabaseCredentialReference = "pg-credential" }
+        };
+        var factory = new RestoreTaskRequestFactory(_credentials, [_staging]);
+        var engine = purpose == "Discovery"
+            ? (await factory.CreateDiscoveryAsync(task, default)).Engine
+            : (await factory.CreateAsync(task, default)).Engine;
+        Assert.Equal("postgres", engine.Value);
+        Assert.Equal(1, _credentials.Calls);
+    }
+
+    [Theory]
+    [InlineData("oracle", false, "Restored")]
+    [InlineData("postgres", true, "Restored")]
+    [InlineData("postgres", false, "数据库数据库数据库数据库数据库数据库数据库数据库")]
+    public async Task UnsupportedEngineIntegratedPostgresAndOverlongUtf8NameAreRefusedBeforeCredentialResolution(string engine, bool integrated, string name)
+    {
+        var task = CreateSnapshot("AgentLocal", "local", "Agent", "local") with
+        {
+            Engine = engine, DatabaseName = name,
+            Target = new RestoreTaskTarget { Host = "pg-host", IntegratedSecurity = integrated, DatabaseCredentialReference = integrated ? null : "pg-credential" }
+        };
+        var factory = new RestoreTaskRequestFactory(_credentials, [_staging]);
+        await Assert.ThrowsAsync<RestoreTaskRequestException>(() => factory.CreateAsync(task, default).AsTask());
+        Assert.Equal(0, _credentials.Calls);
     }
 }

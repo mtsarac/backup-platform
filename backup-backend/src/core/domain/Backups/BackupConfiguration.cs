@@ -23,6 +23,8 @@ public sealed record BackupConfiguration(
     {
         if (Engine is not ("mssql" or "postgres")) throw new ArgumentException("Unsupported database engine.");
         BackupGuard.Text(Database, 128);
+        if (Engine == "postgres" && (Database != Database.Trim() || System.Text.Encoding.UTF8.GetByteCount(Database) > 63 || IntegratedSecurity))
+            throw new ArgumentException("PostgreSQL requires a database name of at most 63 UTF-8 bytes and password authentication.");
         BackupGuard.Text(Host, 255);
         if (Port is < 1 or > 65535) throw new ArgumentException("Invalid database port.");
         if (!IntegratedSecurity) BackupGuard.Text(DatabaseCredentialReference, 128);

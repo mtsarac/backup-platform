@@ -160,7 +160,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         PostgreSqlReplicaRepairStore RepairStore,
         ReplicaRepairService RepairService);
 
-    private async Task<MultiSetup> SetupAsync(QuotaAccountingMode mode = QuotaAccountingMode.LogicalArtifactBytes, ISet<string>? verified = null, byte[]? content = null)
+    private async Task<MultiSetup> SetupAsync(QuotaAccountingMode mode = QuotaAccountingMode.LogicalArtifactBytes, ISet<string>? verified = null, byte[]? content = null, string sourceMetadataJson = "{}")
     {
         content ??= Content;
         var checksum = Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
@@ -215,7 +215,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         }
 
         var completion = new Completion("Succeeded", null,
-            new BackupArtifactResult(content.Length, checksum, checksum, "sha256", T0, "{}", "{}", replicaResults),
+            new BackupArtifactResult(content.Length, checksum, checksum, "sha256", T0, sourceMetadataJson, "{}", replicaResults),
             destReports);
 
         await BackupStoreHarness.CompleteAsync(store, claim, completion, T0);
@@ -806,6 +806,45 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         var movedPin = await Assert.ThrowsAsync<PostgresException>(() => context.Database.ExecuteSqlInterpolatedAsync(
             $"UPDATE restore_replica_pins SET \"ReplicaId\" = {primary.Id} WHERE \"OperationId\" = {operation.Id}"));
         Assert.Equal("23514", movedPin.SqlState);
+    }
+
+    [Fact]
+    public async Task RestoreClaimRechecksTheArtifactEngineCapabilityAfterTheNetworkProbe()
+    {
+        var setup = await SetupAsync(sourceMetadataJson: """{"engine":"postgres"}""");
+        var world = new RestoreWorld(fixture);
+        await world.EnableRestoreAsync(setup.Agent);
+        var now = DateTimeOffset.UtcNow;
+        async Task EnablePostgresAsync()
+        {
+            await using var context = fixture.CreatePlatformContext();
+            context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(setup.Agent.AgentId, setup.Agent.TenantId,
+                "postgres.restore.full", BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, null, "pg-probe", now));
+            await context.SaveChangesAsync();
+        }
+        await EnablePostgresAsync();
+        var store = new PostgreSqlRestoreStore(World.Options(), setup.Resolver);
+        var command = RestoreWorld.Command(setup.Agent.TenantId, setup.Artifact.Id, setup.Agent.AgentId, now: now) with
+        {
+            Target = new RestoreTarget("pg-target", 5432, false, "pg-credential", true, false)
+        };
+        var created = await store.CreateAsync(command, default);
+        Assert.Equal(RestoreCreateOutcome.Created, created.Outcome);
+        var primary = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "central");
+        var provider = (InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, primary.StorageProvider, primary.StorageTarget)!;
+        provider.BeforeRead = async () =>
+        {
+            await using var context = fixture.CreatePlatformContext();
+            await context.AgentCapabilities.Where(capability => capability.TenantId == setup.Agent.TenantId && capability.AgentId == setup.Agent.AgentId &&
+                capability.Identifier == "postgres.restore.full").ExecuteDeleteAsync();
+        };
+        Assert.Null(await store.ClaimNextAsync(setup.Agent.TenantId, setup.Agent.AgentId, now, RestoreWorld.Lease, RestoreWorld.Unclaimed, default));
+        var pending = await world.OperationAsync(created.Operation!.Id);
+        Assert.Equal(RestoreStatus.Pending, pending.Status);
+        Assert.True(pending.Pin.IsActive);
+        provider.BeforeRead = null;
+        await EnablePostgresAsync();
+        Assert.Equal("postgres", (await RestoreWorld.MustClaimAsync(store, setup.Agent, now)).Engine);
     }
 
     [Fact]

@@ -40,7 +40,7 @@ internal static class RetentionKit
     /// </summary>
     public static async Task<SeededBackup> SeedAsync(
         BackupStoreHarness harness, StoreAgent agent, BackupJob job, DateTimeOffset acceptedAt,
-        string storageProvider = "local", string storageTarget = "local", string? key = null)
+        string storageProvider = "local", string storageTarget = "local", string? key = null, string? sourceMetadataJson = null)
     {
         var store = harness.Store();
         var run = await harness.StartRunAsync(store, job, Guid.NewGuid().ToString("N"), acceptedAt - TimeSpan.FromMinutes(5));
@@ -56,7 +56,7 @@ internal static class RetentionKit
         // The agent reports its own idea of when it finished; retention must ignore it (it is deliberately far in the past here).
         var agentReportedAt = acceptedAt - TimeSpan.FromDays(400);
         var completion = new Completion("Succeeded", null, new BackupArtifactResult(100, BackupStoreHarness.SourceHash, BackupStoreHarness.ArtifactHash,
-            "sha256", agentReportedAt, "{\"DatabaseName\":\"Database\"}", "{\"CopyOnly\":true}",
+            "sha256", agentReportedAt, sourceMetadataJson ?? "{\"DatabaseName\":\"Database\"}", "{\"CopyOnly\":true}",
             [new BackupReplicaResult(storageProvider, storageTarget, storedKey, 100, BackupStoreHarness.ArtifactHash, "sha256", "Verified", "ReadBack", agentReportedAt, agentReportedAt)]));
         await BackupStoreHarness.CompleteAsync(store, claim, completion, acceptedAt);
         await using var context = harness.Database.CreatePlatformContext();

@@ -204,6 +204,18 @@ public sealed class RestoreOperationTests
         Assert.Contains("system database", failure.Message);
     }
 
+    [Fact]
+    public void PostgreSqlNamesUseUtf8BytesAndTheirOwnProtectedDatabaseSet()
+    {
+        RestoreOperation.ValidateDatabaseName(new string('a', 63), "postgres");
+        RestoreOperation.ValidateDatabaseName("master", "postgres");
+        Assert.Throws<ArgumentException>(() => RestoreOperation.ValidateDatabaseName(new string('a', 64), "postgres"));
+        Assert.Throws<ArgumentException>(() => RestoreOperation.ValidateDatabaseName(string.Concat(Enumerable.Repeat("数", 22)), "postgres"));
+        foreach (var name in new[] { "postgres", "Postgres", "template0", "TEMPLATE1" })
+            Assert.Throws<ArgumentException>(() => RestoreOperation.ValidateDatabaseName(name, "postgres"));
+        RestoreOperation.ValidateDatabaseName("postgres", "mssql");
+    }
+
     // ---- target validation ----
 
     [Fact]

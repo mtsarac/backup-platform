@@ -2,6 +2,8 @@ using BackupPlatform.Agent.Core.Backup;
 using BackupPlatform.Agent.Core.Restore;
 using BackupPlatform.BackupProviders.Abstractions.Database;
 using BackupPlatform.BackupProviders.MSSQL;
+using BackupPlatform.BackupProviders.PostgreSql;
+using BackupPlatform.BackupProviders.PostgreSql.Tools;
 using BackupPlatform.StorageProviders.Abstractions;
 using BackupPlatform.StorageProviders.Central;
 using BackupPlatform.StorageProviders.Local;
@@ -27,6 +29,13 @@ public static class AgentBackupServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<IDatabaseBackupProvider, SqlServerBackupProvider>();
         services.AddSingleton<IDatabaseRestoreProvider, SqlServerRestoreProvider>();
+        var postgreSql = configuration.GetSection(AgentHostOptions.SectionName).GetSection(AgentBackupOptions.SectionName)
+            .GetSection("PostgreSql").Get<AgentPostgreSqlOptions>();
+        var clientTools = new PostgreSqlProviderOptions(postgreSql?.ClientToolsDirectory);
+        services.AddSingleton<IDatabaseBackupProvider>(provider => new PostgreSqlBackupProvider(
+            provider.GetRequiredService<ILogger<PostgreSqlBackupProvider>>(), clientTools, provider.GetRequiredService<TimeProvider>()));
+        services.AddSingleton<IDatabaseRestoreProvider>(provider => new PostgreSqlRestoreProvider(
+            provider.GetRequiredService<ILogger<PostgreSqlRestoreProvider>>(), clientTools, provider.GetRequiredService<TimeProvider>()));
         services.AddSingleton<IArtifactPreparer, PassThroughArtifactPreparer>();
         services.AddSingleton<IDatabaseBackupPipeline, DatabaseBackupPipeline>();
         services.AddSingleton<IDatabaseRestorePipeline, DatabaseRestorePipeline>();
@@ -144,6 +153,8 @@ internal static class AgentBackupOptionsValidation
         }
 
         var prefix = $"{AgentHostOptions.SectionName}:{AgentBackupOptions.SectionName}:";
+        if (options.PostgreSql?.ClientToolsDirectory is { } clientTools && !IsAbsolute(clientTools))
+            yield return prefix + "PostgreSql:ClientToolsDirectory must be an absolute directory path.";
 
         if (options.Staging is { } staging)
         {

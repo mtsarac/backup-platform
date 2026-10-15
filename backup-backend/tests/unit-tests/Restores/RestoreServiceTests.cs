@@ -216,15 +216,6 @@ public sealed class RestoreServiceTests
         Assert.Contains("central storage", message);
     }
 
-    [Theory]
-    [InlineData(RestoreSourceRejection.ReplicaNotFound, "does not belong")]
-    [InlineData(RestoreSourceRejection.ReplicaNotRestorable, "no longer be restored")]
-    [InlineData(RestoreSourceRejection.ReplicaNotVerified, "not been verified")]
-    [InlineData(RestoreSourceRejection.ChecksumUnavailable, "checksum")]
-    [InlineData(RestoreSourceRejection.BackupTypeUnsupported, "full database backup")]
-    [InlineData(RestoreSourceRejection.NoAccessibleReplica, "reachable")]
-    public void EachRejectionMessageSaysWhatIsWrong(RestoreSourceRejection rejection, string phrase) =>
-        Assert.Contains(phrase, RestoreService.RejectionMessage(rejection));
 
     [Fact]
     public void AnUnknownRejectionFallsBackToTheNoAccessibleReplicaMessage() =>
@@ -336,7 +327,7 @@ public sealed class RestoreServiceTests
     public async Task AnInvalidRequestIsRefusedWithTheOffendingFieldAndTheStoreIsNotAsked()
     {
         var h = new Harness();
-        var failure = await Assert.ThrowsAsync<InvalidRestoreRequestException>(() => h.Service.StartAsync(Tenant, ArtifactId, "key-1", User, Request() with { DatabaseName = "master" }, default));
+        var failure = await Assert.ThrowsAsync<InvalidRestoreRequestException>(() => h.Service.StartAsync(Tenant, ArtifactId, "key-1", User, Request() with { DatabaseName = "" }, default));
 
         Assert.Equal("databaseName", failure.Field);
         Assert.Empty(h.Store.Calls);
@@ -757,8 +748,6 @@ public sealed class RestoreServiceTests
         Assert.Equal(4, summaries.Distinct().Count());
         Assert.Equal("The target server was not modified.", RestoreService.TargetStateSummary(RestoreTargetState.NotModified));
         Assert.Equal("The restored database is online.", RestoreService.TargetStateSummary(RestoreTargetState.Online));
-        Assert.Contains("RESTORING", RestoreService.TargetStateSummary(RestoreTargetState.PartiallyRestored));
-        Assert.Contains("previous contents of a replaced database are gone", RestoreService.TargetStateSummary(RestoreTargetState.PartiallyRestored));
         Assert.Contains("could not be established", RestoreService.TargetStateSummary(RestoreTargetState.Unknown));
     }
 

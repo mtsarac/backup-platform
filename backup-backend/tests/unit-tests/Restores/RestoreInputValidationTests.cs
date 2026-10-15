@@ -265,12 +265,7 @@ public sealed class RestoreInputValidationTests
     [InlineData(" Sales")]
     [InlineData("Sales ")]
     [InlineData("Sa\tles")]
-    [InlineData("master")]
-    [InlineData("TempDB")]
-    [InlineData("msdb")]
-    [InlineData("model")]
-    [InlineData("MSSQLSYSTEMRESOURCE")]
-    public void InvalidAndSystemDatabaseNamesAreRejected(string name)
+    public void InvalidDatabaseNameSyntaxIsRejected(string name)
     {
         var failure = Rejected(Base with { DatabaseName = name });
         Assert.Equal("databaseName", failure.Field);
@@ -315,7 +310,7 @@ public sealed class RestoreInputValidationTests
     [Fact]
     public void TheFieldChecksRunInTheDocumentedOrder()
     {
-        var everythingWrong = new StartRestoreRequest(Guid.Empty, new RestoreTargetRequest("bad host", 0, true, "x"), "master", Guid.Empty, "Nope", "x");
+        var everythingWrong = new StartRestoreRequest(Guid.Empty, new RestoreTargetRequest("bad host", 0, true, "x"), "", Guid.Empty, "Nope", "x");
         Assert.Equal("agentId", Rejected(everythingWrong).Field);
         everythingWrong = everythingWrong with { AgentId = AgentGuid };
         Assert.Equal("replicaId", Rejected(everythingWrong).Field);

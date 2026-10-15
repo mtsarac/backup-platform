@@ -34,7 +34,7 @@ public sealed class RestoreOperation : ITenantOwned
     public RestoreOperation(Guid id, TenantId tenantId, Guid artifactId, Guid replicaId, RestoreSourceAccess sourceAccess, AgentId agentId,
         RestoreTarget target, string databaseName, RestoreMode mode, bool overwriteConfirmed, RestoreOptions? options, string idempotencyKey,
         string requestFingerprint, Guid? requestedByUserId, DateTimeOffset createdAt, RestorePurpose purpose = RestorePurpose.Execution, Guid? precheckId = null,
-        Guid? supportSessionId = null)
+        Guid? supportSessionId = null, string engine = "mssql")
     {
         BackupGuard.Id(id);
         BackupGuard.Id(artifactId);
@@ -47,7 +47,7 @@ public sealed class RestoreOperation : ITenantOwned
         if (!Enum.IsDefined(mode)) throw new ArgumentException("Unknown restore mode.");
         if (!Enum.IsDefined(sourceAccess)) throw new ArgumentException("Unknown source access.");
         if (!Enum.IsDefined(purpose)) throw new ArgumentException("Unknown restore purpose.");
-        if (purpose != RestorePurpose.Discovery) ValidateDatabaseName(databaseName);
+        if (purpose != RestorePurpose.Discovery) ValidateDatabaseName(databaseName, engine);
         else if (databaseName != string.Empty) throw new ArgumentException("Discovery has no target database.");
         // Only an execution can acknowledge an overwrite; read-only preparation never does.
         if (purpose == RestorePurpose.Execution && mode == RestoreMode.ReplaceExistingDatabase && !overwriteConfirmed)
@@ -125,11 +125,20 @@ public sealed class RestoreOperation : ITenantOwned
     public bool IsTerminal => Status is RestoreStatus.Succeeded or RestoreStatus.Failed or RestoreStatus.Cancelled or RestoreStatus.AgentLost;
     public bool IsActive => !IsTerminal;
 
-    public static void ValidateDatabaseName(string? name)
+    public static void ValidateDatabaseName(string? name, string engine = "mssql")
+    {
+        ValidateDatabaseNameSyntax(name);
+        if (engine == "mssql" && SystemDatabases.Contains(name!)) throw new ArgumentException("A system database cannot be a restore target.");
+        if (engine == "postgres" && (System.Text.Encoding.UTF8.GetByteCount(name!) > 63 ||
+            name!.Equals("postgres", StringComparison.OrdinalIgnoreCase) || name.Equals("template0", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("template1", StringComparison.OrdinalIgnoreCase))) throw new ArgumentException("Invalid PostgreSQL target database name.");
+        if (engine is not ("mssql" or "postgres")) throw new ArgumentException("Unknown database engine.");
+    }
+
+    public static void ValidateDatabaseNameSyntax(string? name)
     {
         if (name is null || name.Length is < 1 or > 128 || name.Any(char.IsControl) || name != name.Trim())
             throw new ArgumentException("Invalid target database name.");
-        if (SystemDatabases.Contains(name)) throw new ArgumentException("A system database cannot be a restore target.");
     }
 
     public RestoreAttempt QueueFirstAttempt(Guid attemptId, DateTimeOffset now)

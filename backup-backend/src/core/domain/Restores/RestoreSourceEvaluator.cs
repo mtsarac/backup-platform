@@ -24,6 +24,7 @@ public static class RestoreSourceEvaluator
         ArgumentNullException.ThrowIfNull(targetAgent);
         if (replica.ArtifactId != artifact.Id || replica.TenantId != artifact.TenantId) return RestoreSourceDecision.Reject(RestoreSourceRejection.ReplicaNotFound);
         if (artifact.BackupType != "Full") return RestoreSourceDecision.Reject(RestoreSourceRejection.BackupTypeUnsupported);
+        if (BackupArtifactEngine.Read(artifact.SourceMetadataJson) is null) return RestoreSourceDecision.Reject(RestoreSourceRejection.BackupTypeUnsupported);
         // New pins may recover DeletePending only inside grace; already-held copies survive grace under retention's row locks.
         if (replica.Status != BackupReplicaStatus.Available &&
             !(replica.Status == BackupReplicaStatus.DeletePending && replica.DeleteAfter > now))

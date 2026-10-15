@@ -1,6 +1,7 @@
 using System.Text.Json;
 using BackupPlatform.Agent.Core.Backup;
 using BackupPlatform.Agent.Core.Connectivity;
+using BackupPlatform.Agent.Core.Tasks;
 using BackupPlatform.AgentTests.Support;
 using BackupPlatform.BackupProviders.Abstractions.Database;
 using BackupPlatform.Contracts.Backups;
@@ -10,6 +11,32 @@ namespace BackupPlatform.AgentTests;
 
 public sealed class BackupTaskWorkerTests
 {
+    [Fact]
+    public async Task PostgreSqlBackupSnapshotUsesItsEngineAndNamedPasswordCredential()
+    {
+        await using var harness = new BackupTaskHarness();
+        var task = harness.Envelope(false).Backup!;
+        task = task with { Configuration = task.Configuration with { Engine = "postgres", Port = 1433, CopyOnly = false } };
+        var factory = new BackupTaskRequestFactory(harness.Credentials, [StagingArea.SameHost(Path.GetTempPath())]);
+        var request = await factory.CreateAsync(task, default);
+        Assert.Equal("postgres", request.Engine.Value);
+        Assert.IsType<PasswordDatabaseCredential>(request.Credential);
+        Assert.Equal(1, harness.Credentials.Calls);
+    }
+
+    [Theory]
+    [InlineData(true, "sales")]
+    [InlineData(false, "数据库数据库数据库数据库数据库数据库数据库数据库")]
+    public async Task PostgreSqlBackupRefusesIntegratedAuthenticationAndOverlongUtf8IdentifiersBeforeResolvingSecrets(bool integrated, string database)
+    {
+        await using var harness = new BackupTaskHarness();
+        var task = harness.Envelope(integrated).Backup!;
+        task = task with { Configuration = task.Configuration with { Engine = "postgres", Database = database } };
+        var factory = new BackupTaskRequestFactory(harness.Credentials, [StagingArea.SameHost(Path.GetTempPath())]);
+        await Assert.ThrowsAsync<ArgumentException>(() => factory.CreateAsync(task, default).AsTask());
+        Assert.Equal(0, harness.Credentials.Calls);
+    }
+
     [Fact]
     public async Task Duplicate_deliveries_before_during_and_after_execution_do_not_repeat_the_pipeline()
     {

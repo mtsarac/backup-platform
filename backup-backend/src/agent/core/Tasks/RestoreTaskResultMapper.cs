@@ -209,9 +209,9 @@ internal static class RestoreTaskResultMapper
     private static string? NoteFor(bool cancelled, DatabaseRestoreTargetState targetState) => targetState switch
     {
         DatabaseRestoreTargetState.PartiallyRestored when cancelled =>
-            "The restore was cancelled while running. The target database was left partially restored (typically in the RESTORING state) and is not usable. Restore again with replace, or drop it.",
+            "The restore was cancelled while running. The target database may be partially restored and is not safe to use. Check the target and any retained recovery databases before making changes.",
         DatabaseRestoreTargetState.PartiallyRestored =>
-            "The restore failed while running. The target database was left partially restored (typically in the RESTORING state) and is not usable. Restore again with replace, or drop it.",
+            "The restore failed while running. The target database may be partially restored and is not safe to use. Check the target and any retained recovery databases before making changes.",
         DatabaseRestoreTargetState.Unknown =>
             "The agent could not establish the state of the target database. Check it on the server before using it or restoring again.",
         _ => null
