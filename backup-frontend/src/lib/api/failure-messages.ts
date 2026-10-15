@@ -137,6 +137,11 @@ const messages: Record<string, string> = {
   notification_channel_target_taken: 'Bu hedef (adres, URL veya numara) için zaten bir bildirim kanalı var.',
   notification_channel_limit_reached: 'Bildirim kanalı sınırına ulaşıldı. Kullanılmayan bir kanalı silin.',
   notification_test_rate_limited: 'Bu kanal için saatlik test sınırına (5) ulaşıldı. Daha sonra tekrar deneyin.',
+  discovery_unsupported: 'Agent sürümü keşfi desteklemiyor. Agent\'ı güncelleyin.',
+  discovery_disabled: 'Bu Agent için veritabanı keşfi kapalı. Ayarlardan etkinleştirin.',
+  rescan_too_soon: 'Az önce tarama istendi. Birkaç saniye sonra tekrar deneyin.',
+  credentials_required: 'Önce bu Instance için bir kimlik bilgisi referansı kaydedin.',
+  scan_superseded: 'Tarama sonucu daha yeni bir tarama tarafından değiştirildi. Sayfayı yenileyin.',
   transport_not_configured: 'Bu kanal türü için platform aktarımı yapılandırılmamış. Platform yöneticisine başvurun.',
 }
 // Codes whose text must win over the generic 403/404 wording.

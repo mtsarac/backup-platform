@@ -21,3 +21,11 @@ describe('Sidebar notifications entry', () => {
     expect(screen.queryByRole('link', { name: 'Bildirimler' })).not.toBeInTheDocument()
   })
 })
+
+describe('Sidebar discovery entry', () => {
+  it('links Keşfedilen Veritabanları for every role', () => {
+    access.canAdmin = false
+    render(<MemoryRouter><Sidebar /></MemoryRouter>)
+    expect(screen.getAllByRole('link', { name: 'Keşfedilen Veritabanları' })[0]).toHaveAttribute('href', '/tenants/tenant-a/discovery')
+  })
+})
