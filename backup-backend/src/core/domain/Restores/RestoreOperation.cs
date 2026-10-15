@@ -75,7 +75,7 @@ public sealed class RestoreOperation : ITenantOwned
         Target = target.Validate() with { };
         DatabaseName = databaseName;
         Mode = mode;
-        OverwritePolicy = purpose == RestorePurpose.Execution && mode == RestoreMode.ReplaceExistingDatabase ? RestoreOverwritePolicy.ReplaceExisting : RestoreOverwritePolicy.Forbidden;
+        OverwritePolicy = mode == RestoreMode.ReplaceExistingDatabase ? RestoreOverwritePolicy.ReplaceExisting : RestoreOverwritePolicy.Forbidden;
         Options = options ?? RestoreOptions.Default;
         IdempotencyKey = idempotencyKey;
         RequestFingerprint = requestFingerprint;
