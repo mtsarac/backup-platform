@@ -2,11 +2,10 @@ import { tx } from '@/lib/i18n'
 import { currentLocale } from '@/lib/i18n'
 
 
-/** Decimal (SI) steps only: 1 GB = 1,000,000,000 bytes. Never 1024-based, never labelled GiB. */
+/** Decimal (SI) steps: 1 GB = 1,000,000,000 bytes. Smallest unit is MB (1 MB = 1,000,000 bytes). */
 const units = [
   { suffix: 'GB', size: 1_000_000_000 },
   { suffix: 'MB', size: 1_000_000 },
-  { suffix: 'KB', size: 1_000 },
 ] as const
 
 function number(value: number) {
@@ -14,26 +13,23 @@ function number(value: number) {
 }
 
 /**
- * Capacity for display: decimal GB (`6,2 GB`), falling back to MB / KB / bayt below 1 GB so a small amount never reads as `0 GB`.
- * Display rounding only (2 decimals); the exact byte count stays available through `formatExactBytes`.
+ * Capacity for display: decimal GB (`6,2 GB`), falling back to MB as the smallest unit (never KB or bayt).
+ * Display rounding only (2 decimals).
  */
 export function formatCapacity(bytes: number): string {
   const value = Math.max(0, bytes)
-  for (const [index, unit] of units.entries()) {
-    if (value >= unit.size) {
-      const rounded = Math.round((value / unit.size) * 100) / 100
-      const larger = units[index - 1]
-      // 999,999 KB rounds to 1.000 MB, which is better said as 1 GB.
-      if (larger && rounded * unit.size >= larger.size) return `${number(1)} ${larger.suffix}`
-      return `${number(rounded)} ${unit.suffix}`
-    }
+  if (value >= 1_000_000_000) {
+    const rounded = Math.round((value / 1_000_000_000) * 100) / 100
+    return `${number(rounded)} GB`
   }
-  return tx("{0} bayt", { "0": value.toLocaleString(currentLocale()) })
+  const roundedMb = Math.round((value / 1_000_000) * 100) / 100
+  if (roundedMb >= 1000) return `${number(1)} GB`
+  return `${number(roundedMb)} MB`
 }
 
-/** `5.000.000.000 bayt` (Turkish grouping). */
+/** Formats capacity with MB as the smallest unit. */
 export function formatExactBytes(bytes: number): string {
-  return tx("{0} bayt", { "0": bytes.toLocaleString(currentLocale()) })
+  return formatCapacity(bytes)
 }
 
 /**

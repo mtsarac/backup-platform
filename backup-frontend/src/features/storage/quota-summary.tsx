@@ -17,7 +17,7 @@ export function Fact({ label, children, hint }: { label: string; children: React
 
 function Capacity({ bytes }: { bytes: number }) {
   useLanguage()
-  return <span className="inline-flex flex-col"><span className="text-lg font-semibold text-text-heading">{formatCapacity(bytes)}</span><span className="text-xs text-text-muted">{formatExactBytes(bytes)}</span></span>
+  return <span className="text-lg font-semibold text-text-heading">{formatCapacity(bytes)}</span>
 }
 
 /**

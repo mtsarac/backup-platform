@@ -3,7 +3,7 @@ import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getDiscoveryAgents, getDiscoveryInstance, verifyDiscoveryInstance } from '@/features/discovery/api'
+import { getDiscoveryAgents, getDiscoveryInstance, saveDiscoveryCredential, verifyDiscoveryInstance } from '@/features/discovery/api'
 import { makeDetail, makeStatus } from '@/features/discovery/test-fixtures'
 import { ApiError } from '@/lib/api/client'
 import { InstanceDetailPage } from './instance-detail-page'
@@ -23,6 +23,7 @@ beforeEach(() => {
   Object.assign(access, { canOperate: true, canAdmin: true })
   vi.mocked(getDiscoveryAgents).mockResolvedValue({ items: [makeStatus()] })
   vi.mocked(getDiscoveryInstance).mockResolvedValue(makeDetail())
+  vi.mocked(saveDiscoveryCredential).mockResolvedValue(makeDetail())
 })
 
 describe('instance detail page', () => {
@@ -54,6 +55,21 @@ describe('instance detail page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Bağlantıyı Doğrula' }))
     await waitFor(() => expect(verifyDiscoveryInstance).toHaveBeenCalledWith('tenant-a', 'inst-1'))
     expect(await screen.findByText(/Ajan sürümü keşfi desteklemiyor/)).toBeInTheDocument()
+  })
+  it('saves typed credentials when submitting the credential form', async () => {
+    mount()
+    expect(await screen.findByLabelText('Veritabanı kullanıcı adı')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Veritabanı kullanıcı adı'), { target: { value: 'sa' } })
+    fireEvent.change(screen.getByLabelText('Veritabanı parolası'), { target: { value: 'Secret123!' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
+    await waitFor(() => expect(saveDiscoveryCredential).toHaveBeenCalledWith('tenant-a', 'inst-1', {
+      credentialReference: 'sql-main',
+      databaseLogin: { userName: 'sa', password: 'Secret123!' },
+      integratedSecurity: false,
+      encrypt: true,
+      trustServerCertificate: true,
+    }))
+    expect(await screen.findByText(/Veritabanı girişi kaydedildi/)).toBeInTheDocument()
   })
   it('is read-only for a Viewer', async () => {
     Object.assign(access, { canOperate: false, canAdmin: false })

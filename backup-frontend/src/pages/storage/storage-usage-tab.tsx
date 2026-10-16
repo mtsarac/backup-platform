@@ -27,7 +27,7 @@ export function StorageUsageTab() {
   return <div className="space-y-5">
     {query.isError && <Notice tone="warning">{tx("Güncel veri alınamadı; son başarılı okuma gösteriliyor (")}{agentDate(quota.calculatedAt)}{' '}{tx("hesaplaması).")}</Notice>}
     <StorageNotices quota={quota} />
-    <Section title={tx("Kullanım")} description={quota.limitBytes !== null ? tx("Plan limiti: {0}. 1 GB = 1.000.000.000 bayt.", { "0": formatCapacity(quota.limitBytes) }) : tx('1 GB = 1.000.000.000 bayt.')}
+    <Section title={tx("Kullanım")} description={tx("En küçük birim MB.")}
       actions={<Button variant="outline" size="sm" onClick={() => { void query.refetch() }} disabled={query.isFetching}><RefreshCw className={`size-4 ${query.isFetching ? 'animate-spin' : ''}`} aria-hidden="true" />{query.isFetching && !query.isPending ? 'Yenileniyor…' : tx('Yenile')}</Button>}>
       <QuotaSummary quota={quota} />
     </Section>

@@ -35,6 +35,7 @@ $config = @{
         Backup = @{
             Staging = @{ Mapping = 'SameHost'; AgentDirectory = $stage }
             LocalStorage = @{ RootDirectory = $storage }
+            PostgreSql = @{ ClientToolsDirectory = 'C:\Program Files\PostgreSQL\18\bin' }
         }
     }
 }

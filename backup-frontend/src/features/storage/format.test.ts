@@ -2,19 +2,20 @@ import { describe, expect, it } from 'vitest'
 import { allocatedPercent, formatCapacity, formatExactBytes } from './format'
 
 describe('storage formatting rules', () => {
-  it('converts bytes to decimal GB (1 GB = 1,000,000,000 bytes, never GiB)', () => {
+  it('converts bytes to decimal GB and MB, with MB as smallest unit', () => {
     expect(formatCapacity(1_000_000_000)).toBe('1 GB')
     expect(formatCapacity(5_500_000_000)).toBe('5,5 GB')
     expect(formatCapacity(10_000_000_000)).toBe('10 GB')
     expect(formatCapacity(500_000_000)).toBe('500 MB')
-    expect(formatCapacity(250_000)).toBe('250 KB')
-    expect(formatCapacity(500)).toBe('500 bayt')
-    expect(formatCapacity(0)).toBe('0 bayt')
+    expect(formatCapacity(250_000)).toBe('0,25 MB')
+    expect(formatCapacity(500)).toBe('0 MB')
+    expect(formatCapacity(0)).toBe('0 MB')
   })
 
-  it('formats exact bytes with locale thousands separators', () => {
-    expect(formatExactBytes(1_000_000_000)).toBe('1.000.000.000 bayt')
-    expect(formatExactBytes(5_234_567_890)).toBe('5.234.567.890 bayt')
+  it('formats capacity with MB as smallest unit', () => {
+    expect(formatExactBytes(1_000_000_000)).toBe('1 GB')
+    expect(formatExactBytes(500_000_000)).toBe('500 MB')
+    expect(formatExactBytes(0)).toBe('0 MB')
   })
 
   it('calculates allocated percent accurately against limits', () => {

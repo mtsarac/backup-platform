@@ -33,7 +33,7 @@ import { ApiError } from '@/lib/api/client'
 import { errorMessage } from '@/lib/api/failure-messages'
 
 const tabs = [
-  { value: 'overview', get label() { return tx("Genel") } }, { value: 'members', get label() { return tx("Üyeler") } }, { value: 'subscription', get label() { return tx("Abonelik") } },
+  { value: 'overview', get label() { return tx("Genel") } }, { value: 'members', get label() { return tx("Üyeler") } },
   { value: 'storage', get label() { return tx("Depolama") } }, { value: 'agents', get label() { return tx("Agent'lar") } }, { value: 'support', get label() { return tx("Destek erişimi") } },
 ] as const
 type TabValue = (typeof tabs)[number]['value']
@@ -92,7 +92,6 @@ function Header({ tenant }: { tenant: PlatformTenantDetail }) {
   return <PageHeader crumbs={[platformCrumb, { label: tx('Tenants'), to: platformPaths.tenants }]} title={tenant.name}
     meta={<>
       <Badge tone={tenant.enrollment.enabled ? 'success' : 'neutral'} dot>{tenant.enrollment.enabled ? tx('Kayıt açık') : tx('Kayıt kapalı')}</Badge>
-      {subscription && <span className="inline-flex flex-wrap items-center gap-1.5 text-sm text-text-muted">Plan: <span className="font-medium text-text">{subscription.planName}</span><SubscriptionStatusPill status={subscription.status} /></span>}
     </>}
     actions={<Link className={buttonVariants({ variant: 'outline' })} to={platformPaths.agents(tenant.tenantId)}>{tx("Bu tenant'ın Agent'ları")}</Link>} />
 }
