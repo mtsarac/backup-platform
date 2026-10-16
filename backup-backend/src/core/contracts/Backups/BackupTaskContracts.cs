@@ -19,6 +19,9 @@ public sealed record BackupExecutionConfiguration
     public int? Port { get; init; }
     public bool IntegratedSecurity { get; init; }
     public string? DatabaseCredentialReference { get; init; }
+    /// <summary>Write-only: a login typed in the UI. The API exchanges it for a <see cref="DatabaseCredentialReference"/> and never stores, echoes or forwards it.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public BackupPlatform.Contracts.Agents.DatabaseLoginInput? DatabaseLogin { get; init; }
     public bool Encrypt { get; init; } = true;
     public bool TrustServerCertificate { get; init; }
     public string StagingReference { get; init; } = "default";

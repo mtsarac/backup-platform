@@ -34,6 +34,7 @@ app.MapUserEndpoints();
 app.MapAgentEndpoints();
 app.MapAgentAdministrationEndpoints();
 app.MapDiscoveryEndpoints();
+app.MapDatabaseCredentialEndpoints();
 app.MapPlatformEndpoints();
 app.MapManagedServicePlatformEndpoints();
 app.MapQuotaEndpoints();

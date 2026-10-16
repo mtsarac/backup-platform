@@ -143,25 +143,25 @@ for tool in pg_dump pg_restore; do
 done
 export Agent__Backup__PostgreSql__ClientToolsDirectory=$work/pg-tools
 sql_secret() { python3 -c 'import json, sys; print(json.dumps({"userName": sys.argv[1], "password": sys.argv[2]}))' "$1" "$2"; }
+# Logins the acceptance driver stores through the API (BACKUP_SMOKE_LOGIN_<alias>); agents never receive them from the environment.
+export BACKUP_SMOKE_LOGIN_sql_smoke="$(sql_secret "$BACKUP_PLATFORM_TEST_MSSQL_USER" "$BACKUP_PLATFORM_TEST_MSSQL_PASSWORD")"
+export BACKUP_SMOKE_LOGIN_sql_bad="$(sql_secret "$BACKUP_PLATFORM_TEST_MSSQL_USER" "wrong-$verifier_password")"
+export BACKUP_SMOKE_LOGIN_pg_smoke="$(sql_secret postgres "$BACKUP_PLATFORM_TEST_POSTGRES_PASSWORD")"
+export BACKUP_SMOKE_LOGIN_pg_verify="$(sql_secret bp_r1_verifier "$verifier_password")"
+export BACKUP_SMOKE_LOGIN_pg_bad="$(sql_secret bp_r1_verifier "wrong-$verifier_password")"
 
 ( # MSSQL agent: mapped staging shared with the disposable container; a good and a bad credential.
   export Agent__CredentialStoreDirectory="$work/agents/mssql/identity"
   export Agent__Backup__Staging__Mapping=Mapped Agent__Backup__Staging__ServerDirectory=$BACKUP_PLATFORM_TEST_MSSQL_STAGING_SERVER_DIR Agent__Backup__Staging__AgentDirectory=$BACKUP_PLATFORM_TEST_MSSQL_STAGING_AGENT_DIR
-  export BACKUP_AGENT_SECRET_sql_smoke="$(sql_secret "$BACKUP_PLATFORM_TEST_MSSQL_USER" "$BACKUP_PLATFORM_TEST_MSSQL_PASSWORD")"
-  export BACKUP_AGENT_SECRET_sql_bad="$(sql_secret "$BACKUP_PLATFORM_TEST_MSSQL_USER" "wrong-$verifier_password")"
   start_agent mssql "$BACKUP_PLATFORM_TEST_MSSQL_STAGING_AGENT_DIR" )
 mssql_agent_dir=$work/agents/mssql
 ( # PostgreSQL agent: SameHost staging; superuser for backups, the CREATEDB-only role for verification, and a wrong password.
   export Agent__CredentialStoreDirectory="$work/agents/pg/identity"
   export Agent__Backup__Staging__Mapping=SameHost Agent__Backup__Staging__AgentDirectory="$work/pg-staging"
-  export BACKUP_AGENT_SECRET_pg_smoke="$(sql_secret postgres "$BACKUP_PLATFORM_TEST_POSTGRES_PASSWORD")"
-  export BACKUP_AGENT_SECRET_pg_verify="$(sql_secret bp_r1_verifier "$verifier_password")"
-  export BACKUP_AGENT_SECRET_pg_bad="$(sql_secret bp_r1_verifier "wrong-$verifier_password")"
   start_agent pg "$work/pg-staging" )
 ( # The same PostgreSQL credentials, but a 6 MB staging volume: a real insufficient-capacity agent.
   export Agent__CredentialStoreDirectory="$work/agents/pg-small/identity"
   export Agent__Backup__Staging__Mapping=SameHost Agent__Backup__Staging__AgentDirectory="$work/pg-small-staging"
-  export BACKUP_AGENT_SECRET_pg_verify="$(sql_secret bp_r1_verifier "$verifier_password")"
   start_agent pg-small "$work/pg-small-staging" 6m )
 
 win_args=()
@@ -199,7 +199,6 @@ with os.fdopen(fd, 'w') as target:
 print(values['BACKUP_PLATFORM_TEST_MSSQL_HOST'], values['BACKUP_PLATFORM_TEST_MSSQL_PORT'])
 PY
 )
-    "$REPO_ROOT/scripts/windows/copy-to-vm.sh" "$work/windows-sql.keep.json" "$windows_root\\sql-secret.json"
     "${console_agent[@]}" -Action start -RootDirectory "$windows_root" -BackendUri "$agent_server"
     win_args=(--windows-root "$windows_root" --agent-win "R1 win $suffix" --win-sql-host "$windows_sql_host" --win-sql-port "$windows_sql_port" --win-sql-secret "$work/windows-sql.keep.json" --win-backend "$agent_server")
 fi

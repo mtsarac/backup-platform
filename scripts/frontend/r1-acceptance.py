@@ -50,6 +50,7 @@ class Run:
         self.api = Api(options.server, options.certificate)
         self.api.login(self.state['owner']['login'], self.state['owner']['password'])
         self.tenant = '/api/tenants/' + self.state['tenantId']
+        self.references = {}
         self.work = Path(options.work)
         self.agents = {}
         self.artifacts = {}
@@ -104,10 +105,22 @@ class Run:
             time.sleep(2)
         raise FixtureFailure(f'Agent never reported {capability}; saw {sorted(item.get("identifier") for item in capabilities if isinstance(item, dict))[:40]} status={agent.get("status")} connectivity={agent.get("connectivity")}')
 
+    def reference(self, alias, agent_id):
+        """Stores the login the shell exported as BACKUP_SMOKE_LOGIN_<alias> for this agent and returns its reference. An alias without a login yields a well-formed reference nothing is stored under."""
+        if (alias, agent_id) not in self.references:
+            raw = os.environ.get('BACKUP_SMOKE_LOGIN_' + alias)
+            if raw is None:
+                self.references[(alias, agent_id)] = f'dbc-{agent_id.replace("-", "")}-{"0" * 12}'
+            else:
+                login = json.loads(raw)
+                _, stored = self.api.call('POST', f'{self.tenant}/agents/{agent_id}/database-logins', login)
+                self.references[(alias, agent_id)] = stored['reference']
+        return self.references[(alias, agent_id)]
+
     def backup(self, engine, database, agent_id, name, credential, host=None, port=None, agent_local=False):
         configuration = {'engine': engine, 'host': host or (self.options.mssql_host if engine == 'mssql' else self.options.pg_host),
                          'port': port or (self.options.mssql_port if engine == 'mssql' else self.options.pg_port), 'database': database,
-                         'databaseCredentialReference': credential, 'encrypt': engine == 'mssql', 'trustServerCertificate': engine == 'mssql',
+                         'databaseCredentialReference': self.reference(credential, agent_id), 'encrypt': engine == 'mssql', 'trustServerCertificate': engine == 'mssql',
                          'stagingReference': 'default', 'storageTarget': 'default', 'storagePrefix': 'r1', 'copyOnly': engine == 'mssql',
                          'checksumPolicy': 'Required', 'compressionPolicy': 'Preferred', 'requiredVerifiedReplicaCount': 1,
                          'destinations': [{'storageProvider': 'local' if agent_local else 'central', 'storageConnectionId': None,
@@ -131,13 +144,13 @@ class Run:
 
     # ---- verification helpers ----
 
-    def target(self, engine, credential, host=None, port=None):
+    def target(self, engine, credential, agent_id, host=None, port=None):
         if engine == 'mssql':
-            return {'host': host or self.options.mssql_host, 'port': port or self.options.mssql_port, 'databaseCredentialReference': credential, 'encrypt': True, 'trustServerCertificate': True}
-        return {'host': self.options.pg_host, 'port': self.options.pg_port, 'databaseCredentialReference': credential, 'encrypt': False, 'trustServerCertificate': False}
+            return {'host': host or self.options.mssql_host, 'port': port or self.options.mssql_port, 'databaseCredentialReference': self.reference(credential, agent_id), 'encrypt': True, 'trustServerCertificate': True}
+        return {'host': self.options.pg_host, 'port': self.options.pg_port, 'databaseCredentialReference': self.reference(credential, agent_id), 'encrypt': False, 'trustServerCertificate': False}
 
     def verify(self, artifact_id, agent_id, engine, credential, api=None, expect=(200, 201, 202), key=None, host=None, port=None):
-        return (api or self.api).call('POST', f'{self.tenant}/backup-artifacts/{artifact_id}/restore-verifications', {'agentId': agent_id, 'target': self.target(engine, credential, host, port)},
+        return (api or self.api).call('POST', f'{self.tenant}/backup-artifacts/{artifact_id}/restore-verifications', {'agentId': agent_id, 'target': self.target(engine, credential, agent_id, host, port)},
                                       headers={'Idempotency-Key': key or 'r1-' + uuid.uuid4().hex}, expect=expect)
 
     def restore(self, restore_id, api=None):
@@ -292,7 +305,7 @@ def credential_failure(run, engine, credential):
 def unreachable_server(run, engine):
     artifact, agent = run.artifacts[engine], run.agents[engine]
     port = 9 if engine == 'mssql' else 8
-    target = run.target(engine, 'sql_smoke' if engine == 'mssql' else 'pg_verify') | {'port': port}
+    target = run.target(engine, 'sql_smoke' if engine == 'mssql' else 'pg_verify', agent) | {'port': port}
     _, created = run.api.call('POST', f'{run.tenant}/backup-artifacts/{artifact}/restore-verifications', {'agentId': agent, 'target': target},
                               headers={'Idempotency-Key': 'r1-' + uuid.uuid4().hex}, expect=(202,))
     view = run.finish(created['id'])
@@ -417,7 +430,7 @@ def isolation(run):
     for method, path, body in (('GET', f'{foreign_tenant}/restores/{own}', None), ('POST', f'{foreign_tenant}/restores/{own}/cancel', None),
                                ('POST', f'{foreign_tenant}/restores/{own}/cleanup/retry', None),
                                ('POST', f'{foreign_tenant}/restores/{own}/rollback-removal', {'confirmDatabaseName': 'x'}),
-                               ('POST', f'{foreign_tenant}/backup-artifacts/{run.artifacts["pg"]}/restore-verifications', {'agentId': run.agents['pg'], 'target': run.target('pg', 'pg_verify')})):
+                               ('POST', f'{foreign_tenant}/backup-artifacts/{run.artifacts["pg"]}/restore-verifications', {'agentId': run.agents['pg'], 'target': run.target('pg', 'pg_verify', run.agents['pg'])})):
         status = foreign.call(method, path, body, headers={'Idempotency-Key': 'r1-' + uuid.uuid4().hex}, expect=(400, 403, 404))[0]
         denied.append(status)
     # And the foreign owner cannot reach tenant A by naming its tenant id.
@@ -429,7 +442,7 @@ def isolation(run):
         api = Api(run.options.server, run.options.certificate)
         api.login(run.state['roles'][role]['login'], run.state['roles'][role]['password'])
         roles[role] = api.call('POST', f'{run.tenant}/backup-artifacts/{run.artifacts["pg"]}/restore-verifications',
-                               {'agentId': run.agents['pg'], 'target': run.target('pg', 'pg_verify')}, headers={'Idempotency-Key': 'r1-' + uuid.uuid4().hex}, expect=(202, 403))[0]
+                               {'agentId': run.agents['pg'], 'target': run.target('pg', 'pg_verify', run.agents['pg'])}, headers={'Idempotency-Key': 'r1-' + uuid.uuid4().hex}, expect=(202, 403))[0]
     viewer = Api(run.options.server, run.options.certificate)
     viewer.login(run.state['roles']['Viewer']['login'], run.state['roles']['Viewer']['password'])
     viewer_read = viewer.call('GET', f'{run.tenant}/restores/{own}', expect=(200,))[0]
@@ -451,7 +464,7 @@ def rollback_copy(run):
     run.pg(f'CREATE DATABASE {decoy}')
     artifact, agent = run.artifacts['pg'], run.agents['pg']
     body = {'agentId': agent, 'databaseName': target, 'mode': 'ReplaceExistingDatabase', 'confirmOverwrite': target,
-            'target': run.target('pg', 'pg_smoke'), 'options': {'terminateActiveConnections': True}}
+            'target': run.target('pg', 'pg_smoke', run.agents['pg']), 'options': {'terminateActiveConnections': True}}
     _, created = run.api.call('POST', f'{run.tenant}/backup-artifacts/{artifact}/restore', body, headers={'Idempotency-Key': 'r1-' + uuid.uuid4().hex}, expect=(202,))
     view = run.finish(created['id'])
     cleanup = view['cleanup'] or {}
@@ -529,6 +542,8 @@ def windows_phase(run, selected):
                  "INSERT dbo.Rows (A, C) SELECT TOP (4000000) ABS(CHECKSUM(NEWID())), REPLICATE(CONVERT(char(36), NEWID()), 2) + REPLICATE('x', 28) FROM sys.all_objects a CROSS JOIN sys.all_objects b;\n"
                  "CREATE INDEX IX_A ON dbo.Rows (A); CREATE INDEX IX_B ON dbo.Rows (B); CREATE INDEX IX_C ON dbo.Rows (C);\nGO\n", timeout=1800)
     agent = run.agent_id(options.agent_win)
+    _, stored = run.api.call('POST', f'{run.tenant}/agents/{agent}/database-logins', json.loads(Path(options.win_sql_secret).read_text()))
+    run.references[('sql_smoke', agent)] = stored['reference']
     run.wait_capability(agent, 'mssql.restore.verification', 180)
     host, port = options.win_sql_host, options.win_sql_port
     artifacts = {}

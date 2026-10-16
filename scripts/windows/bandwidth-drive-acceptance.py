@@ -205,9 +205,9 @@ class Bench:
                          'copyOnly': True, 'checksumPolicy': 'Required', 'compressionPolicy': 'Preferred', 'requiredVerifiedReplicaCount': 1,
                          'destinations': [{'storageProvider': 'google-drive', 'storageConnectionId': self.connection['id'], 'storageExecutionLocation': 'Backend', 'isPrimary': True}]}
         if kind == 'w':
-            configuration.update(host=a1d.HOST, port=a1d.PORT, databaseCredentialReference='sql_smoke')
+            configuration.update(host=a1d.HOST, port=a1d.PORT, databaseCredentialReference=dev.store_login(self.api, self.tenant, self.agents[kind], os.environ['BACKUP_PLATFORM_TEST_MSSQL_USER'], os.environ['BACKUP_PLATFORM_TEST_MSSQL_PASSWORD']))
         else:
-            configuration.update(host='127.0.0.1', port=dev.SQL_PORT, databaseCredentialReference=dev.SQL_REFERENCE, integratedSecurity=False, encrypt=True)
+            configuration.update(host='127.0.0.1', port=dev.SQL_PORT, databaseCredentialReference=dev.sql_login(self.api, self.tenant, self.agents[kind]), integratedSecurity=False, encrypt=True)
         job_id = self.api.call('POST', self.tenant + '/backup-jobs', {'name': f'{JOB_PREFIX}{name} {uuid.uuid4().hex[:6]}', 'agentId': self.agents[kind], 'overlapPolicy': 'Skip',
                                                                       'configuration': configuration})[1]['id']
         self.jobs.append(job_id)

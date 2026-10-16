@@ -38,7 +38,9 @@ def verify(options):
     artifact_id = state['artifacts']['central']['id']
     agent_id = state['agents']['central']
     tenant_path = f'/api/tenants/{state["tenantId"]}'
-    request = {'agentId': agent_id, 'target': {'host': options.sql_host, 'port': options.sql_port, 'databaseCredentialReference': 'sql_smoke', 'trustServerCertificate': True},
+    owner = shared.Api(options.server, options.certificate)
+    owner.login(state['owner']['login'], state['owner']['password'])
+    request = {'agentId': agent_id, 'target': {'host': options.sql_host, 'port': options.sql_port, 'databaseCredentialReference': shared.shared.store_sql_login(owner, tenant_path, agent_id), 'trustServerCertificate': True},
                'databaseName': state['sourceDatabase'], 'mode': 'ReplaceExistingDatabase'}
     evidence = []
     for role, credentials in state['roles'].items():

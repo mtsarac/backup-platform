@@ -40,11 +40,6 @@ export Agent__Connectivity__HeartbeatInterval=00:00:10 Agent__Connectivity__Poll
 export Agent__Backup__Staging__Mapping=Mapped Agent__Backup__Staging__ServerDirectory=/var/opt/mssql/staging Agent__Backup__Staging__AgentDirectory="$BP_DEV_HOME/mssql/staging"
 mkdir -p "$BP_DEV_HOME/agent-local-storage"
 export Agent__Backup__LocalStorage__RootDirectory="$BP_DEV_HOME/agent-local-storage"
-export "BACKUP_AGENT_SECRET_$BP_DEV_SQL_CREDENTIAL_REFERENCE=$(python3 -c 'import json, sys; print(json.dumps({"userName": "sa", "password": sys.argv[1]}))' "$BP_DEV_MSSQL_SA_PASSWORD")"
-# References for the shared Docker SQL Server (sql_local) and PostgreSQL (pg_local) from docs/test-cred.txt, so discovery results there can be onboarded.
-load_local_env
-export "BACKUP_AGENT_SECRET_sql_local=$(python3 -c 'import json, sys; print(json.dumps({"userName": sys.argv[1], "password": sys.argv[2]}))' "$BACKUP_PLATFORM_TEST_MSSQL_USER" "$BACKUP_PLATFORM_TEST_MSSQL_PASSWORD")"
-export "BACKUP_AGENT_SECRET_pg_local=$(python3 -c 'import json, sys; print(json.dumps({"userName": "postgres", "password": sys.argv[1]}))' "$BACKUP_PLATFORM_TEST_POSTGRES_PASSWORD")"
 cd -- "$agent_dir"
 dev_spawn agent ./BackupPlatform.Agent.Host
 sleep 3

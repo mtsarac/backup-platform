@@ -153,7 +153,8 @@ def restore(options):
     state, owner, _ = clients(options)
     tenant = f'/api/tenants/{state["tenantId"]}'
     artifact = state['artifacts'][options.provider]
-    request = {'agentId': state['agents'][options.provider], 'target': {'host': options.sql_host, 'port': options.sql_port, 'databaseCredentialReference': 'sql_smoke', 'trustServerCertificate': True},
+    agent_id = state['agents'][options.provider]
+    request = {'agentId': agent_id, 'target': {'host': options.sql_host, 'port': options.sql_port, 'databaseCredentialReference': shared.store_sql_login(owner, tenant, agent_id), 'trustServerCertificate': True},
                'databaseName': options.database, 'mode': 'NewDatabase'}
     _, started = owner.call('POST', tenant + f'/backup-artifacts/{artifact["id"]}/restore', request,
                             headers={'Idempotency-Key': 'm7a-restore-' + uuid.uuid4().hex}, expect=(200, 202))

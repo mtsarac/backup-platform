@@ -18,6 +18,7 @@ import hashlib
 import http.cookiejar
 import json
 import os
+from pathlib import Path
 import ssl
 import stat
 import sys
@@ -46,6 +47,13 @@ def write_private(path, document):
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
     with os.fdopen(fd, 'w') as handle:
         json.dump(document, handle)
+
+
+def store_sql_login(api, tenant, agent_id, login_file=None):
+    """Stores the smoke database login for the agent (encrypted by the API) and returns the reference a job or restore target uses. The login is the JSON file's, else the test SQL Server's from the environment."""
+    login = json.loads(Path(login_file).read_text()) if login_file else {'userName': os.environ['BACKUP_PLATFORM_TEST_MSSQL_USER'], 'password': os.environ['BACKUP_PLATFORM_TEST_MSSQL_PASSWORD']}
+    _, stored = api.call('POST', f'{tenant}/agents/{agent_id}/database-logins', login)
+    return stored['reference']
 
 
 class Api:

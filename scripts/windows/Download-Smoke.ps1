@@ -2,9 +2,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)] [string] $RootDirectory,
-    [Parameter(Mandatory)] [string] $DatabaseSecretFile,
-    [string] $SqlServiceName = 'MSSQL$MSSQLSERVER25',
-    [string] $PostgresSecretFile
+    [string] $SqlServiceName = 'MSSQL$MSSQLSERVER25'
 )
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath($RootDirectory)
@@ -20,10 +18,6 @@ $binary = Join-Path $root 'agent files'
 $expected = Join-Path $binary 'BackupPlatform.Agent.Host.exe'
 if (-not $service -or -not $service.PathName.Trim().Equals('"' + $expected + '"', [StringComparison]::OrdinalIgnoreCase)) {
     throw 'Configure only the service installed by this smoke.'
-}
-$secretPath = [IO.Path]::GetFullPath($DatabaseSecretFile)
-if ((Split-Path -Parent $secretPath) -ne $root -or ((Get-Item -LiteralPath $secretPath -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-    throw 'The disposable credential file must be directly inside the protected smoke root.'
 }
 Stop-Service BackupAgent
 $stage = Join-Path $root 'staging'
@@ -45,36 +39,5 @@ $config = @{
     }
 }
 $config | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $binary 'appsettings.Production.json') -Encoding UTF8
-$key = 'HKLM:\SYSTEM\CurrentControlSet\Services\BackupAgent'
-# The service manager owns environment injection. Restrict the temporary service
-# registry key before adding SQL credentials; uninstall removes this owned key.
-$acl = Get-Acl $key
-$acl.SetAccessRuleProtection($true, $false)
-foreach ($sidText in @('S-1-5-18', 'S-1-5-32-544')) {
-    $sid = New-Object Security.Principal.SecurityIdentifier $sidText
-    $acl.AddAccessRule((New-Object Security.AccessControl.RegistryAccessRule($sid, 'FullControl', 'ContainerInherit', 'None', 'Allow')))
-}
-Set-Acl $key $acl
-try {
-    $secret = Get-Content -LiteralPath $secretPath -Raw | ConvertFrom-Json
-    if (-not $secret.userName -or -not $secret.password) { throw 'SQL smoke credential JSON is invalid.' }
-    $environment = @((Get-ItemProperty -Path $key -Name Environment).Environment | Where-Object { -not $_.StartsWith('BACKUP_AGENT_SECRET_sql_smoke=') })
-    $environment += 'BACKUP_AGENT_SECRET_sql_smoke=' + ($secret | ConvertTo-Json -Compress)
-    if ($PostgresSecretFile) {
-        $postgresPath = [IO.Path]::GetFullPath($PostgresSecretFile)
-        if ((Split-Path -Parent $postgresPath) -ne $root) { throw 'The disposable credential file must be directly inside the protected smoke root.' }
-        $postgres = Get-Content -LiteralPath $postgresPath -Raw | ConvertFrom-Json
-        if (-not $postgres.userName -or -not $postgres.password) { throw 'PostgreSQL credential JSON is invalid.' }
-        $environment = @($environment | Where-Object { -not $_.StartsWith('BACKUP_AGENT_SECRET_pg_win=') })
-        $environment += 'BACKUP_AGENT_SECRET_pg_win=' + ($postgres | ConvertTo-Json -Compress)
-    }
-    Set-ItemProperty -Path $key -Name Environment -Type MultiString -Value $environment
-} finally {
-    $secret = $null
-    $environment = $null
-    $postgres = $null
-    if ($postgresPath) { Remove-Item -LiteralPath $postgresPath -Force -ErrorAction SilentlyContinue }
-    Remove-Item -LiteralPath $secretPath -Force
-}
 Start-Service BackupAgent
-Write-Output 'Owned Windows Agent configured for real MSSQL backup and outbound local download; temporary SQL credentials are protected and not logged.'
+Write-Output 'Owned Windows Agent configured for real MSSQL backup and outbound local download; database logins are entered through the API, never injected into the service.'

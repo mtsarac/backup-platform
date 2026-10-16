@@ -24,6 +24,8 @@ public static class BackupPreCheckIds
 {
     public const string ServerReachable = "server.reachable";
     public const string Authentication = "server.authentication";
+    /// <summary>The instance that answered is the one the job names; without it a stale port or a repurposed host would back up another instance's same-named database.</summary>
+    public const string ServerInstance = "server.instance";
     public const string DatabaseExists = "database.exists";
     public const string DatabaseState = "database.state";
     public const string BackupCapability = "database.backup-capability";

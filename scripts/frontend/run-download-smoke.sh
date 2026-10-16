@@ -74,8 +74,6 @@ export Agent__Backup__Staging__Mapping=Mapped
 export Agent__Backup__Staging__ServerDirectory=$BACKUP_PLATFORM_TEST_MSSQL_STAGING_SERVER_DIR
 export Agent__Backup__Staging__AgentDirectory=$BACKUP_PLATFORM_TEST_MSSQL_STAGING_AGENT_DIR
 export Agent__Backup__CentralStorage__RootDirectory=$central_root Agent__Backup__CentralStorage__TenantScope=$scope
-BACKUP_AGENT_SECRET_sql_smoke=$(python3 -c 'import json, os; print(json.dumps({"userName":os.environ["BACKUP_PLATFORM_TEST_MSSQL_USER"],"password":os.environ["BACKUP_PLATFORM_TEST_MSSQL_PASSWORD"]}))')
-export BACKUP_AGENT_SECRET_sql_smoke
 (cd "$work/linux-agent" && exec ./BackupPlatform.Agent.Host) >"$work/linux-agent.log" 2>&1 &
 agent_pid=$!
 fixture=(python3 "$REPO_ROOT/scripts/frontend/download-smoke-fixture.py" --server "$server" --certificate "$certificate" --state "$state")
@@ -111,10 +109,9 @@ with os.fdopen(fd, 'w') as target:
 print(values['BACKUP_PLATFORM_TEST_MSSQL_HOST'], values['BACKUP_PLATFORM_TEST_MSSQL_PORT'])
 PY
 )
-"$REPO_ROOT/scripts/windows/copy-to-vm.sh" "$work/windows-sql.json" "$windows_root\\sql-secret.json"
-"$REPO_ROOT/scripts/windows/run-powershell.sh" --file "$REPO_ROOT/scripts/windows/Download-Smoke.ps1" -RootDirectory "$windows_root" -DatabaseSecretFile "$windows_root\\sql-secret.json"
+"$REPO_ROOT/scripts/windows/run-powershell.sh" --file "$REPO_ROOT/scripts/windows/Download-Smoke.ps1" -RootDirectory "$windows_root"
+"${fixture[@]}" backup --provider local --agent-name "Local download smoke $suffix" --sql-host "$windows_sql_host" --sql-port "$windows_sql_port" --sql-login-file "$work/windows-sql.json"
 rm -- "$work/windows-sql.json"
-"${fixture[@]}" backup --provider local --agent-name "Local download smoke $suffix" --sql-host "$windows_sql_host" --sql-port "$windows_sql_port"
 "${fixture[@]}" verify --provider local --output "$work/local.bak"
 printf 'SMOKE_FRONTEND_URL=%s\nSMOKE_API_URL=%s\nSMOKE_CERTIFICATE_FILE=%s\nSMOKE_DOWNLOAD_STATE_FILE=%s\nSMOKE_DOWNLOAD_OUTPUT_DIRECTORY=%s\nSMOKE_WINDOWS_ROOT=%s\n' "$frontend" "$server" "$certificate" "$state" "$work" "$windows_root"
 printf 'DOWNLOAD_SMOKE_READY\n'

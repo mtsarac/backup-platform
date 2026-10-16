@@ -233,7 +233,7 @@ It prints one PASS/FAIL JSON line per scenario and drops only its own databases.
 ```bash
 export BP_DEV_PUBLIC_HOST=192.168.122.1                 # libvirt host IPv4: adds it to the dev certificate SAN and the TLS listener (opt-in; restart the dev API and Agent after the first use)
 scripts/dev/start.sh
-scripts/windows/dev-windows-agent.sh install            # publish win-x64, enroll 'dev-windows-agent' into the dev tenant, SQL reference sql_smoke, trusts the dev certificate on the VM
+scripts/windows/dev-windows-agent.sh install            # publish win-x64, enroll 'dev-windows-agent' into the dev tenant, trusts the dev certificate on the VM
 scripts/windows/run-a1-acceptance-drive.sh              # Windows Agent -> Google Drive: backup, ReadBack, download, restore, service restart and cancel during upload, delete
 scripts/windows/dev-windows-agent.sh uninstall          # removes the owned service, identity, trusted certificate and files
 ```
@@ -339,7 +339,7 @@ It refuses to replace an existing `BackupAgent` service.
 `browser-smoke-env.sh --download` can also create just the Owner/token fixture and configured Central root.
 `download-smoke-fixture.py` exposes `setup`, real-Agent `backup` and bounded `verify` commands; all secrets remain in owner-only
 runtime files. `windows/Download-Smoke.ps1` configures only the onboarding-owned service, grants staging access to the SQL service,
-protects its temporary SQL environment-injection registry key and deletes the credential input file. Uninstall removes that owned key.
+no longer injects any database login: the fixtures store the SQL login through the API (`POST .../agents/{id}/database-logins`).
 No 20 GB throughput/RSS benchmark is claimed by this small real-backup smoke.
 
 

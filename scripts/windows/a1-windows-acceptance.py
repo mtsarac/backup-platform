@@ -26,7 +26,6 @@ shared = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shared)
 Api, FixtureFailure = shared.Api, shared.FixtureFailure
 
-SQL_REFERENCE = 'sql_smoke'
 VM_DOMAIN, VM_INTERFACE = 'win11', '52:54:00:c5:fd:46'  # libvirt accepts the NIC's MAC address
 DB_NAME = re.compile(r'bp_a1_win_(big_)?[0-9a-f]{12}(_restored)?')
 TERMINAL = ('Succeeded', 'Failed', 'Cancelled', 'AgentLost', 'Skipped')
@@ -94,7 +93,7 @@ class Stack:
         raise FixtureFailure(f'Timed out waiting for {label}.')
 
     def job(self, database, name):
-        configuration = {'engine': 'mssql', 'host': self.host, 'port': self.port, 'database': database, 'databaseCredentialReference': SQL_REFERENCE,
+        configuration = {'engine': 'mssql', 'host': self.host, 'port': self.port, 'database': database, 'databaseCredentialReference': self.sql_reference(),
                          'trustServerCertificate': True, 'stagingReference': 'default', 'storageTarget': 'default', 'storagePrefix': 'a1-win',
                          'copyOnly': True, 'checksumPolicy': 'Required', 'compressionPolicy': 'Preferred', 'requiredVerifiedReplicaCount': 1,
                          'destinations': [{'storageProvider': 'local', 'storageConnectionId': None, 'storageExecutionLocation': 'Agent', 'isPrimary': True}]}
@@ -127,8 +126,13 @@ class Stack:
             raise FixtureFailure('Backup did not publish exactly one artifact.')
         return run_id, artifacts[0]
 
+    def sql_reference(self):
+        if getattr(self, '_sql_reference', None) is None:
+            self._sql_reference = shared.store_sql_login(self.api, self.tenant, self.agent_id)
+        return self._sql_reference
+
     def restore_request(self, database):
-        return {'agentId': self.agent_id, 'target': {'host': self.host, 'port': self.port, 'databaseCredentialReference': SQL_REFERENCE, 'trustServerCertificate': True},
+        return {'agentId': self.agent_id, 'target': {'host': self.host, 'port': self.port, 'databaseCredentialReference': self.sql_reference(), 'trustServerCertificate': True},
                 'databaseName': database, 'mode': 'NewDatabase'}
 
     def restore_step(self, artifact_id, suffix, body, timeout=600):

@@ -24,6 +24,7 @@ vi.mock('./api', () => ({
   startRestorePrecheck: vi.fn(),
   startRestoreDiscovery: vi.fn(),
   cancelRestore: vi.fn(),
+  storeDatabaseLogin: vi.fn(),
 }))
 
 vi.mock('@/features/agents/api', () => ({
@@ -334,7 +335,11 @@ describe('RestoreWizardPage', () => {
     expect(screen.getByLabelText(/Bağlantı Noktası/)).toHaveValue(5432)
     expect(screen.getByRole('button', { name: /Devam et: Geri Yükleme Modu/i })).toBeDisabled()
     fireEvent.change(host, { target: { value: 'pg-target' } })
-    fireEvent.change(screen.getByLabelText("Kimlik Bilgisi Başvurusu"), { target: { value: 'pg-restore' } })
+    vi.mocked(RestoreApi.storeDatabaseLogin).mockResolvedValue({ reference: 'pg-restore' })
+    fireEvent.change(screen.getByLabelText("Veritabanı kullanıcı adı"), { target: { value: 'pg_user' } })
+    fireEvent.change(screen.getByLabelText("Veritabanı parolası"), { target: { value: 'pg-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Girişi kaydet' }))
+    await waitFor(() => expect(RestoreApi.storeDatabaseLogin).toHaveBeenCalledWith('tenant-a', expect.any(String), { userName: 'pg_user', password: 'pg-secret' }))
     fireEvent.click(screen.getByRole('button', { name: /Devam et: Geri Yükleme Modu/i }))
     expect(screen.queryByRole('checkbox', { name: /RESTORE VERIFYONLY/ })).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Yeni Veritabanı Adı'), { target: { value: '数'.repeat(22) } })

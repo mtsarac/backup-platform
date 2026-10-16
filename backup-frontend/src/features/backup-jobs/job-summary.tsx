@@ -31,7 +31,7 @@ export function JobSummary(props: JobSummaryProps) {
       <Fact label={tx("Database")}>{c.database || '—'}</Fact>
       <Fact label={tx("Engine")}>{c.engine === 'postgres' ? tx('PostgreSQL · pg_dump custom Full') : 'Microsoft SQL Server'}</Fact>
       <Fact label={tx("Port")}>{c.port ?? tx('Varsayılan')}</Fact>
-      <Fact label={tx("Kimlik doğrulama")}>{c.integratedSecurity ? tx('Windows kimlik doğrulaması') : tx("Kimlik bilgisi referansı: {0}", { "0": c.databaseCredentialReference ?? '—' })}</Fact>
+      <Fact label={tx("Kimlik doğrulama")}>{c.integratedSecurity ? tx('Windows kimlik doğrulaması') : (c.databaseCredentialReference ? tx("Kayıtlı veritabanı girişi") : tx("Veritabanı girişi girilmedi"))}</Fact>
       <Fact label={tx("Bağlantı")}>{c.encrypt ? tx('Şifreli') : tx('Şifresiz')}{c.trustServerCertificate ? tx(' · sunucu sertifikasına güvenilir') : ''}</Fact>
     </Facts>)}
     {block(2, <Facts>

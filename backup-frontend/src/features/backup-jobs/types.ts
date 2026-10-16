@@ -6,9 +6,12 @@ export interface BackupDestination {
   storageExecutionLocation: 'Agent' | 'Backend'
   isPrimary: boolean
 }
+export interface DatabaseLogin { userName: string; password: string }
 export interface BackupConfiguration {
   engine: 'mssql' | 'postgres'; database: string; host: string; port: number | null
   integratedSecurity: boolean; databaseCredentialReference: string | null
+  /** Write-only: sent once, exchanged by the API for a reference, never returned. */
+  databaseLogin?: DatabaseLogin | null
   encrypt: boolean; trustServerCertificate: boolean; stagingReference: string
   storagePrefix: string
   /** At least one; exactly one `isPrimary`. This list is the only source of storage targets. */

@@ -167,8 +167,6 @@ export Agent__Connectivity__HeartbeatInterval=00:00:05 Agent__Connectivity__Poll
 export Agent__Backup__Staging__Mapping=Mapped
 export Agent__Backup__Staging__ServerDirectory=$BACKUP_PLATFORM_TEST_MSSQL_STAGING_SERVER_DIR
 export Agent__Backup__Staging__AgentDirectory=$BACKUP_PLATFORM_TEST_MSSQL_STAGING_AGENT_DIR
-BACKUP_AGENT_SECRET_sql_smoke=$(python3 -c 'import json, os; print(json.dumps({"userName":os.environ["BACKUP_PLATFORM_TEST_MSSQL_USER"],"password":os.environ["BACKUP_PLATFORM_TEST_MSSQL_PASSWORD"]}))')
-export BACKUP_AGENT_SECRET_sql_smoke
 (cd "$work/agent" && exec ./BackupPlatform.Agent.Host) >"$work/agent.log" 2>&1 &
 agent_pid=$!
 python3 "${download[@]}" backup --provider sftp --storage-connection-id "$connection_id" --agent-name "SFTP smoke $suffix" \

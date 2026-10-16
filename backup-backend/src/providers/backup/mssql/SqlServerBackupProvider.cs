@@ -119,26 +119,30 @@ public sealed partial class SqlServerBackupProvider : IDatabaseBackupProvider
                 try
                 {
                     instance = await SqlServerDiscovery.ReadInstanceAsync(session, cancellationToken).ConfigureAwait(false);
-                    database = await SqlServerDiscovery.FindDatabaseAsync(session, request.DatabaseName, cancellationToken).ConfigureAwait(false);
-                    // HAS_PERMS_BY_NAME answers 0 (not NULL) for a database it cannot evaluate, even for sysadmin (observed for OFFLINE
-                    // databases on SQL Server 2025), so the answer is only trusted while the database is online.
-                    if (database is { State: SqlServerDatabaseState.Online })
+                    // A different instance answered: nothing else is read or probed there, the evaluation reports the mismatch.
+                    if (SqlServerFullBackupPreCheck.InstanceMatches(connection.Endpoint.ExpectedInstanceName, instance.InstanceName))
                     {
-                        permission = await SqlServerDiscovery.ProbeBackupPermissionAsync(session, request.DatabaseName, cancellationToken)
-                            .ConfigureAwait(false);
-                    }
+                        database = await SqlServerDiscovery.FindDatabaseAsync(session, request.DatabaseName, cancellationToken).ConfigureAwait(false);
+                        // HAS_PERMS_BY_NAME answers 0 (not NULL) for a database it cannot evaluate, even for sysadmin (observed for OFFLINE
+                        // databases on SQL Server 2025), so the answer is only trusted while the database is online.
+                        if (database is { State: SqlServerDatabaseState.Online })
+                        {
+                            permission = await SqlServerDiscovery.ProbeBackupPermissionAsync(session, request.DatabaseName, cancellationToken)
+                                .ConfigureAwait(false);
+                        }
 
-                    if (database is not null)
-                    {
-                        verifyPermission = await SqlServerDiscovery.ProbeVerifyPermissionAsync(session, cancellationToken).ConfigureAwait(false);
-                    }
+                        if (database is not null)
+                        {
+                            verifyPermission = await SqlServerDiscovery.ProbeVerifyPermissionAsync(session, cancellationToken).ConfigureAwait(false);
+                        }
 
-                    if (instance is not null && database is not null && request.Staging is { } stagingArea)
-                    {
-                        var pathFormatUsable = SqlServerFullBackupPreCheck.CheckStagingPathFormat(stagingArea.ServerDirectory, instance.HostPlatform).Status
-                            != BackupPreCheckStatus.Failed;
-                        staging = await SqlServerStagingProbe.GatherAsync(session, request, database, pathFormatUsable, _logger, cancellationToken)
-                            .ConfigureAwait(false);
+                        if (instance is not null && database is not null && request.Staging is { } stagingArea)
+                        {
+                            var pathFormatUsable = SqlServerFullBackupPreCheck.CheckStagingPathFormat(stagingArea.ServerDirectory, instance.HostPlatform).Status
+                                != BackupPreCheckStatus.Failed;
+                            staging = await SqlServerStagingProbe.GatherAsync(session, request, database, pathFormatUsable, _logger, cancellationToken)
+                                .ConfigureAwait(false);
+                        }
                     }
                 }
                 catch (DatabaseProviderException exception)
@@ -149,7 +153,7 @@ public sealed partial class SqlServerBackupProvider : IDatabaseBackupProvider
         }
 
         var items = new List<BackupPreCheckItem>(SqlServerFullBackupPreCheck.Evaluate(
-            new SqlServerPreCheckFacts(connectFailure, metadataFailure, instance, database, permission, staging, verifyPermission), request));
+            new SqlServerPreCheckFacts(connectFailure, metadataFailure, instance, database, permission, staging, verifyPermission, connection.Endpoint.ExpectedInstanceName), request));
 
         if (instance is not null && database is not null && metadataFailure is null)
         {

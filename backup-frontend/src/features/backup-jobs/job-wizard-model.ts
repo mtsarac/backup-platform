@@ -1,5 +1,6 @@
 import { tx } from '@/lib/i18n'
 import type { BackupConfiguration, RetryPolicy, Schedule } from '@/features/backup-jobs/types'
+import { loginErrors } from '@/features/backup-jobs/database-login-validation'
 
 export const jobSteps = ['Genel', 'Kaynak', 'Depolama', 'Zamanlama', 'Saklama & seçenekler', 'Özet'] as const
 export const summaryStep = jobSteps.length - 1
@@ -14,7 +15,7 @@ export function scheduleLabel(schedule: Schedule | null | undefined) {
 // Field-name prefixes owned by each step; server field errors are routed back to the step that shows them.
 const owners: readonly (readonly string[])[] = [
   ['name', 'agentId', 'enabled'],
-  ['configuration.engine', 'configuration.host', 'configuration.database', 'configuration.databaseCredentialReference', 'configuration.port', 'configuration.integratedSecurity', 'configuration.encrypt', 'configuration.trustServerCertificate'],
+  ['configuration.engine', 'configuration.host', 'configuration.database', 'configuration.databaseCredentialReference', 'configuration.databaseLogin.userName', 'configuration.databaseLogin.password', 'configuration.port', 'configuration.integratedSecurity', 'configuration.encrypt', 'configuration.trustServerCertificate'],
   ['configuration.destinations', 'configuration.requiredVerifiedReplicaCount', 'configuration.storagePrefix', 'configuration.stagingReference'],
   ['cronExpression', 'timeZone', 'missedRunGraceSeconds', 'overlapPolicy', 'retryPolicy.'],
   ['retention.', 'configuration.copyOnly', 'configuration.checksumPolicy', 'configuration.compressionPolicy'],
@@ -38,8 +39,13 @@ export function validateStep(step: number, values: StepValues): Record<string, s
     if (!database.trim()) errors['configuration.database'] = tx('Database adını girin.')
     if (values.configuration.engine === 'postgres') {
       if (new TextEncoder().encode(database).length > 63) errors['configuration.database'] = tx('PostgreSQL Database adı en fazla 63 UTF-8 byte olabilir.')
-      if (!values.configuration.databaseCredentialReference?.trim()) errors['configuration.databaseCredentialReference'] = tx('Agent üzerindeki PostgreSQL kimlik bilgisi referansını girin.')
     }
+    if (!values.configuration.integratedSecurity) {
+      const login = loginErrors(values.configuration.databaseLogin, Boolean(values.configuration.databaseCredentialReference))
+      if (login?.userName) errors['configuration.databaseLogin.userName'] = login.userName
+      if (login?.password) errors['configuration.databaseLogin.password'] = login.password
+    }
+    if (values.configuration.engine === 'mssql' && host.includes('\\') && port !== null) errors['configuration.port'] = tx('Instance adı içeren host ile port birlikte verilemez; birini seçin.')
     if (port !== null && !(Number.isInteger(port) && port >= 1 && port <= 65535)) errors['configuration.port'] = tx('Port 1 ile 65535 arasında bir tam sayı olmalı.')
   } else if (step === 3) {
     if (values.scheduled && !values.schedule.cronExpression.trim()) errors.cronExpression = tx('Cron ifadesini girin veya hazır bir zamanlama seçin.')

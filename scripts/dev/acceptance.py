@@ -35,7 +35,23 @@ SERVER = 'https://localhost:7179'
 SOURCE_DB = 'bp_google_drive_acceptance'
 RESTORED_DB = SOURCE_DB + '_restored'
 SQL_PORT = 14331
-SQL_REFERENCE = 'sql_dev'
+
+
+def sa_password():
+    for line in (HOME / 'secrets.env').read_text().splitlines():
+        if line.startswith('BP_DEV_MSSQL_SA_PASSWORD='):
+            return line.split('=', 1)[1]
+    raise FixtureFailure('The dev SQL Server password is not available.')
+
+
+def store_login(api, tenant, agent_id, user, password):
+    """Stores a database login for the agent (encrypted by the API) and returns the reference a job or restore target uses."""
+    _, stored = api.call('POST', tenant + f'/agents/{agent_id}/database-logins', {'userName': user, 'password': password})
+    return stored['reference']
+
+
+def sql_login(api, tenant, agent_id):
+    return store_login(api, tenant, agent_id, 'sa', sa_password())
 
 
 def out(**values):
@@ -128,7 +144,7 @@ def create_job(api, tenant, connection, provider, database):
     if agent is None:
         raise FixtureFailure('The dev-linux-agent is not online (scripts/dev/agent.sh start).')
     configuration = {'engine': 'mssql', 'host': '127.0.0.1', 'port': SQL_PORT, 'database': database, 'integratedSecurity': False,
-                     'databaseCredentialReference': SQL_REFERENCE, 'trustServerCertificate': True, 'encrypt': True,
+                     'databaseCredentialReference': sql_login(api, tenant, agent['agentId']), 'trustServerCertificate': True, 'encrypt': True,
                      'stagingReference': 'default', 'storageTarget': 'default', 'storagePrefix': '',
                      'copyOnly': True, 'checksumPolicy': 'Required', 'compressionPolicy': 'Preferred', 'requiredVerifiedReplicaCount': 1}
     drive = provider == 'google-drive'
@@ -229,7 +245,7 @@ def restore(options):
     # NewDatabase restores refuse an existing target by design (TargetDatabaseExists); only this step's own previous copy is dropped.
     subprocess.run([str(HERE / 'mssql-test-db.sh'), 'drop-restored', RESTORED_DB], capture_output=True, check=True)
     path = tenant + f'/backup-artifacts/{state["artifactId"]}'
-    request = {'agentId': state['agentId'], 'target': {'host': '127.0.0.1', 'port': SQL_PORT, 'databaseCredentialReference': SQL_REFERENCE, 'trustServerCertificate': True},
+    request = {'agentId': state['agentId'], 'target': {'host': '127.0.0.1', 'port': SQL_PORT, 'databaseCredentialReference': sql_login(api, tenant, state['agentId']), 'trustServerCertificate': True},
                'databaseName': RESTORED_DB, 'mode': 'NewDatabase'}
     _, pre = api.call('POST', path + '/restore-precheck', request, headers={'Idempotency-Key': 'dev-pre-' + uuid.uuid4().hex}, expect=(200, 201, 202))
     pre_id = pre.get('id', pre.get('restoreId'))

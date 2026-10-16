@@ -10,7 +10,8 @@ public sealed record DiscoveryReportResult(ReportStatus Status, string? InvalidF
 
 public sealed record DiscoverySettingsRequest(bool Enabled, int ScanIntervalMinutes, bool IncludeDocker);
 
-public sealed record DiscoveryCredentialRequest(string? CredentialReference, bool IntegratedSecurity, bool Encrypt = true, bool TrustServerCertificate = false);
+public sealed record DiscoveryCredentialRequest(string? CredentialReference, bool IntegratedSecurity, bool Encrypt = true, bool TrustServerCertificate = false,
+    BackupPlatform.Contracts.Agents.DatabaseLoginInput? DatabaseLogin = null);
 
 /// <summary>
 /// Agent-facing scan claim/report and tenant-facing inventory operations. Authorization (tenant role, agent principal) happens at the endpoint;
