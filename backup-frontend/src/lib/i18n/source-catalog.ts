@@ -1092,6 +1092,7 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Yalnızca seçilen bağlantılara ait kopyalar kotaya dahildir. Devre dışı hedefler de mevcut kopyalar için seçilebilir. Arama ve yenileme mevcut seçimleri değiştirmez.": {"tr":"Yalnızca seçilen bağlantılara ait kopyalar kotaya dahildir. Devre dışı hedefler de mevcut kopyalar için seçilebilir. Arama ve yenileme mevcut seçimleri değiştirmez.","en":"Only replicas belonging to the selected connections count toward the quota. Disabled targets can also be selected for existing replicas. Searching and refreshing do not change the current selections."},
   "Local": {"tr":"Yerel","en":"Local"},
   "Local (Agent diski)": {"tr":"Yerel ajan diski","en":"Local agent disk"},
+  "Disk adı (agent'ta tanımlı)": {"tr":"Disk adı (ajanda tanımlı)","en":"Disk name (declared on the agent)"},
   "Managed Storage": {"tr":"Yönetilen Depolama","en":"Managed Storage"},
   "Managed Storage (Central)": {"tr":"Merkezi yönetilen depolama","en":"Central managed storage"},
   "Fake S3": {"tr":"Sahte S3","en":"Fake S3"},

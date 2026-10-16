@@ -4,6 +4,7 @@ using BackupPlatform.BackupProviders.Abstractions.Database;
 using BackupPlatform.BackupProviders.MSSQL;
 using BackupPlatform.BackupProviders.PostgreSql;
 using BackupPlatform.BackupProviders.PostgreSql.Tools;
+using BackupPlatform.Agent.Core.Tasks;
 using BackupPlatform.StorageProviders.Abstractions;
 using BackupPlatform.StorageProviders.Central;
 using BackupPlatform.StorageProviders.Local;
@@ -65,10 +66,16 @@ public static class AgentBackupServiceCollectionExtensions
             }
         }
 
+        IStorageProvider? defaultLocal = null;
         if (options.LocalStorage?.RootDirectory is { } localRoot && AgentBackupOptionsValidation.IsAbsolute(localRoot))
         {
-            services.AddSingleton<IStorageProvider>(_ => new LocalStorageProvider(new LocalStorageOptions(localRoot)));
+            defaultLocal = new LocalStorageProvider(new LocalStorageOptions(localRoot));
+            services.AddSingleton(defaultLocal);
         }
+        var volumes = (options.LocalStorage?.Volumes ?? [])
+            .Where(entry => LocalVolumes.IsValidName(entry.Key) && AgentBackupOptionsValidation.IsAbsolute(entry.Value))
+            .ToDictionary(entry => entry.Key, entry => (IStorageProvider)new LocalStorageProvider(new LocalStorageOptions(entry.Value)), StringComparer.Ordinal);
+        services.AddSingleton(new LocalVolumes(defaultLocal, volumes));
 
         if (options.CentralStorage is { RootDirectory: { } centralRoot, TenantScope: { } scope }
             && AgentBackupOptionsValidation.TryCreateCentral(centralRoot, scope, out var central))
@@ -203,6 +210,18 @@ internal static class AgentBackupOptionsValidation
         if (options.LocalStorage is { } local && (local.RootDirectory is null || !IsAbsolute(local.RootDirectory)))
         {
             yield return prefix + "LocalStorage:RootDirectory must be an absolute path.";
+        }
+
+        foreach (var (name, directory) in options.LocalStorage?.Volumes ?? [])
+        {
+            if (!LocalVolumes.IsValidName(name))
+            {
+                yield return prefix + "LocalStorage:Volumes has a name that is not one lowercase key (letters, digits, '-') or is the reserved name 'local'.";
+            }
+            else if (!IsAbsolute(directory))
+            {
+                yield return prefix + $"LocalStorage:Volumes:{name} must be an absolute path.";
+            }
         }
 
         if (options.CentralStorage is { } central)

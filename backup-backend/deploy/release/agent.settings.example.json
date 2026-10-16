@@ -15,7 +15,10 @@
         }
       },
       "LocalStorage": {
-        "RootDirectory": "<directory for backups stored on this machine>"
+        "RootDirectory": "<directory for backups stored on this machine>",
+        "Volumes": {
+          "external-ssd": "<absolute directory of an extra disk; the UI selects it by this name>"
+        }
       },
       "CentralStorage": {
         "RootDirectory": "<directory of the central storage as seen from this machine>",

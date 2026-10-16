@@ -100,7 +100,8 @@ public static class BuiltInStorageProviders
     public static StorageProviderDescriptor Local { get; } = new(
         StorageProviderTypes.Local, "Local (Agent diski)", StorageProviderAvailability.Available, StorageTopology.AgentDirect, BackupStorageExecutionLocation.Agent,
         StorageProviderDescriptor.CapabilityNames(FileSystemStorageProvider.FileSystemCapabilities), [StorageOwnership.TenantManaged],
-        tenantCreatable: true, platformCreatable: false, maxConnectionsPerTenant: 1, [], [], StorageTestMode.AgentSide);
+        tenantCreatable: true, platformCreatable: false, maxConnectionsPerTenant: null,
+        [new("volume", "Disk adı (agent'ta tanımlı)", StorageFieldKind.Text, true, 32)], [], StorageTestMode.AgentSide);
 
     public static StorageProviderDescriptor Central { get; } = new(
         StorageProviderTypes.Central, "Managed Storage (Central)", StorageProviderAvailability.Available, StorageTopology.AgentDirect, BackupStorageExecutionLocation.Backend,

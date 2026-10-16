@@ -11,6 +11,9 @@ public sealed record BackupDestination(
     Guid? StorageConnectionId = null,
     bool IsPrimary = false)
 {
+    /// <summary>The agent volume a local destination writes to (null: the default local storage). Resolved from the connection when a run is admitted.</summary>
+    public string? StorageTarget { get; init; }
+
     public BackupStorageExecutionLocation StorageExecutionLocation { get; init; } =
         StorageProvider == "local" ? BackupStorageExecutionLocation.Agent : BackupStorageExecutionLocation.Backend;
 
@@ -19,6 +22,8 @@ public sealed record BackupDestination(
         BackupGuard.Reference(StorageProvider);
         if (StorageConnectionId == Guid.Empty)
             throw new ArgumentException("A storage connection identifier must not be empty.");
+        if (StorageTarget is not null && (StorageProvider != "local" || !StorageProviderTypes.IsValid(StorageTarget)))
+            throw new ArgumentException("Invalid storage target for destination.");
         if (StorageExecutionLocation is not (BackupStorageExecutionLocation.Backend or BackupStorageExecutionLocation.Agent) ||
             StorageExecutionLocation == BackupStorageExecutionLocation.Agent && StorageProvider != "local")
             throw new ArgumentException("Invalid storage execution location for destination.");

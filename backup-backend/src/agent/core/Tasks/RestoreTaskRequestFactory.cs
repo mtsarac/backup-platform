@@ -13,7 +13,7 @@ namespace BackupPlatform.Agent.Core.Tasks;
 public sealed class RestoreTaskRequestFactory(
     IBackupTaskCredentialResolver credentials,
     IEnumerable<StagingArea> stagingAreas,
-    ITaskStorageProviderFactory? storageFactory = null)
+    ITaskStorageProviderFactory? storageFactory = null, LocalVolumes? volumes = null)
 {
     private const int MaxDatabaseNameLength = 128;
     private const int MaxHostLength = 253;
@@ -71,7 +71,7 @@ public sealed class RestoreTaskRequestFactory(
                     _ => RestorePipelinePurpose.Execution
                 })
             {
-                StorageOverride = task.Source.Access == "BackendRelayed" ? storageFactory!.CreateRestore(task) : null
+                StorageOverride = task.Source.Access == "BackendRelayed" ? storageFactory!.CreateRestore(task) : LocalVolumeOverride(task.Source)
             };
         }
         catch (ArgumentException)
@@ -181,6 +181,13 @@ public sealed class RestoreTaskRequestFactory(
             || (source.Access, source.StorageProvider, source.StorageExecutionLocation) is ("BackendRelayed", "sftp" or "google-drive", "Backend")
             && Guid.TryParse(source.StorageTarget, out var connectionId) && connectionId != Guid.Empty
             && storageFactory is not null);
+
+    /// <summary>A replica on a named agent volume is read through that volume; the default local storage needs no override.</summary>
+    private IStorageProvider? LocalVolumeOverride(RestoreTaskSource source)
+    {
+        if (source.Access != "AgentLocal" || source.StorageTarget is not { Length: > 0 } target || target == LocalVolumes.DefaultName) return null;
+        return volumes?.Resolve(target) ?? throw new RestoreTaskRequestException(RestoreAgentFailureCodes.InvalidConfiguration);
+    }
 
     private static DatabaseRestoreMode ParseMode(string mode) => mode switch
     {

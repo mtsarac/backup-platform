@@ -38,6 +38,8 @@ public sealed record BackupDestinationContract
 {
     public string StorageProvider { get; init; } = "local";
     public Guid? StorageConnectionId { get; init; }
+    /// <summary>For a local destination, the agent-declared volume the run writes to; null is the agent's default local storage. Fixed by the backend when the run is admitted, never taken from a client.</summary>
+    public string? StorageTarget { get; init; }
     /// <summary>"Backend" or "Agent"; required, never inferred from the provider.</summary>
     public string? StorageExecutionLocation { get; init; }
     public bool IsPrimary { get; init; }

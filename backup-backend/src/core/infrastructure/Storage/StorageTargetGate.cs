@@ -132,7 +132,9 @@ internal static class StorageTargetGate
                 // Two entries that resolve to the same connection are one destination twice: it would receive (and report) the artifact twice.
                 return new(null, BackupAdmissionDenialCodes.DestinationCombinationUnsupported);
             }
-            resolvedDestinations.Add(dest with { StorageConnectionId = connection.Id });
+            // The volume is read from the connection here, in the one admission point, so a client can never name one and a later edit cannot move an admitted run.
+            var volume = connection.ProviderType == StorageProviderTypes.Local ? connection.Configuration.GetValueOrDefault("volume") : null;
+            resolvedDestinations.Add(dest with { StorageConnectionId = connection.Id, StorageTarget = volume });
         }
 
         return new(configuration with { Destinations = resolvedDestinations }, null);

@@ -18,9 +18,6 @@ import { platformCrumb } from '@/features/platform/crumbs'
 import { usePlatformAudit, usePlatformTenant, useRenameTenant, useSetTenantEnrollment } from '@/features/platform/hooks'
 import { bareTableClass } from '@/features/platform/list-empty'
 import { platformPaths } from '@/features/platform/paths'
-import { useTenantSubscription } from '@/features/platform/plans/hooks'
-import { SubscriptionSection } from '@/features/platform/plans/subscription-section'
-import { SubscriptionStatusPill } from '@/features/platform/plans/subscription-presentation'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { TenantStorageSection } from '@/features/platform/storage/tenant-storage-section'
 import { inputClass, linkClass } from '@/features/platform/styles'
@@ -88,7 +85,6 @@ function RecentAudit({ tenantId }: { tenantId: string }) {
 
 function Header({ tenant }: { tenant: PlatformTenantDetail }) {
   useLanguage()
-  const subscription = useTenantSubscription(tenant.tenantId).data?.subscription
   return <PageHeader crumbs={[platformCrumb, { label: tx('Tenants'), to: platformPaths.tenants }]} title={tenant.name}
     meta={<>
       <Badge tone={tenant.enrollment.enabled ? 'success' : 'neutral'} dot>{tenant.enrollment.enabled ? tx('Kayıt açık') : tx('Kayıt kapalı')}</Badge>
@@ -110,7 +106,6 @@ function TenantTabs({ tenant }: { tenant: PlatformTenantDetail }) {
         <RecentAudit tenantId={tenant.tenantId} />
       </>}
       {tab === 'members' && <MembershipsSection tenantId={tenant.tenantId} tenantName={tenant.name} />}
-      {tab === 'subscription' && <SubscriptionSection tenantId={tenant.tenantId} tenantName={tenant.name} />}
       {tab === 'storage' && <>
         <TenantStorageSection tenantId={tenant.tenantId} tenantName={tenant.name} />
         <PlatformTenantConnections tenantId={tenant.tenantId} tenantName={tenant.name} />

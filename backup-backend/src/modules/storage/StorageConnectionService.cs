@@ -570,6 +570,8 @@ public sealed class StorageConnectionService(
             result[field.Name] = value;
         }
         if (descriptor.ProviderType == StorageProviderTypes.Sftp) SftpConnectionRules.ValidateConfiguration(result);
+        if (descriptor.ProviderType == StorageProviderTypes.Local && !StorageProviderTypes.IsValid(result.GetValueOrDefault("volume")))
+            throw new InvalidStorageConnectionException("configuration.volume", "invalid_value");
         return result;
     }
 
