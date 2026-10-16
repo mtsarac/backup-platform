@@ -1,6 +1,9 @@
 using System.Net;
 using System.Text.Json;
+using BackupPlatform.Agents.Capabilities;
 using BackupPlatform.Contracts.Discovery;
+using BackupPlatform.Domain.Capabilities;
+using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Tenancy;
 
 namespace BackupPlatform.IntegrationTests;
@@ -198,5 +201,30 @@ public sealed class DiscoveryApiIntegrationTests(PostgreSqlFixture fixture) : IC
         Assert.Equal(2, json.GetProperty("databases").GetArrayLength());
         Assert.Equal(1, json.GetProperty("databaseCounts").GetProperty("backupEligible").GetInt32());
         Assert.Equal("Authenticated", json.GetProperty("access").GetString());
+    }
+
+    [Fact]
+    public async Task A_due_scan_waits_while_the_agent_runs_a_backup_and_is_requested_once_it_has_finished()
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture);
+        await using (var context = fixture.CreatePlatformContext())
+        {
+            // The scenario's agent already declares the backup capabilities directly in the database; discovery is declared the same way.
+            context.AgentCapabilities.Add(new AgentCapabilityRecord(new AgentId(scenario.Agent.AgentId), new TenantId(scenario.Agent.TenantId),
+                DiscoveryProtocol.Capability, CapabilitySupport.Supported, null, "fixture", DateTimeOffset.UtcNow));
+            await context.SaveChangesAsync();
+        }
+        await scenario.StartRunAsync(await scenario.CreateJobAsync());
+        var claim = await scenario.ClaimAsync();
+        await scenario.StartAttemptAsync(claim);
+
+        Assert.Null(await ScanReasonAsync(scenario.World, scenario.Agent));
+        Assert.Null(await ClaimAsync(scenario.World, scenario.Agent));
+
+        using (var completed = await scenario.CompleteRawAsync(claim, scenario.SuccessRequest(claim)))
+            Assert.Equal(HttpStatusCode.NoContent, completed.StatusCode);
+
+        Assert.Equal(DiscoveryScanReasons.Initial, await ScanReasonAsync(scenario.World, scenario.Agent));
+        Assert.NotNull(await ClaimAsync(scenario.World, scenario.Agent));
     }
 }

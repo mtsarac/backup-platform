@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 using BackupPlatform.Agent.Core.Discovery;
+using BackupPlatform.Agent.Transport;
 using BackupPlatform.Contracts.Discovery;
 
 namespace BackupPlatform.AgentTests;

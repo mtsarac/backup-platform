@@ -97,8 +97,11 @@ public sealed class DiscoveryAgentState : ITenantOwned
         RequestedInstanceKey = instanceKey;
     }
 
-    /// <summary>Takes the scan for the caller. <paramref name="jitter"/> is in -1..1 and spreads the periodic schedule of many agents.</summary>
-    public bool TryClaim(DateTimeOffset now, Guid scanId, string periodicReason, double jitter, out string reason)
+    /// <summary>
+    /// Takes the scan for the caller. Until it reports, the next scan is due when the claim would time out, so an agent that crashes mid-scan is
+    /// asked again after <see cref="RunningTimeout"/> instead of after a whole interval.
+    /// </summary>
+    public bool TryClaim(DateTimeOffset now, Guid scanId, string periodicReason, out string reason)
     {
         reason = DueReason(now, periodicReason)!;
         if (reason is null) return false;
@@ -107,7 +110,7 @@ public sealed class DiscoveryAgentState : ITenantOwned
         ScanStartedAt = now;
         ScanRequestedAt = null;
         ScanRequestReason = null;
-        NextScanDueAt = now + Interval(jitter);
+        NextScanDueAt = now + RunningTimeout;
         return true;
     }
 
@@ -119,7 +122,8 @@ public sealed class DiscoveryAgentState : ITenantOwned
         return key;
     }
 
-    public bool Complete(Guid scanId, DateTimeOffset now, string outcome, string? failureCode, string sourcesJson)
+    /// <param name="jitter">In -1..1; spreads the periodic schedule of many agents. A failed scan is retried after the minimum interval.</param>
+    public bool Complete(Guid scanId, DateTimeOffset now, string outcome, string? failureCode, string sourcesJson, double jitter = 0)
     {
         if (ScanId != scanId) return false;
         ScanId = null;
@@ -129,6 +133,7 @@ public sealed class DiscoveryAgentState : ITenantOwned
         LastFailureCode = failureCode;
         SourcesJson = sourcesJson;
         if (outcome != "Failed") LastSuccessfulScanAt = now;
+        NextScanDueAt = now + (outcome == "Failed" ? TimeSpan.FromMinutes(MinimumIntervalMinutes) : Interval(jitter));
         return true;
     }
 

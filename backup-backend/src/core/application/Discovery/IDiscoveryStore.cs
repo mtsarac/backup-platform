@@ -41,15 +41,18 @@ public sealed record BindOutcome(BindStatus Status, DiscoveryInstanceSummary? In
 public interface IDiscoveryStore
 {
     /// <summary>
-    /// The reason a scan is due for the calling agent, or null. An agent that has never been seen and advertises the discovery capability gets its
+    /// The reason a scan is due for the calling agent, or null (also while the agent is busy with a backup or restore, except for a manual request). An agent that has never been seen and advertises the discovery capability gets its
     /// initial scan requested here (one indexed read for known agents).
     /// </summary>
     Task<string?> GetDueReasonAsync(AgentIdentity caller, DateTimeOffset now, CancellationToken cancellationToken);
 
-    /// <summary>Atomically claims the due scan, or returns null when nothing is due or one is already running.</summary>
-    Task<AgentDiscoveryPlan?> ClaimAsync(AgentIdentity caller, Guid scanId, double jitter, DateTimeOffset now, CancellationToken cancellationToken);
+    /// <summary>
+    /// Atomically claims the due scan, or returns null when nothing is due, one is already running, or (for an initial or periodic scan) the agent is
+    /// executing a backup or restore: discovery waits for the next heartbeat instead of competing with that work.
+    /// </summary>
+    Task<AgentDiscoveryPlan?> ClaimAsync(AgentIdentity caller, Guid scanId, DateTimeOffset now, CancellationToken cancellationToken);
 
-    Task<ReportStatus> ApplyReportAsync(AgentIdentity caller, Guid scanId, AgentDiscoveryReport report, string sourcesJson, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<ReportStatus> ApplyReportAsync(AgentIdentity caller, Guid scanId, AgentDiscoveryReport report, string sourcesJson, double jitter, DateTimeOffset now, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<DiscoveryAgentStatus>> ListAgentsAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken);
 

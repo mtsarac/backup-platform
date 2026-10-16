@@ -67,6 +67,18 @@ describe('wizard with discovered databases', () => {
     expect(vi.mocked(saveBackupJob).mock.calls[2][1].configuration.database).toBe('CRM')
     expect(await screen.findByText('Job listesi')).toBeInTheDocument()
   })
+  it('does not create a job again that the inventory already shows for a failed create', async () => {
+    vi.mocked(saveBackupJob).mockResolvedValueOnce({} as never).mockRejectedValueOnce(new Error('timeout'))
+    mount('/tenants/tenant-a/backup-jobs/new?discoveryInstance=inst-1&database=ERP&database=CRM')
+    await toSummary()
+    fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
+    expect(await screen.findByText(/Oluşturulamadı/)).toBeInTheDocument()
+    const detail = makeDetail()
+    vi.mocked(getDiscoveryInstance).mockResolvedValue({ ...detail, databases: detail.databases.map(database => database.name === 'CRM' ? { ...database, jobs: [{ id: 'job-9', name: 'ERP – CRM', enabled: true }] } : database) })
+    fireEvent.click(screen.getByRole('button', { name: 'Başarısızları yeniden dene' }))
+    expect(await screen.findByText('Job listesi')).toBeInTheDocument()
+    expect(saveBackupJob).toHaveBeenCalledTimes(2)
+  })
   it('keeps manual entry working and makes no discovery request until the picker is opened', async () => {
     mount()
     fireEvent.change(await screen.findByLabelText('İş adı'), { target: { value: 'ERP' } })

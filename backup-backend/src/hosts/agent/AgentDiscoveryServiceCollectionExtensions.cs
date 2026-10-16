@@ -1,4 +1,5 @@
 using BackupPlatform.Agent.Core.Discovery;
+using BackupPlatform.Agent.Transport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 #if AGENT_PLATFORM_LINUX

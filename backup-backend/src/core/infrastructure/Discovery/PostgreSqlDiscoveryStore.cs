@@ -3,9 +3,11 @@ using BackupPlatform.Application.Agents;
 using BackupPlatform.Application.Discovery;
 using BackupPlatform.Contracts.Discovery;
 using BackupPlatform.Domain.Audit;
+using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Capabilities;
 using BackupPlatform.Domain.Discovery;
 using BackupPlatform.Domain.Identity;
+using BackupPlatform.Domain.Restores;
 using BackupPlatform.Infrastructure.Backups;
 using BackupPlatform.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -39,7 +41,9 @@ public sealed class PostgreSqlDiscoveryStore(DbContextOptions<PlatformDbContext>
             .SingleOrDefaultAsync(row => row.TenantId == caller.TenantId && row.AgentId == caller.AgentId, cancellationToken);
         if (state is not null)
         {
-            return state.DueReason(now, DiscoveryScanReasons.Periodic);
+            var due = state.DueReason(now, DiscoveryScanReasons.Periodic);
+            // Only a due scan costs the extra look at running work; the common heartbeat stays one read.
+            return due is not null && due != DiscoveryScanReasons.Manual && await AgentBusyAsync(context, caller.TenantId, caller.AgentId, now, cancellationToken) ? null : due;
         }
         if (!await SupportsDiscoveryAsync(context, caller.TenantId, caller.AgentId, cancellationToken))
         {
@@ -54,10 +58,10 @@ public sealed class PostgreSqlDiscoveryStore(DbContextOptions<PlatformDbContext>
         {
             // A concurrent heartbeat created the same row, with the same initial request.
         }
-        return DiscoveryScanReasons.Initial;
+        return await AgentBusyAsync(context, caller.TenantId, caller.AgentId, now, cancellationToken) ? null : DiscoveryScanReasons.Initial;
     }
 
-    public async Task<AgentDiscoveryPlan?> ClaimAsync(AgentIdentity caller, Guid scanId, double jitter, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task<AgentDiscoveryPlan?> ClaimAsync(AgentIdentity caller, Guid scanId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
@@ -66,8 +70,13 @@ public sealed class PostgreSqlDiscoveryStore(DbContextOptions<PlatformDbContext>
             return null;
         }
         var state = await context.DiscoveryAgentStates.SingleOrDefaultAsync(row => row.TenantId == caller.TenantId && row.AgentId == caller.AgentId, cancellationToken);
-        if (state is null || !state.TryClaim(now, scanId, DiscoveryScanReasons.Periodic, jitter, out var reason))
+        if (state is null || !state.TryClaim(now, scanId, DiscoveryScanReasons.Periodic, out var reason))
         {
+            return null;
+        }
+        if (reason != DiscoveryScanReasons.Manual && await AgentBusyAsync(context, caller.TenantId, caller.AgentId, now, cancellationToken))
+        {
+            // Discarding the tracked claim leaves the committed state untouched: still due, asked again on the next heartbeat.
             return null;
         }
         var onlyInstanceKey = state.TakeRequestedInstanceKey();
@@ -99,7 +108,7 @@ public sealed class PostgreSqlDiscoveryStore(DbContextOptions<PlatformDbContext>
     }
 
     public async Task<ReportStatus> ApplyReportAsync(
-        AgentIdentity caller, Guid scanId, AgentDiscoveryReport report, string sourcesJson, DateTimeOffset now, CancellationToken cancellationToken)
+        AgentIdentity caller, Guid scanId, AgentDiscoveryReport report, string sourcesJson, double jitter, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
@@ -108,7 +117,7 @@ public sealed class PostgreSqlDiscoveryStore(DbContextOptions<PlatformDbContext>
             return ReportStatus.AgentNotFound;
         }
         var state = await context.DiscoveryAgentStates.SingleOrDefaultAsync(row => row.TenantId == caller.TenantId && row.AgentId == caller.AgentId, cancellationToken);
-        if (state is null || !state.Complete(scanId, now, report.Outcome, report.FailureCode, sourcesJson))
+        if (state is null || !state.Complete(scanId, now, report.Outcome, report.FailureCode, sourcesJson, jitter))
         {
             return ReportStatus.Superseded;
         }
@@ -311,6 +320,13 @@ public sealed class PostgreSqlDiscoveryStore(DbContextOptions<PlatformDbContext>
             .ToListAsync(cancellationToken);
         return locked.Count != 0;
     }
+
+    /// <summary>Whether the agent holds a live backup or restore attempt (the same predicate the claim paths use to keep one agent from running both).</summary>
+    private static async Task<bool> AgentBusyAsync(PlatformDbContext context, TenantId tenantId, AgentId agentId, DateTimeOffset now, CancellationToken cancellationToken) =>
+        await context.BackupRunAttempts.AsNoTracking().AnyAsync(attempt => attempt.TenantId == tenantId && attempt.AgentId == agentId
+            && (attempt.Status == BackupStatus.Leased || attempt.Status == BackupStatus.Running) && attempt.LeaseExpiresAt > now, cancellationToken)
+        || await context.RestoreAttempts.AsNoTracking().AnyAsync(attempt => attempt.TenantId == tenantId && attempt.AgentId == agentId
+            && (attempt.Status == RestoreStatus.Leased || attempt.Status == RestoreStatus.Running) && attempt.LeaseExpiresAt > now, cancellationToken);
 
     /// <summary>The backend only asks for scans an agent said it can run; the capability is the agent's claim, stored as reported.</summary>
     private static Task<bool> SupportsDiscoveryAsync(PlatformDbContext context, TenantId tenantId, AgentId agentId, CancellationToken cancellationToken) =>

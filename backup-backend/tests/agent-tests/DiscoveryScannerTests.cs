@@ -574,7 +574,7 @@ public sealed class DiscoveryScannerTests
     {
         var rig = new Rig();
         rig.Detectors.Add(new FakeDetector(DiscoverySources.Service, DetectionResult.Scanned([Mssql("mssql|service|A", 1433), Mssql("mssql|service|B", 1500), Mssql("mssql|service|C", 1600)])));
-        var leak = $"Server=localhost;User Id=scanner;Password={Secret}";
+        var leak = $"Server=localhost;User Id=scan-login-user-7;Password={Secret}";
         rig.Mssql.OnDiscover = (connection, _, _) => connection.Endpoint.Port switch
         {
             1433 => throw new DatabaseProviderException(DatabaseFailureKind.AuthenticationFailed, leak, new InvalidOperationException(leak)),
@@ -587,7 +587,7 @@ public sealed class DiscoveryScannerTests
 
         var text = JsonSerializer.Serialize(report, JsonSerializerOptions.Web) + "\n" + rig.Logs.AllText;
         Assert.NotEmpty(rig.Logs.Entries);
-        foreach (var forbidden in new[] { Secret, "Password", "User Id", "Server=", "scanner", "sa-ref" })
+        foreach (var forbidden in new[] { Secret, "Password", "User Id", "Server=", "scan-login-user-7", "sa-ref" })
         {
             Assert.DoesNotContain(forbidden, text, StringComparison.OrdinalIgnoreCase);
         }

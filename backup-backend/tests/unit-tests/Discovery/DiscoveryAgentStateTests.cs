@@ -15,10 +15,10 @@ public sealed class DiscoveryAgentStateTests
         var state = NewState();
 
         Assert.Equal("initial", state.DueReason(T0, "periodic"));
-        Assert.True(state.TryClaim(T0, Guid.NewGuid(), "periodic", 0, out var reason));
+        Assert.True(state.TryClaim(T0, Guid.NewGuid(), "periodic", out var reason));
         Assert.Equal("initial", reason);
         Assert.Equal(DiscoveryScanState.Running, state.StateAt(T0));
-        Assert.False(state.TryClaim(T0.AddSeconds(5), Guid.NewGuid(), "periodic", 0, out _));
+        Assert.False(state.TryClaim(T0.AddSeconds(5), Guid.NewGuid(), "periodic", out _));
         Assert.Null(state.DueReason(T0.AddSeconds(5), "periodic"));
     }
 
@@ -26,7 +26,7 @@ public sealed class DiscoveryAgentStateTests
     public void A_claimed_scan_that_never_reports_can_be_claimed_again_after_the_running_timeout()
     {
         var state = NewState();
-        state.TryClaim(T0, Guid.NewGuid(), "periodic", 0, out _);
+        state.TryClaim(T0, Guid.NewGuid(), "periodic", out _);
         state.RequestScan("manual", null, T0.AddMinutes(1));
 
         Assert.Null(state.DueReason(T0.AddMinutes(9), "periodic"));
@@ -38,7 +38,7 @@ public sealed class DiscoveryAgentStateTests
     {
         var state = NewState();
         var scanId = Guid.NewGuid();
-        state.TryClaim(T0, scanId, "periodic", 0, out _);
+        state.TryClaim(T0, scanId, "periodic", out _);
 
         Assert.False(state.Complete(Guid.NewGuid(), T0.AddMinutes(1), "Completed", null, "[]"));
         Assert.True(state.Complete(scanId, T0.AddMinutes(1), "Failed", "scan_timeout", "[]"));
@@ -49,26 +49,50 @@ public sealed class DiscoveryAgentStateTests
     }
 
     [Fact]
-    public void The_periodic_schedule_follows_the_interval_with_jitter_and_becomes_due_by_itself()
+    public void The_periodic_schedule_counts_from_the_report_with_jitter_and_becomes_due_by_itself()
     {
         var state = NewState();
-        state.TryClaim(T0, Guid.NewGuid(), "periodic", 0, out _);
-        state.Complete(state.ScanId!.Value, T0.AddMinutes(1), "Completed", null, "[]");
+        state.TryClaim(T0, Guid.NewGuid(), "periodic", out _);
+        var reported = T0.AddMinutes(1);
+        state.Complete(state.ScanId!.Value, reported, "Completed", null, "[]");
 
-        Assert.Equal(T0.AddMinutes(DiscoveryAgentState.DefaultIntervalMinutes), state.NextScanDueAt);
-        Assert.Null(state.DueReason(T0.AddMinutes(DiscoveryAgentState.DefaultIntervalMinutes - 1), "periodic"));
-        Assert.Equal("periodic", state.DueReason(T0.AddMinutes(DiscoveryAgentState.DefaultIntervalMinutes), "periodic"));
+        var interval = TimeSpan.FromMinutes(DiscoveryAgentState.DefaultIntervalMinutes);
+        Assert.Equal(reported + interval, state.NextScanDueAt);
+        Assert.Null(state.DueReason(reported + interval - TimeSpan.FromMinutes(1), "periodic"));
+        Assert.Equal("periodic", state.DueReason(reported + interval, "periodic"));
 
         var jittered = NewState();
-        jittered.TryClaim(T0, Guid.NewGuid(), "periodic", 1, out _);
-        Assert.Equal(T0.AddMinutes(DiscoveryAgentState.DefaultIntervalMinutes * 1.10), jittered.NextScanDueAt);
+        jittered.TryClaim(T0, Guid.NewGuid(), "periodic", out _);
+        jittered.Complete(jittered.ScanId!.Value, reported, "Completed", null, "[]", jitter: 1);
+        Assert.Equal(reported + interval * 1.10, jittered.NextScanDueAt);
+    }
+
+    [Fact]
+    public void A_scan_whose_agent_dies_is_asked_for_again_after_the_running_timeout_not_after_a_whole_interval()
+    {
+        var state = NewState();
+        state.TryClaim(T0, Guid.NewGuid(), "periodic", out _);
+
+        Assert.Null(state.DueReason(T0.AddMinutes(9), "periodic"));
+        Assert.Equal("periodic", state.DueReason(T0 + DiscoveryAgentState.RunningTimeout, "periodic"));
+        Assert.True(state.TryClaim(T0 + DiscoveryAgentState.RunningTimeout, Guid.NewGuid(), "periodic", out _));
+    }
+
+    [Fact]
+    public void A_failed_scan_is_retried_after_the_minimum_interval()
+    {
+        var state = NewState();
+        state.TryClaim(T0, Guid.NewGuid(), "periodic", out _);
+        state.Complete(state.ScanId!.Value, T0.AddMinutes(1), "Failed", "scan_timeout", "[]");
+
+        Assert.Equal(T0.AddMinutes(1 + DiscoveryAgentState.MinimumIntervalMinutes), state.NextScanDueAt);
     }
 
     [Fact]
     public void Manual_requests_are_throttled_and_a_disabled_agent_is_never_due()
     {
         var state = NewState();
-        state.TryClaim(T0, Guid.NewGuid(), "periodic", 0, out _);
+        state.TryClaim(T0, Guid.NewGuid(), "periodic", out _);
         state.Complete(state.ScanId!.Value, T0.AddSeconds(10), "Completed", null, "[]");
 
         Assert.False(state.CanRequestManual(T0.AddSeconds(20)));

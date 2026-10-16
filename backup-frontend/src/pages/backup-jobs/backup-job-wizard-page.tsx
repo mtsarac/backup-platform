@@ -9,6 +9,7 @@ import { Stepper } from '@/components/ui/stepper'
 import { QueryState } from '@/components/data/query-state'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { getAgents } from '@/features/agents/api'
+import { getDiscoveryInstance } from '@/features/discovery/api'
 import { useDiscoveryInstance } from '@/features/discovery/hooks'
 import { discoveredConfiguration, selectableNames } from '@/features/discovery/job-prefill'
 import type { DiscoveryInstanceDetail } from '@/features/discovery/types'
@@ -66,6 +67,7 @@ function JobForm({ job, prefill }: { job?: BackupJob; prefill?: { instance: Disc
   // Databases picked from the discovery inventory; one job is created per name when the user confirms the summary.
   const [selected, setSelected] = useState<string[]>(prefill?.databases ?? [])
   const [results, setResults] = useState<Record<string, string>>({})
+  const [discoveryInstanceId, setDiscoveryInstanceId] = useState(prefill?.instance.id ?? '')
   const [retry, setRetry] = useState(job?.retryPolicy ?? initialRetry)
   const [retention, setRetention] = useState(job?.retention ?? initialRetention)
   const [schedule, setSchedule] = useState(job?.schedule ?? initialSchedule)
@@ -138,18 +140,30 @@ function JobForm({ job, prefill }: { job?: BackupJob; prefill?: { instance: Disc
   }
   async function createMany(input: BackupJobInput) {
     const outcome = { ...results }
+    // A create that failed on the client side (timeout) may still have succeeded on the server: before retrying, look at the inventory's jobs.
+    const covered = await coveredAfterFailure(selected.filter(item => outcome[item] && outcome[item] !== 'ok'))
     for (const database of selected.filter(item => outcome[item] !== 'ok')) {
+      if (covered.has(database)) { outcome[database] = 'ok'; continue }
       try {
         await save.mutateAsync({ ...input, name: `${input.name} – ${database}`, configuration: { ...input.configuration, database } })
         outcome[database] = 'ok'
       } catch (error) { outcome[database] = errorMessage(error) }
       setResults({ ...outcome })
     }
+    setResults({ ...outcome })
     saving.current = false
     if (selected.every(item => outcome[item] === 'ok')) navigate(`/tenants/${tenantId}/backup-jobs`)
   }
+  async function coveredAfterFailure(retrying: string[]) {
+    if (!discoveryInstanceId || retrying.length === 0) return new Set<string>()
+    try {
+      const detail = await getDiscoveryInstance(tenantId, discoveryInstanceId)
+      return new Set(detail.databases.filter(database => retrying.includes(database.name) && database.jobs.length > 0).map(database => database.name))
+    } catch { return new Set<string>() }
+  }
   function applyDiscovery(instance: DiscoveryInstanceDetail, databases: string[]) {
     setAgentId(instance.agentId)
+    setDiscoveryInstanceId(instance.id)
     setConfiguration(discoveredConfiguration(configuration, instance, databases))
     setSelected(databases)
     setResults({})
