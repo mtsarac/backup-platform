@@ -279,6 +279,28 @@ public sealed class BackupOrchestrationPersistenceTests(PostgreSqlFixture fixtur
         Assert.Equal(BackupAdmissionDenialCodes.AgentMultiDestinationUnsupported, refused.DenialCode);
         Assert.Null(refused.Run);
     }
+
+    [Fact]
+    public async Task PostgreSqlBackupClaimsWaitForTheMatchingEngineCapabilityEvenAfterJobReconfiguration()
+    {
+        var seed = await SeedAsync();
+        var store = Store();
+        var postgres = Configuration() with { Engine = "postgres", IntegratedSecurity = false, DatabaseCredentialReference = "pg-credential", CopyOnly = false };
+        await store.UpdateJobAsync(seed.TenantId, seed.JobId, new BackupJobUpdate("PG", seed.AgentId, postgres, BackupRetryPolicy.Default, BackupOverlapPolicy.Queue), default);
+        var run = (await store.StartRunAsync(seed.TenantId, seed.JobId, "postgres", Now, default)).Run!;
+        await store.UpdateJobAsync(seed.TenantId, seed.JobId, new BackupJobUpdate("SQL", seed.AgentId, Configuration(), BackupRetryPolicy.Default, BackupOverlapPolicy.Queue), default);
+        Assert.Null(await store.ClaimNextAsync(seed.TenantId, seed.AgentId, Now, Lease, default));
+        await using (var context = fixture.CreatePlatformContext())
+        {
+            context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(seed.AgentId, seed.TenantId,
+                "postgres.backup.full", BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, null, "pg-test", Now));
+            await context.SaveChangesAsync();
+        }
+        var claim = await store.ClaimNextAsync(seed.TenantId, seed.AgentId, Now, Lease, default);
+        Assert.NotNull(claim);
+        Assert.Equal(run.Id, claim.Run.Id);
+        Assert.Equal("postgres", claim.Run.Configuration.Engine);
+    }
     [Theory]
     [InlineData("job-agent")]
     [InlineData("run-job")]

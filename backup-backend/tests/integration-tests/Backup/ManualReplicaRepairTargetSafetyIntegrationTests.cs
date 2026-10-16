@@ -33,11 +33,13 @@ public sealed partial class ManualReplicaRepairIntegrationTests
         Assert.Equal(Content, destination.Storage[result.TargetKey]);
         await using var stored = fixture.CreatePlatformContext();
         Assert.Equal(result.TargetKey, (await stored.ReplicaRepairOperations.AsNoTracking().SingleAsync(r => r.Id == result.Id)).TargetKey);
+        await using var migrationContext = fixture.CreatePlatformContext();
         var downgrade = await Assert.ThrowsAsync<Npgsql.PostgresException>(() =>
-            stored.GetService<IMigrator>().MigrateAsync("20261013112445_RepairTargetQuarantine"));
+            migrationContext.GetService<IMigrator>().MigrateAsync("20261013112445_RepairTargetQuarantine"));
         Assert.True(downgrade.SqlState is Npgsql.PostgresErrorCodes.RaiseException or Npgsql.PostgresErrorCodes.CheckViolation,
             $"Unexpected downgrade error code {downgrade.SqlState}");
         Assert.Equal(result.TargetKey, (await stored.ReplicaRepairOperations.AsNoTracking().SingleAsync(r => r.Id == result.Id)).TargetKey);
+        await migrationContext.GetService<IMigrator>().MigrateAsync();
     }
 
     [Fact]

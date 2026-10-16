@@ -6,8 +6,23 @@ namespace BackupPlatform.Agent.Core.Restore;
 public enum RestorePipelinePurpose
 {
     Execution,
-    Precheck
+    Precheck,
+    /// <summary>Restore into a disposable platform-named database, prove it is usable, then drop it. Never changes any other database.</summary>
+    Verification
 }
+
+/// <summary>What became of a verification's disposable database.</summary>
+public enum VerificationCleanup
+{
+    /// <summary>The restore never reached the point of creating it, or it was already absent when removal ran.</summary>
+    NotCreated,
+    Dropped,
+    /// <summary>It may still exist: the backend keeps the removal owed and retries.</summary>
+    Failed
+}
+
+/// <summary>The engine's verification report (null when verification never ran) and the disposable database's fate. <see cref="CleanupReasonCode"/> is set only when cleanup failed.</summary>
+public sealed record RestoreVerificationOutcome(RestoreVerificationReport? Report, VerificationCleanup Cleanup, string? CleanupReasonCode = null);
 
 /// <summary>Read-only discovery needs only a connection and the agent-local credential, never a replica or staging area.</summary>
 public sealed record RestoreDiscoveryRequest(DatabaseEngineId Engine, DatabaseConnectionSettings Connection, DatabaseCredential Credential);
@@ -184,4 +199,10 @@ public sealed record DatabaseRestorePipelineResult
     public StagingCleanup StagingCleanup { get; init; } = StagingCleanup.NotNeeded;
 
     public IReadOnlyList<RestoreStageRecord> Stages { get; init; } = [];
+
+    /// <summary>Set for a verification only.</summary>
+    public RestoreVerificationOutcome? Verification { get; init; }
+
+    /// <summary>The <c>bp_old_*</c> rollback copy a replace restore kept (PostgreSQL); null otherwise.</summary>
+    public string? RetainedDatabaseName { get; init; }
 }

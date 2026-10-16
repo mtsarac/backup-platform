@@ -16,7 +16,12 @@ import { BackupJobWizardPage } from './pages/backup-jobs/backup-job-wizard-page'
 import { BackupsPage } from './pages/backups/backups-page'
 import { BackupDetailPage } from './pages/backups/backup-detail-page'
 import { UploadBandwidthPage } from './pages/upload-bandwidth/upload-bandwidth-page'
-import { StoragePage } from './pages/storage/storage-page'
+import { StorageLayout } from './pages/storage/storage-layout'
+import { StorageUsageTab } from './pages/storage/storage-usage-tab'
+import { StorageProvidersTab } from './pages/storage/storage-providers-tab'
+import { ConnectionList } from './features/storage-connections/connection-list'
+import { ConnectionDetail } from './features/storage-connections/connection-detail'
+import { ConnectionWizard } from './features/storage-connections/connection-wizard'
 import { ArtifactsPage } from './pages/artifacts/artifacts-page'
 import { ArtifactDetailPage } from './pages/artifacts/artifact-detail-page'
 import { RestoresPage } from './pages/restores/restores-page'
@@ -59,7 +64,13 @@ function AppRoutes() {
         <Route path="backup-jobs/:id/edit" element={<BackupJobWizardPage />} />
         <Route path="backup-runs" element={<BackupsPage />} />
         <Route path="backup-runs/:id" element={<BackupDetailPage />} />
-        <Route path="storage" element={<StoragePage />} />
+        <Route path="storage" element={<StorageLayout />}>
+          <Route index element={<ConnectionList />} />
+          <Route path="usage" element={<StorageUsageTab />} />
+          <Route path="providers" element={<StorageProvidersTab />} />
+        </Route>
+        <Route path="storage/connections/new" element={<ConnectionWizard />} />
+        <Route path="storage/connections/:connectionId" element={<ConnectionDetail />} />
         <Route path="upload-bandwidth" element={<UploadBandwidthPage />} />
         <Route path="artifacts" element={<ArtifactsPage />} />
         <Route path="artifacts/:id" element={<ArtifactDetailPage />} />

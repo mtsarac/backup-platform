@@ -1,14 +1,19 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { AlertCircle, Database, HardDrive, LayoutGrid, List, Monitor, PlayCircle, ShieldAlert } from 'lucide-react'
-import { useState, type ElementType } from 'react'
+import { AlertCircle, CheckCircle2, Database, HardDrive, LayoutGrid, List, Monitor, Plus, ShieldAlert } from 'lucide-react'
+import { useState } from 'react'
 import { apiRequest, tenantPath } from '@/lib/api/client'
 import { failureMessage } from '@/lib/api/failure-messages'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { QueryState } from '@/components/data/query-state'
 import { StatusPill } from '@/components/data/status-pill'
+import { KpiCard } from '@/components/data/kpi-card'
 import { DataTable, type Column } from '@/components/data/data-table'
 import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { Notice } from '@/components/ui/notice'
+import { PageHeader } from '@/components/ui/page-header'
+import { Section } from '@/components/ui/section'
 import type { BackupRun } from '@/features/backups/types'
 import { ReplicationBadge } from '@/features/backups/replication'
 import type { BackupJob } from '@/features/backup-jobs/types'
@@ -21,46 +26,91 @@ interface Dashboard {
   recentRuns: BackupRun[]
   upcomingJobs: BackupJob[]
 }
-function KpiCard({ label, value, icon: Icon, danger, hint }: { label: string; value: number; icon: ElementType; danger?: boolean; hint?: string }) {
-  return <div className="rounded-lg border-2 border-border bg-surface p-6"><div className="flex items-center justify-between gap-2"><span className="text-base font-medium text-text-muted">{label}</span><Icon className={`size-6 ${danger ? 'text-error' : 'text-primary'}`} /></div><p className={`mt-3 text-4xl font-semibold ${danger ? 'text-error' : 'text-text-heading'}`}>{value}</p>{hint && <p className="mt-1 text-base text-text-muted">{hint}</p>}</div>
-}
 
 const VIEW_KEY = 'backup-dashboard-view'
 
+const bannerTones = {
+  error: { box: 'border-error/40 bg-error-subtle', text: 'text-error', icon: ShieldAlert },
+  success: { box: 'border-success/40 bg-success-subtle', text: 'text-success', icon: CheckCircle2 },
+  warning: { box: 'border-warning/40 bg-warning-subtle', text: 'text-warning', icon: ShieldAlert },
+} as const
+
+/** The one sentence the dashboard exists to answer: is anything wrong right now? */
 function StatusBanner({ issues, succeeded, href }: { issues: number; succeeded: number; href: string }) {
-  if (issues > 0) return <section role="status" className="flex flex-wrap items-center gap-4 rounded-lg border-2 border-error bg-error-subtle p-6"><ShieldAlert className="size-12 shrink-0 text-error" /><div className="min-w-0 flex-1"><p className="text-2xl font-semibold text-error">{issues} kategoride uyarı var</p><p className="mt-1 text-base text-text">Başarısız yedek, storage, replikasyon ve silme sayaçları değerlendirilir; bu sayı toplam hata sayısı değildir.</p></div><Link to={href} className="inline-flex h-12 items-center rounded-lg bg-primary px-4 text-base font-medium text-primary-foreground">Yedekleri incele</Link></section>
-  if (succeeded > 0) return <section role="status" className="flex items-center gap-4 rounded-lg border-2 border-success bg-success-subtle p-6"><HardDrive className="size-12 shrink-0 text-success" /><div><p className="text-2xl font-semibold text-success">Son 24 saatte {succeeded} başarılı yedek</p><p className="mt-1 text-base text-text">Bu sonuç, tüm agent bağlantılarının veya planlı görevlerin sağlıklı olduğunu göstermez.</p></div></section>
-  return <section role="status" className="flex items-center gap-4 rounded-lg border-2 border-warning bg-warning-subtle p-6"><ShieldAlert className="size-12 shrink-0 text-warning" /><div><p className="text-2xl font-semibold text-warning">Son 24 saatte yedek alınmadı</p><p className="mt-1 text-base text-text">Planlı görevlerinizin çalıştığından emin olun.</p></div></section>
+  const tone = issues > 0 ? 'error' : succeeded > 0 ? 'success' : 'warning'
+  const { box, text, icon: Icon } = bannerTones[tone]
+  return <section role="status" className={`flex flex-wrap items-center gap-4 rounded-xl border px-5 py-4 ${box}`}>
+    <Icon aria-hidden="true" className={`size-9 shrink-0 ${text}`} />
+    <div className="min-w-0 flex-1">
+      {issues > 0 ? <><p className={`text-xl font-semibold ${text}`}>{issues} kategoride uyarı var</p><p className="text-[0.9375rem] text-text">Başarısız yedek, storage, replikasyon ve silme sayaçları değerlendirilir; bu sayı toplam hata sayısı değildir.</p></>
+        : succeeded > 0 ? <><p className={`text-xl font-semibold ${text}`}>Son 24 saatte {succeeded} başarılı yedek</p><p className="text-[0.9375rem] text-text">Bu sonuç, tüm agent bağlantılarının veya planlı görevlerin sağlıklı olduğunu göstermez.</p></>
+          : <><p className={`text-xl font-semibold ${text}`}>Son 24 saatte yedek alınmadı</p><p className="text-[0.9375rem] text-text">Planlı görevlerinizin çalıştığından emin olun.</p></>}
+    </div>
+    {issues > 0 && <Link to={href} className={buttonVariants()}>Yedekleri incele</Link>}
+  </section>
 }
+
+function Row({ label, value, tone }: { label: string; value: number; tone?: 'error' }) {
+  return <div className="flex items-center justify-between gap-3 py-1.5"><dt className="text-[0.9375rem] text-text-muted">{label}</dt><dd className={`font-semibold tabular-nums ${tone === 'error' && value > 0 ? 'text-error' : 'text-text-heading'}`}>{value}</dd></div>
+}
+
 export function DashboardPage() {
-  const { tenantId, tenant } = useTenant()
+  const { tenantId, tenant, canAdmin } = useTenant()
   const query = useQuery({ queryKey: ['tenant', tenantId, 'dashboard'], queryFn: ({ signal }) => apiRequest<Dashboard>(tenantPath(tenantId, 'dashboard'), { signal }), refetchInterval: 15_000, refetchIntervalInBackground: false })
   const data = query.data
   const [layout, setLayout] = useState<'table' | 'cards'>(() => localStorage.getItem(VIEW_KEY) === 'table' ? 'table' : 'cards')
   const pickLayout = (next: 'table' | 'cards') => { localStorage.setItem(VIEW_KEY, next); setLayout(next) }
   const base = `/tenants/${tenantId}`
   const columns: Column<BackupRun>[] = [
-    { key: 'job', header: 'Job / Database', render: run => <Link className="text-primary hover:underline" to={`${base}/backup-runs/${run.id}`}>{run.jobName} / {run.configuration.database}</Link> },
+    { key: 'job', header: 'Job / Database', wrap: true, render: run => <Link className="font-medium text-primary underline-offset-4 hover:underline" to={`${base}/backup-runs/${run.id}`}>{run.jobName} / {run.configuration.database}</Link> },
     { key: 'agent', header: 'Agent', render: run => run.agentName ?? '—' },
     { key: 'date', header: 'Başlangıç', render: run => new Date(run.startedAt ?? run.createdAt).toLocaleString('tr-TR') },
     { key: 'status', header: 'Durum', render: run => <span className="inline-flex flex-wrap items-center gap-2"><StatusPill status={run.status} /><ReplicationBadge replication={run.replication} /></span> },
-    { key: 'attention', header: 'Bilgi', render: run => run.reasonCode ? failureMessage(run.reasonCode) : run.status === 'RetryPending' ? 'Yeni attempt bekleniyor.' : run.status === 'CancellationRequested' ? 'Agent iptali henüz tamamlamadı.' : '—' },
+    { key: 'attention', header: 'Bilgi', wrap: true, render: run => run.reasonCode ? failureMessage(run.reasonCode) : run.status === 'RetryPending' ? 'Yeni attempt bekleniyor.' : run.status === 'CancellationRequested' ? 'Agent iptali henüz tamamlamadı.' : '—' },
   ]
-  return <div className="space-y-6">
-    <div><h1 className="text-3xl font-semibold text-text-heading">Dashboard</h1><p className="mt-1 text-base text-text-muted">{tenant.name} · Gerçek backup ve Agent durumu</p></div>
+  const replicationShort = data?.runs.replicationInsufficientLast24Hours ?? 0
+  return <>
+    <PageHeader title="Dashboard" description={`${tenant.name} · Gerçek backup ve Agent durumu`}
+      actions={<><Link to={`${base}/backup-runs`} className={buttonVariants({ variant: 'outline' })}>Backup Runs</Link>{canAdmin && <Link to={`${base}/backup-jobs/new`} className={buttonVariants()}><Plus aria-hidden="true" className="size-4" />Yeni Backup Job</Link>}</>} />
     <QueryState isPending={query.isPending} error={query.error}>
       {data && <>
-        <StatusBanner succeeded={data.runs.succeededLast24Hours} href={`${base}/backup-runs?status=Failed`} issues={[data.runs.failedLast24Hours, data.runs.storageFailedLast24Hours, data.runs.replicationInsufficientLast24Hours ?? 0, data.artifacts.deleteFailed].filter(count => count > 0).length} />
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><KpiCard label="Agents" hint="Bağlı bilgisayar / sunucu" value={data.agents.total} icon={Monitor} /><KpiCard label="Scheduled Jobs" hint="Otomatik çalışan görev" value={data.jobs.scheduled} icon={Database} /><KpiCard label="Yedek üretildi · son 24 saat" value={data.runs.succeededLast24Hours} icon={HardDrive} /><KpiCard label="Başarısız · son 24 saat" value={data.runs.failedLast24Hours} icon={AlertCircle} danger={data.runs.failedLast24Hours > 0} /></div>
-        <section className="rounded-lg border border-border bg-surface p-4"><h2 className="font-medium text-text-heading">Agent bağlantı durumu ve yaşam döngüsü</h2><dl className="mt-3 flex flex-wrap gap-5 text-sm">{(Object.entries({ online: 'Çevrimiçi', offline: 'Çevrimdışı', unknown: 'Bağlantı bilinmiyor', disabled: 'Devre dışı (lifecycle)', revoked: 'İptal edilmiş (lifecycle)' }) as [keyof Dashboard['agents'], string][]).map(([key, label]) => <div key={key}><dt className="text-text-muted">{label}</dt><dd className="font-semibold">{data.agents[key]}</dd></div>)}</dl></section>
-        {data.artifacts.deleteFailed > 0 && <div role="alert" className="rounded-lg border border-error/30 bg-error-subtle p-4 text-error">{data.artifacts.deleteFailed} artifact silinemedi. <Link className="underline" to={`${base}/artifacts?state=DeleteFailed`}>Silme hatalarını inceleyin.</Link></div>}
-        {data.runs.storageFailedLast24Hours > 0 && <div role="alert" className="rounded-lg border border-error/30 bg-error-subtle p-4 text-error">{data.runs.storageFailedLast24Hours} backup sırasında storage yazma veya replica doğrulama hatası oluştu. <Link className="underline" to={`${base}/backup-runs?status=Failed`}>Başarısız backups</Link></div>}
-        {(data.runs.replicationInsufficientLast24Hours ?? 0) > 0 && <div role="alert" className="rounded-lg border border-error/30 bg-error-subtle p-4 text-error">{data.runs.replicationInsufficientLast24Hours} backup son 24 saatte kullanılabilir yedek üretti, ancak gereken doğrulanmış replika sayısına ulaşamadı. <Link className="underline" to={`${base}/backup-runs?status=Succeeded`}>Replikasyon sonuçlarını inceleyin.</Link></div>}
-        <section className="flex flex-wrap gap-5 rounded-lg border border-border bg-surface p-4 text-sm"><span>Running: <strong>{data.runs.running}</strong></span><span>RetryPending: <strong>{data.runs.retryPending}</strong></span><span>CancellationRequested: <strong>{data.runs.cancellationRequested}</strong></span></section>
-        <div className="grid gap-4 sm:grid-cols-3"><KpiCard label="Aktif Runs" value={data.runs.active} icon={PlayCircle} /><KpiCard label="Etkin Jobs" value={data.jobs.enabled} icon={Database} /><KpiCard label="Silme bekleyen artifacts" value={data.artifacts.deletePending} icon={HardDrive} /></div>
-        <section className="space-y-3"><div className="flex items-center justify-between"><h2 className="text-xl font-semibold text-text-heading">Son backups</h2><div className="flex items-center gap-2"><Button variant={layout === 'cards' ? 'default' : 'outline'} size="sm" aria-pressed={layout === 'cards'} onClick={() => pickLayout('cards')}><LayoutGrid />Kartlar</Button><Button variant={layout === 'table' ? 'default' : 'outline'} size="sm" aria-pressed={layout === 'table'} onClick={() => pickLayout('table')}><List />Liste</Button><Link className="text-base text-primary underline" to={`${base}/backup-runs`}>Tüm history</Link></div></div><DataTable layout={layout} rows={data.recentRuns} columns={columns} keyExtractor={run => run.id} emptyMessage="Bu tenant için henüz backup çalıştırılmadı." /></section>
-        <section className="rounded-lg border border-border bg-surface p-4"><h2 className="font-medium text-text-heading">Sonraki scheduled backups</h2>{data.upcomingJobs.length ? <ul className="mt-3 divide-y divide-border">{data.upcomingJobs.map(job => <li key={job.id} className="flex flex-wrap justify-between gap-2 py-2"><Link className="text-primary" to={`${base}/backup-jobs/${job.id}/edit`}>{job.name}</Link><span className="text-sm text-text-muted">{job.schedule?.nextOccurrenceAt ? new Date(job.schedule.nextOccurrenceAt).toLocaleString('tr-TR') : '—'} · {job.schedule?.timeZone}</span></li>)}</ul> : <p className="mt-3 text-sm text-text-muted">Etkin schedule yok.</p>}</section>
+        <StatusBanner succeeded={data.runs.succeededLast24Hours} href={`${base}/backup-runs?status=Failed`} issues={[data.runs.failedLast24Hours, data.runs.storageFailedLast24Hours, replicationShort, data.artifacts.deleteFailed].filter(count => count > 0).length} />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <KpiCard label="Agents" hint={`${data.agents.online} çevrimiçi · bağlı bilgisayar / sunucu`} value={data.agents.total} icon={<Monitor className="size-5" />} />
+          <KpiCard label="Scheduled Jobs" hint="Otomatik çalışan görev" value={data.jobs.scheduled} icon={<Database className="size-5" />} />
+          <KpiCard label="Yedek üretildi · son 24 saat" value={data.runs.succeededLast24Hours} tone="success" icon={<HardDrive className="size-5" />} />
+          <KpiCard label="Başarısız · son 24 saat" value={data.runs.failedLast24Hours} tone={data.runs.failedLast24Hours > 0 ? 'error' : undefined} icon={<AlertCircle className="size-5" />} />
+        </div>
+        {data.artifacts.deleteFailed > 0 && <Notice tone="error">{data.artifacts.deleteFailed} artifact silinemedi. <Link className="font-medium underline" to={`${base}/artifacts?state=DeleteFailed`}>Silme hatalarını inceleyin.</Link></Notice>}
+        {data.runs.storageFailedLast24Hours > 0 && <Notice tone="error">{data.runs.storageFailedLast24Hours} backup sırasında storage yazma veya replica doğrulama hatası oluştu. <Link className="font-medium underline" to={`${base}/backup-runs?status=Failed`}>Başarısız backups</Link></Notice>}
+        {replicationShort > 0 && <Notice tone="error">{replicationShort} backup son 24 saatte kullanılabilir yedek üretti, ancak gereken doğrulanmış replika sayısına ulaşamadı. <Link className="font-medium underline" to={`${base}/backup-runs?status=Succeeded`}>Replikasyon sonuçlarını inceleyin.</Link></Notice>}
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
+          <section className="min-w-0 space-y-3" aria-labelledby="recent-runs-heading">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 id="recent-runs-heading" className="text-base font-semibold text-text-heading">Son backups</h2>
+              <div className="flex items-center gap-2">
+                <Button variant={layout === 'cards' ? 'default' : 'outline'} size="sm" aria-pressed={layout === 'cards'} onClick={() => pickLayout('cards')}><LayoutGrid />Kartlar</Button>
+                <Button variant={layout === 'table' ? 'default' : 'outline'} size="sm" aria-pressed={layout === 'table'} onClick={() => pickLayout('table')}><List />Liste</Button>
+                <Link className="text-sm font-medium text-primary underline-offset-4 hover:underline" to={`${base}/backup-runs`}>Tüm history</Link>
+              </div>
+            </div>
+            <DataTable layout={layout} rows={data.recentRuns} columns={columns} keyExtractor={run => run.id} emptyMessage="Bu tenant için henüz backup kaydı yok." />
+          </section>
+          <div className="space-y-4">
+            <Section title="Agent bağlantı durumu ve yaşam döngüsü"><dl className="divide-y divide-border">
+              <Row label="Çevrimiçi" value={data.agents.online} /><Row label="Çevrimdışı" value={data.agents.offline} tone="error" /><Row label="Bağlantı bilinmiyor" value={data.agents.unknown} />
+              <Row label="Devre dışı (lifecycle)" value={data.agents.disabled} /><Row label="İptal edilmiş (lifecycle)" value={data.agents.revoked} />
+            </dl></Section>
+            <Section title="Çalışan işler"><dl className="divide-y divide-border">
+              <Row label="Running" value={data.runs.running} /><Row label="RetryPending" value={data.runs.retryPending} /><Row label="CancellationRequested" value={data.runs.cancellationRequested} />
+              <Row label="Aktif Runs" value={data.runs.active} /><Row label="Etkin Jobs" value={data.jobs.enabled} /><Row label="Silme bekleyen artifacts" value={data.artifacts.deletePending} />
+            </dl></Section>
+            <Section title="Sonraki scheduled backups">{data.upcomingJobs.length
+              ? <ul className="divide-y divide-border">{data.upcomingJobs.map(job => <li key={job.id} className="space-y-0.5 py-2 first:pt-0 last:pb-0"><Link className="font-medium text-primary underline-offset-4 hover:underline" to={`${base}/backup-jobs/${job.id}/edit`}>{job.name}</Link><p className="text-sm text-text-muted">{job.schedule?.nextOccurrenceAt ? new Date(job.schedule.nextOccurrenceAt).toLocaleString('tr-TR') : '—'} · {job.schedule?.timeZone}</p></li>)}</ul>
+              : <p className="text-sm text-text-muted">Etkin schedule yok.</p>}</Section>
+          </div>
+        </div>
       </>}
     </QueryState>
-  </div>
+  </>
 }

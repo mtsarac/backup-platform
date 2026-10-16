@@ -54,12 +54,12 @@ internal sealed class RestoreWorld(PostgreSqlFixture database)
     // ---- seeding ----
 
     /// <summary>A new tenant and agent (able to restore) with one backup in central storage, which any agent can reach.</summary>
-    public async Task<RestoreSeed> SeedCentralAsync(BackupRetentionPolicy? policy = null)
+    public async Task<RestoreSeed> SeedCentralAsync(BackupRetentionPolicy? policy = null, string? sourceMetadataJson = null)
     {
         var agent = await Harness.AddAgentAsync();
         await EnableRestoreAsync(agent);
         var job = await RetentionKit.AddJobAsync(Harness, agent, policy);
-        return new RestoreSeed(agent, await RetentionKit.SeedAsync(Harness, agent, job, Accepted, storageProvider: "central", storageTarget: "central"));
+        return new RestoreSeed(agent, await RetentionKit.SeedAsync(Harness, agent, job, Accepted, storageProvider: "central", storageTarget: "central", sourceMetadataJson: sourceMetadataJson));
     }
 
     /// <summary>A new tenant and agent (able to restore) with one backup on the agent's own disk.</summary>

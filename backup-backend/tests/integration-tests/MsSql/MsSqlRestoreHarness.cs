@@ -132,6 +132,14 @@ public sealed class MsSqlRestoreHarness(MsSqlFixture fixture) : IAsyncDisposable
         return name;
     }
 
+    /// <summary>A fresh <c>bp_verify_*</c> name, as an isolated verification creates; the harness drops it on disposal.</summary>
+    public string NewVerificationName()
+    {
+        var name = RestoreDatabaseNames.NewVerificationName();
+        _databases.Add(name);
+        return name;
+    }
+
     /// <summary>Creates a database with <c>dbo.Notes</c> holding the given marker rows, so a test can tell it from a restored copy of the source.</summary>
     public async Task<string> CreateTargetAsync(string tag, int rows = 1)
     {

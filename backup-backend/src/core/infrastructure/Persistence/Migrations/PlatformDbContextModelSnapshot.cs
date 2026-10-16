@@ -2504,6 +2504,57 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .HasColumnType("xid")
                         .HasColumnName("xmin");
 
+                    b.ComplexProperty(typeof(Dictionary<string, object>), "Cleanup", "BackupPlatform.Domain.Restores.RestoreOperation.Cleanup#RestoreCleanup", b1 =>
+                        {
+                            b1.IsRequired();
+
+                            b1.Property<int>("Attempts")
+                                .HasColumnType("integer")
+                                .HasColumnName("CleanupAttempts");
+
+                            b1.Property<string>("DatabaseName")
+                                .HasMaxLength(128)
+                                .HasColumnType("character varying(128)")
+                                .HasColumnName("CleanupDatabaseName");
+
+                            b1.Property<string>("Kind")
+                                .IsRequired()
+                                .HasMaxLength(24)
+                                .HasColumnType("character varying(24)")
+                                .HasColumnName("CleanupKind");
+
+                            b1.Property<string>("LastFailureCode")
+                                .HasMaxLength(64)
+                                .HasColumnType("character varying(64)")
+                                .HasColumnName("CleanupLastFailureCode");
+
+                            b1.Property<DateTimeOffset?>("LeaseExpiresAt")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("CleanupLeaseExpiresAt");
+
+                            b1.Property<Guid?>("LeaseToken")
+                                .HasColumnType("uuid")
+                                .HasColumnName("CleanupLeaseToken");
+
+                            b1.Property<DateTimeOffset?>("NextAttemptAt")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("CleanupNextAttemptAt");
+
+                            b1.Property<Guid?>("RequestedByUserId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("CleanupRequestedByUserId");
+
+                            b1.Property<string>("State")
+                                .IsRequired()
+                                .HasMaxLength(16)
+                                .HasColumnType("character varying(16)")
+                                .HasColumnName("CleanupState");
+
+                            b1.Property<DateTimeOffset?>("UpdatedAt")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("CleanupUpdatedAt");
+                        });
+
                     b.ComplexProperty(typeof(Dictionary<string, object>), "Options", "BackupPlatform.Domain.Restores.RestoreOperation.Options#RestoreOptions", b1 =>
                         {
                             b1.IsRequired();
@@ -2573,6 +2624,10 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("SupportSessionId", "TenantId");
 
+                    b.HasIndex("TenantId", "AgentId")
+                        .HasDatabaseName("ix_restore_operations_cleanup_pending")
+                        .HasFilter("\"CleanupState\" = 'Pending'");
+
                     b.HasIndex("TenantId", "CreatedAt");
 
                     b.HasIndex("TenantId", "ArtifactId", "CreatedAt");
@@ -2588,13 +2643,15 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_restore_operations_attempt", "\"CurrentAttemptNumber\" >= 1");
 
+                            t.HasCheckConstraint("ck_restore_operations_cleanup", "\"CleanupKind\" IN ('None','VerificationDatabase','RollbackCopy') AND \"CleanupState\" IN ('Idle','Retained','Pending','Completed') AND \"CleanupAttempts\" >= 0 AND (\"CleanupKind\" = 'None') = (\"CleanupDatabaseName\" IS NULL) AND (\"CleanupKind\" <> 'None' OR \"CleanupState\" = 'Idle') AND (\"Purpose\" = 'Verification') = (\"CleanupKind\" = 'VerificationDatabase') AND (\"CleanupKind\" <> 'VerificationDatabase' OR \"CleanupDatabaseName\" = \"DatabaseName\") AND (\"CleanupState\" IN ('Pending','Completed') OR \"CleanupLeaseToken\" IS NULL) AND (\"CleanupState\" NOT IN ('Pending','Completed','Retained') OR \"CompletedAt\" IS NOT NULL)");
+
                             t.HasCheckConstraint("ck_restore_operations_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
 
                             t.HasCheckConstraint("ck_restore_operations_mode", "(\"Mode\" = 'NewDatabase' AND \"OverwritePolicy\" = 'Forbidden') OR (\"Mode\" = 'ReplaceExistingDatabase' AND \"OverwritePolicy\" = 'ReplaceExisting')");
 
                             t.HasCheckConstraint("ck_restore_operations_outcome", "(\"Status\" <> 'Succeeded' OR (((\"Purpose\" = 'Execution' AND \"TargetState\" = 'Online') OR (\"Purpose\" <> 'Execution' AND \"TargetState\" = 'NotModified')) AND \"FailureCode\" IS NULL)) AND (\"Status\" NOT IN ('Failed','Cancelled','AgentLost') OR (\"TargetState\" <> 'Online' AND \"FailureCode\" IS NOT NULL))");
 
-                            t.HasCheckConstraint("ck_restore_operations_purpose", "\"Purpose\" IN ('Execution','Precheck','Discovery')");
+                            t.HasCheckConstraint("ck_restore_operations_purpose", "\"Purpose\" IN ('Execution','Precheck','Discovery','Verification')");
 
                             t.HasCheckConstraint("ck_restore_operations_result", "\"ResultJson\" IS NULL OR \"CompletedAt\" IS NOT NULL");
 

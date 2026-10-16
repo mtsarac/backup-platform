@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Dialog } from '@base-ui/react/dialog'
 import { Button } from '@/components/ui/button'
+import { Field } from '@/components/ui/field'
+import { Notice } from '@/components/ui/notice'
+import { inputClass } from '@/features/platform/styles'
+import { CopyButton } from './copy-button'
 import { createEnrollmentToken } from './api'
 import type { CreatedEnrollmentToken } from './types'
 import { agentDate } from './format'
@@ -49,26 +53,22 @@ export function CreateTokenDialog({ tenantId, onClose, onCreated }: { tenantId: 
         <Dialog.Title className="text-lg font-semibold text-text-heading">Kayıt token'ı oluştur</Dialog.Title>
         <Dialog.Description className="text-sm text-text-muted">Token yalnızca agent kaydı için kullanılır. Güvenli bir kanaldan paylaşın. Bu token tekrar görüntülenemez.</Dialog.Description>
         {created ? (
-          <div className="space-y-3" role="status">
-            <p className="text-sm font-medium text-success">{created.token ? 'Token oluşturuldu.' : monitor.phase === 'Checking' ? 'Token gizlendi; kayıt durumu doğrulanıyor.' : monitor.phase === 'Expired' ? 'Token süresi doldu.' : monitor.phase === 'Revoked' ? 'Token iptal edildi.' : 'Token kullanıldı.'}</p>
-            {created.token && <label className="block text-sm text-text-muted">
-              Tek seferlik kayıt token'ı
-              <textarea readOnly rows={3} value={created.token} className="mt-2 block w-full resize-none rounded-lg border border-border bg-surface-2 p-3 font-mono text-sm text-text" />
-            </label>}
+          <div className="space-y-4">
+            <Notice tone="success">{created.token ? 'Token oluşturuldu.' : monitor.phase === 'Checking' ? 'Token gizlendi; kayıt durumu doğrulanıyor.' : monitor.phase === 'Expired' ? 'Token süresi doldu.' : monitor.phase === 'Revoked' ? 'Token iptal edildi.' : 'Token kullanıldı.'}</Notice>
+            {created.token && <div className="space-y-2">
+              <Field label="Tek seferlik kayıt token'ı">{(control) => <textarea {...control} readOnly rows={3} value={created.token} className="mt-1 block w-full resize-none break-all rounded-lg border border-border-strong/70 bg-surface-2 p-3 font-mono text-sm text-text" />}</Field>
+              <CopyButton value={created.token} label="Kayıt token'ını kopyala" />
+            </div>}
             <p className="text-sm text-text-muted">Son kullanma: {agentDate(created.expiresAt)}</p>
             <p className="text-sm font-medium text-text">Bu token tekrar görüntülenemez.</p>
           </div>
         ) : (
           <form id="create-enrollment-token" onSubmit={(event) => { event.preventDefault(); void create() }}>
-            <label className="block text-sm text-text-muted">
-              Geçerlilik süresi (dakika)
-              <input ref={lifetimeRef} type="number" required min={5} max={10080} step={1} disabled={pending} value={lifetimeMinutes} onChange={(event) => setLifetimeMinutes(event.target.value)} className="mt-2 block w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-text" />
-            </label>
-            <p className="mt-2 text-xs text-text-muted">5 dakika ile 7 gün arasında. Varsayılan: 24 saat.</p>
+            <Field label="Geçerlilik süresi (dakika)" hint="5 dakika ile 7 gün arasında. Varsayılan: 24 saat.">{(control) => <input {...control} ref={lifetimeRef} type="number" required min={5} max={10080} step={1} disabled={pending} value={lifetimeMinutes} onChange={(event) => setLifetimeMinutes(event.target.value)} className={inputClass} />}</Field>
           </form>
         )}
-        {error && <p role="alert" className="text-sm text-error">{error}</p>}
-        {monitor.error && <p role="alert" className="text-sm text-error">{monitor.error}</p>}
+        {error && <Notice tone="error">{error}</Notice>}
+        {monitor.error && <Notice tone="error">{monitor.error}</Notice>}
         {monitor.paused && <Button variant="outline" onClick={monitor.retry}>Takibi tekrar dene</Button>}
         <div className="flex flex-wrap justify-end gap-2"><Dialog.Close render={<Button variant="outline" />}>Kapat</Dialog.Close>{!created && <Button type="submit" form="create-enrollment-token" disabled={pending}>{pending ? 'Oluşturuluyor…' : 'Token oluştur'}</Button>}</div>
       </Dialog.Popup>

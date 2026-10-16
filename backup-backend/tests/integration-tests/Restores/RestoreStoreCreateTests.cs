@@ -15,6 +15,102 @@ public sealed class RestoreStoreCreateTests(PostgreSqlFixture fixture) : IClassF
 {
     private readonly RestoreWorld _world = new(fixture);
 
+    [Theory]
+    [InlineData("postgres", true)]
+    [InlineData("mssql", false)]
+    public async Task OnlyPostgreSqlCanCompleteAndReuseALogicalPrecheckWithoutPhysicalMappings(string engine, bool accepted)
+    {
+        var seed = await _world.SeedCentralAsync(sourceMetadataJson: System.Text.Json.JsonSerializer.Serialize(new { engine }));
+        await using (var context = fixture.CreatePlatformContext())
+        {
+            foreach (var purpose in new[] { RestorePurpose.Precheck, RestorePurpose.Execution })
+            {
+                var identifier = RestoreAgentCapability.ForPurpose(purpose, engine);
+                if (engine == "mssql" && purpose == RestorePurpose.Execution) continue;
+                context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(seed.AgentId, seed.TenantId, identifier,
+                    CapabilitySupport.Supported, null, "precheck-test", Now));
+            }
+            await context.SaveChangesAsync();
+        }
+        var command = Command(seed) with { Purpose = RestorePurpose.Precheck, Target = new RestoreTarget("target", null, false, "credential", true, false) };
+        var store = _world.Store();
+        var created = await store.CreateAsync(command, default);
+        Assert.Equal(RestoreCreateOutcome.Created, created.Outcome);
+        var claim = await MustClaimAsync(store, seed.Agent, Now);
+        await StartAsync(store, claim, Now);
+        var json = """{"preCheck":[{"checkId":"archive","status":"Passed","reasonCode":"ok","message":"Archive readable."}],"sourceBackup":{"databaseName":"sales","backupType":"Database","position":1},"fileMappings":[],"checksumVerified":true,"backupVerified":true}""";
+        var outcome = await CompleteAsync(store, claim, Now, new RestoreCompletion(RestoreStatus.Succeeded, null, RestoreTargetState.NotModified, json));
+        Assert.Equal(accepted ? BackupPlatform.Application.Backups.BackupMutationResult.Accepted : BackupPlatform.Application.Backups.BackupMutationResult.Conflict, outcome);
+        if (!accepted) return;
+        var execution = command with { Purpose = RestorePurpose.Execution, PrecheckId = created.Operation!.Id, IdempotencyKey = Guid.NewGuid().ToString("N") };
+        Assert.Equal(RestoreCreateOutcome.Created, (await store.CreateAsync(execution, default)).Outcome);
+    }
+
+    [Theory]
+    [InlineData(RestorePurpose.Execution)]
+    [InlineData(RestorePurpose.Precheck)]
+    [InlineData(RestorePurpose.Discovery)]
+    public async Task PostgreSqlArtifactsRequireTheirEngineCapabilityAtCreationAndClaimAndStayTenantScoped(RestorePurpose purpose)
+    {
+        var seed = await _world.SeedCentralAsync(sourceMetadataJson: """{"engine":"postgres","databaseName":"sales"}""");
+        var command = Command(seed) with
+        {
+            Purpose = purpose, DatabaseName = purpose == RestorePurpose.Discovery ? "" : "master",
+            Target = new RestoreTarget("mssql-looking-host", 1433, false, "pg-credential", true, false)
+        };
+        var capability = RestoreAgentCapability.ForPurpose(purpose, "postgres");
+        Assert.Equal(RestoreCreateOutcome.AgentCannotRestore, (await _world.Store().CreateAsync(command, default)).Outcome);
+        await using (var context = fixture.CreatePlatformContext())
+        {
+            context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(seed.AgentId, seed.TenantId, capability,
+                CapabilitySupport.Supported, null, "pg-test", Now));
+            await context.SaveChangesAsync();
+        }
+        var created = await _world.Store().CreateAsync(command, default);
+        Assert.Equal(RestoreCreateOutcome.Created, created.Outcome);
+        await _world.ExecuteAsync("DELETE FROM agent_capabilities WHERE \"AgentId\" = @agent AND \"Identifier\" = @capability",
+            ("agent", seed.AgentId.Value), ("capability", capability));
+        Assert.Null(await ClaimAsync(_world.Store(), seed.Agent, Now));
+        var foreign = await _world.SeedCentralAsync();
+        Assert.Null(await _world.Store().ClaimNextAsync(foreign.TenantId, seed.AgentId, Now, Lease, Unclaimed, default));
+        Assert.Equal(RestoreCreateOutcome.ArtifactNotFound, (await _world.Store().CreateAsync(command with { TenantId = foreign.TenantId, AgentId = foreign.AgentId }, default)).Outcome);
+        await using (var context = fixture.CreatePlatformContext())
+        {
+            context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(seed.AgentId, seed.TenantId, capability,
+                CapabilitySupport.Supported, null, "pg-test", Now));
+            await context.SaveChangesAsync();
+        }
+        var claim = await MustClaimAsync(_world.Store(), seed.Agent, Now);
+        Assert.Equal(created.Operation!.Id, claim.Operation.Id);
+        Assert.Equal("postgres", claim.Engine);
+        Assert.Equal("postgres", RestoreService.ToSnapshot(claim).Engine);
+        Assert.Equal(1433, RestoreService.ToSnapshot(claim).Target.Port);
+    }
+
+    [Theory]
+    [InlineData("{\"engine\":\"oracle\"}")]
+    [InlineData("{\"engine\":null}")]
+    public async Task ExplicitUnsupportedArtifactEnginesNeverFallBackToMssql(string metadata)
+    {
+        var seed = await _world.SeedCentralAsync(sourceMetadataJson: metadata);
+        var result = await _world.Store().CreateAsync(Command(seed), default);
+        Assert.Equal(RestoreCreateOutcome.SourceRejected, result.Outcome);
+        Assert.Equal(RestoreSourceRejection.BackupTypeUnsupported, result.Rejection);
+        Assert.Equal(0, await _world.ActivePinsAsync(seed.ReplicaId));
+    }
+
+    [Theory]
+    [InlineData("mssql", "master", false)]
+    [InlineData("postgres", "postgres", false)]
+    [InlineData("postgres", "数据库数据库数据库数据库数据库数据库数据库数据库", false)]
+    [InlineData("postgres", "sales_restored", true)]
+    public async Task EngineSpecificTargetValidationRunsBeforeAnOperationOrPinIsCreated(string engine, string name, bool integrated)
+    {
+        var seed = await _world.SeedCentralAsync(sourceMetadataJson: System.Text.Json.JsonSerializer.Serialize(new { engine }));
+        var command = Command(seed) with { DatabaseName = name, Target = new RestoreTarget("target", null, integrated, integrated ? null : "credential", true, false) };
+        await Assert.ThrowsAsync<InvalidRestoreRequestException>(() => _world.Store().CreateAsync(command, default));
+        Assert.Equal(0, await _world.ActivePinsAsync(seed.ReplicaId));
+    }
     [Fact]
     public async Task CreatingARestorePersistsTheOperationItsFirstAttemptAndTheReplicaPinTogether()
     {

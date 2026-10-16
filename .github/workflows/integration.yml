@@ -44,6 +44,16 @@ jobs:
           dotnet build tests/integration-tests $BUILD_FLAGS
       - name: Start PostgreSQL
         run: ../.github/scripts/start-postgres.sh
+      - name: Install PostgreSQL archive clients
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl --fail --silent --show-error https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
+          source /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends postgresql-client-18 postgresql-client-16
+          echo "BACKUP_PLATFORM_TEST_POSTGRES_TOOLS_DIRECTORY=/usr/lib/postgresql/18/bin" >> "$GITHUB_ENV"
+          echo "BACKUP_PLATFORM_TEST_POSTGRES_OLD_TOOLS_DIRECTORY=/usr/lib/postgresql/16/bin" >> "$GITHUB_ENV"
       - name: Apply idempotent release migration script twice
         run: bash ../.github/scripts/check-migrations.sh
       - name: PostgreSQL integration tests

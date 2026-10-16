@@ -72,7 +72,7 @@ internal sealed class RestoreApiScenario : IAsyncDisposable
     /// A backup accepted through the API: in central storage (any agent can read it), or on <paramref name="owner"/>'s own disk when <paramref name="agentLocal"/>.
     /// <paramref name="backendLocal"/> reports the replica as a backend-held file of the local provider, which no agent can reach.
     /// </summary>
-    public async Task<AcceptedBackup> AcceptBackupAsync(bool agentLocal = false, bool backendLocal = false, EnrolledAgent? owner = null)
+    public async Task<AcceptedBackup> AcceptBackupAsync(bool agentLocal = false, bool backendLocal = false, EnrolledAgent? owner = null, string engine = "mssql")
     {
         owner ??= Agent;
         var provider = agentLocal || backendLocal ? "local" : "central";
@@ -83,7 +83,8 @@ internal sealed class RestoreApiScenario : IAsyncDisposable
             agentId = owner.AgentId,
             configuration = new BackupExecutionConfiguration
             {
-                Database = "master", Host = "sql-server", IntegratedSecurity = true, Destinations = [agentLocal || backendLocal ? BackupTestDestinations.Local(location: location) : BackupTestDestinations.Central()]
+                Engine = engine, Database = "master", Host = "sql-server", IntegratedSecurity = engine == "mssql", DatabaseCredentialReference = engine == "postgres" ? "pg-credential" : null,
+                CopyOnly = engine == "mssql", Destinations = [agentLocal || backendLocal ? BackupTestDestinations.Local(location: location) : BackupTestDestinations.Central()]
             }
         };
         using var created = await Backup.CreateJobRawAsync(body);
@@ -96,6 +97,14 @@ internal sealed class RestoreApiScenario : IAsyncDisposable
         var request = Backup.SuccessRequest(claim);
         var replica = request.Artifact!.Replicas[0] with { StorageProvider = provider, StorageTarget = agentLocal || backendLocal ? "local" : "central", Key = $"{claim.AttemptId:N}/backup.bak" };
         request = request with { Artifact = request.Artifact with { Replicas = [replica] } };
+        if (engine == "postgres")
+            request = request with { Artifact = request.Artifact with
+            {
+                SourceMetadataJson = JsonSerializer.Serialize(new { engine, databaseName = "master", backupType = "Full",
+                    backupStartedAt = Clock.GetUtcNow().AddSeconds(-10), backupFinishedAt = Clock.GetUtcNow().AddSeconds(-5),
+                    backupVerification = new { state = "Passed", method = "pg_restore-full-read" } }),
+                AppliedOptionsJson = """{"copyOnly":false,"checksum":true,"compression":true}"""
+            } };
         var acceptedAt = Clock.GetUtcNow();
         using var completed = await Backup.CompleteRawAsync(claim, request);
         Assert.Equal(HttpStatusCode.NoContent, completed.StatusCode);

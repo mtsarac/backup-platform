@@ -64,6 +64,8 @@ public sealed class SqlServerRestorePlannerTests
         Assert.All(evaluation.Items, item => Assert.Equal(BackupPreCheckStatus.Passed, item.Status));
         var plan = evaluation.Plan!;
         Assert.Equal(["/var/opt/mssql/data/Restored_Sales_1.mdf", "/var/opt/mssql/log/Restored_Sales_log_1.ldf"], plan.Mappings.Select(mapping => mapping.TargetPath.Value));
+        Assert.NotNull(plan.Target.DefaultDataDirectory);
+        Assert.NotNull(plan.Target.DefaultLogDirectory);
         Assert.Equal("/var/opt/mssql/data", plan.Target.DefaultDataDirectory.Value);
         Assert.Equal("/var/opt/mssql/log", plan.Target.DefaultLogDirectory.Value);
         Assert.False(plan.Target.DatabaseExists);
@@ -155,6 +157,42 @@ public sealed class SqlServerRestorePlannerTests
     public void ASystemDatabaseIsNeverPlannedOver()
     {
         var evaluation = Plan(Target(MsSqlTestData.Database("master", 1)), DatabaseRestoreMode.ReplaceExistingDatabase, name: "master");
+
+        Assert.Equal(RestoreReasonCodes.TargetProtected, Item(evaluation, SqlServerRestoreCheckIds.TargetProtected).ReasonCode);
+        Assert.Null(evaluation.Plan);
+    }
+
+    [Fact]
+    public void AnIsolatedVerificationPlansLikeANewDatabaseWithoutTheReplaceBranch()
+    {
+        var name = RestoreDatabaseNames.NewVerificationName();
+
+        var evaluation = Plan(Target(), DatabaseRestoreMode.IsolatedVerification, name: name);
+
+        Assert.All(evaluation.Items, item => Assert.Equal(BackupPreCheckStatus.Passed, item.Status));
+        Assert.DoesNotContain(evaluation.Items, item => item.CheckId == SqlServerRestoreCheckIds.TargetRelation);
+        Assert.NotNull(evaluation.Plan);
+        Assert.False(evaluation.Plan.Target.DatabaseExists);
+        Assert.All(evaluation.Plan.Mappings, mapping => Assert.StartsWith(RestoreDatabaseNames.VerificationPrefix, Path.GetFileName(mapping.TargetPath.Value), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void AnIsolatedVerificationIsNeverPlannedOverAnExistingDatabase()
+    {
+        var name = RestoreDatabaseNames.NewVerificationName();
+
+        var evaluation = Plan(Target(MsSqlTestData.Database(name)), DatabaseRestoreMode.IsolatedVerification, name: name);
+
+        Assert.Equal(RestoreReasonCodes.TargetDatabaseExists, Item(evaluation, BackupPreCheckIds.DatabaseExists).ReasonCode);
+        Assert.Null(evaluation.Plan);
+    }
+
+    [Theory]
+    [InlineData(DatabaseRestoreMode.NewDatabase, "bp_verify_0123456789abcdef0123456789abcdef")]
+    [InlineData(DatabaseRestoreMode.IsolatedVerification, "Sales")]
+    public void AReservedNameMismatchIsNeverPlanned(DatabaseRestoreMode mode, string name)
+    {
+        var evaluation = Plan(Target(), mode, name: name);
 
         Assert.Equal(RestoreReasonCodes.TargetProtected, Item(evaluation, SqlServerRestoreCheckIds.TargetProtected).ReasonCode);
         Assert.Null(evaluation.Plan);

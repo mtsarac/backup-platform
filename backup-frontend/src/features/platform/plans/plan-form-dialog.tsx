@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Field } from '@/components/ui/field'
 import { ApiError } from '@/lib/api/client'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { inputClass } from '../styles'
@@ -14,13 +15,11 @@ function CommonFields({ name, setName, unlimited, setUnlimited, sizeText, setSiz
   sizeText: string; setSizeText: (value: string) => void; sizeError: string; nameInvalid: boolean; sizeInvalid: boolean
 }) {
   return <>
-    <label className="block text-sm text-text-muted">Plan adı<input className={inputClass} value={name} maxLength={100} required aria-invalid={nameInvalid} onChange={(event) => setName(event.target.value)} /></label>
-    <label className="flex items-center gap-2 text-sm text-text"><input type="checkbox" checked={unlimited} onChange={(event) => setUnlimited(event.target.checked)} />Limitsiz</label>
-    {!unlimited && <label className="block text-sm text-text-muted">Depolama limiti (GB)
-      <input className={inputClass} inputMode="decimal" value={sizeText} required aria-invalid={sizeInvalid || Boolean(sizeError)} aria-describedby="plan-size-hint" onChange={(event) => setSizeText(event.target.value)} />
-      <span id="plan-size-hint" className="mt-1 block text-xs">1 GB = 1.000.000.000 bayt (ondalık). En fazla 3 ondalık basamak.</span>
-      {sizeError && <span className="mt-1 block text-xs text-error">{sizeError}</span>}
-    </label>}
+    <Field label="Plan adı">{(control) => <input {...control} className={inputClass} value={name} maxLength={100} required aria-invalid={nameInvalid} onChange={(event) => setName(event.target.value)} />}</Field>
+    <label className="flex min-h-8 items-center gap-2 text-sm text-text"><input className="size-4" type="checkbox" checked={unlimited} onChange={(event) => setUnlimited(event.target.checked)} />Limitsiz</label>
+    {!unlimited && <Field label="Depolama limiti (GB)" hint="1 GB = 1.000.000.000 bayt (ondalık). En fazla 3 ondalık basamak." error={sizeError}>
+      {(control) => <input {...control} className={inputClass} inputMode="decimal" value={sizeText} required aria-invalid={sizeInvalid || Boolean(sizeError)} onChange={(event) => setSizeText(event.target.value)} />}
+    </Field>}
   </>
 }
 
@@ -46,7 +45,7 @@ export function CreatePlanDialog({ onClose }: { onClose: () => void }) {
     create.mutate({ name: name.trim(), ...limit, enabled }, { onSuccess: onClose })
   }
   const field = create.error instanceof ApiError ? create.error.field : undefined
-  return <FormDialog title="Yeni plan" submitLabel="Plan oluştur" pendingLabel="Oluşturuluyor…" pending={create.isPending} disabled={!name.trim()} error={create.error ? errorMessage(create.error) : undefined} onSubmit={submit} onClose={onClose}>
+  return <FormDialog title="Yeni plan" description="Plan, tenant abonelikleri için depolama limitini belirler. Oluşturduktan sonra tenant'a atayın." submitLabel="Plan oluştur" pendingLabel="Oluşturuluyor…" pending={create.isPending} disabled={!name.trim()} error={create.error ? errorMessage(create.error) : undefined} onSubmit={submit} onClose={onClose}>
     <CommonFields name={name} setName={setName} unlimited={unlimited} setUnlimited={setUnlimited} sizeText={sizeText} setSizeText={setSizeText} sizeError={sizeError} nameInvalid={field === 'name'} sizeInvalid={field === 'storageLimit'} />
     <label className="flex items-center gap-2 text-sm text-text"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />Etkin (yeni atamalarda seçilebilir)</label>
   </FormDialog>
@@ -68,7 +67,7 @@ export function EditPlanDialog({ plan, onClose }: { plan: Plan; onClose: () => v
     update.mutate({ name: name.trim(), ...limit, ...(plan.quotaPolicyReference ? { quotaPolicyReference: plan.quotaPolicyReference } : {}) }, { onSuccess: onClose })
   }
   const field = update.error instanceof ApiError ? update.error.field : undefined
-  return <FormDialog title={`Planı düzenle: ${plan.name}`} submitLabel="Kaydet" pendingLabel="Kaydediliyor…" pending={update.isPending} disabled={!name.trim()} error={update.error ? errorMessage(update.error) : undefined} onSubmit={submit} onClose={onClose}>
+  return <FormDialog title={`Planı düzenle: ${plan.name}`} description="Ad ve limit değişikliği bu planı kullanan aboneliklere de yansır." submitLabel="Kaydet" pendingLabel="Kaydediliyor…" pending={update.isPending} disabled={!name.trim()} error={update.error ? errorMessage(update.error) : undefined} onSubmit={submit} onClose={onClose}>
     <CommonFields name={name} setName={setName} unlimited={unlimited} setUnlimited={setUnlimited} sizeText={sizeText} setSizeText={setSizeText} sizeError={sizeError} nameInvalid={field === 'name'} sizeInvalid={field === 'storageLimit'} />
   </FormDialog>
 }

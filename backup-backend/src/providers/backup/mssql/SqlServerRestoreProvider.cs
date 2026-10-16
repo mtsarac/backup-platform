@@ -14,11 +14,12 @@ namespace BackupPlatform.BackupProviders.MSSQL;
 /// <see cref="SqlServerRestorePlanner"/> (pure decisions), <see cref="SqlServerRestoreInspector"/> and <see cref="SqlServerRestoreExecutor"/> (statements),
 /// and <see cref="SqlServerRestoreCommandBuilder"/> (the only T-SQL text); this type wires them to the contract and gathers the facts the pure parts decide on.
 /// </summary>
-public sealed class SqlServerRestoreProvider : IDatabaseRestoreProvider
+public sealed class SqlServerRestoreProvider : IDatabaseRestoreProvider, IRestoreVerificationProvider
 {
     private readonly ILogger<SqlServerRestoreProvider> _logger;
     private readonly SqlServerRestoreInspector _inspector;
     private readonly SqlServerRestoreExecutor _executor;
+    private readonly SqlServerRestoreVerifier _verifier;
 
     public SqlServerRestoreProvider(ILogger<SqlServerRestoreProvider> logger, TimeProvider? timeProvider = null)
         : this(logger, timeProvider, SqlServerRestoreSettings.Default)
@@ -33,6 +34,7 @@ public sealed class SqlServerRestoreProvider : IDatabaseRestoreProvider
         var time = timeProvider ?? TimeProvider.System;
         _inspector = new SqlServerRestoreInspector(logger, time);
         _executor = new SqlServerRestoreExecutor(logger, time, settings);
+        _verifier = new SqlServerRestoreVerifier(logger, time, settings);
     }
 
     public DatabaseEngineId Engine => DatabaseEngineId.MsSql;
@@ -146,6 +148,30 @@ public sealed class SqlServerRestoreProvider : IDatabaseRestoreProvider
         ArgumentNullException.ThrowIfNull(credential);
         ArgumentNullException.ThrowIfNull(request);
         return _executor.ExecuteAsync(connection, credential, request, progress, cancellationToken);
+    }
+
+    public Task<RestoreVerificationReport> VerifyDatabaseAsync(
+        DatabaseConnectionSettings connection,
+        DatabaseCredential credential,
+        RestoreVerificationRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(credential);
+        ArgumentNullException.ThrowIfNull(request);
+        return _verifier.VerifyAsync(connection, credential, request, cancellationToken);
+    }
+
+    public Task<DatabaseDropResult> DropDatabaseAsync(
+        DatabaseConnectionSettings connection,
+        DatabaseCredential credential,
+        DatabaseDropRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(connection);
+        ArgumentNullException.ThrowIfNull(credential);
+        ArgumentNullException.ThrowIfNull(request);
+        return _verifier.DropAsync(connection, credential, request, cancellationToken);
     }
 
     private async Task<(SqlServerSession? Session, DatabaseProviderException? Failure)> OpenAsync(

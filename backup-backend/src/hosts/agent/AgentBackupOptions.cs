@@ -18,6 +18,14 @@ public sealed class AgentBackupOptions
 
     /// <summary>The platform's central storage root, reachable by the agent as a directory (a mounted or shared volume).</summary>
     public AgentCentralStorageOptions? CentralStorage { get; set; }
+
+    /// <summary>Optional directory containing pg_dump and pg_restore; absent uses the process PATH.</summary>
+    public AgentPostgreSqlOptions? PostgreSql { get; set; }
+}
+
+public sealed class AgentPostgreSqlOptions
+{
+    public string? ClientToolsDirectory { get; set; }
 }
 
 /// <summary>

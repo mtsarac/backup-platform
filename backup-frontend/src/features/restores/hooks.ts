@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useVisibleTab } from '@/hooks/use-visible-tab'
 import { useTenant } from '@/features/tenancy/use-tenant'
-import { cancelRestore, getRestore, getRestores, getRestoreTargets, startRestore, startRestoreDiscovery, startRestorePrecheck } from './api'
+import { cancelRestore, getRestore, getRestores, getRestoreTargets, removeRollbackCopy, retryRestoreCleanup, startRestore, startRestoreDiscovery, startRestorePrecheck, startRestoreVerification } from './api'
 import { isActiveRestore } from './presentation'
-import type { RestoreFilters, RestoreView, StartRestoreDiscoveryVariables, StartRestorePrecheckVariables, StartRestoreVariables } from './types'
+import type { RestoreFilters, RestoreView, StartRestoreDiscoveryVariables, StartRestorePrecheckVariables, StartRestoreVariables, StartRestoreVerificationVariables } from './types'
 
 export const restoreQueryKeys = {
   all: (tenantId: string) => ['tenant', tenantId, 'restores'] as const,
@@ -95,4 +95,34 @@ export function useCancelRestore(id: string) {
       ])
     },
   })
+}
+export function useStartRestoreVerification() {
+  const { tenantId } = useTenant()
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ artifactId, request, idempotencyKey }: StartRestoreVerificationVariables) => startRestoreVerification(tenantId, artifactId, request, idempotencyKey),
+    retry: false,
+    onSuccess: async (restore) => {
+      if (restore?.id) client.setQueryData(restoreQueryKeys.detail(tenantId, restore.id), restore)
+      await client.invalidateQueries({ queryKey: restoreQueryKeys.all(tenantId) })
+    },
+  })
+}
+function useCleanupMutation(id: string, call: (tenantId: string, variables: string) => Promise<RestoreView>) {
+  const { tenantId } = useTenant()
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (variables: string) => call(tenantId, variables),
+    retry: false,
+    onSuccess: async (restore: RestoreView) => {
+      client.setQueryData(restoreQueryKeys.detail(tenantId, id), restore)
+      await client.invalidateQueries({ queryKey: restoreQueryKeys.all(tenantId) })
+    },
+  })
+}
+export function useRetryRestoreCleanup(id: string) {
+  return useCleanupMutation(id, (tenantId) => retryRestoreCleanup(tenantId, id))
+}
+export function useRemoveRollbackCopy(id: string) {
+  return useCleanupMutation(id, (tenantId, confirmDatabaseName) => removeRollbackCopy(tenantId, id, confirmDatabaseName))
 }

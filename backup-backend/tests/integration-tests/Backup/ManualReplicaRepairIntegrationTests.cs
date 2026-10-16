@@ -40,15 +40,16 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
 
     private readonly ConnectionWorld _connections = new(fixture);
     private QuotaWorld World => _connections.Quota;
-    private readonly HashSet<TenantId> _ownedTenants = [];
 
     public Task InitializeAsync() => Task.CompletedTask;
 
+    // The database is private to this class and its tests run one after another, so every operation still open when a test ends is a leftover of that test (or of its
+    // background work). Cancelling all of them, not only the test's own tenants', keeps leftovers from occupying the global repair capacity of the tests that follow.
     public async Task DisposeAsync()
     {
         await using var context = fixture.CreatePlatformContext();
         var operations = await context.ReplicaRepairOperations
-            .Where(r => _ownedTenants.Contains(r.TenantId) && (r.Status == ReplicaRepairStatus.Pending || r.Status == ReplicaRepairStatus.InProgress))
+            .Where(r => r.Status == ReplicaRepairStatus.Pending || r.Status == ReplicaRepairStatus.InProgress)
             .ToListAsync();
         foreach (var operation in operations)
             operation.CancelStale(DateTimeOffset.UtcNow);
@@ -159,13 +160,12 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         PostgreSqlReplicaRepairStore RepairStore,
         ReplicaRepairService RepairService);
 
-    private async Task<MultiSetup> SetupAsync(QuotaAccountingMode mode = QuotaAccountingMode.LogicalArtifactBytes, ISet<string>? verified = null, byte[]? content = null)
+    private async Task<MultiSetup> SetupAsync(QuotaAccountingMode mode = QuotaAccountingMode.LogicalArtifactBytes, ISet<string>? verified = null, byte[]? content = null, string sourceMetadataJson = "{}")
     {
         content ??= Content;
         var checksum = Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
         var policy = await World.CreatePolicyAsync(mode, QuotaScopeRule.All, QuotaEnforcementMode.WarnOnly);
         var agent = await World.AgentAsync(100 * QuotaWorld.Gb, policy.Key);
-        _ownedTenants.Add(agent.TenantId);
         var (_, central) = await _connections.DefaultsAsync(agent.TenantId);
         var sftp = await _connections.AddAsync(agent.TenantId, "sftp-1", "sftp");
         var drive = await _connections.AddAsync(agent.TenantId, "drive-1", "google-drive");
@@ -215,7 +215,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         }
 
         var completion = new Completion("Succeeded", null,
-            new BackupArtifactResult(content.Length, checksum, checksum, "sha256", T0, "{}", "{}", replicaResults),
+            new BackupArtifactResult(content.Length, checksum, checksum, "sha256", T0, sourceMetadataJson, "{}", replicaResults),
             destReports);
 
         await BackupStoreHarness.CompleteAsync(store, claim, completion, T0);
@@ -809,6 +809,45 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
     }
 
     [Fact]
+    public async Task RestoreClaimRechecksTheArtifactEngineCapabilityAfterTheNetworkProbe()
+    {
+        var setup = await SetupAsync(sourceMetadataJson: """{"engine":"postgres"}""");
+        var world = new RestoreWorld(fixture);
+        await world.EnableRestoreAsync(setup.Agent);
+        var now = DateTimeOffset.UtcNow;
+        async Task EnablePostgresAsync()
+        {
+            await using var context = fixture.CreatePlatformContext();
+            context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(setup.Agent.AgentId, setup.Agent.TenantId,
+                "postgres.restore.full", BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, null, "pg-probe", now));
+            await context.SaveChangesAsync();
+        }
+        await EnablePostgresAsync();
+        var store = new PostgreSqlRestoreStore(World.Options(), setup.Resolver);
+        var command = RestoreWorld.Command(setup.Agent.TenantId, setup.Artifact.Id, setup.Agent.AgentId, now: now) with
+        {
+            Target = new RestoreTarget("pg-target", 5432, false, "pg-credential", true, false)
+        };
+        var created = await store.CreateAsync(command, default);
+        Assert.Equal(RestoreCreateOutcome.Created, created.Outcome);
+        var primary = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "central");
+        var provider = (InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, primary.StorageProvider, primary.StorageTarget)!;
+        provider.BeforeRead = async () =>
+        {
+            await using var context = fixture.CreatePlatformContext();
+            await context.AgentCapabilities.Where(capability => capability.TenantId == setup.Agent.TenantId && capability.AgentId == setup.Agent.AgentId &&
+                capability.Identifier == "postgres.restore.full").ExecuteDeleteAsync();
+        };
+        Assert.Null(await store.ClaimNextAsync(setup.Agent.TenantId, setup.Agent.AgentId, now, RestoreWorld.Lease, RestoreWorld.Unclaimed, default));
+        var pending = await world.OperationAsync(created.Operation!.Id);
+        Assert.Equal(RestoreStatus.Pending, pending.Status);
+        Assert.True(pending.Pin.IsActive);
+        provider.BeforeRead = null;
+        await EnablePostgresAsync();
+        Assert.Equal("postgres", (await RestoreWorld.MustClaimAsync(store, setup.Agent, now)).Engine);
+    }
+
+    [Fact]
     public async Task RestoreClaimNetworkProbeDoesNotHoldDatabaseLocksAcrossProbe()
     {
         var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp" });
@@ -1044,7 +1083,11 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         var operation = Assert.Single(discovered.SelectMany(batch => batch));
         Assert.Equal(first.Agent.TenantId, operation.TenantId);
         Assert.Empty(await second.RepairStore.ListOperationsAsync(second.Agent.TenantId, second.Artifact.Id, default));
-        var global = await first.RepairStore.DiscoverEligibleRepairsAsync(now, 10, default);
+        // The global scan is paged and its cursor is shared by every test of this database, so the other tenants' artifacts left by earlier tests (all created at the
+        // same instant, in random id order) may fill the first pages: page until the second tenant's turn comes. Each page consumes its artifacts, so this terminates.
+        var global = new List<ReplicaRepairOperation>();
+        for (var page = 0; page < 20 && !global.Any(entity => entity.TenantId == second.Agent.TenantId && entity.ArtifactId == second.Artifact.Id); page++)
+            global.AddRange(await first.RepairStore.DiscoverEligibleRepairsAsync(now, 10, default));
         Assert.Contains(global, entity => entity.TenantId == second.Agent.TenantId && entity.ArtifactId == second.Artifact.Id);
         Assert.NotNull(await first.RepairStore.ClaimDueRepairAsync("global", now, TimeSpan.FromMinutes(5), default));
     }

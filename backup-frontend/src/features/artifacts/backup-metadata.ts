@@ -8,4 +8,5 @@ export interface BackupMetadata {
   sqlDetails: { recoveryModel: string | null; compatibilityLevel: number | null; transparentDataEncryption: string | null; userAccess: string | null } | null
   verification: { state: string | null; method: string | null; startedAt: string | null; finishedAt: string | null } | null
   appliedOptions: { copyOnly: boolean | null; checksum: boolean | null; compression: boolean | null } | null
+  postgreSqlDetails?: { archiveFormat: string | null; clientVersion: string | null; encoding: string | null; collation: string | null; dataChecksums: string | null; databaseSizeBytes: string | null; extensions: string | null } | null
 }

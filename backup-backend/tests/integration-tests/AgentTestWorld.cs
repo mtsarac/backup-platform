@@ -205,20 +205,28 @@ internal sealed class AgentWorld : IAsyncDisposable
         return document.RootElement.Clone();
     }
 
+    // A production-strength PBKDF2 hash costs ~160 ms of CPU. Accounts are told apart by identifier, so one salted hash of one password serves every seeded account.
+    private static readonly (string Password, string Hash) SharedCredential = CreateSharedCredential();
+
+    private static (string Password, string Hash) CreateSharedCredential()
+    {
+        var password = $"Local-only-{Guid.NewGuid():N}!";
+        return (password, new PasswordHashService().Hash(UserId.New(), password));
+    }
+
     public async Task<Account> SeedUserAsync(bool platformAdmin = false)
     {
         var user = new User(UserId.New(), "Agent test user");
         var identifier = $"user-{Guid.NewGuid():N}";
-        var password = $"Local-only-{Guid.NewGuid():N}!";
         await using var context = Database.CreatePlatformContext();
         context.Users.Add(user);
-        context.PasswordCredentials.Add(new PasswordCredential(user.Id, identifier, new PasswordHashService().Hash(user.Id, password)));
+        context.PasswordCredentials.Add(new PasswordCredential(user.Id, identifier, SharedCredential.Hash));
         if (platformAdmin)
         {
             context.PlatformAdmins.Add(new PlatformAdmin(user.Id));
         }
         await context.SaveChangesAsync();
-        return new Account(user.Id, identifier, password);
+        return new Account(user.Id, identifier, SharedCredential.Password);
     }
 
     public async Task<Tenant> AddTenantAsync()

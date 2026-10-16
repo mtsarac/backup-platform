@@ -43,7 +43,7 @@ describe('SFTP frontend contracts and behaviors', () => {
     const values = { host: 'sftp.internal', port: '22', username: 'backup-user', authenticationType: 'password', remoteBaseDirectory: '/backups', hostKeyFingerprint: 'SHA256:abc' }
     expect(configurationComplete(configFields, values)).toBe(true)
     const config = buildConfiguration(configFields, values)
-    expect(config).toEqual({ host: 'sftp.internal', port: 22, username: 'backup-user', authenticationType: 'password', remoteBaseDirectory: '/backups', hostKeyFingerprint: 'SHA256:abc' })
+    expect(config).toEqual({ host: 'sftp.internal', port: '22', username: 'backup-user', authenticationType: 'password', remoteBaseDirectory: '/backups', hostKeyFingerprint: 'SHA256:abc' })
 
     const pwFields = activeSecretFields('sftp', values, secretFields)
     expect(secretsComplete(pwFields, { password: '' })).toBe(false)

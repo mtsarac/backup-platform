@@ -33,6 +33,32 @@ public sealed class BackupMetadataProjectionTests
     }
 
     [Fact]
+    public void PostgreSqlMetadataUsesAnAllowlistAndDoesNotExposeProviderSecrets()
+    {
+        var view = BackupMetadataProjection.Read("""
+            {"engine":"postgres","databaseName":"sales","details":{"archive-format":"custom","client-version":"18.6","encoding":"UTF8","collation":"C",
+             "data-checksums":"on","database-size-bytes":"16384","extensions":"plpgsql, hstore","password":"secret-password","remote-path":"secret-path"}}
+            """, """{"copyOnly":false,"checksum":true,"compression":true}""");
+        Assert.NotNull(view);
+        Assert.Equal("custom", view.PostgreSqlDetails!.ArchiveFormat);
+        Assert.Equal("18.6", view.PostgreSqlDetails.ClientVersion);
+        Assert.Equal("on", view.PostgreSqlDetails.DataChecksums);
+        Assert.Equal("plpgsql, hstore", view.PostgreSqlDetails.Extensions);
+        Assert.DoesNotContain("secret-", JsonSerializer.Serialize(view, JsonSerializerOptions.Web), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("{}", "mssql")]
+    [InlineData("{\"databaseName\":\"legacy\"}", "mssql")]
+    [InlineData("{\"engine\":\"postgres\"}", "postgres")]
+    [InlineData("{\"Engine\":\"mssql\"}", "mssql")]
+    [InlineData("{\"engine\":\"oracle\"}", null)]
+    [InlineData("{\"engine\":null}", null)]
+    [InlineData("{\"engine\":\"postgres\",\"Engine\":\"mssql\"}", null)]
+    public void ArtifactRoutingDefaultsOnlyGenuinelyLegacyMetadata(string metadata, string? expected) =>
+        Assert.Equal(expected, BackupPlatform.Domain.Backups.BackupArtifactEngine.Read(metadata));
+
+    [Fact]
     public void MissingLegacyFactsRemainAbsentAndInvalidFieldTypesAreNotInvented()
     {
         Assert.Null(BackupMetadataProjection.Read("{}", "{}"));

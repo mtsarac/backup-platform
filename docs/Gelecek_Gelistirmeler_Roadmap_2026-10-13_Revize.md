@@ -38,6 +38,7 @@ Temel prensip:
 | Windows/Linux Agent host, enrollment, heartbeat, capability sync | Completed (kapsamlı) | Windows Service ve Linux owner-only enrollment var; Linux systemd installer hâlâ Planned. |
 | MSSQL discovery ve Full Backup | Completed | Manuel/zamanlanmış Full; verify, checksum, staging, replica doğrulama. |
 | MSSQL Full Restore | Completed | API + Agent + Restore Wizard; yeni isim, cross-instance, explicit overwrite, retention pin. Differential/log chain/PITR yok. |
+| PostgreSQL Full Backup ve Full Restore | **Completed — çalışma dalı, 2026-10-15** | Provider + Agent + API + UI; consistent `pg_dump` custom arşivi, tam okuma doğrulaması, NewDatabase ve onaylı Overwrite (eski DB korunur). Ayrıntı: `docs/PostgreSql_Backup_Provider_Architecture.md`. Physical/WAL/PITR yok. |
 | Scheduling, retry, cancellation, concurrency, lease | Completed | PostgreSQL authoritative kararlar, agent çalışma sahipliği ve recovery. |
 | Local/Central/Managed/SFTP/Google Drive storage | Completed (temel kapsam) | Central managed connection olarak kullanılır; canlı Google Drive kabulü A1'de geçti (Linux ve Windows Agent; 122 MB upload bug'ı düzeltildi), multi-destination canlı koşusu ve Windows Agent'tan SFTP `NOT RUN`. |
 | Multi-destination, replica health, repair ve quota | Completed (temel kapsam) | Canonical destinations, atomic repair quota, lease-fenced cleanup, durable quarantine. Tam 3-2-1 sınıf/lokasyon policy engine ayrı faz. |
@@ -51,9 +52,9 @@ Temel prensip:
 
 ## Henüz tamamlanmamış ana alanlar
 
-**A0 audit kapanışı, Faz 2A (upload bandwidth limiting) ve N1 bildirimleri (email + webhook + SMS) tamamlandı** (Bölüm 1B, Bölüm 4, Bölüm 26). N1'de **SMS `IMPLEMENTED — NOT VERIFIED`**'dır (hiçbir gerçek SMS sağlayıcısına karşı çalıştırılmadı; SMS'e özel test bilinçli olarak yazılmadı). **Sıradaki:** R1 izole restore testi ve E1 artifact şifreleme (Bölüm 35); Faz 2B/2C bu iterasyonda başlanmadı.
+**A0 audit kapanışı, Faz 2A (upload bandwidth limiting) ve N1 bildirimleri (email + webhook + SMS) tamamlandı** (Bölüm 1B, Bölüm 4, Bölüm 26). N1'de **SMS `IMPLEMENTED — NOT VERIFIED`**'dır (hiçbir gerçek SMS sağlayıcısına karşı çalıştırılmadı; SMS'e özel test bilinçli olarak yazılmadı). **R1 izole restore doğrulaması (MSSQL ve PostgreSQL) tamamlandı.** **Sıradaki:** E1 artifact şifreleme (Bölüm 35); Faz 2B/2C bu iterasyonda başlanmadı.
 
-**Planlı:** Faz 2B zaman profilleri ve 2C pause/resume/recovery; **erken öncelikli** izole MSSQL restore-test otomasyonu ve backup artifact şifreleme; MSSQL Differential/Log/PITR; File/Folder Backup ve File Restore; Windows VSS; Linux systemd installer; Docker runtime/discovery; PostgreSQL backup; S3/SMB/FTPS; provider kapasite izleme; tam 3-2-1 ve ileri audit; Teams/Slack/Telegram/push bildirimleri. Ayrıntılı **teslim sırası** Bölüm 35'tedir; faz numarası öncelik demek değildir.
+**Planlı:** Faz 2B zaman profilleri ve 2C pause/resume/recovery; **erken öncelikli** izole MSSQL restore-test otomasyonu ve backup artifact şifreleme; MSSQL Differential/Log/PITR; File/Folder Backup ve File Restore; Windows VSS; Linux systemd installer; Docker runtime/discovery; PostgreSQL Physical/WAL/PITR; S3/SMB/FTPS; provider kapasite izleme; tam 3-2-1 ve ileri audit; Teams/Slack/Telegram/push bildirimleri. Ayrıntılı **teslim sırası** Bölüm 35'tedir; faz numarası öncelik demek değildir.
 
 **Kabul durumu:** Gerçek Google Drive OAuth/API ve Windows Agent/MSSQL kabulü 2026-10-14'te A1 ile çalıştırıldı (Bölüm 1B, senaryo matrisi); kapsam dışı kalanlar orada `NOT RUN` olarak listelidir. 2026-10-14'te ayrıca açık Win11 VM'de runtime-only DPAPI probe smoke geçmişti. VM'de .NET 10.0.12 ve SQL Server çalışıyor; SDK yok. İzole A1 smoke Agent'ı kaldırıldı; dev tenant'a bağlı `dev-windows-agent` bilerek kurulu bırakıldı (`scripts/windows/dev-windows-agent.sh uninstall`).
 
@@ -104,7 +105,7 @@ Mevcut append-only `AuditEvent` altyapısı genişletildi; platform, membership,
 
 **Açık doğrulama açığı (NOT VERIFIED):** Tam PostgreSQL suite'i (1.580 test; yerel/CI filtresi MSSQL ve `BackupPipelineSmoke` hariç) **30 dakikalık zaman aşımına ulaştı ve hiç tamamlanmadı**; tamamı için PASS iddiası yoktur ve final entegrasyonda yeniden çalıştırılmadı. Kapsam yerine kanıt dilimleriyle doğrulandı: unit, architecture, Fast Agent PASS; final entegrasyonda A0 + orphan ledger + identity/agent/restore/retention/sweeper + GoogleDrive + StorageConnection + fixture isolation odaklı PostgreSQL seçimi **165/165 PASS**; idempotent migration scripti boş veritabanına uygulandı, son migration'ın `Down` → yeniden `Up` turu ve pending-model kontrolü PASS. Final incelemede `DurableOrphanCleanupLedger.Down` içinde audit `ActorKind` check'ini `(1, 2, 3)`'e daraltan artık satırlar bulundu ve kaldırıldı (önceki migration `Down` bilinçli olarak genişletilmiş check'i korur; 4/5 değerli append-only kayıt varken rollback kırılırdı). Canlı Google Drive OAuth/API ve Windows MSSQL end-to-end kabulü A1 sınırıdır. **A0 / A0.1 sonrası Faz 2A otomatik başlatılmadı.**
 
-**Ayrı takip işi — PostgreSQL suite süresi (ölçülmedi, ürün özelliği değildir):** Süre nedeni henüz profillenmedi; aşağıdakiler doğrulanmamış hipotezlerdir ve ilk adım ölçümdür. (1) Önce `--logger trx` ile sınıf/test bazlı süre dağılımı çıkar. (2) `run-postgres-tests.sh` `xUnit.MaxParallelThreads=2` ile çalıştırır; tek paylaşımlı PostgreSQL üzerinde koleksiyon paralelliği ve konteyner I/O sınırı ölçülmeli. (3) ~98 sınıf kendi `PostgreSqlFixture` veritabanını `CREATE DATABASE … TEMPLATE` ile klonlar; sınıf sayısı × klon maliyeti ve template bağlantı beklemesi ölçülmeli. (4) Entegrasyon testlerinde 31 `Task.Delay`/`Thread.Sleep` kullanımı gerçek-zamanlı bekleme olarak incelenmeli (deterministik saat/orchestration). (5) Uzun testler için `--blame-hang-timeout` ile takılma ve gerçek yavaşlık ayrıştırılmalı. Kabul: test izolasyonu/kapsamı azaltılmadan, tam PostgreSQL suite'in CI zaman bütçesinde tamamlandığı ölçülü kanıt; sonuçlar `NOT RUN`/`PASS` olarak ayrı raporlanır.
+**PostgreSQL suite süresi (ölçüldü, 2026-10-15; ürün özelliği değildir):** 1.695 entegrasyon testi, aynı makine ve aynı PostgreSQL (Docker, btrfs, `fsync=on`) üzerinde 4 thread ile **33 dk 29 sn → 9 dk 04 sn** (`run-postgres-tests.sh`, 1.695/1.695 PASS). Süre PostgreSQL'de değil test sürecinin CPU'sundaydı (testlerin toplamı ≈ wall × thread; PostgreSQL konteyneri ortalama %6 CPU). Isınmış tek API dünyası (host + tenant + kullanıcı + agent enroll) test başına ≈ 2.480 ms CPU harcıyordu: her API host'un tüm minimal-API endpoint'lerini çalışma zamanında ifade ağacıyla derlemesi (`RequestDelegateFactory`, host ≈ 800 ms + ilk istek ≈ 600 ms), PBKDF2 (210 000 iterasyon; 4 × ≈160 ms) ve dinamik koda uygulanan TieredPGO enstrümantasyonu (≈ −650 ms, kapatılınca). Düzeltmeler: API projesinde `EnableRequestDelegateGenerator` (derleme zamanı üretilmiş delegate'ler; host kurulumu ≈ 800 → 26 ms), entegrasyon test projesinde `TieredPGO=false`, `AgentWorld.SeedUserAsync` için süreç başına tek tuzlu hash (2 × 160 ms/dünya; giriş doğrulaması üretim maliyetinde kaldı). Dünya kurulumu 2.476 → 619 ms; 5 sınıflık (160 test) örnekte 1 thread 520 → 183 s, 4 thread ≈ 195 → 74 s. Kalan en büyük tek kalem `DROP DATABASE` (PostgreSQL her drop'ta anlık checkpoint ister): 249 drop, ortalama 2,7 s (p50 1,6 s, en çok 21,6 s) ≈ 669 test-saniyesi ve 417 s checkpoint sync süresi — `fsync=on` btrfs'te dosya başına fsync pahalı; `CREATE DATABASE … TEMPLATE` ise ortalama 139 ms (toplam 35 s). `PostgreSqlFixtureIsolationTests` parametresiz fixture'ın kendi veritabanını `DisposeAsync` içinde düşürdüğünü sabitlediğinden drop ertelenmedi. Bunu aşmak için `scripts/database/with-disposable-databases.sh --postgres-only -- scripts/integration/run-postgres-tests.sh` (CI ile aynı `fsync=off` konteyner) **5 dk 41 sn**, 1.695/1.695 PASS. Thread sayısı: yerel PG'de 6 thread 9 dk 49 sn (kazanç yok), 8 thread 7 dk 58 sn ama 6 test 30 sn Npgsql okuma zaman aşımı/sıra bağımlılığıyla başarısız — varsayılan 4 kaldı (`BP_TEST_THREADS`). Doğrulanamayanlar: 1 thread tam suite süresi ölçülmedi (yalnız 5 sınıflık örnekte); ölçümler dizüstü CPU'da ±%25 oynadı, tekrarlanabilirlik için aynı koşulda ardışık çalıştırmalar karşılaştırıldı.
 
 ## A1 — Canlı Google Drive & Windows 11 acceptance (**Completed — 2026-10-14, çalışma dalı `test/a1-live-provider-acceptance`; kapsam dışı kalanlar `NOT RUN`**)
 
@@ -716,7 +717,7 @@ Hedef, AKINSOFT benzeri yedekleme ürünlerinin temel kullanıcı fonksiyonları
 | File/Folder backup ve include/exclude | Planned | Faz 3, yalnız proje iskeleti. |
 | Bandwidth limiting / transfer policies | **Completed (2A, çalışma dalı) / Planned (2B/2C)** | Faz 2A: agent/tenant/job byte-temelli upload limiti (Bölüm 4); 2B/2C ihtiyaca göre daha sonra. |
 | MSSQL Differential/Transaction Log/PITR | Planned | Faz 10–12. |
-| PostgreSQL backup | Planned | Faz 13. |
+| PostgreSQL Full logical Backup/Restore | **Completed — çalışma dalı (2026-10-15)** | Faz 13 ilk iterasyonu; Physical/WAL/PITR ve Differential/Incremental Planned. |
 | S3 / SMB/NAS / FTPS | Planned | Faz 16/18 ve provider genişlemesi. |
 | OneDrive / Dropbox | Future | 2A.12. |
 | Email/webhook/SMS notification (N1) | Completed — Email/Webhook; SMS `IMPLEMENTED — NOT VERIFIED` | Faz 24 içindeki N1 dilimi (Bölüm 26); Teams/Slack/Telegram/push sonraya. |
@@ -1252,6 +1253,10 @@ Bu özellik Transaction Log backup tamamlanmadan yapılmamalıdır.
 
 # 15. Faz 13 — PostgreSQL Provider
 
+**Durum: Full Backup/Restore Completed — çalışma dalı, 2026-10-15.** Gerçek ortam (2026-10-15, Linux Agent, PostgreSQL 18.6 `5432`, yalnız izole test DB'leri): UI'dan job oluşturma → Şimdi çalıştır → 530.118 B artifact (SHA-256 bağımsız doğrulandı) → UI'dan NewDatabase restore → 12.001 satır, schema/sequence/index/constraint/FK/view/materialized view/large object/pgcrypto/owner imzası **eşit**; Local, Central+SFTP çoklu hedef (2/2 Verified), BackendRelayed SFTP ve Central replikasından restore; onaylı Overwrite (eski DB `bp_old_*` olarak korundu); zamanlanmış çalışma; yanlış credential `AuthenticationFailed`, eksik/eski `pg_dump` `UnsupportedCapability`; 656 MB DB'de iptal (kısmi dosya silindi, `pg_dump` kalmadı), `kill -9` Agent ve backend restart → AgentLost + otomatik retry, tek artifact; restore iptali (scratch silindi, hedef `NotModified`); quota, retention fiziksel silme, download (`.dump`). Doğrulama sayıları: PostgreSQL entegrasyon **1.725/1.725 PASS** (1.695 + 30 yeni; test 5 dk 49 sn, `with-disposable-databases.sh --postgres-only`), unit **3.919**, architecture **156**, Agent **439**, frontend **64 dosya / 626 test** PASS; MSSQL provider **111/111** (3 Windows-auth bilinçli skip), Agent.Host smoke **16/16**, restore acceptance **2/2**, Linux Agent+API MSSQL backup→download→restore→delete PASS.
+
+**NOT RUN / kalan riskler:** Windows Agent + PostgreSQL client araçları ve Windows→PostgreSQL E2E çalıştırılmadı; Google Drive hedefli PostgreSQL koşusu yapılmadı (Drive mevcut A1 kabulüyle aynı relay yolunu kullanır); standby kaynak gerçek ortamda test edilmedi. Restore hedef login'i superuser olmalı; `kill -9` ile ölen Agent'ın staging'de bıraktığı kısmi dosya mevcut sweeper (12 sa) ile temizlenir; `bp_restore_*`/`bp_old_*` veritabanları otomatik silinmez. WAL/PITR/Differential/Incremental, R1 ve File/Folder bu işte **yoktur**. SMS `IMPLEMENTED — NOT VERIFIED` ve Platform Metadata DR değişmedi.
+
 PostgreSQL ayrı `IDatabaseBackupProvider` implementation olacaktır.
 
 MSSQL kodu reuse edilmeye çalışılmamalıdır; ortak olan orchestration/contracts katmanı reuse edilmelidir.
@@ -1438,7 +1443,7 @@ Cloud token'ları agent'a persistent verilmemelidir.
 
 # 22. Faz 20 — Restore Test Automation
 
-**Durum: Planned — küçük `R1` dilimi, yüksek öncelik.** Genel teknik sıra Faz 20 olarak kalır, fakat kullanıcı açısından güvenilir geri yükleme, yeni backup engine/provider sayısını artırmaktan önce gelir. Backup'ın var olması başarılı restore anlamına gelmez.
+**Durum: Completed — R1 izole restore doğrulaması çalışma dalında tamamlandı (2026-10-15).** `docs/R1_Restore_Verification_Design.md` kabul matrisi ve detayları içerir. Otomatik zamanlayıcı sonraki dilime bırakılmıştır.
 
 **R1 (ilk teslim):** Kullanıcının açıkça seçtiği/sahip olduğu artifact için disposable/izole test SQL ortamında Full restore + veri bütünlüğü/DB açılış kontrolü; güvenli cleanup, test sonucu ve audit. Otomatik zamanlayıcı ikinci küçük dilimde devreye alınır. Üretim veritabanına test restore yapılmaz. **R1 kabulü:** başarılı/yetersiz-kapasite/bozuk-artifact/SQL failure/cleanup failure; retry ve restart; bağımsız tenant; sonuç ekranında gerçek `Restored/Failed/NotRun` durumu.
 
@@ -1813,9 +1818,9 @@ A0 — MVP operasyon audit matrisi ve eksik kayıtlar                [Completed:
         ↓
 Faz 2A — Upload bandwidth limiting                               [Completed: çalışma dalı]
         ↓
-N1 (Faz 24) — Email/webhook/SMS bildirimleri  [Completed; SMS NOT VERIFIED]  →  R1 (Faz 20) restore testi  [Next]
+N1 (Faz 24) — Email/webhook/SMS bildirimleri  [Completed; SMS NOT VERIFIED]  →  R1 (Faz 20) restore testi  [Completed]
         ↓
-E1 — Artifact şifreleme mimarisi / ilk güvenli vertical slice      [Öne çekildi]
+E1 — Artifact şifreleme mimarisi / ilk güvenli vertical slice      [Next]
         ↓
 MSSQL Differential → Transaction Log → PITR; File/Folder Backup   [Planlı, karar kapısı]
         ↓
@@ -1835,7 +1840,11 @@ Aşağıda **öncelik sırası** verilir; eski `Faz` numaraları ve `M` dilimler
 | 0 | **A0 — Kritik audit matrisi ve eksik event'ler** | MVP madde 33; veri/actor/tenant güvenliği, atomik yazım, DB testleri; Bölüm 1B kanıt/sınırlar | **Completed — çalışma dalı, 2026-10-14** |
 | 1 | **Faz 2A — Upload bandwidth limiting** | Per-agent/tenant/job, bounded stream, paralel transfer ölçümü, relay/SFTP regresyon | **Completed — çalışma dalı, 2026-10-14** (kanıt ve kalan riskler Bölüm 4) |
 | 2 | **N1 (Faz 24) — Email + generic webhook (+ SMS) bildirimi** | Durable event/dispatch, dedup, retry, SSRF koruması, tenant policy, CI | **Completed — çalışma dalı, 2026-10-14** (Email/Webhook PASS; **SMS `IMPLEMENTED — NOT VERIFIED`**; kanıt ve riskler Bölüm 26) |
-| 3 | **R1 (Faz 20) — İzole MSSQL restore testi** | Disposable SQL, tutarlı veri doğrulama, fail/cleanup/retry, tenant izolasyonu | **Next** — öncelikli |
+| 2A| **UI/UX Redesign & Storage Hub** | Tam frontend SaaS tasarımı, responsive 375/1440px, Storage sihirbazı ve detay akışı, 64 test dosyası / 622 test PASS, Chromium smoke | **Completed — çalışma dalı, 2026-10-15** |
+| 2B| **PostgreSQL Test Suite Optimizasyonu & Profiling** | 1.695 entegrasyon testi 4 thread ile 33 dk 29 sn → 9 dk 04 sn (yerel PG, `fsync=on`) ve 5 dk 41 sn (disposable `fsync=off` PG), 1.695/1.695 PASS; kök neden test sürecinde host başına endpoint derleme + PBKDF2 + PGO, PostgreSQL tarafında `DROP DATABASE` checkpoint'i ("PostgreSQL suite süresi" paragrafı). UploadPacerTests üretim API'si eklenmeden deterministik hale getirildi. | **Completed — çalışma dalı, 2026-10-15** |
+| 2C| **MSSQL Windows VM Full Backup & Replace Overwrite E2E** | Windows 11 VM SQL Server 2025 üzerinde NewDatabase ve ReplaceExistingDatabase (confirmOverwrite doğrulamalı) gerçek E2E PASS | **Completed — çalışma dalı, 2026-10-15** |
+| 2D| **PostgreSQL Full Backup & Restore (Faz 13 ilk iterasyonu)** | Bağımsız provider, engine-aware restore routing, mevcut UI; gerçek Agent/API/Chromium + MSSQL regresyonu | **Completed — çalışma dalı, 2026-10-15** (kanıt Bölüm 15; kapsam dışı: WAL/PITR/Differential/Incremental) |
+| 3 | **R1 (Faz 20) — İzole MSSQL ve PostgreSQL restore doğrulaması** | Gerçek disposable DB, DBCC CHECKDB/tam okuma bütünlük kanıtı, güvenli cleanup, CREATEDB yetkisi, 25/25 senaryo PASS | **Completed — çalışma dalı, 2026-10-15** |
 | 4 | **E1 — Artifact encryption** | Önce tehdit modeli/anahtar yaşam döngüsü, sonra streaming encrypt/decrypt + restore | Planned — güvenlik |
 | 5 | **Faz 10–12 — MSSQL Differential / Transaction Log / PITR** | Full/log base chain, LSN, restore ordering, retention-safe pin, MSSQL E2E | Planned — MSSQL ürün değeri |
 | 6 | **Faz 3 ve 9 — File/Folder Backup + Restore** | Include/exclude, symlink, partial warnings, manifest, güvenli restore; VSS sonra | Planned — ikinci kaynak |

@@ -24,6 +24,11 @@ public static class RestoreTaskEndpoints
         restores.MapPost("/lease", RenewAsync);
         restores.MapPost("/progress", ProgressAsync);
         restores.MapPost("/complete", CompleteAsync);
+        // The removal of a platform-created database is leased to its agent from the poll and reported here, fenced by the lease token the poll handed out.
+        endpoints.MapGroup("/api/agent/restore-cleanups/{operationId:guid}")
+            .WithMetadata(new AgentApiEndpoint(), new RequiresAgentProtocol(), new RequestSizeLimitAttribute(4 * 1024))
+            .RequireAuthorization(AuthorizationPolicies.Agent)
+            .MapPost("/complete", CompleteCleanupAsync);
         return endpoints;
     }
 
@@ -48,6 +53,12 @@ public static class RestoreTaskEndpoints
     private static async Task<IResult> CompleteAsync(Guid attemptId, RestoreTaskCompletionRequest request, ICurrentAgent agent, RestoreService service, CancellationToken cancellationToken)
     {
         try { return BackupTaskEndpoints.Mutation(await service.CompleteAsync(agent.Identity!, attemptId, request, cancellationToken)); }
+        catch (ArgumentException) { return BackupTaskEndpoints.Invalid(); }
+    }
+
+    private static async Task<IResult> CompleteCleanupAsync(Guid operationId, RestoreCleanupCompletionRequest request, ICurrentAgent agent, RestoreService service, CancellationToken cancellationToken)
+    {
+        try { return BackupTaskEndpoints.Mutation(await service.CompleteCleanupAsync(agent.Identity!, operationId, request, cancellationToken)); }
         catch (ArgumentException) { return BackupTaskEndpoints.Invalid(); }
     }
 

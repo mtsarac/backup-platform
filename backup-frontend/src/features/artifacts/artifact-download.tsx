@@ -1,3 +1,6 @@
+import { Notice } from '@/components/ui/notice'
+import { Fact, Facts, Section } from '@/components/ui/section'
+import { selectClass } from '@/features/platform/styles'
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
@@ -43,8 +46,8 @@ function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tena
     anchor.click()
     anchor.remove()
   }, [canAdmin, eligible, session, status.data?.state, downloadUrl])
-  if (!canAdmin) return <p className="text-sm text-text-muted">Download Backup yalnızca Owner / Admin için açıktır.</p>
-  if (!eligible) return <p role="status" className="text-sm text-text-muted">Bu Backup silme sürecinde veya silinmiş; indirme kullanılamıyor.</p>
+  if (!canAdmin) return <Notice tone="info">Download Backup yalnızca Owner / Admin için açıktır.</Notice>
+  if (!eligible) return <Notice tone="info">Bu Backup silme sürecinde veya silinmiş; indirme kullanılamıyor.</Notice>
   const selected = availability.data?.replicas.find(replica => replica.replicaId === replicaId)
   const busy = prepare.isPending || Boolean(session && !status.error && !navigationError && (!status.data || ['Preparing', 'Ready', 'Streaming'].includes(status.data.state)))
   const failure = prepare.error || status.error || availability.error
@@ -52,32 +55,38 @@ function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tena
     try { await navigator.clipboard.writeText(availability.data!.checksum); setCopyNotice('Checksum kopyalandı.') }
     catch { setCopyNotice('Checksum kopyalanamadı. Değeri seçerek kopyalayabilirsiniz.') }
   }
-  return <section aria-label="Download Backup" className="space-y-3 rounded-lg border border-border bg-surface p-5">
-    <h2 className="font-semibold text-text">Download Backup</h2>
-    {availability.isPending && <p role="status">İndirme kullanılabilirliği kontrol ediliyor…</p>}
-    {failure && <p role="alert" className="text-sm text-destructive">{errorMessage(failure)}</p>}
-    {navigationError && <p role="alert" className="text-sm text-destructive">İndirme bağlantısı güvenli değil. Yeni bir indirme başlatın.</p>}
-    {availability.data && <>
-      <p className="text-sm text-text-muted">{artifactSize(availability.data.sizeBytes)} · SHA256</p>
-      <code className="block break-all text-sm">{availability.data.checksum}</code>
-      <Button variant="outline" onClick={copyChecksum}>Checksum kopyala</Button>
-      {copyNotice && <p role="status" className="text-sm">{copyNotice}</p>}
-      <label className="block text-sm">İndirme hedefi
-        <select aria-label="İndirme hedefi" className="mt-1 block w-full rounded-md border border-border bg-surface p-2" value={replicaId} disabled={busy} onChange={event => setReplicaId(event.target.value)}>
-          <option value="">Otomatik · en uygun replika (Fallback destekli)</option>
-          {availability.data.replicas.map(replica => <option key={replica.replicaId} value={replica.replicaId} disabled={!replica.available}>{replica.storageProvider} · {replica.storageTarget}{!replica.available ? ` · ${failureMessage(replica.reason)}` : ''}</option>)}
-        </select>
-      </label>
-      {!replicaId && availability.data.replicas.filter(r => r.available).length > 1 && (
-        <p className="text-xs text-text-muted">Otomatik seçimde, aktarım başlamadan önce backend'in okuyabildiği alternatif doğrulanmış replika denenebilir. Aktarım başladıktan sonra hata oluşursa indirme durur; otomatik yeniden başlatılmaz.</p>
-      )}
-      {!availability.data.available && <p role="status" className="text-sm text-destructive">İndirme kullanılamıyor: Hiçbir doğrulanmış kopya erişilebilir değil ({failureMessage(availability.data.reason)}).</p>}
-      <Button disabled={busy || !availability.data.available || Boolean(selected && !selected.available)} onClick={() => { started.current = false; prepare.mutate() }}>{prepare.isPending || status.data?.state === 'Preparing' ? 'İndirme hazırlanıyor…' : 'Download Backup'}</Button>
-    </>}
-    {session && !status.data && !status.error && <p role="status">İndirme hazırlanıyor…</p>}
-    {status.data && <p role={status.data.state === 'Failed' ? 'alert' : 'status'} className="text-sm">
-      {status.data.state === 'Preparing' ? 'İndirme hazırlanıyor…' : status.data.state === 'Ready' || status.data.state === 'Streaming' ? 'İndirme başlatıldı. Dosya tarayıcınız tarafından kaydediliyor.' : status.data.state === 'Completed' ? 'Dosya aktarımı tamamlandı.' : status.data.state === 'Cancelled' ? 'İndirme iptal edildi.' : `İndirme başarısız: ${failureMessage(status.data.failureCode)}`}
-      {status.data.transferredBytes > 0 && ` · ${artifactSize(status.data.transferredBytes)} aktarıldı`}
-    </p>}
-  </section>
+  const finalState = status.data?.state
+  return <Section title="Download Backup" description="Dosya tarayıcınızdan doğrudan indirilir; içeriği uygulama belleğine alınmaz." className="max-w-3xl">
+    <div className="space-y-4">
+      {availability.isPending && <p role="status" className="text-sm text-text-muted">İndirme kullanılabilirliği kontrol ediliyor…</p>}
+      {failure && <Notice tone="error">{errorMessage(failure)}</Notice>}
+      {navigationError && <Notice tone="error">İndirme bağlantısı güvenli değil. Yeni bir indirme başlatın.</Notice>}
+      {availability.data && <>
+        <Facts columns={1}>
+          <Fact label="Boyut">{artifactSize(availability.data.sizeBytes)}</Fact>
+          <Fact label="SHA256 checksum">
+            <code className="block break-all font-mono text-sm">{availability.data.checksum}</code>
+            <Button className="mt-2" variant="outline" size="sm" onClick={copyChecksum}>Checksum kopyala</Button>
+            {copyNotice && <p role="status" className="mt-1 text-sm text-text-muted">{copyNotice}</p>}
+          </Fact>
+        </Facts>
+        <label className="block text-sm font-medium text-text-heading">İndirme hedefi
+          <select aria-label="İndirme hedefi" className={`${selectClass} w-full`} value={replicaId} disabled={busy} onChange={event => setReplicaId(event.target.value)}>
+            <option value="">Otomatik · en uygun replika (Fallback destekli)</option>
+            {availability.data.replicas.map(replica => <option key={replica.replicaId} value={replica.replicaId} disabled={!replica.available}>{replica.storageProvider} · {replica.storageTarget}{!replica.available ? ` · ${failureMessage(replica.reason)}` : ''}</option>)}
+          </select>
+        </label>
+        {!replicaId && availability.data.replicas.filter(r => r.available).length > 1 && (
+          <p className="text-sm text-text-muted">Otomatik seçimde, aktarım başlamadan önce backend'in okuyabildiği alternatif doğrulanmış replika denenebilir. Aktarım başladıktan sonra hata oluşursa indirme durur; otomatik yeniden başlatılmaz.</p>
+        )}
+        {!availability.data.available && <Notice tone="warning">İndirme kullanılamıyor: Hiçbir doğrulanmış kopya erişilebilir değil ({failureMessage(availability.data.reason)}).</Notice>}
+        <Button disabled={busy || !availability.data.available || Boolean(selected && !selected.available)} onClick={() => { started.current = false; prepare.mutate() }}>{prepare.isPending || finalState === 'Preparing' ? 'İndirme hazırlanıyor…' : 'Download Backup'}</Button>
+      </>}
+      {session && !status.data && !status.error && <p role="status" className="text-sm text-text-muted">İndirme hazırlanıyor…</p>}
+      {status.data && <Notice tone={finalState === 'Failed' ? 'error' : finalState === 'Completed' ? 'success' : 'info'}>
+        {finalState === 'Preparing' ? 'İndirme hazırlanıyor…' : finalState === 'Ready' || finalState === 'Streaming' ? 'İndirme başlatıldı. Dosya tarayıcınız tarafından kaydediliyor.' : finalState === 'Completed' ? 'Dosya aktarımı tamamlandı.' : finalState === 'Cancelled' ? 'İndirme iptal edildi.' : `İndirme başarısız: ${failureMessage(status.data.failureCode)}`}
+        {status.data.transferredBytes > 0 && ` · ${artifactSize(status.data.transferredBytes)} aktarıldı`}
+      </Notice>}
+    </div>
+  </Section>
 }

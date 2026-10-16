@@ -7,10 +7,11 @@ import { ApiError } from '@/lib/api/client'
 import { UploadBandwidthPage } from './upload-bandwidth-page'
 
 const access = vi.hoisted(() => ({ tenantId: 'tenant-a', tenant: { name: 'Acme A.Ş.' }, canOperate: true, canAdmin: true }))
+const jobs = vi.hoisted(() => vi.fn())
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('@/features/upload-bandwidth/api')
 vi.mock('@/features/agents/api', () => ({ getAgents: vi.fn().mockResolvedValue([{ agentId: 'agent-a', hostName: 'SQL-01' }, { agentId: 'agent-b', hostName: 'SQL-02' }]) }))
-vi.mock('@/features/backup-jobs/api', () => ({ getBackupJobs: vi.fn().mockResolvedValue([{ id: 'job-a', name: 'Günlük ERP', agentName: 'SQL-01' }]) }))
+vi.mock('@/features/backup-jobs/api', () => ({ getBackupJobs: jobs }))
 
 const limits = {
   minimumBytesPerSecond: 16_000, maximumBytesPerSecond: 100_000_000_000,
@@ -19,11 +20,13 @@ const limits = {
 function mount() {
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter><UploadBandwidthPage /></MemoryRouter></QueryClientProvider>)
 }
+const openTab = async (name: RegExp) => fireEvent.click(await screen.findByRole('tab', { name }))
 const row = (name: string) => screen.getByRole('row', { name: new RegExp(`^${name}`) })
 
 beforeEach(() => {
   vi.clearAllMocks()
   access.canAdmin = true
+  jobs.mockResolvedValue([{ id: 'job-a', name: 'Günlük ERP', agentName: 'SQL-01' }])
   vi.mocked(getUploadBandwidth).mockResolvedValue(limits)
   vi.mocked(setUploadBandwidth).mockResolvedValue({ scope: 'agent', scopeId: 'agent-b', bytesPerSecond: null })
 })
@@ -32,13 +35,17 @@ describe('upload bandwidth page', () => {
   it('shows tenant, agent and job limits with Unlimited for missing ones', async () => {
     mount()
     expect(await screen.findByTestId('tenant-limit')).toHaveTextContent('100 Mbit/s (12.500.000 B/s)')
+    await openTab(/^Agent/)
+    expect(await screen.findByRole('row', { name: /^SQL-01/ })).toBeInTheDocument()
     expect(row('SQL-01')).toHaveTextContent('10 Mbit/s (1.250.000 B/s)')
     expect(row('SQL-02')).toHaveTextContent('Limitsiz')
-    expect(row('Günlük ERP')).toHaveTextContent('16 KB/s (16.000 B/s)')
+    await openTab(/^Backup Job/)
+    expect(await screen.findByRole('row', { name: /^Günlük ERP/ })).toHaveTextContent('16 KB/s (16.000 B/s)')
   })
 
   it('saves an agent limit in bytes per second after unit conversion', async () => {
     mount()
+    await openTab(/^Agent/)
     fireEvent.click(await screen.findByRole('button', { name: 'SQL-02 yükleme hız sınırını düzenle' }))
     const dialog = await screen.findByRole('dialog')
     fireEvent.click(within(dialog).getByLabelText('Limitsiz (sınır yok)'))
@@ -51,6 +58,7 @@ describe('upload bandwidth page', () => {
 
   it('opens an existing limit in its clean unit and removes it with Unlimited (null)', async () => {
     mount()
+    await openTab(/^Agent/)
     fireEvent.click(await screen.findByRole('button', { name: 'SQL-01 yükleme hız sınırını düzenle' }))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByLabelText('Hız sınırı')).toHaveValue('10')
@@ -63,6 +71,7 @@ describe('upload bandwidth page', () => {
 
   it('blocks out-of-range values client-side', async () => {
     mount()
+    await openTab(/^Backup Job/)
     fireEvent.click(await screen.findByRole('button', { name: 'Günlük ERP yükleme hız sınırını düzenle' }))
     const dialog = await screen.findByRole('dialog')
     fireEvent.change(within(dialog).getByLabelText('Hız sınırı'), { target: { value: '0,1' } })
@@ -79,6 +88,22 @@ describe('upload bandwidth page', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('izin verilen aralığın dışında')
     expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
+  it('searches Backup Jobs and pages locally in groups of 25', async () => {
+    jobs.mockResolvedValue(Array.from({ length: 26 }, (_, index) => ({ id: `job-${index + 1}`, name: `Backup ${String(index + 1).padStart(2, '0')}`, agentName: 'SQL-01' })))
+    mount()
+    await openTab(/^Backup Job/)
+    await screen.findByRole('row', { name: /^Backup 01/ })
+    expect(screen.getAllByRole('row')).toHaveLength(26)
+    expect(screen.queryByRole('row', { name: /^Backup 26/ })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Sonraki' }))
+    expect(screen.getByRole('row', { name: /^Backup 26/ })).toBeInTheDocument()
+    expect(screen.queryByRole('row', { name: /^Backup 01/ })).not.toBeInTheDocument()
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Backup Job ara' }), { target: { value: 'Backup 01' } })
+    expect(screen.getByRole('row', { name: /^Backup 01/ })).toBeInTheDocument()
+    expect(screen.queryByRole('row', { name: /^Backup 26/ })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('row')).toHaveLength(2)
+  })
+
 
   it('is read-only without administrator rights', async () => {
     access.canAdmin = false

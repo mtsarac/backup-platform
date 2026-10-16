@@ -55,6 +55,7 @@ export interface SupportDownload {
 }
 export interface SupportRestoreTargets {
   artifactId: string; sourceDatabase: string; backupType: string; sizeBytes: number
+  engine?: 'mssql' | 'postgres' | 'unsupported'
   environment: { kind: 'CustomerEnvironment'; isolated: false; warning: string }
   agents: Omit<RestoreTargetAgent, 'canDiscover'>[]
   targets: { jobId: string; jobName: string; agentId: string; database: string; host: string; port: number | null; integratedSecurity: boolean }[]

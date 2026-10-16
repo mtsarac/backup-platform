@@ -15,7 +15,7 @@ public sealed class RestoreCompletionTests
         "BackupInvalid", "BackupTypeUnsupported", "IncompatibleVersion", "FileMappingFailed",
         "PreCheckFailed", "TargetDatabaseExists", "TargetDatabaseNotFound", "TargetInUse", "TargetProtected", "InsufficientDiskSpace",
         "SqlRestoreFailed", "DatabaseUnavailable", "OperationTimedOut", "AuthenticationFailed", "PermissionDenied",
-        "InvalidConfiguration", "UnsupportedCapability", "StagingInvalid", "InternalError"
+        "InvalidConfiguration", "UnsupportedCapability", "StagingInvalid", "InternalError", "VerificationFailed"
     ];
 
     public static TheoryData<string> AgentReportableCodes
@@ -265,7 +265,7 @@ public sealed class RestoreCompletionTests
 
     [Fact]
     public void TheStagesAreOrderedAndEndWithTheTerminalStages() =>
-        Assert.Equal(new[] { "Preparing", "DownloadingArtifact", "VerifyingChecksum", "InspectingBackup", "PreparingTarget", "Restoring", "Finalizing", "Completed", "Failed", "Cancelled" },
+        Assert.Equal(new[] { "Preparing", "DownloadingArtifact", "VerifyingChecksum", "InspectingBackup", "PreparingTarget", "Restoring", "Finalizing", "Verifying", "CleaningUp", "Completed", "Failed", "Cancelled" },
             RestoreStages.All.ToArray());
 
     [Fact]

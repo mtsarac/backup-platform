@@ -1,12 +1,15 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { Button } from '@/components/ui/button'
+import { Field } from '@/components/ui/field'
+import { Notice } from '@/components/ui/notice'
 import { ApiError } from '@/lib/api/client'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { platformPaths } from '../paths'
 import { FormDialog } from '../plans/form-dialog'
 import { inputClass, linkClass } from '../styles'
 import { useOpenSupportSession } from './hooks'
-import { permissionLabels } from './presentation'
+import { permissionDescriptions, permissionLabels } from './presentation'
 import type { SupportPermission } from './types'
 
 const permissions: SupportPermission[] = ['ViewBackupMetadata', 'DownloadBackup', 'RestoreBackup']
@@ -77,42 +80,32 @@ export function OpenSessionDialog({ tenantId, tenantName, onClose }: { tenantId:
   return <FormDialog title="Destek oturumu aç" description={`“${tenantName}” tenant'ına süreli ve gerekçeli destek erişimi verilir. İşlemler audit kayıtlarına yazılır ve tenant yöneticileri tarafından görülebilir.`}
     submitLabel="Oturumu aç" pendingLabel="Oturum açılıyor…" pending={open.isPending} onSubmit={submit} onClose={close}>
     <fieldset disabled={open.isPending} className="space-y-4">
-      <div>
-        <label htmlFor={`${formId}-tenant`} className="block text-sm text-text-muted">Tenant</label>
-        <input id={`${formId}-tenant`} className={inputClass} value={tenantName} readOnly />
-      </div>
-      <div>
-        <label htmlFor={`${formId}-reason`} className="block text-sm text-text-muted">Erişim gerekçesi</label>
-        <textarea id={`${formId}-reason`} className={inputClass} rows={3} maxLength={500} value={reason}
-          aria-invalid={Boolean(reasonError)} aria-describedby={`${formId}-reason-help${reasonError ? ` ${formId}-reason-error` : ''}`}
-          onChange={(event) => { setReason(event.target.value); setReasonError('') }} />
-        <p id={`${formId}-reason-help`} className="mt-1 text-xs text-text-muted">Gerekçe zorunludur; en fazla 500 karakter.</p>
-        {reasonError && <p id={`${formId}-reason-error`} role="alert" className="mt-1 text-sm text-error">{reasonError}</p>}
-      </div>
+      <Field label="Tenant">{control => <input {...control} className={inputClass} value={tenantName} readOnly />}</Field>
+      <Field label="Erişim gerekçesi" hint="Gerekçe zorunludur; en fazla 500 karakter." error={reasonError}>
+        {control => <textarea {...control} className={inputClass} rows={3} maxLength={500} value={reason}
+          onChange={event => { setReason(event.target.value); setReasonError('') }} />}
+      </Field>
       <fieldset className="space-y-2" aria-describedby={`${formId}-permission-help${permissionError ? ` ${formId}-permission-error` : ''}`}>
         <legend className="mb-2 text-sm font-medium text-text-heading">Erişim izinleri</legend>
-        {permissions.map((permission) => <label key={permission} className="flex items-start gap-2 text-sm text-text">
-          <input type="checkbox" className="mt-1" checked={selected.includes(permission)}
-            disabled={permission === 'ViewBackupMetadata' && viewRequired} onChange={(event) => togglePermission(permission, event.target.checked)} />
-          <span>{permissionLabels[permission]}</span>
+        {permissions.map(permission => <label key={permission} className="flex min-h-11 items-start gap-3 rounded-lg bg-surface-2 p-3 text-sm text-text">
+          <input type="checkbox" className="mt-1 size-4 shrink-0 accent-primary" checked={selected.includes(permission)}
+            disabled={permission === 'ViewBackupMetadata' && viewRequired} onChange={event => togglePermission(permission, event.target.checked)} />
+          <span className="min-w-0"><span className="block font-medium">{permissionLabels[permission]}</span><span className="mt-0.5 block text-text-muted">{permissionDescriptions[permission]}</span></span>
         </label>)}
         <p id={`${formId}-permission-help`} className="text-xs text-text-muted">İndirme ve geri yükleme izinleri ViewBackupMetadata iznini gerektirir; bu izin otomatik seçilir.</p>
         {permissionError && <p id={`${formId}-permission-error`} role="alert" className="text-sm text-error">{permissionError}</p>}
       </fieldset>
-      <div>
-        <label htmlFor={`${formId}-duration`} className="block text-sm text-text-muted">Süre (dakika)</label>
-        <input id={`${formId}-duration`} type="number" min={1} max={240} step={1} list={`${formId}-durations`} className={inputClass} value={duration}
-          aria-invalid={Boolean(durationError)} aria-describedby={`${formId}-duration-help${durationError ? ` ${formId}-duration-error` : ''}`}
-          onInvalid={(event) => { event.preventDefault(); setDurationError(durationErrorMessage) }}
-          onChange={(event) => { setDuration(event.target.value); setDurationError('') }} />
-        <datalist id={`${formId}-durations`}>{[15, 30, 60, 120, 240].map((minutes) => <option key={minutes} value={minutes} />)}</datalist>
-        <p id={`${formId}-duration-help`} className="mt-1 text-xs text-text-muted">En fazla 240 dakika. Varsayılan süre 60 dakikadır.</p>
-        {durationError && <p id={`${formId}-duration-error`} role="alert" className="mt-1 text-sm text-error">{durationError}</p>}
-      </div>
+      <Field label="Süre (dakika)" hint="En fazla 240 dakika. Varsayılan süre 60 dakikadır." error={durationError}>
+        {control => <input {...control} type="number" min={1} max={240} step={1} list={`${formId}-durations`} className={inputClass} value={duration}
+          onInvalid={event => { event.preventDefault(); setDurationError(durationErrorMessage) }}
+          onChange={event => { setDuration(event.target.value); setDurationError('') }} />}
+      </Field>
+      <datalist id={`${formId}-durations`}>{[15, 30, 60, 120, 240].map(minutes => <option key={minutes} value={minutes} />)}</datalist>
+      <div className="flex flex-wrap gap-2" aria-label="Süre seçenekleri">{[15, 30, 60, 120, 240].map(minutes => <Button key={minutes} type="button" size="sm" variant={duration === String(minutes) ? 'default' : 'outline'} onClick={() => { setDuration(String(minutes)); setDurationError('') }}>{minutes} dk</Button>)}</div>
     </fieldset>
-    {open.error && <div role="alert" className="space-y-1 text-sm text-error">
+    {open.error && <Notice tone="error">
       <p>{conflict ? 'Bu tenant için zaten etkin bir destek oturumunuz var.' : errorMessage(open.error)}</p>
       {conflict?.sessionId && <Link className={linkClass} to={platformPaths.supportSession(conflict.sessionId)}>Mevcut destek oturumuna git</Link>}
-    </div>}
+    </Notice>}
   </FormDialog>
 }

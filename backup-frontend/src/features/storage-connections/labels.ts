@@ -64,6 +64,22 @@ export function capabilityLabel(capability: string): string {
   return Object.hasOwn(capabilityLabels, capability) ? capabilityLabels[capability] : capability
 }
 
+export type Health = { key: 'disabled' | 'reauthorize' | 'failed' | 'untested' | 'agent-side' | 'healthy'; label: string; tone: Tone }
+
+/**
+ * One at-a-glance state for a destination, strongest problem first. It only restates what the API reported (enablement, the last test,
+ * the Google re-authorization flag): a destination is never called healthy without a successful test.
+ */
+export function connectionHealth(connection: Pick<ConnectionView, 'effectiveEnabled' | 'lastTest' | 'providerType' | 'hasSecret' | 'configuration'>): Health {
+  if (!connection.effectiveEnabled) return { key: 'disabled', label: 'Devre dışı', tone: 'warning' }
+  if (connection.providerType === 'google-drive' && (!connection.hasSecret || connection.configuration?.reauthorizationRequired === 'true')) return { key: 'reauthorize', label: 'Yeniden yetkilendirme gerekli', tone: 'warning' }
+  const test = connection.lastTest
+  if (!test) return { key: 'untested', label: 'Test edilmedi', tone: 'neutral' }
+  if (test.status === 'Failed') return { key: 'failed', label: 'Bağlantı sorunu', tone: 'error' }
+  if (test.status === 'NotTestable') return { key: 'agent-side', label: 'Agent tarafında denetlenir', tone: 'neutral' }
+  return { key: 'healthy', label: 'Sağlıklı', tone: 'success' }
+}
+
 const topologyLabels: Record<ProviderTopology, string> = { AgentDirect: 'Agent doğrudan yazar', BackendRelayed: 'Backend üzerinden aktarılır' }
 const executionLocationLabels: Record<ExecutionLocation, string> = { Agent: 'Agent', Backend: 'Backend' }
 const testModeLabels: Record<TestMode, string> = {
@@ -100,20 +116,24 @@ export function secretStatusLabel(connection: Pick<ConnectionView, 'hasSecret'>)
   return connection.hasSecret ? SECRET_PRESENT_LABEL : SECRET_ABSENT_LABEL
 }
 
-function configurationValue(value: ConfigurationValue) {
+function configurationValue(value: ConfigurationValue, kind?: string) {
   if (value === null || value === '') return '—'
-  if (typeof value === 'boolean') return value ? 'Evet' : 'Hayır'
+  if (kind === 'Boolean' || value === 'true' || value === 'false') return value === 'true' ? 'Evet' : 'Hayır'
   return String(value)
 }
 
 /** Label/value pairs of the safe configuration, labelled from the descriptor when it is known. Never touches secrets: the API carries none. */
 export function configurationSummary(connection: Pick<ConnectionView, 'configuration'>, descriptor?: Pick<ProviderDescriptor, 'configFields'>) {
-  return Object.entries(connection.configuration ?? {}).map(([name, value]) => ({
-    name,
-    label: descriptor?.configFields.find((field) => field.name === name)?.label ?? name,
-    value: configurationValue(value),
-  }))
+  return Object.entries(connection.configuration ?? {}).map(([name, value]) => {
+    const field = descriptor?.configFields.find((f) => f.name === name)
+    return {
+      name,
+      label: field?.label ?? name,
+      value: configurationValue(value, field?.kind),
+    }
+  })
 }
+
 
 /** Tenant creation is offered only for an Available provider the tenant may create and while it is below the per-tenant limit. */
 export function tenantCreateState(provider: ProviderDescriptor, connections: readonly ConnectionView[]): { creatable: boolean; reason: string | null } {

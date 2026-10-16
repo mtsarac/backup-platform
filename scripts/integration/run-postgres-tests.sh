@@ -29,4 +29,4 @@ require_command dotnet
 cd -- "$REPO_ROOT/backup-backend"
 filter='FullyQualifiedName!~MsSql&FullyQualifiedName!~BackupPipelineSmoke'
 [[ -z $extra_filter ]] || filter="(${filter})&(${extra_filter})"
-run_dotnet_tests tests/integration-tests -c Release "${build_args[@]}" --filter "$filter" -- xUnit.MaxParallelThreads=2
+run_dotnet_tests tests/integration-tests -c Release "${build_args[@]}" --filter "$filter" -- xUnit.MaxParallelThreads="${BP_TEST_THREADS:-4}"

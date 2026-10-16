@@ -34,6 +34,7 @@
     <ProjectReference Include="../../agent/platform-windows/BackupPlatform.Agent.Platform.Windows.csproj" Condition="'$(AgentPlatform)' == 'Windows'" />
     <ProjectReference Include="../../agent/platform-linux/BackupPlatform.Agent.Platform.Linux.csproj" Condition="'$(AgentPlatform)' == 'Linux'" />
     <ProjectReference Include="../../providers/backup/mssql/BackupPlatform.BackupProviders.MSSQL.csproj" />
+    <ProjectReference Include="../../providers/backup/postgresql/BackupPlatform.BackupProviders.PostgreSql.csproj" />
     <ProjectReference Include="../../providers/backup/file-system/BackupPlatform.BackupProviders.FileSystem.csproj" />
     <ProjectReference Include="../../providers/storage/local/BackupPlatform.StorageProviders.Local.csproj" />
     <ProjectReference Include="../../providers/storage/central/BackupPlatform.StorageProviders.Central.csproj" />

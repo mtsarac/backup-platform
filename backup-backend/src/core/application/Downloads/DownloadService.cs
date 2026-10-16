@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging;
 namespace BackupPlatform.Application.Downloads;
 
 public sealed record ReplicaDownloadAvailability(Guid ReplicaId, string StorageProvider, string StorageTarget, bool Available, string? Reason);
-public sealed record DownloadAvailability(bool Available, string? Reason, IReadOnlyList<ReplicaDownloadAvailability> Replicas, string Checksum, long SizeBytes);
+public sealed record DownloadAvailability(bool Available, string? Reason, IReadOnlyList<ReplicaDownloadAvailability> Replicas, string Checksum, long SizeBytes, string? Engine = "mssql");
 public sealed record PrepareDownloadRequest(Guid? ReplicaId = null);
 public sealed record PreparedDownload(Guid SessionId, string DownloadUrl, string Filename, string Checksum, long SizeBytes);
 public sealed record DownloadStatus(Guid SessionId, string State, string? FailureCode, long TransferredBytes);
@@ -33,7 +33,8 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
             replicas.Add(new ReplicaDownloadAvailability(replica.Id, replica.StorageProvider, replica.StorageTarget, reason is null, reason));
         }
         var available = replicas.Any(replica => replica.Available);
-        return new DownloadAvailability(available, available ? null : replicas.FirstOrDefault()?.Reason ?? "replica_unavailable", replicas, artifact.ArtifactChecksum, artifact.SizeBytes);
+        return new DownloadAvailability(available, available ? null : replicas.FirstOrDefault()?.Reason ?? "replica_unavailable", replicas, artifact.ArtifactChecksum, artifact.SizeBytes,
+            BackupArtifactEngine.Read(artifact.SourceMetadataJson));
     }
 
     /// <exception cref="BackupPlatform.Domain.Support.SupportAccessDeniedException">A support session was given and it can no longer authorize the download.</exception>
@@ -50,7 +51,8 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
                 .FirstOrDefault();
         if (selected is null) throw new DownloadUnavailableException(request.ReplicaId is null ? availability.Reason! : "replica_not_found");
         if (!selected.Available) throw new DownloadUnavailableException(selected.Reason!);
-        var filename = $"backup-{artifactId:N}.bak";
+        var extension = availability.Engine switch { "postgres" => "dump", "mssql" => "bak", _ => "bin" };
+        var filename = $"backup-{artifactId:N}.{extension}";
         var session = await store.CreateAsync(new DownloadCreateCommand(tenantId, artifactId, selected.ReplicaId, userId, filename, time.GetUtcNow(), SessionLifetime, supportSessionId), cancellationToken);
         if (session is null) throw new DownloadUnavailableException("replica_unavailable");
         var url = supportSessionId is { } support

@@ -89,7 +89,11 @@ them:
 ```bash
 scripts/database/with-disposable-databases.sh -- ./scripts/database/check-databases.sh
 scripts/database/with-disposable-databases.sh --restore -- ./scripts/integration/run-mssql-tests.sh --provider --agent --restore
+scripts/database/with-disposable-databases.sh --postgres-only -- ./scripts/integration/run-postgres-tests.sh   # fsync-off PostgreSQL only, no MSSQL
 ```
+
+`--postgres-only` is the fast way to run the full PostgreSQL suite (≈ 5.7 min versus ≈ 9 min against a durable `fsync=on` server, because
+every `DROP DATABASE` forces an immediate checkpoint).
 
 ## Test entry points
 
@@ -120,6 +124,17 @@ Both backend and PostgreSQL runners build current Release output by default. Add
 successful build of the matching test project/dependencies and before any further relevant edits. It is an
 explicit reuse option, not an automatic optimization or an assertion that binaries are current. No runner removes
 or weakens tests; every selected test must execute and pass through the shared TRX verifier.
+
+### PostgreSQL provider tests (`Category=PostgreSqlProvider`)
+
+The PostgreSQL Full Backup/Restore provider tests run the **real** `pg_dump`/`pg_restore` against the configured PostgreSQL
+server (a superuser; every database and role they create is uniquely named and dropped). They are part of the full
+PostgreSQL selection, so these clients must be reachable:
+
+- `BACKUP_PLATFORM_TEST_POSTGRES_TOOLS_DIRECTORY`: directory with `pg_dump`/`pg_restore` at least as new as the server (otherwise the `PATH` is used).
+- `BACKUP_PLATFORM_TEST_POSTGRES_OLD_TOOLS_DIRECTORY`: **required** directory with clients *older* than the server (for example PostgreSQL 16 against 18). The tool-version and archive-version refusal tests use them and fail loudly when it is unset.
+
+Local development: extract the clients from a cached server image, or use wrappers that run `docker run --network=host <older image> pg_dump "$@"`. The agent finds its tools through `Agent:Backup:PostgreSql:ClientToolsDirectory` (absolute directory) or `PATH`.
 
 PostgreSQL fixtures migrate one private schema template per test process, then clone a separate database for each
 fixture. Tenant rows, transaction/lease state and migration changes never share a database between fixtures.
@@ -241,6 +256,24 @@ failure exit codes are preserved (SIGTERM is 143), while runtime files are still
 is reported as failure, not silently accepted. A forced SIGKILL/process-tree kill cannot guarantee trap execution.
 In that case the protected state file identifies the exact owned database for recovery; never drop every
 `bp_smoke_*` database or delete unrelated runtime roots.
+
+## R1 isolated restore verification smoke
+
+```bash
+scripts/frontend/run-r1-smoke.sh [--no-build] [--acceptance-only] [--windows] [--only SCENARIO...]
+```
+
+Starts disposable MSSQL + PostgreSQL containers and the owned browser stack (fresh platform database, HTTPS API, Vite), enrolls three real Linux Agents
+(SQL Server with a good and a wrong credential, PostgreSQL with a superuser for backups and a **CREATEDB-only** `bp_r1_verifier` role for verification, and a
+PostgreSQL agent whose staging volume is a 6 MB tmpfs inside `unshare -Urm`), takes real Full backups into central storage and runs
+`scripts/frontend/r1-acceptance.py`: healthy/bit-flipped/truncated/missing artifacts, wrong credential and unreachable server, insufficient staging capacity,
+cancel then retry, SIGKILL of the agent mid-verification, a stopped database server (failed cleanup, backoff, operator retry), an API restart during a
+verification, a PostgreSQL replace restore's `bp_old_*` rollback copy (kept, removed only by an administrator who repeats its name after the guarded
+retention, a decoy `bp_old_*` untouched), tenant isolation and roles. `--windows` additionally installs an owned Windows service Agent on the VM
+(same `Onboarding-Smoke.ps1` root rules as the download smoke) and runs healthy/corrupt/service-restart scenarios against the VM's SQL Server.
+Only databases named `bp_r1_*` and the platform's own `bp_verify_*` / `bp_old_*` databases of that run are ever created or dropped. Agents run under a
+supervisor so `kill -9` is a real crash; PostgreSQL client libraries are only exposed to `pg_dump`/`pg_restore` through wrappers. Without `--acceptance-only`
+the stack stays up after the API acceptance (`R1_SMOKE_READY`) for the real-browser smoke; set `BP_R1_LOG_DIR` to keep agent logs when a run fails.
 
 ## Quota browser smoke fixture
 

@@ -1,84 +1,14 @@
 import { useEffect, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { FormDialog } from '@/features/platform/plans/form-dialog'
 import { usePlatformTenants } from '@/features/platform/hooks'
 import { inputClass, selectClass } from '@/features/platform/styles'
 import { QUOTA_SCOPE_PATTERN } from '@/features/storage/scope-input'
-import { ConfigFieldInputs, SecretFieldInputs } from './descriptor-fields'
-import { activeSecretFields, buildConfiguration, buildSecretValues, configurationComplete, hasSecretInput, initialFieldValues, secretsComplete } from './descriptor-values'
+import { activeSecretFields, configurationComplete, initialFieldValues, providerPayload, secretsComplete } from './descriptor-values'
 import type { FieldValues } from './descriptor-values'
-import { storageConnectionKeys, useCreatePlatformConnection, useCreateTenantConnection, usePlatformProviders } from './hooks'
-import { getGoogleDriveAuthorizeUrl, testTenantConnection } from './api'
-import { openGoogleOAuthPopup } from './google-oauth'
-import { connectionErrorMessage, errorField, invalidFieldName, isPlatformCreatable } from './labels'
-import type { ProviderDescriptor, TenantCreateConnectionInput } from './types'
-
-/** Safe descriptor configuration followed by the selected authentication method's new credentials. */
-function ProviderFields({ provider, config, secret, error, onConfig, onSecret }: {
-  provider: ProviderDescriptor; config: FieldValues; secret: Record<string, string>; error: unknown
-  onConfig: (name: string, value: string | boolean) => void; onSecret: (name: string, value: string) => void
-}) {
-  const fields = activeSecretFields(provider.providerType, config, provider.secretFields)
-  return <>
-    <ConfigFieldInputs providerType={provider.providerType} fields={provider.configFields} values={config} invalidName={invalidFieldName(error, 'configuration')} onChange={onConfig} />
-    {fields.length > 0 && <div className="space-y-3 rounded-lg border border-border bg-surface-2 p-3">
-      <p className="text-xs text-text-muted">Kimlik bilgisi değerleri yalnızca sunucuya gönderilir; kaydedildikten sonra bir daha gösterilmez.</p>
-      <SecretFieldInputs providerType={provider.providerType} fields={fields} values={secret} invalidName={invalidFieldName(error, 'secret')} onChange={onSecret} />
-    </div>}
-  </>
-}
-
-/** `configuration`/`secret` are omitted entirely when the provider declares no such fields or nothing was entered. */
-function providerPayload(provider: ProviderDescriptor, name: string, config: FieldValues, secret: Record<string, string>): TenantCreateConnectionInput {
-  const input: TenantCreateConnectionInput = { providerType: provider.providerType, name: name.trim() }
-  if (provider.configFields.length > 0) input.configuration = buildConfiguration(provider.configFields, config)
-  const fields = activeSecretFields(provider.providerType, config, provider.secretFields)
-  const credentials = buildSecretValues(fields, secret)
-  if (hasSecretInput(credentials)) input.secret = credentials
-  return input
-}
-
-/** Tenant 'Bağlantı ekle': generic over the descriptor, so a provider that becomes tenant-creatable needs no UI change. */
-export function CreateConnectionDialog({ provider, onClose }: { provider: ProviderDescriptor; onClose: () => void }) {
-  const [name, setName] = useState('')
-  const [config, setConfig] = useState<FieldValues>(() => initialFieldValues(provider.configFields, {}, provider.providerType))
-  const [secret, setSecret] = useState<Record<string, string>>({})
-  const create = useCreateTenantConnection()
-  const client = useQueryClient()
-  const reset = create.reset
-  useEffect(() => reset, [reset])
-
-  function submit() {
-    const input = providerPayload(provider, name, config, secret)
-    setSecret({})
-    create.mutate(input, {
-      onSuccess: (newConnection) => {
-        reset()
-        onClose()
-        if (provider.providerType === 'google-drive') {
-          getGoogleDriveAuthorizeUrl(newConnection.tenantId, newConnection.id).then(({ authorizationUrl }) => {
-            openGoogleOAuthPopup(authorizationUrl, () => {
-              // The test records its result on the connection either way; refresh the list so the new state is shown.
-              testTenantConnection(newConnection.tenantId, newConnection.id).catch(() => {})
-                .finally(() => client.invalidateQueries({ queryKey: storageConnectionKeys.tenantAll(newConnection.tenantId) }))
-            })
-          }).catch(() => {})
-        }
-      }
-    })
-  }
-
-  return <FormDialog title={`Bağlantı ekle: ${provider.displayName}`} submitLabel="Bağlantı ekle" pendingLabel="Ekleniyor…" pending={create.isPending}
-    disabled={!name.trim() || !configurationComplete(provider.configFields, config) || !secretsComplete(activeSecretFields(provider.providerType, config, provider.secretFields), secret)}
-    error={create.error ? connectionErrorMessage(create.error) : undefined} onSubmit={submit} onClose={onClose}>
-    <label className="block text-sm text-text-muted">Ad
-      <input className={inputClass} value={name} required aria-invalid={errorField(create.error) === 'name'} onChange={(event) => setName(event.target.value)} />
-    </label>
-    <ProviderFields provider={provider} config={config} secret={secret} error={create.error}
-      onConfig={(field, value) => setConfig((current) => ({ ...current, [field]: value }))} onSecret={(field, value) => setSecret((current) => ({ ...current, [field]: value }))} />
-  </FormDialog>
-}
+import { useCreatePlatformConnection, usePlatformProviders } from './hooks'
+import { connectionErrorMessage, errorField, isPlatformCreatable } from './labels'
+import { ProviderFields } from './provider-form'
 
 interface PickedTenant { tenantId: string; name: string }
 

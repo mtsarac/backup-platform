@@ -61,7 +61,9 @@ if [[ "$agent" == true || "$restore" == true ]]; then
     [[ "$BACKUP_PLATFORM_TEST_AGENT_HOST_PATH" == /* && -x "$BACKUP_PLATFORM_TEST_AGENT_HOST_PATH" ]] || fail 'AGENT_HOST_PATH must be an absolute executable published Agent.Host path.'
 fi
 if [[ "$provider" == true ]]; then
-    run_dotnet_tests tests/integration-tests -c Release "${build_args[@]}" --filter 'FullyQualifiedName~IntegrationTests.MsSql|FullyQualifiedName~BackupPipelineSmoke' -- xUnit.MaxParallelThreads=2
+    filter='FullyQualifiedName~IntegrationTests.MsSql|FullyQualifiedName~BackupPipelineSmoke'
+    [[ $(uname -s) == Linux ]] && filter="(${filter})&FullyQualifiedName!~MsSqlWindowsAuthenticationIntegrationTests"
+    run_dotnet_tests tests/integration-tests -c Release "${build_args[@]}" --filter "$filter" -- xUnit.MaxParallelThreads=2
 fi
 if [[ "$agent" == true ]]; then
     run_dotnet_tests tests/integration-tests -c Release "${build_args[@]}" --filter 'FullyQualifiedName~AgentSmokeTests' -- xUnit.MaxParallelThreads=1

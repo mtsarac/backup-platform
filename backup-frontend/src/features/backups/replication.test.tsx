@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReplicationHealth } from '@/features/artifacts/types'
@@ -6,6 +6,7 @@ import { makeRun } from '@/features/backups/test-data'
 import type { BackupRun, BackupRunPage } from '@/features/backups/types'
 import { BackupDetailPage } from '@/pages/backups/backup-detail-page'
 import { BackupsPage } from '@/pages/backups/backups-page'
+import { failureMessage } from '@/lib/api/failure-messages'
 import { ReplicationBadge, ReplicationSection, ReplicationSummary } from './replication'
 
 const state = vi.hoisted(() => ({
@@ -77,7 +78,8 @@ describe('replication compliance rendering', () => {
     expect(list.getAllByRole('listitem')).toHaveLength(3)
     expect(list.getAllByText('Doğrulandı')).toHaveLength(2)
     expect(list.getByText('Başarısız')).toBeInTheDocument()
-    expect(list.getByText(/Yedek depolamaya yazılamadı\./)).toBeInTheDocument()
+    expect(list.getByText(failureMessage('StorageUnavailable'), { exact: false })).toBeInTheDocument()
+    expect(list.queryByText(/Yedek depolamaya yazılamadı\./)).not.toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('Yedek kullanılabilir ve politika karşılanıyor')
   })
 
@@ -92,6 +94,7 @@ describe('replication compliance rendering', () => {
     renderDetail()
     expect(screen.getAllByText('Başarılı').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Kısmi replikasyon · politika karşılandı').length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('tab', { name: 'Replikasyon' }))
     expect(screen.getByRole('region', { name: 'Replikasyon' })).toBeInTheDocument()
   })
 

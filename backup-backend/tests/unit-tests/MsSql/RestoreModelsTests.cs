@@ -72,9 +72,9 @@ public sealed class RestoreModelsTests
     }
 
     [Fact]
-    public void ARestorePlanNeedsFilesAndUniqueDestinationsAndNames()
+    public void ARestorePlanAllowsLogicalPlacementButRequiresUniquePhysicalDestinationsAndNames()
     {
-        Assert.Throws<ArgumentException>(() => new RestorePlan([], Target()));
+        Assert.Empty(new RestorePlan([], Target()).Mappings);
         Assert.Throws<ArgumentException>(() => new RestorePlan([Mapping("A", "/d/x.mdf"), Mapping("B", "/D/X.MDF")], Target()));
         Assert.Throws<ArgumentException>(() => new RestorePlan([Mapping("A", "/d/x.mdf"), Mapping("a", "/d/y.mdf")], Target()));
         Assert.Throws<ArgumentNullException>(() => new RestorePlan(null!, Target()));

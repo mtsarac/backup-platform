@@ -44,6 +44,8 @@ public sealed class BackupExecutionCompositionTests
 
         Assert.IsType<DatabaseBackupPipeline>(provider.GetRequiredService<IDatabaseBackupPipeline>());
         Assert.Contains(provider.GetServices<IDatabaseBackupProvider>(), p => p.Engine == DatabaseEngineId.MsSql);
+        Assert.Contains(provider.GetServices<IDatabaseBackupProvider>(), p => p.Engine.Value == "postgres");
+        Assert.Equal(["mssql", "postgres"], provider.GetServices<IDatabaseRestoreProvider>().Select(p => p.Engine.Value).Order(StringComparer.Ordinal));
         Assert.Empty(provider.GetServices<IStorageProvider>());
         Assert.Null(provider.GetService<StagingArea>());
     }
@@ -97,6 +99,22 @@ public sealed class BackupExecutionCompositionTests
         };
 
         Assert.True(new AgentHostOptionsValidator().Validate(null, options).Succeeded);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("relative/pg-tools")]
+    public void PostgreSqlClientToolsDirectoryMustBeAbsoluteWhenSet(string directory) =>
+        Assert.Contains("PostgreSql:ClientToolsDirectory", Fail(("Agent:Backup:PostgreSql:ClientToolsDirectory", directory)), StringComparison.Ordinal);
+
+    [Fact]
+    public void PostgreSqlClientToolsDirectoryBindsWithoutChangingOtherHostConfiguration()
+    {
+        using var provider = Build(("Agent:Backup:PostgreSql:ClientToolsDirectory", Root));
+        var options = provider.GetRequiredService<IOptions<AgentHostOptions>>().Value;
+        Assert.Equal(Root, options.Backup!.PostgreSql!.ClientToolsDirectory);
+        Assert.Equal(2, provider.GetServices<IDatabaseBackupProvider>().Count());
+        Assert.Equal(2, provider.GetServices<IDatabaseRestoreProvider>().Count());
     }
 
     [Fact]

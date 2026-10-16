@@ -19,6 +19,7 @@ public static class RestoreInputValidation
     public const int MaxPreCheckItems = 64;
     public const int MaxWarnings = 64;
     public const int MaxFileMappings = 256;
+    public const int MaxVerificationChecks = 16;
     private static readonly string[] PreCheckStatuses = ["Passed", "Warning", "Failed", "Skipped"];
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -38,13 +39,14 @@ public static class RestoreInputValidation
             ? target.DatabaseCredentialReference is null
             : Text(target.DatabaseCredentialReference, 64) && target.DatabaseCredentialReference!.All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_'),
             "target.databaseCredentialReference");
-        if (purpose != RestorePurpose.Discovery)
+        if (purpose is RestorePurpose.Discovery or RestorePurpose.Verification) Check(request.DatabaseName == string.Empty, "databaseName");
+        else
         {
-            try { RestoreOperation.ValidateDatabaseName(request.DatabaseName); }
+            try { RestoreOperation.ValidateDatabaseNameSyntax(request.DatabaseName); }
             catch (ArgumentException) { throw new InvalidRestoreRequestException("databaseName"); }
         }
-        else Check(request.DatabaseName == string.Empty, "databaseName");
         var mode = ParseMode(request.Mode);
+        Check(purpose != RestorePurpose.Verification || mode == RestoreMode.NewDatabase, "mode");
         // Overwriting is a decision the caller states in so many words: the exact name of the database that will be replaced.
         if (purpose == RestorePurpose.Execution && mode == RestoreMode.ReplaceExistingDatabase)
         {
@@ -58,7 +60,9 @@ public static class RestoreInputValidation
         var domainTarget = new RestoreTarget(target.Host, target.Port, target.IntegratedSecurity, target.DatabaseCredentialReference, target.Encrypt, target.TrustServerCertificate);
         try { domainTarget.Validate(); }
         catch (ArgumentException) { throw new InvalidRestoreRequestException("target"); }
-        var options = new RestoreOptions(request.Options?.TerminateActiveConnections ?? false, request.Options?.VerifyChecksum ?? true, request.Options?.VerifyBackup ?? true);
+        var verification = purpose == RestorePurpose.Verification;
+        // A verification creates its own database: there is never an existing one whose sessions could be terminated.
+        var options = new RestoreOptions(!verification && (request.Options?.TerminateActiveConnections ?? false), request.Options?.VerifyChecksum ?? true, request.Options?.VerifyBackup ?? true);
         var confirmed = purpose == RestorePurpose.Execution && mode == RestoreMode.ReplaceExistingDatabase;
         var fingerprint = Fingerprint(artifactId, request.AgentId, request.ReplicaId, domainTarget, request.DatabaseName, mode, options);
         if (request.PrecheckId is { } precheckId)
@@ -119,7 +123,7 @@ public static class RestoreInputValidation
         switch (status)
         {
             case RestoreStatus.Succeeded:
-                var isPreparation = request.Result?.Discovery is not null || request.Result?.PreCheck is { Count: > 0 };
+                var isPreparation = request.Result?.Discovery is not null || request.Result?.Verification is not null || request.Result?.PreCheck is { Count: > 0 };
                 var validState = isPreparation
                     ? targetState is RestoreTargetState.Online or RestoreTargetState.NotModified
                     : targetState == RestoreTargetState.Online;
@@ -144,7 +148,9 @@ public static class RestoreInputValidation
             resultJson = JsonSerializer.Serialize(result, JsonOptions);
             if (resultJson.Length > RestoreOperation.MaxResultJsonLength) throw new ArgumentException("The restore result is too large.");
         }
-        return new RestoreCompletion(status, failureCode, targetState, resultJson);
+        // A verification's disposable database is gone only when the agent says so; every other report (or none) leaves its removal owed and tracked.
+        return new RestoreCompletion(status, failureCode, targetState, resultJson,
+            RestoreVerificationCleanupOutcomes.IsRemoved(request.Result?.Verification?.Cleanup), status == RestoreStatus.Succeeded ? request.Result?.RetainedDatabaseName : null);
     }
 
     /// <summary>The typed result of a stored operation; null when none was reported or the stored text is unreadable.</summary>
@@ -184,6 +190,17 @@ public static class RestoreInputValidation
         }
         if (result.TargetServer is { } server)
             Require(Safe(server.ServerName, 256) && Safe(server.InstanceName, 256) && Safe(server.Version, 64) && Safe(server.Edition, 128) && Safe(server.HostPlatform, 64));
+        if (result.RetainedDatabaseName is not null) Require(PlatformDatabaseNames.IsRollback(result.RetainedDatabaseName));
+        if (result.Verification is { } verification)
+        {
+            Require(verification.Checks is { Count: <= MaxVerificationChecks } && verification.UserTableCount is null or >= 0 && verification.ReadableTableCount is null or >= 0 &&
+                (verification.Cleanup is RestoreVerificationCleanupOutcomes.Dropped or RestoreVerificationCleanupOutcomes.NotCreated or RestoreVerificationCleanupOutcomes.Failed) &&
+                (verification.CleanupReasonCode is null || Safe(verification.CleanupReasonCode, 64, required: true) &&
+                    verification.CleanupReasonCode.All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_' or '.')));
+            foreach (var check in verification.Checks)
+                Require(check is not null && Safe(check.CheckId, 64, required: true) && check.Status is "Passed" or "Failed" && Safe(check.ReasonCode, 64, required: true) &&
+                    check.ReasonCode.All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_' or '.') && Safe(check.Message, 512));
+        }
         Require(Safe(result.DatabaseState, 64) && Safe(result.TargetStateNote, 512));
     }
 
@@ -209,6 +226,9 @@ public static class RestoreInputValidation
         }
         return true;
     }
+
+    /// <summary>A stable machine code: short, lowercase-ish ASCII with dashes, as providers report them.</summary>
+    public static bool IsSafeCode(string? code) => code is { Length: > 0 and <= 64 } && code.All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_' or '.');
 
     private static bool Bounded(string? value, int maximum) => value is { Length: > 0 } && value.Length <= maximum && !value.Any(char.IsControl);
 

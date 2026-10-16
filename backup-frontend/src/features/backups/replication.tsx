@@ -1,5 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Notice } from '@/components/ui/notice'
+import { Section } from '@/components/ui/section'
 import type { ReplicaRepairOperation, ReplicationDestination, ReplicationHealth, ReplicationStatus } from '@/features/artifacts/types'
 import { failureMessage } from '@/lib/api/failure-messages'
 
@@ -57,21 +59,21 @@ function DestinationRow({
   const isExhausted = Boolean(repairOperation?.isExhausted)
   const repairEligible = Boolean(canRepair && destination.state !== 'Verified' && onRepair)
   return (
-    <li className="flex flex-wrap items-start justify-between gap-2 rounded-md border border-border bg-surface-2 p-3 text-sm">
-      <div className="space-y-1">
+    <li className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-border bg-surface-2 p-3 text-sm">
+      <div className="min-w-0 space-y-1">
         <p className="font-medium text-text">{providerLabels[destination.storageProvider] ?? destination.storageProvider}{destination.isPrimary && <span className="ml-2 text-xs text-text-muted">Birincil</span>}</p>
-        {destination.state === 'Failed' && destination.failureCode && <p className="text-error">{destination.failureCode === 'TargetConflict' ? failureMessage(destination.failureCode) : (destination.failureReason ?? failureMessage(destination.failureCode))} <span className="text-text-muted">· {destination.failureCode}</span></p>}
+        {destination.state === 'Failed' && destination.failureCode && <p className="text-error">{failureMessage(destination.failureCode)} <span className="text-text-muted">· {destination.failureCode}</span></p>}
         {destination.objectMayRemain && destination.replicaStatus !== 'Quarantined' && <p className="text-warning">Hedefte tamamlanmamış bir dosya kalmış olabilir; saklama süreci bu dosyayı da kaldırır.</p>}
         {destination.replicaStatus === 'Quarantined' && <p className="text-warning">Bu replika karantinaya alınmıştır; sahipliği doğrulanmadan otomatik veya manuel olarak silinmez.</p>}
         {isAutoPending && (
-          <p className="text-xs text-amber-500 font-medium">
+          <p className="text-sm font-medium text-warning">
             Otomatik yeniden deneme bekleniyor (Deneme {repairOperation?.attemptCount ?? 0} / {repairOperation?.maxAttempts ?? 5})
             {repairOperation?.nextRetryAt && ` · Sonraki: ${new Date(repairOperation.nextRetryAt).toLocaleTimeString()}`}
             {repairOperation?.lastFailureCode && ` (${repairOperation.lastFailureCode})`}
           </p>
         )}
         {isExhausted && (
-          <p className="text-xs text-error font-medium">
+          <p className="text-sm font-medium text-error">
             Yeniden deneme sınırına ulaşıldı ({repairOperation?.attemptCount ?? 5} / {repairOperation?.maxAttempts ?? 5})
             {repairOperation?.lastFailureCode && ` · Son hata: ${repairOperation.lastFailureCode}`}
           </p>
@@ -110,15 +112,11 @@ export function ReplicationSection({
 }) {
   if (!replication) return null
   return (
-    <section aria-label="Replikasyon" className="space-y-3 rounded-lg border border-border bg-surface p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-text-heading">Replikasyon</h2>
-        <ReplicationBadge replication={replication} />
-      </div>
-      <p className="text-sm text-text-muted">{replicationCounts(replication)}</p>
-      {replication.status === 'Degraded' && <p role="status" className="text-sm text-warning">Yedek kullanılabilir ve politika karşılanıyor; mevcut doğrulanmış replikalardan indirme ve geri yükleme yapılabilir.</p>}
-      {replication.status === 'InsufficientReplicas' && <p role="alert" className="text-sm text-error">Politikanın gerektirdiği replika sayısına ulaşılamadı; ancak mevcut doğrulanmış replikalardan indirme ve geri yükleme mümkündür.</p>}
-      {replication.status === 'Unavailable' && <p role="alert" className="text-sm text-error">Hiçbir hedefte doğrulanmış kopya yok; indirme ve geri yükleme kullanılamaz.</p>}
+    <Section title="Replikasyon" description={replicationCounts(replication)} actions={<ReplicationBadge replication={replication} />}>
+      <div className="space-y-3">
+      {replication.status === 'Degraded' && <Notice tone="warning">Yedek kullanılabilir ve politika karşılanıyor; mevcut doğrulanmış replikalardan indirme ve geri yükleme yapılabilir.</Notice>}
+      {replication.status === 'InsufficientReplicas' && <Notice tone="error">Politikanın gerektirdiği replika sayısına ulaşılamadı; ancak mevcut doğrulanmış replikalardan indirme ve geri yükleme mümkündür.</Notice>}
+      {replication.status === 'Unavailable' && <Notice tone="error">Hiçbir hedefte doğrulanmış kopya yok; indirme ve geri yükleme kullanılamaz.</Notice>}
       {replication.destinations.length > 0 && (
         <ul className="space-y-2" aria-label="Hedef sonuçları">
           {replication.destinations.map((destination) => {
@@ -139,6 +137,7 @@ export function ReplicationSection({
           })}
         </ul>
       )}
-    </section>
+      </div>
+    </Section>
   )
 }

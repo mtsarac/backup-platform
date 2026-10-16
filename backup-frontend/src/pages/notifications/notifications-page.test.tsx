@@ -34,6 +34,8 @@ function mount() {
   return render(<QueryClientProvider client={client}><NotificationsPage /></QueryClientProvider>)
 }
 
+const openTab = async (user: ReturnType<typeof userEvent.setup>, name: string) => user.click(await screen.findByRole('tab', { name }))
+
 beforeEach(() => {
   vi.resetAllMocks()
   access.canAdmin = true
@@ -53,11 +55,14 @@ describe('role gating', () => {
     expect(api.getDeliveries).not.toHaveBeenCalled()
   })
 
-  it('shows all three sections to admins', async () => {
+  it('shows all three sections to admins, one tab at a time', async () => {
+    const user = userEvent.setup()
     mount()
     expect(await screen.findByRole('heading', { name: 'Bildirim politikası' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Kanallar' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Gönderim geçmişi' })).toBeInTheDocument()
+    await openTab(user, 'Kanallar')
+    expect(await screen.findByRole('heading', { name: 'Kanallar' })).toBeInTheDocument()
+    await openTab(user, 'Gönderim geçmişi')
+    expect(await screen.findByRole('heading', { name: 'Gönderim geçmişi' })).toBeInTheDocument()
   })
 })
 
@@ -103,7 +108,9 @@ describe('channels', () => {
   const card = (name: string) => within(screen.getByRole('article', { name }))
 
   it('shows targetDisplay and secret status only', async () => {
+    const user = userEvent.setup()
     mount()
+    await openTab(user, 'Kanallar')
     await screen.findByRole('article', { name: 'Pager' })
     expect(card('Ops mailbox').getByText(/ops@example.com/)).toBeInTheDocument()
     expect(card('Pager').getByText(/https:\/\/hooks.example.com\/…/)).toBeInTheDocument()
@@ -117,6 +124,7 @@ describe('channels', () => {
     vi.mocked(api.testChannel).mockResolvedValue({ deliveryId: 'd9' })
     const user = userEvent.setup()
     mount()
+    await openTab(user, 'Kanallar')
     await screen.findByRole('article', { name: 'Ops mailbox' })
     expect(card('Ops mailbox').getByText('Adres onayı bekleniyor')).toBeInTheDocument()
     expect(card('Ops mailbox').queryByRole('button', { name: 'Ops mailbox kanalı: test gönder' })).not.toBeInTheDocument()
@@ -129,6 +137,7 @@ describe('channels', () => {
     vi.mocked(api.testChannel).mockRejectedValue(new ApiError(409, { error: 'notification_test_rate_limited' }))
     const user = userEvent.setup()
     mount()
+    await openTab(user, 'Kanallar')
     await user.click(await screen.findByRole('button', { name: 'Ops mailbox kanalı: test gönder' }))
     expect(await card('Ops mailbox').findByRole('alert')).toHaveTextContent('saatlik test sınırına')
   })
@@ -137,6 +146,7 @@ describe('channels', () => {
     vi.mocked(api.testChannel).mockRejectedValueOnce(new ApiError(409, { error: 'transport_not_configured' })).mockResolvedValueOnce({ deliveryId: 'd9' })
     const user = userEvent.setup()
     mount()
+    await openTab(user, 'Kanallar')
     await user.click(await screen.findByRole('button', { name: 'Ops mailbox kanalı: test gönder' }))
     expect(await card('Ops mailbox').findByRole('alert')).toHaveTextContent('platform aktarımı yapılandırılmamış')
     await user.click(card('Ops mailbox').getByRole('button', { name: 'Ops mailbox kanalı: test gönder' }))
@@ -148,6 +158,7 @@ describe('channels', () => {
     vi.mocked(api.createChannel).mockResolvedValue(channel({ id: 'c-new', kind: 'webhook', name: 'Yeni', authentication: 'hmac', hasSecret: true }))
     const user = userEvent.setup()
     mount()
+    await openTab(user, 'Kanallar')
     await user.click(await screen.findByRole('button', { name: 'Kanal ekle' }))
     const dialog = within(await screen.findByRole('dialog'))
     await user.selectOptions(dialog.getByLabelText('Tür'), 'webhook')
@@ -169,6 +180,7 @@ describe('channels', () => {
     vi.mocked(api.setChannelSecret).mockResolvedValue(channel({ id: 'c-hook', kind: 'webhook', name: 'Pager', authentication: 'bearer', hasSecret: true }))
     const user = userEvent.setup()
     mount()
+    await openTab(user, 'Kanallar')
     await user.click(await screen.findByRole('button', { name: 'Pager kanalı: secret ayarla' }))
     const dialog = within(await screen.findByRole('dialog'))
     const input = dialog.getByLabelText('Yeni secret') as HTMLInputElement
@@ -185,6 +197,7 @@ describe('channels', () => {
     vi.mocked(api.deleteChannel).mockResolvedValue(undefined)
     const user = userEvent.setup()
     mount()
+    await openTab(user, 'Kanallar')
     await user.click(await screen.findByRole('button', { name: 'Pager kanalı: secret temizle' }))
     await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Secret’ı temizle' }))
     await waitFor(() => expect(api.clearChannelSecret).toHaveBeenCalledWith('tenant-a', 'c-hook'))
@@ -198,6 +211,7 @@ describe('channels', () => {
     vi.mocked(api.setChannelEnabled).mockResolvedValue(channel({ enabled: false }))
     const user = userEvent.setup()
     mount()
+    await openTab(user, 'Kanallar')
     await user.click(await screen.findByRole('button', { name: 'Ops mailbox kanalı: devre dışı bırak' }))
     await waitFor(() => expect(api.setChannelEnabled).toHaveBeenCalledWith('tenant-a', 'c-mail', false))
   })
@@ -205,7 +219,9 @@ describe('channels', () => {
 
 describe('delivery history', () => {
   it('renders status, error code, attempts and next attempt', async () => {
+    const user = userEvent.setup()
     mount()
+    await openTab(user, 'Gönderim geçmişi')
     const row = within((await screen.findByText(/build-01/)).closest('tr')!)
     expect(row.getByText('Başarısız')).toBeInTheDocument()
     expect(row.getByText('smtp_unavailable')).toBeInTheDocument()
@@ -216,6 +232,7 @@ describe('delivery history', () => {
   it('sends status, kind and eventType filters and resets to page 1', async () => {
     const user = userEvent.setup()
     mount()
+    await openTab(user, 'Gönderim geçmişi')
     await screen.findByText(/build-01/)
     expect(api.getDeliveries).toHaveBeenLastCalledWith('tenant-a', { page: 1, pageSize: 25, status: undefined, kind: undefined, eventType: undefined }, expect.anything())
     await user.selectOptions(screen.getByLabelText('Durum'), 'failed')
@@ -228,6 +245,7 @@ describe('delivery history', () => {
     vi.mocked(api.getDeliveries).mockResolvedValue({ items: [delivery()], totalCount: 60, page: 1, pageSize: 25 })
     const user = userEvent.setup()
     mount()
+    await openTab(user, 'Gönderim geçmişi')
     await screen.findByText(/build-01/)
     await user.click(screen.getByRole('button', { name: 'Sonraki' }))
     await waitFor(() => expect(api.getDeliveries).toHaveBeenLastCalledWith('tenant-a', expect.objectContaining({ page: 2 }), expect.anything()))

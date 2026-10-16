@@ -23,12 +23,18 @@ public sealed class RestoreTaskRequestFactory(
     public async ValueTask<DatabaseRestorePipelineRequest> CreateAsync(RestoreTaskSnapshot task, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(task);
-        if (task.Purpose is not ("Execution" or "Precheck"))
+        if (task.Purpose is not ("Execution" or "Precheck" or "Verification"))
         {
             throw new RestoreTaskRequestException(RestoreAgentFailureCodes.InvalidConfiguration);
         }
         var staging = ValidateAndResolveStaging(task);
-        var mode = ParseMode(task.Mode);
+        var verification = task.Purpose == "Verification";
+        // A verification always creates a new, platform-named disposable database; the engine provider runs it with the least privilege it needs.
+        if (verification && (task.Mode != "NewDatabase" || !RestoreDatabaseNames.IsVerificationName(task.DatabaseName)))
+        {
+            throw new RestoreTaskRequestException(RestoreAgentFailureCodes.InvalidConfiguration);
+        }
+        var mode = verification ? DatabaseRestoreMode.IsolatedVerification : ParseMode(task.Mode);
 
         DatabaseConnectionSettings connection;
         StorageProviderId storage;
@@ -50,13 +56,20 @@ public sealed class RestoreTaskRequestFactory(
         var credential = task.Target.IntegratedSecurity
             ? IntegratedDatabaseCredential.Instance
             : await ResolveCredentialAsync(task.Target.DatabaseCredentialReference!, cancellationToken).ConfigureAwait(false);
+        if (task.Engine == "postgres" && credential is not PasswordDatabaseCredential)
+            throw new RestoreTaskRequestException(RestoreAgentFailureCodes.InvalidConfiguration);
         try
         {
             return new DatabaseRestorePipelineRequest(
-                DatabaseEngineId.MsSql, connection, credential, task.DatabaseName, mode, staging, storage, key, task.TenantId,
+                new DatabaseEngineId(task.Engine), connection, credential, task.DatabaseName, mode, staging, storage, key, task.TenantId,
                 task.Source.SizeBytes, checksum,
                 task.Options.TerminateActiveConnections, task.Options.VerifyChecksum, task.Options.VerifyBackup,
-                purpose: task.Purpose == "Precheck" ? RestorePipelinePurpose.Precheck : RestorePipelinePurpose.Execution)
+                purpose: task.Purpose switch
+                {
+                    "Precheck" => RestorePipelinePurpose.Precheck,
+                    "Verification" => RestorePipelinePurpose.Verification,
+                    _ => RestorePipelinePurpose.Execution
+                })
             {
                 StorageOverride = task.Source.Access == "BackendRelayed" ? storageFactory!.CreateRestore(task) : null
             };
@@ -89,12 +102,49 @@ public sealed class RestoreTaskRequestFactory(
         var credential = task.Target.IntegratedSecurity
             ? IntegratedDatabaseCredential.Instance
             : await ResolveCredentialAsync(task.Target.DatabaseCredentialReference!, cancellationToken).ConfigureAwait(false);
-        return new RestoreDiscoveryRequest(DatabaseEngineId.MsSql, connection, credential);
+        if (task.Engine == "postgres" && credential is not PasswordDatabaseCredential)
+            throw new RestoreTaskRequestException(RestoreAgentFailureCodes.InvalidConfiguration);
+        return new RestoreDiscoveryRequest(new DatabaseEngineId(task.Engine), connection, credential);
+    }
+
+    /// <summary>The connection and local credential for removing a platform-created database. Refuses a snapshot this agent cannot act on before any credential is resolved.</summary>
+    internal async ValueTask<(DatabaseConnectionSettings Connection, DatabaseCredential Credential)> CreateCleanupTargetAsync(RestoreCleanupSnapshot task, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+        if (task.Version != 1 || task.OperationId == Guid.Empty || task.TenantId == Guid.Empty || task.LeaseToken == Guid.Empty || task.Engine is not ("mssql" or "postgres")
+            || task.Target is null || (task.Engine == "postgres" && task.Target.IntegratedSecurity)
+            || string.IsNullOrWhiteSpace(task.Target.Host) || task.Target.Host.Length > MaxHostLength || task.Target.Host.Any(char.IsControl)
+            || !BackupTaskRequestFactory.HasValidAuthentication(task.Target.IntegratedSecurity, task.Target.DatabaseCredentialReference))
+        {
+            throw new RestoreTaskRequestException(RestoreAgentFailureCodes.InvalidConfiguration);
+        }
+
+        DatabaseConnectionSettings connection;
+        try
+        {
+            connection = new DatabaseConnectionSettings(new DatabaseEndpoint(task.Target.Host, task.Target.Port),
+                new DatabaseConnectionOptions(requireEncryption: task.Target.Encrypt, trustServerCertificate: task.Target.TrustServerCertificate));
+        }
+        catch (ArgumentException)
+        {
+            throw new RestoreTaskRequestException(RestoreAgentFailureCodes.InvalidConfiguration);
+        }
+
+        var credential = task.Target.IntegratedSecurity
+            ? IntegratedDatabaseCredential.Instance
+            : await ResolveCredentialAsync(task.Target.DatabaseCredentialReference!, cancellationToken).ConfigureAwait(false);
+        if (task.Engine == "postgres" && credential is not PasswordDatabaseCredential)
+        {
+            throw new RestoreTaskRequestException(RestoreAgentFailureCodes.InvalidConfiguration);
+        }
+        return (connection, credential);
     }
 
     private static bool HasValidIdentityAndTarget(RestoreTaskSnapshot task) =>
         task.Version == 1 && task.OperationId != Guid.Empty && task.AttemptId != Guid.Empty && task.TenantId != Guid.Empty
+        && task.Engine is ("mssql" or "postgres")
         && task.LeaseToken != Guid.Empty && task.Target is not null
+        && (task.Engine != "postgres" || !task.Target.IntegratedSecurity)
         && !string.IsNullOrWhiteSpace(task.Target.Host) && task.Target.Host.Length <= MaxHostLength
         && !task.Target.Host.Any(char.IsControl)
         && BackupTaskRequestFactory.HasValidAuthentication(task.Target.IntegratedSecurity, task.Target.DatabaseCredentialReference);
@@ -105,6 +155,7 @@ public sealed class RestoreTaskRequestFactory(
             || task.ArtifactId == Guid.Empty || task.ReplicaId == Guid.Empty
             || task.Source is null || task.Options is null
             || string.IsNullOrWhiteSpace(task.DatabaseName) || task.DatabaseName.Length > MaxDatabaseNameLength || task.DatabaseName.Any(char.IsControl)
+            || task.Engine == "postgres" && System.Text.Encoding.UTF8.GetByteCount(task.DatabaseName) > 63
             || !HasValidSource(task.Source))
         {
             throw new RestoreTaskRequestException(RestoreAgentFailureCodes.InvalidConfiguration);

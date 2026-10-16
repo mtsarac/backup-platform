@@ -118,6 +118,36 @@ internal sealed class FakeRestoreStore : IRestoreStore
         return Task.FromResult(CompleteResult);
     }
 
+    public RestoreCleanupClaim? CleanupClaimResult { get; set; }
+    public List<(TenantId Tenant, AgentId Agent, DateTimeOffset Now, TimeSpan Lease)> CleanupClaims { get; } = [];
+    public BackupMutationResult CleanupCompleteResult { get; set; } = BackupMutationResult.Accepted;
+    public List<(TenantId Tenant, AgentId Agent, Guid OperationId, Guid Token, bool Removed, string? FailureCode)> CleanupCompletions { get; } = [];
+    public RestoreCleanupRequestResult CleanupRequestResult { get; set; } = new(RestoreCleanupRequestOutcome.NotFound);
+    public List<(TenantId Tenant, Guid RestoreId, TimeSpan Retention, Guid? User)> CleanupRequests { get; } = [];
+
+    public Task<RestoreCleanupClaim?> ClaimCleanupAsync(TenantId tenantId, AgentId agentId, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken)
+    {
+        Calls.Add(nameof(ClaimCleanupAsync));
+        CleanupClaims.Add((tenantId, agentId, now, leaseDuration));
+        return Task.FromResult(CleanupClaimResult);
+    }
+
+    public Task<BackupMutationResult> CompleteCleanupAsync(TenantId tenantId, AgentId agentId, Guid operationId, Guid leaseToken, bool removed, string? failureCode, DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        Calls.Add(nameof(CompleteCleanupAsync));
+        CleanupCompletions.Add((tenantId, agentId, operationId, leaseToken, removed, failureCode));
+        return Task.FromResult(CleanupCompleteResult);
+    }
+
+    public Task<RestoreCleanupRequestResult> RequestCleanupAsync(TenantId tenantId, Guid restoreId, DateTimeOffset now, TimeSpan rollbackRetention, Guid? requestedByUserId,
+        CancellationToken cancellationToken)
+    {
+        Calls.Add(nameof(RequestCleanupAsync));
+        CleanupRequests.Add((tenantId, restoreId, rollbackRetention, requestedByUserId));
+        return Task.FromResult(CleanupRequestResult);
+    }
+
     public Task<int> ExpireStaleAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
         Calls.Add(nameof(ExpireStaleAsync));

@@ -6,7 +6,12 @@ public enum DatabaseRestoreMode
     /// <summary>Create a database that does not exist yet; an existing one is a failed pre-check.</summary>
     NewDatabase = 1,
     /// <summary>Overwrite an existing database. The only mode whose statement may carry the engine's overwrite option.</summary>
-    ReplaceExistingDatabase = 2
+    ReplaceExistingDatabase = 2,
+    /// <summary>
+    /// Create a disposable <c>bp_verify_*</c> database next to the target's other databases, only to prove the backup restores. Never replaces or publishes
+    /// under another name, and an engine may run it with the least privilege it needs (no owner/ACL preservation).
+    /// </summary>
+    IsolatedVerification = 3
 }
 
 /// <summary>
@@ -23,6 +28,8 @@ public enum RestoreExecutionStage
     PreparingTarget,
     Restoring,
     Finalizing,
+    Verifying,
+    CleaningUp,
     Completed,
     Failed,
     Cancelled
@@ -108,36 +115,37 @@ public enum RestoreFileKind
 /// <summary>One logical file of the backed-up database (<c>RESTORE FILELISTONLY</c>). <see cref="SourcePhysicalName"/> is where it lived on the SOURCE server: informational, never a restore destination.</summary>
 public sealed record RestoreBackupFile(string LogicalName, string SourcePhysicalName, RestoreFileKind Kind, string? FileGroupName, long SizeBytes);
 
-/// <summary>What was read from a backup file: its header, its logical files and whether the engine's own verification ran and passed.</summary>
+/// <summary>
+/// What was read from a backup file: its header, its logical files and whether the engine's own verification ran and passed.
+/// <see cref="EngineDetails"/> carries engine-specific facts the planner needs (for PostgreSQL: the archive's extensions and encoding) under stable keys;
+/// engines without any leave it null.
+/// </summary>
 public sealed record RestoreBackupInspection(
     RestoreBackupHeader Header,
     IReadOnlyList<RestoreBackupFile> Files,
     bool VerifyOnlyPassed,
     DateTimeOffset? VerifyStartedAt,
-    DateTimeOffset? VerifyFinishedAt);
+    DateTimeOffset? VerifyFinishedAt,
+    IReadOnlyDictionary<string, string>? EngineDetails = null);
 
 /// <summary>A logical file and its destination on the TARGET server, generated from the target's own directories.</summary>
 public sealed record RestoreFileMapping(string LogicalName, RestoreFileKind Kind, string SourcePhysicalName, DatabaseServerPath TargetPath, long SizeBytes, string? FileGroupName = null);
 
-/// <summary>The target server facts a plan was made against.</summary>
+/// <summary>The target server facts a plan was made against. The default directories are null for engines that do not place files by path (PostgreSQL).</summary>
 public sealed record RestoreTargetInfo(
     DatabaseInstanceInfo Instance,
-    DatabaseServerPath DefaultDataDirectory,
-    DatabaseServerPath DefaultLogDirectory,
+    DatabaseServerPath? DefaultDataDirectory,
+    DatabaseServerPath? DefaultLogDirectory,
     bool DatabaseExists,
     string? DatabaseState);
 
-/// <summary>Where every logical file of a backup will go on the target. Destinations are unique and never taken from the source server's paths.</summary>
+/// <summary>The target placement plan. Logical engines have no physical file mappings; physical engines map each logical file.</summary>
 public sealed record RestorePlan
 {
     public RestorePlan(IReadOnlyList<RestoreFileMapping> mappings, RestoreTargetInfo target, IEnumerable<BackupWarning>? warnings = null)
     {
         ArgumentNullException.ThrowIfNull(mappings);
         ArgumentNullException.ThrowIfNull(target);
-        if (mappings.Count == 0)
-        {
-            throw new ArgumentException("A restore plan maps at least one file.", nameof(mappings));
-        }
 
         if (mappings.Select(mapping => mapping.TargetPath.Value).Distinct(StringComparer.OrdinalIgnoreCase).Count() != mappings.Count
             || mappings.Select(mapping => mapping.LogicalName).Distinct(StringComparer.OrdinalIgnoreCase).Count() != mappings.Count)
@@ -258,7 +266,7 @@ public sealed record RestoreInspectionRequest
 {
     public static readonly TimeSpan DefaultVerifyTimeout = TimeSpan.FromHours(2);
 
-    public RestoreInspectionRequest(DatabaseServerPath serverFile, bool runVerifyOnly, TimeSpan? verifyTimeout = null)
+    public RestoreInspectionRequest(DatabaseServerPath serverFile, bool runVerifyOnly, TimeSpan? verifyTimeout = null, AgentPath? agentFile = null)
     {
         ArgumentNullException.ThrowIfNull(serverFile);
         var timeout = verifyTimeout ?? DefaultVerifyTimeout;
@@ -268,12 +276,16 @@ public sealed record RestoreInspectionRequest
         }
 
         ServerFile = serverFile;
+        AgentFile = agentFile;
         RunVerifyOnly = runVerifyOnly;
         VerifyTimeout = TimeSpan.FromSeconds(Math.Ceiling(timeout.TotalSeconds));
     }
 
     /// <summary>The backup file as the database server sees it.</summary>
     public DatabaseServerPath ServerFile { get; }
+
+    /// <summary>The same file as the agent process sees it. A client-tool engine (PostgreSQL) reads the file itself and needs this; a server-side engine (SQL Server) ignores it.</summary>
+    public AgentPath? AgentFile { get; }
 
     /// <summary>Run the engine's own verification (<c>RESTORE VERIFYONLY</c>) on the file now, even if the backup was verified when it was taken.</summary>
     public bool RunVerifyOnly { get; }
@@ -333,7 +345,8 @@ public sealed record DatabaseRestoreRequest
         bool terminateActiveConnections,
         RestoreBackupInspection inspection,
         RestorePlan plan,
-        TimeSpan? restoreTimeout = null)
+        TimeSpan? restoreTimeout = null,
+        AgentPath? agentFile = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(databaseName);
         ArgumentNullException.ThrowIfNull(serverFile);
@@ -352,6 +365,7 @@ public sealed record DatabaseRestoreRequest
 
         DatabaseName = databaseName;
         ServerFile = serverFile;
+        AgentFile = agentFile;
         Mode = mode;
         TerminateActiveConnections = terminateActiveConnections;
         Inspection = inspection;
@@ -361,6 +375,9 @@ public sealed record DatabaseRestoreRequest
 
     public string DatabaseName { get; }
     public DatabaseServerPath ServerFile { get; }
+
+    /// <summary>The staged file as the agent process sees it; see <see cref="RestoreInspectionRequest.AgentFile"/>.</summary>
+    public AgentPath? AgentFile { get; }
     public DatabaseRestoreMode Mode { get; }
     public bool TerminateActiveConnections { get; }
     public RestoreBackupInspection Inspection { get; }
@@ -384,7 +401,8 @@ public sealed record DatabaseRestoreResult
         DateTimeOffset? restoreStartedAt,
         DateTimeOffset? restoreFinishedAt,
         IReadOnlyList<RestoreFileMapping> fileMappings,
-        IEnumerable<BackupWarning> warnings)
+        IEnumerable<BackupWarning> warnings,
+        string? retainedDatabaseName = null)
     {
         if (!Enum.IsDefined(status))
         {
@@ -421,6 +439,12 @@ public sealed record DatabaseRestoreResult
         RestoreFinishedAt = restoreFinishedAt;
         FileMappings = fileMappings;
         Warnings = warnings.ToArray();
+        if (retainedDatabaseName is not null && (status != DatabaseRestoreStatus.Succeeded || !RestoreDatabaseNames.IsRollbackName(retainedDatabaseName)))
+        {
+            throw new ArgumentException("Only a successful restore can retain a platform rollback database.", nameof(retainedDatabaseName));
+        }
+
+        RetainedDatabaseName = retainedDatabaseName;
     }
 
     public DatabaseRestoreStatus Status { get; }
@@ -438,6 +462,9 @@ public sealed record DatabaseRestoreResult
     public DateTimeOffset? RestoreFinishedAt { get; }
     public IReadOnlyList<RestoreFileMapping> FileMappings { get; }
     public IReadOnlyList<BackupWarning> Warnings { get; }
+
+    /// <summary>The <c>bp_old_*</c> rollback copy of the database this restore replaced (PostgreSQL), kept for the operator; null when none was kept.</summary>
+    public string? RetainedDatabaseName { get; }
 }
 
 /// <summary>

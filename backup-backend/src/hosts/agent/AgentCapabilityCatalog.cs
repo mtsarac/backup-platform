@@ -1,4 +1,5 @@
 using BackupPlatform.BackupProviders.MSSQL.Capabilities;
+using BackupPlatform.BackupProviders.PostgreSql;
 using BackupPlatform.Contracts.Agents;
 using BackupPlatform.Contracts.Downloads;
 using BackupPlatform.Contracts.Restores;
@@ -38,6 +39,19 @@ public sealed class AgentCapabilityCatalog
         Supported(SqlServerCapabilityIds.RestoreDatabase.Value),
         Supported(RestoreTaskTypes.PrecheckCapability),
         Supported(RestoreTaskTypes.DiscoveryCapability),
+        Supported(RestoreTaskTypes.MssqlVerificationCapability),
+        Supported(RestoreTaskTypes.PostgresVerificationCapability),
+        Supported(PostgreSqlCapabilityIds.FullBackup.Value),
+        Supported(PostgreSqlCapabilityIds.BackupChecksum.Value),
+        Supported(PostgreSqlCapabilityIds.BackupCompression.Value),
+        Supported(PostgreSqlCapabilityIds.CopyOnly.Value),
+        Supported(PostgreSqlCapabilityIds.RestoreFull.Value),
+        Supported(PostgreSqlCapabilityIds.RestorePrecheck.Value),
+        Supported(PostgreSqlCapabilityIds.RestoreDiscovery.Value),
+        Supported(PostgreSqlCapabilityIds.RestoreVerify.Value),
+        Unsupported(PostgreSqlCapabilityIds.DifferentialBackup.Value),
+        Unsupported(PostgreSqlCapabilityIds.IncrementalBackup.Value),
+        Unsupported(PostgreSqlCapabilityIds.WalArchiving.Value),
         Supported(DownloadTaskTypes.Capability),
         Supported(TaskStorageProtocol.Capability),
         Supported(BackupTaskProtocol.MultiDestinationCapability),

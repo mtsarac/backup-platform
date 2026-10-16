@@ -27,6 +27,7 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
         var credential = configuration.IntegratedSecurity
             ? IntegratedDatabaseCredential.Instance
             : await ResolveCredentialAsync(configuration.DatabaseCredentialReference!, cancellationToken).ConfigureAwait(false);
+        if (configuration.Engine == "postgres" && credential is not PasswordDatabaseCredential) throw new BackupTaskCredentialException();
         var targets = configuration.Destinations.Select(destination => new BackupPipelineDestination(
             new StorageProviderId(destination.StorageProvider),
             destination.StorageProvider is "sftp" or "google-drive"
@@ -35,7 +36,8 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
             destination.StorageConnectionId,
             destination.IsPrimary)).ToArray();
         var primary = targets.Single(target => target.IsPrimary);
-        return new DatabaseBackupPipelineRequest(DatabaseEngineId.MsSql, connection, credential, configuration.Database,
+        var engineId = new DatabaseEngineId(configuration.Engine);
+        return new DatabaseBackupPipelineRequest(engineId, connection, credential, configuration.Database,
             staging, primary.Storage, prefix, options)
         {
             StorageOverride = primary.StorageOverride,
@@ -67,9 +69,10 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
     private static void ValidateConfiguration(BackupExecutionConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
-        if (configuration.Engine != "mssql" || configuration.StagingReference != "default"
+        if (configuration.Engine is not ("mssql" or "postgres") || configuration.StagingReference != "default"
             || string.IsNullOrWhiteSpace(configuration.Database) || configuration.Database.Length > 128
-            || configuration.Database.Any(char.IsControl) || configuration.Host is null || configuration.Host.Length > 253)
+            || configuration.Database.Any(char.IsControl) || configuration.Host is null || configuration.Host.Length > 253
+            || configuration.Engine == "postgres" && (configuration.Database != configuration.Database.Trim() || System.Text.Encoding.UTF8.GetByteCount(configuration.Database) > 63 || configuration.IntegratedSecurity))
         {
             throw new ArgumentException("The backup configuration is unsupported.");
         }

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import * as api from '@/features/platform/api'
 import { paged, renderPlatform } from '@/features/platform/test-utils'
@@ -18,6 +18,7 @@ beforeEach(() => {
 })
 
 async function fillForm(login: string, name: string, password: string) {
+  await userEvent.click(screen.getByRole('button', { name: 'Yeni kullanıcı' }))
   await userEvent.type(screen.getByLabelText(/Kullanıcı adı/), login)
   await userEvent.type(screen.getByLabelText('Görünen ad'), name)
   await userEvent.type(screen.getByLabelText(/Şifre/), password)
@@ -43,6 +44,9 @@ describe('platform users', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Kullanıcı oluştur' }))
     expect(api.createUser).toHaveBeenCalledWith({ loginIdentifier: 'deniz', displayName: 'Deniz Kaya', password: 'a-very-long-password' })
     expect(await screen.findByRole('cell', { name: 'Deniz Kaya' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(document.body.innerHTML).not.toContain('a-very-long-password')
+    await userEvent.click(screen.getByRole('button', { name: 'Yeni kullanıcı' }))
     expect(screen.getByLabelText(/Şifre/)).toHaveValue('')
     expect(screen.getByLabelText(/Kullanıcı adı/)).toHaveValue('')
   })

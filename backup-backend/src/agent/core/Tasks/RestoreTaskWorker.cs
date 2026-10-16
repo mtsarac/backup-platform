@@ -84,7 +84,8 @@ public sealed partial class RestoreTaskWorker : IAgentTaskSink
     private static bool HasMatchingPurpose(string type, string purpose) => (type, purpose) is
         (RestoreTaskTypes.DatabaseRestore, "Execution")
         or (RestoreTaskTypes.DatabaseRestorePrecheck, "Precheck")
-        or (RestoreTaskTypes.DatabaseRestoreDiscovery, "Discovery");
+        or (RestoreTaskTypes.DatabaseRestoreDiscovery, "Discovery")
+        or (RestoreTaskTypes.DatabaseRestoreVerification, "Verification");
 
     private bool TryEnqueue(AgentTaskEnvelope task) =>
         _time is IAgentLoopObserver observer ? observer.Signal("restore worker", () => _queue.Writer.TryWrite(task)) : _queue.Writer.TryWrite(task);
@@ -217,15 +218,15 @@ public sealed partial class RestoreTaskWorker : IAgentTaskSink
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            return RestoreTaskResultMapper.Failure(task.LeaseToken, RestoreAgentFailureCodes.Cancelled, DatabaseRestoreTargetState.NotModified);
+            return RestoreTaskResultMapper.Failure(task.LeaseToken, RestoreAgentFailureCodes.Cancelled, DatabaseRestoreTargetState.NotModified, nothingCreated: task.Purpose == "Verification");
         }
         catch (RestoreTaskRequestException exception)
         {
-            return RestoreTaskResultMapper.Failure(task.LeaseToken, exception.FailureCode, DatabaseRestoreTargetState.NotModified);
+            return RestoreTaskResultMapper.Failure(task.LeaseToken, exception.FailureCode, DatabaseRestoreTargetState.NotModified, nothingCreated: task.Purpose == "Verification");
         }
         catch (Exception)
         {
-            return RestoreTaskResultMapper.Failure(task.LeaseToken, RestoreAgentFailureCodes.InternalError, DatabaseRestoreTargetState.NotModified);
+            return RestoreTaskResultMapper.Failure(task.LeaseToken, RestoreAgentFailureCodes.InternalError, DatabaseRestoreTargetState.NotModified, nothingCreated: task.Purpose == "Verification");
         }
 
         try

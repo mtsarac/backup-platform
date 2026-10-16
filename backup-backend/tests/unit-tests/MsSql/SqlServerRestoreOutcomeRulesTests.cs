@@ -99,6 +99,19 @@ public sealed class SqlServerRestoreOutcomeRulesTests
     }
 
     [Fact]
+    public void AnIsolatedVerificationIsJudgedLikeANewDatabase()
+    {
+        const DatabaseRestoreMode mode = DatabaseRestoreMode.IsolatedVerification;
+
+        Assert.Equal(DatabaseRestoreTargetState.Online, Determine(mode, true, true, false, null, Db()).TargetState);
+        Assert.Equal(DatabaseRestoreTargetState.NotModified, Determine(mode, true, false, false, null, null).TargetState);
+        var left = Determine(mode, true, false, false, null, Db(SqlServerDatabaseState.Restoring));
+        Assert.Equal(DatabaseRestoreTargetState.PartiallyRestored, left.TargetState);
+        Assert.Contains(left.Warnings, warning => warning.Code == SqlServerRestoreWarningCodes.DatabaseLeftRestoring);
+        Assert.DoesNotContain(left.Warnings, warning => warning.Code == SqlServerRestoreWarningCodes.DatabaseMissingAfterRestore);
+    }
+
+    [Fact]
     public void AFailedReplaceWhoseDatabaseIsStillTheSameOnlineDatabaseWasRejectedBeforeItWasTouched()
     {
         var outcome = Determine(DatabaseRestoreMode.ReplaceExistingDatabase, true, false, true, Db(), Db());

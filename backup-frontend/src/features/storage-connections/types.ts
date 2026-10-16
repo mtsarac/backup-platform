@@ -39,7 +39,7 @@ export interface ProviderDescriptor {
   testMode: TestMode
 }
 
-export type ConfigurationValue = string | number | boolean | null
+export type ConfigurationValue = string
 export type ConnectionConfiguration = Record<string, ConfigurationValue>
 
 export interface ConnectionTest {

@@ -15,4 +15,7 @@ public interface IRestoreTaskClient
     Task<AgentBackendResult<BackupTaskLeaseResponse>> RenewAsync(AgentLocalIdentity identity, Guid attemptId, BackupTaskLeaseRequest request, CancellationToken cancellationToken);
     Task<AgentBackendResult<bool>> ReportProgressAsync(AgentLocalIdentity identity, Guid attemptId, BackupTaskProgressRequest request, CancellationToken cancellationToken);
     Task<AgentBackendResult<bool>> CompleteAsync(AgentLocalIdentity identity, Guid attemptId, RestoreTaskCompletionRequest request, CancellationToken cancellationToken);
+
+    /// <summary>Reports the outcome of a leased database removal, fenced by the lease token inside <paramref name="request"/>.</summary>
+    Task<AgentBackendResult<bool>> CompleteCleanupAsync(AgentLocalIdentity identity, Guid operationId, RestoreCleanupCompletionRequest request, CancellationToken cancellationToken);
 }

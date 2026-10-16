@@ -16,9 +16,10 @@ public sealed class AgentCapabilityCatalogTests
         var supported = catalog.Capabilities.Where(c => c.Support == AgentCapabilitySupportNames.Supported).Select(c => c.Identifier).Order(StringComparer.Ordinal);
         var unsupported = catalog.Capabilities.Where(c => c.Support == AgentCapabilitySupportNames.Unsupported).Select(c => c.Identifier).Order(StringComparer.Ordinal);
         Assert.Equal(
-            ["backup.multi-destination", "backup.quota-bounded-upload", "backup.upload-bandwidth-limit", "mssql.backup.checksum", "mssql.backup.compression", "mssql.backup.copy-only", "mssql.backup.full", "mssql.restore.database", "mssql.restore.discovery", "mssql.restore.precheck", "mssql.restore.verify-only", "storage.backend-relay", "storage.download"], supported);
-        Assert.Equal(["mssql.backup.differential", "mssql.backup.log"], unsupported);
-        Assert.Equal(15, catalog.Capabilities.Count);
+            ["backup.multi-destination", "backup.quota-bounded-upload", "backup.upload-bandwidth-limit", "mssql.backup.checksum", "mssql.backup.compression", "mssql.backup.copy-only", "mssql.backup.full", "mssql.restore.database", "mssql.restore.discovery", "mssql.restore.precheck", "mssql.restore.verification", "mssql.restore.verify-only",
+             "postgres.backup.checksum", "postgres.backup.compression", "postgres.backup.copy-only", "postgres.backup.full", "postgres.restore.discovery", "postgres.restore.full", "postgres.restore.precheck", "postgres.restore.verification", "postgres.restore.verify", "storage.backend-relay", "storage.download"], supported);
+        Assert.Equal(["mssql.backup.differential", "mssql.backup.log", "postgres.backup.differential", "postgres.backup.incremental", "postgres.backup.wal"], unsupported);
+        Assert.Equal(28, catalog.Capabilities.Count);
         Assert.All(catalog.Capabilities.Where(c => c.Support == AgentCapabilitySupportNames.Supported),
             c => Assert.Equal("agent", Assert.Single(c.Metadata!, entry => entry.Key == "scope").Value));
         Assert.Equal(AgentCapabilityRevision.Compute(catalog.Capabilities), catalog.Revision);

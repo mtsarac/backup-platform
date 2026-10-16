@@ -28,13 +28,13 @@ public sealed class RestoreOperation : ITenantOwned
 
     private RestoreOperation()
     {
-        TenantId = null!; AgentId = null!; Target = null!; DatabaseName = null!; Options = null!; IdempotencyKey = null!; RequestFingerprint = null!; Pin = null!;
+        TenantId = null!; AgentId = null!; Target = null!; DatabaseName = null!; Options = null!; IdempotencyKey = null!; RequestFingerprint = null!; Pin = null!; Cleanup = RestoreCleanup.None;
     }
 
     public RestoreOperation(Guid id, TenantId tenantId, Guid artifactId, Guid replicaId, RestoreSourceAccess sourceAccess, AgentId agentId,
         RestoreTarget target, string databaseName, RestoreMode mode, bool overwriteConfirmed, RestoreOptions? options, string idempotencyKey,
         string requestFingerprint, Guid? requestedByUserId, DateTimeOffset createdAt, RestorePurpose purpose = RestorePurpose.Execution, Guid? precheckId = null,
-        Guid? supportSessionId = null)
+        Guid? supportSessionId = null, string engine = "mssql")
     {
         BackupGuard.Id(id);
         BackupGuard.Id(artifactId);
@@ -47,7 +47,13 @@ public sealed class RestoreOperation : ITenantOwned
         if (!Enum.IsDefined(mode)) throw new ArgumentException("Unknown restore mode.");
         if (!Enum.IsDefined(sourceAccess)) throw new ArgumentException("Unknown source access.");
         if (!Enum.IsDefined(purpose)) throw new ArgumentException("Unknown restore purpose.");
-        if (purpose != RestorePurpose.Discovery) ValidateDatabaseName(databaseName);
+        if (purpose == RestorePurpose.Verification)
+        {
+            // The backend names the disposable database before anything exists, so a lost agent can never leave an unknown leftover; only a new database may ever be created.
+            ValidateDatabaseName(databaseName, engine, verification: true);
+            if (mode != RestoreMode.NewDatabase || supportSessionId is not null) throw new ArgumentException("A verification only creates a new disposable database.");
+        }
+        else if (purpose != RestorePurpose.Discovery) ValidateDatabaseName(databaseName, engine);
         else if (databaseName != string.Empty) throw new ArgumentException("Discovery has no target database.");
         // Only an execution can acknowledge an overwrite; read-only preparation never does.
         if (purpose == RestorePurpose.Execution && mode == RestoreMode.ReplaceExistingDatabase && !overwriteConfirmed)
@@ -64,6 +70,7 @@ public sealed class RestoreOperation : ITenantOwned
             if (requestedByUserId is null) throw new ArgumentException("A support restore records the platform administrator who requested it.");
         }
         Purpose = purpose;
+        Cleanup = purpose == RestorePurpose.Verification ? RestoreCleanup.ForVerification(databaseName) : RestoreCleanup.None;
         PrecheckId = precheckId;
         SupportSessionId = supportSessionId;
         Id = id;
@@ -75,7 +82,7 @@ public sealed class RestoreOperation : ITenantOwned
         Target = target.Validate() with { };
         DatabaseName = databaseName;
         Mode = mode;
-        OverwritePolicy = purpose == RestorePurpose.Execution && mode == RestoreMode.ReplaceExistingDatabase ? RestoreOverwritePolicy.ReplaceExisting : RestoreOverwritePolicy.Forbidden;
+        OverwritePolicy = mode == RestoreMode.ReplaceExistingDatabase ? RestoreOverwritePolicy.ReplaceExisting : RestoreOverwritePolicy.Forbidden;
         Options = options ?? RestoreOptions.Default;
         IdempotencyKey = idempotencyKey;
         RequestFingerprint = requestFingerprint;
@@ -120,16 +127,30 @@ public sealed class RestoreOperation : ITenantOwned
     /// <summary>The agent's typed result (pre-check items, file mappings, warnings, header summary) as JSON; opaque to the domain.</summary>
     public string? ResultJson { get; private set; }
     public RestoreReplicaPin Pin { get; private set; }
+    /// <summary>The platform-created database this operation owes the target's cleanup for (a verification's disposable database, or a retained rollback copy).</summary>
+    public RestoreCleanup Cleanup { get; private set; }
     public IReadOnlyList<RestoreAttempt> Attempts => _attemptView ??= _attempts.AsReadOnly();
     public RestoreAttempt CurrentAttempt => _attempts.Single(attempt => attempt.Number == CurrentAttemptNumber);
     public bool IsTerminal => Status is RestoreStatus.Succeeded or RestoreStatus.Failed or RestoreStatus.Cancelled or RestoreStatus.AgentLost;
     public bool IsActive => !IsTerminal;
 
-    public static void ValidateDatabaseName(string? name)
+    public static void ValidateDatabaseName(string? name, string engine = "mssql", bool verification = false)
+    {
+        ValidateDatabaseNameSyntax(name);
+        // The platform's own prefixes are reserved: a user restore can never name a database the cleanup would later treat as disposable or as a rollback copy.
+        if (verification ? !PlatformDatabaseNames.IsVerification(name) : PlatformDatabaseNames.IsReserved(name))
+            throw new ArgumentException("This database name is reserved for the platform.");
+        if (engine == "mssql" && SystemDatabases.Contains(name!)) throw new ArgumentException("A system database cannot be a restore target.");
+        if (engine == "postgres" && (System.Text.Encoding.UTF8.GetByteCount(name!) > 63 ||
+            name!.Equals("postgres", StringComparison.OrdinalIgnoreCase) || name.Equals("template0", StringComparison.OrdinalIgnoreCase) ||
+            name.Equals("template1", StringComparison.OrdinalIgnoreCase))) throw new ArgumentException("Invalid PostgreSQL target database name.");
+        if (engine is not ("mssql" or "postgres")) throw new ArgumentException("Unknown database engine.");
+    }
+
+    public static void ValidateDatabaseNameSyntax(string? name)
     {
         if (name is null || name.Length is < 1 or > 128 || name.Any(char.IsControl) || name != name.Trim())
             throw new ArgumentException("Invalid target database name.");
-        if (SystemDatabases.Contains(name)) throw new ArgumentException("A system database cannot be a restore target.");
     }
 
     public RestoreAttempt QueueFirstAttempt(Guid attemptId, DateTimeOffset now)
@@ -180,7 +201,9 @@ public sealed class RestoreOperation : ITenantOwned
             throw new InvalidOperationException("Read-only preparation cannot change the target.");
         if (Purpose == RestorePurpose.Execution && completion.Status == RestoreStatus.Succeeded && completion.TargetState != RestoreTargetState.Online)
             throw new InvalidOperationException("An execution must leave the restored database online.");
-        EndTerminal(attempt.Status, attempt.FailureCode, attempt.TargetState!.Value, completion.ResultJson, now);
+        if (completion.RetainedDatabaseName is not null && (Purpose != RestorePurpose.Execution || Mode != RestoreMode.ReplaceExistingDatabase || completion.Status != RestoreStatus.Succeeded))
+            throw new InvalidOperationException("Only a successful replace restore retains a rollback database.");
+        EndTerminal(attempt.Status, attempt.FailureCode, attempt.TargetState!.Value, completion.ResultJson, now, completion.TemporaryDatabaseRemoved, completion.RetainedDatabaseName);
     }
 
     /// <summary>
@@ -201,7 +224,7 @@ public sealed class RestoreOperation : ITenantOwned
     {
         var attempt = CurrentAttempt;
         if (!attempt.Expire(now, Purpose)) return false;
-        EndTerminal(RestoreStatus.AgentLost, RestoreFailureCodes.AgentLost, attempt.TargetState!.Value, null, now);
+        EndTerminal(RestoreStatus.AgentLost, RestoreFailureCodes.AgentLost, attempt.TargetState!.Value, null, now, temporaryDatabaseRemoved: false);
         return true;
     }
 
@@ -214,7 +237,8 @@ public sealed class RestoreOperation : ITenantOwned
         return true;
     }
 
-    private void EndTerminal(RestoreStatus status, string? failureCode, RestoreTargetState targetState, string? resultJson, DateTimeOffset now)
+    private void EndTerminal(RestoreStatus status, string? failureCode, RestoreTargetState targetState, string? resultJson, DateTimeOffset now,
+        bool temporaryDatabaseRemoved = true, string? retainedDatabaseName = null)
     {
         Status = status;
         FailureCode = failureCode;
@@ -222,5 +246,25 @@ public sealed class RestoreOperation : ITenantOwned
         ResultJson = resultJson;
         CompletedAt = BackupGuard.Timestamp(now);
         Pin.Release(now);
+        Cleanup = retainedDatabaseName is not null ? RestoreCleanup.Retain(retainedDatabaseName, now) : Cleanup.Ended(temporaryDatabaseRemoved, now);
     }
+
+    /// <summary>An operator asks for the removal of the retained rollback copy, or for a retry now of a cleanup that is backing off or parked. False when there is nothing to request.</summary>
+    public bool RequestCleanup(DateTimeOffset now, Guid? userId)
+    {
+        if (!IsTerminal || !Cleanup.TryRequest(now, userId, out var next)) return false;
+        Cleanup = next;
+        return true;
+    }
+
+    /// <summary>Leases the owed removal to the agent. The lease token fences the report; an earlier lease that expired can no longer report.</summary>
+    public bool TryLeaseCleanup(Guid token, DateTimeOffset now, TimeSpan duration)
+    {
+        if (!IsTerminal || !Cleanup.CanLease(now)) return false;
+        Cleanup = Cleanup.Leased(token, now, duration);
+        return true;
+    }
+
+    /// <exception cref="InvalidOperationException">The lease is not the current one.</exception>
+    public void ReportCleanup(Guid token, bool removed, string? failureCode, DateTimeOffset now) => Cleanup = Cleanup.Reported(token, removed, failureCode, now);
 }

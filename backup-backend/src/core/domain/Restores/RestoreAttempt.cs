@@ -149,8 +149,12 @@ public sealed class RestoreAttempt : ITenantOwned
     }
 }
 
-/// <summary>What an agent reports when it ends an attempt.</summary>
-public sealed record RestoreCompletion(RestoreStatus Status, string? FailureCode, RestoreTargetState TargetState, string? ResultJson)
+/// <summary>
+/// What an agent reports when it ends an attempt. <paramref name="TemporaryDatabaseRemoved"/> is the agent's statement that a verification's disposable database is gone (or
+/// was never created); anything else leaves its removal owed. <paramref name="RetainedDatabaseName"/> is the rollback copy a replace restore kept, if any.
+/// </summary>
+public sealed record RestoreCompletion(RestoreStatus Status, string? FailureCode, RestoreTargetState TargetState, string? ResultJson,
+    bool TemporaryDatabaseRemoved = false, string? RetainedDatabaseName = null)
 {
     internal void Validate(RestoreStatus current)
     {
@@ -173,5 +177,7 @@ public sealed record RestoreCompletion(RestoreStatus Status, string? FailureCode
                 break;
         }
         if (ResultJson is { Length: > RestoreOperation.MaxResultJsonLength }) throw new ArgumentException("The restore result is too large.");
+        if (RetainedDatabaseName is not null && (Status != RestoreStatus.Succeeded || !PlatformDatabaseNames.IsRollback(RetainedDatabaseName)))
+            throw new ArgumentException("Only a successful restore can retain a platform rollback database.");
     }
 }

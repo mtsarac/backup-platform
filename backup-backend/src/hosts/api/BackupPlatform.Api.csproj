@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
+  <PropertyGroup>
+    <EnableRequestDelegateGenerator>true</EnableRequestDelegateGenerator>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\core\application\BackupPlatform.Application.csproj" />
     <ProjectReference Include="..\..\core\contracts\BackupPlatform.Contracts.csproj" />

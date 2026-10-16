@@ -33,6 +33,15 @@ public sealed class HttpRestoreTaskClient : IRestoreTaskClient
     public Task<AgentBackendResult<bool>> CompleteAsync(AgentLocalIdentity identity, Guid attemptId, RestoreTaskCompletionRequest request, CancellationToken cancellationToken) =>
         _client.SendEmptyAsync(identity, Path(attemptId, "complete"), Content(request), cancellationToken);
 
+    public Task<AgentBackendResult<bool>> CompleteCleanupAsync(AgentLocalIdentity identity, Guid operationId, RestoreCleanupCompletionRequest request, CancellationToken cancellationToken)
+    {
+        if (operationId == Guid.Empty)
+        {
+            throw new ArgumentException("An operation identifier is required.", nameof(operationId));
+        }
+        return _client.SendEmptyAsync(identity, $"api/agent/restore-cleanups/{operationId:D}/complete", Content(request), cancellationToken);
+    }
+
     private static JsonContent Content<T>(T request) where T : class
     {
         ArgumentNullException.ThrowIfNull(request);

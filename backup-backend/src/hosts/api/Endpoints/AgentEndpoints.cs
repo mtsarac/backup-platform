@@ -142,6 +142,8 @@ public static class AgentEndpoints
         // skipped (the store would refuse it anyway while the restore holds the agent).
         var restore = await restores.ClaimAsync(currentAgent.Identity!, cancellationToken);
         var backup = restore is null ? await backups.ClaimAsync(currentAgent.Identity!, cancellationToken) : null;
+        // Housekeeping only when nothing else was claimed: the store also refuses it while the agent holds a live restore or backup attempt.
+        var cleanup = restore is null && backup is null ? await restores.ClaimCleanupAsync(currentAgent.Identity!, cancellationToken) : null;
         DownloadTaskSnapshot? download;
         try { download = await downloads.ClaimAsync(currentAgent.Identity!, cancellationToken); }
         catch (Exception exception) when (exception is not OperationCanceledException)
@@ -158,10 +160,12 @@ public static class AgentEndpoints
             {
                 "Precheck" => RestoreTaskTypes.DatabaseRestorePrecheck,
                 "Discovery" => RestoreTaskTypes.DatabaseRestoreDiscovery,
+                "Verification" => RestoreTaskTypes.DatabaseRestoreVerification,
                 _ => RestoreTaskTypes.DatabaseRestore
             };
             tasks.Add(new AgentTaskEnvelope { Id = restore.AttemptId.ToString(), Type = taskType, Restore = restore });
         }
+        if (cleanup is not null) tasks.Add(new AgentTaskEnvelope { Id = cleanup.LeaseToken.ToString(), Type = RestoreTaskTypes.DatabaseRestoreCleanup, RestoreCleanup = cleanup });
         if (backup is not null) tasks.Add(new AgentTaskEnvelope { Id = backup.AttemptId.ToString(), Type = "database-backup", Backup = backup });
         if (download is not null) tasks.Add(new AgentTaskEnvelope { Id = download.SessionId.ToString(), Type = DownloadTaskTypes.BackupDownload, Download = download });
         return Results.Ok(new AgentPollResponse
