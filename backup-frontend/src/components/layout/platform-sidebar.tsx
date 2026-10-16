@@ -1,5 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { ArrowLeft, Bell, Building2, Gauge, HardDrive, Layers, LayoutDashboard, Monitor, ScrollText, ShieldCheck, Sliders, Users } from 'lucide-react'
+import { ArrowLeft, Bell, Building2, Gauge, HardDrive, LayoutDashboard, Monitor, ScrollText, ShieldCheck, Sliders, Users } from 'lucide-react'
 import { platformPaths } from '@/features/platform/paths'
 import { SidebarFrame, type NavGroup } from './nav'
 

@@ -1,12 +1,5 @@
-import { tx } from '@/lib/i18n'
 import { currentLocale } from '@/lib/i18n'
 
-
-/** Decimal (SI) steps: 1 GB = 1,000,000,000 bytes. Smallest unit is MB (1 MB = 1,000,000 bytes). */
-const units = [
-  { suffix: 'GB', size: 1_000_000_000 },
-  { suffix: 'MB', size: 1_000_000 },
-] as const
 
 function number(value: number) {
   return value.toLocaleString(currentLocale(), { maximumFractionDigits: 2 })
