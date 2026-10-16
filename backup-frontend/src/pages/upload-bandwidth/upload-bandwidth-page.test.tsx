@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -35,20 +36,20 @@ describe('upload bandwidth page', () => {
   it('shows tenant, agent and job limits with Unlimited for missing ones', async () => {
     mount()
     expect(await screen.findByTestId('tenant-limit')).toHaveTextContent('100 Mbit/s (12.500.000 B/s)')
-    await openTab(/^Agent/)
+    await openTab(/^(?:Agent|Ajan)/)
     expect(await screen.findByRole('row', { name: /^SQL-01/ })).toBeInTheDocument()
     expect(row('SQL-01')).toHaveTextContent('10 Mbit/s (1.250.000 B/s)')
-    expect(row('SQL-02')).toHaveTextContent('Limitsiz')
-    await openTab(/^Backup Job/)
+    expect(row('SQL-02')).toHaveTextContent('Sınırsız')
+    await openTab(/^(?:Backup Job|Yedekleme İş)/)
     expect(await screen.findByRole('row', { name: /^Günlük ERP/ })).toHaveTextContent('16 KB/s (16.000 B/s)')
   })
 
   it('saves an agent limit in bytes per second after unit conversion', async () => {
     mount()
-    await openTab(/^Agent/)
+    await openTab(/^(?:Agent|Ajan)/)
     fireEvent.click(await screen.findByRole('button', { name: 'SQL-02 yükleme hız sınırını düzenle' }))
     const dialog = await screen.findByRole('dialog')
-    fireEvent.click(within(dialog).getByLabelText('Limitsiz (sınır yok)'))
+    fireEvent.click(within(dialog).getByLabelText("Sınırsız (sınır yok)"))
     fireEvent.change(within(dialog).getByLabelText('Hız sınırı'), { target: { value: '2,5' } })
     fireEvent.change(within(dialog).getByLabelText('Birim'), { target: { value: 'MB/s' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }))
@@ -58,12 +59,12 @@ describe('upload bandwidth page', () => {
 
   it('opens an existing limit in its clean unit and removes it with Unlimited (null)', async () => {
     mount()
-    await openTab(/^Agent/)
+    await openTab(/^(?:Agent|Ajan)/)
     fireEvent.click(await screen.findByRole('button', { name: 'SQL-01 yükleme hız sınırını düzenle' }))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByLabelText('Hız sınırı')).toHaveValue('10')
     expect(within(dialog).getByLabelText('Birim')).toHaveValue('Mbit/s')
-    fireEvent.click(within(dialog).getByLabelText('Limitsiz (sınır yok)'))
+    fireEvent.click(within(dialog).getByLabelText("Sınırsız (sınır yok)"))
     expect(within(dialog).getByLabelText('Hız sınırı')).toBeDisabled()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }))
     await waitFor(() => expect(setUploadBandwidth).toHaveBeenCalledWith('tenant-a', { scope: 'agent', id: 'agent-a' }, null))
@@ -71,7 +72,7 @@ describe('upload bandwidth page', () => {
 
   it('blocks out-of-range values client-side', async () => {
     mount()
-    await openTab(/^Backup Job/)
+    await openTab(/^(?:Backup Job|Yedekleme İş)/)
     fireEvent.click(await screen.findByRole('button', { name: 'Günlük ERP yükleme hız sınırını düzenle' }))
     const dialog = await screen.findByRole('dialog')
     fireEvent.change(within(dialog).getByLabelText('Hız sınırı'), { target: { value: '0,1' } })
@@ -91,14 +92,14 @@ describe('upload bandwidth page', () => {
   it('searches Backup Jobs and pages locally in groups of 25', async () => {
     jobs.mockResolvedValue(Array.from({ length: 26 }, (_, index) => ({ id: `job-${index + 1}`, name: `Backup ${String(index + 1).padStart(2, '0')}`, agentName: 'SQL-01' })))
     mount()
-    await openTab(/^Backup Job/)
+    await openTab(/^(?:Backup Job|Yedekleme İş)/)
     await screen.findByRole('row', { name: /^Backup 01/ })
     expect(screen.getAllByRole('row')).toHaveLength(26)
     expect(screen.queryByRole('row', { name: /^Backup 26/ })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Sonraki' }))
     expect(screen.getByRole('row', { name: /^Backup 26/ })).toBeInTheDocument()
     expect(screen.queryByRole('row', { name: /^Backup 01/ })).not.toBeInTheDocument()
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Backup Job ara' }), { target: { value: 'Backup 01' } })
+    fireEvent.change(screen.getByRole('searchbox', { name: "Backup Job ara" }), { target: { value: 'Backup 01' } })
     expect(screen.getByRole('row', { name: /^Backup 01/ })).toBeInTheDocument()
     expect(screen.queryByRole('row', { name: /^Backup 26/ })).not.toBeInTheDocument()
     expect(screen.getAllByRole('row')).toHaveLength(2)
@@ -110,6 +111,6 @@ describe('upload bandwidth page', () => {
     mount()
     expect(await screen.findByTestId('tenant-limit')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /düzenle/ })).not.toBeInTheDocument()
-    expect(screen.getByText(/yalnızca Owner \/ Admin değiştirebilir/)).toBeInTheDocument()
+    expect(screen.getByText(/yalnızca (?:Owner \/ Admin|Sahip \/ Yönetici) değiştirebilir/)).toBeInTheDocument()
   })
 })

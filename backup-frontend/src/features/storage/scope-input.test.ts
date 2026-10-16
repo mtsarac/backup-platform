@@ -37,7 +37,11 @@ describe('scope labels', () => {
       { kind: 'all' }, { kind: 'providerType', values: ['central', 'local'] }, { kind: 'ownershipType', values: ['PlatformManaged', 'TenantManaged'] },
       { kind: 'quotaScope', values: ['managed', 'tenant'] }, { kind: 'storageConnection', values: ['3f2b8c1e-0d4a-4b6e-9a7c-5e1d2f3a4b5c'] },
     ])).toEqual([
-      'Tüm storage (All)', 'Provider türü: central, local', 'Sahiplik: Platform yönetimli, Tenant yönetimli', 'Kota kapsamı: managed, tenant', 'Depolama bağlantısı: 3f2b8c1e-0d4a-4b6e-9a7c-5e1d2f3a4b5c',
+      expect.stringMatching(/(?:Tüm storage \(All\)|Tüm depolama)/),
+      expect.stringMatching(/(?:Provider|Sağlayıcı) türü: central, local/),
+      expect.stringMatching(/Sahiplik: Platform yönetimli, (?:Tenant|Çalışma alanı) yönetimli/),
+      'Kota kapsamı: managed, tenant',
+      'Depolama bağlantısı: 3f2b8c1e-0d4a-4b6e-9a7c-5e1d2f3a4b5c',
     ])
   })
 

@@ -38,3 +38,11 @@ export function getEnrollmentTokenStatus(tenantId: string, tokenId: string, sign
 export function revokeEnrollmentToken(tenantId: string, tokenId: string, signal?: AbortSignal) {
   return apiRequest<void>(tenantPath(tenantId, `agent-enrollment-tokens/${encodeURIComponent(tokenId)}`), { method: 'DELETE', signal })
 }
+
+export interface AgentDistribution {
+  serverUrl: string | null
+  packages: { 'win-x64': boolean; 'linux-x64': boolean }
+}
+export function getAgentDistribution(signal?: AbortSignal) {
+  return apiRequest<AgentDistribution>('agent-dist/status', { signal })
+}

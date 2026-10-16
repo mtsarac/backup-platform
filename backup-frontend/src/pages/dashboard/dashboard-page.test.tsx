@@ -1,4 +1,5 @@
-import { render, screen, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
+import { render } from '@/test/render'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -42,17 +43,17 @@ describe('dashboard replication monitoring', () => {
       status: 'InsufficientReplicas', policySatisfied: false, destinations: [],
     } })]
     renderDashboard()
-    expect(screen.getByRole('alert')).toHaveTextContent('1 backup son 24 saatte kullanılabilir yedek üretti, ancak gereken doğrulanmış replika sayısına ulaşamadı.')
-    expect(screen.getByRole('link', { name: 'Replikasyon sonuçlarını inceleyin.' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs?status=Succeeded')
+    expect(screen.getByRole('alert')).toHaveTextContent(/1 (?:backup|yedekleme) son 24 saatte kullanılabilir yedek (?:üretti|oluşturdu), ancak gereken doğrulanmış (?:replika|kopya) sayısına ulaşamadı\./)
+    expect(screen.getByRole('link', { name: "Çoğaltma sonuçlarını inceleyin." })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs?status=Succeeded')
     expect(screen.getAllByText('Başarılı').length).toBeGreaterThan(0)
-    expect(screen.getByText('Yetersiz doğrulanmış replika')).toBeInTheDocument()
-    expect(within(screen.getByText('Yedek üretildi · son 24 saat').parentElement!.parentElement!).getByText('1')).toBeInTheDocument()
+    expect(screen.getByText("Doğrulanmış kopya sayısı yetersiz")).toBeInTheDocument()
+    expect(within(screen.getByText("Yedek oluşturuldu · son 24 saat").parentElement!.parentElement!).getByText('1')).toBeInTheDocument()
   })
 
   it('alerts from the tenant-wide count even when the insufficient run is outside recent history', () => {
     state.data.runs.replicationInsufficientLast24Hours = 9
     renderDashboard()
-    expect(screen.getByRole('alert')).toHaveTextContent('9 backup son 24 saatte')
+    expect(screen.getByRole('alert')).toHaveTextContent(/9 (?:backup|yedekleme) son 24 saatte/)
   })
 
   it('shows degraded policy-compliant copies without an insufficient-replication alert', () => {
@@ -63,7 +64,7 @@ describe('dashboard replication monitoring', () => {
     } })]
     renderDashboard()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(screen.getByText('Kısmi replikasyon · politika karşılandı')).toBeInTheDocument()
+    expect(screen.getByText("Kısmi çoğaltma · ilke karşılandı")).toBeInTheDocument()
   })
 
   it('keeps legacy responses without a replication count readable', () => {
@@ -90,14 +91,14 @@ describe('dashboard simplified status', () => {
     state.data.runs.succeededLast24Hours = 7
     state.data.agents.offline = 1
     renderDashboard()
-    expect(screen.getByRole('status')).toHaveTextContent('Son 24 saatte 7 başarılı yedek')
-    expect(screen.getByRole('status')).toHaveTextContent('tüm agent bağlantılarının veya planlı görevlerin sağlıklı olduğunu göstermez')
+    expect(screen.getByRole('status')).toHaveTextContent(/Son 24 saatte 7 başarılı (?:yedek|yedekleme)/)
+    expect(screen.getByRole('status')).toHaveTextContent(/tüm (?:agent|ajan) bağlantılarının veya planlı (?:görevlerin|işlerin) sağlıklı olduğunu göstermez/)
   })
 
   it('reports no successful backup when the KPI is zero', () => {
     state.data.runs.succeededLast24Hours = 0
     renderDashboard()
-    expect(screen.getByRole('status')).toHaveTextContent('Son 24 saatte yedek alınmadı')
+    expect(screen.getByRole('status')).toHaveTextContent("Son 24 saatte yedekleme yapılmadı")
   })
 
 

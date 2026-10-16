@@ -35,7 +35,7 @@ Temel prensip:
 | Alan | Durum | Not |
 |---|---|---|
 | Multi-tenant backend, auth/RBAC, PlatformAdmin | Completed | Tenant izolasyonu, Owner/Admin/Operator/Viewer ve ayrı PlatformAdmin. |
-| Windows/Linux Agent host, enrollment, heartbeat, capability sync | Completed (kapsamlı) | Windows Service ve Linux owner-only enrollment var; Linux systemd installer hâlâ Planned. |
+| Windows/Linux Agent host, enrollment, heartbeat, capability sync | Completed (kapsamlı) | Windows Service ve Linux owner-only enrollment var. **Tek satırlık kurulum (Windows PowerShell + Linux systemd), rehberli ve otomatik kip: Implemented — çalışma dalı, 2026-10-16**; Windows 11 VM'de ve Fedora 44 systemd konteynerinde gerçek servis olarak doğrulandı. Çıplak (bare-metal) Linux, diğer dağıtımlar, Linux uninstall betiği, kod imzalama ve paket checksum doğrulaması yok. |
 | MSSQL discovery ve Full Backup | Completed | Manuel/zamanlanmış Full; verify, checksum, staging, replica doğrulama. |
 | MSSQL Full Restore | Completed | API + Agent + Restore Wizard; yeni isim, cross-instance, explicit overwrite, retention pin. Differential/log chain/PITR yok. |
 | PostgreSQL Full Backup ve Full Restore | **Completed — çalışma dalı, 2026-10-15** | Provider + Agent + API + UI; consistent `pg_dump` custom arşivi, tam okuma doğrulaması, NewDatabase ve onaylı Overwrite (eski DB korunur). Ayrıntı: `docs/PostgreSql_Backup_Provider_Architecture.md`. Physical/WAL/PITR yok. |
@@ -54,7 +54,7 @@ Temel prensip:
 
 **A0 audit kapanışı, Faz 2A (upload bandwidth limiting) ve N1 bildirimleri (email + webhook + SMS) tamamlandı** (Bölüm 1B, Bölüm 4, Bölüm 26). N1'de **SMS `IMPLEMENTED — NOT VERIFIED`**'dır (hiçbir gerçek SMS sağlayıcısına karşı çalıştırılmadı; SMS'e özel test bilinçli olarak yazılmadı). **R1 izole restore doğrulaması (MSSQL ve PostgreSQL) tamamlandı** (PR #18, main). **Database Auto Discovery & Inventory (D1) çalışma dalında tamamlandı (2026-10-16)**: agent yerel (Windows registry, Linux systemd/pg_lsclusters, Docker CLI, kimlik bilgisiz loopback handshake) keşif, kalıcı tenant envanteri, periyodik/manuel tarama, credential-reference bağlama, Discovery UI ve Backup Job sihirbazı entegrasyonu; izole yığında canlı kabul (Linux Agent + Docker, Windows 11 VM named instance, Chromium) — kanıt `docs/Database_Auto_Discovery_Design.md` Bölüm 9; Windows default instance/Windows PostgreSQL/native Linux systemd canlı koşulmadı. **Sıradaki:** E1 artifact şifreleme (Bölüm 35); Faz 2B/2C bu iterasyonda başlanmadı.
 
-**Planlı:** Faz 2B zaman profilleri ve 2C pause/resume/recovery; **erken öncelikli** izole MSSQL restore-test otomasyonu ve backup artifact şifreleme; MSSQL Differential/Log/PITR; File/Folder Backup ve File Restore; Windows VSS; Linux systemd installer; Docker runtime işlemleri (Docker container discovery D1 ile tamamlandı); PostgreSQL Physical/WAL/PITR; S3/SMB/FTPS; provider kapasite izleme; tam 3-2-1 ve ileri audit; Teams/Slack/Telegram/push bildirimleri. Ayrıntılı **teslim sırası** Bölüm 35'tedir; faz numarası öncelik demek değildir.
+**Planlı:** Faz 2B zaman profilleri ve 2C pause/resume/recovery; **erken öncelikli** izole MSSQL restore-test otomasyonu ve backup artifact şifreleme; MSSQL Differential/Log/PITR; File/Folder Backup ve File Restore; Windows VSS; Linux uninstall betiği ve paket imzalama; Docker runtime işlemleri (Docker container discovery D1 ile tamamlandı); PostgreSQL Physical/WAL/PITR; S3/SMB/FTPS; provider kapasite izleme; tam 3-2-1 ve ileri audit; Teams/Slack/Telegram/push bildirimleri. Ayrıntılı **teslim sırası** Bölüm 35'tedir; faz numarası öncelik demek değildir.
 
 **Kabul durumu:** Gerçek Google Drive OAuth/API ve Windows Agent/MSSQL kabulü 2026-10-14'te A1 ile çalıştırıldı (Bölüm 1B, senaryo matrisi); kapsam dışı kalanlar orada `NOT RUN` olarak listelidir. 2026-10-14'te ayrıca açık Win11 VM'de runtime-only DPAPI probe smoke geçmişti. VM'de .NET 10.0.12 ve SQL Server çalışıyor; SDK yok. İzole A1 smoke Agent'ı kaldırıldı; dev tenant'a bağlı `dev-windows-agent` bilerek kurulu bırakıldı (`scripts/windows/dev-windows-agent.sh uninstall`).
 
@@ -755,7 +755,7 @@ Her dilim bağımsız doğrulanabilir şekilde geliştirilmeli; aşağıdaki “
 
 | Dilim | İçerik | Durum |
 |---|---|---|
-| M0 | Agent Installation / Enrollment UX | Completed; Linux systemd installer ayrı Planned |
+| M0 | Agent Installation / Enrollment UX | Completed; tek satırlık Windows/Linux kurulum (rehberli + otomatik) 2026-10-16 çalışma dalında eklendi; Linux uninstall betiği ve imzalama Planned |
 | M1 | Plans, Tenant Subscription, PlatformAdmin manuel atama ve audit | Completed |
 | M2 | QuotaPolicy, usage projection/reconcile, admission, quota states ve reservations | Completed (temel); quota kapsamı/onarım güvenliği hardening ile güçlendirildi |
 | M3 | Tenant Storage UI; PlatformAdmin Plans/Subscriptions/Usage UI | Completed |

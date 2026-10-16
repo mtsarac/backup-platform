@@ -1,3 +1,4 @@
+import { tx } from '@/lib/i18n'
 import ky from 'ky'
 
 export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '/api').replace(/\/$/, '')
@@ -13,7 +14,7 @@ export class ApiError extends Error {
   readonly sessionId?: string
   readonly permission?: string
   constructor(status: number, body: ErrorBody = {}) {
-    super(`API request failed (${status})`)
+    super(tx("API request failed ({0})", { "0": status }))
     this.name = 'ApiError'
     this.status = status
     this.code = body.code ?? body.error
@@ -56,12 +57,12 @@ async function getAntiforgery() {
 }
 export interface RequestOptions { method?: string; json?: unknown; signal?: AbortSignal; headers?: Record<string, string> }
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  if (path.startsWith('/') || path.includes('://') || path.includes('..')) throw new Error('API path must be relative')
+  if (path.startsWith('/') || path.includes('://') || path.includes('..')) throw new Error(tx('API path must be relative'))
   const method = (options.method ?? 'GET').toUpperCase()
   const headers = { ...options.headers }
   if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
     const token = await getAntiforgery()
-    if (!token) throw new Error('Antiforgery token unavailable')
+    if (!token) throw new Error(tx('Antiforgery token unavailable'))
     headers[token.headerName] = token.requestToken
   }
   const response = await http(`${API_BASE_URL}/${path}`, { ...options, method, headers })
@@ -77,6 +78,6 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   return response.json<T>()
 }
 export function tenantPath(tenantId: string, resource: string) {
-  if (!tenantId || /[/?#]/.test(tenantId) || resource.startsWith('/') || resource.includes('..')) throw new Error('Invalid tenant route')
+  if (!tenantId || /[/?#]/.test(tenantId) || resource.startsWith('/') || resource.includes('..')) throw new Error(tx('Invalid tenant route'))
   return `tenants/${encodeURIComponent(tenantId)}/${resource}`
 }

@@ -3,7 +3,8 @@
 param(
     [Parameter(Mandatory)] [string] $RootDirectory,
     [Parameter(Mandatory)] [string] $DatabaseSecretFile,
-    [string] $SqlServiceName = 'MSSQL$MSSQLSERVER25'
+    [string] $SqlServiceName = 'MSSQL$MSSQLSERVER25',
+    [string] $PostgresSecretFile
 )
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath($RootDirectory)
@@ -59,10 +60,20 @@ try {
     if (-not $secret.userName -or -not $secret.password) { throw 'SQL smoke credential JSON is invalid.' }
     $environment = @((Get-ItemProperty -Path $key -Name Environment).Environment | Where-Object { -not $_.StartsWith('BACKUP_AGENT_SECRET_sql_smoke=') })
     $environment += 'BACKUP_AGENT_SECRET_sql_smoke=' + ($secret | ConvertTo-Json -Compress)
+    if ($PostgresSecretFile) {
+        $postgresPath = [IO.Path]::GetFullPath($PostgresSecretFile)
+        if ((Split-Path -Parent $postgresPath) -ne $root) { throw 'The disposable credential file must be directly inside the protected smoke root.' }
+        $postgres = Get-Content -LiteralPath $postgresPath -Raw | ConvertFrom-Json
+        if (-not $postgres.userName -or -not $postgres.password) { throw 'PostgreSQL credential JSON is invalid.' }
+        $environment = @($environment | Where-Object { -not $_.StartsWith('BACKUP_AGENT_SECRET_pg_win=') })
+        $environment += 'BACKUP_AGENT_SECRET_pg_win=' + ($postgres | ConvertTo-Json -Compress)
+    }
     Set-ItemProperty -Path $key -Name Environment -Type MultiString -Value $environment
 } finally {
     $secret = $null
     $environment = $null
+    $postgres = $null
+    if ($postgresPath) { Remove-Item -LiteralPath $postgresPath -Force -ErrorAction SilentlyContinue }
     Remove-Item -LiteralPath $secretPath -Force
 }
 Start-Service BackupAgent

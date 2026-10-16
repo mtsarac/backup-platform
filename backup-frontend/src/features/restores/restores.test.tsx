@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
+import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -242,21 +243,21 @@ afterEach(() => {
 describe('ArtifactRestoreAction', () => {
   it('renders Restore Backup button when user canOperate and artifact is eligible', () => {
     renderWithClient(<ArtifactRestoreAction tenantId="tenant-a" artifact={sampleArtifact} />)
-    const button = screen.getByRole('button', { name: /Restore Backup/i })
+    const button = screen.getByRole('button', { name: /Yedeklemeyi Geri Yükle/i })
     expect(button).toBeEnabled()
   })
 
   it('blocks Viewer role from restoring', () => {
     tenancy.canOperate = false
     renderWithClient(<ArtifactRestoreAction tenantId="tenant-a" artifact={sampleArtifact} />)
-    expect(screen.queryByRole('button', { name: /Restore Backup/i })).not.toBeInTheDocument()
-    expect(screen.getByText(/Viewer rolü bu işlem için yetkili değildir/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Yedeklemeyi Geri Yükle/i })).not.toBeInTheDocument()
+    expect(screen.getByText(/Görüntüleyici rolü bu işlem için yetkili değildir/i)).toBeInTheDocument()
   })
 
   it('shows disabled button and explanation when artifact is deleted or unverified', () => {
     const deletedArtifact: BackupArtifact = { ...sampleArtifact, state: 'Deleted' }
     renderWithClient(<ArtifactRestoreAction tenantId="tenant-a" artifact={deletedArtifact} />)
-    const button = screen.getByRole('button', { name: /Restore Backup/i })
+    const button = screen.getByRole('button', { name: /Yedeklemeyi Geri Yükle/i })
     expect(button).toBeDisabled()
     expect(screen.getByText(/silindiği için geri yüklenemez/i)).toBeInTheDocument()
   })
@@ -267,7 +268,7 @@ describe('RestoresPage', () => {
     renderWithClient(<RestoresPage />)
     expect(screen.getByRole('heading', { name: /Geri yükleme geçmişi/i })).toBeInTheDocument()
     expect(await screen.findByText('RestoredSalesDB')).toBeInTheDocument()
-    expect(screen.getByText('Yeni Database')).toBeInTheDocument()
+    expect(screen.getByText("Yeni veritabanı")).toBeInTheDocument()
     expect(screen.getAllByText('Çalışıyor').length).toBeGreaterThan(0)
   })
 })
@@ -287,7 +288,7 @@ describe('RestoreDetailPage', () => {
     expect(cancelButton).toBeEnabled()
 
     fireEvent.click(cancelButton)
-    expect(await screen.findByText(/Restore iptal edilsin mi\?/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Geri Yükleme iptal edilsin mi\?/i)).toBeInTheDocument()
   })
 
   it('renders warning when restore failed or cancelled that database may not be healthy', async () => {
@@ -307,16 +308,16 @@ describe('RestoreDetailPage', () => {
       '/tenants/tenant-a/restores/restore-1'
     )
 
-    expect(await screen.findByText(/Cancelled, Failed veya AgentLost durumu Database'in sağlıklı olduğunu göstermez/i)).toBeInTheDocument()
-    expect(screen.getByText(/Kısmen geri yüklendi · PartiallyRestored/i)).toBeInTheDocument()
+    expect(await screen.findByText(/veritabanının sağlıklı olduğunu göstermez/i)).toBeInTheDocument()
+    expect(screen.getByText(/Kısmen geri yüklendi/i)).toBeInTheDocument()
   })
 
   it('keeps source safety options and attempt progress accessible in their tabs', async () => {
     renderWithClient(<Routes><Route path="/tenants/:tenantId/restores/:id" element={<RestoreDetailPage />} /></Routes>, '/tenants/tenant-a/restores/restore-1')
     expect(await screen.findByRole('heading', { name: /Geri yükleme · RestoredSalesDB/i })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: 'Kaynak ve seçenekler' }))
-    expect(screen.getByText('Restore için silmeye karşı korunuyor')).toBeInTheDocument()
-    expect(screen.getByText('Aktif bağlantıları sonlandır')).toBeInTheDocument()
+    expect(screen.getByText("Geri yükleme için silmeye karşı korunuyor")).toBeInTheDocument()
+    expect(screen.getByText("Etkin bağlantıları sonlandır")).toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: 'Denemeler' }))
     expect(screen.getByRole('article', { name: '1. deneme' })).toBeInTheDocument()
     expect(screen.getByRole('progressbar', { name: '1. deneme ilerlemesi' })).toHaveAttribute('aria-valuenow', '65.5')
@@ -329,12 +330,12 @@ describe('RestoreWizardPage', () => {
   it('routes a custom PostgreSQL target with password authentication and rejects identifiers over 63 UTF-8 bytes', async () => {
     vi.mocked(RestoreApi.getRestoreTargets).mockResolvedValue({ ...sampleTargets, engine: 'postgres', targets: [] })
     renderWithClient(<Routes><Route path="/tenants/:tenantId/artifacts/:id/restore" element={<RestoreWizardPage />} /></Routes>, '/tenants/tenant-a/artifacts/artifact-1/restore')
-    const host = await screen.findByLabelText('PostgreSQL Host')
-    expect(screen.getByLabelText(/Port/)).toHaveValue(5432)
-    expect(screen.getByRole('button', { name: /Devam et: Restore Modu/i })).toBeDisabled()
+    const host = await screen.findByLabelText("PostgreSQL Sunucusu")
+    expect(screen.getByLabelText(/Bağlantı Noktası/)).toHaveValue(5432)
+    expect(screen.getByRole('button', { name: /Devam et: Geri Yükleme Modu/i })).toBeDisabled()
     fireEvent.change(host, { target: { value: 'pg-target' } })
-    fireEvent.change(screen.getByLabelText('Credential Referansı'), { target: { value: 'pg-restore' } })
-    fireEvent.click(screen.getByRole('button', { name: /Devam et: Restore Modu/i }))
+    fireEvent.change(screen.getByLabelText("Kimlik Bilgisi Başvurusu"), { target: { value: 'pg-restore' } })
+    fireEvent.click(screen.getByRole('button', { name: /Devam et: Geri Yükleme Modu/i }))
     expect(screen.queryByRole('checkbox', { name: /RESTORE VERIFYONLY/ })).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Yeni Veritabanı Adı'), { target: { value: '数'.repeat(22) } })
     expect(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i })).toBeDisabled()
@@ -354,7 +355,7 @@ describe('RestoreWizardPage', () => {
     vi.mocked(RestoreApi.startRestorePrecheck).mockResolvedValue(precheck)
     vi.mocked(RestoreApi.getRestore).mockResolvedValue(precheck)
     renderWithClient(<Routes><Route path="/tenants/:tenantId/artifacts/:id/restore" element={<RestoreWizardPage />} /></Routes>, '/tenants/tenant-a/artifacts/artifact-1/restore')
-    fireEvent.click(await screen.findByRole('button', { name: /Devam et: Restore Modu/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /Devam et: Geri Yükleme Modu/i }))
     fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i }))
     fireEvent.click(await screen.findByRole('button', { name: /Mod Ayarlarına Dön/i }))
     fireEvent.change(screen.getByLabelText('Yeni Veritabanı Adı'), { target: { value: 'CorrectedDB' } })
@@ -430,10 +431,10 @@ describe('RestoreWizardPage', () => {
     )
 
     // Step 1: Target & Instance
-    expect(await screen.findByRole('heading', { name: /1\. Hedef Agent Seçimi/i })).toBeInTheDocument()
-    const continueBtn = screen.getByRole('button', { name: /Devam et: Restore Modu/i })
+    expect(await screen.findByRole('heading', { name: /1\. Hedef Ajan Seçimi/i })).toBeInTheDocument()
+    const continueBtn = screen.getByRole('button', { name: /Devam et: Geri Yükleme Modu/i })
     expect(continueBtn).toBeEnabled()
-    expect(screen.getByRole('combobox', { name: 'Agent' })).toHaveValue('agent-1')
+    expect(screen.getByRole('combobox', { name: "Ajan" })).toHaveValue('agent-1')
     fireEvent.click(continueBtn)
 
     // Step 2: Restore Mode
@@ -450,7 +451,7 @@ describe('RestoreWizardPage', () => {
     expect(await screen.findByText(/Tüm ön kontroller başarıyla tamamlandı/i)).toBeInTheDocument()
 
     // Step 4: Execute
-    const executeBtn = screen.getByRole('button', { name: /Yeni Database Olarak Restore Başlat/i })
+    const executeBtn = screen.getByRole('button', { name: /Yeni Veritabanı Olarak Geri Yükleme Başlat/i })
     expect(executeBtn).toBeEnabled()
     fireEvent.click(executeBtn)
 
@@ -462,9 +463,9 @@ describe('RestoreWizardPage', () => {
 
   it('blocks an ineligible agent without sending a precheck and allows an eligible selection', async () => {
     renderWithClient(<Routes><Route path="/tenants/:tenantId/artifacts/:id/restore" element={<RestoreWizardPage />} /></Routes>, '/tenants/tenant-a/artifacts/artifact-1/restore')
-    const selector = await screen.findByRole('combobox', { name: 'Agent' })
+    const selector = await screen.findByRole('combobox', { name: "Ajan" })
     fireEvent.change(selector, { target: { value: 'agent-2' } })
-    const next = screen.getByRole('button', { name: /Devam et: Restore Modu/i })
+    const next = screen.getByRole('button', { name: /Devam et: Geri Yükleme Modu/i })
     expect(next).toBeDisabled()
     fireEvent.click(next)
     expect(RestoreApi.startRestorePrecheck).not.toHaveBeenCalled()
@@ -479,10 +480,10 @@ describe('RestoreWizardPage', () => {
     vi.mocked(RestoreApi.startRestorePrecheck).mockResolvedValue(failed)
     vi.mocked(RestoreApi.getRestore).mockResolvedValue(failed)
     renderWithClient(<Routes><Route path="/tenants/:tenantId/artifacts/:id/restore" element={<RestoreWizardPage />} /></Routes>, '/tenants/tenant-a/artifacts/artifact-1/restore')
-    fireEvent.click(await screen.findByRole('button', { name: /Devam et: Restore Modu/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /Devam et: Geri Yükleme Modu/i }))
     fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/i }))
     expect(await screen.findByRole('alert')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Yeni Database Olarak Restore Başlat/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Yeni Veritabanı Olarak Geri Yükleme Başlat/i })).toBeDisabled()
     expect(RestoreApi.startRestore).not.toHaveBeenCalled()
   })
 
@@ -494,7 +495,7 @@ describe('RestoreWizardPage', () => {
       '/tenants/tenant-a/artifacts/artifact-1/restore'
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: /Devam et: Restore Modu/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /Devam et: Geri Yükleme Modu/i }))
 
     // Switch to ReplaceExistingDatabase
     const replaceModeBtn = screen.getByText(/Mevcut veritabanının üzerine yaz \(Riskli\)/i)

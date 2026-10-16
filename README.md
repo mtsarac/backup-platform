@@ -84,22 +84,27 @@ bun run build
 
 ## Agent enrollment
 
-1. In the web interface, open **Agents → Add Agent**, select the target platform, and generate a one-time enrollment token.
-2. Place the published agent files on the target machine.
-3. Run the enrollment command:
+1. In the web interface, open **Agents → Add Agent** and create a one-time enrollment token. The dialog shows ready-to-run commands for Windows and Linux in two modes. The language switch in the top bar also sets the installer language.
+2. Run the command on the target machine.
 
-   Windows (in an elevated PowerShell terminal):
+   - **Guided** (interactive): omits the token. The installer asks for the server address, the enrollment token (hidden), and the agent name, shows a summary, and installs only after explicit confirmation.
+   - **Automatic** (non-interactive): the command carries the token and never prompts. Missing or invalid values fail before anything is changed.
+
    ```powershell
-   .\BackupPlatform.Agent.Host.exe enroll --server 'https://backup.example.com' --token '<token>' --non-interactive
+   # Windows, elevated PowerShell
+   & ([scriptblock]::Create((irm 'https://backup.example.com/api/agent-dist/install.ps1'))) -Interactive -Language en
    ```
-   This installs and starts the service under `NT SERVICE\BackupAgent` with DPAPI-protected credentials.
-
-   Linux:
    ```bash
-   ./BackupPlatform.Agent.Host enroll --server 'https://backup.example.com' --token '<token>' --store-directory "$HOME/.local/share/backup-agent" --non-interactive
-   ./BackupPlatform.Agent.Host --store-directory "$HOME/.local/share/backup-agent"
+   # Linux, root with systemd
+   curl -fsS https://backup.example.com/api/agent-dist/install.sh | sudo bash -s -- --interactive --language en
    ```
-4. The web interface updates to Online once the agent connects and synchronizes capabilities.
+
+   Windows installs the `BackupAgent` service under `NT SERVICE\BackupAgent` with a DPAPI-protected identity. Linux installs the `backup-agent.service` systemd unit under an unprivileged `backup-agent` account (identity in `/var/lib/backup-agent/identity`, binaries in `/opt/backup-agent`). Both refuse to replace an existing service, identity, or binary tree. The HTTPS certificate must already be trusted; validation is never disabled.
+3. The web interface updates to Online once the agent connects and synchronizes capabilities.
+
+The API serves the installers and the agent archives from `AgentDistribution__PackagesDirectory` (an absolute path holding `backup-agent-win-x64.zip` and `backup-agent-linux-x64.tar.gz`, both built by `.github/scripts/package-release.sh`; `scripts/dev/publish-agent-dist.sh` stages them for development). `AgentDistribution__PublicBaseUrl` is the public HTTPS address shown in the dialog. Without a package directory the installers report the package as unavailable.
+
+Manual enrollment from an extracted release archive remains available through `BackupPlatform.Agent.Host enroll --server <url> --token <token> --non-interactive` (see the archive README). The installer scripts are not code-signed and do not verify package checksums beyond trusted HTTPS.
 
 ## Testing
 

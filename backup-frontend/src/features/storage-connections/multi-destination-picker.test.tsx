@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { screen, fireEvent } from '@testing-library/react'
+import { render } from '@/test/render'
 import { MultiDestinationPicker } from './multi-destination-picker'
 import type { BackupConfiguration } from '@/features/backup-jobs/types'
 import type { ConnectionView, ProviderDescriptor } from './types'
@@ -124,7 +125,7 @@ describe('MultiDestinationPicker', () => {
     } as BackupConfiguration
     const onChange = vi.fn()
     render(<MultiDestinationPicker configuration={configuration} connections={dummyConnections} providers={dummyProviders} pending={false} error={null} existingTarget={true} onChange={onChange} onRefresh={() => {}} />)
-    expect(screen.getByLabelText('Storage Provider')).toHaveValue('sftp')
+    expect(screen.getByLabelText("Depolama Sağlayıcısı")).toHaveValue('sftp')
     expect(screen.getByLabelText('Depolama bağlantısı')).toHaveValue('conn-sftp-1')
     fireEvent.change(screen.getByLabelText('Depolama bağlantısı'), { target: { value: 'conn-local' } })
     expect(onChange.mock.calls[0][0].destinations[0]).toEqual(configuration.destinations![0])
@@ -159,11 +160,11 @@ describe('MultiDestinationPicker', () => {
       />
     )
 
-    expect(screen.getByText('Primary')).toBeInTheDocument()
+    expect(screen.getByText("Birincil")).toBeInTheDocument()
     expect(screen.getByText('Toplam 1 hedef')).toBeInTheDocument()
 
     // Add secondary SFTP
-    const select = screen.getByLabelText('Yeni Replikasyon Hedefi Ekle')
+    const select = screen.getByLabelText("Yeni Çoğaltma Hedefi Ekle")
     fireEvent.change(select, { target: { value: 'conn-sftp-1' } })
 
     expect(onChange).toHaveBeenCalled()
@@ -208,7 +209,7 @@ describe('MultiDestinationPicker', () => {
     expect(screen.getByText('Toplam 2 hedef')).toBeInTheDocument()
 
     // Change primary to SFTP
-    const makePrimaryBtn = screen.getByRole('button', { name: 'Primary Yap' })
+    const makePrimaryBtn = screen.getByRole('button', { name: "Birincil Yap" })
     fireEvent.click(makePrimaryBtn)
 
     expect(onChange).toHaveBeenCalled()
@@ -243,7 +244,7 @@ describe('MultiDestinationPicker', () => {
     render(<MultiDestinationPicker configuration={config} connections={dummyConnections} providers={dummyProviders} pending={false} error={null} existingTarget={true} onChange={onChange} onRefresh={() => {}} />)
 
     expect(screen.getByLabelText('Depolama bağlantısı')).toHaveValue('conn-sftp-1')
-    fireEvent.change(screen.getByLabelText('Storage Provider'), { target: { value: 'central' } })
+    fireEvent.change(screen.getByLabelText("Depolama Sağlayıcısı"), { target: { value: 'central' } })
 
     const updated = onChange.mock.calls[0][0] as BackupConfiguration
     expect(updated.destinations).toEqual([
@@ -279,6 +280,6 @@ describe('MultiDestinationPicker', () => {
       />
     )
 
-    expect(screen.getByText(/Multi-destination backup execution is not yet available/i)).toBeInTheDocument()
+    expect(screen.getByText(/(?:Multi-destination backup execution is not yet available|Birden fazla hedefe yedekleme henüz kullanılamıyor)/i)).toBeInTheDocument()
   })
 })

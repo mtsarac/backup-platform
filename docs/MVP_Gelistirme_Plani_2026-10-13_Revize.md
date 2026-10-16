@@ -1048,7 +1048,7 @@ Bu belge ilk MVP'nin tarihsel planıdır; yukarıdaki teknik kararlar ve 35 madd
 
 | Kapsam | 2026-10-13 kod durumu | Sınır / not |
 |---|---|---|
-| Multi-tenant auth/RBAC, PlatformAdmin, agent enrollment | Completed | Windows Service + Linux host/enrollment; Linux systemd installer yok. |
+| Multi-tenant auth/RBAC, PlatformAdmin, agent enrollment | Completed | Windows Service + Linux host/enrollment; tek satırlık kurulum (Windows/Linux systemd, rehberli ve otomatik) çalışma dalında; Linux uninstall betiği yok. |
 | MSSQL discovery, manual/scheduled Full Backup | Completed | Verify/checksum/staging/replica, retry, cancellation, concurrency, retention. |
 | MSSQL Full Restore | Completed | API, Agent ve Restore Wizard; differential/log/PITR restore kapsam dışı. |
 | Storage | Completed (temel) | Local/Central, SFTP, Google Drive, canonical multi-destination. Gerçek Google Drive canlı API acceptance bekliyor. |
@@ -1074,7 +1074,7 @@ Bu belge ilk MVP'nin tarihsel planıdır; yukarıdaki teknik kararlar ve 35 madd
 
 ## 14.3 Henüz uygulanmayan ileri özellikler
 
-Bandwidth profilleri (2B) ve upload pause/resume (2C) — byte-temelli upload limiti (2A) tamamlandı; File/Folder Backup ve File Restore; Windows VSS ve Linux snapshot; Docker runtime; Linux systemd installer; MSSQL Differential/Transaction Log/PITR; PostgreSQL Physical/WAL/PITR; S3/SMB/FTPS; tam 3-2-1 storage-class/off-site policy; otomatik restore testleri (R1); Teams/Slack/Telegram/push bildirimleri (email/webhook/SMS bildirimleri N1 ile eklendi; SMS `IMPLEMENTED — NOT VERIFIED`); kapasite/health/anomaly; auto-update; artifact encryption (E1); ileri audit/raporlama. **Online billing/provider bu eksikler listesine dahil değildir: bilinçli biçimde kapsam dışıdır.**
+Bandwidth profilleri (2B) ve upload pause/resume (2C) — byte-temelli upload limiti (2A) tamamlandı; File/Folder Backup ve File Restore; Windows VSS ve Linux snapshot; Docker runtime; Linux uninstall betiği ve paket imzalama (tek satırlık kurulum çalışma dalında mevcut); MSSQL Differential/Transaction Log/PITR; PostgreSQL Physical/WAL/PITR; S3/SMB/FTPS; tam 3-2-1 storage-class/off-site policy; otomatik restore testleri (R1); Teams/Slack/Telegram/push bildirimleri (email/webhook/SMS bildirimleri N1 ile eklendi; SMS `IMPLEMENTED — NOT VERIFIED`); kapasite/health/anomaly; auto-update; artifact encryption (E1); ileri audit/raporlama. **Online billing/provider bu eksikler listesine dahil değildir: bilinçli biçimde kapsam dışıdır.**
 
 FileSystem backup ve snapshot modüllerinin `.csproj` iskeletlerinin bulunması bu özelliklerin tamamlandığı anlamına gelmez. SFTP ve Google Drive ise önceki 2026-10-07 listelerinin tersine temel işlevleriyle kodda vardır.
 

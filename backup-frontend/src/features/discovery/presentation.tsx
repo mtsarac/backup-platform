@@ -1,9 +1,11 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import { Badge } from '@/components/ui/badge'
 import { accessMeta, databaseStateMeta, fullBackupMeta, lastChangeMeta, outcomeMeta, presenceMeta, reachabilityMeta, scanStateMeta, sourceStatusMeta, type Tone } from './status'
 
 function Pill({ meta, value, dot = true }: { meta: Record<string, { label: string; tone: Tone }>; value: string; dot?: boolean }) {
+  useLanguage()
   const found = meta[value] ?? { label: value, tone: 'neutral' as const }
-  return <Badge tone={found.tone} dot={dot}>{found.label}</Badge>
+  return <Badge tone={found.tone} dot={dot}>{tx(found.label)}</Badge>
 }
 export const ReachabilityPill = ({ value }: { value: string }) => <Pill meta={reachabilityMeta} value={value} />
 export const AccessPill = ({ value }: { value: string }) => <Pill meta={accessMeta} value={value} />

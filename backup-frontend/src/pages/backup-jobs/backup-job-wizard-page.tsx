@@ -1,3 +1,4 @@
+import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -33,6 +34,7 @@ const initialRetention: RetentionPolicy = { enabled: true, keepForSeconds: 12096
 const policies = [['Disabled', 'Off — kapalı'], ['Preferred', 'IfSupported — destekleniyorsa'], ['Required', 'Required — zorunlu']] as const
 
 export function BackupJobWizardPage() {
+  useLanguage()
   const { id = '' } = useParams()
   const { tenantId, canOperate } = useTenant()
   const job = useBackupJob(id)
@@ -40,22 +42,23 @@ export function BackupJobWizardPage() {
   const discoveryInstance = id ? '' : params.get('discoveryInstance') ?? ''
   const discovered = useDiscoveryInstance(discoveryInstance)
   const prefill = discovered.data ? { instance: discovered.data, databases: selectableNames(discovered.data, params.getAll('database')) } : undefined
-  const crumbs = [{ label: 'Yedekleme işleri', to: `/tenants/${tenantId}/backup-jobs` }, { label: id ? 'Düzenle' : 'Yeni iş' }]
+  const crumbs = [{ label: tx('Yedekleme işleri'), to: `/tenants/${tenantId}/backup-jobs` }, { label: id ? tx('Düzenle') : tx('Yeni iş') }]
   let body
-  if (!canOperate) body = <Notice tone="error">Bu sayfada değişiklik yapma yetkiniz yok. Viewer rolü salt okunurdur.</Notice>
+  if (!canOperate) body = <Notice tone="error">{tx("Bu sayfada değişiklik yapma yetkiniz yok. Viewer rolü salt okunurdur.")}</Notice>
   else if (id) body = <QueryState isPending={job.isPending} error={job.error}>{job.data && <JobForm key={`${tenantId}:${id}`} job={job.data} />}</QueryState>
   else if (discoveryInstance && discovered.isPending) body = <QueryState isPending error={null} />
   else body = <>
-    {discovered.error && <Notice tone="warning" title="Keşfedilen veritabanları yüklenemedi">{errorMessage(discovered.error)} Kaynağı elle girebilirsiniz.</Notice>}
+    {discovered.error && <Notice tone="warning" title={tx("Keşfedilen veritabanları yüklenemedi")}>{errorMessage(discovered.error)}{' '}{tx("Kaynağı elle girebilirsiniz.")}</Notice>}
     <JobForm key={`${tenantId}:new`} prefill={prefill} />
   </>
   return <div className="space-y-6">
-    <PageHeader crumbs={crumbs} title={id ? 'Yedekleme işini düzenle' : 'Yeni yedekleme işi'} description="Kaynak, depolama, zamanlama ve saklama ayarlarını adım adım belirleyin." />
+    <PageHeader crumbs={crumbs} title={id ? tx('Yedekleme işini düzenle') : tx('Yeni yedekleme işi')} description={tx("Kaynak, depolama, zamanlama ve saklama ayarlarını adım adım belirleyin.")} />
     {body}
   </div>
 }
 
 function JobForm({ job, prefill }: { job?: BackupJob; prefill?: { instance: DiscoveryInstanceDetail; databases: string[] } }) {
+  useLanguage()
   const { tenantId, canAdmin } = useTenant()
   const navigate = useNavigate()
   const save = useSaveBackupJob(job?.id)
@@ -105,7 +108,7 @@ function JobForm({ job, prefill }: { job?: BackupJob; prefill?: { instance: Disc
   const { text, number, check, select } = fieldKit(errors)
   const withErrors = (...names: string[]) => names.some(item => errors[item])
   const nextOccurrence = job && (job.nextOccurrenceAt ?? job.schedule?.nextOccurrenceAt)
-  const nextRun = job ? nextOccurrence ? new Date(nextOccurrence).toLocaleString('tr-TR') : 'Planlanmamış' : undefined
+  const nextRun = job ? nextOccurrence ? new Date(nextOccurrence).toLocaleString(currentLocale()) : tx('Planlanmamış') : undefined
   const agent = agents.data?.find(item => item.agentId === agentId)
 
   useEffect(() => {
@@ -180,90 +183,90 @@ function JobForm({ job, prefill }: { job?: BackupJob; prefill?: { instance: Disc
     if (last) submit()
     else advance(step + 1)
   }}>
-    <Stepper steps={jobSteps} current={step} />
-    <h2 ref={headingRef} tabIndex={-1} className="sr-only">Adım {step + 1} / {jobSteps.length}: {jobSteps[step]}</h2>
-    {step === 0 && <Section title="İş ve Agent" description="İşin adı ve yedeği alacak Agent.">
+    <Stepper steps={jobSteps.map(step => tx(step))} current={step} />
+    <h2 ref={headingRef} tabIndex={-1} className="sr-only">{tx("Adım")}{' '}{step + 1} / {tx(jobSteps.length)}: {tx(jobSteps[step])}</h2>
+    {step === 0 && <Section title={tx("İş ve Agent")} description={tx("İşin adı ve yedeği alacak Agent.")}>
       <FormGrid>
-        {text('name', 'İş adı', name, setName)}
+        {text('name', tx('İş adı'), name, setName)}
         <div className="min-w-0 space-y-1">
-          {select('agentId', 'Agent', agentId, [['', 'Agent seçin'], ...(agents.data ?? []).map(item => [item.agentId, `${item.hostName ?? 'Adsız Agent'} · ${item.operationalStatus}`] as const)], setAgentId)}
-          {agents.isPending && <p role="status" className="text-sm text-text-muted">Agent listesi yükleniyor…</p>}{agents.error && <p role="alert" className="text-sm text-error">{errorMessage(agents.error)}</p>}
+          {select('agentId', tx('Agent'), agentId, [['', tx('Agent seçin')], ...(agents.data ?? []).map(item => [item.agentId, `${item.hostName ?? tx('Adsız Agent')} · ${tx(item.operationalStatus)}`] as const)], setAgentId)}
+          {agents.isPending && <p role="status" className="text-sm text-text-muted">{tx("Agent listesi yükleniyor…")}</p>}{agents.error && <p role="alert" className="text-sm text-error">{errorMessage(agents.error)}</p>}
         </div>
-        {check('İş etkin', enabled, setEnabled)}
+        {check(tx('İş etkin'), enabled, setEnabled)}
       </FormGrid>
     </Section>}
     {step === 1 && <SourceStep key={configuration.engine} configuration={configuration} errors={errors} discovery={job ? undefined : { agents: agents.data ?? [], agentId, selected, onApply: applyDiscovery, onClear: clearDiscovery }}
       onChange={next => { if (next.engine !== configuration.engine) { setSelected([]); setResults({}) } setConfiguration(next) }} />}
     {step === 2 && <>
-      <Section title="Depolama ve yürütme" description="Yedeğin yazılacağı hedefler.">
+      <Section title={tx("Depolama ve yürütme")} description={tx("Yedeğin yazılacağı hedefler.")}>
         <MultiDestinationPicker configuration={configuration} connections={connectionItems} providers={providerItems} pending={pickerPending} error={pickerError} fieldError={Object.entries(errors).find(([field]) => field.startsWith('configuration.destinations'))?.[1] ?? errors['configuration.requiredVerifiedReplicaCount']} existingTarget={existingTarget} onChange={setConfiguration} onRefresh={refreshConnections} />
       </Section>
-      <Advanced title="Depolama ayrıntıları" open={withErrors('configuration.storagePrefix', 'configuration.stagingReference')}>
-        {text('configuration.storagePrefix', 'Hedef öneki (göreli anahtar)', configuration.storagePrefix, storagePrefix => setConfiguration({ ...configuration, storagePrefix }))}
-        {text('configuration.stagingReference', 'Geçici alan referansı (staging)', configuration.stagingReference, stagingReference => setConfiguration({ ...configuration, stagingReference }))}
+      <Advanced title={tx("Depolama ayrıntıları")} open={withErrors('configuration.storagePrefix', 'configuration.stagingReference')}>
+        {text('configuration.storagePrefix', tx('Hedef öneki (göreli anahtar)'), configuration.storagePrefix, storagePrefix => setConfiguration({ ...configuration, storagePrefix }))}
+        {text('configuration.stagingReference', tx('Geçici alan referansı (staging)'), configuration.stagingReference, stagingReference => setConfiguration({ ...configuration, stagingReference }))}
       </Advanced>
     </>}
     {step === 3 && <>
-      <Section title="Zamanlama" description="Manuel çalıştırma her zaman mümkündür; zamanlama isteğe bağlıdır.">
+      <Section title={tx("Zamanlama")} description={tx("Manuel çalıştırma her zaman mümkündür; zamanlama isteğe bağlıdır.")}>
         <FormGrid>
-          {check('Zamanlama kullan', scheduled, setScheduled)}
-          {scheduled && check('Zamanlama etkin', schedule.enabled, value => setSchedule({ ...schedule, enabled: value }))}
-          {scheduled && <div role="group" aria-label="Hazır zamanlamalar" className="flex flex-wrap gap-2 md:col-span-2">{schedulePresets.map(([label, cron]) => <Button key={cron} type="button" variant={schedule.cronExpression === cron ? 'default' : 'outline'} aria-pressed={schedule.cronExpression === cron} onClick={() => setSchedule({ ...schedule, cronExpression: cron })}>{label}</Button>)}</div>}
-          {nextRun && <p className="text-sm text-text-muted md:col-span-2">Kaydedilmiş zamanlamanın sonraki çalışması: {nextRun}. Değişiklikler kaydedildikten sonra sunucu tarafından hesaplanır.</p>}
+          {check(tx('Zamanlama kullan'), scheduled, setScheduled)}
+          {scheduled && check(tx('Zamanlama etkin'), schedule.enabled, value => setSchedule({ ...schedule, enabled: value }))}
+          {scheduled && <div role="group" aria-label={tx("Hazır zamanlamalar")} className="flex flex-wrap gap-2 md:col-span-2">{schedulePresets.map(([label, cron]) => <Button key={cron} type="button" variant={schedule.cronExpression === cron ? 'default' : 'outline'} aria-pressed={schedule.cronExpression === cron} onClick={() => setSchedule({ ...schedule, cronExpression: cron })}>{tx(label)}</Button>)}</div>}
+          {nextRun && <p className="text-sm text-text-muted md:col-span-2">{tx("Kaydedilmiş zamanlamanın sonraki çalışması:")}{' '}{nextRun}{tx(". Değişiklikler kaydedildikten sonra sunucu tarafından hesaplanır.")}</p>}
         </FormGrid>
       </Section>
-      <Advanced title="Gelişmiş zamanlama" open={withErrors('cronExpression', 'timeZone', 'missedRunGraceSeconds', 'overlapPolicy')}>
-        {scheduled && text('cronExpression', 'Cron ifadesi', schedule.cronExpression, cronExpression => setSchedule({ ...schedule, cronExpression }))}
-        {scheduled && text('timeZone', 'Saat dilimi (IANA / sistem adı)', schedule.timeZone, timeZone => setSchedule({ ...schedule, timeZone }))}
-        {scheduled && number('missedRunGraceSeconds', 'Kaçırılan çalışma toleransı (saniye)', schedule.missedRunGraceSeconds, value => setSchedule({ ...schedule, missedRunGraceSeconds: value ?? 0 }))}
-        {select('overlapPolicy', 'Önceki çalışma sürerken yeni zamanlama', overlap, [['Skip', 'Atla'], ['Queue', 'Kuyruğa al']], value => setOverlap(value as 'Skip' | 'Queue'))}
+      <Advanced title={tx("Gelişmiş zamanlama")} open={withErrors('cronExpression', 'timeZone', 'missedRunGraceSeconds', 'overlapPolicy')}>
+        {scheduled && text('cronExpression', tx('Cron ifadesi'), schedule.cronExpression, cronExpression => setSchedule({ ...schedule, cronExpression }))}
+        {scheduled && text('timeZone', tx('Saat dilimi (IANA / sistem adı)'), schedule.timeZone, timeZone => setSchedule({ ...schedule, timeZone }))}
+        {scheduled && number('missedRunGraceSeconds', tx('Kaçırılan çalışma toleransı (saniye)'), schedule.missedRunGraceSeconds, value => setSchedule({ ...schedule, missedRunGraceSeconds: value ?? 0 }))}
+        {select('overlapPolicy', tx('Önceki çalışma sürerken yeni zamanlama'), overlap, [['Skip', tx('Atla')], ['Queue', tx('Kuyruğa al')]], value => setOverlap(value as 'Skip' | 'Queue'))}
       </Advanced>
-      <Advanced title="Yeniden deneme" open={withErrors('retryPolicy.maxAttempts', 'retryPolicy.initialDelaySeconds', 'retryPolicy.maxDelaySeconds', 'retryPolicy.backoff', 'retryPolicy.jitter')}>
-        {number('retryPolicy.maxAttempts', 'Toplam deneme sayısı', retry.maxAttempts, value => setRetry({ ...retry, maxAttempts: value ?? 0 }))}
-        {number('retryPolicy.initialDelaySeconds', 'İlk gecikme (saniye)', retry.initialDelaySeconds, value => setRetry({ ...retry, initialDelaySeconds: value ?? 0 }))}
-        {number('retryPolicy.maxDelaySeconds', 'En uzun gecikme (saniye)', retry.maxDelaySeconds, value => setRetry({ ...retry, maxDelaySeconds: value ?? 0 }))}
-        {select('retryPolicy.backoff', 'Gecikme stratejisi', retry.backoff, [['Fixed', 'Fixed — sabit'], ['Exponential', 'Exponential — üstel']], backoff => setRetry({ ...retry, backoff }))}
-        {number('retryPolicy.jitter', 'Rastgele gecikme oranı (jitter)', retry.jitter, value => setRetry({ ...retry, jitter: value ?? 0 }))}
+      <Advanced title={tx("Yeniden deneme")} open={withErrors('retryPolicy.maxAttempts', 'retryPolicy.initialDelaySeconds', 'retryPolicy.maxDelaySeconds', 'retryPolicy.backoff', 'retryPolicy.jitter')}>
+        {number('retryPolicy.maxAttempts', tx('Toplam deneme sayısı'), retry.maxAttempts, value => setRetry({ ...retry, maxAttempts: value ?? 0 }))}
+        {number('retryPolicy.initialDelaySeconds', tx('İlk gecikme (saniye)'), retry.initialDelaySeconds, value => setRetry({ ...retry, initialDelaySeconds: value ?? 0 }))}
+        {number('retryPolicy.maxDelaySeconds', tx('En uzun gecikme (saniye)'), retry.maxDelaySeconds, value => setRetry({ ...retry, maxDelaySeconds: value ?? 0 }))}
+        {select('retryPolicy.backoff', tx('Gecikme stratejisi'), retry.backoff, [['Fixed', tx('Fixed — sabit')], ['Exponential', tx('Exponential — üstel')]], backoff => setRetry({ ...retry, backoff }))}
+        {number('retryPolicy.jitter', tx('Rastgele gecikme oranı (jitter)'), retry.jitter, value => setRetry({ ...retry, jitter: value ?? 0 }))}
       </Advanced>
     </>}
     {step === 4 && <>
-      <Section title="Saklama politikası" description="Yedeklerin ne kadar süre saklanacağı.">
+      <Section title={tx("Saklama politikası")} description={tx("Yedeklerin ne kadar süre saklanacağı.")}>
         <FormGrid>
-          {!canAdmin && <p className="text-sm text-text-muted md:col-span-2">Saklama politikasını yalnızca Owner / Admin değiştirebilir. {job ? 'Mevcut politika korunur.' : 'Sunucunun varsayılan politikası uygulanır.'}</p>}
-          {check('Saklama süresi etkin', retention.enabled, value => setRetention({ ...retention, enabled: value }), !canAdmin)}
-          {number('retention.keepForSeconds', 'KeepFor — saklama süresi (saniye)', retention.keepForSeconds, value => setRetention({ ...retention, keepForSeconds: value ?? 0 }), !canAdmin)}
-          {number('retention.deleteGracePeriodSeconds', 'DeleteGracePeriod — silme bekleme süresi (saniye)', retention.deleteGracePeriodSeconds, value => setRetention({ ...retention, deleteGracePeriodSeconds: value ?? 0 }), !canAdmin)}
-          <p className="text-sm text-text-muted md:col-span-2">Politika değişikliği mevcut yedeklerin son kullanma tarihini değiştirmez.</p>
+          {!canAdmin && <p className="text-sm text-text-muted md:col-span-2">{tx("Saklama politikasını yalnızca Owner / Admin değiştirebilir.")}{' '}{job ? tx('Mevcut politika korunur.') : tx('Sunucunun varsayılan politikası uygulanır.')}</p>}
+          {check(tx('Saklama süresi etkin'), retention.enabled, value => setRetention({ ...retention, enabled: value }), !canAdmin)}
+          {number('retention.keepForSeconds', tx('KeepFor — saklama süresi (saniye)'), retention.keepForSeconds, value => setRetention({ ...retention, keepForSeconds: value ?? 0 }), !canAdmin)}
+          {number('retention.deleteGracePeriodSeconds', tx('DeleteGracePeriod — silme bekleme süresi (saniye)'), retention.deleteGracePeriodSeconds, value => setRetention({ ...retention, deleteGracePeriodSeconds: value ?? 0 }), !canAdmin)}
+          <p className="text-sm text-text-muted md:col-span-2">{tx("Politika değişikliği mevcut yedeklerin son kullanma tarihini değiştirmez.")}</p>
         </FormGrid>
       </Section>
-      <Section title="Yedekleme seçenekleri">
+      <Section title={tx("Yedekleme seçenekleri")}>
         <FormGrid>
-          {configuration.engine !== 'postgres' && check('Kopya yedek (COPY_ONLY: mevcut yedek zincirini etkilemez)', configuration.copyOnly, copyOnly => setConfiguration({ ...configuration, copyOnly }))}
-          {select('configuration.checksumPolicy', configuration.engine === 'postgres' ? 'Sayfa bütünlüğü (data_checksums)' : 'Bütünlük doğrulaması (CHECKSUM)', configuration.checksumPolicy, policies, value => setConfiguration({ ...configuration, checksumPolicy: value as BackupConfiguration['checksumPolicy'] }))}
-          {select('configuration.compressionPolicy', 'Sıkıştırma (Compression)', configuration.compressionPolicy, policies, value => setConfiguration({ ...configuration, compressionPolicy: value as BackupConfiguration['compressionPolicy'] }))}
-          {configuration.engine === 'postgres' && <p className="text-sm text-text-muted md:col-span-2">pg_dump custom arşivi mevcut yedek zincirini değiştirmez; COPY_ONLY uygulanmaz. data_checksums sunucunun sayfa doğrulamasıdır: Required yalnızca etkin kümelerde çalışır, Preferred desteklenmiyorsa uyarır. Arşiv ve replikalar her durumda SHA-256 ile doğrulanır. Sıkıştırma pg_dump arşiv sıkıştırmasıdır.</p>}
+          {configuration.engine !== 'postgres' && check(tx('Kopya yedek (COPY_ONLY: mevcut yedek zincirini etkilemez)'), configuration.copyOnly, copyOnly => setConfiguration({ ...configuration, copyOnly }))}
+          {select('configuration.checksumPolicy', configuration.engine === 'postgres' ? tx('Sayfa bütünlüğü (data_checksums)') : tx('Bütünlük doğrulaması (CHECKSUM)'), configuration.checksumPolicy, policies, value => setConfiguration({ ...configuration, checksumPolicy: value as BackupConfiguration['checksumPolicy'] }))}
+          {select('configuration.compressionPolicy', tx('Sıkıştırma (Compression)'), configuration.compressionPolicy, policies, value => setConfiguration({ ...configuration, compressionPolicy: value as BackupConfiguration['compressionPolicy'] }))}
+          {configuration.engine === 'postgres' && <p className="text-sm text-text-muted md:col-span-2">{tx("pg_dump custom arşivi mevcut yedek zincirini değiştirmez; COPY_ONLY uygulanmaz. data_checksums sunucunun sayfa doğrulamasıdır: Required yalnızca etkin kümelerde çalışır, Preferred desteklenmiyorsa uyarır. Arşiv ve replikalar her durumda SHA-256 ile doğrulanır. Sıkıştırma pg_dump arşiv sıkıştırmasıdır.")}</p>}
         </FormGrid>
       </Section>
     </>}
     {last && <>
-      <JobSummary name={name} agentLabel={agent ? `${agent.hostName ?? 'Adsız Agent'} · ${agent.operationalStatus}` : agentId ? 'Agent bulunamadı' : 'Seçilmedi'} enabled={enabled} configuration={configuration} scheduled={scheduled} schedule={schedule} overlap={overlap} retry={retry} retention={retention} canAdmin={canAdmin} connections={connectionItems} nextRun={nextRun} onGo={go} />
-      {multi && <Section title="Oluşturulacak işler" description={`${selected.length} veritabanı için ayrı Backup Job oluşturulur. Hiçbiri 'Kaydet' düğmesine basılana kadar oluşturulmaz.`}>
-        <ul className="space-y-1 text-sm">{selected.map(database => <li key={database}>{name} – {database}{results[database] === 'ok' && <span className="text-success"> · Oluşturuldu</span>}{results[database] && results[database] !== 'ok' && <span role="alert" className="text-error"> · Oluşturulamadı: {results[database]}</span>}</li>)}</ul>
-        {failedCount > 0 && <p className="mt-3 text-sm text-text-muted">Başarısız olanlar yeniden denenebilir; oluşturulanlar tekrar gönderilmez.</p>}
+      <JobSummary name={name} agentLabel={agent ? `${agent.hostName ?? tx('Adsız Agent')} · ${agent.operationalStatus}` : agentId ? tx('Agent bulunamadı') : tx('Seçilmedi')} enabled={enabled} configuration={configuration} scheduled={scheduled} schedule={schedule} overlap={overlap} retry={retry} retention={retention} canAdmin={canAdmin} connections={connectionItems} nextRun={nextRun} onGo={go} />
+      {multi && <Section title={tx("Oluşturulacak işler")} description={tx("{0} veritabanı için ayrı Backup Job oluşturulur. Hiçbiri 'Kaydet' düğmesine basılana kadar oluşturulmaz.", { "0": selected.length })}>
+        <ul className="space-y-1 text-sm">{selected.map(database => <li key={database}>{name} – {database}{results[database] === 'ok' && <span className="text-success">{' '}{tx("· Oluşturuldu")}</span>}{results[database] && results[database] !== 'ok' && <span role="alert" className="text-error">{' '}{tx("· Oluşturulamadı:")}{' '}{results[database]}</span>}</li>)}</ul>
+        {failedCount > 0 && <p className="mt-3 text-sm text-text-muted">{tx("Başarısız olanlar yeniden denenebilir; oluşturulanlar tekrar gönderilmez.")}</p>}
       </Section>}
-      {job && <Section title="Son zamanlama oluşumları"><QueryState isPending={occurrences.isPending} error={occurrences.error} empty={occurrences.data?.length === 0}><ul className="space-y-2 text-sm">{occurrences.data?.map(item => <li key={item.id}>{new Date(item.scheduledAt).toLocaleString('tr-TR')} · {item.outcome} · {item.outcome === 'AdmissionDenied' ? failureMessage(item.reason) : item.reason}{item.runId && <> · <Link className="text-primary underline" to={`/tenants/${tenantId}/backup-runs/${item.runId}`}>Çalıştırmayı aç</Link></>}</li>)}</ul></QueryState></Section>}
-      {cannotSave && <Notice tone="warning" title="Depolama hedefi kaydedilemiyor" action={<Button type="button" variant="outline" size="sm" aria-label="Adıma git: Depolama (hedef sorunu)" onClick={() => go(2)}>Adıma git</Button>}>Hedef depolama bağlantısı doğrulanamadı veya kullanılamıyor. Depolama adımında hedefi düzeltin.</Notice>}
+      {job && <Section title={tx("Son zamanlama oluşumları")}><QueryState isPending={occurrences.isPending} error={occurrences.error} empty={occurrences.data?.length === 0}><ul className="space-y-2 text-sm">{occurrences.data?.map(item => <li key={item.id}>{new Date(item.scheduledAt).toLocaleString(currentLocale())} · {tx(item.outcome)} · {item.outcome === 'AdmissionDenied' ? failureMessage(item.reason) : item.reason}{item.runId && <> · <Link className="text-primary underline" to={`/tenants/${tenantId}/backup-runs/${item.runId}`}>{tx("Çalıştırmayı aç")}</Link></>}</li>)}</ul></QueryState></Section>}
+      {cannotSave && <Notice tone="warning" title={tx("Depolama hedefi kaydedilemiyor")} action={<Button type="button" variant="outline" size="sm" aria-label={tx("Adıma git: Depolama (hedef sorunu)")} onClick={() => go(2)}>{tx("Adıma git")}</Button>}>{tx("Hedef depolama bağlantısı doğrulanamadı veya kullanılamıyor. Depolama adımında hedefi düzeltin.")}</Notice>}
     </>}
-    {saveError && <Notice tone="error" title="İş kaydedilemedi">
+    {saveError && <Notice tone="error" title={tx("İş kaydedilemedi")}>
       <p>{errorMessage(saveError)}</p>
-      {errorSteps.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{errorSteps.map(item => <Button key={item} type="button" variant="outline" size="sm" aria-label={`Hatalı alana git: ${jobSteps[item]}`} onClick={() => go(item)}>Adıma git</Button>)}</div>}
+      {errorSteps.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{errorSteps.map(item => <Button key={item} type="button" variant="outline" size="sm" aria-label={tx("Hatalı alana git: {0}", { "0": jobSteps[item] })} onClick={() => go(item)}>{tx("Adıma git")}</Button>)}</div>}
     </Notice>}
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <Button type="button" variant="outline" disabled={step === 0 || save.isPending} onClick={() => go(step - 1)}>Geri</Button>
+      <Button type="button" variant="outline" disabled={step === 0 || save.isPending} onClick={() => go(step - 1)}>{tx("Geri")}</Button>
       <div className="flex flex-wrap items-center gap-3">
-        <Link className="text-sm text-primary underline-offset-4 hover:underline" to={`/tenants/${tenantId}/backup-jobs`}>Vazgeç</Link>
-        {job && !last && <Button type="button" variant="outline" onClick={() => advance(summaryStep)}>Özete dön</Button>}
-        {last ? <Button key="save" type="submit" size="lg" disabled={save.isPending || cannotSave}>{save.isPending ? 'Kaydediliyor…' : failedCount > 0 ? 'Başarısızları yeniden dene' : 'Kaydet'}</Button> : <Button key="next" type="submit">İleri</Button>}
+        <Link className="text-sm text-primary underline-offset-4 hover:underline" to={`/tenants/${tenantId}/backup-jobs`}>{tx("Vazgeç")}</Link>
+        {job && !last && <Button type="button" variant="outline" onClick={() => advance(summaryStep)}>{tx("Özete dön")}</Button>}
+        {last ? <Button key="save" type="submit" size="lg" disabled={save.isPending || cannotSave}>{save.isPending ? tx('Kaydediliyor…') : failedCount > 0 ? tx('Başarısızları yeniden dene') : tx('Kaydet')}</Button> : <Button key="next" type="submit">{tx("İleri")}</Button>}
       </div>
     </div>
   </form>

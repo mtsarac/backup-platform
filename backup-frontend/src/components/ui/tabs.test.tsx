@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { render, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
+import { render } from '@/test/render'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { Tabs } from './tabs'
@@ -16,7 +17,7 @@ describe('Tab keyboard navigation', () => {
     render(<SessionTabs />)
     const user = userEvent.setup()
     const overview = screen.getByRole('tab', { name: 'Özet' })
-    const audit = screen.getByRole('tab', { name: 'Audit' })
+    const audit = screen.getByRole('tab', { name: "Denetim" })
     expect(screen.getByRole('tab', { name: 'Müşteri verisi' })).toBeDisabled()
     await user.click(overview)
     await user.keyboard('{ArrowRight}')

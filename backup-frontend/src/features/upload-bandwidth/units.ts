@@ -1,3 +1,4 @@
+import { currentLocale, tx } from '@/lib/i18n'
 /**
  * Decimal units only; bits and bytes are never mixed: 1 Mbit/s = 125,000 B/s, 1 MB/s = 1,000,000 B/s. The API unit is always bytes per second.
  * Order matters: `formatBandwidth` / `toInput` pick the first unit that shows the value as a whole number.
@@ -10,7 +11,7 @@ export const bandwidthUnits = [
 ] as const
 export type BandwidthUnitId = (typeof bandwidthUnits)[number]['id']
 
-const locale = 'tr-TR'
+
 const unitSize = (unit: BandwidthUnitId) => bandwidthUnits.find(item => item.id === unit)?.bytesPerSecond ?? 1
 
 /** The first unit (Mbit/s, MB/s, KB/s, B/s) in which `bytesPerSecond` is a whole number; B/s always fits. */
@@ -21,12 +22,12 @@ export function cleanUnit(bytesPerSecond: number) {
 /** `10 Mbit/s` for 1,250,000 B/s. */
 export function formatBandwidth(bytesPerSecond: number): string {
   const unit = cleanUnit(bytesPerSecond)
-  return `${(bytesPerSecond / unit.bytesPerSecond).toLocaleString(locale)} ${unit.id}`
+  return `${(bytesPerSecond / unit.bytesPerSecond).toLocaleString(currentLocale())} ${unit.id}`
 }
 
 /** `1.250.000 B/s` (Turkish grouping), shown beside the friendly value so a bits/bytes mix-up is visible. */
 export function formatExactRate(bytesPerSecond: number): string {
-  return `${bytesPerSecond.toLocaleString(locale)} B/s`
+  return `${bytesPerSecond.toLocaleString(currentLocale())} B/s`
 }
 
 /** Editor text that round-trips through `parseBandwidth` (plain digits, no grouping). */
@@ -55,6 +56,6 @@ export function parseBandwidth(text: string, unit: BandwidthUnitId, minimum: num
 
 export function bandwidthErrorMessage(error: 'invalid' | 'out_of_range', minimum: number, maximum: number) {
   return error === 'invalid'
-    ? 'Değeri sayı olarak girin (en fazla 6 ondalık basamak); sonuç tam bayt/sn olmalıdır.'
-    : `Hız ${formatBandwidth(minimum)} (${formatExactRate(minimum)}) ile ${formatBandwidth(maximum)} (${formatExactRate(maximum)}) arasında olmalıdır.`
+    ? tx('Değeri sayı olarak girin (en fazla 6 ondalık basamak); sonuç tam bayt/sn olmalıdır.')
+    : tx("Hız {0} ({1}) ile {2} ({3}) arasında olmalıdır.", { "0": formatBandwidth(minimum), "1": formatExactRate(minimum), "2": formatBandwidth(maximum), "3": formatExactRate(maximum) })
 }

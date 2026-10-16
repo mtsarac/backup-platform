@@ -95,6 +95,13 @@ scripts/database/with-disposable-databases.sh --postgres-only -- ./scripts/integ
 `--postgres-only` is the fast way to run the full PostgreSQL suite (≈ 5.7 min versus ≈ 9 min against a durable `fsync=on` server, because
 every `DROP DATABASE` forces an immediate checkpoint).
 
+Random sample databases for backup/restore by hand (laptop Docker + Windows VM SQL Server and PostgreSQL; only `bpsample_*` names are ever touched):
+
+```bash
+scripts/dev/sample-databases.sh create [--target local-mssql|local-pg|vm-mssql|vm-pg|all] [--count N]
+scripts/dev/sample-databases.sh list|drop [--target ...]
+```
+
 ## Test entry points
 
 ```bash
@@ -232,6 +239,15 @@ scripts/windows/dev-windows-agent.sh uninstall          # removes the owned serv
 ```
 
 Needs a connected Drive connection (`ACCEPTANCE_CONNECTION_NAME` selects one by name). Revoking one Google Drive connection invalidates every token of the same Google account and OAuth client, so disconnect only the last connection you intend to keep using.
+
+### Installer packages on the persistent dev stack
+
+```bash
+scripts/dev/publish-agent-dist.sh        # stages backup-agent-win-x64.zip and backup-agent-linux-x64.tar.gz (official release layout, numeric version 0.0.0; BP_AGENT_VERSION overrides) in $BP_DEV_HOME/agent-dist
+BP_DEV_PUBLIC_HOST=192.168.122.1 scripts/dev/start.sh   # start.sh passes AgentDistribution__PackagesDirectory and __PublicBaseUrl to the API
+```
+
+The Add agent dialog then offers the guided and automatic one-line commands. The development certificate must be trusted on the target machine (the Windows VM helper already trusts it; for a Linux guest add `$BP_DEV_HOME/cert.pem` to its CA store). The enrollment endpoint currently accepts only numeric agent versions, so prerelease labels cannot be used here.
 
 
 ## Browser smoke environment

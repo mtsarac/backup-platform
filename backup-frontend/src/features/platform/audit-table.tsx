@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import { Link } from 'react-router-dom'
 import { DataTable, type Column } from '@/components/data/data-table'
 import { Badge } from '@/components/ui/badge'
@@ -7,73 +8,73 @@ import { linkClass } from './styles'
 import type { AuditDetailValue, PlatformAuditEntry } from './types'
 
 const actionLabels: Record<string, string> = {
-  'tenant.created': 'Tenant oluşturuldu',
-  'tenant.renamed': 'Tenant yeniden adlandırıldı',
-  'membership.added': 'Üyelik eklendi',
-  'membership.role_changed': 'Üyelik rolü değiştirildi',
-  'membership.removed': 'Üyelik kaldırıldı',
-  'agent_enrollment.policy_changed': 'Agent kayıt politikası değiştirildi',
-  'user.created': 'Kullanıcı oluşturuldu',
-  'plan.created': 'Plan oluşturuldu',
-  'plan.changed': 'Plan değiştirildi',
-  'plan.enabled': 'Plan etkinleştirildi',
-  'plan.disabled': 'Plan devre dışı bırakıldı',
-  'subscription.assigned': 'Abonelik atandı',
-  'subscription.changed': 'Abonelik planı değiştirildi',
-  'subscription.suspended': 'Abonelik askıya alındı',
-  'subscription.resumed': 'Abonelik yeniden etkinleştirildi',
-  'subscription.storage_limit_override_changed': 'Depolama limiti override değiştirildi',
-  'quota_policy.created': 'Kota politikası oluşturuldu',
-  'quota_policy.changed': 'Kota politikası değiştirildi',
-  'tenant_storage_usage.rebuilt': 'Depolama kullanımı baştan hesaplandı (Rebuild)',
-  'tenant_storage_usage.reconcile_corrected': 'Depolama kullanımı doğrulandı ve düzeltildi (Reconcile)',
-  'storage_connection.created': 'Depolama bağlantısı oluşturuldu',
-  'storage_connection.updated': 'Depolama bağlantısı güncellendi',
-  'storage_connection.enabled': 'Depolama bağlantısı etkinleştirildi',
-  'storage_connection.disabled': 'Depolama bağlantısı devre dışı bırakıldı',
-  'storage_connection.deleted': 'Depolama bağlantısı silindi',
-  'storage_connection.tested': 'Depolama bağlantısı test edildi',
-  'storage_connection.secret_rotated': 'Depolama bağlantısı kimlik bilgisi yenilendi',
-  'storage_connection.secret_cleared': 'Depolama bağlantısı kimlik bilgisi temizlendi',
-  'storage_connection.quota_scope_changed': 'Depolama bağlantısı kota kapsamı değiştirildi',
-  'auth.login_succeeded': 'Kullanıcı girişi başarılı',
-  'auth.login_failed': 'Kullanıcı girişi başarısız',
-  'auth.logout': 'Kullanıcı çıkışı yapıldı',
-  'agent.enrollment_token_created': 'Agent kayıt tokenı oluşturuldu',
-  'agent.enrollment_token_revoked': 'Agent kayıt tokenı iptal edildi',
-  'agent.enrolled': 'Agent sisteme kaydoldu',
-  'agent.credential_rotation_started': 'Agent credential yenileme başlatıldı',
-  'agent.credential_rotation_confirmed': 'Agent credential yenileme onaylandı',
-  'agent.revoked': 'Agent yetkisi iptal edildi',
-  'backup_job.created': 'Yedekleme görevi oluşturuldu',
-  'backup_job.updated': 'Yedekleme görevi güncellendi',
-  'backup_job.schedule_changed': 'Yedekleme zamanlaması değiştirildi',
-  'backup_job.schedule_removed': 'Yedekleme zamanlaması kaldırıldı',
-  'backup_job.retention_changed': 'Yedekleme saklama politikası değiştirildi',
-  'backup_job.enabled': 'Yedekleme görevi etkinleştirildi',
-  'backup_job.disabled': 'Yedekleme görevi devre dışı bırakıldı',
-  'backup_run.triggered': 'Yedekleme çalıştırması başlatıldı',
-  'backup_run.retry_requested': 'Yedekleme tekrar denemesi istendi',
-  'backup_run.cancel_requested': 'Yedekleme iptali istendi',
-  'backup_run.completed': 'Yedekleme tamamlandı',
-  'backup_artifact.delete_requested': 'Yedekleme silme talebi oluşturuldu',
-  'backup_artifact.delete_cancelled': 'Yedekleme silme talebi iptal edildi',
-  'backup_replica.physical_delete_completed': 'Yedekleme kopyası fiziksel olarak silindi',
-  'backup_run.attempt_completed': 'Yedekleme denemesi sonuçlandı',
-  'backup_schedule.occurrence_decided': 'Zamanlanmış çalıştırma kararı verildi',
-  'backup_artifact.retention_applied': 'Yedekleme saklama süresi doldu',
-  'backup_replica.physical_delete_failed': 'Yedekleme kopyası silinemedi',
-  'backup_replica.orphan_recorded': 'Sahipsiz yedekleme kopyası kaydedildi',
-  'backup_replica.quarantined': 'Yedekleme kopyası karantinaya alındı',
-  'backup_storage.orphan_delete_completed': 'Sahipsiz depolama nesnesi silindi',
+  get 'tenant.created'() { return tx("Tenant oluşturuldu") },
+  get 'tenant.renamed'() { return tx("Tenant yeniden adlandırıldı") },
+  get 'membership.added'() { return tx("Üyelik eklendi") },
+  get 'membership.role_changed'() { return tx("Üyelik rolü değiştirildi") },
+  get 'membership.removed'() { return tx("Üyelik kaldırıldı") },
+  get 'agent_enrollment.policy_changed'() { return tx("Agent kayıt politikası değiştirildi") },
+  get 'user.created'() { return tx("Kullanıcı oluşturuldu") },
+  get 'plan.created'() { return tx("Plan oluşturuldu") },
+  get 'plan.changed'() { return tx("Plan değiştirildi") },
+  get 'plan.enabled'() { return tx("Plan etkinleştirildi") },
+  get 'plan.disabled'() { return tx("Plan devre dışı bırakıldı") },
+  get 'subscription.assigned'() { return tx("Abonelik atandı") },
+  get 'subscription.changed'() { return tx("Abonelik planı değiştirildi") },
+  get 'subscription.suspended'() { return tx("Abonelik askıya alındı") },
+  get 'subscription.resumed'() { return tx("Abonelik yeniden etkinleştirildi") },
+  get 'subscription.storage_limit_override_changed'() { return tx("Depolama limiti override değiştirildi") },
+  get 'quota_policy.created'() { return tx("Kota politikası oluşturuldu") },
+  get 'quota_policy.changed'() { return tx("Kota politikası değiştirildi") },
+  get 'tenant_storage_usage.rebuilt'() { return tx("Depolama kullanımı baştan hesaplandı (Rebuild)") },
+  get 'tenant_storage_usage.reconcile_corrected'() { return tx("Depolama kullanımı doğrulandı ve düzeltildi (Reconcile)") },
+  get 'storage_connection.created'() { return tx("Depolama bağlantısı oluşturuldu") },
+  get 'storage_connection.updated'() { return tx("Depolama bağlantısı güncellendi") },
+  get 'storage_connection.enabled'() { return tx("Depolama bağlantısı etkinleştirildi") },
+  get 'storage_connection.disabled'() { return tx("Depolama bağlantısı devre dışı bırakıldı") },
+  get 'storage_connection.deleted'() { return tx("Depolama bağlantısı silindi") },
+  get 'storage_connection.tested'() { return tx("Depolama bağlantısı test edildi") },
+  get 'storage_connection.secret_rotated'() { return tx("Depolama bağlantısı kimlik bilgisi yenilendi") },
+  get 'storage_connection.secret_cleared'() { return tx("Depolama bağlantısı kimlik bilgisi temizlendi") },
+  get 'storage_connection.quota_scope_changed'() { return tx("Depolama bağlantısı kota kapsamı değiştirildi") },
+  get 'auth.login_succeeded'() { return tx("Kullanıcı girişi başarılı") },
+  get 'auth.login_failed'() { return tx("Kullanıcı girişi başarısız") },
+  get 'auth.logout'() { return tx("Kullanıcı çıkışı yapıldı") },
+  get 'agent.enrollment_token_created'() { return tx("Agent kayıt tokenı oluşturuldu") },
+  get 'agent.enrollment_token_revoked'() { return tx("Agent kayıt tokenı iptal edildi") },
+  get 'agent.enrolled'() { return tx("Agent sisteme kaydoldu") },
+  get 'agent.credential_rotation_started'() { return tx("Agent credential yenileme başlatıldı") },
+  get 'agent.credential_rotation_confirmed'() { return tx("Agent credential yenileme onaylandı") },
+  get 'agent.revoked'() { return tx("Agent yetkisi iptal edildi") },
+  get 'backup_job.created'() { return tx("Yedekleme görevi oluşturuldu") },
+  get 'backup_job.updated'() { return tx("Yedekleme görevi güncellendi") },
+  get 'backup_job.schedule_changed'() { return tx("Yedekleme zamanlaması değiştirildi") },
+  get 'backup_job.schedule_removed'() { return tx("Yedekleme zamanlaması kaldırıldı") },
+  get 'backup_job.retention_changed'() { return tx("Yedekleme saklama politikası değiştirildi") },
+  get 'backup_job.enabled'() { return tx("Yedekleme görevi etkinleştirildi") },
+  get 'backup_job.disabled'() { return tx("Yedekleme görevi devre dışı bırakıldı") },
+  get 'backup_run.triggered'() { return tx("Yedekleme çalıştırması başlatıldı") },
+  get 'backup_run.retry_requested'() { return tx("Yedekleme tekrar denemesi istendi") },
+  get 'backup_run.cancel_requested'() { return tx("Yedekleme iptali istendi") },
+  get 'backup_run.completed'() { return tx("Yedekleme tamamlandı") },
+  get 'backup_artifact.delete_requested'() { return tx("Yedekleme silme talebi oluşturuldu") },
+  get 'backup_artifact.delete_cancelled'() { return tx("Yedekleme silme talebi iptal edildi") },
+  get 'backup_replica.physical_delete_completed'() { return tx("Yedekleme kopyası fiziksel olarak silindi") },
+  get 'backup_run.attempt_completed'() { return tx("Yedekleme denemesi sonuçlandı") },
+  get 'backup_schedule.occurrence_decided'() { return tx("Zamanlanmış çalıştırma kararı verildi") },
+  get 'backup_artifact.retention_applied'() { return tx("Yedekleme saklama süresi doldu") },
+  get 'backup_replica.physical_delete_failed'() { return tx("Yedekleme kopyası silinemedi") },
+  get 'backup_replica.orphan_recorded'() { return tx("Sahipsiz yedekleme kopyası kaydedildi") },
+  get 'backup_replica.quarantined'() { return tx("Yedekleme kopyası karantinaya alındı") },
+  get 'backup_storage.orphan_delete_completed'() { return tx("Sahipsiz depolama nesnesi silindi") },
 }
 
 const actorLabels: Record<PlatformAuditEntry['actorKind'], string> = {
-  PlatformAdmin: 'PlatformAdmin',
-  TenantAdministrator: 'Tenant yöneticisi',
-  System: 'Sistem',
-  User: 'Kullanıcı',
-  Anonymous: 'Anonim',
+  get PlatformAdmin() { return tx("PlatformAdmin") },
+  get TenantAdministrator() { return tx("Tenant yöneticisi") },
+  get System() { return tx("Sistem") },
+  get User() { return tx("Kullanıcı") },
+  get Anonymous() { return tx("Anonim") },
 }
 
 function auditActionLabel(action: string) {
@@ -82,24 +83,26 @@ function auditActionLabel(action: string) {
 
 function detailValue(value: AuditDetailValue) {
   if (value === null) return '—'
-  if (typeof value === 'boolean') return value ? 'Evet' : 'Hayır'
+  if (typeof value === 'boolean') return value ? tx('Evet') : tx('Hayır')
   return String(value)
 }
 
 function Details({ details }: { details: PlatformAuditEntry['details'] }) {
+  useLanguage()
   const entries = Object.entries(details ?? {})
   if (entries.length === 0) return <span className="text-text-muted">—</span>
   return <dl className="space-y-0.5 text-xs">{entries.map(([key, value]) => <div key={key} className="flex flex-wrap gap-1"><dt className="text-text-muted">{key}:</dt><dd className="break-all">{detailValue(value)}</dd></div>)}</dl>
 }
 
 export function AuditTable({ rows, emptyMessage, showTenant = true, className }: { rows: readonly PlatformAuditEntry[]; emptyMessage: string; showTenant?: boolean; className?: string }) {
+  useLanguage()
   const columns: Column<PlatformAuditEntry>[] = [
-    { key: 'at', header: 'Zaman', render: (entry) => agentDate(entry.at) },
-    { key: 'action', header: 'İşlem', wrap: true, render: (entry) => <span className="font-medium">{auditActionLabel(entry.action)}</span> },
-    { key: 'actor', header: 'Yapan', wrap: true, render: (entry) => <div className="flex flex-wrap items-center gap-1.5"><span>{entry.actorDisplayName ?? 'Bilinmeyen kullanıcı'}</span><Badge tone={entry.actorKind === 'PlatformAdmin' ? 'warning' : entry.actorKind === 'System' || entry.actorKind === 'Anonymous' ? 'neutral' : 'info'}>{actorLabels[entry.actorKind]}</Badge></div> },
-    ...(showTenant ? [{ key: 'tenant', header: 'Tenant', wrap: true, render: (entry: PlatformAuditEntry) => entry.tenantId ? <Link className={linkClass} to={platformPaths.tenant(entry.tenantId)}>{entry.tenantName ?? 'Tenant'}</Link> : <span className="text-text-muted">—</span> }] : []),
-    { key: 'target', header: 'Hedef', wrap: true, render: (entry) => entry.targetType },
-    { key: 'details', header: 'Ayrıntılar', wrap: true, render: (entry) => <Details details={entry.details} /> },
+    { key: 'at', header: tx('Zaman'), render: (entry) => agentDate(entry.at) },
+    { key: 'action', header: tx('İşlem'), wrap: true, render: (entry) => <span className="font-medium">{auditActionLabel(entry.action)}</span> },
+    { key: 'actor', header: tx('Yapan'), wrap: true, render: (entry) => <div className="flex flex-wrap items-center gap-1.5"><span>{entry.actorDisplayName ?? tx('Bilinmeyen kullanıcı')}</span><Badge tone={entry.actorKind === 'PlatformAdmin' ? 'warning' : entry.actorKind === 'System' || entry.actorKind === 'Anonymous' ? 'neutral' : 'info'}>{actorLabels[entry.actorKind]}</Badge></div> },
+    ...(showTenant ? [{ key: 'tenant', header: tx('Tenant'), wrap: true, render: (entry: PlatformAuditEntry) => entry.tenantId ? <Link className={linkClass} to={platformPaths.tenant(entry.tenantId)}>{entry.tenantName ?? 'Tenant'}</Link> : <span className="text-text-muted">—</span> }] : []),
+    { key: 'target', header: tx('Hedef'), wrap: true, render: (entry) => entry.targetType },
+    { key: 'details', header: tx('Ayrıntılar'), wrap: true, render: (entry) => <Details details={entry.details} /> },
   ]
   return <DataTable rows={rows} columns={columns} keyExtractor={(entry) => entry.id} emptyMessage={emptyMessage} className={className} />
 }

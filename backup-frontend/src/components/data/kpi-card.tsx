@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
@@ -21,6 +22,7 @@ interface KpiCardProps {
 }
 
 export function KpiCard({ label, value, icon, tone, hint, className }: KpiCardProps) {
+  useLanguage()
   return (
     <div
       className={cn(
@@ -29,7 +31,7 @@ export function KpiCard({ label, value, icon, tone, hint, className }: KpiCardPr
       )}
     >
       <div className="flex items-center justify-between">
-        <span className="text-sm text-text-muted">{label}</span>
+        <span className="text-sm text-text-muted">{tx(label)}</span>
         {icon && (
           <span className={cn('text-text-muted', tone && toneClasses[tone])}>
             {icon}

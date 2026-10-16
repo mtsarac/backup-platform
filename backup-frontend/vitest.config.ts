@@ -5,6 +5,11 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   define: { 'import.meta.env.VITE_API_BASE_URL': JSON.stringify('http://localhost/api') },
-  resolve: { alias: { '@': path.resolve(import.meta.dirname, './src') } },
+  resolve: {
+    alias: [
+      { find: /^@testing-library\/react$/, replacement: path.resolve(import.meta.dirname, './src/test/render.tsx') },
+      { find: '@', replacement: path.resolve(import.meta.dirname, './src') },
+    ],
+  },
   test: { environment: 'jsdom', pool: 'vmThreads', maxWorkers: 2, setupFiles: ['./src/test/setup.ts'], restoreMocks: true },
 })

@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { render } from '@/test/render'
 import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/lib/api/client'
@@ -123,7 +124,7 @@ describe('run detail controls and attention', () => {
   it.each(runStatuses)('visibly distinguishes %s with eligible controls', async (status) => {
     state.query.data = makeRun({ status })
     renderDetail()
-    const label = { Pending: 'Sırada bekliyor', Leased: 'Agent görevi aldı', Running: 'Çalışıyor', RetryPending: 'Yeniden denenecek', CancellationRequested: 'İptal isteniyor', Succeeded: 'Başarılı', Failed: 'Başarısız', Cancelled: 'İptal edildi', AgentLost: '' }[status]
+    const label = { Pending: 'Sırada bekliyor', Leased: /(?:Agent görevi aldı|Ajan görevi aldı)/, Running: 'Çalışıyor', RetryPending: 'Yeniden denenecek', CancellationRequested: 'İptal isteniyor', Succeeded: 'Başarılı', Failed: 'Başarısız', Cancelled: 'İptal edildi', AgentLost: '' }[status]
     if (label) expect(screen.getAllByText(label).length).toBeGreaterThan(0)
     if (['Succeeded', 'Cancelled', 'CancellationRequested'].includes(status)) {
       expect(screen.queryByRole('button', { name: 'Yeniden dene' })).not.toBeInTheDocument()

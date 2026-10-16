@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { render } from '@/test/render'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
@@ -18,12 +19,12 @@ vi.mock('@/features/backup-jobs/api', () => ({ getBackupJob: vi.fn(), getOccurre
 
 /** Fills the required fields of steps 1-2 and lands on the Depolama step. */
 async function reachStorage(name: string) {
-  await screen.findByRole('option', { name: /SQL Agent/ })
+  await screen.findByRole('option', { name: /(?:SQL Agent|SQL Ajanı)/ })
   fireEvent.change(screen.getByLabelText('İş adı'), { target: { value: name } })
-  fireEvent.change(screen.getByLabelText('Agent'), { target: { value: 'agent-a' } })
+  fireEvent.change(screen.getByLabelText("Ajan"), { target: { value: 'agent-a' } })
   fireEvent.click(screen.getByRole('button', { name: 'İleri' }))
-  fireEvent.change(screen.getByLabelText('SQL Server host / instance'), { target: { value: 'sql' } })
-  fireEvent.change(screen.getByLabelText('Database'), { target: { value: 'ERP' } })
+  fireEvent.change(screen.getByLabelText("SQL Server ana bilgisayarı / veritabanı sunucusu"), { target: { value: 'sql' } })
+  fireEvent.change(screen.getByLabelText("Veritabanı"), { target: { value: 'ERP' } })
   fireEvent.click(screen.getByRole('button', { name: 'İleri' }))
 }
 
@@ -71,8 +72,8 @@ describe('job connection picker tenant lifecycle', () => {
     await reachStorage('B form')
     await waitFor(() => expect(screen.getByRole('option', { name: /B private Local · Local/ })).toBeInTheDocument())
     expect(screen.getByLabelText('Depolama bağlantısı')).toHaveValue('')
-    expect(screen.getByLabelText('Storage Provider')).toHaveValue('local')
-    expect(screen.queryByRole('option', { name: /Managed Storage/ })).not.toBeInTheDocument()
+    expect(screen.getByLabelText("Depolama Sağlayıcısı")).toHaveValue('local')
+    expect(screen.queryByRole('option', { name: /Yönetilen Depolama/ })).not.toBeInTheDocument()
     expect(screen.getByRole('option', { name: /B private Local · Local/ })).toBeInTheDocument()
     expect(lateRequest.signal?.aborted).toBe(true)
     await waitFor(() => expect(cache.getQueryCache().findAll({ queryKey: ['tenant', 'tenant-a'] })).toHaveLength(0))
@@ -80,7 +81,7 @@ describe('job connection picker tenant lifecycle', () => {
     expect(cache.getQueryData(['tenant', 'tenant-a', 'backup-jobs', 'job-a'])).toBeUndefined()
     await act(async () => { resolveLate({ items: aConnections }); await lateResult })
     expect(cache.getQueryData(storageConnectionKeys.tenantList('tenant-a'))).toBeUndefined()
-    expect(screen.queryByRole('option', { name: /Managed Storage/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /Yönetilen Depolama/ })).not.toBeInTheDocument()
     expect(getTenantConnections).toHaveBeenLastCalledWith('tenant-b', expect.any(AbortSignal))
     cache.clear()
   })

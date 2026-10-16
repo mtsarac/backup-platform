@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Lock } from 'lucide-react'
@@ -27,13 +28,15 @@ import type { SupportSession } from '@/features/platform/support/types'
 import { ApiError } from '@/lib/api/client'
 import { errorMessage } from '@/lib/api/failure-messages'
 
-const crumbs = [{ label: 'Platform', to: platformPaths.root }, { label: 'Support Sessions', to: platformPaths.supportSessions }]
+const crumbs = [{ label: 'Platform', to: platformPaths.root }, { get label() { return tx("Support Sessions") }, to: platformPaths.supportSessions }]
 
 export function PlatformSupportSessionPage() {
+  useLanguage()
   const { sessionId = '' } = useParams()
   return <SessionDetail key={sessionId} sessionId={sessionId} />
 }
 function SessionDetail({ sessionId }: { sessionId: string }) {
+  useLanguage()
   const client = useQueryClient()
   const query = useSupportSession(sessionId)
   const [mutationDenied, setMutationDenied] = useState<ApiError | null>(null)
@@ -51,9 +54,10 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
   }, [client, sessionId])
   const error = mutationDenied ?? query.error
   if (query.data && !error) return <SessionView session={query.data} receivedAt={query.dataUpdatedAt} />
-  return <div className="space-y-6"><PageHeader crumbs={crumbs} title="Support Session" /><SupportQueryState isPending={query.isPending} error={error} /></div>
+  return <div className="space-y-6"><PageHeader crumbs={crumbs} title={tx("Support Session")} /><SupportQueryState isPending={query.isPending} error={error} /></div>
 }
 function SessionView({ session, receivedAt }: { session: SupportSession; receivedAt: number }) {
+  useLanguage()
   const client = useQueryClient()
   const { get, update } = useListParams()
   const countdown = useSupportCountdown(session.expiresAt, session.serverNow, receivedAt)
@@ -62,54 +66,56 @@ function SessionView({ session, receivedAt }: { session: SupportSession; receive
   const expired = session.status === 'Active' && countdown.seconds === 0
   useEffect(() => { if (expired) { removeSupportData(client, session.id); void client.invalidateQueries({ queryKey: supportKeys.session(session.id), exact: true }) } }, [client, expired, session.id])
   const tabs = [
-    { value: 'overview', label: 'Overview', enabled: true },
-    { value: 'browser', label: 'Backup Browser', enabled: access.view },
-    { value: 'downloads', label: 'Downloads', enabled: access.downloads },
-    { value: 'restores', label: 'Restore Operations', enabled: access.restores },
-    { value: 'audit', label: 'Audit', enabled: true },
+    { value: 'overview', label: tx('Overview'), enabled: true },
+    { value: 'browser', label: tx('Backup Browser'), enabled: access.view },
+    { value: 'downloads', label: tx('Downloads'), enabled: access.downloads },
+    { value: 'restores', label: tx('Restore Operations'), enabled: access.restores },
+    { value: 'audit', label: tx('Audit'), enabled: true },
   ]
   const tab = tabs.some(item => item.value === get('tab')) ? get('tab') : 'overview'
   const selected = tabs.find(item => item.value === tab)!
   const active = effective.status === 'Active'
   return <div className="space-y-6">
-    <PageHeader crumbs={crumbs} title={`${effective.tenantName} · Support Session`} description={`Oturumu açan: ${effective.actorDisplayName ?? effective.platformAdminId}`}
-      meta={<><SupportStatusPill status={effective.status} /><span aria-label="Oturum süresi" className="text-sm text-text-muted">{active ? `Kalan süre: ${countdown.label}` : 'Erişim sona erdi.'} · Süre sonu: {artifactDate(effective.expiresAt)}</span></>}
+    <PageHeader crumbs={crumbs} title={tx("{0} · Support Session", { "0": effective.tenantName })} description={tx("Oturumu açan: {0}", { "0": effective.actorDisplayName ?? effective.platformAdminId })}
+      meta={<><SupportStatusPill status={effective.status} /><span aria-label={tx("Oturum süresi")} className="text-sm text-text-muted">{active ? tx("Kalan süre: {0}", { "0": countdown.label }) : tx('Erişim sona erdi.')}{' '}{tx("· Süre sonu:")}{' '}{artifactDate(effective.expiresAt)}</span></>}
       actions={<SessionActions session={effective} />} />
-    {effective.status !== 'Active' ? <Notice tone="warning">{endedMessages[effective.status]} Yalnızca oturum özeti ve audit okunabilir.</Notice>
-      : !effective.isOwner && <Notice tone="warning">Bu oturumun sahibi değilsiniz. Müşteri verileri yalnızca oturumu açan PlatformAdmin'e açıktır. Özeti ve audit kayıtlarını görebilir veya gerekçeyle erişimi geri alabilirsiniz.</Notice>}
+    {effective.status !== 'Active' ? <Notice tone="warning">{endedMessages[effective.status]}{' '}{tx("Yalnızca oturum özeti ve audit okunabilir.")}</Notice>
+      : !effective.isOwner && <Notice tone="warning">{tx("Bu oturumun sahibi değilsiniz. Müşteri verileri yalnızca oturumu açan PlatformAdmin'e açıktır. Özeti ve audit kayıtlarını görebilir veya gerekçeyle erişimi geri alabilirsiniz.")}</Notice>}
     <div>
-      <Tabs label="Destek oturumu sekmeleri" idPrefix="support" value={tab} onChange={value => update({ tab: value })}
-        items={tabs.map(item => ({ value: item.value, disabled: !item.enabled, label: item.enabled ? item.label : <span className="inline-flex items-center gap-1.5">{item.label}<Lock aria-hidden="true" className="size-3.5" /></span> }))} />
+      <Tabs label={tx("Destek oturumu sekmeleri")} idPrefix="support" value={tab} onChange={value => update({ tab: value })}
+        items={tabs.map(item => ({ value: item.value, disabled: !item.enabled, label: item.enabled ? tx(item.label) : <span className="inline-flex items-center gap-1.5">{tx(item.label)}<Lock aria-hidden="true" className="size-3.5" /></span> }))} />
       <div role="tabpanel" id={`support-panel-${tab}`} aria-labelledby={`support-tab-${tab}`} className="pt-6">
-        {tab === 'overview' ? <SessionOverview session={effective} /> : tab === 'audit' ? <SupportAuditTab session={effective} /> : !selected.enabled ? <Notice>Bu sekme için etkin oturum sahipliği ve uygun izin gerekir. Müşteri verileri yüklenmedi.</Notice> : tab === 'browser' ? <SupportBackupBrowser key={`${effective.id}:${effective.tenantId}:${effective.status}`} session={effective} /> : tab === 'downloads' ? <SupportDownloadsTab session={effective} /> : <SupportRestoresTab key={`${effective.id}:${effective.tenantId}:${effective.status}`} session={effective} />}
+        {tab === 'overview' ? <SessionOverview session={effective} /> : tab === 'audit' ? <SupportAuditTab session={effective} /> : !selected.enabled ? <Notice>{tx("Bu sekme için etkin oturum sahipliği ve uygun izin gerekir. Müşteri verileri yüklenmedi.")}</Notice> : tab === 'browser' ? <SupportBackupBrowser key={`${effective.id}:${effective.tenantId}:${effective.status}`} session={effective} /> : tab === 'downloads' ? <SupportDownloadsTab session={effective} /> : <SupportRestoresTab key={`${effective.id}:${effective.tenantId}:${effective.status}`} session={effective} />}
       </div>
     </div>
   </div>
 }
 function SessionOverview({ session }: { session: SupportSession }) {
+  useLanguage()
   return <div className="space-y-5">
-    <Notice tone="warning" title="Müşteri ortamındasınız">
-      <p>Bu erişim yalnızca belirtilen tenant ve süre için geçerlidir; tüm veri erişimleri denetlenir.</p>
-      <p>ViewBackupMetadata metadata okumaya, DownloadBackup dosya indirmeye, RestoreBackup yalnızca yeni Database oluşturmaya izin verir. Restore hedefleri müşterinin gerçek veritabanı sunucusudur, izole değildir.</p>
+    <Notice tone="warning" title={tx("Müşteri ortamındasınız")}>
+      <p>{tx("Bu erişim yalnızca belirtilen tenant ve süre için geçerlidir; tüm veri erişimleri denetlenir.")}</p>
+      <p>{tx("ViewBackupMetadata metadata okumaya, DownloadBackup dosya indirmeye, RestoreBackup yalnızca yeni Database oluşturmaya izin verir. Restore hedefleri müşterinin gerçek veritabanı sunucusudur, izole değildir.")}</p>
     </Notice>
-    <Section title="Oturum özeti">
+    <Section title={tx("Oturum özeti")}>
       <div className="space-y-4">
         <Facts columns={1}>
-          <Fact label="Gerekçe"><span className="whitespace-pre-wrap">{session.reason}</span></Fact>
-          <Fact label="İzinler"><PermissionBadges permissions={session.permissions} /></Fact>
+          <Fact label={tx("Gerekçe")}><span className="whitespace-pre-wrap">{session.reason}</span></Fact>
+          <Fact label={tx("İzinler")}><PermissionBadges permissions={session.permissions} /></Fact>
         </Facts>
         <Facts>
-          <Fact label="Başlangıç">{artifactDate(session.startedAt)}</Fact>
-          <Fact label="Süre sonu">{artifactDate(session.expiresAt)}</Fact>
-          <Fact label="Kapanış">{artifactDate(session.closedAt)}</Fact>
-          <Fact label="Kapatan / erişimi geri alan">{session.closedByDisplayName ?? session.closedBy ?? '—'}</Fact>
-          <Fact label="Kapanış gerekçesi">{session.closeReason ?? '—'}</Fact>
+          <Fact label={tx("Başlangıç")}>{artifactDate(session.startedAt)}</Fact>
+          <Fact label={tx("Süre sonu")}>{artifactDate(session.expiresAt)}</Fact>
+          <Fact label={tx("Kapanış")}>{artifactDate(session.closedAt)}</Fact>
+          <Fact label={tx("Kapatan / erişimi geri alan")}>{session.closedByDisplayName ?? session.closedBy ?? '—'}</Fact>
+          <Fact label={tx("Kapanış gerekçesi")}>{session.closeReason ?? '—'}</Fact>
         </Facts>
       </div>
     </Section>
   </div>
 }
 function SessionActions({ session }: { session: SupportSession }) {
+  useLanguage()
   const { close, revoke } = useEndSupportSession(session.id)
   const [closeOpen, setCloseOpen] = useState(false)
   const [revokeOpen, setRevokeOpen] = useState(false)
@@ -127,11 +133,11 @@ function SessionActions({ session }: { session: SupportSession }) {
     revoke.mutate(value, { onSuccess: () => setRevokeOpen(false), onSettled: () => { submitting.current = false } })
   }
   return <>
-    {session.isOwner ? <Button variant="outline" disabled={!active || busy} onClick={() => { close.reset(); setCloseOpen(true) }}>Close session</Button> : <Button variant="destructive" disabled={!active || busy} onClick={() => { revoke.reset(); setReason(''); setInvalid(false); setRevokeOpen(true) }}>Revoke</Button>}
-    <ConfirmDialog open={closeOpen && active} onClose={() => setCloseOpen(false)} title="Destek oturumu kapatılsın mı?" description="Müşteri metadata önbelleği kaldırılır; yeni download, precheck veya restore başlatılamaz. Geçmiş ve audit kayıtları korunur." confirmLabel="Oturumu kapat" pending={busy} error={close.error ? errorMessage(close.error) : undefined} onConfirm={end} />
-    {revokeOpen && active && <FormDialog title="Destek erişimini geri al" description="Oturumun erişimi hemen sona erer. Gerekçe audit kaydına eklenir." submitLabel="Erişimi geri al" pendingLabel="Erişim geri alınıyor…" pending={busy}
+    {session.isOwner ? <Button variant="outline" disabled={!active || busy} onClick={() => { close.reset(); setCloseOpen(true) }}>{tx("Close session")}</Button> : <Button variant="destructive" disabled={!active || busy} onClick={() => { revoke.reset(); setReason(''); setInvalid(false); setRevokeOpen(true) }}>{tx("Revoke")}</Button>}
+    <ConfirmDialog open={closeOpen && active} onClose={() => setCloseOpen(false)} title={tx("Destek oturumu kapatılsın mı?")} description={tx("Müşteri metadata önbelleği kaldırılır; yeni download, precheck veya restore başlatılamaz. Geçmiş ve audit kayıtları korunur.")} confirmLabel="Oturumu kapat" pending={busy} error={close.error ? errorMessage(close.error) : undefined} onConfirm={end} />
+    {revokeOpen && active && <FormDialog title={tx("Destek erişimini geri al")} description={tx("Oturumun erişimi hemen sona erer. Gerekçe audit kaydına eklenir.")} submitLabel="Erişimi geri al" pendingLabel="Erişim geri alınıyor…" pending={busy}
       error={revoke.error ? errorMessage(revoke.error) : undefined} onSubmit={revokeAccess} onClose={() => setRevokeOpen(false)}>
-      <Field label="Gerekçe" hint="Zorunlu; en fazla 500 karakter." error={invalid ? 'Gerekçe zorunludur ve en fazla 500 karakter olabilir.' : undefined}>
+      <Field label={tx("Gerekçe")} hint={tx("Zorunlu; en fazla 500 karakter.")} error={invalid ? tx('Gerekçe zorunludur ve en fazla 500 karakter olabilir.') : undefined}>
         {control => <textarea {...control} className={inputClass} rows={3} value={reason} maxLength={500} disabled={busy} onChange={event => setReason(event.target.value)} />}
       </Field>
     </FormDialog>}

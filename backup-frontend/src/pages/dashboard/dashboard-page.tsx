@@ -1,3 +1,4 @@
+import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { AlertCircle, CheckCircle2, Database, HardDrive, LayoutGrid, List, Monitor, Plus, ShieldAlert } from 'lucide-react'
@@ -37,24 +38,27 @@ const bannerTones = {
 
 /** The one sentence the dashboard exists to answer: is anything wrong right now? */
 function StatusBanner({ issues, succeeded, href }: { issues: number; succeeded: number; href: string }) {
+  useLanguage()
   const tone = issues > 0 ? 'error' : succeeded > 0 ? 'success' : 'warning'
   const { box, text, icon: Icon } = bannerTones[tone]
   return <section role="status" className={`flex flex-wrap items-center gap-4 rounded-xl border px-5 py-4 ${box}`}>
     <Icon aria-hidden="true" className={`size-9 shrink-0 ${text}`} />
     <div className="min-w-0 flex-1">
-      {issues > 0 ? <><p className={`text-xl font-semibold ${text}`}>{issues} kategoride uyarı var</p><p className="text-[0.9375rem] text-text">Başarısız yedek, storage, replikasyon ve silme sayaçları değerlendirilir; bu sayı toplam hata sayısı değildir.</p></>
-        : succeeded > 0 ? <><p className={`text-xl font-semibold ${text}`}>Son 24 saatte {succeeded} başarılı yedek</p><p className="text-[0.9375rem] text-text">Bu sonuç, tüm agent bağlantılarının veya planlı görevlerin sağlıklı olduğunu göstermez.</p></>
-          : <><p className={`text-xl font-semibold ${text}`}>Son 24 saatte yedek alınmadı</p><p className="text-[0.9375rem] text-text">Planlı görevlerinizin çalıştığından emin olun.</p></>}
+      {issues > 0 ? <><p className={`text-xl font-semibold ${text}`}>{issues}{' '}{tx("kategoride uyarı var")}</p><p className="text-[0.9375rem] text-text">{tx("Başarısız yedek, storage, replikasyon ve silme sayaçları değerlendirilir; bu sayı toplam hata sayısı değildir.")}</p></>
+        : succeeded > 0 ? <><p className={`text-xl font-semibold ${text}`}>{tx("Son 24 saatte")}{' '}{succeeded}{' '}{tx("başarılı yedek")}</p><p className="text-[0.9375rem] text-text">{tx("Bu sonuç, tüm agent bağlantılarının veya planlı görevlerin sağlıklı olduğunu göstermez.")}</p></>
+          : <><p className={`text-xl font-semibold ${text}`}>{tx("Son 24 saatte yedek alınmadı")}</p><p className="text-[0.9375rem] text-text">{tx("Planlı görevlerinizin çalıştığından emin olun.")}</p></>}
     </div>
-    {issues > 0 && <Link to={href} className={buttonVariants()}>Yedekleri incele</Link>}
+    {issues > 0 && <Link to={href} className={buttonVariants()}>{tx("Yedekleri incele")}</Link>}
   </section>
 }
 
 function Row({ label, value, tone }: { label: string; value: number; tone?: 'error' }) {
-  return <div className="flex items-center justify-between gap-3 py-1.5"><dt className="text-[0.9375rem] text-text-muted">{label}</dt><dd className={`font-semibold tabular-nums ${tone === 'error' && value > 0 ? 'text-error' : 'text-text-heading'}`}>{value}</dd></div>
+  useLanguage()
+  return <div className="flex items-center justify-between gap-3 py-1.5"><dt className="text-[0.9375rem] text-text-muted">{tx(label)}</dt><dd className={`font-semibold tabular-nums ${tone === 'error' && value > 0 ? 'text-error' : 'text-text-heading'}`}>{value}</dd></div>
 }
 
 export function DashboardPage() {
+  useLanguage()
   const { tenantId, tenant, canAdmin } = useTenant()
   const query = useQuery({ queryKey: ['tenant', tenantId, 'dashboard'], queryFn: ({ signal }) => apiRequest<Dashboard>(tenantPath(tenantId, 'dashboard'), { signal }), refetchInterval: 15_000, refetchIntervalInBackground: false })
   const data = query.data
@@ -62,52 +66,52 @@ export function DashboardPage() {
   const pickLayout = (next: 'table' | 'cards') => { localStorage.setItem(VIEW_KEY, next); setLayout(next) }
   const base = `/tenants/${tenantId}`
   const columns: Column<BackupRun>[] = [
-    { key: 'job', header: 'Job / Database', wrap: true, render: run => <Link className="font-medium text-primary underline-offset-4 hover:underline" to={`${base}/backup-runs/${run.id}`}>{run.jobName} / {run.configuration.database}</Link> },
-    { key: 'agent', header: 'Agent', render: run => run.agentName ?? '—' },
-    { key: 'date', header: 'Başlangıç', render: run => new Date(run.startedAt ?? run.createdAt).toLocaleString('tr-TR') },
-    { key: 'status', header: 'Durum', render: run => <span className="inline-flex flex-wrap items-center gap-2"><StatusPill status={run.status} /><ReplicationBadge replication={run.replication} /></span> },
-    { key: 'attention', header: 'Bilgi', wrap: true, render: run => run.reasonCode ? failureMessage(run.reasonCode) : run.status === 'RetryPending' ? 'Yeni attempt bekleniyor.' : run.status === 'CancellationRequested' ? 'Agent iptali henüz tamamlamadı.' : '—' },
+    { key: 'job', header: tx('Job / Database'), wrap: true, render: run => <Link className="font-medium text-primary underline-offset-4 hover:underline" to={`${base}/backup-runs/${run.id}`}>{run.jobName} / {run.configuration.database}</Link> },
+    { key: 'agent', header: tx('Agent'), render: run => run.agentName ?? '—' },
+    { key: 'date', header: tx('Başlangıç'), render: run => new Date(run.startedAt ?? run.createdAt).toLocaleString(currentLocale()) },
+    { key: 'status', header: tx('Durum'), render: run => <span className="inline-flex flex-wrap items-center gap-2"><StatusPill status={run.status} /><ReplicationBadge replication={run.replication} /></span> },
+    { key: 'attention', header: tx('Bilgi'), wrap: true, render: run => run.reasonCode ? failureMessage(run.reasonCode) : run.status === 'RetryPending' ? tx('Yeni attempt bekleniyor.') : run.status === 'CancellationRequested' ? tx('Agent iptali henüz tamamlamadı.') : '—' },
   ]
   const replicationShort = data?.runs.replicationInsufficientLast24Hours ?? 0
   return <>
-    <PageHeader title="Dashboard" description={`${tenant.name} · Gerçek backup ve Agent durumu`}
-      actions={<><Link to={`${base}/backup-runs`} className={buttonVariants({ variant: 'outline' })}>Backup Runs</Link>{canAdmin && <Link to={`${base}/backup-jobs/new`} className={buttonVariants()}><Plus aria-hidden="true" className="size-4" />Yeni Backup Job</Link>}</>} />
+    <PageHeader title={tx("Dashboard")} description={tx("{0} · Gerçek backup ve Agent durumu", { "0": tenant.name })}
+      actions={<><Link to={`${base}/backup-runs`} className={buttonVariants({ variant: 'outline' })}>{tx("Backup Runs")}</Link>{canAdmin && <Link to={`${base}/backup-jobs/new`} className={buttonVariants()}><Plus aria-hidden="true" className="size-4" />{tx("Yeni Backup Job")}</Link>}</>} />
     <QueryState isPending={query.isPending} error={query.error}>
       {data && <>
         <StatusBanner succeeded={data.runs.succeededLast24Hours} href={`${base}/backup-runs?status=Failed`} issues={[data.runs.failedLast24Hours, data.runs.storageFailedLast24Hours, replicationShort, data.artifacts.deleteFailed].filter(count => count > 0).length} />
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <KpiCard label="Agents" hint={`${data.agents.online} çevrimiçi · bağlı bilgisayar / sunucu`} value={data.agents.total} icon={<Monitor className="size-5" />} />
-          <KpiCard label="Scheduled Jobs" hint="Otomatik çalışan görev" value={data.jobs.scheduled} icon={<Database className="size-5" />} />
-          <KpiCard label="Yedek üretildi · son 24 saat" value={data.runs.succeededLast24Hours} tone="success" icon={<HardDrive className="size-5" />} />
-          <KpiCard label="Başarısız · son 24 saat" value={data.runs.failedLast24Hours} tone={data.runs.failedLast24Hours > 0 ? 'error' : undefined} icon={<AlertCircle className="size-5" />} />
+          <KpiCard label={tx("Agents")} hint={tx("{0} çevrimiçi · bağlı bilgisayar / sunucu", { "0": data.agents.online })} value={data.agents.total} icon={<Monitor className="size-5" />} />
+          <KpiCard label={tx("Scheduled Jobs")} hint={tx("Otomatik çalışan görev")} value={data.jobs.scheduled} icon={<Database className="size-5" />} />
+          <KpiCard label={tx("Yedek üretildi · son 24 saat")} value={data.runs.succeededLast24Hours} tone="success" icon={<HardDrive className="size-5" />} />
+          <KpiCard label={tx("Başarısız · son 24 saat")} value={data.runs.failedLast24Hours} tone={data.runs.failedLast24Hours > 0 ? 'error' : undefined} icon={<AlertCircle className="size-5" />} />
         </div>
-        {data.artifacts.deleteFailed > 0 && <Notice tone="error">{data.artifacts.deleteFailed} artifact silinemedi. <Link className="font-medium underline" to={`${base}/artifacts?state=DeleteFailed`}>Silme hatalarını inceleyin.</Link></Notice>}
-        {data.runs.storageFailedLast24Hours > 0 && <Notice tone="error">{data.runs.storageFailedLast24Hours} backup sırasında storage yazma veya replica doğrulama hatası oluştu. <Link className="font-medium underline" to={`${base}/backup-runs?status=Failed`}>Başarısız backups</Link></Notice>}
-        {replicationShort > 0 && <Notice tone="error">{replicationShort} backup son 24 saatte kullanılabilir yedek üretti, ancak gereken doğrulanmış replika sayısına ulaşamadı. <Link className="font-medium underline" to={`${base}/backup-runs?status=Succeeded`}>Replikasyon sonuçlarını inceleyin.</Link></Notice>}
+        {data.artifacts.deleteFailed > 0 && <Notice tone="error">{data.artifacts.deleteFailed}{' '}{tx("artifact silinemedi.")}{' '}<Link className="font-medium underline" to={`${base}/artifacts?state=DeleteFailed`}>{tx("Silme hatalarını inceleyin.")}</Link></Notice>}
+        {data.runs.storageFailedLast24Hours > 0 && <Notice tone="error">{data.runs.storageFailedLast24Hours}{' '}{tx("backup sırasında storage yazma veya replica doğrulama hatası oluştu.")}{' '}<Link className="font-medium underline" to={`${base}/backup-runs?status=Failed`}>{tx("Başarısız backups")}</Link></Notice>}
+        {replicationShort > 0 && <Notice tone="error">{replicationShort}{' '}{tx("backup son 24 saatte kullanılabilir yedek üretti, ancak gereken doğrulanmış replika sayısına ulaşamadı.")}{' '}<Link className="font-medium underline" to={`${base}/backup-runs?status=Succeeded`}>{tx("Replikasyon sonuçlarını inceleyin.")}</Link></Notice>}
         <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
           <section className="min-w-0 space-y-3" aria-labelledby="recent-runs-heading">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 id="recent-runs-heading" className="text-base font-semibold text-text-heading">Son backups</h2>
+              <h2 id="recent-runs-heading" className="text-base font-semibold text-text-heading">{tx("Son backups")}</h2>
               <div className="flex items-center gap-2">
-                <Button variant={layout === 'cards' ? 'default' : 'outline'} size="sm" aria-pressed={layout === 'cards'} onClick={() => pickLayout('cards')}><LayoutGrid />Kartlar</Button>
-                <Button variant={layout === 'table' ? 'default' : 'outline'} size="sm" aria-pressed={layout === 'table'} onClick={() => pickLayout('table')}><List />Liste</Button>
-                <Link className="text-sm font-medium text-primary underline-offset-4 hover:underline" to={`${base}/backup-runs`}>Tüm history</Link>
+                <Button variant={layout === 'cards' ? 'default' : 'outline'} size="sm" aria-pressed={layout === 'cards'} onClick={() => pickLayout('cards')}><LayoutGrid />{tx("Kartlar")}</Button>
+                <Button variant={layout === 'table' ? 'default' : 'outline'} size="sm" aria-pressed={layout === 'table'} onClick={() => pickLayout('table')}><List />{tx("Liste")}</Button>
+                <Link className="text-sm font-medium text-primary underline-offset-4 hover:underline" to={`${base}/backup-runs`}>{tx("Tüm history")}</Link>
               </div>
             </div>
-            <DataTable layout={layout} rows={data.recentRuns} columns={columns} keyExtractor={run => run.id} emptyMessage="Bu tenant için henüz backup kaydı yok." />
+            <DataTable layout={layout} rows={data.recentRuns} columns={columns} keyExtractor={run => run.id} emptyMessage={tx("Bu tenant için henüz backup kaydı yok.")} />
           </section>
           <div className="space-y-4">
-            <Section title="Agent bağlantı durumu ve yaşam döngüsü"><dl className="divide-y divide-border">
-              <Row label="Çevrimiçi" value={data.agents.online} /><Row label="Çevrimdışı" value={data.agents.offline} tone="error" /><Row label="Bağlantı bilinmiyor" value={data.agents.unknown} />
-              <Row label="Devre dışı (lifecycle)" value={data.agents.disabled} /><Row label="İptal edilmiş (lifecycle)" value={data.agents.revoked} />
+            <Section title={tx("Agent bağlantı durumu ve yaşam döngüsü")}><dl className="divide-y divide-border">
+              <Row label={tx("Çevrimiçi")} value={data.agents.online} /><Row label={tx("Çevrimdışı")} value={data.agents.offline} tone="error" /><Row label={tx("Bağlantı bilinmiyor")} value={data.agents.unknown} />
+              <Row label={tx("Devre dışı (lifecycle)")} value={data.agents.disabled} /><Row label={tx("İptal edilmiş (lifecycle)")} value={data.agents.revoked} />
             </dl></Section>
-            <Section title="Çalışan işler"><dl className="divide-y divide-border">
-              <Row label="Running" value={data.runs.running} /><Row label="RetryPending" value={data.runs.retryPending} /><Row label="CancellationRequested" value={data.runs.cancellationRequested} />
-              <Row label="Aktif Runs" value={data.runs.active} /><Row label="Etkin Jobs" value={data.jobs.enabled} /><Row label="Silme bekleyen artifacts" value={data.artifacts.deletePending} />
+            <Section title={tx("Çalışan işler")}><dl className="divide-y divide-border">
+              <Row label={tx("Running")} value={data.runs.running} /><Row label={tx("RetryPending")} value={data.runs.retryPending} /><Row label={tx("CancellationRequested")} value={data.runs.cancellationRequested} />
+              <Row label={tx("Aktif Runs")} value={data.runs.active} /><Row label={tx("Etkin Jobs")} value={data.jobs.enabled} /><Row label={tx("Silme bekleyen artifacts")} value={data.artifacts.deletePending} />
             </dl></Section>
-            <Section title="Sonraki scheduled backups">{data.upcomingJobs.length
-              ? <ul className="divide-y divide-border">{data.upcomingJobs.map(job => <li key={job.id} className="space-y-0.5 py-2 first:pt-0 last:pb-0"><Link className="font-medium text-primary underline-offset-4 hover:underline" to={`${base}/backup-jobs/${job.id}/edit`}>{job.name}</Link><p className="text-sm text-text-muted">{job.schedule?.nextOccurrenceAt ? new Date(job.schedule.nextOccurrenceAt).toLocaleString('tr-TR') : '—'} · {job.schedule?.timeZone}</p></li>)}</ul>
-              : <p className="text-sm text-text-muted">Etkin schedule yok.</p>}</Section>
+            <Section title={tx("Sonraki scheduled backups")}>{data.upcomingJobs.length
+              ? <ul className="divide-y divide-border">{data.upcomingJobs.map(job => <li key={job.id} className="space-y-0.5 py-2 first:pt-0 last:pb-0"><Link className="font-medium text-primary underline-offset-4 hover:underline" to={`${base}/backup-jobs/${job.id}/edit`}>{job.name}</Link><p className="text-sm text-text-muted">{job.schedule?.nextOccurrenceAt ? new Date(job.schedule.nextOccurrenceAt).toLocaleString(currentLocale()) : '—'} · {job.schedule?.timeZone}</p></li>)}</ul>
+              : <p className="text-sm text-text-muted">{tx("Etkin schedule yok.")}</p>}</Section>
           </div>
         </div>
       </>}

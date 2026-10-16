@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import { useEffect, useRef, type ComponentType, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
@@ -7,6 +8,7 @@ export interface NavItem { label: string; to: string; icon: ComponentType<{ clas
 export interface NavGroup { heading?: string; items: readonly NavItem[] }
 
 function Brand({ icon: Icon, title, caption }: { icon: ComponentType<{ className?: string }>; title: string; caption: string }) {
+  useLanguage()
   return <div className="flex items-center gap-3">
     <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground"><Icon aria-hidden="true" className="size-5" /></span>
     <span className="min-w-0 leading-tight"><span className="block font-semibold text-sidebar-foreground">{title}</span><span className="block text-xs text-sidebar-muted">{caption}</span></span>
@@ -14,10 +16,11 @@ function Brand({ icon: Icon, title, caption }: { icon: ComponentType<{ className
 }
 
 function SidebarContent({ brand, label, groups, footer, onClose }: { brand: { icon: ComponentType<{ className?: string }>; title: string; caption: string }; label: string; groups: readonly NavGroup[]; footer?: ReactNode; onClose?: () => void }) {
+  useLanguage()
   return <>
     <div className="flex h-16 shrink-0 items-center justify-between px-5">
       <Brand {...brand} />
-      {onClose && <Button variant="ghost" size="icon" onClick={onClose} aria-label="Menüyü kapat" className="text-sidebar-foreground hover:bg-sidebar-active"><X /></Button>}
+      {onClose && <Button variant="ghost" size="icon" onClick={onClose} aria-label={tx("Menüyü kapat")} className="text-sidebar-foreground hover:bg-sidebar-active"><X /></Button>}
     </div>
     <nav aria-label={label} className="flex-1 space-y-5 overflow-y-auto px-3 py-3">
       {groups.map((group, index) => <div key={group.heading ?? index}>
@@ -25,7 +28,7 @@ function SidebarContent({ brand, label, groups, footer, onClose }: { brand: { ic
         <ul className="space-y-0.5">{group.items.map((item) => <li key={item.to}>
           <NavLink to={item.to} end={item.end} onClick={onClose}
             className={({ isActive }) => `flex min-h-11 items-center gap-3 rounded-lg px-3 text-[0.9375rem] transition-colors ${isActive ? 'bg-sidebar-active font-medium text-white shadow-[inset_3px_0_0_var(--primary)]' : 'text-sidebar-foreground hover:bg-sidebar-active/60'}`}>
-            <item.icon className="size-5 shrink-0" />{item.label}
+            <item.icon className="size-5 shrink-0" />{tx(item.label)}
           </NavLink>
         </li>)}</ul>
       </div>)}
@@ -36,6 +39,7 @@ function SidebarContent({ brand, label, groups, footer, onClose }: { brand: { ic
 
 /** Fixed sidebar from `lg` up; the same content in a modal dialog below it. */
 export function SidebarFrame({ mobileOpen, onMobileClose, dialogLabel, ...content }: { mobileOpen?: boolean; onMobileClose?: () => void; dialogLabel: string; brand: { icon: ComponentType<{ className?: string }>; title: string; caption: string }; label: string; groups: readonly NavGroup[]; footer?: ReactNode }) {
+  useLanguage()
   const dialog = useRef<HTMLDialogElement>(null)
   useEffect(() => {
     if (mobileOpen && !dialog.current?.open) dialog.current?.showModal()

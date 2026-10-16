@@ -24,8 +24,9 @@ Backup-specific configuration uses Agent__... environment variables or bin/appse
 are supplied as BACKUP_AGENT_SECRET_<reference> environment variables (JSON {"userName":"...","password":"..."}).
 
 Limitations of this release
-  - There is NO bundled installer or systemd unit. The run command is foreground; use a service manager you maintain.
-  - The frontend has no Agent download endpoint.
-  - The binaries are not code-signed.
+  - This archive alone has no installer or systemd unit; the foreground run command above needs a service manager you maintain.
+    A backend that sets AgentDistribution__PackagesDirectory serves a systemd one-line installer (guided or automatic) that installs
+    this archive under /opt/backup-agent as the unprivileged backup-agent account. There is no uninstall script yet.
+  - The binaries and installer scripts are not code-signed.
 
 Verify the download with the SHA256SUMS.txt file attached to the release.

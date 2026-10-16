@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -82,12 +83,12 @@ describe('wizard with discovered databases', () => {
   it('keeps manual entry working and makes no discovery request until the picker is opened', async () => {
     mount()
     fireEvent.change(await screen.findByLabelText('İş adı'), { target: { value: 'ERP' } })
-    await screen.findByRole('option', { name: /SQL Agent/ })
-    fireEvent.change(screen.getByLabelText('Agent'), { target: { value: 'agent-a' } })
+    await screen.findByRole('option', { name: /(?:SQL Agent|SQL Ajanı)/ })
+    fireEvent.change(screen.getByLabelText("Ajan"), { target: { value: 'agent-a' } })
     next()
-    expect(screen.getByLabelText('Database')).toBeEnabled()
+    expect(screen.getByLabelText("Veritabanı")).toBeEnabled()
     expect(getDiscoveryInstances).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Keşfedilen veritabanlarından seç' }))
-    expect(screen.getByLabelText('Keşif Agent\'ı')).toBeInTheDocument()
+    expect(screen.getByLabelText("Keşif Ajanı")).toBeInTheDocument()
   })
 })

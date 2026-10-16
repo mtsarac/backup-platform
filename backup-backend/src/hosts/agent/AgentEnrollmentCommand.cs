@@ -10,7 +10,9 @@ internal static class AgentEnrollmentCommand
         {
             var options = Parse(args);
             var server = options.GetValueOrDefault("--server");
-            var token = options.GetValueOrDefault("--token");
+            var environmentToken = Environment.GetEnvironmentVariable("BACKUP_AGENT_ENROLLMENT_TOKEN");
+            Environment.SetEnvironmentVariable("BACKUP_AGENT_ENROLLMENT_TOKEN", null);
+            var token = options.GetValueOrDefault("--token") ?? environmentToken;
             var name = options.GetValueOrDefault("--name");
             var interactive = !options.ContainsKey("--non-interactive");
             if (interactive && server is null)

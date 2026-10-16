@@ -58,7 +58,14 @@ fd = os.open(sys.argv[1], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
 with os.fdopen(fd, 'w') as handle:
     json.dump({'userName': os.environ['BACKUP_PLATFORM_TEST_MSSQL_USER'], 'password': os.environ['BACKUP_PLATFORM_TEST_MSSQL_PASSWORD']}, handle)
 PY
+        python3 - "$work/pg.json" <<'PY'
+import json, os, sys
+fd = os.open(sys.argv[1], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+with os.fdopen(fd, 'w') as handle:
+    json.dump({'userName': os.environ['BACKUP_PLATFORM_TEST_WINDOWS_POSTGRES_USER'], 'password': os.environ['BACKUP_PLATFORM_TEST_WINDOWS_POSTGRES_PASSWORD']}, handle)
+PY
         "$copy" "$work/sql.json" "$root\\sql-secret.json"
-        "$ps" --file "$REPO_ROOT/scripts/windows/Download-Smoke.ps1" -RootDirectory "$root" -DatabaseSecretFile "$root\\sql-secret.json"
+        "$copy" "$work/pg.json" "$root\\pg-secret.json"
+        "$ps" --file "$REPO_ROOT/scripts/windows/Download-Smoke.ps1" -RootDirectory "$root" -DatabaseSecretFile "$root\\sql-secret.json" -PostgresSecretFile "$root\\pg-secret.json"
         printf 'Dev Windows agent installed (root %s).\n' "$root" ;;
 esac

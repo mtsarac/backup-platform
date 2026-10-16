@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
@@ -16,10 +17,10 @@ import { channelKinds, eventTypes, severities } from './types'
 import type { ChannelKind, EventType, NotificationPolicy, Severity } from './types'
 
 const thresholdLabels: Record<ThresholdField, string> = {
-  staleAfterHours: 'Backup güncel değil eşiği (saat)',
-  agentOfflineAfterMinutes: 'Agent çevrimdışı eşiği (dakika)',
-  reminderIntervalHours: 'Hatırlatma aralığı (saat, 0 = hatırlatma yok)',
-  maxNotificationsPerHour: 'Saatlik azami bildirim',
+  get staleAfterHours() { return tx("Backup güncel değil eşiği (saat)") },
+  get agentOfflineAfterMinutes() { return tx("Agent çevrimdışı eşiği (dakika)") },
+  get reminderIntervalHours() { return tx("Hatırlatma aralığı (saat, 0 = hatırlatma yok)") },
+  get maxNotificationsPerHour() { return tx("Saatlik azami bildirim") },
 }
 
 const checkClass = 'flex min-h-11 items-center gap-3 rounded-lg border border-border bg-surface-2 px-3 text-[0.9375rem] text-text'
@@ -30,6 +31,7 @@ function toggle<T>(list: T[], item: T, on: boolean) {
 }
 
 function PolicyForm({ policy }: { policy: NotificationPolicy }) {
+  useLanguage()
   const save = useUpdateNotificationPolicy()
   const [enabled, setEnabled] = useState(policy.enabled)
   const [events, setEvents] = useState<EventType[]>(policy.eventTypes)
@@ -52,33 +54,34 @@ function PolicyForm({ policy }: { policy: NotificationPolicy }) {
   }
 
   return <form onSubmit={submit} noValidate className="space-y-6">
-    <label className={`${checkClass} font-medium`}><input type="checkbox" className={boxClass} checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />Bildirimler etkin</label>
-    <fieldset className="space-y-2"><legend className="text-sm font-medium text-text-heading">Olay türleri</legend>
+    <label className={`${checkClass} font-medium`}><input type="checkbox" className={boxClass} checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />{tx("Bildirimler etkin")}</label>
+    <fieldset className="space-y-2"><legend className="text-sm font-medium text-text-heading">{tx("Olay türleri")}</legend>
       <div className="flex flex-wrap gap-2">{eventTypes.map((type) => <label key={type} className={checkClass}><input type="checkbox" className={boxClass} checked={events.includes(type)} onChange={(event) => setEvents(toggle(events, type, event.target.checked))} />{eventTypeLabels[type]}</label>)}</div>
     </fieldset>
-    <fieldset className="space-y-2"><legend className="text-sm font-medium text-text-heading">Kanal türleri</legend>
+    <fieldset className="space-y-2"><legend className="text-sm font-medium text-text-heading">{tx("Kanal türleri")}</legend>
       <div className="flex flex-wrap gap-2">{channelKinds.map((kind) => <label key={kind} className={checkClass}><input type="checkbox" className={boxClass} checked={kinds.includes(kind)} onChange={(event) => setKinds(toggle(kinds, kind, event.target.checked))} />{kindLabels[kind]}</label>)}</div>
-      {unavailable.map((kind) => <Notice key={kind} tone="warning">{kindLabels[kind]} aktarımı platform tarafından yapılandırılmamış veya etkin değil; bu tür seçili olsa da bildirim gönderilemez.</Notice>)}
+      {unavailable.map((kind) => <Notice key={kind} tone="warning">{kindLabels[kind]}{' '}{tx("aktarımı platform tarafından yapılandırılmamış veya etkin değil; bu tür seçili olsa da bildirim gönderilemez.")}</Notice>)}
     </fieldset>
     <div className="grid gap-4 sm:grid-cols-2">
-      <Field label="Asgari önem düzeyi">
+      <Field label={tx("Asgari önem düzeyi")}>
         {(control) => <select {...control} className={`${selectClass} w-full`} value={minimumSeverity} onChange={(event) => setMinimumSeverity(event.target.value as Severity)}>{severities.map((severity) => <option key={severity} value={severity}>{severityLabels[severity]}</option>)}</select>}
       </Field>
-      <div className="flex items-end"><label className={checkClass}><input type="checkbox" className={boxClass} checked={recovery} onChange={(event) => setRecovery(event.target.checked)} />Düzelme bildirimleri gönder</label></div>
+      <div className="flex items-end"><label className={checkClass}><input type="checkbox" className={boxClass} checked={recovery} onChange={(event) => setRecovery(event.target.checked)} />{tx("Düzelme bildirimleri gönder")}</label></div>
     </div>
     <div className="grid gap-4 sm:grid-cols-2">{(Object.keys(thresholdRanges) as ThresholdField[]).map((field) => <Field key={field} label={thresholdLabels[field]} error={submitted ? errors[field] : undefined}>
       {(control) => <input {...control} className={inputClass} inputMode="numeric" value={thresholds[field]} onChange={(event) => setThresholds({ ...thresholds, [field]: event.target.value })} />}
     </Field>)}</div>
     {save.isError && <Notice tone="error">{errorMessage(save.error)}</Notice>}
-    {save.isSuccess && <Notice tone="success">Politika kaydedildi.</Notice>}
-    <div className="flex flex-wrap items-center gap-3 border-t border-border pt-4"><Button type="submit" disabled={save.isPending}>{save.isPending ? 'Kaydediliyor…' : 'Politikayı kaydet'}</Button>
-      <span className="text-sm text-text-muted">{policy.updatedAt ? `Son güncelleme: ${agentDate(policy.updatedAt)}` : 'Henüz kaydedilmedi; varsayılan değerler gösteriliyor.'}</span></div>
+    {save.isSuccess && <Notice tone="success">{tx("Politika kaydedildi.")}</Notice>}
+    <div className="flex flex-wrap items-center gap-3 border-t border-border pt-4"><Button type="submit" disabled={save.isPending}>{save.isPending ? tx('Kaydediliyor…') : tx('Politikayı kaydet')}</Button>
+      <span className="text-sm text-text-muted">{policy.updatedAt ? tx("Son güncelleme: {0}", { "0": agentDate(policy.updatedAt) }) : tx('Henüz kaydedilmedi; varsayılan değerler gösteriliyor.')}</span></div>
   </form>
 }
 
 export function PolicySection() {
+  useLanguage()
   const policy = useNotificationPolicy()
-  return <Section title="Bildirim politikası" description="Hangi olayların, hangi önem düzeyinden itibaren, hangi kanal türlerine bildirileceği.">
+  return <Section title={tx("Bildirim politikası")} description={tx("Hangi olayların, hangi önem düzeyinden itibaren, hangi kanal türlerine bildirileceği.")}>
     <QueryState isPending={policy.isPending} error={policy.error}>{policy.data && <PolicyForm policy={policy.data} />}</QueryState>
   </Section>
 }

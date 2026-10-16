@@ -28,9 +28,9 @@ describe('platform users', () => {
   it('lists users and shows PlatformAdmin as a badge, never as a tenant role', async () => {
     renderPlatform(<PlatformUsersPage />)
     const adminRow = (await screen.findByText('Root Admin')).closest('tr')!
-    expect(within(adminRow).getByText('PlatformAdmin')).toBeInTheDocument()
+    expect(within(adminRow).getByText("Platform Yöneticisi")).toBeInTheDocument()
     const memberRow = screen.getByText('Ayşe Yılmaz').closest('tr')!
-    expect(within(memberRow).queryByText('PlatformAdmin')).not.toBeInTheDocument()
+    expect(within(memberRow).queryByText("Platform Yöneticisi")).not.toBeInTheDocument()
     expect(within(memberRow).getByText('3')).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Platform rolü' })).toBeInTheDocument()
   })

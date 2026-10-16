@@ -1,3 +1,4 @@
+import { tx } from '@/lib/i18n'
 import { useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTenant } from '@/features/tenancy/use-tenant'
@@ -30,7 +31,7 @@ export function useSaveBackupJob(id?: string) {
   const { tenantId, canOperate, canAdmin } = useTenant()
   const invalidate = useInvalidateJobs()
   return useMutation({ mutationFn: (input: BackupJobInput) => {
-    if (!canOperate) throw new Error('Bu işlem için yetkiniz yok.')
+    if (!canOperate) throw new Error(tx('Bu işlem için yetkiniz yok.'))
     return saveBackupJob(tenantId, { ...input, retention: canAdmin ? input.retention : undefined }, id)
   }, onSuccess: invalidate, onError: invalidate })
 }
@@ -38,7 +39,7 @@ export function useToggleBackupJob() {
   const { tenantId, canOperate } = useTenant()
   const invalidate = useInvalidateJobs()
   return useMutation({ mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => {
-    if (!canOperate) throw new Error('Bu işlem için yetkiniz yok.')
+    if (!canOperate) throw new Error(tx('Bu işlem için yetkiniz yok.'))
     return setJobEnabled(tenantId, id, enabled)
   }, onSuccess: invalidate })
 }
@@ -48,7 +49,7 @@ export function useRunBackupJob() {
   const actions = useRef(new Map<string, { key: string; pending: boolean }>())
   const mutation = useMutation({ mutationFn: ({ id, key }: { id: string; key: string }) => startJobRun(tenantId, id, key), retry: false, onSuccess: invalidate })
   const run = async (id: string) => {
-    if (!canOperate) throw new Error('Bu işlem için yetkiniz yok.')
+    if (!canOperate) throw new Error(tx('Bu işlem için yetkiniz yok.'))
     const actionId = `${tenantId}/${id}`
     const previous = actions.current.get(actionId)
     if (previous?.pending) return undefined

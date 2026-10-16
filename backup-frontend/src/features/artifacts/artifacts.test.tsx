@@ -1,4 +1,5 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -63,19 +64,19 @@ describe('Backup dosyaları', () => {
       postgreSqlDetails: { archiveFormat: 'custom', clientVersion: '18.6', encoding: 'UTF8', collation: 'C', dataChecksums: 'on', databaseSizeBytes: '16384', extensions: 'hstore' },
     } }))
     mount()
-    fireEvent.click(await screen.findByRole('tab', { name: /metadata/i }))
+    fireEvent.click(await screen.findByRole('tab', { name: /üst veri/i }))
     expect(screen.getByRole('heading', { name: /PostgreSQL/ })).toBeInTheDocument()
     expect(screen.getByText('UTF8')).toBeInTheDocument()
     expect(screen.getByText('hstore')).toBeInTheDocument()
-    expect(screen.queryByText('Recovery model')).not.toBeInTheDocument()
-    expect(screen.queryByText('SQL Server edition')).not.toBeInTheDocument()
+    expect(screen.queryByText("Kurtarma modeli")).not.toBeInTheDocument()
+    expect(screen.queryByText("SQL Server sürüm türü")).not.toBeInTheDocument()
   })
   it('clears the selected tab and destructive confirmation when navigating to another Artifact', async () => {
     request.mockResolvedValue(artifact())
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
     const router = createMemoryRouter([{ path: '/tenants/:tenantId/artifacts/:id', element: <ArtifactDetailPage /> }], { initialEntries: ['/tenants/tenant-a/artifacts/artifact-a'] })
     render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
-    fireEvent.click(await screen.findByRole('tab', { name: /metadata/i }))
+    fireEvent.click(await screen.findByRole('tab', { name: /üst veri/i }))
     fireEvent.click(screen.getByRole('button', { name: 'Silme isteği oluştur' }))
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
     await act(async () => { await router.navigate('/tenants/tenant-a/artifacts/artifact-b') })
@@ -114,7 +115,7 @@ describe('Backup dosyaları', () => {
     })
     mount()
     fireEvent.click(await screen.findByRole('button', { name: 'Silmeyi iptal et' }))
-    await screen.findByText('Silme iptal edildi. Backup dosyaları korunuyor.')
+    await screen.findByText("Silme iptal edildi. Yedekleme dosyaları korunuyor.")
     expect(request).toHaveBeenCalledWith('tenants/tenant-a/backup-artifacts/artifact-a/cancel-delete', { method: 'POST' })
     expect(screen.queryByRole('button', { name: 'Silmeyi iptal et' })).not.toBeInTheDocument()
   })
@@ -123,8 +124,8 @@ describe('Backup dosyaları', () => {
     request.mockResolvedValue(pending({ waitingForAgent: true, deleteFailureCode: 'agent_unavailable', deleteNextAttemptAt: '2099-10-06T10:05:00Z' }))
     mount()
     await screen.findByRole('button', { name: 'Silmeyi iptal et' })
-    fireEvent.click(screen.getByRole('tab', { name: 'Replikalar' }))
-    expect(await screen.findByText(/Fiziksel silme için Agent bekleniyor/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: "Kopyalar" }))
+    expect(await screen.findByText(/Fiziksel silme için Ajan bekleniyor/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Silmeyi iptal et' })).toBeInTheDocument()
     expect(screen.getByText('Sonraki silme denemesi')).toBeInTheDocument()
     expect(screen.getByText('Silme yürütücüsü')).toBeInTheDocument()
@@ -135,7 +136,7 @@ describe('Backup dosyaları', () => {
     mount()
     await screen.findByText(/Fiziksel silme başladığı için/)
     expect(screen.queryByRole('button', { name: 'Silmeyi iptal et' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('tab', { name: 'Replikalar' }))
+    fireEvent.click(screen.getByRole('tab', { name: "Kopyalar" }))
     expect(screen.getByRole('alert')).toHaveTextContent('Silme tamamlanamadı')
     expect(screen.queryByText(/password=hidden/)).not.toBeInTheDocument()
   })
@@ -144,7 +145,7 @@ describe('Backup dosyaları', () => {
     request.mockResolvedValue(artifact({ state: 'Deleted', replicas: [{ ...replica, status: 'Deleted', usable: false, deletedAt: '2026-10-06T10:00:00Z' }] }))
     mount()
     await screen.findByText(/Bu kayıt yalnızca yedekleme geçmişidir/)
-    fireEvent.click(screen.getByRole('tab', { name: 'Replikalar' }))
+    fireEvent.click(screen.getByRole('tab', { name: "Kopyalar" }))
     expect(await screen.findByText(/Fiziksel dosya kaldırıldı/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Silme isteği oluştur' })).not.toBeInTheDocument()
     expect(screen.queryByText('replica-internal')).not.toBeInTheDocument()

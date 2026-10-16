@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -38,7 +39,7 @@ describe('instance detail page', () => {
     expect(await screen.findByLabelText('ERP seç')).toBeEnabled()
     expect(screen.getByLabelText('master seç')).toBeDisabled()
     expect(screen.getByLabelText('Covered seç')).toBeDisabled()
-    expect(screen.getByRole('link', { name: 'Covered job' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-9/edit')
+    expect(screen.getByRole('link', { name: "Covered job" })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-9/edit')
     expect(screen.getByRole('button', { name: /Yedekleme İşi Oluştur/ })).toBeDisabled()
     fireEvent.click(screen.getByLabelText('ERP seç'))
     fireEvent.click(screen.getByLabelText('CRM seç'))
@@ -51,7 +52,7 @@ describe('instance detail page', () => {
     expect(await screen.findByLabelText(/Kimlik bilgisi referans adı/)).toHaveValue('sql-main')
     fireEvent.click(screen.getByRole('button', { name: 'Bağlantıyı Doğrula' }))
     await waitFor(() => expect(verifyDiscoveryInstance).toHaveBeenCalledWith('tenant-a', 'inst-1'))
-    expect(await screen.findByText(/Agent sürümü keşfi desteklemiyor/)).toBeInTheDocument()
+    expect(await screen.findByText(/Ajan sürümü keşfi desteklemiyor/)).toBeInTheDocument()
   })
   it('is read-only for a Viewer', async () => {
     Object.assign(access, { canOperate: false, canAdmin: false })

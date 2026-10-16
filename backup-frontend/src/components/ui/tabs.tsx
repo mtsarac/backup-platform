@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import { useRef, type KeyboardEvent, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import { cn } from '@/lib/utils'
@@ -7,9 +8,10 @@ const tabClass = (active: boolean) => cn('relative inline-flex min-h-11 items-ce
 
 /** Tabs that are real routes: the URL keeps the place, back/forward work, every tab is a link. */
 export function RouteTabs({ label, items }: { label: string; items: readonly { to: string; label: ReactNode; end?: boolean }[] }) {
+  useLanguage()
   return <nav aria-label={label} className="-mb-px overflow-x-auto border-b border-border">
     <ul className="flex min-w-max gap-1">{items.map((item) => <li key={item.to}>
-      <NavLink to={item.to} end={item.end} className={({ isActive }) => tabClass(isActive)}>{item.label}</NavLink>
+      <NavLink to={item.to} end={item.end} className={({ isActive }) => tabClass(isActive)}>{tx(item.label)}</NavLink>
     </li>)}</ul>
   </nav>
 }
@@ -18,6 +20,7 @@ export function RouteTabs({ label, items }: { label: string; items: readonly { t
 export function Tabs<T extends string>({ label, value, onChange, items, idPrefix }: {
   label: string; value: T; onChange: (value: T) => void; items: readonly { value: T; label: ReactNode; disabled?: boolean }[]; idPrefix: string
 }) {
+  useLanguage()
   const refs = useRef(new Map<T, HTMLButtonElement>())
   function onKeyDown(event: KeyboardEvent) {
     const enabled = items.filter((item) => !item.disabled)
@@ -33,6 +36,6 @@ export function Tabs<T extends string>({ label, value, onChange, items, idPrefix
   return <div role="tablist" aria-label={label} onKeyDown={onKeyDown} className="-mb-px flex overflow-x-auto border-b border-border">
     {items.map((item) => <button key={item.value} ref={(node) => { if (node) refs.current.set(item.value, node); else refs.current.delete(item.value) }} type="button" role="tab" id={`${idPrefix}-tab-${item.value}`}
       disabled={item.disabled} aria-selected={item.value === value} aria-controls={`${idPrefix}-panel-${item.value}`} tabIndex={item.value === value && !item.disabled ? 0 : -1}
-      onClick={() => onChange(item.value)} className={cn(tabClass(item.value === value), 'disabled:cursor-not-allowed disabled:opacity-50')}>{item.label}</button>)}
+      onClick={() => onChange(item.value)} className={cn(tabClass(item.value === value), 'disabled:cursor-not-allowed disabled:opacity-50')}>{tx(item.label)}</button>)}
   </div>
 }

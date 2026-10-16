@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
+import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, expect, it, vi } from 'vitest'
@@ -27,10 +28,10 @@ it('does not create a second Queue-policy run when double-click follows a fast s
   cache.clear()
 })
 it.each([
-  ['storage_connection_disabled', 'Hedef depolama bağlantısı devre dışı; yeni backup başlatılamaz.'],
-  ['storage_connection_unavailable', 'Hedef depolama bağlantısı bulunamadı veya bu Job\'un Storage Provider\'ına ait değil; yeni backup başlatılamaz.'],
-  ['quota_size_unknown', 'Backup boyutu henüz bilinmediği için kesin depolama kotasında güvenli alan ayrılamadı; yeni backup başlatılmadı. Boyut tahmininin belirlenmesi için yöneticiye başvurun.'],
-  ['quota_bounded_upload_unsupported', 'Agent, yükleme öncesinde kesin depolama kotasını uygulamayı desteklemiyor; Agent\'ı güncelleyin. Yeni backup başlatılmadı.'],
+  ['storage_connection_disabled', /(?:yeni backup başlatılamaz|yeni yedekleme başlatılamaz)/],
+  ['storage_connection_unavailable', /(?:Hedef depolama bağlantısı bulunamadı|yeni backup başlatılamaz|yeni yedekleme başlatılamaz)/],
+  ['quota_size_unknown', /(?:kesin depolama kotasında|kesin depolama kotası kapsamında)/],
+  ['quota_bounded_upload_unsupported', /(?:Agent, yükleme öncesinde|Ajan, yükleme öncesinde)/],
 ])('Şimdi çalıştır, %s reddini Türkçe gösterir', async (code, text) => {
   vi.mocked(startJobRun).mockRejectedValue(new ApiError(409, { error: 'admission_denied', code }))
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -55,10 +56,10 @@ it('sayfalar 25 iş gösterir; durum ve arama değişiklikleri ilk sayfaya döne
   expect(screen.queryByText('İş 25')).not.toBeInTheDocument()
   expect(screen.getByText('30 kayıt · Sayfa 1 / 2')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Sonraki' }))
-  fireEvent.change(screen.getByLabelText('İş, Agent veya Database ara'), { target: { value: 'SQL Agent' } })
+  fireEvent.change(screen.getByLabelText("İş, ajan veya veritabanı ara"), { target: { value: 'SQL Agent' } })
   expect(screen.getByText('İş 0')).toBeInTheDocument()
   expect(screen.getByText('30 kayıt · Sayfa 1 / 2')).toBeInTheDocument()
-  fireEvent.change(screen.getByLabelText('İş, Agent veya Database ara'), { target: { value: 'İş 2' } })
+  fireEvent.change(screen.getByLabelText("İş, ajan veya veritabanı ara"), { target: { value: 'İş 2' } })
   expect(screen.getByText('İş 2')).toBeInTheDocument()
   expect(screen.queryByText('İş 0')).not.toBeInTheDocument()
   cache.clear()

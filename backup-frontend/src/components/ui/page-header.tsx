@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import type { ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -8,11 +9,12 @@ export interface Crumb { label: string; to?: string }
 export function PageHeader({ title, description, crumbs, actions, meta }: {
   title: ReactNode; description?: ReactNode; crumbs?: readonly Crumb[]; actions?: ReactNode; meta?: ReactNode
 }) {
+  useLanguage()
   return <header className="space-y-2 pb-1">
-    {crumbs && crumbs.length > 0 && <nav aria-label="Sayfa yolu"><ol className="flex flex-wrap items-center gap-1 text-sm text-text-muted">
+    {crumbs && crumbs.length > 0 && <nav aria-label={tx("Sayfa yolu")}><ol className="flex flex-wrap items-center gap-1 text-sm text-text-muted">
       {crumbs.map((crumb, index) => <li key={`${crumb.label}-${index}`} className="inline-flex min-w-0 max-w-full items-center gap-1">
         {index > 0 && <ChevronRight aria-hidden="true" className="size-3.5 shrink-0" />}
-        {crumb.to ? <Link to={crumb.to} className="min-w-0 break-words rounded-sm underline-offset-4 hover:text-text hover:underline">{crumb.label}</Link> : <span className="min-w-0 break-words" aria-current="page">{crumb.label}</span>}
+        {crumb.to ? <Link to={crumb.to} className="min-w-0 break-words rounded-sm underline-offset-4 hover:text-text hover:underline">{tx(crumb.label)}</Link> : <span className="min-w-0 break-words" aria-current="page">{tx(crumb.label)}</span>}
       </li>)}
     </ol></nav>}
     <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">

@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
+import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -217,7 +218,7 @@ describe('Manual replica repair frontend flow', () => {
     const repairButton = screen.getByRole('button', { name: /^onar$/i })
     await user.click(repairButton)
     expect(state.startRepairFn).not.toHaveBeenCalled()
-    expect(screen.getByRole('dialog')).toHaveTextContent('Kaynak Replica korunur.')
+    expect(screen.getByRole('dialog')).toHaveTextContent('Kaynak kopya korunur.')
     await user.click(screen.getByRole('button', { name: 'Onarımı başlat' }))
 
     expect(state.startRepairFn).toHaveBeenCalledWith({

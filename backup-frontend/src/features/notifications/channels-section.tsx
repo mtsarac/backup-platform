@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { BellOff } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -17,13 +18,14 @@ import type { NotificationChannel } from './types'
 type Dialog = 'edit' | 'secret' | 'clearSecret' | 'delete'
 
 function ChannelCard({ channel }: { channel: NotificationChannel }) {
+  useLanguage()
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const toggle = useSetChannelEnabled()
   const test = useTestChannel()
   const clearSecret = useClearChannelSecret()
   const remove = useDeleteChannel()
   const close = () => setDialog(null)
-  const label = (text: string) => `${channel.name} kanalı: ${text}`
+  const label = (text: string) => tx("{0} kanalı: {1}", { "0": channel.name, "1": text })
   const usesSecret = channel.kind === 'webhook' && channel.authentication !== 'none'
   const last = channel.lastDelivery
   const unconfirmed = channel.kind === 'email' && channel.recipientVerified === false
@@ -31,44 +33,45 @@ function ChannelCard({ channel }: { channel: NotificationChannel }) {
   return <li className="py-4 first:pt-0 last:pb-0"><article aria-label={channel.name} className="space-y-3">
     <div className="flex flex-wrap items-start justify-between gap-2">
       <div className="min-w-0"><h3 className="break-words font-medium text-text-heading">{channel.name}</h3><p className="break-all text-sm text-text-muted">{kindLabels[channel.kind]} · {channel.targetDisplay}</p></div>
-      <div className="flex flex-wrap gap-1"><Badge dot tone={channel.enabled ? 'success' : 'warning'}>{channel.enabled ? 'Etkin' : 'Devre dışı'}</Badge>{unconfirmed && <Badge tone="warning">Adres onayı bekleniyor</Badge>}</div>
+      <div className="flex flex-wrap gap-1"><Badge dot tone={channel.enabled ? 'success' : 'warning'}>{channel.enabled ? tx('Etkin') : tx('Devre dışı')}</Badge>{unconfirmed && <Badge tone="warning">{tx("Adres onayı bekleniyor")}</Badge>}</div>
     </div>
     <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-      {channel.kind === 'webhook' && <div><dt className="text-text-muted">Kimlik doğrulama</dt><dd>{authenticationLabels[channel.authentication]}{usesSecret && <> · {channel.hasSecret ? 'Secret kayıtlı' : <span className="text-warning">Secret ayarlanmadı</span>}</>}</dd></div>}
-      <div><dt className="text-text-muted">Son gönderim</dt><dd>{last ? <>{deliveryStatusLabels[last.status].label} · {agentDate(last.at)}{last.errorCode && <> · <code>{last.errorCode}</code></>}</> : 'Henüz gönderim yok'}</dd></div>
+      {channel.kind === 'webhook' && <div><dt className="text-text-muted">{tx("Kimlik doğrulama")}</dt><dd>{authenticationLabels[channel.authentication]}{usesSecret && <> · {channel.hasSecret ? tx('Secret kayıtlı') : <span className="text-warning">{tx("Secret ayarlanmadı")}</span>}</>}</dd></div>}
+      <div><dt className="text-text-muted">{tx("Son gönderim")}</dt><dd>{last ? <>{tx(deliveryStatusLabels[last.status].label)} · {agentDate(last.at)}{last.errorCode && <> · <code>{last.errorCode}</code></>}</> : tx('Henüz gönderim yok')}</dd></div>
     </dl>
     <div className="flex flex-wrap gap-2">
-      <Button variant="outline" size="sm" aria-label={label('düzenle')} onClick={() => { setDialog('edit') }}>Düzenle</Button>
-      <Button variant="outline" size="sm" aria-label={label(channel.enabled ? 'devre dışı bırak' : 'etkinleştir')} disabled={toggle.isPending} onClick={() => toggle.mutate({ id: channel.id, enabled: !channel.enabled })}>{channel.enabled ? 'Devre dışı bırak' : 'Etkinleştir'}</Button>
-      <Button variant="outline" size="sm" aria-label={label(unconfirmed ? 'onay isteğini yeniden gönder' : 'test gönder')} disabled={test.isPending} onClick={() => test.mutate(channel.id)}>{test.isPending ? 'Gönderiliyor…' : unconfirmed ? 'Onay isteğini yeniden gönder' : 'Test gönder'}</Button>
-      {usesSecret && <Button variant="outline" size="sm" aria-label={label('secret ayarla')} onClick={() => { setDialog('secret') }}>{channel.hasSecret ? 'Secret yenile' : 'Secret ayarla'}</Button>}
-      {usesSecret && channel.hasSecret && <Button variant="outline" size="sm" aria-label={label('secret temizle')} onClick={() => { clearSecret.reset(); setDialog('clearSecret') }}>Secret temizle</Button>}
-      <Button variant="destructive" size="sm" aria-label={label('sil')} onClick={() => { remove.reset(); setDialog('delete') }}>Sil</Button>
+      <Button variant="outline" size="sm" aria-label={label(tx('düzenle'))} onClick={() => { setDialog('edit') }}>{tx("Düzenle")}</Button>
+      <Button variant="outline" size="sm" aria-label={label(channel.enabled ? tx('devre dışı bırak') : tx('etkinleştir'))} disabled={toggle.isPending} onClick={() => toggle.mutate({ id: channel.id, enabled: !channel.enabled })}>{channel.enabled ? tx('Devre dışı bırak') : tx('Etkinleştir')}</Button>
+      <Button variant="outline" size="sm" aria-label={label(unconfirmed ? tx('onay isteğini yeniden gönder') : tx('test gönder'))} disabled={test.isPending} onClick={() => test.mutate(channel.id)}>{test.isPending ? tx('Gönderiliyor…') : unconfirmed ? tx('Onay isteğini yeniden gönder') : tx('Test gönder')}</Button>
+      {usesSecret && <Button variant="outline" size="sm" aria-label={label(tx('secret ayarla'))} onClick={() => { setDialog('secret') }}>{channel.hasSecret ? tx('Secret yenile') : tx('Secret ayarla')}</Button>}
+      {usesSecret && channel.hasSecret && <Button variant="outline" size="sm" aria-label={label(tx('secret temizle'))} onClick={() => { clearSecret.reset(); setDialog('clearSecret') }}>{tx("Secret temizle")}</Button>}
+      <Button variant="destructive" size="sm" aria-label={label('sil')} onClick={() => { remove.reset(); setDialog('delete') }}>{tx("Sil")}</Button>
     </div>
     {toggle.error && <Notice tone="error">{errorMessage(toggle.error)}</Notice>}
     {test.error && <Notice tone="error">{errorMessage(test.error)}</Notice>}
-    {test.isSuccess && <Notice tone="success">{unconfirmed ? 'Onay isteği adrese gönderilmek üzere kuyruğa alındı; sonucu Gönderim geçmişi sekmesinde görün.' : 'Test bildirimi kuyruğa alındı; sonucu Gönderim geçmişi sekmesinde görün.'}</Notice>}
+    {test.isSuccess && <Notice tone="success">{unconfirmed ? tx('Onay isteği adrese gönderilmek üzere kuyruğa alındı; sonucu Gönderim geçmişi sekmesinde görün.') : tx('Test bildirimi kuyruğa alındı; sonucu Gönderim geçmişi sekmesinde görün.')}</Notice>}
     {dialog === 'edit' && <EditChannelDialog channel={channel} onClose={close} />}
     {dialog === 'secret' && <ChannelSecretDialog channel={channel} onClose={close} />}
-    <ConfirmDialog open={dialog === 'clearSecret'} onClose={close} title={`“${channel.name}” secret’ı temizlensin mi?`} confirmLabel="Secret’ı temizle"
-      description="Kayıtlı secret silinir; yeniden ayarlanana kadar webhook gönderimleri başarısız olur."
+    <ConfirmDialog open={dialog === 'clearSecret'} onClose={close} title={tx("“{0}” secret’ı temizlensin mi?", { "0": channel.name })} confirmLabel={tx("Secret’ı temizle")}
+      description={tx("Kayıtlı secret silinir; yeniden ayarlanana kadar webhook gönderimleri başarısız olur.")}
       pending={clearSecret.isPending} error={clearSecret.error ? errorMessage(clearSecret.error) : undefined}
       onConfirm={() => clearSecret.mutate(channel.id, { onSuccess: close })} />
-    <ConfirmDialog open={dialog === 'delete'} onClose={close} title={`“${channel.name}” silinsin mi?`} confirmLabel="Kanalı sil"
-      description="Kanal silinir. Gönderim geçmişi korunur."
+    <ConfirmDialog open={dialog === 'delete'} onClose={close} title={tx("“{0}” silinsin mi?", { "0": channel.name })} confirmLabel="Kanalı sil"
+      description={tx("Kanal silinir. Gönderim geçmişi korunur.")}
       pending={remove.isPending} error={remove.error ? errorMessage(remove.error) : undefined}
       onConfirm={() => remove.mutate(channel.id, { onSuccess: close })} />
   </article></li>
 }
 
 export function ChannelsSection() {
+  useLanguage()
   const channels = useNotificationChannels()
   const [adding, setAdding] = useState(false)
-  const addButton = <Button onClick={() => setAdding(true)}>Kanal ekle</Button>
-  return <Section title="Kanallar" description="Bildirimlerin gönderileceği adresler. Hedefler güvenlik için yalnızca kısaltılmış biçimde gösterilir." actions={channels.data?.items.length ? addButton : undefined}>
+  const addButton = <Button onClick={() => setAdding(true)}>{tx("Kanal ekle")}</Button>
+  return <Section title={tx("Kanallar")} description={tx("Bildirimlerin gönderileceği adresler. Hedefler güvenlik için yalnızca kısaltılmış biçimde gösterilir.")} actions={channels.data?.items.length ? addButton : undefined}>
     <QueryState isPending={channels.isPending} error={channels.error}>
       {channels.data && (channels.data.items.length === 0
-        ? <EmptyState icon={BellOff} title="Henüz bildirim kanalı yok." action={addButton}>E-posta, webhook veya SMS kanalı ekleyerek uyarıları almaya başlayın.</EmptyState>
+        ? <EmptyState icon={BellOff} title={tx("Henüz bildirim kanalı yok.")} action={addButton}>{tx("E-posta, webhook veya SMS kanalı ekleyerek uyarıları almaya başlayın.")}</EmptyState>
         : <ul className="divide-y divide-border">{channels.data.items.map((channel) => <ChannelCard key={channel.id} channel={channel} />)}</ul>)}
     </QueryState>
     {adding && <AddChannelDialog onClose={() => setAdding(false)} />}

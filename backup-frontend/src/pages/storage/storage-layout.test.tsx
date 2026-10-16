@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
+import { render } from '@/test/render'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -41,7 +42,7 @@ beforeEach(() => {
 describe('Storage hub', () => {
   it('keeps destinations, quotas and provider capabilities accessible on separate subpages', async () => {
     mount()
-    expect(await screen.findByRole('article', { name: 'Managed Storage' })).toBeInTheDocument()
+    expect(await screen.findByRole('article', { name: "Managed Storage" })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Plan ve abonelik' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('link', { name: 'Kullanım ve kota' }))
     expect(await screen.findByRole('heading', { name: 'Plan ve abonelik' })).toBeInTheDocument()
@@ -54,14 +55,14 @@ describe('Storage hub', () => {
   it('does not make destinations depend on a successful quota read', async () => {
     vi.mocked(getTenantStorageQuota).mockRejectedValue(new ApiError(500))
     mount()
-    expect(await screen.findByRole('article', { name: 'Local' })).toBeInTheDocument()
+    expect(await screen.findByRole('article', { name: "Local" })).toBeInTheDocument()
     expect(getTenantStorageQuota).not.toHaveBeenCalled()
   })
 
   it('rejects non-member quota reads without requesting destinations', async () => {
     vi.mocked(getTenantStorageQuota).mockRejectedValue(new ApiError(403))
     mount('/usage')
-    expect(await screen.findByText("Bu tenant'ın depolama bilgisine erişiminiz yok")).toBeInTheDocument()
+    expect(await screen.findByText("Bu çalışma alanının depolama bilgilerine erişiminiz yok")).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Depolama hedefleri' })).not.toBeInTheDocument()
     expect(connectionApi.getTenantConnections).not.toHaveBeenCalled()
   })

@@ -34,7 +34,8 @@ Backup-specific setup is separate from onboarding: staging/storage and SQL Serve
 config\agent.settings.example.json. Never put Agent permanent credentials in that file.
 
 Limitations of this release
-  - Published files must be supplied by your administrator or a verified release; the frontend has no download endpoint.
-  - The binaries are not code-signed.
+  - A backend that sets AgentDistribution__PackagesDirectory serves this archive plus a guided/automatic one-line installer
+    (see the repository README). This archive can still be extracted and enrolled manually as described above.
+  - The binaries and installer scripts are not code-signed.
 
 Verify the download with the SHA256SUMS.txt file attached to the release.

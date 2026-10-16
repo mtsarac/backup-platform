@@ -33,7 +33,7 @@ describe('presentation helpers', () => {
     expect(capabilityLabel('storage.read')).toBe('Okuma')
     expect(capabilityLabel('storage.atomic-publish')).toBe('Atomik yayımlama')
     expect(capabilityLabel('storage.enumerate')).toBe('Listeleme')
-    expect(capabilityLabel('storage.verify-absence')).toBe('Silme doğrulama')
+    expect(capabilityLabel('storage.verify-absence')).toBe("Silme doğrulaması")
     expect(capabilityLabel('storage.write')).toBe('storage.write')
     expect(capabilityLabel('storage.teleport')).toBe('storage.teleport')
   })
@@ -57,7 +57,7 @@ describe('presentation helpers', () => {
   it('summarises configuration with descriptor labels, falling back to the field name', () => {
     const connection = makeConnection({ configuration: { bucket: 'a', useTls: 'false', port: '', extra: 'x' } })
     expect(configurationSummary(connection, fakeProvider)).toEqual([
-      { name: 'bucket', label: 'Bucket', value: 'a' }, { name: 'useTls', label: 'TLS kullan', value: 'Hayır' }, { name: 'port', label: 'Port', value: '—' }, { name: 'extra', label: 'extra', value: 'x' },
+      { name: 'bucket', label: "Kova", value: 'a' }, { name: 'useTls', label: 'TLS kullan', value: 'Hayır' }, { name: 'port', label: "Bağlantı noktası", value: '—' }, { name: 'extra', label: 'extra', value: 'x' },
     ])
     expect(configurationSummary(makeConnection())).toEqual([])
   })

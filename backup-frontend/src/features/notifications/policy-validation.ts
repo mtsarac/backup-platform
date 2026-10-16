@@ -1,3 +1,4 @@
+import { tx } from '@/lib/i18n'
 import type { PolicyInput } from './types'
 
 export type ThresholdField = 'staleAfterHours' | 'agentOfflineAfterMinutes' | 'reminderIntervalHours' | 'maxNotificationsPerHour'
@@ -16,7 +17,7 @@ export function validateThresholds(values: Record<ThresholdField, string>): Part
   for (const [field, { min, max }] of Object.entries(thresholdRanges) as [ThresholdField, { min: number; max: number }][]) {
     const text = values[field].trim()
     const number = Number(text)
-    if (text === '' || !Number.isInteger(number) || number < min || number > max) errors[field] = `${min} ile ${max} arasında bir tam sayı girin.`
+    if (text === '' || !Number.isInteger(number) || number < min || number > max) errors[field] = tx("{0} ile {1} arasında bir tam sayı girin.", { "0": min, "1": max })
   }
   return errors
 }

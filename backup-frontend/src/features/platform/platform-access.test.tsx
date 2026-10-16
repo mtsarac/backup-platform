@@ -29,22 +29,22 @@ beforeEach(() => {
 describe('Platform Administration entry points', () => {
   it('tenant sidebar shows the Platform Administration link to a PlatformAdmin', () => {
     renderPlatform(<Sidebar />, { user: platformAdmin })
-    for (const link of screen.getAllByText('Platform Administration')) expect(link.closest('a')).toHaveAttribute('href', '/platform')
+    for (const link of screen.getAllByText(/Platform Administration|Platform Yönetimi/)) expect(link.closest('a')).toHaveAttribute('href', '/platform')
   })
 
   it('tenant sidebar hides it from a user who is only a tenant Owner', () => {
     renderPlatform(<Sidebar />, { user: tenantOwner })
-    expect(screen.queryByText('Platform Administration')).not.toBeInTheDocument()
-    expect(screen.getAllByText('Backup Jobs').length).toBeGreaterThan(0)
+    expect(screen.queryByText(/Platform Administration|Platform Yönetimi/)).not.toBeInTheDocument()
+    expect(screen.getAllByText(/Yedekleme İşleri|Yedekleme İşleri/).length).toBeGreaterThan(0)
   })
 
   it('tenant picker links PlatformAdmin users and hides it for others', () => {
     const tenants = [{ tenantId: 't1', name: 'Bir', role: 'Owner' as const }, { tenantId: 't2', name: 'İki', role: 'Viewer' as const }]
     const { unmount } = renderPlatform(<TenantSelectPage />, { user: platformAdmin, tenants })
-    expect(screen.getByRole('link', { name: 'Platform Administration' })).toHaveAttribute('href', '/platform')
+    expect(screen.getByRole('link', { name: /Platform Administration|Platform Yönetimi/ })).toHaveAttribute('href', '/platform')
     unmount()
     renderPlatform(<TenantSelectPage />, { user: tenantOwner, tenants })
-    expect(screen.queryByRole('link', { name: 'Platform Administration' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Platform Administration|Platform Yönetimi/ })).not.toBeInTheDocument()
   })
 })
 
@@ -54,25 +54,25 @@ describe('PlatformAdminRoute guard', () => {
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('Bu alan için yetkiniz yok')
     expect(within(alert).getByRole('link', { name: 'Ana sayfaya dön' })).toHaveAttribute('href', '/')
-    expect(screen.queryByRole('navigation', { name: 'Platform navigation' })).not.toBeInTheDocument()
-    expect(screen.queryByText('Platform Dashboard')).not.toBeInTheDocument()
+    expect(screen.queryByRole('navigation', { name: "Platform gezinme menüsü" })).not.toBeInTheDocument()
+    expect(screen.queryByText("Platform Gösterge Paneli")).not.toBeInTheDocument()
     for (const fn of Object.values(api)) if (typeof fn === 'function') expect(fn).not.toHaveBeenCalled()
     expect(storageApi.getStorageUsage).not.toHaveBeenCalled()
   })
 
   it('renders the platform shell and dashboard for a PlatformAdmin without tenant selector', async () => {
     renderPlatform(null, { routes: tree, user: platformAdmin })
-    expect(await screen.findByRole('heading', { name: 'Platform Dashboard' })).toBeInTheDocument()
-    const nav = screen.getAllByRole('navigation', { name: 'Platform navigation' })[0]
-    for (const name of ['Dashboard', 'Tenants', 'Users', 'Agents', 'Audit']) expect(within(nav).getByRole('link', { name })).toBeInTheDocument()
-    expect(within(nav).getByRole('link', { name: 'Storage Targets' })).toHaveAttribute('href', '/platform/storage-connections')
-    expect(within(nav).getByRole('link', { name: 'Tenant arayüzüne dön' })).toHaveAttribute('href', '/')
-    expect(screen.getAllByText('Platform Administration').length).toBeGreaterThan(0)
-    expect(screen.getByText('PlatformAdmin')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: "Platform Gösterge Paneli" })).toBeInTheDocument()
+    const nav = screen.getAllByRole('navigation', { name: "Platform gezinme menüsü" })[0]
+    for (const name of ['Gösterge Paneli', 'Çalışma Alanları', 'Kullanıcılar', 'Ajanlar', 'Denetim']) expect(within(nav).getByRole('link', { name })).toBeInTheDocument()
+    expect(within(nav).getByRole('link', { name: "Depolama Hedefleri" })).toHaveAttribute('href', '/platform/storage-connections')
+    expect(within(nav).getByRole('link', { name: "Çalışma alanı arayüzüne dön" })).toHaveAttribute('href', '/')
+    expect(screen.getAllByText("Platform Yönetimi").length).toBeGreaterThan(0)
+    expect(screen.getByText("Platform Yöneticisi")).toBeInTheDocument()
     expect(screen.getByText('Platform Operatörü')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Tema değiştir' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: "Temayı değiştir" })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Çıkış' })).toBeInTheDocument()
-    expect(screen.queryByLabelText('Tenant')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Çalışma Alanı")).not.toBeInTheDocument()
     expect(api.getSummary).toHaveBeenCalled()
   })
 })
@@ -81,16 +81,16 @@ describe('platform dashboard', () => {
   it('shows KPI totals and the agent breakdown', async () => {
     renderPlatform(<PlatformDashboardPage />)
     const card = (label: string | RegExp) => screen.getByText(label).parentElement!.parentElement!
-    await screen.findByText('Tenants')
-    expect(card('Tenants')).toHaveTextContent('3')
-    expect(card('Users')).toHaveTextContent('7')
-    expect(card('Etkin Backup Jobs')).toHaveTextContent('9')
-    expect(card(/Başarısız Backup Runs/)).toHaveTextContent('2')
+    await screen.findByText("Çalışma Alanları")
+    expect(card('Çalışma Alanları')).toHaveTextContent('3')
+    expect(card('Kullanıcılar')).toHaveTextContent('7')
+    expect(card('Etkin Yedekleme İşleri')).toHaveTextContent('9')
+    expect(card(/Başarısız Yedekleme Çalıştırmaları/)).toHaveTextContent('2')
     expect(screen.getByText('Çevrimiçi').nextSibling).toHaveTextContent('6')
     expect(screen.getByText('Çevrimdışı').nextSibling).toHaveTextContent('2')
     expect(screen.getByText('Devre dışı').nextSibling).toHaveTextContent('1')
     expect(screen.getByText('İptal edilmiş').nextSibling).toHaveTextContent('0')
-    expect(screen.getByRole('link', { name: "Çevrimdışı Agent'ları listele" })).toHaveAttribute('href', '/platform/agents?connectivity=offline')
+    expect(screen.getByRole('link', { name: "Çevrimdışı Ajanları listele" })).toHaveAttribute('href', '/platform/agents?connectivity=offline')
     expect(await screen.findByText('Henüz depolama kullanım kaydı yok.')).toBeInTheDocument()
     expect(storageApi.getStorageUsage).toHaveBeenCalledWith({ page: 1, pageSize: 5 }, expect.any(AbortSignal))
     expect(screen.getByRole('link', { name: 'Tüm depolama kullanımı' })).toHaveAttribute('href', '/platform/storage')

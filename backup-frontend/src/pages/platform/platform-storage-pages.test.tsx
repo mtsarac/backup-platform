@@ -91,12 +91,12 @@ describe('Platform Storage Usage Page states and operations', () => {
     renderPlatform(<PlatformStoragePage />, { path: '/platform/storage', route: '/platform/storage' })
     expect(await screen.findByText('Acme Corp')).toBeInTheDocument()
 
-    const reconcileBtn = screen.getByRole('button', { name: 'Reconcile' })
+    const reconcileBtn = screen.getByRole('button', { name: "Uzlaştır" })
     fireEvent.click(reconcileBtn)
 
-    expect(await screen.findByText('Depolama senkronizasyonu çalıştırılsın mı (Reconcile)?')).toBeInTheDocument()
+    expect(await screen.findByText("Depolama eşitlemesi çalıştırılsın mı?")).toBeInTheDocument()
 
-    const confirmBtn = screen.getByRole('button', { name: 'Reconcile Çalıştır' })
+    const confirmBtn = screen.getByRole('button', { name: "Uzlaştırmayı Çalıştır" })
     fireEvent.click(confirmBtn)
 
     await waitFor(() => {
@@ -123,12 +123,12 @@ describe('Platform Storage Usage Page states and operations', () => {
     renderPlatform(<PlatformStoragePage />, { path: '/platform/storage', route: '/platform/storage' })
     expect(await screen.findByText('Acme Corp')).toBeInTheDocument()
 
-    const rebuildBtn = screen.getByRole('button', { name: 'Rebuild' })
+    const rebuildBtn = screen.getByRole('button', { name: "Yeniden Hesapla" })
     fireEvent.click(rebuildBtn)
 
-    expect(await screen.findByText('Depolama baştan hesaplansın mı (Rebuild)?')).toBeInTheDocument()
+    expect(await screen.findByText("Depolama baştan hesaplansın mı?")).toBeInTheDocument()
 
-    const confirmBtn = screen.getByRole('button', { name: 'Rebuild Çalıştır' })
+    const confirmBtn = screen.getByRole('button', { name: "Yeniden Hesaplamayı Çalıştır" })
     fireEvent.click(confirmBtn)
 
     await waitFor(() => {
@@ -163,7 +163,7 @@ describe('Platform Quota Policies Page and Dialog', () => {
     const scopeSelect = screen.getByLabelText(/Depolama Kapsamı/i)
     await user.selectOptions(scopeSelect, 'providerType')
 
-    expect(screen.getAllByText(/Provider Anahtarları/i)[0]).toBeInTheDocument()
+    expect(screen.getAllByText(/(?:Provider|Sağlayıcı) Anahtarları/i)[0]).toBeInTheDocument()
 
     const submitBtn = screen.getByRole('button', { name: 'Oluştur' })
     await user.click(submitBtn)

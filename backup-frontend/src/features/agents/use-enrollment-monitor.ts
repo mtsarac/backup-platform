@@ -1,3 +1,4 @@
+import { tx } from '@/lib/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { getAgent, getEnrollmentTokenStatus } from './api'
 import type { AgentDetail } from './types'
@@ -79,7 +80,7 @@ export function useEnrollmentMonitor(tenantId: string, ticket: Ticket | null, cl
       if (stopped || finished || signal.aborted) return
       if (failures >= 3 || polls >= 120) {
         setPaused(true)
-        if (polls >= 120) setError('Otomatik takip durduruldu. Agent hizmetini ve backend bağlantısını kontrol edip tekrar deneyin.')
+        if (polls >= 120) setError(tx('Otomatik takip durduruldu. Agent hizmetini ve backend bağlantısını kontrol edip tekrar deneyin.'))
         return
       }
       timer = window.setTimeout(() => { void poll() }, failures ? Math.min(30_000, 5_000 * 2 ** failures) : 5_000)

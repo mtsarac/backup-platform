@@ -1,34 +1,35 @@
+import { currentLocale, tx } from '@/lib/i18n'
 /** Known identifiers reported by the agent; anything else is shown by its raw identifier so nothing is hidden. */
 export const capabilityLabels: Record<string, string> = {
-  'mssql.backup.full': 'MSSQL Full Backup',
-  'mssql.backup.checksum': 'CHECKSUM',
-  'mssql.backup.compression': 'Compression',
-  'mssql.backup.copy-only': 'COPY_ONLY',
-  'mssql.restore.verify-only': 'VERIFYONLY',
-  'mssql.backup.differential': 'Differential backup',
-  'mssql.backup.log': 'Log backup',
-  'mssql.restore.database': 'MSSQL Full Restore',
-  'mssql.restore.precheck': 'MSSQL Restore Precheck',
-  'mssql.restore.discovery': 'MSSQL Target Discovery',
-  'postgres.backup.full': 'PostgreSQL Full Backup · pg_dump',
-  'postgres.backup.checksum': 'PostgreSQL data_checksums',
-  'postgres.backup.compression': 'PostgreSQL Archive Compression',
-  'postgres.backup.copy-only': 'PostgreSQL Logical Copy',
-  'postgres.restore.full': 'PostgreSQL Full Restore · pg_restore',
-  'postgres.restore.precheck': 'PostgreSQL Restore Precheck',
-  'postgres.restore.discovery': 'PostgreSQL Target Discovery',
-  'postgres.restore.verify': 'PostgreSQL Archive Verification',
-  'postgres.backup.differential': 'PostgreSQL Differential Backup',
-  'postgres.backup.incremental': 'PostgreSQL Incremental Backup',
+  get 'mssql.backup.full'() { return tx("MSSQL Full Backup") },
+  get 'mssql.backup.checksum'() { return tx("CHECKSUM") },
+  get 'mssql.backup.compression'() { return tx("Compression") },
+  get 'mssql.backup.copy-only'() { return tx("COPY_ONLY") },
+  get 'mssql.restore.verify-only'() { return tx("VERIFYONLY") },
+  get 'mssql.backup.differential'() { return tx("Differential backup") },
+  get 'mssql.backup.log'() { return tx("Log backup") },
+  get 'mssql.restore.database'() { return tx("MSSQL Full Restore") },
+  get 'mssql.restore.precheck'() { return tx("MSSQL Restore Precheck") },
+  get 'mssql.restore.discovery'() { return tx("MSSQL Target Discovery") },
+  get 'postgres.backup.full'() { return tx("PostgreSQL Full Backup · pg_dump") },
+  get 'postgres.backup.checksum'() { return tx("PostgreSQL data_checksums") },
+  get 'postgres.backup.compression'() { return tx("PostgreSQL Archive Compression") },
+  get 'postgres.backup.copy-only'() { return tx("PostgreSQL Logical Copy") },
+  get 'postgres.restore.full'() { return tx("PostgreSQL Full Restore · pg_restore") },
+  get 'postgres.restore.precheck'() { return tx("PostgreSQL Restore Precheck") },
+  get 'postgres.restore.discovery'() { return tx("PostgreSQL Target Discovery") },
+  get 'postgres.restore.verify'() { return tx("PostgreSQL Archive Verification") },
+  get 'postgres.backup.differential'() { return tx("PostgreSQL Differential Backup") },
+  get 'postgres.backup.incremental'() { return tx("PostgreSQL Incremental Backup") },
   'postgres.backup.wal': 'PostgreSQL WAL / PITR',
 }
 
 export const capabilitySupportLabels: Record<string, string> = {
-  Supported: 'Destekleniyor',
-  Unsupported: 'Desteklenmiyor',
-  Unknown: 'Bilinmiyor',
+  get Supported() { return tx("Destekleniyor") },
+  get Unsupported() { return tx("Desteklenmiyor") },
+  get Unknown() { return tx("Bilinmiyor") },
 }
 
 export function agentDate(value: string | null | undefined) {
-  return value ? new Date(value).toLocaleString('tr-TR') : 'Henüz bildirilmedi'
+  return value ? new Date(value).toLocaleString(currentLocale()) : tx('Henüz bildirilmedi')
 }

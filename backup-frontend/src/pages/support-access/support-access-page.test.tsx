@@ -35,20 +35,20 @@ beforeEach(() => {
 describe('tenant support transparency', () => {
   it.each(['Owner', 'Admin'] as const)('shows the tenant support navigation for %s', (role) => {
     renderAccess(role, '/tenants/tenant-a/support-access', <Sidebar />)
-    const links = screen.getAllByRole('link', { name: 'Support Access', hidden: true })
+    const links = screen.getAllByRole('link', { name: /Support Access|Destek Erişimi/, hidden: true })
     expect(links.length).toBeGreaterThan(0)
     for (const link of links) expect(link).toHaveAttribute('href', '/tenants/tenant-a/support-access')
   })
 
   it.each(['Operator', 'Viewer'] as const)('hides the tenant support navigation for %s', (role) => {
     renderAccess(role, '/tenants/tenant-a/support-access', <Sidebar />)
-    expect(screen.queryByRole('link', { name: 'Support Access', hidden: true })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Support Access|Destek Erişimi/, hidden: true })).not.toBeInTheDocument()
   })
 
   it.each(['Owner', 'Admin'] as const)('renders history, all six counters and read-only activity for %s', async (role) => {
     renderAccess(role)
     expect(await screen.findByText('Destek Uzmanı')).toBeInTheDocument()
-    for (const [label, count] of [['Görüntülenen Artifact', 2], ['Başlatılan indirme', 3], ['Tamamlanan indirme', 4], ['Başarısız indirme', 5], ['İstenen Restore', 6], ['İptal edilen Restore', 7]] as const) {
+    for (const [label, count] of [['Görüntülenen Yedek Dosyası', 2], ['Başlatılan indirme', 3], ['Tamamlanan indirme', 4], ['Başarısız indirme', 5], ['İstenen Geri Yükleme', 6], ['İptal edilen Geri Yükleme', 7]] as const) {
       expect(screen.getByText(label).parentElement).toHaveTextContent(String(count))
     }
     fireEvent.click(screen.getByRole('button', { name: 'Etkinliği görüntüle' }))
@@ -56,14 +56,14 @@ describe('tenant support transparency', () => {
     const detail = screen.getByRole('region', { name: 'Destek oturumu ayrıntısı' })
     expect(within(detail).getByText('İnceleme tamamlandı')).toBeInTheDocument()
     expect(within(detail).getByText('artifact-a')).toBeInTheDocument()
-    expect(within(detail).queryByRole('button', { name: /Restore başlat|indir|iptal et/i })).not.toBeInTheDocument()
+    expect(within(detail).queryByRole('button', { name: /Geri Yükleme başlat|indir|iptal et/i })).not.toBeInTheDocument()
     fireEvent.click(within(detail).getByRole('button', { name: 'Sonraki' }))
     await waitFor(() => expect(api.getSupportAccessActivity).toHaveBeenLastCalledWith('tenant-a', 'session-a', { page: 2, pageSize: 25 }, expect.any(AbortSignal)))
   })
 
   it.each(['Operator', 'Viewer'] as const)('blocks %s before any query mounts', (role) => {
     renderAccess(role, '/tenants/tenant-a/support-access?sessionId=session-a')
-    expect(screen.getByRole('alert')).toHaveTextContent('Owner / Admin')
+    expect(screen.getByRole('alert')).toHaveTextContent(/(?:Owner \/ Admin|Sahibi \/ Yöneticisi)/)
     expect(api.getSupportAccessSessions).not.toHaveBeenCalled()
     expect(api.getSupportAccessSession).not.toHaveBeenCalled()
     expect(api.getSupportAccessActivity).not.toHaveBeenCalled()
@@ -80,21 +80,21 @@ describe('tenant support transparency', () => {
   it('renders a tenant-specific authorization state for server 403', async () => {
     vi.mocked(api.getSupportAccessSessions).mockRejectedValue(new ApiError(403))
     renderAccess()
-    expect(await screen.findByRole('alert')).toHaveTextContent('Owner / Admin')
+    expect(await screen.findByRole('alert')).toHaveTextContent(/(?:Owner \/ Admin|Sahibi \/ Yöneticisi)/)
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })
 
   it('renders missing or cross-tenant session 404 without requesting activity', async () => {
     vi.mocked(api.getSupportAccessSession).mockRejectedValue(new ApiError(404, { error: 'support_session_not_found' }))
     renderAccess('Admin', '/tenants/tenant-a/support-access?sessionId=session-b')
-    expect(await screen.findByRole('alert')).toHaveTextContent("bu tenant'a ait değil")
+    expect(await screen.findByRole('alert')).toHaveTextContent(/bu (?:tenant|çalışma alanın)a ait değil/)
     expect(api.getSupportAccessActivity).not.toHaveBeenCalled()
   })
 
   it('renders an authorization state when activity returns 403', async () => {
     vi.mocked(api.getSupportAccessActivity).mockRejectedValue(new ApiError(403))
     renderAccess('Admin', '/tenants/tenant-a/support-access?sessionId=session-a')
-    expect(await screen.findByRole('alert')).toHaveTextContent('Owner / Admin')
+    expect(await screen.findByRole('alert')).toHaveTextContent(/(?:Owner \/ Admin|Sahibi \/ Yöneticisi)/)
     expect(screen.queryByText('support.artifact.viewed')).not.toBeInTheDocument()
   })
 
