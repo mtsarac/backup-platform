@@ -8,12 +8,14 @@ import sys
 
 
 def read_sections(path):
-    sections = {"postgres": {}, "mssql": {}, "windows": {}}
+    sections = {"postgres": {}, "mssql": {}, "windows": {}, "windows_postgres": {}}
     section = None
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if line.lower().startswith("windows11 vm"):
             section = "windows"
+        elif line.lower().startswith("win11 vm postgresql"):
+            section = "windows_postgres"
         elif line.lower() == "postgresql:":
             section = "postgres"
         elif line.lower() == "mssqlserver:":
@@ -41,6 +43,9 @@ def configuration(sections):
         if sql.get(key):
             values["BACKUP_PLATFORM_TEST_MSSQL_" + suffix] = sql[key]
     values["BACKUP_PLATFORM_TEST_MSSQL_TRUST_SERVER_CERTIFICATE"] = "true"
+    for suffix, key in (("USER", "USER"), ("PASSWORD", "PASSWORD")):
+        if value := sections.get("windows_postgres", {}).get(key):
+            values["BACKUP_PLATFORM_TEST_WINDOWS_POSTGRES_" + suffix] = value
     ssh = vm.get("SSH", "")
     match = re.fullmatch(r"ssh\s+([\w.@-]+)", ssh)
     host = os.environ.get("WINDOWS_SSH_HOST", vm.get("HOST", "192.168.122.218"))
