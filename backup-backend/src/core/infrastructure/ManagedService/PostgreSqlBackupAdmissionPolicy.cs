@@ -53,57 +53,8 @@ public sealed class PostgreSqlBackupAdmissionPolicy(
         {
             return BackupAdmissionDecision.Denied(BackupAdmissionDenialCodes.SubscriptionRequired);
         }
-        var entitlement = await PostgreSqlTenantEntitlementReader.ResolveAsync(context, request.TenantId, request.Now, cancellationToken);
-        if (entitlement.DenialCode(EntitlementOperation.StartNewBackupRun) is { } subscriptionCode)
-        {
-            logger.LogInformation("Backup admission denied for tenant {TenantId}: {Code} ({Status}), trigger {Trigger}, run {RunId}.",
-                request.TenantId, subscriptionCode, entitlement.Status, request.TriggerType, request.RunId);
-            return BackupAdmissionDecision.Denied(subscriptionCode);
-        }
-        var policy = await TenantUsageEngine.ResolvePolicyAsync(context, request.TenantId, cancellationToken);
-        if (policy.EnforcementMode == QuotaEnforcementMode.None || entitlement.StorageLimit is not { IsUnlimited: false })
-        {
-            return BackupAdmissionDecision.Admitted;
-        }
-
-        if (await TenantUsageEngine.ReleaseStaleReservationsAsync(context, request.TenantId, request.Now, cancellationToken) > 0)
-        {
-            // The projection may not exist yet; EnsureCurrent below computes the reserved figure from the (already corrected) reservations.
-            await TenantUsageEngine.RefreshReservedAsync(context, request.TenantId, cancellationToken);
-        }
-        var (usage, _) = await TenantUsageEngine.EnsureCurrentAsync(context, request.TenantId, policy, request.Now, cancellationToken);
-        if (await context.QuotaReservations.AsNoTracking().AnyAsync(reservation => reservation.TenantId == request.TenantId
-            && reservation.RunId == request.RunId && reservation.ReleasedAt == null, cancellationToken))
-        {
-            return BackupAdmissionDecision.Admitted;
-        }
-        var estimate = await EstimateAsync(context, request, policy, cancellationToken);
-        var decision = QuotaAdmissionDecision.Decide(entitlement, policy, usage.UsedBytes, usage.ReservedBytes, estimate ?? 0);
-        if (!decision.Allowed)
-        {
-            logger.LogWarning(
-                "Backup admission denied for tenant {TenantId}: {Code}, state {State}, used {UsedBytes} + reserved {ReservedBytes} + estimated {EstimatedBytes} of limit {LimitBytes}, policy {PolicyKey} v{PolicyVersion}, trigger {Trigger}, run {RunId}.",
-                request.TenantId, decision.DenialCode, decision.State, usage.UsedBytes, usage.ReservedBytes, estimate, entitlement.StorageLimit!.Value.Bytes,
-                policy.Key, policy.Version, request.TriggerType, request.RunId);
-            return BackupAdmissionDecision.Denied(decision.DenialCode!);
-        }
-        if (estimate is null && policy.EnforcementMode == QuotaEnforcementMode.BlockNewBackups)
-        {
-            return BackupAdmissionDecision.Denied(BackupAdmissionDenialCodes.QuotaSizeUnknown);
-        }
-        if (estimate is > 0 && policy.EnforcementMode == QuotaEnforcementMode.BlockNewBackups)
-        {
-            var agentId = await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == request.TenantId && job.Id == request.JobId)
-                .Select(job => job.AgentId).SingleAsync(cancellationToken);
-            if (!await TenantUsageEngine.SupportsQuotaBoundedUploadAsync(context, request.TenantId, agentId, cancellationToken))
-                return BackupAdmissionDecision.Denied(BackupAdmissionDenialCodes.QuotaBoundedUploadUnsupported);
-        }
-        if (estimate is > 0 && await TenantUsageEngine.InsertReservationAsync(context, request.TenantId, request.RunId, estimate.Value, request.Now, quota.ReservationTimeToLive, cancellationToken) > 0)
-        {
-            await TenantUsageEngine.RefreshReservedAsync(context, request.TenantId, cancellationToken);
-            logger.LogInformation("Quota reservation created for tenant {TenantId}, run {RunId}: {ReservedBytes} bytes (state {State}).",
-                request.TenantId, request.RunId, estimate, decision.State);
-        }
+        // Plan and quota system disabled for now: all backups are admitted unconditionally.
+        logger.LogDebug("Admission granted for run {RunId} under tenant {TenantId} (quota TTL {Ttl}).", request.RunId, request.TenantId, quota.ReservationTimeToLive);
         return BackupAdmissionDecision.Admitted;
     }
 

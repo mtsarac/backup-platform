@@ -100,6 +100,7 @@ def seed(options):
     subscription = current.get('subscription')
     if not subscription or subscription['planId'] != plan['planId'] or subscription['status'] != 'Active':
         platform.call('PUT', f'/api/platform/tenants/{tenant_id}/subscription', {'planId': plan['planId']})
+    platform.call('PUT', f'/api/platform/tenants/{tenant_id}/subscription/storage-limit-override', {'kind': 'unlimited'})
     platform.call('PUT', f'/api/platform/tenants/{tenant_id}/agent-enrollment', {'enabled': True})
     print(f'Seed complete: tenant {tenant_id}, plan {plan["planId"]}')
 

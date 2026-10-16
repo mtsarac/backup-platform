@@ -60,5 +60,6 @@ These rules apply to all changes in this repository, regardless of task, branch,
 - Do not change Git identity settings to impersonate a person. If committing would attribute changes to an agent or an unauthorized identity, stop and report the blocker rather than creating that commit.
 - State remaining risks, limitations, and incomplete steps accurately.
 - Use no more than 2 subagents unless explicitly authorized.
+- Do not commit anything in docs/ directory.
 
 **Goal:** Minimal complexity, reliable behavior, and maintainable code—not minimal line count at the expense of safety.

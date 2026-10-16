@@ -69,3 +69,5 @@ bun run build
 - Review generated schema changes and preserve existing data and migration history.
 - Work on the user's current authorized branch. Do not hardcode a specific branch or milestone into permanent repository instructions.
 - Keep commits focused and use the existing CI checks appropriate to the change. Follow `AGENTS.md` for Git and attribution rules.
+
+- Do not commit anything in docs/ directory.

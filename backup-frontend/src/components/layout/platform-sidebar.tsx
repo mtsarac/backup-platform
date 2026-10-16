@@ -8,7 +8,6 @@ const groups: NavGroup[] = [
   { get heading() { return tx("Müşteriler") }, items: [
     { get label() { return tx("Tenants") }, to: platformPaths.tenants, icon: Building2 },
     { get label() { return tx("Users") }, to: platformPaths.users, icon: Users },
-    { get label() { return tx("Plans") }, to: platformPaths.plans, icon: Layers },
     { get label() { return tx("Agents") }, to: platformPaths.agents(), icon: Monitor },
   ] },
   { get heading() { return tx("Depolama") }, items: [
