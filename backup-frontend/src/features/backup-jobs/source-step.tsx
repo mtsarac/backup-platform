@@ -2,10 +2,11 @@ import { Section } from '@/components/ui/section'
 import { FormGrid } from '@/features/backup-jobs/job-form-fields'
 import { fieldKit, type FieldErrors } from '@/features/backup-jobs/job-field-kit'
 import type { BackupConfiguration } from '@/features/backup-jobs/types'
+import { DiscoverySourcePicker, type DiscoverySourceProps } from './discovery-source-picker'
 
-interface SourceProps { configuration: BackupConfiguration; errors: FieldErrors; onChange: (configuration: BackupConfiguration) => void }
+interface SourceProps { configuration: BackupConfiguration; errors: FieldErrors; onChange: (configuration: BackupConfiguration) => void; discovery?: DiscoverySourceProps }
 
-export function SourceStep({ configuration, errors, onChange }: SourceProps) {
+export function SourceStep({ configuration, errors, onChange, discovery }: SourceProps) {
   const { text, number, check } = fieldKit(errors)
   const isPg = configuration.engine === 'postgres'
   return <Section title={isPg ? "PostgreSQL kaynak ve bağlantı" : "MSSQL kaynak ve bağlantı"} description={isPg ? "Yedeği alınacak PostgreSQL sunucusu ve veritabanı." : "Yedeği alınacak SQL Server Instance ve Database."}>
@@ -20,8 +21,9 @@ export function SourceStep({ configuration, errors, onChange }: SourceProps) {
       </label>
     </div>
     <FormGrid>
+      {discovery && <DiscoverySourcePicker {...discovery} />}
       {text('configuration.host', isPg ? 'PostgreSQL host' : 'SQL Server host / instance', configuration.host, host => onChange({ ...configuration, host }))}
-      {text('configuration.database', 'Database', configuration.database, database => onChange({ ...configuration, database }))}
+      {text('configuration.database', 'Database', configuration.database, database => onChange({ ...configuration, database }), Boolean(discovery?.selected.length))}
       {text('configuration.databaseCredentialReference', 'Kimlik bilgisi referansı (parola değil)', configuration.databaseCredentialReference ?? '', databaseCredentialReference => onChange({ ...configuration, databaseCredentialReference: databaseCredentialReference || null }), !isPg && configuration.integratedSecurity)}
       {number('configuration.port', isPg ? 'Port (varsayılan 5432)' : 'Port (isteğe bağlı)', configuration.port, port => onChange({ ...configuration, port }))}
       {!isPg && check('Windows kimlik doğrulaması (integrated security)', configuration.integratedSecurity, integratedSecurity => onChange({ ...configuration, integratedSecurity, databaseCredentialReference: integratedSecurity ? null : configuration.databaseCredentialReference }))}

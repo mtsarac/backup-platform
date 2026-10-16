@@ -29,6 +29,10 @@ public sealed partial class AgentConnectivityService
                 {
                     StartCapabilitySync(identity, cancellationToken);
                 }
+                if (result.Value.DiscoveryScanReason is not null)
+                {
+                    StartDiscoveryScan(identity, cancellationToken);
+                }
                 delay = _backoff.AddJitter(_effectiveHeartbeatInterval);
             }
             else

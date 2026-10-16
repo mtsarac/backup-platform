@@ -4,5 +4,8 @@
     <ProjectReference Include="..\core\BackupPlatform.Agent.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="BackupPlatform.AgentTests" />
+  </ItemGroup>
 
 </Project>

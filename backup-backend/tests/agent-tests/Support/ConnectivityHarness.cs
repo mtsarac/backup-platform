@@ -43,6 +43,9 @@ internal sealed class ConnectivityHarness : IAsyncDisposable
 
     public TestCapabilitySource Capabilities { get; }
 
+    /// <summary>Set before <see cref="Start"/>; null leaves discovery out of the service, like an agent without it.</summary>
+    public BackupPlatform.Agent.Core.Discovery.IDiscoveryScanRunner? Discovery { get; set; }
+
     public AgentConnectivityService Service { get; private set; } = null!;
 
     public Task Run => _run ?? throw new InvalidOperationException("Not started.");
@@ -57,7 +60,7 @@ internal sealed class ConnectivityHarness : IAsyncDisposable
             new AgentSoftwareInfo("1.2.3", "linux", "Test OS", "10.0.0"),
             Capabilities, Options,
             new AgentBackoff(Options.ReconnectBaseDelay, Options.ReconnectMaxDelay, () => RetryRandom, () => Random),
-            Time, _factory.CreateLogger<AgentConnectivityService>());
+            Time, _factory.CreateLogger<AgentConnectivityService>(), discovery: Discovery);
         _run = Service.RunAsync(_cts.Token);
     }
 

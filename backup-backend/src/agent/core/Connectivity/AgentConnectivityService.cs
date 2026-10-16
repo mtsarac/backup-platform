@@ -1,5 +1,6 @@
 using System.Runtime.ExceptionServices;
 using System.Threading.Channels;
+using BackupPlatform.Agent.Core.Discovery;
 using BackupPlatform.Agent.Core.Identity;
 using BackupPlatform.Agent.Core.Tasks;
 using BackupPlatform.Contracts.Agents;
@@ -28,6 +29,7 @@ public sealed partial class AgentConnectivityService : IAgentConnectivityStatus
     private readonly IAgentCredentialStore _store;
     private readonly IAgentBackendClient _client;
     private readonly IAgentTaskSink? _taskSink;
+    private readonly IDiscoveryScanRunner? _discovery;
     private readonly IAgentPushChannel _channel;
     private readonly AgentSoftwareInfo _software;
     private readonly ICapabilityRevisionSource _capabilities;
@@ -57,6 +59,8 @@ public sealed partial class AgentConnectivityService : IAgentConnectivityStatus
     private TimeSpan _effectiveHeartbeatInterval;
     private int _capabilitySyncRunning;
     private Task? _capabilitySync;
+    private int _discoveryScanRunning;
+    private Task? _discoveryScan;
 
     public AgentConnectivityService(
         IAgentCredentialStore store,
@@ -68,7 +72,8 @@ public sealed partial class AgentConnectivityService : IAgentConnectivityStatus
         AgentBackoff backoff,
         TimeProvider timeProvider,
         ILogger<AgentConnectivityService> logger,
-        IAgentTaskSink? taskSink = null)
+        IAgentTaskSink? taskSink = null,
+        IDiscoveryScanRunner? discovery = null)
     {
         ArgumentNullException.ThrowIfNull(store);
         ArgumentNullException.ThrowIfNull(client);
@@ -87,6 +92,7 @@ public sealed partial class AgentConnectivityService : IAgentConnectivityStatus
         _store = store;
         _client = client;
         _taskSink = taskSink;
+        _discovery = discovery;
         _channel = channel;
         _software = software;
         _capabilities = capabilities;
@@ -236,15 +242,19 @@ public sealed partial class AgentConnectivityService : IAgentConnectivityStatus
         {
             LogUnexpected("push channel shutdown", exception.GetType().Name);
         }
-        if (_capabilitySync is { } capabilitySync)
+        foreach (var background in new[] { _capabilitySync, _discoveryScan })
         {
+            if (background is null)
+            {
+                continue;
+            }
             try
             {
-                await capabilitySync.WaitAsync(grace.Token).ConfigureAwait(false);
+                await background.WaitAsync(grace.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
-                // Bounded: the sync observes the cancelled loop token and ends on its own.
+                // Bounded: the background run observes the cancelled loop token and ends on its own.
             }
         }
         lock (_gate)

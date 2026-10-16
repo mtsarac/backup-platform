@@ -15,6 +15,8 @@ import { BackupJobsPage } from './pages/backup-jobs/backup-jobs-page'
 import { BackupJobWizardPage } from './pages/backup-jobs/backup-job-wizard-page'
 import { BackupsPage } from './pages/backups/backups-page'
 import { BackupDetailPage } from './pages/backups/backup-detail-page'
+import { DiscoveryPage } from './pages/discovery/discovery-page'
+import { InstanceDetailPage } from './pages/discovery/instance-detail-page'
 import { UploadBandwidthPage } from './pages/upload-bandwidth/upload-bandwidth-page'
 import { StorageLayout } from './pages/storage/storage-layout'
 import { StorageUsageTab } from './pages/storage/storage-usage-tab'
@@ -71,6 +73,8 @@ function AppRoutes() {
         </Route>
         <Route path="storage/connections/new" element={<ConnectionWizard />} />
         <Route path="storage/connections/:connectionId" element={<ConnectionDetail />} />
+        <Route path="discovery" element={<DiscoveryPage />} />
+        <Route path="discovery/instances/:instanceId" element={<InstanceDetailPage />} />
         <Route path="upload-bandwidth" element={<UploadBandwidthPage />} />
         <Route path="artifacts" element={<ArtifactsPage />} />
         <Route path="artifacts/:id" element={<ArtifactDetailPage />} />

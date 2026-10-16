@@ -68,6 +68,7 @@ public static class AgentHostServiceCollectionExtensions
         services.AddHostedService<AgentRestoreTaskHostedService>();
         services.AddHostedService<AgentRestoreCleanupHostedService>();
         services.AddHostedService<AgentDownloadTaskHostedService>();
+        services.AddAgentDiscovery();
         services.AddSingleton<AgentConnectivityService>();
         services.AddSingleton<IAgentConnectivityStatus>(static provider => provider.GetRequiredService<AgentConnectivityService>());
         services.AddHostedService<AgentConnectivityWorker>();

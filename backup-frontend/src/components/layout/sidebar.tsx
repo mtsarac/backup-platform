@@ -1,4 +1,4 @@
-import { Activity, Bell, Database, DatabaseBackup, Gauge, HardDrive, LayoutDashboard, Monitor, RotateCcw, ShieldCheck, Upload } from 'lucide-react'
+import { Activity, Bell, Database, DatabaseBackup, Gauge, HardDrive, LayoutDashboard, Monitor, Radar, RotateCcw, ShieldCheck, Upload } from 'lucide-react'
 import { useAuth } from '@/features/auth/use-auth'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { SidebarFrame, type NavGroup } from './nav'
@@ -17,6 +17,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen?: boolean; o
     ] },
     { heading: 'Altyapı', items: [
       { label: 'Agents', to: `${base}/agents`, icon: Monitor },
+      { label: 'Keşfedilen Veritabanları', to: `${base}/discovery`, icon: Radar },
       { label: 'Storage', to: `${base}/storage`, icon: Gauge },
       { label: 'Upload Bandwidth', to: `${base}/upload-bandwidth`, icon: Upload },
     ] },

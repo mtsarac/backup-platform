@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Notice } from '@/components/ui/notice'
@@ -9,6 +9,10 @@ import { Stepper } from '@/components/ui/stepper'
 import { QueryState } from '@/components/data/query-state'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { getAgents } from '@/features/agents/api'
+import { getDiscoveryInstance } from '@/features/discovery/api'
+import { useDiscoveryInstance } from '@/features/discovery/hooks'
+import { discoveredConfiguration, selectableNames } from '@/features/discovery/job-prefill'
+import type { DiscoveryInstanceDetail } from '@/features/discovery/types'
 import { useBackupJob, useJobOccurrences, useSaveBackupJob } from '@/features/backup-jobs/hooks'
 import { Advanced, FormGrid } from '@/features/backup-jobs/job-form-fields'
 import { fieldKit } from '@/features/backup-jobs/job-field-kit'
@@ -32,26 +36,38 @@ export function BackupJobWizardPage() {
   const { id = '' } = useParams()
   const { tenantId, canOperate } = useTenant()
   const job = useBackupJob(id)
+  const [params] = useSearchParams()
+  const discoveryInstance = id ? '' : params.get('discoveryInstance') ?? ''
+  const discovered = useDiscoveryInstance(discoveryInstance)
+  const prefill = discovered.data ? { instance: discovered.data, databases: selectableNames(discovered.data, params.getAll('database')) } : undefined
   const crumbs = [{ label: 'Yedekleme işleri', to: `/tenants/${tenantId}/backup-jobs` }, { label: id ? 'Düzenle' : 'Yeni iş' }]
   let body
   if (!canOperate) body = <Notice tone="error">Bu sayfada değişiklik yapma yetkiniz yok. Viewer rolü salt okunurdur.</Notice>
   else if (id) body = <QueryState isPending={job.isPending} error={job.error}>{job.data && <JobForm key={`${tenantId}:${id}`} job={job.data} />}</QueryState>
-  else body = <JobForm key={`${tenantId}:new`} />
+  else if (discoveryInstance && discovered.isPending) body = <QueryState isPending error={null} />
+  else body = <>
+    {discovered.error && <Notice tone="warning" title="Keşfedilen veritabanları yüklenemedi">{errorMessage(discovered.error)} Kaynağı elle girebilirsiniz.</Notice>}
+    <JobForm key={`${tenantId}:new`} prefill={prefill} />
+  </>
   return <div className="space-y-6">
     <PageHeader crumbs={crumbs} title={id ? 'Yedekleme işini düzenle' : 'Yeni yedekleme işi'} description="Kaynak, depolama, zamanlama ve saklama ayarlarını adım adım belirleyin." />
     {body}
   </div>
 }
 
-function JobForm({ job }: { job?: BackupJob }) {
+function JobForm({ job, prefill }: { job?: BackupJob; prefill?: { instance: DiscoveryInstanceDetail; databases: string[] } }) {
   const { tenantId, canAdmin } = useTenant()
   const navigate = useNavigate()
   const save = useSaveBackupJob(job?.id)
   const occurrences = useJobOccurrences(job?.id ?? '')
   const agents = useQuery({ queryKey: ['tenant', tenantId, 'agents'], queryFn: ({ signal }) => getAgents(tenantId, signal) })
   const [name, setName] = useState(job?.name ?? '')
-  const [agentId, setAgentId] = useState(job?.agentId ?? '')
-  const [configuration, setConfiguration] = useState(() => job?.configuration.engine === 'postgres' ? { ...job.configuration, copyOnly: false } : job?.configuration ?? initialConfiguration)
+  const [agentId, setAgentId] = useState(job?.agentId ?? prefill?.instance.agentId ?? '')
+  const [configuration, setConfiguration] = useState(() => job?.configuration.engine === 'postgres' ? { ...job.configuration, copyOnly: false } : job?.configuration ?? (prefill?.databases.length ? discoveredConfiguration(initialConfiguration, prefill.instance, prefill.databases) : initialConfiguration))
+  // Databases picked from the discovery inventory; one job is created per name when the user confirms the summary.
+  const [selected, setSelected] = useState<string[]>(prefill?.databases ?? [])
+  const [results, setResults] = useState<Record<string, string>>({})
+  const [discoveryInstanceId, setDiscoveryInstanceId] = useState(prefill?.instance.id ?? '')
   const [retry, setRetry] = useState(job?.retryPolicy ?? initialRetry)
   const [retention, setRetention] = useState(job?.retention ?? initialRetention)
   const [schedule, setSchedule] = useState(job?.schedule ?? initialSchedule)
@@ -81,7 +97,9 @@ function JobForm({ job }: { job?: BackupJob }) {
     void connections.refetch()
     void providers.refetch()
   }
-  const serverErrors: Record<string, string> = save.error instanceof ApiError ? { ...Object.fromEntries(Object.entries(save.error.fields).map(([field, code]) => [field.replace(/^schedule\./, ''), failureMessage(code)])), ...(save.error.field ? { [save.error.field.replace(/^schedule\./, '')]: errorMessage(save.error) } : {}) } : {}
+  const multi = selected.length > 1
+  const saveError = multi ? null : save.error
+  const serverErrors: Record<string, string> = saveError instanceof ApiError ? { ...Object.fromEntries(Object.entries(saveError.fields).map(([field, code]) => [field.replace(/^schedule\./, ''), failureMessage(code)])), ...(saveError.field ? { [saveError.field.replace(/^schedule\./, '')]: errorMessage(saveError) } : {}) } : {}
   const errors = { ...serverErrors, ...clientErrors }
   const errorSteps = [...new Set(Object.keys(serverErrors).map(stepOfField).filter((value): value is number => value !== undefined))].sort((a, b) => a - b)
   const { text, number, check, select } = fieldKit(errors)
@@ -111,6 +129,7 @@ function JobForm({ job }: { job?: BackupJob }) {
     if (saving.current || cannotSave) return
     saving.current = true
     const input: BackupJobInput = { name, agentId, configuration, retryPolicy: retry, overlapPolicy: overlap, enabled, schedule: scheduled ? { ...schedule, overlapPolicy: overlap } : null, ...(canAdmin ? { retention } : {}) }
+    if (multi) { void createMany(input); return }
     save.mutate(input, {
       onSuccess: () => navigate(`/tenants/${tenantId}/backup-jobs`),
       onError: error => {
@@ -119,6 +138,42 @@ function JobForm({ job }: { job?: BackupJob }) {
       onSettled: () => { saving.current = false },
     })
   }
+  async function createMany(input: BackupJobInput) {
+    const outcome = { ...results }
+    // A create that failed on the client side (timeout) may still have succeeded on the server: before retrying, look at the inventory's jobs.
+    const covered = await coveredAfterFailure(selected.filter(item => outcome[item] && outcome[item] !== 'ok'))
+    for (const database of selected.filter(item => outcome[item] !== 'ok')) {
+      if (covered.has(database)) { outcome[database] = 'ok'; continue }
+      try {
+        await save.mutateAsync({ ...input, name: `${input.name} – ${database}`, configuration: { ...input.configuration, database } })
+        outcome[database] = 'ok'
+      } catch (error) { outcome[database] = errorMessage(error) }
+      setResults({ ...outcome })
+    }
+    setResults({ ...outcome })
+    saving.current = false
+    if (selected.every(item => outcome[item] === 'ok')) navigate(`/tenants/${tenantId}/backup-jobs`)
+  }
+  async function coveredAfterFailure(retrying: string[]) {
+    if (!discoveryInstanceId || retrying.length === 0) return new Set<string>()
+    try {
+      const detail = await getDiscoveryInstance(tenantId, discoveryInstanceId)
+      return new Set(detail.databases.filter(database => retrying.includes(database.name) && database.jobs.length > 0).map(database => database.name))
+    } catch { return new Set<string>() }
+  }
+  function applyDiscovery(instance: DiscoveryInstanceDetail, databases: string[]) {
+    setAgentId(instance.agentId)
+    setDiscoveryInstanceId(instance.id)
+    setConfiguration(discoveredConfiguration(configuration, instance, databases))
+    setSelected(databases)
+    setResults({})
+  }
+  function clearDiscovery() {
+    setSelected([])
+    setResults({})
+    setConfiguration({ ...configuration, database: '' })
+  }
+  const failedCount = Object.values(results).filter(value => value !== 'ok').length
   const last = step === summaryStep
   return <form ref={formRef} noValidate className="space-y-5" onSubmit={event => {
     event.preventDefault()
@@ -137,7 +192,8 @@ function JobForm({ job }: { job?: BackupJob }) {
         {check('İş etkin', enabled, setEnabled)}
       </FormGrid>
     </Section>}
-    {step === 1 && <SourceStep key={configuration.engine} configuration={configuration} errors={errors} onChange={setConfiguration} />}
+    {step === 1 && <SourceStep key={configuration.engine} configuration={configuration} errors={errors} discovery={job ? undefined : { agents: agents.data ?? [], agentId, selected, onApply: applyDiscovery, onClear: clearDiscovery }}
+      onChange={next => { if (next.engine !== configuration.engine) { setSelected([]); setResults({}) } setConfiguration(next) }} />}
     {step === 2 && <>
       <Section title="Depolama ve yürütme" description="Yedeğin yazılacağı hedefler.">
         <MultiDestinationPicker configuration={configuration} connections={connectionItems} providers={providerItems} pending={pickerPending} error={pickerError} fieldError={Object.entries(errors).find(([field]) => field.startsWith('configuration.destinations'))?.[1] ?? errors['configuration.requiredVerifiedReplicaCount']} existingTarget={existingTarget} onChange={setConfiguration} onRefresh={refreshConnections} />
@@ -191,11 +247,15 @@ function JobForm({ job }: { job?: BackupJob }) {
     </>}
     {last && <>
       <JobSummary name={name} agentLabel={agent ? `${agent.hostName ?? 'Adsız Agent'} · ${agent.operationalStatus}` : agentId ? 'Agent bulunamadı' : 'Seçilmedi'} enabled={enabled} configuration={configuration} scheduled={scheduled} schedule={schedule} overlap={overlap} retry={retry} retention={retention} canAdmin={canAdmin} connections={connectionItems} nextRun={nextRun} onGo={go} />
+      {multi && <Section title="Oluşturulacak işler" description={`${selected.length} veritabanı için ayrı Backup Job oluşturulur. Hiçbiri 'Kaydet' düğmesine basılana kadar oluşturulmaz.`}>
+        <ul className="space-y-1 text-sm">{selected.map(database => <li key={database}>{name} – {database}{results[database] === 'ok' && <span className="text-success"> · Oluşturuldu</span>}{results[database] && results[database] !== 'ok' && <span role="alert" className="text-error"> · Oluşturulamadı: {results[database]}</span>}</li>)}</ul>
+        {failedCount > 0 && <p className="mt-3 text-sm text-text-muted">Başarısız olanlar yeniden denenebilir; oluşturulanlar tekrar gönderilmez.</p>}
+      </Section>}
       {job && <Section title="Son zamanlama oluşumları"><QueryState isPending={occurrences.isPending} error={occurrences.error} empty={occurrences.data?.length === 0}><ul className="space-y-2 text-sm">{occurrences.data?.map(item => <li key={item.id}>{new Date(item.scheduledAt).toLocaleString('tr-TR')} · {item.outcome} · {item.outcome === 'AdmissionDenied' ? failureMessage(item.reason) : item.reason}{item.runId && <> · <Link className="text-primary underline" to={`/tenants/${tenantId}/backup-runs/${item.runId}`}>Çalıştırmayı aç</Link></>}</li>)}</ul></QueryState></Section>}
       {cannotSave && <Notice tone="warning" title="Depolama hedefi kaydedilemiyor" action={<Button type="button" variant="outline" size="sm" aria-label="Adıma git: Depolama (hedef sorunu)" onClick={() => go(2)}>Adıma git</Button>}>Hedef depolama bağlantısı doğrulanamadı veya kullanılamıyor. Depolama adımında hedefi düzeltin.</Notice>}
     </>}
-    {save.error && <Notice tone="error" title="İş kaydedilemedi">
-      <p>{errorMessage(save.error)}</p>
+    {saveError && <Notice tone="error" title="İş kaydedilemedi">
+      <p>{errorMessage(saveError)}</p>
       {errorSteps.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{errorSteps.map(item => <Button key={item} type="button" variant="outline" size="sm" aria-label={`Hatalı alana git: ${jobSteps[item]}`} onClick={() => go(item)}>Adıma git</Button>)}</div>}
     </Notice>}
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -203,7 +263,7 @@ function JobForm({ job }: { job?: BackupJob }) {
       <div className="flex flex-wrap items-center gap-3">
         <Link className="text-sm text-primary underline-offset-4 hover:underline" to={`/tenants/${tenantId}/backup-jobs`}>Vazgeç</Link>
         {job && !last && <Button type="button" variant="outline" onClick={() => advance(summaryStep)}>Özete dön</Button>}
-        {last ? <Button key="save" type="submit" size="lg" disabled={save.isPending || cannotSave}>{save.isPending ? 'Kaydediliyor…' : 'Kaydet'}</Button> : <Button key="next" type="submit">İleri</Button>}
+        {last ? <Button key="save" type="submit" size="lg" disabled={save.isPending || cannotSave}>{save.isPending ? 'Kaydediliyor…' : failedCount > 0 ? 'Başarısızları yeniden dene' : 'Kaydet'}</Button> : <Button key="next" type="submit">İleri</Button>}
       </div>
     </div>
   </form>

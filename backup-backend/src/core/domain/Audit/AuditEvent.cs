@@ -68,6 +68,11 @@ public static class AuditActions
 
     // Transfer policy events
     public const string UploadBandwidthLimitChanged = "upload_bandwidth.limit_changed";
+
+    // Database discovery events
+    public const string DiscoverySettingsChanged = "discovery.settings_changed";
+    public const string DiscoveryCredentialBound = "discovery.credential_bound";
+    public const string DiscoveryRescanRequested = "discovery.rescan_requested";
 }
 
 /// <summary>
