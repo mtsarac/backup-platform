@@ -26,7 +26,8 @@ public sealed class WindowsDiscoveryDetectorTests : IDisposable
         _scratch.Dispose();
     }
 
-    private RegistryKey OpenHive() => Registry.CurrentUser.OpenSubKey(_hive) ?? throw new InvalidOperationException("The test hive does not exist.");
+    // Creates the hive on demand so a machine with nothing installed is an empty root, not a missing one.
+    private RegistryKey OpenHive() => Registry.CurrentUser.CreateSubKey(_hive);
 
     private RegistryKey Create(string path)
     {
