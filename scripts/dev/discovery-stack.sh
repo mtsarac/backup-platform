@@ -75,7 +75,12 @@ up)
     done
     for _ in $(seq 1 90); do docker logs bp-disc-mssql 2>&1 | grep -q 'SQL Server is now ready for client connections' && break; sleep 2; done
     for db in DiscSales DiscHr; do
-        docker exec -e SQLCMDPASSWORD="$MSSQL_PASSWORD" bp-disc-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -Q "IF DB_ID('$db') IS NULL CREATE DATABASE [$db]" >/dev/null
+        # The first logins right after "ready" can still fail while the instance finishes initialising.
+        for attempt in $(seq 1 30); do
+            docker exec -e SQLCMDPASSWORD="$MSSQL_PASSWORD" bp-disc-mssql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -Q "IF DB_ID('$db') IS NULL CREATE DATABASE [$db]" >/dev/null 2>&1 && break
+            (( attempt < 30 )) || fail 'SQL Server did not accept the SA login.'
+            sleep 2
+        done
     done
     printf 'Containers ready\n'
 

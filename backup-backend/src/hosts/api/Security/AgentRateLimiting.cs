@@ -23,6 +23,8 @@ public sealed class AgentRateLimitOptions
     public int AuthenticationFailuresPerClient { get; init; } = 30;
     public int HeartbeatPerAgent { get; init; } = 12;
     public int PollPerAgent { get; init; } = 20;
+    /// <summary>Discovery scan claims and reports per agent per window: its own budget, so a scan can never starve (or be starved by) the heartbeat.</summary>
+    public int DiscoveryPerAgent { get; init; } = 8;
     /// <summary>Push channel connection attempts (negotiate and upgrade count separately) per agent per window.</summary>
     public int ConnectPerAgent { get; init; } = 20;
 
@@ -31,6 +33,7 @@ public sealed class AgentRateLimitOptions
         public const string Enrollment = "agent-enrollment";
         public const string Heartbeat = "agent-heartbeat";
         public const string Poll = "agent-poll";
+        public const string Discovery = "agent-discovery";
         public const string Connect = "agent-connect";
     }
 }
@@ -142,6 +145,7 @@ public static class AgentRateLimiting
             });
             AddPerAgentPolicy(options, AgentRateLimitOptions.Policies.Heartbeat, limits => limits.HeartbeatPerAgent);
             AddPerAgentPolicy(options, AgentRateLimitOptions.Policies.Poll, limits => limits.PollPerAgent);
+            AddPerAgentPolicy(options, AgentRateLimitOptions.Policies.Discovery, limits => limits.DiscoveryPerAgent);
             AddPerAgentPolicy(options, AgentRateLimitOptions.Policies.Connect, limits => limits.ConnectPerAgent);
             options.OnRejected = async (context, cancellationToken) =>
             {

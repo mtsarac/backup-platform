@@ -29,9 +29,15 @@ public sealed partial class DiscoveryScanRunner : IDiscoveryScanRunner
     private readonly IAgentDiscoveryClient _client;
     private readonly DiscoveryScanner _scanner;
     private readonly ILogger<DiscoveryScanRunner> _logger;
+    private readonly TimeProvider _time;
     private int _running;
 
-    public DiscoveryScanRunner(IAgentDiscoveryClient client, DiscoveryScanner scanner, ILogger<DiscoveryScanRunner> logger)
+    /// <summary>Attempts at delivering one report; a scan is expensive and an unreported claim only expires after ten minutes.</summary>
+    private const int ReportAttempts = 4;
+    private static readonly TimeSpan DefaultRetryDelay = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan MaximumRetryDelay = TimeSpan.FromSeconds(60);
+
+    public DiscoveryScanRunner(IAgentDiscoveryClient client, DiscoveryScanner scanner, ILogger<DiscoveryScanRunner> logger, TimeProvider? time = null)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(scanner);
@@ -39,6 +45,7 @@ public sealed partial class DiscoveryScanRunner : IDiscoveryScanRunner
         _client = client;
         _scanner = scanner;
         _logger = logger;
+        _time = time ?? TimeProvider.System;
     }
 
     public async Task RunAsync(AgentLocalIdentity identity, CancellationToken cancellationToken)
@@ -74,7 +81,7 @@ public sealed partial class DiscoveryScanRunner : IDiscoveryScanRunner
                 report = new AgentDiscoveryReport { Outcome = DiscoveryOutcomes.Failed, FailureCode = "scan_failed" };
             }
 
-            var reported = await _client.ReportAsync(identity, plan.ScanId, report, cancellationToken).ConfigureAwait(false);
+            var reported = await ReportWithRetryAsync(identity, plan.ScanId, report, cancellationToken).ConfigureAwait(false);
             if (reported.IsSuccess)
             {
                 LogReported(plan.ScanId, report.Outcome);
@@ -91,6 +98,22 @@ public sealed partial class DiscoveryScanRunner : IDiscoveryScanRunner
         finally
         {
             Volatile.Write(ref _running, 0);
+        }
+    }
+
+    /// <summary>Only a throttled or transient failure is retried; a refusal (stale scan, bad request, credential) cannot succeed later.</summary>
+    private async Task<AgentBackendResult<bool>> ReportWithRetryAsync(AgentLocalIdentity identity, Guid scanId, AgentDiscoveryReport report, CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var result = await _client.ReportAsync(identity, scanId, report, cancellationToken).ConfigureAwait(false);
+            if (result.IsSuccess || attempt == ReportAttempts
+                || result.Failure.Kind is not (AgentBackendFailureKind.RateLimited or AgentBackendFailureKind.Transient))
+            {
+                return result;
+            }
+            var delay = result.Failure.RetryAfter is { } requested && requested > TimeSpan.Zero ? requested : DefaultRetryDelay * attempt;
+            await Task.Delay(delay < MaximumRetryDelay ? delay : MaximumRetryDelay, _time, cancellationToken).ConfigureAwait(false);
         }
     }
 

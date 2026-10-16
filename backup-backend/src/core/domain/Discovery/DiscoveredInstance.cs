@@ -162,8 +162,19 @@ public sealed class DiscoveredInstance : ITenantOwned
     }
 
     private bool IsMaterialChange(InstanceObservation observation) =>
-        Source != observation.Source || Host != observation.Host || Port != observation.Port || Version != observation.Version
-        || Edition != observation.Edition || ContainerImage != observation.ContainerImage;
+        Source != observation.Source || Host != observation.Host || Port != observation.Port || ContainerImage != observation.ContainerImage
+        || Differs(Version, observation.Version) || Differs(Edition, observation.Edition);
+
+    /// <summary>
+    /// A scan that could not read a value (no credential) says nothing about it, and the cheap handshake reports a shorter dotted version
+    /// (<c>17.0.5015</c>) of the same server the provider reports in full (<c>17.0.5015.4</c>); neither is a change.
+    /// </summary>
+    private static bool Differs(string? stored, string? observed) =>
+        stored is not null && observed is not null && stored != observed
+        && !stored.StartsWith(observed + ".", StringComparison.Ordinal) && !observed.StartsWith(stored + ".", StringComparison.Ordinal);
+
+    private static string? Prefer(string? stored, string? observed) =>
+        observed is null || (stored is not null && stored.StartsWith(observed + ".", StringComparison.Ordinal)) ? stored : observed;
 
     [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(Source), nameof(DisplayName), nameof(Host), nameof(Reachability))]
     private void Assign(InstanceObservation observation, DateTimeOffset now)
@@ -173,9 +184,9 @@ public sealed class DiscoveredInstance : ITenantOwned
         InstanceName = observation.InstanceName;
         Host = observation.Host;
         Port = observation.Port;
-        Version = observation.Version;
-        Edition = observation.Edition;
-        HostPlatform = observation.HostPlatform;
+        Version = Prefer(Version, observation.Version);
+        Edition = observation.Edition ?? Edition;
+        HostPlatform = observation.HostPlatform ?? HostPlatform;
         ContainerName = observation.ContainerName;
         ContainerImage = observation.ContainerImage;
         Reachability = observation.Reachability;

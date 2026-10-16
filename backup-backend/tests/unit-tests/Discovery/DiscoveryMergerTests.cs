@@ -182,6 +182,24 @@ public sealed class DiscoveryMergerTests
         Assert.Equal(T0.AddHours(1), instances[0].LastSeenAt);
     }
 
+    [Fact]
+    public void A_cheaper_scan_never_downgrades_or_erases_what_an_authenticated_scan_read_and_is_not_a_change()
+    {
+        var instances = new List<DiscoveredInstance>();
+        var databases = new List<DiscoveredDatabase>();
+        Merge(instances, databases, Report(DiscoveryOutcomes.Completed, [DiscoverySources.Service], Instance(version: "16.0.4135.4") with { Edition = "Developer Edition" }), T0);
+        Merge(instances, databases, Report(DiscoveryOutcomes.Completed, [DiscoverySources.Service], Instance(version: "16.0.4135") with { Access = DiscoveryAccess.CredentialsRequired }), T0.AddHours(1));
+        Merge(instances, databases, Report(DiscoveryOutcomes.Completed, [DiscoverySources.Service], Instance() with { Version = null, Access = DiscoveryAccess.CredentialsRequired }), T0.AddHours(2));
+
+        Assert.Equal("16.0.4135.4", instances[0].Version);
+        Assert.Equal("Developer Edition", instances[0].Edition);
+        Assert.Equal(DiscoveryChangeKind.Discovered, instances[0].LastChangeKind);
+
+        Merge(instances, databases, Report(DiscoveryOutcomes.Completed, [DiscoverySources.Service], Instance(version: "16.0.4150.1")), T0.AddHours(3));
+        Assert.Equal("16.0.4150.1", instances[0].Version);
+        Assert.Equal(DiscoveryChangeKind.Changed, instances[0].LastChangeKind);
+    }
+
     private static DiscoveredInstance InstanceOf(string engine) => new(Guid.NewGuid(), Tenant, Agent, "key",
         new InstanceObservation(engine, DiscoverySources.Service, "x", null, "localhost", 1, null, null, null, null, null, "Unknown", "Unknown", null, "Unknown", null), T0);
 

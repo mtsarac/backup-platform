@@ -16,7 +16,7 @@ export const makeDetail = (patch: Partial<DiscoveryInstanceDetail> = {}): Discov
 })
 export const makeStatus = (patch: Partial<DiscoveryAgentStatus> = {}): DiscoveryAgentStatus => ({
   agentId: 'agent-a', enabled: true, scanIntervalMinutes: 360, includeDocker: true, scanState: 'Idle', scanReason: null, lastScanAt: '2026-10-02T08:00:00Z', lastSuccessfulScanAt: '2026-10-02T08:00:00Z',
-  lastOutcome: 'Completed', lastFailureCode: null, nextScanDueAt: null, instanceCount: 1, sources: [{ source: 'Service', status: 'Scanned', reasonCode: null }, { source: 'Docker', status: 'Unavailable', reasonCode: 'docker_unavailable' }], ...patch,
+  lastOutcome: 'Completed', lastFailureCode: null, nextScanDueAt: null, instanceCount: 1, sources: [{ source: 'Service', status: 'Scanned', reasonCode: null }, { source: 'Docker', status: 'Unavailable', reasonCode: 'docker_not_found' }], ...patch,
 })
 export const supportedAgent = { agentId: 'agent-a', hostName: 'SQL Agent', operationalStatus: 'Online', capabilities: [{ identifier: 'discovery.database-inventory', support: 'Supported' }] }
 export const legacyAgent = { agentId: 'agent-old', hostName: 'Old Agent', operationalStatus: 'Online', capabilities: [] }

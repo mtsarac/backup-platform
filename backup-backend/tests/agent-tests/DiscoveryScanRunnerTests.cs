@@ -63,10 +63,15 @@ public sealed class DiscoveryScanRunnerTests
         public ValueTask<DatabaseCredential> ResolveAsync(string reference, CancellationToken cancellationToken) => throw new InvalidOperationException();
     }
 
+    private sealed class NoDelay : TimeProvider
+    {
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period) => base.CreateTimer(callback, state, TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+    }
+
     private static DiscoveryScanRunner Create(FakeClient client, Func<string>? source = null, CaptureLoggerProvider? logs = null) => new(
         client,
         new DiscoveryScanner([new Detector(source ?? (() => DiscoverySources.Service))], new NoProbe(), [], new NoCredentials(), TimeProvider.System, NullLogger<DiscoveryScanner>.Instance),
-        (logs ?? new CaptureLoggerProvider()).CreateFactory().CreateLogger<DiscoveryScanRunner>());
+        (logs ?? new CaptureLoggerProvider()).CreateFactory().CreateLogger<DiscoveryScanRunner>(), new NoDelay());
 
     [Fact]
     public async Task Nothing_due_means_no_scan_and_no_report()
@@ -200,5 +205,34 @@ public sealed class DiscoveryScanRunnerTests
         client.OnClaim = static _ => Task.FromResult(AgentBackendResult<AgentDiscoveryPlan?>.NoContent());
         await runner.RunAsync(TestIdentity.Create(), default);
         Assert.Equal(2, client.Claims);
+    }
+
+    [Fact]
+    public async Task A_throttled_or_transient_report_is_retried_until_accepted_but_a_refusal_is_not()
+    {
+        var attempts = 0;
+        var client = new FakeClient
+        {
+            OnReport = () => ++attempts < 3
+                ? AgentBackendResult<bool>.Fail(new AgentBackendFailure(attempts == 1 ? AgentBackendFailureKind.RateLimited : AgentBackendFailureKind.Transient, "later"))
+                : AgentBackendResult<bool>.Success(true),
+        };
+
+        await Create(client).RunAsync(TestIdentity.Create(), default);
+        Assert.Equal(3, client.Reports.Count);
+
+        var refused = new FakeClient { OnReport = static () => AgentBackendResult<bool>.Fail(new AgentBackendFailure(AgentBackendFailureKind.Rejected, "scan_superseded")) };
+        await Create(refused).RunAsync(TestIdentity.Create(), default);
+        Assert.Single(refused.Reports);
+    }
+
+    [Fact]
+    public async Task A_report_that_stays_throttled_gives_up_after_a_bounded_number_of_attempts()
+    {
+        var client = new FakeClient { OnReport = static () => AgentBackendResult<bool>.Fail(new AgentBackendFailure(AgentBackendFailureKind.RateLimited, "later")) };
+
+        await Create(client).RunAsync(TestIdentity.Create(), default);
+
+        Assert.Equal(4, client.Reports.Count);
     }
 }

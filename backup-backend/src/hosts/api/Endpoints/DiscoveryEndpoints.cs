@@ -20,7 +20,7 @@ public static class DiscoveryEndpoints
         var agent = endpoints.MapGroup("/api/agent/discovery/scans")
             .WithMetadata(new AgentApiEndpoint(), new RequiresAgentProtocol())
             .RequireAuthorization(AuthorizationPolicies.Agent)
-            .RequireRateLimiting(AgentRateLimitOptions.Policies.Heartbeat);
+            .RequireRateLimiting(AgentRateLimitOptions.Policies.Discovery);
         agent.MapPost("", ClaimAsync).WithMetadata(new RequestSizeLimitAttribute(1024));
         agent.MapPut("{scanId:guid}", ReportAsync).WithMetadata(new RequestSizeLimitAttribute(DiscoveryProtocol.MaximumReportBytes));
 

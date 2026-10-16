@@ -336,9 +336,12 @@ public sealed partial class DiscoveryScanner
         }
         catch (DatabaseProviderException exception)
         {
+            // A server whose handshake just answered is not unreachable: the connection failed for another reason (typically TLS on a server without it).
+            var answered = basic.Reachability == DiscoveryReachability.Reachable;
             var (access, reason) = exception.Kind switch
             {
                 DatabaseFailureKind.AuthenticationFailed => (DiscoveryAccess.AuthenticationFailed, "authentication_failed"),
+                DatabaseFailureKind.Unreachable or DatabaseFailureKind.Timeout when answered => (DiscoveryAccess.Error, "connection_failed"),
                 DatabaseFailureKind.Unreachable => (DiscoveryAccess.Unreachable, "unreachable"),
                 DatabaseFailureKind.Timeout => (DiscoveryAccess.Unreachable, "timeout"),
                 DatabaseFailureKind.PermissionDenied => (DiscoveryAccess.Error, "permission_denied"),
@@ -350,7 +353,7 @@ public sealed partial class DiscoveryScanner
             {
                 Access = access,
                 AccessReasonCode = reason,
-                Reachability = exception.Kind is DatabaseFailureKind.Unreachable or DatabaseFailureKind.Timeout ? DiscoveryReachability.Unreachable
+                Reachability = exception.Kind is DatabaseFailureKind.Unreachable or DatabaseFailureKind.Timeout && !answered ? DiscoveryReachability.Unreachable
                     : exception.Kind is DatabaseFailureKind.AuthenticationFailed or DatabaseFailureKind.PermissionDenied ? DiscoveryReachability.Reachable
                     : basic.Reachability,
             };

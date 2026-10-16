@@ -1,7 +1,8 @@
 # Database Auto Discovery & Inventory — MSSQL / PostgreSQL
 
 Branch: `feature/database-auto-discovery` (base `48ce43b1`, the committed HEAD of `feature/ui-db-full-readiness`).
-Status: **IMPLEMENTED — NOT VERIFIED.** No test, live database, Docker, Windows VM or shared service was used while writing this.
+Status: **Completed on the working branch (2026-10-16)** after integration with `main` (PR #18) and live acceptance on an isolated stack (section 9).
+Earlier text of this document (sections 1–8) is the design; section 9 records what was really run and what it changed.
 
 ## 1. Goals and non-goals
 
@@ -183,12 +184,51 @@ links to the job); creation still goes through the unchanged `POST /backup-jobs`
 * Resource limits: per-agent single scan, timeouts, bounded enrichment concurrency, bounded report size/cardinalities, rescan throttle, jitter.
 * Isolation from backup/restore: separate tables, separate endpoints, background single-flight on the agent, failure never propagates.
 
-## 8. Remaining risks / not verified
+## 8. Remaining risks
 
-* Everything is unexecuted. Windows registry/service detection and Linux systemd/`pg_lsclusters` parsing are validated only by unit tests that were not
-  run; real behaviour on SQL Server (default, named, dynamic ports), PostgreSQL (EDB installer, Debian clusters) and Docker must be exercised.
-* Linux detection of non-systemd, non-default-port installations relies on the loopback listener probe of well-known ports only.
-* A stopped Docker daemon (CLI installed) is reported as `Docker = Failed/docker_failed`, which makes the scan `Partial`; it never marks containers missing.
-* Docker containers without a published port are listed but cannot be used for jobs (no host/port to connect to).
-* The heartbeat adds one indexed read (two for an agent that never reported) per heartbeat.
-* The EF migration was generated, never applied.
+* Windows 11 VM: only the **named** instance `MSSQLSERVER25` exists, so default-instance detection (key `mssql|service|default`) and the PostgreSQL registry/service
+  detector were not exercised live; they are covered by the registry-hive tests of `tests/windows-tests`, which run in the Windows GitHub workflow, not locally
+  (the VM has no SDK).
+* Windows PostgreSQL: the data directory of the EDB installer is normally unreadable for the agent's account, so a non-default port cannot be read from
+  `postgresql.conf` and the default 5432 is assumed (the handshake then reports the instance unreachable). Not observed live (no PostgreSQL on the VM).
+* Linux native services: the host has no systemd PostgreSQL/SQL Server unit and no sudo, so only the "systemd answered, nothing running" path was observed live.
+  `systemctl`, `pg_lsclusters` and `mssql.conf`/`postgresql.conf` parsing is unit-tested against literal tool output only.
+* The agent identity used for the Windows run was a console process of the logged-in administrator, not the `NT SERVICE\BackupAgent` virtual account, whose registry
+  and file access can differ.
+* Docker containers without a published port are listed but cannot be used for jobs; a stopped Docker daemon makes the scan `Partial` (`docker_failed`).
+* Discovery behind a running backup/restore is deferred (initial/periodic only) and verified by an integration test, not live.
+* The heartbeat does one extra indexed read (two for an agent that never reported).
+
+## 9. Integration and live acceptance (2026-10-16)
+
+Integration: `origin/main` (merge of PR #18, post-merge Fast CI green) was merged without conflicts; the R1 migration (`20261015170727`) precedes
+`20261015214653_DatabaseDiscovery`, `dotnet ef migrations has-pending-model-changes` reports no drift, so no migration was regenerated.
+
+Isolated stack (`scripts/dev/discovery-stack.sh`, `scripts/dev/discovery-windows-agent.sh`, `scripts/dev/discovery-acceptance.py`): its own platform PostgreSQL, SQL Server
+and PostgreSQL containers (`bp-disc-*`), API/Vite on other ports, a Linux agent and a disposable console agent on the Windows 11 VM (own `BackupAgentSmoke-*` root; the
+VM's `BackupAgent` service and identity untouched, trust anchor removed afterwards). The persistent dev stack, the shared `mssql`/`postgres` containers (only handshake-probed
+and listed by `docker ps`; no login) and Google Drive were not used.
+
+| # | Scenario | Result |
+|---|---|---|
+| 1 | Initial scan after enrollment (heartbeat directive → claim → report): 2 MSSQL + 3 PostgreSQL containers via Docker, TDS version from the credential-free PreLogin, `CredentialsRequired`, no database listed | PASS |
+| 2 | Wrong credential → `AuthenticationFailed`; unresolvable reference → `Error/credential_unavailable` | PASS |
+| 3 | Valid MSSQL credential (container) → `Authenticated`, 6 databases, `tempdb` `Unsupported/system-database-tempdb` | PASS |
+| 4 | Valid PostgreSQL credential → `Authenticated`, 5 databases, `template0` `Unsupported/connections-disallowed` | PASS |
+| 5 | TLS required but server without TLS → `Reachable` + `Error/connection_failed` | PASS after fix (was reported `Unreachable`, contradicting the handshake) |
+| 6 | Repeated scans (≥ 10) → still 5 instances, no duplicates; a credential-less scan keeps version/edition and does not flip `Changed` | PASS after fix (version `17.0.5015` ↔ `17.0.5015.4` flip-flopped) |
+| 7 | Manual rescan; second request inside 30 s → `429 rescan_too_soon` | PASS |
+| 8 | Agent `kill -9` + restart → inventory intact, rescan works | PASS |
+| 9 | Backend restart → inventory persisted, agent reconnected, rescan works | PASS |
+| 10 | Abandoned claim (state edited to a claim 9 min old, never reported): not re-triggered while "running", automatic periodic scan when the timeout passes | PASS after fix (next scan was a whole interval away) |
+| 11 | Container stopped for 2 scans → `Missing`; restarted → `Reappeared`; credential binding preserved | PASS |
+| 12 | Tenant isolation: foreign owner sees an empty inventory; instance read/bind/verify/rescan/settings of another tenant → 404; foreign tenant route → 403 | PASS |
+| 13 | Windows 11 VM, named instance `MSSQLSERVER25` from the registry (port 1433, patch level 17.0.1000.7), Docker `Unavailable/docker_not_found`, then `Authenticated` with 14 databases (read-only enumeration) | PASS |
+| 14 | Chromium: list, status bar, instance detail, credential form save + verify, wizard prefill, 2 jobs created only after `Kaydet`, covered databases disabled with job links | PASS |
+| 15 | Report lost to the 5 s-heartbeat rate limit (discovery shared the heartbeat budget) | FOUND live, fixed: own budget (`agent-discovery`) + bounded report retry |
+| 16 | Windows default instance, Windows PostgreSQL, native Linux systemd/`pg_lsclusters` | NOT RUN live (see section 8) |
+| 17 | Discovery deferred while the agent holds a live backup attempt | integration test only |
+
+Automated suites on the final tree: unit 4,063, architecture 156, agent 567 (including `ConnectivityServiceTests`), frontend 667 (typecheck + lint clean), full PostgreSQL integration 1,757/1,757 (disposable `fsync=off` PostgreSQL), MSSQL provider 118/118 and actual-host agent 16/16 (disposable SQL Server 2025). One unrelated, timing-based test (`NotificationDeliveryProcessorTests.Sends_run_concurrently_but_never_beyond_the_configured_limit`) failed once under load and passed 3/3 in isolation and in the final run.
+
+No secret appeared in the agent, API or frontend logs, nor in the audit events (they hold the reference name only).

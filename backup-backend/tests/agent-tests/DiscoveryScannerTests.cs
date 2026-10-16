@@ -446,6 +446,23 @@ public sealed class DiscoveryScannerTests
     }
 
     [Theory]
+    [InlineData(DatabaseFailureKind.Unreachable)]
+    [InlineData(DatabaseFailureKind.Timeout)]
+    public async Task A_server_that_answered_the_handshake_is_not_reported_unreachable_when_only_the_login_connection_fails(DatabaseFailureKind kind)
+    {
+        var rig = new Rig();
+        rig.Detectors.Add(new FakeDetector(DiscoverySources.Service, DetectionResult.Scanned([Mssql("mssql|service|default", 1433)])));
+        rig.Probe.Answers[(DiscoveryEngines.MsSql, 1433)] = new ListenerProbeResult(true, true, "17.0.1");
+        rig.Mssql.OnDiscover = (_, _, _) => throw new DatabaseProviderException(kind, "user message", new InvalidOperationException("tls"));
+
+        var instance = Assert.Single((await ScanAsync(rig, new AgentDiscoveryPlan { Bindings = [Binding("mssql|service|default")] })).Instances);
+
+        Assert.Equal(DiscoveryAccess.Error, instance.Access);
+        Assert.Equal("connection_failed", instance.AccessReasonCode);
+        Assert.Equal(DiscoveryReachability.Reachable, instance.Reachability);
+    }
+
+    [Theory]
     [InlineData(DatabaseFailureKind.AuthenticationFailed, DiscoveryAccess.AuthenticationFailed, "authentication_failed", DiscoveryReachability.Reachable)]
     [InlineData(DatabaseFailureKind.PermissionDenied, DiscoveryAccess.Error, "permission_denied", DiscoveryReachability.Reachable)]
     [InlineData(DatabaseFailureKind.Unreachable, DiscoveryAccess.Unreachable, "unreachable", DiscoveryReachability.Unreachable)]
