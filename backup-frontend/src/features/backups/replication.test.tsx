@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
+import { render } from '@/test/render'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReplicationHealth } from '@/features/artifacts/types'
@@ -51,14 +52,14 @@ describe('replication compliance rendering', () => {
   })
 
   it.each([
-    ['Healthy', 3, 'Replikasyon sağlıklı'],
-    ['Degraded', 2, 'Kısmi replikasyon · politika karşılandı'],
-    ['InsufficientReplicas', 1, 'Yetersiz doğrulanmış replika'],
-    ['Unavailable', 0, 'Doğrulanmış replika yok'],
+    ['Healthy', 3, 'Çoğaltma sağlıklı'],
+    ['Degraded', 2, 'Kısmi çoğaltma · ilke karşılandı'],
+    ['InsufficientReplicas', 1, 'Doğrulanmış kopya sayısı yetersiz'],
+    ['Unavailable', 0, 'Doğrulanmış kopya yok'],
   ] as const)('shows the backend status %s and the verified/required counts', (status, verified, label) => {
     render(<ReplicationSummary replication={healthOf(status, verified)} />)
     expect(screen.getByText(label)).toBeInTheDocument()
-    expect(screen.getByText(`${verified} / 2 doğrulanmış replika gerekli · 3 hedef`)).toBeInTheDocument()
+    expect(screen.getByText(`${verified} / 2 doğrulanmış kopya gerekli · 3 hedef`)).toBeInTheDocument()
   })
 
   it('renders nothing for a legacy run or artifact without replication', () => {
@@ -68,8 +69,8 @@ describe('replication compliance rendering', () => {
 
   it('does not recompute the status from the counts', () => {
     render(<ReplicationBadge replication={{ ...healthOf('Degraded', 3), status: 'Degraded' }} />)
-    expect(screen.getByText('Kısmi replikasyon · politika karşılandı')).toBeInTheDocument()
-    expect(screen.queryByText('Replikasyon sağlıklı')).not.toBeInTheDocument()
+    expect(screen.getByText("Kısmi çoğaltma · ilke karşılandı")).toBeInTheDocument()
+    expect(screen.queryByText("Çoğaltma sağlıklı")).not.toBeInTheDocument()
   })
 
   it('lists each destination, naming the failed one with its reason next to the verified ones', () => {
@@ -80,7 +81,7 @@ describe('replication compliance rendering', () => {
     expect(list.getByText('Başarısız')).toBeInTheDocument()
     expect(list.getByText(failureMessage('StorageUnavailable'), { exact: false })).toBeInTheDocument()
     expect(list.queryByText(/Yedek depolamaya yazılamadı\./)).not.toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('Yedek kullanılabilir ve politika karşılanıyor')
+    expect(screen.getByRole('status')).toHaveTextContent('Yedek kullanılabilir ve ilke karşılanıyor')
   })
 
 
@@ -93,21 +94,21 @@ describe('replication compliance rendering', () => {
     state.run = makeRun({ status: 'Succeeded', replication: healthOf('Degraded', 2) })
     renderDetail()
     expect(screen.getAllByText('Başarılı').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Kısmi replikasyon · politika karşılandı').length).toBeGreaterThan(0)
-    fireEvent.click(screen.getByRole('tab', { name: 'Replikasyon' }))
-    expect(screen.getByRole('region', { name: 'Replikasyon' })).toBeInTheDocument()
+    expect(screen.getAllByText("Kısmi çoğaltma · ilke karşılandı").length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('tab', { name: "Çoğaltma" }))
+    expect(screen.getByRole('region', { name: "Çoğaltma" })).toBeInTheDocument()
   })
 
   it('the run list shows the replication verdict beside the run status', () => {
     state.page = { items: [makeRun({ status: 'Succeeded', replication: healthOf('InsufficientReplicas', 1) })], totalCount: 1, page: 1, pageSize: 25 }
     render(<MemoryRouter><BackupsPage /></MemoryRouter>)
     expect(screen.getAllByText('Başarılı').length).toBeGreaterThan(0)
-    expect(screen.getByText('Yetersiz doğrulanmış replika')).toBeInTheDocument()
+    expect(screen.getByText("Doğrulanmış kopya sayısı yetersiz")).toBeInTheDocument()
   })
 
   it('a pre-existing run without the field renders exactly as before', () => {
     state.run = makeRun({ status: 'Succeeded' })
     renderDetail()
-    expect(screen.queryByRole('region', { name: 'Replikasyon' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: "Çoğaltma" })).not.toBeInTheDocument()
   })
 })

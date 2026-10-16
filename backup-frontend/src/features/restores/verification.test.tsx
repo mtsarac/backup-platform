@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -74,9 +75,9 @@ describe('artifact restore verification', () => {
     renderAt(<Routes><Route path="/" element={<ArtifactVerificationSection tenantId="tenant-a" artifact={artifact} />} /><Route path="/tenants/tenant-a/restores/:id" element={<p>detail page</p>} /></Routes>)
     expect(await screen.findByText('Henüz test edilmedi.')).toBeInTheDocument()
     expect(RestoreApi.getRestores).toHaveBeenCalledWith('tenant-a', { purpose: 'Verification', artifactId: 'artifact-1', pageSize: 10 }, expect.anything())
-    fireEvent.click(screen.getByRole('button', { name: 'Restore testi başlat' }))
-    expect(await screen.findByText(/Production Database değiştirilmez/)).toBeInTheDocument()
-    const agentOptions = within(screen.getByLabelText('Agent')).getAllByRole('option')
+    fireEvent.click(screen.getByRole('button', { name: "Geri yükleme testi başlat" }))
+    expect(await screen.findByText(/(?:Production Veritabanı değiştirilmez|Canlı veritabanı değiştirilmez)/)).toBeInTheDocument()
+    const agentOptions = within(screen.getByLabelText("Ajan")).getAllByRole('option')
     expect(agentOptions).toHaveLength(1)
     expect(agentOptions[0]).toHaveTextContent('Verifier')
     fireEvent.click(screen.getByRole('button', { name: 'Testi başlat' }))
@@ -98,9 +99,9 @@ describe('artifact restore verification', () => {
     ]))
     renderAt(<ArtifactVerificationSection tenantId="tenant-a" artifact={artifact} />)
     expect(await screen.findByRole('table')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Restore testi başlat' })).not.toBeInTheDocument()
-    expect(screen.getAllByText('Başarısız · Failed').length).toBeGreaterThan(0)
-    expect(screen.getByText('Başarılı · Restored')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: "Geri yükleme testi başlat" })).not.toBeInTheDocument()
+    expect(screen.getAllByText("Başarısız").length).toBeGreaterThan(0)
+    expect(screen.getByText("Başarılı")).toBeInTheDocument()
     expect(screen.getByText(/otomatik yeniden denenecek \(deneme 2\)/)).toBeInTheDocument()
     expect(screen.getAllByText(/Süre: 30 sn|30 sn/).length).toBeGreaterThan(0)
   })
@@ -110,10 +111,10 @@ describe('restore verification detail', () => {
   it('renders a Restored outcome with checks and removed temporary database', async () => {
     vi.mocked(RestoreApi.getRestore).mockResolvedValue(withResult({ ...base, cleanup: cleanupOf({}) }))
     renderDetail()
-    expect(await screen.findByText('Başarılı · Restored')).toBeInTheDocument()
-    expect(screen.getByText(/Database çevrimiçi/)).toBeInTheDocument()
+    expect((await screen.findAllByText("Başarılı")).length).toBeGreaterThan(0)
+    expect(screen.getByText(/Veritabanı çevrimiçi/)).toBeInTheDocument()
     expect(screen.getByText(/4 okunabilir \/ 4 kullanıcı tablosu/)).toBeInTheDocument()
-    expect(screen.getByText(/Geçici Database kaldırıldı/)).toBeInTheDocument()
+    expect(screen.getByText(/Geçici veritabanı kaldırıldı/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Temizliği yeniden dene' })).not.toBeInTheDocument()
   })
 
@@ -122,13 +123,13 @@ describe('restore verification detail', () => {
     renderDetail()
     expect(await screen.findByText(/The backup restored, but checks failed\./)).toBeInTheDocument()
     expect(screen.getByText('Başarısız', { selector: 'li span.font-medium' })).toBeInTheDocument()
-    expect(screen.queryByText(/Hedef Database'i kontrol edin/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Hedef veritabanını kontrol edin/)).not.toBeInTheDocument()
   })
 
   it('renders NotRun for a cancelled verification', async () => {
     vi.mocked(RestoreApi.getRestore).mockResolvedValue({ ...base, status: 'Cancelled', verificationOutcome: 'NotRun', cleanup: cleanupOf({}) })
     renderDetail()
-    expect(await screen.findByText('Çalışmadı · NotRun')).toBeInTheDocument()
+    expect(await screen.findByText("Çalıştırılmadı · Çalıştırılmadı")).toBeInTheDocument()
   })
 
   it('retries a pending cleanup and flags needsAttention', async () => {
@@ -151,13 +152,13 @@ describe('rollback copy removal', () => {
     vi.mocked(RestoreApi.getRestore).mockResolvedValue(retained)
     vi.mocked(RestoreApi.removeRollbackCopy).mockResolvedValue({ ...retained, cleanup: cleanupOf({ kind: 'RollbackCopy', state: 'Pending', databaseName: 'bp_old_SalesDB_1' }) })
     renderDetail()
-    expect(await screen.findByText(/Otomatik olarak asla kaldırılmaz/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Rollback kopyasını kaldır' }))
+    expect(await screen.findByText(/(?:Otomatik olarak asla kaldırılmaz|otomatik olarak kaldırılmaz)/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: "Geri alma kopyasını kaldır" }))
     const confirm = await screen.findByRole('button', { name: 'Kalıcı olarak kaldır' })
     expect(confirm).toBeDisabled()
-    fireEvent.change(screen.getByLabelText('Database adı onayı'), { target: { value: 'bp_old_SalesDB' } })
+    fireEvent.change(screen.getByLabelText("Veritabanı adı onayı"), { target: { value: 'bp_old_SalesDB' } })
     expect(confirm).toBeDisabled()
-    fireEvent.change(screen.getByLabelText('Database adı onayı'), { target: { value: 'bp_old_SalesDB_1' } })
+    fireEvent.change(screen.getByLabelText("Veritabanı adı onayı"), { target: { value: 'bp_old_SalesDB_1' } })
     fireEvent.click(confirm)
     await waitFor(() => expect(RestoreApi.removeRollbackCopy).toHaveBeenCalledWith('tenant-a', 'ver-1', 'bp_old_SalesDB_1'))
   })
@@ -166,8 +167,8 @@ describe('rollback copy removal', () => {
     tenancy.canAdmin = false
     vi.mocked(RestoreApi.getRestore).mockResolvedValue(retained)
     renderDetail()
-    expect(await screen.findByText(/Otomatik olarak asla kaldırılmaz/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Rollback kopyasını kaldır' })).not.toBeInTheDocument()
+    expect(await screen.findByText(/(?:Otomatik olarak asla kaldırılmaz|otomatik olarak kaldırılmaz)/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: "Geri alma kopyasını kaldır" })).not.toBeInTheDocument()
   })
 })
 
@@ -176,9 +177,9 @@ describe('restores list filter', () => {
     vi.mocked(RestoreApi.getRestores).mockImplementation(async (_tenant, filters) => page(filters?.purpose === 'Verification' ? [{ ...base, sourceDatabaseName: 'SalesDB', cleanup: cleanupOf({}) }] : []))
     renderAt(<RestoresPage />)
     await waitFor(() => expect(RestoreApi.getRestores).toHaveBeenCalledWith('tenant-a', expect.objectContaining({ purpose: undefined }), expect.anything()))
-    fireEvent.click(screen.getByRole('tab', { name: 'Restore tests' }))
-    expect(await screen.findByText('Başarılı · Restored')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: "Geri yükleme testleri" }))
+    expect(await screen.findByText("Başarılı")).toBeInTheDocument()
     expect(RestoreApi.getRestores).toHaveBeenCalledWith('tenant-a', expect.objectContaining({ purpose: 'Verification' }), expect.anything())
-    expect(screen.queryByText('Hedef Database')).not.toBeInTheDocument()
+    expect(screen.queryByText("Hedef veritabanı")).not.toBeInTheDocument()
   })
 })

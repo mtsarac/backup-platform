@@ -1,3 +1,5 @@
+import { currentLocale } from '@/lib/i18n'
+import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { RefreshCw, ShieldCheck } from 'lucide-react'
@@ -27,6 +29,7 @@ import { errorMessage } from '@/lib/api/failure-messages'
 import { useStorageUsage, useReconcileUsage, useRebuildUsage } from '@/features/platform/storage/hooks'
 
 export function PlatformStoragePage() {
+  useLanguage()
   const { page, get, update } = useListParams()
   const search = get('search')
   const quotaState = (get('quotaState') || undefined) as QuotaState | undefined
@@ -56,9 +59,7 @@ export function PlatformStoragePage() {
       onSuccess: (res) => {
         setActiveReconcile(null)
         setStatusMessage(
-          `“${activeReconcile.tenantName}” için reconcile tamamlandı: ${
-            res.drifted ? 'sapma düzeltildi' : 'sapma yok'
-          }.`,
+          tx("“{0}” için reconcile tamamlandı: {1}.", { "0": activeReconcile.tenantName, "1": res.drifted ? tx('sapma düzeltildi') : tx('sapma yok') }),
         )
       },
     })
@@ -70,7 +71,7 @@ export function PlatformStoragePage() {
     rebuild.mutate(undefined, {
       onSuccess: () => {
         setActiveRebuild(null)
-        setStatusMessage(`“${activeRebuild.tenantName}” için kullanım baştan hesaplandı (Rebuild).`)
+        setStatusMessage(tx("“{0}” için kullanım baştan hesaplandı (Rebuild).", { "0": activeRebuild.tenantName }))
       },
     })
   }
@@ -78,7 +79,7 @@ export function PlatformStoragePage() {
   const columns: Column<StorageUsageRow>[] = [
     {
       key: 'tenant',
-      header: 'Tenant',
+      header: tx('Tenant'),
       wrap: true,
       render: (row) => (
         <div>
@@ -86,17 +87,17 @@ export function PlatformStoragePage() {
             {row.tenantName}
           </Link>
           {!row.hasUsage && (
-            <div className="text-xs text-text-muted">Projeksiyon yok</div>
+            <div className="text-xs text-text-muted">{tx("Projeksiyon yok")}</div>
           )}
           {row.hasUsage && !row.usageCurrent && (
-            <Badge tone="warning" className="mt-0.5 text-[10px]">Eski Politika</Badge>
+            <Badge tone="warning" className="mt-0.5 text-[10px]">{tx("Eski Politika")}</Badge>
           )}
         </div>
       ),
     },
     {
       key: 'plan',
-      header: 'Plan & Durum',
+      header: tx('Plan & Durum'),
       render: (row) => (
         <div className="space-y-1">
           <div><PlanName plan={row.plan} /></div>
@@ -106,7 +107,7 @@ export function PlatformStoragePage() {
     },
     {
       key: 'usage',
-      header: 'Kullanılan / Limit',
+      header: tx('Kullanılan / Limit'),
       wrap: true,
       render: (row) => {
         if (!row.hasUsage || row.usedBytes === null) {
@@ -132,11 +133,11 @@ export function PlatformStoragePage() {
                 reservedBytes={reserved}
                 limitBytes={limit}
                 state={row.state ?? 'Normal'}
-                label={`${row.tenantName} doluluk oranı`}
+                label={tx("{0} doluluk oranı", { "0": row.tenantName })}
               />
             )}
             {percent !== null && (
-              <div className="text-sm text-text-muted">%{percent} ayrılmış</div>
+              <div className="text-sm text-text-muted">{tx('%{0}', { '0': percent.toLocaleString(currentLocale()) })}{' '}{tx("ayrılmış")}</div>
             )}
           </div>
         )
@@ -144,14 +145,14 @@ export function PlatformStoragePage() {
     },
     {
       key: 'state',
-      header: 'Kota Durumu',
+      header: tx('Kota Durumu'),
       render: (row) => (
         <div className="space-y-1">
           {row.state ? <QuotaStateBadge state={row.state} /> : <span className="text-xs text-text-muted">—</span>}
           {!row.newBackupsAllowed && (
             <div>
               <Badge tone="error" className="text-[10px]">
-                {row.denialCode === 'quota_exceeded' ? 'Kota Doldu' : 'Engellendi'}
+                {row.denialCode === 'quota_exceeded' ? tx('Kota Doldu') : tx('Engellendi')}
               </Badge>
             </div>
           )}
@@ -160,7 +161,7 @@ export function PlatformStoragePage() {
     },
     {
       key: 'policy',
-      header: 'Politika',
+      header: tx('Politika'),
       render: (row) => (
         <div className="text-xs">
           <span className="font-medium">{row.policy.key}</span>
@@ -170,7 +171,7 @@ export function PlatformStoragePage() {
     },
     {
       key: 'calculatedAt',
-      header: 'Son Hesaplama',
+      header: tx('Son Hesaplama'),
       render: (row) => (
         <span className="text-xs text-text-muted">
           {row.calculatedAt ? agentDate(row.calculatedAt) : '—'}
@@ -179,7 +180,7 @@ export function PlatformStoragePage() {
     },
     {
       key: 'actions',
-      header: 'İşlemler',
+      header: tx('İşlemler'),
       render: (row) => (
         <div className="flex flex-wrap gap-1.5">
           <Button
@@ -189,9 +190,7 @@ export function PlatformStoragePage() {
               reconcile.reset()
               setActiveReconcile(row)
             }}
-          >
-            Reconcile
-          </Button>
+          >{tx("Reconcile")}</Button>
           <Button
             variant="outline"
             size="sm"
@@ -199,9 +198,7 @@ export function PlatformStoragePage() {
               rebuild.reset()
               setActiveRebuild(row)
             }}
-          >
-            Rebuild
-          </Button>
+          >{tx("Rebuild")}</Button>
         </div>
       ),
     },
@@ -209,30 +206,30 @@ export function PlatformStoragePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader crumbs={[platformCrumb]} title="Depolama ve Kota Yönetimi" description="Tüm tenant'ların depolama kullanımını, rezerve alanlarını ve kota durumlarını izleyin." actions={<>
-        <Button variant="outline" onClick={() => void query.refetch()} disabled={query.isFetching}><RefreshCw aria-hidden="true" className={`size-4 ${query.isFetching ? 'animate-spin motion-reduce:animate-none' : ''}`} />Yenile</Button>
-        <Link to={platformPaths.quotaPolicies} className={buttonVariants({ variant: 'outline' })}><ShieldCheck aria-hidden="true" className="size-4" />Kota Politikaları</Link>
+      <PageHeader crumbs={[platformCrumb]} title={tx("Depolama ve Kota Yönetimi")} description={tx("Tüm tenant'ların depolama kullanımını, rezerve alanlarını ve kota durumlarını izleyin.")} actions={<>
+        <Button variant="outline" onClick={() => void query.refetch()} disabled={query.isFetching}><RefreshCw aria-hidden="true" className={`size-4 ${query.isFetching ? 'animate-spin motion-reduce:animate-none' : ''}`} />{tx("Yenile")}</Button>
+        <Link to={platformPaths.quotaPolicies} className={buttonVariants({ variant: 'outline' })}><ShieldCheck aria-hidden="true" className="size-4" />{tx("Kota Politikaları")}</Link>
       </>} />
       {statusMessage && <Notice tone="success">{statusMessage}</Notice>}
-      <Filters label="Depolama kullanım filtreleri" onClear={search || quotaState || subscriptionStatus ? () => update({ search: '', quotaState: '', subscriptionStatus: '' }) : undefined}>
-        <SearchForm className="sm:col-span-2" label="Tenant ara" value={search} onSearch={(value) => update({ search: value })} placeholder="Tenant adı..." />
-        <FilterField label="Kota durumu"><select className={filterControlClass} value={quotaState ?? ''} onChange={(event) => update({ quotaState: event.target.value })}>
-          <option value="">Tümü</option><option value="Normal">Normal</option><option value="Warning">Warning</option><option value="Critical">Critical</option><option value="OverQuota">OverQuota</option><option value="Unlimited">Unlimited</option>
+      <Filters label={tx("Depolama kullanım filtreleri")} onClear={search || quotaState || subscriptionStatus ? () => update({ search: '', quotaState: '', subscriptionStatus: '' }) : undefined}>
+        <SearchForm className="sm:col-span-2" label={tx("Tenant ara")} value={search} onSearch={(value) => update({ search: value })} placeholder={tx("Tenant adı...")} />
+        <FilterField label={tx("Kota durumu")}><select className={filterControlClass} value={quotaState ?? ''} onChange={(event) => update({ quotaState: event.target.value })}>
+          <option value="">{tx("Tümü")}</option><option value="Normal">Normal</option><option value="Warning">{tx("Warning")}</option><option value="Critical">{tx("Critical")}</option><option value="OverQuota">{tx("OverQuota")}</option><option value="Unlimited">{tx("Unlimited")}</option>
         </select></FilterField>
-        <FilterField label="Abonelik"><select className={filterControlClass} value={subscriptionStatus ?? ''} onChange={(event) => update({ subscriptionStatus: event.target.value })}>
-          <option value="">Tümü</option><option value="Active">Etkin</option><option value="Suspended">Askıda</option><option value="Expired">Süresi doldu</option><option value="NoSubscription">Abonelik yok</option>
+        <FilterField label={tx("Abonelik")}><select className={filterControlClass} value={subscriptionStatus ?? ''} onChange={(event) => update({ subscriptionStatus: event.target.value })}>
+          <option value="">{tx("Tümü")}</option><option value="Active">{tx("Etkin")}</option><option value="Suspended">{tx("Askıda")}</option><option value="Expired">{tx("Süresi doldu")}</option><option value="NoSubscription">{tx("Abonelik yok")}</option>
         </select></FilterField>
       </Filters>
 
       <PlatformQueryState isPending={query.isPending} error={query.error}>
         {data && (
           <div className="space-y-4">
-            <Section title="Tenant kullanımı" description="Kullanılan ve rezerve alanın toplamı etkin limit ile karşılaştırılır. Reconcile ve Rebuild kullanım kayıtlarını günceller; Backup dosyalarını silmez." flush className="overflow-hidden">
-              <DataTable className={bareTableClass} rows={data.items} columns={columns} keyExtractor={(row) => row.tenantId} emptyMessage="Kriterlere uygun tenant kullanımı bulunamadı." />
+            <Section title={tx("Tenant kullanımı")} description={tx("Kullanılan ve rezerve alanın toplamı etkin limit ile karşılaştırılır. Reconcile ve Rebuild kullanım kayıtlarını günceller; Backup dosyalarını silmez.")} flush className="overflow-hidden">
+              <DataTable className={bareTableClass} rows={data.items} columns={columns} keyExtractor={(row) => row.tenantId} emptyMessage={tx("Kriterlere uygun tenant kullanımı bulunamadı.")} />
             </Section>
             {data.totalCount > 0 && (
               <Pagination
-                label="Kullanım sayfaları"
+                label={tx("Kullanım sayfaları")}
                 page={page}
                 pageSize={data.pageSize}
                 totalCount={data.totalCount}
@@ -247,13 +244,13 @@ export function PlatformStoragePage() {
       <ConfirmDialog
         open={Boolean(activeReconcile)}
         onClose={() => setActiveReconcile(null)}
-        title="Depolama senkronizasyonu çalıştırılsın mı (Reconcile)?"
+        title={tx("Depolama eşitlemesi çalıştırılsın mı?")}
         description={
           activeReconcile
-            ? `“${activeReconcile.tenantName}” için mevcut artifact ve replikalar taranacak, kullanım güncellenecek ve süresi geçmiş rezervasyonlar iptal edilecektir.`
+            ? tx("“{0}” için mevcut artifact ve replikalar taranacak, kullanım güncellenecek ve süresi geçmiş rezervasyonlar iptal edilecektir.", { "0": activeReconcile.tenantName })
             : ''
         }
-        confirmLabel="Reconcile Çalıştır"
+        confirmLabel={tx("Uzlaştırmayı Çalıştır")}
         pending={reconcile.isPending}
         error={reconcile.error ? errorMessage(reconcile.error) : undefined}
         onConfirm={runReconcile}
@@ -262,13 +259,13 @@ export function PlatformStoragePage() {
       <ConfirmDialog
         open={Boolean(activeRebuild)}
         onClose={() => setActiveRebuild(null)}
-        title="Depolama baştan hesaplansın mı (Rebuild)?"
+        title={tx("Depolama baştan hesaplansın mı?")}
         description={
           activeRebuild
-            ? `“${activeRebuild.tenantName}” için kullanım kaydı baştan hesaplanacaktır. Mevcut veritabanı kayıtları geçerli kota politikasına göre yeniden taranır.`
+            ? tx("“{0}” için kullanım kaydı baştan hesaplanacaktır. Mevcut veritabanı kayıtları geçerli kota politikasına göre yeniden taranır.", { "0": activeRebuild.tenantName })
             : ''
         }
-        confirmLabel="Rebuild Çalıştır"
+        confirmLabel={tx("Yeniden Hesaplamayı Çalıştır")}
         pending={rebuild.isPending}
         error={rebuild.error ? errorMessage(rebuild.error) : undefined}
         onConfirm={runRebuild}

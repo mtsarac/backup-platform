@@ -57,7 +57,7 @@ describe('platform global agents list', () => {
   it('renders the empty state for filters without results', async () => {
     vi.mocked(api.getPlatformAgents).mockResolvedValue(paged([]))
     renderPlatform(<PlatformAgentsPage />, { path: '/platform/agents?connectivity=unknown' })
-    expect(await screen.findByText('Filtrelere uygun Agent bulunamadı.')).toBeInTheDocument()
+    expect(await screen.findByText("Filtrelere uygun ajan bulunamadı.")).toBeInTheDocument()
   })
 
   it('renders the authorization state for 403', async () => {

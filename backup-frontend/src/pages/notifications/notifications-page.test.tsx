@@ -1,4 +1,5 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
+import { render } from '@/test/render'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -79,7 +80,7 @@ describe('policy', () => {
   it('blocks out-of-range thresholds with a field error and no request', async () => {
     const user = userEvent.setup()
     mount()
-    const stale = await screen.findByLabelText(/Backup güncel değil eşiği/)
+    const stale = await screen.findByLabelText(/(?:güncel değil|güncelliğini yitirme) eşiği/i)
     await user.clear(stale)
     await user.type(stale, '721')
     await user.click(screen.getByRole('button', { name: 'Politikayı kaydet' }))
@@ -114,8 +115,8 @@ describe('channels', () => {
     await screen.findByRole('article', { name: 'Pager' })
     expect(card('Ops mailbox').getByText(/ops@example.com/)).toBeInTheDocument()
     expect(card('Pager').getByText(/https:\/\/hooks.example.com\/…/)).toBeInTheDocument()
-    expect(card('Pager').getByText(/Secret kayıtlı/)).toBeInTheDocument()
-    expect(card('Pager').getByRole('button', { name: 'Pager kanalı: secret temizle' })).toBeInTheDocument()
+    expect(card('Pager').getByText(/Gizli anahtar kayıtlı/)).toBeInTheDocument()
+    expect(card('Pager').getByRole('button', { name: /Pager kanalı: (?:secret|gizli anahtarı) temizle/ })).toBeInTheDocument()
     expect(card('Ops mailbox').queryByRole('button', { name: /secret/i })).not.toBeInTheDocument()
   })
 
@@ -163,7 +164,7 @@ describe('channels', () => {
     const dialog = within(await screen.findByRole('dialog'))
     await user.selectOptions(dialog.getByLabelText('Tür'), 'webhook')
     await user.type(dialog.getByLabelText('Ad'), 'Yeni')
-    await user.type(dialog.getByLabelText('Webhook adresi'), 'https://hooks.example.com/abc')
+    await user.type(dialog.getByLabelText("Web kancası adresi"), 'https://hooks.example.com/abc')
     await user.selectOptions(dialog.getByLabelText('Kimlik doğrulama'), 'hmac')
     const input = dialog.getByLabelText(/HMAC imza anahtarı/)
     expect(input).toHaveAttribute('type', 'password')
@@ -181,12 +182,12 @@ describe('channels', () => {
     const user = userEvent.setup()
     mount()
     await openTab(user, 'Kanallar')
-    await user.click(await screen.findByRole('button', { name: 'Pager kanalı: secret ayarla' }))
+    await user.click(await screen.findByRole('button', { name: /Pager kanalı: (?:secret|gizli anahtar) ayarla/ }))
     const dialog = within(await screen.findByRole('dialog'))
-    const input = dialog.getByLabelText('Yeni secret') as HTMLInputElement
+    const input = dialog.getByLabelText("Yeni gizli anahtar") as HTMLInputElement
     expect(input.type).toBe('password')
     await user.type(input, SECRET)
-    await user.click(dialog.getByRole('button', { name: 'Secret’ı kaydet' }))
+    await user.click(dialog.getByRole('button', { name: "Gizli anahtarı kaydet" }))
     await waitFor(() => expect(api.setChannelSecret).toHaveBeenCalledWith('tenant-a', 'c-hook', SECRET))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(document.body.innerHTML).not.toContain(SECRET)
@@ -198,8 +199,8 @@ describe('channels', () => {
     const user = userEvent.setup()
     mount()
     await openTab(user, 'Kanallar')
-    await user.click(await screen.findByRole('button', { name: 'Pager kanalı: secret temizle' }))
-    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Secret’ı temizle' }))
+    await user.click(await screen.findByRole('button', { name: /Pager kanalı: (?:secret|gizli anahtarı) temizle/ }))
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: "Gizli anahtarı temizle" }))
     await waitFor(() => expect(api.clearChannelSecret).toHaveBeenCalledWith('tenant-a', 'c-hook'))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'Ops mailbox kanalı: sil' }))

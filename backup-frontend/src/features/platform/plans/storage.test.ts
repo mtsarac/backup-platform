@@ -7,7 +7,7 @@ describe('decimal storage units (1 GB = 1,000,000,000 bytes)', () => {
     expect(formatGb(2_500_000_000)).toBe('2,5 GB')
     expect(formatGb(1_000_000_000)).toBe('1 GB')
     expect(formatGb(5_368_709_120)).toBe('5,36870912 GB')
-    expect(formatGb(null)).toBe('Limitsiz')
+    expect(formatGb(null)).toBe('Sınırsız')
   })
 
   it('shows exact bytes with Turkish grouping', () => {

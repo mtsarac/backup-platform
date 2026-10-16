@@ -1,4 +1,5 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
+import { render } from '@/test/render'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -36,21 +37,21 @@ describe('Google Drive storage destination', () => {
     expect(panel().getByText('backup-user@gmail.com')).toBeInTheDocument()
     expect(panel().getByRole('button', { name: /yeniden bağla/i })).toBeInTheDocument()
     expect(panel().getByRole('button', { name: /bağlantıyı kes/i })).toBeInTheDocument()
-    expect(screen.queryByLabelText('Refresh token')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Yenileme anahtarı")).not.toBeInTheDocument()
   })
 
   it('requires reauthorization when disconnected', async () => {
     mount({ hasSecret: false, configuration: { reauthorizationRequired: 'true' } })
     await screen.findByRole('heading', { level: 1, name: 'Google Drive Yedekleri' })
     expect(panel().getByText('Yeniden yetkilendirme gerekli')).toBeInTheDocument()
-    expect(panel().getByRole('button', { name: /google hesabını bağla/i })).toBeInTheDocument()
+    expect(panel().getByRole('button', { name: /Google hesabını bağla/i })).toBeInTheDocument()
   })
 
   it('starts the real authorization URL flow from the connection', async () => {
     vi.mocked(api.getGoogleDriveAuthorizeUrl).mockResolvedValue({ authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth?mock=1' })
     const popup = vi.spyOn(window, 'open').mockReturnValue(null)
     mount({ hasSecret: false })
-    await userEvent.click(await screen.findByRole('button', { name: /google hesabını bağla/i }))
+    await userEvent.click(await screen.findByRole('button', { name: /Google hesabını bağla/i }))
     await waitFor(() => expect(api.getGoogleDriveAuthorizeUrl).toHaveBeenCalledWith('tenant-a', 'drive'))
     expect(popup).toHaveBeenCalled()
     popup.mockRestore()

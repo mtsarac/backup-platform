@@ -25,7 +25,7 @@ function serve(current: Subscription | null, history: Subscription[] = current ?
 
 const buttonNames = () => screen.getAllByRole('button').map((button) => button.textContent)
 async function facts() {
-  const term = await screen.findByText('Etkin depolama limiti')
+  const term = await screen.findByText("Geçerli depolama limiti")
   const list = term.closest('dl')
   if (!list) throw new Error('Subscription facts not found')
   return within(list)
@@ -78,7 +78,7 @@ describe('subscription details', () => {
     serve(makeSubscription({ storageLimitOverride: { kind: 'limited', bytes: 2_500_000_000 }, effectiveStorageLimit: { unlimited: false, bytes: 2_500_000_000, source: 'override' } }))
     mount()
     const current = await facts()
-    expect(current.getByText('Kaynak: Override')).toBeInTheDocument()
+    expect(current.getByText(/Kaynak: (?:Override|Özel limit)/)).toBeInTheDocument()
     expect(current.getAllByText('2,5 GB')).toHaveLength(2)
     expect(current.getAllByText('2.500.000.000 bayt')).toHaveLength(2)
   })
@@ -87,13 +87,13 @@ describe('subscription details', () => {
     serve(makeSubscription({ planName: 'Legacy Unlimited', planStorageLimitBytes: null, effectiveStorageLimit: { unlimited: true, bytes: null, source: 'plan' }, assignedByUserId: null, assignedByDisplayName: null }))
     mount()
     const current = await facts()
-    expect(current.getAllByText('Limitsiz').length).toBeGreaterThan(0)
+    expect(current.getAllByText(/(?:Sınırsız|Limitsiz)/).length).toBeGreaterThan(0)
     expect(current.getByText('Sistem (geçiş)')).toBeInTheDocument()
   })
 
   it.each([
-    ['Active', ['Planı değiştir', 'Askıya al', 'Limit override']],
-    ['Suspended', ['Planı değiştir', 'Yeniden etkinleştir', 'Limit override']],
+    ['Active', ['Planı değiştir', 'Askıya al', 'Özel limit']],
+    ['Suspended', ['Planı değiştir', 'Yeniden etkinleştir', 'Özel limit']],
     ['Expired', ['Plan ata']],
   ] as const)('%s offers exactly the valid actions', async (status, expected) => {
     serve(makeSubscription({ status }))
@@ -130,9 +130,9 @@ describe('assign and change plan', () => {
     const picker = await within(dialog).findByRole('combobox', { name: /^Plan/ })
     await waitFor(() => expect(within(picker).getByRole('option', { name: 'Kurumsal 50 · 50 GB' })).toBeInTheDocument())
     expect(within(picker).getByRole('option', { name: '5 GB · 5 GB' })).toBeInTheDocument()
-    expect(within(picker).queryByRole('option', { name: /Legacy Unlimited/ })).not.toBeInTheDocument()
+    expect(within(picker).queryByRole('option', { name: /Eski Sınırsız/ })).not.toBeInTheDocument()
     await userEvent.click(within(dialog).getByRole('checkbox', { name: 'Sistem planlarını göster' }))
-    expect(within(picker).getByRole('option', { name: 'Legacy Unlimited · Limitsiz' })).toBeInTheDocument()
+    expect(within(picker).getByRole('option', { name: 'Legacy Unlimited · Sınırsız' })).toBeInTheDocument()
     await userEvent.selectOptions(picker, 'plan-50')
     vi.mocked(api.assignSubscriptionPlan).mockResolvedValue({ outcome: 'assigned', subscription: makeSubscription({ planId: 'plan-50', planName: 'Kurumsal 50' }), previousSubscriptionId: null })
     serve(makeSubscription({ planId: 'plan-50', planName: 'Kurumsal 50', planStorageLimitBytes: 50_000_000_000, effectiveStorageLimit: { unlimited: false, bytes: 50_000_000_000, source: 'plan' } }))
@@ -151,8 +151,8 @@ describe('assign and change plan', () => {
     const dialog = await dialogByName()
     await waitFor(() => expect(within(dialog).getByRole('option', { name: '5 GB · 5 GB' })).toBeInTheDocument())
     await userEvent.selectOptions(within(dialog).getByRole('combobox', { name: /^Plan/ }), 'plan-5')
-    await userEvent.selectOptions(within(dialog).getByRole('combobox', { name: /override/i }), 'limited')
-    await userEvent.type(within(dialog).getByLabelText(/Override boyutu/), '1,5')
+    await userEvent.selectOptions(within(dialog).getByRole('combobox', { name: /(?:override|özel depolama limiti)/i }), 'limited')
+    await userEvent.type(within(dialog).getByLabelText(/(?:Override|Özel limit) boyutu/), '1,5')
     fireEvent.change(within(dialog).getByLabelText(/Bitiş tarihi/), { target: { value: '2030-01-02T10:30' } })
     await userEvent.click(within(dialog).getByRole('button', { name: 'Plan ata' }))
     await waitFor(() => expect(api.assignSubscriptionPlan).toHaveBeenCalledWith('tenant-a', {
@@ -168,9 +168,9 @@ describe('assign and change plan', () => {
     const dialog = await dialogByName()
     await waitFor(() => expect(within(dialog).getByRole('option', { name: '5 GB · 5 GB' })).toBeInTheDocument())
     await userEvent.selectOptions(within(dialog).getByRole('combobox', { name: /^Plan/ }), 'plan-5')
-    const override = within(dialog).getByRole('combobox', { name: /override/i })
+    const override = within(dialog).getByRole('combobox', { name: /(?:override|özel depolama limiti)/i })
     await userEvent.selectOptions(override, 'limited')
-    await userEvent.type(within(dialog).getByLabelText(/Override boyutu/), 'abc')
+    await userEvent.type(within(dialog).getByLabelText(/(?:Override|Özel limit) boyutu/), 'abc')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Plan ata' }))
     expect(await within(dialog).findByText(/en fazla 3 ondalık/)).toBeInTheDocument()
     expect(api.assignSubscriptionPlan).not.toHaveBeenCalled()
@@ -186,7 +186,7 @@ describe('assign and change plan', () => {
     mount()
     await userEvent.click(await screen.findByRole('button', { name: 'Planı değiştir' }))
     const dialog = await dialogByName()
-    expect(dialog).toHaveTextContent('Override yeni plana taşınmaz')
+    expect(dialog).toHaveTextContent(/(?:Override|Özel limit) yeni plana taşınmaz/)
     await waitFor(() => expect(within(dialog).getByRole('option', { name: '5 GB · 5 GB (mevcut)' })).toBeDisabled())
     await userEvent.selectOptions(within(dialog).getByRole('combobox', { name: /^Plan/ }), 'plan-50')
     serve(next, [next, old])
@@ -253,9 +253,9 @@ describe('suspend, resume and override', () => {
     serve(makeSubscription({ storageLimitOverride: { kind: 'limited', bytes: 2_500_000_000 }, effectiveStorageLimit: { unlimited: false, bytes: 2_500_000_000, source: 'override' } }))
     vi.mocked(api.setStorageLimitOverride).mockResolvedValue(active)
     mount()
-    await userEvent.click(await screen.findByRole('button', { name: 'Limit override' }))
+    await userEvent.click(await screen.findByRole('button', { name: "Özel limit" }))
     const dialog = await dialogByName()
-    const size = within(dialog).getByLabelText(/Override boyutu/)
+    const size = within(dialog).getByLabelText(/(?:Override|Özel limit) boyutu/)
     expect(size).toHaveValue('2,5')
     await userEvent.clear(size)
     await userEvent.type(size, '3')
@@ -268,9 +268,9 @@ describe('suspend, resume and override', () => {
     serve(kind === 'none' ? makeSubscription({ storageLimitOverride: { kind: 'unlimited', bytes: null }, effectiveStorageLimit: { unlimited: true, bytes: null, source: 'override' } }) : active)
     vi.mocked(api.setStorageLimitOverride).mockResolvedValue(active)
     mount()
-    await userEvent.click(await screen.findByRole('button', { name: 'Limit override' }))
+    await userEvent.click(await screen.findByRole('button', { name: "Özel limit" }))
     const dialog = await dialogByName()
-    await userEvent.selectOptions(within(dialog).getByRole('combobox', { name: /override/i }), kind)
+    await userEvent.selectOptions(within(dialog).getByRole('combobox', { name: /(?:override|özel depolama limiti)/i }), kind)
     await userEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }))
     await waitFor(() => expect(api.setStorageLimitOverride).toHaveBeenCalledWith('tenant-a', body))
   })
@@ -278,7 +278,7 @@ describe('suspend, resume and override', () => {
   it('maps a not-open override conflict', async () => {
     vi.mocked(api.setStorageLimitOverride).mockRejectedValue(new ApiError(409, { error: 'subscription_not_open' }))
     mount()
-    await userEvent.click(await screen.findByRole('button', { name: 'Limit override' }))
+    await userEvent.click(await screen.findByRole('button', { name: "Özel limit" }))
     const dialog = await dialogByName()
     await userEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }))
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('Abonelik sona ermiş')

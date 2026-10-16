@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
@@ -11,15 +12,16 @@ type Tab = 'policy' | 'channels' | 'deliveries'
 
 /** Owner/Admin only (the API enforces it too); other roles get a notice and no request is made. */
 export function NotificationsPage() {
+  useLanguage()
   const { tenant, canAdmin } = useTenant()
   const [tab, setTab] = useState<Tab>('policy')
   if (!canAdmin) return <div className="space-y-6">
-    <PageHeader title="Bildirimler" />
-    <Notice tone="error" title="Bildirimleri yönetme yetkiniz yok">Bildirim ayarlarını yalnızca bu tenant'ın Owner ve Admin rolleri görebilir.</Notice>
+    <PageHeader title={tx("Bildirimler")} />
+    <Notice tone="error" title={tx("Bildirimleri yönetme yetkiniz yok")}>{tx("Bildirim ayarlarını yalnızca bu tenant'ın Owner ve Admin rolleri görebilir.")}</Notice>
   </div>
   return <div className="space-y-6">
-    <PageHeader title="Bildirimler" description={`${tenant.name} · E-posta, webhook ve SMS ile uyarı bildirimleri.`} />
-    <Tabs label="Bildirim bölümleri" idPrefix="notifications" value={tab} onChange={setTab} items={[{ value: 'policy', label: 'Politika' }, { value: 'channels', label: 'Kanallar' }, { value: 'deliveries', label: 'Gönderim geçmişi' }]} />
+    <PageHeader title={tx("Bildirimler")} description={tx("{0} · E-posta, webhook ve SMS ile uyarı bildirimleri.", { "0": tenant.name })} />
+    <Tabs label={tx("Bildirim bölümleri")} idPrefix="notifications" value={tab} onChange={setTab} items={[{ value: 'policy', label: tx('Politika') }, { value: 'channels', label: tx('Kanallar') }, { value: 'deliveries', label: tx('Gönderim geçmişi') }]} />
     <div role="tabpanel" id="notifications-panel-policy" aria-labelledby="notifications-tab-policy" hidden={tab !== 'policy'}>
       <PolicySection />
     </div>

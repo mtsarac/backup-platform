@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import { Search } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
@@ -13,10 +14,11 @@ interface FilterBarProps {
 export function FilterBar({
   search,
   onSearchChange,
-  placeholder = 'Ara...',
+  placeholder = tx('Ara...'),
   children,
   className,
 }: FilterBarProps) {
+  useLanguage()
   return (
     <div
       className={cn(

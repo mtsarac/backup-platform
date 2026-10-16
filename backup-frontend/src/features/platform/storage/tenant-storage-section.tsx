@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { RefreshCw, RotateCcw } from 'lucide-react'
@@ -14,6 +15,7 @@ import { errorMessage } from '@/lib/api/failure-messages'
 import { usePlatformTenantQuota, useRebuildUsage, useReconcileUsage } from './hooks'
 
 export function TenantStorageSection({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
+  useLanguage()
   const query = usePlatformTenantQuota(tenantId)
   const reconcile = useReconcileUsage(tenantId)
   const rebuild = useRebuildUsage(tenantId)
@@ -29,8 +31,8 @@ export function TenantStorageSection({ tenantId, tenantName }: { tenantId: strin
         setConfirmOp(null)
         setLastResult(
           res.drifted
-            ? `Reconcile tamamlandı: sapma düzeltildi (${res.reservationsReleased} rezerve temizlendi).`
-            : 'Reconcile tamamlandı: sapma tespit edilmedi.',
+            ? tx("Reconcile tamamlandı: sapma düzeltildi ({0} rezerve temizlendi).", { "0": res.reservationsReleased })
+            : tx('Reconcile tamamlandı: sapma tespit edilmedi.'),
         )
       },
     })
@@ -42,24 +44,22 @@ export function TenantStorageSection({ tenantId, tenantName }: { tenantId: strin
       onSuccess: (res) => {
         setConfirmOp(null)
         setLastResult(
-          `Rebuild tamamlandı: kullanım yeniden hesaplandı (V${res.policyVersion}, ${res.reservationsReleased} rezerve temizlendi).`,
+          tx("Rebuild tamamlandı: kullanım yeniden hesaplandı (V{0}, {1} rezerve temizlendi).", { "0": res.policyVersion, "1": res.reservationsReleased }),
         )
       },
     })
   }
 
   return (
-    <Section title={<span className="inline-flex flex-wrap items-center gap-2">Depolama ve Kota {quota && <StandingBadge quota={quota} />}</span>} description="Kullanılan ve rezerve alan; geçerli politika ve Backup başlatma durumu." actions={<>
+    <Section title={<span className="inline-flex flex-wrap items-center gap-2">{tx("Depolama ve Kota")}{' '}{quota && <StandingBadge quota={quota} />}</span>} description={tx("Kullanılan ve rezerve alan; geçerli politika ve Backup başlatma durumu.")} actions={<>
           <Button
             variant="outline"
             size="sm"
             disabled={query.isFetching}
             onClick={() => void query.refetch()}
-            title="Kullanım verisini yenile"
+            title={tx("Kullanım verisini yenile")}
           >
-            <RefreshCw className={`size-3.5 ${query.isFetching ? 'animate-spin' : ''}`} />
-            Yenile
-          </Button>
+            <RefreshCw className={`size-3.5 ${query.isFetching ? 'animate-spin' : ''}`} />{tx("Yenile")}</Button>
           <Button
             variant="outline"
             size="sm"
@@ -67,9 +67,7 @@ export function TenantStorageSection({ tenantId, tenantName }: { tenantId: strin
               reconcile.reset()
               setConfirmOp('reconcile')
             }}
-          >
-            Reconcile
-          </Button>
+          >{tx("Reconcile")}</Button>
           <Button
             variant="outline"
             size="sm"
@@ -78,9 +76,7 @@ export function TenantStorageSection({ tenantId, tenantName }: { tenantId: strin
               setConfirmOp('rebuild')
             }}
           >
-            <RotateCcw className="size-3.5" />
-            Rebuild
-          </Button>
+            <RotateCcw className="size-3.5" />{tx("Rebuild")}</Button>
       </>}>
       <div className="space-y-4">
       {lastResult && <Notice tone="success">{lastResult}</Notice>}
@@ -91,19 +87,18 @@ export function TenantStorageSection({ tenantId, tenantName }: { tenantId: strin
             <QuotaSummary quota={quota} />
 
             <details className="rounded-lg bg-surface-2 p-4">
-              <summary className="cursor-pointer text-sm font-medium text-text-heading">Kota politikası ve kapsam</summary>
+              <summary className="cursor-pointer text-sm font-medium text-text-heading">{tx("Kota politikası ve kapsam")}</summary>
               <div className="pt-4"><Facts columns={2}>
-                <Fact label="Kota Politikası"><Link to={platformPaths.quotaPolicies} className="font-medium text-primary hover:underline">{quota.policy.key} (v{quota.policy.version})</Link></Fact>
-                <Fact label="Hesaplama Modu">{accountingModeLabels[quota.accountingMode]}</Fact>
-                <Fact label="Uygulama Modu">{enforcementModeLabels[quota.enforcementMode]}</Fact>
-                <Fact label="Kapsam">{scopeLabels(quota.includedStorageScopes).join('; ')}</Fact>
+                <Fact label={tx("Kota Politikası")}><Link to={platformPaths.quotaPolicies} className="font-medium text-primary hover:underline">{quota.policy.key} (v{quota.policy.version})</Link></Fact>
+                <Fact label={tx("Hesaplama Modu")}>{accountingModeLabels[quota.accountingMode]}</Fact>
+                <Fact label={tx("Uygulama Modu")}>{enforcementModeLabels[quota.enforcementMode]}</Fact>
+                <Fact label={tx("Kapsam")}>{scopeLabels(quota.includedStorageScopes).join('; ')}</Fact>
               </Facts></div>
             </details>
 
-            {!quota.newBackupsAllowed && <Notice tone="error">Yeni backup başlatma engellendi (red kodu: <code>{quota.denialCode ?? 'bilinmiyor'}</code>).</Notice>}
+            {!quota.newBackupsAllowed && <Notice tone="error">{tx("Yeni backup başlatma engellendi (red kodu:")}{' '}<code>{quota.denialCode ?? 'bilinmiyor'}</code>).</Notice>}
 
-            <div className="text-xs text-text-muted">
-              Son hesaplama zamanı: {agentDate(quota.calculatedAt)}
+            <div className="text-xs text-text-muted">{tx("Son hesaplama zamanı:")}{' '}{agentDate(quota.calculatedAt)}
             </div>
           </div>
         )}
@@ -112,8 +107,8 @@ export function TenantStorageSection({ tenantId, tenantName }: { tenantId: strin
       <ConfirmDialog
         open={confirmOp === 'reconcile'}
         onClose={() => setConfirmOp(null)}
-        title="Depolama kullanımı doğrulansın mı (Reconcile)?"
-        description={`“${tenantName}” tenant'ının aktif artifact ve replika kayıtları taranarak izlenen kullanım ile senkronize edilir. Zaman aşımına uğramış rezervasyonlar serbest bırakılır.`}
+        title={tx("Depolama kullanımı doğrulansın mı (Reconcile)?")}
+        description={tx("“{0}” tenant'ının aktif artifact ve replika kayıtları taranarak izlenen kullanım ile senkronize edilir. Zaman aşımına uğramış rezervasyonlar serbest bırakılır.", { "0": tenantName })}
         confirmLabel="Reconcile Çalıştır"
         pending={reconcile.isPending}
         error={reconcile.error ? errorMessage(reconcile.error) : undefined}
@@ -123,8 +118,8 @@ export function TenantStorageSection({ tenantId, tenantName }: { tenantId: strin
       <ConfirmDialog
         open={confirmOp === 'rebuild'}
         onClose={() => setConfirmOp(null)}
-        title="Depolama kullanımı sıfırdan hesaplansın mı (Rebuild)?"
-        description={`“${tenantName}” tenant'ının kullanım tablosu sıfırlanıp tüm artifact ve replikaları geçerli kota politikası (${quota?.policy.key ?? 'varsayılan'}) kurallarına göre baştan hesaplanacaktır. Bu işlem audit kaydı oluşturur.`}
+        title={tx("Depolama kullanımı sıfırdan hesaplansın mı (Rebuild)?")}
+        description={tx("“{0}” tenant'ının kullanım tablosu sıfırlanıp tüm artifact ve replikaları geçerli kota politikası ({1}) kurallarına göre baştan hesaplanacaktır. Bu işlem audit kaydı oluşturur.", { "0": tenantName, "1": quota?.policy.key ?? tx('varsayılan') })}
         confirmLabel="Rebuild Çalıştır"
         pending={rebuild.isPending}
         error={rebuild.error ? errorMessage(rebuild.error) : undefined}

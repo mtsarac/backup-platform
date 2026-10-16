@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import { render } from '@/test/render'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
@@ -28,7 +29,7 @@ describe('tenant switching and permissions', () => {
     await userEvent.click(screen.getByText(action))
     expect(await screen.findByText('Public B')).toBeInTheDocument()
     expect(screen.queryByText('Private A')).not.toBeInTheDocument()
-    expect(screen.queryByText('Run now')).not.toBeInTheDocument()
+    expect(screen.queryByText("Şimdi çalıştır")).not.toBeInTheDocument()
     await waitFor(() => expect(cache.getQueryData(['tenant', 'tenant-a', 'backup-runs'])).toBeUndefined())
     cache.clear()
   })

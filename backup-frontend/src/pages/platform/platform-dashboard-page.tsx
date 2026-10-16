@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import { AlertCircle, Building2, Database, Monitor, Users } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { KpiCard } from '@/components/data/kpi-card'
@@ -17,29 +18,30 @@ interface Attention { key: string; text: string; to: string; action: string }
 /** Only what needs a decision: counts of zero produce no row. */
 function attentionItems(data: PlatformSummary): Attention[] {
   const items: Attention[] = []
-  if (data.failedRunsLast24Hours > 0) items.push({ key: 'runs', text: `Son 24 saatte ${data.failedRunsLast24Hours} Backup Run başarısız oldu.`, to: platformPaths.audit(), action: 'Audit kayıtlarını aç' })
-  if (data.agents.offline > 0) items.push({ key: 'offline', text: `${data.agents.offline} Agent çevrimdışı.`, to: `${platformPaths.agents()}?connectivity=offline`, action: 'Çevrimdışı Agent\'ları listele' })
-  if (data.agents.unknown > 0) items.push({ key: 'unknown', text: `${data.agents.unknown} Agent'ın bağlantı durumu bilinmiyor.`, to: `${platformPaths.agents()}?connectivity=unknown`, action: 'Bilinmeyen Agent\'ları listele' })
-  if (data.agents.disabled > 0) items.push({ key: 'disabled', text: `${data.agents.disabled} Agent devre dışı bırakılmış.`, to: `${platformPaths.agents()}?status=Disabled`, action: 'Devre dışı Agent\'ları listele' })
+  if (data.failedRunsLast24Hours > 0) items.push({ key: 'runs', text: tx("Son 24 saatte {0} Backup Run başarısız oldu.", { "0": data.failedRunsLast24Hours }), to: platformPaths.audit(), action: tx('Audit kayıtlarını aç') })
+  if (data.agents.offline > 0) items.push({ key: 'offline', text: tx("{0} Agent çevrimdışı.", { "0": data.agents.offline }), to: `${platformPaths.agents()}?connectivity=offline`, action: tx('Çevrimdışı Agent\'ları listele') })
+  if (data.agents.unknown > 0) items.push({ key: 'unknown', text: tx("{0} Agent'ın bağlantı durumu bilinmiyor.", { "0": data.agents.unknown }), to: `${platformPaths.agents()}?connectivity=unknown`, action: tx('Bilinmeyen Agent\'ları listele') })
+  if (data.agents.disabled > 0) items.push({ key: 'disabled', text: tx("{0} Agent devre dışı bırakılmış.", { "0": data.agents.disabled }), to: `${platformPaths.agents()}?status=Disabled`, action: tx('Devre dışı Agent\'ları listele') })
   return items
 }
 
 export function PlatformDashboardPage() {
+  useLanguage()
   const query = usePlatformSummary()
   const data = query.data
   return <div className="space-y-6">
-    <PageHeader title="Platform Dashboard" description="Tüm tenant'lar genelinde özet durum." />
+    <PageHeader title={tx("Platform Dashboard")} description={tx("Tüm tenant'lar genelinde özet durum.")} />
     <PlatformQueryState isPending={query.isPending} error={query.error}>
       {data && <>
         <DashboardAttention data={data} />
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          <Link to={platformPaths.tenants} className="block rounded-lg"><KpiCard label="Tenants" value={data.tenants} icon={<Building2 className="size-4" />} className="h-full hover:bg-surface-2" /></Link>
-          <Link to={platformPaths.users} className="block rounded-lg"><KpiCard label="Users" value={data.users} icon={<Users className="size-4" />} className="h-full hover:bg-surface-2" /></Link>
-          <Link to={platformPaths.agents()} className="block rounded-lg"><KpiCard label="Agents" value={data.agents.total} icon={<Monitor className="size-4" />} className="h-full hover:bg-surface-2" /></Link>
-          <KpiCard label="Etkin Backup Jobs" value={data.enabledBackupJobs} icon={<Database className="size-4" />} />
-          <KpiCard label="Başarısız Backup Runs · son 24 saat" value={data.failedRunsLast24Hours} tone={data.failedRunsLast24Hours > 0 ? 'error' : undefined} icon={<AlertCircle className="size-4" />} className={data.failedRunsLast24Hours > 0 ? 'border-error/40' : undefined} />
+          <Link to={platformPaths.tenants} className="block rounded-lg"><KpiCard label={tx("Tenants")} value={data.tenants} icon={<Building2 className="size-4" />} className="h-full hover:bg-surface-2" /></Link>
+          <Link to={platformPaths.users} className="block rounded-lg"><KpiCard label={tx("Users")} value={data.users} icon={<Users className="size-4" />} className="h-full hover:bg-surface-2" /></Link>
+          <Link to={platformPaths.agents()} className="block rounded-lg"><KpiCard label={tx("Agents")} value={data.agents.total} icon={<Monitor className="size-4" />} className="h-full hover:bg-surface-2" /></Link>
+          <KpiCard label={tx("Etkin Backup Jobs")} value={data.enabledBackupJobs} icon={<Database className="size-4" />} />
+          <KpiCard label={tx("Başarısız Backup Runs · son 24 saat")} value={data.failedRunsLast24Hours} tone={data.failedRunsLast24Hours > 0 ? 'error' : undefined} icon={<AlertCircle className="size-4" />} className={data.failedRunsLast24Hours > 0 ? 'border-error/40' : undefined} />
         </div>
-        <Section title="Agent bağlantı durumu ve yaşam döngüsü" description="Bağlantı kesilmesi ile devre dışı bırakma ayrı durumlardır." actions={<Link className={`${linkClass} text-sm`} to={platformPaths.agents()}>Tüm Agent'lar</Link>}>
+        <Section title={tx("Agent bağlantı durumu ve yaşam döngüsü")} description={tx("Bağlantı kesilmesi ile devre dışı bırakma ayrı durumlardır.")} actions={<Link className={`${linkClass} text-sm`} to={platformPaths.agents()}>{tx("Tüm Agent'lar")}</Link>}>
           <AgentBreakdown counts={data.agents} />
         </Section>
         <DashboardStorage />
@@ -49,9 +51,10 @@ export function PlatformDashboardPage() {
 }
 
 function DashboardAttention({ data }: { data: PlatformSummary }) {
+  useLanguage()
   const items = attentionItems(data)
-  if (items.length === 0) return <Notice tone="success" title="Dikkat gerektiren bir durum yok.">Son 24 saatte başarısız Backup Run yok; çevrimdışı, bağlantısı bilinmeyen veya devre dışı Agent yok.</Notice>
-  return <Section title="Dikkat gerektirenler" description="Önce bunlara bakın.">
+  if (items.length === 0) return <Notice tone="success" title={tx("Dikkat gerektiren bir durum yok.")}>{tx("Son 24 saatte başarısız Backup Run yok; çevrimdışı, bağlantısı bilinmeyen veya devre dışı Agent yok.")}</Notice>
+  return <Section title={tx("Dikkat gerektirenler")} description={tx("Önce bunlara bakın.")}>
     <ul className="divide-y divide-border">
       {items.map((item) => <li key={item.key} className="flex flex-wrap items-center justify-between gap-2 py-2 first:pt-0 last:pb-0">
         <span className="text-[0.9375rem]">{item.text}</span>

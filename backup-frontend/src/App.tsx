@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { ProtectedRoute } from './components/auth/protected-route'
 import { PlatformAdminRoute } from './components/auth/platform-admin-route'
@@ -49,9 +50,10 @@ import { NotificationsPage } from './pages/notifications/notifications-page'
 import { PlatformNotificationTransportsPage } from './pages/platform/platform-notification-transports-page'
 
 function AppRoutes() {
+  useLanguage()
   const { isAuthenticated, isLoading, error, refresh } = useAuth()
   if (isLoading) return <div className="mx-auto max-w-lg p-6"><QueryState isPending error={null} /></div>
-  if (error) return <div className="mx-auto max-w-lg space-y-4 p-6"><QueryState isPending={false} error={error} /><Button onClick={refresh}>Tekrar dene</Button></div>
+  if (error) return <div className="mx-auto max-w-lg space-y-4 p-6"><QueryState isPending={false} error={error} /><Button onClick={refresh}>{tx("Tekrar dene")}</Button></div>
   return <Routes>
     <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />} />
     <Route element={<ProtectedRoute isAuthenticated={isAuthenticated} />}>
@@ -83,7 +85,7 @@ function AppRoutes() {
         <Route path="restores/:id" element={<RestoreDetailPage />} />
         <Route path="support-access" element={<SupportAccessPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
-        <Route path="*" element={<p>Sayfa bulunamadı.</p>} />
+        <Route path="*" element={<p>{tx("Sayfa bulunamadı.")}</p>} />
       </Routes></AppShell></TenantProvider>} />
       <Route path="/platform" element={<PlatformAdminRoute />}>
         <Route element={<PlatformShell />}>
@@ -101,11 +103,13 @@ function AppRoutes() {
           <Route path="support-sessions" element={<PlatformSupportSessionsPage />} />
           <Route path="support-sessions/:sessionId" element={<PlatformSupportSessionPage />} />
           <Route path="notification-transports" element={<PlatformNotificationTransportsPage />} />
-          <Route path="*" element={<p>Sayfa bulunamadı.</p>} />
+          <Route path="*" element={<p>{tx("Sayfa bulunamadı.")}</p>} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Route>
   </Routes>
 }
-export default function App() { return <BrowserRouter><AppRoutes /></BrowserRouter> }
+export default function App() {
+  useLanguage()
+  return <BrowserRouter><AppRoutes /></BrowserRouter> }

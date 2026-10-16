@@ -1,19 +1,28 @@
+import { tx } from '@/lib/i18n'
 import type { SupportPermission, SupportScope, SupportSession, SupportStatus } from './types'
 
 export const supportPermissions: readonly SupportPermission[] = ['ViewBackupMetadata', 'DownloadBackup', 'RestoreBackup']
 export const supportStatuses: readonly SupportStatus[] = ['Active', 'Expired', 'Closed', 'Revoked']
-export const permissionLabels: Record<SupportPermission, string> = { ViewBackupMetadata: 'Backup metadata görüntüle · ViewBackupMetadata', DownloadBackup: 'Backup indir · DownloadBackup', RestoreBackup: 'Yeni Database geri yükle · RestoreBackup' }
-export const permissionShortLabels: Record<SupportPermission, string> = { ViewBackupMetadata: 'Metadata görüntüleme', DownloadBackup: 'Download', RestoreBackup: 'Yeni Database restore' }
-export const permissionDescriptions: Record<SupportPermission, string> = {
-  ViewBackupMetadata: 'Müşterinin Backup Job, Backup Run ve Artifact bilgilerini okur; Backup dosyasını indirme izni vermez.',
-  DownloadBackup: 'Artifact dosyasını indirmeye izin verir.',
-  RestoreBackup: 'Yalnızca yeni Database oluşturur; mevcut Database değiştirilmez.',
+export const permissionLabels: Record<SupportPermission, string> = {
+  get ViewBackupMetadata() { return `${tx('Backup metadata görüntüle')} · ViewBackupMetadata` },
+  get DownloadBackup() { return `${tx('Backup indir')} · DownloadBackup` },
+  get RestoreBackup() { return `${tx('Yeni Database geri yükle')} · RestoreBackup` },
 }
-export const statusLabels: Record<SupportStatus, string> = { Active: 'Etkin', Expired: 'Süresi doldu', Closed: 'Kapatıldı', Revoked: 'Erişim geri alındı' }
+export const permissionShortLabels: Record<SupportPermission, string> = {
+  get ViewBackupMetadata() { return tx("Metadata görüntüleme") },
+  get DownloadBackup() { return tx("Download") },
+  get RestoreBackup() { return tx("Yeni Database restore") },
+}
+export const permissionDescriptions: Record<SupportPermission, string> = {
+  get ViewBackupMetadata() { return tx("Müşterinin Backup Job, Backup Run ve Artifact bilgilerini okur; Backup dosyasını indirme izni vermez.") },
+  get DownloadBackup() { return tx("Artifact dosyasını indirmeye izin verir.") },
+  get RestoreBackup() { return tx("Yalnızca yeni Database oluşturur; mevcut Database değiştirilmez.") },
+}
+export const statusLabels: Record<SupportStatus, string> = { get Active() { return tx("Etkin") }, get Expired() { return tx("Süresi doldu") }, get Closed() { return tx("Kapatıldı") }, get Revoked() { return tx("Erişim geri alındı") } }
 export const endedMessages: Record<Exclude<SupportStatus, 'Active'>, string> = {
-  Expired: 'Destek oturumunun süresi doldu. Müşteri verilerine erişim ve tüm işlemler kapalıdır.',
-  Closed: 'Destek oturumu kapatıldı. Müşteri verilerine erişim ve tüm işlemler kapalıdır.',
-  Revoked: 'Destek erişimi geri alındı. Müşteri verilerine erişim ve tüm işlemler kapalıdır.',
+  get Expired() { return tx("Destek oturumunun süresi doldu. Müşteri verilerine erişim ve tüm işlemler kapalıdır.") },
+  get Closed() { return tx("Destek oturumu kapatıldı. Müşteri verilerine erişim ve tüm işlemler kapalıdır.") },
+  get Revoked() { return tx("Destek erişimi geri alındı. Müşteri verilerine erişim ve tüm işlemler kapalıdır.") },
 }
 export interface SupportAccess { view: boolean; download: boolean; restore: boolean; downloads: boolean; restores: boolean }
 export function supportAccess(session: SupportSession): SupportAccess {

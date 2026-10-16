@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Building2, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -23,18 +24,20 @@ import { ApiError } from '@/lib/api/client'
 import { errorMessage } from '@/lib/api/failure-messages'
 
 function CreateTenantDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (name: string) => void }) {
+  useLanguage()
   const [name, setName] = useState('')
   const create = useCreateTenant()
   const nameInvalid = create.error instanceof ApiError && create.error.field === 'name'
-  return <FormDialog title="Yeni tenant" description="Tenant, müşteriye ait yalıtılmış çalışma alanıdır. Üyeleri ve abonelik planını oluşturduktan sonra tenant detayından yönetirsiniz."
-    submitLabel="Tenant oluştur" pendingLabel="Oluşturuluyor…" pending={create.isPending} disabled={!name.trim()}
+  return <FormDialog title={tx("Yeni tenant")} description={tx("Tenant, müşteriye ait yalıtılmış çalışma alanıdır. Üyeleri ve abonelik planını oluşturduktan sonra tenant detayından yönetirsiniz.")}
+    submitLabel={tx("Tenant oluştur")} pendingLabel={tx("Oluşturuluyor…")} pending={create.isPending} disabled={!name.trim()}
     error={create.error ? errorMessage(create.error) : undefined} onClose={onClose}
     onSubmit={() => create.mutate(name.trim(), { onSuccess: (tenant) => { onCreated(tenant.name); onClose() } })}>
-    <Field label="Tenant adı">{(control) => <input {...control} className={inputClass} value={name} maxLength={200} required aria-invalid={nameInvalid} onChange={(event) => setName(event.target.value)} />}</Field>
+    <Field label={tx("Tenant adı")}>{(control) => <input {...control} className={inputClass} value={name} maxLength={200} required aria-invalid={nameInvalid} onChange={(event) => setName(event.target.value)} />}</Field>
   </FormDialog>
 }
 
 export function PlatformTenantsPage() {
+  useLanguage()
   const { page, get, update } = useListParams()
   const search = get('search')
   const query = usePlatformTenants({ search, page, pageSize: PLATFORM_PAGE_SIZE })
@@ -42,24 +45,24 @@ export function PlatformTenantsPage() {
   const [created, setCreated] = useState('')
   const data = query.data
   const columns: Column<PlatformTenant>[] = [
-    { key: 'name', header: 'Tenant', wrap: true, render: (tenant) => <Link className={`${linkClass} font-semibold`} to={platformPaths.tenant(tenant.tenantId)}>{tenant.name}</Link> },
-    { key: 'members', header: 'Üye sayısı', render: (tenant) => tenant.memberCount },
-    { key: 'agents', header: 'Agents', render: (tenant) => tenant.agentCount },
-    { key: 'enrollment', header: 'Agent kaydı', render: (tenant) => <Badge tone={tenant.enrollmentEnabled ? 'success' : 'neutral'} dot>{tenant.enrollmentEnabled ? 'Açık' : 'Kapalı'}</Badge> },
+    { key: 'name', header: tx('Tenant'), wrap: true, render: (tenant) => <Link className={`${linkClass} font-semibold`} to={platformPaths.tenant(tenant.tenantId)}>{tenant.name}</Link> },
+    { key: 'members', header: tx('Üye sayısı'), render: (tenant) => tenant.memberCount },
+    { key: 'agents', header: tx('Agents'), render: (tenant) => tenant.agentCount },
+    { key: 'enrollment', header: tx('Agent kaydı'), render: (tenant) => <Badge tone={tenant.enrollmentEnabled ? 'success' : 'neutral'} dot>{tenant.enrollmentEnabled ? tx('Açık') : tx('Kapalı')}</Badge> },
   ]
-  const newTenant = <Button onClick={() => { setCreated(''); setCreating(true) }}><Plus aria-hidden="true" />Yeni tenant</Button>
+  const newTenant = <Button onClick={() => { setCreated(''); setCreating(true) }}><Plus aria-hidden="true" />{tx("Yeni tenant")}</Button>
   return <div className="space-y-6">
-    <PageHeader crumbs={[platformCrumb]} title="Tenants" description="Tüm tenant'ları yönetin; üyelikler ve Agent kayıt politikası tenant detayındadır." actions={newTenant} />
-    {created && <Notice tone="success">“{created}” tenant'ı oluşturuldu.</Notice>}
-    <Filters label="Tenant filtreleri" onClear={search ? () => update({ search: '' }) : undefined}>
-      <SearchForm className="sm:col-span-2" label="Tenant ara" value={search} onSearch={(value) => update({ search: value })} placeholder="Tenant adı" />
+    <PageHeader crumbs={[platformCrumb]} title={tx("Tenants")} description={tx("Tüm tenant'ları yönetin; üyelikler ve Agent kayıt politikası tenant detayındadır.")} actions={newTenant} />
+    {created && <Notice tone="success">“{created}{tx("” tenant'ı oluşturuldu.")}</Notice>}
+    <Filters label={tx("Tenant filtreleri")} onClear={search ? () => update({ search: '' }) : undefined}>
+      <SearchForm className="sm:col-span-2" label={tx("Tenant ara")} value={search} onSearch={(value) => update({ search: value })} placeholder={tx("Tenant adı")} />
     </Filters>
     <PlatformQueryState isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">
         {data.totalCount === 0 && !search
-          ? <ListEmpty icon={Building2} title="Henüz tenant yok." action={newTenant}>İlk tenant'ı oluşturarak üye ve Agent eklemeye başlayın.</ListEmpty>
-          : <DataTable rows={data.items} columns={columns} keyExtractor={(tenant) => tenant.tenantId} emptyMessage="Aramaya uygun tenant bulunamadı." />}
-        {data.totalCount > 0 && <Pagination label="Tenant sayfaları" page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
+          ? <ListEmpty icon={Building2} title={tx("Henüz tenant yok.")} action={newTenant}>{tx("İlk tenant'ı oluşturarak üye ve Agent eklemeye başlayın.")}</ListEmpty>
+          : <DataTable rows={data.items} columns={columns} keyExtractor={(tenant) => tenant.tenantId} emptyMessage={tx("Aramaya uygun tenant bulunamadı.")} />}
+        {data.totalCount > 0 && <Pagination label={tx("Tenant sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
       </div>}
     </PlatformQueryState>
     {creating && <CreateTenantDialog onClose={() => setCreating(false)} onCreated={setCreated} />}

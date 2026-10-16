@@ -1,3 +1,4 @@
+import { tx } from '@/lib/i18n'
 import type { AccountingMode, EnforcementMode, EntitlementStatus, PlanSummary, QuotaState, ScopeSelector } from './types'
 import { LEGACY_UNLIMITED_KEY } from './types'
 
@@ -5,42 +6,42 @@ type Tone = 'neutral' | 'success' | 'warning' | 'error' | 'info'
 
 export const quotaStateMeta: Record<QuotaState, { label: string; tone: Tone }> = {
   Normal: { label: 'Normal', tone: 'success' },
-  Warning: { label: 'Warning', tone: 'warning' },
-  Critical: { label: 'Critical', tone: 'error' },
-  OverQuota: { label: 'OverQuota', tone: 'error' },
-  Unlimited: { label: 'Unlimited', tone: 'info' },
+  Warning: { get label() { return tx("Warning") }, tone: 'warning' },
+  Critical: { get label() { return tx("Critical") }, tone: 'error' },
+  OverQuota: { get label() { return tx("OverQuota") }, tone: 'error' },
+  Unlimited: { get label() { return tx("Unlimited") }, tone: 'info' },
 }
 
 export const subscriptionStatusMeta: Record<EntitlementStatus, { label: string; tone: Tone }> = {
-  Active: { label: 'Etkin', tone: 'success' },
-  Suspended: { label: 'Askıda', tone: 'warning' },
-  Expired: { label: 'Süresi doldu', tone: 'error' },
-  NoSubscription: { label: 'Abonelik yok', tone: 'neutral' },
+  Active: { get label() { return tx("Etkin") }, tone: 'success' },
+  Suspended: { get label() { return tx("Askıda") }, tone: 'warning' },
+  Expired: { get label() { return tx("Süresi doldu") }, tone: 'error' },
+  NoSubscription: { get label() { return tx("Abonelik yok") }, tone: 'neutral' },
 }
 
 export const accountingModeLabels: Record<AccountingMode, string> = {
-  LogicalArtifactBytes: 'Logical',
-  PhysicalReplicaBytes: 'Physical',
+  get LogicalArtifactBytes() { return tx("Logical") },
+  get PhysicalReplicaBytes() { return tx("Physical") },
 }
 
 export const accountingModeHelp: Record<AccountingMode, string> = {
-  LogicalArtifactBytes: 'Bir backup, kaç kopyası olursa olsun kapsamdaki en az bir kopyası varsa yalnızca bir kez, kendi boyutuyla sayılır.',
-  PhysicalReplicaBytes: 'Kapsamdaki her fiziksel kopya kendi boyutuyla ayrı ayrı sayılır.',
+  get LogicalArtifactBytes() { return tx("Bir backup, kaç kopyası olursa olsun kapsamdaki en az bir kopyası varsa yalnızca bir kez, kendi boyutuyla sayılır.") },
+  get PhysicalReplicaBytes() { return tx("Kapsamdaki her fiziksel kopya kendi boyutuyla ayrı ayrı sayılır.") },
 }
 
 export const enforcementModeLabels: Record<EnforcementMode, string> = {
-  BlockNewBackups: 'Yeni backup\'ları engelle',
-  WarnOnly: 'Yalnızca uyar',
-  None: 'Kota uygulanmaz',
+  get BlockNewBackups() { return tx("Yeni backup'ları engelle") },
+  get WarnOnly() { return tx("Yalnızca uyar") },
+  get None() { return tx("Kota uygulanmaz") },
 }
 
 export const enforcementModeHelp: Record<EnforcementMode, string> = {
-  BlockNewBackups: 'Limite ulaşan tenant yeni backup başlatamaz.',
-  WarnOnly: 'Kullanım izlenir ve gösterilir; yeni backup hiçbir zaman engellenmez.',
-  None: 'Kota kararı verilmez; tenant Unlimited görünür.',
+  get BlockNewBackups() { return tx("Limite ulaşan tenant yeni backup başlatamaz.") },
+  get WarnOnly() { return tx("Kullanım izlenir ve gösterilir; yeni backup hiçbir zaman engellenmez.") },
+  get None() { return tx("Kota kararı verilmez; tenant Unlimited görünür.") },
 }
 
-export const ownershipLabels: Record<string, string> = { PlatformManaged: 'Platform yönetimli', TenantManaged: 'Tenant yönetimli' }
+export const ownershipLabels: Record<string, string> = { get PlatformManaged() { return tx("Platform yönetimli") }, get TenantManaged() { return tx("Tenant yönetimli") } }
 
 export function ownershipLabel(ownership: string): string {
   return Object.hasOwn(ownershipLabels, ownership) ? ownershipLabels[ownership] : ownership
@@ -50,11 +51,11 @@ export function ownershipLabel(ownership: string): string {
 export function scopeLabel(selector: ScopeSelector): string {
   const values = selector.values ?? []
   switch (selector.kind) {
-    case 'all': return 'Tüm storage (All)'
-    case 'providerType': return `Provider türü: ${values.join(', ')}`
-    case 'ownershipType': return `Sahiplik: ${values.map(ownershipLabel).join(', ')}`
-    case 'quotaScope': return `Kota kapsamı: ${values.join(', ')}`
-    case 'storageConnection': return `Depolama bağlantısı: ${values.join(', ')}`
+    case 'all': return tx('Tüm storage (All)')
+    case 'providerType': return tx("Provider türü: {0}", { "0": values.join(', ') })
+    case 'ownershipType': return tx("Sahiplik: {0}", { "0": values.map(ownershipLabel).join(', ') })
+    case 'quotaScope': return tx("Kota kapsamı: {0}", { "0": values.join(', ') })
+    case 'storageConnection': return tx("Depolama bağlantısı: {0}", { "0": values.join(', ') })
     default: return String(selector.kind)
   }
 }

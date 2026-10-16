@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
@@ -25,7 +26,8 @@ const empty = (message: string) => <p className="px-4 py-10 text-center text-tex
  * A real table from `md` up. Below that each row becomes a labelled card (the header is read from the column,
  * not duplicated in the DOM), so phones never need horizontal scrolling. Explicit roles keep the table semantics when the layout turns block.
  */
-export function DataTable<T>({ rows, columns, keyExtractor, emptyMessage = 'Kayıt bulunamadı.', className, layout = 'table' }: DataTableProps<T>) {
+export function DataTable<T>({ rows, columns, keyExtractor, emptyMessage = tx('Kayıt bulunamadı.'), className, layout = 'table' }: DataTableProps<T>) {
+  useLanguage()
   if (layout === 'cards') {
     if (rows.length === 0) return <div className="rounded-xl border border-border bg-surface">{empty(emptyMessage)}</div>
     return (

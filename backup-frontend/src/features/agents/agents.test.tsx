@@ -1,19 +1,20 @@
 /// <reference lib="es2024.promise" />
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { ClientsPage } from '@/pages/clients/clients-page'
 import { ClientDetailPage } from '@/pages/clients/client-detail-page'
 import { AgentRegisterPage } from '@/pages/clients/agent-register-page'
-import { CreateTokenDialog } from './create-token-dialog'
+import { AddAgentDialog } from './add-agent-dialog'
 import type { AgentDetail, CreatedEnrollmentToken } from './types'
 import * as api from './api'
 
 const tenancy = vi.hoisted(() => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true, tenant: { tenantId: 'tenant-a', name: 'Test', role: 'Owner' } }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => tenancy }))
-vi.mock('./api', () => ({ getAgents: vi.fn(), getAgent: vi.fn(), revokeAgent: vi.fn(), getEnrollmentPolicy: vi.fn(), setEnrollmentPolicy: vi.fn(), getEnrollmentTokens: vi.fn(), getEnrollmentTokenStatus: vi.fn(), createEnrollmentToken: vi.fn(), revokeEnrollmentToken: vi.fn() }))
+vi.mock('./api', () => ({ getAgentDistribution: vi.fn(), getAgents: vi.fn(), getAgent: vi.fn(), revokeAgent: vi.fn(), getEnrollmentPolicy: vi.fn(), setEnrollmentPolicy: vi.fn(), getEnrollmentTokens: vi.fn(), getEnrollmentTokenStatus: vi.fn(), createEnrollmentToken: vi.fn(), revokeEnrollmentToken: vi.fn() }))
 
 const agent: AgentDetail = {
   agentId: 'agent-a', hostName: 'SQL-01', platform: 'Windows', status: 'Active',
@@ -31,6 +32,7 @@ function mount(content: ReactNode, path = '/tenants/tenant-a/agents') {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: 'https://backend.example:7443', packages: { 'win-x64': true, 'linux-x64': true } })
   Object.assign(tenancy, { tenantId: 'tenant-a', canAdmin: true, canOperate: true })
   tenancy.tenant.role = 'Owner'
   vi.mocked(api.getAgents).mockResolvedValue([agent])
@@ -69,7 +71,7 @@ describe('Agent read views', () => {
     expect(await screen.findByRole('heading', { name: 'SQL-01' })).toBeInTheDocument()
     expect(screen.getByText('.NET 10')).toBeInTheDocument()
     expect(screen.getByText('Windows Server')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Agent kaydını iptal et' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: "Ajan kaydını iptal et" })).not.toBeInTheDocument()
     expect(screen.queryByText('agent-a')).not.toBeInTheDocument()
     expect(api.getAgent).toHaveBeenCalledWith('tenant-a', 'agent-a', expect.any(AbortSignal))
   })
@@ -87,7 +89,7 @@ describe('Agent read views', () => {
     const row = (await screen.findByRole('link', { name: 'SQL-01' })).closest('tr')!
     expect(within(row).getByText('4 yetenek')).toBeInTheDocument()
     expect(within(row).getByText('2 destekleniyor')).toBeInTheDocument()
-    expect(within(row).queryByText('MSSQL Full Backup')).not.toBeInTheDocument()
+    expect(within(row).queryByText("MSSQL Tam Yedekleme")).not.toBeInTheDocument()
     list.unmount()
     mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
     fireEvent.click(await screen.findByRole('tab', { name: 'Yetenekler' }))
@@ -96,7 +98,7 @@ describe('Agent read views', () => {
     expect(within(section).getByText('Desteklenmiyor')).toBeInTheDocument()
     expect(within(section).getByText('Bilinmiyor')).toBeInTheDocument()
     expect(within(section).getByText('vendor.custom-feature')).toBeInTheDocument()
-    expect(within(section).getByText('MSSQL Full Backup')).toBeInTheDocument()
+    expect(within(section).getByText("MSSQL Tam Yedekleme")).toBeInTheDocument()
     expect(screen.getByText('c1-abc')).toBeInTheDocument()
   })
 
@@ -110,7 +112,7 @@ describe('Agent read views', () => {
   it('requires focused confirmation before admin revocation and invalidates only related scopes', async () => {
     const { client } = mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
     const invalidate = vi.spyOn(client, 'invalidateQueries')
-    fireEvent.click(await screen.findByRole('button', { name: 'Agent kaydını iptal et' }))
+    fireEvent.click(await screen.findByRole('button', { name: "Ajan kaydını iptal et" }))
     const dialog = await screen.findByRole('dialog')
     await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Vazgeç' })).toHaveFocus())
     expect(api.revokeAgent).not.toHaveBeenCalled()
@@ -129,15 +131,15 @@ describe('Enrollment', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('yöneticisi')
     expect(api.getEnrollmentPolicy).not.toHaveBeenCalled()
     expect(api.getEnrollmentTokens).not.toHaveBeenCalled()
-    expect(screen.queryByRole('button', { name: 'Token oluştur' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: "Kayıt anahtarı oluştur" })).not.toBeInTheDocument()
   })
 
   it('shows policy off and disables token creation, while admin may enable enrollment', async () => {
     vi.mocked(api.getEnrollmentPolicy).mockResolvedValue({ tenantId: 'tenant-a', enabled: false })
     mount(<AgentRegisterPage />)
-    const toggle = await screen.findByRole('switch', { name: 'Yeni agent kayıtlarına izin ver' })
+    const toggle = await screen.findByRole('switch', { name: "Yeni ajan kayıtlarına izin ver" })
     expect(toggle).toHaveAttribute('aria-checked', 'false')
-    expect(screen.getByRole('button', { name: 'Token oluştur' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: "Kayıt anahtarı oluştur" })).toBeDisabled()
     fireEvent.click(toggle)
     await waitFor(() => expect(api.setEnrollmentPolicy).toHaveBeenCalledWith('tenant-a', true))
   })
@@ -145,21 +147,21 @@ describe('Enrollment', () => {
   it('shows plaintext once without query or mutation cache persistence, and clears it on close', async () => {
     const { client } = mount(<AgentRegisterPage />)
     await screen.findByRole('switch')
-    fireEvent.click(screen.getByRole('button', { name: 'Token oluştur' }))
+    fireEvent.click(screen.getByRole('button', { name: "Kayıt anahtarı oluştur" }))
     const dialog = await screen.findByRole('dialog')
     const lifetime = within(dialog).getByRole('spinbutton', { name: 'Geçerlilik süresi (dakika)' })
     fireEvent.change(lifetime, { target: { value: '60' } })
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Token oluştur' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: "Kayıt anahtarı oluştur" }))
     expect(await screen.findByDisplayValue('secret-once-only')).toBeInTheDocument()
     expect(api.createEnrollmentToken).toHaveBeenCalledWith('tenant-a', 60, expect.any(AbortSignal))
-    expect(within(dialog).getByText('Bu token tekrar görüntülenemez.')).toBeInTheDocument()
+    expect(within(dialog).getByText(/Anahtarı paylaşmayın/)).toBeInTheDocument()
     expect(JSON.stringify(client.getQueryCache().getAll().map((query) => query.state.data))).not.toContain('secret-once-only')
     expect(client.getMutationCache().getAll()).toHaveLength(0)
     expect(screen.queryByText('internal-user-id')).not.toBeInTheDocument()
     expect(screen.queryByText('token-a')).not.toBeInTheDocument()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Kapat' }))
     await waitFor(() => expect(screen.queryByDisplayValue('secret-once-only')).not.toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: 'Token oluştur' }))
+    fireEvent.click(screen.getByRole('button', { name: "Kayıt anahtarı oluştur" }))
     expect(await screen.findByRole('spinbutton')).toHaveValue(1440)
     expect(screen.queryByDisplayValue('secret-once-only')).not.toBeInTheDocument()
   })
@@ -167,7 +169,7 @@ describe('Enrollment', () => {
   it('revokes an active token only after confirmation', async () => {
     const { client } = mount(<AgentRegisterPage />)
     const invalidate = vi.spyOn(client, 'invalidateQueries')
-    fireEvent.click(await screen.findByRole('button', { name: /tarihinde oluşturulan token'ı iptal et/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /tarihinde oluşturulan kayıt anahtarını iptal et/ }))
     const dialog = await screen.findByRole('dialog')
     expect(api.revokeEnrollmentToken).not.toHaveBeenCalled()
     fireEvent.click(within(dialog).getByRole('button', { name: 'İptali onayla' }))
@@ -179,8 +181,8 @@ describe('Enrollment', () => {
     const { promise, resolve } = Promise.withResolvers<CreatedEnrollmentToken>()
     vi.mocked(api.createEnrollmentToken).mockReturnValue(promise)
     const onCreated = vi.fn()
-    const view = mount(<CreateTokenDialog tenantId="tenant-a" onClose={vi.fn()} onCreated={onCreated} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Token oluştur' }))
+    const view = mount(<AddAgentDialog tenantId="tenant-a" onClose={vi.fn()} onCreated={onCreated} />)
+    fireEvent.click(await screen.findByRole('button', { name: "Kayıt anahtarı oluştur" }))
     const signal = vi.mocked(api.createEnrollmentToken).mock.calls[0]![2]
     view.unmount()
     expect(signal.aborted).toBe(true)
@@ -191,9 +193,9 @@ describe('Enrollment', () => {
   it('clears plaintext when the tenant changes without a route unmount', async () => {
     const { client, rerender } = mount(<AgentRegisterPage />)
     await screen.findByRole('switch')
-    fireEvent.click(screen.getByRole('button', { name: 'Token oluştur' }))
+    fireEvent.click(screen.getByRole('button', { name: "Kayıt anahtarı oluştur" }))
     const dialog = await screen.findByRole('dialog')
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Token oluştur' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: "Kayıt anahtarı oluştur" }))
     await screen.findByDisplayValue('secret-once-only')
     tenancy.tenantId = 'tenant-b'
     rerender(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/tenants/tenant-a/agents']}><Routes><Route path="/tenants/:tenantId/agents/:id" element={<AgentRegisterPage />} /><Route path="*" element={<AgentRegisterPage />} /></Routes></MemoryRouter></QueryClientProvider>)

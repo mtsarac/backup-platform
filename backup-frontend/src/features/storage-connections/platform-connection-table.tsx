@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import { Link } from 'react-router-dom'
 import { DataTable, type Column } from '@/components/data/data-table'
 import { Badge } from '@/components/ui/badge'
@@ -12,18 +13,19 @@ import type { ConnectionView, ProviderDescriptor } from './types'
 export function PlatformConnectionTable({ rows, providers, ops, showTenant, emptyMessage }: {
   rows: readonly ConnectionView[]; providers: readonly ProviderDescriptor[]; ops: ConnectionOps; showTenant: boolean; emptyMessage: string
 }) {
+  useLanguage()
   const columns: Column<ConnectionView>[] = [
-    ...(showTenant ? [{ key: 'tenant', header: 'Tenant', wrap: true, render: (row: ConnectionView) => <Link className={linkClass} to={platformPaths.tenant(row.tenantId)}>{row.tenantName ?? 'Tenant'}</Link> }] : []),
-    { key: 'name', header: 'Bağlantı', wrap: true, render: (row) => <div className="space-y-1">
-      <div className="flex flex-wrap items-center gap-1.5"><span className="font-medium text-text-heading">{row.name}</span>{row.isDefault && <Badge tone="accent">Varsayılan</Badge>}</div>
+    ...(showTenant ? [{ key: 'tenant', header: tx('Tenant'), wrap: true, render: (row: ConnectionView) => <Link className={linkClass} to={platformPaths.tenant(row.tenantId)}>{row.tenantName ?? 'Tenant'}</Link> }] : []),
+    { key: 'name', header: tx('Bağlantı'), wrap: true, render: (row) => <div className="space-y-1">
+      <div className="flex flex-wrap items-center gap-1.5"><span className="font-medium text-text-heading">{row.name}</span>{row.isDefault && <Badge tone="accent">{tx("Varsayılan")}</Badge>}</div>
       <p className="text-sm text-text-muted">{row.providerDisplayName}</p>
       <OwnershipBadge ownership={row.ownership} />
-      <details className="text-xs text-text-muted"><summary className="cursor-pointer">Bağlantı kimliği</summary><code className="break-all">{row.id}</code></details>
+      <details className="text-xs text-text-muted"><summary className="cursor-pointer">{tx("Bağlantı kimliği")}</summary><code className="break-all">{row.id}</code></details>
     </div> },
-    { key: 'enabled', header: 'Durum', wrap: true, render: (row) => <div className="space-y-2"><ConnectionState connection={row} /><LastTest test={row.lastTest} /></div> },
-    { key: 'secret', header: 'Kimlik bilgisi', wrap: true, render: (row) => <SecretStatus connection={row} /> },
-    { key: 'footprint', header: 'Replica / Boyut', render: (row) => <div className="space-y-2"><Footprint connection={row} /><p className="text-xs text-text-muted">Kota kapsamı: <code className="text-text">{row.quotaScope}</code></p></div> },
-    { key: 'actions', header: 'İşlemler', wrap: true, render: (row) => <ConnectionActions connection={row} descriptor={providers.find((provider) => provider.providerType === row.providerType)} ops={ops} /> },
+    { key: 'enabled', header: tx('Durum'), wrap: true, render: (row) => <div className="space-y-2"><ConnectionState connection={row} /><LastTest test={row.lastTest} /></div> },
+    { key: 'secret', header: tx('Kimlik bilgisi'), wrap: true, render: (row) => <SecretStatus connection={row} /> },
+    { key: 'footprint', header: tx('Replica / Boyut'), render: (row) => <div className="space-y-2"><Footprint connection={row} /><p className="text-xs text-text-muted">{tx("Kota kapsamı:")}{' '}<code className="text-text">{row.quotaScope}</code></p></div> },
+    { key: 'actions', header: tx('İşlemler'), wrap: true, render: (row) => <ConnectionActions connection={row} descriptor={providers.find((provider) => provider.providerType === row.providerType)} ops={ops} /> },
   ]
   return <DataTable rows={rows} columns={columns} keyExtractor={(row) => row.id} emptyMessage={emptyMessage} />
 }

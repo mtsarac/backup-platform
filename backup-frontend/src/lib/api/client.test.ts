@@ -64,8 +64,8 @@ describe('browser API contract', () => {
   it('maps unknown stable failure codes but never backend exceptions', () => {
     expect(failureMessage('FutureFailure')).toBe('İşlem başarısız oldu (FutureFailure).')
     expect(failureMessage('System.Exception: password=secret')).toBe('İşlem başarısız oldu.')
-    expect(failureMessage('attempts_exhausted')).toContain('attempt')
-    expect(failureMessage('storage_not_configured')).toContain('Storage')
+    expect(failureMessage('attempts_exhausted')).toContain('deneme')
+    expect(failureMessage('storage_not_configured')).toContain('Depolama')
   })
   it('keeps validation errors field-addressable and prevents tenant route escape', async () => {
     handle = () => json({ error: 'invalid_schedule', field: 'cronExpression', code: 'invalid_cron', message: 'parser internals' }, 400)

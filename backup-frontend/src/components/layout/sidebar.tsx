@@ -2,30 +2,32 @@ import { Activity, Bell, Database, DatabaseBackup, Gauge, HardDrive, LayoutDashb
 import { useAuth } from '@/features/auth/use-auth'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { SidebarFrame, type NavGroup } from './nav'
+import { useTranslation } from '@/lib/i18n'
 
 export function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen?: boolean; onMobileClose?: () => void }) {
   const { tenantId, canAdmin } = useTenant()
   const { user } = useAuth()
+  const { t } = useTranslation()
   const base = `/tenants/${tenantId}`
   const groups: NavGroup[] = [
-    { items: [{ label: 'Dashboard', to: base, icon: LayoutDashboard, end: true }] },
-    { heading: 'Yedekleme', items: [
-      { label: 'Backup Jobs', to: `${base}/backup-jobs`, icon: Database },
-      { label: 'Backup Runs', to: `${base}/backup-runs`, icon: Activity },
-      { label: 'Artifacts', to: `${base}/artifacts`, icon: HardDrive },
-      { label: 'Restores', to: `${base}/restores`, icon: RotateCcw },
+    { items: [{ label: t('nav.dashboard'), to: base, icon: LayoutDashboard, end: true }] },
+    { heading: t('nav.backupSection'), items: [
+      { label: t('nav.backupJobs'), to: `${base}/backup-jobs`, icon: Database },
+      { label: t('nav.backupRuns'), to: `${base}/backup-runs`, icon: Activity },
+      { label: t('nav.artifacts'), to: `${base}/artifacts`, icon: HardDrive },
+      { label: t('nav.restores'), to: `${base}/restores`, icon: RotateCcw },
     ] },
-    { heading: 'Altyapı', items: [
-      { label: 'Agents', to: `${base}/agents`, icon: Monitor },
-      { label: 'Keşfedilen Veritabanları', to: `${base}/discovery`, icon: Radar },
-      { label: 'Storage', to: `${base}/storage`, icon: Gauge },
-      { label: 'Upload Bandwidth', to: `${base}/upload-bandwidth`, icon: Upload },
+    { heading: t('nav.infraSection'), items: [
+      { label: t('nav.agents'), to: `${base}/agents`, icon: Monitor },
+      { label: t('nav.discovery'), to: `${base}/discovery`, icon: Radar },
+      { label: t('nav.storage'), to: `${base}/storage`, icon: Gauge },
+      { label: t('nav.bandwidth'), to: `${base}/upload-bandwidth`, icon: Upload },
     ] },
-    ...(canAdmin ? [{ heading: 'Çalışma alanı', items: [
-      { label: 'Bildirimler', to: `${base}/notifications`, icon: Bell },
-      { label: 'Support Access', to: `${base}/support-access`, icon: ShieldCheck },
+    ...(canAdmin ? [{ heading: t('nav.workspaceSection'), items: [
+      { label: t('nav.notifications'), to: `${base}/notifications`, icon: Bell },
+      { label: t('nav.supportAccess'), to: `${base}/support-access`, icon: ShieldCheck },
     ] }] : []),
-    ...(user?.isPlatformAdmin ? [{ heading: 'Platform', items: [{ label: 'Platform Administration', to: '/platform', icon: ShieldCheck }] }] : []),
+    ...(user?.isPlatformAdmin ? [{ heading: t('nav.platformSection'), items: [{ label: t('nav.platformAdmin'), to: '/platform', icon: ShieldCheck }] }] : []),
   ]
-  return <SidebarFrame mobileOpen={mobileOpen} onMobileClose={onMobileClose} dialogLabel="Ana menü" label="Ana navigation" brand={{ icon: DatabaseBackup, title: 'Backup Platform', caption: 'Yönetim konsolu' }} groups={groups} />
+  return <SidebarFrame mobileOpen={mobileOpen} onMobileClose={onMobileClose} dialogLabel={t('nav.dialogLabel')} label={t('nav.label')} brand={{ icon: DatabaseBackup, title: t('nav.brandTitle'), caption: t('nav.brandCaption') }} groups={groups} />
 }

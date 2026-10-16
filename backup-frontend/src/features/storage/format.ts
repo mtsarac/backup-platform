@@ -1,4 +1,6 @@
-const locale = 'tr-TR'
+import { tx } from '@/lib/i18n'
+import { currentLocale } from '@/lib/i18n'
+
 
 /** Decimal (SI) steps only: 1 GB = 1,000,000,000 bytes. Never 1024-based, never labelled GiB. */
 const units = [
@@ -8,7 +10,7 @@ const units = [
 ] as const
 
 function number(value: number) {
-  return value.toLocaleString(locale, { maximumFractionDigits: 2 })
+  return value.toLocaleString(currentLocale(), { maximumFractionDigits: 2 })
 }
 
 /**
@@ -26,12 +28,12 @@ export function formatCapacity(bytes: number): string {
       return `${number(rounded)} ${unit.suffix}`
     }
   }
-  return `${value.toLocaleString(locale)} bayt`
+  return tx("{0} bayt", { "0": value.toLocaleString(currentLocale()) })
 }
 
 /** `5.000.000.000 bayt` (Turkish grouping). */
 export function formatExactBytes(bytes: number): string {
-  return `${bytes.toLocaleString(locale)} bayt`
+  return tx("{0} bayt", { "0": bytes.toLocaleString(currentLocale()) })
 }
 
 /**

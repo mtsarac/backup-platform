@@ -1,3 +1,4 @@
+import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Notice } from '@/components/ui/notice'
@@ -8,35 +9,37 @@ import { failureMessage } from '@/lib/api/failure-messages'
 type Tone = 'success' | 'warning' | 'error'
 
 const statusMeta: Record<ReplicationStatus, { label: string; tone: Tone }> = {
-  Healthy: { label: 'Replikasyon sağlıklı', tone: 'success' },
-  Degraded: { label: 'Kısmi replikasyon · politika karşılandı', tone: 'warning' },
-  InsufficientReplicas: { label: 'Yetersiz doğrulanmış replika', tone: 'error' },
-  Unavailable: { label: 'Doğrulanmış replika yok', tone: 'error' },
+  Healthy: { get label() { return tx("Replikasyon sağlıklı") }, tone: 'success' },
+  Degraded: { get label() { return tx("Kısmi replikasyon · politika karşılandı") }, tone: 'warning' },
+  InsufficientReplicas: { get label() { return tx("Yetersiz doğrulanmış replika") }, tone: 'error' },
+  Unavailable: { get label() { return tx("Doğrulanmış replika yok") }, tone: 'error' },
 }
 
 const destinationStates: Record<string, { label: string; tone: Tone | 'neutral' }> = {
-  Verified: { label: 'Doğrulandı', tone: 'success' },
-  Failed: { label: 'Başarısız', tone: 'error' },
-  Cancelled: { label: 'İptal edildi', tone: 'neutral' },
-  NotAttempted: { label: 'Denenmedi', tone: 'neutral' },
-  Deleted: { label: 'Silindi', tone: 'neutral' },
+  Verified: { get label() { return tx("Doğrulandı") }, tone: 'success' },
+  Failed: { get label() { return tx("Başarısız") }, tone: 'error' },
+  Cancelled: { get label() { return tx("İptal edildi") }, tone: 'neutral' },
+  NotAttempted: { get label() { return tx("Denenmedi") }, tone: 'neutral' },
+  Deleted: { get label() { return tx("Silindi") }, tone: 'neutral' },
 }
 
-const providerLabels: Record<string, string> = { local: 'Agent yerel', central: 'Merkezi depolama', sftp: 'SFTP', 'google-drive': 'Google Drive' }
+const providerLabels: Record<string, string> = { get local() { return tx("Agent yerel") }, get central() { return tx("Merkezi depolama") }, sftp: 'SFTP', 'google-drive': 'Google Drive' }
 
 /** The status is always the backend's verdict; nothing here recomputes it from the counts. */
 export function ReplicationBadge({ replication }: { replication?: ReplicationHealth | null }) {
+  useLanguage()
   if (!replication) return null
   const meta = statusMeta[replication.status] ?? { label: replication.status, tone: 'neutral' as const }
-  return <Badge tone={meta.tone}>{meta.label}</Badge>
+  return <Badge tone={meta.tone}>{tx(meta.label)}</Badge>
 }
 
 /** "2 / 2 doğrulanmış replika gerekli · 3 hedef": verified copies against the policy's requirement, plus how many destinations the job has. */
 function replicationCounts(replication: ReplicationHealth): string {
-  return `${replication.verifiedReplicas} / ${replication.requiredVerifiedReplicas} doğrulanmış replika gerekli · ${replication.destinationCount} hedef`
+  return tx("{0} / {1} doğrulanmış replika gerekli · {2} hedef", { "0": replication.verifiedReplicas, "1": replication.requiredVerifiedReplicas, "2": replication.destinationCount })
 }
 
 export function ReplicationSummary({ replication }: { replication?: ReplicationHealth | null }) {
+  useLanguage()
   if (!replication) return null
   return <span className="inline-flex flex-wrap items-center gap-2"><ReplicationBadge replication={replication} /><span className="text-xs text-text-muted">{replicationCounts(replication)}</span></span>
 }
@@ -54,6 +57,7 @@ function DestinationRow({
   canRepair?: boolean
   repairOperation?: ReplicaRepairOperation | null
 }) {
+  useLanguage()
   const meta = destinationStates[destination.state] ?? { label: destination.state, tone: 'neutral' as const }
   const isAutoPending = repairOperation?.status === 'Pending' && Boolean(repairOperation?.nextRetryAt)
   const isExhausted = Boolean(repairOperation?.isExhausted)
@@ -61,26 +65,24 @@ function DestinationRow({
   return (
     <li className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-border bg-surface-2 p-3 text-sm">
       <div className="min-w-0 space-y-1">
-        <p className="font-medium text-text">{providerLabels[destination.storageProvider] ?? destination.storageProvider}{destination.isPrimary && <span className="ml-2 text-xs text-text-muted">Birincil</span>}</p>
+        <p className="font-medium text-text">{providerLabels[destination.storageProvider] ?? destination.storageProvider}{destination.isPrimary && <span className="ml-2 text-xs text-text-muted">{tx("Birincil")}</span>}</p>
         {destination.state === 'Failed' && destination.failureCode && <p className="text-error">{failureMessage(destination.failureCode)} <span className="text-text-muted">· {destination.failureCode}</span></p>}
-        {destination.objectMayRemain && destination.replicaStatus !== 'Quarantined' && <p className="text-warning">Hedefte tamamlanmamış bir dosya kalmış olabilir; saklama süreci bu dosyayı da kaldırır.</p>}
-        {destination.replicaStatus === 'Quarantined' && <p className="text-warning">Bu replika karantinaya alınmıştır; sahipliği doğrulanmadan otomatik veya manuel olarak silinmez.</p>}
+        {destination.objectMayRemain && destination.replicaStatus !== 'Quarantined' && <p className="text-warning">{tx("Hedefte tamamlanmamış bir dosya kalmış olabilir; saklama süreci bu dosyayı da kaldırır.")}</p>}
+        {destination.replicaStatus === 'Quarantined' && <p className="text-warning">{tx("Bu replika karantinaya alınmıştır; sahipliği doğrulanmadan otomatik veya manuel olarak silinmez.")}</p>}
         {isAutoPending && (
-          <p className="text-sm font-medium text-warning">
-            Otomatik yeniden deneme bekleniyor (Deneme {repairOperation?.attemptCount ?? 0} / {repairOperation?.maxAttempts ?? 5})
-            {repairOperation?.nextRetryAt && ` · Sonraki: ${new Date(repairOperation.nextRetryAt).toLocaleTimeString()}`}
+          <p className="text-sm font-medium text-warning">{tx("Otomatik yeniden deneme bekleniyor (Deneme")}{' '}{repairOperation?.attemptCount ?? 0} / {repairOperation?.maxAttempts ?? 5})
+            {repairOperation?.nextRetryAt && tx(" · Sonraki: {0}", { "0": new Date(repairOperation.nextRetryAt).toLocaleTimeString(currentLocale()) })}
             {repairOperation?.lastFailureCode && ` (${repairOperation.lastFailureCode})`}
           </p>
         )}
         {isExhausted && (
-          <p className="text-sm font-medium text-error">
-            Yeniden deneme sınırına ulaşıldı ({repairOperation?.attemptCount ?? 5} / {repairOperation?.maxAttempts ?? 5})
-            {repairOperation?.lastFailureCode && ` · Son hata: ${repairOperation.lastFailureCode}`}
+          <p className="text-sm font-medium text-error">{tx("Yeniden deneme sınırına ulaşıldı (")}{repairOperation?.attemptCount ?? 5} / {repairOperation?.maxAttempts ?? 5})
+            {repairOperation?.lastFailureCode && tx(" · Son hata: {0}", { "0": repairOperation.lastFailureCode })}
           </p>
         )}
       </div>
       <div className="flex items-center gap-2">
-        <Badge tone={meta.tone}>{meta.label}</Badge>
+        <Badge tone={meta.tone}>{tx(meta.label)}</Badge>
         {repairEligible && (
           <Button
             size="sm"
@@ -88,7 +90,7 @@ function DestinationRow({
             disabled={isRepairing}
             onClick={() => onRepair!(destination)}
           >
-            {isRepairing ? 'Onarılıyor…' : 'Onar'}
+            {isRepairing ? tx('Onarılıyor…') : tx('Onar')}
           </Button>
         )}
       </div>
@@ -110,15 +112,16 @@ export function ReplicationSection({
   canRepair?: boolean
   repairs?: ReplicaRepairOperation[] | null
 }) {
+  useLanguage()
   if (!replication) return null
   return (
-    <Section title="Replikasyon" description={replicationCounts(replication)} actions={<ReplicationBadge replication={replication} />}>
+    <Section title={tx("Replikasyon")} description={replicationCounts(replication)} actions={<ReplicationBadge replication={replication} />}>
       <div className="space-y-3">
-      {replication.status === 'Degraded' && <Notice tone="warning">Yedek kullanılabilir ve politika karşılanıyor; mevcut doğrulanmış replikalardan indirme ve geri yükleme yapılabilir.</Notice>}
-      {replication.status === 'InsufficientReplicas' && <Notice tone="error">Politikanın gerektirdiği replika sayısına ulaşılamadı; ancak mevcut doğrulanmış replikalardan indirme ve geri yükleme mümkündür.</Notice>}
-      {replication.status === 'Unavailable' && <Notice tone="error">Hiçbir hedefte doğrulanmış kopya yok; indirme ve geri yükleme kullanılamaz.</Notice>}
+      {replication.status === 'Degraded' && <Notice tone="warning">{tx("Yedek kullanılabilir ve politika karşılanıyor; mevcut doğrulanmış replikalardan indirme ve geri yükleme yapılabilir.")}</Notice>}
+      {replication.status === 'InsufficientReplicas' && <Notice tone="error">{tx("Politikanın gerektirdiği replika sayısına ulaşılamadı; ancak mevcut doğrulanmış replikalardan indirme ve geri yükleme mümkündür.")}</Notice>}
+      {replication.status === 'Unavailable' && <Notice tone="error">{tx("Hiçbir hedefte doğrulanmış kopya yok; indirme ve geri yükleme kullanılamaz.")}</Notice>}
       {replication.destinations.length > 0 && (
-        <ul className="space-y-2" aria-label="Hedef sonuçları">
+        <ul className="space-y-2" aria-label={tx("Hedef sonuçları")}>
           {replication.destinations.map((destination) => {
             const destId = destination.storageConnectionId ?? destination.storageProvider
             const destRepairs = repairs?.filter(r => destination.storageConnectionId ? r.storageConnectionId === destination.storageConnectionId : r.storageProvider === destination.storageProvider)

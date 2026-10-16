@@ -1,10 +1,11 @@
+import { currentLocale, tx } from '@/lib/i18n'
 /** Product rule: 1 GB = 1,000,000,000 bytes (decimal, never 1024-based). Bytes stay the API unit. */
 export const BYTES_PER_GB = 1_000_000_000
 export const MAX_STORAGE_BYTES = 1_000_000_000_000_000
 const BYTES_PER_MILLI_GB = 1_000_000
 const MAX_WHOLE_GB = MAX_STORAGE_BYTES / BYTES_PER_GB
 
-const locale = 'tr-TR'
+
 
 /** Exact decimal digits after the comma (no rounding), or '' for whole GB. */
 function fraction(bytes: number) {
@@ -17,20 +18,20 @@ function wholeGb(bytes: number) {
 
 /** `5 GB`, `2,5 GB`, `Limitsiz` for null. */
 export function formatGb(bytes: number | null): string {
-  if (bytes === null) return 'Limitsiz'
+  if (bytes === null) return tx('Limitsiz')
   const digits = fraction(bytes)
-  return `${wholeGb(bytes).toLocaleString(locale)}${digits ? `,${digits}` : ''} GB`
+  return `${wholeGb(bytes).toLocaleString(currentLocale())}${digits ? `${currentLocale() === 'tr-TR' ? ',' : '.'}${digits}` : ''} GB`
 }
 
 /** `5.000.000.000 bayt` (Turkish grouping). */
 export function formatBytes(bytes: number): string {
-  return `${bytes.toLocaleString(locale)} bayt`
+  return tx("{0} bayt", { "0": bytes.toLocaleString(currentLocale()) })
 }
 
 /** Text for a GB input field that round-trips through `parseGb` (up to 3 decimals). */
 export function toGbInput(bytes: number): string {
   const digits = fraction(bytes)
-  return `${wholeGb(bytes)}${digits ? `,${digits}` : ''}`
+  return `${wholeGb(bytes)}${digits ? `${currentLocale() === 'tr-TR' ? ',' : '.'}${digits}` : ''}`
 }
 
 export type GbParseResult = { bytes: number } | { error: 'invalid' | 'out_of_range' }
@@ -48,6 +49,6 @@ export function parseGb(text: string): GbParseResult {
 
 export function gbErrorMessage(error: 'invalid' | 'out_of_range') {
   return error === 'invalid'
-    ? 'Boyutu GB cinsinden, en fazla 3 ondalık basamakla girin (örn. 2,5).'
-    : 'Boyut 0’dan büyük ve en fazla 1.000.000 GB olmalıdır.'
+    ? tx('Boyutu GB cinsinden, en fazla 3 ondalık basamakla girin (örn. 2,5).')
+    : tx('Boyut 0’dan büyük ve en fazla 1.000.000 GB olmalıdır.')
 }

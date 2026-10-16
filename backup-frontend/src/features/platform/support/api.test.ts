@@ -38,7 +38,7 @@ describe('support HTTP contract', () => {
   })
   it.each([
     ['session_expired', 'süresi doldu'], ['session_closed', 'kapatıldı'], ['session_revoked', 'geri alındı'],
-    ['permission_missing', 'gereken izin yok'], ['not_session_owner', 'oturumunu açan PlatformAdmin'], ['replace_forbidden', 'mevcut Database üzerine yazılamaz'],
+    ['permission_missing', 'gereken izin yok'], ['not_session_owner', 'oturumunu açan Platform Yöneticisi'], ['replace_forbidden', 'mevcut veritabanının üzerine yazılamaz'],
   ])('maps 403 %s to specific Turkish text without backend exception details', (reason, expected) => {
     const error = new ApiError(403, { error: 'support_access_denied', reason })
     expect(errorMessage(error)).toContain(expected)
@@ -47,7 +47,7 @@ describe('support HTTP contract', () => {
     const error = new ApiError(409, { error: 'active_session_exists', sessionId: 'support-existing' })
     expect(error.sessionId).toBe('support-existing')
     expect(errorMessage(error)).toContain('zaten etkin bir destek oturumunuz')
-    expect(errorMessage(new ApiError(503, { error: 'support_unavailable' }))).toContain('audit kaydı')
+    expect(errorMessage(new ApiError(503, { error: 'support_unavailable' }))).toContain('denetim kaydı')
     expect(errorMessage(new ApiError(403, { error: 'support_access_denied', reason: 'System.Exception: secret' }))).toBe('İşlem başarısız oldu.')
   })
 })

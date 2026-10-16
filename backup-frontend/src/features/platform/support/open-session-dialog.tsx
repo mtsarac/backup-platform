@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import { useEffect, useId, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
@@ -17,6 +18,7 @@ const durationErrorMessage = 'Süre 1 ile 240 dakika arasında tam sayı olmalı
 
 /** Conditional mounting gives each opening a fresh idempotency key and form. */
 export function OpenSessionDialog({ tenantId, tenantName, onClose }: { tenantId: string; tenantName: string; onClose: () => void }) {
+  useLanguage()
   const navigate = useNavigate()
   const formId = useId()
   const open = useOpenSupportSession()
@@ -53,9 +55,9 @@ export function OpenSessionDialog({ tenantId, tenantName, onClose }: { tenantId:
     if (submitting.current || open.isPending) return
     const trimmedReason = reason.trim()
     const minutes = Number(duration)
-    const nextReasonError = !trimmedReason ? 'Destek erişimi için gerekçe girin.' : trimmedReason.length > 500 ? 'Gerekçe en fazla 500 karakter olabilir.' : ''
-    const nextPermissionError = selected.length === 0 ? 'En az bir izin seçin.' : ''
-    const nextDurationError = !Number.isInteger(minutes) || minutes < 1 || minutes > 240 ? durationErrorMessage : ''
+    const nextReasonError = !trimmedReason ? tx('Destek erişimi için gerekçe girin.') : trimmedReason.length > 500 ? tx('Gerekçe en fazla 500 karakter olabilir.') : ''
+    const nextPermissionError = selected.length === 0 ? tx('En az bir izin seçin.') : ''
+    const nextDurationError = !Number.isInteger(minutes) || minutes < 1 || minutes > 240 ? tx(durationErrorMessage) : ''
     setReasonError(nextReasonError)
     setPermissionError(nextPermissionError)
     setDurationError(nextDurationError)
@@ -77,35 +79,35 @@ export function OpenSessionDialog({ tenantId, tenantName, onClose }: { tenantId:
     if (!submitting.current) onClose()
   }
 
-  return <FormDialog title="Destek oturumu aç" description={`“${tenantName}” tenant'ına süreli ve gerekçeli destek erişimi verilir. İşlemler audit kayıtlarına yazılır ve tenant yöneticileri tarafından görülebilir.`}
+  return <FormDialog title={tx("Destek oturumu aç")} description={tx("“{0}” tenant'ına süreli ve gerekçeli destek erişimi verilir. İşlemler audit kayıtlarına yazılır ve tenant yöneticileri tarafından görülebilir.", { "0": tenantName })}
     submitLabel="Oturumu aç" pendingLabel="Oturum açılıyor…" pending={open.isPending} onSubmit={submit} onClose={close}>
     <fieldset disabled={open.isPending} className="space-y-4">
-      <Field label="Tenant">{control => <input {...control} className={inputClass} value={tenantName} readOnly />}</Field>
-      <Field label="Erişim gerekçesi" hint="Gerekçe zorunludur; en fazla 500 karakter." error={reasonError}>
+      <Field label={tx("Tenant")}>{control => <input {...control} className={inputClass} value={tenantName} readOnly />}</Field>
+      <Field label={tx("Erişim gerekçesi")} hint={tx("Gerekçe zorunludur; en fazla 500 karakter.")} error={reasonError}>
         {control => <textarea {...control} className={inputClass} rows={3} maxLength={500} value={reason}
           onChange={event => { setReason(event.target.value); setReasonError('') }} />}
       </Field>
       <fieldset className="space-y-2" aria-describedby={`${formId}-permission-help${permissionError ? ` ${formId}-permission-error` : ''}`}>
-        <legend className="mb-2 text-sm font-medium text-text-heading">Erişim izinleri</legend>
+        <legend className="mb-2 text-sm font-medium text-text-heading">{tx("Erişim izinleri")}</legend>
         {permissions.map(permission => <label key={permission} className="flex min-h-11 items-start gap-3 rounded-lg bg-surface-2 p-3 text-sm text-text">
           <input type="checkbox" className="mt-1 size-4 shrink-0 accent-primary" checked={selected.includes(permission)}
             disabled={permission === 'ViewBackupMetadata' && viewRequired} onChange={event => togglePermission(permission, event.target.checked)} />
           <span className="min-w-0"><span className="block font-medium">{permissionLabels[permission]}</span><span className="mt-0.5 block text-text-muted">{permissionDescriptions[permission]}</span></span>
         </label>)}
-        <p id={`${formId}-permission-help`} className="text-xs text-text-muted">İndirme ve geri yükleme izinleri ViewBackupMetadata iznini gerektirir; bu izin otomatik seçilir.</p>
-        {permissionError && <p id={`${formId}-permission-error`} role="alert" className="text-sm text-error">{permissionError}</p>}
+        <p id={`${formId}-permission-help`} className="text-xs text-text-muted">{tx("İndirme ve geri yükleme izinleri ViewBackupMetadata iznini gerektirir; bu izin otomatik seçilir.")}</p>
+        {permissionError && <p id={`${formId}-permission-error`} role="alert" className="text-sm text-error">{tx(permissionError)}</p>}
       </fieldset>
-      <Field label="Süre (dakika)" hint="En fazla 240 dakika. Varsayılan süre 60 dakikadır." error={durationError}>
+      <Field label={tx("Süre (dakika)")} hint={tx("En fazla 240 dakika. Varsayılan süre 60 dakikadır.")} error={durationError}>
         {control => <input {...control} type="number" min={1} max={240} step={1} list={`${formId}-durations`} className={inputClass} value={duration}
-          onInvalid={event => { event.preventDefault(); setDurationError(durationErrorMessage) }}
+          onInvalid={event => { event.preventDefault(); setDurationError(tx(durationErrorMessage)) }}
           onChange={event => { setDuration(event.target.value); setDurationError('') }} />}
       </Field>
       <datalist id={`${formId}-durations`}>{[15, 30, 60, 120, 240].map(minutes => <option key={minutes} value={minutes} />)}</datalist>
-      <div className="flex flex-wrap gap-2" aria-label="Süre seçenekleri">{[15, 30, 60, 120, 240].map(minutes => <Button key={minutes} type="button" size="sm" variant={duration === String(minutes) ? 'default' : 'outline'} onClick={() => { setDuration(String(minutes)); setDurationError('') }}>{minutes} dk</Button>)}</div>
+      <div className="flex flex-wrap gap-2" aria-label={tx("Süre seçenekleri")}>{[15, 30, 60, 120, 240].map(minutes => <Button key={minutes} type="button" size="sm" variant={duration === String(minutes) ? 'default' : 'outline'} onClick={() => { setDuration(String(minutes)); setDurationError('') }}>{minutes}{' '}{tx("dk")}</Button>)}</div>
     </fieldset>
     {open.error && <Notice tone="error">
-      <p>{conflict ? 'Bu tenant için zaten etkin bir destek oturumunuz var.' : errorMessage(open.error)}</p>
-      {conflict?.sessionId && <Link className={linkClass} to={platformPaths.supportSession(conflict.sessionId)}>Mevcut destek oturumuna git</Link>}
+      <p>{conflict ? tx('Bu tenant için zaten etkin bir destek oturumunuz var.') : errorMessage(open.error)}</p>
+      {conflict?.sessionId && <Link className={linkClass} to={platformPaths.supportSession(conflict.sessionId)}>{tx("Mevcut destek oturumuna git")}</Link>}
     </Notice>}
   </FormDialog>
 }

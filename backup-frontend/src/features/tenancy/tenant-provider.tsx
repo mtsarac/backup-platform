@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import { useEffect, useRef, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
@@ -6,6 +7,7 @@ import { TenantContext } from './tenant-context'
 import { tenantPermissions } from './permissions'
 
 export function TenantProvider({ children }: { children: ReactNode }) {
+  useLanguage()
   const { tenantId = '' } = useParams()
   const { tenants } = useAuth()
   const tenant = tenants.find(item => item.tenantId === tenantId)
@@ -20,7 +22,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       cache.removeQueries({ queryKey: ['tenant', oldId] })
     }
   }, [cache, tenantId])
-  if (!tenant) return <div role="alert" className="p-6">Bu tenant için üyeliğiniz yok. <button type="button" className="text-primary underline" onClick={() => navigate('/')}>Tenant seçimine dön</button></div>
+  if (!tenant) return <div role="alert" className="p-6">{tx("Bu tenant için üyeliğiniz yok.")}{' '}<button type="button" className="text-primary underline" onClick={() => navigate('/')}>{tx("Tenant seçimine dön")}</button></div>
   async function switchTenant(id: string) {
     if (id === tenantId || !tenants.some(item => item.tenantId === id)) return
     await cache.cancelQueries({ queryKey: ['tenant', tenantId] })

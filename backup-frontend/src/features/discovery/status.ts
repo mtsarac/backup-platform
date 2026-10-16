@@ -1,3 +1,4 @@
+import { tx } from '@/lib/i18n'
 import type { AgentCapability } from '@/features/agents/types'
 import type { DiscoveryAgentStatus, DiscoveryDatabase, DiscoveryInstanceSummary } from './types'
 
@@ -7,97 +8,97 @@ export type Tone = 'neutral' | 'success' | 'warning' | 'error' | 'info'
 type Meta = { label: string; tone: Tone }
 
 export const reachabilityMeta: Record<string, Meta> = {
-  Reachable: { label: 'Erişilebilir', tone: 'success' },
-  Unreachable: { label: 'Erişilemiyor', tone: 'error' },
-  Unknown: { label: 'Bilinmiyor', tone: 'neutral' },
+  Reachable: { get label() { return tx("Erişilebilir") }, tone: 'success' },
+  Unreachable: { get label() { return tx("Erişilemiyor") }, tone: 'error' },
+  Unknown: { get label() { return tx("Bilinmiyor") }, tone: 'neutral' },
 }
 export const accessMeta: Record<string, Meta> = {
-  CredentialsRequired: { label: 'Kimlik bilgisi gerekli', tone: 'warning' },
-  Authenticated: { label: 'Kimlik doğrulandı', tone: 'success' },
-  AuthenticationFailed: { label: 'Kimlik doğrulaması başarısız', tone: 'error' },
-  Unreachable: { label: 'Bağlanılamadı', tone: 'error' },
-  Error: { label: 'Hata', tone: 'error' },
-  Unknown: { label: 'Bilinmiyor', tone: 'neutral' },
+  CredentialsRequired: { get label() { return tx("Kimlik bilgisi gerekli") }, tone: 'warning' },
+  Authenticated: { get label() { return tx("Kimlik doğrulandı") }, tone: 'success' },
+  AuthenticationFailed: { get label() { return tx("Kimlik doğrulaması başarısız") }, tone: 'error' },
+  Unreachable: { get label() { return tx("Bağlanılamadı") }, tone: 'error' },
+  Error: { get label() { return tx("Hata") }, tone: 'error' },
+  Unknown: { get label() { return tx("Bilinmiyor") }, tone: 'neutral' },
 }
 export const presenceMeta: Record<string, Meta> = {
-  Present: { label: 'Mevcut', tone: 'success' },
-  Missing: { label: 'Kayıp', tone: 'neutral' },
+  Present: { get label() { return tx("Mevcut") }, tone: 'success' },
+  Missing: { get label() { return tx("Kayıp") }, tone: 'neutral' },
 }
 export const lastChangeMeta: Record<string, Meta> = {
-  Discovered: { label: 'Yeni', tone: 'info' },
-  Changed: { label: 'Değişti', tone: 'warning' },
-  Recovered: { label: 'Yeniden erişilebilir', tone: 'success' },
-  Unreachable: { label: 'Erişilemiyor', tone: 'error' },
-  Missing: { label: 'Kayboldu', tone: 'neutral' },
-  Reappeared: { label: 'Yeniden göründü', tone: 'info' },
+  Discovered: { get label() { return tx("Yeni") }, tone: 'info' },
+  Changed: { get label() { return tx("Değişti") }, tone: 'warning' },
+  Recovered: { get label() { return tx("Yeniden erişilebilir") }, tone: 'success' },
+  Unreachable: { get label() { return tx("Erişilemiyor") }, tone: 'error' },
+  Missing: { get label() { return tx("Kayboldu") }, tone: 'neutral' },
+  Reappeared: { get label() { return tx("Yeniden göründü") }, tone: 'info' },
 }
 export const fullBackupMeta: Record<string, Meta> = {
-  Supported: { label: 'Full Backup destekleniyor', tone: 'success' },
-  Unsupported: { label: 'Full Backup desteklenmiyor', tone: 'error' },
-  Unknown: { label: 'Full Backup durumu bilinmiyor', tone: 'neutral' },
+  Supported: { get label() { return tx("Full Backup destekleniyor") }, tone: 'success' },
+  Unsupported: { get label() { return tx("Full Backup desteklenmiyor") }, tone: 'error' },
+  Unknown: { get label() { return tx("Full Backup durumu bilinmiyor") }, tone: 'neutral' },
 }
 export const databaseStateMeta: Record<string, Meta> = {
-  Online: { label: 'Çevrimiçi', tone: 'success' },
-  Offline: { label: 'Çevrimdışı', tone: 'warning' },
-  Unknown: { label: 'Bilinmiyor', tone: 'neutral' },
+  Online: { get label() { return tx("Çevrimiçi") }, tone: 'success' },
+  Offline: { get label() { return tx("Çevrimdışı") }, tone: 'warning' },
+  Unknown: { get label() { return tx("Bilinmiyor") }, tone: 'neutral' },
 }
-export const sourceLabels: Record<string, string> = { Service: 'Servis', Listener: 'Dinleyici (port)', Docker: 'Docker' }
+export const sourceLabels: Record<string, string> = { get Service() { return tx("Servis") }, get Listener() { return tx("Dinleyici (port)") }, Docker: 'Docker' }
 export const sourceStatusMeta: Record<string, Meta> = {
-  Scanned: { label: 'Tarandı', tone: 'success' },
-  Unavailable: { label: 'Kullanılamıyor', tone: 'warning' },
-  Disabled: { label: 'Kapalı', tone: 'neutral' },
-  Failed: { label: 'Başarısız', tone: 'error' },
+  Scanned: { get label() { return tx("Tarandı") }, tone: 'success' },
+  Unavailable: { get label() { return tx("Kullanılamıyor") }, tone: 'warning' },
+  Disabled: { get label() { return tx("Kapalı") }, tone: 'neutral' },
+  Failed: { get label() { return tx("Başarısız") }, tone: 'error' },
 }
 export const outcomeMeta: Record<string, Meta> = {
-  Completed: { label: 'Tamamlandı', tone: 'success' },
-  Partial: { label: 'Kısmen tamamlandı', tone: 'warning' },
-  Failed: { label: 'Başarısız', tone: 'error' },
+  Completed: { get label() { return tx("Tamamlandı") }, tone: 'success' },
+  Partial: { get label() { return tx("Kısmen tamamlandı") }, tone: 'warning' },
+  Failed: { get label() { return tx("Başarısız") }, tone: 'error' },
 }
 export const scanStateMeta: Record<string, Meta> = {
-  Idle: { label: 'Boşta', tone: 'neutral' },
-  Requested: { label: 'Tarama istendi', tone: 'info' },
-  Running: { label: 'Taranıyor', tone: 'info' },
+  Idle: { get label() { return tx("Boşta") }, tone: 'neutral' },
+  Requested: { get label() { return tx("Tarama istendi") }, tone: 'info' },
+  Running: { get label() { return tx("Taranıyor") }, tone: 'info' },
 }
 export const engineLabels: Record<string, string> = { mssql: 'MSSQL', postgres: 'PostgreSQL' }
 
 // Reason codes are agent-produced fixed codes; unknown ones are shown as the bare code, never as free text.
 const reasonLabels: Record<string, string> = {
-  docker_not_found: 'Docker CLI bulunamadı.',
-  docker_access_denied: 'Docker CLI için yetki yok.',
-  docker_timeout: 'Docker yanıt vermedi (zaman aşımı).',
-  docker_failed: 'Docker sorgulanamadı (servis çalışmıyor olabilir).',
-  disabled_by_settings: 'Ayarlarda kapatıldı.',
-  systemd_not_found: 'systemd bulunamadı.',
-  systemd_not_running: 'systemd çalışmıyor.',
-  systemd_access_denied: 'systemd için yetki yok.',
-  systemd_failed: 'systemd sorgulanamadı.',
-  registry_access_denied: 'Registry için yetki yok.',
-  registry_failed: 'Registry okunamadı.',
-  detector_failed: 'Bu kaynak okunamadı.',
-  probe_failed: 'Port yoklaması başarısız oldu.',
-  scan_timeout: 'Tarama süre sınırını aştı.',
-  scan_failed: 'Tarama başarısız oldu.',
-  timeout: 'Zaman aşımına uğradı.',
-  no_published_port: 'Container portu dışarı açılmamış; bağlanılamaz.',
-  no_endpoint: 'Bağlanılacak adres bulunamadı.',
-  too_many_databases: 'Veritabanı listesi tek raporda taşınamayacak kadar büyük.',
-  credential_unavailable: 'Kimlik bilgisi referansı Agent üzerinde çözülemedi.',
-  provider_unavailable: 'Bu motor için sağlayıcı yok.',
-  invalid_configuration: 'Bağlantı ayarı geçersiz.',
-  permission_denied: 'Okuma yetkisi yok.',
-  authentication_failed: 'Kimlik doğrulaması başarısız.',
-  unreachable: 'Sunucuya bağlanılamadı.',
-  connection_failed: 'Sunucu yanıt veriyor ancak oturum açılamadı (şifreleme ayarını kontrol edin).',
-  unexpected: 'Beklenmeyen hata.',
-  credentials_required: 'Kimlik bilgisi gerekli.',
-  not_supported: 'Desteklenmiyor.',
-  'system-database-tempdb': 'tempdb yedeklenemez.',
-  'system-database-master-full-only': 'master yalnızca Full Backup ile yedeklenir.',
-  'connections-disallowed': 'Veritabanı bağlantıya kapalı (şablon veritabanı).',
+  get docker_not_found() { return tx("Docker CLI bulunamadı.") },
+  get docker_access_denied() { return tx("Docker CLI için yetki yok.") },
+  get docker_timeout() { return tx("Docker yanıt vermedi (zaman aşımı).") },
+  get docker_failed() { return tx("Docker sorgulanamadı (servis çalışmıyor olabilir).") },
+  get disabled_by_settings() { return tx("Ayarlarda kapatıldı.") },
+  get systemd_not_found() { return tx("systemd bulunamadı.") },
+  get systemd_not_running() { return tx("systemd çalışmıyor.") },
+  get systemd_access_denied() { return tx("systemd için yetki yok.") },
+  get systemd_failed() { return tx("systemd sorgulanamadı.") },
+  get registry_access_denied() { return tx("Registry için yetki yok.") },
+  get registry_failed() { return tx("Registry okunamadı.") },
+  get detector_failed() { return tx("Bu kaynak okunamadı.") },
+  get probe_failed() { return tx("Port yoklaması başarısız oldu.") },
+  get scan_timeout() { return tx("Tarama süre sınırını aştı.") },
+  get scan_failed() { return tx("Tarama başarısız oldu.") },
+  get timeout() { return tx("Zaman aşımına uğradı.") },
+  get no_published_port() { return tx("Container portu dışarı açılmamış; bağlanılamaz.") },
+  get no_endpoint() { return tx("Bağlanılacak adres bulunamadı.") },
+  get too_many_databases() { return tx("Veritabanı listesi tek raporda taşınamayacak kadar büyük.") },
+  get credential_unavailable() { return tx("Kimlik bilgisi referansı Agent üzerinde çözülemedi.") },
+  get provider_unavailable() { return tx("Bu motor için sağlayıcı yok.") },
+  get invalid_configuration() { return tx("Bağlantı ayarı geçersiz.") },
+  get permission_denied() { return tx("Okuma yetkisi yok.") },
+  get authentication_failed() { return tx("Kimlik doğrulaması başarısız.") },
+  get unreachable() { return tx("Sunucuya bağlanılamadı.") },
+  get connection_failed() { return tx("Sunucu yanıt veriyor ancak oturum açılamadı (şifreleme ayarını kontrol edin).") },
+  get unexpected() { return tx("Beklenmeyen hata.") },
+  get credentials_required() { return tx("Kimlik bilgisi gerekli.") },
+  get not_supported() { return tx("Desteklenmiyor.") },
+  get 'system-database-tempdb'() { return tx("tempdb yedeklenemez.") },
+  get 'system-database-master-full-only'() { return tx("master yalnızca Full Backup ile yedeklenir.") },
+  get 'connections-disallowed'() { return tx("Veritabanı bağlantıya kapalı (şablon veritabanı).") },
 }
 export function reasonText(code: string | null | undefined) {
   if (!code) return null
-  return reasonLabels[code] ?? (/^[A-Za-z0-9_.-]{1,80}$/.test(code) ? `Neden kodu: ${code}` : null)
+  return reasonLabels[code] ?? (/^[A-Za-z0-9_.-]{1,80}$/.test(code) ? tx("Neden kodu: {0}", { "0": code }) : null)
 }
 
 export const supportsDiscovery = (capabilities: readonly AgentCapability[] | undefined) => Boolean(capabilities?.some(item => item.identifier === DISCOVERY_CAPABILITY && item.support === 'Supported'))
@@ -112,11 +113,11 @@ export const databaseSelectable = (database: DiscoveryDatabase, instance: Pick<D
 /** Why a database cannot be picked; null when it can. */
 export function databaseBlockedReason(database: DiscoveryDatabase, instance: Pick<DiscoveryInstanceSummary, 'presence' | 'access' | 'host' | 'port'>) {
   if (databaseSelectable(database, instance)) return null
-  if (!canCreateJob(instance)) return 'Instance için Backup Job oluşturulamaz.'
-  if (database.isSystem) return 'Sistem veritabanı.'
-  if (database.presence !== 'Present') return 'Veritabanı son taramada görülmedi.'
-  if (database.state !== 'Online') return 'Veritabanı çevrimiçi değil.'
-  if (database.fullBackup === 'Unsupported') return reasonText(database.fullBackupReasonCode) ?? 'Full Backup desteklenmiyor.'
-  if (database.jobs.length > 0) return 'Zaten bir Backup Job kapsıyor.'
+  if (!canCreateJob(instance)) return tx('Instance için Backup Job oluşturulamaz.')
+  if (database.isSystem) return tx('Sistem veritabanı.')
+  if (database.presence !== 'Present') return tx('Veritabanı son taramada görülmedi.')
+  if (database.state !== 'Online') return tx('Veritabanı çevrimiçi değil.')
+  if (database.fullBackup === 'Unsupported') return reasonText(database.fullBackupReasonCode) ?? tx('Full Backup desteklenmiyor.')
+  if (database.jobs.length > 0) return tx('Zaten bir Backup Job kapsıyor.')
   return null
 }

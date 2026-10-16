@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import { Badge } from '@/components/ui/badge'
 import { capabilityLabels, capabilitySupportLabels } from './format'
 import type { AgentCapability } from './types'
@@ -5,9 +6,9 @@ import type { AgentCapability } from './types'
 const supportTones: Record<string, 'success' | 'neutral' | 'warning'> = { Supported: 'success', Unsupported: 'neutral', Unknown: 'warning' }
 const supportOrder: Record<string, number> = { Supported: 0, Unknown: 1, Unsupported: 2 }
 const groups = [
-  { support: 'Supported', title: 'Desteklenenler' },
-  { support: 'Unknown', title: 'Durumu bilinmeyenler' },
-  { support: 'Unsupported', title: 'Desteklenmeyenler' },
+  { support: 'Supported', get title() { return tx("Desteklenenler") } },
+  { support: 'Unknown', get title() { return tx("Durumu bilinmeyenler") } },
+  { support: 'Unsupported', get title() { return tx("Desteklenmeyenler") } },
 ] as const
 
 function sortCapabilities(capabilities: AgentCapability[]) {
@@ -15,18 +16,21 @@ function sortCapabilities(capabilities: AgentCapability[]) {
 }
 
 export function SupportBadge({ support }: { support: string }) {
+  useLanguage()
   return <Badge tone={supportTones[support] ?? 'warning'}>{capabilitySupportLabels[support] ?? support}</Badge>
 }
 
 /** Table summary: a count only; the full list lives on the Agent detail page. Never claims support for something not reported. */
 export function CapabilitySummary({ capabilities }: { capabilities: AgentCapability[] }) {
-  if (capabilities.length === 0) return <span className="text-text-muted">Henüz bildirilmedi</span>
+  useLanguage()
+  if (capabilities.length === 0) return <span className="text-text-muted">{tx("Henüz bildirilmedi")}</span>
   const supported = capabilities.filter((item) => item.support === 'Supported').length
-  return <div><div>{capabilities.length} yetenek</div><div className="text-sm text-text-muted">{supported} destekleniyor</div></div>
+  return <div><div>{capabilities.length}{' '}{tx("yetenek")}</div><div className="text-sm text-text-muted">{supported}{' '}{tx("destekleniyor")}</div></div>
 }
 
 /** Full list grouped by support state; unknown support values land with the unknown ones. */
 export function CapabilityList({ capabilities }: { capabilities: AgentCapability[] }) {
+  useLanguage()
   const known = new Set<string>(groups.map((group) => group.support))
   return <div className="space-y-5 text-[0.9375rem] text-text">
     {groups.map((group) => {

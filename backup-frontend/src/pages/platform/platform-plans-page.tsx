@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { DataTable, type Column } from '@/components/data/data-table'
 import { Pagination } from '@/components/data/pagination'
@@ -23,6 +24,7 @@ function enabledFilter(value: string): EnabledFilter | undefined {
 }
 
 export function PlatformPlansPage() {
+  useLanguage()
   const { page, get, update } = useListParams()
   const search = get('search')
   const enabled = enabledFilter(get('enabled'))
@@ -34,40 +36,40 @@ export function PlatformPlansPage() {
   const data = query.data
   const filtered = Boolean(search || enabled)
   const columns: Column<Plan>[] = [
-    { key: 'name', header: 'Plan', wrap: true, render: (plan) => <div><span className="font-medium">{plan.name}</span>{plan.quotaPolicyReference && <div className="text-xs text-text-muted">Politika referansı: {plan.quotaPolicyReference}</div>}</div> },
-    { key: 'enabled', header: 'Durum', render: (plan) => <Badge tone={plan.enabled ? 'success' : 'neutral'}>{plan.enabled ? 'Etkin' : 'Devre dışı'}</Badge> },
-    { key: 'limit', header: 'Depolama limiti', render: (plan) => <StorageLimitText bytes={plan.storageLimitBytes} /> },
-    { key: 'system', header: 'Tür', render: (plan) => plan.isSystem ? <Badge tone="warning">Sistem / Legacy</Badge> : <span className="text-text-muted">Özel</span> },
-    { key: 'tenants', header: 'Tenant sayısı', render: (plan) => plan.tenantCount },
-    { key: 'updated', header: 'Güncellendi', render: (plan) => agentDate(plan.updatedAt) },
-    { key: 'actions', header: 'İşlemler', wrap: true, render: (plan) => plan.isSystem
-      ? <span className="text-xs text-text-muted">Sistem planı; salt okunur.</span>
+    { key: 'name', header: 'Plan', wrap: true, render: (plan) => <div><span className="font-medium">{plan.name}</span>{plan.quotaPolicyReference && <div className="text-xs text-text-muted">{tx("Politika referansı:")}{' '}{plan.quotaPolicyReference}</div>}</div> },
+    { key: 'enabled', header: tx('Durum'), render: (plan) => <Badge tone={plan.enabled ? 'success' : 'neutral'}>{plan.enabled ? tx('Etkin') : tx('Devre dışı')}</Badge> },
+    { key: 'limit', header: tx('Depolama limiti'), render: (plan) => <StorageLimitText bytes={plan.storageLimitBytes} /> },
+    { key: 'system', header: tx('Tür'), render: (plan) => plan.isSystem ? <Badge tone="warning">{tx("Sistem / Legacy")}</Badge> : <span className="text-text-muted">{tx("Özel")}</span> },
+    { key: 'tenants', header: tx('Tenant sayısı'), render: (plan) => plan.tenantCount },
+    { key: 'updated', header: tx('Güncellendi'), render: (plan) => agentDate(plan.updatedAt) },
+    { key: 'actions', header: tx('İşlemler'), wrap: true, render: (plan) => plan.isSystem
+      ? <span className="text-xs text-text-muted">{tx("Sistem planı; salt okunur.")}</span>
       : <div className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" aria-label={`${plan.name} planını düzenle`} onClick={() => setEditing(plan)}>Düzenle</Button>
-        <Button variant="outline" size="sm" aria-label={`${plan.name} planını ${plan.enabled ? 'devre dışı bırak' : 'etkinleştir'}`} onClick={() => { setEnabled.reset(); setToggling(plan) }}>{plan.enabled ? 'Devre dışı bırak' : 'Etkinleştir'}</Button>
+        <Button variant="outline" size="sm" aria-label={tx("{0} planını düzenle", { "0": plan.name })} onClick={() => setEditing(plan)}>{tx("Düzenle")}</Button>
+        <Button variant="outline" size="sm" aria-label={tx("{0} planını {1}", { "0": plan.name, "1": plan.enabled ? tx('devre dışı bırak') : tx('etkinleştir') })} onClick={() => { setEnabled.reset(); setToggling(plan) }}>{plan.enabled ? tx('Devre dışı bırak') : tx('Etkinleştir')}</Button>
       </div> },
   ]
   return <div className="space-y-6">
-    <PageHeader crumbs={[platformCrumb]} title="Plans" description="Depolama planlarını yönetin. 1 GB = 1.000.000.000 bayt (ondalık)." actions={<Button onClick={() => setCreating(true)}>Yeni plan</Button>} />
-    <Filters label="Plan filtreleri" onClear={filtered ? () => update({ search: '', enabled: '' }) : undefined}>
-      <SearchForm className="sm:col-span-2" label="Plan ara" value={search} onSearch={(value) => update({ search: value })} placeholder="Plan adı" />
-      <FilterField label="Durum"><select className={filterControlClass} value={enabled ?? ''} onChange={(event) => update({ enabled: event.target.value })}>
-        <option value="">Tümü</option><option value="true">Etkin</option><option value="false">Devre dışı</option>
+    <PageHeader crumbs={[platformCrumb]} title={tx("Plans")} description={tx("Depolama planlarını yönetin. 1 GB = 1.000.000.000 bayt (ondalık).")} actions={<Button onClick={() => setCreating(true)}>{tx("Yeni plan")}</Button>} />
+    <Filters label={tx("Plan filtreleri")} onClear={filtered ? () => update({ search: '', enabled: '' }) : undefined}>
+      <SearchForm className="sm:col-span-2" label={tx("Plan ara")} value={search} onSearch={(value) => update({ search: value })} placeholder={tx("Plan adı")} />
+      <FilterField label={tx("Durum")}><select className={filterControlClass} value={enabled ?? ''} onChange={(event) => update({ enabled: event.target.value })}>
+        <option value="">{tx("Tümü")}</option><option value="true">{tx("Etkin")}</option><option value="false">{tx("Devre dışı")}</option>
       </select></FilterField>
     </Filters>
     <PlatformQueryState isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">
-        {!filtered && data.totalCount === 0 ? <ListEmpty title="Henüz plan yok." action={<Button onClick={() => setCreating(true)}>Yeni plan</Button>}>Bir plan oluşturun, sonra tenant'ın Abonelik bölümünden atayın.</ListEmpty>
-          : <DataTable rows={data.items} columns={columns} keyExtractor={(plan) => plan.planId} emptyMessage={filtered ? 'Filtreye uygun plan bulunamadı.' : 'Henüz plan yok.'} />}
-        {data.totalCount > 0 && <Pagination label="Plan sayfaları" page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
+        {!filtered && data.totalCount === 0 ? <ListEmpty title={tx("Henüz plan yok.")} action={<Button onClick={() => setCreating(true)}>{tx("Yeni plan")}</Button>}>{tx("Bir plan oluşturun, sonra tenant'ın Abonelik bölümünden atayın.")}</ListEmpty>
+          : <DataTable rows={data.items} columns={columns} keyExtractor={(plan) => plan.planId} emptyMessage={filtered ? tx('Filtreye uygun plan bulunamadı.') : tx('Henüz plan yok.')} />}
+        {data.totalCount > 0 && <Pagination label={tx("Plan sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
       </div>}
     </PlatformQueryState>
     {creating && <CreatePlanDialog onClose={() => setCreating(false)} />}
     {editing && <EditPlanDialog plan={editing} onClose={() => setEditing(null)} />}
     <ConfirmDialog open={Boolean(toggling)} onClose={() => setToggling(null)} pending={setEnabled.isPending}
-      title={toggling?.enabled ? 'Plan devre dışı bırakılsın mı?' : 'Plan etkinleştirilsin mi?'}
-      description={toggling ? (toggling.enabled ? `“${toggling.name}” yeni atamalarda seçilemez. Bu planı kullanan mevcut abonelikler başka bir plana taşınmaz.` : `“${toggling.name}” yeni atamalarda yeniden seçilebilir olacak.`) : ''}
-      confirmLabel={toggling?.enabled ? 'Devre dışı bırak' : 'Etkinleştir'} error={setEnabled.error ? errorMessage(setEnabled.error) : undefined}
+      title={toggling?.enabled ? tx('Plan devre dışı bırakılsın mı?') : tx('Plan etkinleştirilsin mi?')}
+      description={toggling ? (toggling.enabled ? tx("“{0}” yeni atamalarda seçilemez. Bu planı kullanan mevcut abonelikler başka bir plana taşınmaz.", { "0": toggling.name }) : tx("“{0}” yeni atamalarda yeniden seçilebilir olacak.", { "0": toggling.name })) : ''}
+      confirmLabel={toggling?.enabled ? tx('Devre dışı bırak') : tx('Etkinleştir')} error={setEnabled.error ? errorMessage(setEnabled.error) : undefined}
       onConfirm={() => { if (toggling) setEnabled.mutate({ planId: toggling.planId, enabled: !toggling.enabled }, { onSuccess: () => setToggling(null) }) }} />
   </div>
 }

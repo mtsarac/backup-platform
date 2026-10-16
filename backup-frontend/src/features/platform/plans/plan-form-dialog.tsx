@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Field } from '@/components/ui/field'
 import { ApiError } from '@/lib/api/client'
@@ -14,10 +15,11 @@ function CommonFields({ name, setName, unlimited, setUnlimited, sizeText, setSiz
   name: string; setName: (value: string) => void; unlimited: boolean; setUnlimited: (value: boolean) => void
   sizeText: string; setSizeText: (value: string) => void; sizeError: string; nameInvalid: boolean; sizeInvalid: boolean
 }) {
+  useLanguage()
   return <>
-    <Field label="Plan adı">{(control) => <input {...control} className={inputClass} value={name} maxLength={100} required aria-invalid={nameInvalid} onChange={(event) => setName(event.target.value)} />}</Field>
-    <label className="flex min-h-8 items-center gap-2 text-sm text-text"><input className="size-4" type="checkbox" checked={unlimited} onChange={(event) => setUnlimited(event.target.checked)} />Limitsiz</label>
-    {!unlimited && <Field label="Depolama limiti (GB)" hint="1 GB = 1.000.000.000 bayt (ondalık). En fazla 3 ondalık basamak." error={sizeError}>
+    <Field label={tx("Plan adı")}>{(control) => <input {...control} className={inputClass} value={name} maxLength={100} required aria-invalid={nameInvalid} onChange={(event) => setName(event.target.value)} />}</Field>
+    <label className="flex min-h-8 items-center gap-2 text-sm text-text"><input className="size-4" type="checkbox" checked={unlimited} onChange={(event) => setUnlimited(event.target.checked)} />{tx("Limitsiz")}</label>
+    {!unlimited && <Field label={tx("Depolama limiti (GB)")} hint={tx("1 GB = 1.000.000.000 bayt (ondalık). En fazla 3 ondalık basamak.")} error={sizeError}>
       {(control) => <input {...control} className={inputClass} inputMode="decimal" value={sizeText} required aria-invalid={sizeInvalid || Boolean(sizeError)} onChange={(event) => setSizeText(event.target.value)} />}
     </Field>}
   </>
@@ -31,6 +33,7 @@ function resolveSize(unlimited: boolean, sizeText: string, unchanged: Size | nul
 }
 
 export function CreatePlanDialog({ onClose }: { onClose: () => void }) {
+  useLanguage()
   const [name, setName] = useState('')
   const [unlimited, setUnlimited] = useState(false)
   const [sizeText, setSizeText] = useState('')
@@ -45,13 +48,14 @@ export function CreatePlanDialog({ onClose }: { onClose: () => void }) {
     create.mutate({ name: name.trim(), ...limit, enabled }, { onSuccess: onClose })
   }
   const field = create.error instanceof ApiError ? create.error.field : undefined
-  return <FormDialog title="Yeni plan" description="Plan, tenant abonelikleri için depolama limitini belirler. Oluşturduktan sonra tenant'a atayın." submitLabel="Plan oluştur" pendingLabel="Oluşturuluyor…" pending={create.isPending} disabled={!name.trim()} error={create.error ? errorMessage(create.error) : undefined} onSubmit={submit} onClose={onClose}>
+  return <FormDialog title={tx("Yeni plan")} description={tx("Plan, tenant abonelikleri için depolama limitini belirler. Oluşturduktan sonra tenant'a atayın.")} submitLabel="Plan oluştur" pendingLabel="Oluşturuluyor…" pending={create.isPending} disabled={!name.trim()} error={create.error ? errorMessage(create.error) : undefined} onSubmit={submit} onClose={onClose}>
     <CommonFields name={name} setName={setName} unlimited={unlimited} setUnlimited={setUnlimited} sizeText={sizeText} setSizeText={setSizeText} sizeError={sizeError} nameInvalid={field === 'name'} sizeInvalid={field === 'storageLimit'} />
-    <label className="flex items-center gap-2 text-sm text-text"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />Etkin (yeni atamalarda seçilebilir)</label>
+    <label className="flex items-center gap-2 text-sm text-text"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />{tx("Etkin (yeni atamalarda seçilebilir)")}</label>
   </FormDialog>
 }
 
 export function EditPlanDialog({ plan, onClose }: { plan: Plan; onClose: () => void }) {
+  useLanguage()
   const initialText = plan.storageLimitBytes === null ? '' : toGbInput(plan.storageLimitBytes)
   const [name, setName] = useState(plan.name)
   const [unlimited, setUnlimited] = useState(plan.storageLimitBytes === null)
@@ -67,7 +71,7 @@ export function EditPlanDialog({ plan, onClose }: { plan: Plan; onClose: () => v
     update.mutate({ name: name.trim(), ...limit, ...(plan.quotaPolicyReference ? { quotaPolicyReference: plan.quotaPolicyReference } : {}) }, { onSuccess: onClose })
   }
   const field = update.error instanceof ApiError ? update.error.field : undefined
-  return <FormDialog title={`Planı düzenle: ${plan.name}`} description="Ad ve limit değişikliği bu planı kullanan aboneliklere de yansır." submitLabel="Kaydet" pendingLabel="Kaydediliyor…" pending={update.isPending} disabled={!name.trim()} error={update.error ? errorMessage(update.error) : undefined} onSubmit={submit} onClose={onClose}>
+  return <FormDialog title={tx("Planı düzenle: {0}", { "0": plan.name })} description={tx("Ad ve limit değişikliği bu planı kullanan aboneliklere de yansır.")} submitLabel="Kaydet" pendingLabel="Kaydediliyor…" pending={update.isPending} disabled={!name.trim()} error={update.error ? errorMessage(update.error) : undefined} onSubmit={submit} onClose={onClose}>
     <CommonFields name={name} setName={setName} unlimited={unlimited} setUnlimited={setUnlimited} sizeText={sizeText} setSizeText={setSizeText} sizeError={sizeError} nameInvalid={field === 'name'} sizeInvalid={field === 'storageLimit'} />
   </FormDialog>
 }

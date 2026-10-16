@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import type { FormEvent, ReactNode } from 'react'
 import { Dialog } from '@base-ui/react/dialog'
 import { Button } from '@/components/ui/button'
@@ -7,6 +8,7 @@ export function FormDialog({ title, description, submitLabel, pendingLabel, pend
   title: string; description?: ReactNode; submitLabel: string; pendingLabel: string; pending: boolean; error?: string
   disabled?: boolean; onSubmit: () => void; onClose: () => void; children: ReactNode
 }) {
+  useLanguage()
   function submit(event: FormEvent) { event.preventDefault(); if (!pending && !disabled) onSubmit() }
   return <Dialog.Root open onOpenChange={(next) => { if (!next && !pending) onClose() }} disablePointerDismissal={pending}>
     <Dialog.Portal>
@@ -16,9 +18,9 @@ export function FormDialog({ title, description, submitLabel, pendingLabel, pend
         {description && <Dialog.Description className="text-sm text-text-muted">{description}</Dialog.Description>}
         <form onSubmit={submit} className="space-y-4">
           {children}
-          {error && <p role="alert" className="text-sm text-error">{error}</p>}
+          {error && <p role="alert" className="text-sm text-error">{tx(error)}</p>}
           <div className="flex flex-wrap justify-end gap-2">
-            <Dialog.Close render={<Button type="button" variant="outline" disabled={pending} />}>Vazgeç</Dialog.Close>
+            <Dialog.Close render={<Button type="button" variant="outline" disabled={pending} />}>{tx("Vazgeç")}</Dialog.Close>
             <Button type="submit" disabled={pending || disabled}>{pending ? pendingLabel : submitLabel}</Button>
           </div>
         </form>

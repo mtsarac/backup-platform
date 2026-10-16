@@ -1,4 +1,5 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
+import { render } from '@/test/render'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -49,14 +50,14 @@ beforeEach(() => {
 describe('Storage connections list and detail', () => {
   it('lists destination ownership and footprint without exposing credentials or configuration', async () => {
     mount()
-    await screen.findByRole('article', { name: 'Local' })
-    expect(article('Local').getByText('Tenant yönetimli')).toBeInTheDocument()
+    await screen.findByRole('article', { name: "Local" })
+    expect(article('Local').getByText("Çalışma alanı yönetimli")).toBeInTheDocument()
     expect(article('Local').getByText('Varsayılan')).toBeInTheDocument()
-    expect(article('Local').getByText(/2 Replica/)).toBeInTheDocument()
+    expect(article('Local').getByText(/2 Kopya/)).toBeInTheDocument()
     expect(article('Local').getByText('6,2 GB')).toBeInTheDocument()
     expect(article('Local').getByText('Henüz test edilmedi')).toBeInTheDocument()
     expect(article('Managed Storage').getByText('Platform yönetimli')).toBeInTheDocument()
-    expect(article('Managed Storage').getByText(/3 Replica/)).toBeInTheDocument()
+    expect(article('Managed Storage').getByText(/3 Kopya/)).toBeInTheDocument()
     expect(article('Managed Storage').getByText('123 MB')).toBeInTheDocument()
     await userEvent.click(article('Local').getByRole('link', { name: 'Local bağlantısını yönet' }))
     expect(await screen.findByRole('list', { name: 'Local yetenekleri' })).toHaveTextContent('OkumaSilme')
@@ -75,8 +76,8 @@ describe('Storage connections list and detail', () => {
     mount(detail('conn-s3', 'configuration'))
     expect(await screen.findByText('archive')).toBeInTheDocument()
     const panel = screen.getByRole('tabpanel')
-    expect(panel).toHaveTextContent('Bucketarchive')
-    expect(panel).toHaveTextContent('Port9000')
+    expect(panel).toHaveTextContent(/(?:Bucket|Kova)archive/)
+    expect(panel).toHaveTextContent(/(?:Port|Bağlantı noktası)9000/)
     expect(panel).toHaveTextContent('TLS kullanEvet')
   })
 
@@ -87,13 +88,13 @@ describe('Storage connections list and detail', () => {
       s3({ lastTest: { status: 'Failed', code: 'access_denied', message: 'Access denied.', testedAt: '2026-10-06T10:00:00Z' } }),
     ])
     mount()
-    await screen.findByRole('article', { name: 'Local' })
-    expect(article('Local').getByText('Agent tarafında denetlenir')).toBeInTheDocument()
+    await screen.findByRole('article', { name: "Local" })
+    expect(article('Local').getByText("Ajan tarafında denetlenir")).toBeInTheDocument()
     expect(article('Local').queryByText('Sağlıklı')).not.toBeInTheDocument()
     expect(article('Managed Storage').getByText('Sağlıklı')).toBeInTheDocument()
     expect(article('S3 Arşiv').getByText('Bağlantı sorunu')).toBeInTheDocument()
     await userEvent.click(article('Local').getByRole('link', { name: /bağlantısını yönet/ }))
-    expect(await screen.findByText(/Backend Agent diskine erişemez/)).toBeInTheDocument()
+    expect(await screen.findByText(/(?:Backend Agent diskine erişemez|Ajan diskine erişemez)/)).toBeInTheDocument()
     expect(screen.queryByText(/cannot reach/)).not.toBeInTheDocument()
   })
 
@@ -103,7 +104,7 @@ describe('Storage connections list and detail', () => {
   ])('uses API permissions for %s connections', async (_name, permissions, editable) => {
     serve([makeConnection({ permissions: { ...tenantAdminPermissions, ...permissions } })])
     mount(detail('conn-local', 'configuration'))
-    await screen.findByRole('heading', { level: 1, name: 'Local' })
+    await screen.findByRole('heading', { level: 1, name: "Local" })
     expect(Boolean(screen.queryByRole('button', { name: 'Local bağlantısı: düzenle' }))).toBe(editable)
     expect(screen.queryByRole('button', { name: /test et/ })).not.toBeInTheDocument()
     await tab('Yönetim')
@@ -134,13 +135,13 @@ describe('Provider catalog', () => {
 
   it('offers creation for an available provider below its connection limit', async () => {
     mount(`${base}/providers`)
-    expect(await screen.findByRole('link', { name: 'Fake S3 için bağlantı ekle' })).toHaveAttribute('href', `${base}/connections/new?provider=fake-s3`)
+    expect(await screen.findByRole('link', { name: /(?:Fake S3|Sahte S3) için bağlantı ekle/ })).toHaveAttribute('href', `${base}/connections/new?provider=fake-s3`)
   })
 
   it('does not allow the non-admin role to create, including a direct wizard URL', async () => {
     access.canAdmin = false
     mount(`${base}/connections/new`)
-    expect(screen.getByText('Bağlantı eklemek için Owner / Admin rolü gerekir')).toBeInTheDocument()
+    expect(screen.getByText("Bağlantı eklemek için Sahip / Yönetici rolü gerekir")).toBeInTheDocument()
     expect(api.getTenantConnections).not.toHaveBeenCalled()
     expect(api.createTenantConnection).not.toHaveBeenCalled()
   })
@@ -149,24 +150,24 @@ describe('Provider catalog', () => {
     serve([makeConnection(), s3({ id: 's1', name: 'S3 A' }), s3({ id: 's2', name: 'S3 B' })])
     mount(`${base}/providers`)
     expect(await screen.findByText('Bağlantı sınırına ulaşıldı (2).')).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Fake S3 için bağlantı ekle' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /(?:Fake S3|Sahte S3) için bağlantı ekle/ })).not.toBeInTheDocument()
   })
 })
 
 async function fillWizard() {
   const user = userEvent.setup()
-  await user.click(await screen.findByRole('radio', { name: /Fake S3/ }))
+  await user.click(await screen.findByRole('radio', { name: /Sahte S3/ }))
   await user.click(screen.getByRole('button', { name: 'İleri' }))
   expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
   await user.type(screen.getByRole('textbox', { name: 'Ad' }), ' Arşiv ')
-  await user.type(screen.getByLabelText('Bucket'), 'archive')
-  await user.type(screen.getByLabelText('Port'), '9000')
+  await user.type(screen.getByLabelText("Kova"), 'archive')
+  await user.type(screen.getByLabelText("Bağlantı noktası"), '9000')
   await user.click(screen.getByLabelText('TLS kullan'))
   await user.click(screen.getByRole('button', { name: 'İleri' }))
   expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
-  await user.type(screen.getByLabelText('Access key'), SECRET_A)
-  await user.type(screen.getByLabelText('Secret key'), SECRET_B)
-  expect(screen.getByLabelText('Secret key')).toHaveAttribute('type', 'password')
+  await user.type(screen.getByLabelText("Erişim anahtarı"), SECRET_A)
+  await user.type(screen.getByLabelText("Gizli anahtar"), SECRET_B)
+  expect(screen.getByLabelText("Gizli anahtar")).toHaveAttribute('type', 'password')
   await user.click(screen.getByRole('button', { name: 'İleri' }))
   return user
 }
@@ -192,13 +193,13 @@ describe('Connection wizard', () => {
     mount(`${base}/connections/new`)
     const user = await fillWizard()
     await user.click(screen.getByRole('button', { name: 'Bağlantıyı oluştur ve test et' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('Bu Storage Provider için bağlantı sınırına ulaşıldı.')
+    expect(await screen.findByRole('alert')).toHaveTextContent("Bu depolama sağlayıcısı için bağlantı sınırına ulaşıldı.")
     await user.click(screen.getByRole('button', { name: 'Geri' }))
-    expect(screen.getByLabelText('Access key')).toHaveValue('')
-    expect(screen.getByLabelText('Secret key')).toHaveValue('')
+    expect(screen.getByLabelText("Erişim anahtarı")).toHaveValue('')
+    expect(screen.getByLabelText("Gizli anahtar")).toHaveValue('')
     expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: 'Geri' }))
-    expect(screen.getByLabelText('Bucket')).toHaveValue('archive')
+    expect(screen.getByLabelText("Kova")).toHaveValue('archive')
   })
 })
 
@@ -212,12 +213,12 @@ describe('Credential replacement', () => {
     const { client } = mount(detail('conn-s3', 'credentials'))
     await user.click(await screen.findByRole('button', { name: 'S3 Arşiv bağlantısı: kimlik bilgisini yenile' }))
     const dialog = await screen.findByRole('dialog')
-    for (const name of ['Access key', 'Secret key']) {
+    for (const name of [/(?:Access key|Erişim anahtarı)/, /(?:Secret key|Gizli anahtar)/]) {
       expect(within(dialog).getByLabelText(name)).toHaveAttribute('type', 'password')
       expect(within(dialog).getByLabelText(name)).toHaveValue('')
     }
-    await user.type(within(dialog).getByLabelText('Access key'), SECRET_A)
-    await user.type(within(dialog).getByLabelText('Secret key'), SECRET_B)
+    await user.type(within(dialog).getByLabelText("Erişim anahtarı"), SECRET_A)
+    await user.type(within(dialog).getByLabelText("Gizli anahtar"), SECRET_B)
     await user.click(within(dialog).getByRole('button', { name: 'Kaydet' }))
     await waitFor(() => expect(api.setTenantConnectionSecret).toHaveBeenCalledWith('tenant-a', 'conn-s3', { accessKey: SECRET_A, secretKey: SECRET_B }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
@@ -233,13 +234,13 @@ describe('Credential replacement', () => {
     mount(detail('conn-s3', 'credentials'))
     await user.click(await screen.findByRole('button', { name: 'S3 Arşiv bağlantısı: kimlik bilgisini yenile' }))
     const dialog = await screen.findByRole('dialog')
-    await user.type(within(dialog).getByLabelText('Access key'), SECRET_A)
-    await user.type(within(dialog).getByLabelText('Secret key'), SECRET_B)
+    await user.type(within(dialog).getByLabelText("Erişim anahtarı"), SECRET_A)
+    await user.type(within(dialog).getByLabelText("Gizli anahtar"), SECRET_B)
     await user.click(within(dialog).getByRole('button', { name: 'Kaydet' }))
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('Girilen değer geçersiz.')
-    expect(within(dialog).getByLabelText('Access key')).toHaveValue('')
-    expect(within(dialog).getByLabelText('Access key')).toHaveAttribute('aria-invalid', 'true')
-    expect(within(dialog).getByLabelText('Secret key')).toHaveValue('')
+    expect(within(dialog).getByLabelText("Erişim anahtarı")).toHaveValue('')
+    expect(within(dialog).getByLabelText("Erişim anahtarı")).toHaveAttribute('aria-invalid', 'true')
+    expect(within(dialog).getByLabelText("Gizli anahtar")).toHaveValue('')
     expect(within(dialog).getByRole('button', { name: 'Kaydet' })).toBeDisabled()
   })
 
@@ -267,9 +268,9 @@ describe('Enablement, test, deletion and editing', () => {
     mount(detail('conn-local', 'manage'))
     await userEvent.click(await screen.findByRole('button', { name: 'Local bağlantısı: devre dışı bırak' }))
     const dialog = await screen.findByRole('dialog')
-    expect(dialog).toHaveTextContent('yeni backup\'lar (manuel ve zamanlanmış) başlatılamaz')
-    expect(dialog).toHaveTextContent('Mevcut Replica\'lar silinmez ve kullanılabilir kalır')
-    expect(dialog).toHaveTextContent('indirme, geri yükleme')
+    expect(dialog).toHaveTextContent(/(?:yeni backup'lar \(manuel ve zamanlanmış\) başlatılamaz|yeni yedeklemeler \(elle başlatılan ve zamanlanmış\) başlatılamaz)/)
+    expect(dialog).toHaveTextContent(/(?:Mevcut Replica'lar silinmez ve kullanılabilir kalır|Mevcut kopyalar silinmez ve kullanılabilir kalır)/)
+    expect(dialog).toHaveTextContent(/(?:indirme, geri yükleme|indirme, restore)/)
     expect(api.setTenantConnectionEnabled).not.toHaveBeenCalled()
     await userEvent.click(within(dialog).getByRole('button', { name: 'Devre dışı bırak' }))
     await waitFor(() => expect(api.setTenantConnectionEnabled).toHaveBeenCalledWith('tenant-a', 'conn-local', false))
@@ -317,7 +318,7 @@ describe('Enablement, test, deletion and editing', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Local bağlantısı: sil' }))
     const dialog = await screen.findByRole('dialog')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Bağlantıyı sil' }))
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Bağlantı hâlâ Replica veya Backup Job tarafından kullanılıyor; silinemez.')
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent("Bağlantı hâlâ bir kopya veya yedekleme işi tarafından kullanılıyor; silinemez.")
     expect(api.deleteTenantConnection).toHaveBeenCalledWith('tenant-a', 'conn-local')
   })
 

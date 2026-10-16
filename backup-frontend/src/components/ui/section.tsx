@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import { useId, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
@@ -5,6 +6,7 @@ import { cn } from '@/lib/utils'
 export function Section({ title, description, actions, children, flush, className, tone = 'default' }: {
   title?: ReactNode; description?: ReactNode; actions?: ReactNode; children?: ReactNode; flush?: boolean; className?: string; tone?: 'default' | 'danger'
 }) {
+  useLanguage()
   const id = useId()
   return <section aria-labelledby={title ? id : undefined} className={cn('rounded-xl border bg-surface shadow-card', tone === 'danger' ? 'border-error/40' : 'border-border', className)}>
     {(title || actions) && <div className={cn('flex flex-wrap items-start justify-between gap-3 px-5 pt-4', flush && 'border-b border-border pb-4')}>
@@ -20,9 +22,11 @@ export function Section({ title, description, actions, children, flush, classNam
 
 /** Label/value rows for read-only facts. Wraps instead of truncating. */
 export function Facts({ children, columns = 2 }: { children: ReactNode; columns?: 1 | 2 | 3 }) {
+  useLanguage()
   return <dl className={cn('grid gap-x-8 gap-y-4', columns === 2 && 'sm:grid-cols-2', columns === 3 && 'sm:grid-cols-2 lg:grid-cols-3')}>{children}</dl>
 }
 
 export function Fact({ label, children }: { label: ReactNode; children: ReactNode }) {
-  return <div className="min-w-0"><dt className="text-sm text-text-muted">{label}</dt><dd className="mt-0.5 break-words text-[0.9375rem] text-text">{children}</dd></div>
+  useLanguage()
+  return <div className="min-w-0"><dt className="text-sm text-text-muted">{tx(label)}</dt><dd className="mt-0.5 break-words text-[0.9375rem] text-text">{children}</dd></div>
 }

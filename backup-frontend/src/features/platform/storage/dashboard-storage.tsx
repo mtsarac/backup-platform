@@ -1,3 +1,4 @@
+import { tx, useLanguage } from '@/lib/i18n'
 import { Link } from 'react-router-dom'
 import { DataTable, type Column } from '@/components/data/data-table'
 import { Section } from '@/components/ui/section'
@@ -11,20 +12,21 @@ import { linkClass } from '../styles'
 import { useStorageUsage } from './hooks'
 
 const columns: Column<StorageUsageRow>[] = [
-  { key: 'tenant', header: 'Tenant', wrap: true, render: (row) => <Link className={linkClass} to={platformPaths.tenant(row.tenantId)}>{row.tenantName}</Link> },
-  { key: 'used', header: 'Kullanılan', render: (row) => row.hasUsage && row.usedBytes !== null ? formatCapacity(row.usedBytes) : 'Henüz hesaplanmadı' },
-  { key: 'reserved', header: 'Rezerve', render: (row) => row.hasUsage && row.reservedBytes !== null ? formatCapacity(row.reservedBytes) : '—' },
-  { key: 'limit', header: 'Limit', render: (row) => row.limitBytes === null ? row.subscriptionStatus === 'NoSubscription' ? 'Limit tanımlı değil' : 'Limitsiz' : formatCapacity(row.limitBytes) },
-  { key: 'state', header: 'Kota durumu', render: (row) => row.state ? <QuotaStateBadge state={row.state} /> : 'Henüz hesaplanmadı' },
+  { key: 'tenant', get header() { return tx("Tenant") }, wrap: true, render: (row) => <Link className={linkClass} to={platformPaths.tenant(row.tenantId)}>{row.tenantName}</Link> },
+  { key: 'used', get header() { return tx("Kullanılan") }, render: (row) => row.hasUsage && row.usedBytes !== null ? formatCapacity(row.usedBytes) : tx('Henüz hesaplanmadı') },
+  { key: 'reserved', get header() { return tx("Rezerve") }, render: (row) => row.hasUsage && row.reservedBytes !== null ? formatCapacity(row.reservedBytes) : '—' },
+  { key: 'limit', get header() { return tx("Limit") }, render: (row) => row.limitBytes === null ? row.subscriptionStatus === 'NoSubscription' ? tx('Limit tanımlı değil') : 'Limitsiz' : formatCapacity(row.limitBytes) },
+  { key: 'state', get header() { return tx("Kota durumu") }, render: (row) => row.state ? <QuotaStateBadge state={row.state} /> : tx('Henüz hesaplanmadı') },
 ]
 
 /** A bounded preview, never a platform total calculated from one page. */
 export function DashboardStorage() {
+  useLanguage()
   const query = useStorageUsage({ page: 1, pageSize: 5 })
-  return <Section title="Depolama kullanımı" description={query.data ? `${query.data.totalCount} tenant · İlk ${query.data.items.length} kayıt gösteriliyor; tüm kullanım için listeyi açın.` : 'Kullanılan ve rezerve alan, etkin limit ve kota durumu.'} flush className="overflow-hidden"
-    actions={<Link className={`${linkClass} text-sm`} to={platformPaths.storage}>Tüm depolama kullanımı</Link>}>
+  return <Section title={tx("Depolama kullanımı")} description={query.data ? tx("{0} tenant · İlk {1} kayıt gösteriliyor; tüm kullanım için listeyi açın.", { "0": query.data.totalCount, "1": query.data.items.length }) : tx('Kullanılan ve rezerve alan, etkin limit ve kota durumu.')} flush className="overflow-hidden"
+    actions={<Link className={`${linkClass} text-sm`} to={platformPaths.storage}>{tx("Tüm depolama kullanımı")}</Link>}>
     <PlatformQueryState isPending={query.isPending} error={query.error}>
-      {query.data && <DataTable className={bareTableClass} rows={query.data.items} columns={columns} keyExtractor={(row) => row.tenantId} emptyMessage="Henüz depolama kullanım kaydı yok." />}
+      {query.data && <DataTable className={bareTableClass} rows={query.data.items} columns={columns} keyExtractor={(row) => row.tenantId} emptyMessage={tx("Henüz depolama kullanım kaydı yok.")} />}
     </PlatformQueryState>
   </Section>
 }
