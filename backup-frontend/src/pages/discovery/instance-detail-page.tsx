@@ -4,7 +4,6 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { QueryState } from '@/components/data/query-state'
 import { Button } from '@/components/ui/button'
-import { Field } from '@/components/ui/field'
 import { Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Fact, Facts, Section } from '@/components/ui/section'
@@ -14,7 +13,9 @@ import { useDiscoveryAgents, useDiscoveryInstance, useSaveCredential, useVerifyI
 import { AccessPill, FullBackupPill, LastChangePill, PresencePill, ReachabilityPill } from '@/features/discovery/presentation'
 import { canCreateJob, databaseSelectable, engineLabels, reasonText, sourceLabels } from '@/features/discovery/status'
 import type { DiscoveryInstanceDetail } from '@/features/discovery/types'
-import { inputClass } from '@/features/platform/styles'
+import { DatabaseLoginFields } from '@/features/backup-jobs/database-login-fields'
+import { loginErrors } from '@/features/backup-jobs/database-login-validation'
+import type { DatabaseLogin } from '@/features/backup-jobs/types'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { ApiError } from '@/lib/api/client'
 import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
@@ -26,23 +27,29 @@ function CredentialForm({ instance }: { instance: DiscoveryInstanceDetail }) {
   const save = useSaveCredential(instance.id)
   const verify = useVerifyInstance()
   const isMssql = instance.engine === 'mssql'
-  const [reference, setReference] = useState(instance.credential.credentialReference ?? '')
+  const [login, setLogin] = useState<DatabaseLogin | null>(null)
+  const [submitted, setSubmitted] = useState(false)
+  const hasStored = Boolean(instance.credential.credentialReference)
   const [integrated, setIntegrated] = useState(instance.credential.integratedSecurity)
+  const usesPassword = !(isMssql && integrated)
+  const loginProblem = usesPassword && submitted ? loginErrors(login, hasStored) : undefined
   const [encrypt, setEncrypt] = useState(instance.credential.encrypt)
   const [trust, setTrust] = useState(instance.credential.trustServerCertificate)
-  const referenceError = save.error instanceof ApiError ? (save.error.fields.credentialReference ? tx('Kimlik bilgisi referansı geçersiz. Agent üzerinde tanımlı gizli anahtar adını girin.') : Object.values(save.error.fields).map(failureMessage)[0]) : undefined
-  const otherError = save.error && !referenceError ? errorMessage(save.error) : undefined
+  const otherError = save.error ? (save.error instanceof ApiError ? Object.values(save.error.fields).map(failureMessage)[0] : undefined) ?? errorMessage(save.error) : undefined
   const verifyStarted = verify.isSuccess
-  return <Section title={tx("Bağlantı kimlik bilgisi")} description={tx("Parola girilmez: yalnızca Agent üzerindeki gizli anahtarın referans adı saklanır.")}>
-    <form className="space-y-3" noValidate onSubmit={event => { event.preventDefault(); save.mutate({ credentialReference: integrated ? null : reference.trim() || null, integratedSecurity: isMssql && integrated, encrypt, trustServerCertificate: trust }) }}>
-      <Field id="credential-reference" label={tx("Kimlik bilgisi referans adı (parola değil)")} hint={tx("Agent makinesinde BACKUP_AGENT_SECRET_<referans> olarak tanımlı gizli anahtarın adıdır; parola bu forma yazılmaz ve platformda saklanmaz.")} error={referenceError}>
-        {control => <input {...control} className={inputClass} value={reference} disabled={!canOperate || (isMssql && integrated)} onChange={event => setReference(event.target.value)} />}
-      </Field>
+  return <Section title={tx("Bağlantı kimlik bilgisi")} description={tx("Bu Instance için kullanılacak veritabanı kullanıcısı. Parola şifrelenerek saklanır ve bir daha gösterilmez.")}>
+    <form className="space-y-3" noValidate onSubmit={event => {
+      event.preventDefault()
+      setSubmitted(true)
+      if (usesPassword && loginErrors(login, hasStored)) return
+      save.mutate({ credentialReference: usesPassword ? instance.credential.credentialReference : null, databaseLogin: usesPassword ? login : null, integratedSecurity: isMssql && integrated, encrypt, trustServerCertificate: trust })
+    }}>
+      {usesPassword && <DatabaseLoginFields idPrefix="credential" login={login} hasStored={hasStored} disabled={!canOperate} errors={loginProblem} onChange={setLogin} />}
       {isMssql && <label className="flex min-h-11 items-center gap-3 text-[0.9375rem] text-text"><input type="checkbox" className="size-5 accent-primary" checked={integrated} disabled={!canOperate} onChange={event => setIntegrated(event.target.checked)} />{tx("Windows kimlik doğrulaması (integrated security)")}</label>}
       <label className="flex min-h-11 items-center gap-3 text-[0.9375rem] text-text"><input type="checkbox" className="size-5 accent-primary" checked={encrypt} disabled={!canOperate} onChange={event => setEncrypt(event.target.checked)} />{tx("Bağlantıyı şifrele")}</label>
       <label className="flex min-h-11 items-center gap-3 text-[0.9375rem] text-text"><input type="checkbox" className="size-5 accent-primary" checked={trust} disabled={!canOperate} onChange={event => setTrust(event.target.checked)} />{tx("Sunucu sertifikasına güven")}</label>
       {otherError && <Notice tone="error">{otherError}</Notice>}
-      {save.isSuccess && <Notice tone="success">{tx("Kimlik bilgisi bağlaması kaydedildi. Veritabanlarını listelemek için bağlantıyı doğrulayın.")}</Notice>}
+      {save.isSuccess && <Notice tone="success">{tx("Veritabanı girişi kaydedildi. Veritabanlarını listelemek için bağlantıyı doğrulayın.")}</Notice>}
       {verifyStarted && <Notice tone="info">{tx("Doğrulama taraması istendi; sonuç Agent'ın bir sonraki heartbeat'inde gelir.")}</Notice>}
       {verify.error && <Notice tone="error">{errorMessage(verify.error)}</Notice>}
       {canOperate && <div className="flex flex-wrap gap-2">

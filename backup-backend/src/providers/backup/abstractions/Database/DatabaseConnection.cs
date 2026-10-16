@@ -16,6 +16,11 @@ public sealed record DatabaseEndpoint
             throw new ArgumentOutOfRangeException(nameof(port), port, "Ports are 1..65535.");
         }
 
+        if (port is not null && host.Contains('\\'))
+        {
+            throw new ArgumentException("A host naming an instance (host\\instance) cannot also carry a port: the port would silently win and could reach a different instance.", nameof(port));
+        }
+
         if (instanceName is not null)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(instanceName);
@@ -40,6 +45,12 @@ public sealed record DatabaseEndpoint
 
     /// <summary>A named instance resolved by the engine's own listener service; null for the default instance or an explicit port.</summary>
     public string? InstanceName { get; }
+
+    /// <summary>
+    /// The instance the caller meant, when it named one (<see cref="InstanceName"/> or a <c>host\instance</c> host); null when it addressed the default instance or a bare port,
+    /// which a provider cannot compare against what answered. A provider uses it to refuse a connection that reached a different instance.
+    /// </summary>
+    public string? ExpectedInstanceName => InstanceName ?? (Host.IndexOf('\\') is var slash and >= 0 && slash < Host.Length - 1 ? Host[(slash + 1)..] : null);
 }
 
 /// <summary>

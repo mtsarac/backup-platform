@@ -11,6 +11,7 @@ import type { BackupArtifact } from '@/features/artifacts/types'
 import { formatDuration, formatTimestamp } from '@/features/backups/presentation'
 import { inputClass, selectClass } from '@/features/platform/styles'
 import { useTenant } from '@/features/tenancy/use-tenant'
+import { StoredLoginPanel } from './stored-login-panel'
 import { useRestores, useRestoreTargets, useStartRestoreVerification } from './hooks'
 import { restoreErrorMessage, verificationCleanupText, verificationOutcomeLabels } from './presentation'
 import type { RestoreTarget, RestoreView, StartRestoreVerificationVariables } from './types'
@@ -102,8 +103,9 @@ function VerificationForm({ tenantId, artifactId, onClose }: { tenantId: string;
       {!useConfigured && <div className="grid gap-3 sm:grid-cols-2">
         <div><label htmlFor="verify-host" className="block text-sm font-medium">{tx("Host / Instance")}</label><input id="verify-host" className={inputClass} value={custom.host} onChange={(event) => setCustom({ ...custom, host: event.target.value })} placeholder={tx("localhost veya SQLSERVER")} /></div>
         <div><label htmlFor="verify-port" className="block text-sm font-medium">{tx("Port (İsteğe bağlı)")}</label><input id="verify-port" type="number" className={inputClass} value={custom.port ?? ''} onChange={(event) => setCustom({ ...custom, port: event.target.value ? Number(event.target.value) : null })} placeholder="1433" /></div>
-        <div className="sm:col-span-2"><label htmlFor="verify-cred" className="block text-sm font-medium">{tx("Credential Referansı")}</label><input id="verify-cred" className={inputClass} value={custom.databaseCredentialReference ?? ''} onChange={(event) => setCustom({ ...custom, databaseCredentialReference: event.target.value || null })} placeholder={tx("Agent credential referansı (örn. sql_smoke)")} /></div>
+        {!custom.integratedSecurity && <StoredLoginPanel tenantId={tenantId} agentId={selectedAgent} idPrefix="verify-login" reference={custom.databaseCredentialReference} onStored={(reference) => setCustom({ ...custom, databaseCredentialReference: reference })} />}
         <div className="flex flex-wrap items-center gap-4 text-sm sm:col-span-2">
+          <label className="flex items-center gap-2"><input type="checkbox" checked={custom.integratedSecurity} onChange={(event) => setCustom({ ...custom, integratedSecurity: event.target.checked, databaseCredentialReference: null })} /><span>{tx("Windows kimlik doğrulaması")}</span></label>
           <label className="flex items-center gap-2"><input type="checkbox" checked={custom.encrypt} onChange={(event) => setCustom({ ...custom, encrypt: event.target.checked })} /><span>{tx("Bağlantıyı Şifrele")}</span></label>
           <label className="flex items-center gap-2"><input type="checkbox" checked={custom.trustServerCertificate} onChange={(event) => setCustom({ ...custom, trustServerCertificate: event.target.checked })} /><span>{tx("Sunucu Sertifikasına Güven")}</span></label>
         </div>

@@ -18,6 +18,7 @@ import { useRestore, useRestoreTargets, useStartRestore, useStartRestoreDiscover
 import { restoreErrorMessage, restoreFailureMessage, restoreModeLabel } from '@/features/restores/presentation'
 import type { RestoreMode, RestoreOptions, RestoreTarget, RestoreTargetsResponse, RestoreView, StartRestoreDiscoveryVariables, StartRestorePrecheckVariables, StartRestoreVariables } from '@/features/restores/types'
 import { useTenant } from '@/features/tenancy/use-tenant'
+import { StoredLoginPanel } from '@/features/restores/stored-login-panel'
 import { ApiError } from '@/lib/api/client'
 
 
@@ -428,17 +429,12 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
                       placeholder={isPg ? '5432' : '1433'}
                     />
                   </div>
-                  <div className="sm:col-span-2">
-                    <label htmlFor={`${instancePrefix}-cred`} className="block text-sm font-medium">{tx("Credential Referansı")}</label>
-                    <input
-                      id={`${instancePrefix}-cred`}
-                      className={inputClass}
-                      value={customTarget.databaseCredentialReference ?? ''}
-                      onChange={(e) => changeCustomTarget({ ...customTarget, databaseCredentialReference: e.target.value || null })}
-                      placeholder={tx("Agent credential referansı (örn. sql_smoke)")}
-                    />
-                  </div>
+                  {!customTarget.integratedSecurity && <StoredLoginPanel tenantId={tenantId} agentId={selectedAgentId} idPrefix={`${instancePrefix}-login`} reference={customTarget.databaseCredentialReference} onStored={(reference) => changeCustomTarget({ ...customTarget, databaseCredentialReference: reference })} />}
                   <div className="flex flex-wrap items-center gap-4 text-sm sm:col-span-2">
+                                        <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={customTarget.integratedSecurity} onChange={(e) => changeCustomTarget({ ...customTarget, integratedSecurity: e.target.checked, databaseCredentialReference: null })} />
+                      <span>{tx("Windows kimlik doğrulaması")}</span>
+                    </label>
                     <label className="flex items-center gap-2">
                       <input
                         type="checkbox"

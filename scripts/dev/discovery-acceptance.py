@@ -5,7 +5,7 @@ Talks only to the real tenant API (as the tenant Owner). Never prints credential
   snap                         agent status and every instance with access/reachability/last change
   wait [--min-new N]           wait until the agent is idle and a newer scan was reported
   rescan                       POST the manual rescan of the stack's agent, then wait
-  bind KEY REF [--integrated]  bind an agent-local credential reference to the instance whose key contains KEY, then verify and wait
+  bind KEY USER [--password-env VAR] [--integrated]  store the database login (password read from env VAR, default BP_DISCOVERY_DB_PASSWORD) on the instance whose key contains KEY, then verify and wait
   verify KEY                   verify the bound credential of the instance
   dbs KEY                      list the discovered databases of the instance (with jobs)
   raw METHOD PATH [JSON]       tenant-relative call, prints status and body
@@ -104,7 +104,7 @@ def main():
     sub.add_parser('snap')
     sub.add_parser('wait')
     sub.add_parser('rescan')
-    bind = sub.add_parser('bind'); bind.add_argument('key'); bind.add_argument('reference'); bind.add_argument('--integrated', action='store_true')
+    bind = sub.add_parser('bind'); bind.add_argument('key'); bind.add_argument('user'); bind.add_argument('--password-env', default='BP_DISCOVERY_DB_PASSWORD'); bind.add_argument('--integrated', action='store_true')
     bind.add_argument('--trust', action='store_true'); bind.add_argument('--no-encrypt', action='store_true')
     verify = sub.add_parser('verify'); verify.add_argument('key')
     dbs = sub.add_parser('dbs'); dbs.add_argument('key')
@@ -126,7 +126,7 @@ def main():
         _, instances = snapshot(api, tenant)
         item = find(instances, options.key)
         if options.command == 'bind':
-            body = {'credentialReference': None if options.integrated else options.reference, 'integratedSecurity': options.integrated, 'encrypt': not options.no_encrypt, 'trustServerCertificate': True}
+            body = {'credentialReference': None, 'databaseLogin': None if options.integrated else {'userName': options.user, 'password': os.environ[options.password_env]}, 'integratedSecurity': options.integrated, 'encrypt': not options.no_encrypt, 'trustServerCertificate': True}
             status, _ = api.call('PUT', f'/api/tenants/{tenant}/discovery/instances/{item["id"]}/credential', body, expect=(200, 400))
             print('bind ->', status)
         previous = last_scan(api, tenant)

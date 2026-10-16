@@ -170,7 +170,7 @@ public sealed class DiscoveryApiIntegrationTests(PostgreSqlFixture fixture) : IC
             Assert.Equal(HttpStatusCode.Conflict, early.StatusCode);
 
         using (var bind = await setup.Admin.SendAsync(HttpMethod.Put, $"{Root(setup)}/instances/{instanceId}/credential",
-            new { credentialReference = "sql-main", integratedSecurity = false, encrypt = true, trustServerCertificate = true }))
+            new { databaseLogin = new { userName = "sa", password = "Discovery-Test-1!" }, integratedSecurity = false, encrypt = true, trustServerCertificate = true }))
         {
             Assert.Equal(HttpStatusCode.OK, bind.StatusCode);
             Assert.True(AgentWorld.ReadJson(bind).GetProperty("credential").GetProperty("bound").GetBoolean());
@@ -186,8 +186,9 @@ public sealed class DiscoveryApiIntegrationTests(PostgreSqlFixture fixture) : IC
         var manual = (await ClaimAsync(world, agent))!.Value;
         Assert.Equal("mssql|service|default", manual.GetProperty("onlyInstanceKey").GetString());
         var binding = Assert.Single(manual.GetProperty("bindings").EnumerateArray());
-        Assert.Equal("sql-main", binding.GetProperty("credentialReference").GetString());
+        Assert.StartsWith($"dbc-{agent.AgentId:N}-", binding.GetProperty("credentialReference").GetString(), StringComparison.Ordinal);
         Assert.DoesNotContain("password", manual.GetRawText(), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Discovery-Test-1!", manual.GetRawText(), StringComparison.Ordinal);
 
         var databases = new List<AgentDiscoveredDatabase>
         {

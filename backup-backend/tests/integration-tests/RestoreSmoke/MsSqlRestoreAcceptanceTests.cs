@@ -45,7 +45,7 @@ public sealed class MsSqlRestoreAcceptanceTests(PostgreSqlFixture database, ITes
             var configuration = new BackupExecutionConfiguration
             {
                 Host = hostName, Port = sourcePort, Database = sourceName,
-                DatabaseCredentialReference = "sql_smoke", TrustServerCertificate = true,
+                DatabaseLogin = new(Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_USER")!, Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_PASSWORD")!), TrustServerCertificate = true,
                 StagingReference = "default", Destinations = BackupTestDestinations.LocalAgent, StoragePrefix = "restore-smoke",
                 CopyOnly = true, ChecksumPolicy = "Required", CompressionPolicy = "Preferred"
             };
@@ -67,7 +67,7 @@ public sealed class MsSqlRestoreAcceptanceTests(PostgreSqlFixture database, ITes
             var request = new
             {
                 agentId = agent.AgentId,
-                target = new { host = hostName, port = targetPort, databaseCredentialReference = "sql_smoke", trustServerCertificate = true },
+                target = new { host = hostName, port = targetPort, databaseCredentialReference = await MsSqlManualAgentSmokeTests.StoreSqlLoginAsync(tenant, agent.AgentId), trustServerCertificate = true },
                 databaseName = targetName
             };
             var restore = await RequestAsync(tenant, artifactId, "new-name", request);

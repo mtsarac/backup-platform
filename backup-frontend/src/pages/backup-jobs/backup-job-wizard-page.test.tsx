@@ -80,7 +80,8 @@ describe('iş formu', () => {
     expect(screen.queryByLabelText(/Windows kimlik/)).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText("PostgreSQL ana bilgisayarı"), { target: { value: 'pg-host' } })
     fireEvent.change(screen.getByLabelText("Veritabanı"), { target: { value: '数'.repeat(22) } })
-    fireEvent.change(screen.getByLabelText("Kimlik bilgisi başvurusu (parola değil)"), { target: { value: 'pg-local' } })
+    fireEvent.change(screen.getByLabelText("Veritabanı kullanıcı adı"), { target: { value: 'pg_user' } })
+    fireEvent.change(screen.getByLabelText("Veritabanı parolası"), { target: { value: 'pg-secret' } })
     next()
     expect(screen.getByLabelText("Veritabanı")).toHaveAttribute('aria-invalid', 'true')
     expect(saveBackupJob).not.toHaveBeenCalled()
@@ -92,7 +93,7 @@ describe('iş formu', () => {
     await submit()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(1))
     expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration).toMatchObject({
-      engine: 'postgres', port: 5432, integratedSecurity: false, databaseCredentialReference: 'pg-local',
+      engine: 'postgres', port: 5432, integratedSecurity: false, databaseLogin: { userName: 'pg_user', password: 'pg-secret' },
       database: '数'.repeat(21), copyOnly: false, checksumPolicy: 'Preferred',
     })
   })
@@ -115,20 +116,25 @@ describe('iş formu', () => {
     await waitFor(() => expect(document.getElementById('cronExpression-error')).toHaveTextContent(/.+/))
     expect(screen.getByLabelText('Cron ifadesi')).toHaveAttribute('aria-invalid', 'true')
   })
-  it('kimlik bilgisi referansı sunucu hatasını Kaynak adımında gösterir', async () => {
-    vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400, { field: 'configuration.databaseCredentialReference', code: 'invalid_request' }))
+  it('SQL kimlik doğrulamasında kullanıcı adı ve parola girilmeden Kaynak adımından ilerlemez', async () => {
     renderPage()
     await reach(1)
     fireEvent.click(screen.getByLabelText("Windows kimlik doğrulaması (tümleşik güvenlik)"))
-    fireEvent.change(screen.getByLabelText("Kimlik bilgisi başvurusu (parola değil)"), { target: { value: 'missing-reference' } })
     fireEvent.change(screen.getByLabelText("SQL Server ana bilgisayarı / veritabanı sunucusu"), { target: { value: 'sql' } })
     fireEvent.change(screen.getByLabelText("Veritabanı"), { target: { value: 'ERP' } })
-    next(4)
-    await submit()
-    fireEvent.click(await screen.findByRole('button', { name: 'Hatalı alana git: Kaynak' }))
-    expect(screen.getByLabelText("Kimlik bilgisi başvurusu (parola değil)")).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByLabelText("Kimlik bilgisi başvurusu (parola değil)")).toHaveValue('missing-reference')
-    expect(saveBackupJob).toHaveBeenCalledTimes(1)
+    next()
+    expect(screen.getByLabelText("Veritabanı kullanıcı adı")).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByLabelText("Veritabanı parolası")).toHaveAttribute('aria-invalid', 'true')
+    expect(saveBackupJob).not.toHaveBeenCalled()
+  })
+  it('instance adı içeren host ile portu birlikte kabul etmez', async () => {
+    renderPage()
+    await reach(1)
+    fireEvent.change(screen.getByLabelText("SQL Server ana bilgisayarı / veritabanı sunucusu"), { target: { value: 'srv\\SQL2022' } })
+    fireEvent.change(screen.getByLabelText("Veritabanı"), { target: { value: 'ERP' } })
+    fireEvent.change(screen.getByLabelText(/Bağlantı noktası/), { target: { value: '1433' } })
+    next()
+    expect(screen.getByLabelText(/Bağlantı noktası/)).toHaveAttribute('aria-invalid', 'true')
   })
 
   it('geçersiz zamanlama kaydı alan hatasını gösterir ve başka istek göndermez', async () => {

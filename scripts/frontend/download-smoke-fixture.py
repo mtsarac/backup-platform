@@ -72,7 +72,7 @@ def backup(options):
         raise FixtureFailure('Actual enrolled Agent was not found.')
     agent_id = agent.get('agentId', agent.get('id'))
     configuration = {'engine': 'mssql', 'host': options.sql_host, 'port': options.sql_port, 'database': options.database,
-                     'databaseCredentialReference': 'sql_smoke', 'trustServerCertificate': True,
+                     'databaseCredentialReference': shared.store_sql_login(api, path, agent_id, options.sql_login_file), 'trustServerCertificate': True,
                      'stagingReference': 'default', 'storageTarget': 'default',
                      'storagePrefix': 'download-smoke', 'copyOnly': True, 'checksumPolicy': 'Required', 'compressionPolicy': 'Preferred',
                      'requiredVerifiedReplicaCount': 1}
@@ -175,6 +175,7 @@ def main():
     second.add_argument('--agent-name', required=True)
     second.add_argument('--sql-host', required=True)
     second.add_argument('--sql-port', type=int, default=1433)
+    second.add_argument('--sql-login-file', help='JSON {userName, password} of the SQL login to store (default: the test SQL Server from the environment).')
     second.add_argument('--database', default='master')
     second.add_argument('--timeout', type=int, default=240)
     second.add_argument('--upload-limit', type=int, default=0, help='Job upload limit in bytes per second (0 = none).')

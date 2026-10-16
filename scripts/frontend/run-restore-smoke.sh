@@ -69,8 +69,6 @@ export Agent__Backup__Staging__Mapping=Mapped
 export Agent__Backup__Staging__ServerDirectory=$BACKUP_PLATFORM_TEST_MSSQL_STAGING_SERVER_DIR
 export Agent__Backup__Staging__AgentDirectory=$BACKUP_PLATFORM_TEST_MSSQL_STAGING_AGENT_DIR
 export Agent__Backup__CentralStorage__RootDirectory=$central_root Agent__Backup__CentralStorage__TenantScope=$scope
-BACKUP_AGENT_SECRET_sql_smoke=$(python3 -c 'import json, os; print(json.dumps({"userName":os.environ["BACKUP_PLATFORM_TEST_MSSQL_USER"],"password":os.environ["BACKUP_PLATFORM_TEST_MSSQL_PASSWORD"]}))')
-export BACKUP_AGENT_SECRET_sql_smoke
 (cd "$work/agent" && exec ./BackupPlatform.Agent.Host) >"$work/agent.log" 2>&1 &
 agent_pid=$!
 python3 "$REPO_ROOT/scripts/frontend/download-smoke-fixture.py" --server "$server" --certificate "$certificate" --state "$state" backup \

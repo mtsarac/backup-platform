@@ -3,7 +3,6 @@ using BackupPlatform.Agent.Core.Identity;
 using BackupPlatform.Agent.Core.Tasks;
 using BackupPlatform.Agent.Transport;
 using BackupPlatform.BackupProviders.Abstractions.Database;
-using BackupPlatform.SecretProviders.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -45,7 +44,6 @@ public static class AgentHostServiceCollectionExtensions
 
         services.AddAgentTransport();
         services.AddAgentBackupExecution(configuration);
-        services.TryAddSingleton<ISecretProvider, EnvironmentTaskSecretProvider>();
         services.TryAddSingleton<IBackupTaskCredentialResolver, BackupTaskCredentialResolver>();
         services.AddSingleton(provider => new BackupTaskRequestFactory(
             provider.GetRequiredService<IBackupTaskCredentialResolver>(),

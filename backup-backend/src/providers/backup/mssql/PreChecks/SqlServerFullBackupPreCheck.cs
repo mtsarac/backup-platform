@@ -13,7 +13,8 @@ internal sealed record SqlServerPreCheckFacts(
     SqlServerDatabaseInfo? Database,
     SqlServerBackupPermission Permission,
     SqlServerStagingFacts? Staging = null,
-    SqlServerBackupPermission VerifyPermission = SqlServerBackupPermission.Unknown);
+    SqlServerBackupPermission VerifyPermission = SqlServerBackupPermission.Unknown,
+    string? ExpectedInstanceName = null);
 
 /// <summary>Machine-readable reasons the SQL Server full-backup pre-check can report.</summary>
 public static class SqlServerPreCheckReasons
@@ -25,6 +26,7 @@ public static class SqlServerPreCheckReasons
     public const string ConnectionSettingsInvalid = "connection-settings-invalid";
     public const string ConnectionFailed = "connection-failed";
     public const string AuthenticationFailed = "authentication-failed";
+    public const string InstanceMismatch = "instance-mismatch";
     public const string MetadataUnavailable = "metadata-unavailable";
     public const string DatabaseNotFound = "database-not-found";
     public const string DatabaseOnline = "database-online";
@@ -121,6 +123,19 @@ internal static class SqlServerFullBackupPreCheck
             return items;
         }
 
+        if (!InstanceMatches(facts.ExpectedInstanceName, facts.Instance.InstanceName))
+        {
+            items.Add(Failed(BackupPreCheckIds.ServerInstance, SqlServerPreCheckReasons.InstanceMismatch,
+                "The SQL Server instance that answered is not the instance this job names. Nothing was backed up."));
+            items.AddRange(downstream.Select(Skipped));
+            return items;
+        }
+
+        if (facts.ExpectedInstanceName is not null)
+        {
+            items.Add(Passed(BackupPreCheckIds.ServerInstance, SqlServerPreCheckReasons.Ok, "The named instance answered."));
+        }
+
         if (facts.Database is not { } database)
         {
             items.Add(Failed(BackupPreCheckIds.DatabaseExists, SqlServerPreCheckReasons.DatabaseNotFound,
@@ -165,6 +180,10 @@ internal static class SqlServerFullBackupPreCheck
 
         return items;
     }
+
+    // An unnamed target (default instance or a bare port) has nothing to compare; a named one must be answered by exactly that instance (SERVERPROPERTY InstanceName is NULL for the default one).
+    internal static bool InstanceMatches(string? expected, string? actual) =>
+        expected is null || string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The checks that depend on the database being found, in report order.</summary>
     private static IReadOnlyList<string> DownstreamCheckIds(FullBackupPreCheckRequest request)

@@ -44,3 +44,7 @@ export function retryRestoreCleanup(tenantId: string, id: string) {
 export function removeRollbackCopy(tenantId: string, id: string, confirmDatabaseName: string) {
   return apiRequest<RestoreView>(tenantPath(tenantId, `restores/${encodeURIComponent(id)}/rollback-removal`), { method: 'POST', json: { confirmDatabaseName } })
 }
+
+/** Encrypts a typed database login on the server and returns the reference a restore target uses; the password never travels in a restore request. */
+export const storeDatabaseLogin = (tenantId: string, agentId: string, login: { userName: string; password: string }) =>
+  apiRequest<{ reference: string }>(tenantPath(tenantId, `agents/${encodeURIComponent(agentId)}/database-logins`), { method: 'POST', json: login })

@@ -39,9 +39,6 @@ start_agent() {
     export SSL_CERT_FILE="$H/cert.pem"
     export Agent__Backend__BaseUri="https://127.0.0.1:$API_PORT" Agent__CredentialStoreDirectory="$H/agent-identity"
     export Agent__Connectivity__HeartbeatInterval=00:00:05 Agent__Connectivity__PollInterval=00:00:05 Agent__Connectivity__MinimumPollSpacing=00:00:01
-    export "BACKUP_AGENT_SECRET_disc_mssql=$(python3 -c 'import json,sys; print(json.dumps({"userName":"sa","password":sys.argv[1]}))' "$MSSQL_PASSWORD")"
-    export "BACKUP_AGENT_SECRET_disc_pg=$(python3 -c 'import json,sys; print(json.dumps({"userName":"postgres","password":sys.argv[1]}))' "$TARGET_PG_PASSWORD")"
-    export "BACKUP_AGENT_SECRET_disc_bad=$(python3 -c 'import json; print(json.dumps({"userName":"sa","password":"definitely-wrong"}))')"
     cd -- "$AGENT_DIR"
     spawn agent ./BackupPlatform.Agent.Host
     sleep 2

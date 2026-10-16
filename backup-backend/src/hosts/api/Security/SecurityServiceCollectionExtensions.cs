@@ -88,6 +88,7 @@ public static class SecurityServiceCollectionExtensions
         AddAgentSecurity(services);
         AddAgentConnectivity(services);
         services.AddScoped<IDiscoveryStore, PostgreSqlDiscoveryStore>();
+        services.AddSingleton<BackupPlatform.Api.Databases.DatabaseCredentialVault>();
         services.AddScoped<DiscoveryService>();
         services.TryAddSingleton(provider =>
         {

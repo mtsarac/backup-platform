@@ -68,10 +68,6 @@ internal sealed class AgentHostSmokeProcess : IAsyncDisposable
         start.Environment["Agent__Backup__Staging__ServerDirectory"] = serverStaging;
         start.Environment["Agent__Backup__Staging__AgentDirectory"] = agentStaging;
         start.Environment["Agent__Backup__LocalStorage__RootDirectory"] = storage;
-        start.Environment["BACKUP_AGENT_SECRET_sql_smoke"] = System.Text.Json.JsonSerializer.Serialize(new
-        {
-            userName = Required("BACKUP_PLATFORM_TEST_MSSQL_USER"), password = Required("BACKUP_PLATFORM_TEST_MSSQL_PASSWORD")
-        });
         try
         {
             return new AgentHostSmokeProcess(scratch, storage, Process.Start(start) ?? throw new InvalidOperationException("Agent.Host could not start."), diagnostic);

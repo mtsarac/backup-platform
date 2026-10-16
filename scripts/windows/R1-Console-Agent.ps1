@@ -83,11 +83,8 @@ switch ($Action) {
             Backup = @{ Staging = @{ Mapping = 'SameHost'; AgentDirectory = $stage }; LocalStorage = @{ RootDirectory = $storage } }
         } }
         $config | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $binary 'appsettings.Production.json') -Encoding UTF8
-        # The SQL credential reaches only this process's environment, from the protected root.
         $launcher = @"
 `$ErrorActionPreference = 'Stop'
-`$secret = Get-Content -LiteralPath '$(Join-Path $root 'sql-secret.json')' -Raw | ConvertFrom-Json
-`$env:BACKUP_AGENT_SECRET_sql_smoke = (`$secret | ConvertTo-Json -Compress)
 Start-Process -FilePath '$exe' -WorkingDirectory '$binary' -WindowStyle Hidden -RedirectStandardOutput '$(Join-Path $root 'agent.log')' -RedirectStandardError '$(Join-Path $root 'agent-err.log')'
 "@
         Set-Content -LiteralPath (Join-Path $root 'launch.ps1') -Value $launcher -Encoding UTF8

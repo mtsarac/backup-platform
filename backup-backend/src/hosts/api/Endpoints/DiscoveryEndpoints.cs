@@ -1,3 +1,4 @@
+using BackupPlatform.Api.Databases;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Application.Discovery;
@@ -82,8 +83,23 @@ public static class DiscoveryEndpoints
         ToResult(context, await service.VerifyAsync(tenant.TenantId!, instanceId, user.UserId!, cancellationToken));
 
     private static async Task<IResult> BindCredentialAsync(
-        Guid instanceId, DiscoveryCredentialRequest request, ITenantContext tenant, ICurrentUser user, DiscoveryService service, CancellationToken cancellationToken)
+        Guid instanceId, DiscoveryCredentialRequest request, ITenantContext tenant, ICurrentUser user, DiscoveryService service, DatabaseCredentialVault vault,
+        CancellationToken cancellationToken)
     {
+        if (await service.GetInstanceAsync(tenant.TenantId!, instanceId, cancellationToken) is not { } detail) return Results.NotFound();
+        try
+        {
+            // The typed login (or a reference of this instance's agent) is the only accepted source; free text is never a reference.
+            request = request with
+            {
+                CredentialReference = await vault.PrepareAsync(detail.Instance.AgentId, request.IntegratedSecurity, request.DatabaseLogin, request.CredentialReference, cancellationToken),
+                DatabaseLogin = null
+            };
+        }
+        catch (DatabaseLoginRejectedException)
+        {
+            return Invalid("databaseLogin", "invalid_value", "A user name and password, or a login already stored for this agent, is required.");
+        }
         var outcome = await service.BindCredentialAsync(tenant.TenantId!, instanceId, request, user.UserId!, cancellationToken);
         return outcome.Status switch
         {

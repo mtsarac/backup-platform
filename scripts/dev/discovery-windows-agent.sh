@@ -2,7 +2,7 @@
 # Disposable Windows console Agent on the VM for the Database Auto Discovery acceptance, enrolled into the stack of discovery-stack.sh
 # (which must listen on BP_DISC_PUBLIC_HOST, default 192.168.122.1). The VM's own BackupAgent service and identity are never touched: the agent is a hidden
 # console process inside its own owned BackupAgentSmoke-<hex> root (scripts/windows/R1-Console-Agent.ps1), removed by 'down' together with the temporary
-# trust anchor. The VM's SQL login reaches only that process, as agent-local reference sql_smoke.
+# trust anchor. The VM's SQL login is entered through the API (database-logins), never injected into the agent.
 #   discovery-windows-agent.sh up | down | stop | start | log
 set +x
 set -euo pipefail

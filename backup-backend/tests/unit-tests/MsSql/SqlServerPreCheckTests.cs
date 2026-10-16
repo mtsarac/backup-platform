@@ -31,6 +31,39 @@ public sealed class SqlServerPreCheckTests
         Assert.All(report.Items, item => Assert.Equal(BackupPreCheckStatus.Passed, item.Status));
     }
 
+    [Fact]
+    public void AnotherInstanceAnsweringFailsAndSkipsTheDatabaseChecks()
+    {
+        var report = Run(Healthy() with { ExpectedInstanceName = "SQL2022" }, Sales);
+
+        Assert.False(report.CanProceed);
+        var failed = Assert.Single(report.Items, item => item.Status == BackupPreCheckStatus.Failed);
+        Assert.Equal(BackupPreCheckIds.ServerInstance, failed.CheckId);
+        Assert.Equal(SqlServerPreCheckReasons.InstanceMismatch, failed.ReasonCode);
+        Assert.Contains(report.Items, item => item.CheckId == BackupPreCheckIds.BackupPermission && item.Status == BackupPreCheckStatus.Skipped);
+    }
+
+    [Fact]
+    public void NamedInstanceThatAnswersPassesCaseInsensitively()
+    {
+        var instance = Healthy().Instance! with { InstanceName = "sql2022" };
+        var report = Run(Healthy() with { Instance = instance, ExpectedInstanceName = "SQL2022" }, Sales);
+
+        Assert.True(report.CanProceed);
+        Assert.Contains(report.Items, item => item.CheckId == BackupPreCheckIds.ServerInstance && item.Status == BackupPreCheckStatus.Passed);
+    }
+
+    [Theory]
+    [InlineData("srv\\SQL2022", null, "SQL2022")]
+    [InlineData("srv", "SQL2022", "SQL2022")]
+    [InlineData("srv", null, null)]
+    public void EndpointExpectsTheInstanceItNames(string host, string? instanceName, string? expected) =>
+        Assert.Equal(expected, new DatabaseEndpoint(host, null, instanceName).ExpectedInstanceName);
+
+    [Fact]
+    public void HostNamingAnInstanceCannotAlsoCarryAPort() =>
+        Assert.Throws<ArgumentException>(() => new DatabaseEndpoint("srv\\SQL2022", 1433));
+
     [Theory]
     [InlineData(DatabaseFailureKind.Unreachable, SqlServerPreCheckReasons.ServerUnreachable)]
     [InlineData(DatabaseFailureKind.Timeout, SqlServerPreCheckReasons.ConnectionTimeout)]

@@ -1,6 +1,7 @@
 using BackupPlatform.Agents.Capabilities;
 using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Api.Restores;
+using BackupPlatform.Api.Databases;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Application.Identity;
@@ -37,8 +38,10 @@ public static class RestoreEndpoints
     }
 
     private static async Task<IResult> StartAsync(Guid artifactId, StartRestoreRequest request, HttpContext context, ITenantContext tenant, ICurrentUser user, RestoreService service,
-        IAgentPushDispatcher push, ILogger<RestoreService> logger, CancellationToken cancellationToken)
+        DatabaseCredentialVault vault, IAgentPushDispatcher push, ILogger<RestoreService> logger, CancellationToken cancellationToken)
     {
+        if (!vault.AcceptsTarget(request.AgentId, request.Target))
+            return Results.BadRequest(new { error = "invalid_request", field = "target.databaseCredentialReference", code = "invalid_value", message = "Invalid restore request field." });
         var keys = context.Request.Headers["Idempotency-Key"];
         if (keys.Count != 1 || !BackupInputValidation.IsValidKey(keys[0]))
             return Results.BadRequest(new { error = "invalid_request", field = "Idempotency-Key", code = "invalid_value", message = "A valid Idempotency-Key is required (1-128 printable ASCII characters)." });
@@ -52,8 +55,10 @@ public static class RestoreEndpoints
     }
 
     private static async Task<IResult> PrecheckAsync(Guid artifactId, StartRestorePrecheckRequest request, HttpContext context, ITenantContext tenant, ICurrentUser user, RestoreService service,
-        IAgentPushDispatcher push, ILogger<RestoreService> logger, CancellationToken cancellationToken)
+        DatabaseCredentialVault vault, IAgentPushDispatcher push, ILogger<RestoreService> logger, CancellationToken cancellationToken)
     {
+        if (!vault.AcceptsTarget(request.AgentId, request.Target))
+            return Results.BadRequest(new { error = "invalid_request", field = "target.databaseCredentialReference", code = "invalid_value", message = "Invalid restore request field." });
         var keys = context.Request.Headers["Idempotency-Key"];
         if (keys.Count != 1 || !BackupInputValidation.IsValidKey(keys[0]))
             return Results.BadRequest(new { error = "invalid_request", field = "Idempotency-Key", code = "invalid_value", message = "A valid Idempotency-Key is required (1-128 printable ASCII characters)." });
@@ -67,8 +72,10 @@ public static class RestoreEndpoints
     }
 
     private static async Task<IResult> VerifyAsync(Guid artifactId, StartRestoreVerificationRequest request, HttpContext context, ITenantContext tenant, ICurrentUser user, RestoreService service,
-        IAgentPushDispatcher push, ILogger<RestoreService> logger, CancellationToken cancellationToken)
+        DatabaseCredentialVault vault, IAgentPushDispatcher push, ILogger<RestoreService> logger, CancellationToken cancellationToken)
     {
+        if (!vault.AcceptsTarget(request.AgentId, request.Target))
+            return Results.BadRequest(new { error = "invalid_request", field = "target.databaseCredentialReference", code = "invalid_value", message = "Invalid restore request field." });
         var keys = context.Request.Headers["Idempotency-Key"];
         if (keys.Count != 1 || !BackupInputValidation.IsValidKey(keys[0]))
             return Results.BadRequest(new { error = "invalid_request", field = "Idempotency-Key", code = "invalid_value", message = "A valid Idempotency-Key is required (1-128 printable ASCII characters)." });
@@ -109,8 +116,10 @@ public static class RestoreEndpoints
     }
 
     private static async Task<IResult> DiscoverAsync(Guid artifactId, StartRestoreDiscoveryRequest request, HttpContext context, ITenantContext tenant, ICurrentUser user, RestoreService service,
-        IAgentPushDispatcher push, ILogger<RestoreService> logger, CancellationToken cancellationToken)
+        DatabaseCredentialVault vault, IAgentPushDispatcher push, ILogger<RestoreService> logger, CancellationToken cancellationToken)
     {
+        if (!vault.AcceptsTarget(request.AgentId, request.Target))
+            return Results.BadRequest(new { error = "invalid_request", field = "target.databaseCredentialReference", code = "invalid_value", message = "Invalid restore request field." });
         var keys = context.Request.Headers["Idempotency-Key"];
         if (keys.Count != 1 || !BackupInputValidation.IsValidKey(keys[0]))
             return Results.BadRequest(new { error = "invalid_request", field = "Idempotency-Key", code = "invalid_value", message = "A valid Idempotency-Key is required (1-128 printable ASCII characters)." });

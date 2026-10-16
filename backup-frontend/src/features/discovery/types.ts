@@ -35,6 +35,6 @@ export type DiscoveryDatabase = {
 export type DiscoveryInstanceDetail = DiscoveryInstanceSummary & { databases: DiscoveryDatabase[] }
 
 // Request bodies of the mutating endpoints.
-export type DiscoveryCredentialInput = { credentialReference: string | null; integratedSecurity: boolean; encrypt: boolean; trustServerCertificate: boolean }
+export type DiscoveryCredentialInput = { credentialReference: string | null; databaseLogin?: { userName: string; password: string } | null; integratedSecurity: boolean; encrypt: boolean; trustServerCertificate: boolean }
 export type DiscoverySettingsInput = { enabled: boolean; scanIntervalMinutes: number; includeDocker: boolean }
 export type DiscoveryInstanceFilters = { agentId?: string; engine?: DiscoveryEngine; includeMissing?: boolean }

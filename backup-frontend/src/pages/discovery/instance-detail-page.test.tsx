@@ -46,10 +46,11 @@ describe('instance detail page', () => {
     fireEvent.click(screen.getByRole('button', { name: /Yedekleme İşi Oluştur/ }))
     expect(await screen.findByTestId('target')).toHaveTextContent('/tenants/tenant-a/backup-jobs/new?discoveryInstance=inst-1&database=ERP&database=CRM')
   })
-  it('shows the credential reference as a name field and verifies the connection', async () => {
+  it('asks for the database user and password, never shows a stored one, and verifies the connection', async () => {
     vi.mocked(verifyDiscoveryInstance).mockRejectedValue(new ApiError(409, { error: 'discovery_unsupported' }))
     mount()
-    expect(await screen.findByLabelText(/Kimlik bilgisi referans adı/)).toHaveValue('sql-main')
+    expect(await screen.findByLabelText('Veritabanı kullanıcı adı')).toHaveValue('')
+    expect(screen.getByLabelText('Veritabanı parolası')).toHaveValue('')
     fireEvent.click(screen.getByRole('button', { name: 'Bağlantıyı Doğrula' }))
     await waitFor(() => expect(verifyDiscoveryInstance).toHaveBeenCalledWith('tenant-a', 'inst-1'))
     expect(await screen.findByText(/Ajan sürümü keşfi desteklemiyor/)).toBeInTheDocument()

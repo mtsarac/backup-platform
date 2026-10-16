@@ -38,7 +38,6 @@
     <ProjectReference Include="../../providers/backup/file-system/BackupPlatform.BackupProviders.FileSystem.csproj" />
     <ProjectReference Include="../../providers/storage/local/BackupPlatform.StorageProviders.Local.csproj" />
     <ProjectReference Include="../../providers/storage/central/BackupPlatform.StorageProviders.Central.csproj" />
-    <ProjectReference Include="../../providers/secret/abstractions/BackupPlatform.SecretProviders.Abstractions.csproj" />
   </ItemGroup>
 
   <ItemGroup>

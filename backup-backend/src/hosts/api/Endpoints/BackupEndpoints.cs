@@ -1,6 +1,8 @@
 using BackupPlatform.Agents.Connectivity;
+using BackupPlatform.Api.Databases;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Application.Identity;
 using BackupPlatform.Application.Tenancy;
 using Microsoft.AspNetCore.Authorization;
@@ -34,11 +36,12 @@ public static class BackupEndpoints
     }
 
     private static async Task<IResult> CreateJobAsync(CreateBackupJobRequest request, HttpContext context, ITenantContext tenant, IAuthorizationService authorization,
-        BackupOrchestrator service, BackupScheduleService schedules, ICurrentUser currentUser, CancellationToken cancellationToken)
+        BackupOrchestrator service, BackupScheduleService schedules, DatabaseCredentialVault vault, ICurrentUser currentUser, CancellationToken cancellationToken)
     {
         if (request.Retention is not null && !await IsAdministratorAsync(authorization, context)) return RetentionForbidden();
         try
         {
+            request = request with { Configuration = await ExchangeLoginAsync(vault, request.AgentId, request.Configuration, cancellationToken) };
             var job = await service.CreateJobAsync(tenant.TenantId!, request, cancellationToken, currentUser.UserId!);
             if (job is null) return Results.NotFound();
             if (job.Schedule is not null) await schedules.TrySynchronizeAsync(tenant.TenantId!, job.Id, cancellationToken);
@@ -47,6 +50,24 @@ public static class BackupEndpoints
         catch (InvalidBackupScheduleException exception) { return InvalidSchedule(exception); }
         catch (InvalidBackupJobException exception) { return InvalidJob(exception); }
         catch (ArgumentException) { return Invalid("Invalid backup job configuration."); }
+    }
+
+    /// <summary>Turns a typed login into a platform-minted reference (and drops the typed value); a reference must already belong to the job's agent.</summary>
+    private static async Task<BackupExecutionConfiguration> ExchangeLoginAsync(DatabaseCredentialVault vault, Guid agentId, BackupExecutionConfiguration? configuration, CancellationToken cancellationToken)
+    {
+        if (configuration is null) return configuration!;
+        try
+        {
+            return configuration with
+            {
+                DatabaseCredentialReference = await vault.PrepareAsync(agentId, configuration.IntegratedSecurity, configuration.DatabaseLogin, configuration.DatabaseCredentialReference, cancellationToken),
+                DatabaseLogin = null
+            };
+        }
+        catch (DatabaseLoginRejectedException)
+        {
+            throw new InvalidBackupJobException("configuration.databaseLogin");
+        }
     }
 
     private static async Task<IResult> GetJobAsync(Guid jobId, ITenantContext tenant, IBackupUiStore store, TimeProvider time, CancellationToken cancellationToken)
@@ -59,12 +80,13 @@ public static class BackupEndpoints
         Results.Ok(await store.ListJobsAsync(tenant.TenantId!, time.GetUtcNow(), cancellationToken));
 
     private static async Task<IResult> UpdateJobAsync(Guid jobId, UpdateBackupJobRequest request, HttpContext context, ITenantContext tenant, IAuthorizationService authorization,
-        BackupOrchestrator service, BackupScheduleService schedules, ICurrentUser currentUser, CancellationToken cancellationToken)
+        BackupOrchestrator service, BackupScheduleService schedules, DatabaseCredentialVault vault, ICurrentUser currentUser, CancellationToken cancellationToken)
     {
         // Retention keeps its administrator-only rule even though it now travels in the same request: an operator simply does not send it.
         if (request.Retention is not null && !await IsAdministratorAsync(authorization, context)) return RetentionForbidden();
         try
         {
+            request = request with { Configuration = await ExchangeLoginAsync(vault, request.AgentId, request.Configuration, cancellationToken) };
             var job = await service.UpdateJobAsync(tenant.TenantId!, jobId, request, cancellationToken, currentUser.UserId!);
             if (job is null) return Results.NotFound();
             await schedules.TrySynchronizeAsync(tenant.TenantId!, jobId, cancellationToken);

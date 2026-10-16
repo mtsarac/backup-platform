@@ -49,7 +49,7 @@ class Drive:
         self.agent_id = agent['agentId']
 
     def job(self, database, name):
-        configuration = {'engine': 'mssql', 'host': HOST, 'port': PORT, 'database': database, 'databaseCredentialReference': 'sql_smoke', 'trustServerCertificate': True,
+        configuration = {'engine': 'mssql', 'host': HOST, 'port': PORT, 'database': database, 'databaseCredentialReference': self.sql_reference(), 'trustServerCertificate': True,
                          'stagingReference': 'default', 'storageTarget': 'default', 'storagePrefix': '', 'copyOnly': True, 'checksumPolicy': 'Required',
                          'compressionPolicy': 'Preferred', 'requiredVerifiedReplicaCount': 1,
                          'destinations': [{'storageProvider': 'google-drive', 'storageConnectionId': self.connection['id'], 'storageExecutionLocation': 'Backend', 'isPrimary': True}]}
@@ -80,8 +80,13 @@ class Drive:
             raise FixtureFailure('The run did not publish exactly one artifact.')
         return found[0]
 
+    def sql_reference(self):
+        if getattr(self, '_sql_reference', None) is None:
+            self._sql_reference = dev.store_login(self.api, self.tenant, self.agent_id, os.environ['BACKUP_PLATFORM_TEST_MSSQL_USER'], os.environ['BACKUP_PLATFORM_TEST_MSSQL_PASSWORD'])
+        return self._sql_reference
+
     def restore(self, artifact_id, suffix, database):
-        body = {'agentId': self.agent_id, 'target': {'host': HOST, 'port': PORT, 'databaseCredentialReference': 'sql_smoke', 'trustServerCertificate': True},
+        body = {'agentId': self.agent_id, 'target': {'host': HOST, 'port': PORT, 'databaseCredentialReference': self.sql_reference(), 'trustServerCertificate': True},
                 'databaseName': database, 'mode': 'NewDatabase'}
         _, started = self.api.call('POST', f'{self.tenant}/backup-artifacts/{artifact_id}/{suffix}', body, headers={'Idempotency-Key': 'a1d-' + uuid.uuid4().hex}, expect=(200, 201, 202))
         restore_id = started.get('id', started.get('restoreId'))

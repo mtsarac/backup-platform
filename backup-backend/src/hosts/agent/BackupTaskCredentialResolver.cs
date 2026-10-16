@@ -1,54 +1,24 @@
-using System.Text.Json;
+using BackupPlatform.Agent.Core.Identity;
 using BackupPlatform.Agent.Core.Tasks;
 using BackupPlatform.BackupProviders.Abstractions.Database;
-using BackupPlatform.SecretProviders.Abstractions;
 
 namespace BackupPlatform.Agent.Host;
 
 /// <summary>
-/// Deployment-supplied secret source: BACKUP_AGENT_SECRET_{reference} contains a JSON object with userName/password.
-/// Read at execution time, never copied to appsettings, the task protocol, a database, the identity store or a credential cache.
-/// Environment injection belongs to the service manager; integrated authentication requires no such secret.
-/// A secret manager can replace ISecretProvider without changing jobs or task execution.
+/// Fetches the login for one operation from the backend, which only answers for references minted for this agent. Nothing is cached or written down:
+/// a changed or removed login takes effect on the next operation, and a stolen agent disk holds no database password.
 /// </summary>
-internal sealed class EnvironmentTaskSecretProvider : ISecretProvider
-{
-    public ValueTask<SecretValue> ResolveAsync(SecretReference reference, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(reference);
-        cancellationToken.ThrowIfCancellationRequested();
-        var value = Environment.GetEnvironmentVariable("BACKUP_AGENT_SECRET_" + reference.Name);
-        if (string.IsNullOrEmpty(value) || value.Length > 16 * 1024)
-        {
-            throw new InvalidOperationException("The referenced database credential is unavailable.");
-        }
-        return ValueTask.FromResult(new SecretValue(value));
-    }
-}
-
-internal sealed class BackupTaskCredentialResolver(ISecretProvider secrets) : IBackupTaskCredentialResolver
+internal sealed class BackupTaskCredentialResolver(IDatabaseCredentialClient client, IAgentCredentialStore identities) : IBackupTaskCredentialResolver
 {
     public async ValueTask<DatabaseCredential> ResolveAsync(string reference, CancellationToken cancellationToken)
     {
-        var secret = await secrets.ResolveAsync(new SecretReference(reference), cancellationToken).ConfigureAwait(false);
-        try
+        var identity = await identities.LoadAsync(cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("The agent identity is unavailable.");
+        var result = await client.ResolveAsync(identity, reference, cancellationToken).ConfigureAwait(false);
+        if (!result.IsSuccess || result.Value is not { } login || string.IsNullOrWhiteSpace(login.UserName) || string.IsNullOrEmpty(login.Password))
         {
-            using var document = JsonDocument.Parse(secret.Reveal());
-            var root = document.RootElement;
-            if (root.ValueKind != JsonValueKind.Object
-                || !root.TryGetProperty("userName", out var userName)
-                || !root.TryGetProperty("password", out var password)
-                || userName.ValueKind != JsonValueKind.String || password.ValueKind != JsonValueKind.String
-                || string.IsNullOrWhiteSpace(userName.GetString()) || string.IsNullOrEmpty(password.GetString()))
-            {
-                throw new InvalidOperationException("The referenced database credential has an invalid format.");
-            }
-            return new PasswordDatabaseCredential(userName.GetString()!, new DatabaseSecret(password.GetString()!));
+            throw new InvalidOperationException("The referenced database credential is unavailable.");
         }
-        catch (JsonException)
-        {
-            // Do not propagate a parser diagnostic or an inner exception containing secret bytes.
-            throw new InvalidOperationException("The referenced database credential has an invalid format.");
-        }
+        return new PasswordDatabaseCredential(login.UserName, new DatabaseSecret(login.Password));
     }
 }

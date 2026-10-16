@@ -130,7 +130,7 @@ def run_backup(label, required):
         {'storageProvider': 'google-drive', 'storageConnectionId': state['driveConnectionId'], 'storageExecutionLocation': 'Backend', 'isPrimary': False},
     ]
     configuration = {'engine': 'mssql', 'host': '127.0.0.1', 'port': acc.SQL_PORT, 'database': acc.SOURCE_DB, 'integratedSecurity': False,
-                     'databaseCredentialReference': acc.SQL_REFERENCE, 'trustServerCertificate': True, 'encrypt': True, 'stagingReference': 'default', 'storagePrefix': '',
+                     'databaseCredentialReference': acc.sql_login(api, tenant, agent['agentId']), 'trustServerCertificate': True, 'encrypt': True, 'stagingReference': 'default', 'storagePrefix': '',
                      'copyOnly': True, 'checksumPolicy': 'Required', 'compressionPolicy': 'Preferred', 'destinations': destinations, 'requiredVerifiedReplicaCount': required}
     sets_before, quota_before = backup_sets(), acc.quota(api, tenant)
     _, job = api.call('POST', tenant + '/backup-jobs', {'name': f'M7d3 acceptance {label} {time.strftime("%H%M%S")}', 'agentId': agent['agentId'],
