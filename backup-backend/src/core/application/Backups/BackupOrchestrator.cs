@@ -337,6 +337,7 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         {
             StorageProvider = d.StorageProvider,
             StorageConnectionId = d.StorageConnectionId,
+            StorageTarget = d.StorageTarget,
             StorageExecutionLocation = d.StorageExecutionLocation.ToString(),
             IsPrimary = d.IsPrimary
         }).ToArray(),

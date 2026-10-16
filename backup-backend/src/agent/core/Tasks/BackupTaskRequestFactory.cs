@@ -7,7 +7,7 @@ namespace BackupPlatform.Agent.Core.Tasks;
 
 /// <summary>Resolves only host-registered staging and local credential names; task input can never choose a staging path.</summary>
 public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver credentials, IEnumerable<StagingArea> stagingAreas,
-    ITaskStorageProviderFactory? storageFactory = null, Func<BackupTaskSnapshot, IUploadBandwidth>? uploadBandwidth = null)
+    ITaskStorageProviderFactory? storageFactory = null, Func<BackupTaskSnapshot, IUploadBandwidth>? uploadBandwidth = null, LocalVolumes? volumes = null)
 {
     private readonly StagingArea? _staging = stagingAreas.SingleOrDefault();
 
@@ -32,7 +32,9 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
             new StorageProviderId(destination.StorageProvider),
             destination.StorageProvider is "sftp" or "google-drive"
                 ? (storageFactory ?? throw new ArgumentException("Backend-relayed storage is not configured.")).CreateBackup(task, destination)
-                : null,
+                : destination.StorageProvider == "local" && destination.StorageTarget is { } volume
+                    ? volumes?.Resolve(volume) ?? throw new ArgumentException("The local storage volume is not configured on this agent.")
+                    : null,
             destination.StorageConnectionId,
             destination.IsPrimary)).ToArray();
         var primary = targets.Single(target => target.IsPrimary);
@@ -89,6 +91,10 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
             if (destination.StorageProvider is not ("local" or "central" or "sftp" or "google-drive"))
             {
                 throw new ArgumentException("The destination storage provider is unsupported.");
+            }
+            if (destination.StorageTarget is not null && (destination.StorageProvider != "local" || !LocalVolumes.IsValidName(destination.StorageTarget)))
+            {
+                throw new ArgumentException("The destination storage target is invalid.");
             }
             if (destination.StorageExecutionLocation is not ("Backend" or "Agent"))
             {

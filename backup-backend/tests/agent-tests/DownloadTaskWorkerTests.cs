@@ -50,7 +50,8 @@ public sealed class DownloadTaskWorkerTests
     [InlineData("/etc/passwd", "local", "local")]
     [InlineData("C:\\Windows\\private.key", "local", "local")]
     [InlineData("tenant/artifact.bak", "central", "central")]
-    [InlineData("tenant/artifact.bak", "local", "arbitrary-root")]
+    [InlineData("tenant/artifact.bak", "local", "/arbitrary/root")]
+    [InlineData("tenant/artifact.bak", "local", "../escape")]
     public async Task A_task_cannot_choose_filesystem_paths_or_unconfigured_storage_targets(string key, string provider, string target)
     {
         await using var harness = new DownloadTaskHarness();
@@ -60,6 +61,19 @@ public sealed class DownloadTaskWorkerTests
         Assert.True(harness.Worker.TryPublish(envelope));
         await Wait.UntilAsync(() => !harness.Client.Completions.IsEmpty, "source validation refusal");
         Assert.Equal(DownloadAgentFailureCodes.InvalidConfiguration, Assert.Single(harness.Client.Completions).FailureCode);
+        Assert.Empty(harness.Client.Uploads);
+    }
+
+    [Fact]
+    public async Task A_volume_name_the_agent_does_not_declare_is_inaccessible()
+    {
+        await using var harness = new DownloadTaskHarness();
+        var envelope = harness.Envelope([1, 2, 3], "tenant/artifact.bak");
+        envelope = envelope with { Download = envelope.Download! with { StorageTarget = "external-ssd" } };
+        harness.Start();
+        Assert.True(harness.Worker.TryPublish(envelope));
+        await Wait.UntilAsync(() => !harness.Client.Completions.IsEmpty, "unknown volume refusal");
+        Assert.Equal(DownloadAgentFailureCodes.SourceInaccessible, Assert.Single(harness.Client.Completions).FailureCode);
         Assert.Empty(harness.Client.Uploads);
     }
 

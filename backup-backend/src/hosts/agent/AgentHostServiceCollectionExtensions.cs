@@ -49,12 +49,14 @@ public static class AgentHostServiceCollectionExtensions
             provider.GetRequiredService<IBackupTaskCredentialResolver>(),
             provider.GetServices<StagingArea>(),
             provider.GetService<ITaskStorageProviderFactory>(),
-            PacedUploads(provider)));
+            PacedUploads(provider),
+            provider.GetService<LocalVolumes>()));
         services.AddSingleton<BackupTaskWorker>();
         services.AddSingleton(provider => new RestoreTaskRequestFactory(
             provider.GetRequiredService<IBackupTaskCredentialResolver>(),
             provider.GetServices<StagingArea>(),
-            provider.GetService<ITaskStorageProviderFactory>()));
+            provider.GetService<ITaskStorageProviderFactory>(),
+            provider.GetService<LocalVolumes>()));
         services.AddSingleton<RestoreTaskWorker>();
         services.AddSingleton<RestoreCleanupWorker>();
         services.TryAddSingleton<IDeleteReplicaProviderResolver, DeleteReplicaProviderResolver>();

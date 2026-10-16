@@ -12,7 +12,7 @@ namespace BackupPlatform.Agent.Core.Tasks;
 /// <summary>Reads only configured provider objects claimed by authenticated polling. A verified open handle is streamed outbound; the backend verifies its own copy before allowing a browser download.</summary>
 public sealed partial class DownloadTaskWorker(
     IDownloadTaskClient client, IAgentCredentialStore identities, IEnumerable<IStorageProvider> providers,
-    AgentSoftwareInfo software, TimeProvider time, ILogger<DownloadTaskWorker> logger) : IAgentTaskSink
+    AgentSoftwareInfo software, TimeProvider time, ILogger<DownloadTaskWorker> logger, LocalVolumes? volumes = null) : IAgentTaskSink
 {
     private readonly Channel<DownloadTaskSnapshot> _queue = Channel.CreateBounded<DownloadTaskSnapshot>(new BoundedChannelOptions(1)
     {
@@ -159,14 +159,15 @@ public sealed partial class DownloadTaskWorker(
     private (IStorageProvider Provider, StorageObjectKey Key, ContentChecksum Checksum) ResolveSource(DownloadTaskSnapshot task)
     {
         if (task.StorageProvider != "local" || task.ChecksumAlgorithm != "sha256" || task.SizeBytes <= 0
-            || task.StorageTarget != "local")
+            || task.StorageTarget != "local" && !LocalVolumes.IsValidName(task.StorageTarget))
         {
             throw new ArgumentException("The download source is invalid.");
         }
         var providerId = new StorageProviderId(task.StorageProvider);
         var key = new StorageObjectKey(task.StorageKey);
         var checksum = new ContentChecksum(ChecksumAlgorithm.Sha256, task.Checksum);
-        if (!_providers.TryGetValue(providerId, out var provider) || provider.Topology != StorageTopology.AgentDirect
+        var found = task.StorageTarget == "local" ? _providers.GetValueOrDefault(providerId) : volumes?.Resolve(task.StorageTarget);
+        if (found is not { } provider || provider.Topology != StorageTopology.AgentDirect
             || !provider.Capabilities.Supports(StorageCapabilityIds.Read))
         {
             throw new StorageException(StorageFailureKind.NotSupported, "The download source is inaccessible.");

@@ -161,7 +161,9 @@ internal static class BackupTaskResultMapper
             {
                 StorageProvider = copy.Replica!.Location.Provider.Value,
                 StorageTarget = copy.Destination.Storage.Value is "sftp" or "google-drive" && copy.Destination.ConnectionId is { } connection
-                    ? connection.ToString("D") : copy.Replica.Location.Provider.Value,
+                    ? connection.ToString("D")
+                    : task.Configuration.Destinations.FirstOrDefault(d => d.StorageConnectionId == copy.Destination.ConnectionId && d.StorageProvider == "local")?.StorageTarget
+                        ?? copy.Replica.Location.Provider.Value,
                 StorageConnectionId = copy.Destination.ConnectionId,
                 Key = copy.Replica.Location.Key.Value,
                 SizeBytes = copy.Replica.SizeBytes,

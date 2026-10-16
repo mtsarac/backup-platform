@@ -65,6 +65,9 @@ public sealed class AgentStagingCleanupOptions
 public sealed class AgentLocalStorageOptions
 {
     public string? RootDirectory { get; set; }
+
+    /// <summary>Additional disks (an external SSD/HDD, a mount) by name to absolute directory. The UI selects a name; a path never travels in a task, so only what is listed here can be written.</summary>
+    public Dictionary<string, string>? Volumes { get; set; }
 }
 
 public sealed class AgentCentralStorageOptions

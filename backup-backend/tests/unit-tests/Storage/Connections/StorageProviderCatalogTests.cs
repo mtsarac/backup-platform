@@ -29,8 +29,9 @@ public sealed class StorageProviderCatalogTests
 
         Assert.Equal(StorageProviderAvailability.Available, descriptor.Availability);
         Assert.True(descriptor.IsAvailable);
-        Assert.Empty(descriptor.ConfigFields);
         Assert.Empty(descriptor.SecretFields);
+        // Local names the agent-declared disk it writes to; Central has nothing to configure.
+        Assert.Equal(providerType == "local" ? ["volume"] : [], descriptor.ConfigFields.Select(field => field.Name));
     }
 
     [Fact]

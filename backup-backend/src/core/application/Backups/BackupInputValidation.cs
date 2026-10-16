@@ -104,7 +104,7 @@ public static class BackupInputValidation
             a.Replicas is null || a.Replicas.Count > snapshot.Count || !Metadata(a, configuration)) return false;
         if (request.Status == "Succeeded" ? a.Replicas.Count == 0 : a.Replicas.Count != 0 || !request.Destinations.Any(d => d.ObjectMayRemain)) return false;
         return a.Replicas.All(r => r is not null && Destination(snapshot, r.StorageProvider, r.StorageConnectionId) is { } destination && Reference(r.StorageTarget) &&
-            (destination.StorageExecutionLocation != BackupStorageExecutionLocation.Agent || r.StorageTarget == r.StorageProvider) &&
+            (destination.StorageExecutionLocation != BackupStorageExecutionLocation.Agent || r.StorageTarget == (destination.StorageTarget ?? r.StorageProvider)) &&
             (destination.StorageProvider is not ("sftp" or "google-drive") || r.StorageTarget == destination.StorageConnectionId?.ToString("D")) &&
             Text(r.Key, StorageObjectKey.MaxLength) && SafeKey(r.Key) && r.SizeBytes == a.SizeBytes && r.ChecksumAlgorithm == a.ChecksumAlgorithm &&
             Checksum(r.Checksum) && r.Checksum.Equals(a.ArtifactChecksum, StringComparison.OrdinalIgnoreCase) && r.VerificationState == "Verified" &&
