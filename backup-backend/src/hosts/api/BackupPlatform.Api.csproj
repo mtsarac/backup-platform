@@ -20,6 +20,10 @@
     <ProjectReference Include="..\..\providers\storage\sftp\BackupPlatform.StorageProviders.Sftp.csproj" />
     <ProjectReference Include="..\..\providers\storage\google-drive\BackupPlatform.StorageProviders.GoogleDrive.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../../deploy/windows/install.ps1" LogicalName="BackupPlatform.AgentInstallers.install.ps1" />
+    <EmbeddedResource Include="../../../deploy/linux/install.sh" LogicalName="BackupPlatform.AgentInstallers.install.sh" />
+  </ItemGroup>
 
 
 </Project>

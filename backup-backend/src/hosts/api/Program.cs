@@ -51,6 +51,7 @@ app.MapSupportEndpoints();
 app.MapSupportTransparencyEndpoints();
 app.MapAgentDownloadEndpoints();
 app.MapAgentStorageTransferEndpoints();
+app.MapAgentDistributionEndpoints();
 app.MapAgentHub();
 
 app.Run();
