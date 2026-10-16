@@ -64,7 +64,7 @@ switch ($Action) {
         if (-not $BackendUri -or -not $TokenFile) { throw 'enroll requires BackendUri and a protected runtime TokenFile.' }
         $token = ((Get-Content -LiteralPath $TokenFile -Raw | ConvertFrom-Json).token)
         try {
-            & $exe enroll --server $BackendUri --token $token --name $AgentName --store-directory $identity --non-interactive
+            & $exe enroll --server $BackendUri --token $token --name $AgentName --store-directory $identity --non-interactive --console
             if ($LASTEXITCODE -ne 0) { throw 'Agent enrollment CLI failed; see the secret-free diagnostic above.' }
         } finally {
             $token = $null
@@ -88,7 +88,7 @@ switch ($Action) {
 `$ErrorActionPreference = 'Stop'
 `$secret = Get-Content -LiteralPath '$(Join-Path $root 'sql-secret.json')' -Raw | ConvertFrom-Json
 `$env:BACKUP_AGENT_SECRET_sql_smoke = (`$secret | ConvertTo-Json -Compress)
-Start-Process -FilePath '$exe' -WorkingDirectory '$binary' -WindowStyle Hidden
+Start-Process -FilePath '$exe' -WorkingDirectory '$binary' -WindowStyle Hidden -RedirectStandardOutput '$(Join-Path $root 'agent.log')' -RedirectStandardError '$(Join-Path $root 'agent-err.log')'
 "@
         Set-Content -LiteralPath (Join-Path $root 'launch.ps1') -Value $launcher -Encoding UTF8
         # Win32_Process.Create detaches the agent from this SSH session's job object, so it survives the session ending.

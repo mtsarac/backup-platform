@@ -42,6 +42,10 @@ cleanup_smoke() {
         [[ -f $work/agents/$name/supervisor.pid ]] && kill "$(<"$work/agents/$name/supervisor.pid")" 2>/dev/null || true
     done
     if [[ $windows_prepared == true ]]; then
+        if (( rc != 0 )); then
+            printf "Windows Agent diagnostic:\n" >&2
+            "$REPO_ROOT/scripts/windows/run-powershell.sh" --command "if (Test-Path '$windows_root\\agent.log') { Get-Content '$windows_root\\agent.log' -Tail 60 } if (Test-Path '$windows_root\\agent-err.log') { Get-Content '$windows_root\\agent-err.log' -Tail 60 }" >&2 || true
+        fi
         "$REPO_ROOT/scripts/windows/run-powershell.sh" --file "$REPO_ROOT/scripts/windows/R1-Console-Agent.ps1" -Action cleanup -RootDirectory "$windows_root" || windows_result=1
     fi
     [[ ! -f $work/api.pid ]] || kill "$(<"$work/api.pid")" 2>/dev/null || true
@@ -162,6 +166,7 @@ mssql_agent_dir=$work/agents/mssql
 
 win_args=()
 if $windows; then
+    "$REPO_ROOT/scripts/windows/run-powershell.sh" --command "Set-Date -Date '$(python3 -c 'import datetime; print(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))')'" >/dev/null || true
     console_agent=("$REPO_ROOT/scripts/windows/run-powershell.sh" --file "$REPO_ROOT/scripts/windows/R1-Console-Agent.ps1")
     run_redacted dotnet publish "$REPO_ROOT/backup-backend/src/hosts/agent" -c Release -r win-x64 --self-contained true -p:AgentPlatform=Windows -o "$work/windows-agent" >"$work/publish-windows.log"
     windows_root="C:\\ProgramData\\BackupAgentSmoke-$(python3 -c 'import uuid; print(uuid.uuid4().hex[:12])')"

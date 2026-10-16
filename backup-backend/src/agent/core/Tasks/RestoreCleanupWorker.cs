@@ -79,10 +79,16 @@ public sealed class RestoreCleanupWorker : IAgentTaskSink
         {
             throw new InvalidOperationException("The cleanup worker can only run once.");
         }
+        _time.StartOperation("restore cleanup");
+        _time.EnterOperation("restore cleanup");
         try
         {
-            await foreach (var task in _queue.Reader.ReadAllAsync(stoppingToken).ConfigureAwait(false))
+            while (await _time.ObserveAsync("restore cleanup", _queue.Reader.WaitToReadAsync(stoppingToken).AsTask()).ConfigureAwait(false))
             {
+                if (!_queue.Reader.TryRead(out var task))
+                {
+                    continue;
+                }
                 lock (_gate)
                 {
                     _active = task.LeaseToken;
@@ -111,6 +117,10 @@ public sealed class RestoreCleanupWorker : IAgentTaskSink
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
+        }
+        finally
+        {
+            _time.EndOperation("restore cleanup");
         }
     }
 
@@ -206,7 +216,7 @@ public sealed class RestoreCleanupWorker : IAgentTaskSink
                 return;
             }
             var delay = response.Failure.RetryAfter is { } requested && requested > CompletionRetry ? requested : CompletionRetry;
-            await Task.Delay(delay, _time, cancellationToken).ConfigureAwait(false);
+            await _time.ObserveAsync("restore cleanup", Task.Delay(delay, _time, cancellationToken)).ConfigureAwait(false);
         }
     }
 }
