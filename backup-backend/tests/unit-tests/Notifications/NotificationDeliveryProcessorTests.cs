@@ -30,7 +30,8 @@ public sealed class NotificationDeliveryProcessorTests
 
         public override Task<bool> CompleteAsync(Guid deliveryId, string owner, int attempt, DeliveryResult result, DateTimeOffset now, CancellationToken cancellationToken)
         {
-            Completed.Add((deliveryId, attempt, result));
+            // The processor completes deliveries concurrently; an unsynchronised List.Add loses entries.
+            lock (Completed) Completed.Add((deliveryId, attempt, result));
             return Task.FromResult(!LeaseLost);
         }
     }
