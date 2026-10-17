@@ -39,7 +39,8 @@ function New-ProtectedDirectory([string] $Path) {
     foreach ($sid in @($administrators, (New-Object Security.Principal.SecurityIdentifier 'S-1-5-18'))) {
         $security.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
     }
-    (New-Object IO.DirectoryInfo $Path).Create($security)
+    $null = [IO.Directory]::CreateDirectory($Path)
+    Set-Acl -Path $Path -AclObject $security
 }
 if ($Interactive -and $NonInteractive) { Fail 'Choose only one interaction mode.' 'Yalnızca bir etkileşim kipi seçin.' }
 # SSH/ConPTY has a real console even when Windows reports no interactive desktop session.
