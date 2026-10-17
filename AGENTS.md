@@ -61,5 +61,7 @@ These rules apply to all changes in this repository, regardless of task, branch,
 - State remaining risks, limitations, and incomplete steps accurately.
 - Use no more than 2 subagents unless explicitly authorized.
 - Do not commit anything in docs/ directory.
+- Never commit secret files: `.env*` (except `.env.example`), credentials, keys, or tokens. Ask the user before committing any file that may contain secrets.
+- Read or use secret files only with the user's explicit approval for the task.
 
 **Goal:** Minimal complexity, reliable behavior, and maintainable code—not minimal line count at the expense of safety.
