@@ -116,16 +116,16 @@ public sealed class BackupFailureCodesTests
     public void CancelledAgentLostAndUnknownCodesAreNotAgentReportableFailures(string? code) =>
         Assert.False(BackupFailureCodes.IsAgentReportable(code));
 
-    [Fact]
-    public void AnAgentCannotReportAgentLostOrCancelledAsAFailedAttempt()
+    [Theory]
+    [InlineData(BackupFailureCodes.AgentLost)]
+    [InlineData(BackupFailureCodes.Cancelled)]
+    [InlineData("SqlException: boom")]
+    public void AnAgentCannotReportAgentLostCancelledOrUnknownCodesAsAFailedAttempt(string code)
     {
         // Wiring check through the domain: the attempt state machine honours the same table.
-        foreach (var code in new[] { BackupFailureCodes.AgentLost, BackupFailureCodes.Cancelled, "SqlException: boom" })
-        {
-            var run = NewRunningRun(out var token);
-            Assert.Throws<ArgumentException>(() => run.Complete(token, Now.AddSeconds(1), new BackupCompletion(BackupStatus.Failed, code, null)));
-            Assert.Equal(BackupStatus.Running, run.Status);
-        }
+        var run = NewRunningRun(out var token);
+        Assert.Throws<ArgumentException>(() => run.Complete(token, Now.AddSeconds(1), new BackupCompletion(BackupStatus.Failed, code, null)));
+        Assert.Equal(BackupStatus.Running, run.Status);
     }
 
     private static readonly DateTimeOffset Now = new(2026, 10, 5, 0, 0, 0, TimeSpan.Zero);

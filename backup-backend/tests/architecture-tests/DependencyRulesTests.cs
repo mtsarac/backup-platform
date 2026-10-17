@@ -5,7 +5,9 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
     [Theory]
     [InlineData("BackupPlatform.Domain")]
     [InlineData("BackupPlatform.Contracts")]
-    public void FoundationProjectsMustHaveNoProjectDependencies(string project)
+    [InlineData("BackupPlatform.BackupProviders.Abstractions")]
+    [InlineData("BackupPlatform.StorageProviders.Abstractions")]
+    public void StandaloneProjectsMustHaveNoProjectDependencies(string project)
     {
         foreach (var (configuration, graph) in fixture.Graphs)
         {
@@ -94,27 +96,19 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
         || name.StartsWith("IdentityModel", StringComparison.OrdinalIgnoreCase)
         || name.StartsWith("BackupPlatform.Identity", StringComparison.OrdinalIgnoreCase);
 
-    [Fact]
-    public void DomainMustNotDependOnInfrastructure()
-    {
-        AssertForbiddenDependencies("BackupPlatform.Domain", node => node.Name == "BackupPlatform.Infrastructure");
-    }
+    [Theory]
+    [InlineData("BackupPlatform.Domain")]
+    [InlineData("BackupPlatform.Application")]
+    public void FoundationProjectsMustNotDependOnInfrastructure(string project) =>
+        AssertForbiddenDependencies(project, node => node.Name == "BackupPlatform.Infrastructure");
 
-    [Fact]
-    public void DomainMustNotDependOnProviderImplementations()
-    {
-        AssertForbiddenDependencies("BackupPlatform.Domain", IsProviderImplementation);
-    }
-
-    [Fact]
-    public void ApplicationMustNotDependOnInfrastructure()
-    {
-        AssertForbiddenDependencies("BackupPlatform.Application", node => node.Name == "BackupPlatform.Infrastructure");
-    }
-
-    [Fact]
-    public void ApplicationMustNotDependOnBackupOrStorageImplementations() =>
-        AssertForbiddenDependencies("BackupPlatform.Application", IsProviderImplementation);
+    [Theory]
+    [InlineData("BackupPlatform.Domain")]
+    [InlineData("BackupPlatform.Application")]
+    [InlineData("BackupPlatform.Agent.Core")]
+    [InlineData("BackupPlatform.Infrastructure")]
+    public void ProjectsMustNotDependOnProviderImplementations(string project) =>
+        AssertForbiddenDependencies(project, IsProviderImplementation);
 
     [Fact]
     public void DomainMustNotDependOnTransportOrContracts() =>
@@ -367,10 +361,6 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
         }
     }
 
-    [Fact]
-    public void TheSchedulerInfrastructureMustNotReachBackupOrStorageProviderImplementations() =>
-        AssertForbiddenDependencies("BackupPlatform.Infrastructure", IsProviderImplementation);
-
     private static bool IsSchedulerLibraryDependency(string name) =>
         name.Equals("Quartz", StringComparison.OrdinalIgnoreCase)
         || name.StartsWith("Quartz.", StringComparison.OrdinalIgnoreCase);
@@ -499,10 +489,6 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
         && !node.Name.EndsWith(".Abstractions", StringComparison.Ordinal);
 
     [Fact]
-    public void AgentCoreMustNotDependOnProviderImplementations() =>
-        AssertForbiddenDependencies("BackupPlatform.Agent.Core", IsProviderImplementation);
-
-    [Fact]
     public void OnlyHostsMayComposeProviderImplementations()
     {
         foreach (var (configuration, graph) in fixture.Graphs)
@@ -512,16 +498,6 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
             {
                 AssertForbiddenDependencies(configuration, graph, node.Name, IsProviderImplementation);
             }
-        }
-    }
-
-    [Fact]
-    public void BackupAndStorageProviderAbstractionsMustBeIndependentOfEachOther()
-    {
-        foreach (var (configuration, graph) in fixture.Graphs)
-        {
-            Assert.True(graph["BackupPlatform.BackupProviders.Abstractions"].References.Length == 0, $"The backup provider abstractions must stand alone ({configuration}).");
-            Assert.True(graph["BackupPlatform.StorageProviders.Abstractions"].References.Length == 0, $"The storage provider abstractions must stand alone ({configuration}).");
         }
     }
 

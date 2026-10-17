@@ -13,46 +13,24 @@ public sealed class SftpStorageProviderConfigurationTests
 {
     private static readonly string ValidFingerprint = Convert.ToBase64String(SHA256.HashData([1, 2, 3, 4, 5]));
 
-    [Fact]
-    public void Validate_Rejects_InvalidHost()
+    [Theory]
+    [InlineData("", 22, "password", "/backups", false)]
+    [InlineData("sftp.example.internal", 0, "password", "/backups", false)]
+    [InlineData("sftp.example.internal", 22, "oauth", "/backups", false)]
+    [InlineData("sftp.example.internal", 22, "password", "backups", false)]
+    [InlineData("sftp.example.internal", 22, "password", "/backups/../escaped", false)]
+    [InlineData("sftp.example.internal", 22, "password", "/backups\\sub", false)]
+    [InlineData("sftp.example.internal", 22, "password", "/backups", true)]
+    public void Validate_Rejects_InvalidOptions(string host, int port, string authType, string path, bool badFingerprint)
     {
-        var options = new SftpStorageOptions("", 22, "backupuser", "password", "/backups", ValidFingerprint, Guid.NewGuid(), Guid.NewGuid());
+        var fingerprint = badFingerprint ? "not-base64!" : ValidFingerprint;
+        var options = new SftpStorageOptions(host, port, "backupuser", authType, path, fingerprint, Guid.NewGuid(), Guid.NewGuid());
         Assert.Throws<ArgumentException>(() => SftpConfiguration.Validate(options));
     }
 
     [Fact]
-    public void Validate_Rejects_InvalidPort()
+    public void Validate_Rejects_WrongLengthHostKeyFingerprint()
     {
-        var options = new SftpStorageOptions("sftp.example.internal", 0, "backupuser", "password", "/backups", ValidFingerprint, Guid.NewGuid(), Guid.NewGuid());
-        Assert.Throws<ArgumentException>(() => SftpConfiguration.Validate(options));
-    }
-
-    [Fact]
-    public void Validate_Rejects_InvalidAuthType()
-    {
-        var options = new SftpStorageOptions("sftp.example.internal", 22, "backupuser", "oauth", "/backups", ValidFingerprint, Guid.NewGuid(), Guid.NewGuid());
-        Assert.Throws<ArgumentException>(() => SftpConfiguration.Validate(options));
-    }
-
-    [Fact]
-    public void Validate_Rejects_RelativeOrEscapePath()
-    {
-        var relative = new SftpStorageOptions("sftp.example.internal", 22, "backupuser", "password", "backups", ValidFingerprint, Guid.NewGuid(), Guid.NewGuid());
-        Assert.Throws<ArgumentException>(() => SftpConfiguration.Validate(relative));
-
-        var traversal = new SftpStorageOptions("sftp.example.internal", 22, "backupuser", "password", "/backups/../escaped", ValidFingerprint, Guid.NewGuid(), Guid.NewGuid());
-        Assert.Throws<ArgumentException>(() => SftpConfiguration.Validate(traversal));
-
-        var backslash = new SftpStorageOptions("sftp.example.internal", 22, "backupuser", "password", "/backups\\sub", ValidFingerprint, Guid.NewGuid(), Guid.NewGuid());
-        Assert.Throws<ArgumentException>(() => SftpConfiguration.Validate(backslash));
-    }
-
-    [Fact]
-    public void Validate_Rejects_MalformedHostKeyFingerprint()
-    {
-        var invalidBase64 = new SftpStorageOptions("sftp.example.internal", 22, "backupuser", "password", "/backups", "not-base64!", Guid.NewGuid(), Guid.NewGuid());
-        Assert.Throws<ArgumentException>(() => SftpConfiguration.Validate(invalidBase64));
-
         var wrongLength = new SftpStorageOptions("sftp.example.internal", 22, "backupuser", "password", "/backups", Convert.ToBase64String([1, 2, 3]), Guid.NewGuid(), Guid.NewGuid());
         Assert.Throws<ArgumentException>(() => SftpConfiguration.Validate(wrongLength));
     }

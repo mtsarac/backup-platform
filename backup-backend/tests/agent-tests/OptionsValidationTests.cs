@@ -86,36 +86,21 @@ public sealed class OptionsValidationTests
     }
 
     [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("   ")]
-    public void Missing_backend_address_is_reported(string? uri)
+    [InlineData(null, "Agent:Backend:BaseUri is required")]
+    [InlineData("", "Agent:Backend:BaseUri is required")]
+    [InlineData("   ", "Agent:Backend:BaseUri is required")]
+    [InlineData("http://backup.example.test/", "Agent:Backend:BaseUri must be an absolute https URI")]
+    [InlineData("ws://backup.example.test/", "Agent:Backend:BaseUri must be an absolute https URI")]
+    [InlineData("backup.example.test", "Agent:Backend:BaseUri must be an absolute https URI")]
+    [InlineData("/relative/path", "Agent:Backend:BaseUri must be an absolute https URI")]
+    [InlineData("ftp://backup.example.test/", "Agent:Backend:BaseUri must be an absolute https URI")]
+    [InlineData("https://user:pass@backup.example.test/", "user information")]
+    public void Invalid_backend_address_is_reported(string? uri, string expectedProblem)
     {
         var result = Validate(o => o.Backend.BaseUri = uri);
 
         Assert.True(result.Failed);
-        Assert.Contains("Agent:Backend:BaseUri is required", Assert.Single(result.Failures!), StringComparison.Ordinal);
-    }
-
-    [Theory]
-    [InlineData("http://backup.example.test/")]
-    [InlineData("ws://backup.example.test/")]
-    [InlineData("backup.example.test")]
-    [InlineData("/relative/path")]
-    [InlineData("ftp://backup.example.test/")]
-    public void Backend_address_must_be_an_absolute_https_uri(string uri)
-    {
-        var result = Validate(o => o.Backend.BaseUri = uri);
-
-        Assert.Contains("Agent:Backend:BaseUri must be an absolute https URI", Assert.Single(result.Failures!), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Backend_address_must_not_embed_credentials()
-    {
-        var result = Validate(o => o.Backend.BaseUri = "https://user:pass@backup.example.test/");
-
-        Assert.Contains("user information", Assert.Single(result.Failures!), StringComparison.Ordinal);
+        Assert.Contains(expectedProblem, Assert.Single(result.Failures!), StringComparison.Ordinal);
     }
 
     [Theory]

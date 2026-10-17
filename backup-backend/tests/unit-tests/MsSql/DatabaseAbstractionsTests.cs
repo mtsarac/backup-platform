@@ -104,19 +104,14 @@ public sealed class DatabaseAbstractionsTests
     [Theory]
     [InlineData(0)]
     [InlineData(-5)]
+    [InlineData(-1)] // Timeout.InfiniteTimeSpan
     [InlineData(500)]
-    public void OptionsRejectZeroNegativeAndExcessiveTimeouts(int milliseconds)
+    [InlineData(86_400_000)]
+    public void OptionsRejectZeroNegativeInfiniteAndExcessiveTimeouts(int milliseconds)
     {
         var value = TimeSpan.FromMilliseconds(milliseconds);
         Assert.Throws<ArgumentOutOfRangeException>(() => new DatabaseConnectionOptions(connectTimeout: value));
         Assert.Throws<ArgumentOutOfRangeException>(() => new DatabaseConnectionOptions(commandTimeout: value));
-    }
-
-    [Fact]
-    public void InfiniteTimeoutsAreNotExpressible()
-    {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new DatabaseConnectionOptions(commandTimeout: Timeout.InfiniteTimeSpan));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new DatabaseConnectionOptions(connectTimeout: TimeSpan.FromDays(1)));
     }
 
     [Fact]

@@ -121,10 +121,12 @@ public sealed class SqlServerRestoreOutcomeRulesTests
         Assert.Empty(outcome.Warnings);
     }
 
-    [Fact]
-    public void AFailedReplaceThatLeftTheDatabaseSingleUserIsPartiallyRestoredAndSaysWhy()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AReplaceThatLeftTheDatabaseSingleUserIsPartiallyRestoredAndSaysWhyWhetherOrNotTheRestoreWasIssued(bool restoreIssued)
     {
-        var outcome = Determine(DatabaseRestoreMode.ReplaceExistingDatabase, true, false, true, Db(), Db(access: SqlServerUserAccess.SingleUser));
+        var outcome = Determine(DatabaseRestoreMode.ReplaceExistingDatabase, restoreIssued, false, true, Db(), Db(access: SqlServerUserAccess.SingleUser));
 
         Assert.Equal(DatabaseRestoreTargetState.PartiallyRestored, outcome.TargetState);
         Assert.Contains(outcome.Warnings, warning => warning.Code == SqlServerRestoreWarningCodes.DatabaseLeftSingleUser);
@@ -173,15 +175,6 @@ public sealed class SqlServerRestoreOutcomeRulesTests
 
         Assert.Equal(DatabaseRestoreTargetState.NotModified, outcome.TargetState);
         Assert.Equal("ONLINE", outcome.DatabaseState);
-    }
-
-    [Fact]
-    public void OnlyTheAccessChangeWasMadeAndNotUndoneIsReportedNotHidden()
-    {
-        var outcome = Determine(DatabaseRestoreMode.ReplaceExistingDatabase, false, false, true, Db(), Db(access: SqlServerUserAccess.SingleUser));
-
-        Assert.Equal(DatabaseRestoreTargetState.PartiallyRestored, outcome.TargetState);
-        Assert.Contains(outcome.Warnings, warning => warning.Code == SqlServerRestoreWarningCodes.DatabaseLeftSingleUser);
     }
 
     [Fact]

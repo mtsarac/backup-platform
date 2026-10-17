@@ -74,14 +74,6 @@ public sealed class RestoreOperationTests
     }
 
     [Fact]
-    public void TheTargetIsStoredAsAValidatedCopy()
-    {
-        var operation = Operation();
-        Assert.Equal(Target(), operation.Target);
-        Assert.Equal("sql01.corp.local", operation.Target.Host);
-    }
-
-    [Fact]
     public void ConstructionRefusesEmptyIdentifiers()
     {
         RestoreOperation Build(Guid id, Guid artifactId, Guid replicaId) => new(id, TenantId.New(), artifactId, replicaId, RestoreSourceAccess.CentralStorage, AgentId.New(), Target(),
@@ -218,17 +210,12 @@ public sealed class RestoreOperationTests
 
     // ---- target validation ----
 
-    [Fact]
-    public void ATargetWithIntegratedSecurityAndNoCredentialIsValid()
+    [Theory]
+    [InlineData(null, true, null)]
+    [InlineData(1433, false, "sql-prod_1")]
+    public void ATargetWithExactlyOneOfIntegratedSecurityAndACredentialReferenceIsValid(int? port, bool integratedSecurity, string? credentialReference)
     {
-        var target = new RestoreTarget("db.internal", null, true, null, true, false);
-        Assert.Same(target, target.Validate());
-    }
-
-    [Fact]
-    public void ATargetWithACredentialReferenceAndNoIntegratedSecurityIsValid()
-    {
-        var target = new RestoreTarget("db.internal", 1433, false, "sql-prod_1", true, false);
+        var target = new RestoreTarget("db.internal", port, integratedSecurity, credentialReference, true, false);
         Assert.Same(target, target.Validate());
     }
 
@@ -481,16 +468,18 @@ public sealed class RestoreOperationTests
 
     // ---- renew ----
 
-    [Fact]
-    public void RenewalExtendsTheLeaseFromNow()
+    [Theory]
+    [InlineData(RestoreStatus.Leased)]
+    [InlineData(RestoreStatus.Running)]
+    public void RenewalExtendsTheLeaseFromNowWhileLeasedOrRunning(RestoreStatus status)
     {
         var operation = Queued();
-        var token = Claim(operation);
+        var token = status == RestoreStatus.Running ? Begin(operation) : Claim(operation);
         var at = Now.AddSeconds(90);
         operation.Renew(token, at, Lease);
 
         Assert.Equal(at + Lease, operation.CurrentAttempt.LeaseExpiresAt);
-        Assert.Equal(RestoreStatus.Leased, operation.Status);
+        Assert.Equal(status, operation.Status);
     }
 
     [Fact]
@@ -501,15 +490,6 @@ public sealed class RestoreOperationTests
         var original = operation.CurrentAttempt.LeaseExpiresAt;
         operation.Renew(token, Now.AddSeconds(1), TimeSpan.FromSeconds(10));
         Assert.Equal(original, operation.CurrentAttempt.LeaseExpiresAt);
-    }
-
-    [Fact]
-    public void RenewalWorksForARunningRestoreToo()
-    {
-        var operation = Queued();
-        var token = Begin(operation);
-        operation.Renew(token, Now.AddSeconds(100), Lease);
-        Assert.Equal(Now.AddSeconds(100) + Lease, operation.CurrentAttempt.LeaseExpiresAt);
     }
 
     [Fact]
@@ -743,32 +723,27 @@ public sealed class RestoreOperationTests
         Assert.Throws<ArgumentNullException>(() => operation.Complete(token, Now.AddSeconds(1), null!));
     }
 
-    [Fact]
-    public void CompletingTheSameOutcomeTwiceChangesNothing()
+    public static TheoryData<RestoreCompletion, RestoreStatus> RepeatedOutcomes => new()
+    {
+        { Success("{\"databaseState\":\"ONLINE\"}"), RestoreStatus.Succeeded },
+        { Failure(RestoreFailureCodes.TargetInUse, RestoreTargetState.NotModified), RestoreStatus.Failed }
+    };
+
+    [Theory]
+    [MemberData(nameof(RepeatedOutcomes))]
+    public void CompletingTheSameOutcomeTwiceChangesNothing(RestoreCompletion completion, RestoreStatus expected)
     {
         var operation = Running(out var token);
-        var completion = Success("{\"databaseState\":\"ONLINE\"}");
         operation.Complete(token, Now.AddSeconds(30), completion);
         var pinReleasedAt = operation.Pin.ReleasedAt;
 
         operation.Complete(token, Now.AddMinutes(10), completion with { });
 
-        Assert.Equal(RestoreStatus.Succeeded, operation.Status);
+        Assert.Equal(expected, operation.Status);
         Assert.Equal(Now.AddSeconds(30), operation.CompletedAt);
         Assert.Equal(Now.AddSeconds(30), operation.CurrentAttempt.CompletedAt);
         Assert.Equal(pinReleasedAt, operation.Pin.ReleasedAt);
-        Assert.Equal("{\"databaseState\":\"ONLINE\"}", operation.ResultJson);
-    }
-
-    [Fact]
-    public void CompletingAFailureTwiceIsAlsoIdempotent()
-    {
-        var operation = Running(out var token);
-        var completion = Failure(RestoreFailureCodes.TargetInUse, RestoreTargetState.NotModified);
-        operation.Complete(token, Now.AddSeconds(30), completion);
-        operation.Complete(token, Now.AddSeconds(31), completion);
-        Assert.Equal(RestoreStatus.Failed, operation.Status);
-        Assert.Equal(Now.AddSeconds(30), operation.CompletedAt);
+        Assert.Equal(completion.ResultJson, operation.ResultJson);
     }
 
     [Fact]
@@ -987,28 +962,19 @@ public sealed class RestoreOperationTests
         Assert.Equal(RestoreFailureCodes.AgentLost, operation.FailureCode);
     }
 
-    [Fact]
-    public void LostRunningLeaseCannotUseStaleEarlyProgressAsProofTheTargetIsUntouched()
-    {
-        var operation = Running(out var token);
-        operation.Progress(token, Now.AddSeconds(5), RestoreStages.DownloadingArtifact, 30);
-        // Progress is best effort; the agent may have started RESTORE without delivering another report.
-        Assert.True(operation.Expire(Now + Lease));
-        Assert.Equal(RestoreTargetState.Unknown, operation.TargetState);
-        Assert.Equal(RestoreTargetState.Unknown, operation.CurrentAttempt.TargetState);
-    }
-
-
+    // Progress is best effort: even an early stage is no proof the agent had not started RESTORE without delivering another report.
     [Theory]
+    [InlineData(RestoreStages.DownloadingArtifact)]
     [InlineData(RestoreStages.PreparingTarget)]
     [InlineData(RestoreStages.Restoring)]
     [InlineData(RestoreStages.Finalizing)]
-    public void ARunningRestoreLostAtOrAfterTheTargetStagesIsInAnUnknownState(string stage)
+    public void ARunningRestoreLostAfterAnyReportedStageIsInAnUnknownState(string stage)
     {
         var operation = Running(out var token);
         operation.Progress(token, Now.AddSeconds(5), stage, 30);
         Assert.True(operation.Expire(Now + Lease));
         Assert.Equal(RestoreTargetState.Unknown, operation.TargetState);
+        Assert.Equal(RestoreTargetState.Unknown, operation.CurrentAttempt.TargetState);
         Assert.Equal(RestoreStatus.AgentLost, operation.Status);
     }
 

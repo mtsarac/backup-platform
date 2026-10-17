@@ -83,24 +83,16 @@ public sealed class SqlServerRestorePlannerTests
     }
 
     [Theory]
-    [InlineData(RestoreBackupKind.Differential)]
-    [InlineData(RestoreBackupKind.TransactionLog)]
-    [InlineData(RestoreBackupKind.Other)]
-    public void ANonFullBackupFailsThePlanWithBackupTypeUnsupportedAndYieldsNoPlan(RestoreBackupKind kind)
+    [InlineData(RestoreBackupKind.Differential, false, RestoreReasonCodes.BackupTypeUnsupported)]
+    [InlineData(RestoreBackupKind.TransactionLog, false, RestoreReasonCodes.BackupTypeUnsupported)]
+    [InlineData(RestoreBackupKind.Other, false, RestoreReasonCodes.BackupTypeUnsupported)]
+    [InlineData(RestoreBackupKind.Database, true, SqlServerRestoreReasons.BackupEncryptedUnsupported)]
+    public void AnUnsupportedBackupFailsThePlanWithTheBackupTypeReasonAndYieldsNoPlan(RestoreBackupKind kind, bool encrypted, string reason)
     {
-        var evaluation = Plan(Target(), inspection: Inspection(Header(kind)));
+        var evaluation = Plan(Target(), inspection: Inspection(Header(kind, encrypted: encrypted)));
 
         var item = Item(evaluation, SqlServerRestoreCheckIds.BackupType);
-        Assert.Equal((BackupPreCheckStatus.Failed, RestoreReasonCodes.BackupTypeUnsupported), (item.Status, item.ReasonCode));
-        Assert.Null(evaluation.Plan);
-    }
-
-    [Fact]
-    public void AnEncryptedBackupYieldsNoPlan()
-    {
-        var evaluation = Plan(Target(), inspection: Inspection(Header(encrypted: true)));
-
-        Assert.Equal(SqlServerRestoreReasons.BackupEncryptedUnsupported, Item(evaluation, SqlServerRestoreCheckIds.BackupType).ReasonCode);
+        Assert.Equal((BackupPreCheckStatus.Failed, reason), (item.Status, item.ReasonCode));
         Assert.Null(evaluation.Plan);
     }
 
@@ -132,10 +124,14 @@ public sealed class SqlServerRestorePlannerTests
         Assert.NotNull(evaluation.Plan);
     }
 
-    [Fact]
-    public void ANewDatabaseWhoseNameIsTakenNowYieldsNoPlan()
+    [Theory]
+    [InlineData(DatabaseRestoreMode.NewDatabase)]
+    [InlineData(DatabaseRestoreMode.IsolatedVerification)]
+    public void ANewOrVerificationDatabaseWhoseNameIsTakenNowYieldsNoPlan(DatabaseRestoreMode mode)
     {
-        var evaluation = Plan(Target(MsSqlTestData.Database("Restored")));
+        var name = mode == DatabaseRestoreMode.IsolatedVerification ? RestoreDatabaseNames.NewVerificationName() : "Restored";
+
+        var evaluation = Plan(Target(MsSqlTestData.Database(name)), mode, name: name);
 
         Assert.Equal(RestoreReasonCodes.TargetDatabaseExists, Item(evaluation, BackupPreCheckIds.DatabaseExists).ReasonCode);
         Assert.Equal(BackupPreCheckStatus.Skipped, Item(evaluation, SqlServerRestoreCheckIds.FileMapping).Status);
@@ -174,17 +170,6 @@ public sealed class SqlServerRestorePlannerTests
         Assert.NotNull(evaluation.Plan);
         Assert.False(evaluation.Plan.Target.DatabaseExists);
         Assert.All(evaluation.Plan.Mappings, mapping => Assert.StartsWith(RestoreDatabaseNames.VerificationPrefix, Path.GetFileName(mapping.TargetPath.Value), StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void AnIsolatedVerificationIsNeverPlannedOverAnExistingDatabase()
-    {
-        var name = RestoreDatabaseNames.NewVerificationName();
-
-        var evaluation = Plan(Target(MsSqlTestData.Database(name)), DatabaseRestoreMode.IsolatedVerification, name: name);
-
-        Assert.Equal(RestoreReasonCodes.TargetDatabaseExists, Item(evaluation, BackupPreCheckIds.DatabaseExists).ReasonCode);
-        Assert.Null(evaluation.Plan);
     }
 
     [Theory]

@@ -28,22 +28,8 @@ public sealed class PostgreSqlRestoreVerificationTests
     }
 
     [Theory]
-    [InlineData(Verification, true)]
-    [InlineData("bp_old_0123456789abcdef0123456789abcdef", false)]
-    [InlineData("production", false)]
-    public void OnlyAVerificationNameIsAcceptedForAVerificationRestore(string name, bool accepted)
-    {
-        if (accepted)
-        {
-            PostgreSqlRestoreProvider.ValidateName(name, DatabaseRestoreMode.IsolatedVerification);
-            return;
-        }
-
-        var failure = Assert.Throws<PostgreSqlRestoreException>(() => PostgreSqlRestoreProvider.ValidateName(name, DatabaseRestoreMode.IsolatedVerification));
-        Assert.Equal(RestoreReasonCodes.TargetProtected, failure.ReasonCode);
-    }
-
-    [Theory]
+    [InlineData(DatabaseRestoreMode.IsolatedVerification, "bp_old_0123456789abcdef0123456789abcdef")]
+    [InlineData(DatabaseRestoreMode.IsolatedVerification, "production")]
     [InlineData(DatabaseRestoreMode.NewDatabase, Verification)]
     [InlineData(DatabaseRestoreMode.ReplaceExistingDatabase, Verification)]
     [InlineData(DatabaseRestoreMode.NewDatabase, "BP_VERIFY_whatever")]
@@ -58,9 +44,10 @@ public sealed class PostgreSqlRestoreVerificationTests
     }
 
     [Theory]
-    [InlineData(DatabaseRestoreMode.NewDatabase)]
-    [InlineData(DatabaseRestoreMode.ReplaceExistingDatabase)]
-    public void OrdinaryNamesStillPassInTheNormalModes(DatabaseRestoreMode mode) => PostgreSqlRestoreProvider.ValidateName("customer_db", mode);
+    [InlineData(DatabaseRestoreMode.IsolatedVerification, Verification)]
+    [InlineData(DatabaseRestoreMode.NewDatabase, "customer_db")]
+    [InlineData(DatabaseRestoreMode.ReplaceExistingDatabase, "customer_db")]
+    public void ValidNamesPassTheirOwnMode(DatabaseRestoreMode mode, string name) => PostgreSqlRestoreProvider.ValidateName(name, mode);
 
     [Theory]
     [InlineData("{\"provider\":\"backup-platform\",\"phase\":\"previous\",\"target\":\"x\",\"operation\":\"y\"}", true)]

@@ -7,18 +7,13 @@ public sealed class EffectiveStorageLimitTests
 {
     private const long Gb = 1_000_000_000;
 
-    [Fact]
-    public void NoOverrideUsesThePlanLimit()
+    [Theory]
+    [InlineData(5 * Gb)]
+    [InlineData(null)]
+    public void NoOverrideUsesThePlanLimitAndAnUnlimitedPlanIsUnlimited(long? plan)
     {
-        var limit = EffectiveStorageLimit.Resolve(5 * Gb, StorageLimitOverride.None);
-        Assert.Equal((false, (long?)(5 * Gb), EffectiveStorageLimitSource.Plan), (limit.IsUnlimited, limit.Bytes, limit.Source));
-    }
-
-    [Fact]
-    public void NoOverrideOnAnUnlimitedPlanIsUnlimited()
-    {
-        var limit = EffectiveStorageLimit.Resolve(null, StorageLimitOverride.None);
-        Assert.Equal((true, (long?)null, EffectiveStorageLimitSource.Plan), (limit.IsUnlimited, limit.Bytes, limit.Source));
+        var limit = EffectiveStorageLimit.Resolve(plan, StorageLimitOverride.None);
+        Assert.Equal((plan is null, plan, EffectiveStorageLimitSource.Plan), (limit.IsUnlimited, limit.Bytes, limit.Source));
     }
 
     [Theory]

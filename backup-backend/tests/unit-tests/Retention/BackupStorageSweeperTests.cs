@@ -263,12 +263,14 @@ public sealed class BackupStorageSweeperTests
         Assert.Equal([key], rig.Store.ReferenceQueries[^1].Keys);
     }
 
-    [Fact]
-    public async Task AFileOfAnAttemptTheDatabaseDoesNotKnowIsNotOurs()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AFileOrUploadOfAnAttemptTheDatabaseDoesNotKnowIsNotOurs(bool upload)
     {
         var rig = new Rig();
         var stranger = new Attempt(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
-        var key = rig.Object(stranger, Old);
+        var key = upload ? rig.Partial(stranger, Old) : rig.Object(stranger, Old);
 
         var report = await rig.SweepAsync();
 
@@ -351,11 +353,13 @@ public sealed class BackupStorageSweeperTests
 
     // ---- unpublished uploads ----
 
-    [Fact]
-    public async Task AnOldIdleUnpublishedUploadOfADeadAttemptIsDeleted()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(null)] // nobody can tell whether a writer holds it: still deleted once old enough
+    public async Task AnOldUnpublishedUploadOfADeadAttemptNoWriterIsKnownToHoldIsDeleted(bool? inUse)
     {
         var rig = new Rig();
-        var key = rig.Partial(rig.Register(BackupStatus.Failed), Old, inUse: false);
+        var key = rig.Partial(rig.Register(BackupStatus.Failed), Old, inUse);
 
         var report = await rig.SweepAsync();
 
@@ -363,18 +367,6 @@ public sealed class BackupStorageSweeperTests
         Assert.Equal(new StorageSweepReport(1, 0, 0, 0, 0, 0, 1, 0, 0, false), report);
         // A temporary file is never a replica: nothing is asked about references for it.
         Assert.Empty(rig.Store.ReferenceQueries);
-    }
-
-    [Fact]
-    public async Task AnUploadWhenNobodyCanTellIfAWriterHoldsItIsStillDeletedOnceOldEnough()
-    {
-        var rig = new Rig();
-        var key = rig.Partial(rig.Register(BackupStatus.Failed), Old, inUse: null);
-
-        var report = await rig.SweepAsync();
-
-        Assert.False(rig.Storage.Has(key));
-        Assert.Equal(1, report.PartialUploadsDeleted);
     }
 
     [Fact]
@@ -403,44 +395,21 @@ public sealed class BackupStorageSweeperTests
     }
 
     [Theory]
-    [InlineData(BackupStatus.Pending)]
-    [InlineData(BackupStatus.Leased)]
-    [InlineData(BackupStatus.Running)]
-    public async Task AnUploadOfALiveAttemptIsKept(BackupStatus attempt)
+    [InlineData(BackupStatus.Pending, BackupStatus.Pending)]
+    [InlineData(BackupStatus.Leased, BackupStatus.Leased)]
+    [InlineData(BackupStatus.Running, BackupStatus.Running)]
+    // The run is still in flight (RetryPending), so nothing of it is cleaned up until it ends, even a leftover of the attempt that already failed.
+    [InlineData(BackupStatus.RetryPending, BackupStatus.Failed)]
+    public async Task AnUploadOfALiveRunIsKept(BackupStatus run, BackupStatus attempt)
     {
         var rig = new Rig();
-        var key = rig.Partial(rig.Register(attempt, attempt), Old, inUse: false);
-
-        var report = await rig.SweepAsync();
-
-        Assert.True(rig.Storage.Has(key));
-        Assert.Equal(1, report.KeptActive);
-    }
-
-    [Fact]
-    public async Task AnUploadOfAnEndedAttemptIsKeptWhileItsRunWaitsForARetry()
-    {
-        // The run is still in flight (RetryPending), so nothing of it is cleaned up until it ends, even a leftover of the attempt that already failed.
-        var rig = new Rig();
-        var key = rig.Partial(rig.Register(BackupStatus.RetryPending, BackupStatus.Failed), Old, inUse: false);
+        var key = rig.Partial(rig.Register(run, attempt), Old, inUse: false);
 
         var report = await rig.SweepAsync();
 
         Assert.True(rig.Storage.Has(key));
         Assert.Equal(0, report.PartialUploadsDeleted);
         Assert.Equal(1, report.KeptActive);
-    }
-
-    [Fact]
-    public async Task AnUploadOfAnUnknownAttemptIsNotOurs()
-    {
-        var rig = new Rig();
-        var key = rig.Partial(new Attempt(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()), Old);
-
-        var report = await rig.SweepAsync();
-
-        Assert.True(rig.Storage.Has(key));
-        Assert.Equal(1, report.Unrecognized);
     }
 
     [Fact]

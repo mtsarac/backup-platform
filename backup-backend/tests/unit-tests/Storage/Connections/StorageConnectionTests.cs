@@ -25,18 +25,11 @@ public sealed class StorageConnectionTests
     }
 
     [Fact]
-    public void NameOfExactlyMaximumLengthIsAcceptedAndOneMoreIsRejected()
+    public void NameOfExactlyMaximumLengthIsAcceptedAndOneMoreIsRejectedAfterTrimming()
     {
         Assert.Equal(StorageConnection.MaximumNameLength, Create(new string('a', StorageConnection.MaximumNameLength)).Name.Length);
+        Assert.Equal(StorageConnection.MaximumNameLength, Create("  " + new string('a', StorageConnection.MaximumNameLength) + "  ").Name.Length);
         Assert.Throws<ArgumentException>(() => Create(new string('a', StorageConnection.MaximumNameLength + 1)));
-    }
-
-    [Fact]
-    public void LengthLimitAppliesAfterTrimming()
-    {
-        var padded = "  " + new string('a', StorageConnection.MaximumNameLength) + "  ";
-
-        Assert.Equal(StorageConnection.MaximumNameLength, Create(padded).Name.Length);
     }
 
     [Theory]

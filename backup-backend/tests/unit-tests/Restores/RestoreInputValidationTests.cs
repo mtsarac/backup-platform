@@ -409,41 +409,36 @@ public sealed class RestoreInputValidationTests
     private static BackupTaskProgressRequest Progress(string stage, double? percent = null, Guid? token = null) => new() { LeaseToken = token ?? Token, Stage = stage, Percent = percent };
 
     [Theory]
-    [InlineData(RestoreStages.Preparing)]
-    [InlineData(RestoreStages.DownloadingArtifact)]
-    [InlineData(RestoreStages.VerifyingChecksum)]
-    [InlineData(RestoreStages.InspectingBackup)]
-    [InlineData(RestoreStages.PreparingTarget)]
-    [InlineData(RestoreStages.Restoring)]
-    [InlineData(RestoreStages.Finalizing)]
-    public void EveryKnownNonTerminalStageIsValidProgress(string stage) => Assert.True(RestoreInputValidation.IsValidProgress(Progress(stage, 10)));
-
-    [Theory]
-    [InlineData(RestoreStages.Completed)]
-    [InlineData(RestoreStages.Failed)]
-    [InlineData(RestoreStages.Cancelled)]
-    [InlineData("")]
-    [InlineData("Nope")]
-    [InlineData("restoring")]
-    public void TerminalAndUnknownStagesAreNotProgress(string stage) => Assert.False(RestoreInputValidation.IsValidProgress(Progress(stage, 10)));
+    [InlineData(RestoreStages.Preparing, true)]
+    [InlineData(RestoreStages.DownloadingArtifact, true)]
+    [InlineData(RestoreStages.VerifyingChecksum, true)]
+    [InlineData(RestoreStages.InspectingBackup, true)]
+    [InlineData(RestoreStages.PreparingTarget, true)]
+    [InlineData(RestoreStages.Restoring, true)]
+    [InlineData(RestoreStages.Finalizing, true)]
+    [InlineData(RestoreStages.Completed, false)]
+    [InlineData(RestoreStages.Failed, false)]
+    [InlineData(RestoreStages.Cancelled, false)]
+    [InlineData("", false)]
+    [InlineData("Nope", false)]
+    [InlineData("restoring", false)]
+    public void OnlyKnownNonTerminalStagesAreValidProgress(string stage, bool valid) => Assert.Equal(valid, RestoreInputValidation.IsValidProgress(Progress(stage, 10)));
 
     [Fact]
     public void ProgressWithAnEmptyTokenIsInvalid() => Assert.False(RestoreInputValidation.IsValidProgress(Progress(RestoreStages.Restoring, 10, Guid.Empty)));
 
     [Theory]
-    [InlineData(null)]
-    [InlineData(0.0)]
-    [InlineData(50.5)]
-    [InlineData(100.0)]
-    public void ProgressPercentagesInsideTheRangeAreValid(double? percent) => Assert.True(RestoreInputValidation.IsValidProgress(Progress(RestoreStages.Restoring, percent)));
-
-    [Theory]
-    [InlineData(-0.001)]
-    [InlineData(100.001)]
-    [InlineData(double.NaN)]
-    [InlineData(double.PositiveInfinity)]
-    [InlineData(double.NegativeInfinity)]
-    public void ProgressPercentagesOutsideTheRangeAreInvalid(double percent) => Assert.False(RestoreInputValidation.IsValidProgress(Progress(RestoreStages.Restoring, percent)));
+    [InlineData(null, true)]
+    [InlineData(0.0, true)]
+    [InlineData(50.5, true)]
+    [InlineData(100.0, true)]
+    [InlineData(-0.001, false)]
+    [InlineData(100.001, false)]
+    [InlineData(double.NaN, false)]
+    [InlineData(double.PositiveInfinity, false)]
+    [InlineData(double.NegativeInfinity, false)]
+    public void OnlyProgressPercentagesInsideTheRangeAreValid(double? percent, bool valid) =>
+        Assert.Equal(valid, RestoreInputValidation.IsValidProgress(Progress(RestoreStages.Restoring, percent)));
 
     // ---- agent reports: completion ----
 
@@ -535,6 +530,7 @@ public sealed class RestoreInputValidationTests
         Assert.Throws<ArgumentException>(() => RestoreInputValidation.ToCompletion(Completion("Cancelled", code, "NotModified")));
 
     [Theory]
+    [InlineData(null)]
     [InlineData("")]
     [InlineData("Pending")]
     [InlineData("Leased")]
@@ -544,13 +540,11 @@ public sealed class RestoreInputValidationTests
     [InlineData("SUCCEEDED")]
     [InlineData("4")]
     [InlineData(" Succeeded")]
-    public void OnlyTheThreeReportedOutcomesAreAcceptedAsStatus(string status) =>
-        Assert.Throws<ArgumentException>(() => RestoreInputValidation.ToCompletion(Completion(status, null, "Online")));
-
-    [Fact]
-    public void ANullStatusIsRejected() => Assert.Throws<ArgumentException>(() => RestoreInputValidation.ToCompletion(Completion(null!, null, "Online")));
+    public void OnlyTheThreeReportedOutcomesAreAcceptedAsStatus(string? status) =>
+        Assert.Throws<ArgumentException>(() => RestoreInputValidation.ToCompletion(Completion(status!, null, "Online")));
 
     [Theory]
+    [InlineData(null)]
     [InlineData("")]
     [InlineData("1")]
     [InlineData("2")]
@@ -559,15 +553,12 @@ public sealed class RestoreInputValidationTests
     [InlineData("ONLINE")]
     [InlineData("Restoring")]
     [InlineData(" Online")]
-    public void TheTargetStateMustBeOneOfTheFourNames(string state)
+    public void TheTargetStateMustBeOneOfTheFourNames(string? state)
     {
-        Assert.Throws<ArgumentException>(() => RestoreInputValidation.ToCompletion(Completion("Succeeded", null, state)));
-        Assert.Throws<ArgumentException>(() => RestoreInputValidation.ToCompletion(Completion("Failed", RestoreFailureCodes.InternalError, state)));
-        Assert.Throws<ArgumentException>(() => RestoreInputValidation.ToCompletion(Completion("Cancelled", null, state)));
+        Assert.Throws<ArgumentException>(() => RestoreInputValidation.ToCompletion(Completion("Succeeded", null, state!)));
+        Assert.Throws<ArgumentException>(() => RestoreInputValidation.ToCompletion(Completion("Failed", RestoreFailureCodes.InternalError, state!)));
+        Assert.Throws<ArgumentException>(() => RestoreInputValidation.ToCompletion(Completion("Cancelled", null, state!)));
     }
-
-    [Fact]
-    public void ANullTargetStateIsRejected() => Assert.Throws<ArgumentException>(() => RestoreInputValidation.ToCompletion(Completion("Succeeded", null, null!)));
 
     [Fact]
     public void ACompletionWithAnEmptyLeaseTokenIsRejected() =>
@@ -857,10 +848,8 @@ public sealed class RestoreInputValidationTests
 
     // ---- ReadResult ----
 
-    [Fact]
-    public void ReadingNoResultYieldsNull() => Assert.Null(RestoreInputValidation.ReadResult(null));
-
     [Theory]
+    [InlineData(null)]
     [InlineData("")]
     [InlineData("not json")]
     [InlineData("{")]
@@ -869,7 +858,7 @@ public sealed class RestoreInputValidationTests
     [InlineData("null")]
     [InlineData("{\"checksumVerified\":\"yes\"}")]
     [InlineData("{\"preCheck\":42}")]
-    public void UnreadableStoredTextYieldsNull(string json) => Assert.Null(RestoreInputValidation.ReadResult(json));
+    public void NoResultOrUnreadableStoredTextYieldsNull(string? json) => Assert.Null(RestoreInputValidation.ReadResult(json));
 
     [Fact]
     public void AnEmptyJsonObjectReadsAsAnEmptyResult()

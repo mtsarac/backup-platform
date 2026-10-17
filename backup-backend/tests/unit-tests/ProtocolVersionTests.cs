@@ -104,16 +104,12 @@ public sealed class ProtocolVersionTests
         Assert.False(range.Contains(new ProtocolVersion(1, 1)));
     }
 
-    [Fact]
-    public void RangeRejectsMixedMajorVersions()
+    [Theory]
+    [InlineData(1, 0, 2, 0)]
+    [InlineData(1, 3, 1, 2)]
+    public void RangeRejectsMixedMajorVersionsAndReversedBounds(int lowMajor, int lowMinor, int highMajor, int highMinor)
     {
-        Assert.Throws<ArgumentException>(() => new ProtocolVersionRange(new ProtocolVersion(1, 0), new ProtocolVersion(2, 0)));
-    }
-
-    [Fact]
-    public void RangeRejectsReversedBounds()
-    {
-        Assert.Throws<ArgumentException>(() => new ProtocolVersionRange(new ProtocolVersion(1, 3), new ProtocolVersion(1, 2)));
+        Assert.Throws<ArgumentException>(() => new ProtocolVersionRange(new ProtocolVersion(lowMajor, lowMinor), new ProtocolVersion(highMajor, highMinor)));
     }
 
     [Fact]

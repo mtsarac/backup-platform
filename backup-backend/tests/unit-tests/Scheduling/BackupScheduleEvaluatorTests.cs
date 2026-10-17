@@ -20,11 +20,13 @@ public sealed class BackupScheduleEvaluatorTests
 
     // ---- within / outside grace -------------------------------------------------------------------------------------------------
 
-    [Fact]
-    public void BackendReturnsInsideGraceTheMissedOccurrenceRuns()
+    [Theory]
+    [InlineData(0)]  // just became due, no delay
+    [InlineData(1)]  // no active run, Skip policy
+    [InlineData(20)] // scheduled 10:00, back at 10:20, grace 30m
+    public void BackendReturnsInsideGraceTheMissedOccurrenceRuns(int minute)
     {
-        // scheduled 10:00, back at 10:20, grace 30m
-        var plan = Plan(Hourly(TimeSpan.FromMinutes(30)), At(10, 20), last: At(9));
+        var plan = Plan(Hourly(TimeSpan.FromMinutes(30)), At(10, minute), last: At(9));
         Assert.Equal(At(10), plan.CreateRunFor);
         Assert.Empty(plan.Resolutions);
         Assert.Null(plan.Deferred);
@@ -48,20 +50,6 @@ public sealed class BackupScheduleEvaluatorTests
         var schedule = Hourly(TimeSpan.FromMinutes(30));
         Assert.Equal(At(10), Plan(schedule, At(10, 30), last: At(9)).CreateRunFor);
         Assert.Null(Plan(schedule, At(10, 30).AddSeconds(1), last: At(9)).CreateRunFor);
-    }
-
-    [Fact]
-    public void AnOccurrenceThatJustBecameDueRunsWithNoDelay()
-    {
-        var plan = Plan(Hourly(TimeSpan.FromMinutes(30)), At(10), last: At(9));
-        Assert.Equal(At(10), plan.CreateRunFor);
-    }
-
-    [Fact]
-    public void NothingDueDecidesNothing()
-    {
-        var plan = Plan(Hourly(TimeSpan.FromMinutes(30)), At(10, 59), last: At(10));
-        Assert.Same(BackupSchedulePlan.Nothing, plan);
     }
 
     // ---- several missed occurrences ---------------------------------------------------------------------------------------------
@@ -121,10 +109,12 @@ public sealed class BackupScheduleEvaluatorTests
         Assert.DoesNotContain(plan.Resolutions, r => r.Outcome is BackupOccurrenceOutcome.RunCreated or BackupOccurrenceOutcome.SkippedOverlap);
     }
 
-    [Fact]
-    public void OccurrencesAlreadyDecidedAreNeverDecidedAgain()
+    [Theory]
+    [InlineData(10, 59, 30, 10)]
+    [InlineData(10, 20, 90, 10)]
+    public void OccurrencesAlreadyDecidedAreNeverDecidedAgain(int hour, int minute, int graceMinutes, int lastHour)
     {
-        var plan = Plan(Hourly(TimeSpan.FromMinutes(90)), At(10, 20), last: At(10));
+        var plan = Plan(Hourly(TimeSpan.FromMinutes(graceMinutes)), At(hour, minute), last: At(lastHour));
         Assert.Same(BackupSchedulePlan.Nothing, plan);
     }
 
@@ -170,13 +160,6 @@ public sealed class BackupScheduleEvaluatorTests
         var plan = Plan(Hourly(TimeSpan.FromMinutes(30)), At(10, 1), last: At(9), overlap: BackupOverlapPolicy.Queue, active: Guid.NewGuid());
         Assert.Equal(At(10), plan.CreateRunFor);
         Assert.Empty(plan.Resolutions);
-    }
-
-    [Fact]
-    public void SkipPolicyWithoutAnActiveRunCreatesTheRun()
-    {
-        var plan = Plan(Hourly(TimeSpan.FromMinutes(30)), At(10, 1), last: At(9), overlap: BackupOverlapPolicy.Skip, active: null);
-        Assert.Equal(At(10), plan.CreateRunFor);
     }
 
     [Fact]

@@ -124,22 +124,15 @@ public sealed class QuotaAdmissionDecisionTests
         Assert.False(QuotaAdmissionDecision.Decide(entitlement, Policy(), long.MaxValue, long.MaxValue, long.MaxValue).Allowed);
     }
 
-    [Fact]
-    public void WarnOnlyNeverDeniesButStillReportsOverQuota()
+    [Theory]
+    [InlineData(QuotaEnforcementMode.WarnOnly, QuotaState.OverQuota)]
+    [InlineData(QuotaEnforcementMode.None, QuotaState.Unlimited)]
+    public void NonBlockingEnforcementNeverDeniesAndReportsItsOwnState(QuotaEnforcementMode enforcement, QuotaState state)
     {
-        var decision = Decide(used: 3 * Limit, reserved: Limit, estimate: Limit, enforcement: QuotaEnforcementMode.WarnOnly);
+        var decision = Decide(used: 3 * Limit, reserved: Limit, estimate: Limit, enforcement: enforcement);
         Assert.True(decision.Allowed);
         Assert.Null(decision.DenialCode);
-        Assert.Equal(QuotaState.OverQuota, decision.State);
-    }
-
-    [Fact]
-    public void EnforcementNoneNeverAppliesAQuota()
-    {
-        var decision = Decide(used: 3 * Limit, estimate: Limit, enforcement: QuotaEnforcementMode.None);
-        Assert.True(decision.Allowed);
-        Assert.Null(decision.DenialCode);
-        Assert.Equal(QuotaState.Unlimited, decision.State);
+        Assert.Equal(state, decision.State);
     }
 
     [Theory]

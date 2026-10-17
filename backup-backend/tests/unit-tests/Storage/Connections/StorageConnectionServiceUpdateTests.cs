@@ -30,53 +30,30 @@ public sealed class StorageConnectionServiceUpdateTests
 
     private static readonly StorageConnectionPermissions None = new(false, false, false, false, false, false);
 
-    [Fact]
-    public void TenantManagesItsOwnConnectionsButNeverSetsTheQuotaScope()
+    public static IEnumerable<object[]> PermissionCases()
     {
-        var scope = StorageScope.Tenant(TenantId.New(), true);
-
-        Assert.Equal(new(true, false, true, true, true, true), Permissions(scope, StorageOwnership.TenantManaged, TestProviders.FakeDescriptor));
+        var tenant = StorageScope.Tenant(TenantId.New(), true);
+        // Tenant manages its own connections but never sets the quota scope.
+        yield return [tenant, StorageOwnership.TenantManaged, TestProviders.FakeDescriptor, new StorageConnectionPermissions(true, false, true, true, true, true)];
+        // No secret fields: cannot manage secrets but can test.
+        yield return [tenant, StorageOwnership.TenantManaged, TestProviders.PlainDescriptor, new StorageConnectionPermissions(true, false, true, true, false, true)];
+        // Platform-managed connections are read-only for tenants.
+        yield return [tenant, StorageOwnership.PlatformManaged, TestProviders.PlatformOnlyDescriptor, None];
+        yield return [StorageScope.Platform, StorageOwnership.PlatformManaged, TestProviders.PlatformOnlyDescriptor, new StorageConnectionPermissions(true, true, true, true, true, true)];
+        yield return [StorageScope.Platform, StorageOwnership.PlatformManaged, BuiltInStorageProviders.Central, new StorageConnectionPermissions(true, true, true, true, false, true)];
+        // Platform only views, toggles and sets the quota scope of tenant-managed connections.
+        yield return [StorageScope.Platform, StorageOwnership.TenantManaged, TestProviders.FakeDescriptor, new StorageConnectionPermissions(false, true, true, false, false, false)];
+        // Viewer scopes get nothing, even for the platform flag combination.
+        yield return [StorageScope.Tenant(TenantId.New(), false), StorageOwnership.TenantManaged, TestProviders.FakeDescriptor, None];
+        yield return [new StorageScope(null, false), StorageOwnership.PlatformManaged, TestProviders.PlatformOnlyDescriptor, None];
     }
 
-    [Fact]
-    public void TenantCannotManageSecretsOfAProviderWithoutSecretFieldsButCanTestIt()
+    [Theory]
+    [MemberData(nameof(PermissionCases))]
+    public void PermissionsFollowScopeOwnershipAndProviderCapabilities(
+        StorageScope scope, StorageOwnership ownership, StorageProviderDescriptor descriptor, StorageConnectionPermissions expected)
     {
-        var scope = StorageScope.Tenant(TenantId.New(), true);
-
-        Assert.Equal(new(true, false, true, true, false, true), Permissions(scope, StorageOwnership.TenantManaged, TestProviders.PlainDescriptor));
-    }
-
-    [Fact]
-    public void PlatformManagedConnectionsAreReadOnlyForTenants()
-    {
-        var scope = StorageScope.Tenant(TenantId.New(), true);
-
-        Assert.Equal(None, Permissions(scope, StorageOwnership.PlatformManaged, TestProviders.PlatformOnlyDescriptor));
-    }
-
-    [Fact]
-    public void PlatformFullyManagesPlatformManagedConnections()
-    {
-        Assert.Equal(new(true, true, true, true, true, true), Permissions(StorageScope.Platform, StorageOwnership.PlatformManaged, TestProviders.PlatformOnlyDescriptor));
-    }
-
-    [Fact]
-    public void PlatformCannotManageSecretsOfAPlatformConnectionWhoseProviderHasNoSecretFields()
-    {
-        Assert.Equal(new(true, true, true, true, false, true), Permissions(StorageScope.Platform, StorageOwnership.PlatformManaged, BuiltInStorageProviders.Central));
-    }
-
-    [Fact]
-    public void PlatformOnlyViewsTogglesAndSetsTheQuotaScopeOfTenantManagedConnections()
-    {
-        Assert.Equal(new(false, true, true, false, false, false), Permissions(StorageScope.Platform, StorageOwnership.TenantManaged, TestProviders.FakeDescriptor));
-    }
-
-    [Fact]
-    public void ViewerScopeGetsNothingEvenOnTenantManagedConnectionsAndEvenForThePlatformFlagCombination()
-    {
-        Assert.Equal(None, Permissions(StorageScope.Tenant(TenantId.New(), false), StorageOwnership.TenantManaged, TestProviders.FakeDescriptor));
-        Assert.Equal(None, Permissions(new StorageScope(null, false), StorageOwnership.PlatformManaged, TestProviders.PlatformOnlyDescriptor));
+        Assert.Equal(expected, Permissions(scope, ownership, descriptor));
     }
 
     [Theory]

@@ -12,12 +12,6 @@ public sealed class MultiStorageConfigurationUnitTests
         new("mssql", "SalesDB", "sql.local", 1433, true, null, true, false, "default", "", true, "Preferred", "Preferred");
 
     [Fact]
-    public void ConfigurationWithoutDestinations_IsInvalid()
-    {
-        Assert.Throws<ArgumentException>(() => CreateLegacy().Validate());
-    }
-
-    [Fact]
     public void SingleDestinationConfiguration_ValidatesAndDefaultsReplicaCount()
     {
         var connId = Guid.NewGuid();
@@ -50,32 +44,21 @@ public sealed class MultiStorageConfigurationUnitTests
         Assert.Equal(2, validated.RequiredVerifiedReplicaCount);
     }
 
-    [Fact]
-    public void MultiDestination_RequiresExactlyOnePrimary()
+    [Theory]
+    [InlineData(false, false)] // no primary
+    [InlineData(true, true)] // multiple primaries
+    public void MultiDestination_RequiresExactlyOnePrimary(bool localIsPrimary, bool sftpIsPrimary)
     {
-        var sftpConn = Guid.NewGuid();
-
-        // No primary
-        var noPrimary = CreateLegacy() with
+        var config = CreateLegacy() with
         {
             Destinations =
             [
-                new BackupDestination("local", null, IsPrimary: false),
-                new BackupDestination("sftp", sftpConn, IsPrimary: false)
+                new BackupDestination("local", null, IsPrimary: localIsPrimary),
+                new BackupDestination("sftp", Guid.NewGuid(), IsPrimary: sftpIsPrimary)
             ]
         };
-        Assert.Throws<ArgumentException>(() => noPrimary.Validate());
 
-        // Multiple primaries
-        var multiPrimary = CreateLegacy() with
-        {
-            Destinations =
-            [
-                new BackupDestination("local", null, IsPrimary: true),
-                new BackupDestination("sftp", sftpConn, IsPrimary: true)
-            ]
-        };
-        Assert.Throws<ArgumentException>(() => multiPrimary.Validate());
+        Assert.Throws<ArgumentException>(() => config.Validate());
     }
 
     [Fact]
@@ -93,28 +76,27 @@ public sealed class MultiStorageConfigurationUnitTests
         Assert.Throws<ArgumentException>(() => duplicate.Validate());
     }
 
-    [Fact]
-    public void MultiDestination_ValidatesRequiredVerifiedReplicaCountBounds()
+    [Theory]
+    [InlineData(0, false)]
+    [InlineData(3, false)] // more than the two destinations
+    [InlineData(1, true)]
+    [InlineData(2, true)]
+    public void MultiDestination_ValidatesRequiredVerifiedReplicaCountBounds(int required, bool valid)
     {
-        var sftpConn = Guid.NewGuid();
         var config = CreateLegacy() with
         {
             Destinations =
             [
                 new BackupDestination("local", null, IsPrimary: true),
-                new BackupDestination("sftp", sftpConn, IsPrimary: false)
-            ]
+                new BackupDestination("sftp", Guid.NewGuid(), IsPrimary: false)
+            ],
+            RequiredVerifiedReplicaCount = required
         };
 
-        // 0 is invalid
-        Assert.Throws<ArgumentException>(() => (config with { RequiredVerifiedReplicaCount = 0 }).Validate());
-
-        // > count (3 > 2) is invalid
-        Assert.Throws<ArgumentException>(() => (config with { RequiredVerifiedReplicaCount = 3 }).Validate());
-
-        // 1 and 2 are valid
-        Assert.NotNull((config with { RequiredVerifiedReplicaCount = 1 }).Validate());
-        Assert.NotNull((config with { RequiredVerifiedReplicaCount = 2 }).Validate());
+        if (valid)
+            Assert.NotNull(config.Validate());
+        else
+            Assert.Throws<ArgumentException>(() => config.Validate());
     }
 
     [Fact]
@@ -223,28 +205,29 @@ public sealed class MultiStorageConfigurationUnitTests
         Assert.Throws<ArgumentException>(() => deserialized.Validate());
     }
 
-    [Fact]
-    public void JobRequestWithoutDestinations_IsRejectedOnTheDestinationsField()
+    public static TheoryData<BackupExecutionConfiguration, string> InvalidDestinationShapes => new()
     {
-        var wire = new BackupExecutionConfiguration { Engine = "mssql", Database = "DB", Host = "host", IntegratedSecurity = true };
-
-        var error = Assert.Throws<InvalidBackupJobException>(() =>
-            BackupInputValidation.Validate(new CreateBackupJobRequest("Job", Guid.NewGuid(), wire)));
-        Assert.Equal("configuration.destinations", error.Field);
-    }
-
-    [Fact]
-    public void DestinationWithoutExecutionLocation_IsRejected()
-    {
-        var wire = new BackupExecutionConfiguration
         {
-            Engine = "mssql", Database = "DB", Host = "host", IntegratedSecurity = true,
-            Destinations = [new BackupDestinationContract { StorageProvider = "central", IsPrimary = true }]
-        };
+            new BackupExecutionConfiguration { Engine = "mssql", Database = "DB", Host = "host", IntegratedSecurity = true },
+            "configuration.destinations"
+        },
+        {
+            new BackupExecutionConfiguration
+            {
+                Engine = "mssql", Database = "DB", Host = "host", IntegratedSecurity = true,
+                Destinations = [new BackupDestinationContract { StorageProvider = "central", IsPrimary = true }]
+            },
+            "configuration.destinations[0].storageExecutionLocation"
+        }
+    };
 
+    [Theory]
+    [MemberData(nameof(InvalidDestinationShapes))]
+    public void JobRequestWithMissingDestinationsOrExecutionLocation_IsRejectedOnTheOffendingField(BackupExecutionConfiguration wire, string field)
+    {
         var error = Assert.Throws<InvalidBackupJobException>(() =>
             BackupInputValidation.Validate(new CreateBackupJobRequest("Job", Guid.NewGuid(), wire)));
-        Assert.Equal("configuration.destinations[0].storageExecutionLocation", error.Field);
+        Assert.Equal(field, error.Field);
     }
 
     [Fact]

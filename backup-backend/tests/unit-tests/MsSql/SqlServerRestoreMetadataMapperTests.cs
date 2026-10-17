@@ -117,22 +117,16 @@ public sealed class SqlServerRestoreMetadataMapperTests
     }
 
     [Theory]
-    [InlineData("KeyAlgorithm", "aes_256")]
-    [InlineData("EncryptorType", "CERTIFICATE")]
-    public void BackupEncryptionIsRecognizedFromTheAlgorithmOrTheEncryptorType(string column, string value)
+    [InlineData("KeyAlgorithm", "aes_256", true)]
+    [InlineData("EncryptorType", "CERTIFICATE", true)]
+    [InlineData("KeyAlgorithm", "NO_Encryption", false)]
+    [InlineData("KeyAlgorithm", "  ", false)]
+    public void BackupEncryptionIsRecognizedFromTheAlgorithmOrTheEncryptorType(string column, string value, bool encrypted)
     {
         var row = HeaderRow();
         row[column] = value;
 
-        Assert.True(SqlServerBackupMetadataMapper.MapHeader(row)!.IsEncrypted);
-    }
-
-    [Fact]
-    public void DocumentedNoEncryptionAlgorithmDoesNotRejectAPlainBackup()
-    {
-        var row = HeaderRow();
-        row["KeyAlgorithm"] = "NO_Encryption";
-        Assert.False(SqlServerBackupMetadataMapper.MapHeader(row)!.IsEncrypted);
+        Assert.Equal(encrypted, SqlServerBackupMetadataMapper.MapHeader(row)!.IsEncrypted);
     }
 
     [Fact]
@@ -149,12 +143,9 @@ public sealed class SqlServerRestoreMetadataMapperTests
         withThumbprint["EncryptorThumbprint"] = new byte[] { 1, 2, 3 };
         var empty = HeaderRow();
         empty["EncryptorThumbprint"] = Array.Empty<byte>();
-        var blank = HeaderRow();
-        blank["KeyAlgorithm"] = "  ";
 
         Assert.True(SqlServerBackupMetadataMapper.MapHeader(withThumbprint)!.IsEncrypted);
         Assert.False(SqlServerBackupMetadataMapper.MapHeader(empty)!.IsEncrypted);
-        Assert.False(SqlServerBackupMetadataMapper.MapHeader(blank)!.IsEncrypted);
     }
 
     [Theory]

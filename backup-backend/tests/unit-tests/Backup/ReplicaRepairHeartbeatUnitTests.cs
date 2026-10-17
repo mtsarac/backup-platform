@@ -100,67 +100,17 @@ public sealed class ReplicaRepairHeartbeatUnitTests
         Assert.Empty(provider.DeletedKeys);
     }
 
-    [Fact]
-    public async Task Heartbeat_WhenLeaseLostDuringVerification_DoesNotPublishReplica_And_DoesNotDeleteOrCancel()
+    [Theory]
+    [InlineData(true)]  // renewal reports the lease was lost
+    [InlineData(false)] // renewal throws (e.g. DB connection failure)
+    public async Task Heartbeat_WhenRenewalFailsDuringVerification_StopsSafely_WithoutPublishingDeletingOrCancelling(bool leaseLost)
     {
         var time = new FakeTimeProvider(T0);
         var targetConnId = Guid.NewGuid();
         var (artifact, sourceReplica, admission) = CreateSetup(targetConnId);
-        var store = new FakeRepairStore { ShouldRenewSucceed = false };
-        var provider = new FakeStorageProvider(ArtifactData, Checksum);
-        provider.OnVerifyAsync = async ct =>
-        {
-            var tcs = new TaskCompletionSource<bool>();
-            store.OnRenewLease = () => tcs.TrySetResult(true);
-            // The heartbeat timer may not be registered yet; keep advancing until a renewal is observed.
-            while (!tcs.Task.IsCompleted)
-            {
-                time.Advance(TimeSpan.FromSeconds(20));
-                await Task.Delay(5);
-            }
-
-            while (!ct.IsCancellationRequested)
-            {
-                await Task.Yield();
-            }
-
-            ct.ThrowIfCancellationRequested();
-            return new StorageVerificationResult(
-                new StorageLocation(provider.Id, new StorageObjectKey("test")),
-                StorageVerificationStatus.Verified,
-                StorageVerificationMethod.ReadBack,
-                Size,
-                new ContentChecksum(ChecksumAlgorithm.Sha256, Checksum));
-        };
-
-        var resolver = new FakeStorageResolver(provider);
-        var service = new ReplicaRepairService(store, resolver, time, NullLogger<ReplicaRepairService>.Instance);
-
-        var operationId = Guid.NewGuid();
-        var claimedOp = new ReplicaRepairOperation(operationId, Tenant, artifact.Id, targetConnId, "sftp", sourceReplica.Id, T0);
-        claimedOp.Claim(Guid.NewGuid(), "worker-1", T0, TimeSpan.FromMinutes(10));
-
-        var result = await service.ExecuteRepairAsync(
-            Tenant,
-            artifact.Id,
-            operationId,
-            admission,
-            externalToken: CancellationToken.None,
-            claimedOperation: claimedOp);
-
-        Assert.NotNull(result);
-        Assert.Null(store.CompletedReplica);
-        Assert.Empty(provider.DeletedKeys);
-        Assert.Equal(0, store.CancelOperationCallCount);
-    }
-
-    [Fact]
-    public async Task Heartbeat_WhenExceptionOccursDuringRenewal_StopsSafely_WithoutDeletingOrCancelling()
-    {
-        var time = new FakeTimeProvider(T0);
-        var targetConnId = Guid.NewGuid();
-        var (artifact, sourceReplica, admission) = CreateSetup(targetConnId);
-        var store = new FakeRepairStore { RenewLeaseThrows = new InvalidOperationException("Simulated DB connection failure") };
+        var store = leaseLost
+            ? new FakeRepairStore { ShouldRenewSucceed = false }
+            : new FakeRepairStore { RenewLeaseThrows = new InvalidOperationException("Simulated DB connection failure") };
         var provider = new FakeStorageProvider(ArtifactData, Checksum);
         provider.OnVerifyAsync = async ct =>
         {

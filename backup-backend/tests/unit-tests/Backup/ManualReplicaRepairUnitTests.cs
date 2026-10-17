@@ -139,25 +139,14 @@ public sealed class ManualReplicaRepairUnitTests
         Assert.Empty(candidates);
     }
 
-    [Fact]
-    public void Scenario5_RetryPolicy_exponential_backoff_and_jitter_bounds()
-    {
-        var delay1 = ReplicaRepairRetryPolicy.CalculateDelay(1, 0.0);
-        var delay2 = ReplicaRepairRetryPolicy.CalculateDelay(2, 0.0);
-        var delay3 = ReplicaRepairRetryPolicy.CalculateDelay(3, 0.0);
-
-        Assert.Equal(TimeSpan.FromSeconds(30), delay1);
-        Assert.Equal(TimeSpan.FromSeconds(60), delay2);
-        Assert.Equal(TimeSpan.FromSeconds(120), delay3);
-
-        // Jitter should reduce delay up to 20%
-        var jittered = ReplicaRepairRetryPolicy.CalculateDelay(1, 1.0);
-        Assert.Equal(TimeSpan.FromSeconds(24), jittered);
-
-        // Max delay capped at 1 hour
-        var delay10 = ReplicaRepairRetryPolicy.CalculateDelay(10, 0.0);
-        Assert.Equal(TimeSpan.FromHours(1), delay10);
-    }
+    [Theory]
+    [InlineData(1, 0.0, 30)]
+    [InlineData(2, 0.0, 60)]
+    [InlineData(3, 0.0, 120)]
+    [InlineData(1, 1.0, 24)] // jitter reduces the delay by up to 20%
+    [InlineData(10, 0.0, 3600)] // capped at 1 hour
+    public void Scenario5_RetryPolicy_exponential_backoff_and_jitter_bounds(int attempt, double jitter, int expectedSeconds) =>
+        Assert.Equal(TimeSpan.FromSeconds(expectedSeconds), ReplicaRepairRetryPolicy.CalculateDelay(attempt, jitter));
 
     [Fact]
     public void Scenario6_RetryPolicy_max_attempts_and_exhaustion()
@@ -189,26 +178,24 @@ public sealed class ManualReplicaRepairUnitTests
         Assert.Null(op.NextRetryAt);
     }
 
-    [Fact]
-    public void Scenario7_Transient_vs_permanent_failure_classification()
-    {
-        Assert.True(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.StorageUnavailable));
-        Assert.True(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.OperationTimedOut));
-        Assert.True(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.StorageWriteFailed));
-        Assert.True(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.SourceInaccessible));
-        Assert.True(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.LeaseLost));
-        Assert.True(ReplicaRepairRetryPolicy.IsTransient("lease_expired"));
-        Assert.True(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.InternalError));
-
-        Assert.False(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.ArtifactExpired));
-        Assert.False(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.AlreadyVerified));
-        Assert.False(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.Cancelled));
-        Assert.False(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.UnsupportedSource));
-        Assert.False(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.SourceChecksumMismatch));
-        Assert.False(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.QuotaExceeded));
-        Assert.False(ReplicaRepairRetryPolicy.IsTransient(ReplicaRepairFailureCodes.DestinationNotConfigured));
-        Assert.False(ReplicaRepairRetryPolicy.IsTransient("storage_connection_disabled"));
-    }
+    [Theory]
+    [InlineData(ReplicaRepairFailureCodes.StorageUnavailable, true)]
+    [InlineData(ReplicaRepairFailureCodes.OperationTimedOut, true)]
+    [InlineData(ReplicaRepairFailureCodes.StorageWriteFailed, true)]
+    [InlineData(ReplicaRepairFailureCodes.SourceInaccessible, true)]
+    [InlineData(ReplicaRepairFailureCodes.LeaseLost, true)]
+    [InlineData("lease_expired", true)]
+    [InlineData(ReplicaRepairFailureCodes.InternalError, true)]
+    [InlineData(ReplicaRepairFailureCodes.ArtifactExpired, false)]
+    [InlineData(ReplicaRepairFailureCodes.AlreadyVerified, false)]
+    [InlineData(ReplicaRepairFailureCodes.Cancelled, false)]
+    [InlineData(ReplicaRepairFailureCodes.UnsupportedSource, false)]
+    [InlineData(ReplicaRepairFailureCodes.SourceChecksumMismatch, false)]
+    [InlineData(ReplicaRepairFailureCodes.QuotaExceeded, false)]
+    [InlineData(ReplicaRepairFailureCodes.DestinationNotConfigured, false)]
+    [InlineData("storage_connection_disabled", false)]
+    public void Scenario7_Transient_vs_permanent_failure_classification(string code, bool transient) =>
+        Assert.Equal(transient, ReplicaRepairRetryPolicy.IsTransient(code));
 
     [Fact]
     public void Scenario16_AddOrphanReplica_registers_unverified_replica_bound_for_cleanup()

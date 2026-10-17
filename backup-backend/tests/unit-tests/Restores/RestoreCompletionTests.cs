@@ -28,9 +28,9 @@ public sealed class RestoreCompletionTests
         }
     }
 
-    public static TheoryData<string> NonAgentReportableCodes => new()
+    public static TheoryData<string?> NonAgentReportableCodes => new()
     {
-        RestoreFailureCodes.Cancelled, RestoreFailureCodes.AgentLost, RestoreFailureCodes.NotClaimed, "", "bogus", "internalerror", "SQLRESTOREFAILED", " SqlRestoreFailed"
+        null, RestoreFailureCodes.Cancelled, RestoreFailureCodes.AgentLost, RestoreFailureCodes.NotClaimed, "", "bogus", "internalerror", "SQLRESTOREFAILED", " SqlRestoreFailed"
     };
 
     public static TheoryData<RestoreTargetState> NonOnlineStates => new()
@@ -120,20 +120,12 @@ public sealed class RestoreCompletionTests
 
     [Theory]
     [MemberData(nameof(NonAgentReportableCodes))]
-    public void AFailedRestoreNeedsAnAgentReportableCode(string code)
+    public void AFailedRestoreNeedsAnAgentReportableCode(string? code)
     {
         var operation = Queued();
         var token = Begin(operation);
         Assert.Throws<ArgumentException>(() => operation.Complete(token, Now.AddSeconds(1), new RestoreCompletion(RestoreStatus.Failed, code, RestoreTargetState.NotModified, null)));
         Assert.Equal(RestoreStatus.Running, operation.Status);
-    }
-
-    [Fact]
-    public void AFailedRestoreWithoutACodeIsRefused()
-    {
-        var operation = Queued();
-        var token = Begin(operation);
-        Assert.Throws<ArgumentException>(() => operation.Complete(token, Now.AddSeconds(1), new RestoreCompletion(RestoreStatus.Failed, null, RestoreTargetState.NotModified, null)));
     }
 
     [Fact]
@@ -220,14 +212,6 @@ public sealed class RestoreCompletionTests
         }
     }
 
-    [Fact]
-    public void ACompletionRecordComparesByValue()
-    {
-        Assert.Equal(new RestoreCompletion(RestoreStatus.Failed, "InternalError", RestoreTargetState.Unknown, "{}"),
-            new RestoreCompletion(RestoreStatus.Failed, "InternalError", RestoreTargetState.Unknown, "{}"));
-        Assert.NotEqual(Failure(), Failure(RestoreFailureCodes.TargetInUse));
-    }
-
     // ---- RestoreFailureCodes ----
 
     [Theory]
@@ -236,19 +220,13 @@ public sealed class RestoreCompletionTests
 
     [Theory]
     [MemberData(nameof(NonAgentReportableCodes))]
-    public void BackendOnlyOutcomesAndUnknownTextAreNotReportable(string code) => Assert.False(RestoreFailureCodes.IsAgentReportable(code));
-
-    [Fact]
-    public void ANullCodeIsNotReportable() => Assert.False(RestoreFailureCodes.IsAgentReportable(null));
+    public void BackendOnlyOutcomesAndUnknownTextAreNotReportable(string? code) => Assert.False(RestoreFailureCodes.IsAgentReportable(code));
 
     [Fact]
     public void TheReportableCollectionIsExactlyTheDocumentedClosedSet()
     {
         Assert.Equal(ReportableCodes.Length, RestoreFailureCodes.AgentReportable.Count);
         Assert.Equal(ReportableCodes.OrderBy(code => code, StringComparer.Ordinal), RestoreFailureCodes.AgentReportable.OrderBy(code => code, StringComparer.Ordinal));
-        Assert.DoesNotContain(RestoreFailureCodes.Cancelled, RestoreFailureCodes.AgentReportable);
-        Assert.DoesNotContain(RestoreFailureCodes.AgentLost, RestoreFailureCodes.AgentReportable);
-        Assert.DoesNotContain(RestoreFailureCodes.NotClaimed, RestoreFailureCodes.AgentReportable);
     }
 
     [Fact]

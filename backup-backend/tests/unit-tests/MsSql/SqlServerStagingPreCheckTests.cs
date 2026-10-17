@@ -58,26 +58,18 @@ public sealed class SqlServerStagingPreCheckTests
         Assert.Equal(SqlServerPreCheckReasons.StagingMappingVerified, Item(items, BackupPreCheckIds.StagingMapping).ReasonCode);
     }
 
-    [Fact]
-    public void AProbeTheAgentCouldNotRemoveWarnsAboutTheMappingItemButStillProvesWriteAccess()
+    [Theory]
+    [InlineData(true, BackupPreCheckStatus.Warning, SqlServerPreCheckReasons.ProbeLeftover)]
+    [InlineData(false, BackupPreCheckStatus.Failed, SqlServerPreCheckReasons.StagingMappingMismatch)]
+    public void AProbeThatIsLeftOverOrInvisibleToTheAgentAffectsOnlyTheMappingItemNotTheWriteAccess(
+        bool leftover, BackupPreCheckStatus mappingStatus, string mappingReason)
     {
-        var items = SqlServerStagingPreCheck.Evaluate(Facts(SqlServerStagingProbeOutcome.CreatedAndVisibleLeftover));
+        var outcome = leftover ? SqlServerStagingProbeOutcome.CreatedAndVisibleLeftover : SqlServerStagingProbeOutcome.CreatedNotVisible;
+        var items = SqlServerStagingPreCheck.Evaluate(Facts(outcome));
 
         Assert.Equal(BackupPreCheckStatus.Passed, Item(items, BackupPreCheckIds.StagingServerWritable).Status);
         var mapping = Item(items, BackupPreCheckIds.StagingMapping);
-        Assert.Equal(BackupPreCheckStatus.Warning, mapping.Status);
-        Assert.Equal(SqlServerPreCheckReasons.ProbeLeftover, mapping.ReasonCode);
-    }
-
-    [Fact]
-    public void ADirectoryTheAgentCannotSeeFailsTheMappingButNotTheWriteAccess()
-    {
-        var items = SqlServerStagingPreCheck.Evaluate(Facts(SqlServerStagingProbeOutcome.CreatedNotVisible));
-
-        Assert.Equal(BackupPreCheckStatus.Passed, Item(items, BackupPreCheckIds.StagingServerWritable).Status);
-        var mapping = Item(items, BackupPreCheckIds.StagingMapping);
-        Assert.Equal(BackupPreCheckStatus.Failed, mapping.Status);
-        Assert.Equal(SqlServerPreCheckReasons.StagingMappingMismatch, mapping.ReasonCode);
+        Assert.Equal((mappingStatus, mappingReason), (mapping.Status, mapping.ReasonCode));
     }
 
     [Fact]
