@@ -24,7 +24,7 @@ export function enrollmentCommands(platform: AgentPlatform, server: string, toke
   const quote = (value: string) => platform === 'Windows' ? `'${value.replaceAll("'", "''")}'` : `'${value.replaceAll("'", "'\\''")}'`
   if (platform === 'Windows') {
     const parameters = mode === 'interactive' ? '-Interactive' : `-Token ${quote(token)} -AgentName ${quote(name.trim())} -NonInteractive`
-    return `& ([scriptblock]::Create((Invoke-RestMethod -Uri ${quote(`${origin}/api/agent-dist/install.ps1`)}))) -Server ${quote(origin)} ${parameters} -Language ${language}`
+    return `Invoke-RestMethod -Uri ${quote(`${origin}/api/agent-dist/install.ps1`)} -OutFile "$env:TEMP\\install.ps1"; & "$env:TEMP\\install.ps1" -Server ${quote(origin)} ${parameters} -Language ${language}`
   }
   const parameters = mode === 'interactive' ? '--interactive' : `--token ${quote(token)} --name ${quote(name.trim())} --non-interactive`
   return `(set -e; script=$(mktemp); trap 'rm -f "$script"' EXIT; curl --proto '=https' --tlsv1.2 -fsSL ${quote(`${origin}/api/agent-dist/install.sh`)} -o "$script"; sudo bash "$script" --server ${quote(origin)} ${parameters} --language ${language})`
