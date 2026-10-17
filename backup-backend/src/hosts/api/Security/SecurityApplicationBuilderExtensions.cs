@@ -4,6 +4,13 @@ public static class SecurityApplicationBuilderExtensions
 {
     public static WebApplication UsePlatformSecurity(this WebApplication app)
     {
+        var forwardedHeaders = new Microsoft.AspNetCore.Builder.ForwardedHeadersOptions
+        {
+            ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto
+        };
+        forwardedHeaders.KnownIPNetworks.Clear();
+        forwardedHeaders.KnownProxies.Clear();
+        app.UseForwardedHeaders(forwardedHeaders);
         app.Use(async (context, next) =>
         {
             if (context.Request.Path.StartsWithSegments("/api"))

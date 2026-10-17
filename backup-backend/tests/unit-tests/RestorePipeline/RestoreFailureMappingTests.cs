@@ -38,25 +38,20 @@ public sealed class RestoreFailureMappingTests
     [InlineData(BackupFailureCause.PermissionDenied, "PermissionDenied")]
     [InlineData(BackupFailureCause.StagingInvalid, "StagingInvalid")]
     [InlineData(BackupFailureCause.StorageUnavailable, "StorageUnavailable")]
-    public void EveryClassifiedCauseHasItsPlatformCode(BackupFailureCause cause, string expected)
+    [InlineData(BackupFailureCause.Unclassified, null)]
+    public void EveryClassifiedCauseHasItsPlatformCodeAndAnUnclassifiedOneSaysNothing(BackupFailureCause cause, string? expected)
     {
         Assert.Equal(expected, RestoreFailureMapping.FromCause(cause));
     }
-
-    [Fact]
-    public void AnUnclassifiedCauseSaysNothing() => Assert.Null(RestoreFailureMapping.FromCause(BackupFailureCause.Unclassified));
 
     [Theory]
     [InlineData(RestoreFailureKind.PreCheckFailed, "PreCheckFailed")]
     [InlineData(RestoreFailureKind.BackupInvalid, "BackupInvalid")]
     [InlineData(RestoreFailureKind.SqlRestoreFailed, "SqlRestoreFailed")]
     [InlineData(RestoreFailureKind.Cancelled, "InternalError")]
-    public void TheKindIsTheLastResortBeforeAnInternalError(RestoreFailureKind kind, string expected) =>
+    [InlineData(null, "InternalError")]
+    public void TheKindIsTheLastResortBeforeAnInternalError(RestoreFailureKind? kind, string expected) =>
         Assert.Equal(expected, RestoreFailureMapping.Map("unknown-reason", BackupFailureCause.Unclassified, kind));
-
-    [Fact]
-    public void WithoutAnyInformationTheCodeIsAnInternalError() =>
-        Assert.Equal("InternalError", RestoreFailureMapping.Map("unknown-reason", BackupFailureCause.Unclassified, null));
 
     [Fact]
     public void ReasonBeatsCauseBeatsKind()

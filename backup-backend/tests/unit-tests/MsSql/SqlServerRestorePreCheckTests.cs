@@ -140,10 +140,11 @@ public sealed class SqlServerRestorePreCheckTests
         Assert.Equal((BackupPreCheckStatus.Warning, SqlServerRestoreReasons.ServerVersionUnknown), (unknown.Status, unknown.ReasonCode));
     }
 
+    public static TheoryData<string> InvalidNames => new() { "bad\nname", "tab\tname", new string('a', 129) };
+
     [Theory]
-    [InlineData("bad\nname")]
-    [InlineData("tab\tname")]
-    public void ANameWithControlCharactersFailsAndTheNameDependentChecksAreSkipped(string name)
+    [MemberData(nameof(InvalidNames))]
+    public void AnInvalidNameFailsAndTheNameDependentChecksAreSkipped(string name)
     {
         var report = Run(Facts(), NewDb(name));
 
@@ -152,14 +153,6 @@ public sealed class SqlServerRestorePreCheckTests
         Assert.Equal(BackupPreCheckStatus.Skipped, Item(report, BackupPreCheckIds.DatabaseExists).Status);
         Assert.Equal(BackupPreCheckStatus.Skipped, Item(report, SqlServerRestoreCheckIds.TargetProtected).Status);
         Assert.Equal(BackupPreCheckStatus.Skipped, Item(report, SqlServerRestoreCheckIds.RestorePermission).Status);
-    }
-
-    [Fact]
-    public void ANameLongerThanSysnameFails()
-    {
-        var report = Run(Facts(), NewDb(new string('a', 129)));
-
-        Assert.Equal(BackupPreCheckStatus.Failed, Item(report, SqlServerRestoreCheckIds.DatabaseName).Status);
     }
 
     [Fact]
@@ -256,22 +249,15 @@ public sealed class SqlServerRestorePreCheckTests
     }
 
     [Theory]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    public void AvailabilityGroupAndMirroredTargetsAreProtected(bool group, bool mirror)
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, true)]
+    public void AvailabilityGroupMirroredAndSnapshotTargetsAreProtected(bool group, bool mirror, bool snapshot)
     {
-        var report = Run(Facts(MsSqlTestData.Database(), inAvailabilityGroup: group, mirrored: mirror), Replace());
+        var report = Run(Facts(MsSqlTestData.Database(snapshot: snapshot), inAvailabilityGroup: group, mirrored: mirror), Replace());
 
         var protection = Item(report, SqlServerRestoreCheckIds.TargetProtected);
         Assert.Equal((BackupPreCheckStatus.Failed, RestoreReasonCodes.TargetProtected), (protection.Status, protection.ReasonCode));
-    }
-
-    [Fact]
-    public void ASnapshotTargetIsProtected()
-    {
-        var report = Run(Facts(MsSqlTestData.Database(snapshot: true)), Replace());
-
-        Assert.Equal(RestoreReasonCodes.TargetProtected, Item(report, SqlServerRestoreCheckIds.TargetProtected).ReasonCode);
     }
 
     [Fact]
@@ -363,28 +349,18 @@ public sealed class SqlServerRestorePreCheckTests
         Assert.Equal(BackupFailureCause.PermissionDenied, replace.Cause);
     }
 
-    [Fact]
-    public void UnreadableDirectoriesAreUnknownNotFailedAtPreCheckTime()
+    [Theory]
+    [InlineData(true, null, null, BackupPreCheckStatus.Warning, SqlServerRestoreReasons.DirectoriesUnknown)]
+    [InlineData(false, null, null, BackupPreCheckStatus.Failed, RestoreReasonCodes.FileMappingFailed)]
+    [InlineData(false, "/var/opt/mssql/data/master.mdf", "/var/opt/mssql/data/mastlog.ldf", BackupPreCheckStatus.Warning, SqlServerRestoreReasons.DirectoriesFallback)]
+    public void DirectoriesThatAreUnreadableMissingOrOnlyMastersAreUnknownFailedOrAFallback(
+        bool noDirectories, string? masterData, string? masterLog, BackupPreCheckStatus status, string reason)
     {
-        var item = Item(Run(Facts(noDirectories: true), NewDb()), SqlServerRestoreCheckIds.Directories);
+        var facts = Facts(directories: new SqlServerRawDirectories(null, null, masterData, masterLog), noDirectories: noDirectories);
 
-        Assert.Equal((BackupPreCheckStatus.Warning, SqlServerRestoreReasons.DirectoriesUnknown), (item.Status, item.ReasonCode));
-    }
+        var item = Item(Run(facts, NewDb()), SqlServerRestoreCheckIds.Directories);
 
-    [Fact]
-    public void NoUsableDirectoryAtAllFailsWithTheFileMappingReason()
-    {
-        var item = Item(Run(Facts(directories: new SqlServerRawDirectories(null, null, null, null)), NewDb()), SqlServerRestoreCheckIds.Directories);
-
-        Assert.Equal((BackupPreCheckStatus.Failed, RestoreReasonCodes.FileMappingFailed), (item.Status, item.ReasonCode));
-    }
-
-    [Fact]
-    public void MastersDirectoryInPlaceOfTheDefaultsIsAWarning()
-    {
-        var item = Item(Run(Facts(directories: new SqlServerRawDirectories(null, null, "/var/opt/mssql/data/master.mdf", "/var/opt/mssql/data/mastlog.ldf")), NewDb()), SqlServerRestoreCheckIds.Directories);
-
-        Assert.Equal((BackupPreCheckStatus.Warning, SqlServerRestoreReasons.DirectoriesFallback), (item.Status, item.ReasonCode));
+        Assert.Equal((status, reason), (item.Status, item.ReasonCode));
     }
 
     [Theory]

@@ -93,26 +93,22 @@ public sealed class SqlServerConnectionTests
     }
 
     [Theory]
-    [InlineData(18456, DatabaseFailureKind.AuthenticationFailed)]
-    [InlineData(4060, DatabaseFailureKind.AuthenticationFailed)]
-    [InlineData(18487, DatabaseFailureKind.AuthenticationFailed)]
-    [InlineData(-2, DatabaseFailureKind.Timeout)]
-    [InlineData(229, DatabaseFailureKind.PermissionDenied)]
-    [InlineData(300, DatabaseFailureKind.PermissionDenied)]
-    [InlineData(53, DatabaseFailureKind.Unreachable)]
-    [InlineData(40, DatabaseFailureKind.Unreachable)]
-    public void ConnectPhaseErrorNumbersAreClassified(int number, DatabaseFailureKind expected) =>
-        Assert.Equal(expected, SqlServerFailureClassifier.ClassifyNumber(number, SqlServerOperationPhase.Connect).Kind);
-
-    [Theory]
-    [InlineData(10054, DatabaseFailureKind.Unreachable)]
-    [InlineData(-1, DatabaseFailureKind.Unreachable)]
-    [InlineData(-2, DatabaseFailureKind.Timeout)]
-    [InlineData(229, DatabaseFailureKind.PermissionDenied)]
-    [InlineData(208, DatabaseFailureKind.Unexpected)]
-    [InlineData(102, DatabaseFailureKind.Unexpected)]
-    public void CommandPhaseDoesNotMistakeQueryErrorsForConnectivity(int number, DatabaseFailureKind expected) =>
-        Assert.Equal(expected, SqlServerFailureClassifier.ClassifyNumber(number, SqlServerOperationPhase.Command).Kind);
+    [InlineData("Connect", 18456, DatabaseFailureKind.AuthenticationFailed)]
+    [InlineData("Connect", 4060, DatabaseFailureKind.AuthenticationFailed)]
+    [InlineData("Connect", 18487, DatabaseFailureKind.AuthenticationFailed)]
+    [InlineData("Connect", -2, DatabaseFailureKind.Timeout)]
+    [InlineData("Connect", 229, DatabaseFailureKind.PermissionDenied)]
+    [InlineData("Connect", 300, DatabaseFailureKind.PermissionDenied)]
+    [InlineData("Connect", 53, DatabaseFailureKind.Unreachable)]
+    [InlineData("Connect", 40, DatabaseFailureKind.Unreachable)]
+    [InlineData("Command", 10054, DatabaseFailureKind.Unreachable)]
+    [InlineData("Command", -1, DatabaseFailureKind.Unreachable)]
+    [InlineData("Command", -2, DatabaseFailureKind.Timeout)]
+    [InlineData("Command", 229, DatabaseFailureKind.PermissionDenied)]
+    [InlineData("Command", 208, DatabaseFailureKind.Unexpected)] // query errors are not connectivity errors
+    [InlineData("Command", 102, DatabaseFailureKind.Unexpected)]
+    public void ErrorNumbersAreClassifiedPerPhase(string phaseName, int number, DatabaseFailureKind expected) =>
+        Assert.Equal(expected, SqlServerFailureClassifier.ClassifyNumber(number, Enum.Parse<SqlServerOperationPhase>(phaseName)).Kind);
 
     [Fact]
     public void ClassifiedMessagesAreFixedAndNeverEchoExceptionText()

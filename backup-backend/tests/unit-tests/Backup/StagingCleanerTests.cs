@@ -46,29 +46,19 @@ public sealed class StagingCleanerTests : IDisposable
         Assert.Empty(report.Failures);
     }
 
-    [Fact]
-    public async Task AYoungManagedFileIsKept()
+    [Theory]
+    [InlineData(11)]   // younger than the minimum age
+    [InlineData(-72)]  // timestamp in the future
+    public async Task AManagedFileNotOldEnoughIsKept(double ageHours)
     {
         var name = TempStaging.ManagedName();
-        _t.Write(name, TimeSpan.FromHours(11));
+        _t.Write(name, TimeSpan.FromHours(ageHours));
 
         var report = await RunAsync();
 
         Assert.True(_t.Exists(name));
         Assert.Equal(1, report.KeptYoung);
         Assert.Equal(0, report.Deleted);
-    }
-
-    [Fact]
-    public async Task AFileWithAFutureTimestampIsKept()
-    {
-        var name = TempStaging.ManagedName();
-        _t.Write(name, -TimeSpan.FromDays(3));
-
-        var report = await RunAsync();
-
-        Assert.True(_t.Exists(name));
-        Assert.Equal(1, report.KeptYoung);
     }
 
     [Fact]

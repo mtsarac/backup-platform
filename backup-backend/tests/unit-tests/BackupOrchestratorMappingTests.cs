@@ -6,13 +6,16 @@ namespace BackupPlatform.UnitTests;
 
 public sealed class BackupOrchestratorMappingTests
 {
-    [Fact]
-    public void MissingRetryPolicyRequestMeansThePlatformDefault() =>
-        Assert.Equal(BackupRetryPolicy.Default, BackupOrchestrator.ToDomain((BackupRetryPolicyRequest?)null));
+    public static TheoryData<BackupRetryPolicyRequest?> RequestsThatKeepEveryDefault => new()
+    {
+        null,
+        new BackupRetryPolicyRequest(),
+    };
 
-    [Fact]
-    public void EmptyRequestKeepsEveryDefault() =>
-        Assert.Equal(BackupRetryPolicy.Default, BackupOrchestrator.ToDomain(new BackupRetryPolicyRequest()));
+    [Theory]
+    [MemberData(nameof(RequestsThatKeepEveryDefault))]
+    public void MissingOrEmptyRetryPolicyRequestMeansThePlatformDefault(BackupRetryPolicyRequest? request) =>
+        Assert.Equal(BackupRetryPolicy.Default, BackupOrchestrator.ToDomain(request));
 
     [Fact]
     public void PartialRequestOverridesOnlyTheSuppliedMembers()

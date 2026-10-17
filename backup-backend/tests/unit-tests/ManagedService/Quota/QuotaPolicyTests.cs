@@ -85,26 +85,19 @@ public sealed class QuotaPolicyTests
     public void AKeyIsTrimmed() => Assert.Equal("gold", Create(key: "  gold ").Key);
 
     [Theory]
-    [InlineData("Gold")]
-    [InlineData("has space")]
-    [InlineData("-gold")]
-    [InlineData(".gold")]
-    [InlineData("_gold")]
-    [InlineData("gold/plus")]
-    public void MalformedKeysAreRejected(string key)
-    {
-        var error = Invalid(() => Create(key: key));
-        Assert.Equal(("key", "invalid_value"), (error.Field, error.Code));
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("   ")]
-    public void AKeyIsRequired(string? key)
+    [InlineData("Gold", "invalid_value")]
+    [InlineData("has space", "invalid_value")]
+    [InlineData("-gold", "invalid_value")]
+    [InlineData(".gold", "invalid_value")]
+    [InlineData("_gold", "invalid_value")]
+    [InlineData("gold/plus", "invalid_value")]
+    [InlineData(null, "required")]
+    [InlineData("", "required")]
+    [InlineData("   ", "required")]
+    public void MalformedOrMissingKeysAreRejected(string? key, string code)
     {
         var error = Invalid(() => Create(key: key!));
-        Assert.Equal(("key", "required"), (error.Field, error.Code));
+        Assert.Equal(("key", code), (error.Field, error.Code));
     }
 
     [Fact]

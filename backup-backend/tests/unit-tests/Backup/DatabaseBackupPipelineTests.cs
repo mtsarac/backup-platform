@@ -10,26 +10,6 @@ public sealed class DatabaseBackupPipelineTests : IDisposable
 
     public void Dispose() => _h.Dispose();
 
-    [Theory]
-    [InlineData(StorageFailureKind.Io, BackupFailureCause.StorageUnavailable)]
-    [InlineData(StorageFailureKind.Unexpected, BackupFailureCause.StorageUnavailable)]
-    [InlineData(StorageFailureKind.NotFound, BackupFailureCause.StorageUnavailable)]
-    [InlineData(StorageFailureKind.IntegrityMismatch, BackupFailureCause.StorageUnavailable)]
-    [InlineData(StorageFailureKind.AccessDenied, BackupFailureCause.PermissionDenied)]
-    [InlineData(StorageFailureKind.InvalidConfiguration, BackupFailureCause.InvalidConfiguration)]
-    [InlineData(StorageFailureKind.NotSupported, BackupFailureCause.Unsupported)]
-    [InlineData(StorageFailureKind.InsufficientSpace, BackupFailureCause.Unclassified)]
-    [InlineData(StorageFailureKind.AlreadyExists, BackupFailureCause.Unclassified)]
-    public async Task StorageFailuresCarryAnEngineIndependentCause(StorageFailureKind kind, BackupFailureCause cause)
-    {
-        _h.Storage.OnPut = (_, _, _, _) => throw new StorageException(kind, "The storage rejected the write.");
-
-        var result = await _h.RunAsync();
-
-        Assert.Equal(BackupFailureKind.StorageWriteFailed, result.Failure!.Kind);
-        Assert.Equal(cause, result.Failure.Cause);
-    }
-
     [Fact]
     public async Task AFailedPreCheckCarriesTheCauseOfItsFirstFailedItem()
     {
@@ -359,40 +339,34 @@ public sealed class DatabaseBackupPipelineTests : IDisposable
         Assert.Empty(_h.StagedFiles);
     }
 
-    [Fact]
-    public async Task AFailingPreparerIsAnArtifactPreparationFailureAndStagingIsCleanedByDefault()
+    [Theory]
+    [InlineData(StagingFailurePolicy.Delete, StagingCleanupStatus.Deleted, 0)]
+    [InlineData(StagingFailurePolicy.Keep, StagingCleanupStatus.Kept, 1)]
+    public async Task AFailingPreparerIsAnArtifactPreparationFailureAndTheStagedFileFollowsTheFailurePolicy(
+        StagingFailurePolicy policy, StagingCleanupStatus cleanup, int stagedFiles)
     {
         using var harness = new PipelineHarness(new ThrowingPreparer());
 
-        var result = await harness.RunAsync();
+        var result = await harness.RunAsync(harness.Request(onFailure: policy));
 
         Assert.Equal(BackupFailureKind.ArtifactPreparationFailed, result.Failure!.Kind);
         Assert.Equal(BackupExecutionStage.PreparingArtifact, result.Failure.Stage);
-        Assert.Empty(harness.StagedFiles);
-        Assert.Equal(StagingCleanupStatus.Deleted, result.StagingCleanup.Status);
+        Assert.Equal(stagedFiles, harness.StagedFiles.Count());
+        Assert.Equal(cleanup, result.StagingCleanup.Status);
         AssertNoSensitiveText(result);
     }
 
-    [Fact]
-    public async Task KeepPolicyLeavesTheStagedFileOfAFailedRunForDiagnosis()
-    {
-        using var harness = new PipelineHarness(new ThrowingPreparer());
-
-        var result = await harness.RunAsync(harness.Request(onFailure: StagingFailurePolicy.Keep));
-
-        Assert.Equal(BackupFailureKind.ArtifactPreparationFailed, result.Failure!.Kind);
-        Assert.Single(harness.StagedFiles);
-        Assert.Equal(StagingCleanupStatus.Kept, result.StagingCleanup.Status);
-    }
-
     [Theory]
-    [InlineData(StorageFailureKind.AlreadyExists, BackupPipelineReasons.StorageAlreadyExists)]
-    [InlineData(StorageFailureKind.IntegrityMismatch, BackupPipelineReasons.StorageIntegrityMismatch)]
-    [InlineData(StorageFailureKind.InsufficientSpace, BackupPipelineReasons.StorageInsufficientSpace)]
-    [InlineData(StorageFailureKind.AccessDenied, BackupPipelineReasons.StorageAccessDenied)]
-    [InlineData(StorageFailureKind.Io, BackupPipelineReasons.StorageIoError)]
-    [InlineData(StorageFailureKind.Unexpected, BackupPipelineReasons.StorageUnexpected)]
-    public async Task StorageFailuresAreClassifiedByKindAndTheStagingFileIsCleaned(StorageFailureKind kind, string reason)
+    [InlineData(StorageFailureKind.AlreadyExists, BackupPipelineReasons.StorageAlreadyExists, BackupFailureCause.Unclassified)]
+    [InlineData(StorageFailureKind.IntegrityMismatch, BackupPipelineReasons.StorageIntegrityMismatch, BackupFailureCause.StorageUnavailable)]
+    [InlineData(StorageFailureKind.InsufficientSpace, BackupPipelineReasons.StorageInsufficientSpace, BackupFailureCause.Unclassified)]
+    [InlineData(StorageFailureKind.AccessDenied, BackupPipelineReasons.StorageAccessDenied, BackupFailureCause.PermissionDenied)]
+    [InlineData(StorageFailureKind.Io, BackupPipelineReasons.StorageIoError, BackupFailureCause.StorageUnavailable)]
+    [InlineData(StorageFailureKind.Unexpected, BackupPipelineReasons.StorageUnexpected, BackupFailureCause.StorageUnavailable)]
+    [InlineData(StorageFailureKind.NotFound, BackupPipelineReasons.StorageUnexpected, BackupFailureCause.StorageUnavailable)]
+    [InlineData(StorageFailureKind.InvalidConfiguration, BackupPipelineReasons.StorageInvalidConfiguration, BackupFailureCause.InvalidConfiguration)]
+    [InlineData(StorageFailureKind.NotSupported, BackupPipelineReasons.StorageNotSupported, BackupFailureCause.Unsupported)]
+    public async Task StorageFailuresAreClassifiedByKindWithAnEngineIndependentCauseAndTheStagingFileIsCleaned(StorageFailureKind kind, string reason, BackupFailureCause cause)
     {
         _h.Storage.OnPut = (_, _, _, _) => throw new StorageException(kind, "The storage rejected the write.");
 
@@ -401,6 +375,7 @@ public sealed class DatabaseBackupPipelineTests : IDisposable
         Assert.Equal(DatabaseBackupStatus.Failed, result.Status);
         Assert.Equal(BackupFailureKind.StorageWriteFailed, result.Failure!.Kind);
         Assert.Equal(reason, result.Failure.ReasonCode);
+        Assert.Equal(cause, result.Failure.Cause);
         Assert.Equal("The storage rejected the write.", result.Failure.Message);
         Assert.Empty(_h.StagedFiles);
         Assert.Null(result.Replica);

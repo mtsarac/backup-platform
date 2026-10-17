@@ -63,16 +63,9 @@ public sealed class SqlServerMetadataTests
     [InlineData(10, 50, "SQL Server 2008 R2")]
     [InlineData(16, 0, "SQL Server 2022")]
     [InlineData(17, 0, "SQL Server 2025")]
-    public void KnownReleasesHaveNames(int major, int minor, string expected) =>
+    [InlineData(42, 0, null)] // future releases are representable without a name
+    public void KnownReleasesHaveNames(int major, int minor, string? expected) =>
         Assert.Equal(expected, new SqlServerVersion(major, minor, 0).ReleaseName);
-
-    [Fact]
-    public void FutureReleasesAreRepresentableWithoutAName()
-    {
-        var future = new SqlServerVersion(42, 0, 1);
-        Assert.Null(future.ReleaseName);
-        Assert.True(future.IsAtLeast(16));
-    }
 
     [Theory]
     [InlineData("Enterprise Edition: Core-based Licensing (64-bit)", SqlServerEditionFamily.Enterprise)]

@@ -175,18 +175,6 @@ public sealed class DatabaseRestorePipelineTests : IDisposable
     }
 
     [Fact]
-    public async Task TheSizeIsStillCheckedWhenChecksumVerificationIsOff()
-    {
-        _h.Storage.Objects[_h.Key.Value] = RestorePipelineHarness.BackupBytes[..^10];
-        _h.Storage.OnGetMetadata = key => Task.FromResult<StorageObjectMetadata?>(new StorageObjectMetadata(new StorageLocation(StorageProviderId.Local, key), RestorePipelineHarness.BackupBytes.Length, null, DateTimeOffset.UtcNow));
-
-        var result = await _h.RunAsync(_h.Request(verifyChecksum: false));
-
-        Assert.Equal(RestoreAgentFailureCodes.ChecksumMismatch, result.Failure!.Code);
-        Assert.Equal(RestoreExecutionStage.VerifyingChecksum, result.Failure.Stage);
-    }
-
-    [Fact]
     public async Task TheCopyReportsByteProgressThroughOneBoundedBufferAndTheChecksumStageReportsCompletion()
     {
         var result = await _h.RunAsync();
@@ -420,13 +408,15 @@ public sealed class DatabaseRestorePipelineTests : IDisposable
         Assert.Equal(StagingCleanupStatus.Deleted, result.StagingCleanup.Status);
     }
 
-    [Fact]
-    public async Task AReplicaThatIsShorterThanPublishedIsAChecksumMismatch()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AReplicaThatIsShorterThanPublishedIsAChecksumMismatchEvenWhenTheChecksumComparisonIsOff(bool verifyChecksum)
     {
         _h.Storage.Objects[_h.Key.Value] = RestorePipelineHarness.BackupBytes[..^100];
         _h.Storage.OnGetMetadata = key => Task.FromResult<StorageObjectMetadata?>(new StorageObjectMetadata(new StorageLocation(StorageProviderId.Local, key), RestorePipelineHarness.BackupBytes.Length, null, DateTimeOffset.UtcNow));
 
-        var result = await _h.RunAsync();
+        var result = await _h.RunAsync(_h.Request(verifyChecksum: verifyChecksum));
 
         Assert.Equal(RestoreAgentFailureCodes.ChecksumMismatch, result.Failure!.Code);
         Assert.Equal(RestorePipelineReasons.ReplicaSizeMismatch, result.Failure.ReasonCode);

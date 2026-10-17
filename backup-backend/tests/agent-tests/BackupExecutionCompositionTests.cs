@@ -69,7 +69,6 @@ public sealed class BackupExecutionCompositionTests
         Assert.Equal(StagingMappingKind.Mapped, staging.Kind);
         Assert.Equal("/var/opt/mssql/staging", staging.ServerDirectory.Value);
         Assert.Equal(Path.Combine(Root, "staging"), staging.AgentDirectory.Value);
-        Assert.NotNull(provider.GetRequiredService<IDatabaseBackupPipeline>());
     }
 
     [Fact]
@@ -178,7 +177,6 @@ public sealed class BackupExecutionCompositionTests
             ("Agent:Backup:Staging:AgentDirectory", Path.Combine(Root, "staging")));
         using var configuredProvider = configured.BuildServiceProvider();
         Assert.True(HasCleanupHostedService(configured));
-        Assert.NotNull(configuredProvider.GetRequiredService<StagingCleaner>());
         Assert.Same(configuredProvider.GetRequiredService<StagingCleaner>(), configuredProvider.GetRequiredService<StagingCleaner>());
     }
 
@@ -249,33 +247,22 @@ public sealed class BackupExecutionCompositionTests
     }
 
     [Theory]
-    [InlineData("00:00:59")]
-    [InlineData("00:00:00")]
-    [InlineData("-01:00:00")]
-    [InlineData("400.00:00:00")]
-    public void ACleanupMinimumAgeOutsideItsLimitsIsRejectedByName(string value)
+    [InlineData("MinimumAge", "00:00:59", "between 1 minute and 365 days")]
+    [InlineData("MinimumAge", "00:00:00", "between 1 minute and 365 days")]
+    [InlineData("MinimumAge", "-01:00:00", "between 1 minute and 365 days")]
+    [InlineData("MinimumAge", "400.00:00:00", "between 1 minute and 365 days")]
+    [InlineData("ScanInterval", "00:00:09", "between 10 seconds and 7 days")]
+    [InlineData("ScanInterval", "00:00:00", "between 10 seconds and 7 days")]
+    [InlineData("ScanInterval", "-00:01:00", "between 10 seconds and 7 days")]
+    [InlineData("ScanInterval", "8.00:00:00", "between 10 seconds and 7 days")]
+    public void ACleanupIntervalOutsideItsLimitsIsRejectedByName(string setting, string value, string limits)
     {
         var message = Fail(
             ("Agent:Backup:Staging:Mapping", "SameHost"),
             ("Agent:Backup:Staging:AgentDirectory", Path.Combine(Root, "s")),
-            ("Agent:Backup:Staging:Cleanup:MinimumAge", value));
+            ($"Agent:Backup:Staging:Cleanup:{setting}", value));
 
-        Assert.Contains("Agent:Backup:Staging:Cleanup:MinimumAge must be between 1 minute and 365 days", message, StringComparison.Ordinal);
-    }
-
-    [Theory]
-    [InlineData("00:00:09")]
-    [InlineData("00:00:00")]
-    [InlineData("-00:01:00")]
-    [InlineData("8.00:00:00")]
-    public void ACleanupScanIntervalOutsideItsLimitsIsRejectedByName(string value)
-    {
-        var message = Fail(
-            ("Agent:Backup:Staging:Mapping", "SameHost"),
-            ("Agent:Backup:Staging:AgentDirectory", Path.Combine(Root, "s")),
-            ("Agent:Backup:Staging:Cleanup:ScanInterval", value));
-
-        Assert.Contains("Agent:Backup:Staging:Cleanup:ScanInterval must be between 10 seconds and 7 days", message, StringComparison.Ordinal);
+        Assert.Contains($"Agent:Backup:Staging:Cleanup:{setting} must be {limits}", message, StringComparison.Ordinal);
     }
 
     [Fact]

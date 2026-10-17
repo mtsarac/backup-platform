@@ -280,29 +280,20 @@ public sealed class BackupRunRetryTests
         Assert.Equal(BackupStatus.Pending, run.CurrentAttempt.Status);
     }
 
-    [Fact]
-    public void RetryAttemptIsEligibleFromItsScheduledDueTimeEvenWhenStartedLate()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(7)]
+    public void RetryAttemptIsEligibleFromItsScheduledDueTimeWhetherStartedOnTimeOrLate(int minutesLate)
     {
         var run = NewRun();
         Fail(run, BackupFailureCodes.DatabaseUnavailable, Now);
         var due = run.NextAttemptAt!.Value;
-        var late = due.AddMinutes(7);
+        var startedAt = due.AddMinutes(minutesLate);
 
-        Assert.True(run.StartScheduledRetry(Guid.NewGuid(), late));
+        Assert.True(run.StartScheduledRetry(Guid.NewGuid(), startedAt));
 
         Assert.Equal(due, run.CurrentAttempt.EligibleAt);
-        Assert.Equal(late, run.CurrentAttempt.CreatedAt);
-    }
-
-    [Fact]
-    public void RetryAttemptStartedExactlyOnTimeIsEligibleFromItsCreation()
-    {
-        var run = NewRun();
-        Fail(run, BackupFailureCodes.DatabaseUnavailable, Now);
-        var due = run.NextAttemptAt!.Value;
-        Assert.True(run.StartScheduledRetry(Guid.NewGuid(), due));
-        Assert.Equal(due, run.CurrentAttempt.EligibleAt);
-        Assert.Equal(due, run.CurrentAttempt.CreatedAt);
+        Assert.Equal(startedAt, run.CurrentAttempt.CreatedAt);
     }
 
     [Fact]

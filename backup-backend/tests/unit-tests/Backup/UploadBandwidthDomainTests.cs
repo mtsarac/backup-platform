@@ -30,28 +30,18 @@ public sealed class UploadBandwidthDomainTests
         Assert.Equal(1_000_000, new UploadBandwidthLimit(tenant, UploadBandwidthScope.Tenant, tenant.Value, 1_000_000, now).BytesPerSecond);
     }
 
-    [Fact]
-    public void A_lone_upload_gets_the_whole_limit_and_equal_uploads_get_equal_slices()
+    // 0 = wait: a lone upload gets the whole limit; the incumbent still holding the whole limit leaves nothing free for a newcomer;
+    // a slice below the minimum is a wait, not a crawl.
+    [Theory]
+    [InlineData(1_000_000L, 0, 0L, 1_000_000L)]
+    [InlineData(1_000_000L, 1, 500_000L, 500_000L)]
+    [InlineData(1_000_000L, 3, 750_000L, 250_000L)]
+    [InlineData(1_000_000L, 1, 1_000_000L, 0L)]
+    [InlineData(16_000L, 31, 0L, 0L)]
+    [InlineData(16_000L, 15, 0L, UploadBandwidth.MinimumShareBytesPerSecond)]
+    public void Share_splits_the_limit_equally_and_waits_when_nothing_usable_is_free(long limit, int running, long taken, long expected)
     {
-        Assert.Equal(1_000_000, UploadBandwidth.Share(1_000_000, 0, 0));
-        Assert.Equal(500_000, UploadBandwidth.Share(1_000_000, 1, 500_000));
-        Assert.Equal(250_000, UploadBandwidth.Share(1_000_000, 3, 750_000));
-    }
-
-    [Fact]
-    public void A_newcomer_waits_until_the_running_uploads_have_taken_their_reduced_slice()
-    {
-        // The incumbent still holds the whole limit: nothing is free, so the newcomer is told to wait (0), not given an overlapping slice.
-        Assert.Equal(0, UploadBandwidth.Share(1_000_000, 1, 1_000_000));
-        // The incumbent renewed and was cut to its fair half; now the newcomer's half is free.
-        Assert.Equal(500_000, UploadBandwidth.Share(1_000_000, 1, 500_000));
-    }
-
-    [Fact]
-    public void A_slice_below_the_minimum_is_a_wait_not_a_crawl()
-    {
-        Assert.Equal(0, UploadBandwidth.Share(16_000, 31, 0));
-        Assert.Equal(UploadBandwidth.MinimumShareBytesPerSecond, UploadBandwidth.Share(16_000, 15, 0));
+        Assert.Equal(expected, UploadBandwidth.Share(limit, running, taken));
     }
 
     // Replays the real protocol (every upload renews in turn) over arbitrary arrivals, departures and limits:
@@ -90,13 +80,14 @@ public sealed class UploadBandwidthDomainTests
         if (grants.Count > 0) Assert.All(grants.Values, share => Assert.True(share == 0 || share >= limit / grants.Count - 1));
     }
 
-    [Fact]
-    public void The_lowest_ceiling_wins_and_a_slice_not_yet_granted_holds_the_transfer()
+    [Theory]
+    [InlineData(null, null, null, null)]
+    [InlineData(5_000_000L, 2_000_000L, 9_000_000L, 2_000_000L)]
+    [InlineData(5_000_000L, null, 300_000L, 300_000L)]
+    [InlineData(5_000_000L, null, 0L, 0L)]
+    public void The_lowest_ceiling_wins_and_a_slice_not_yet_granted_holds_the_transfer(long? job, long? agent, long? tenantShare, long? expected)
     {
-        Assert.Null(new UploadPolicyResponse().EffectiveBytesPerSecond);
-        Assert.Equal(2_000_000, new UploadPolicyResponse { JobBytesPerSecond = 5_000_000, AgentBytesPerSecond = 2_000_000, TenantShareBytesPerSecond = 9_000_000 }.EffectiveBytesPerSecond);
-        Assert.Equal(300_000, new UploadPolicyResponse { JobBytesPerSecond = 5_000_000, TenantShareBytesPerSecond = 300_000 }.EffectiveBytesPerSecond);
-        Assert.Equal(0, new UploadPolicyResponse { JobBytesPerSecond = 5_000_000, TenantShareBytesPerSecond = 0 }.EffectiveBytesPerSecond);
+        Assert.Equal(expected, new UploadPolicyResponse { JobBytesPerSecond = job, AgentBytesPerSecond = agent, TenantShareBytesPerSecond = tenantShare }.EffectiveBytesPerSecond);
     }
 
     [Fact]

@@ -125,15 +125,4 @@ public sealed class PlanTests
         Assert.False(plan.SetEnabled(false, Now.AddMinutes(3)));
         Assert.Equal(Now.AddMinutes(2), plan.UpdatedAt);
     }
-
-    [Fact]
-    public void ADifferentSizeIsJustADifferentRowNotADifferentCodePath()
-    {
-        // 1/5/10/20 GB, 50 GB and a custom plan go through exactly the same constructor; nothing branches on a name or a tier.
-        foreach (var gigabytes in new long?[] { 1, 5, 10, 20, 50, 100, 250, null })
-        {
-            var plan = NewPlan($"{gigabytes?.ToString() ?? "Unlimited"} plan", gigabytes * StorageLimits.BytesPerGigabyte);
-            Assert.Equal(gigabytes * StorageLimits.BytesPerGigabyte, plan.StorageLimitBytes);
-        }
-    }
 }

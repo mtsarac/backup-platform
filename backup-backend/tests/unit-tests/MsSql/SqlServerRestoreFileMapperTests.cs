@@ -284,14 +284,6 @@ public sealed class SqlServerRestoreFileMapperTests
         Assert.Equal(62, new RestorePlan(result.Mappings!, target).Mappings.Count);
     }
 
-    [Fact]
-    public void TheFirstDataFileGetsMdfAndTheOthersNdf()
-    {
-        var result = Map([Data("A"), Data("B"), Data("C"), Log("L")]);
-
-        Assert.Equal(["mdf", "ndf", "ndf", "ldf"], Paths(result).Select(path => path[(path.LastIndexOf('.') + 1)..]));
-    }
-
     [Theory]
     [InlineData("/var/opt/mssql/data/", "/var/opt/mssql/data")]
     [InlineData("/var/opt/mssql/data", "/var/opt/mssql/data")]

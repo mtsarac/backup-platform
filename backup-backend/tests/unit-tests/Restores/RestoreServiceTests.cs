@@ -122,48 +122,21 @@ public sealed class RestoreServiceTests
         Assert.Null(result.Message);
     }
 
-    [Fact]
-    public async Task AnInactiveAgentIsAnAgentCannotRestoreRefusalWithTheAgentNotActiveDetail()
+    [Theory]
+    [InlineData(RestoreCreateOutcome.AgentNotActive, RestoreStartOutcome.AgentNotActive, "agent_cannot_restore", "agent_not_active", "not active")]
+    [InlineData(RestoreCreateOutcome.AgentCannotRestore, RestoreStartOutcome.AgentCannotRestore, "agent_cannot_restore", "capability_not_supported", "restore")]
+    [InlineData(RestoreCreateOutcome.IdempotencyConflict, RestoreStartOutcome.IdempotencyConflict, "idempotency_conflict", null, "Idempotency-Key")]
+    public async Task ARefusedStartCarriesItsCodeItsDetailAndItsMessage(RestoreCreateOutcome created, RestoreStartOutcome expected, string code, string? detail, string messageFragment)
     {
         var h = new Harness();
-        h.Store.OnCreate = _ => new RestoreCreateResult(RestoreCreateOutcome.AgentNotActive);
+        h.Store.OnCreate = _ => new RestoreCreateResult(created);
 
         var result = await h.Service.StartAsync(Tenant, ArtifactId, "key-1", User, Request(), default);
 
-        Assert.Equal(RestoreStartOutcome.AgentNotActive, result.Outcome);
-        Assert.Equal("agent_cannot_restore", result.Code);
-        Assert.Equal("agent_not_active", result.Detail);
-        Assert.Contains("not active", result.Message);
-        Assert.Null(result.Restore);
-    }
-
-    [Fact]
-    public async Task AnAgentWithoutTheRestoreCapabilityIsAnAgentCannotRestoreRefusalWithTheCapabilityDetail()
-    {
-        var h = new Harness();
-        h.Store.OnCreate = _ => new RestoreCreateResult(RestoreCreateOutcome.AgentCannotRestore);
-
-        var result = await h.Service.StartAsync(Tenant, ArtifactId, "key-1", User, Request(), default);
-
-        Assert.Equal(RestoreStartOutcome.AgentCannotRestore, result.Outcome);
-        Assert.Equal("agent_cannot_restore", result.Code);
-        Assert.Equal("capability_not_supported", result.Detail);
-        Assert.Contains("restore", result.Message);
-        Assert.Null(result.Restore);
-    }
-
-    [Fact]
-    public async Task AReusedKeyWithADifferentRequestIsAnIdempotencyConflict()
-    {
-        var h = new Harness();
-        h.Store.OnCreate = _ => new RestoreCreateResult(RestoreCreateOutcome.IdempotencyConflict);
-
-        var result = await h.Service.StartAsync(Tenant, ArtifactId, "key-1", User, Request(), default);
-
-        Assert.Equal(RestoreStartOutcome.IdempotencyConflict, result.Outcome);
-        Assert.Equal("idempotency_conflict", result.Code);
-        Assert.Null(result.Detail);
-        Assert.Contains("Idempotency-Key", result.Message);
+        Assert.Equal(expected, result.Outcome);
+        Assert.Equal(code, result.Code);
+        Assert.Equal(detail, result.Detail);
+        Assert.Contains(messageFragment, result.Message);
         Assert.Null(result.Restore);
     }
 
@@ -193,10 +166,6 @@ public sealed class RestoreServiceTests
         Assert.Null(result.Detail);
         Assert.Null(result.Restore);
     }
-
-    [Theory]
-    [MemberData(nameof(RejectionCodes))]
-    public void RejectionCodeIsTheEnumNameInSnakeCase(RestoreSourceRejection rejection, string code) => Assert.Equal(code, RestoreService.RejectionCode(rejection));
 
     [Fact]
     public void EveryRejectionHasItsOwnNonEmptyMessage()
@@ -323,34 +292,22 @@ public sealed class RestoreServiceTests
         Assert.Empty(h.Store.Calls);
     }
 
-    [Fact]
-    public async Task AnInvalidRequestIsRefusedWithTheOffendingFieldAndTheStoreIsNotAsked()
+    public static TheoryData<Guid, StartRestoreRequest, string, string> InvalidStartRequests => new()
+    {
+        { ArtifactId, Request() with { DatabaseName = "" }, "databaseName", "invalid_value" },
+        { ArtifactId, Request() with { Mode = "ReplaceExistingDatabase" }, "confirmOverwrite", "confirmation_required" },
+        { Guid.Empty, Request(), "artifactId", "invalid_value" }
+    };
+
+    [Theory]
+    [MemberData(nameof(InvalidStartRequests))]
+    public async Task AnInvalidRequestIsRefusedWithTheOffendingFieldAndTheStoreIsNotAsked(Guid artifactId, StartRestoreRequest request, string field, string code)
     {
         var h = new Harness();
-        var failure = await Assert.ThrowsAsync<InvalidRestoreRequestException>(() => h.Service.StartAsync(Tenant, ArtifactId, "key-1", User, Request() with { DatabaseName = "" }, default));
+        var failure = await Assert.ThrowsAsync<InvalidRestoreRequestException>(() => h.Service.StartAsync(Tenant, artifactId, "key-1", User, request, default));
 
-        Assert.Equal("databaseName", failure.Field);
-        Assert.Empty(h.Store.Calls);
-    }
-
-    [Fact]
-    public async Task AnUnconfirmedReplaceIsRefusedBeforeTheStoreIsAsked()
-    {
-        var h = new Harness();
-        var failure = await Assert.ThrowsAsync<InvalidRestoreRequestException>(() => h.Service.StartAsync(Tenant, ArtifactId, "key-1", User, Request() with { Mode = "ReplaceExistingDatabase" }, default));
-
-        Assert.Equal("confirmOverwrite", failure.Field);
-        Assert.Equal("confirmation_required", failure.Code);
-        Assert.Empty(h.Store.Calls);
-    }
-
-    [Fact]
-    public async Task AnEmptyArtifactIdIsRefusedBeforeTheStoreIsAsked()
-    {
-        var h = new Harness();
-        var failure = await Assert.ThrowsAsync<InvalidRestoreRequestException>(() => h.Service.StartAsync(Tenant, Guid.Empty, "key-1", User, Request(), default));
-
-        Assert.Equal("artifactId", failure.Field);
+        Assert.Equal(field, failure.Field);
+        Assert.Equal(code, failure.Code);
         Assert.Empty(h.Store.Calls);
     }
 

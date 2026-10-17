@@ -189,11 +189,9 @@ public sealed class BackupStageTrackerTests
     [InlineData("Sales.bak")]
     [InlineData(".bak")]
     [InlineData("backup.bak")]
-    public void NamesOutsideTheManagedGrammarAreNeverRecognised(string name) =>
+    [InlineData(null)]
+    public void NamesOutsideTheManagedGrammarAreNeverRecognised(string? name) =>
         Assert.False(ManagedBackupLayout.IsManagedArtifactName(name));
-
-    [Fact]
-    public void ANullNameIsNotManaged() => Assert.False(ManagedBackupLayout.IsManagedArtifactName(null));
 
     [Fact]
     public void TheAttemptScopeIsTheDashlessLowercaseGuidsJoinedBySlashes()

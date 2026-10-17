@@ -19,6 +19,7 @@ public sealed class ReplicationComplianceUnitTests
     private static readonly Guid Central = Guid.NewGuid();
     private static readonly Guid Sftp = Guid.NewGuid();
     private static readonly Guid Drive = Guid.NewGuid();
+    private static readonly Guid Stranger = Guid.NewGuid();
 
     private static BackupConfiguration Snapshot(int required) => new("mssql", "Sales", "sql.local", 1433, true, null, true, false, "default", "", true, "Preferred", "Preferred")
     {
@@ -256,41 +257,21 @@ public sealed class ReplicationComplianceUnitTests
         Assert.True(BackupInputValidation.IsValidCompletion(request, Snapshot(2)));
     }
 
-    [Fact]
-    public void A_replica_on_a_destination_outside_the_snapshot_is_rejected()
+    public static TheoryData<string, BackupTaskCompletionRequest, int> RejectedCompletions => new()
     {
-        var stranger = Guid.NewGuid();
-        var request = Completion([ReplicaOf("central", Central), ReplicaOf("sftp", stranger)], [Verified("central", Central), Verified("sftp", stranger), Failed("google-drive", Drive)]);
+        { "replica on a destination outside the snapshot", Completion([ReplicaOf("central", Central), ReplicaOf("sftp", Stranger)], [Verified("central", Central), Verified("sftp", Stranger), Failed("google-drive", Drive)]), 2 },
+        { "a destination left unaccounted for", Completion([ReplicaOf("central", Central)], [Verified("central", Central), Failed("sftp", Sftp)]), 1 },
+        { "no destinations reported", Completion([ReplicaOf("central", Central)], []), 1 },
+        { "a destination reported twice", Completion([ReplicaOf("central", Central)], [Verified("central", Central), Verified("central", Central), Failed("sftp", Sftp)]), 1 },
+        { "verified without its replica", Completion([ReplicaOf("central", Central)], [Verified("central", Central), Verified("sftp", Sftp), Failed("google-drive", Drive)]), 1 },
+        { "failure code that is not known", Completion([ReplicaOf("central", Central)], [Verified("central", Central), Failed("sftp", Sftp, "made-up"), Failed("google-drive", Drive)]), 1 },
+    };
 
-        Assert.False(BackupInputValidation.IsValidCompletion(request, Snapshot(2)));
-    }
-
-    [Fact]
-    public void A_multi_destination_completion_must_account_for_every_destination()
+    [Theory]
+    [MemberData(nameof(RejectedCompletions))]
+    public void A_completion_that_misreports_the_snapshot_destinations_is_rejected(string reason, BackupTaskCompletionRequest request, int required)
     {
-        var missingOne = Completion([ReplicaOf("central", Central)], [Verified("central", Central), Failed("sftp", Sftp)]);
-        var none = Completion([ReplicaOf("central", Central)], []);
-
-        Assert.False(BackupInputValidation.IsValidCompletion(missingOne, Snapshot(1)));
-        Assert.False(BackupInputValidation.IsValidCompletion(none, Snapshot(1)));
-    }
-
-    [Fact]
-    public void A_destination_cannot_be_reported_twice_nor_verified_without_its_replica()
-    {
-        var twice = Completion([ReplicaOf("central", Central)], [Verified("central", Central), Verified("central", Central), Failed("sftp", Sftp)]);
-        var withoutReplica = Completion([ReplicaOf("central", Central)], [Verified("central", Central), Verified("sftp", Sftp), Failed("google-drive", Drive)]);
-
-        Assert.False(BackupInputValidation.IsValidCompletion(twice, Snapshot(1)));
-        Assert.False(BackupInputValidation.IsValidCompletion(withoutReplica, Snapshot(1)));
-    }
-
-    [Fact]
-    public void A_failed_destination_must_carry_a_known_failure_code()
-    {
-        var request = Completion([ReplicaOf("central", Central)], [Verified("central", Central), Failed("sftp", Sftp, "made-up"), Failed("google-drive", Drive)]);
-
-        Assert.False(BackupInputValidation.IsValidCompletion(request, Snapshot(1)));
+        Assert.False(BackupInputValidation.IsValidCompletion(request, Snapshot(required)), reason);
     }
 
     [Fact]

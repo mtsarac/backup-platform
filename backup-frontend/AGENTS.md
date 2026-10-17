@@ -4,7 +4,7 @@
 **Git:** repo on `main`
 
 ## OVERVIEW
-Vite + React 19 + TypeScript management UI for the Backup Platform backend. It uses the real cookie + antiforgery API (no JWT, nothing in browser storage), explicit tenant routes (`/tenants/:tenantId/...`), TanStack Query, a central ky client, Tailwind v4/shadcn styling and Base UI dialogs. MVP scope: Dashboard, Agents (+Enrollment), Backup Jobs, Backup Runs, Artifacts. Tenant-level users/settings and PostgreSQL backup are intentionally absent; Storage Providers are not configured freely (only the API's provider catalog and `storage-connections` are shown). A separate PlatformAdmin area lives under `/platform` (tenants, plans, tenant subscription, users, global Agents, audit; read-only for Agents).
+Vite + React + TypeScript management UI for the Backup Platform backend. It uses the real cookie + antiforgery API (no JWT, nothing in browser storage), explicit tenant routes (`/tenants/:tenantId/...`), TanStack Query, a central ky client, Tailwind/shadcn styling and Base UI dialogs. MVP scope: Dashboard, Agents (+Enrollment), Backup Jobs, Backup Runs, Artifacts. Tenant-level users/settings and PostgreSQL backup are intentionally absent; Storage Providers are not configured freely (only the API's provider catalog and `storage-connections` are shown). A separate PlatformAdmin area lives under `/platform` (tenants, plans, tenant subscription, users, global Agents, audit; read-only for Agents).
 
 ## STRUCTURE
 ```text
@@ -12,7 +12,7 @@ backup-frontend/
 ├── src/
 │   ├── App.tsx                 # BrowserRouter + tenant-scoped route tree
 │   ├── main.tsx                # StrictMode + Providers entry
-│   ├── index.css               # Tailwind v4, shadcn imports, semantic tokens
+│   ├── index.css               # Tailwind, shadcn imports, semantic tokens
 │   ├── lib/                    # routes, API client, failure-messages, QueryClient, providers
 │   ├── features/               # auth, tenancy, agents, backup-jobs, backups, artifacts, storage, storage-connections
 │   ├── components/             # auth guard, layout, theme, data, ui primitives
@@ -61,7 +61,7 @@ Notifications (N1) live in `src/features/notifications/` (tenant policy/channels
 | `queryClient` | Const | `src/lib/query-client.ts` | Query defaults: no focus refetch, one retry for non-4xx, stale 30s. |
 
 ## CONVENTIONS
-- Toolchain: Bun lockfile, Vite 8, React 19, TypeScript 6, Oxlint, Tailwind v4, shadcn, Base UI, TanStack Query, ky, Vitest/jsdom/RTL.
+- Toolchain: Bun lockfile, Vite, React, TypeScript, Oxlint, Tailwind, shadcn, Base UI, TanStack Query, ky, Vitest/jsdom/RTL.
 - TypeScript strict: `target es2023`, `moduleResolution bundler`, `verbatimModuleSyntax true`, `erasableSyntaxOnly true`, `noUnusedLocals/Params true`, `allowArbitraryExtensions true`, alias `@/* -> src/*`.
 - Imports: prefer `@/` alias for cross-folder app imports; use `import type` for types; CSS imported globally from `src/main.tsx` -> `src/index.css`.
 - React context lint pattern: keep contexts in `*-context.ts`, providers in `*-provider.tsx`, hooks in `use-*.ts` to satisfy `react/only-export-components`.

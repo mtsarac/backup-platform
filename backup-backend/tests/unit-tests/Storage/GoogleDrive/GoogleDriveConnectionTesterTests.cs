@@ -53,11 +53,15 @@ public sealed class GoogleDriveConnectionTesterTests
         Assert.Equal(StorageTestCodes.SecretUnavailable, result.Code);
     }
 
-    [Fact]
-    public async Task TestAsync_Fails_WhenAuthFails()
+    [Theory]
+    [InlineData(true, StorageTestCodes.AuthenticationFailed)]
+    [InlineData(false, StorageTestCodes.IntegrityMismatch)]
+    public async Task TestAsync_Fails_WhenAuthOrProbeVerificationFails(bool authFails, string expectedCode)
     {
-        var tester = new GoogleDriveConnectionTester((conn, secrets) =>
-            throw new StorageException(StorageFailureKind.AuthenticationFailed, "Invalid grant"));
+        var stubProvider = new StubStorageProvider(succeeds: true, verificationFails: !authFails);
+        var tester = new GoogleDriveConnectionTester((conn, secrets) => authFails
+            ? throw new StorageException(StorageFailureKind.AuthenticationFailed, "Invalid grant")
+            : stubProvider);
 
         var connection = new StorageConnection(
             _connectionId, new TenantId(_tenantId), "Google Drive Test", StorageProviderTypes.GoogleDrive,
@@ -69,26 +73,7 @@ public sealed class GoogleDriveConnectionTesterTests
         var result = await tester.TestAsync(connection, secrets, CancellationToken.None);
 
         Assert.Equal(StorageTestStatus.Failed, result.Status);
-        Assert.Equal(StorageTestCodes.AuthenticationFailed, result.Code);
-    }
-
-    [Fact]
-    public async Task TestAsync_Fails_WhenProbeFailsVerification()
-    {
-        var stubProvider = new StubStorageProvider(succeeds: true, verificationFails: true);
-        var tester = new GoogleDriveConnectionTester((conn, secrets) => stubProvider);
-
-        var connection = new StorageConnection(
-            _connectionId, new TenantId(_tenantId), "Google Drive Test", StorageProviderTypes.GoogleDrive,
-            StorageOwnership.TenantManaged, "tenant", new Dictionary<string, string>(), isDefault: false, DateTimeOffset.UtcNow);
-
-        connection.AttachSecret($"sc-{_connectionId:N}-123", ["refreshToken"], DateTimeOffset.UtcNow);
-
-        var secrets = new StubSecretProvider();
-        var result = await tester.TestAsync(connection, secrets, CancellationToken.None);
-
-        Assert.Equal(StorageTestStatus.Failed, result.Status);
-        Assert.Equal(StorageTestCodes.IntegrityMismatch, result.Code);
+        Assert.Equal(expectedCode, result.Code);
     }
 
     private sealed class StubStorageProvider(bool succeeds, bool verificationFails = false) : IStorageProvider

@@ -145,23 +145,14 @@ public sealed class ConnectionTesterTests : IDisposable
     }
 
     [Fact]
-    public async Task AMissingRootDirectoryFailsAsInvalidConfiguration()
-    {
-        var provider = RealProvider(Path.Combine(_root, "does-not-exist"));
-
-        var result = await Run(provider);
-
-        Assert.Equal(StorageTestStatus.Failed, result.Status);
-        Assert.Equal(StorageTestCodes.InvalidConfiguration, result.Code);
-    }
-
-    [Fact]
-    public async Task AFailureMessageNeverContainsTheFileSystemPath()
+    public async Task AMissingRootDirectoryFailsAsInvalidConfigurationWithoutLeakingThePath()
     {
         var missing = Path.Combine(_root, "does-not-exist");
 
         var result = await Run(RealProvider(missing));
 
+        Assert.Equal(StorageTestStatus.Failed, result.Status);
+        Assert.Equal(StorageTestCodes.InvalidConfiguration, result.Code);
         Assert.DoesNotContain(missing, result.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(_root, result.Message, StringComparison.Ordinal);
     }

@@ -53,8 +53,8 @@ function New-ProtectedDirectory([string] $Path, [Security.Principal.SecurityIden
         $rule = New-Object Security.AccessControl.FileSystemAccessRule($sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
         $security.AddAccessRule($rule)
     }
-    $directory = New-Object IO.DirectoryInfo $Path
-    $directory.Create($security)
+    $null = [IO.Directory]::CreateDirectory($Path)
+    Set-Acl -Path $Path -AclObject $security
 }
 
 $binary = Assert-SafePath ([IO.Path]::GetFullPath($BinaryDirectory))

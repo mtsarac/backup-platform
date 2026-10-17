@@ -122,8 +122,11 @@ public sealed class ReplicaRepairDurableIntentUnitTests
         Assert.Equal(0, store.RecordedOrphanCount);
     }
 
-    [Fact]
-    public async Task VerifyAsync_WhenThrowsException_PerformsFencedCleanup_And_RecordsDurableOrphan_IfDeletionUnconfirmed()
+    [Theory]
+    [InlineData(false, false, 1, 0)] // deletion could not be confirmed: a durable orphan is recorded
+    [InlineData(true, false, 0, 1)]  // deletion succeeded: nothing to track
+    [InlineData(false, true, 0, 0)]  // object already gone (NotFound): absence counts as verified
+    public async Task VerifyAsync_WhenThrowsException_PerformsFencedCleanup_And_RecordsDurableOrphan_OnlyIfDeletionUnconfirmed(bool deleteResult, bool deleteNotFound, int expectedOrphans, int expectedDeletes)
     {
         var time = new FakeTimeProvider(T0);
         var targetConnId = Guid.NewGuid();
@@ -132,7 +135,8 @@ public sealed class ReplicaRepairDurableIntentUnitTests
         var provider = new FakeStorageProvider(ArtifactData, Checksum)
         {
             OnVerifyAsync = _ => throw new StorageException(StorageFailureKind.Io, "Readback failed"),
-            DeleteResult = false // Deletion could not be confirmed
+            DeleteResult = deleteResult,
+            DeleteThrows = deleteNotFound ? new StorageException(StorageFailureKind.NotFound, "File not found") : null
         };
 
         var resolver = new FakeStorageResolver(provider);
@@ -155,79 +159,9 @@ public sealed class ReplicaRepairDurableIntentUnitTests
         Assert.Null(result.TargetReplicaId);
         Assert.Null(store.CompletedReplica);
         Assert.True(store.CanCleanupChecked);
-        Assert.Equal(1, store.RecordedOrphanCount);
-        Assert.Equal(store.PinnedTargetKey, store.LastRecordedOrphanKey);
-    }
-
-    [Fact]
-    public async Task VerifyAsync_WhenThrowsException_And_DeleteSucceeds_DoesNotRecordOrphan()
-    {
-        var time = new FakeTimeProvider(T0);
-        var targetConnId = Guid.NewGuid();
-        var (artifact, sourceReplica, admission) = CreateSetup(targetConnId);
-        var store = new FakeRepairStore();
-        var provider = new FakeStorageProvider(ArtifactData, Checksum)
-        {
-            OnVerifyAsync = _ => throw new StorageException(StorageFailureKind.Io, "Readback failed"),
-            DeleteResult = true // Deletion succeeded
-        };
-
-        var resolver = new FakeStorageResolver(provider);
-        var service = new ReplicaRepairService(store, resolver, time, NullLogger<ReplicaRepairService>.Instance);
-
-        var operationId = Guid.NewGuid();
-        var claimedOp = new ReplicaRepairOperation(operationId, Tenant, artifact.Id, targetConnId, "sftp", sourceReplica.Id, T0);
-        claimedOp.Claim(Guid.NewGuid(), "worker-1", T0, TimeSpan.FromMinutes(10));
-
-        var result = await service.ExecuteRepairAsync(
-            Tenant,
-            artifact.Id,
-            operationId,
-            admission,
-            externalToken: CancellationToken.None,
-            claimedOperation: claimedOp);
-
-        Assert.NotNull(result);
-        Assert.Equal(ReplicaRepairFailureCodes.StorageWriteFailed, result.FailureCode);
-        Assert.Null(result.TargetReplicaId);
-        Assert.Null(store.CompletedReplica);
-        Assert.True(store.CanCleanupChecked);
-        Assert.NotEmpty(provider.DeletedKeys);
-        Assert.Equal(0, store.RecordedOrphanCount);
-    }
-
-    [Fact]
-    public async Task DeleteAsync_WhenNotFoundException_ConsidersAbsenceVerified_And_DoesNotRecordOrphan()
-    {
-        var time = new FakeTimeProvider(T0);
-        var targetConnId = Guid.NewGuid();
-        var (artifact, sourceReplica, admission) = CreateSetup(targetConnId);
-        var store = new FakeRepairStore();
-        var provider = new FakeStorageProvider(ArtifactData, Checksum)
-        {
-            OnVerifyAsync = _ => throw new StorageException(StorageFailureKind.Io, "Verification error"),
-            DeleteThrows = new StorageException(StorageFailureKind.NotFound, "File not found")
-        };
-
-        var resolver = new FakeStorageResolver(provider);
-        var service = new ReplicaRepairService(store, resolver, time, NullLogger<ReplicaRepairService>.Instance);
-
-        var operationId = Guid.NewGuid();
-        var claimedOp = new ReplicaRepairOperation(operationId, Tenant, artifact.Id, targetConnId, "sftp", sourceReplica.Id, T0);
-        claimedOp.Claim(Guid.NewGuid(), "worker-1", T0, TimeSpan.FromMinutes(10));
-
-        var result = await service.ExecuteRepairAsync(
-            Tenant,
-            artifact.Id,
-            operationId,
-            admission,
-            externalToken: CancellationToken.None,
-            claimedOperation: claimedOp);
-
-        Assert.NotNull(result);
-        Assert.Null(store.CompletedReplica);
-        Assert.True(store.CanCleanupChecked);
-        Assert.Equal(0, store.RecordedOrphanCount);
+        Assert.Equal(expectedDeletes, provider.DeletedKeys.Count);
+        Assert.Equal(expectedOrphans, store.RecordedOrphanCount);
+        Assert.Equal(expectedOrphans == 1 ? store.PinnedTargetKey : null, store.LastRecordedOrphanKey);
     }
 
     [Fact]

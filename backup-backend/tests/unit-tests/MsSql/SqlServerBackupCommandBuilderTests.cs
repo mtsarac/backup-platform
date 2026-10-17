@@ -74,16 +74,9 @@ public sealed class SqlServerBackupCommandBuilderTests
     [InlineData(false, false, false, true, false, "BACKUP DATABASE [Sales] TO DISK = N'/var/opt/mssql/bp-staging/a.bak' WITH INIT, NAME = N'BackupPlatform full backup', NO_CHECKSUM, NO_COMPRESSION;")]
     [InlineData(false, false, true, true, false, "BACKUP DATABASE [Sales] TO DISK = N'/var/opt/mssql/bp-staging/a.bak' WITH INIT, NAME = N'BackupPlatform full backup', NO_CHECKSUM, COMPRESSION;")]
     [InlineData(true, true, true, true, true, "BACKUP DATABASE [Sales] TO DISK = N'/var/opt/mssql/bp-staging/a.bak' WITH INIT, NAME = N'BackupPlatform full backup', COPY_ONLY, CHECKSUM, COMPRESSION, STATS = 1;")]
+    [InlineData(true, true, false, false, true, "BACKUP DATABASE [Sales] TO DISK = N'/var/opt/mssql/bp-staging/a.bak' WITH INIT, NAME = N'BackupPlatform full backup', COPY_ONLY, CHECKSUM, STATS = 1;")]
     public void FullBackupSpellsOutEveryOptionDecision(bool copyOnly, bool checksum, bool compression, bool compressionSupported, bool stats, string expected) =>
         Assert.Equal(expected, SqlServerBackupCommandBuilder.BuildFullBackup("Sales", File, new AppliedFullBackupOptions(copyOnly, checksum, compression), compressionSupported, stats));
-
-    [Fact]
-    public void CompressionKeywordsNeverAppearWhereTheCapabilityIsNotSupported()
-    {
-        var sql = SqlServerBackupCommandBuilder.BuildFullBackup("Sales", File, new AppliedFullBackupOptions(true, true, false), compressionCapabilitySupported: false, stats: true);
-
-        Assert.DoesNotContain("COMPRESSION", sql, StringComparison.Ordinal);
-    }
 
     [Fact]
     public void ADatabaseNameAndPathThatTryToInjectStayInsideTheirQuotes()

@@ -30,23 +30,13 @@ public sealed class DataProtectionSecretStoreTests
 
     private static SecretReference Ref(string name) => new(name);
 
-    [Fact]
-    public async Task ASecretRoundTripsExactly()
-    {
-        var store = Store();
-
-        await store.SetAsync(Ref("sc-1"), new SecretValue(Plaintext), CancellationToken.None);
-        var resolved = await store.ResolveAsync(Ref("sc-1"), CancellationToken.None);
-
-        Assert.Equal(Plaintext, resolved.Reveal());
-    }
-
     [Theory]
+    [InlineData(Plaintext)]
     [InlineData("")]
     [InlineData(" ")]
     [InlineData("ünïcödé ✓ 日本語")]
     [InlineData("{\"password\":\"a\\\"b\"}")]
-    public async Task EdgeCaseValuesRoundTripUnchanged(string value)
+    public async Task ValuesRoundTripExactly(string value)
     {
         var store = Store();
 

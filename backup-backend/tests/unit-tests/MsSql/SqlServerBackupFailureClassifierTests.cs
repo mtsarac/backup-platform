@@ -5,31 +5,27 @@ namespace BackupPlatform.UnitTests.MsSql;
 public sealed class SqlServerBackupFailureClassifierTests
 {
     [Theory]
-    [InlineData(-2, SqlServerBackupReasons.BackupTimeout)]
-    [InlineData(3201, SqlServerBackupReasons.StagingWriteFailed)]
-    [InlineData(3202, SqlServerBackupReasons.StagingWriteFailed)]
-    [InlineData(262, SqlServerBackupReasons.PermissionDenied)]
-    [InlineData(229, SqlServerBackupReasons.PermissionDenied)]
-    [InlineData(911, SqlServerBackupReasons.DatabaseNotFound)]
-    [InlineData(3043, SqlServerBackupReasons.DatabaseCorruptionDetected)]
-    [InlineData(824, SqlServerBackupReasons.DatabaseCorruptionDetected)]
-    [InlineData(10054, SqlServerBackupReasons.ConnectionLost)]
-    [InlineData(99999, SqlServerBackupReasons.BackupFailed)]
-    public void BackupErrorNumbersMapToStableReasons(int number, string reason) =>
-        Assert.Equal(reason, SqlServerBackupFailureClassifier.Classify(SqlServerStatement.Backup, [number]).Reason);
-
-    [Theory]
-    [InlineData(-2, SqlServerBackupReasons.VerifyTimeout)]
-    [InlineData(3241, SqlServerBackupReasons.BackupMediaInvalid)]
-    [InlineData(3242, SqlServerBackupReasons.BackupMediaInvalid)]
-    [InlineData(3203, SqlServerBackupReasons.BackupFileUnreadable)]
-    [InlineData(3201, SqlServerBackupReasons.BackupFileUnreadable)]
-    [InlineData(3187, SqlServerBackupReasons.BackupChecksumMismatch)]
-    [InlineData(3169, SqlServerBackupReasons.BackupVersionIncompatible)]
-    [InlineData(262, SqlServerBackupReasons.PermissionDenied)]
-    [InlineData(1, SqlServerBackupReasons.VerifyFailed)]
-    public void VerifyErrorNumbersMapToStableReasons(int number, string reason) =>
-        Assert.Equal(reason, SqlServerBackupFailureClassifier.Classify(SqlServerStatement.Verify, [number]).Reason);
+    [InlineData("Backup", -2, SqlServerBackupReasons.BackupTimeout)]
+    [InlineData("Backup", 3201, SqlServerBackupReasons.StagingWriteFailed)]
+    [InlineData("Backup", 3202, SqlServerBackupReasons.StagingWriteFailed)]
+    [InlineData("Backup", 262, SqlServerBackupReasons.PermissionDenied)]
+    [InlineData("Backup", 229, SqlServerBackupReasons.PermissionDenied)]
+    [InlineData("Backup", 911, SqlServerBackupReasons.DatabaseNotFound)]
+    [InlineData("Backup", 3043, SqlServerBackupReasons.DatabaseCorruptionDetected)]
+    [InlineData("Backup", 824, SqlServerBackupReasons.DatabaseCorruptionDetected)]
+    [InlineData("Backup", 10054, SqlServerBackupReasons.ConnectionLost)]
+    [InlineData("Backup", 99999, SqlServerBackupReasons.BackupFailed)]
+    [InlineData("Verify", -2, SqlServerBackupReasons.VerifyTimeout)]
+    [InlineData("Verify", 3241, SqlServerBackupReasons.BackupMediaInvalid)]
+    [InlineData("Verify", 3242, SqlServerBackupReasons.BackupMediaInvalid)]
+    [InlineData("Verify", 3203, SqlServerBackupReasons.BackupFileUnreadable)]
+    [InlineData("Verify", 3201, SqlServerBackupReasons.BackupFileUnreadable)]
+    [InlineData("Verify", 3187, SqlServerBackupReasons.BackupChecksumMismatch)]
+    [InlineData("Verify", 3169, SqlServerBackupReasons.BackupVersionIncompatible)]
+    [InlineData("Verify", 262, SqlServerBackupReasons.PermissionDenied)]
+    [InlineData("Verify", 1, SqlServerBackupReasons.VerifyFailed)]
+    public void ErrorNumbersMapToStableReasons(string statementName, int number, string reason) =>
+        Assert.Equal(reason, SqlServerBackupFailureClassifier.Classify(Enum.Parse<SqlServerStatement>(statementName), [number]).Reason);
 
     [Fact]
     public void TheCauseDecidesNotTheGenericTerminatingAbnormallyThatFollowsIt()

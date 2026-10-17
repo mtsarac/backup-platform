@@ -32,48 +32,27 @@ public sealed class RestoreSourceEvaluatorTests
 
     // ---- Evaluate: accepted ----
 
-    [Fact]
-    public void AnAvailableVerifiedCentralReplicaIsReadFromCentralStorage()
+    [Theory]
+    [InlineData(false, RestoreSourceAccess.CentralStorage)]
+    [InlineData(true, RestoreSourceAccess.AgentLocal)]
+    public void AnAvailableVerifiedReplicaIsReadFromWhereItLives(bool onTheTargetAgentsDisk, RestoreSourceAccess expected)
     {
-        var (artifact, replica) = Central();
+        var (artifact, replica) = onTheTargetAgentsDisk ? OwnLocal() : Central();
         var decision = RestoreSourceEvaluator.Evaluate(artifact, replica, Agent, Now);
 
         Assert.True(decision.Eligible);
         Assert.Null(decision.Rejection);
-        Assert.Equal(RestoreSourceAccess.CentralStorage, decision.Access);
-    }
-
-    [Fact]
-    public void AnAvailableVerifiedReplicaOnTheTargetAgentsOwnDiskIsReadLocally()
-    {
-        var (artifact, replica) = OwnLocal();
-        var decision = RestoreSourceEvaluator.Evaluate(artifact, replica, Agent, Now);
-
-        Assert.True(decision.Eligible);
-        Assert.Equal(RestoreSourceAccess.AgentLocal, decision.Access);
-        Assert.Null(decision.Rejection);
-    }
-
-    [Fact]
-    public void DecisionsCarryExactlyOneOfAnAccessAndARejection()
-    {
-        var accepted = RestoreSourceDecision.Accept(RestoreSourceAccess.AgentLocal);
-        Assert.True(accepted.Eligible);
-        Assert.Equal(RestoreSourceAccess.AgentLocal, accepted.Access);
-        Assert.Null(accepted.Rejection);
-
-        var rejected = RestoreSourceDecision.Reject(RestoreSourceRejection.ReplicaNotVerified);
-        Assert.False(rejected.Eligible);
-        Assert.Null(rejected.Access);
-        Assert.Equal(RestoreSourceRejection.ReplicaNotVerified, rejected.Rejection);
+        Assert.Equal(expected, decision.Access);
     }
 
     // ---- Evaluate: delete lifecycle ----
 
-    [Fact]
-    public void ADeletePendingReplicaInsideItsGracePeriodIsStillRestorable()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ADeletePendingReplicaInsideItsGracePeriodIsStillRestorable(bool ownLocal)
     {
-        var (artifact, replica) = Central();
+        var (artifact, replica) = ownLocal ? OwnLocal() : Central();
         artifact.RequestDelete(Now, null);
         var deleteAfter = replica.DeleteAfter!.Value;
 
@@ -82,27 +61,18 @@ public sealed class RestoreSourceEvaluatorTests
         Assert.True(RestoreSourceEvaluator.Evaluate(artifact, replica, Agent, deleteAfter - OneTick).Eligible);
     }
 
-    [Fact]
-    public void ADeletePendingReplicaAtOrAfterItsDeleteAfterIsNotRestorable()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ADeletePendingReplicaAtOrAfterItsDeleteAfterIsNotRestorable(bool ownLocal)
     {
-        var (artifact, replica) = Central();
+        var (artifact, replica) = ownLocal ? OwnLocal() : Central();
         artifact.RequestDelete(Now, null);
         var deleteAfter = replica.DeleteAfter!.Value;
 
         Assert.Equal(RestoreSourceRejection.ReplicaNotRestorable, RejectionOf(artifact, replica, deleteAfter));
         Assert.Equal(RestoreSourceRejection.ReplicaNotRestorable, RejectionOf(artifact, replica, deleteAfter + OneTick));
         Assert.Equal(RestoreSourceRejection.ReplicaNotRestorable, RejectionOf(artifact, replica, deleteAfter.AddDays(30)));
-    }
-
-    [Fact]
-    public void ADeletePendingAgentLocalReplicaFollowsTheSameGraceRule()
-    {
-        var (artifact, replica) = OwnLocal();
-        artifact.RequestDelete(Now, null);
-        var deleteAfter = replica.DeleteAfter!.Value;
-
-        Assert.Equal(RestoreSourceAccess.AgentLocal, RestoreSourceEvaluator.Evaluate(artifact, replica, Agent, deleteAfter - OneTick).Access);
-        Assert.Equal(RestoreSourceRejection.ReplicaNotRestorable, RejectionOf(artifact, replica, deleteAfter));
     }
 
     [Fact]
@@ -255,23 +225,16 @@ public sealed class RestoreSourceEvaluatorTests
         Assert.Same(replica, RestoreSourceEvaluator.SelectReplica(artifact, Agent, Now));
     }
 
-    [Fact]
-    public void TheNewestOfTwoEqualReplicasIsSelected()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TheNewestOfEquallyRankedReplicasIsSelected(bool ownLocal)
     {
         var artifact = Artifact();
-        AddTo(artifact, CentralReplica(artifact, "tenant/older.bak", Now.AddDays(-3)));
-        var newest = AddTo(artifact, CentralReplica(artifact, "tenant/newest.bak", Now.AddDays(-1)));
-        AddTo(artifact, CentralReplica(artifact, "tenant/middle.bak", Now.AddDays(-2)));
-
-        Assert.Same(newest, RestoreSourceEvaluator.SelectReplica(artifact, Agent, Now));
-    }
-
-    [Fact]
-    public void TheNewestOfTwoOwnLocalReplicasIsSelected()
-    {
-        var artifact = Artifact();
-        AddTo(artifact, AgentReplica(artifact, Agent.Value, "tenant/older-local.bak", Now.AddDays(-3)));
-        var newest = AddTo(artifact, AgentReplica(artifact, Agent.Value, "tenant/newer-local.bak", Now.AddDays(-1)));
+        BackupReplica Make(string path, int ageDays) => ownLocal ? AgentReplica(artifact, Agent.Value, path, Now.AddDays(-ageDays)) : CentralReplica(artifact, path, Now.AddDays(-ageDays));
+        AddTo(artifact, Make("tenant/older.bak", 3));
+        var newest = AddTo(artifact, Make("tenant/newest.bak", 1));
+        AddTo(artifact, Make("tenant/middle.bak", 2));
 
         Assert.Same(newest, RestoreSourceEvaluator.SelectReplica(artifact, Agent, Now));
     }

@@ -6,7 +6,7 @@ A multi-tenant backup platform with a .NET backend and agent, a React frontend, 
 
 ## Repository Map
 
-- `backup-backend/`: .NET 10 solution (`BackupPlatform.sln`).
+- `backup-backend/`: .NET solution (`BackupPlatform.sln`).
   - `src/core/domain/`: Business entities and invariants; no project-level dependencies on other application layers.
   - `src/core/contracts/`: Shared API/agent contracts and storage layout contracts.
   - `src/core/application/`: Use cases, orchestration, application interfaces.
@@ -69,5 +69,3 @@ bun run build
 - Review generated schema changes and preserve existing data and migration history.
 - Work on the user's current authorized branch. Do not hardcode a specific branch or milestone into permanent repository instructions.
 - Keep commits focused and use the existing CI checks appropriate to the change. Follow `AGENTS.md` for Git and attribution rules.
-
-- Do not commit anything in docs/ directory.

@@ -133,35 +133,24 @@ public sealed class HttpAgentBackendClientTests
         Assert.Equal(AgentBackendFailureKind.Rejected, result.Failure!.Kind);
     }
 
-    [Fact]
-    public async Task Rate_limit_reads_retry_after_from_the_delta_header()
+    [Theory]
+    [InlineData(false, 42)]
+    [InlineData(true, 90)]
+    public async Task Rate_limit_reads_retry_after_from_the_delta_header_or_an_http_date_relative_to_the_clock(bool httpDate, int expectedSeconds)
     {
         _handler.Respond = (_, _) =>
         {
             var response = FakeHttpHandler.Json(HttpStatusCode.TooManyRequests, """{"error":"rate_limited","retryAfterSeconds":5}""");
-            response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromSeconds(42));
+            response.Headers.RetryAfter = httpDate
+                ? new RetryConditionHeaderValue(_time.GetUtcNow().AddSeconds(90))
+                : new RetryConditionHeaderValue(TimeSpan.FromSeconds(42));
             return Task.FromResult(response);
         };
 
         var result = await SendHeartbeat();
 
         Assert.Equal(AgentBackendFailureKind.RateLimited, result.Failure!.Kind);
-        Assert.Equal(TimeSpan.FromSeconds(42), result.Failure.RetryAfter);
-    }
-
-    [Fact]
-    public async Task Rate_limit_reads_retry_after_from_an_http_date_relative_to_the_clock()
-    {
-        _handler.Respond = (_, _) =>
-        {
-            var response = FakeHttpHandler.Json(HttpStatusCode.TooManyRequests, """{"error":"rate_limited"}""");
-            response.Headers.RetryAfter = new RetryConditionHeaderValue(_time.GetUtcNow().AddSeconds(90));
-            return Task.FromResult(response);
-        };
-
-        var result = await SendHeartbeat();
-
-        Assert.Equal(TimeSpan.FromSeconds(90), result.Failure!.RetryAfter);
+        Assert.Equal(TimeSpan.FromSeconds(expectedSeconds), result.Failure.RetryAfter);
     }
 
     [Fact]
