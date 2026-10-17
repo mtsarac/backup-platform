@@ -1,0 +1,84 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: bp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: backup_platform_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d backup_platform_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2025-latest
+    container_name: bp-mssql
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-Password123!}
+      MSSQL_PID: "Developer"
+    ports:
+      - "${MSSQL_PORT:-1433}:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+
+  api:
+    build:
+      context: ./backup-backend
+      dockerfile: Dockerfile
+    container_name: bp-api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      BACKUP_PLATFORM_CONNECTION_STRING: Host=postgres;Port=5432;Database=backup_platform_dev;Username=postgres;Password=${POSTGRES_PASSWORD:-postgres}
+      BACKUP_PLATFORM_BOOTSTRAP_LOGIN: ${BOOTSTRAP_ADMIN_LOGIN:-admin}
+      BACKUP_PLATFORM_BOOTSTRAP_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-PlatformAdmin123!}
+      BACKUP_PLATFORM_BOOTSTRAP_DISPLAY_NAME: ${BOOTSTRAP_ADMIN_NAME:-Platform Admin}
+      AgentDistribution__PackagesDirectory: /app/agent-dist
+      AgentDistribution__PublicBaseUrl: https://${PUBLIC_HOST:-192.168.1.177}:${API_PORT:-5252}
+      Secrets__DataProtection__KeysDirectory: /app/dp-keys
+      GoogleDrive__ClientId: ${GOOGLE_CLIENT_ID:-}
+      GoogleDrive__ClientSecret: ${GOOGLE_CLIENT_SECRET:-}
+      GoogleDrive__RedirectUri: ${GOOGLE_REDIRECT_URI:-}
+      GoogleDrive__FrontendOrigin: ${GOOGLE_FRONTEND_ORIGIN:-}
+      GoogleDrive__StagingDirectory: /app/gdrive-staging
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - api_dp_keys:/app/dp-keys
+      - api_gdrive_staging:/app/gdrive-staging
+
+  frontend:
+    build:
+      context: ./backup-frontend
+      dockerfile: Dockerfile
+    container_name: bp-frontend
+    restart: unless-stopped
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:-192.168.1.177}
+      EXTRA_SANS: "IP:192.168.122.1,IP:100.80.80.81"
+    ports:
+      - "${FRONTEND_PORT:-5173}:443"
+      - "${FRONTEND_HTTP_PORT:-5174}:80"
+      - "${API_PORT:-5252}:5252"
+    depends_on:
+      - api
+    volumes:
+      - frontend_certs:/etc/nginx/certs
+
+volumes:
+  postgres_data:
+  mssql_data:
+  api_dp_keys:
+  api_gdrive_staging:
+  frontend_certs:
