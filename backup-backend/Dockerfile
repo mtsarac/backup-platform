@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0-preview AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 RUN apt-get update && apt-get install -y --no-install-recommends zip && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 
@@ -52,7 +52,7 @@ RUN mkdir -p /app/publish/agent-dist && \
     tar -C /tmp/linux-stage -czf /app/publish/agent-dist/backup-agent-linux-x64.tar.gz backup-agent-linux-x64-1.0.0 && \
     rm -rf /tmp/linux-stage
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-preview AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
 COPY docker-entrypoint.sh /app/
