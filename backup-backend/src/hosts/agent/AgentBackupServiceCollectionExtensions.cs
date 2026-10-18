@@ -1,3 +1,4 @@
+using BackupPlatform.Agent.Core.Connectivity;
 using BackupPlatform.Agent.Core.Backup;
 using BackupPlatform.Agent.Core.Restore;
 using BackupPlatform.BackupProviders.Abstractions.Database;
@@ -57,11 +58,16 @@ public static class AgentBackupServiceCollectionExtensions
             if (AgentBackupOptionsValidation.TryCreateCleanup(options.Staging?.Cleanup, out var cleanup))
             {
                 services.AddSingleton(cleanup);
-                services.AddSingleton(provider => new StagingCleaner(
-                    new AgentStagingDirectory(staging.AgentDirectory),
-                    provider.GetRequiredService<StagingUsageRegistry>(),
-                    provider.GetRequiredService<TimeProvider>(),
-                    provider.GetRequiredService<ILogger<StagingCleaner>>()));
+                services.AddSingleton(provider =>
+                {
+                    var time = provider.GetRequiredService<TimeProvider>();
+                    return new StagingCleaner(
+                        new AgentStagingDirectory(staging.AgentDirectory),
+                        provider.GetRequiredService<StagingUsageRegistry>(),
+                        // Cleanup age is judged against file timestamps written by this machine's own clock.
+                        time is ServerAlignedTimeProvider aligned ? aligned.Local : time,
+                        provider.GetRequiredService<ILogger<StagingCleaner>>());
+                });
                 services.AddHostedService<AgentStagingCleanupHostedService>();
             }
         }

@@ -8,11 +8,13 @@ public sealed partial class AgentConnectivityService
     private async Task HeartbeatLoopAsync(CancellationToken cancellationToken)
     {
         var failures = 0;
+        var clockSkewed = false;
         while (true)
         {
             var attempt = await WaitForRestrictionAsync("heartbeat", cancellationToken).ConfigureAwait(false);
             var identity = Identity;
             var request = _software.ToHeartbeat(_capabilities.GetRevision());
+            var sentAt = _time.GetTimestamp();
             var result = await GuardAsync("heartbeat", () => _client.SendHeartbeatAsync(identity, request, cancellationToken)).ConfigureAwait(false);
 
             // Failures never shorten the period; they can only add to it (Retry-After) or leave it unchanged.
@@ -22,6 +24,16 @@ public sealed partial class AgentConnectivityService
                 failures = 0;
                 ClearRestriction(attempt);
                 ApplyServerHeartbeatInterval(identity.AgentId, result.Value);
+                if (_time is ServerAlignedTimeProvider clock && clock.Observe(result.Value.ServerTime, _time.GetElapsedTime(sentAt)))
+                {
+                    var skewed = clock.Offset.Duration() > ClockSkewWarningThreshold;
+                    if (skewed != clockSkewed)
+                    {
+                        clockSkewed = skewed;
+                        if (skewed) LogClockSkewDetected(identity.AgentId, clock.Offset);
+                        else LogClockSkewResolved(identity.AgentId);
+                    }
+                }
                 var acknowledgedAt = _time.GetUtcNow();
                 Update(s => s with { ConsecutiveHeartbeatFailures = 0, LastSuccessfulHeartbeatUtc = acknowledgedAt });
                 LogHeartbeatSucceeded(identity.AgentId, result.Value.ServerTime);

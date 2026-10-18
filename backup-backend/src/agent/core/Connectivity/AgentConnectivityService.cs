@@ -26,6 +26,9 @@ public sealed partial class AgentConnectivityService : IAgentConnectivityStatus
 
     private static readonly TimeSpan MaximumRetryAfter = TimeSpan.FromHours(1);
 
+    /// <summary>Clock offsets below this are normal network jitter and not worth a warning.</summary>
+    private static readonly TimeSpan ClockSkewWarningThreshold = TimeSpan.FromSeconds(30);
+
     private readonly IAgentCredentialStore _store;
     private readonly IAgentBackendClient _client;
     private readonly IAgentTaskSink? _taskSink;
