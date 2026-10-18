@@ -22,7 +22,7 @@ public static class AgentHostServiceCollectionExtensions
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<AgentHostOptions>, AgentHostOptionsValidator>();
 
-        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<TimeProvider>(static _ => new ServerAlignedTimeProvider(TimeProvider.System));
         services.AddSingleton(static provider =>
         {
             var connectivity = provider.GetRequiredService<IOptions<AgentHostOptions>>().Value.Connectivity;

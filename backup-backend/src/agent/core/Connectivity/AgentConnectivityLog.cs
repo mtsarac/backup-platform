@@ -55,6 +55,13 @@ public sealed partial class AgentConnectivityService
     [LoggerMessage(EventId = 30, Level = LogLevel.Debug, Message = "Heartbeat acknowledged: AgentId={AgentId} ServerTime={ServerTime}")]
     private partial void LogHeartbeatSucceeded(Guid agentId, DateTimeOffset serverTime);
 
+    [LoggerMessage(EventId = 35, Level = LogLevel.Warning,
+        Message = "This machine's clock differs from the backend's: AgentId={AgentId} BackendMinusLocal={Offset}. Backend time is used for task deadlines; correct the system time or time zone.")]
+    private partial void LogClockSkewDetected(Guid agentId, TimeSpan offset);
+
+    [LoggerMessage(EventId = 36, Level = LogLevel.Information, Message = "This machine's clock matches the backend's again: AgentId={AgentId}")]
+    private partial void LogClockSkewResolved(Guid agentId);
+
     [LoggerMessage(EventId = 31, Level = LogLevel.Warning,
         Message = "Heartbeat failed: AgentId={AgentId} Failure={Failure} Reason={Reason} ConsecutiveFailures={RetryCount} NextHeartbeatIn={Delay} BackendHost={BackendHost}")]
     private partial void LogHeartbeatFailed(Guid agentId, AgentBackendFailureKind failure, string reason, int retryCount, TimeSpan delay, string backendHost);
