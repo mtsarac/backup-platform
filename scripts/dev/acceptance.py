@@ -238,7 +238,7 @@ def download(options):
     ok = transferred == state['sizeBytes'] and digest.hexdigest().lower() == state['checksum'].lower()
     encrypted = head == b'BPENC\0'
     out(step='download', bytes=transferred, sha256=digest.hexdigest(), matchesArtifact=ok, encrypted=encrypted, lifecycle=completed['state'], transferredBytes=completed['transferredBytes'])
-    if encrypted != (os.environ.get('ACCEPTANCE_ENCRYPTION', 'Off') == 'Required'):
+    if encrypted != (os.environ.get('ACCEPTANCE_ENCRYPTION', 'Off') != 'Off'):
         raise FixtureFailure('The downloaded artifact format does not match the job encryption policy.')
     if not ok:
         raise FixtureFailure('Downloaded length/SHA-256 differs from the artifact.')
