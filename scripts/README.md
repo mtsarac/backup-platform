@@ -49,12 +49,14 @@ scripts/windows/test-agent-service.sh status
 Local connection values live in the private file:
 
 ```text
-docs/test-cred.txt
+docs/test-cred.yaml
 ```
+
+The file is YAML with `local` and `windows11_vm` blocks, each holding `mssql` and PostgreSQL entries with `host`, `port`, `user`, and `password`. The dev stack also writes its accounts to `docs/local-development-accounts.yaml`. Override the path with `BP_CREDENTIAL_FILE` or `BP_DEV_ACCOUNTS_FILE`. The scripts parse these files with PyYAML (`pip install pyyaml`).
 
 Rules:
 
-- do not modify `docs/test-cred.txt`,
+- do not modify `docs/test-cred.yaml`,
 - do not add it to Git,
 - do not copy its contents into tracked files,
 - do not hardcode passwords/secrets in scripts,
@@ -390,7 +392,7 @@ Disposable integration smoke for backend-relayed SFTP storage:
 ## Persistent local development stack (`scripts/dev/`)
 
 Not disposable: state lives in `~/.local/share/backup-platform-dev` (override with `BP_DEV_HOME`), the PostgreSQL database is `backup_platform_dev`
-in the existing `postgres` container, and accounts are written once to the git-ignored `docs/local-development-accounts.txt` (0600).
+in the existing `postgres` container, and accounts are written once to the git-ignored `docs/local-development-accounts.yaml` (0600).
 
 ```bash
 scripts/dev/start.sh [--no-build] [--no-agent]   # idempotent: MSSQL container, DB, migrations, API, seed, Vite, Linux Agent

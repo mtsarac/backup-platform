@@ -12,7 +12,8 @@ BP_DEV_WEB_PORT=5173
 BP_DEV_MSSQL_CONTAINER=${BP_DEV_MSSQL_CONTAINER:-bp-dev-mssql}
 BP_DEV_MSSQL_PORT=14331
 BP_DEV_SQL_CREDENTIAL_REFERENCE=sql_dev
-BP_DEV_ACCOUNTS_FILE="$REPO_ROOT/docs/local-development-accounts.txt"
+BP_DEV_ACCOUNTS_FILE="${BP_DEV_ACCOUNTS_FILE:-$REPO_ROOT/docs/local-development-accounts.yaml}"
+export BP_DEV_ACCOUNTS_FILE
 BP_DEV_FRONTEND_URL="http://localhost:$BP_DEV_WEB_PORT"
 BP_DEV_API_URL="http://localhost:$BP_DEV_API_HTTP_PORT"
 BP_DEV_API_TLS_URL="https://localhost:$BP_DEV_API_HTTPS_PORT"
@@ -39,7 +40,7 @@ dev_prepare_state() {
     fi
 }
 
-# Replaces only the Database segment of the administrative PostgreSQL connection string from docs/test-cred.txt.
+# Replaces only the Database segment of the administrative PostgreSQL connection string from docs/test-cred.yaml.
 dev_connection_string() {
     python3 - "$BACKUP_PLATFORM_TEST_CONNECTION_STRING" "$BP_DEV_DATABASE" <<'PY'
 import sys

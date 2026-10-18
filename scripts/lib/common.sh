@@ -6,7 +6,7 @@ if [[ ${BP_COMMON_LOADED:-0} == 1 ]]; then return 0; fi
 BP_COMMON_LOADED=1
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 export REPO_ROOT
-BP_CREDENTIAL_FILE="${BP_CREDENTIAL_FILE:-${REPO_ROOT}/docs/test-cred.txt}"
+BP_CREDENTIAL_FILE="${BP_CREDENTIAL_FILE:-${REPO_ROOT}/docs/test-cred.yaml}"
 export BP_CREDENTIAL_FILE
 umask 077
 BP_CLEANUP_DIRS=()

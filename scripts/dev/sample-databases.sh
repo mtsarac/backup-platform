@@ -4,7 +4,7 @@
 #   sample-databases.sh create [--target local-mssql|local-pg|vm-mssql|vm-pg|all] [--count N]   N databases per target (default 3, sizes ~5/25/70 MB, cycling)
 #   sample-databases.sh list   [--target ...]
 #   sample-databases.sh drop   [--target ...]   drops only databases named bpsample_*; nothing else is ever touched
-# Credentials come from docs/test-cred.txt at runtime and are handed to the client containers by environment, never printed.
+# Credentials come from docs/test-cred.yaml at runtime and are handed to the client containers by environment, never printed.
 set +x
 set -euo pipefail
 # shellcheck source=../lib/common.sh

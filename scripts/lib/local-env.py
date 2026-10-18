@@ -6,22 +6,31 @@ from pathlib import Path
 import re
 import sys
 
+import yaml
+
 
 def read_sections(path):
     sections = {"postgres": {}, "mssql": {}, "windows": {}, "windows_postgres": {}}
-    section = None
-    for raw in path.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if line.lower().startswith("windows11 vm"):
-            section = "windows"
-        elif line.lower().startswith("win11 vm postgresql"):
-            section = "windows_postgres"
-        elif line.lower() == "postgresql:":
-            section = "postgres"
-        elif line.lower() == "mssqlserver:":
-            section = "mssql"
-        elif section and (match := re.match(r"^([A-Z_]+)\s*[:=]\s*(.*)$", line)):
-            sections[section][match[1]] = match[2]
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    local, vm = data.get("local") or {}, data.get("windows11_vm") or {}
+    pg_section, windows_pg_section = (next(k for k in sections if match(k)) for match in (
+        lambda k: k not in ("mssql", "windows") and not k.startswith("windows_"),
+        lambda k: k.startswith("windows_")))
+    # YAML names the PostgreSQL block after the engine; sections use the same names as before.
+    local_pg = next((v for k, v in local.items() if k != "mssql"), None)
+    vm_pg = next((v for k, v in vm.items() if isinstance(v, dict) and k != "mssql"), None)
+
+    def fill(section, source, fields):
+        for legacy, field in fields.items():
+            if (value := (source or {}).get(field)) is not None:
+                sections[section][legacy] = str(value)
+
+    fill(pg_section, local_pg, {"HOST": "host", "PORT": "port", "POSTGRES_USER": "user", "POSTGRES_PASSWORD": "password"})
+    fill("mssql", local.get("mssql"), {"HOST": "host", "PORT": "port", "USER": "user", "MSSQL_SA_PASSWORD": "password"})
+    fill("windows", vm.get("mssql"), {"HOST": "host", "PORT": "port", "USER": "user", "MSSQL_SA_PASSWORD": "password"})
+    if vm.get("ssh"):
+        sections["windows"]["SSH"] = str(vm["ssh"])
+    fill(windows_pg_section, vm_pg, {"USER": "user", "PASSWORD": "password"})
     return sections
 
 
