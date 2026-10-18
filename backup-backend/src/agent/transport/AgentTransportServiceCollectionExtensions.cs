@@ -1,5 +1,6 @@
 using BackupPlatform.Agent.Core.Connectivity;
 using BackupPlatform.Agent.Core.Discovery;
+using BackupPlatform.Agent.Core.Restore;
 using BackupPlatform.Agent.Core.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -99,6 +100,17 @@ public static class AgentTransportServiceCollectionExtensions
             {
                 // The renewable session lease, not a fixed HTTP timeout, bounds a large upload.
                 client.Timeout = Timeout.InfiniteTimeSpan;
+                client.MaxResponseContentBufferSize = 1024 * 1024;
+            })
+            .ConfigurePrimaryHttpMessageHandler(static () => new SocketsHttpHandler
+            {
+                PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+                AllowAutoRedirect = false,
+            })
+            .SetHandlerLifetime(Timeout.InfiniteTimeSpan);
+        services.AddHttpClient<IArtifactKeyClient, HttpArtifactKeyClient>(client =>
+            {
+                client.Timeout = RequestTimeout;
                 client.MaxResponseContentBufferSize = 1024 * 1024;
             })
             .ConfigurePrimaryHttpMessageHandler(static () => new SocketsHttpHandler

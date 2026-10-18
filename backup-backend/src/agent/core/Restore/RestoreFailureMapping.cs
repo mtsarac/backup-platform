@@ -72,6 +72,9 @@ public static class RestorePipelineReasons
     public const string ProviderError = "provider-error";
     public const string StagingCleanupFailed = "staging-cleanup-failed";
     public const string ChecksumNotVerified = "checksum-not-verified";
+    public const string ArtifactKeyUnavailable = "artifact-key-unavailable";
+    public const string ArtifactAuthenticationFailed = "artifact-authentication-failed";
+    public const string SourceChecksumMismatch = "source-checksum-mismatch";
     public const string Cancelled = "cancelled";
     public const string Unexpected = "unexpected";
     public const string VerificationUnsupported = "verification-unsupported";

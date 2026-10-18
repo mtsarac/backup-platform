@@ -42,6 +42,7 @@ public static class BackupInputValidation
         Check(c.StoragePrefix is { Length: <= 512 } && SafeKey(c.StoragePrefix), "configuration.storagePrefix");
         Check(c.ChecksumPolicy is "Required" or "Preferred" or "Disabled", "configuration.checksumPolicy");
         Check(c.CompressionPolicy is "Required" or "Preferred" or "Disabled", "configuration.compressionPolicy");
+        Check(c.EncryptionPolicy is "Off" or "Optional" or "Required", "configuration.encryptionPolicy");
         Check(c.IntegratedSecurity ? c.DatabaseCredentialReference is null : Text(c.DatabaseCredentialReference, 64) && c.DatabaseCredentialReference!.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '-' or '_'), "configuration.databaseCredentialReference");
 
         var destinations = c.Destinations ?? [];
@@ -101,7 +102,7 @@ public static class BackupInputValidation
         if (request.Status is not ("Succeeded" or "Failed" or "Cancelled") || request.Artifact is not { } a) return false;
         if (request.Status == "Succeeded" && request.FailureCode is not null) return false;
         if (a.SizeBytes <= 0 || a.CreatedAt == default || a.ChecksumAlgorithm != "sha256" || !Checksum(a.SourceChecksum) || !Checksum(a.ArtifactChecksum) ||
-            a.Replicas is null || a.Replicas.Count > snapshot.Count || !Metadata(a, configuration)) return false;
+            !ValidEncryption(a) || a.Replicas is null || a.Replicas.Count > snapshot.Count || !Metadata(a, configuration)) return false;
         if (request.Status == "Succeeded" ? a.Replicas.Count == 0 : a.Replicas.Count != 0 || !request.Destinations.Any(d => d.ObjectMayRemain)) return false;
         return a.Replicas.All(r => r is not null && Destination(snapshot, r.StorageProvider, r.StorageConnectionId) is { } destination && Reference(r.StorageTarget) &&
             (destination.StorageExecutionLocation != BackupStorageExecutionLocation.Agent || r.StorageTarget == (destination.StorageTarget ?? r.StorageProvider)) &&
@@ -150,6 +151,14 @@ public static class BackupInputValidation
     }
 
     private static bool Checksum(string? value) => value is { Length: 64 } && value.All(Uri.IsHexDigit);
+
+    private static bool ValidEncryption(BackupTaskArtifact a) => a.Format switch
+    {
+        ArtifactFormats.Plain => a.EncryptionKeyId is null && a.EncryptionKeyVersion is null && a.EncryptionWrappedDekBase64 is null,
+        ArtifactFormats.Bpe2 => a.EncryptionKeyId is { Length: 32 } id && id.All(c => char.IsAsciiHexDigitLower(c)) && a.EncryptionKeyVersion is >= 1 &&
+            a.EncryptionWrappedDekBase64 is { Length: > 0 and <= 4096 } dek && Convert.TryFromBase64String(dek, new byte[3072], out _),
+        _ => false
+    };
 
     private static bool Metadata(BackupTaskArtifact artifact, BackupConfiguration configuration)
     {

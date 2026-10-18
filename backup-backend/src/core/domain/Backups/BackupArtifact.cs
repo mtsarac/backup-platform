@@ -9,9 +9,12 @@ public sealed class BackupArtifact : ITenantOwned
     private IReadOnlyList<BackupReplica>? _replicaView;
     private readonly List<BackupReplica> _replicas = [];
     private bool _sealed;
-    private BackupArtifact() { TenantId = null!; SourceChecksum = null!; ArtifactChecksum = null!; ChecksumAlgorithm = null!; SourceMetadataJson = null!; AppliedOptionsJson = null!; }
+    public const string PlainFormat = "v1-plain";
+    public const string BpeFormat = "v2-bpe";
+    private BackupArtifact() { TenantId = null!; SourceChecksum = null!; ArtifactChecksum = null!; ChecksumAlgorithm = null!; SourceMetadataJson = null!; AppliedOptionsJson = null!; Format = null!; }
     public BackupArtifact(Guid id, TenantId tenantId, Guid attemptId, long sizeBytes, string sourceChecksum,
-        string artifactChecksum, string checksumAlgorithm, DateTimeOffset createdAt, string sourceMetadataJson, string appliedOptionsJson)
+        string artifactChecksum, string checksumAlgorithm, DateTimeOffset createdAt, string sourceMetadataJson, string appliedOptionsJson,
+        string format = PlainFormat, string? encryptionKeyId = null, int? encryptionKeyVersion = null, string? encryptionWrappedDekBase64 = null)
     {
         BackupGuard.Id(id);
         BackupGuard.Id(attemptId);
@@ -21,6 +24,7 @@ public sealed class BackupArtifact : ITenantOwned
         BackupGuard.Checksum(artifactChecksum, checksumAlgorithm);
         ValidateMetadata(sourceMetadataJson);
         ValidateMetadata(appliedOptionsJson);
+        ValidateEncryption(format, encryptionKeyId, encryptionKeyVersion, encryptionWrappedDekBase64);
         Id = id;
         TenantId = tenantId;
         AttemptId = attemptId;
@@ -31,6 +35,10 @@ public sealed class BackupArtifact : ITenantOwned
         CreatedAt = BackupGuard.Timestamp(createdAt);
         SourceMetadataJson = sourceMetadataJson;
         AppliedOptionsJson = appliedOptionsJson;
+        Format = format;
+        EncryptionKeyId = encryptionKeyId;
+        EncryptionKeyVersion = encryptionKeyVersion;
+        EncryptionWrappedDekBase64 = encryptionWrappedDekBase64;
     }
     public Guid Id { get; private set; }
     public TenantId TenantId { get; private set; }
@@ -43,6 +51,12 @@ public sealed class BackupArtifact : ITenantOwned
     public DateTimeOffset CreatedAt { get; private set; }
     public string SourceMetadataJson { get; private set; }
     public string AppliedOptionsJson { get; private set; }
+    /// <summary><see cref="PlainFormat"/> or <see cref="BpeFormat"/>.</summary>
+    public string Format { get; private set; }
+    public string? EncryptionKeyId { get; private set; }
+    public int? EncryptionKeyVersion { get; private set; }
+    /// <summary>The DEK wrapped to the tenant wrap key, as the agent copied it from the .bpe header. Useless without the tenant private key; never returned by an API.</summary>
+    public string? EncryptionWrappedDekBase64 { get; private set; }
     public IReadOnlyList<BackupReplica> Replicas => _replicaView ??= _replicas.AsReadOnly();
     public void AddReplica(BackupReplica replica)
     {
@@ -214,8 +228,21 @@ public sealed class BackupArtifact : ITenantOwned
     }
     internal bool SameResult(BackupArtifact other) => SizeBytes == other.SizeBytes && SourceChecksum == other.SourceChecksum &&
         ArtifactChecksum == other.ArtifactChecksum && ChecksumAlgorithm == other.ChecksumAlgorithm && CreatedAt == other.CreatedAt &&
+        Format == other.Format && EncryptionKeyId == other.EncryptionKeyId && EncryptionKeyVersion == other.EncryptionKeyVersion &&
+        EncryptionWrappedDekBase64 == other.EncryptionWrappedDekBase64 &&
         SameMetadata(SourceMetadataJson, other.SourceMetadataJson) && SameMetadata(AppliedOptionsJson, other.AppliedOptionsJson) &&
         _replicas.Count == other._replicas.Count && _replicas.All(replica => other._replicas.Any(replica.SameResult));
+    private static void ValidateEncryption(string format, string? keyId, int? version, string? wrappedDek)
+    {
+        if (format == PlainFormat)
+        {
+            if (keyId is not null || version is not null || wrappedDek is not null) throw new ArgumentException("A plain artifact has no encryption key.");
+            return;
+        }
+        if (format != BpeFormat || keyId is not { Length: 32 } || !keyId.All(c => char.IsAsciiHexDigitLower(c)) || version is not >= 1 ||
+            wrappedDek is not { Length: > 0 and <= 4096 } || !Convert.TryFromBase64String(wrappedDek, new byte[3072], out _))
+            throw new ArgumentException("An encrypted artifact requires a key id, version and wrapped DEK.");
+    }
     private static bool SameMetadata(string first, string second)
     {
         if (string.Equals(first, second, StringComparison.Ordinal)) return true;

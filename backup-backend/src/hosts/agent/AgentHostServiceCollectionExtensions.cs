@@ -1,5 +1,6 @@
 using BackupPlatform.Agent.Core.Connectivity;
 using BackupPlatform.Agent.Core.Identity;
+using BackupPlatform.Agent.Core.Restore;
 using BackupPlatform.Agent.Core.Tasks;
 using BackupPlatform.Agent.Transport;
 using BackupPlatform.BackupProviders.Abstractions.Database;
@@ -56,7 +57,8 @@ public static class AgentHostServiceCollectionExtensions
             provider.GetRequiredService<IBackupTaskCredentialResolver>(),
             provider.GetServices<StagingArea>(),
             provider.GetService<ITaskStorageProviderFactory>(),
-            provider.GetService<LocalVolumes>()));
+            provider.GetService<LocalVolumes>(),
+            provider.GetService<IArtifactKeyClient>()));
         services.AddSingleton<RestoreTaskWorker>();
         services.AddSingleton<RestoreCleanupWorker>();
         services.TryAddSingleton<IDeleteReplicaProviderResolver, DeleteReplicaProviderResolver>();

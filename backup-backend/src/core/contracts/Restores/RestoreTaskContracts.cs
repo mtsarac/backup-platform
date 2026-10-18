@@ -59,6 +59,22 @@ public sealed record RestoreTaskSource
     public string ChecksumAlgorithm { get; init; } = "sha256";
     /// <summary><c>AgentLocal</c>, <c>CentralStorage</c>, or <c>BackendRelayed</c>; SFTP is read through the backend, which alone resolves storage credentials.</summary>
     public string Access { get; init; } = string.Empty;
+    /// <summary><see cref="BackupPlatform.Contracts.Backups.ArtifactFormats"/> of the artifact. When v2-bpe the agent decrypts in staging and verifies the plaintext against <see cref="SourceChecksum"/>.</summary>
+    public string Format { get; init; } = BackupPlatform.Contracts.Backups.ArtifactFormats.Plain;
+    /// <summary>SHA-256 of the plaintext backup file (the artifact's SourceChecksum); the decrypted bytes must match before anything is restored.</summary>
+    public string SourceChecksum { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// Agent to backend, fenced by the restore attempt's lease: ask the backend to unwrap the DEK of THE attempt's own artifact. The request has no
+/// body and carries no key material: the backend resolves attempt, operation and artifact itself and unwraps only the wrapped DEK it stored for
+/// that artifact, so the endpoint cannot be used to decrypt arbitrary blobs. Route: <c>POST /api/agent/restore-tasks/{attemptId}/artifact-key</c>.
+/// The backend verifies the key belongs to the attempt's tenant and audits the call.
+/// </summary>
+public sealed record ArtifactKeyUnwrapResponse
+{
+    /// <summary>The DEK in the clear, for this restore only. It must never be logged, persisted or put in a task payload.</summary>
+    public string DekBase64 { get; init; } = string.Empty;
 }
 
 public sealed record RestoreTaskTarget

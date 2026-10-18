@@ -13,9 +13,10 @@ namespace BackupPlatform.IntegrationTests.RestoreSmoke;
 public sealed class MsSqlRestoreAcceptanceTests(PostgreSqlFixture database, ITestOutputHelper output) : IClassFixture<PostgreSqlFixture>
 {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task VerifiedArtifactRestoresAfterSourceDeletionAndExplicitlyReplacesDisposableTarget(bool crossInstance)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task VerifiedArtifactRestoresAfterSourceDeletionAndExplicitlyReplacesDisposableTarget(bool crossInstance, bool encrypted)
     {
         var hostName = AgentHostSmokeProcess.Required("BACKUP_PLATFORM_TEST_MSSQL_HOST");
         var sourcePort = int.Parse(AgentHostSmokeProcess.Required("BACKUP_PLATFORM_TEST_MSSQL_PORT"), System.Globalization.CultureInfo.InvariantCulture);
@@ -47,7 +48,7 @@ public sealed class MsSqlRestoreAcceptanceTests(PostgreSqlFixture database, ITes
                 Host = hostName, Port = sourcePort, Database = sourceName,
                 DatabaseLogin = new(Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_USER")!, Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_PASSWORD")!), TrustServerCertificate = true,
                 StagingReference = "default", Destinations = BackupTestDestinations.LocalAgent, StoragePrefix = "restore-smoke",
-                CopyOnly = true, ChecksumPolicy = "Required", CompressionPolicy = "Preferred"
+                CopyOnly = true, ChecksumPolicy = "Required", CompressionPolicy = "Preferred", EncryptionPolicy = encrypted ? "Required" : "Off"
             };
             using var jobResponse = await tenant.Admin.SendAsync(HttpMethod.Post,
                 $"/api/tenants/{tenant.Tenant.Id.Value}/backup-jobs", new { name = "Restore acceptance source", agentId = agent.AgentId, configuration });
@@ -99,6 +100,14 @@ public sealed class MsSqlRestoreAcceptanceTests(PostgreSqlFixture database, ITes
             await target.AssertPayloadAsync(targetName);
             Assert.Equal("ONLINE/MULTI_USER", await target.DatabaseStateAsync(targetName));
             output.WriteLine("Explicit disposable overwrite restored the original rows and left the target ONLINE/MULTI_USER; implicit overwrite was rejected without modifying it.");
+
+            var storedHead = new byte[6];
+            await using (var stored = File.OpenRead(Path.Combine(agentHost.StorageDirectory, replica.GetProperty("key").GetString()!.Replace('/', Path.DirectorySeparatorChar))))
+            {
+                await stored.ReadExactlyAsync(storedHead);
+            }
+            Assert.Equal(encrypted, storedHead.AsSpan().SequenceEqual("BPENC\0"u8));
+            output.WriteLine("Stored replica is {0}.", encrypted ? "bpe v2 ciphertext" : "the plain engine backup");
 
             // Change bytes without changing their length: persisted Verified metadata must not authorize today's corrupt file.
             var physical = Path.Combine(agentHost.StorageDirectory, replica.GetProperty("key").GetString()!.Replace('/', Path.DirectorySeparatorChar));

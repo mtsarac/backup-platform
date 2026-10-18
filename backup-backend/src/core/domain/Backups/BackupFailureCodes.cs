@@ -27,6 +27,8 @@ public static class BackupFailureCodes
     public const string PermissionDenied = "PermissionDenied";
     public const string StagingInvalid = "StagingInvalid";
     public const string QuotaExceeded = "QuotaExceeded";
+    /// <summary>A job whose policy is Required produced (or reported) an artifact that is not encrypted. Never retried: another attempt would be given the same instruction.</summary>
+    public const string EncryptionRequired = "EncryptionRequired";
 
     // Outcomes that are not agent-reported failures.
     public const string Cancelled = "Cancelled";
@@ -53,6 +55,7 @@ public static class BackupFailureCodes
         [AuthenticationFailed] = false,
         [PermissionDenied] = false,
         [QuotaExceeded] = false,
+        [EncryptionRequired] = false,
         [StagingInvalid] = false
     };
 

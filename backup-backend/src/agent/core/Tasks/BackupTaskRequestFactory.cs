@@ -1,6 +1,8 @@
+using System.Security.Cryptography;
 using BackupPlatform.Agent.Core.Backup;
 using BackupPlatform.BackupProviders.Abstractions.Database;
 using BackupPlatform.Contracts.Backups;
+using BackupPlatform.Encryption;
 using BackupPlatform.StorageProviders.Abstractions;
 
 namespace BackupPlatform.Agent.Core.Tasks;
@@ -46,8 +48,38 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
             MaxArtifactBytes = task.MaxArtifactBytes,
             Destinations = targets,
             UploadBandwidth = uploadBandwidth?.Invoke(task),
-            RequiredVerifiedReplicas = Math.Max(1, configuration.RequiredVerifiedReplicaCount)
+            RequiredVerifiedReplicas = Math.Max(1, configuration.RequiredVerifiedReplicaCount),
+            Encryption = task.Encryption is { } encryption ? ToArtifactEncryption(encryption) : null
         };
+    }
+
+    private const int MinWrapKeyBits = 3072;
+
+    private static ArtifactEncryption ToArtifactEncryption(BackupEncryptionInstruction instruction)
+    {
+        if (instruction.KeyVersion < 1)
+        {
+            throw new BackupTaskEncryptionException();
+        }
+
+        var key = RSA.Create();
+        try
+        {
+            key.ImportSubjectPublicKeyInfo(Convert.FromBase64String(instruction.PublicKeySpkiBase64), out _);
+        }
+        catch (Exception exception) when (exception is FormatException or CryptographicException or ArgumentException)
+        {
+            key.Dispose();
+            throw new BackupTaskEncryptionException();
+        }
+
+        if (key.KeySize < MinWrapKeyBits)
+        {
+            key.Dispose();
+            throw new BackupTaskEncryptionException();
+        }
+
+        return new ArtifactEncryption(instruction.Required, [new BpeRecipient(BpeRecipientType.TenantWrap, instruction.KeyVersion, key)]);
     }
 
     private async ValueTask<DatabaseCredential> ResolveCredentialAsync(string reference, CancellationToken cancellationToken)
@@ -133,5 +165,10 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
 }
 
 internal sealed class BackupTaskCredentialException : Exception
+{
+}
+
+/// <summary>The task's encryption instruction cannot be honoured; reported as invalid configuration so an encrypted job never silently produces a plaintext artifact.</summary>
+internal sealed class BackupTaskEncryptionException : Exception
 {
 }

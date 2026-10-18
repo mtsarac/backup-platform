@@ -110,6 +110,9 @@ public sealed record DatabaseBackupPipelineRequest
 
     /// <summary>Paces the upload bytes of every destination to the backend's limits; null uploads at full speed. The timeout of a paced destination is widened by <see cref="IUploadBandwidthSession.DeadlineAllowance"/>.</summary>
     public IUploadBandwidth? UploadBandwidth { get; init; }
+
+    /// <summary>Null means the job does not encrypt; otherwise handed to the artifact preparer unchanged.</summary>
+    public ArtifactEncryption? Encryption { get; init; }
 }
 
 /// <summary>One copy target of an execution. <see cref="StorageOverride"/> is a task-scoped (lease-bound, relayed) provider; <see cref="ConnectionId"/> is the snapshot destination it belongs to.</summary>
@@ -120,6 +123,9 @@ public enum ArtifactTransformKind
     Compression = 1,
     Encryption
 }
+
+/// <summary>The tenant-wrap recipient of an encrypted artifact, read back from its header. <see cref="WrappedDek"/> is ciphertext only the backend's private wrap key opens.</summary>
+public sealed record ArtifactSeal(string KeyId, int KeyVersion, byte[] WrappedDek);
 
 /// <summary>One transformation applied between the engine's backup file and the stored artifact (none exist yet; the list is how they will be recorded).</summary>
 public sealed record ArtifactTransform(ArtifactTransformKind Kind, string Algorithm);
@@ -141,7 +147,8 @@ public sealed record BackupArtifactInfo(
     long SizeBytes,
     ContentChecksum Checksum,
     bool IsSourceFile,
-    IReadOnlyList<ArtifactTransform> Transforms);
+    IReadOnlyList<ArtifactTransform> Transforms,
+    ArtifactSeal? Seal = null);
 
 /// <summary>One physical copy of the artifact on a storage, with what the verification of that copy established.</summary>
 public sealed record BackupReplicaInfo(

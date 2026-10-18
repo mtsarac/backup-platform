@@ -32,6 +32,8 @@ public sealed record BackupExecutionConfiguration
     /// <summary>The only destination source (at least one, exactly one primary). A job may leave a destination's connection null (the tenant default for its provider); a run always carries the resolved one.</summary>
     public IReadOnlyList<BackupDestinationContract> Destinations { get; init; } = [];
     public int RequiredVerifiedReplicaCount { get; init; } = 1;
+    /// <summary>"Off" (default when omitted), "Optional" or "Required". The backend turns it into <see cref="BackupTaskSnapshot.Encryption"/>.</summary>
+    public string EncryptionPolicy { get; init; } = "Off";
 }
 
 public sealed record BackupDestinationContract
@@ -60,6 +62,8 @@ public sealed record BackupTaskSnapshot
     public bool CancellationRequested { get; init; }
     /// <summary>Hard-quota bound checked before any transfer; null means no hard bound, zero refuses storage.</summary>
     public long? MaxArtifactBytes { get; init; }
+    /// <summary>Null means the job does not encrypt. Carries the tenant's PUBLIC wrap key only; no private or symmetric key ever travels to the agent.</summary>
+    public BackupEncryptionInstruction? Encryption { get; init; }
 }
 
 public sealed record BackupTaskStartRequest
@@ -131,6 +135,27 @@ public sealed record BackupTaskArtifact
     public string SourceMetadataJson { get; init; } = "{}";
     public string AppliedOptionsJson { get; init; } = "{}";
     public IReadOnlyList<BackupTaskReplica> Replicas { get; init; } = [];
+    /// <summary><see cref="ArtifactFormats.Plain"/> or <see cref="ArtifactFormats.Bpe2"/>: what the agent actually wrote. The backend rejects a result that contradicts a Required policy.</summary>
+    public string Format { get; init; } = ArtifactFormats.Plain;
+    /// <summary>Key id and version of the tenant-wrap recipient the artifact was sealed to; null when <see cref="Format"/> is plain.</summary>
+    public string? EncryptionKeyId { get; init; }
+    public int? EncryptionKeyVersion { get; init; }
+    /// <summary>The tenant-wrap recipient's wrapped DEK, copied from the artifact header. It is ciphertext only the backend's private wrap key can open; the backend stores it so restore-time unwrap never accepts key material from an agent.</summary>
+    public string? EncryptionWrappedDekBase64 { get; init; }
+}
+
+public static class ArtifactFormats
+{
+    public const string Plain = "v1-plain";
+    public const string Bpe2 = "v2-bpe";
+}
+
+/// <summary>Per-job encryption instruction. <see cref="Required"/> makes the agent fail rather than produce a plaintext artifact. <see cref="PublicKeySpkiBase64"/> is an RSA SubjectPublicKeyInfo, never secret.</summary>
+public sealed record BackupEncryptionInstruction
+{
+    public bool Required { get; init; }
+    public int KeyVersion { get; init; }
+    public string PublicKeySpkiBase64 { get; init; } = string.Empty;
 }
 
 public sealed record BackupTaskReplica

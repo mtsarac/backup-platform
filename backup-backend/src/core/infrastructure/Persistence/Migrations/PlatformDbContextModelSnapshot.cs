@@ -437,6 +437,24 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("EncryptionKeyId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int?>("EncryptionKeyVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EncryptionWrappedDekBase64")
+                        .HasMaxLength(4096)
+                        .HasColumnType("character varying(4096)");
+
+                    b.Property<string>("Format")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("v1-plain");
+
                     b.Property<DateTimeOffset?>("RetentionAppliedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -494,6 +512,8 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.ToTable("backup_artifacts", null, t =>
                         {
                             t.HasCheckConstraint("ck_backup_artifact_checksums", "\"ChecksumAlgorithm\" = 'sha256' AND \"SourceChecksum\" ~ '^[0-9a-f]{64}$' AND \"ArtifactChecksum\" ~ '^[0-9a-f]{64}$'");
+
+                            t.HasCheckConstraint("ck_backup_artifact_encryption", "(\"Format\" = 'v1-plain' AND \"EncryptionKeyId\" IS NULL AND \"EncryptionKeyVersion\" IS NULL AND \"EncryptionWrappedDekBase64\" IS NULL) OR (\"Format\" = 'v2-bpe' AND \"EncryptionKeyId\" IS NOT NULL AND \"EncryptionKeyVersion\" >= 1 AND \"EncryptionWrappedDekBase64\" IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_backup_artifact_retention", "\"RetentionGracePeriod\" BETWEEN interval '1 second' AND interval '365 days' AND (\"RetentionExpiresAt\" IS NULL OR (\"AcceptedAt\" IS NOT NULL AND \"RetentionExpiresAt\" > \"AcceptedAt\"))");
 
@@ -1573,6 +1593,70 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_replica_repair_operations_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
 
                             t.HasCheckConstraint("ck_replica_repair_operations_terminal", "(\"Status\" IN ('Succeeded','Failed','Cancelled')) = (\"CompletedAt\" IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.TenantWrapKey", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("KeyId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<byte[]>("PublicKeySpki")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("SecretReference")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("TenantId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("Id", "TenantId");
+
+                    b.HasIndex("KeyId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "Version")
+                        .IsUnique();
+
+                    b.ToTable("tenant_wrap_keys", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_tenant_wrap_keys_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_tenant_wrap_keys_state", "\"State\" IN ('Active','DecryptOnly','Retired')");
+
+                            t.HasCheckConstraint("ck_tenant_wrap_keys_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_tenant_wrap_keys_version", "\"Version\" >= 1");
                         });
                 });
 
@@ -4234,6 +4318,15 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .HasForeignKey("SourceReplicaId", "TenantId")
                         .HasPrincipalKey("Id", "TenantId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.TenantWrapKey", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("BackupPlatform.Domain.Discovery.DiscoveredDatabase", b =>

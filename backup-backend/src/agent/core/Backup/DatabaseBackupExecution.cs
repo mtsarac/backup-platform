@@ -243,7 +243,7 @@ internal sealed class DatabaseBackupExecution
         try
         {
             _prepared = await _preparer.PrepareAsync(
-                new ArtifactPreparationInput(_staging, _sourceFile!.FileName, DatabaseBackupType.Full, _providerResult!.Options!.Applied),
+                new ArtifactPreparationInput(_staging, _sourceFile!.FileName, DatabaseBackupType.Full, _providerResult!.Options!.Applied, _request.Encryption),
                 cancellationToken).ConfigureAwait(false);
             Hold(_prepared.FileName);
             if (!_staging.FileExists(_prepared.FileName))
@@ -267,7 +267,7 @@ internal sealed class DatabaseBackupExecution
         var (checksum, size) = await HashFileAsync(
             prepared.FileName, stage, BackupPipelineReasons.ArtifactFileMissing, BackupPipelineReasons.ArtifactHashFailed,
             BackupFailureKind.ArtifactPreparationFailed, cancellationToken).ConfigureAwait(false);
-        _artifact = new BackupArtifactInfo(prepared.FileName, size, checksum, prepared.IsSourceFile, prepared.Transforms);
+        _artifact = new BackupArtifactInfo(prepared.FileName, size, checksum, prepared.IsSourceFile, prepared.Transforms, prepared.Seal);
     }
 
     /// <summary>

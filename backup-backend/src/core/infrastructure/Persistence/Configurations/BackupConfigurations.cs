@@ -209,12 +209,17 @@ internal sealed class BackupArtifactConfiguration : IEntityTypeConfiguration<Bac
             // Retention is fixed when the artifact is accepted: an expiration needs the acceptance it was counted from, and the grace period is bounded.
             table.HasCheckConstraint("ck_backup_artifact_retention", "\"RetentionGracePeriod\" BETWEEN interval '1 second' AND interval '365 days' " +
                 "AND (\"RetentionExpiresAt\" IS NULL OR (\"AcceptedAt\" IS NOT NULL AND \"RetentionExpiresAt\" > \"AcceptedAt\"))");
+            table.HasCheckConstraint("ck_backup_artifact_encryption", "(\"Format\" = 'v1-plain' AND \"EncryptionKeyId\" IS NULL AND \"EncryptionKeyVersion\" IS NULL AND \"EncryptionWrappedDekBase64\" IS NULL) OR " +
+                "(\"Format\" = 'v2-bpe' AND \"EncryptionKeyId\" IS NOT NULL AND \"EncryptionKeyVersion\" >= 1 AND \"EncryptionWrappedDekBase64\" IS NOT NULL)");
         });
         builder.Property(artifact => artifact.SourceChecksum).HasMaxLength(64).IsRequired();
         builder.Property(artifact => artifact.ArtifactChecksum).HasMaxLength(64).IsRequired();
         builder.Property(artifact => artifact.ChecksumAlgorithm).HasMaxLength(16).IsRequired();
         builder.Property(artifact => artifact.SourceMetadataJson).HasMaxLength(16384).IsRequired();
         builder.Property(artifact => artifact.AppliedOptionsJson).HasMaxLength(16384).IsRequired();
+        builder.Property(artifact => artifact.Format).HasMaxLength(16).HasDefaultValue(BackupArtifact.PlainFormat).IsRequired();
+        builder.Property(artifact => artifact.EncryptionKeyId).HasMaxLength(32);
+        builder.Property(artifact => artifact.EncryptionWrappedDekBase64).HasMaxLength(4096);
         builder.Property<bool>("_sealed").HasColumnName("Sealed");
         builder.Property(artifact => artifact.RetentionGracePeriod).HasDefaultValue(TimeSpan.FromHours(24));
         builder.Ignore(artifact => artifact.State);
@@ -227,6 +232,25 @@ internal sealed class BackupArtifactConfiguration : IEntityTypeConfiguration<Bac
             .HasPrincipalKey(artifact => new { artifact.Id, artifact.TenantId, artifact.SizeBytes, artifact.ArtifactChecksum, artifact.ChecksumAlgorithm })
             .OnDelete(DeleteBehavior.Restrict);
         builder.Navigation(artifact => artifact.Replicas).HasField("_replicas").UsePropertyAccessMode(PropertyAccessMode.Field);
+    }
+}
+
+internal sealed class TenantWrapKeyConfiguration : IEntityTypeConfiguration<TenantWrapKey>
+{
+    public void Configure(EntityTypeBuilder<TenantWrapKey> builder)
+    {
+        BackupMapping.Base(builder, "tenant_wrap_keys");
+        builder.ToTable("tenant_wrap_keys", table =>
+        {
+            table.HasCheckConstraint("ck_tenant_wrap_keys_version", "\"Version\" >= 1");
+            table.HasCheckConstraint("ck_tenant_wrap_keys_state", "\"State\" IN ('Active','DecryptOnly','Retired')");
+        });
+        builder.Property(key => key.KeyId).HasMaxLength(32).IsRequired();
+        builder.Property(key => key.SecretReference).HasMaxLength(128).IsRequired();
+        builder.Property(key => key.PublicKeySpki).IsRequired();
+        builder.Property(key => key.State).HasConversion<string>().HasMaxLength(16).IsRequired();
+        builder.HasIndex(key => new { key.TenantId, key.Version }).IsUnique();
+        builder.HasIndex(key => key.KeyId).IsUnique();
     }
 }
 

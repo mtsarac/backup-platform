@@ -193,6 +193,10 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
         {
             return BackupTaskResultMapper.Failure(task.LeaseToken, BackupTaskFailureCode.Cancelled);
         }
+        catch (BackupTaskEncryptionException)
+        {
+            return BackupTaskResultMapper.Failure(task.LeaseToken, BackupTaskFailureCode.InvalidConfiguration);
+        }
         catch (Exception)
         {
             return BackupTaskResultMapper.Failure(task.LeaseToken, BackupTaskFailureCode.InternalError);

@@ -73,6 +73,10 @@ public static class AuditActions
     public const string DiscoverySettingsChanged = "discovery.settings_changed";
     public const string DiscoveryCredentialBound = "discovery.credential_bound";
     public const string DiscoveryRescanRequested = "discovery.rescan_requested";
+
+    // Artifact encryption events (ids only, never key material)
+    public const string TenantWrapKeyCreated = "tenant_wrap_key.created";
+    public const string BackupArtifactKeyUnwrapped = "backup_artifact.key_unwrapped";
 }
 
 /// <summary>

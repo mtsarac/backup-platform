@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using BackupPlatform.Agent.Core.Backup;
 using BackupPlatform.BackupProviders.Abstractions.Database;
 using BackupPlatform.Contracts.Backups;
+using BackupPlatform.Encryption;
 using BackupPlatform.StorageProviders.Abstractions;
 using Microsoft.Extensions.Logging;
 
@@ -35,6 +36,7 @@ internal sealed class DatabaseRestoreExecution
 
     private DateTimeOffset _startedAt;
     private string? _stagedName;
+    private readonly List<string> _stagedFiles = [];
     private long _copiedBytes;
     private bool _copyOverflow;
     private ContentChecksum? _copiedChecksum;
@@ -147,6 +149,8 @@ internal sealed class DatabaseRestoreExecution
         cancellationToken.ThrowIfCancellationRequested();
         VerifyChecksum();
         cancellationToken.ThrowIfCancellationRequested();
+        await DecryptAsync(cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
         await InspectAsync(provider, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         await PlanAsync(provider, cancellationToken).ConfigureAwait(false);
@@ -256,7 +260,7 @@ internal sealed class DatabaseRestoreExecution
             Warn(BackupPreCheckIds.StagingDiskSpace, RestorePipelineReasons.StagingSpaceUnknown,
                 "The free space of the staging volume could not be determined.");
         }
-        else if (free < _request.ExpectedSizeBytes)
+        else if (free < _request.ExpectedSizeBytes * (_request.Decryption is null ? 1 : 2))
         {
             throw FailCheck(stage, RestoreAgentFailureCodes.InsufficientDiskSpace, BackupPreCheckIds.StagingDiskSpace,
                 RestorePipelineReasons.StagingInsufficientSpace, "The staging volume does not have enough free space for the backup file.",
@@ -317,6 +321,7 @@ internal sealed class DatabaseRestoreExecution
         }
 
         _stagedName = name;
+        _stagedFiles.Add(name);
 
         Stream source;
         try
@@ -464,6 +469,84 @@ internal sealed class DatabaseRestoreExecution
 
         _checksumVerified = true;
         _tracker.Report(stage, 100, expected, expected);
+    }
+
+    // ---- Decryption (part of VerifyingChecksum) -------------------------------------------------------------------------------
+
+    /// <summary>
+    /// An encrypted replica is decrypted into a SECOND staged file and only that file ever reaches the engine. The plaintext must hash to the
+    /// recorded source checksum first, so neither a tampered ciphertext nor a wrong key can put unauthenticated bytes into the target.
+    /// </summary>
+    private async Task DecryptAsync(CancellationToken cancellationToken)
+    {
+        if (_request.Decryption is not { } decryption)
+        {
+            return;
+        }
+
+        const RestoreExecutionStage stage = RestoreExecutionStage.VerifyingChecksum;
+        var ciphertextName = _stagedName!;
+        var plaintextName = ManagedBackupLayout.StagedFileName("restore", _startedAt, Guid.NewGuid());
+        if (_usage is not null)
+        {
+            _holds.Add(_usage.Hold(plaintextName));
+        }
+
+        _stagedFiles.Add(plaintextName);
+        try
+        {
+            await using var ciphertext = new FileStream(_staging.FilePath(ciphertextName), FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 1,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+            await using var plaintext = new FileStream(_staging.FilePath(plaintextName), FileMode.CreateNew, FileAccess.Write, FileShare.None, bufferSize: 1,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+            await BpeDecryptor.DecryptAsync(ciphertext, plaintext, async (recipients, token) =>
+            {
+                // The backend unwraps the key it stored for this artifact; a header without a tenant-wrap recipient cannot be that artifact.
+                if (!recipients.Any(recipient => recipient.Type == BpeRecipientType.TenantWrap))
+                {
+                    throw new BpeFormatException("The artifact has no tenant recipient.");
+                }
+
+                return await decryption.UnwrapDek(token).ConfigureAwait(false);
+            }, cancellationToken).ConfigureAwait(false);
+            await plaintext.FlushAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (ArtifactKeyUnavailableException exception)
+        {
+            throw Fail(stage, RestoreAgentFailureCodes.ArtifactTransferFailed, RestorePipelineReasons.ArtifactKeyUnavailable,
+                "The key of the encrypted backup could not be obtained, so the backup was not decrypted.", exception);
+        }
+        catch (BpeFormatException exception)
+        {
+            throw Fail(stage, RestoreAgentFailureCodes.ChecksumMismatch, RestorePipelineReasons.ArtifactAuthenticationFailed,
+                "The encrypted backup failed authentication (corrupt, tampered with, or the wrong key), so it was not restored.", exception);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw StagingWriteFailure(stage, exception);
+        }
+
+        ContentChecksum actual;
+        try
+        {
+            await using var decrypted = new FileStream(_staging.FilePath(plaintextName), FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 1,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+            actual = await ContentHasher.ComputeSha256Async(decrypted, null, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw StagingWriteFailure(stage, exception);
+        }
+
+        if (actual != decryption.SourceChecksum)
+        {
+            throw Fail(stage, RestoreAgentFailureCodes.ChecksumMismatch, RestorePipelineReasons.SourceChecksumMismatch,
+                "The decrypted backup does not match the checksum recorded when it was taken, so it cannot be trusted.");
+        }
+
+        _stagedName = plaintextName;
+        // Best effort: the ciphertext is no longer needed, and the final clean-up retries whatever stays behind.
+        _staging.TryDeleteFile(ciphertextName);
     }
 
     // ---- InspectingBackup -----------------------------------------------------------------------------------------------------
@@ -671,7 +754,8 @@ internal sealed class DatabaseRestoreExecution
             return;
         }
 
-        if (_staging.TryDeleteFile(_stagedName))
+        // Every file the run staged, not just the last one: a failed decryption leaves ciphertext and a partial plaintext behind.
+        if (_stagedFiles.Select(_staging.TryDeleteFile).ToArray().All(deleted => deleted))
         {
             _stagingCleanup = new StagingCleanup(StagingCleanupStatus.Deleted);
             return;

@@ -10,6 +10,7 @@
     <ProjectReference Include="..\..\modules\notifications\BackupPlatform.Notifications.csproj" />
     <ProjectReference Include="..\..\providers\secret\abstractions\BackupPlatform.SecretProviders.Abstractions.csproj" />
     <ProjectReference Include="..\..\providers\storage\abstractions\BackupPlatform.StorageProviders.Abstractions.csproj" />
+    <ProjectReference Include="..\encryption\BackupPlatform.Encryption.csproj" />
   </ItemGroup>
 
   <ItemGroup>

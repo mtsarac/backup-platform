@@ -1,5 +1,6 @@
 using BackupPlatform.Agent.Core.Restore;
 using BackupPlatform.BackupProviders.Abstractions.Database;
+using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Contracts.Restores;
 using BackupPlatform.StorageProviders.Abstractions;
 
@@ -13,7 +14,7 @@ namespace BackupPlatform.Agent.Core.Tasks;
 public sealed class RestoreTaskRequestFactory(
     IBackupTaskCredentialResolver credentials,
     IEnumerable<StagingArea> stagingAreas,
-    ITaskStorageProviderFactory? storageFactory = null, LocalVolumes? volumes = null)
+    ITaskStorageProviderFactory? storageFactory = null, LocalVolumes? volumes = null, IArtifactKeyClient? artifactKeys = null)
 {
     private const int MaxDatabaseNameLength = 128;
     private const int MaxHostLength = 253;
@@ -40,6 +41,7 @@ public sealed class RestoreTaskRequestFactory(
         StorageProviderId storage;
         StorageObjectKey key;
         ContentChecksum checksum;
+        ArtifactDecryption? decryption = null;
         try
         {
             connection = new DatabaseConnectionSettings(new DatabaseEndpoint(task.Target.Host, task.Target.Port),
@@ -47,6 +49,12 @@ public sealed class RestoreTaskRequestFactory(
             storage = new StorageProviderId(task.Source.StorageProvider);
             key = new StorageObjectKey(task.Source.StorageKey);
             checksum = new ContentChecksum(ChecksumAlgorithm.Sha256, task.Source.Checksum);
+            if (task.Source.Format == ArtifactFormats.Bpe2)
+            {
+                var keys = artifactKeys ?? throw new ArgumentException("Encrypted backups are not supported by this agent.");
+                decryption = new ArtifactDecryption(new ContentChecksum(ChecksumAlgorithm.Sha256, task.Source.SourceChecksum),
+                    token => keys.UnwrapAsync(task.AttemptId, task.LeaseToken, task.OperationId, token));
+            }
         }
         catch (ArgumentException)
         {
@@ -71,7 +79,8 @@ public sealed class RestoreTaskRequestFactory(
                     _ => RestorePipelinePurpose.Execution
                 })
             {
-                StorageOverride = task.Source.Access == "BackendRelayed" ? storageFactory!.CreateRestore(task) : LocalVolumeOverride(task.Source)
+                StorageOverride = task.Source.Access == "BackendRelayed" ? storageFactory!.CreateRestore(task) : LocalVolumeOverride(task.Source),
+                Decryption = decryption
             };
         }
         catch (ArgumentException)
@@ -175,6 +184,7 @@ public sealed class RestoreTaskRequestFactory(
     /// </summary>
     private bool HasValidSource(RestoreTaskSource source) =>
         source.SizeBytes > 0
+        && source.Format is ArtifactFormats.Plain or ArtifactFormats.Bpe2
         && string.Equals(source.ChecksumAlgorithm, "sha256", StringComparison.Ordinal)
         && ((source.Access, source.StorageProvider, source.StorageExecutionLocation) is
             ("AgentLocal", "local", "Agent") or ("CentralStorage", "central", "Backend")

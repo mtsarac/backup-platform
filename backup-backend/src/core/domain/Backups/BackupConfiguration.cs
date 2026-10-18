@@ -19,6 +19,9 @@ public sealed record BackupConfiguration(
     /// </summary>
     public int RequiredVerifiedReplicaCount { get; init; } = 1;
 
+    /// <summary>"Off" (default; also what a configuration saved before encryption existed deserializes to), "Optional" or "Required".</summary>
+    public string EncryptionPolicy { get; init; } = "Off";
+
     public BackupConfiguration Validate()
     {
         if (Engine is not ("mssql" or "postgres")) throw new ArgumentException("Unsupported database engine.");
@@ -34,6 +37,7 @@ public sealed record BackupConfiguration(
         if (ChecksumPolicy is not ("Required" or "Preferred" or "Disabled") ||
             CompressionPolicy is not ("Required" or "Preferred" or "Disabled"))
             throw new ArgumentException("Invalid backup option policy.");
+        if (EncryptionPolicy is not ("Off" or "Optional" or "Required")) throw new ArgumentException("Invalid encryption policy.");
 
         var effectiveDestinations = Destinations;
         if (effectiveDestinations.Count == 0)
@@ -66,7 +70,7 @@ public sealed record BackupConfiguration(
         IntegratedSecurity == other.IntegratedSecurity && DatabaseCredentialReference == other.DatabaseCredentialReference && Encrypt == other.Encrypt &&
         TrustServerCertificate == other.TrustServerCertificate && StagingReference == other.StagingReference &&
         StoragePrefix == other.StoragePrefix && CopyOnly == other.CopyOnly && ChecksumPolicy == other.ChecksumPolicy && CompressionPolicy == other.CompressionPolicy &&
-        RequiredVerifiedReplicaCount == other.RequiredVerifiedReplicaCount && Destinations.SequenceEqual(other.Destinations);
+        RequiredVerifiedReplicaCount == other.RequiredVerifiedReplicaCount && EncryptionPolicy == other.EncryptionPolicy && Destinations.SequenceEqual(other.Destinations);
 
     public override int GetHashCode()
     {
