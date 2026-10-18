@@ -144,8 +144,11 @@ public sealed class AgentDistributionEndpointsTests : IAsyncLifetime
         using var process = Process.Start(start)!;
         var output = process.StandardOutput.ReadToEndAsync();
         var error = process.StandardError.ReadToEndAsync();
-        await process.StandardInput.WriteAsync(script);
-        process.StandardInput.Close();
+        // bash may exit on the argument error before reading the whole script from stdin.
+        try { await process.StandardInput.WriteAsync(script); }
+        catch (IOException) { }
+        try { process.StandardInput.Close(); }
+        catch (IOException) { }
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         try { await process.WaitForExitAsync(deadline.Token); }
         catch (OperationCanceledException) { process.Kill(entireProcessTree: true); throw; }
