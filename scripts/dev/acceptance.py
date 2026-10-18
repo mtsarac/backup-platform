@@ -146,7 +146,8 @@ def create_job(api, tenant, connection, provider, database):
     configuration = {'engine': 'mssql', 'host': '127.0.0.1', 'port': SQL_PORT, 'database': database, 'integratedSecurity': False,
                      'databaseCredentialReference': sql_login(api, tenant, agent['agentId']), 'trustServerCertificate': True, 'encrypt': True,
                      'stagingReference': 'default', 'storageTarget': 'default', 'storagePrefix': '',
-                     'copyOnly': True, 'checksumPolicy': 'Required', 'compressionPolicy': 'Preferred', 'requiredVerifiedReplicaCount': 1}
+                     'copyOnly': True, 'checksumPolicy': 'Required', 'compressionPolicy': 'Preferred', 'requiredVerifiedReplicaCount': 1,
+                     'encryptionPolicy': os.environ.get('ACCEPTANCE_ENCRYPTION', 'Off')}
     drive = provider == 'google-drive'
     configuration['destinations'] = [{'storageProvider': provider, 'storageConnectionId': connection['id'] if drive else None,
                                       'storageExecutionLocation': 'Backend' if drive else 'Agent', 'isPrimary': True}]
@@ -225,16 +226,20 @@ def download(options):
     _, prepared = api.call('POST', path + '/downloads', {}, expect=(200, 201, 202))
     wait('Download preparation', lambda: api.call('GET', path + '/downloads/' + prepared['sessionId'])[1],
          lambda d: d['state'] in ('Ready', 'Streaming'), lambda d: d['state'] in ('Failed', 'Cancelled'))
-    digest, transferred = hashlib.sha256(), 0
+    digest, transferred, head = hashlib.sha256(), 0, b''
     import urllib.request
     with api.opener.open(urllib.request.Request(SERVER + prepared['downloadUrl']), timeout=600) as response:
         while chunk := response.read(128 * 1024):
+            head = head or chunk[:6]
             digest.update(chunk)
             transferred += len(chunk)
     completed = wait('Download completion', lambda: api.call('GET', path + '/downloads/' + prepared['sessionId'])[1],
                      lambda d: d['state'] == 'Completed', lambda d: d['state'] in ('Failed', 'Cancelled'), timeout=30, interval=0.3)
     ok = transferred == state['sizeBytes'] and digest.hexdigest().lower() == state['checksum'].lower()
-    out(step='download', bytes=transferred, sha256=digest.hexdigest(), matchesArtifact=ok, lifecycle=completed['state'], transferredBytes=completed['transferredBytes'])
+    encrypted = head == b'BPENC\0'
+    out(step='download', bytes=transferred, sha256=digest.hexdigest(), matchesArtifact=ok, encrypted=encrypted, lifecycle=completed['state'], transferredBytes=completed['transferredBytes'])
+    if encrypted != (os.environ.get('ACCEPTANCE_ENCRYPTION', 'Off') == 'Required'):
+        raise FixtureFailure('The downloaded artifact format does not match the job encryption policy.')
     if not ok:
         raise FixtureFailure('Downloaded length/SHA-256 differs from the artifact.')
 
