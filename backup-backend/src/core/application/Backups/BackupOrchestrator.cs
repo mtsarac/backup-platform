@@ -45,7 +45,7 @@ public sealed record BackupReplicaView(Guid Id, string StorageProvider, string S
 /// </summary>
 public sealed record BackupReplicationView(int RequiredVerifiedReplicas, int VerifiedReplicas, int DestinationCount, string Status, bool PolicySatisfied, IReadOnlyList<BackupDestinationHealthView> Destinations);
 public sealed record BackupDestinationHealthView(string StorageProvider, Guid? StorageConnectionId, bool IsPrimary, string State, string? FailureCode, string? FailureReason, bool ObjectMayRemain, Guid? ReplicaId, string? ReplicaStatus);
-public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time, BackupSchedulingOptions? scheduling = null, BackupRetentionOptions? retention = null)
+public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time, BackupSchedulingOptions? scheduling = null, BackupRetentionOptions? retention = null, ITenantWrapKeyStore? wrapKeys = null)
 {
     public static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(120);
 
@@ -113,7 +113,8 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
             c.StoragePrefix, c.CopyOnly, c.ChecksumPolicy, c.CompressionPolicy)
         {
             Destinations = destinations,
-            RequiredVerifiedReplicaCount = c.RequiredVerifiedReplicaCount > 0 ? c.RequiredVerifiedReplicaCount : 1
+            RequiredVerifiedReplicaCount = c.RequiredVerifiedReplicaCount > 0 ? c.RequiredVerifiedReplicaCount : 1,
+            EncryptionPolicy = c.EncryptionPolicy
         };
     }
 
@@ -136,13 +137,22 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
     {
         var claim = await store.ClaimNextAsync(identity.TenantId, identity.AgentId, time.GetUtcNow(), LeaseDuration, cancellationToken);
         if (claim is null) return null;
+        var policy = claim.Run.Configuration.EncryptionPolicy;
+        BackupEncryptionInstruction? encryption = null;
+        if (policy != "Off")
+        {
+            // A job that asks for encryption is never handed out without a key: silently writing plaintext is the failure this policy exists to prevent.
+            var key = await (wrapKeys ?? throw new InvalidOperationException("Encryption requires a tenant wrap key store.")).EnsureActiveAsync(claim.Run.TenantId, cancellationToken);
+            encryption = new BackupEncryptionInstruction { Required = policy == "Required", KeyVersion = key.Version, PublicKeySpkiBase64 = Convert.ToBase64String(key.PublicKeySpki) };
+        }
         return new BackupTaskSnapshot
         {
             RunId = claim.Run.Id, JobId = claim.Run.JobId, TenantId = claim.Run.TenantId.Value,
             AttemptId = claim.Attempt.Id, AttemptNumber = claim.Attempt.Number,
             LeaseToken = claim.Attempt.LeaseToken!.Value, LeaseExpiresAt = claim.Attempt.LeaseExpiresAt!.Value,
             MaxArtifactBytes = claim.MaxArtifactBytes,
-            Configuration = ToWire(claim.Run.Configuration), CancellationRequested = claim.Run.CancellationRequestedAt is not null
+            Configuration = ToWire(claim.Run.Configuration), CancellationRequested = claim.Run.CancellationRequestedAt is not null,
+            Encryption = encryption
         };
     }
 
@@ -157,13 +167,39 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         {
             throw new ArgumentException("Invalid completion metadata.");
         }
+        request = await ApplyEncryptionPolicyAsync(identity.TenantId, claim.Run.Configuration, request, cancellationToken);
         var a = request.Artifact;
         var artifact = a is null ? null : new BackupArtifactResult(a.SizeBytes, a.SourceChecksum, a.ArtifactChecksum, a.ChecksumAlgorithm,
             a.CreatedAt, a.SourceMetadataJson, a.AppliedOptionsJson, a.Replicas.Select(r => new BackupReplicaResult(r.StorageProvider, r.StorageTarget,
-                r.Key, r.SizeBytes, r.Checksum, r.ChecksumAlgorithm, r.VerificationState, r.VerificationMethod, r.CreatedAt, r.VerifiedAt, r.StorageConnectionId)).ToArray());
+                r.Key, r.SizeBytes, r.Checksum, r.ChecksumAlgorithm, r.VerificationState, r.VerificationMethod, r.CreatedAt, r.VerifiedAt, r.StorageConnectionId)).ToArray(),
+            a.Format, a.EncryptionKeyId, a.EncryptionKeyVersion, a.EncryptionWrappedDekBase64);
         var destinations = request.Destinations.Select(d => new BackupDestinationReport(d.StorageProvider, d.StorageConnectionId, d.State, d.Upload, d.Verification,
             d.FailureCode, d.Key, d.ObjectMayRemain, d.StartedAt, d.CompletedAt)).ToArray();
         return await store.CompleteAttemptAsync(Command(identity, attemptId, request.LeaseToken), new BackupCompletion(request.Status, request.FailureCode, artifact, destinations), cancellationToken);
+    }
+
+    /// <summary>
+    /// An encrypted artifact must name a key of THIS tenant. A Required job whose artifact is plain is failed (never published); the copies already uploaded are
+    /// reported as orphans so retention removes them.
+    /// </summary>
+    private async Task<BackupTaskCompletionRequest> ApplyEncryptionPolicyAsync(TenantId tenantId, BackupConfiguration configuration, BackupTaskCompletionRequest request, CancellationToken cancellationToken)
+    {
+        if (request.Artifact is not { } a) return request;
+        if (a.Format == ArtifactFormats.Bpe2)
+        {
+            if (wrapKeys is null || !await wrapKeys.OwnsKeyAsync(tenantId, a.EncryptionKeyId!, a.EncryptionKeyVersion!.Value, cancellationToken))
+                throw new ArgumentException("Invalid completion metadata.");
+            return request;
+        }
+        if (request.Status != "Succeeded" || configuration.EncryptionPolicy != "Required") return request;
+        return request with
+        {
+            Status = "Failed", FailureCode = BackupFailureCodes.EncryptionRequired, Artifact = a with { Replicas = [] },
+            Destinations = request.Destinations.Select(d => d.State != "Verified" ? d : d with
+            {
+                State = "Failed", Verification = "Failed", FailureCode = BackupFailureCodes.EncryptionRequired, ObjectMayRemain = true
+            }).ToArray()
+        };
     }
 
     public static BackupRetryPolicy ToDomain(BackupRetryPolicyRequest? request)
@@ -310,8 +346,8 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         BackupFailureCodes.SqlBackupFailed => "SQL Server could not complete the full backup.",
         BackupFailureCodes.VerificationFailed => "The database backup did not pass verification.",
         BackupFailureCodes.HashFailed => "The backup checksum could not be computed.",
-        BackupFailureCodes.StorageWriteFailed => "The backup artifact could not be written to storage.",
         BackupFailureCodes.QuotaExceeded => "The actual backup size exceeds the space available under the hard storage quota; the destination upload was refused.",
+        BackupFailureCodes.EncryptionRequired => "The job requires encryption but the backup artifact was not encrypted.",
         BackupFailureCodes.ReplicaVerificationFailed => "The stored backup replica did not pass verification.",
         BackupFailureCodes.DatabaseUnavailable => "The database server could not be reached.",
         BackupFailureCodes.OperationTimedOut => "A backup operation timed out.",
@@ -332,7 +368,7 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         Engine = c.Engine, Database = c.Database, Host = c.Host, Port = c.Port, IntegratedSecurity = c.IntegratedSecurity,
         DatabaseCredentialReference = c.DatabaseCredentialReference, Encrypt = c.Encrypt, TrustServerCertificate = c.TrustServerCertificate,
         StagingReference = c.StagingReference, StoragePrefix = c.StoragePrefix,
-        CopyOnly = c.CopyOnly, ChecksumPolicy = c.ChecksumPolicy, CompressionPolicy = c.CompressionPolicy,
+        CopyOnly = c.CopyOnly, ChecksumPolicy = c.ChecksumPolicy, CompressionPolicy = c.CompressionPolicy, EncryptionPolicy = c.EncryptionPolicy,
         Destinations = c.Destinations.Select(d => new BackupDestinationContract
         {
             StorageProvider = d.StorageProvider,

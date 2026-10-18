@@ -173,6 +173,9 @@ public sealed class BackupStageTrackerTests
     [InlineData("Sales_20261005T053015Z_a1b2c3d4e_FULL.bak")]
     [InlineData("Sales_20261005T053015Z_FULL.bak")]
     [InlineData("Sales_20261005T053015_a1b2c3d4_FULL.bak")]
+    [InlineData("Sales_20261005T053015Z_a1b2c3d4_FULL.bpe")]
+    [InlineData("Sales_20261005T053015Z_a1b2c3d4_FULL.bak.bpe.bpe")]
+    [InlineData("Sales_20261005T053015Z_a1b2c3d4_FULL.bak.BPE")]
     [InlineData("Sales_20261005T053015Z_a1b2c3d4_FULL.bak.partial")]
     [InlineData(".Sales_20261005T053015Z_a1b2c3d4_FULL.bak")]
     [InlineData("_20261005T053015Z_a1b2c3d4_FULL.bak")]
@@ -192,6 +195,18 @@ public sealed class BackupStageTrackerTests
     [InlineData(null)]
     public void NamesOutsideTheManagedGrammarAreNeverRecognised(string? name) =>
         Assert.False(ManagedBackupLayout.IsManagedArtifactName(name));
+
+    [Fact]
+    public void AnEncryptedArtifactNameAndItsPartialUploadAreManagedAndParseAsStorageKeys()
+    {
+        const string name = "Sales_20261005T053015Z_a1b2c3d4_FULL.bak.bpe";
+        var scope = ManagedBackupLayout.AttemptScope(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+
+        Assert.True(ManagedBackupLayout.IsManagedArtifactName(name));
+        Assert.True(ManagedBackupLayout.IsManagedPartialName($".{name}.{new string('a', 32)}.partial"));
+        Assert.True(ManagedBackupLayout.TryParseStorageKey($"{scope}/{name}", out var parsed));
+        Assert.False(parsed!.IsPartial);
+    }
 
     [Fact]
     public void TheAttemptScopeIsTheDashlessLowercaseGuidsJoinedBySlashes()

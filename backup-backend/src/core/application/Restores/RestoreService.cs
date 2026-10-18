@@ -220,7 +220,8 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
             {
                 StorageProvider = replica.StorageProvider, StorageTarget = replica.StorageTarget, StorageKey = replica.Key,
                 StorageExecutionLocation = replica.ExecutionLocation.ToString(), SizeBytes = replica.SizeBytes,
-                Checksum = replica.Checksum, ChecksumAlgorithm = replica.ChecksumAlgorithm, Access = operation.SourceAccess.ToString()
+                Checksum = replica.Checksum, ChecksumAlgorithm = replica.ChecksumAlgorithm, Access = operation.SourceAccess.ToString(),
+                Format = claim.ArtifactFormat, SourceChecksum = claim.SourceChecksum
             },
             Target = new RestoreTaskTarget
             {

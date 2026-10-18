@@ -130,6 +130,10 @@ internal static class BackupTaskResultMapper
             SourceChecksum = source.Checksum.Hex,
             ArtifactChecksum = artifact.Checksum.Hex,
             ChecksumAlgorithm = "sha256",
+            Format = artifact.Transforms.Any(transform => transform.Kind == ArtifactTransformKind.Encryption) ? ArtifactFormats.Bpe2 : ArtifactFormats.Plain,
+            EncryptionKeyId = artifact.Seal?.KeyId,
+            EncryptionKeyVersion = artifact.Seal?.KeyVersion,
+            EncryptionWrappedDekBase64 = artifact.Seal is { } seal ? Convert.ToBase64String(seal.WrappedDek) : null,
             CreatedAt = result.BackupFinishedAt ?? result.FinishedAt,
             SourceMetadataJson = JsonSerializer.Serialize(new
             {

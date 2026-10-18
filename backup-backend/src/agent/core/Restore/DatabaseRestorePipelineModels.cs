@@ -24,6 +24,12 @@ public enum VerificationCleanup
 /// <summary>The engine's verification report (null when verification never ran) and the disposable database's fate. <see cref="CleanupReasonCode"/> is set only when cleanup failed.</summary>
 public sealed record RestoreVerificationOutcome(RestoreVerificationReport? Report, VerificationCleanup Cleanup, string? CleanupReasonCode = null);
 
+/// <summary>
+/// Marks a replica as an encrypted (<c>bpe</c> v2) artifact. <paramref name="UnwrapDek"/> is bound to the restore attempt by whoever builds the request,
+/// so the pipeline itself never sees a lease or an identifier it could misuse; <paramref name="SourceChecksum"/> is the plaintext SHA-256 the decrypted bytes must match.
+/// </summary>
+public sealed record ArtifactDecryption(ContentChecksum SourceChecksum, Func<CancellationToken, Task<byte[]>> UnwrapDek);
+
 /// <summary>Read-only discovery needs only a connection and the agent-local credential, never a replica or staging area.</summary>
 public sealed record RestoreDiscoveryRequest(DatabaseEngineId Engine, DatabaseConnectionSettings Connection, DatabaseCredential Credential);
 
@@ -113,6 +119,9 @@ public sealed record DatabaseRestorePipelineRequest
 
     /// <summary>A task-scoped authenticated backend storage proxy.</summary>
     public IStorageProvider? StorageOverride { get; init; }
+
+    /// <summary>Null for a plain (v1) replica; otherwise the staged replica is ciphertext that is decrypted and verified before the engine sees it.</summary>
+    public ArtifactDecryption? Decryption { get; init; }
 
     /// <summary>The replica's key. Must be a key of the platform's own layout whose tenant is <see cref="TenantId"/>.</summary>
     public StorageObjectKey StorageKey { get; }

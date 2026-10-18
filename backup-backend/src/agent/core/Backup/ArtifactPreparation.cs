@@ -22,7 +22,7 @@ public sealed record ArtifactPreparationInput(
 /// into the same staging directory and names it by <see cref="FileName"/>, a simple name; the pipeline owns removing it. A preparer that
 /// leaves the engine's file alone returns the source name and <see cref="IsSourceFile"/> = true.
 /// </summary>
-public sealed record PreparedArtifact(string FileName, bool IsSourceFile, IReadOnlyList<ArtifactTransform> Transforms);
+public sealed record PreparedArtifact(string FileName, bool IsSourceFile, IReadOnlyList<ArtifactTransform> Transforms, ArtifactSeal? Seal = null);
 
 /// <summary>
 /// The seam where compression and encryption of the stored artifact will go. No transform exists in this iteration: the

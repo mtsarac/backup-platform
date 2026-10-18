@@ -62,7 +62,7 @@ public sealed record RestoreCreateResult(RestoreCreateOutcome Outcome, RestoreOp
     Domain.Support.SupportAccessDenial? SupportDenial = null);
 
 /// <summary>A claimed restore attempt with the replica it reads (the persisted location, never a caller-supplied one).</summary>
-public sealed record RestoreClaim(RestoreOperation Operation, RestoreAttempt Attempt, BackupReplica Replica, string Engine = "mssql");
+public sealed record RestoreClaim(RestoreOperation Operation, RestoreAttempt Attempt, BackupReplica Replica, string Engine = "mssql", string ArtifactFormat = BackupArtifact.PlainFormat, string SourceChecksum = "");
 
 public sealed record RestoreLeaseCommand(TenantId TenantId, AgentId AgentId, Guid AttemptId, Guid LeaseToken, DateTimeOffset Now)
 {

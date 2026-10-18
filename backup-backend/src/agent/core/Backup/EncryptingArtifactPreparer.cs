@@ -27,13 +27,22 @@ public sealed class EncryptingArtifactPreparer : IArtifactPreparer
         }
 
         var staging = input.Staging;
-        var outputName = $"{Guid.NewGuid():N}.bpe";
+        var outputName = input.SourceFileName + ".bpe"; // stays inside ManagedBackupLayout's grammar so storage keys and staging cleanup still recognise it
         var sourcePath = staging.FilePath(input.SourceFileName);
+        var outputPath = staging.FilePath(outputName);
+        ArtifactSeal? seal;
         try
         {
-            await using var source = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
-            await using var output = new FileStream(staging.FilePath(outputName), FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, useAsync: true);
-            await BpeEncryptor.EncryptAsync(source, output, source.Length, wrapKeys, cancellationToken: cancellationToken).ConfigureAwait(false);
+            await using (var source = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true))
+            await using (var output = new FileStream(outputPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+            {
+                await BpeEncryptor.EncryptAsync(source, output, source.Length, wrapKeys, cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+
+            await using var written = new FileStream(outputPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
+            var recipients = await BpeDecryptor.ReadRecipientsAsync(written, cancellationToken).ConfigureAwait(false);
+            seal = recipients.Where(recipient => recipient.Type == BpeRecipientType.TenantWrap)
+                .Select(recipient => new ArtifactSeal(recipient.KeyId, recipient.KeyVersion, recipient.WrappedDek)).FirstOrDefault();
         }
         catch
         {
@@ -42,6 +51,6 @@ public sealed class EncryptingArtifactPreparer : IArtifactPreparer
             throw;
         }
 
-        return new PreparedArtifact(outputName, IsSourceFile: false, [new ArtifactTransform(ArtifactTransformKind.Encryption, Algorithm)]);
+        return new PreparedArtifact(outputName, IsSourceFile: false, [new ArtifactTransform(ArtifactTransformKind.Encryption, Algorithm)], seal);
     }
 }

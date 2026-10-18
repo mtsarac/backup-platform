@@ -111,6 +111,14 @@ internal static class BpeFormat
         _ => throw new ArgumentOutOfRangeException(nameof(type))
     };
 
+    public static BpeRecipientType ParseTypeName(string? name) => name switch
+    {
+        "tenant-wrap" => BpeRecipientType.TenantWrap,
+        "platform-recovery" => BpeRecipientType.PlatformRecovery,
+        "tenant-recovery" => BpeRecipientType.TenantRecovery,
+        _ => throw new BpeFormatException("Unknown recipient type.")
+    };
+
     public static string Utf8(byte[] bytes) => Encoding.UTF8.GetString(bytes);
 
     public sealed record Core(byte[] ArtifactId, int ChunkSize, byte[] NoncePrefix, long SourceSize);

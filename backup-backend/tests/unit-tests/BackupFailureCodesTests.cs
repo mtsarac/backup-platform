@@ -27,6 +27,7 @@ public sealed class BackupFailureCodesTests
         BackupFailureCodes.AuthenticationFailed,
         BackupFailureCodes.PermissionDenied,
         BackupFailureCodes.QuotaExceeded,
+        BackupFailureCodes.EncryptionRequired,
         BackupFailureCodes.StagingInvalid
     ];
 
@@ -38,7 +39,7 @@ public sealed class BackupFailureCodesTests
     [
         "PreCheckFailed", "SqlBackupFailed", "VerificationFailed", "HashFailed", "StorageWriteFailed", "ReplicaVerificationFailed", "InternalError",
         "DatabaseUnavailable", "OperationTimedOut", "StorageUnavailable", "DatabaseNotFound", "InvalidConfiguration", "UnsupportedCapability",
-        "AuthenticationFailed", "PermissionDenied", "StagingInvalid", "QuotaExceeded"
+        "AuthenticationFailed", "PermissionDenied", "StagingInvalid", "QuotaExceeded", "EncryptionRequired"
     ];
 
     private static IEnumerable<string> AllDeclaredCodes() => typeof(BackupFailureCodes)

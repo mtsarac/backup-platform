@@ -6,6 +6,7 @@ using BackupPlatform.Application.Downloads;
 using BackupPlatform.Application.Restores;
 using BackupPlatform.Contracts.Agents;
 using BackupPlatform.Contracts.Backups;
+using BackupPlatform.Contracts.Restores;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Storage;
@@ -39,7 +40,43 @@ public static class AgentStorageTransferEndpoints
         restore.MapGet("/content", ReadRestoreAsync);
         restore.MapGet("/metadata", GetRestoreMetadataAsync);
         restore.MapPost("/verify", VerifyRestoreAsync);
+        endpoints.MapPost("/api/agent/restore-tasks/{attemptId:guid}/artifact-key", UnwrapArtifactKeyAsync)
+            .WithMetadata(new AgentApiEndpoint(), new RequiresAgentProtocol())
+            .RequireAuthorization(AuthorizationPolicies.Agent);
         return endpoints;
+    }
+
+    /// <summary>
+    /// No body in, nothing logged: the agent names no key and no wrapped DEK. The backend unwraps only what it stored for the operation's artifact, so a
+    /// compromised agent cannot use this route as a decryption oracle for arbitrary ciphertext.
+    /// </summary>
+    private static async Task<IResult> UnwrapArtifactKeyAsync(Guid attemptId, HttpRequest request, ICurrentAgent agent, IRestoreStore restoreStore,
+        IDownloadStore downloadStore, ITenantWrapKeyStore keys, CancellationToken cancellationToken)
+    {
+        if (attemptId == Guid.Empty || agent.Identity is null) return Results.Unauthorized();
+        if (!Guid.TryParse(request.Headers[TaskStorageProtocol.LeaseHeader], out var lease) || lease == Guid.Empty
+            || !Guid.TryParse(request.Headers[TaskStorageProtocol.RestoreHeader], out var operationId))
+            return Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "Missing lease or operation header." });
+
+        var tenant = agent.Identity.TenantId;
+        var operation = await restoreStore.GetAsync(tenant, operationId, cancellationToken);
+        if (operation is null || operation.AgentId != agent.Identity.AgentId
+            || operation.CurrentAttempt.Id != attemptId || !operation.CurrentAttempt.HasLease(lease, DateTimeOffset.UtcNow))
+            return Results.Conflict(new AgentApiError { Error = "lease_conflict", Message = "The restore attempt lease is invalid." });
+
+        var artifact = await downloadStore.GetArtifactAsync(tenant, operation.ArtifactId, cancellationToken);
+        if (artifact is not { Format: BackupArtifact.BpeFormat, EncryptionKeyId: { } keyId, EncryptionWrappedDekBase64: { } wrapped })
+            return Results.Conflict(new AgentApiError { Error = "artifact_not_encrypted", Message = "The artifact has no encryption key." });
+
+        byte[] dek;
+        try { dek = await keys.UnwrapDekAsync(tenant, attemptId, keyId, Convert.FromBase64String(wrapped), cancellationToken); }
+        catch (TenantWrapKeyUnavailableException) { return Results.Conflict(new AgentApiError { Error = "key_unavailable", Message = "The artifact key is unavailable." }); }
+        try
+        {
+            request.HttpContext.Response.Headers.CacheControl = "no-store";
+            return Results.Json(new ArtifactKeyUnwrapResponse { DekBase64 = Convert.ToBase64String(dek) });
+        }
+        finally { System.Security.Cryptography.CryptographicOperations.ZeroMemory(dek); }
     }
 
     private static async Task<IResult> UploadAsync(Guid attemptId, HttpRequest request, ICurrentAgent agent,

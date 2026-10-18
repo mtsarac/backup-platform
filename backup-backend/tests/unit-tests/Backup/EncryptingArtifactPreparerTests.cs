@@ -43,6 +43,19 @@ public sealed class EncryptingArtifactPreparerTests : IDisposable
         Assert.Equal(data, plain.ToArray());
     }
 
+    [Fact]
+    public async Task ReportsTheTenantWrapRecipientOfTheFileItWrote()
+    {
+        var prepared = await new EncryptingArtifactPreparer().PrepareAsync(Input([1, 2, 3], ForKey()), CancellationToken.None);
+
+        var seal = Assert.IsType<ArtifactSeal>(prepared.Seal);
+        Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(_key.ExportSubjectPublicKeyInfo())[..16]), seal.KeyId);
+        Assert.Equal(1, seal.KeyVersion);
+        Assert.Equal(32, DekOf(seal));
+    }
+
+    private int DekOf(ArtifactSeal seal) => _key.Decrypt(seal.WrappedDek, RSAEncryptionPadding.OaepSHA256).Length;
+
     [Theory]
     [InlineData(false)] // no encryption instruction at all
     [InlineData(true)] // optional instruction without recipients
@@ -55,6 +68,7 @@ public sealed class EncryptingArtifactPreparerTests : IDisposable
         Assert.True(prepared.IsSourceFile);
         Assert.Equal("source.bak", prepared.FileName);
         Assert.Empty(prepared.Transforms);
+        Assert.Null(prepared.Seal);
     }
 
     [Fact]

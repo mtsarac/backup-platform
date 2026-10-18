@@ -38,7 +38,7 @@ public static class AgentBackupServiceCollectionExtensions
             provider.GetRequiredService<ILogger<PostgreSqlBackupProvider>>(), clientTools, provider.GetRequiredService<TimeProvider>()));
         services.AddSingleton<IDatabaseRestoreProvider>(provider => new PostgreSqlRestoreProvider(
             provider.GetRequiredService<ILogger<PostgreSqlRestoreProvider>>(), clientTools, provider.GetRequiredService<TimeProvider>()));
-        services.AddSingleton<IArtifactPreparer, PassThroughArtifactPreparer>();
+        services.AddSingleton<IArtifactPreparer, EncryptingArtifactPreparer>();
         services.AddSingleton<IDatabaseBackupPipeline, DatabaseBackupPipeline>();
         services.AddSingleton<IDatabaseRestorePipeline, DatabaseRestorePipeline>();
         // Shared by the pipeline (which holds the staged names of running attempts) and the staging cleanup (which must skip them).

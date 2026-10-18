@@ -315,7 +315,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
                             AddAudit(context, next, now, null, "restore.replica_fallback", next.SupportSessionId);
                     }
                     next.Claim(token, now, leaseDuration);
-                    var claim = new RestoreClaim(next, next.CurrentAttempt, chosenCandidate, engine);
+                    var claim = new RestoreClaim(next, next.CurrentAttempt, chosenCandidate, engine, artifact.Format, artifact.SourceChecksum);
                     AddTerminalAudits(context);
                     await context.SaveChangesAsync(cancellationToken);
                     await transaction.CommitAsync(cancellationToken);
@@ -419,7 +419,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         op.Claim(token, now, leaseDuration);
         if (op.Pin.IsActive && lockedReplica.Status is BackupReplicaStatus.Available or BackupReplicaStatus.DeletePending)
         {
-            var claim = new RestoreClaim(op, op.CurrentAttempt, lockedReplica, engine);
+            var claim = new RestoreClaim(op, op.CurrentAttempt, lockedReplica, engine, artifact.Format, artifact.SourceChecksum);
             AddTerminalAudits(context);
             await context.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
