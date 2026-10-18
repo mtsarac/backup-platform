@@ -3,24 +3,24 @@ using BackupPlatform.Encryption;
 
 namespace BackupPlatform.Agent.Core.Backup;
 
-/// <summary>Public wrap keys the artifact's DEK is sealed to. Empty means this backup is not encrypted. Never carries private key material.</summary>
-public interface IArtifactRecipientSource
-{
-    IReadOnlyList<BpeRecipient> GetRecipients();
-}
-
 /// <summary>
 /// Encrypts the verified engine backup into a <c>bpe</c> v2 file in staging, so storage providers, relay and replicas only ever see ciphertext.
-/// With no recipients it behaves exactly like <see cref="PassThroughArtifactPreparer"/>. The plaintext source file stays the pipeline's to remove.
+/// Without an encryption instruction (or an optional one with no recipients) it behaves like <see cref="PassThroughArtifactPreparer"/>; a required
+/// one with no recipients fails instead of producing plaintext. The plaintext source file stays the pipeline's to remove.
 /// </summary>
-public sealed class EncryptingArtifactPreparer(IArtifactRecipientSource recipients) : IArtifactPreparer
+public sealed class EncryptingArtifactPreparer : IArtifactPreparer
 {
     public const string Algorithm = "bpe-v2/AES-256-GCM-STREAM";
 
     public async Task<PreparedArtifact> PrepareAsync(ArtifactPreparationInput input, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(input);
-        var wrapKeys = recipients.GetRecipients();
+        var wrapKeys = input.Encryption?.Recipients ?? [];
+        if (input.Encryption is { Required: true } && wrapKeys.Count == 0)
+        {
+            throw new InvalidOperationException("Encryption is required for this backup but no recipient keys were provided.");
+        }
+
         if (wrapKeys.Count == 0)
         {
             return await new PassThroughArtifactPreparer().PrepareAsync(input, cancellationToken).ConfigureAwait(false);

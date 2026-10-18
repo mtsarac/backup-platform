@@ -16,26 +16,23 @@ public sealed class EncryptingArtifactPreparerTests : IDisposable
         Directory.Delete(_root, recursive: true);
     }
 
-    private sealed class Recipients(params BpeRecipient[] list) : IArtifactRecipientSource
-    {
-        public IReadOnlyList<BpeRecipient> GetRecipients() => list;
-    }
-
-    private ArtifactPreparationInput Input(byte[] data)
+    private ArtifactPreparationInput Input(byte[] data, ArtifactEncryption? encryption)
     {
         File.WriteAllBytes(Path.Combine(_root, "source.bak"), data);
         return new ArtifactPreparationInput(new AgentStagingDirectory(new AgentPath(_root)), "source.bak", DatabaseBackupType.Full,
-            new AppliedFullBackupOptions(false, true, false));
+            new AppliedFullBackupOptions(false, true, false), encryption);
     }
+
+    private ArtifactEncryption ForKey(bool required = true) =>
+        new(required, [new BpeRecipient(BpeRecipientType.TenantWrap, 1, _key)]);
 
     [Fact]
     public async Task EncryptsIntoANewStagedFileAndLeavesNoPlaintextInIt()
     {
         var data = RandomNumberGenerator.GetBytes(300_000);
-        var input = Input(data);
+        var input = Input(data, ForKey());
 
-        var prepared = await new EncryptingArtifactPreparer(new Recipients(new BpeRecipient(BpeRecipientType.TenantWrap, 1, _key)))
-            .PrepareAsync(input, CancellationToken.None);
+        var prepared = await new EncryptingArtifactPreparer().PrepareAsync(input, CancellationToken.None);
 
         Assert.False(prepared.IsSourceFile);
         Assert.Equal(ArtifactTransformKind.Encryption, Assert.Single(prepared.Transforms).Kind);
@@ -46,12 +43,14 @@ public sealed class EncryptingArtifactPreparerTests : IDisposable
         Assert.Equal(data, plain.ToArray());
     }
 
-    [Fact]
-    public async Task WithoutRecipientsTheSourceFileIsTheArtifact()
+    [Theory]
+    [InlineData(false)] // no encryption instruction at all
+    [InlineData(true)] // optional instruction without recipients
+    public async Task WithoutRequiredEncryptionTheSourceFileIsTheArtifact(bool optionalWithoutRecipients)
     {
-        var input = Input([1, 2, 3]);
+        var input = Input([1, 2, 3], optionalWithoutRecipients ? new ArtifactEncryption(false, []) : null);
 
-        var prepared = await new EncryptingArtifactPreparer(new Recipients()).PrepareAsync(input, CancellationToken.None);
+        var prepared = await new EncryptingArtifactPreparer().PrepareAsync(input, CancellationToken.None);
 
         Assert.True(prepared.IsSourceFile);
         Assert.Equal("source.bak", prepared.FileName);
@@ -59,14 +58,23 @@ public sealed class EncryptingArtifactPreparerTests : IDisposable
     }
 
     [Fact]
+    public async Task RequiredEncryptionWithoutRecipientsFailsInsteadOfProducingPlaintext()
+    {
+        var input = Input([1, 2, 3], new ArtifactEncryption(true, []));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new EncryptingArtifactPreparer().PrepareAsync(input, CancellationToken.None));
+
+        Assert.Equal(["source.bak"], Directory.GetFiles(_root).Select(Path.GetFileName));
+    }
+
+    [Fact]
     public async Task ACancelledEncryptionLeavesNoPartialArtifactBehind()
     {
-        var input = Input(new byte[10_000]);
+        var input = Input(new byte[10_000], ForKey());
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            new EncryptingArtifactPreparer(new Recipients(new BpeRecipient(BpeRecipientType.TenantWrap, 1, _key))).PrepareAsync(input, cts.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new EncryptingArtifactPreparer().PrepareAsync(input, cts.Token));
 
         Assert.Equal(["source.bak"], Directory.GetFiles(_root).Select(Path.GetFileName));
     }
