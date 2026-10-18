@@ -30,7 +30,7 @@ spec.loader.exec_module(bootstrap)
 shared, Api, FixtureFailure = bootstrap.shared, bootstrap.Api, bootstrap.FixtureFailure
 
 HOME = Path(os.environ.get('BP_DEV_HOME', Path.home() / '.local/share/backup-platform-dev'))
-ACCOUNTS = HERE.parent.parent / 'docs' / 'local-development-accounts.txt'
+ACCOUNTS = Path(os.environ.get('BP_DEV_ACCOUNTS_FILE') or HERE.parent.parent / 'docs' / 'local-development-accounts.yaml')
 SERVER = 'https://localhost:7179'
 SOURCE_DB = 'bp_google_drive_acceptance'
 RESTORED_DB = SOURCE_DB + '_restored'

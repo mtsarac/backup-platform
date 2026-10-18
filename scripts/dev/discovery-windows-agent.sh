@@ -43,7 +43,7 @@ PY
     "$copy" "$work/agent.zip" "$windows_root\\agent.zip"
     "$copy" "$H/cert.pem" "$windows_root\\certificate.pem"
     "${console[@]}" -Action stage -RootDirectory "$windows_root"
-    python3 "$REPO_ROOT/scripts/dev/bootstrap.py" enrollment-token --accounts-file "$H/accounts.txt" --server "https://127.0.0.1:$API_PORT" --certificate "$H/cert.pem" --output "$work/token.json"
+    python3 "$REPO_ROOT/scripts/dev/bootstrap.py" enrollment-token --accounts-file "$H/accounts.yaml" --server "https://127.0.0.1:$API_PORT" --certificate "$H/cert.pem" --output "$work/token.json"
     "$copy" "$work/token.json" "$windows_root\\token.json"
     "${console[@]}" -Action enroll -RootDirectory "$windows_root" -BackendUri "$SERVER" -TokenFile "$windows_root\\token.json" -AgentName disc-windows-agent
     python3 - "$work/sql.json" <<'PY'

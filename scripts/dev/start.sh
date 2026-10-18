@@ -14,7 +14,7 @@ while (($#)); do
         --no-agent) agent=false ;;
         -h|--help)
             printf '%s\n' 'Usage: scripts/dev/start.sh [--no-build] [--no-agent]' \
-                'Needs docs/test-cred.txt and docs/client_secret_*.json (read at runtime, never printed). State: $BP_DEV_HOME (default ~/.local/share/backup-platform-dev).'
+                'Needs docs/test-cred.yaml and docs/client_secret_*.json (read at runtime, never printed). State: $BP_DEV_HOME (default ~/.local/share/backup-platform-dev).'
             exit 0 ;;
         *) fail 'Unknown option; use --help.' ;;
     esac
@@ -23,7 +23,7 @@ done
 
 load_local_env
 for tool in docker dotnet bun openssl python3 curl jq; do require_command "$tool"; done
-[[ -n ${BACKUP_PLATFORM_TEST_CONNECTION_STRING:-} ]] || fail 'BACKUP_PLATFORM_TEST_CONNECTION_STRING is not available from docs/test-cred.txt.'
+[[ -n ${BACKUP_PLATFORM_TEST_CONNECTION_STRING:-} ]] || fail 'BACKUP_PLATFORM_TEST_CONNECTION_STRING is not available from docs/test-cred.yaml.'
 dev_prepare_state
 
 # A browser re-download leaves 'name(1).json' duplicates: prefer the original file name.

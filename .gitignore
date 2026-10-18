@@ -1,16 +1,24 @@
 # .NET
-**/bin/
-**/obj/
+bin/
+obj/
 *.user
 *.suo
+*.ntvs*
+*.njsproj
+*.sw?
+*.local
 
 # Frontend
-**/node_modules/
-**/dist/
+node_modules/
+dist/
+dist-ssr/
+/backup-frontend/logs/
+*.tsbuildinfo
 
 # Python
 __pycache__/
 *.pyc
+
 # IDE
 .idea/
 .vscode/
@@ -23,12 +31,8 @@ __pycache__/
 .env
 .env.*
 !.env.example
-**/appsettings.Development.local.json
-**/appsettings.Local.json
-docs/Archive.zip
-docs/archive/
-docs/*.json
-docs/*.txt
+appsettings.Development.local.json
+appsettings.Local.json
 
 # Logs
 *.log
@@ -43,10 +47,26 @@ coverage/
 /publish/
 /release-out/
 /release-files/
-*.tsbuildinfo
 
-# Local tooling state
+# Local tooling state and private docs (plans, credentials, accounts)
 .omo/
 .superpowers/
 .serena/
 docs/
+
+# AI agent tooling and generated agent files (AGENTS.md / CLAUDE.md are tracked instructions)
+.claude/
+.cursor/
+.cursorrules
+.codex/
+.omp/
+.opencode/
+.windsurf/
+.continue/
+.gemini/
+.kiro/
+.roo/
+.cline/
+.aider*
+.copilot/
+.github/copilot-*.md

@@ -1,60 +1,49 @@
-# React + TypeScript + Vite
+# Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+The web UI for Backup Platform. React 19, TypeScript, Vite, Tailwind CSS 4, TanStack Query, and Base UI components. It talks to the backend through same-origin `/api` requests.
 
-Currently, two official plugins are available:
+## Layout
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```text
+src/
+  features/    One folder per area: agents, backup-jobs, backups, artifacts,
+               restores, storage, notifications, discovery, platform admin, ...
+  components/  Shared UI: layout, data tables, auth, storage, ui primitives
+  pages/       Route-level pages
+  lib/         API client, i18n (Turkish and English), providers, accessibility prefs
+  hooks/       Shared hooks
+  test/        Test setup
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Run it
 
-## Secure Backup downloads
+You need [bun](https://bun.sh) 1.4+.
 
-The existing tenant Backup Browser detail screen supports Owner/Admin-only downloads for Central and Agent-local replicas. It shows destination availability, expected SHA256 and size, offers checksum copying, prepares a scoped download session and polls its status. Ready sessions use a native cookie-authenticated browser download; file bytes are never buffered as a JavaScript Blob. Agent offline, unavailable replicas, denied access and integrity/transfer failures use safe central error messages. Storage keys and physical paths are not displayed.
+```bash
+bun install --frozen-lockfile
+bun run dev          # proxies /api to BACKUP_API_PROXY_TARGET (default https://localhost:5001)
+bun run typecheck
+bun run lint         # oxlint
+bun run test         # vitest
+bun run build
+```
 
-Availability and status query keys include the tenant and artifact. Changing tenant, artifact, download eligibility or administrative permissions remounts the download controller so an earlier pending session cannot start in the new scope.
+The `Dockerfile` serves the production build with nginx. `docker-compose.yml` in the repository root runs it next to the API.
 
-## Dashboard status scope
+## Tests
 
-The status banner reports successful backups in the last 24 hours, not a guarantee of overall system safety. Its warning count is the number of nonzero categories (failed backups, storage failures, insufficient replication, failed artifact deletions), not their sum: these counters may overlap. Agent connectivity and scheduled jobs remain separate indicators.
-
-## Hardening API compatibility
-
-Backup job storage configuration uses only `destinations` and `requiredVerifiedReplicaCount`; the primary target is selected by `isPrimary`, not array position. Removed top-level storage fields are not submitted. `Quarantined` replicas require ownership review and are not verified restore/download sources; `TargetConflict` is explained without exposing provider exception details.
-
-Text size (100%, 125%, 150%) and high contrast persist in browser local storage and are applied before React mounts. Restore request retries retain an idempotency key for unchanged input; correcting target, mode or options creates a new request identity.
-
-## Test feedback
-
-`bun run test` executes the full suite with two `vmThreads` workers. This reuses jsdom setup while retaining
-file isolation and mock restoration, rather than constructing an environment for every test file.
-For a focused development check, pass a test file or directory, for example:
+`bun run test` runs the whole suite on two `vmThreads` workers. To check one area while you work, pass a path:
 
 ```bash
 bun run test src/features/platform/audit-table.test.tsx
 ```
 
-Full tests, typechecking, lint and the production build remain the acceptance checks.
+Before opening a PR, run typecheck, lint, the full test suite, and the build.
+
+## Behavior worth knowing
+
+- **Downloads.** Backup Browser downloads are for tenant Owners and Admins. The UI prepares a download session and polls it. Once ready, the browser downloads the file natively with the session cookie, so file bytes never pass through a JavaScript Blob. Storage keys and physical paths are never shown. The availability and status query keys include the tenant and artifact, so switching either one starts a fresh session.
+- **Dashboard banner.** It reports successful backups in the last 24 hours. It does not claim the whole system is safe. The warning count is the number of non-zero categories (failed backups, storage failures, insufficient replication, failed artifact deletions), not their sum, because those counters can overlap.
+- **Job storage configuration.** Jobs send only `destinations` and `requiredVerifiedReplicaCount`. The primary target is the one with `isPrimary`, not the first in the array. `Quarantined` replicas need an ownership review and are not offered as restore or download sources.
+- **Restore retries.** A retry with unchanged input keeps its idempotency key. Changing the target, mode, or options creates a new request.
+- **Accessibility.** Text size (100%, 125%, 150%) and high contrast are stored in local storage and applied before React mounts.

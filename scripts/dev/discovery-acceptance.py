@@ -32,7 +32,7 @@ SERVER = 'https://127.0.0.1:' + os.environ.get('BP_DISC_API_PORT', '7391')
 
 
 def session(prefix='tenant_owner'):
-    accounts = bootstrap.read_accounts(HOME / 'accounts.txt')
+    accounts = bootstrap.read_accounts(HOME / 'accounts.yaml')
     api = Api(SERVER, str(HOME / 'cert.pem'))
     api.login(accounts[prefix + '_login'], accounts[prefix + '_password'])
     _, memberships = api.call('GET', '/api/me/tenants')
