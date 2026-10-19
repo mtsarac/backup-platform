@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Backups;
 using BackupPlatform.Application.Downloads;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Backups;
@@ -5,6 +6,7 @@ using BackupPlatform.Domain.Downloads;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Support;
 using BackupPlatform.Domain.Tenancy;
+using BackupPlatform.Infrastructure.Backups;
 using BackupPlatform.Infrastructure.Support;
 using BackupPlatform.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -28,6 +30,8 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var downloadId = Guid.NewGuid();
+        ArtifactBreakGlassRequest? grant = null;
         if (command.SupportSessionId is { } supportId)
         {
             // The support session is locked first (shared), then artifact, then replica: the order closing a session uses against the downloads it cancels.
@@ -35,6 +39,21 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
                 command.Now, cancellationToken);
             if (session is null) return null;
             if (denial is { } refused) throw new SupportAccessDeniedException(refused);
+        }
+        else if (command.BreakGlassRequestId is { } breakGlassId)
+        {
+            // The PlatformAdmin route is authorized by the request row alone (the endpoint has already required the PlatformAdmin policy). It is locked before artifact and
+            // replica, the order every path takes, and spending its single use commits with the download hold or not at all.
+            grant = await PostgreSqlArtifactBreakGlassStore.LockAsync(context, breakGlassId, cancellationToken);
+            if (grant is null || grant.TenantId != command.TenantId || grant.ArtifactId != command.ArtifactId) return null;
+            if (grant.Consume(new UserId(command.UserId), downloadId, command.Now) is { } refused)
+            {
+                context.AuditEvents.Add(PostgreSqlArtifactBreakGlassStore.Audit(AuditActions.BreakGlassRefused, grant, new UserId(command.UserId), command.Now,
+                    new Dictionary<string, object?> { ["attempted"] = "download", ["result"] = "refused", ["reason"] = BreakGlassDenials.Code(refused) }));
+                await context.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                throw new BreakGlassDeniedException(refused);
+            }
         }
         else if (!await IsAdministratorAsync(context, command.TenantId, command.UserId, cancellationToken)) return null;
         var artifactLocked = await context.Database.SqlQuery<Guid>($"""
@@ -52,9 +71,13 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
         var replica = await context.BackupReplicas.AsNoTracking().SingleAsync(entity => entity.TenantId == command.TenantId && entity.ArtifactId == command.ArtifactId && entity.Id == command.ReplicaId, cancellationToken);
         if (replica.Status != BackupReplicaStatus.Available || replica.VerificationState != "Verified" ||
             replica.Checksum != artifact.ArtifactChecksum || replica.SizeBytes != artifact.SizeBytes || artifact.ChecksumAlgorithm != "sha256") return null;
-        var download = new DownloadSession(Guid.NewGuid(), artifact, replica, command.UserId, command.Filename, command.Now, command.Lifetime, command.SupportSessionId);
+        var lifetime = grant is null ? command.Lifetime : TimeSpan.FromTicks(Math.Min(command.Lifetime.Ticks, (grant.ExpiresAt - command.Now).Ticks));
+        var download = new DownloadSession(downloadId, artifact, replica, command.UserId, command.Filename, command.Now, lifetime, command.SupportSessionId, command.Decrypted, command.BreakGlassRequestId);
         context.DownloadSessions.Add(download);
-        AddAudit(context, download, command.Now, "download.requested");
+        if (grant is not null)
+            context.AuditEvents.Add(PostgreSqlArtifactBreakGlassStore.Audit(AuditActions.BreakGlassConsumed, grant, new UserId(command.UserId), command.Now,
+                new Dictionary<string, object?> { ["downloadId"] = downloadId, ["replicaId"] = replica.Id, ["result"] = "consumed" }));
+        else AddAudit(context, download, command.Now, "download.requested");
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return download;
@@ -113,7 +136,7 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
         }
         var session = await LockSessionAsync(context, sessionId, cancellationToken);
         if (session is null) return null;
-        if (startsStreaming && session.SupportSessionId is null &&
+        if (startsStreaming && session.SupportSessionId is null && session.BreakGlassRequestId is null &&
             !await IsAdministratorAsync(context, session.TenantId, session.UserId, cancellationToken)) return null;
         var previous = session.State;
         if (!session.Transition(transition.ExpectedState, transition.ExpectedOwner, transition.State, transition.Owner,
@@ -223,8 +246,19 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
             ["artifactId"] = session.ArtifactId, ["replicaId"] = session.ReplicaId, ["sessionId"] = session.Id,
             ["transferredBytes"] = session.TransferredBytes, ["status"] = session.State.ToString(), ["failure"] = session.FailureCode,
             ["startedAt"] = action == "download.streaming" ? now : (DateTimeOffset?)null,
-            ["completedAt"] = session.ReleasedAt, ["result"] = session.IsTerminal ? session.State.ToString() : null
+            ["completedAt"] = session.ReleasedAt, ["result"] = session.IsTerminal ? session.State.ToString() : null, ["decrypted"] = session.Decrypted
         };
+        if (session.BreakGlassRequestId is { } breakGlass)
+        {
+            // The request itself was audited when its single use was spent (break_glass.consumed); here only the transfer is recorded, as the PlatformAdmin who holds the grant.
+            if (action is "download.requested" or "download.preparing" or "download.ready") return;
+            details["downloadId"] = session.Id;
+            details["requestId"] = breakGlass;
+            details["result"] ??= "started";
+            context.AuditEvents.Add(AuditEvent.Record(now, new UserId(session.UserId), AuditActorKind.PlatformAdmin, BreakGlassAction(action), session.TenantId,
+                "backup_artifact", session.ArtifactId.ToString("D"), details));
+            return;
+        }
         if (session.SupportSessionId is not { } support)
         {
             context.AuditEvents.Add(AuditEvent.Record(now, new UserId(session.UserId), AuditActorKind.TenantAdministrator, action, session.TenantId,
@@ -240,6 +274,13 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
         context.AuditEvents.Add(AuditEvent.Record(now, new UserId(session.UserId), AuditActorKind.PlatformAdmin, SupportAction(action), session.TenantId,
             SupportAuditActions.ArtifactTargetType, session.ArtifactId.ToString("D"), details, support));
     }
+
+    private static string BreakGlassAction(string action) => action switch
+    {
+        "download.streaming" or "download.replica_fallback" => AuditActions.BreakGlassDownloadStarted,
+        "download.completed" => AuditActions.BreakGlassDownloadCompleted,
+        _ => AuditActions.BreakGlassDownloadFailed
+    };
 
     private static string SupportAction(string action) => action switch
     {

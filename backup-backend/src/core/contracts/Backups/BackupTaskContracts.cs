@@ -142,6 +142,33 @@ public sealed record BackupTaskArtifact
     public int? EncryptionKeyVersion { get; init; }
     /// <summary>The tenant-wrap recipient's wrapped DEK, copied from the artifact header. It is ciphertext only the backend's private wrap key can open; the backend stores it so restore-time unwrap never accepts key material from an agent.</summary>
     public string? EncryptionWrappedDekBase64 { get; init; }
+    /// <summary>Every recipient read back from the artifact header (type, key id, key version; no wrapped keys). Empty when <see cref="Format"/> is plain; the backend checks each against the keys it issued.</summary>
+    public IReadOnlyList<BackupTaskArtifactRecipient> EncryptionRecipients { get; init; } = [];
+}
+
+public sealed record BackupTaskArtifactRecipient
+{
+    /// <summary>One of <see cref="BackupRecipientTypes"/>.</summary>
+    public string Type { get; init; } = string.Empty;
+    public string KeyId { get; init; } = string.Empty;
+    public int KeyVersion { get; init; }
+}
+
+/// <summary>Wire names of the <c>bpe</c> recipient types; identical to the header's <c>type</c> strings.</summary>
+public static class BackupRecipientTypes
+{
+    public const string TenantWrap = "tenant-wrap";
+    public const string PlatformRecovery = "platform-recovery";
+    public const string TenantRecovery = "tenant-recovery";
+}
+
+/// <summary>One public key the agent seals the DEK to. <see cref="KeyId"/> is SHA-256(SPKI)[..16] in hex, which the agent re-derives before wrapping so a task whose key and id disagree is refused.</summary>
+public sealed record BackupEncryptionRecipient
+{
+    public string Type { get; init; } = string.Empty;
+    public int KeyVersion { get; init; }
+    public string KeyId { get; init; } = string.Empty;
+    public string PublicKeySpkiBase64 { get; init; } = string.Empty;
 }
 
 public static class ArtifactFormats
@@ -150,12 +177,14 @@ public static class ArtifactFormats
     public const string Bpe2 = "v2-bpe";
 }
 
-/// <summary>Per-job encryption instruction. <see cref="Required"/> makes the agent fail rather than produce a plaintext artifact. <see cref="PublicKeySpkiBase64"/> is an RSA SubjectPublicKeyInfo, never secret.</summary>
+/// <summary>
+/// Per-job encryption instruction: exactly one tenant-wrap recipient, plus the platform-recovery recipient when the platform has one configured and the
+/// tenant's optional tenant-recovery recipient. <see cref="Required"/> makes the agent fail rather than produce a plaintext artifact. Public keys only.
+/// </summary>
 public sealed record BackupEncryptionInstruction
 {
     public bool Required { get; init; }
-    public int KeyVersion { get; init; }
-    public string PublicKeySpkiBase64 { get; init; } = string.Empty;
+    public IReadOnlyList<BackupEncryptionRecipient> Recipients { get; init; } = [];
 }
 
 public sealed record BackupTaskReplica

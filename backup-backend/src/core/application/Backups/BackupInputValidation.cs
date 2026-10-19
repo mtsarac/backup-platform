@@ -154,11 +154,19 @@ public static class BackupInputValidation
 
     private static bool ValidEncryption(BackupTaskArtifact a) => a.Format switch
     {
-        ArtifactFormats.Plain => a.EncryptionKeyId is null && a.EncryptionKeyVersion is null && a.EncryptionWrappedDekBase64 is null,
+        ArtifactFormats.Plain => a.EncryptionKeyId is null && a.EncryptionKeyVersion is null && a.EncryptionWrappedDekBase64 is null && a.EncryptionRecipients.Count == 0,
         ArtifactFormats.Bpe2 => a.EncryptionKeyId is { Length: 32 } id && id.All(c => char.IsAsciiHexDigitLower(c)) && a.EncryptionKeyVersion is >= 1 &&
-            a.EncryptionWrappedDekBase64 is { Length: > 0 and <= 4096 } dek && Convert.TryFromBase64String(dek, new byte[3072], out _),
+            a.EncryptionWrappedDekBase64 is { Length: > 0 and <= 4096 } dek && Convert.TryFromBase64String(dek, new byte[3072], out _) && ValidRecipients(a),
         _ => false
     };
+
+    /// <summary>One entry per recipient type (at most the three that exist), each with a hex key id, and exactly one tenant-wrap entry that is the artifact's own key.</summary>
+    private static bool ValidRecipients(BackupTaskArtifact a) =>
+        a.EncryptionRecipients is { Count: >= 1 and <= 3 } recipients &&
+        recipients.All(r => r.Type is BackupRecipientTypes.TenantWrap or BackupRecipientTypes.PlatformRecovery or BackupRecipientTypes.TenantRecovery &&
+            r.KeyId is { Length: 32 } key && key.All(c => char.IsAsciiHexDigitLower(c)) && r.KeyVersion >= 1) &&
+        recipients.Select(r => r.Type).Distinct().Count() == recipients.Count &&
+        recipients.SingleOrDefault(r => r.Type == BackupRecipientTypes.TenantWrap) is { } wrap && wrap.KeyId == a.EncryptionKeyId && wrap.KeyVersion == a.EncryptionKeyVersion;
 
     private static bool Metadata(BackupTaskArtifact artifact, BackupConfiguration configuration)
     {

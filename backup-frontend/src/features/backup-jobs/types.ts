@@ -1,3 +1,4 @@
+import type { EncryptionPolicy } from '@/features/artifact-encryption/types'
 export type OptionPolicy = 'Disabled' | 'Preferred' | 'Required'
 export interface BackupDestination {
   storageProvider: string
@@ -18,6 +19,8 @@ export interface BackupConfiguration {
   destinations: BackupDestination[]
   requiredVerifiedReplicaCount: number
   copyOnly: boolean; checksumPolicy: OptionPolicy; compressionPolicy: OptionPolicy
+  /** Defaults to `Off` on the server; `Required` fails a run whose artifact comes back unencrypted. */
+  encryptionPolicy: EncryptionPolicy
 }
 export interface RetryPolicy { maxAttempts: number; initialDelaySeconds: number; maxDelaySeconds: number; backoff: string; jitter: number }
 export interface RetentionPolicy { enabled: boolean; keepForSeconds: number; deleteGracePeriodSeconds: number }

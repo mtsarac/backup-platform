@@ -131,5 +131,11 @@ public enum BpeRecipientType
     TenantRecovery
 }
 
+public static class BpeRecipientTypes
+{
+    /// <summary>The wire name of the type (<c>tenant-wrap</c>, <c>platform-recovery</c>, <c>tenant-recovery</c>).</summary>
+    public static string WireName(this BpeRecipientType type) => BpeFormat.TypeName(type);
+}
+
 /// <summary>The input is not a valid <c>bpe</c> v2 artifact, or it was tampered with or truncated.</summary>
 public sealed class BpeFormatException(string message) : Exception(message);

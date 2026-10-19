@@ -25,6 +25,10 @@ internal sealed class DownloadSessionConfiguration : IEntityTypeConfiguration<Do
             .HasPrincipalKey(replica => new { replica.Id, replica.TenantId }).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<BackupPlatform.Domain.Support.SupportAccessSession>().WithMany().HasForeignKey(session => new { session.SupportSessionId, session.TenantId })
             .HasPrincipalKey(support => new { support.Id, support.TenantId }).OnDelete(DeleteBehavior.Restrict);
+        builder.Property(session => session.Decrypted).HasDefaultValue(false);
+        builder.HasOne<ArtifactBreakGlassRequest>().WithMany().HasForeignKey(session => new { session.BreakGlassRequestId, session.TenantId })
+            .HasPrincipalKey(request => new { request.Id, request.TenantId }).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(session => session.BreakGlassRequestId).HasDatabaseName("ix_download_sessions_break_glass").HasFilter("\"BreakGlassRequestId\" IS NOT NULL");
         builder.HasIndex(session => session.SupportSessionId).HasDatabaseName("ix_download_sessions_support").HasFilter("\"SupportSessionId\" IS NOT NULL");
         builder.HasIndex(session => session.ReplicaId).HasDatabaseName("ix_download_sessions_active").HasFilter("\"ReleasedAt\" IS NULL");
         builder.HasIndex(session => session.ExpiresAt).HasDatabaseName("ix_download_sessions_expiry").HasFilter("\"ReleasedAt\" IS NULL");
@@ -36,6 +40,7 @@ internal sealed class DownloadSessionConfiguration : IEntityTypeConfiguration<Do
             table.HasCheckConstraint("ck_download_sessions_expiry", "\"ExpiresAt\" > \"CreatedAt\"");
             table.HasCheckConstraint("ck_download_sessions_release", "(\"State\" IN ('Completed','Failed','Cancelled')) = (\"ReleasedAt\" IS NOT NULL)");
             table.HasCheckConstraint("ck_download_sessions_lease", "(\"LeaseOwner\" IS NULL) = (\"LeaseExpiresAt\" IS NULL)");
+            table.HasCheckConstraint("ck_download_sessions_channel", "(\"BreakGlassRequestId\" IS NULL OR \"Decrypted\") AND (NOT \"Decrypted\" OR \"SupportSessionId\" IS NULL)");
         });
     }
 }

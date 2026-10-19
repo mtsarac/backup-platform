@@ -63,7 +63,7 @@ public sealed class NotificationPolicy : ITenantOwned
     public static NotificationPolicy Defaults(TenantId tenantId, DateTimeOffset now) => new(Guid.NewGuid(), tenantId, now);
 
     public bool Admits(string eventType, NotificationSeverity severity) =>
-        Enabled && ChannelKinds.Count > 0 && EventTypes.Contains(eventType) && severity >= MinimumSeverity;
+        Enabled && ChannelKinds.Count > 0 && (EventTypes.Contains(eventType) || NotificationEventTypes.Mandatory.Contains(eventType)) && severity >= MinimumSeverity;
 
     /// <summary>Applies a complete new policy. False, changing nothing, when it equals the current one.</summary>
     public bool Update(

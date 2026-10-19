@@ -69,7 +69,7 @@ public static class AgentStorageTransferEndpoints
             return Results.Conflict(new AgentApiError { Error = "artifact_not_encrypted", Message = "The artifact has no encryption key." });
 
         byte[] dek;
-        try { dek = await keys.UnwrapDekAsync(tenant, attemptId, keyId, Convert.FromBase64String(wrapped), cancellationToken); }
+        try { dek = await keys.UnwrapDekAsync(tenant, "restore_attempt", attemptId, keyId, Convert.FromBase64String(wrapped), cancellationToken); }
         catch (TenantWrapKeyUnavailableException) { return Results.Conflict(new AgentApiError { Error = "key_unavailable", Message = "The artifact key is unavailable." }); }
         try
         {

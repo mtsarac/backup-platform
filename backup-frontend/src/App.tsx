@@ -48,6 +48,9 @@ import { PlatformSupportSessionPage } from './pages/platform/platform-support-se
 import { SupportAccessPage } from './pages/support-access/support-access-page'
 import { NotificationsPage } from './pages/notifications/notifications-page'
 import { PlatformNotificationTransportsPage } from './pages/platform/platform-notification-transports-page'
+import { PlatformBreakGlassPage } from './pages/platform/platform-break-glass-page'
+import { PlatformBreakGlassDetailPage } from './pages/platform/platform-break-glass-detail-page'
+import { EncryptionPage } from './pages/encryption/encryption-page'
 
 function AppRoutes() {
   useLanguage()
@@ -85,6 +88,7 @@ function AppRoutes() {
         <Route path="restores/:id" element={<RestoreDetailPage />} />
         <Route path="support-access" element={<SupportAccessPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
+        <Route path="encryption" element={<EncryptionPage />} />
         <Route path="*" element={<p>{tx("Sayfa bulunamadı.")}</p>} />
       </Routes></AppShell></TenantProvider>} />
       <Route path="/platform" element={<PlatformAdminRoute />}>
@@ -102,6 +106,8 @@ function AppRoutes() {
           <Route path="audit" element={<PlatformAuditPage />} />
           <Route path="support-sessions" element={<PlatformSupportSessionsPage />} />
           <Route path="support-sessions/:sessionId" element={<PlatformSupportSessionPage />} />
+          <Route path="break-glass" element={<PlatformBreakGlassPage />} />
+          <Route path="break-glass/:requestId" element={<PlatformBreakGlassDetailPage />} />
           <Route path="notification-transports" element={<PlatformNotificationTransportsPage />} />
           <Route path="*" element={<p>{tx("Sayfa bulunamadı.")}</p>} />
         </Route>

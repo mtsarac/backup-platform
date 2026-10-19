@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import sys
 import time
@@ -64,9 +65,13 @@ def backup(options):
     while time.monotonic() < deadline:
         _, document = api.call('GET', path + '/agents')
         agents = document if isinstance(document, list) else document.get('items', [])
-        agent = next((item for item in agents if item.get('hostName') == options.agent_name), None)
+        agent = next((item for item in agents if item.get('hostName') == options.agent_name and item.get('connectivity') == 'online'), None)
         if agent:
-            break
+            agent_id = agent.get('agentId', agent.get('id'))
+            _, detail = api.call('GET', path + f'/agents/{agent_id}')
+            caps = detail.get('capabilities', [])
+            if any(c.get('identifier') == 'core.backup.multi-destination' and c.get('support') == 'Supported' for c in caps):
+                break
         time.sleep(1)
     if agent is None:
         raise FixtureFailure('Actual enrolled Agent was not found.')
@@ -75,7 +80,7 @@ def backup(options):
                      'databaseCredentialReference': shared.store_sql_login(api, path, agent_id, options.sql_login_file), 'trustServerCertificate': True,
                      'stagingReference': 'default', 'storageTarget': 'default',
                      'storagePrefix': 'download-smoke', 'copyOnly': True, 'checksumPolicy': 'Required', 'compressionPolicy': 'Preferred',
-                     'requiredVerifiedReplicaCount': 1}
+                     'requiredVerifiedReplicaCount': 1, 'encryptionPolicy': os.environ.get('BP_SMOKE_ENCRYPTION', 'Off')}
     destination = {'storageProvider': options.provider, 'storageConnectionId': None,
                    'storageExecutionLocation': 'Agent' if options.provider == 'local' else 'Backend', 'isPrimary': True}
     if options.provider == 'sftp':
@@ -109,7 +114,8 @@ def backup(options):
                     raise FixtureFailure('The paced upload finished faster than its limit allows.')
             state['agents'][options.provider] = agent_id
             state['artifacts'][options.provider] = {'id': artifact['id'], 'checksum': artifact['artifactChecksum'],
-                                                    'sizeBytes': artifact['sizeBytes'], 'jobId': job['id'], 'runId': run_id}
+                                                    'sizeBytes': artifact['sizeBytes'], 'jobId': job['id'], 'runId': run_id,
+                                                    'encryptionPolicy': configuration['encryptionPolicy']}
             shared.write_private(options.state, state)
             print(json.dumps({'provider': options.provider, **state['artifacts'][options.provider]}))
             return
@@ -149,6 +155,10 @@ def verify(options):
                 target.write(chunk)
     if transferred != artifact['sizeBytes'] or digest.hexdigest().lower() != artifact['checksum'].lower():
         raise FixtureFailure('Downloaded length/SHA-256 differs from the actual artifact.')
+    with open(options.output, 'rb') as downloaded:
+        encrypted = downloaded.read(6) == b'BPENC\0'
+    if encrypted != (artifact.get('encryptionPolicy', 'Off') != 'Off'):
+        raise FixtureFailure('Stored artifact format does not match the requested encryption policy.')
     completion_deadline = time.monotonic() + 15
     while True:
         _, completed = api.call('GET', path + '/downloads/' + session['sessionId'])
@@ -158,7 +168,7 @@ def verify(options):
     if completed['state'] != 'Completed' or completed['transferredBytes'] != transferred:
         raise FixtureFailure('Download lifecycle did not record completion with exact transferred bytes.')
     print(json.dumps({'provider': options.provider, 'artifactId': artifact['id'], 'bytes': transferred,
-                      'sha256': digest.hexdigest(), 'matchesArtifactChecksum': True, 'auditState': completed['state']}))
+                      'sha256': digest.hexdigest(), 'encrypted': encrypted, 'matchesArtifactChecksum': True, 'auditState': completed['state']}))
 
 
 def main():

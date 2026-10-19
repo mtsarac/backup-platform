@@ -295,7 +295,12 @@ public static class SupportEndpoints
         }
         catch (DownloadUnavailableException exception)
         {
-            return exception.Code == "replica_not_found" ? Results.NotFound(new { error = exception.Code }) : Results.Conflict(new { error = exception.Code });
+            return exception.Code switch
+            {
+                "replica_not_found" => Results.NotFound(new { error = exception.Code }),
+                "decrypt_not_permitted" => Results.Json(new { error = exception.Code }, statusCode: StatusCodes.Status403Forbidden),
+                _ => Results.Conflict(new { error = exception.Code })
+            };
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {

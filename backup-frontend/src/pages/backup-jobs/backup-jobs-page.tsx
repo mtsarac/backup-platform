@@ -14,6 +14,7 @@ import { FilterField, Filters, filterControlClass } from '@/components/ui/filter
 import { Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { useTenant } from '@/features/tenancy/use-tenant'
+import { PolicyBadge } from '@/features/artifact-encryption/presentation'
 import { useBackupJobs, useRunBackupJob, useToggleBackupJob } from '@/features/backup-jobs/hooks'
 import { scheduleLabel } from '@/features/backup-jobs/job-wizard-model'
 import type { BackupJob } from '@/features/backup-jobs/types'
@@ -41,6 +42,7 @@ export function BackupJobsPage() {
     { key: 'name', header: tx('İş adı'), wrap: true, render: job => <span className="space-y-1"><span className="block font-medium text-text-heading">{job.name}</span><StatusPill status={job.enabled ? 'Active' : 'Disabled'} /></span> },
     { key: 'agent', header: tx('Agent'), wrap: true, render: job => job.agentName || tx('Agent adı bulunamadı') },
     { key: 'database', header: tx('Database'), wrap: true, render: job => job.configuration.database },
+    { key: 'encryption', header: tx('Şifreleme'), render: job => <PolicyBadge policy={job.configuration.encryptionPolicy} /> },
     { key: 'schedule', header: tx('Zamanlama'), wrap: true, render: job => {
       const next = job.nextOccurrenceAt ?? job.schedule?.nextOccurrenceAt
       return <span className="space-y-0.5">

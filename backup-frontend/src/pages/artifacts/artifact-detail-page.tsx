@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { ArtifactEncryptionSection } from '@/features/artifact-encryption/artifact-encryption-section'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { QueryState } from '@/components/data/query-state'
@@ -183,6 +184,7 @@ function ArtifactDetail({ id }: { id: string }) {
                 <ArtifactSummary artifact={artifact} />
                 {artifact.replication && <ReplicationSection replication={artifact.replication} onRepair={(destination) => { if (repairFinished) setActiveRepairId(null); setRepairError(null); setRepairDestination(destination) }} repairingDestinationId={repairFinished ? null : repairingDestId} canRepair={canRepair} repairs={repairsQuery.data} />}
                 <ArtifactIntegrity artifact={artifact} />
+                <ArtifactEncryptionSection encryption={artifact.encryption} />
                 <ArtifactRestoreAction tenantId={tenantId} artifact={artifact} />
                 <ArtifactVerificationSection tenantId={tenantId} artifact={artifact} />
               </>}

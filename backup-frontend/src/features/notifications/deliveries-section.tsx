@@ -14,7 +14,7 @@ import { agentDate } from '@/features/agents/format'
 import { useNotificationDeliveries } from './hooks'
 import { deliveryStatusLabels, eventTypeLabels, kindLabels, phaseLabels, severityLabels } from './labels'
 import { channelKinds, deliveryStatuses, eventTypes } from './types'
-import type { ChannelKind, DeliveryFilters, DeliveryStatus, EventType, NotificationDelivery } from './types'
+import type { ChannelKind, DeliveryFilters, DeliveryStatus, EventType, MandatoryEventType, NotificationDelivery } from './types'
 
 const PAGE_SIZE = 25
 
@@ -32,7 +32,7 @@ export function DeliveriesSection() {
   const [page, setPage] = useState(1)
   const [status, setStatus] = useState<DeliveryStatus | ''>('')
   const [kind, setKind] = useState<ChannelKind | ''>('')
-  const [eventType, setEventType] = useState<EventType | 'test' | ''>('')
+  const [eventType, setEventType] = useState<EventType | MandatoryEventType | 'test' | ''>('')
   const filters: DeliveryFilters = { page, pageSize: PAGE_SIZE, status: status || undefined, kind: kind || undefined, eventType: eventType || undefined }
   const deliveries = useNotificationDeliveries(filters)
   const data = deliveries.data
@@ -43,7 +43,7 @@ export function DeliveriesSection() {
       <Filters label={tx("Gönderim filtreleri")}>
         <FilterField label={tx("Durum")}><select aria-label={tx("Durum")} className={filterControlClass} value={status} onChange={filter(setStatus)}><option value="">{tx("Tümü")}</option>{deliveryStatuses.map((item) => <option key={item} value={item}>{tx(deliveryStatusLabels[item].label)}</option>)}</select></FilterField>
         <FilterField label={tx("Kanal türü")}><select aria-label={tx("Kanal türü")} className={filterControlClass} value={kind} onChange={filter(setKind)}><option value="">{tx("Tümü")}</option>{channelKinds.map((item) => <option key={item} value={item}>{kindLabels[item]}</option>)}</select></FilterField>
-        <FilterField label={tx("Olay türü")}><select aria-label={tx("Olay türü")} className={filterControlClass} value={eventType} onChange={filter(setEventType)}><option value="">{tx("Tümü")}</option>{[...eventTypes, 'test' as const].map((item) => <option key={item} value={item}>{eventTypeLabels[item]}</option>)}</select></FilterField>
+        <FilterField label={tx("Olay türü")}><select aria-label={tx("Olay türü")} className={filterControlClass} value={eventType} onChange={filter(setEventType)}><option value="">{tx("Tümü")}</option>{[...eventTypes, 'break_glass_access' as const, 'test' as const].map((item) => <option key={item} value={item}>{eventTypeLabels[item]}</option>)}</select></FilterField>
       </Filters>
       <QueryState isPending={deliveries.isPending} error={deliveries.error}>
         {data && (data.totalCount === 0

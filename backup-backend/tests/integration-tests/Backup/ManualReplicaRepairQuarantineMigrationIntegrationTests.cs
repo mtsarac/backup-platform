@@ -21,7 +21,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
                 await empty.GetService<IMigrator>().MigrateAsync(previous);
             // The old schema predates artifact encryption; current code reads these columns, so they stand in until ArtifactEncryption itself adds them.
             await database.ExecuteAsync("ALTER TABLE backup_artifacts ADD COLUMN \"Format\" varchar(16) NOT NULL DEFAULT 'v1-plain', ADD COLUMN \"EncryptionKeyId\" varchar(32), " +
-                "ADD COLUMN \"EncryptionKeyVersion\" integer, ADD COLUMN \"EncryptionWrappedDekBase64\" varchar(4096)");
+                "ADD COLUMN \"EncryptionKeyVersion\" integer, ADD COLUMN \"EncryptionWrappedDekBase64\" varchar(4096), ADD COLUMN \"EncryptionRecipientsJson\" varchar(2048)");
             var scenario = new ManualReplicaRepairIntegrationTests(database);
             var setup = await scenario.SetupAsync(QuotaAccountingMode.PhysicalReplicaBytes, new HashSet<string> { "central", "google-drive" });
             var source = setup.Artifact.Replicas.Single(r => r.StorageProvider == "central");
@@ -38,7 +38,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
                 await setup.RepairStore.CreateOperationAsync(operation, default);
             }
             var before = (await scenario.World.StoredUsageAsync(setup.Agent.TenantId))!;
-            await database.ExecuteAsync("ALTER TABLE backup_artifacts DROP COLUMN \"Format\", DROP COLUMN \"EncryptionKeyId\", DROP COLUMN \"EncryptionKeyVersion\", DROP COLUMN \"EncryptionWrappedDekBase64\"");
+            await database.ExecuteAsync("ALTER TABLE backup_artifacts DROP COLUMN \"Format\", DROP COLUMN \"EncryptionKeyId\", DROP COLUMN \"EncryptionKeyVersion\", DROP COLUMN \"EncryptionWrappedDekBase64\", DROP COLUMN \"EncryptionRecipientsJson\"");
             await using var context = database.CreatePlatformContext();
             await context.GetService<IMigrator>().MigrateAsync();
             var replicas = await context.BackupReplicas.AsNoTracking().Where(r => r.TenantId == setup.Agent.TenantId).ToListAsync();

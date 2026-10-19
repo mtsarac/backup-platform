@@ -731,7 +731,8 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         var service = new DownloadService(store, setup.Resolver, new NoAgentDownloadSource(), clock, NullLogger<DownloadService>.Instance);
         var http = new DefaultHttpContext();
         http.Response.Body = new MemoryStream();
-        await new DownloadStreamer(store, service, clock, NullLogger<DownloadStreamer>.Instance).StreamAsync(http, session);
+        using var spool = new AgentDownloadSpool(clock, NullLogger<AgentDownloadSpool>.Instance);
+        await new DownloadStreamer(store, service, clock, NullLogger<DownloadStreamer>.Instance, spool).StreamAsync(http, session);
         Assert.Equal(Content, ((MemoryStream)http.Response.Body).ToArray());
         var completed = (await store.GetAsync(session.TenantId, session.Id, default))!;
         Assert.Equal((DownloadState.Completed, fallback.Id, (long)Content.Length), (completed.State, completed.ReplicaId, completed.TransferredBytes));
@@ -1302,7 +1303,8 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         var service = new DownloadService(store, setup.Resolver, new NoAgentDownloadSource(), clock, NullLogger<DownloadService>.Instance);
         var http = new DefaultHttpContext();
         http.Response.Body = new MemoryStream();
-        await new DownloadStreamer(store, service, clock, NullLogger<DownloadStreamer>.Instance).StreamAsync(http, session);
+        using var spool = new AgentDownloadSpool(clock, NullLogger<AgentDownloadSpool>.Instance);
+        await new DownloadStreamer(store, service, clock, NullLogger<DownloadStreamer>.Instance, spool).StreamAsync(http, session);
         var failed = (await store.GetAsync(session.TenantId, session.Id, default))!;
         Assert.False(alternateOpened);
         Assert.Equal((DownloadState.Failed, primary.Id, 0L), (failed.State, failed.ReplicaId, failed.TransferredBytes));
@@ -1355,7 +1357,8 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
             return Task.CompletedTask;
         };
         var service = new DownloadService(store, setup.Resolver, new NoAgentDownloadSource(), clock, NullLogger<DownloadService>.Instance);
-        var streamer = new DownloadStreamer(store, service, clock, NullLogger<DownloadStreamer>.Instance);
+        using var spool = new AgentDownloadSpool(clock, NullLogger<AgentDownloadSpool>.Instance);
+        var streamer = new DownloadStreamer(store, service, clock, NullLogger<DownloadStreamer>.Instance, spool);
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");
         await using var app = builder.Build();
@@ -1442,7 +1445,8 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
             return Task.CompletedTask;
         };
         var service = new DownloadService(store, setup.Resolver, new NoAgentDownloadSource(), clock, NullLogger<DownloadService>.Instance);
-        var streamer = new DownloadStreamer(store, service, clock, NullLogger<DownloadStreamer>.Instance);
+        using var spool = new AgentDownloadSpool(clock, NullLogger<AgentDownloadSpool>.Instance);
+        var streamer = new DownloadStreamer(store, service, clock, NullLogger<DownloadStreamer>.Instance, spool);
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");
         await using var app = builder.Build();

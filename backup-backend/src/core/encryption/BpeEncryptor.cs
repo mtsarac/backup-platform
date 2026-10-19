@@ -12,7 +12,7 @@ public sealed record BpeEncryptOptions(int ChunkSize = BpeFormat.DefaultChunkSiz
 
 public static class BpeEncryptor
 {
-    private const int MinRsaBits = 3072;
+    private const int MinRsaBits = 4096;
 
     /// <summary>Streams <paramref name="plaintext"/> into a <c>bpe</c> v2 artifact on <paramref name="output"/> with memory bounded by two chunks.</summary>
     /// <param name="sourceSize">Exact plaintext length; it is part of the authenticated core, so a mismatch fails the call.</param>

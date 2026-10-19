@@ -16,9 +16,15 @@ public sealed class ArtifactEncryptionTests
 {
     private static readonly StagingArea Staging = StagingArea.SameHost(Path.GetTempPath());
 
+    private static BackupEncryptionRecipient Recipient(string type, RSA key, int version = 1, string? keyId = null) => new()
+    {
+        Type = type, KeyVersion = version, PublicKeySpkiBase64 = Convert.ToBase64String(key.ExportSubjectPublicKeyInfo()),
+        KeyId = keyId ?? BpeKeyId.FromSpki(key.ExportSubjectPublicKeyInfo())
+    };
+
     private static BackupEncryptionInstruction Instruction(RSA key, bool required = true, int version = 3) => new()
     {
-        Required = required, KeyVersion = version, PublicKeySpkiBase64 = Convert.ToBase64String(key.ExportSubjectPublicKeyInfo())
+        Required = required, Recipients = [Recipient(BackupRecipientTypes.TenantWrap, key, version)]
     };
 
     private static async Task<(BackupTaskHarness Harness, BackupTaskSnapshot Task, BackupTaskRequestFactory Factory)> ArrangeAsync(BackupEncryptionInstruction? instruction)
@@ -44,7 +50,7 @@ public sealed class ArtifactEncryptionTests
     [InlineData(false)]
     public async Task AValidInstructionBecomesOneTenantWrapRecipientWithTheRequiredFlag(bool required)
     {
-        using var key = RSA.Create(3072);
+        using var key = RSA.Create(4096);
         var (harness, task, factory) = await ArrangeAsync(Instruction(key, required, version: 3));
         await using var _ = harness;
 
@@ -57,6 +63,26 @@ public sealed class ArtifactEncryptionTests
         Assert.Equal(key.ExportSubjectPublicKeyInfo(), recipient.PublicKey.ExportSubjectPublicKeyInfo());
     }
 
+    [Fact]
+    public async Task PlatformAndTenantRecoveryKeysBecomeRecipientsOfTheirOwnType()
+    {
+        using RSA wrap = RSA.Create(4096), platform = RSA.Create(4096), tenant = RSA.Create(4096);
+        var (harness, task, factory) = await ArrangeAsync(new BackupEncryptionInstruction
+        {
+            Required = true,
+            Recipients =
+            [
+                Recipient(BackupRecipientTypes.TenantWrap, wrap, 4), Recipient(BackupRecipientTypes.PlatformRecovery, platform, 2), Recipient(BackupRecipientTypes.TenantRecovery, tenant, 7)
+            ]
+        });
+        await using var _ = harness;
+
+        var recipients = (await factory.CreateAsync(task, default)).Encryption!.Recipients;
+
+        Assert.Equal([(BpeRecipientType.TenantWrap, 4), (BpeRecipientType.PlatformRecovery, 2), (BpeRecipientType.TenantRecovery, 7)], recipients.Select(r => (r.Type, r.KeyVersion)));
+        Assert.Equal(platform.ExportSubjectPublicKeyInfo(), recipients[1].PublicKey.ExportSubjectPublicKeyInfo());
+    }
+
     [Theory]
     [InlineData("empty")]
     [InlineData("not-base64")]
@@ -64,19 +90,41 @@ public sealed class ArtifactEncryptionTests
     [InlineData("rsa-2048")]
     [InlineData("ecdsa")]
     [InlineData("version-0")]
+    [InlineData("key-id-mismatch")]
+    [InlineData("no-tenant-wrap")]
+    [InlineData("two-tenant-wrap")]
+    [InlineData("duplicate-recovery")]
+    [InlineData("unknown-type")]
+    [InlineData("recovery-key-id-mismatch")]
     public async Task AnUnusableKeyIsRefusedInsteadOfProducingAPlainArtifact(string kind)
     {
         using var rsa2048 = RSA.Create(2048);
-        using var rsa3072 = RSA.Create(3072);
+        using var rsa4096 = RSA.Create(4096);
+        using var other = RSA.Create(4096);
         using var ecdsa = ECDsa.Create();
+        BackupEncryptionRecipient Wrap(string spki, string id = "0123456789abcdef0123456789abcdef") =>
+            new() { Type = BackupRecipientTypes.TenantWrap, KeyVersion = 1, PublicKeySpkiBase64 = spki, KeyId = id };
         var instruction = kind switch
         {
-            "empty" => new BackupEncryptionInstruction { Required = true, KeyVersion = 1 },
-            "not-base64" => new BackupEncryptionInstruction { Required = true, KeyVersion = 1, PublicKeySpkiBase64 = "%%%" },
-            "not-spki" => new BackupEncryptionInstruction { Required = true, KeyVersion = 1, PublicKeySpkiBase64 = Convert.ToBase64String(new byte[64]) },
+            "empty" => new BackupEncryptionInstruction { Required = true },
+            "not-base64" => new BackupEncryptionInstruction { Required = true, Recipients = [Wrap("%%%")] },
+            "not-spki" => new BackupEncryptionInstruction { Required = true, Recipients = [Wrap(Convert.ToBase64String(new byte[64]))] },
             "rsa-2048" => Instruction(rsa2048),
-            "ecdsa" => new BackupEncryptionInstruction { Required = true, KeyVersion = 1, PublicKeySpkiBase64 = Convert.ToBase64String(ecdsa.ExportSubjectPublicKeyInfo()) },
-            _ => Instruction(rsa3072, version: 0)
+            "ecdsa" => new BackupEncryptionInstruction { Required = true, Recipients = [Wrap(Convert.ToBase64String(ecdsa.ExportSubjectPublicKeyInfo()))] },
+            "version-0" => Instruction(rsa4096, version: 0),
+            // the task's key and its id disagree: an intermediary swapped the key (or the id), so nothing is wrapped
+            "key-id-mismatch" => new BackupEncryptionInstruction { Required = true, Recipients = [Recipient(BackupRecipientTypes.TenantWrap, rsa4096, 1, "ffffffffffffffffffffffffffffffff")] },
+            "no-tenant-wrap" => new BackupEncryptionInstruction { Required = true, Recipients = [Recipient(BackupRecipientTypes.PlatformRecovery, rsa4096)] },
+            "two-tenant-wrap" => new BackupEncryptionInstruction { Required = true, Recipients = [Recipient(BackupRecipientTypes.TenantWrap, rsa4096), Recipient(BackupRecipientTypes.TenantWrap, other)] },
+            "duplicate-recovery" => new BackupEncryptionInstruction
+            {
+                Required = true, Recipients = [Recipient(BackupRecipientTypes.TenantWrap, rsa4096), Recipient(BackupRecipientTypes.PlatformRecovery, other), Recipient(BackupRecipientTypes.PlatformRecovery, other)]
+            },
+            "unknown-type" => new BackupEncryptionInstruction { Required = true, Recipients = [Recipient(BackupRecipientTypes.TenantWrap, rsa4096), Recipient("backend-escrow", other)] },
+            _ => new BackupEncryptionInstruction
+            {
+                Required = true, Recipients = [Recipient(BackupRecipientTypes.TenantWrap, rsa4096), Recipient(BackupRecipientTypes.PlatformRecovery, other, 1, "ffffffffffffffffffffffffffffffff")]
+            }
         };
         var (harness, task, factory) = await ArrangeAsync(instruction);
         await using var _ = harness;
@@ -89,7 +137,7 @@ public sealed class ArtifactEncryptionTests
     {
         await using var harness = new BackupTaskHarness();
         var envelope = harness.Envelope();
-        envelope = envelope with { Backup = envelope.Backup! with { Encryption = new BackupEncryptionInstruction { Required = true, KeyVersion = 1 } } };
+        envelope = envelope with { Backup = envelope.Backup! with { Encryption = new BackupEncryptionInstruction { Required = true } } };
 
         Assert.True(harness.Worker.TryPublish(envelope));
         harness.Start();
@@ -123,19 +171,21 @@ public sealed class ArtifactEncryptionTests
     }
 
     [Fact]
-    public async Task AnEncryptedArtifactIsReportedWithItsKeyIdVersionAndWrappedDekAndKeepsBothChecksums()
+    public async Task AnEncryptedArtifactIsReportedWithItsKeyIdVersionWrappedDekAndRecipientIndexAndKeepsBothChecksums()
     {
         byte[] wrapped = [1, 2, 3, 4];
         var artifact = await MapAsync(info => info with
         {
             Transforms = [new ArtifactTransform(ArtifactTransformKind.Encryption, EncryptingArtifactPreparer.Algorithm)],
-            Seal = new ArtifactSeal("0123456789abcdef0123456789abcdef", 3, wrapped)
+            Seal = new ArtifactSeal("0123456789abcdef0123456789abcdef", 3, wrapped,
+                [new("tenant-wrap", "0123456789abcdef0123456789abcdef", 3), new("platform-recovery", "fedcba9876543210fedcba9876543210", 1)])
         });
 
         Assert.Equal(ArtifactFormats.Bpe2, artifact.Format);
         Assert.Equal("0123456789abcdef0123456789abcdef", artifact.EncryptionKeyId);
         Assert.Equal(3, artifact.EncryptionKeyVersion);
         Assert.Equal(wrapped, Convert.FromBase64String(artifact.EncryptionWrappedDekBase64!));
+        Assert.Equal([("tenant-wrap", 3), ("platform-recovery", 1)], artifact.EncryptionRecipients.Select(r => (r.Type, r.KeyVersion)));
         Assert.Equal(new string('a', 64), artifact.SourceChecksum);
         Assert.Equal(new string('b', 64), artifact.ArtifactChecksum);
     }

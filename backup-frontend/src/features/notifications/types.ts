@@ -39,6 +39,7 @@ export interface NotificationChannel {
   enabled: boolean
   /** E-posta kanallarında adres sahibinin onayı; diğer türlerde null. Onaylanmamış adrese bildirim gitmez. */
   recipientVerified: boolean | null
+  securityOwnerUserId: string | null
   authentication: WebhookAuthentication
   hasSecret: boolean
   secretUpdatedAt: string | null
@@ -57,10 +58,13 @@ export interface CreateChannelInput {
 
 export interface UpdateChannelInput { name?: string; target?: string; authentication?: WebhookAuthentication }
 
+/** Always-on Owner security notice, independent of ordinary notification policy and event selection. */
+export type MandatoryEventType = 'break_glass_access'
+
 export interface NotificationDelivery {
   id: string
   eventId: string
-  eventType: EventType | 'test' | 'recipient_verification'
+  eventType: EventType | 'test' | 'recipient_verification' | MandatoryEventType
   phase: 'raised' | 'recovered' | 'test'
   severity: Severity
   subjectKind: string
@@ -76,5 +80,5 @@ export interface NotificationDelivery {
   createdAt: string
 }
 
-export interface DeliveryFilters { page: number; pageSize: number; status?: DeliveryStatus; kind?: ChannelKind; eventType?: EventType | 'test' }
+export interface DeliveryFilters { page: number; pageSize: number; status?: DeliveryStatus; kind?: ChannelKind; eventType?: EventType | 'test' | MandatoryEventType }
 export type DeliveryPage = PagedResult<NotificationDelivery>

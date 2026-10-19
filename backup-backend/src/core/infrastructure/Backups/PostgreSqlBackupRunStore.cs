@@ -355,7 +355,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
                     artifact.ChecksumAlgorithm, artifact.CreatedAt, artifact.SourceMetadataJson, artifact.AppliedOptionsJson,
                     artifact.Replicas.Select(replica => new BackupReplicaResult(replica.StorageProvider, replica.StorageTarget, replica.Key, replica.SizeBytes,
                         replica.Checksum, replica.ChecksumAlgorithm, replica.VerificationState, replica.VerificationMethod, replica.CreatedAt, replica.VerifiedAt,
-                        replica.StorageConnectionId)).ToArray(), artifact.Format, artifact.EncryptionKeyId, artifact.EncryptionKeyVersion, artifact.EncryptionWrappedDekBase64)).ToArray();
+                        replica.StorageConnectionId)).ToArray(), artifact.Format, artifact.EncryptionKeyId, artifact.EncryptionKeyVersion, artifact.EncryptionWrappedDekBase64, artifact.EncryptionRecipientsJson)).ToArray();
                 if (!run.CurrentAttempt.IsTerminal && pending.Length > 0 && run.CurrentAttempt.HasLease(command.LeaseToken, command.Now))
                 {
                     context.BackupReplicas.RemoveRange(pending.SelectMany(artifact => artifact.Replicas));
@@ -489,7 +489,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         {
             artifact = new BackupArtifact(Guid.NewGuid(), command.TenantId, command.AttemptId, input.SizeBytes,
                 input.SourceChecksum, input.ArtifactChecksum, input.ChecksumAlgorithm, input.CreatedAt, input.SourceMetadataJson, input.AppliedOptionsJson,
-                input.Format, input.EncryptionKeyId, input.EncryptionKeyVersion, input.EncryptionWrappedDekBase64);
+                input.Format, input.EncryptionKeyId, input.EncryptionKeyVersion, input.EncryptionWrappedDekBase64, input.EncryptionRecipientsJson);
             foreach (var replica in input.Replicas)
             {
                 var (destination, connection) = Resolve(replica.StorageProvider, replica.StorageConnectionId);
@@ -503,7 +503,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         {
             artifact ??= new BackupArtifact(Guid.NewGuid(), command.TenantId, command.AttemptId, pending.SizeBytes, pending.SourceChecksum,
                 pending.ArtifactChecksum, pending.ChecksumAlgorithm, pending.CreatedAt, pending.SourceMetadataJson, pending.AppliedOptionsJson,
-                pending.Format, pending.EncryptionKeyId, pending.EncryptionKeyVersion, pending.EncryptionWrappedDekBase64);
+                pending.Format, pending.EncryptionKeyId, pending.EncryptionKeyVersion, pending.EncryptionWrappedDekBase64, pending.EncryptionRecipientsJson);
             foreach (var replica in pending.Replicas)
             {
                 if (artifact.Replicas.Any(r => r.StorageConnectionId == replica.StorageConnectionId) ||

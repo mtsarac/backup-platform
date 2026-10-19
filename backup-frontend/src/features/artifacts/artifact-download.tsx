@@ -20,6 +20,7 @@ function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tena
   const active = useRef(true)
   const started = useRef(false)
   const [replicaId, setReplicaId] = useState('')
+  const [decrypt, setDecrypt] = useState(false)
   const [copyNotice, setCopyNotice] = useState('')
   useEffect(() => { active.current = true; return () => { active.current = false } }, [])
   const availability = useQuery({
@@ -27,7 +28,8 @@ function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tena
     queryFn: ({ signal }) => getDownloadAvailability(tenantId, artifactId, signal), enabled: canAdmin && eligible,
     refetchInterval: 10_000,
   })
-  const prepare = useMutation({ mutationFn: () => prepareDownload(tenantId, artifactId, replicaId || undefined) })
+  // The decrypt flag is only sent when chosen: the default request stays exactly the stored-file download.
+  const prepare = useMutation({ mutationFn: () => decrypt ? prepareDownload(tenantId, artifactId, replicaId || undefined, true) : prepareDownload(tenantId, artifactId, replicaId || undefined) })
   const session = prepare.data
   const downloadUrl = nativeDownloadUrl(session?.downloadUrl)
   const navigationError = Boolean(session && !downloadUrl)
@@ -67,11 +69,12 @@ function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tena
       {availability.data && <>
         <Facts columns={1}>
           <Fact label={tx("Boyut")}>{artifactSize(availability.data.sizeBytes)}</Fact>
-          <Fact label={tx("SHA256 checksum")}>
+          <Fact label={availability.data.format === 'v2-bpe' ? tx("Şifreli dosyanın SHA256 checksum değeri") : tx("SHA256 checksum")}>
             <code className="block break-all font-mono text-sm">{availability.data.checksum}</code>
             <Button className="mt-2" variant="outline" size="sm" onClick={copyChecksum}>{tx("Checksum kopyala")}</Button>
             {copyNotice && <p role="status" className="mt-1 text-sm text-text-muted">{copyNotice}</p>}
           </Fact>
+          {session?.decrypted && <Fact label={tx("Çözülmüş dosyanın SHA256 checksum değeri")}><code className="block break-all font-mono text-sm">{session.checksum}</code></Fact>}
         </Facts>
         <label className="block text-sm font-medium text-text-heading">{tx("İndirme hedefi")}<select aria-label={tx("İndirme hedefi")} className={`${selectClass} w-full`} value={replicaId} disabled={busy} onChange={event => setReplicaId(event.target.value)}>
             <option value="">{tx("Otomatik · en uygun replika (Fallback destekli)")}</option>
@@ -81,8 +84,13 @@ function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tena
         {!replicaId && availability.data.replicas.filter(r => r.available).length > 1 && (
           <p className="text-sm text-text-muted">{tx("Otomatik seçimde, aktarım başlamadan önce backend'in okuyabildiği alternatif doğrulanmış replika denenebilir. Aktarım başladıktan sonra hata oluşursa indirme durur; otomatik yeniden başlatılmaz.")}</p>
         )}
+        {availability.data.format === 'v2-bpe' && <fieldset className="space-y-2" disabled={busy}>
+          <legend className="text-sm font-medium text-text-heading">{tx("İndirilecek dosya")}</legend>
+          <label className="flex min-h-11 items-start gap-3 rounded-lg bg-surface-2 p-3 text-sm"><input type="radio" name="download-form" className="mt-1 size-4 accent-primary" checked={!decrypt} onChange={() => setDecrypt(false)} /><span><span className="block font-medium">{tx("Şifreli dosya (.bpe) · varsayılan")}</span><span className="block text-text-muted">{tx("Depolanan dosya olduğu gibi iner ve anahtar olmadan okunamaz. Çevrimdışı çözmek için bp-decrypt kullanılır.")}</span></span></label>
+          <label className="flex min-h-11 items-start gap-3 rounded-lg bg-surface-2 p-3 text-sm"><input type="radio" name="download-form" className="mt-1 size-4 accent-primary" checked={decrypt} onChange={() => setDecrypt(true)} /><span><span className="block font-medium">{tx("Çözülmüş dosya")}</span><span className="block text-text-muted">{tx("Backend dosyanın tamamını güvenli geçici alanda çözer; şifreli ve düz veri checksum doğrulanmadan hiçbir düz veri gönderilmez. İşlem audit kaydına yazılır. İndirilen dosya şifresizdir, güvenle saklayın.")}</span></span></label>
+        </fieldset>}
         {!availability.data.available && <Notice tone="warning">{tx("İndirme kullanılamıyor: Hiçbir doğrulanmış kopya erişilebilir değil (")}{failureMessage(availability.data.reason)}).</Notice>}
-        <Button disabled={busy || !availability.data.available || Boolean(selected && !selected.available)} onClick={() => { started.current = false; prepare.mutate() }}>{prepare.isPending || finalState === 'Preparing' ? tx('İndirme hazırlanıyor…') : tx('Download Backup')}</Button>
+        <Button disabled={busy || !availability.data.available || Boolean(selected && !selected.available)} onClick={() => { started.current = false; prepare.mutate() }}>{prepare.isPending || finalState === 'Preparing' ? tx('İndirme hazırlanıyor…') : availability.data.format === 'v2-bpe' && decrypt ? tx('Çözülmüş dosyayı indir') : tx('Download Backup')}</Button>
       </>}
       {session && !status.data && !status.error && <p role="status" className="text-sm text-text-muted">{tx("İndirme hazırlanıyor…")}</p>}
       {status.data && <Notice tone={finalState === 'Failed' ? 'error' : finalState === 'Completed' ? 'success' : 'info'}>

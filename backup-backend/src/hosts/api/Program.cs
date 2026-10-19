@@ -20,6 +20,8 @@ _ = app.Services.GetRequiredService<BackupPlatform.Agents.Connectivity.AgentConn
 _ = app.Services.GetRequiredService<BackupPlatform.Application.Backups.BackupExecutionOptions>();
 _ = app.Services.GetRequiredService<BackupPlatform.Application.Backups.BackupSchedulingOptions>();
 _ = app.Services.GetRequiredService<BackupPlatform.Application.Restores.RestoreExecutionOptions>();
+if (app.Services.GetRequiredService<BackupPlatform.Application.Backups.ArtifactRecoveryOptions>().PlatformRecovery is null)
+    app.Logger.LogWarning("platform_recovery_missing: Encryption:PlatformRecoveryPublicKeyPem is not configured, so newly encrypted artifacts have no platform recovery recipient.");
 
 if (isBootstrap)
 {
@@ -48,6 +50,8 @@ app.MapUploadBandwidthEndpoints();
 app.MapRestoreEndpoints();
 app.MapRestoreTaskEndpoints();
 app.MapDownloadEndpoints();
+app.MapArtifactEncryptionEndpoints();
+app.MapArtifactBreakGlassEndpoints();
 app.MapSupportEndpoints();
 app.MapSupportTransparencyEndpoints();
 app.MapAgentDownloadEndpoints();

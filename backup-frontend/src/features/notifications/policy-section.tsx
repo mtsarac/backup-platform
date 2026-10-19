@@ -57,6 +57,7 @@ function PolicyForm({ policy }: { policy: NotificationPolicy }) {
     <label className={`${checkClass} font-medium`}><input type="checkbox" className={boxClass} checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />{tx("Bildirimler etkin")}</label>
     <fieldset className="space-y-2"><legend className="text-sm font-medium text-text-heading">{tx("Olay türleri")}</legend>
       <div className="flex flex-wrap gap-2">{eventTypes.map((type) => <label key={type} className={checkClass}><input type="checkbox" className={boxClass} checked={events.includes(type)} onChange={(event) => setEvents(toggle(events, type, event.target.checked))} />{eventTypeLabels[type]}</label>)}</div>
+      <p className="text-sm text-text-muted">{tx("Break-glass erişimi bildirimi zorunludur ve kapatılamaz: bir platform yöneticisi şifreli Backup'larınız için break-glass erişimi kullandığında Kritik olarak gönderilir (bildirimler etkinse ve en az bir kanal varsa).")}</p>
     </fieldset>
     <fieldset className="space-y-2"><legend className="text-sm font-medium text-text-heading">{tx("Kanal türleri")}</legend>
       <div className="flex flex-wrap gap-2">{channelKinds.map((kind) => <label key={kind} className={checkClass}><input type="checkbox" className={boxClass} checked={kinds.includes(kind)} onChange={(event) => setKinds(toggle(kinds, kind, event.target.checked))} />{kindLabels[kind]}</label>)}</div>

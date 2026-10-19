@@ -8,8 +8,9 @@ import type { NotificationChannel, NotificationDelivery, NotificationPolicy } fr
 import { ApiError } from '@/lib/api/client'
 import { NotificationsPage } from './notifications-page'
 
-const access = vi.hoisted(() => ({ tenantId: 'tenant-a', tenant: { name: 'Acme' }, canAdmin: true, canOperate: true }))
+const access = vi.hoisted(() => ({ tenantId: 'tenant-a', tenant: { name: 'Acme', role: 'Owner' }, canAdmin: true, canOperate: true }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
+vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({ user: { userId: 'owner-a' } }) }))
 vi.mock('@/features/notifications/api')
 
 const SECRET = 'whsec-very-secret-123'
@@ -21,6 +22,7 @@ const policy = (overrides: Partial<NotificationPolicy> = {}): NotificationPolicy
 })
 const channel = (overrides: Partial<NotificationChannel> = {}): NotificationChannel => ({
   id: 'c-mail', kind: 'email', name: 'Ops mailbox', targetDisplay: 'ops@example.com', enabled: true, recipientVerified: true, authentication: 'none', hasSecret: false, secretUpdatedAt: null,
+  securityOwnerUserId: null,
   createdAt: '2026-10-01T08:00:00Z', updatedAt: '2026-10-01T08:00:00Z', lastDelivery: null, ...overrides,
 })
 const delivery = (overrides: Partial<NotificationDelivery> = {}): NotificationDelivery => ({
@@ -40,7 +42,9 @@ const openTab = async (user: ReturnType<typeof userEvent.setup>, name: string) =
 beforeEach(() => {
   vi.resetAllMocks()
   access.canAdmin = true
+  access.tenant.role = 'Owner'
   vi.mocked(api.getPolicy).mockResolvedValue(policy())
+  vi.mocked(api.setOwnerSecurityRecipient).mockResolvedValue(channel({ securityOwnerUserId: 'owner-a' }))
   vi.mocked(api.getChannels).mockResolvedValue({ items: [channel(), channel({ id: 'c-hook', kind: 'webhook', name: 'Pager', recipientVerified: null, targetDisplay: 'https://hooks.example.com/…', authentication: 'bearer', hasSecret: true })] })
   vi.mocked(api.getDeliveries).mockResolvedValue({ items: [delivery()], totalCount: 1, page: 1, pageSize: 25 })
 })
@@ -250,5 +254,44 @@ describe('delivery history', () => {
     await screen.findByText(/build-01/)
     await user.click(screen.getByRole('button', { name: 'Sonraki' }))
     await waitFor(() => expect(api.getDeliveries).toHaveBeenLastCalledWith('tenant-a', expect.objectContaining({ page: 2 }), expect.anything()))
+  })
+})
+
+describe('mandatory Owner security recipient', () => {
+  it('requires Owner confirmation and refreshes the designated channel independently of disabled general policy', async () => {
+    const user = userEvent.setup()
+    mount()
+    await openTab(user, 'Kanallar')
+    await user.click(await screen.findByRole('button', { name: 'Güvenlik alıcım olarak kaydet' }))
+    expect(api.setOwnerSecurityRecipient).not.toHaveBeenCalled()
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Kaydet' }))
+    await waitFor(() => expect(api.setOwnerSecurityRecipient).toHaveBeenCalledWith('tenant-a', 'c-mail', true))
+    await waitFor(() => expect(api.getChannels).toHaveBeenCalledTimes(2))
+  })
+
+  it('offers no designation to a tenant Admin and disables unconfirmed email designation', async () => {
+    const user = userEvent.setup()
+    access.tenant.role = 'Admin'
+    const first = mount()
+    await openTab(user, 'Kanallar')
+    await screen.findByRole('heading', { name: 'Ops mailbox' })
+    expect(screen.queryByRole('button', { name: 'Güvenlik alıcım olarak kaydet' })).not.toBeInTheDocument()
+    first.unmount()
+    access.tenant.role = 'Owner'
+    vi.mocked(api.getChannels).mockResolvedValue({ items: [channel({ recipientVerified: false })] })
+    mount()
+    await openTab(user, 'Kanallar')
+    expect(await screen.findByRole('button', { name: 'Güvenlik alıcım olarak kaydet' })).toBeDisabled()
+  })
+
+  it('lets the designated Owner remove the binding after confirmation', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.getChannels).mockResolvedValue({ items: [channel({ securityOwnerUserId: 'owner-a' })] })
+    mount()
+    await openTab(user, 'Kanallar')
+    await user.click(await screen.findByRole('button', { name: 'Güvenlik alıcımı kaldır' }))
+    expect(api.setOwnerSecurityRecipient).not.toHaveBeenCalled()
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Kaldır' }))
+    await waitFor(() => expect(api.setOwnerSecurityRecipient).toHaveBeenCalledWith('tenant-a', 'c-mail', false))
   })
 })

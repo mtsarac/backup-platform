@@ -11,8 +11,16 @@ namespace BackupPlatform.UnitTests.Backup;
 public sealed class ArtifactEncryptionPolicyTests
 {
     private const string KeyId = "0123456789abcdef0123456789abcdef";
+    private const string PlatformKeyId = "aaaaaaaaaaaaaaaabbbbbbbbbbbbbbbb";
+    private const string TenantKeyId = "ccccccccccccccccdddddddddddddddd";
     private static readonly string Wrapped = Convert.ToBase64String(new byte[512]);
     private static readonly byte[] Spki = [1, 2, 3, 4];
+    private static readonly byte[] PlatformSpki = [5, 6, 7];
+    private static readonly byte[] TenantSpki = [8, 9];
+
+    private static ArtifactRecoveryOptions Platform() => new(new PlatformRecoveryKey(3, PlatformKeyId, PlatformSpki));
+
+    private static TenantRecoveryKeyInfo TenantKey() => new(2, TenantKeyId, TenantSpki, Now);
 
     [Fact]
     public async Task OffSendsNoInstructionAndNeverTouchesTheKeyStore()
@@ -25,12 +33,32 @@ public sealed class ArtifactEncryptionPolicyTests
     [Theory]
     [InlineData("Optional", false)]
     [InlineData("Required", true)]
-    public async Task OptionalAndRequiredSendThePublicKeyWithTheRequiredFlag(string policy, bool required)
+    public async Task OptionalAndRequiredSendOnlyTheTenantWrapKeyWhenNoRecoveryKeyExists(string policy, bool required)
     {
         var (orchestrator, keys, identity) = Setup(policy);
         var instruction = (await orchestrator.ClaimAsync(identity, default))!.Encryption!;
-        Assert.Equal((required, 7, Convert.ToBase64String(Spki)), (instruction.Required, instruction.KeyVersion, instruction.PublicKeySpkiBase64));
+        Assert.Equal(required, instruction.Required);
+        var recipient = Assert.Single(instruction.Recipients);
+        Assert.Equal((BackupRecipientTypes.TenantWrap, 7, KeyId, Convert.ToBase64String(Spki)), (recipient.Type, recipient.KeyVersion, recipient.KeyId, recipient.PublicKeySpkiBase64));
         Assert.Equal(1, keys.Ensured);
+    }
+
+    [Fact]
+    public async Task ThePlatformAndTenantRecoveryKeysTravelAsPublicRecipientsNextToTheTenantWrapKey()
+    {
+        var (orchestrator, _, identity) = Setup("Required", Platform(), TenantKey());
+        var instruction = (await orchestrator.ClaimAsync(identity, default))!.Encryption!;
+        Assert.Equal([(BackupRecipientTypes.TenantWrap, 7, KeyId), (BackupRecipientTypes.PlatformRecovery, 3, PlatformKeyId), (BackupRecipientTypes.TenantRecovery, 2, TenantKeyId)],
+            instruction.Recipients.Select(r => (r.Type, r.KeyVersion, r.KeyId)));
+        Assert.Equal(Convert.ToBase64String(PlatformSpki), instruction.Recipients[1].PublicKeySpkiBase64);
+        Assert.Equal(Convert.ToBase64String(TenantSpki), instruction.Recipients[2].PublicKeySpkiBase64);
+    }
+
+    [Fact]
+    public async Task OffNeverAddsRecoveryRecipients()
+    {
+        var (orchestrator, _, identity) = Setup("Off", Platform(), TenantKey());
+        Assert.Null((await orchestrator.ClaimAsync(identity, default))!.Encryption);
     }
 
     [Fact]
@@ -68,12 +96,82 @@ public sealed class ArtifactEncryptionPolicyTests
     }
 
     [Fact]
-    public async Task EncryptedArtifactCarriesKeyIdVersionAndWrappedDekIntoTheStore()
+    public async Task EncryptedArtifactCarriesKeyIdVersionWrappedDekAndTheRecipientIndexIntoTheStore()
     {
-        var (orchestrator, _, identity, store) = SetupWithStore("Required");
-        await orchestrator.CompleteAsync(identity, store.Run.CurrentAttempt.Id, Success(ArtifactFormats.Bpe2), default);
+        var (orchestrator, _, identity, store) = SetupWithStore("Required", Platform(), TenantKey());
+        var recipients = new[] { Wrap, Recipient(BackupRecipientTypes.PlatformRecovery, PlatformKeyId, 3), Recipient(BackupRecipientTypes.TenantRecovery, TenantKeyId, 2) };
+        await orchestrator.CompleteAsync(identity, store.Run.CurrentAttempt.Id, Success(ArtifactFormats.Bpe2, recipients), default);
         var artifact = store.Completed!.Artifact!;
         Assert.Equal(("Succeeded", ArtifactFormats.Bpe2, KeyId, 7, Wrapped), (store.Completed.Outcome, artifact.Format, artifact.EncryptionKeyId, artifact.EncryptionKeyVersion, artifact.EncryptionWrappedDekBase64));
+        var index = System.Text.Json.JsonDocument.Parse(artifact.EncryptionRecipientsJson!).RootElement.EnumerateArray().Select(e => (e.GetProperty("type").GetString(), e.GetProperty("keyId").GetString(), e.GetProperty("keyVersion").GetInt32())).ToArray();
+        Assert.Equal([("tenant-wrap", KeyId, 7), ("platform-recovery", PlatformKeyId, 3), ("tenant-recovery", TenantKeyId, 2)], index);
+        Assert.DoesNotContain(Wrapped, artifact.EncryptionRecipientsJson);
+    }
+
+    [Fact]
+    public async Task RecoveryRecipientsAreOnlyAcceptedAsTheKeysTheBackendIssues()
+    {
+        // platform recovery key not configured, a recipient claims one
+        var (orchestrator, _, identity, store) = SetupWithStore("Required");
+        await Assert.ThrowsAsync<ArgumentException>(() => orchestrator.CompleteAsync(identity, store.Run.CurrentAttempt.Id,
+            Success(ArtifactFormats.Bpe2, Wrap, Recipient(BackupRecipientTypes.PlatformRecovery, PlatformKeyId, 1)), default));
+        // configured, but the agent reports another key id or version
+        (orchestrator, _, identity, store) = SetupWithStore("Required", Platform());
+        await Assert.ThrowsAsync<ArgumentException>(() => orchestrator.CompleteAsync(identity, store.Run.CurrentAttempt.Id,
+            Success(ArtifactFormats.Bpe2, Wrap, Recipient(BackupRecipientTypes.PlatformRecovery, TenantKeyId, 1)), default));
+        await Assert.ThrowsAsync<ArgumentException>(() => orchestrator.CompleteAsync(identity, store.Run.CurrentAttempt.Id,
+            Success(ArtifactFormats.Bpe2, Wrap, Recipient(BackupRecipientTypes.PlatformRecovery, PlatformKeyId, 9)), default));
+        // the tenant has no recovery key, or another one
+        await Assert.ThrowsAsync<ArgumentException>(() => orchestrator.CompleteAsync(identity, store.Run.CurrentAttempt.Id,
+            Success(ArtifactFormats.Bpe2, Wrap, Recipient(BackupRecipientTypes.TenantRecovery, TenantKeyId, 2)), default));
+        (orchestrator, _, identity, store) = SetupWithStore("Required", Platform(), TenantKey());
+        await Assert.ThrowsAsync<ArgumentException>(() => orchestrator.CompleteAsync(identity, store.Run.CurrentAttempt.Id,
+            Success(ArtifactFormats.Bpe2, Wrap, Recipient(BackupRecipientTypes.TenantRecovery, PlatformKeyId, 2)), default));
+        Assert.Null(store.Completed);
+    }
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ConfiguredRecoveryRecipientsCannotBeOmittedFromTheArtifactIndex(bool omitPlatform)
+    {
+        var (orchestrator, _, identity, store) = SetupWithStore("Required", Platform(), TenantKey());
+        var remaining = omitPlatform ? Recipient(BackupRecipientTypes.TenantRecovery, TenantKeyId, 2) : Recipient(BackupRecipientTypes.PlatformRecovery, PlatformKeyId, 3);
+        await Assert.ThrowsAsync<ArgumentException>(() => orchestrator.CompleteAsync(identity, store.Run.CurrentAttempt.Id,
+            Success(ArtifactFormats.Bpe2, Wrap, remaining), default));
+        Assert.Null(store.Completed);
+    }
+
+
+    [Theory]
+    [InlineData("duplicate-type")]
+    [InlineData("no-tenant-wrap")]
+    [InlineData("wrap-differs-from-artifact-key")]
+    [InlineData("unknown-type")]
+    [InlineData("bad-key-id")]
+    [InlineData("too-many")]
+    public async Task MalformedRecipientIndexesAreRejected(string kind)
+    {
+        var (orchestrator, _, identity, store) = SetupWithStore("Required", Platform(), TenantKey());
+        var recipients = kind switch
+        {
+            "duplicate-type" => new[] { Wrap, Wrap },
+            "no-tenant-wrap" => [Recipient(BackupRecipientTypes.PlatformRecovery, PlatformKeyId, 1)],
+            "wrap-differs-from-artifact-key" => [Recipient(BackupRecipientTypes.TenantWrap, PlatformKeyId, 7)],
+            "unknown-type" => [Wrap, Recipient("escrow", PlatformKeyId, 1)],
+            "bad-key-id" => [Wrap, Recipient(BackupRecipientTypes.PlatformRecovery, "XYZ", 1)],
+            _ => [Wrap, Recipient(BackupRecipientTypes.PlatformRecovery, PlatformKeyId, 1), Recipient(BackupRecipientTypes.TenantRecovery, TenantKeyId, 2), Recipient(BackupRecipientTypes.TenantRecovery, TenantKeyId, 3)]
+        };
+        await Assert.ThrowsAsync<ArgumentException>(() => orchestrator.CompleteAsync(identity, store.Run.CurrentAttempt.Id, Success(ArtifactFormats.Bpe2, recipients), default));
+        Assert.Null(store.Completed);
+    }
+
+    [Fact]
+    public async Task APlainArtifactMustNotCarryARecipientIndex()
+    {
+        var (orchestrator, _, identity, store) = SetupWithStore("Off");
+        var request = Success(ArtifactFormats.Plain);
+        request = request with { Artifact = request.Artifact! with { EncryptionRecipients = [Wrap] } };
+        await Assert.ThrowsAsync<ArgumentException>(() => orchestrator.CompleteAsync(identity, store.Run.CurrentAttempt.Id, request, default));
     }
 
     [Fact]
@@ -138,18 +236,19 @@ public sealed class ArtifactEncryptionPolicyTests
         Assert.Equal((KeyId, 1), (sealedKey.EncryptionKeyId, sealedKey.EncryptionKeyVersion));
     }
 
-    private static (BackupOrchestrator Orchestrator, Keys Keys, AgentIdentity Identity) Setup(string policy)
+    private static (BackupOrchestrator Orchestrator, Keys Keys, AgentIdentity Identity) Setup(string policy, ArtifactRecoveryOptions? recovery = null, TenantRecoveryKeyInfo? tenantKey = null)
     {
-        var (orchestrator, keys, identity, _) = SetupWithStore(policy);
+        var (orchestrator, keys, identity, _) = SetupWithStore(policy, recovery, tenantKey);
         return (orchestrator, keys, identity);
     }
 
-    private static (BackupOrchestrator Orchestrator, Keys Keys, AgentIdentity Identity, Store Store) SetupWithStore(string policy)
+    private static (BackupOrchestrator Orchestrator, Keys Keys, AgentIdentity Identity, Store Store) SetupWithStore(string policy, ArtifactRecoveryOptions? recovery = null,
+        TenantRecoveryKeyInfo? tenantKey = null)
     {
         var run = RunWith(policy);
         var keys = new Keys();
         var store = new Store(run);
-        return (new BackupOrchestrator(store, TimeProvider.System, wrapKeys: keys), keys, Identity(run), store);
+        return (new BackupOrchestrator(store, TimeProvider.System, wrapKeys: keys, recovery: recovery, tenantRecoveryKeys: new TenantRecovery(tenantKey)), keys, Identity(run), store);
     }
 
     private static AgentIdentity Identity(BackupRun run) => new(run.AgentId, run.TenantId, Guid.NewGuid(), 1);
@@ -162,7 +261,11 @@ public sealed class ArtifactEncryptionPolicyTests
         return run;
     }
 
-    private static BackupTaskCompletionRequest Success(string format) => new()
+    private static BackupTaskArtifactRecipient Recipient(string type, string keyId, int version) => new() { Type = type, KeyId = keyId, KeyVersion = version };
+
+    private static readonly BackupTaskArtifactRecipient Wrap = Recipient(BackupRecipientTypes.TenantWrap, KeyId, 7);
+
+    private static BackupTaskCompletionRequest Success(string format, params BackupTaskArtifactRecipient[] recipients) => new()
     {
         LeaseToken = Guid.NewGuid(),
         Status = "Succeeded",
@@ -175,6 +278,7 @@ public sealed class ArtifactEncryptionPolicyTests
             EncryptionKeyId = format == ArtifactFormats.Bpe2 ? KeyId : null,
             EncryptionKeyVersion = format == ArtifactFormats.Bpe2 ? 7 : null,
             EncryptionWrappedDekBase64 = format == ArtifactFormats.Bpe2 ? Wrapped : null,
+            EncryptionRecipients = format == ArtifactFormats.Bpe2 ? (recipients.Length == 0 ? [Wrap] : recipients) : [],
             Replicas = [new BackupTaskReplica
             {
                 StorageProvider = "local", StorageTarget = "default", Key = "tenant/job/run/attempt/backup.bak", SizeBytes = 100,
@@ -198,7 +302,17 @@ public sealed class ArtifactEncryptionPolicyTests
             return Task.FromResult(new TenantWrapPublicKey(7, KeyId, Spki));
         }
         public Task<bool> OwnsKeyAsync(TenantId tenantId, string keyId, int version, CancellationToken cancellationToken) => Task.FromResult(Owns);
-        public Task<byte[]> UnwrapDekAsync(TenantId tenantId, Guid restoreAttemptId, string keyId, byte[] wrappedDek, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<byte[]> UnwrapDekAsync(TenantId tenantId, string targetType, Guid targetId, string keyId, byte[] wrappedDek, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<TenantWrapKeyView>> ListAsync(TenantId tenantId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<TenantWrapKeyRotation> RotateAsync(TenantId tenantId, UserId actor, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<TenantWrapKeyRetirement> RetireAsync(TenantId tenantId, int version, UserId actor, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class TenantRecovery(TenantRecoveryKeyInfo? key) : ITenantRecoveryKeyStore
+    {
+        public Task<TenantRecoveryKeyInfo?> GetAsync(TenantId tenantId, CancellationToken cancellationToken) => Task.FromResult(key);
+        public Task<TenantRecoveryKeyInfo> SetAsync(TenantId tenantId, UserId actor, string publicKeyPem, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> RemoveAsync(TenantId tenantId, UserId actor, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class Store(BackupRun run) : IBackupRunStore

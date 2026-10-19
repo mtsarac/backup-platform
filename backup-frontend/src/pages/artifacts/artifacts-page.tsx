@@ -16,6 +16,7 @@ import { useArtifacts } from '@/features/artifacts/hooks'
 import type { ArtifactFilters, ArtifactState, BackupArtifact } from '@/features/artifacts/types'
 import { ReplicationSummary } from '@/features/backups/replication'
 import { linkClass } from '@/features/platform/styles'
+import { Badge } from '@/components/ui/badge'
 import { useTenant } from '@/features/tenancy/use-tenant'
 
 const stateOptions: { value: ArtifactState | ''; label: string }[] = [
@@ -40,6 +41,7 @@ export function ArtifactsPage() {
     </div> },
     { key: 'state', header: tx('Durum'), render: (artifact) => <StatusPill status={artifactState(artifact)} /> },
     { key: 'size', header: tx('Boyut'), render: (artifact) => artifactSize(artifact.sizeBytes) },
+    { key: 'encryption', header: tx('Şifreleme'), render: (artifact) => artifact.encryption ? <Badge tone="success">{tx("Şifreli · v2-bpe")}</Badge> : <span className="text-text-muted">{tx("Şifresiz · v1")}</span> },
     { key: 'created', header: tx('Oluşturulma'), render: (artifact) => <div><p>{artifactDate(artifact.createdAt)}</p><p className="text-sm text-text-muted">{artifact.retentionExpiresAt ? tx("Saklama sonu: {0}", { "0": artifactDate(artifact.retentionExpiresAt) }) : tx('Süre sınırı yok')}</p></div> },
     { key: 'replicas', header: tx('Replika'), wrap: true, render: (artifact) => <div className="space-y-1"><ReplicationSummary replication={artifact.replication} /><div className="flex flex-wrap gap-1">{artifact.replicas.map((replica, index) => <span key={replica.id} className="flex items-center gap-1"><span className="text-sm text-text-muted">{index + 1}.</span><StatusPill status={replica.status} /></span>)}</div></div> },
   ]

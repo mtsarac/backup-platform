@@ -4,6 +4,7 @@ using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Notifications;
 using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.Notifications;
+using BackupPlatform.Domain.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -81,6 +82,10 @@ public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbConte
         var channel = await context.NotificationChannels.SingleOrDefaultAsync(row => row.TenantId == tenantId && row.Id == id, cancellationToken);
         if (channel is null) return new(NotificationOutcome.NotFound);
         var change = mutate(channel);
+        if (change?.AuditAction == NotificationAuditActions.ChannelSecurityOwnerChanged &&
+            (channel.SecurityOwnerUserId is { } designated && designated != actor.UserId || !await context.TenantMemberships.AnyAsync(
+                membership => membership.TenantId == tenantId && membership.UserId == actor.UserId && membership.Role == TenantRole.Owner, cancellationToken)))
+            throw new InvalidNotificationException("securityOwnerUserId", "owner_required");
         if (change is null) return new(NotificationOutcome.Unchanged, new(channel, await LastAsync(context, tenantId, id, cancellationToken)));
         AddAudit(context, actor, change.AuditAction, channel, change.Details);
         if (await SaveAsync(context, cancellationToken) is { } conflict) return new(conflict);
@@ -295,16 +300,23 @@ public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbConte
         var events = await context.NotificationEvents.AsNoTracking().Where(notificationEvent => eventIds.Contains(notificationEvent.Id)).ToDictionaryAsync(notificationEvent => notificationEvent.Id, cancellationToken);
         var channels = await context.NotificationChannels.AsNoTracking().Where(channel => channelIds.Contains(channel.Id)).ToDictionaryAsync(channel => channel.Id, cancellationToken);
         var policies = await context.NotificationPolicies.AsNoTracking().Where(policy => tenantIds.Contains(policy.TenantId)).ToDictionaryAsync(policy => policy.TenantId, cancellationToken);
+        var securityTenants = events.Values.Where(e => e.Type == NotificationEventTypes.BreakGlassAccess).Select(e => e.TenantId).Distinct().ToList();
+        var securityOwners = securityTenants.Count == 0 ? [] : await context.TenantMemberships.AsNoTracking()
+            .Where(membership => securityTenants.Contains(membership.TenantId) && membership.Role == TenantRole.Owner).ToListAsync(cancellationToken);
         return deliveries.Select(delivery =>
         {
             var e = events[delivery.EventId];
             channels.TryGetValue(delivery.ChannelId, out var channel);
             policies.TryGetValue(delivery.TenantId, out var policy);
             // A channel or policy switched off after the fan-out stops what has not been sent yet; a test goes out whatever the policy says.
-            var policyAllows = e.Phase == NotificationPhase.Test || policy is { Enabled: true } && policy.ChannelKinds.Contains(delivery.ChannelKind);
+            var securityNotice = e.Type == NotificationEventTypes.BreakGlassAccess;
+            var policyAllows = securityNotice || e.Phase == NotificationPhase.Test || policy is { Enabled: true } && policy.ChannelKinds.Contains(delivery.ChannelKind);
             DeliverySkip? skip = channel is null || channel.TenantId != delivery.TenantId ? new(NotificationDeliveryStatus.Cancelled, NotificationDeliveryCodes.ChannelRemoved)
                 : !channel.Enabled ? new(NotificationDeliveryStatus.Suppressed, NotificationDeliveryCodes.ChannelDisabled)
                 : channel.AwaitsConfirmation && e.Type != NotificationEventTypes.RecipientVerification ? new(NotificationDeliveryStatus.Suppressed, NotificationDeliveryCodes.RecipientUnverified)
+                : securityNotice && (channel.Kind != NotificationChannelKind.Email || channel.SecurityOwnerUserId is not { } designated ||
+                    !securityOwners.Any(membership => membership.TenantId == delivery.TenantId && membership.UserId == designated))
+                    ? new(NotificationDeliveryStatus.Cancelled, NotificationDeliveryCodes.OwnerRecipientUnavailable)
                 : !policyAllows ? new(NotificationDeliveryStatus.Cancelled, NotificationDeliveryCodes.PolicyDisabled) : null;
             return new DeliveryWork(delivery.Id, delivery.TenantId, delivery.AttemptCount, delivery.ChannelKind, delivery.ChannelId, skip is null ? channel!.Target : null,
                 channel?.Authentication ?? WebhookAuthentication.None, skip is null ? channel!.SecretReference : null,

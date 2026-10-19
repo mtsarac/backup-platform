@@ -99,6 +99,11 @@ public static class SecurityServiceCollectionExtensions
         services.AddScoped<IBackupRunStore, PostgreSqlBackupRunStore>();
         services.AddScoped<IBackupUiStore, PostgreSqlBackupUiStore>();
         services.AddScoped<ITenantWrapKeyStore, PostgreSqlTenantWrapKeyStore>();
+        services.AddScoped<ITenantRecoveryKeyStore, PostgreSqlTenantRecoveryKeyStore>();
+        services.TryAddSingleton(provider => BackupPlatform.Api.Backups.ArtifactRecoveryConfiguration.Load(provider.GetRequiredService<IConfiguration>()));
+        services.AddScoped<IArtifactBreakGlassStore, PostgreSqlArtifactBreakGlassStore>();
+        services.AddScoped<ArtifactBreakGlassService>();
+        services.AddHostedService<BackupPlatform.Api.Backups.BreakGlassExpiryWorker>();
         services.AddScoped<BackupOrchestrator>();
         services.AddScoped<IUploadBandwidthStore, PostgreSqlUploadBandwidthStore>();
         services.AddScoped<UploadBandwidthService>();

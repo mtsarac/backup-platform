@@ -32,7 +32,10 @@ public sealed record BackupAttemptView(Guid Id, int Number, string Status, DateT
 public sealed record BackupArtifactView(Guid Id, long SizeBytes, string SourceChecksum, string ArtifactChecksum, string ChecksumAlgorithm, DateTimeOffset CreatedAt, IReadOnlyList<BackupReplicaView> Replicas,
     string State = "Available", DateTimeOffset? AcceptedAt = null, DateTimeOffset? RetentionExpiresAt = null, DateTimeOffset? RetentionPinnedAt = null, DateTimeOffset? DeleteAfter = null, string? DeleteReason = null,
     Guid? RunId = null, Guid? JobId = null, Guid? AttemptId = null, string? JobName = null, string? DatabaseName = null, string? AgentName = null, bool CancelDeleteAllowed = false, Guid? AgentId = null, string BackupType = "Full", BackupMetadataView? BackupMetadata = null,
-    BackupReplicationView? Replication = null);
+    BackupReplicationView? Replication = null, ArtifactEncryptionView? Encryption = null);
+/// <summary>An encrypted artifact's key index: which tenant wrap key sealed it and which recipients its header names. No wrapped key, no key material.</summary>
+public sealed record ArtifactEncryptionView(string Format, string KeyId, int KeyVersion, IReadOnlyList<ArtifactRecipientView> Recipients);
+public sealed record ArtifactRecipientView(string Type, string KeyId, int KeyVersion);
 /// <summary>One physical copy. <see cref="Usable"/> is true while the bytes are intact and may be restored from (Available, or DeletePending inside its grace period).</summary>
 public sealed record BackupReplicaView(Guid Id, string StorageProvider, string StorageTarget, string Key, long SizeBytes, string Checksum, string ChecksumAlgorithm, string VerificationState, string VerificationMethod, DateTimeOffset CreatedAt, DateTimeOffset? VerifiedAt,
     string Status = "Available", bool Usable = true, DateTimeOffset? DeleteRequestedAt = null, DateTimeOffset? DeleteAfter = null, string? DeleteReason = null, DateTimeOffset? DeletedAt = null,
@@ -45,7 +48,8 @@ public sealed record BackupReplicaView(Guid Id, string StorageProvider, string S
 /// </summary>
 public sealed record BackupReplicationView(int RequiredVerifiedReplicas, int VerifiedReplicas, int DestinationCount, string Status, bool PolicySatisfied, IReadOnlyList<BackupDestinationHealthView> Destinations);
 public sealed record BackupDestinationHealthView(string StorageProvider, Guid? StorageConnectionId, bool IsPrimary, string State, string? FailureCode, string? FailureReason, bool ObjectMayRemain, Guid? ReplicaId, string? ReplicaStatus);
-public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time, BackupSchedulingOptions? scheduling = null, BackupRetentionOptions? retention = null, ITenantWrapKeyStore? wrapKeys = null)
+public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time, BackupSchedulingOptions? scheduling = null, BackupRetentionOptions? retention = null, ITenantWrapKeyStore? wrapKeys = null,
+    ArtifactRecoveryOptions? recovery = null, ITenantRecoveryKeyStore? tenantRecoveryKeys = null)
 {
     public static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(120);
 
@@ -143,7 +147,13 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         {
             // A job that asks for encryption is never handed out without a key: silently writing plaintext is the failure this policy exists to prevent.
             var key = await (wrapKeys ?? throw new InvalidOperationException("Encryption requires a tenant wrap key store.")).EnsureActiveAsync(claim.Run.TenantId, cancellationToken);
-            encryption = new BackupEncryptionInstruction { Required = policy == "Required", KeyVersion = key.Version, PublicKeySpkiBase64 = Convert.ToBase64String(key.PublicKeySpki) };
+            var recipients = new List<BackupEncryptionRecipient> { Recipient(BackupRecipientTypes.TenantWrap, key.Version, key.KeyId, key.PublicKeySpki) };
+            // Without a platform recovery key the artifact is still encrypted to the tenant key alone (Required included): the platform logs that at startup, and the artifact's
+            // recipient list shows it, but a missing recovery key never blocks or downgrades a backup.
+            if (recovery?.PlatformRecovery is { } platform) recipients.Add(Recipient(BackupRecipientTypes.PlatformRecovery, platform.Version, platform.KeyId, platform.PublicKeySpki));
+            if (tenantRecoveryKeys is not null && await tenantRecoveryKeys.GetAsync(claim.Run.TenantId, cancellationToken) is { } tenantKey)
+                recipients.Add(Recipient(BackupRecipientTypes.TenantRecovery, tenantKey.Version, tenantKey.KeyId, tenantKey.PublicKeySpki));
+            encryption = new BackupEncryptionInstruction { Required = policy == "Required", Recipients = recipients };
         }
         return new BackupTaskSnapshot
         {
@@ -172,7 +182,7 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         var artifact = a is null ? null : new BackupArtifactResult(a.SizeBytes, a.SourceChecksum, a.ArtifactChecksum, a.ChecksumAlgorithm,
             a.CreatedAt, a.SourceMetadataJson, a.AppliedOptionsJson, a.Replicas.Select(r => new BackupReplicaResult(r.StorageProvider, r.StorageTarget,
                 r.Key, r.SizeBytes, r.Checksum, r.ChecksumAlgorithm, r.VerificationState, r.VerificationMethod, r.CreatedAt, r.VerifiedAt, r.StorageConnectionId)).ToArray(),
-            a.Format, a.EncryptionKeyId, a.EncryptionKeyVersion, a.EncryptionWrappedDekBase64);
+            a.Format, a.EncryptionKeyId, a.EncryptionKeyVersion, a.EncryptionWrappedDekBase64, a.Format == ArtifactFormats.Bpe2 ? RecipientIndex(a.EncryptionRecipients) : null);
         var destinations = request.Destinations.Select(d => new BackupDestinationReport(d.StorageProvider, d.StorageConnectionId, d.State, d.Upload, d.Verification,
             d.FailureCode, d.Key, d.ObjectMayRemain, d.StartedAt, d.CompletedAt)).ToArray();
         return await store.CompleteAttemptAsync(Command(identity, attemptId, request.LeaseToken), new BackupCompletion(request.Status, request.FailureCode, artifact, destinations), cancellationToken);
@@ -187,7 +197,8 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         if (request.Artifact is not { } a) return request;
         if (a.Format == ArtifactFormats.Bpe2)
         {
-            if (wrapKeys is null || !await wrapKeys.OwnsKeyAsync(tenantId, a.EncryptionKeyId!, a.EncryptionKeyVersion!.Value, cancellationToken))
+            if (wrapKeys is null || !await wrapKeys.OwnsKeyAsync(tenantId, a.EncryptionKeyId!, a.EncryptionKeyVersion!.Value, cancellationToken)
+                || !await RecipientsAreIssuedAsync(tenantId, a.EncryptionRecipients, cancellationToken))
                 throw new ArgumentException("Invalid completion metadata.");
             return request;
         }
@@ -201,6 +212,28 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
             }).ToArray()
         };
     }
+
+    /// <summary>
+    /// Every recipient the agent reports must be one the backend issues: the platform recovery recipient only as the configured key, the tenant recovery recipient only as the tenant's
+    /// current key. A tenant-wrap recipient was already matched to the tenant's keys by <c>OwnsKeyAsync</c> (shape and the match with the artifact's key are in the input validation).
+    /// A key changed while a backup ran therefore fails that attempt's completion instead of recording a recipient nobody can vouch for.
+    /// </summary>
+    private async Task<bool> RecipientsAreIssuedAsync(TenantId tenantId, IReadOnlyList<BackupTaskArtifactRecipient> recipients, CancellationToken cancellationToken)
+    {
+        var platform = recovery?.PlatformRecovery;
+        var tenantKey = tenantRecoveryKeys is null ? null : await tenantRecoveryKeys.GetAsync(tenantId, cancellationToken);
+        var reportedPlatform = recipients.SingleOrDefault(recipient => recipient.Type == BackupRecipientTypes.PlatformRecovery);
+        var reportedTenant = recipients.SingleOrDefault(recipient => recipient.Type == BackupRecipientTypes.TenantRecovery);
+        return (platform is null ? reportedPlatform is null : reportedPlatform is not null && reportedPlatform.KeyId == platform.KeyId && reportedPlatform.KeyVersion == platform.Version)
+            && (tenantKey is null ? reportedTenant is null : reportedTenant is not null && reportedTenant.KeyId == tenantKey.KeyId && reportedTenant.KeyVersion == tenantKey.Version);
+    }
+
+    private static BackupEncryptionRecipient Recipient(string type, int version, string keyId, byte[] spki) =>
+        new() { Type = type, KeyVersion = version, KeyId = keyId, PublicKeySpkiBase64 = Convert.ToBase64String(spki) };
+
+    /// <summary>The artifact's recipient index: type, key id and version of each header recipient, no wrapped keys.</summary>
+    private static string RecipientIndex(IReadOnlyList<BackupTaskArtifactRecipient> recipients) =>
+        System.Text.Json.JsonSerializer.Serialize(recipients.Select(recipient => new { type = recipient.Type, keyId = recipient.KeyId, keyVersion = recipient.KeyVersion }));
 
     public static BackupRetryPolicy ToDomain(BackupRetryPolicyRequest? request)
     {
@@ -275,7 +308,16 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
             waiting.Length == 0 ? null : waiting.Min(r => r.DeleteAfter), waiting.OrderBy(r => r.DeleteAfter).FirstOrDefault()?.DeleteReason?.ToString(),
             runId, jobId, artifact.AttemptId, CancelDeleteAllowed: artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.DeletePending && replica.VerificationState == "Verified"), BackupType: artifact.BackupType,
             BackupMetadata: BackupMetadataProjection.Read(artifact.SourceMetadataJson, artifact.AppliedOptionsJson),
-            Replication: snapshot is null ? null : ToView(BackupReplicationEvaluator.ForArtifact(snapshot.RequiredVerifiedReplicaCount, snapshot.Destinations.Count, artifact.Replicas)));
+            Replication: snapshot is null ? null : ToView(BackupReplicationEvaluator.ForArtifact(snapshot.RequiredVerifiedReplicaCount, snapshot.Destinations.Count, artifact.Replicas)),
+            Encryption: ToEncryptionView(artifact));
+    }
+
+    private static ArtifactEncryptionView? ToEncryptionView(BackupArtifact artifact)
+    {
+        if (artifact.Format != BackupArtifact.BpeFormat) return null;
+        var recipients = artifact.EncryptionRecipientsJson is null ? []
+            : System.Text.Json.JsonSerializer.Deserialize<ArtifactRecipientView[]>(artifact.EncryptionRecipientsJson, System.Text.Json.JsonSerializerOptions.Web) ?? [];
+        return new ArtifactEncryptionView(artifact.Format, artifact.EncryptionKeyId!, artifact.EncryptionKeyVersion!.Value, recipients);
     }
 
     public static BackupReplicaView ToView(BackupReplica r) => new(r.Id, r.StorageProvider, r.StorageTarget, r.Key, r.SizeBytes, r.Checksum, r.ChecksumAlgorithm,

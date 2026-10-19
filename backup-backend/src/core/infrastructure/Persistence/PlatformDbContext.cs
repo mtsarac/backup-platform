@@ -78,6 +78,8 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<BackupDestinationOutcome> BackupDestinationOutcomes => Set<BackupDestinationOutcome>();
     public DbSet<ReplicaRepairOperation> ReplicaRepairOperations => Set<ReplicaRepairOperation>();
     public DbSet<TenantWrapKey> TenantWrapKeys => Set<TenantWrapKey>();
+    public DbSet<TenantRecoveryKey> TenantRecoveryKeys => Set<TenantRecoveryKey>();
+    public DbSet<ArtifactBreakGlassRequest> ArtifactBreakGlassRequests => Set<ArtifactBreakGlassRequest>();
     public DbSet<BackupLifecycleFact> BackupLifecycleFacts => Set<BackupLifecycleFact>();
     public DbSet<BackupScheduleOccurrence> BackupScheduleOccurrences => Set<BackupScheduleOccurrence>();
     public DbSet<RestoreOperation> RestoreOperations => Set<RestoreOperation>();

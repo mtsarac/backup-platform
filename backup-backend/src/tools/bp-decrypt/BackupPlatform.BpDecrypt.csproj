@@ -7,6 +7,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\core\encryption\BackupPlatform.Encryption.csproj" />
+    <Compile Include="..\shared\CliArguments.cs" Link="CliArguments.cs" />
+    <InternalsVisibleTo Include="BackupPlatform.UnitTests" />
   </ItemGroup>
 
 </Project>

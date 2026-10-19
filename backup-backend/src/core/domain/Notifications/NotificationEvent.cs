@@ -34,7 +34,7 @@ public sealed class NotificationEvent : ITenantOwned
     {
         BackupGuard.Id(id);
         ArgumentNullException.ThrowIfNull(tenantId);
-        if (type is not (NotificationEventTypes.Test or NotificationEventTypes.RecipientVerification) && !NotificationEventTypes.IsSelectable(type)) throw new ArgumentException("Unknown event type.", nameof(type));
+        if (type is not (NotificationEventTypes.Test or NotificationEventTypes.RecipientVerification) && !NotificationEventTypes.IsDetectable(type)) throw new ArgumentException("Unknown event type.", nameof(type));
         if (!Enum.IsDefined(phase) || !Enum.IsDefined(severity)) throw new ArgumentException("Unknown phase or severity.");
         BackupGuard.Text(dedupKey, NotificationCondition.MaximumKeyLength + 32);
         Id = id;

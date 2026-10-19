@@ -53,33 +53,51 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
         };
     }
 
-    private const int MinWrapKeyBits = 3072;
+    private const int MinWrapKeyBits = 4096;
 
+    /// <summary>
+    /// Builds the recipients of an encrypted job. The task arrives over the enrollment-bound authenticated channel, and each key is still re-checked here: its id must be
+    /// SHA-256(SPKI)[..16] of the key as received, so a task whose key and id disagree (or one carrying a private key blob, which does not parse as SPKI) never wraps a DEK.
+    /// Exactly one tenant-wrap recipient is required; platform and tenant recovery recipients are optional, one of each at most.
+    /// </summary>
     private static ArtifactEncryption ToArtifactEncryption(BackupEncryptionInstruction instruction)
     {
-        if (instruction.KeyVersion < 1)
-        {
-            throw new BackupTaskEncryptionException();
-        }
-
-        var key = RSA.Create();
+        var recipients = new List<BpeRecipient>();
         try
         {
-            key.ImportSubjectPublicKeyInfo(Convert.FromBase64String(instruction.PublicKeySpkiBase64), out _);
+            foreach (var recipient in instruction.Recipients)
+            {
+                var type = recipient.Type switch
+                {
+                    BackupRecipientTypes.TenantWrap => BpeRecipientType.TenantWrap,
+                    BackupRecipientTypes.PlatformRecovery => BpeRecipientType.PlatformRecovery,
+                    BackupRecipientTypes.TenantRecovery => BpeRecipientType.TenantRecovery,
+                    _ => throw new BackupTaskEncryptionException()
+                };
+                if (recipient.KeyVersion < 1 || recipients.Any(existing => existing.Type == type)) throw new BackupTaskEncryptionException();
+                var key = RSA.Create();
+                recipients.Add(new BpeRecipient(type, recipient.KeyVersion, key));
+                try
+                {
+                    key.ImportSubjectPublicKeyInfo(Convert.FromBase64String(recipient.PublicKeySpkiBase64), out _);
+                }
+                catch (Exception exception) when (exception is FormatException or CryptographicException or ArgumentException)
+                {
+                    throw new BackupTaskEncryptionException();
+                }
+
+                if (key.KeySize < MinWrapKeyBits || BpeKeyId.FromSpki(key.ExportSubjectPublicKeyInfo()) != recipient.KeyId) throw new BackupTaskEncryptionException();
+            }
+
+            if (recipients.Count(recipient => recipient.Type == BpeRecipientType.TenantWrap) != 1) throw new BackupTaskEncryptionException();
         }
-        catch (Exception exception) when (exception is FormatException or CryptographicException or ArgumentException)
+        catch
         {
-            key.Dispose();
-            throw new BackupTaskEncryptionException();
+            foreach (var recipient in recipients) recipient.PublicKey.Dispose();
+            throw;
         }
 
-        if (key.KeySize < MinWrapKeyBits)
-        {
-            key.Dispose();
-            throw new BackupTaskEncryptionException();
-        }
-
-        return new ArtifactEncryption(instruction.Required, [new BpeRecipient(BpeRecipientType.TenantWrap, instruction.KeyVersion, key)]);
+        return new ArtifactEncryption(instruction.Required, recipients);
     }
 
     private async ValueTask<DatabaseCredential> ResolveCredentialAsync(string reference, CancellationToken cancellationToken)

@@ -40,6 +40,8 @@
     <ProjectReference Include="../../src/providers/secret/data-protection/BackupPlatform.SecretProviders.DataProtection.csproj" />
     <ProjectReference Include="../../src/hosts/api/BackupPlatform.Api.csproj" />
     <ProjectReference Include="..\..\src\core\encryption\BackupPlatform.Encryption.csproj" />
+    <ProjectReference Include="..\..\src\tools\bp-decrypt\BackupPlatform.BpDecrypt.csproj" />
+    <ProjectReference Include="..\..\src\tools\bp-recovery\BackupPlatform.BpRecovery.csproj" />
   </ItemGroup>
 
 </Project>

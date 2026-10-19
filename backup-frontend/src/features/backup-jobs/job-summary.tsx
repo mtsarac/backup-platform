@@ -5,6 +5,7 @@ import { Fact, Facts, Section } from '@/components/ui/section'
 import { jobSteps, scheduleLabel } from '@/features/backup-jobs/job-wizard-model'
 import type { BackupConfiguration, RetentionPolicy, RetryPolicy, Schedule } from '@/features/backup-jobs/types'
 import { formatSeconds } from '@/features/backups/presentation'
+import { policyLabels } from '@/features/artifact-encryption/labels'
 import type { ConnectionView } from '@/features/storage-connections/types'
 
 export interface JobSummaryProps {
@@ -53,6 +54,7 @@ export function JobSummary(props: JobSummaryProps) {
       <Fact label={tx("Kopya yedek (COPY_ONLY)")}>{c.engine === 'postgres' ? tx('Mantıksal arşiv yedek zincirini değiştirmez') : c.copyOnly ? tx('Açık') : tx('Kapalı')}</Fact>
       <Fact label={c.engine === 'postgres' ? tx('Sayfa bütünlüğü (data_checksums)') : tx('Bütünlük doğrulaması (CHECKSUM)')}>{policyText[c.checksumPolicy]}</Fact>
       <Fact label={tx("Sıkıştırma (Compression)")}>{policyText[c.compressionPolicy]}</Fact>
+      <Fact label={tx("Şifreleme")}>{policyLabels[c.encryptionPolicy]}</Fact>
     </Facts>)}
   </div>
 }

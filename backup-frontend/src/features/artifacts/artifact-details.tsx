@@ -6,6 +6,7 @@ import { failureMessage } from '@/lib/api/failure-messages'
 import { artifactDate, artifactSize, artifactState, deletionReason } from './format'
 import type { BackupArtifact, BackupReplica } from './types'
 import { ReplicationSummary } from '@/features/backups/replication'
+import { ArtifactEncryptionSection } from '@/features/artifact-encryption/artifact-encryption-section'
 
 /** Metadata presentation also accepts the deliberately redacted platform support projection. */
 export interface ArtifactPresentation extends Omit<BackupArtifact, 'attemptId' | 'replicas'> {
@@ -146,6 +147,7 @@ export function ArtifactDetails({ artifact }: { artifact: ArtifactPresentation }
     <ArtifactDeletedNotice artifact={artifact} />
     <ArtifactSummary artifact={artifact} />
     <ArtifactIntegrity artifact={artifact} />
+    <ArtifactEncryptionSection encryption={artifact.encryption} />
     <ArtifactRetention artifact={artifact} />
     <ArtifactMetadata artifact={artifact} />
     <ArtifactReplicas artifact={artifact} />

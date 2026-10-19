@@ -28,10 +28,11 @@ import { useListParams } from '@/features/platform/use-list-params'
 import { PlatformTenantConnections } from '@/features/storage-connections/platform-tenant-connections'
 import { ApiError } from '@/lib/api/client'
 import { errorMessage } from '@/lib/api/failure-messages'
+import { WrapKeysSection } from '@/features/artifact-encryption/wrap-keys-section'
 
 const tabs = [
   { value: 'overview', get label() { return tx("Genel") } }, { value: 'members', get label() { return tx("Üyeler") } },
-  { value: 'storage', get label() { return tx("Depolama") } }, { value: 'agents', get label() { return tx("Agent'lar") } }, { value: 'support', get label() { return tx("Destek erişimi") } },
+  { value: 'storage', get label() { return tx("Depolama") } }, { value: 'agents', get label() { return tx("Agent'lar") } }, { value: 'support', get label() { return tx("Destek erişimi") } }, { value: 'encryption', get label() { return tx("Şifreleme") } },
 ] as const
 type TabValue = (typeof tabs)[number]['value']
 
@@ -117,6 +118,7 @@ function TenantTabs({ tenant }: { tenant: PlatformTenantDetail }) {
         <EnrollmentSection tenant={tenant} />
       </>}
       {tab === 'support' && <SupportAccessSection tenantId={tenant.tenantId} tenantName={tenant.name} />}
+      {tab === 'encryption' && <WrapKeysSection tenantId={tenant.tenantId} tenantName={tenant.name} />}
     </div>
   </div>
 }

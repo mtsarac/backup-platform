@@ -3,6 +3,7 @@ using BackupPlatform.Application.Identity;
 using BackupPlatform.Application.Tenancy;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Notifications;
+using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Notifications;
 
 namespace BackupPlatform.Api.Endpoints;
@@ -40,6 +41,8 @@ public sealed class NotificationSecretRequest
 {
     public string? Value { get; init; }
 }
+public sealed record OwnerSecurityRecipientRequest(bool Enabled);
+
 
 public sealed class EmailTransportRequest
 {
@@ -89,6 +92,7 @@ public static class NotificationEndpoints
         tenant.MapPost("/channels/{id:guid}/disable", (Guid id, ITenantContext t, ICurrentUser u, NotificationAdministrationService s, CancellationToken c) => ToggleAsync(id, false, t, u, s, c));
         tenant.MapDelete("/channels/{id:guid}", DeleteChannelAsync);
         tenant.MapPost("/channels/{id:guid}/test", TestChannelAsync);
+        tenant.MapPost("/channels/{id:guid}/owner-security-recipient", SetOwnerSecurityRecipientAsync);
         tenant.MapGet("/deliveries", ListDeliveriesAsync);
 
         var platform = endpoints.MapGroup("/api/platform/notification-transports").RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
@@ -143,7 +147,8 @@ public static class NotificationEndpoints
     private static object ToResponse(NotificationChannelView view) => new
     {
         id = view.Id, kind = view.Kind, name = view.Name, targetDisplay = view.TargetDisplay, enabled = view.Enabled, recipientVerified = view.RecipientVerified, authentication = view.Authentication,
-        hasSecret = view.HasSecret, secretUpdatedAt = view.SecretUpdatedAt, createdAt = view.CreatedAt, updatedAt = view.UpdatedAt, lastDelivery = view.LastDelivery
+        hasSecret = view.HasSecret, secretUpdatedAt = view.SecretUpdatedAt, createdAt = view.CreatedAt, updatedAt = view.UpdatedAt, lastDelivery = view.LastDelivery,
+        securityOwnerUserId = view.SecurityOwnerUserId
     };
 
     // ---- policy -------------------------------------------------------------------------------------------------------------------------
@@ -180,6 +185,12 @@ public static class NotificationEndpoints
 
     private static async Task<IResult> GetChannelAsync(Guid id, ITenantContext tenant, NotificationAdministrationService service, CancellationToken cancellationToken) =>
         await service.GetChannelAsync(tenant.TenantId!, id, cancellationToken) is { } view ? Results.Ok(ToResponse(view)) : Failure(NotificationOutcome.NotFound);
+    private static Task<IResult> SetOwnerSecurityRecipientAsync(Guid id, OwnerSecurityRecipientRequest request, HttpContext context, ITenantContext tenant, ICurrentUser user,
+        NotificationAdministrationService service, CancellationToken cancellationToken) =>
+        context.Features.Get<ResolvedTenantContext>()?.Membership.Role != TenantRole.Owner
+            ? Task.FromResult<IResult>(Results.Json(new { error = "owner_required" }, statusCode: StatusCodes.Status403Forbidden))
+            : GuardAsync(async () => Respond(await service.SetSecurityOwnerAsync(tenant.TenantId!, id, request.Enabled, TenantActor(user), cancellationToken)));
+
 
     private static Task<IResult> CreateChannelAsync(CreateNotificationChannelRequest request, ITenantContext tenant, ICurrentUser user, NotificationAdministrationService service, CancellationToken cancellationToken) =>
         GuardAsync(async () => Respond(await service.CreateChannelAsync(tenant.TenantId!,

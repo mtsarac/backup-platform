@@ -18,11 +18,15 @@ const owners: readonly (readonly string[])[] = [
   ['configuration.engine', 'configuration.host', 'configuration.database', 'configuration.databaseCredentialReference', 'configuration.databaseLogin.userName', 'configuration.databaseLogin.password', 'configuration.port', 'configuration.integratedSecurity', 'configuration.encrypt', 'configuration.trustServerCertificate'],
   ['configuration.destinations', 'configuration.requiredVerifiedReplicaCount', 'configuration.storagePrefix', 'configuration.stagingReference'],
   ['cronExpression', 'timeZone', 'missedRunGraceSeconds', 'overlapPolicy', 'retryPolicy.'],
-  ['retention.', 'configuration.copyOnly', 'configuration.checksumPolicy', 'configuration.compressionPolicy'],
+  ['retention.', 'configuration.copyOnly', 'configuration.checksumPolicy', 'configuration.compressionPolicy', 'configuration.encryptionPolicy'],
 ]
+/** A prefix owns a field when it is the field, a parent path of it, or a trailing-dot group; never a mere string prefix ("configuration.encrypt" must not claim "configuration.encryptionPolicy"). */
+function owns(prefix: string, name: string) {
+  return name === prefix || name === prefix.split('.').at(-1) || name.startsWith(`${prefix}.`) || name.startsWith(`${prefix}[`) || (prefix.endsWith('.') && name.startsWith(prefix))
+}
 export function stepOfField(field: string): number | undefined {
   const name = field.replace(/^schedule\./, '')
-  const step = owners.findIndex(prefixes => prefixes.some(prefix => name.startsWith(prefix) || name === prefix.split('.').at(-1)))
+  const step = owners.findIndex(prefixes => prefixes.some(prefix => owns(prefix, name)))
   return step < 0 ? undefined : step
 }
 

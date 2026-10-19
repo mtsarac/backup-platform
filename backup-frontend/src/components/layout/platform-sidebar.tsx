@@ -1,5 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { ArrowLeft, Bell, Building2, Gauge, HardDrive, LayoutDashboard, Monitor, ScrollText, ShieldCheck, Sliders, Users } from 'lucide-react'
+import { ArrowLeft, Bell, Building2, Gauge, HardDrive, KeyRound, LayoutDashboard, Monitor, ScrollText, ShieldCheck, Sliders, Users } from 'lucide-react'
 import { platformPaths } from '@/features/platform/paths'
 import { SidebarFrame, type NavGroup } from './nav'
 
@@ -18,6 +18,7 @@ const groups: NavGroup[] = [
   { get heading() { return tx("Operasyon") }, items: [
     { get label() { return tx("Bildirim altyapısı") }, to: platformPaths.notificationTransports, icon: Bell },
     { get label() { return tx("Support Sessions") }, to: platformPaths.supportSessions, icon: ShieldCheck },
+    { get label() { return tx("Break-glass") }, to: platformPaths.breakGlass, icon: KeyRound },
     { get label() { return tx("Audit") }, to: platformPaths.audit(), icon: ScrollText },
   ] },
   { items: [{ get label() { return tx("Tenant arayüzüne dön") }, to: '/', icon: ArrowLeft, end: true }] },

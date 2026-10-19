@@ -80,7 +80,7 @@ class Api:
             status, body = error.code, error.read()
         document = json.loads(body) if body else None
         if status not in expect:
-            code = document.get('error') if isinstance(document, dict) else None
+            code = f"{document.get('error')}: {document.get('code')}" if isinstance(document, dict) else None
             raise FixtureFailure(f'{method} {path.split("?")[0]} failed with HTTP {status}' + (f' ({code})' if code else ''))
         return status, document
 

@@ -139,7 +139,7 @@ describe('MultiDestinationPicker', () => {
       integratedSecurity: true, databaseCredentialReference: null,
       encrypt: true, trustServerCertificate: false, stagingReference: 'default',
       storagePrefix: '', copyOnly: true,
-      checksumPolicy: 'Required', compressionPolicy: 'Preferred',
+      checksumPolicy: 'Required', compressionPolicy: 'Preferred', encryptionPolicy: 'Off',
       destinations: [
         { storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true }
       ],
@@ -184,7 +184,7 @@ describe('MultiDestinationPicker', () => {
       integratedSecurity: true, databaseCredentialReference: null,
       encrypt: true, trustServerCertificate: false, stagingReference: 'default',
       storagePrefix: '', copyOnly: true,
-      checksumPolicy: 'Required', compressionPolicy: 'Preferred',
+      checksumPolicy: 'Required', compressionPolicy: 'Preferred', encryptionPolicy: 'Off',
       destinations: [
         { storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true },
         { storageProvider: 'sftp', storageConnectionId: 'conn-sftp-1', storageExecutionLocation: 'Backend', isPrimary: false }
@@ -233,7 +233,7 @@ describe('MultiDestinationPicker', () => {
       integratedSecurity: true, databaseCredentialReference: null,
       encrypt: true, trustServerCertificate: false, stagingReference: 'default',
       storagePrefix: '', copyOnly: true,
-      checksumPolicy: 'Required', compressionPolicy: 'Preferred',
+      checksumPolicy: 'Required', compressionPolicy: 'Preferred', encryptionPolicy: 'Off',
       destinations: [
         { storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: false },
         { storageProvider: 'sftp', storageConnectionId: 'conn-sftp-1', storageExecutionLocation: 'Backend', isPrimary: true }
@@ -259,7 +259,7 @@ describe('MultiDestinationPicker', () => {
       integratedSecurity: true, databaseCredentialReference: null,
       encrypt: true, trustServerCertificate: false, stagingReference: 'default',
       storagePrefix: '', copyOnly: true,
-      checksumPolicy: 'Required', compressionPolicy: 'Preferred',
+      checksumPolicy: 'Required', compressionPolicy: 'Preferred', encryptionPolicy: 'Off',
       destinations: [
         { storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true },
         { storageProvider: 'sftp', storageConnectionId: 'conn-sftp-1', storageExecutionLocation: 'Backend', isPrimary: false }

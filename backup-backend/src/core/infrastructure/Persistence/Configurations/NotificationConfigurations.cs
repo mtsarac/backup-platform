@@ -1,5 +1,7 @@
 using System.Text.Json;
 using BackupPlatform.Domain.Notifications;
+using BackupPlatform.Domain.Tenancy;
+using BackupPlatform.Infrastructure.Persistence.Conversions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -54,6 +56,8 @@ internal sealed class NotificationChannelConfiguration : IEntityTypeConfiguratio
         builder.Property(channel => channel.CreatedAt).HasColumnType("timestamp with time zone").IsRequired();
         builder.Property(channel => channel.UpdatedAt).HasColumnType("timestamp with time zone").IsRequired();
         builder.Property(channel => channel.RecipientVerifiedAt).HasColumnType("timestamp with time zone");
+        builder.Property(channel => channel.SecurityOwnerUserId).HasConversion<UserIdConverter>().HasColumnType("uuid");
+        builder.HasOne<User>().WithMany().HasForeignKey(channel => channel.SecurityOwnerUserId).OnDelete(DeleteBehavior.Restrict);
         builder.Ignore(channel => channel.HasSecret);
         builder.Ignore(channel => channel.IsDeliverable);
         builder.Ignore(channel => channel.AwaitsConfirmation);

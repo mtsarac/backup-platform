@@ -5,8 +5,8 @@ namespace BackupPlatform.UnitTests.Encryption;
 
 public sealed class BpeHeaderApiTests
 {
-    private static readonly RSA TenantKey = RSA.Create(3072);
-    private static readonly RSA RecoveryKey = RSA.Create(3072);
+    private static readonly RSA TenantKey = RSA.Create(4096);
+    private static readonly RSA RecoveryKey = RSA.Create(4096);
 
     private static async Task<byte[]> SealAsync(byte[] data, byte[] dek)
     {
@@ -34,7 +34,7 @@ public sealed class BpeHeaderApiTests
         Assert.Equal([BpeRecipientType.TenantWrap, BpeRecipientType.PlatformRecovery], recipients.Select(recipient => recipient.Type));
         Assert.Equal([7, 2], recipients.Select(recipient => recipient.KeyVersion));
         Assert.Equal(BpeFormat.KeyId(TenantKey), recipients[0].KeyId);
-        Assert.All(recipients, recipient => Assert.Equal(384, recipient.WrappedDek.Length));
+        Assert.All(recipients, recipient => Assert.Equal(512, recipient.WrappedDek.Length));
         Assert.Equal(32, TenantKey.Decrypt(recipients[0].WrappedDek, RSAEncryptionPadding.OaepSHA256).Length);
     }
 

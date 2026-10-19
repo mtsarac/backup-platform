@@ -12,7 +12,7 @@ const url = '/api/platform/support-sessions/support-a/artifacts/artifact-a/downl
 beforeEach(() => {
   vi.resetAllMocks()
   vi.mocked(api.getSupportDownloadAvailability).mockResolvedValue({ available: true, reason: null, checksum: 'expected-sha', sizeBytes: 4096, replicas: [{ replicaId: 'replica-a', storageProvider: 'Central', available: true, reason: null }, { replicaId: 'offline', storageProvider: 'Local', available: false, reason: 'agent_unavailable' }] })
-  vi.mocked(api.prepareSupportDownload).mockResolvedValue({ sessionId: 'download-a', downloadUrl: url, filename: 'backup.bak', checksum: 'expected-sha', sizeBytes: 4096 })
+  vi.mocked(api.prepareSupportDownload).mockResolvedValue({ sessionId: 'download-a', downloadUrl: url, filename: 'backup.bak', checksum: 'expected-sha', sizeBytes: 4096, decrypted: false })
   vi.mocked(api.getSupportDownloadStatus).mockResolvedValue({ sessionId: 'download-a', state: 'Ready', transferredBytes: 0 })
 })
 afterEach(() => vi.restoreAllMocks())
@@ -50,7 +50,7 @@ describe('support native download', () => {
   })
   it('never navigates an unsafe returned URL', async () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-    vi.mocked(api.prepareSupportDownload).mockResolvedValue({ sessionId: 'download-a', downloadUrl: 'https://evil.example/content?token=secret', filename: 'backup.bak', checksum: 'sha', sizeBytes: 4096 })
+    vi.mocked(api.prepareSupportDownload).mockResolvedValue({ sessionId: 'download-a', downloadUrl: 'https://evil.example/content?token=secret', filename: 'backup.bak', checksum: 'sha', sizeBytes: 4096, decrypted: false })
     renderPlatform(<SupportArtifactDownload scope={scope} artifactId="artifact-a" eligible />)
     await screen.findByRole('combobox', { name: "Kopya" })
     fireEvent.click(screen.getByRole('button', { name: "İndir" }))

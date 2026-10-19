@@ -124,8 +124,14 @@ public enum ArtifactTransformKind
     Encryption
 }
 
-/// <summary>The tenant-wrap recipient of an encrypted artifact, read back from its header. <see cref="WrappedDek"/> is ciphertext only the backend's private wrap key opens.</summary>
-public sealed record ArtifactSeal(string KeyId, int KeyVersion, byte[] WrappedDek);
+/// <summary>
+/// What the header of an encrypted artifact says, read back after writing it: the tenant-wrap recipient (<see cref="WrappedDek"/> is ciphertext only the backend's private wrap key
+/// opens) and the index of every recipient, which the backend checks against the keys it issued.
+/// </summary>
+public sealed record ArtifactSeal(string KeyId, int KeyVersion, byte[] WrappedDek, IReadOnlyList<ArtifactRecipientRef> Recipients);
+
+/// <summary>One recipient of an encrypted artifact as its header names it: wire type name, key id, key version. No wrapped key.</summary>
+public sealed record ArtifactRecipientRef(string Type, string KeyId, int KeyVersion);
 
 /// <summary>One transformation applied between the engine's backup file and the stored artifact (none exist yet; the list is how they will be recorded).</summary>
 public sealed record ArtifactTransform(ArtifactTransformKind Kind, string Algorithm);

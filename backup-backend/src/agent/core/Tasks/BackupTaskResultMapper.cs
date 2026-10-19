@@ -134,6 +134,7 @@ internal static class BackupTaskResultMapper
             EncryptionKeyId = artifact.Seal?.KeyId,
             EncryptionKeyVersion = artifact.Seal?.KeyVersion,
             EncryptionWrappedDekBase64 = artifact.Seal is { } seal ? Convert.ToBase64String(seal.WrappedDek) : null,
+            EncryptionRecipients = artifact.Seal?.Recipients.Select(recipient => new BackupTaskArtifactRecipient { Type = recipient.Type, KeyId = recipient.KeyId, KeyVersion = recipient.KeyVersion }).ToArray() ?? [],
             CreatedAt = result.BackupFinishedAt ?? result.FinishedAt,
             SourceMetadataJson = JsonSerializer.Serialize(new
             {

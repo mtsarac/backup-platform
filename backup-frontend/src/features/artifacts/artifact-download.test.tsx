@@ -7,7 +7,7 @@ import { getDownloadAvailability, getDownloadStatus, prepareDownload } from './a
 import type { DownloadAvailability, DownloadStatus } from './api'
 
 vi.mock('./api', () => ({ getDownloadAvailability: vi.fn(), getDownloadStatus: vi.fn(), prepareDownload: vi.fn() }))
-const availability: DownloadAvailability = { available: true, reason: null, checksum: 'expected-sha256', sizeBytes: 4096, replicas: [
+const availability: DownloadAvailability = { available: true, reason: null, checksum: 'expected-sha256', sizeBytes: 4096, format: 'v1-plain', replicas: [
   { replicaId: 'central', storageProvider: 'Central', storageTarget: 'Managed storage', available: true, reason: null },
   { replicaId: 'local', storageProvider: 'Local', storageTarget: 'Agent storage', available: false, reason: 'agent_unavailable' },
 ] }
@@ -18,7 +18,7 @@ function mount(tenantId = 'tenant-a', canAdmin = true, eligible = true) {
 }
 beforeEach(() => {
   vi.mocked(getDownloadAvailability).mockResolvedValue(availability)
-  vi.mocked(prepareDownload).mockResolvedValue({ sessionId: 'session-a', downloadUrl: '/api/tenants/tenant-a/backup-artifacts/artifact-a/downloads/session-a/content', filename: 'backup.bak', checksum: availability.checksum, sizeBytes: 4096 })
+  vi.mocked(prepareDownload).mockResolvedValue({ sessionId: 'session-a', downloadUrl: '/api/tenants/tenant-a/backup-artifacts/artifact-a/downloads/session-a/content', filename: 'backup.bak', checksum: availability.checksum, sizeBytes: 4096, decrypted: false })
   vi.mocked(getDownloadStatus).mockResolvedValue({ sessionId: 'session-a', state: 'Ready', transferredBytes: 0 })
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.clearAllMocks(); vi.unstubAllGlobals() })

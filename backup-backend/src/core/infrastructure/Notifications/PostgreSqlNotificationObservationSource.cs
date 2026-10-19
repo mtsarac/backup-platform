@@ -93,6 +93,7 @@ public sealed class PostgreSqlNotificationObservationSource(
             new Dictionary<string, string> { ["code"] = Code(run.TerminalReason, run.Status == BackupStatus.AgentLost ? "agent_lost" : "failed") })).ToList();
     }
 
+
     private async Task<IReadOnlyList<NotificationObservation>> StaleJobsAsync(NotificationPolicy policy, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
