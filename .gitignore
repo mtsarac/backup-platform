@@ -54,7 +54,12 @@ coverage/
 .serena/
 docs/
 
-# AI agent tooling and generated agent files (AGENTS.md / CLAUDE.md are tracked instructions)
+# AI agent tooling, instructions, and local agent files
+.scratch/
+CLAUDE.md
+CLAUDE*.md
+AGENTS.md
+AGENTS*.md
 .claude/
 .cursor/
 .cursorrules
