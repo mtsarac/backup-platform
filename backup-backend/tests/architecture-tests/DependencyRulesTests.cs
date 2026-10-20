@@ -495,10 +495,13 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
         {
             foreach (var node in graph.Values.Where(node =>
                 !node.RelativePath.StartsWith("src/hosts/", StringComparison.Ordinal)
-                && node.Name != "BackupPlatform.Agent.Transport"
                 && !IsProviderImplementation(node)))
             {
-                AssertForbiddenDependencies(configuration, graph, node.Name, IsProviderImplementation);
+                // Direct external transfers (T1) allow Agent.Transport to compose Sftp and GoogleDrive direct providers.
+                AssertForbiddenDependencies(configuration, graph, node.Name, dep =>
+                    IsProviderImplementation(dep)
+                    && !(node.Name == "BackupPlatform.Agent.Transport"
+                        && dep.Name is "BackupPlatform.StorageProviders.Sftp" or "BackupPlatform.StorageProviders.GoogleDrive"));
             }
         }
     }

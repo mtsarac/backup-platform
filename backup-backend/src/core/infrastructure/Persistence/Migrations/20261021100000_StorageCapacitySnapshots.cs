@@ -7,8 +7,6 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace BackupPlatform.Infrastructure.Persistence.Migrations;
 
-[DbContext(typeof(PlatformDbContext))]
-[Migration("20261021100000_StorageCapacitySnapshots")]
 public partial class StorageCapacitySnapshots : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
