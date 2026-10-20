@@ -12,7 +12,7 @@ import { agentDate } from '@/features/agents/format'
 import { formatCapacity, formatExactBytes } from '@/features/storage/format'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { HealthBadge, OwnershipBadge } from './connection-parts'
-import { useTenantConnectionOps, useTenantConnections } from './hooks'
+import { useTenantConnectionCapacity, useTenantConnectionOps, useTenantConnections } from './hooks'
 import { connectionHealth, connectionErrorMessage } from './labels'
 import { ProviderIcon } from './provider-icon'
 import { connectionPath } from '@/lib/routes'
@@ -20,6 +20,8 @@ import type { ConnectionView } from './types'
 
 function ConnectionRow({ connection, share, tenantId, onTest, testing, testError }: { connection: ConnectionView; share: number; tenantId: string; onTest: () => void; testing: boolean; testError?: string }) {
   useLanguage()
+  const { data: capacity } = useTenantConnectionCapacity(connection.id)
+
   return <li><article aria-label={connection.name} className="grid items-center gap-x-6 gap-y-3 px-5 py-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)_minmax(0,1.2fr)_11rem]">
     <div className="flex min-w-0 items-center gap-3">
       <ProviderIcon providerType={connection.providerType} />
@@ -27,6 +29,8 @@ function ConnectionRow({ connection, share, tenantId, onTest, testing, testError
         <h3 className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium text-text-heading">
           <Link to={connectionPath(tenantId, connection.id)} className="break-words underline-offset-4 hover:underline">{connection.name}</Link>
           {connection.isDefault && <Badge tone="accent">{tx("Varsayılan")}</Badge>}
+          {capacity?.status === 'Critical' && <Badge tone="error">{tx("Kritik")}</Badge>}
+          {capacity?.status === 'Warning' && <Badge tone="warning">{tx("Uyarı")}</Badge>}
         </h3>
         <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-sm text-text-muted">{connection.providerDisplayName}<OwnershipBadge ownership={connection.ownership} /></p>
       </div>

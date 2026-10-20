@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Notifications;
 using Microsoft.Extensions.Logging;
 
@@ -34,6 +35,13 @@ public sealed class NotificationEngine(
             }
         }
         return events;
+    }
+
+    public async Task<int> SweepTenantAsync(TenantId tenantId, CancellationToken cancellationToken)
+    {
+        var policy = await store.GetPolicyAsync(tenantId, cancellationToken);
+        if (policy is not { Enabled: true }) return 0;
+        return await SweepTenantAsync(policy, cancellationToken);
     }
 
     public async Task<int> SweepTenantAsync(NotificationPolicy policy, CancellationToken cancellationToken)

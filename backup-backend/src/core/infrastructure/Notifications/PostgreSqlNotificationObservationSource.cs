@@ -39,6 +39,7 @@ public sealed class PostgreSqlNotificationObservationSource(
                     NotificationEventTypes.AgentOffline => new(type, true, await OfflineAgentsAsync(policy, now, cancellationToken)),
                     NotificationEventTypes.QuotaCritical => new(type, true, await QuotaAsync(policy, now, cancellationToken)),
                     NotificationEventTypes.ReplicaDegraded => new(type, true, await DegradedReplicasAsync(policy, cancellationToken)),
+                    NotificationEventTypes.StorageCapacityCritical => new(type, true, await StorageCapacityAsync(policy, now, cancellationToken)),
                     _ => throw new InvalidOperationException("Unknown notification event type.")
                 });
             }
@@ -70,6 +71,10 @@ public sealed class PostgreSqlNotificationObservationSource(
             case NotificationEventTypes.BackupStale or NotificationEventTypes.ReplicaDegraded:
                 inService = (await context.BackupJobs.AsNoTracking().Where(job => job.TenantId == tenantId && subjectIds.Contains(job.Id) && job.Enabled)
                     .Select(job => job.Id).ToListAsync(cancellationToken)).ToHashSet();
+                break;
+            case NotificationEventTypes.StorageCapacityCritical:
+                inService = (await context.StorageConnections.AsNoTracking().Where(conn => conn.TenantId == tenantId && subjectIds.Contains(conn.Id) && conn.Enabled)
+                    .Select(conn => conn.Id).ToListAsync(cancellationToken)).ToHashSet();
                 break;
             default:
                 return new HashSet<Guid>(); // quota (the tenant itself) and one-shot types have no subject that can be taken out of service
@@ -168,6 +173,48 @@ public sealed class PostgreSqlNotificationObservationSource(
                 }));
         }
         return result;
+    }
+
+    private async Task<IReadOnlyList<NotificationObservation>> StorageCapacityAsync(NotificationPolicy policy, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var connections = await context.StorageConnections.AsNoTracking()
+            .Where(c => c.TenantId == policy.TenantId && c.Enabled)
+            .Select(c => new { c.Id, c.Name })
+            .ToListAsync(cancellationToken);
+        if (connections.Count == 0) return [];
+
+        var names = connections.ToDictionary(c => c.Id, c => c.Name);
+        var observations = new List<NotificationObservation>();
+        foreach (var conn in connections)
+        {
+            var snapshot = await context.StorageCapacitySnapshots.AsNoTracking()
+                .Where(s => s.TenantId == policy.TenantId && s.ConnectionId == conn.Id && s.Status != Domain.Storage.StorageCapacityStatus.CapacityUnavailable)
+                .OrderByDescending(s => s.ReportedAt)
+                .ThenByDescending(s => s.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (snapshot is null) continue;
+
+            var evaluated = Domain.Storage.StorageCapacityStatus.Evaluate(snapshot.TotalBytes, snapshot.UsedBytes, snapshot.FreeBytes);
+            if (evaluated != Domain.Storage.StorageCapacityStatus.Critical) continue;
+            var percent = snapshot.TotalBytes > 0 && snapshot.UsedBytes.HasValue
+                ? (long)Math.Min(999, (double)snapshot.UsedBytes.Value * 100 / snapshot.TotalBytes.Value)
+                : 90;
+            observations.Add(new(
+                $"{NotificationEventTypes.StorageCapacityCritical}:{snapshot.ConnectionId:N}",
+                NotificationEventTypes.StorageCapacityCritical,
+                NotificationSeverity.Critical,
+                new("storage_connection", snapshot.ConnectionId, names.GetValueOrDefault(snapshot.ConnectionId, "Storage connection")),
+                snapshot.ReportedAt,
+                new Dictionary<string, string>
+                {
+                    ["percent"] = percent.ToString(),
+                    ["totalBytes"] = snapshot.TotalBytes?.ToString() ?? "",
+                    ["usedBytes"] = snapshot.UsedBytes?.ToString() ?? "",
+                    ["freeBytes"] = snapshot.FreeBytes?.ToString() ?? ""
+                }));
+        }
+        return observations;
     }
 
     private static async Task<Dictionary<Guid, string>> JobNamesAsync(PlatformDbContext context, NotificationPolicy policy, List<Guid> jobIds, CancellationToken cancellationToken) =>

@@ -62,6 +62,13 @@ describe('tenant storage connection API', () => {
     await api.setTenantConnectionEnabled('tenant-a', 'conn-1', true)
     expect(path()).toBe('/api/tenants/tenant-a/storage-connections/conn-1/enable')
   })
+
+  it('gets capacity and probes capacity with correct endpoints and verbs', async () => {
+    await api.getTenantConnectionCapacity('tenant-a', 'conn-1')
+    expect([last().method, path()]).toEqual(['GET', '/api/tenants/tenant-a/storage-connections/conn-1/capacity'])
+    await api.probeTenantConnectionCapacity('tenant-a', 'conn-1')
+    expect([last().method, path()]).toEqual(['POST', '/api/tenants/tenant-a/storage-connections/conn-1/probe'])
+  })
 })
 
 describe('platform storage connection API', () => {

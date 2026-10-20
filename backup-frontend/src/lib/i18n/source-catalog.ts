@@ -1513,6 +1513,7 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Agent çevrimdışı": {"tr":"Ajan çevrimdışı","en":"Agent offline"},
   "Kota kritik": {"tr":"Kota kritik düzeyde","en":"Quota critical"},
   "Replica bozuldu": {"tr":"Kopya bozuldu","en":"Replica corrupted"},
+  "Depolama kapasitesi kritik": {"tr":"Depolama kapasitesi kritik","en":"Storage capacity critical"},
   "Test bildirimi": {"tr":"Test bildirimi","en":"Test notification"},
   "E-posta onay isteği": {"tr":"E-posta onay isteği","en":"Email verification request"},
   "Kimlik doğrulama yok": {"tr":"Kimlik doğrulama yok","en":"No authentication"},

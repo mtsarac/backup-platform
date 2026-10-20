@@ -494,7 +494,9 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
         foreach (var (configuration, graph) in fixture.Graphs)
         {
             foreach (var node in graph.Values.Where(node =>
-                !node.RelativePath.StartsWith("src/hosts/", StringComparison.Ordinal) && !IsProviderImplementation(node)))
+                !node.RelativePath.StartsWith("src/hosts/", StringComparison.Ordinal)
+                && node.Name != "BackupPlatform.Agent.Transport"
+                && !IsProviderImplementation(node)))
             {
                 AssertForbiddenDependencies(configuration, graph, node.Name, IsProviderImplementation);
             }

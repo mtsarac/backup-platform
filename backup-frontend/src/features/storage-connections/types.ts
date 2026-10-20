@@ -127,3 +127,15 @@ export interface PlatformConnectionFilters {
   page?: number
   pageSize?: number
 }
+
+export type StorageCapacityStatus = 'Available' | 'Warning' | 'Critical' | 'CapacityUnavailable'
+
+export interface StorageCapacitySnapshot {
+  connectionId: string
+  totalBytes: number | null
+  usedBytes: number | null
+  freeBytes: number | null
+  status: StorageCapacityStatus
+  reportedAt: string
+  errorMessage?: string | null
+}

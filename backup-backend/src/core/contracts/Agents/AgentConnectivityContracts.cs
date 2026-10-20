@@ -80,6 +80,7 @@ public sealed record AgentTaskEnvelope
     public BackupPlatform.Contracts.Restores.RestoreTaskSnapshot? Restore { get; init; }
     public BackupPlatform.Contracts.Downloads.DownloadTaskSnapshot? Download { get; init; }
     public BackupPlatform.Contracts.Restores.RestoreCleanupSnapshot? RestoreCleanup { get; init; }
+    public BackupPlatform.Contracts.Storage.CapacityProbeTaskRequest? CapacityProbe { get; init; }
 }
 
 public sealed record AgentPollResponse

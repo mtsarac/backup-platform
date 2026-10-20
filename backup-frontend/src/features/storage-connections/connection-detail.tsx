@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { QueryState } from '@/components/data/query-state'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
@@ -13,7 +14,7 @@ import { formatCapacity, formatExactBytes } from '@/features/storage/format'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { ConnectionActions } from './connection-actions'
 import { CapabilityChips, HealthBadge, OwnershipBadge, SecretStatus } from './connection-parts'
-import { useTenantConnectionOps, useTenantConnections, useTenantProviders } from './hooks'
+import { useTenantConnectionCapacity, useProbeTenantConnectionCapacity, useTenantConnectionOps, useTenantConnections, useTenantProviders } from './hooks'
 import { configurationSummary, connectionHealth, disableEffects, enableEffect, executionLocationLabel, testMessage, testModeLabel, topologyLabel } from './labels'
 import type { ConnectionView, ProviderDescriptor } from './types'
 
@@ -39,6 +40,97 @@ function HealthNotice({ connection }: { connection: ConnectionView }) {
   return null
 }
 
+function CapacitySection({ connection }: { connection: ConnectionView }) {
+  useLanguage()
+  const { data: capacity, isPending } = useTenantConnectionCapacity(connection.id)
+  const probe = useProbeTenantConnectionCapacity(connection.id)
+
+  const hasMetrics = capacity && capacity.status !== 'CapacityUnavailable' && capacity.totalBytes != null
+  const percentUsed = hasMetrics && capacity.totalBytes! > 0
+    ? Math.min(100, Math.round(((capacity.usedBytes ?? 0) / capacity.totalBytes!) * 100))
+    : 0
+  const isCritical = capacity?.status === 'Critical'
+  const isWarning = capacity?.status === 'Warning'
+
+  return (
+    <Section
+      title={
+        <span className="flex items-center gap-2">
+          <span>{tx("Depolama Kapasitesi")}</span>
+          {isCritical && <Badge tone="error">{tx("Kritik")}</Badge>}
+          {isWarning && <Badge tone="warning">{tx("Uyarı")}</Badge>}
+        </span>
+      }
+      description={tx("Fiziksel disk ve kota durumu.")}
+      actions={
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={probe.isPending}
+          onClick={() => probe.mutate()}
+        >
+          {probe.isPending ? tx("Sorgulanıyor…") : tx("Kapasiteyi Sorgula")}
+        </Button>
+      }
+    >
+      {capacity?.status === 'CapacityUnavailable' && (
+        <Notice tone="warning" title={tx("Kapasite bilgisi alınamadı")}>
+          {tx("Depolama hedefine erişebilen aktif bir Agent veya bağlantı bulunamadı.")}
+        </Notice>
+      )}
+
+      {hasMetrics ? (
+        <div className="space-y-4">
+          <Facts columns={3}>
+            <Fact label={tx("Toplam Alan")}>
+              <span className="text-lg font-semibold text-text-heading" title={formatExactBytes(capacity.totalBytes!)}>
+                {formatCapacity(capacity.totalBytes!)}
+              </span>
+            </Fact>
+            <Fact label={tx("Kullanılan Alan")}>
+              <span className="text-lg font-semibold text-text-heading" title={capacity.usedBytes != null ? formatExactBytes(capacity.usedBytes) : undefined}>
+                {capacity.usedBytes != null ? formatCapacity(capacity.usedBytes) : '—'}
+              </span>
+            </Fact>
+            <Fact label={tx("Boş Alan")}>
+              <span className="text-lg font-semibold text-text-heading" title={capacity.freeBytes != null ? formatExactBytes(capacity.freeBytes) : undefined}>
+                {capacity.freeBytes != null ? formatCapacity(capacity.freeBytes) : '—'}
+              </span>
+            </Fact>
+          </Facts>
+
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs text-text-muted">
+              <span>{tx("Doluluk Oranı")}</span>
+              <span>{percentUsed}%</span>
+            </div>
+            <div aria-hidden="true" className="h-2 overflow-hidden rounded-full bg-surface-3">
+              <div
+                className={`h-full rounded-full ${percentUsed > 90 ? 'bg-error' : percentUsed > 75 ? 'bg-warning' : 'bg-primary'}`}
+                style={{ width: `${percentUsed}%` }}
+              />
+            </div>
+          </div>
+
+          <p className="text-xs text-text-muted">
+            {tx("Son sorgulama: {0}", { "0": agentDate(capacity.reportedAt) })}
+          </p>
+        </div>
+      ) : capacity?.status !== 'CapacityUnavailable' ? (
+        <p className="text-sm text-text-muted">
+          {isPending ? tx("Kapasite bilgisi yükleniyor…") : tx("Kapasite bilgisi henüz sorgulanmadı. “Kapasiteyi Sorgula” düğmesini kullanarak güncel durumu alabilirsiniz.")}
+        </p>
+      ) : null}
+
+      {probe.isError && (
+        <p role="alert" className="mt-2 text-sm text-error">
+          {tx("Kapasite sorgulama başarısız oldu.")}
+        </p>
+      )}
+    </Section>
+  )
+}
+
 function Overview({ connection, descriptor, total }: { connection: ConnectionView; descriptor?: ProviderDescriptor; total: number }) {
   useLanguage()
   const share = total > 0 ? Math.round((connection.storedBytes / total) * 100) : 0
@@ -54,6 +146,7 @@ function Overview({ connection, descriptor, total }: { connection: ConnectionVie
         <Fact label={tx("Son güncelleme")}>{agentDate(connection.updatedAt)}</Fact>
       </Facts>
     </Section>
+    <CapacitySection connection={connection} />
     <Section title={tx("Sağlayıcı")} description={connection.providerDisplayName}>
       <Facts columns={3}>
         <Fact label={tx("Topoloji")}>{topologyLabel(descriptor?.topology ?? null)}</Fact>

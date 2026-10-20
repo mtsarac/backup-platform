@@ -50,6 +50,8 @@ public static class NotificationMessageFormatter
                 $"Two platform administrators approved decrypted access to \"{name}\". Who asked, why and whether it was used are listed for your account administrators in the web console."),
             NotificationEventTypes.ReplicaDegraded => ($"Backup replicas {Fact("status", "degraded")}: {name}",
                 $"The latest backup of job \"{name}\" has {Fact("verified")} of {Fact("required")} required verified replicas."),
+            NotificationEventTypes.StorageCapacityCritical => ($"Storage capacity critical: {name}",
+                $"Storage target \"{name}\" is at {Fact("percent")}% capacity (critical threshold 90% exceeded)."),
             _ => ($"Notification: {name}", $"An event of type {e.Type} occurred for \"{name}\".")
         };
     }
@@ -60,6 +62,7 @@ public static class NotificationMessageFormatter
         NotificationEventTypes.AgentOffline => ($"Agent back online: {name}", $"Agent \"{name}\" is connected again."),
         NotificationEventTypes.QuotaCritical => ("Storage quota back to normal", "The tenant's backup storage is below the critical threshold again."),
         NotificationEventTypes.ReplicaDegraded => ($"Backup replicas healthy again: {name}", $"The latest backup of job \"{name}\" meets its replica requirement again."),
+        NotificationEventTypes.StorageCapacityCritical => ($"Storage capacity healthy again: {name}", $"Storage target \"{name}\" is below the critical threshold again."),
         _ => ($"Resolved: {name}", $"The condition for \"{name}\" has ended.")
     };
 

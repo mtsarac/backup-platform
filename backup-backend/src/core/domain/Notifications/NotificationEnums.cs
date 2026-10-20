@@ -54,12 +54,13 @@ public static class NotificationEventTypes
     public const string AgentOffline = "agent_offline";
     public const string QuotaCritical = "quota_critical";
     public const string ReplicaDegraded = "replica_degraded";
+    public const string StorageCapacityCritical = "storage_capacity_critical";
     /// <summary>Not selectable in a policy; used only by the channel test.</summary>
     public const string Test = "test";
     /// <summary>Not selectable in a policy; the one message an unconfirmed email recipient may receive (a confirmation request with a link, nothing else).</summary>
     public const string RecipientVerification = "recipient_verification";
 
-    public static IReadOnlyList<string> Selectable { get; } = [BackupFailed, BackupStale, AgentOffline, QuotaCritical, ReplicaDegraded];
+    public static IReadOnlyList<string> Selectable { get; } = [BackupFailed, BackupStale, AgentOffline, QuotaCritical, ReplicaDegraded, StorageCapacityCritical];
 
     /// <summary>
     /// A PlatformAdmin was granted decrypted access to one of the tenant's artifacts (break-glass). Queued atomically at approval to explicitly designated Owner

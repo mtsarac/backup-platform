@@ -1,4 +1,5 @@
 using BackupPlatform.Application.Agents;
+using BackupPlatform.Application.Storage;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
@@ -49,7 +50,7 @@ public sealed record BackupReplicaView(Guid Id, string StorageProvider, string S
 public sealed record BackupReplicationView(int RequiredVerifiedReplicas, int VerifiedReplicas, int DestinationCount, string Status, bool PolicySatisfied, IReadOnlyList<BackupDestinationHealthView> Destinations);
 public sealed record BackupDestinationHealthView(string StorageProvider, Guid? StorageConnectionId, bool IsPrimary, string State, string? FailureCode, string? FailureReason, bool ObjectMayRemain, Guid? ReplicaId, string? ReplicaStatus);
 public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time, BackupSchedulingOptions? scheduling = null, BackupRetentionOptions? retention = null, ITenantWrapKeyStore? wrapKeys = null,
-    ArtifactRecoveryOptions? recovery = null, ITenantRecoveryKeyStore? tenantRecoveryKeys = null)
+    ArtifactRecoveryOptions? recovery = null, ITenantRecoveryKeyStore? tenantRecoveryKeys = null, IStorageCapacityProbeTrigger? probeTrigger = null)
 {
     public static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(120);
 
@@ -186,9 +187,25 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
             a.Format, a.EncryptionKeyId, a.EncryptionKeyVersion, a.EncryptionWrappedDekBase64, a.Format == ArtifactFormats.Bpe2 ? RecipientIndex(a.EncryptionRecipients) : null);
         var destinations = request.Destinations.Select(d => new BackupDestinationReport(d.StorageProvider, d.StorageConnectionId, d.State, d.Upload, d.Verification,
             d.FailureCode, d.Key, d.ObjectMayRemain, d.StartedAt, d.CompletedAt)).ToArray();
-        return await store.CompleteAttemptAsync(Command(identity, attemptId, request.LeaseToken), new BackupCompletion(request.Status, request.FailureCode, artifact, destinations), cancellationToken);
-    }
+        var mutationResult = await store.CompleteAttemptAsync(Command(identity, attemptId, request.LeaseToken), new BackupCompletion(request.Status, request.FailureCode, artifact, destinations), cancellationToken);
+        if (mutationResult == BackupMutationResult.Accepted && probeTrigger is not null)
+        {
+            var connectionIds = destinations
+                .Where(d => d.StorageConnectionId.HasValue && d.StorageConnectionId.Value != Guid.Empty)
+                .Select(d => d.StorageConnectionId!.Value)
+                .Concat(claim.Run.Configuration.Destinations
+                    .Where(d => d.StorageConnectionId.HasValue && d.StorageConnectionId.Value != Guid.Empty)
+                    .Select(d => d.StorageConnectionId!.Value))
+                .Distinct()
+                .ToList();
 
+            foreach (var connId in connectionIds)
+            {
+                probeTrigger.EnqueueProbe(identity.TenantId, connId);
+            }
+        }
+        return mutationResult;
+    }
     /// <summary>
     /// An encrypted artifact must name a key of THIS tenant. A Required job whose artifact is plain is failed (never published); the copies already uploaded are
     /// reported as orphans so retention removes them.

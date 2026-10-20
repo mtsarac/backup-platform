@@ -64,6 +64,76 @@ describe('Storage connections list and detail', () => {
     expect(screen.getByText('tenant')).toBeInTheDocument()
   })
 
+  it('displays storage capacity metrics and triggers capacity probe', async () => {
+    vi.mocked(api.getTenantConnectionCapacity).mockResolvedValue({
+      connectionId: 'conn-local',
+      totalBytes: 500_000_000_000,
+      usedBytes: 300_000_000_000,
+      freeBytes: 200_000_000_000,
+      status: 'Available',
+      reportedAt: '2026-10-21T10:00:00Z',
+    })
+    vi.mocked(api.probeTenantConnectionCapacity).mockResolvedValue({
+      connectionId: 'conn-local',
+      totalBytes: 500_000_000_000,
+      usedBytes: 400_000_000_000,
+      freeBytes: 100_000_000_000,
+      status: 'Available',
+      reportedAt: '2026-10-21T10:05:00Z',
+    })
+
+    mount(detail('conn-local'))
+    expect(await screen.findByText('Depolama Kapasitesi')).toBeInTheDocument()
+    expect(await screen.findByText('500 GB')).toBeInTheDocument()
+    expect(screen.getByText('300 GB')).toBeInTheDocument()
+    expect(screen.getByText('200 GB')).toBeInTheDocument()
+
+    const probeBtn = screen.getByRole('button', { name: 'Kapasiteyi Sorgula' })
+    await userEvent.click(probeBtn)
+    expect(api.probeTenantConnectionCapacity).toHaveBeenCalledWith('tenant-a', 'conn-local')
+  })
+
+  it('displays Warning badge at 80% and Critical badge at 90% capacity on detail and list', async () => {
+    // 1. Detail page with 85% usage shows Warning badge
+    vi.mocked(api.getTenantConnectionCapacity).mockResolvedValueOnce({
+      connectionId: 'conn-local',
+      totalBytes: 100_000_000_000,
+      usedBytes: 85_000_000_000,
+      freeBytes: 15_000_000_000,
+      status: 'Warning',
+      reportedAt: '2026-10-21T10:00:00Z',
+    })
+
+    mount(detail('conn-local'))
+    expect(await screen.findByText('Uyarı')).toBeInTheDocument()
+
+    // 2. Detail page with 95% usage shows Critical badge
+    vi.mocked(api.getTenantConnectionCapacity).mockResolvedValueOnce({
+      connectionId: 'conn-local',
+      totalBytes: 100_000_000_000,
+      usedBytes: 95_000_000_000,
+      freeBytes: 5_000_000_000,
+      status: 'Critical',
+      reportedAt: '2026-10-21T10:00:00Z',
+    })
+
+    mount(detail('conn-local'))
+    expect(await screen.findByText('Kritik')).toBeInTheDocument()
+
+    // 3. List page shows Warning / Critical badge for connection rows
+    vi.mocked(api.getTenantConnectionCapacity).mockResolvedValue({
+      connectionId: 'conn-local',
+      totalBytes: 100_000_000_000,
+      usedBytes: 92_000_000_000,
+      freeBytes: 8_000_000_000,
+      status: 'Critical',
+      reportedAt: '2026-10-21T10:00:00Z',
+    })
+    serve([makeConnection()])
+    mount(base)
+    expect(await screen.findByText('Kritik')).toBeInTheDocument()
+  })
+
   it('shows secret presence, never its value, on the credential tab', async () => {
     serve([s3({ hasSecret: true, secretFieldNames: ['accessKey', 'secretKey'], secretUpdatedAt: '2026-10-05T10:00:00Z' })])
     mount(detail('conn-s3', 'credentials'))

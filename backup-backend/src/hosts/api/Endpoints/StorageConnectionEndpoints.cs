@@ -4,6 +4,7 @@ using BackupPlatform.Application.Tenancy;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Storage;
 using BackupPlatform.Storage;
+using BackupPlatform.Tenancy;
 using Microsoft.AspNetCore.Authorization;
 
 namespace BackupPlatform.Api.Endpoints;
@@ -51,6 +52,8 @@ public static class StorageConnectionEndpoints
         tenant.MapPut("/storage-connections/{id:guid}/secret", SetSecretForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
         tenant.MapDelete("/storage-connections/{id:guid}/secret", ClearSecretForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
         tenant.MapPost("/storage-connections/{id:guid}/test", TestForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+        tenant.MapGet("/storage-connections/{id:guid}/capacity", GetCapacityForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
+        tenant.MapPost("/storage-connections/{id:guid}/probe", ProbeForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
         tenant.MapPost("/storage-connections/{id:guid}/enable", (Guid id, ITenantContext t, ICurrentUser u, StorageConnectionService s, CancellationToken c) =>
             ToggleAsync(Scope(t), id, true, u, s, c)).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
         tenant.MapPost("/storage-connections/{id:guid}/disable", (Guid id, ITenantContext t, ICurrentUser u, StorageConnectionService s, CancellationToken c) =>
@@ -71,12 +74,18 @@ public static class StorageConnectionEndpoints
         platform.MapPut("/storage-connections/{id:guid}/secret", SetSecretForPlatformAsync);
         platform.MapDelete("/storage-connections/{id:guid}/secret", ClearSecretForPlatformAsync);
         platform.MapPost("/storage-connections/{id:guid}/test", TestForPlatformAsync);
+        platform.MapGet("/storage-connections/{id:guid}/capacity", GetCapacityForPlatformAsync);
+        platform.MapPost("/storage-connections/{id:guid}/probe", ProbeForPlatformAsync);
         platform.MapPost("/storage-connections/{id:guid}/enable", (Guid id, ICurrentUser u, StorageConnectionService s, CancellationToken c) =>
             ToggleAsync(StorageScope.Platform, id, true, u, s, c));
         platform.MapPost("/storage-connections/{id:guid}/disable", (Guid id, ICurrentUser u, StorageConnectionService s, CancellationToken c) =>
             ToggleAsync(StorageScope.Platform, id, false, u, s, c));
         platform.MapDelete("/storage-connections/{id:guid}", DeleteForPlatformAsync);
         endpoints.MapGet("/api/platform/google-drive/oauth/callback", GoogleDriveOAuthCallbackAsync).AllowAnonymous();
+
+        var v1 = endpoints.MapGroup("/api/v1/storage/connections/{id:guid}");
+        v1.MapGet("/capacity", GetCapacityV1Async).RequireAuthorization();
+        v1.MapPost("/probe", ProbeV1Async).RequireAuthorization();
         return endpoints;
     }
 
@@ -384,4 +393,74 @@ public static class StorageConnectionEndpoints
         Uri.TryCreate(configured, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" && uri.AbsolutePath == "/" && uri.Query.Length == 0 && uri.Fragment.Length == 0
             ? System.Text.Json.JsonSerializer.Serialize(uri.GetLeftPart(UriPartial.Authority))
             : "window.location.origin";
+
+    private static async Task<IResult> GetCapacityForTenantAsync(
+        Guid id, ITenantContext tenant, StorageCapacityProbeService service, CancellationToken cancellationToken)
+    {
+        var capacity = await service.GetCapacityAsync(tenant.TenantId!, id, cancellationToken);
+        return capacity is null ? Results.NotFound(new { error = "capacity_not_found" }) : Results.Ok(capacity);
+    }
+
+    private static async Task<IResult> ProbeForTenantAsync(
+        Guid id, ITenantContext tenant, StorageCapacityProbeService service, CancellationToken cancellationToken)
+    {
+        var capacity = await service.ProbeAsync(tenant.TenantId!, id, cancellationToken);
+        return capacity is null ? Results.NotFound(new { error = "storage_connection_not_found" }) : Results.Ok(capacity);
+    }
+
+    private static async Task<IResult> GetCapacityForPlatformAsync(
+        Guid id, IStorageConnectionStore store, StorageCapacityProbeService service, CancellationToken cancellationToken)
+    {
+        var record = await store.FindAsync(id, null, cancellationToken);
+        if (record is null) return Results.NotFound(new { error = "storage_connection_not_found" });
+        var capacity = await service.GetCapacityAsync(record.Connection.TenantId, id, cancellationToken);
+        return capacity is null ? Results.NotFound(new { error = "capacity_not_found" }) : Results.Ok(capacity);
+    }
+
+    private static async Task<IResult> ProbeForPlatformAsync(
+        Guid id, IStorageConnectionStore store, StorageCapacityProbeService service, CancellationToken cancellationToken)
+    {
+        var record = await store.FindAsync(id, null, cancellationToken);
+        if (record is null) return Results.NotFound(new { error = "storage_connection_not_found" });
+        var capacity = await service.ProbeAsync(record.Connection.TenantId, id, cancellationToken);
+        return capacity is null ? Results.NotFound(new { error = "storage_connection_not_found" }) : Results.Ok(capacity);
+    }
+
+    private static async Task<IResult> GetCapacityV1Async(
+        Guid id, ICurrentUser user, TenantResolutionService resolution, IUserAccessStore userAccess,
+        IStorageConnectionStore store, StorageCapacityProbeService service, CancellationToken cancellationToken)
+    {
+        if (!user.IsAuthenticated || user.UserId is not { } userId) return Results.Unauthorized();
+        var record = await store.FindAsync(id, null, cancellationToken);
+        if (record is null) return Results.NotFound(new { error = "storage_connection_not_found" });
+
+        var isPlatformAdmin = await userAccess.IsPlatformAdminAsync(userId, cancellationToken);
+        var membership = isPlatformAdmin ? null : await resolution.ResolveAsync(record.Connection.TenantId, cancellationToken);
+        if (!isPlatformAdmin && membership is null)
+        {
+            return Results.NotFound(new { error = "storage_connection_not_found" });
+        }
+
+        var capacity = await service.GetCapacityAsync(record.Connection.TenantId, id, cancellationToken);
+        return capacity is null ? Results.NotFound(new { error = "capacity_not_found" }) : Results.Ok(capacity);
+    }
+
+    private static async Task<IResult> ProbeV1Async(
+        Guid id, ICurrentUser user, TenantResolutionService resolution, IUserAccessStore userAccess,
+        IStorageConnectionStore store, StorageCapacityProbeService service, CancellationToken cancellationToken)
+    {
+        if (!user.IsAuthenticated || user.UserId is not { } userId) return Results.Unauthorized();
+        var record = await store.FindAsync(id, null, cancellationToken);
+        if (record is null) return Results.NotFound(new { error = "storage_connection_not_found" });
+
+        var isPlatformAdmin = await userAccess.IsPlatformAdminAsync(userId, cancellationToken);
+        var membership = isPlatformAdmin ? null : await resolution.ResolveAsync(record.Connection.TenantId, cancellationToken);
+        if (!isPlatformAdmin && (membership is null || (membership.Role != BackupPlatform.Domain.Tenancy.TenantRole.Owner && membership.Role != BackupPlatform.Domain.Tenancy.TenantRole.Admin)))
+        {
+            return Results.NotFound(new { error = "storage_connection_not_found" });
+        }
+
+        var capacity = await service.ProbeAsync(record.Connection.TenantId, id, cancellationToken);
+        return capacity is null ? Results.NotFound(new { error = "storage_connection_not_found" }) : Results.Ok(capacity);
+    }
 }

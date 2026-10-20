@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using BackupPlatform.Domain.Notifications;
 using BackupPlatform.Domain.Tenancy;
 using Microsoft.EntityFrameworkCore;
 
@@ -179,7 +180,7 @@ public sealed class NotificationApiIntegrationTests : IAsyncLifetime
 
         var initial = await ReadAsync(await setup.Admin.GetAsync(path), HttpStatusCode.OK);
         Assert.False(initial.GetProperty("enabled").GetBoolean());
-        Assert.Equal(5, initial.GetProperty("eventTypes").GetArrayLength());
+        Assert.Equal(NotificationEventTypes.Selectable.Count, initial.GetProperty("eventTypes").GetArrayLength());
         Assert.Equal((48, 15, 24, 30), (initial.GetProperty("staleAfterHours").GetInt32(), initial.GetProperty("agentOfflineAfterMinutes").GetInt32(),
             initial.GetProperty("reminderIntervalHours").GetInt32(), initial.GetProperty("maxNotificationsPerHour").GetInt32()));
         Assert.False(initial.GetProperty("transports").GetProperty("email").GetProperty("available").GetBoolean());

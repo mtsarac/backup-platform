@@ -1,5 +1,6 @@
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Application.Storage;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Backups;
 using BackupCompletion = BackupPlatform.Application.Backups.BackupCompletion;
@@ -225,6 +226,25 @@ public sealed class ArtifactEncryptionPolicyTests
     }
 
     [Fact]
+    public async Task CompleteAsync_EnqueuesCapacityProbe_ForDestinationConnections()
+    {
+        var connId = Guid.NewGuid();
+        var trigger = new FakeCapacityProbeTrigger();
+        var destinations = new[] { new BackupDestination("local", connId, true) { StorageExecutionLocation = BackupStorageExecutionLocation.Backend } };
+        var (orchestrator, _, identity, store) = SetupWithStore("Off", probeTrigger: trigger, destinations: destinations);
+
+        var result = await orchestrator.CompleteAsync(identity, store.Run.CurrentAttempt.Id, Success(ArtifactFormats.Plain), default);
+        Assert.Equal(BackupMutationResult.Accepted, result);
+        Assert.Contains((store.Run.TenantId, connId), trigger.Enqueued);
+    }
+
+    private sealed class FakeCapacityProbeTrigger : IStorageCapacityProbeTrigger
+    {
+        public List<(TenantId TenantId, Guid ConnectionId)> Enqueued { get; } = [];
+        public void EnqueueProbe(TenantId tenantId, Guid connectionId) => Enqueued.Add((tenantId, connectionId));
+    }
+
+    [Fact]
     public void ArtifactsDefaultToPlainAndEncryptedOnesNeedTheirKeyReference()
     {
         var tenant = TenantId.New();
@@ -243,19 +263,20 @@ public sealed class ArtifactEncryptionPolicyTests
     }
 
     private static (BackupOrchestrator Orchestrator, Keys Keys, AgentIdentity Identity, Store Store) SetupWithStore(string policy, ArtifactRecoveryOptions? recovery = null,
-        TenantRecoveryKeyInfo? tenantKey = null)
+        TenantRecoveryKeyInfo? tenantKey = null, IStorageCapacityProbeTrigger? probeTrigger = null, IReadOnlyList<BackupDestination>? destinations = null)
     {
-        var run = RunWith(policy);
+        var run = RunWith(policy, destinations);
         var keys = new Keys();
         var store = new Store(run);
-        return (new BackupOrchestrator(store, TimeProvider.System, wrapKeys: keys, recovery: recovery, tenantRecoveryKeys: new TenantRecovery(tenantKey)), keys, Identity(run), store);
+        return (new BackupOrchestrator(store, TimeProvider.System, wrapKeys: keys, recovery: recovery, tenantRecoveryKeys: new TenantRecovery(tenantKey), probeTrigger: probeTrigger), keys, Identity(run), store);
     }
 
     private static AgentIdentity Identity(BackupRun run) => new(run.AgentId, run.TenantId, Guid.NewGuid(), 1);
 
-    private static BackupRun RunWith(string policy)
+    private static BackupRun RunWith(string policy, IReadOnlyList<BackupDestination>? destinations = null)
     {
-        var run = new BackupRun(Guid.NewGuid(), TenantId.New(), Guid.NewGuid(), AgentId.New(), Configuration() with { EncryptionPolicy = policy }, "key", Now, Policy(), BackupOverlapPolicy.Skip);
+        var config = Configuration() with { EncryptionPolicy = policy, Destinations = destinations ?? Configuration().Destinations };
+        var run = new BackupRun(Guid.NewGuid(), TenantId.New(), Guid.NewGuid(), AgentId.New(), config, "key", Now, Policy(), BackupOverlapPolicy.Skip);
         run.QueueFirstAttempt(Guid.NewGuid(), Now);
         Begin(run, Now);
         return run;

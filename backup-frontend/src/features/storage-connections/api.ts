@@ -3,7 +3,7 @@ import { query } from '@/features/platform/api'
 import type { PagedResult } from '@/features/platform/types'
 import type {
   ConnectionTestResponse, ConnectionView, PlatformConnectionFilters, PlatformCreateConnectionInput, PlatformUpdateConnectionInput,
-  ProviderDescriptor, SecretValues, TenantCreateConnectionInput, TenantUpdateConnectionInput,
+  ProviderDescriptor, SecretValues, StorageCapacitySnapshot, TenantCreateConnectionInput, TenantUpdateConnectionInput,
 } from './types'
 
 const connection = (tenantId: string, id: string, suffix = '') => tenantPath(tenantId, `storage-connections/${encodeURIComponent(id)}${suffix}`)
@@ -50,6 +50,14 @@ export function getGoogleDriveAuthorizeUrl(tenantId: string, id: string) {
 
 export function disconnectGoogleDrive(tenantId: string, id: string) {
   return apiRequest<{ disconnected: boolean }>(connection(tenantId, id, '/google-drive/disconnect'), { method: 'POST' })
+}
+
+export function getTenantConnectionCapacity(tenantId: string, id: string, signal?: AbortSignal) {
+  return apiRequest<StorageCapacitySnapshot>(connection(tenantId, id, '/capacity'), { signal })
+}
+
+export function probeTenantConnectionCapacity(tenantId: string, id: string) {
+  return apiRequest<StorageCapacitySnapshot>(connection(tenantId, id, '/probe'), { method: 'POST' })
 }
 
 const platformConnection = (id: string, suffix = '') => `platform/storage-connections/${encodeURIComponent(id)}${suffix}`
