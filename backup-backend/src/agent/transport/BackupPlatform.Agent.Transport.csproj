@@ -8,6 +8,8 @@
   <ItemGroup>
     <ProjectReference Include="..\core\BackupPlatform.Agent.Core.csproj" />
     <ProjectReference Include="..\..\core\contracts\BackupPlatform.Contracts.csproj" />
+    <ProjectReference Include="..\..\providers\storage\sftp\BackupPlatform.StorageProviders.Sftp.csproj" />
+    <ProjectReference Include="..\..\providers\storage\google-drive\BackupPlatform.StorageProviders.GoogleDrive.csproj" />
   </ItemGroup>
 
   <ItemGroup>

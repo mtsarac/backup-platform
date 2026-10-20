@@ -109,7 +109,8 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
                 "Backend" => BackupStorageExecutionLocation.Backend,
                 "Agent" => BackupStorageExecutionLocation.Agent,
                 _ => throw new ArgumentException("Invalid storage execution location for destination.")
-            }
+            },
+            Direct = d.StorageProvider == "local"
         }).ToArray();
 
         return new(c.Engine, c.Database, c.Host, c.Port,
@@ -417,7 +418,8 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
             StorageConnectionId = d.StorageConnectionId,
             StorageTarget = d.StorageTarget,
             StorageExecutionLocation = d.StorageExecutionLocation.ToString(),
-            IsPrimary = d.IsPrimary
+            IsPrimary = d.IsPrimary,
+            Direct = d.Direct
         }).ToArray(),
         RequiredVerifiedReplicaCount = c.RequiredVerifiedReplicaCount
     };

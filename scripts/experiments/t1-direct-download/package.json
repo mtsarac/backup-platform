@@ -1,0 +1,10 @@
+{
+  "name": "t1-direct-download-feasibility",
+  "private": true,
+  "type": "module",
+  "scripts": { "start": "node server.mjs" },
+  "dependencies": {
+    "hash-wasm": "4.12.0",
+    "node-datachannel": "0.33.4"
+  }
+}

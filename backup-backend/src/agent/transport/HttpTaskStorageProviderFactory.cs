@@ -1,4 +1,9 @@
 using System.Net;
+using System.Buffers;
+using System.Security.Cryptography;
+using System.Collections.Concurrent;
+using BackupPlatform.StorageProviders.GoogleDrive;
+using BackupPlatform.StorageProviders.Sftp;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -12,13 +17,35 @@ using BackupPlatform.StorageProviders.Abstractions;
 
 namespace BackupPlatform.Agent.Transport;
 
-public sealed class HttpTaskStorageProviderFactory(HttpClient http, AgentBackendEndpoint endpoint, IAgentCredentialStore identities) : ITaskStorageProviderFactory
+public sealed class HttpTaskStorageProviderFactory(
+    HttpClient http,
+    AgentBackendEndpoint endpoint,
+    IAgentCredentialStore identities,
+    string? stagingDirectory = null) : ITaskStorageProviderFactory
 {
-    public IStorageProvider CreateBackup(BackupTaskSnapshot task, BackupDestinationContract destination) => new Provider(http, endpoint, identities,
-        $"api/agent/tasks/{task.AttemptId:D}/storage", task.LeaseToken, null, destination.StorageProvider, destination.StorageConnectionId);
+    private readonly string? _stagingDirectory = stagingDirectory ?? Path.Combine(Path.GetTempPath(), "backup-platform-staging");
 
-    public IStorageProvider CreateRestore(RestoreTaskSnapshot task) => new Provider(http, endpoint, identities,
-        $"api/agent/restore-tasks/{task.AttemptId:D}/storage", task.LeaseToken, task.OperationId, task.Source.StorageProvider, null);
+    public IStorageProvider CreateBackup(BackupTaskSnapshot task, BackupDestinationContract destination)
+    {
+        if (destination.Direct && destination.StorageProvider is "sftp" or "google-drive" && destination.StorageConnectionId is { } connectionId)
+        {
+            return new DirectTaskStorageProvider(http, endpoint, identities, task.AttemptId, task.LeaseToken,
+                connectionId, task.TenantId, destination.StorageProvider, _stagingDirectory, null);
+        }
+        return new Provider(http, endpoint, identities,
+            $"api/agent/tasks/{task.AttemptId:D}/storage", task.LeaseToken, null, destination.StorageProvider, destination.StorageConnectionId);
+    }
+
+    public IStorageProvider CreateRestore(RestoreTaskSnapshot task)
+    {
+        if (task.Source.Access == "AgentDirect" && task.Source.StorageProvider is "sftp" or "google-drive" && Guid.TryParse(task.Source.StorageTarget, out var connectionId))
+        {
+            return new DirectTaskStorageProvider(http, endpoint, identities, task.AttemptId, task.LeaseToken,
+                connectionId, task.TenantId, task.Source.StorageProvider, _stagingDirectory, task.OperationId);
+        }
+        return new Provider(http, endpoint, identities,
+            $"api/agent/restore-tasks/{task.AttemptId:D}/storage", task.LeaseToken, task.OperationId, task.Source.StorageProvider, null);
+    }
 
     private sealed class Provider(HttpClient http, AgentBackendEndpoint endpoint, IAgentCredentialStore identities,
         string path, Guid lease, Guid? restore, string providerType, Guid? destination) : IStorageProvider
@@ -148,5 +175,276 @@ public sealed class HttpTaskStorageProviderFactory(HttpClient http, AgentBackend
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
         protected override void Dispose(bool disposing) { if (disposing) { stream.Dispose(); response.Dispose(); } base.Dispose(disposing); }
         public override async ValueTask DisposeAsync() { await stream.DisposeAsync().ConfigureAwait(false); response.Dispose(); GC.SuppressFinalize(this); }
+    }
+
+    private sealed class DirectTaskStorageProvider(
+        HttpClient http, AgentBackendEndpoint endpoint, IAgentCredentialStore identities,
+        Guid attemptId, Guid lease, Guid connectionId, Guid tenantId, string providerType,
+        string? stagingDirectory, Guid? restoreOperationId) : IStorageProvider
+    {
+        private readonly SemaphoreSlim _initLock = new(1, 1);
+        private IStorageProvider? _targetProvider;
+        private string? _cachedAccessToken;
+        private DateTimeOffset _accessTokenExpiresAt = DateTimeOffset.MinValue;
+
+        public StorageProviderId Id => _targetProvider?.Id ?? new(providerType);
+        public StorageTopology Topology => StorageTopology.AgentDirect;
+        public StorageCapabilities Capabilities => _targetProvider?.Capabilities ?? new([
+            StorageCapabilityIds.Read, StorageCapabilityIds.Delete, StorageCapabilityIds.AtomicPublish, StorageCapabilityIds.VerifyAbsence]);
+
+        public async Task<StorageObjectMetadata> PutAsync(StorageObjectKey key, Stream content, StoragePutOptions options,
+            IProgress<long>? progress, CancellationToken cancellationToken)
+        {
+            var target = await GetProviderAsync(cancellationToken).ConfigureAwait(false);
+            return await target.PutAsync(key, content, options, progress, cancellationToken).ConfigureAwait(false);
+        }
+
+        public async Task<bool> ExistsAsync(StorageObjectKey key, CancellationToken cancellationToken)
+        {
+            var target = await GetProviderAsync(cancellationToken).ConfigureAwait(false);
+            return await target.ExistsAsync(key, cancellationToken).ConfigureAwait(false);
+        }
+
+        public async Task<StorageObjectMetadata?> GetMetadataAsync(StorageObjectKey key, CancellationToken cancellationToken)
+        {
+            var target = await GetProviderAsync(cancellationToken).ConfigureAwait(false);
+            return await target.GetMetadataAsync(key, cancellationToken).ConfigureAwait(false);
+        }
+
+        public async Task<StorageVerificationResult> VerifyAsync(StorageObjectKey key, StorageVerificationExpectation expected, CancellationToken cancellationToken)
+        {
+            var target = await GetProviderAsync(cancellationToken).ConfigureAwait(false);
+            return await target.VerifyAsync(key, expected, cancellationToken).ConfigureAwait(false);
+        }
+
+        public async Task<bool> DeleteAsync(StorageObjectKey key, CancellationToken cancellationToken)
+        {
+            var target = await GetProviderAsync(cancellationToken).ConfigureAwait(false);
+            return await target.DeleteAsync(key, cancellationToken).ConfigureAwait(false);
+        }
+
+        public async Task<Stream> OpenReadAsync(StorageObjectKey key, CancellationToken cancellationToken)
+        {
+            var target = await GetProviderAsync(cancellationToken).ConfigureAwait(false);
+            return await target.OpenReadAsync(key, cancellationToken).ConfigureAwait(false);
+        }
+
+        public async IAsyncEnumerable<StorageEntry> EnumerateAsync(StorageObjectKey? prefix, DateTimeOffset modifiedBefore,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            var target = await GetProviderAsync(cancellationToken).ConfigureAwait(false);
+            await foreach (var entry in target.EnumerateAsync(prefix, modifiedBefore, cancellationToken).ConfigureAwait(false))
+                yield return entry;
+        }
+
+        private async ValueTask<IStorageProvider> GetProviderAsync(CancellationToken cancellationToken)
+        {
+            if (_targetProvider is not null) return _targetProvider;
+            await _initLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                if (_targetProvider is not null) return _targetProvider;
+                var access = await FetchAccessAsync(cancellationToken).ConfigureAwait(false);
+                if (access.ProviderType == "sftp")
+                {
+                    if (string.IsNullOrWhiteSpace(access.RemoteBaseDirectory))
+                        throw new StorageException(StorageFailureKind.InvalidConfiguration, "Missing SFTP remote base directory.");
+                    if (access.AuthenticationType is not (SftpConfiguration.AuthTypePassword or SftpConfiguration.AuthTypePrivateKey))
+                        throw new StorageException(StorageFailureKind.InvalidConfiguration, $"Unsupported SFTP authentication type '{access.AuthenticationType}'.");
+
+                    var options = new SftpStorageOptions(
+                        access.Host ?? throw new StorageException(StorageFailureKind.InvalidConfiguration, "Missing SFTP host."),
+                        access.Port > 0 ? access.Port : 22,
+                        access.Username ?? throw new StorageException(StorageFailureKind.InvalidConfiguration, "Missing SFTP username."),
+                        access.AuthenticationType,
+                        access.RemoteBaseDirectory,
+                        access.HostKeyFingerprint ?? throw new StorageException(StorageFailureKind.InvalidConfiguration, "Missing SFTP host key fingerprint."),
+                        tenantId,
+                        connectionId);
+                    var credential = new SftpCredential(access.Password, access.PrivateKey, access.Passphrase);
+                    _targetProvider = new SftpStorageProvider(options, _ => ValueTask.FromResult(credential));
+                    return _targetProvider;
+                }
+                if (access.ProviderType == "google-drive")
+                {
+                    var options = new GoogleDriveStorageOptions(
+                        tenantId,
+                        connectionId,
+                        folderId: access.FolderId,
+                        stagingDirectory: stagingDirectory);
+                    var catalog = new BackendGoogleDriveFileCatalog(http, endpoint, identities, attemptId, lease, connectionId, restoreOperationId);
+                    _targetProvider = GoogleDriveStorageProvider.CreateDirect(
+                        http,
+                        options,
+                        async token =>
+                        {
+                            if (_cachedAccessToken is not null && DateTimeOffset.UtcNow < _accessTokenExpiresAt - TimeSpan.FromMinutes(2))
+                            {
+                                return _cachedAccessToken;
+                            }
+                            var refreshed = await FetchAccessAsync(token).ConfigureAwait(false);
+                            return refreshed.AccessToken ?? throw new StorageException(StorageFailureKind.AuthenticationFailed, "No Google Drive access token returned.");
+                        },
+                        catalog: catalog,
+                        stagingStore: !string.IsNullOrWhiteSpace(stagingDirectory) ? new AgentGoogleDriveStagingStore(stagingDirectory) : null);
+                    return _targetProvider;
+                }
+                throw new StorageException(StorageFailureKind.NotSupported, $"Unsupported direct storage provider {access.ProviderType}.");
+            }
+            finally
+            {
+                _initLock.Release();
+            }
+        }
+
+        private async Task<TaskStorageAccessResponse> FetchAccessAsync(CancellationToken cancellationToken)
+        {
+            var identity = await identities.LoadAsync(cancellationToken).ConfigureAwait(false);
+            if (identity is null || lease == Guid.Empty)
+                throw new StorageException(StorageFailureKind.AccessDenied, "The storage task identity is unavailable.");
+
+            var relativePath = restoreOperationId is null
+                ? $"api/agent/tasks/{attemptId:D}/storage/access"
+                : $"api/agent/restore-tasks/{attemptId:D}/storage/access";
+
+            using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(endpoint.BaseUri, relativePath));
+            request.Headers.TryAddWithoutValidation("Authorization", identity.Current.ToAuthorizationHeaderValue());
+            request.Headers.TryAddWithoutValidation(AgentProtocolHeader.Name, AgentProtocol.Current.Version.ToString());
+            request.Headers.TryAddWithoutValidation(TaskStorageProtocol.LeaseHeader, lease.ToString("D"));
+            if (restoreOperationId is null)
+                request.Headers.TryAddWithoutValidation(TaskStorageProtocol.DestinationHeader, connectionId.ToString("D"));
+            else
+                request.Headers.TryAddWithoutValidation(TaskStorageProtocol.RestoreHeader, restoreOperationId.Value.ToString("D"));
+
+            try
+            {
+                using var response = await http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                    throw new StorageException(StorageFailureKind.AccessDenied, "Failed to resolve direct storage access.");
+                var access = await response.Content.ReadFromJsonAsync<TaskStorageAccessResponse>(options: JsonSerializerOptions.Web, cancellationToken).ConfigureAwait(false)
+                    ?? throw new StorageException(StorageFailureKind.Io, "Invalid direct storage access response.");
+                if (access.AccessToken is not null)
+                {
+                    _cachedAccessToken = access.AccessToken;
+                    _accessTokenExpiresAt = access.ExpiresAt ?? DateTimeOffset.UtcNow.AddMinutes(45);
+                }
+                return access;
+            }
+            catch (Exception exception) when (exception is not StorageException && exception is HttpRequestException or IOException)
+            {
+                throw new StorageException(StorageFailureKind.NetworkUnavailable, "The storage service is unavailable.", exception);
+            }
+        }
+    }
+
+    private sealed class AgentGoogleDriveStagingStore(string stagingDirectory) : IGoogleDriveStagingStore
+    {
+        public async Task<GoogleDriveStagedFile> StageAsync(Stream content, long expectedLength, ContentChecksum checksum, CancellationToken token)
+        {
+            var path = Path.Combine(stagingDirectory, $"gdrive_{Guid.NewGuid():N}.staging");
+            try
+            {
+                using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+                await using (var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, useAsync: true))
+                {
+                    var buffer = ArrayPool<byte>.Shared.Rent(65536);
+                    try
+                    {
+                        long length = 0;
+                        int count;
+                        while ((count = await content.ReadAsync(buffer, token).ConfigureAwait(false)) > 0)
+                        {
+                            if (count > expectedLength - length)
+                                throw new StorageException(StorageFailureKind.IntegrityMismatch, "Staged length exceeded expectation.");
+                            hash.AppendData(buffer, 0, count);
+                            await output.WriteAsync(buffer.AsMemory(0, count), token).ConfigureAwait(false);
+                            length += count;
+                        }
+                        if (length != expectedLength || !ContentChecksum.Sha256(hash.GetHashAndReset()).Equals(checksum))
+                            throw new StorageException(StorageFailureKind.IntegrityMismatch, "Staged file checksum mismatch.");
+                    }
+                    finally
+                    {
+                        ArrayPool<byte>.Shared.Return(buffer);
+                    }
+                }
+                return new GoogleDriveStagedFile(path, token, () =>
+                {
+                    try { File.Delete(path); } catch { }
+                    return ValueTask.CompletedTask;
+                });
+            }
+            catch
+            {
+                try { File.Delete(path); } catch { }
+                throw;
+            }
+        }
+    }
+
+    private sealed class BackendGoogleDriveFileCatalog(
+        HttpClient http, AgentBackendEndpoint endpoint, IAgentCredentialStore identities,
+        Guid attemptId, Guid lease, Guid connectionId, Guid? restoreOperationId) : IGoogleDriveFileCatalog
+    {
+        public async Task<GoogleDriveFileRecord?> FindAsync(Guid tenantId, Guid targetConnectionId, string storageKey, CancellationToken cancellationToken)
+        {
+            var relative = restoreOperationId is null
+                ? $"api/agent/tasks/{attemptId:D}/storage/catalog?key={Uri.EscapeDataString(storageKey)}"
+                : $"api/agent/restore-tasks/{attemptId:D}/storage/catalog?key={Uri.EscapeDataString(storageKey)}";
+            using var request = CreateRequest(HttpMethod.Get, relative);
+            using var response = await SendAsync(request, cancellationToken).ConfigureAwait(false);
+            if (response.StatusCode == HttpStatusCode.NotFound) return null;
+            if (!response.IsSuccessStatusCode)
+                throw new StorageException(StorageFailureKind.AccessDenied, "Failed to query Google Drive catalog.");
+            var record = await response.Content.ReadFromJsonAsync<TaskStorageCatalogRecord>(options: JsonSerializerOptions.Web, cancellationToken).ConfigureAwait(false);
+            return record is null ? null : new GoogleDriveFileRecord(record.FileId, record.ParentFolderId, record.FileName, record.SizeBytes, record.Checksum, record.Md5Checksum);
+        }
+
+        public async Task SaveAsync(Guid tenantId, Guid targetConnectionId, string storageKey, GoogleDriveFileRecord record, CancellationToken cancellationToken)
+        {
+            var relative = $"api/agent/tasks/{attemptId:D}/storage/catalog";
+            using var request = CreateRequest(HttpMethod.Post, relative);
+            request.Content = JsonContent.Create(new TaskStorageCatalogSaveRequest(
+                storageKey,
+                new TaskStorageCatalogRecord(record.FileId, record.ParentFolderId, record.FileName, record.SizeBytes, record.Checksum, record.Md5Checksum)));
+            using var response = await SendAsync(request, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+                throw new StorageException(StorageFailureKind.AccessDenied, "Failed to save Google Drive catalog record.");
+        }
+
+        public async Task DeleteAsync(Guid tenantId, Guid targetConnectionId, string storageKey, string expectedFileId, CancellationToken cancellationToken)
+        {
+            var relative = $"api/agent/tasks/{attemptId:D}/storage/catalog?key={Uri.EscapeDataString(storageKey)}&expectedFileId={Uri.EscapeDataString(expectedFileId)}";
+            using var request = CreateRequest(HttpMethod.Delete, relative);
+            using var response = await SendAsync(request, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+                throw new StorageException(StorageFailureKind.AccessDenied, "Failed to delete Google Drive catalog record.");
+        }
+
+        public Task<IReadOnlyList<GoogleDriveCatalogEntry>> ListAsync(Guid tenantId, Guid targetConnectionId, CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<GoogleDriveCatalogEntry>>([]);
+
+        public Task ReportFindingAsync(Guid tenantId, Guid targetConnectionId, GoogleDriveReconciliationFinding finding, CancellationToken cancellationToken)
+            => Task.CompletedTask;
+
+        private HttpRequestMessage CreateRequest(HttpMethod method, string relativePath)
+        {
+            var request = new HttpRequestMessage(method, new Uri(endpoint.BaseUri, relativePath));
+            request.Headers.TryAddWithoutValidation(AgentProtocolHeader.Name, AgentProtocol.Current.Version.ToString());
+            request.Headers.TryAddWithoutValidation(TaskStorageProtocol.LeaseHeader, lease.ToString("D"));
+            if (restoreOperationId is null)
+                request.Headers.TryAddWithoutValidation(TaskStorageProtocol.DestinationHeader, connectionId.ToString("D"));
+            else
+                request.Headers.TryAddWithoutValidation(TaskStorageProtocol.RestoreHeader, restoreOperationId.Value.ToString("D"));
+            return request;
+        }
+
+        private async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var identity = await identities.LoadAsync(cancellationToken).ConfigureAwait(false);
+            if (identity is not null)
+                request.Headers.TryAddWithoutValidation("Authorization", identity.Current.ToAuthorizationHeaderValue());
+            return await http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        }
     }
 }

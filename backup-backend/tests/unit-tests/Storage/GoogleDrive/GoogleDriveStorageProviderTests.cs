@@ -541,6 +541,38 @@ public sealed class GoogleDriveStorageProviderTests : IDisposable
         Assert.Empty(server.Files);
         Assert.Empty(Directory.EnumerateFiles(_directory));
     }
+    [Fact]
+    public async Task Put_DirectAccessTokenSource_SucceedsWithoutClientSecret()
+    {
+        var server = new FakeDrive();
+        var options = new GoogleDriveStorageOptions(_tenant, _connection, stagingDirectory: _directory, uploadTimeout: TimeSpan.FromSeconds(5));
+        var tokenSourceCalled = false;
+        var provider = GoogleDriveStorageProvider.CreateDirect(
+            new HttpClient(server),
+            options,
+            _ => { tokenSourceCalled = true; return ValueTask.FromResult("direct-token-xyz"); },
+            stagingStore: new TestStagingStore(_directory));
+
+        var meta = await Put(provider);
+        Assert.True(tokenSourceCalled);
+        Assert.Single(server.Files);
+        Assert.Equal(Bytes.Length, meta.SizeBytes);
+    }
+    [Fact]
+    public void GoogleDriveStorageOptions_ThrowsWhenTenantIdEmpty()
+    {
+        Assert.Throws<ArgumentException>(() => new GoogleDriveStorageOptions(Guid.Empty, _connection));
+        Assert.Throws<ArgumentException>(() => new GoogleDriveStorageOptions("client", "secret", Guid.Empty, _connection));
+    }
+
+    [Fact]
+    public void GoogleDriveTokenManager_ThrowsWhenClientSecretsMissing()
+    {
+        var options = new GoogleDriveStorageOptions(_tenant, _connection);
+        Assert.Throws<ArgumentException>(() => new GoogleDriveTokenManager(new HttpClient(), options, _ => ValueTask.FromResult(new GoogleDriveCredential("refresh"))));
+    }
+
+
 
     private sealed class FailingCatalog : IGoogleDriveFileCatalog
     {

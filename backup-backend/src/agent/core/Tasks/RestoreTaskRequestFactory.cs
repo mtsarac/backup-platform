@@ -79,7 +79,7 @@ public sealed class RestoreTaskRequestFactory(
                     _ => RestorePipelinePurpose.Execution
                 })
             {
-                StorageOverride = task.Source.Access == "BackendRelayed" ? storageFactory!.CreateRestore(task) : LocalVolumeOverride(task.Source),
+                StorageOverride = task.Source.Access is "BackendRelayed" or "AgentDirect" ? storageFactory!.CreateRestore(task) : LocalVolumeOverride(task.Source),
                 Decryption = decryption
             };
         }
@@ -188,7 +188,7 @@ public sealed class RestoreTaskRequestFactory(
         && string.Equals(source.ChecksumAlgorithm, "sha256", StringComparison.Ordinal)
         && ((source.Access, source.StorageProvider, source.StorageExecutionLocation) is
             ("AgentLocal", "local", "Agent") or ("CentralStorage", "central", "Backend")
-            || (source.Access, source.StorageProvider, source.StorageExecutionLocation) is ("BackendRelayed", "sftp" or "google-drive", "Backend")
+            || (source.Access, source.StorageProvider, source.StorageExecutionLocation) is ("BackendRelayed" or "AgentDirect", "sftp" or "google-drive", "Backend" or "Agent")
             && Guid.TryParse(source.StorageTarget, out var connectionId) && connectionId != Guid.Empty
             && storageFactory is not null);
 

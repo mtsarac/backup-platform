@@ -45,6 +45,8 @@ public sealed record BackupDestinationContract
     /// <summary>"Backend" or "Agent"; required, never inferred from the provider.</summary>
     public string? StorageExecutionLocation { get; init; }
     public bool IsPrimary { get; init; }
+    /// <summary>True when the agent transfers directly to/from the storage; false when bytes are relayed through the backend.</summary>
+    public bool Direct { get; init; }
 }
 /// <summary>A database-authoritative claim, not a push command. Tokens fence every mutation of this attempt.</summary>
 public sealed record BackupTaskSnapshot

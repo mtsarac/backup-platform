@@ -17,6 +17,13 @@ location. Do not keep permanent reusable helpers under `/tmp`.
 
 A script needed more than once belongs in `scripts/`.
 
+## T1.0 direct-download feasibility
+
+[Isolated native-to-browser experiment](experiments/t1-direct-download/README.md):
+synthetic data, bounded DataChannel-to-disk transfer, independent SHA-256 readback,
+corruption/cancellation/no-path checks. Loopback-only, no application credentials
+or deployment. This is not a product download implementation or a closed T1 gate.
+
 ## Session continuity
 
 Before creating a helper:

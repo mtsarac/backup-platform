@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Text.Json;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Application.Backups;
@@ -9,12 +10,17 @@ using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Contracts.Restores;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Backups;
+using BackupPlatform.Domain.Restores;
+using BackupPlatform.Domain.Storage;
 using BackupPlatform.Storage;
 using BackupPlatform.Infrastructure.Backups;
 using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.StorageProviders.Abstractions;
 using BackupPlatform.StorageProviders.Abstractions.Transfer;
+using BackupPlatform.SecretProviders.Abstractions;
 using BackupPlatform.Api.Backups;
+using BackupPlatform.StorageProviders.GoogleDrive;
+using BackupPlatform.StorageProviders.Sftp;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -33,6 +39,10 @@ public static class AgentStorageTransferEndpoints
         backup.MapGet("/metadata", GetBackupMetadataAsync);
         backup.MapPost("/verify", VerifyBackupAsync);
         backup.MapDelete("/content", DeleteBackupAsync);
+        backup.MapPost("/access", GetBackupStorageAccessAsync);
+        backup.MapGet("/catalog", GetBackupStorageCatalogAsync);
+        backup.MapPost("/catalog", SaveBackupStorageCatalogAsync);
+        backup.MapDelete("/catalog", DeleteBackupStorageCatalogAsync);
 
         var restore = endpoints.MapGroup("/api/agent/restore-tasks/{attemptId:guid}/storage")
             .WithMetadata(new AgentApiEndpoint(), new RequiresAgentProtocol())
@@ -40,6 +50,8 @@ public static class AgentStorageTransferEndpoints
         restore.MapGet("/content", ReadRestoreAsync);
         restore.MapGet("/metadata", GetRestoreMetadataAsync);
         restore.MapPost("/verify", VerifyRestoreAsync);
+        restore.MapPost("/access", GetRestoreStorageAccessAsync);
+        restore.MapGet("/catalog", GetRestoreStorageCatalogAsync);
         endpoints.MapPost("/api/agent/restore-tasks/{attemptId:guid}/artifact-key", UnwrapArtifactKeyAsync)
             .WithMetadata(new AgentApiEndpoint(), new RequiresAgentProtocol())
             .RequireAuthorization(AuthorizationPolicies.Agent);
@@ -308,8 +320,9 @@ public static class AgentStorageTransferEndpoints
             return (Results.Conflict(new AgentApiError { Error = "quota_exceeded", Message = "The artifact exceeds this run's reserved storage capacity." }), null, null, null);
 
         var destination = claim.Run.Configuration.Destinations.SingleOrDefault(candidate => candidate.StorageConnectionId == named);
-        if (destination is not { StorageProvider: "sftp" or "google-drive", StorageExecutionLocation: BackupStorageExecutionLocation.Backend, StorageConnectionId: { } connectionId })
-            return (Results.Conflict(new AgentApiError { Error = "destination_not_authorized", Message = "The destination is not part of this run." }), null, null, null);
+        if (destination is not { StorageProvider: "sftp" or "google-drive", StorageExecutionLocation: BackupStorageExecutionLocation.Backend, StorageConnectionId: { } connectionId }
+            || destination.Direct)
+            return (Results.Conflict(new AgentApiError { Error = "destination_not_authorized", Message = "The destination is not part of this run or must not use relay." }), null, null, null);
 
         if (!ManagedBackupLayout.TryParseStorageKey(key, out var layout) || layout is null || layout.TenantId != agent.Identity.TenantId.Value
             || layout.AttemptId != attemptId || layout.RunId != claim.Run.Id || layout.JobId != claim.Run.JobId)
@@ -382,4 +395,214 @@ public static class AgentStorageTransferEndpoints
         }
     }
 
+
+    private static async Task<(IResult? Result, Guid? TenantId, Guid? ConnectionId, StorageConnection? Connection, Guid? RunId, Guid? JobId)> FenceDirectBackupAccessAsync(
+        Guid attemptId, HttpRequest request, ICurrentAgent agent, IBackupRunStore store,
+        IStorageConnectionStore connections, string? requiredProvider, CancellationToken cancellationToken)
+    {
+        if (attemptId == Guid.Empty || agent.Identity is null)
+            return (Results.Unauthorized(), null, null, null, null, null);
+        if (!Guid.TryParse(request.Headers[TaskStorageProtocol.LeaseHeader], out var lease) || lease == Guid.Empty)
+            return (Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "Missing lease header." }), null, null, null, null, null);
+        if (!Guid.TryParse(request.Headers[TaskStorageProtocol.DestinationHeader].FirstOrDefault(), out var named) || named == Guid.Empty)
+            return (Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "The destination header is missing or invalid." }), null, null, null, null, null);
+
+        var claim = await store.GetAttemptAsync(agent.Identity.TenantId, agent.Identity.AgentId, attemptId, cancellationToken);
+        if (claim is null || claim.Run.CurrentAttempt.Id != attemptId || !claim.Attempt.HasLease(lease, DateTimeOffset.UtcNow))
+            return (Results.Conflict(new AgentApiError { Error = "lease_conflict", Message = "Invalid lease or storage target." }), null, null, null, null, null);
+
+        var destination = claim.Run.Configuration.Destinations.SingleOrDefault(candidate => candidate.StorageConnectionId == named);
+        if (destination is not { StorageProvider: "sftp" or "google-drive", Direct: true, StorageConnectionId: { } connectionId }
+            || (requiredProvider is not null && destination.StorageProvider != requiredProvider))
+            return (Results.Conflict(new AgentApiError { Error = "destination_not_authorized", Message = "The destination is not part of this run or not direct mode." }), null, null, null, null, null);
+
+        var connection = (await connections.FindAsync(connectionId, agent.Identity.TenantId, cancellationToken))?.Connection;
+        if (connection is null || connection.TenantId != agent.Identity.TenantId || connection.ProviderType != destination.StorageProvider || !connection.EffectiveEnabled)
+            return (Results.Conflict(new AgentApiError { Error = "destination_unavailable", Message = "The destination storage connection is not available." }), null, null, null, null, null);
+
+        return (null, agent.Identity.TenantId.Value, connectionId, connection, claim.Run.Id, claim.Run.JobId);
+    }
+
+    private static async Task<(IResult? Result, Guid? TenantId, Guid? ConnectionId, StorageConnection? Connection, string? StorageKey)> FenceDirectRestoreAccessAsync(
+        Guid attemptId, HttpRequest request, ICurrentAgent agent, IRestoreStore store,
+        IDownloadStore downloadStore, IStorageConnectionStore connections, string? requiredProvider, CancellationToken cancellationToken)
+    {
+        if (attemptId == Guid.Empty || agent.Identity is null)
+            return (Results.Unauthorized(), null, null, null, null);
+        if (!Guid.TryParse(request.Headers[TaskStorageProtocol.LeaseHeader], out var lease) || lease == Guid.Empty
+            || !Guid.TryParse(request.Headers[TaskStorageProtocol.RestoreHeader], out var operationId))
+            return (Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "Missing lease or operation header." }), null, null, null, null);
+
+        var operation = await store.GetAsync(agent.Identity.TenantId, operationId, cancellationToken);
+        if (operation is null || operation.AgentId != agent.Identity.AgentId
+            || operation.CurrentAttempt.Id != attemptId || !operation.CurrentAttempt.HasLease(lease, DateTimeOffset.UtcNow))
+            return (Results.Conflict(new AgentApiError { Error = "lease_conflict", Message = "The restore attempt lease is invalid." }), null, null, null, null);
+
+        var artifact = await downloadStore.GetArtifactAsync(agent.Identity.TenantId, operation.ArtifactId, cancellationToken);
+        var replica = artifact?.Replicas.SingleOrDefault(r => r.Id == operation.ReplicaId);
+        if (replica is null || replica.StorageProvider is not ("sftp" or "google-drive") || operation.SourceAccess != RestoreSourceAccess.AgentDirect
+            || !Guid.TryParse(replica.StorageTarget, out var connectionId)
+            || (requiredProvider is not null && replica.StorageProvider != requiredProvider))
+            return (Results.Conflict(new AgentApiError { Error = "source_inaccessible", Message = "The replica storage is inaccessible or not direct mode." }), null, null, null, null);
+
+        var connection = (await connections.FindAsync(connectionId, agent.Identity.TenantId, cancellationToken))?.Connection;
+        if (connection is null || connection.TenantId != agent.Identity.TenantId || connection.ProviderType != replica.StorageProvider || !connection.EffectiveEnabled)
+            return (Results.Conflict(new AgentApiError { Error = "source_unavailable", Message = "The storage connection is unavailable." }), null, null, null, null);
+
+        return (null, agent.Identity.TenantId.Value, connectionId, connection, replica.Key);
+    }
+
+    private static async Task<IResult> GetBackupStorageAccessAsync(
+        Guid attemptId, HttpRequest request, ICurrentAgent agent, IBackupRunStore store,
+        IStorageConnectionStore connections, ISecretProvider secrets,
+        GoogleDriveConnectionProviderFactory driveFactory, CancellationToken cancellationToken)
+    {
+        var fence = await FenceDirectBackupAccessAsync(attemptId, request, agent, store, connections, null, cancellationToken);
+        if (fence.Result is not null) return fence.Result;
+        return await ResolveAccessResponseAsync(request, fence.Connection!, secrets, driveFactory, cancellationToken);
+    }
+
+    private static async Task<IResult> GetRestoreStorageAccessAsync(
+        Guid attemptId, HttpRequest request, ICurrentAgent agent, IRestoreStore store,
+        IDownloadStore downloadStore, IStorageConnectionStore connections, ISecretProvider secrets,
+        GoogleDriveConnectionProviderFactory driveFactory, CancellationToken cancellationToken)
+    {
+        var fence = await FenceDirectRestoreAccessAsync(attemptId, request, agent, store, downloadStore, connections, null, cancellationToken);
+        if (fence.Result is not null) return fence.Result;
+        return await ResolveAccessResponseAsync(request, fence.Connection!, secrets, driveFactory, cancellationToken);
+    }
+
+    private static async Task<IResult> GetBackupStorageCatalogAsync(
+        Guid attemptId, HttpRequest request, ICurrentAgent agent, IBackupRunStore store,
+        IStorageConnectionStore connections, IGoogleDriveFileCatalog catalog, CancellationToken cancellationToken)
+    {
+        var fence = await FenceDirectBackupAccessAsync(attemptId, request, agent, store, connections, "google-drive", cancellationToken);
+        if (fence.Result is not null) return fence.Result;
+        var key = request.Query["key"].ToString();
+        if (string.IsNullOrWhiteSpace(key)) return Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "Missing key query parameter." });
+        var record = await catalog.FindAsync(fence.TenantId!.Value, fence.ConnectionId!.Value, key, cancellationToken);
+        return record is null
+            ? Results.NotFound()
+            : Results.Ok(new TaskStorageCatalogRecord(record.FileId, record.ParentFolderId, record.FileName, record.SizeBytes, record.Checksum, record.Md5Checksum));
+    }
+
+    private static async Task<IResult> SaveBackupStorageCatalogAsync(
+        Guid attemptId, HttpRequest request, ICurrentAgent agent, IBackupRunStore store,
+        IStorageConnectionStore connections, IGoogleDriveFileCatalog catalog, TaskStorageCatalogSaveRequest body, CancellationToken cancellationToken)
+    {
+        var fence = await FenceDirectBackupAccessAsync(attemptId, request, agent, store, connections, "google-drive", cancellationToken);
+        if (fence.Result is not null) return fence.Result;
+        if (string.IsNullOrWhiteSpace(body?.StorageKey) || body.Record is null || string.IsNullOrWhiteSpace(body.Record.FileId))
+            return Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "Invalid catalog save payload." });
+        if (!ManagedBackupLayout.TryParseStorageKey(body.StorageKey, out var layout) || layout is null
+            || layout.TenantId != fence.TenantId!.Value
+            || layout.AttemptId != attemptId || layout.RunId != fence.RunId!.Value || layout.JobId != fence.JobId!.Value)
+            return Results.Conflict(new AgentApiError { Error = "invalid_key", Message = "The key layout does not match the attempt." });
+        var record = new GoogleDriveFileRecord(body.Record.FileId, body.Record.ParentFolderId, body.Record.FileName, body.Record.SizeBytes, body.Record.Checksum, body.Record.Md5Checksum);
+        await catalog.SaveAsync(fence.TenantId!.Value, fence.ConnectionId!.Value, body.StorageKey, record, cancellationToken);
+        return Results.Ok();
+    }
+
+    private static async Task<IResult> DeleteBackupStorageCatalogAsync(
+        Guid attemptId, HttpRequest request, ICurrentAgent agent, IBackupRunStore store,
+        IStorageConnectionStore connections, IGoogleDriveFileCatalog catalog, CancellationToken cancellationToken)
+    {
+        var fence = await FenceDirectBackupAccessAsync(attemptId, request, agent, store, connections, "google-drive", cancellationToken);
+        if (fence.Result is not null) return fence.Result;
+        var key = request.Query["key"].ToString();
+        var expectedFileId = request.Query["expectedFileId"].ToString();
+        if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(expectedFileId))
+            return Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "Missing key or expectedFileId query parameter." });
+        if (!ManagedBackupLayout.TryParseStorageKey(key, out var layout) || layout is null
+            || layout.TenantId != fence.TenantId!.Value
+            || layout.AttemptId != attemptId || layout.RunId != fence.RunId!.Value || layout.JobId != fence.JobId!.Value)
+            return Results.Conflict(new AgentApiError { Error = "invalid_key", Message = "The key layout does not match the attempt." });
+        await catalog.DeleteAsync(fence.TenantId!.Value, fence.ConnectionId!.Value, key, expectedFileId, cancellationToken);
+        return Results.Ok();
+    }
+
+    private static async Task<IResult> GetRestoreStorageCatalogAsync(
+        Guid attemptId, HttpRequest request, ICurrentAgent agent, IRestoreStore store,
+        IDownloadStore downloadStore, IStorageConnectionStore connections, IGoogleDriveFileCatalog catalog, CancellationToken cancellationToken)
+    {
+        var fence = await FenceDirectRestoreAccessAsync(attemptId, request, agent, store, downloadStore, connections, "google-drive", cancellationToken);
+        if (fence.Result is not null) return fence.Result;
+        var key = request.Query["key"].ToString();
+        if (string.IsNullOrWhiteSpace(key) || key != fence.StorageKey)
+            return Results.Conflict(new AgentApiError { Error = "invalid_key", Message = "The key does not match the restored replica." });
+        var record = await catalog.FindAsync(fence.TenantId!.Value, fence.ConnectionId!.Value, key, cancellationToken);
+        return record is null
+            ? Results.NotFound()
+            : Results.Ok(new TaskStorageCatalogRecord(record.FileId, record.ParentFolderId, record.FileName, record.SizeBytes, record.Checksum, record.Md5Checksum));
+    }
+
+
+    private static async Task<IResult> ResolveAccessResponseAsync(
+        HttpRequest request, StorageConnection connection, ISecretProvider secrets,
+        GoogleDriveConnectionProviderFactory driveFactory, CancellationToken cancellationToken)
+    {
+        request.HttpContext.Response.Headers.CacheControl = "no-store";
+        if (connection.ProviderType == StorageProviderTypes.GoogleDrive)
+        {
+            var tokenResult = await driveFactory.GetAccessTokenWithExpiryAsync(connection, secrets, cancellationToken);
+            return Results.Ok(new TaskStorageAccessResponse
+            {
+                ProviderType = StorageProviderTypes.GoogleDrive,
+                AccessToken = tokenResult.AccessToken,
+                ExpiresAt = tokenResult.ExpiresAt,
+                FolderId = connection.Configuration.GetValueOrDefault("folderId")
+            });
+        }
+
+        if (connection.ProviderType == StorageProviderTypes.Sftp)
+        {
+            var config = connection.Configuration;
+            int.TryParse(config.GetValueOrDefault("port"), out var port);
+            if (port <= 0) port = 22;
+
+            var authType = config.GetValueOrDefault("authenticationType");
+            if (string.IsNullOrWhiteSpace(authType) || authType is not (SftpConfiguration.AuthTypePassword or SftpConfiguration.AuthTypePrivateKey))
+            {
+                return Results.Conflict(new AgentApiError { Error = "invalid_configuration", Message = "SFTP connection authenticationType is required." });
+            }
+
+            var remoteBaseDir = config.GetValueOrDefault("remoteBaseDirectory");
+            if (string.IsNullOrWhiteSpace(remoteBaseDir))
+            {
+                return Results.Conflict(new AgentApiError { Error = "invalid_configuration", Message = "SFTP connection remoteBaseDirectory is required." });
+            }
+
+            var reference = connection.SecretReference;
+            if (reference is null || !reference.StartsWith($"sc-{connection.Id:N}-", StringComparison.Ordinal))
+            {
+                return Results.Conflict(new AgentApiError { Error = "authentication_failed", Message = "SFTP connection has no valid credentials configured." });
+            }
+
+            SftpCredential credential;
+            try
+            {
+                credential = await SftpConnectionProviderFactory.ReadCredentialAsync(secrets, new SecretReference(reference), authType, cancellationToken);
+            }
+            catch (StorageException)
+            {
+                return Results.Conflict(new AgentApiError { Error = "authentication_failed", Message = "Failed to load SFTP credentials." });
+            }
+
+            return Results.Ok(new TaskStorageAccessResponse
+            {
+                ProviderType = StorageProviderTypes.Sftp,
+                Host = config.GetValueOrDefault("host"),
+                Port = port,
+                Username = config.GetValueOrDefault("username"),
+                AuthenticationType = authType,
+                RemoteBaseDirectory = remoteBaseDir,
+                HostKeyFingerprint = config.GetValueOrDefault("hostKeyFingerprint"),
+                Password = credential.Password,
+                PrivateKey = credential.PrivateKey,
+                Passphrase = credential.Passphrase
+            });
+        }
+
+        return Results.BadRequest(new AgentApiError { Error = "unsupported_provider", Message = "Direct access is only supported for SFTP and Google Drive." });
+    }
 }

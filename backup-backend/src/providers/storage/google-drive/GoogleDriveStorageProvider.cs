@@ -27,7 +27,7 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
     private static readonly Counter<long> Retries = Meter.CreateCounter<long>("google_drive_retries");
     private readonly HttpClient _http;
     private readonly GoogleDriveStorageOptions _options;
-    private readonly GoogleDriveTokenManager _tokenManager;
+    private readonly Func<CancellationToken, ValueTask<string>> _accessTokenSource;
     private readonly IGoogleDriveFileCatalog _catalog;
     private readonly IGoogleDriveStagingStore? _stagingStore;
     private readonly Action<GoogleDriveReconciliationFinding>? _observer;
@@ -42,11 +42,30 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
         Func<CancellationToken, Task>? onReauthorizationRequired = null,
         Action<GoogleDriveReconciliationFinding>? reconciliationObserver = null,
         IGoogleDriveStagingStore? stagingStore = null)
+        : this(http, options,
+            new GoogleDriveTokenManager(http, options, credentials ?? throw new ArgumentNullException(nameof(credentials)), onTokenRotated, refreshCoordinator, onReauthorizationRequired).GetAccessTokenAsync,
+            catalog, reconciliationObserver, stagingStore)
+    {
+    }
+
+    public static GoogleDriveStorageProvider CreateDirect(
+        HttpClient http,
+        GoogleDriveStorageOptions options,
+        Func<CancellationToken, ValueTask<string>> accessTokenSource,
+        IGoogleDriveFileCatalog? catalog = null,
+        Action<GoogleDriveReconciliationFinding>? reconciliationObserver = null,
+        IGoogleDriveStagingStore? stagingStore = null) =>
+        new(http, options, accessTokenSource, catalog, reconciliationObserver, stagingStore);
+
+    private GoogleDriveStorageProvider(HttpClient http, GoogleDriveStorageOptions options,
+        Func<CancellationToken, ValueTask<string>> accessTokenSource,
+        IGoogleDriveFileCatalog? catalog,
+        Action<GoogleDriveReconciliationFinding>? reconciliationObserver,
+        IGoogleDriveStagingStore? stagingStore)
     {
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _options = options ?? throw new ArgumentNullException(nameof(options));
-        ArgumentNullException.ThrowIfNull(credentials);
-        _tokenManager = new GoogleDriveTokenManager(http, options, credentials, onTokenRotated, refreshCoordinator, onReauthorizationRequired);
+        _accessTokenSource = accessTokenSource ?? throw new ArgumentNullException(nameof(accessTokenSource));
         _catalog = catalog ?? new InMemoryGoogleDriveFileCatalog();
         _stagingStore = stagingStore;
         _observer = reconciliationObserver;
@@ -567,7 +586,7 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
         {
             token.ThrowIfCancellationRequested();
             using var request = create();
-            if (authorize) request.Headers.Authorization = new("Bearer", await _tokenManager.GetAccessTokenAsync(token).ConfigureAwait(false));
+            if (authorize) request.Headers.Authorization = new("Bearer", await _accessTokenSource(token).ConfigureAwait(false));
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
             var remaining = _options.MaxRetryElapsed - clock.Elapsed;
             if (retry && remaining <= TimeSpan.Zero) throw Failure(StorageFailureKind.Timeout);

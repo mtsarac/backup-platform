@@ -37,7 +37,7 @@ public sealed class SftpConnectionProviderFactory(SftpNetworkOptions network)
         }
     }
 
-    private static async ValueTask<SftpCredential> ReadCredentialAsync(
+    internal static async ValueTask<SftpCredential> ReadCredentialAsync(
         ISecretProvider secrets, SecretReference reference, string authenticationType, CancellationToken cancellationToken)
     {
         try

@@ -150,10 +150,16 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
             {
                 throw new ArgumentException("The destination storage execution location is unsupported.");
             }
-            if ((destination.StorageProvider is "sftp" or "google-drive") && (destination.StorageExecutionLocation != "Backend"
-                || destination.StorageConnectionId is null || destination.StorageConnectionId == Guid.Empty || configuration.StoragePrefix != string.Empty))
+            if (destination.StorageProvider is "sftp" or "google-drive")
             {
-                throw new ArgumentException("The backend-relayed storage configuration is invalid.");
+                if (destination.StorageConnectionId is null || destination.StorageConnectionId == Guid.Empty || configuration.StoragePrefix != string.Empty)
+                {
+                    throw new ArgumentException("The external storage configuration is invalid.");
+                }
+                if (!destination.Direct && destination.StorageExecutionLocation != "Backend")
+                {
+                    throw new ArgumentException("The backend-relayed storage configuration is invalid.");
+                }
             }
         }
         if (!HasValidAuthentication(configuration.IntegratedSecurity, configuration.DatabaseCredentialReference))

@@ -23,7 +23,7 @@ internal sealed class RestoreOperationConfiguration : IEntityTypeConfiguration<R
         builder.ToTable("restore_operations", table =>
         {
             table.HasCheckConstraint("ck_restore_operations_status", $"\"Status\" IN ({RestoreMapping.Statuses})");
-            table.HasCheckConstraint("ck_restore_operations_source", "\"SourceAccess\" IN ('AgentLocal','CentralStorage','BackendRelayed')");
+            table.HasCheckConstraint("ck_restore_operations_source", "\"SourceAccess\" IN ('AgentLocal','CentralStorage','BackendRelayed','AgentDirect')");
             // The decision to overwrite is a stored fact and it must agree with the mode: only a replace restore carries the overwrite policy.
             table.HasCheckConstraint("ck_restore_operations_mode",
                 "(\"Mode\" = 'NewDatabase' AND \"OverwritePolicy\" = 'Forbidden') OR (\"Mode\" = 'ReplaceExistingDatabase' AND \"OverwritePolicy\" = 'ReplaceExisting')");

@@ -38,6 +38,8 @@
     <ProjectReference Include="../../providers/backup/file-system/BackupPlatform.BackupProviders.FileSystem.csproj" />
     <ProjectReference Include="../../providers/storage/local/BackupPlatform.StorageProviders.Local.csproj" />
     <ProjectReference Include="../../providers/storage/central/BackupPlatform.StorageProviders.Central.csproj" />
+    <ProjectReference Include="../../providers/storage/sftp/BackupPlatform.StorageProviders.Sftp.csproj" />
+    <ProjectReference Include="../../providers/storage/google-drive/BackupPlatform.StorageProviders.GoogleDrive.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -16,7 +16,8 @@ public sealed record BackupDestination(
 
     public BackupStorageExecutionLocation StorageExecutionLocation { get; init; } =
         StorageProvider == "local" ? BackupStorageExecutionLocation.Agent : BackupStorageExecutionLocation.Backend;
-
+    /// <summary>True when the agent transfers directly to/from the storage; false when bytes are relayed through the platform backend.</summary>
+    public bool Direct { get; init; } = StorageProvider == "local";
     public BackupDestination Validate()
     {
         BackupGuard.Reference(StorageProvider);

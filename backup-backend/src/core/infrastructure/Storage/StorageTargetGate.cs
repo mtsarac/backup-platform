@@ -101,7 +101,7 @@ internal static class StorageTargetGate
         {
             return new(null, BackupAdmissionDenialCodes.AgentMultiDestinationUnsupported);
         }
-
+        bool? supportsDirect = null;
         foreach (var dest in effectiveDestinations)
         {
             StorageConnection? connection;
@@ -134,7 +134,13 @@ internal static class StorageTargetGate
             }
             // The volume is read from the connection here, in the one admission point, so a client can never name one and a later edit cannot move an admitted run.
             var volume = connection.ProviderType == StorageProviderTypes.Local ? connection.Configuration.GetValueOrDefault("volume") : null;
-            resolvedDestinations.Add(dest with { StorageConnectionId = connection.Id, StorageTarget = volume });
+            var isDirect = dest.StorageProvider == StorageProviderTypes.Local;
+            if (dest.StorageProvider is StorageProviderTypes.Sftp or StorageProviderTypes.GoogleDrive)
+            {
+                supportsDirect ??= await SupportsDirectStorageAsync(context, tenantId, agentId, cancellationToken);
+                isDirect = supportsDirect.Value;
+            }
+            resolvedDestinations.Add(dest with { StorageConnectionId = connection.Id, StorageTarget = volume, Direct = isDirect });
         }
 
         return new(configuration with { Destinations = resolvedDestinations }, null);
@@ -144,6 +150,11 @@ internal static class StorageTargetGate
     public static Task<bool> SupportsMultiDestinationAsync(PlatformDbContext context, TenantId tenantId, AgentId agentId, CancellationToken cancellationToken) =>
         context.AgentCapabilities.AsNoTracking().AnyAsync(record => record.TenantId == tenantId && record.AgentId == agentId
             && record.Identifier == BackupPlatform.Contracts.Backups.BackupTaskProtocol.MultiDestinationCapability
+            && record.Support == BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, cancellationToken);
+
+    public static Task<bool> SupportsDirectStorageAsync(PlatformDbContext context, TenantId tenantId, AgentId agentId, CancellationToken cancellationToken) =>
+        context.AgentCapabilities.AsNoTracking().AnyAsync(record => record.TenantId == tenantId && record.AgentId == agentId
+            && record.Identifier == BackupPlatform.Contracts.Backups.TaskStorageProtocol.DirectCapability
             && record.Support == BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, cancellationToken);
 
     /// <summary>

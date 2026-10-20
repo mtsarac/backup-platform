@@ -37,7 +37,9 @@ public enum RestoreSourceAccess
     /// <summary>The replica lives in central storage, which the agent reaches directly as a mounted directory.</summary>
     CentralStorage = 2,
     /// <summary>The backend reads the SFTP replica and relays its bytes to the target agent; storage credentials stay on the backend.</summary>
-    BackendRelayed = 3
+    BackendRelayed = 3,
+    /// <summary>The target agent reads the external storage (SFTP or Google Drive) directly using attempt-scoped credentials.</summary>
+    AgentDirect = 4
 }
 
 /// <summary>Attempts use Pending..AgentLost; the operation mirrors its current attempt.</summary>

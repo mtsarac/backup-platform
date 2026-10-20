@@ -55,6 +55,7 @@ public sealed class AgentCapabilityCatalog
         Unsupported(PostgreSqlCapabilityIds.WalArchiving.Value),
         Supported(DownloadTaskTypes.Capability),
         Supported(TaskStorageProtocol.Capability),
+        Supported(TaskStorageProtocol.DirectCapability),
         Supported(BackupTaskProtocol.MultiDestinationCapability),
         Supported(BackupTaskProtocol.QuotaBoundedUploadCapability),
         Supported(BackupTaskProtocol.UploadBandwidthLimitCapability),
