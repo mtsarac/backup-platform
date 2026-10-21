@@ -93,6 +93,27 @@ describe('Storage connections list and detail', () => {
     expect(api.probeTenantConnectionCapacity).toHaveBeenCalledWith('tenant-a', 'conn-local')
   })
 
+  it('shows queued capacity without fake metrics and refetches the Agent result', async () => {
+    vi.mocked(api.getTenantConnectionCapacity).mockResolvedValueOnce({
+      connectionId: 'conn-local', totalBytes: 100_000, usedBytes: 20_000, freeBytes: 80_000,
+      status: 'Available', reportedAt: '2026-10-21T10:00:00Z',
+    }).mockResolvedValue({
+      connectionId: 'conn-local', totalBytes: 100_000, usedBytes: 92_000, freeBytes: 8_000,
+      status: 'Critical', reportedAt: '2026-10-21T10:05:00Z',
+    })
+    vi.mocked(api.probeTenantConnectionCapacity).mockResolvedValue({
+      connectionId: 'conn-local', taskId: 'task-1', totalBytes: null, usedBytes: null, freeBytes: null,
+      status: 'Pending', reportedAt: '2026-10-21T10:04:00Z',
+    })
+    mount(detail('conn-local'))
+    await userEvent.click(await screen.findByRole('button', { name: 'Kapasiteyi Sorgula' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Agent yanıtı bekleniyor')
+    expect(screen.getByRole('button', { name: 'Sorgulanıyor…' })).toBeDisabled()
+    expect(screen.queryByText('100 kB')).not.toBeInTheDocument()
+    expect(await screen.findByText('Kritik', {}, { timeout: 4_000 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Kapasiteyi Sorgula' })).toBeEnabled()
+  })
+
   it('displays Warning badge at 80% and Critical badge at 90% capacity on detail and list', async () => {
     // 1. Detail page with 85% usage shows Warning badge
     vi.mocked(api.getTenantConnectionCapacity).mockResolvedValueOnce({

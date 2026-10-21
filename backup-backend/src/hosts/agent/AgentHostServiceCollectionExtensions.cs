@@ -64,8 +64,11 @@ public static class AgentHostServiceCollectionExtensions
         services.TryAddSingleton<IDeleteReplicaProviderResolver, DeleteReplicaProviderResolver>();
         services.AddSingleton<DeleteReplicaTaskWorker>();
         services.AddSingleton<DownloadTaskWorker>();
+        services.AddSingleton(provider => configuration.GetSection("Agent:Backup:Sftp")
+            .Get<BackupPlatform.StorageProviders.Sftp.SftpNetworkOptions>() ?? new BackupPlatform.StorageProviders.Sftp.SftpNetworkOptions());
         services.AddSingleton<BackupPlatform.Contracts.Storage.ISftpCapacityProbeExecutor, Storage.SftpCapacityProbeExecutor>();
-        services.AddSingleton<BackupPlatform.Agent.Core.Storage.CapacityProbeTaskHandler>();
+        services.AddSingleton<CapacityProbeTaskWorker>();
+        services.AddHostedService<AgentCapacityTaskHostedService>();
         services.AddSingleton<IAgentTaskSink, AgentTaskDispatcher>();
         services.AddHostedService<AgentDeletionTaskHostedService>();
         services.AddHostedService<AgentBackupTaskHostedService>();

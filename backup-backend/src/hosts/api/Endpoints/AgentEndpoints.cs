@@ -40,6 +40,12 @@ public static class AgentEndpoints
             .RequireAuthorization(AuthorizationPolicies.Agent)
             .RequireRateLimiting(AgentRateLimitOptions.Policies.Poll)
             .WithMetadata(new RequiresAgentProtocol());
+        agent.MapPost("/capacity-probes/{taskId:guid}/complete", CompleteCapacityAsync)
+            .RequireAuthorization(AuthorizationPolicies.Agent).RequireRateLimiting(AgentRateLimitOptions.Policies.Poll)
+            .WithMetadata(new RequiresAgentProtocol(), new RequestSizeLimitAttribute(4096));
+        agent.MapPost("/capacity-probes/{taskId:guid}/lease", AuthorizeCapacityAsync)
+            .RequireAuthorization(AuthorizationPolicies.Agent).RequireRateLimiting(AgentRateLimitOptions.Policies.Poll)
+            .WithMetadata(new RequiresAgentProtocol(), new RequestSizeLimitAttribute(4096));
         agent.MapGet("/me", GetIdentity).RequireAuthorization(AuthorizationPolicies.Agent);
         agent.MapPost("/credential/rotate", BeginRotationAsync).RequireAuthorization(AuthorizationPolicies.Agent);
         agent.MapPost("/credential/confirm", ConfirmRotationAsync)
@@ -140,6 +146,7 @@ public static class AgentEndpoints
     private static async Task<IResult> PollAsync(
         string? cursor, ICurrentAgent currentAgent, AgentConnectivityService service, BackupOrchestrator backups,
         AgentReplicaDeletionService deletions, RestoreService restores, AgentDownloadSource downloads, ILogger<AgentDownloadSource> logger,
+        BackupPlatform.Api.Backups.AgentCapacityProbeService capacity,
         CancellationToken cancellationToken)
     {
         var poll = await service.PollAsync(currentAgent.Identity!, cursor, cancellationToken);
@@ -178,6 +185,8 @@ public static class AgentEndpoints
         if (cleanup is not null) tasks.Add(new AgentTaskEnvelope { Id = cleanup.LeaseToken.ToString(), Type = RestoreTaskTypes.DatabaseRestoreCleanup, RestoreCleanup = cleanup });
         if (backup is not null) tasks.Add(new AgentTaskEnvelope { Id = backup.AttemptId.ToString(), Type = "database-backup", Backup = backup });
         if (download is not null) tasks.Add(new AgentTaskEnvelope { Id = download.SessionId.ToString(), Type = DownloadTaskTypes.BackupDownload, Download = download });
+        var capacityTask = await capacity.ClaimAsync(currentAgent.Identity!, cancellationToken);
+        if (capacityTask is not null) tasks.Add(new AgentTaskEnvelope { Id = capacityTask.TaskId.ToString(), Type = BackupPlatform.Contracts.Storage.CapacityProbeProtocol.TaskType, CapacityProbe = capacityTask });
         return Results.Ok(new AgentPollResponse
         {
             Cursor = poll.Cursor,
@@ -185,6 +194,22 @@ public static class AgentEndpoints
             NextPollAfterSeconds = (int)poll.NextPollAfter.TotalSeconds
         });
     }
+
+    private static async Task<IResult> CompleteCapacityAsync(Guid taskId, BackupPlatform.Contracts.Storage.CapacityProbeCompletionRequest request,
+        ICurrentAgent currentAgent, BackupPlatform.Storage.IStorageCapacityTaskQueue queue, TimeProvider time, CancellationToken cancellationToken)
+    {
+        var result = await queue.CompleteAsync(currentAgent.Identity!, taskId, request, time.GetUtcNow(), cancellationToken);
+        return result switch
+        {
+            BackupMutationResult.Accepted => Results.Ok(),
+            BackupMutationResult.NotFound => Results.NotFound(),
+            _ => Results.Conflict()
+        };
+    }
+
+    private static async Task<IResult> AuthorizeCapacityAsync(Guid taskId, BackupPlatform.Contracts.Storage.CapacityProbeCompletionRequest request,
+        ICurrentAgent currentAgent, BackupPlatform.Storage.IStorageCapacityTaskQueue queue, TimeProvider time, CancellationToken cancellationToken) =>
+        await queue.IsLiveAsync(currentAgent.Identity!, taskId, request.LeaseToken, time.GetUtcNow(), cancellationToken) ? Results.Ok() : Results.Conflict();
 
     private static IResult GetIdentity(ICurrentAgent currentAgent)
     {

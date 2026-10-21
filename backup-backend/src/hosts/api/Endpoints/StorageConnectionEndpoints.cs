@@ -405,7 +405,8 @@ public static class StorageConnectionEndpoints
         Guid id, ITenantContext tenant, StorageCapacityProbeService service, CancellationToken cancellationToken)
     {
         var capacity = await service.ProbeAsync(tenant.TenantId!, id, cancellationToken);
-        return capacity is null ? Results.NotFound(new { error = "storage_connection_not_found" }) : Results.Ok(capacity);
+        return capacity is null ? Results.NotFound(new { error = "storage_connection_not_found" })
+            : capacity.Status == "Pending" ? Results.Json(capacity, statusCode: StatusCodes.Status202Accepted) : Results.Ok(capacity);
     }
 
     private static async Task<IResult> GetCapacityForPlatformAsync(
@@ -423,7 +424,8 @@ public static class StorageConnectionEndpoints
         var record = await store.FindAsync(id, null, cancellationToken);
         if (record is null) return Results.NotFound(new { error = "storage_connection_not_found" });
         var capacity = await service.ProbeAsync(record.Connection.TenantId, id, cancellationToken);
-        return capacity is null ? Results.NotFound(new { error = "storage_connection_not_found" }) : Results.Ok(capacity);
+        return capacity is null ? Results.NotFound(new { error = "storage_connection_not_found" })
+            : capacity.Status == "Pending" ? Results.Json(capacity, statusCode: StatusCodes.Status202Accepted) : Results.Ok(capacity);
     }
 
     private static async Task<IResult> GetCapacityV1Async(
@@ -461,6 +463,7 @@ public static class StorageConnectionEndpoints
         }
 
         var capacity = await service.ProbeAsync(record.Connection.TenantId, id, cancellationToken);
-        return capacity is null ? Results.NotFound(new { error = "storage_connection_not_found" }) : Results.Ok(capacity);
+        return capacity is null ? Results.NotFound(new { error = "storage_connection_not_found" })
+            : capacity.Status == "Pending" ? Results.Json(capacity, statusCode: StatusCodes.Status202Accepted) : Results.Ok(capacity);
     }
 }

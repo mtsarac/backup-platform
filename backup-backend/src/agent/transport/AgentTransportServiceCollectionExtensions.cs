@@ -85,6 +85,17 @@ public static class AgentTransportServiceCollectionExtensions
                 AllowAutoRedirect = false,
             })
             .SetHandlerLifetime(Timeout.InfiniteTimeSpan);
+        services.AddHttpClient<ICapacityProbeTaskClient, HttpCapacityProbeTaskClient>(client =>
+            {
+                client.Timeout = RequestTimeout;
+                client.MaxResponseContentBufferSize = 1024 * 1024;
+            })
+            .ConfigurePrimaryHttpMessageHandler(static () => new SocketsHttpHandler
+            {
+                PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+                AllowAutoRedirect = false,
+            })
+            .SetHandlerLifetime(Timeout.InfiniteTimeSpan);
         services.AddHttpClient<IRestoreTaskClient, HttpRestoreTaskClient>(client =>
             {
                 client.Timeout = RequestTimeout;

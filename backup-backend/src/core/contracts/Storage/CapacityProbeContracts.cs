@@ -1,5 +1,11 @@
 namespace BackupPlatform.Contracts.Storage;
 
+public static class CapacityProbeProtocol
+{
+    public const string TaskType = "capacity-probe";
+    public const string Capability = "capacity-probe";
+}
+
 public static class CapacityProbeFailureCodes
 {
     public const string CapacityUnavailable = "CapacityUnavailable";
@@ -13,6 +19,10 @@ public sealed record CapacityProbeTaskRequest
 {
     public Guid TaskId { get; init; }
     public Guid ConnectionId { get; init; }
+    public Guid TenantId { get; init; }
+    public Guid AgentId { get; init; }
+    public Guid LeaseToken { get; init; }
+    public DateTimeOffset LeaseExpiresAt { get; init; }
     public string ProviderType { get; init; } = string.Empty;
     public IReadOnlyDictionary<string, string> Configuration { get; init; } = new Dictionary<string, string>();
     public IReadOnlyDictionary<string, string>? Secret { get; init; }
@@ -56,7 +66,8 @@ public interface ISftpCapacityProbeExecutor
     Task<CapacityProbeTaskResult> ProbeAsync(CapacityProbeTaskRequest request, CancellationToken cancellationToken);
 }
 
-public interface IAgentCapacityProbeDispatcher
+public sealed record CapacityProbeCompletionRequest
 {
-    Task<CapacityProbeTaskResult> DispatchAsync(Guid agentId, CapacityProbeTaskRequest request, CancellationToken cancellationToken);
+    public Guid LeaseToken { get; init; }
+    public CapacityProbeTaskResult Result { get; init; } = new();
 }

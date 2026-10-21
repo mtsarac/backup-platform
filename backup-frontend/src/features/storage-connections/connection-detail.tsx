@@ -44,8 +44,9 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
   useLanguage()
   const { data: capacity, isPending } = useTenantConnectionCapacity(connection.id)
   const probe = useProbeTenantConnectionCapacity(connection.id)
+  const awaitingAgent = capacity?.status === 'Pending'
 
-  const hasMetrics = capacity && capacity.status !== 'CapacityUnavailable' && capacity.totalBytes != null
+  const hasMetrics = capacity && !awaitingAgent && capacity.status !== 'CapacityUnavailable' && capacity.totalBytes != null
   const percentUsed = hasMetrics && capacity.totalBytes! > 0
     ? Math.min(100, Math.round(((capacity.usedBytes ?? 0) / capacity.totalBytes!) * 100))
     : 0
@@ -66,13 +67,16 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
         <Button
           variant="outline"
           size="sm"
-          disabled={probe.isPending}
+          disabled={probe.isPending || awaitingAgent}
           onClick={() => probe.mutate()}
         >
-          {probe.isPending ? tx("Sorgulanıyor…") : tx("Kapasiteyi Sorgula")}
+          {probe.isPending || awaitingAgent ? tx("Sorgulanıyor…") : tx("Kapasiteyi Sorgula")}
         </Button>
       }
     >
+      {awaitingAgent && (
+        <p role="status" className="text-sm text-text-muted">{tx("Kapasite sorgusu sırada; Agent yanıtı bekleniyor.")}</p>
+      )}
       {capacity?.status === 'CapacityUnavailable' && (
         <Notice tone="warning" title={tx("Kapasite bilgisi alınamadı")}>
           {tx("Depolama hedefine erişebilen aktif bir Agent veya bağlantı bulunamadı.")}
@@ -116,11 +120,33 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
             {tx("Son sorgulama: {0}", { "0": agentDate(capacity.reportedAt) })}
           </p>
         </div>
-      ) : capacity?.status !== 'CapacityUnavailable' ? (
+      ) : !awaitingAgent && capacity?.status !== 'CapacityUnavailable' ? (
         <p className="text-sm text-text-muted">
           {isPending ? tx("Kapasite bilgisi yükleniyor…") : tx("Kapasite bilgisi henüz sorgulanmadı. “Kapasiteyi Sorgula” düğmesini kullanarak güncel durumu alabilirsiniz.")}
         </p>
       ) : null}
+
+      {capacity?.history && capacity.history.length > 0 && (
+        <div className="mt-5 overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <caption className="mb-2 text-left text-text-muted">{tx("Kapasite geçmişi — en son {0} ölçüm", { "0": capacity.historyLimit ?? 30 })}</caption>
+            <thead><tr>
+              <th scope="col" className="p-2">{tx("Tarih")}</th>
+              <th scope="col" className="p-2">{tx("Toplam Alan")}</th>
+              <th scope="col" className="p-2">{tx("Kullanılan Alan")}</th>
+              <th scope="col" className="p-2">{tx("Boş Alan")}</th>
+              <th scope="col" className="p-2">{tx("Durum")}</th>
+            </tr></thead>
+            <tbody>{capacity.history.map((measurement, index) => <tr key={`${measurement.reportedAt}-${index}`} className="border-t border-border">
+              <td className="p-2">{agentDate(measurement.reportedAt)}</td>
+              <td className="p-2">{measurement.totalBytes == null ? '—' : formatCapacity(measurement.totalBytes)}</td>
+              <td className="p-2">{measurement.usedBytes == null ? '—' : formatCapacity(measurement.usedBytes)}</td>
+              <td className="p-2">{measurement.freeBytes == null ? '—' : formatCapacity(measurement.freeBytes)}</td>
+              <td className="p-2">{measurement.status === 'Critical' ? tx("Kritik") : measurement.status === 'Warning' ? tx("Uyarı") : measurement.status === 'Available' ? tx("Kullanılabilir") : tx("Kapasite bilgisi alınamadı")}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+      )}
 
       {probe.isError && (
         <p role="alert" className="mt-2 text-sm text-error">

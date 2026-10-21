@@ -1,5 +1,8 @@
 // UI source copy only. Stable wire values and customer-entered names are never catalog lookups.
 export const sourceCatalog: Record<string, { tr: string; en: string }> = {
+  "Kapasite geçmişi — en son {0} ölçüm": {"tr":"Kapasite geçmişi — en son {0} ölçüm","en":"Capacity history — latest {0} measurements"},
+  "Kapasite sorgusu sırada; Agent yanıtı bekleniyor.": {"tr":"Kapasite sorgusu sırada; Agent yanıtı bekleniyor.","en":"Capacity probe queued; waiting for the Agent response."},
+  "Agent yanıtı bekleniyor": {"tr":"Agent yanıtı bekleniyor","en":"Waiting for the Agent response"},
   "Yedekleme sağlığı": {"tr":"Yedekleme sağlığı","en":"Backup health"},
   "Sağlık durumu yalnızca bilgilendirir; yedeklemeleri engellemez.": {"tr":"Sağlık durumu yalnızca bilgilendirir; yedeklemeleri engellemez.","en":"Health is advisory only; it does not block backups."},
   "Sağlık bilgisi yükleniyor…": {"tr":"Sağlık bilgisi yükleniyor…","en":"Loading backup health…"},

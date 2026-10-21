@@ -20,6 +20,15 @@ public sealed class PostgreSqlStorageCapacitySnapshotStore(DbContextOptions<Plat
             .ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<StorageCapacitySnapshot>> GetHistoryAsync(TenantId tenantId, Guid connectionId, int limit, CancellationToken cancellationToken)
+    {
+        await using var db = PlatformDbContext.CreateForPlatformOperations(options);
+        return await db.StorageCapacitySnapshots.AsNoTracking()
+            .Where(snapshot => snapshot.TenantId == tenantId && snapshot.ConnectionId == connectionId)
+            .OrderByDescending(snapshot => snapshot.ReportedAt).ThenByDescending(snapshot => snapshot.Id)
+            .Take(Math.Clamp(limit, 1, StorageCapacityResponse.MaximumHistory)).ToListAsync(cancellationToken);
+    }
+
     public async Task SaveAsync(StorageCapacitySnapshot snapshot, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(snapshot);

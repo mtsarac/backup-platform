@@ -6,7 +6,8 @@ namespace BackupPlatform.Agent.Core.Storage;
 
 public sealed class CapacityProbeTaskHandler(
     ISftpCapacityProbeExecutor? sftpExecutor = null,
-    ILogger<CapacityProbeTaskHandler>? logger = null)
+    ILogger<CapacityProbeTaskHandler>? logger = null,
+    IReadOnlyDictionary<string, string>? localVolumeDirectories = null)
 {
     public async Task<CapacityProbeTaskResult> ExecuteAsync(CapacityProbeTaskRequest request, CancellationToken cancellationToken = default)
     {
@@ -35,63 +36,21 @@ public sealed class CapacityProbeTaskHandler(
     {
         try
         {
-            string? target = null;
-            if (request.Configuration.TryGetValue("volume", out var vol) && !string.IsNullOrWhiteSpace(vol))
-            {
-                target = vol.Trim();
-            }
-            else if (request.Configuration.TryGetValue("path", out var p) && !string.IsNullOrWhiteSpace(p))
-            {
-                target = p.Trim();
-            }
-
-            DriveInfo? drive = null;
-            if (!string.IsNullOrWhiteSpace(target))
-            {
-                try
-                {
-                    drive = new DriveInfo(target);
-                }
-                catch
-                {
-                    // Fall back to matching longest mounted root
-                    try
-                    {
-                        var full = Path.GetFullPath(target);
-                        drive = DriveInfo.GetDrives()
-                            .Where(d => full.StartsWith(d.RootDirectory.FullName, StringComparison.OrdinalIgnoreCase))
-                            .OrderByDescending(d => d.RootDirectory.FullName.Length)
-                            .FirstOrDefault();
-                    }
-                    catch
-                    {
-                        // Ignore
-                    }
-                }
-            }
-
-            if (drive is null)
-            {
-                var root = Path.GetPathRoot(Environment.CurrentDirectory) ?? "/";
-                drive = new DriveInfo(root);
-            }
-
-            if (!drive.IsReady)
-            {
-                logger?.LogWarning("Local drive {DriveName} is not ready for capacity probe.", drive.Name);
-                return CapacityProbeTaskResult.Failure(request.TaskId, request.ConnectionId, CapacityProbeFailureCodes.CapacityUnavailable, $"Drive '{drive.Name}' is not ready.");
-            }
-
-            var total = drive.TotalSize;
-            var free = drive.AvailableFreeSpace;
-            var used = Math.Max(0, total - free);
-
+            var volume = request.Configuration.GetValueOrDefault("volume") ?? "local";
+            var target = localVolumeDirectories?.GetValueOrDefault(volume);
+            if (string.IsNullOrWhiteSpace(target) || !Path.IsPathFullyQualified(target))
+                return CapacityProbeTaskResult.Failure(request.TaskId, request.ConnectionId, CapacityProbeFailureCodes.InvalidConfiguration);
+            var (total, used, free) = BackupPlatform.StorageProviders.Abstractions.FileSystem.FileSystemCapacity.Query(target);
             return CapacityProbeTaskResult.Success(request.TaskId, request.ConnectionId, total, used, free);
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return CapacityProbeTaskResult.Failure(request.TaskId, request.ConnectionId, CapacityProbeFailureCodes.TargetNotFound);
         }
         catch (Exception ex) when (ex is ArgumentException or DriveNotFoundException or IOException or UnauthorizedAccessException)
         {
             logger?.LogWarning(ex, "Failed to query local capacity for connection {ConnectionId}", request.ConnectionId);
-            return CapacityProbeTaskResult.Failure(request.TaskId, request.ConnectionId, CapacityProbeFailureCodes.CapacityUnavailable, ex.Message);
+            return CapacityProbeTaskResult.Failure(request.TaskId, request.ConnectionId, CapacityProbeFailureCodes.CapacityUnavailable);
         }
     }
 }

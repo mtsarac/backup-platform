@@ -5,11 +5,12 @@ using Microsoft.Extensions.Logging;
 
 namespace BackupPlatform.Agent.Host.Storage;
 
-public sealed class SftpCapacityProbeExecutor(ILogger<SftpCapacityProbeExecutor>? logger = null) : ISftpCapacityProbeExecutor
+public sealed class SftpCapacityProbeExecutor(SftpNetworkOptions network, ILogger<SftpCapacityProbeExecutor>? logger = null) : ISftpCapacityProbeExecutor
 {
     public async Task<CapacityProbeTaskResult> ProbeAsync(CapacityProbeTaskRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        var requestCancellation = cancellationToken;
 
         if (!request.Configuration.TryGetValue("host", out var host) || string.IsNullOrWhiteSpace(host))
         {
@@ -33,25 +34,30 @@ public sealed class SftpCapacityProbeExecutor(ILogger<SftpCapacityProbeExecutor>
 
         try
         {
-            var options = new SftpStorageOptions(host, port, username, authType, remoteDir, fingerprint, Guid.Empty, request.ConnectionId);
-            var network = new SftpNetworkOptions();
+            var options = new SftpStorageOptions(host, port, username, authType, remoteDir, fingerprint, request.TenantId, request.ConnectionId);
+            SftpConfiguration.Validate(options, network);
+            using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            lifetime.CancelAfter(network.ConnectionTimeout + network.OperationTimeout);
+            cancellationToken = lifetime.Token;
             var manager = new SftpSessionManager(options, _ => ValueTask.FromResult(new SftpCredential(password, privateKey, passphrase)), network);
 
             using var client = await manager.CreateConnectedClientAsync(cancellationToken).ConfigureAwait(false);
             var path = string.IsNullOrWhiteSpace(remoteDir) ? "/" : remoteDir;
             var info = await client.GetStatusAsync(path, cancellationToken).ConfigureAwait(false);
 
-            var blockSize = info.BlockSize > 0 ? (long)info.BlockSize : (long)info.FileSystemBlockSize;
-            var total = (long)info.TotalBlocks * blockSize;
-            var free = (long)info.AvailableBlocks * blockSize;
-            var used = Math.Max(0, total - free);
+            var blockSize = checked((long)(info.FileSystemBlockSize > 0 ? info.FileSystemBlockSize : info.BlockSize));
+            var total = checked((long)info.TotalBlocks * blockSize);
+            var free = checked((long)info.AvailableBlocks * blockSize);
+            if (total <= 0 || free < 0 || free > total) throw new IOException("Invalid filesystem capacity.");
+            var used = total - free;
 
             return CapacityProbeTaskResult.Success(request.TaskId, request.ConnectionId, total, used, free);
         }
+        catch (OperationCanceledException) when (requestCancellation.IsCancellationRequested) { throw; }
         catch (Exception ex)
         {
             logger?.LogWarning(ex, "SFTP capacity probe failed for connection {ConnectionId}", request.ConnectionId);
-            return CapacityProbeTaskResult.Failure(request.TaskId, request.ConnectionId, CapacityProbeFailureCodes.CapacityUnavailable, ex.Message);
+            return CapacityProbeTaskResult.Failure(request.TaskId, request.ConnectionId, CapacityProbeFailureCodes.CapacityUnavailable);
         }
     }
 }
