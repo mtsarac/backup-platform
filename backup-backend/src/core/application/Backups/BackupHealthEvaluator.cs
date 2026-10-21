@@ -21,9 +21,10 @@ public sealed class BackupHealthEvaluator(IBackupHealthStore store, TimeProvider
         var evidence = await store.ReadAsync(tenantId, null, now, cancellationToken);
         var jobs = evidence.Select(item => Evaluate(item, now)).ToArray();
         double? average = jobs.Length == 0 ? null : Math.Round(jobs.Average(job => job.Score), 2);
+        var anomalies = await store.ReadRecentSizeAnomaliesAsync(tenantId, now, cancellationToken);
         return new(now, jobs.Length, average, average is null ? null : Classify(average.Value), jobs.Count(job => job.State == "Healthy"),
             jobs.Count(job => job.State == "Degraded"), jobs.Count(job => job.State == "Critical"), jobs,
-            await store.ReadCapacityRisksAsync(tenantId, now, cancellationToken));
+            await store.ReadCapacityRisksAsync(tenantId, now, cancellationToken), anomalies.Items, anomalies.Total);
     }
 
     private static BackupJobHealth Evaluate(BackupHealthEvidence evidence, DateTimeOffset now)

@@ -75,6 +75,25 @@ public sealed class PostgreSqlBackupHealthStore(DbContextOptions<PlatformDbConte
             .OrderBy(risk => risk.Status == StorageCapacityStatus.Critical ? 0 : 1).ThenBy(risk => risk.ConnectionName).ThenBy(risk => risk.ConnectionId).ToArray();
     }
 
+    public async Task<(IReadOnlyList<BackupRecentSizeAnomaly> Items, int Total)> ReadRecentSizeAnomaliesAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var db = PlatformDbContext.CreateForPlatformOperations(options);
+        var since = now.AddDays(-7);
+        var warnings = from run in db.BackupRuns.AsNoTracking()
+            join job in db.BackupJobs on run.JobId equals job.Id
+            where run.TenantId == tenantId && job.TenantId == tenantId && run.Status == BackupStatus.Succeeded &&
+                run.SizeAnomalyStatus == BackupSizeAnomalyStatuses.SizeAnomalyWarning && run.CompletedAt >= since && run.CompletedAt <= now
+            select new { Run = run, JobName = job.Name };
+        var total = await warnings.CountAsync(cancellationToken);
+        var items = await warnings.OrderByDescending(row => row.Run.CompletedAt).ThenByDescending(row => row.Run.Id).Take(20)
+            .Select(row => new BackupRecentSizeAnomaly(row.Run.Id, row.Run.JobId, row.JobName, row.Run.CompletedAt!.Value,
+                row.Run.Attempts.Where(attempt => attempt.TenantId == tenantId && attempt.Number == row.Run.CurrentAttemptNumber)
+                    .SelectMany(attempt => attempt.Artifacts).Where(artifact => artifact.TenantId == tenantId).Sum(artifact => artifact.SizeBytes),
+                row.Run.SizeAnomalyBaselineBytes!.Value, row.Run.SizeAnomalyDeviationRatio!.Value))
+            .ToListAsync(cancellationToken);
+        return (items, total);
+    }
+
     private static async Task<Dictionary<Guid, StorageCapacitySnapshot>> LatestSnapshotsAsync(PlatformDbContext db, TenantId tenantId, CancellationToken cancellationToken) =>
         (await db.StorageCapacitySnapshots.AsNoTracking().Where(snapshot => snapshot.TenantId == tenantId)
             .GroupBy(snapshot => snapshot.ConnectionId).Select(group => group.OrderByDescending(snapshot => snapshot.ReportedAt).ThenByDescending(snapshot => snapshot.Id).First())
