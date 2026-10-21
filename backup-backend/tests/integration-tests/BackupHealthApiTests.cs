@@ -87,9 +87,9 @@ public sealed class BackupHealthApiTests(PostgreSqlFixture fixture) : IClassFixt
     }
 
     [Theory]
-    [InlineData("CapacityUnavailable", 100, 20, 80)]
-    [InlineData("Available", null, 20, null)]
-    [InlineData("Available", 100, -1, 101)]
+    [InlineData("CapacityUnavailable", 100L, 20L, 80L)]
+    [InlineData("Available", null, 20L, null)]
+    [InlineData("Available", 100L, -1L, 101L)]
     public async Task LatestUnavailableOrUnmeasurableCapacityNeverBorrowsAnOlderHealthyMeasurement(string status, long? total, long? used, long? free)
     {
         await using var scenario = await CreateScenarioAsync();
