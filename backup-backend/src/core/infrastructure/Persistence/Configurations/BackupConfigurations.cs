@@ -129,6 +129,10 @@ internal sealed class BackupRunConfiguration : IEntityTypeConfiguration<BackupRu
         builder.Property(run => run.TerminalReason).HasMaxLength(128);
         builder.Property(run => run.OverlapPolicy).HasConversion<string>().HasMaxLength(16).IsRequired();
         builder.Property(run => run.RetryState).HasConversion<int>();
+        builder.Property(run => run.IsSizeAnomaly).HasDefaultValue(false);
+        builder.Property(run => run.SizeAnomalyStatus).HasMaxLength(32);
+        builder.Property(run => run.SizeAnomalyDeviationRatio);
+        builder.Property(run => run.SizeAnomalyBaselineBytes);
         builder.Ignore(run => run.CurrentAttempt);
         builder.Ignore(run => run.IsTerminal);
         builder.Ignore(run => run.IsActive);
@@ -155,6 +159,7 @@ internal sealed class BackupRunConfiguration : IEntityTypeConfiguration<BackupRu
         builder.HasIndex(run => new { run.TenantId, run.JobId, run.ScheduledOccurrence }).IsUnique().HasFilter("\"ScheduledOccurrence\" IS NOT NULL");
         // The unclaimed-run sweep: pending scheduled runs, earliest deadline first.
         builder.HasIndex(run => new { run.ClaimDeadline, run.Id }).HasFilter("\"Status\" = 1 AND \"ClaimDeadline\" IS NOT NULL");
+        builder.HasIndex(run => new { run.TenantId, run.IsSizeAnomaly, run.CompletedAt });
     }
 }
 

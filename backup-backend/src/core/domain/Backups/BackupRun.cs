@@ -111,6 +111,18 @@ public sealed class BackupRun : ITenantOwned
     public DateTimeOffset? CompletedAt { get; private set; }
     public DateTimeOffset? CancellationRequestedAt { get; private set; }
     public string? TerminalReason { get; private set; }
+    public bool IsSizeAnomaly { get; private set; }
+    public string? SizeAnomalyStatus { get; private set; }
+    public double? SizeAnomalyDeviationRatio { get; private set; }
+    public long? SizeAnomalyBaselineBytes { get; private set; }
+
+    public void RecordSizeAnomaly(string status, bool isAnomaly, double? deviationRatio, long? baselineMeanBytes)
+    {
+        SizeAnomalyStatus = status;
+        IsSizeAnomaly = isAnomaly;
+        SizeAnomalyDeviationRatio = deviationRatio;
+        SizeAnomalyBaselineBytes = baselineMeanBytes;
+    }
     public IReadOnlyList<BackupRunAttempt> Attempts => _attemptView ??= _attempts.AsReadOnly();
     public IReadOnlyList<BackupLifecycleFact> Facts => _factView ??= _facts.AsReadOnly();
     public BackupRunAttempt CurrentAttempt => _attempts.Single(attempt => attempt.Number == CurrentAttemptNumber);
