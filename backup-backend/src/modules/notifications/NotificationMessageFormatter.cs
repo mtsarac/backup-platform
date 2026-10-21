@@ -52,6 +52,8 @@ public static class NotificationMessageFormatter
                 $"The latest backup of job \"{name}\" has {Fact("verified")} of {Fact("required")} required verified replicas."),
             NotificationEventTypes.StorageCapacityCritical => ($"Storage capacity critical: {name}",
                 $"Storage target \"{name}\" is at {Fact("percent")}% capacity (critical threshold 90% exceeded)."),
+            NotificationEventTypes.BackupSizeAnomaly => ($"Backup size anomaly: {name}",
+                $"A backup of job \"{name}\" succeeded with an unusual artifact size: {Fact("sizeBytes")} bytes compared with a recent average of {Fact("baselineBytes")} bytes ({Fact("deviationPercent")}% change). This advisory does not invalidate the backup."),
             _ => ($"Notification: {name}", $"An event of type {e.Type} occurred for \"{name}\".")
         };
     }

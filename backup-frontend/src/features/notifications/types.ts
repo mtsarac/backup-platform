@@ -1,6 +1,6 @@
 import type { PagedResult } from '@/features/platform/types'
 
-export const eventTypes = ['backup_failed', 'backup_stale', 'agent_offline', 'quota_critical', 'replica_degraded', 'storage_capacity_critical'] as const
+export const eventTypes = ['backup_failed', 'backup_stale', 'agent_offline', 'quota_critical', 'replica_degraded', 'storage_capacity_critical', 'backup_size_anomaly'] as const
 export const severities = ['info', 'warning', 'critical'] as const
 export const channelKinds = ['email', 'webhook', 'sms'] as const
 export const webhookAuthentications = ['none', 'bearer', 'hmac'] as const

@@ -111,17 +111,17 @@ public sealed class BackupRun : ITenantOwned
     public DateTimeOffset? CompletedAt { get; private set; }
     public DateTimeOffset? CancellationRequestedAt { get; private set; }
     public string? TerminalReason { get; private set; }
-    public bool IsSizeAnomaly { get; private set; }
+    public bool IsSizeAnomaly => SizeAnomalyStatus == BackupSizeAnomalyStatuses.SizeAnomalyWarning;
     public string? SizeAnomalyStatus { get; private set; }
     public double? SizeAnomalyDeviationRatio { get; private set; }
     public long? SizeAnomalyBaselineBytes { get; private set; }
 
-    public void RecordSizeAnomaly(string status, bool isAnomaly, double? deviationRatio, long? baselineMeanBytes)
+    public void RecordSizeAnomaly(BackupSizeAnomalyResult result)
     {
-        SizeAnomalyStatus = status;
-        IsSizeAnomaly = isAnomaly;
-        SizeAnomalyDeviationRatio = deviationRatio;
-        SizeAnomalyBaselineBytes = baselineMeanBytes;
+        if (Status != BackupStatus.Succeeded || SizeAnomalyStatus is not null) throw new InvalidOperationException("Only a newly succeeded run can be evaluated.");
+        SizeAnomalyStatus = result.Status;
+        SizeAnomalyDeviationRatio = result.DeviationRatio;
+        SizeAnomalyBaselineBytes = result.BaselineMeanBytes;
     }
     public IReadOnlyList<BackupRunAttempt> Attempts => _attemptView ??= _attempts.AsReadOnly();
     public IReadOnlyList<BackupLifecycleFact> Facts => _factView ??= _facts.AsReadOnly();

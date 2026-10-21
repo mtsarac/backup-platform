@@ -6174,4 +6174,9 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Bu adres güvenlik alıcınız olsun mu?": {"tr":"Bu adres güvenlik alıcınız olsun mu?","en":"Use this address for your security notices?"},
   "Bu adres artık sizin zorunlu break-glass bildirimlerinizi almaz. Başka bir doğrulanmış adres kaydedin.": {"tr":"Bu adres artık sizin zorunlu break-glass bildirimlerinizi almaz. Başka bir doğrulanmış adres kaydedin.","en":"This address will no longer receive your mandatory break-glass notices. Designate another verified address."},
   "Bu e-posta adresinin size ait olduğunu onaylıyorsunuz. Tenant sahibi olduğunuz sürece zorunlu break-glass bildirimleri genel politika kapalı olsa da bu adrese gönderilir.": {"tr":"Bu e-posta adresinin size ait olduğunu onaylıyorsunuz. Tenant sahibi olduğunuz sürece zorunlu break-glass bildirimleri genel politika kapalı olsa da bu adrese gönderilir.","en":"You confirm that this email address belongs to you. While you remain a tenant Owner, mandatory break-glass notices are sent here even if ordinary notifications are disabled."},
+  "Boyut Anomalisi": {"tr":"Boyut Anomalisi","en":"Size anomaly"},
+  "Boyut baz çizgisi bekleniyor": {"tr":"Boyut baz çizgisi bekleniyor","en":"Size baseline pending"},
+  "Geçmiş ortalama: {0} · Sapma: {1}": {"tr":"Geçmiş ortalama: {0} · Sapma: {1}","en":"Historical average: {0} · Deviation: {1}"},
+  "Yedek başarıyla tamamlandı. Boyut uyarısı yedeği geçersiz kılmaz; beklenmeyen veri değişikliklerini inceleyin.": {"tr":"Yedek başarıyla tamamlandı. Boyut uyarısı yedeği geçersiz kılmaz; beklenmeyen veri değişikliklerini inceleyin.","en":"The backup succeeded. The size warning does not invalidate it; investigate unexpected data changes."},
+  "Karşılaştırma için en az 3 önceki başarılı yedek gerekir.": {"tr":"Karşılaştırma için en az 3 önceki başarılı yedek gerekir.","en":"Comparison requires at least 3 previous successful backups."},
 }

@@ -12,6 +12,7 @@ export const eventTypeLabels: Record<EventType | MandatoryEventType | 'test' | '
   get quota_critical() { return tx("Kota kritik") },
   get replica_degraded() { return tx("Replica bozuldu") },
   get storage_capacity_critical() { return tx("Depolama kapasitesi kritik") },
+  get backup_size_anomaly() { return tx("Boyut Anomalisi") },
   get test() { return tx("Test bildirimi") },
   get recipient_verification() { return tx("E-posta onay isteği") },
   get break_glass_access() { return tx("Break-glass erişimi") },

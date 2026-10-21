@@ -22,7 +22,10 @@ public sealed record UpdateBackupJobRequest(string Name, Guid AgentId, BackupExe
 public sealed record BackupLastRunView(Guid Id, string Status, DateTimeOffset CreatedAt, DateTimeOffset? StartedAt, DateTimeOffset? CompletedAt, string? ReasonCode);
 public sealed record BackupJobView(Guid Id, Guid AgentId, string Name, string BackupType, string OverlapPolicy, BackupRetryPolicyView RetryPolicy, bool Enabled, DateTimeOffset CreatedAt, BackupExecutionConfiguration Configuration, BackupScheduleView? Schedule = null, BackupRetentionPolicyView? Retention = null, BackupLastRunView? LastRun = null, string? AgentName = null, DateTimeOffset? NextOccurrenceAt = null);
 /// <summary>A run. <see cref="ScheduledFor"/> and <see cref="ScheduleDelaySeconds"/> are set for scheduled runs only: the instant the schedule asked for, and how long after it the run was actually created.</summary>
-public sealed record BackupRunView(Guid Id, Guid JobId, Guid AgentId, string Status, string BackupType, string TriggerType, BackupExecutionConfiguration Configuration, int CurrentAttemptNumber, DateTimeOffset CreatedAt, DateTimeOffset? StartedAt, DateTimeOffset? CompletedAt, DateTimeOffset? CancellationRequestedAt, string? ReasonCode, string? Reason, BackupRetryView Retry, IReadOnlyList<BackupAttemptView> Attempts, DateTimeOffset? ScheduledFor = null, double? ScheduleDelaySeconds = null, DateTimeOffset? ClaimDeadline = null, BackupRetentionPolicyView? Retention = null, string? JobName = null, string? AgentName = null, BackupReplicationView? Replication = null);
+public sealed record BackupRunView(Guid Id, Guid JobId, Guid AgentId, string Status, string BackupType, string TriggerType, BackupExecutionConfiguration Configuration, int CurrentAttemptNumber, DateTimeOffset CreatedAt, DateTimeOffset? StartedAt, DateTimeOffset? CompletedAt, DateTimeOffset? CancellationRequestedAt, string? ReasonCode, string? Reason, BackupRetryView Retry, IReadOnlyList<BackupAttemptView> Attempts, DateTimeOffset? ScheduledFor = null, double? ScheduleDelaySeconds = null, DateTimeOffset? ClaimDeadline = null, BackupRetentionPolicyView? Retention = null, string? JobName = null, string? AgentName = null, BackupReplicationView? Replication = null, string? SizeAnomalyStatus = null, double? SizeAnomalyDeviationRatio = null, long? SizeAnomalyBaselineBytes = null)
+{
+    public bool IsSizeAnomaly => SizeAnomalyStatus == BackupSizeAnomalyStatuses.SizeAnomalyWarning;
+}
 /// <summary>Where the run stands in its retry lifecycle. <see cref="AttemptsUsed"/> counts attempts created, <see cref="MaxAttempts"/> is the total allowed (not a retry count).</summary>
 public sealed record BackupRetryView(int MaxAttempts, int AttemptsUsed, string State, DateTimeOffset? NextAttemptAt, string? LastFailureCode, string? LastFailureReason, bool? LastFailureRetryable, string OverlapPolicy, BackupRetryPolicyView Policy);
 public sealed record BackupAttemptView(Guid Id, int Number, string Status, DateTimeOffset CreatedAt, DateTimeOffset? StartedAt, DateTimeOffset? CompletedAt, string? ReasonCode, string? Reason, bool? Retryable, string? ProgressStage, double? ProgressPercent, DateTimeOffset? ProgressAt, IReadOnlyList<BackupArtifactView> Artifacts, string? Trigger = null, BackupReplicationView? Replication = null);
@@ -373,7 +376,8 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
                 a.ProgressAt, a.Artifacts.Select(artifact => ToView(artifact, run.Id, run.JobId, run.Configuration)).ToArray(),
                 AttemptTrigger(run, a), ToView(BackupReplicationEvaluator.ForAttempt(run.Configuration, a)))).ToArray(),
             run.ScheduledOccurrence, run.ScheduledOccurrence is { } scheduledFor ? Math.Max(0, (run.CreatedAt - scheduledFor).TotalSeconds) : null, run.ClaimDeadline, ToView(run.RetentionPolicy),
-            Replication: ToView(EffectiveReplication(run)));
+            Replication: ToView(EffectiveReplication(run)), SizeAnomalyStatus: run.SizeAnomalyStatus,
+            SizeAnomalyDeviationRatio: run.SizeAnomalyDeviationRatio, SizeAnomalyBaselineBytes: run.SizeAnomalyBaselineBytes);
     }
 
     /// <summary>The replication of the attempt that decides the run: the succeeded one if any, else the latest that actually transferred something.</summary>

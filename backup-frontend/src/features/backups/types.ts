@@ -61,6 +61,10 @@ export interface BackupRun {
   cancellationRequestedAt: string | null
   reasonCode: string | null
   reason: string | null
+  isSizeAnomaly: boolean
+  sizeAnomalyStatus: 'BaselinePending' | 'Normal' | 'SizeAnomalyWarning' | null
+  sizeAnomalyDeviationRatio: number | null
+  sizeAnomalyBaselineBytes: number | null
   scheduledFor: string | null
   scheduleDelaySeconds: number | null
   claimDeadline: string | null
