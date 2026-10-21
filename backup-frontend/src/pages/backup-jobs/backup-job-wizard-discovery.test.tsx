@@ -16,7 +16,7 @@ vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('@/features/agents/api', () => ({ getAgents: vi.fn().mockResolvedValue([{ agentId: 'agent-a', hostName: 'SQL Agent', operationalStatus: 'Online', capabilities: [{ identifier: 'discovery.database-inventory', support: 'Supported' }] }]) }))
 vi.mock('@/features/storage-connections/api')
 vi.mock('@/features/discovery/api')
-vi.mock('@/features/backup-jobs/api', () => ({ saveBackupJob: vi.fn(), getBackupJob: vi.fn(), getBackupJobs: vi.fn(), getOccurrences: vi.fn(), startJobRun: vi.fn(), setJobEnabled: vi.fn() }))
+vi.mock('@/features/backup-jobs/api', () => ({ saveBackupJob: vi.fn(), getBackupJob: vi.fn(), getBackupJobHealth: vi.fn(), getBackupJobs: vi.fn(), getOccurrences: vi.fn(), startJobRun: vi.fn(), setJobEnabled: vi.fn() }))
 
 function mount(route = '/tenants/tenant-a/backup-jobs/new') {
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter initialEntries={[route]}><Routes>

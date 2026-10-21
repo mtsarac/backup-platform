@@ -39,7 +39,7 @@ export function BackupJobsPage() {
   const base = `/tenants/${tenantId}`
   const newJob = canOperate ? <Link className={buttonVariants()} to={`${base}/backup-jobs/new`}><Plus aria-hidden="true" />{tx("Yeni iş")}</Link> : undefined
   const columns: Column<BackupJob>[] = [
-    { key: 'name', header: tx('İş adı'), wrap: true, render: job => <span className="space-y-1"><span className="block font-medium text-text-heading">{job.name}</span><StatusPill status={job.enabled ? 'Active' : 'Disabled'} /></span> },
+    { key: 'name', header: tx('İş adı'), wrap: true, render: job => <span className="space-y-1"><Link to={`${base}/backup-jobs/${job.id}/edit`} className={`block font-medium ${linkClass}`}>{job.name}</Link><StatusPill status={job.enabled ? 'Active' : 'Disabled'} /></span> },
     { key: 'agent', header: tx('Agent'), wrap: true, render: job => job.agentName || tx('Agent adı bulunamadı') },
     { key: 'database', header: tx('Database'), wrap: true, render: job => job.configuration.database },
     { key: 'encryption', header: tx('Şifreleme'), render: job => <PolicyBadge policy={job.configuration.encryptionPolicy} /> },

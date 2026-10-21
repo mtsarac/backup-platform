@@ -15,7 +15,7 @@ import { BackupJobWizardPage } from './backup-job-wizard-page'
 
 vi.mock('@/features/agents/api', () => ({ getAgents: vi.fn().mockResolvedValue([{ agentId: 'agent-a', hostName: 'SQL Agent', operationalStatus: 'Online' }]) }))
 vi.mock('@/features/storage-connections/api')
-vi.mock('@/features/backup-jobs/api', () => ({ getBackupJob: vi.fn(), getOccurrences: vi.fn(), saveBackupJob: vi.fn() }))
+vi.mock('@/features/backup-jobs/api', () => ({ getBackupJob: vi.fn(), getBackupJobHealth: vi.fn(), getOccurrences: vi.fn(), saveBackupJob: vi.fn() }))
 
 /** Fills the required fields of steps 1-2 and lands on the Depolama step. */
 async function reachStorage(name: string) {

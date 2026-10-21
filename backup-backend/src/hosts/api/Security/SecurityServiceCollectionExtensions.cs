@@ -98,6 +98,8 @@ public static class SecurityServiceCollectionExtensions
         });
         services.AddScoped<IBackupRunStore, PostgreSqlBackupRunStore>();
         services.AddScoped<IBackupUiStore, PostgreSqlBackupUiStore>();
+        services.AddScoped<IBackupHealthStore, PostgreSqlBackupHealthStore>();
+        services.AddScoped<BackupHealthEvaluator>();
         services.AddScoped<ITenantWrapKeyStore, PostgreSqlTenantWrapKeyStore>();
         services.AddScoped<ITenantRecoveryKeyStore, PostgreSqlTenantRecoveryKeyStore>();
         services.TryAddSingleton(provider => BackupPlatform.Api.Backups.ArtifactRecoveryConfiguration.Load(provider.GetRequiredService<IConfiguration>()));
