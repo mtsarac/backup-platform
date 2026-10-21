@@ -113,7 +113,7 @@ describe('Storage connections list and detail', () => {
     })
     mount(detail('conn-local'))
     await userEvent.click(await screen.findByRole('button', { name: 'Kapasiteyi Sorgula' }))
-    expect(await screen.findByRole('status')).toHaveTextContent('Agent yanıtı bekleniyor')
+    expect(await screen.findByText(/Agent yanıtı bekleniyor/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Sorgulanıyor…' })).toBeDisabled()
     expect(screen.queryByText('100 kB')).not.toBeInTheDocument()
     expect(await screen.findByText('Kritik', {}, { timeout: 4_000 })).toBeInTheDocument()

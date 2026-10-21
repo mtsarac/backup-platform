@@ -385,17 +385,10 @@ public sealed class StorageCapacityProbeIntegrationTests(PostgreSqlFixture fixtu
             LeaseToken = task.LeaseToken,
             Result = CapacityProbeTaskResult.Success(task.TaskId, id, 100, 92, 8)
         };
-        var name = "p5a_capacity_" + Guid.NewGuid().ToString("N");
         await using (var db = fixture.CreatePlatformContext())
-            await db.Database.ExecuteSqlRawAsync($"""
-                CREATE FUNCTION {name}() RETURNS trigger LANGUAGE plpgsql AS $fn$
-                BEGIN
-                    IF NEW."TenantId" = '{setup.Tenant.Id.Value}'::uuid THEN
-                        RAISE EXCEPTION 'p5a_capacity_atomic_failure';
-                    END IF;
-                    RETURN NEW;
-                END $fn$;
-                CREATE TRIGGER {name} BEFORE INSERT ON notification_events FOR EACH ROW EXECUTE FUNCTION {name}();
+            await db.Database.ExecuteSqlRawAsync("""
+                ALTER TABLE notification_events ADD CONSTRAINT p5a_capacity_atomic_failure
+                CHECK ("Type" <> 'storage_capacity_critical') NOT VALID
                 """);
         try
         {
@@ -415,7 +408,7 @@ public sealed class StorageCapacityProbeIntegrationTests(PostgreSqlFixture fixtu
         finally
         {
             await using var db = fixture.CreatePlatformContext();
-            await db.Database.ExecuteSqlRawAsync($"DROP TRIGGER {name} ON notification_events; DROP FUNCTION {name}();");
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE notification_events DROP CONSTRAINT p5a_capacity_atomic_failure");
         }
         using var accepted = await world.SendAgentAsync(HttpMethod.Post, $"/api/agent/capacity-probes/{task.TaskId}/complete",
             agent.CredentialId, agent.Secret, body: body);
