@@ -1,3 +1,4 @@
+using System.Globalization;
 using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Backups;
@@ -13,10 +14,9 @@ using Microsoft.Extensions.Logging;
 namespace BackupPlatform.Infrastructure.Notifications;
 
 /// <summary>
-/// The detectors: they READ the platform's existing facts (runs, agent liveness, quota standing, replica health) and report what they see. They write
-/// nothing, hook into no backup code path and add no work to backup or restore, so a notification problem can never reach them, and they reuse the platform's
-/// own definitions (<see cref="AgentConnectivityEvaluator"/>-style timeout, <see cref="QuotaState"/>, <see cref="BackupReplicationEvaluator"/>) instead of
-/// restating them. A type whose read fails is omitted from the result, never reported as empty.
+/// The detectors read platform facts and report observations without performing transport I/O. Size anomalies also use the same one-shot
+/// observation at completion, so their outbox commits with the successful run; later sweeps are idempotent. A type whose read fails is
+/// omitted from the result, never reported as empty.
 /// </summary>
 public sealed class PostgreSqlNotificationObservationSource(
     DbContextOptions<PlatformDbContext> options, IStorageUsageService usage, AgentConnectivityOptions connectivity, ILogger<PostgreSqlNotificationObservationSource> logger)
@@ -40,6 +40,7 @@ public sealed class PostgreSqlNotificationObservationSource(
                     NotificationEventTypes.QuotaCritical => new(type, true, await QuotaAsync(policy, now, cancellationToken)),
                     NotificationEventTypes.ReplicaDegraded => new(type, true, await DegradedReplicasAsync(policy, cancellationToken)),
                     NotificationEventTypes.StorageCapacityCritical => new(type, true, await StorageCapacityAsync(policy, now, cancellationToken)),
+                    NotificationEventTypes.BackupSizeAnomaly => new(type, false, await SizeAnomaliesAsync(policy, now, cancellationToken)),
                     _ => throw new InvalidOperationException("Unknown notification event type.")
                 });
             }
@@ -97,6 +98,31 @@ public sealed class PostgreSqlNotificationObservationSource(
             new("backup_job", run.JobId, jobNames.GetValueOrDefault(run.JobId, "Backup job")), run.CompletedAt!.Value,
             new Dictionary<string, string> { ["code"] = Code(run.TerminalReason, run.Status == BackupStatus.AgentLost ? "agent_lost" : "failed") })).ToList();
     }
+
+    private async Task<IReadOnlyList<NotificationObservation>> SizeAnomaliesAsync(NotificationPolicy policy, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var since = new[] { policy.ActiveSince ?? policy.UpdatedAt, now - FailureLookback }.Max();
+        var runs = await context.BackupRuns.AsNoTracking()
+            .Where(run => run.TenantId == policy.TenantId && run.Status == BackupStatus.Succeeded &&
+                run.SizeAnomalyStatus == BackupSizeAnomalyStatuses.SizeAnomalyWarning && run.CompletedAt >= since &&
+                !context.NotificationEvents.Any(e => e.TenantId == policy.TenantId && e.DedupKey == NotificationEventTypes.BackupSizeAnomaly + ":" + run.Id.ToString().Replace("-", "")))
+            .OrderBy(run => run.CompletedAt).ThenBy(run => run.Id).Take(MaximumFailuresPerSweep)
+            .Include(run => run.Attempts).ThenInclude(attempt => attempt.Artifacts).ToListAsync(cancellationToken);
+        var names = await JobNamesAsync(context, policy, runs.Select(run => run.JobId).Distinct().ToList(), cancellationToken);
+        return runs.Select(run => SizeAnomaly(run, names.GetValueOrDefault(run.JobId, "Backup job"))).ToList();
+    }
+
+    internal static NotificationObservation SizeAnomaly(BackupRun run, string jobName) => new(
+        $"{NotificationEventTypes.BackupSizeAnomaly}:{run.Id:N}", NotificationEventTypes.BackupSizeAnomaly, NotificationSeverity.Warning,
+        new("backup_job", run.JobId, jobName), run.CompletedAt!.Value,
+        new Dictionary<string, string>
+        {
+            ["runId"] = run.Id.ToString("D"),
+            ["sizeBytes"] = run.CurrentAttempt.Artifacts.Sum(artifact => artifact.SizeBytes).ToString(CultureInfo.InvariantCulture),
+            ["baselineBytes"] = run.SizeAnomalyBaselineBytes!.Value.ToString(CultureInfo.InvariantCulture),
+            ["deviationPercent"] = (run.SizeAnomalyDeviationRatio!.Value * 100).ToString("0.##", CultureInfo.InvariantCulture)
+        });
 
 
     private async Task<IReadOnlyList<NotificationObservation>> StaleJobsAsync(NotificationPolicy policy, DateTimeOffset now, CancellationToken cancellationToken)

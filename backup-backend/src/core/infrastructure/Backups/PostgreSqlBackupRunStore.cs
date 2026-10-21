@@ -6,6 +6,8 @@ using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Restores;
 using BackupPlatform.Infrastructure.ManagedService;
+using BackupPlatform.Infrastructure.Notifications;
+using BackupPlatform.Notifications;
 using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
@@ -21,7 +23,7 @@ namespace BackupPlatform.Infrastructure.Backups;
 /// agent limits are decided against a consistent count of Leased/Running attempts by any number of backend instances. Releasing
 /// transitions (complete, expire, cancel) never wait on that lock, so the two lock orders cannot cycle.
 /// </summary>
-public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext> options, IBackupAdmissionPolicy admission, BackupExecutionOptions? limits = null, Func<double>? jitter = null) : IBackupRunStore
+public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext> options, IBackupAdmissionPolicy admission, BackupExecutionOptions? limits = null, Func<double>? jitter = null, NotificationOptions? notifications = null) : IBackupRunStore
 {
     // Arbitrary fixed application key for the claim critical section.
     private const long ClaimLockKey = 0x4250_434C_4149_4D01;
@@ -438,6 +440,27 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         catch (InvalidOperationException) { return BackupMutationResult.Conflict; }
         catch (ArgumentException) { return BackupMutationResult.Conflict; }
         BackupAudit.RecordCompletion(context, run, wasTerminal, attemptWasTerminal, command.Now);
+        if (!wasTerminal && run.Status == BackupStatus.Succeeded)
+        {
+            var baseline = await context.BackupRuns.AsNoTracking()
+                .Where(previous => previous.TenantId == run.TenantId && previous.JobId == run.JobId && previous.Status == BackupStatus.Succeeded && previous.Id != run.Id)
+                .OrderByDescending(previous => previous.CompletedAt ?? previous.CreatedAt).ThenByDescending(previous => previous.Id).Take(10)
+                .Select(previous => previous.Attempts.Where(attempt => attempt.Status == BackupStatus.Succeeded)
+                    .SelectMany(attempt => attempt.Artifacts).Sum(artifact => artifact.SizeBytes)).ToListAsync(cancellationToken);
+            run.RecordSizeAnomaly(BackupSizeAnomalyDetector.Evaluate(run.CurrentAttempt.Artifacts.Sum(artifact => artifact.SizeBytes), baseline));
+            if (run.IsSizeAnomaly)
+            {
+                var jobName = await context.BackupJobs.Where(job => job.TenantId == run.TenantId && job.Id == run.JobId).Select(job => job.Name).SingleAsync(cancellationToken);
+                await PostgreSqlNotificationStore.RecordOccurrenceAsync(context, run.TenantId,
+                    PostgreSqlNotificationObservationSource.SizeAnomaly(run, jobName), notifications ?? new NotificationOptions(), command.Now, cancellationToken);
+                context.AuditEvents.Add(AuditEvent.Record(command.Now, UserId.System, AuditActorKind.System, AuditActions.BackupRunSizeAnomaly, run.TenantId,
+                    "backup_run", run.Id.ToString("D"), new Dictionary<string, object?>
+                    {
+                        ["jobId"] = run.JobId, ["status"] = run.SizeAnomalyStatus,
+                        ["deviationRatio"] = run.SizeAnomalyDeviationRatio, ["baselineBytes"] = run.SizeAnomalyBaselineBytes
+                    }));
+            }
+        }
         try { await context.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateConcurrencyException) { return BackupMutationResult.Conflict; }
         await transaction.CommitAsync(cancellationToken);

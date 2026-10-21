@@ -7,6 +7,7 @@ export function makeRun(patch: Partial<BackupRun> = {}): BackupRun {
     configuration: { database: 'Uygulama', engine: 'mssql', host: 'sql-host', port: 1433, destinations: [{ storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true }] },
     currentAttemptNumber: 1, createdAt: '2026-10-06T10:00:00Z', startedAt: '2026-10-06T10:01:00Z',
     completedAt: null, cancellationRequestedAt: null, reasonCode: null, reason: null,
+    isSizeAnomaly: false, sizeAnomalyStatus: null, sizeAnomalyDeviationRatio: null, sizeAnomalyBaselineBytes: null,
     scheduledFor: null, scheduleDelaySeconds: null, claimDeadline: null, retention: null,
     retry: { maxAttempts: 3, attemptsUsed: 1, state: 'None', nextAttemptAt: null, lastFailureCode: null,
       lastFailureReason: null, lastFailureRetryable: null, overlapPolicy: 'Skip',

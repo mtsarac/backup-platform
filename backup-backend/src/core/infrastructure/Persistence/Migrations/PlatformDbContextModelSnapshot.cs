@@ -1151,6 +1151,16 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("ScheduledOccurrence")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<long?>("SizeAnomalyBaselineBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<double?>("SizeAnomalyDeviationRatio")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("SizeAnomalyStatus")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<DateTimeOffset?>("StartedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1246,6 +1256,8 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "JobId", "ScheduledOccurrence")
                         .IsUnique()
                         .HasFilter("\"ScheduledOccurrence\" IS NOT NULL");
+
+                    b.HasIndex("TenantId", "SizeAnomalyStatus", "CompletedAt");
 
                     b.HasIndex("TenantId", "Status", "CreatedAt");
 
@@ -3451,6 +3463,66 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BackupPlatform.Domain.Storage.StorageCapacitySnapshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<long?>("FreeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("ReportedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("TenantId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("TotalBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("UsedBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("Id", "TenantId");
+
+                    b.HasIndex("ConnectionId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "ConnectionId", "ReportedAt")
+                        .HasDatabaseName("ix_storage_capacity_snapshots_connection");
+
+                    b.ToTable("storage_capacity_snapshots", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_storage_capacity_snapshots_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_storage_capacity_snapshots_status", "\"Status\" IN ('Available','CapacityUnavailable')");
+
+                            t.HasCheckConstraint("ck_storage_capacity_snapshots_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
+                        });
+                });
+
             modelBuilder.Entity("BackupPlatform.Domain.Storage.StorageConnection", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3578,76 +3650,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_storage_connections_test", "(\"LastTestStatus\" IS NULL) = (\"LastTestedAt\" IS NULL) AND (\"LastTestStatus\" IS NULL OR \"LastTestStatus\" IN ('Succeeded','Failed','NotTestable'))");
                         });
-                });
-
-            modelBuilder.Entity("BackupPlatform.Domain.Storage.StorageCapacitySnapshot", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TenantId")
-                        .IsConcurrencyToken()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ConnectionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<long?>("TotalBytes")
-                        .HasColumnType("bigint");
-
-                    b.Property<long?>("UsedBytes")
-                        .HasColumnType("bigint");
-
-                    b.Property<long?>("FreeBytes")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<DateTimeOffset>("ReportedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ErrorMessage")
-                        .HasMaxLength(1024)
-                        .HasColumnType("character varying(1024)");
-
-                    b.Property<uint>("xmin")
-                        .IsRowVersion()
-                        .HasColumnType("xid");
-
-                    b.HasKey("Id");
-
-                    b.HasAlternateKey("Id", "TenantId");
-
-                    b.HasIndex("ConnectionId");
-
-                    b.HasIndex("TenantId");
-
-                    b.HasIndex("TenantId", "ConnectionId", "ReportedAt")
-                        .HasDatabaseName("ix_storage_capacity_snapshots_connection");
-
-                    b.ToTable("storage_capacity_snapshots", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_storage_capacity_snapshots_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
-
-                            t.HasCheckConstraint("ck_storage_capacity_snapshots_status", "\"Status\" IN ('Available','CapacityUnavailable')");
-
-                            t.HasCheckConstraint("ck_storage_capacity_snapshots_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
-                        });
-
-                    b.HasOne("BackupPlatform.Domain.Storage.StorageConnection", null)
-                        .WithMany()
-                        .HasForeignKey("ConnectionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("BackupPlatform.Domain.Support.SupportAccessSession", b =>
@@ -4824,6 +4826,21 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("ReplicaId", "TenantId")
                         .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Storage.StorageCapacitySnapshot", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Storage.StorageConnection", null)
+                        .WithMany()
+                        .HasForeignKey("ConnectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

@@ -17,6 +17,7 @@ import { useBackupJobs } from '@/features/backup-jobs/hooks'
 import { useBackups } from '@/features/backups/hooks'
 import { dateFilterInstant, formatDuration, formatTimestamp, runStatuses, runStatusLabels, triggerLabel } from '@/features/backups/presentation'
 import { ReplicationBadge } from '@/features/backups/replication'
+import { SizeAnomalyBadge, SizeAnomalyComparison } from '@/features/backups/size-anomaly'
 import type { BackupRun, BackupRunFilters, BackupRunStatus, BackupTrigger } from '@/features/backups/types'
 import { linkClass } from '@/features/platform/styles'
 import { useTenant } from '@/features/tenancy/use-tenant'
@@ -43,6 +44,7 @@ export function BackupsPage() {
     </div> },
     { key: 'status', header: tx('Durum'), render: (run) => <div className="flex flex-col items-start gap-1">
       <StatusPill status={run.status} /><ReplicationBadge replication={run.replication} />
+      <SizeAnomalyBadge run={run} /><SizeAnomalyComparison run={run} />
       <span className="text-sm text-text-muted">{tx("Deneme")}{' '}{run.currentAttemptNumber} / {run.retry.maxAttempts}</span>
     </div> },
     { key: 'trigger', header: tx('Tetikleyici'), wrap: true, render: (run) => <div>{triggerLabel(run.triggerType)}<p className="text-sm text-text-muted">{tx("Planlanan:")}{' '}{formatTimestamp(run.scheduledFor)}</p></div> },

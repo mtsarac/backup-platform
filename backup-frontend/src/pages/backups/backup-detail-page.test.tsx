@@ -35,6 +35,27 @@ beforeEach(() => {
 })
 
 describe('run detail controls and attention', () => {
+  it('shows a yellow advisory and historical comparison without treating a successful backup as failed', () => {
+    state.query.data = makeRun({ status: 'Succeeded', isSizeAnomaly: true, sizeAnomalyStatus: 'SizeAnomalyWarning', sizeAnomalyBaselineBytes: 1000, sizeAnomalyDeviationRatio: -0.5 })
+    renderDetail()
+    expect(screen.getByText('Boyut Anomalisi')).toBeInTheDocument()
+    expect(screen.getByText('Boyut Anomalisi')).toHaveClass('bg-warning-subtle')
+    expect(screen.getByText(/Geçmiş ortalama: 1000 B/)).toHaveTextContent('-%50')
+    expect(screen.getByText('Yedek başarıyla tamamlandı. Boyut uyarısı yedeği geçersiz kılmaz; beklenmeyen veri değişikliklerini inceleyin.')).toBeInTheDocument()
+    expect(screen.getByText('Başarılı')).toBeInTheDocument()
+    expect(screen.queryByText('Çalıştırma başarısız oldu')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Yeniden dene' })).not.toBeInTheDocument()
+  })
+
+  it('distinguishes cold-start metadata from missing measurements', () => {
+    state.query.data = makeRun({ status: 'Succeeded', sizeAnomalyStatus: 'BaselinePending' })
+    renderDetail()
+    expect(screen.getByText('Boyut baz çizgisi bekleniyor')).toBeInTheDocument()
+    expect(screen.getByText('Karşılaştırma için en az 3 önceki başarılı yedek gerekir.')).toBeInTheDocument()
+    expect(screen.queryByText('Boyut Anomalisi')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Geçmiş ortalama:/)).not.toBeInTheDocument()
+  })
+
   it('resets the selected tab and cancellation confirmation when navigating to another run', async () => {
     const router = createMemoryRouter([{ path: '/tenants/:tenantId/backup-runs/:id', element: <BackupDetailPage /> }], { initialEntries: ['/tenants/tenant-a/backup-runs/first'] })
     render(<RouterProvider router={router} />)

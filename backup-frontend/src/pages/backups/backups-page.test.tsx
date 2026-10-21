@@ -22,6 +22,16 @@ beforeEach(() => {
 })
 
 describe('run history filters and pagination', () => {
+  it('shows anomaly and signed comparison beside success while normal runs have no warning badge', () => {
+    state.page = { items: [makeRun({ status: 'Succeeded', isSizeAnomaly: true, sizeAnomalyStatus: 'SizeAnomalyWarning', sizeAnomalyBaselineBytes: 1000, sizeAnomalyDeviationRatio: 2 }),
+      makeRun({ id: 'normal-run', status: 'Succeeded', sizeAnomalyStatus: 'Normal', sizeAnomalyBaselineBytes: 1000, sizeAnomalyDeviationRatio: 0.05 })], totalCount: 2, page: 1, pageSize: 25 }
+    render(<MemoryRouter><BackupsPage /></MemoryRouter>)
+    expect(screen.getAllByText('Boyut Anomalisi')).toHaveLength(1)
+    expect(screen.getAllByText('Başarılı')).toHaveLength(2)
+    expect(screen.getAllByText(/Geçmiş ortalama: 1000 B/)[0]).toHaveTextContent('+%200')
+    expect(screen.getAllByText(/Geçmiş ortalama: 1000 B/)[1]).toHaveTextContent('+%5')
+  })
+
   it('submits all filters to query hook, resets page on change, and clears filters', () => {
     render(<MemoryRouter><BackupsPage /></MemoryRouter>)
     fireEvent.click(screen.getByRole('button', { name: 'Sonraki' }))

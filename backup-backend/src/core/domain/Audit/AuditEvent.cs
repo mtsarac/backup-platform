@@ -54,6 +54,7 @@ public static class AuditActions
     public const string BackupRunCancelRequested = "backup_run.cancel_requested";
     public const string BackupRunCompleted = "backup_run.completed";
     public const string BackupRunAttemptCompleted = "backup_run.attempt_completed";
+    public const string BackupRunSizeAnomaly = "backup_run.size_anomaly";
     public const string BackupScheduleOccurrenceDecided = "backup_schedule.occurrence_decided";
 
     // Retention / replica deletion events

@@ -15,6 +15,7 @@ import { ConfirmDialog } from '@/features/agents/confirm-dialog'
 import { useBackup, useBackupActions } from '@/features/backups/hooks'
 import { canCancelRun, canRetryRun, formatDuration, formatSeconds, formatTimestamp, isActiveRun, progressStageLabel, retryStateLabels, triggerLabel } from '@/features/backups/presentation'
 import { ReplicationBadge, ReplicationSection } from '@/features/backups/replication'
+import { SizeAnomalyBadge, SizeAnomalyComparison } from '@/features/backups/size-anomaly'
 import type { BackupAttempt, BackupRun } from '@/features/backups/types'
 import { linkClass } from '@/features/platform/styles'
 import { useTenant } from '@/features/tenancy/use-tenant'
@@ -78,7 +79,7 @@ function BackupDetail({ id }: { id: string }) {
         crumbs={[{ label: tx('Backup Run\'lar'), to: `/tenants/${tenantId}/backup-runs` }, { label: run?.jobName ?? tx('Backup Run') }]}
         title={run?.jobName ?? tx('Backup Run')}
         description={run ? `${run.configuration.database} · ${run.agentName ?? 'Agent'}` : undefined}
-        meta={run && <><StatusPill status={run.status} /><ReplicationBadge replication={run.replication} /><span className="text-sm text-text-muted">{triggerLabel(run.triggerType)} · {formatTimestamp(run.startedAt ?? run.createdAt)}</span></>}
+        meta={run && <><StatusPill status={run.status} /><ReplicationBadge replication={run.replication} /><SizeAnomalyBadge run={run} /><span className="text-sm text-text-muted">{triggerLabel(run.triggerType)} · {formatTimestamp(run.startedAt ?? run.createdAt)}</span></>}
         actions={run && canOperate && <>
           {canRetryRun(run.status) && <Button disabled={busy} onClick={() => void perform('retry')}>{actions.retry.isPending ? tx('Sıraya alınıyor…') : tx('Yeniden dene')}</Button>}
           {canCancelRun(run.status) && <Button variant="destructive" disabled={busy} onClick={() => { actions.cancel.reset(); setConfirmCancel(true) }}>{actions.cancel.isPending ? tx('İletiliyor…') : tx('İptal et')}</Button>}
@@ -95,6 +96,9 @@ function BackupDetail({ id }: { id: string }) {
           <Tabs label={tx("Backup Run bölümleri")} idPrefix="run" value={tab} onChange={setTab} items={tabs} />
           <div role="tabpanel" id={`run-panel-${tab}`} aria-labelledby={`run-tab-${tab}`} className="space-y-6">
             {tab === 'summary' && <>
+              {run.sizeAnomalyStatus === 'SizeAnomalyWarning' && <Notice tone="warning">{tx("Yedek başarıyla tamamlandı. Boyut uyarısı yedeği geçersiz kılmaz; beklenmeyen veri değişikliklerini inceleyin.")}</Notice>}
+              {run.sizeAnomalyStatus === 'BaselinePending' && <p className="text-sm text-text-muted">{tx("Karşılaştırma için en az 3 önceki başarılı yedek gerekir.")}</p>}
+              <SizeAnomalyComparison run={run} />
               {(run.status === 'Failed' || run.status === 'AgentLost') && <Section tone="danger" title={tx("Çalıştırma başarısız oldu")}>
                 <div className="space-y-1 text-sm">
                   <p className="font-medium text-error">{failureMessage(run.reasonCode ?? run.retry.lastFailureCode)}</p>
