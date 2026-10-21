@@ -24,7 +24,8 @@ public sealed class StorageCapacityProbeService(
         var snapshots = await snapshotStore.GetHistoryAsync(tenantId, connectionId, StorageCapacityResponse.MaximumHistory, cancellationToken).ConfigureAwait(false);
         var response = pending ?? (snapshots.Count == 0 ? null : StorageCapacityResponse.From(snapshots[0]));
         var connection = await connectionStore.FindAsync(connectionId, tenantId, cancellationToken).ConfigureAwait(false);
-        if (connection is not null && pending is null
+        if (connection is not null && pending is null && snapshots.Count > 0
+            && snapshots[0].Status != StorageCapacityStatus.CapacityUnavailable
             && !await taskQueue.CanUseSnapshotAsync(tenantId, connectionId, _time.GetUtcNow(), cancellationToken).ConfigureAwait(false))
             response = new StorageCapacityResponse
             {

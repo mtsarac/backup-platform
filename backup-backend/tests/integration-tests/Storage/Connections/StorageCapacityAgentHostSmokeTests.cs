@@ -1,6 +1,8 @@
 using System.Net;
 using System.Text.Json;
 using BackupPlatform.IntegrationTests.Backup;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit.Abstractions;
 
 namespace BackupPlatform.IntegrationTests.Storage.Connections;
@@ -35,14 +37,20 @@ public sealed class StorageCapacityAgentHostSmokeTests(PostgreSqlFixture fixture
         await using var world = await AgentWorld.CreateAsync(fixture, clock: new MutableClock(live: true), kestrel: true);
         var setup = await world.CreateTenantAsync();
         var agent = await world.EnrollAsync(setup);
+        var reference = "capacity-smoke-" + Guid.NewGuid().ToString("N");
         var connection = await StorageCapacityProbeIntegrationTests.AddConnectionAsync(world, setup, "sftp", new()
         {
             ["host"] = hostName, ["port"] = port, ["username"] = username, ["authenticationType"] = "password",
             ["remoteBaseDirectory"] = "/", ["hostKeyFingerprint"] = fingerprint
         });
-        using var saved = await setup.Admin.SendAsync(HttpMethod.Put, $"/api/tenants/{setup.Tenant.Id.Value}/storage-connections/{connection}/secret",
-            new { values = new Dictionary<string, string> { ["password"] = password } });
-        Assert.Equal(HttpStatusCode.OK, saved.StatusCode);
+        await using (var db = fixture.CreatePlatformContext())
+        {
+            (await db.StorageConnections.SingleAsync(c => c.Id == connection)).AttachSecret(reference, ["password"], world.Clock.GetUtcNow());
+            await db.SaveChangesAsync();
+        }
+        await world.Factory.Services.GetRequiredService<BackupPlatform.SecretProviders.Abstractions.ISecretStore>()
+            .SetAsync(new BackupPlatform.SecretProviders.Abstractions.SecretReference(reference),
+                new BackupPlatform.SecretProviders.Abstractions.SecretValue(JsonSerializer.Serialize(new Dictionary<string, string> { ["password"] = password })), default);
         await using var host = await AgentHostSmokeProcess.StartAsync(world, agent, output.WriteLine);
         var capacity = await ProbeAndWaitAsync(setup, host, connection);
         Assert.Contains(capacity.GetProperty("status").GetString(), new[] { "Available", "Warning", "Critical" });
