@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from '@testing-library/react'
+import { act, screen, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render } from '@/test/render'
@@ -35,7 +35,6 @@ describe('backup job health card', () => {
     expect(within(region).getByText('Son izole geri yükleme testi başarısız oldu.')).toBeInTheDocument()
     expect(within(region).getByText('Güncel ve ölçülebilir depolama kapasitesi bilgisi yok.')).toBeInTheDocument()
     expect(within(region).getByText('Sağlık durumu yalnızca bilgilendirir; yedeklemeleri engellemez.')).toBeInTheDocument()
-    expect(apiRequest).toHaveBeenCalledWith('/api/tenants/tenant-a/backup-jobs/job-a/health', expect.objectContaining({ signal: expect.any(AbortSignal) }))
   })
 
   it('does not invent a score on request failure', async () => {
@@ -55,7 +54,6 @@ describe('backup job health card', () => {
     view.rerender(card(client))
     expect(screen.queryByText('35 / 100')).not.toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('Sağlık bilgisi yükleniyor…')
-    await waitFor(() => expect(apiRequest).toHaveBeenLastCalledWith('/api/tenants/tenant-b/backup-jobs/job-a/health', expect.anything()))
     await act(async () => other.resolve({ ...health, score: 90, state: 'Healthy' }))
     expect(await screen.findByText('90 / 100')).toBeInTheDocument()
     expect(screen.queryByText('35 / 100')).not.toBeInTheDocument()

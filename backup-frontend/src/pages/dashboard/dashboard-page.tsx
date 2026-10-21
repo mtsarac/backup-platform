@@ -18,6 +18,7 @@ import { Section } from '@/components/ui/section'
 import type { BackupRun } from '@/features/backups/types'
 import { ReplicationBadge } from '@/features/backups/replication'
 import type { BackupJob } from '@/features/backup-jobs/types'
+import { ObservabilityPanel } from './observability-panel'
 
 interface Dashboard {
   jobs: { total: number; enabled: number; scheduled: number }
@@ -85,6 +86,7 @@ export function DashboardPage() {
           <KpiCard label={tx("Yedek üretildi · son 24 saat")} value={data.runs.succeededLast24Hours} tone="success" icon={<HardDrive className="size-5" />} />
           <KpiCard label={tx("Başarısız · son 24 saat")} value={data.runs.failedLast24Hours} tone={data.runs.failedLast24Hours > 0 ? 'error' : undefined} icon={<AlertCircle className="size-5" />} />
         </div>
+        <ObservabilityPanel tenantId={tenantId} />
         {data.artifacts.deleteFailed > 0 && <Notice tone="error">{data.artifacts.deleteFailed}{' '}{tx("artifact silinemedi.")}{' '}<Link className="font-medium underline" to={`${base}/artifacts?state=DeleteFailed`}>{tx("Silme hatalarını inceleyin.")}</Link></Notice>}
         {data.runs.storageFailedLast24Hours > 0 && <Notice tone="error">{data.runs.storageFailedLast24Hours}{' '}{tx("backup sırasında storage yazma veya replica doğrulama hatası oluştu.")}{' '}<Link className="font-medium underline" to={`${base}/backup-runs?status=Failed`}>{tx("Başarısız backups")}</Link></Notice>}
         {replicationShort > 0 && <Notice tone="error">{replicationShort}{' '}{tx("backup son 24 saatte kullanılabilir yedek üretti, ancak gereken doğrulanmış replika sayısına ulaşamadı.")}{' '}<Link className="font-medium underline" to={`${base}/backup-runs?status=Succeeded`}>{tx("Replikasyon sonuçlarını inceleyin.")}</Link></Notice>}

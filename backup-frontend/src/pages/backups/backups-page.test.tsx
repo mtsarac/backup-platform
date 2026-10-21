@@ -1,4 +1,4 @@
-import { fireEvent, screen } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -26,10 +26,13 @@ describe('run history filters and pagination', () => {
     state.page = { items: [makeRun({ status: 'Succeeded', isSizeAnomaly: true, sizeAnomalyStatus: 'SizeAnomalyWarning', sizeAnomalyBaselineBytes: 1000, sizeAnomalyDeviationRatio: 2 }),
       makeRun({ id: 'normal-run', status: 'Succeeded', sizeAnomalyStatus: 'Normal', sizeAnomalyBaselineBytes: 1000, sizeAnomalyDeviationRatio: 0.05 })], totalCount: 2, page: 1, pageSize: 25 }
     render(<MemoryRouter><BackupsPage /></MemoryRouter>)
-    expect(screen.getAllByText('Boyut Anomalisi')).toHaveLength(1)
-    expect(screen.getAllByText('Başarılı')).toHaveLength(2)
-    expect(screen.getAllByText(/Geçmiş ortalama: 1000 B/)[0]).toHaveTextContent('+%200')
-    expect(screen.getAllByText(/Geçmiş ortalama: 1000 B/)[1]).toHaveTextContent('+%5')
+    const [warningRow, normalRow] = screen.getAllByRole('row').slice(1)
+    expect(within(warningRow).getByText('Boyut Anomalisi')).toBeInTheDocument()
+    expect(within(warningRow).getByText('Başarılı')).toBeInTheDocument()
+    expect(within(normalRow).getByText('Başarılı')).toBeInTheDocument()
+    expect(within(normalRow).queryByText('Boyut Anomalisi')).not.toBeInTheDocument()
+    expect(within(warningRow).getByText(/Geçmiş ortalama: 1000 B/)).toHaveTextContent('+%200')
+    expect(within(normalRow).getByText(/Geçmiş ortalama: 1000 B/)).toHaveTextContent('+%5')
   })
 
   it('submits all filters to query hook, resets page on change, and clears filters', () => {

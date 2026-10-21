@@ -16,8 +16,15 @@ const state = vi.hoisted(() => ({
     recentRuns: [] as BackupRun[],
     upcomingJobs: [],
   },
+  observability: {
+    totalJobs: 0, averageScore: null as number | null, healthy: 0, degraded: 0, critical: 0,
+    jobs: [] as { jobId: string; jobName: string; score: number; state: string }[],
+    capacityRisks: [] as { connectionId: string; connectionName: string; status: string; totalBytes: number; usedBytes: number; freeBytes: number; reportedAt: string }[],
+    recentSizeAnomalies: [] as { runId: string; jobId: string; jobName: string; completedAt: string; sizeBytes: number; baselineMeanBytes: number; deviationRatio: number }[],
+    recentSizeAnomaliesTotal: 0,
+  },
 }))
-vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: state.data, isPending: false, error: null }) }))
+vi.mock('@tanstack/react-query', () => ({ useQuery: ({ queryKey }: { queryKey: string[] }) => ({ data: queryKey.includes('observability') ? state.observability : state.data, isPending: false, error: null }) }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', tenant: { name: 'Tenant A' } }) }))
 
 function renderDashboard() {
@@ -33,6 +40,7 @@ beforeEach(() => {
   state.data.artifacts.deleteFailed = 0
   state.data.runs.replicationInsufficientLast24Hours = undefined
   state.data.recentRuns = []
+  state.observability = { totalJobs: 0, averageScore: null, healthy: 0, degraded: 0, critical: 0, jobs: [], capacityRisks: [], recentSizeAnomalies: [], recentSizeAnomaliesTotal: 0 }
 })
 
 describe('dashboard replication monitoring', () => {
@@ -108,5 +116,25 @@ describe('dashboard simplified status', () => {
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
     await userEvent.setup().click(screen.getByRole('button', { name: 'Liste' }))
     expect(screen.getByRole('table')).toBeInTheDocument()
+  })
+})
+
+describe('observability dashboard', () => {
+  it('links capacity risks and successful anomalous backups to their investigation screens', () => {
+    state.observability = {
+      totalJobs: 1, averageScore: 70, healthy: 0, degraded: 1, critical: 0,
+      jobs: [{ jobId: 'job-risk', jobName: 'Riskli veritabanı', score: 70, state: 'Degraded' }],
+      capacityRisks: [{ connectionId: 'disk-risk', connectionName: 'Dolu disk', status: 'Critical', totalBytes: 1_000_000_000, usedBytes: 920_000_000, freeBytes: 80_000_000, reportedAt: '2026-10-21T12:00:00Z' }],
+      recentSizeAnomalies: [{ runId: 'run-anomaly', jobId: 'job-risk', jobName: 'Küçülen yedek', completedAt: '2026-10-21T12:00:00Z', sizeBytes: 600_000_000, baselineMeanBytes: 1_000_000_000, deviationRatio: -0.4 }],
+      recentSizeAnomaliesTotal: 1,
+    }
+    state.data.recentRuns = [makeRun({ status: 'Succeeded' })]
+    renderDashboard()
+    expect(screen.getByRole('link', { name: 'Riskli veritabanı' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-risk/edit')
+    expect(screen.getByRole('link', { name: 'Dolu disk' })).toHaveAttribute('href', '/tenants/tenant-a/storage/connections/disk-risk')
+    expect(screen.getByRole('link', { name: 'Küçülen yedek' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-anomaly')
+    expect(screen.getByText('Kritik kapasite')).toBeInTheDocument()
+    expect(screen.getByText(/Yedek: 600 MB · Geçmiş ortalama: 1 GB/)).toBeInTheDocument()
+    expect(screen.getAllByText('Başarılı').length).toBeGreaterThan(0)
   })
 })
