@@ -6,7 +6,7 @@
 #   discovery-windows-agent.sh up | down | stop | start | log
 set +x
 set -euo pipefail
-# shellcheck source=../lib/common.sh
+# shellcheck source=scripts/lib/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 H=${BP_DISC_HOME:-/tmp/bp-discovery-acceptance}
 API_PORT=${BP_DISC_API_PORT:-7391}

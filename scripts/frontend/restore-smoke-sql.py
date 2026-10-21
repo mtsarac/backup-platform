@@ -16,7 +16,7 @@ def run_sql(container, sql):
     result = subprocess.run(['docker', 'exec', '-i', '-e', 'SQLCMDPASSWORD', container,
                              '/opt/mssql-tools18/bin/sqlcmd', '-S', 'localhost', '-U',
                              environment['BACKUP_PLATFORM_TEST_MSSQL_USER'], '-C', '-b', '-h', '-1', '-W'],
-                            input=sql, text=True, capture_output=True, env=environment, timeout=45)
+                            input=sql, text=True, capture_output=True, env=environment, timeout=45, check=False)
     if result.returncode:
         raise ValueError('Disposable SQL command failed; provider diagnostics withheld.')
     return result.stdout.strip()

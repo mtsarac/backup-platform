@@ -10,11 +10,11 @@ import hashlib
 import importlib.util
 import json
 import os
-from pathlib import Path
 import sys
 import time
 import urllib.request
 import uuid
+from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 
@@ -32,7 +32,8 @@ dev = load('dev_acceptance', HERE.parent / 'dev' / 'acceptance.py')
 win = load('a1_windows', HERE / 'a1-windows-acceptance.py')
 FixtureFailure = win.FixtureFailure
 TERMINAL = win.TERMINAL
-ROOT = json.load(open(Path(os.environ.get('BP_DEV_HOME', Path.home() / '.local/share/backup-platform-dev')) / 'dev-windows-agent.json'))['root']
+with open(Path(os.environ.get('BP_DEV_HOME', Path.home() / '.local/share/backup-platform-dev')) / 'dev-windows-agent.json') as f:
+    ROOT = json.load(f)['root']
 STAGING = ROOT + '\\staging'
 HOST, PORT = os.environ['BACKUP_PLATFORM_TEST_MSSQL_HOST'], int(os.environ.get('BACKUP_PLATFORM_TEST_MSSQL_PORT', '1433'))
 

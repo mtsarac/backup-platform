@@ -10,11 +10,11 @@ import hashlib
 import importlib.util
 import json
 import os
-from pathlib import Path
 import sys
 import time
 import urllib.request
 import uuid
+from pathlib import Path
 
 spec = importlib.util.spec_from_file_location('quota_fixture', Path(__file__).with_name('quota-smoke-fixture.py'))
 shared = importlib.util.module_from_spec(spec)

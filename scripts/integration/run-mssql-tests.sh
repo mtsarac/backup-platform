@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set +x
 set -euo pipefail
-# shellcheck source=../lib/common.sh
+# shellcheck source=scripts/lib/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
 provider=false
@@ -34,7 +34,7 @@ done
 # The agent path is local to the test process; never turn a Windows server path
 # into a guessed Linux mount. SQL Server must already have access to its path.
 agent_staging=$BACKUP_PLATFORM_TEST_MSSQL_STAGING_AGENT_DIR
-[[ "$agent_staging" == /* && "$agent_staging" != *'\'* ]] || fail 'STAGING_AGENT_DIR must be an explicit absolute Linux path visible to the local test process.'
+[[ "$agent_staging" == /* && "$agent_staging" != *\\* ]] || fail 'STAGING_AGENT_DIR must be an explicit absolute Linux path visible to the local test process.'
 mkdir -p -- "$agent_staging"
 if [[ "$restore" == true ]]; then
     target_port=${BACKUP_PLATFORM_TEST_MSSQL_RESTORE_TARGET_PORT:-}

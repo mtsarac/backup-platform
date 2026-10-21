@@ -2,6 +2,7 @@
 # Disposable real SFTP + PostgreSQL/MSSQL -> actual Linux Agent -> download/restore/retention.
 set +x
 set -euo pipefail
+# shellcheck source=scripts/lib/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 if [[ ${1:-} != --configured ]]; then
     exec "$REPO_ROOT/scripts/database/with-disposable-databases.sh" -- "$0" --configured "$@"

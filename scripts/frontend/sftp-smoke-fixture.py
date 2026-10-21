@@ -4,10 +4,10 @@ import argparse
 import hashlib
 import importlib.util
 import json
-from pathlib import Path
 import sys
 import time
 import uuid
+from pathlib import Path
 
 spec = importlib.util.spec_from_file_location('connections_fixture', Path(__file__).with_name('storage-connections-smoke-fixture.py'))
 shared = importlib.util.module_from_spec(spec)

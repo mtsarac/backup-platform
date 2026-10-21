@@ -4,7 +4,7 @@
 # Never touches any other container.
 set +x
 set -euo pipefail
-# shellcheck source=common.sh
+# shellcheck source=scripts/dev/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 for name in agent web api; do dev_kill "$name"; done
 if docker container inspect "$BP_DEV_MSSQL_CONTAINER" >/dev/null 2>&1; then docker stop "$BP_DEV_MSSQL_CONTAINER" >/dev/null; fi

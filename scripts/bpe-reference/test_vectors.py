@@ -6,9 +6,9 @@ import hashlib
 import io
 import itertools
 import json
+import os
 import pathlib
 import struct
-import os
 import tempfile
 import unittest
 

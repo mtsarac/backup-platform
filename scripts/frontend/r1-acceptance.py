@@ -12,13 +12,13 @@ import argparse
 import importlib.util
 import json
 import os
-from pathlib import Path
 import re
 import signal
 import subprocess
 import sys
 import time
 import uuid
+from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('quota_fixture', HERE / 'quota-smoke-fixture.py')
@@ -63,7 +63,7 @@ class Run:
         environment = dict(os.environ, SQLCMDPASSWORD=os.environ['BACKUP_PLATFORM_TEST_MSSQL_PASSWORD'])
         done = subprocess.run(['docker', 'exec', '-i', '-e', 'SQLCMDPASSWORD', self.options.mssql_container, '/opt/mssql-tools18/bin/sqlcmd', '-S', 'localhost', '-U',
                                os.environ['BACKUP_PLATFORM_TEST_MSSQL_USER'], '-C', '-b', '-h', '-1', '-W', '-t', str(timeout)],
-                              input=script, text=True, capture_output=True, env=environment, timeout=timeout + 30)
+                              input=script, text=True, capture_output=True, env=environment, timeout=timeout + 30, check=False)
         if done.returncode:
             raise FixtureFailure('SQL Server command failed: ' + (done.stdout + done.stderr).replace('\n', ' ')[-300:])
         return [line.strip() for line in done.stdout.splitlines() if line.strip()]
@@ -71,7 +71,7 @@ class Run:
     def pg(self, sql, database='postgres', timeout=120):
         environment = dict(os.environ, PGPASSWORD=os.environ['BACKUP_PLATFORM_TEST_POSTGRES_PASSWORD'])
         done = subprocess.run(['docker', 'exec', '-i', '-e', 'PGPASSWORD', self.options.pg_container, 'psql', '-U', 'postgres', '-d', database, '-X', '-A', '-t', '-v', 'ON_ERROR_STOP=1'],
-                              input=sql, text=True, capture_output=True, env=environment, timeout=timeout)
+                              input=sql, text=True, capture_output=True, env=environment, timeout=timeout, check=False)
         if done.returncode:
             raise FixtureFailure('PostgreSQL command failed: ' + (done.stdout + done.stderr).replace('\n', ' ')[-300:])
         return [line.strip() for line in done.stdout.splitlines() if line.strip()]
@@ -186,7 +186,7 @@ class Run:
 
     def restart_api(self):
         port = self.options.server.rsplit(':', 1)[1].rstrip('/')
-        found = subprocess.run(['ss', '-ltnpH', f'sport = :{port}'], capture_output=True, text=True).stdout
+        found = subprocess.run(['ss', '-ltnpH', f'sport = :{port}'], capture_output=True, text=True, check=False).stdout
         pid = int(re.search(r'pid=(\d+)', found).group(1))
         cmdline = Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0')[:-1]
         environment = dict(item.split(b'=', 1) for item in Path(f'/proc/{pid}/environ').read_bytes().split(b'\0') if b'=' in item)
@@ -199,9 +199,9 @@ class Run:
             if attempt == 200:  # a shutdown that hangs is still a restart: the platform must not depend on a graceful one
                 os.kill(pid, signal.SIGKILL)
             time.sleep(0.2)
-        log = open(self.work / 'api-restarted.log', 'ab')
-        replacement = subprocess.Popen([item.decode() for item in cmdline], cwd=cwd, env={key.decode(): value.decode() for key, value in environment.items()},
-                                       stdout=log, stderr=log, start_new_session=True)
+        with open(self.work / 'api-restarted.log', 'ab') as log:
+            replacement = subprocess.Popen([item.decode() for item in cmdline], cwd=cwd, env={key.decode(): value.decode() for key, value in environment.items()},
+                                           stdout=log, stderr=log, start_new_session=True)
         (self.work / 'api.pid').write_text(str(replacement.pid))
         deadline = time.monotonic() + 90
         while time.monotonic() < deadline:
@@ -209,7 +209,7 @@ class Run:
                 self.api.call('GET', '/api/auth/antiforgery')
                 self.api.csrf = None
                 return
-            except Exception:
+            except (FixtureFailure, OSError, ValueError):
                 time.sleep(0.5)
         raise FixtureFailure('The API did not come back after the restart: ' + '; '.join(line.strip()[:200] for line in (self.work / 'api-restarted.log').read_text(errors='replace').splitlines() if line.strip() and not line.lstrip().startswith('at '))[:900])
 
@@ -391,7 +391,7 @@ def wait_server(run, engine, timeout=180):
         try:
             run.leftovers(engine)
             return
-        except Exception:
+        except (FixtureFailure, OSError, subprocess.SubprocessError):
             time.sleep(3)
     raise FixtureFailure('The database server did not come back.')
 
@@ -496,7 +496,7 @@ def win_sql(run, script, timeout=900):
     secret = json.loads(Path(run.options.win_sql_secret).read_text())
     environment = dict(os.environ, SQLCMDPASSWORD=secret['password'])
     done = subprocess.run(['docker', 'exec', '-i', '-e', 'SQLCMDPASSWORD', run.options.mssql_container, '/opt/mssql-tools18/bin/sqlcmd', '-S', f'{run.options.win_sql_host},{run.options.win_sql_port}',
-                           '-U', secret['userName'], '-C', '-b', '-h', '-1', '-W', '-t', str(timeout)], input=script, text=True, capture_output=True, env=environment, timeout=timeout + 30)
+                           '-U', secret['userName'], '-C', '-b', '-h', '-1', '-W', '-t', str(timeout)], input=script, text=True, capture_output=True, env=environment, timeout=timeout + 30, check=False)
     if done.returncode:
         raise FixtureFailure('VM SQL Server command failed: ' + (done.stdout + done.stderr).replace('\n', ' ')[-300:])
     return [line.strip() for line in done.stdout.splitlines() if line.strip()]
@@ -507,7 +507,7 @@ def win_leftovers(run):
 
 
 def powershell(run, command, timeout=300):
-    done = subprocess.run([str(HERE.parent / 'windows' / 'run-powershell.sh'), '--command', command], capture_output=True, text=True, timeout=timeout)
+    done = subprocess.run([str(HERE.parent / 'windows' / 'run-powershell.sh'), '--command', command], capture_output=True, text=True, timeout=timeout, check=False)
     if done.returncode:
         raise FixtureFailure('VM command failed: ' + done.stderr.replace('\n', ' ')[-300:])
     return [line.strip() for line in done.stdout.splitlines() if line.strip() and not line.startswith(('**', '#<', '<Objs'))]
@@ -517,7 +517,7 @@ def win_agent(run, action):
     arguments = ['-Action', action, '-RootDirectory', run.options.windows_root]
     if action == 'start':
         arguments += ['-BackendUri', run.options.win_backend]
-    done = subprocess.run([str(HERE.parent / 'windows' / 'run-powershell.sh'), '--file', str(HERE.parent / 'windows' / 'R1-Console-Agent.ps1'), '--', *arguments], capture_output=True, text=True, timeout=300)
+    done = subprocess.run([str(HERE.parent / 'windows' / 'run-powershell.sh'), '--file', str(HERE.parent / 'windows' / 'R1-Console-Agent.ps1'), '--', *arguments], capture_output=True, text=True, timeout=300, check=False)
     if done.returncode:
         raise FixtureFailure('VM agent control failed: ' + done.stderr.replace('\n', ' ')[-300:])
 
@@ -583,14 +583,14 @@ def audit(run, restore_id):
 
 def setup_databases(run):
     suffix = uuid.uuid4().hex[:12]
-    run.mssql("SET NOCOUNT ON; CREATE DATABASE [bp_r1_small_%s];\nGO\nUSE [bp_r1_small_%s]; CREATE TABLE dbo.Items (Id int PRIMARY KEY, Marker nvarchar(100)); INSERT dbo.Items VALUES (1, N'r1'), (2, N'r1b');\nGO\n" % (suffix, suffix))
-    run.mssql("SET NOCOUNT ON; CREATE DATABASE [bp_r1_big_%s];\nGO\nUSE [bp_r1_big_%s]; CREATE TABLE dbo.Rows (Id int IDENTITY(1,1) PRIMARY KEY, A int NOT NULL, B uniqueidentifier NOT NULL DEFAULT NEWID(), C char(100) NOT NULL);\n"
+    run.mssql(f"SET NOCOUNT ON; CREATE DATABASE [bp_r1_small_{suffix}];\nGO\nUSE [bp_r1_small_{suffix}]; CREATE TABLE dbo.Items (Id int PRIMARY KEY, Marker nvarchar(100)); INSERT dbo.Items VALUES (1, N'r1'), (2, N'r1b');\nGO\n")
+    run.mssql(f"SET NOCOUNT ON; CREATE DATABASE [bp_r1_big_{suffix}];\nGO\nUSE [bp_r1_big_{suffix}]; CREATE TABLE dbo.Rows (Id int IDENTITY(1,1) PRIMARY KEY, A int NOT NULL, B uniqueidentifier NOT NULL DEFAULT NEWID(), C char(100) NOT NULL);\n"
               "INSERT dbo.Rows (A, C) SELECT TOP (6000000) ABS(CHECKSUM(NEWID())), REPLICATE(CONVERT(char(36), NEWID()), 2) + REPLICATE('x', 28) FROM sys.all_objects a CROSS JOIN sys.all_objects b;\n"
-              "CREATE INDEX IX_A ON dbo.Rows (A); CREATE INDEX IX_B ON dbo.Rows (B); CREATE INDEX IX_C ON dbo.Rows (C);\nGO\n" % (suffix, suffix), timeout=1800)
-    run.pg("CREATE DATABASE bp_r1_small_%s" % suffix)
+              f"CREATE INDEX IX_A ON dbo.Rows (A); CREATE INDEX IX_B ON dbo.Rows (B); CREATE INDEX IX_C ON dbo.Rows (C);\nGO\n", timeout=1800)
+    run.pg(f"CREATE DATABASE bp_r1_small_{suffix}")
     run.pg("CREATE TABLE items (id int PRIMARY KEY, marker text); INSERT INTO items SELECT g, md5(g::text) FROM generate_series(1, 20000) g; CREATE TABLE tail (id int PRIMARY KEY, payload text); "
            "INSERT INTO tail SELECT g, (SELECT string_agg(md5(random()::text || i::text || g::text), '') FROM generate_series(1, 40) i) FROM generate_series(1, 20000) g", database='bp_r1_small_' + suffix)
-    run.pg("CREATE DATABASE bp_r1_big_%s" % suffix)
+    run.pg(f"CREATE DATABASE bp_r1_big_{suffix}")
     run.pg("CREATE TABLE blob (id int PRIMARY KEY, payload text); INSERT INTO blob SELECT g, (SELECT string_agg(md5(random()::text || i::text), '') FROM generate_series(1, 300000) i) FROM generate_series(1, 150) g",
            database='bp_r1_big_' + suffix, timeout=1800)
     return suffix

@@ -131,7 +131,7 @@ public sealed class RestoreCleanupWorkerTests
         await using var deletions = new DeleteReplicaHarness();
         await using var restores = new RestoreTaskHarness();
         await using var downloads = new DownloadTaskHarness();
-        var dispatcher = new BackupPlatform.Agent.Core.Tasks.AgentTaskDispatcher(backups.Worker, restores.Worker, deletions.Worker, downloads.Worker, restores.CleanupWorker);
+        var dispatcher = new BackupPlatform.Agent.Core.Tasks.AgentTaskDispatcher(backups.Worker, restores.Worker, deletions.Worker, downloads.Worker, restores.CleanupWorker, null!);
         var envelope = restores.CleanupEnvelope();
 
         Assert.True(dispatcher.TryPublish(envelope));

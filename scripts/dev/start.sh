@@ -4,7 +4,7 @@
 # Never stops, recreates or resets any other container or database. Re-running is safe.
 set +x
 set -euo pipefail
-# shellcheck source=common.sh
+# shellcheck source=scripts/dev/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 build=true agent=true
@@ -14,7 +14,7 @@ while (($#)); do
         --no-agent) agent=false ;;
         -h|--help)
             printf '%s\n' 'Usage: scripts/dev/start.sh [--no-build] [--no-agent]' \
-                'Needs docs/test-cred.yaml and docs/client_secret_*.json (read at runtime, never printed). State: $BP_DEV_HOME (default ~/.local/share/backup-platform-dev).'
+                "Needs docs/test-cred.yaml and docs/client_secret_*.json (read at runtime, never printed). State: \$BP_DEV_HOME (default ~/.local/share/backup-platform-dev)."
             exit 0 ;;
         *) fail 'Unknown option; use --help.' ;;
     esac

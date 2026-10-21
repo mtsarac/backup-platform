@@ -18,14 +18,14 @@ import hashlib
 import http.cookiejar
 import json
 import os
-from pathlib import Path
 import ssl
 import stat
 import sys
 import urllib.error
 import urllib.request
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 PROTOCOL_HEADER = 'X-Backup-Agent-Protocol'
 
@@ -100,7 +100,7 @@ def agent_headers(agent):
 
 
 def now_iso(delta=timedelta()):
-    return (datetime.now(timezone.utc) + delta).strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+    return (datetime.now(UTC) + delta).strftime('%Y-%m-%dT%H:%M:%S.%fZ')
 
 
 def setup(options):

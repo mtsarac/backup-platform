@@ -14,9 +14,9 @@ import argparse
 import importlib.util
 import json
 import os
-from pathlib import Path
 import sys
 import time
+from pathlib import Path
 
 here = Path(__file__).parent
 spec = importlib.util.spec_from_file_location('quota_fixture', here.parent / 'frontend' / 'quota-smoke-fixture.py')

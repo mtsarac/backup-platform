@@ -13,11 +13,11 @@ import hashlib
 import importlib.util
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 import time
 import uuid
+from pathlib import Path
 
 HERE = Path(__file__).parent
 spec = importlib.util.spec_from_file_location('acceptance', HERE / 'acceptance.py')
@@ -191,8 +191,8 @@ def delete_artifacts(labels):
         api.call('DELETE', path, expect=(200, 202, 409))
         leftover = label.startswith('leftover-')
         try:
-            final = acc.wait(f'Physical deletion ({label})', lambda: api.call('GET', path)[1], lambda d: d['state'] == 'Deleted',
-                             lambda d: d['state'] == 'DeleteFailed' and not leftover, timeout=30 if leftover else 240, interval=2)
+            final = acc.wait(f'Physical deletion ({label})', lambda p=path: api.call('GET', p)[1], lambda d: d['state'] == 'Deleted',
+                             lambda d, lo=leftover: d['state'] == 'DeleteFailed' and not lo, timeout=30 if leftover else 240, interval=2)
         except FixtureFailure:
             if not leftover:
                 raise

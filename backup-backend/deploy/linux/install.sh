@@ -82,7 +82,9 @@ then fail 'Invalid HTTPS server address or agent name. Use HTTPS without credent
 SERVER=${SERVER%/}
 [[ $(uname -s) == Linux && $(uname -m) == x86_64 ]] || fail 'Only Linux x64 is supported.' 'Yalnızca Linux x64 desteklenir.'
 (( EUID == 0 )) || fail 'Run this installer as root (sudo bash).' 'Kurulumu root yetkisiyle çalıştırın (sudo bash).'
-[[ -d /run/systemd/system ]] && systemctl show-environment >/dev/null 2>&1 || fail 'A running systemd service manager is required.' 'Çalışan bir systemd hizmet yöneticisi gerekir.'
+if [[ ! -d /run/systemd/system ]] || ! systemctl show-environment >/dev/null 2>&1; then
+    fail 'A running systemd service manager is required.' 'Çalışan bir systemd hizmet yöneticisi gerekir.'
+fi
 # Fixed root-controlled parents prevent another user from swapping paths during installation.
 for path in /opt /var /var/lib /etc /etc/systemd /etc/systemd/system; do
     [[ -d "$path" && ! -L "$path" && $(stat -c %u "$path") == 0 ]] || fail 'Installation parents must be real root-owned directories.' 'Üst kurulum dizinleri root sahipliğinde gerçek dizinler olmalıdır.'

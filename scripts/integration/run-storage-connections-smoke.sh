@@ -4,7 +4,7 @@
 # a disabled connection blocks new runs only -> enabled again, a second real backup succeeds.
 set +x
 set -euo pipefail
-# shellcheck source=../lib/common.sh
+# shellcheck source=scripts/lib/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 if [[ ${1:-} != --configured ]]; then
     exec "$REPO_ROOT/scripts/database/with-disposable-databases.sh" -- "$0" --configured "$@"

@@ -2,7 +2,7 @@
 # Read-only status of the development stack.
 set +x
 set -euo pipefail
-# shellcheck source=common.sh
+# shellcheck source=scripts/dev/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 for name in api web agent; do
     if dev_pid_alive "$name"; then printf '%-8s running (pid %s)\n' "$name" "$(<"$BP_DEV_HOME/run/$name.pid")"; else printf '%-8s stopped\n' "$name"; fi

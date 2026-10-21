@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Verify enrollment/auth/heartbeat/capability sync through the real tenant API."""
 import argparse
-from datetime import datetime
 import http.cookiejar
 import json
 import os
@@ -13,6 +12,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from datetime import datetime
 
 
 class AcceptanceFailure(Exception):

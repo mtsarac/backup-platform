@@ -5,7 +5,7 @@
 # to a 0600 file whose path is printed (never the secret itself).
 set +x
 set -euo pipefail
-# shellcheck source=../lib/common.sh
+# shellcheck source=scripts/lib/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
 build=true
@@ -73,6 +73,7 @@ cert_password=$(python3 -c 'import secrets; print(secrets.token_hex(12))')
 pids=()
 database_created=false
 
+# shellcheck disable=SC2329
 smoke_cleanup() {
     local pid
     for pid in "${pids[@]}"; do kill "$pid" 2>/dev/null || true; done
@@ -80,15 +81,20 @@ smoke_cleanup() {
     if [[ $database_created == true ]]; then
         local container=${BP_SMOKE_POSTGRES_CONTAINER:-postgres}
         if docker container inspect "$container" >/dev/null 2>&1; then
-            docker exec "$container" psql -U postgres -v ON_ERROR_STOP=1 -q \
-                -c "DROP DATABASE IF EXISTS \"$database\" WITH (FORCE)" >/dev/null 2>&1 \
-                && printf 'Smoke database dropped\n' || { printf 'Smoke database cleanup failed: %s\n' "$database" >&2; return 1; }
+            if docker exec "$container" psql -U postgres -v ON_ERROR_STOP=1 -q \
+                -c "DROP DATABASE IF EXISTS \"$database\" WITH (FORCE)" >/dev/null 2>&1; then
+                printf 'Smoke database dropped\n'
+            else
+                printf 'Smoke database cleanup failed: %s\n' "$database" >&2
+                return 1
+            fi
         else
             printf 'Smoke database left behind (no container %s): %s\n' "$container" "$database" >&2
             return 1
         fi
     fi
 }
+rc=0
 # Pass the original status explicitly; a failing subshell here would trip errexit before file cleanup.
 trap 'rc=$?; if ! smoke_cleanup; then if (( rc == 0 )); then rc=1; fi; fi; cleanup_runtime "$rc"' EXIT
 

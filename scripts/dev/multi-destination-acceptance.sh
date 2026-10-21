@@ -6,7 +6,7 @@
 # Usage: scripts/dev/multi-destination-acceptance.sh [--no-build]
 set +x
 set -euo pipefail
-# shellcheck source=common.sh
+# shellcheck source=scripts/dev/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 build_args=()
 [[ ${1:-} != --no-build ]] || build_args=(--no-build)

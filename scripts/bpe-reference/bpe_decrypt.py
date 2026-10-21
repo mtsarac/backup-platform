@@ -10,22 +10,21 @@ plaintext to a temporary file that is renamed into place only after the whole ar
   python3 bpe_decrypt.py --in artifact.bpe --out plaintext --dek-hex <64 hex>   # DEK unwrapped elsewhere, e.g. with openssl
 """
 import argparse
+import base64
 import hashlib
 import hmac
 import json
 import os
 import struct
 import sys
-import base64
 import tempfile
 
+import bpe_shares
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-
-import bpe_shares
 
 MAGIC = b"BPENC\0"
 VERSION = 2
