@@ -72,6 +72,11 @@ describe('Storage connections list and detail', () => {
       freeBytes: 200_000_000_000,
       status: 'Available',
       reportedAt: '2026-10-21T10:00:00Z',
+      historyLimit: 30,
+      history: [{
+        reportedAt: '2026-10-21T10:00:00Z', totalBytes: 500_000_000_000,
+        usedBytes: 300_000_000_000, freeBytes: 200_000_000_000, status: 'Available',
+      }],
     })
     vi.mocked(api.probeTenantConnectionCapacity).mockResolvedValue({
       connectionId: 'conn-local',
@@ -84,13 +89,35 @@ describe('Storage connections list and detail', () => {
 
     mount(detail('conn-local'))
     expect(await screen.findByText('Depolama Kapasitesi')).toBeInTheDocument()
-    expect(await screen.findByText('500 GB')).toBeInTheDocument()
-    expect(screen.getByText('300 GB')).toBeInTheDocument()
-    expect(screen.getByText('200 GB')).toBeInTheDocument()
+    expect(await screen.findByRole('table', { name: 'Kapasite geçmişi — en son 30 ölçüm' })).toBeInTheDocument()
+    expect(screen.getAllByText('500 GB')).toHaveLength(2)
+    expect(screen.getAllByText('300 GB')).toHaveLength(2)
+    expect(screen.getAllByText('200 GB')).toHaveLength(2)
 
     const probeBtn = screen.getByRole('button', { name: 'Kapasiteyi Sorgula' })
     await userEvent.click(probeBtn)
     expect(api.probeTenantConnectionCapacity).toHaveBeenCalledWith('tenant-a', 'conn-local')
+  })
+
+  it('shows queued capacity without fake metrics and refetches the Agent result', async () => {
+    vi.mocked(api.getTenantConnectionCapacity).mockResolvedValueOnce({
+      connectionId: 'conn-local', totalBytes: 100_000, usedBytes: 20_000, freeBytes: 80_000,
+      status: 'Available', reportedAt: '2026-10-21T10:00:00Z',
+    }).mockResolvedValue({
+      connectionId: 'conn-local', totalBytes: 100_000, usedBytes: 92_000, freeBytes: 8_000,
+      status: 'Critical', reportedAt: '2026-10-21T10:05:00Z',
+    })
+    vi.mocked(api.probeTenantConnectionCapacity).mockResolvedValue({
+      connectionId: 'conn-local', taskId: 'task-1', totalBytes: null, usedBytes: null, freeBytes: null,
+      status: 'Pending', reportedAt: '2026-10-21T10:04:00Z',
+    })
+    mount(detail('conn-local'))
+    await userEvent.click(await screen.findByRole('button', { name: 'Kapasiteyi Sorgula' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Agent yanıtı bekleniyor')
+    expect(screen.getByRole('button', { name: 'Sorgulanıyor…' })).toBeDisabled()
+    expect(screen.queryByText('100 kB')).not.toBeInTheDocument()
+    expect(await screen.findByText('Kritik', {}, { timeout: 4_000 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Kapasiteyi Sorgula' })).toBeEnabled()
   })
 
   it('displays Warning badge at 80% and Critical badge at 90% capacity on detail and list', async () => {

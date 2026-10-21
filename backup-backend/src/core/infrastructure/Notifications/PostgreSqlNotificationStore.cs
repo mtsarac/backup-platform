@@ -236,9 +236,15 @@ public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbConte
     /// <summary>Enlists in a lifecycle write's transaction, sharing the same tenant lock and policy/delivery rules as a sweep.</summary>
     internal static async Task RecordOccurrenceAsync(PlatformDbContext context, TenantId tenantId, NotificationObservation observation, NotificationOptions options, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        if (context.Database.CurrentTransaction is null) throw new InvalidOperationException("An occurrence requires an existing transaction.");
+        var session = await OpenLifecycleSessionAsync(context, tenantId, TimeProvider.System, cancellationToken);
+        await NotificationEngine.ApplyOccurrenceAsync(session, observation, options, now);
+    }
+
+    internal static async Task<INotificationSession> OpenLifecycleSessionAsync(PlatformDbContext context, TenantId tenantId, TimeProvider clock, CancellationToken cancellationToken)
+    {
+        if (context.Database.CurrentTransaction is null) throw new InvalidOperationException("A lifecycle observation requires an existing transaction.");
         await LockAsync(context, TenantLock(tenantId), cancellationToken);
-        await NotificationEngine.ApplyOccurrenceAsync(new Session(context, tenantId, TimeProvider.System), observation, options, now);
+        return new Session(context, tenantId, clock);
     }
 
     private sealed class Session(PlatformDbContext context, TenantId tenantId, TimeProvider time) : INotificationSession

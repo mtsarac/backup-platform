@@ -11,7 +11,7 @@ internal sealed class StorageCapacitySnapshotConfiguration : IEntityTypeConfigur
         BackupMapping.Base(builder, "storage_capacity_snapshots");
         builder.ToTable("storage_capacity_snapshots", table =>
         {
-            table.HasCheckConstraint("ck_storage_capacity_snapshots_status", "\"Status\" IN ('Available','CapacityUnavailable')");
+            table.HasCheckConstraint("ck_storage_capacity_snapshots_status", "\"Status\" IN ('Available','Warning','Critical','CapacityUnavailable')");
         });
         builder.Property(snapshot => snapshot.ConnectionId).IsRequired();
         builder.Property(snapshot => snapshot.TotalBytes);

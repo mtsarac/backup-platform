@@ -128,10 +128,19 @@ export interface PlatformConnectionFilters {
   pageSize?: number
 }
 
-export type StorageCapacityStatus = 'Available' | 'Warning' | 'Critical' | 'CapacityUnavailable'
+export type StorageCapacityStatus = 'Available' | 'Warning' | 'Critical' | 'CapacityUnavailable' | 'Pending'
 
 export interface StorageCapacitySnapshot {
   connectionId: string
+  taskId?: string | null
+  historyLimit?: number
+  history?: Array<{
+    reportedAt: string
+    totalBytes: number | null
+    usedBytes: number | null
+    freeBytes: number | null
+    status: Exclude<StorageCapacityStatus, 'Pending'>
+  }>
   totalBytes: number | null
   usedBytes: number | null
   freeBytes: number | null

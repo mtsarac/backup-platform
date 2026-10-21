@@ -31,6 +31,7 @@ function ConnectionRow({ connection, share, tenantId, onTest, testing, testError
           {connection.isDefault && <Badge tone="accent">{tx("Varsayılan")}</Badge>}
           {capacity?.status === 'Critical' && <Badge tone="error">{tx("Kritik")}</Badge>}
           {capacity?.status === 'Warning' && <Badge tone="warning">{tx("Uyarı")}</Badge>}
+          {capacity?.status === 'Pending' && <span role="status" className="text-xs text-text-muted">{tx("Agent yanıtı bekleniyor")}</span>}
         </h3>
         <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-sm text-text-muted">{connection.providerDisplayName}<OwnershipBadge ownership={connection.ownership} /></p>
       </div>

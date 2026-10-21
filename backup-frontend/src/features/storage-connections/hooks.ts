@@ -64,6 +64,7 @@ export function useTenantConnectionCapacity(connectionId: string) {
     queryKey: storageConnectionKeys.tenantCapacity(tenantId, connectionId),
     queryFn: ({ signal }) => getTenantConnectionCapacity(tenantId, connectionId, signal),
     enabled: Boolean(tenantId && connectionId),
+    refetchInterval: (query) => query.state.data?.status === 'Pending' ? 2_000 : false,
   })
 }
 

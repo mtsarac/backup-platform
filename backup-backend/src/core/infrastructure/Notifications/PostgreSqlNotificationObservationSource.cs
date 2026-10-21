@@ -204,8 +204,13 @@ public sealed class PostgreSqlNotificationObservationSource(
     private async Task<IReadOnlyList<NotificationObservation>> StorageCapacityAsync(NotificationPolicy policy, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        return await CollectStorageCapacityAsync(context, policy.TenantId, cancellationToken);
+    }
+
+    internal static async Task<IReadOnlyList<NotificationObservation>> CollectStorageCapacityAsync(PlatformDbContext context, TenantId tenantId, CancellationToken cancellationToken)
+    {
         var connections = await context.StorageConnections.AsNoTracking()
-            .Where(c => c.TenantId == policy.TenantId && c.Enabled)
+            .Where(c => c.TenantId == tenantId && c.Enabled && !c.AdministrativelyDisabled)
             .Select(c => new { c.Id, c.Name })
             .ToListAsync(cancellationToken);
         if (connections.Count == 0) return [];
@@ -215,7 +220,7 @@ public sealed class PostgreSqlNotificationObservationSource(
         foreach (var conn in connections)
         {
             var snapshot = await context.StorageCapacitySnapshots.AsNoTracking()
-                .Where(s => s.TenantId == policy.TenantId && s.ConnectionId == conn.Id && s.Status != Domain.Storage.StorageCapacityStatus.CapacityUnavailable)
+                .Where(s => s.TenantId == tenantId && s.ConnectionId == conn.Id && s.Status != Domain.Storage.StorageCapacityStatus.CapacityUnavailable)
                 .OrderByDescending(s => s.ReportedAt)
                 .ThenByDescending(s => s.Id)
                 .FirstOrDefaultAsync(cancellationToken);

@@ -95,6 +95,7 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<QuotaReservation> QuotaReservations => Set<QuotaReservation>();
     public DbSet<StorageConnection> StorageConnections => Set<StorageConnection>();
     public DbSet<StorageCapacitySnapshot> StorageCapacitySnapshots => Set<StorageCapacitySnapshot>();
+    public DbSet<StorageCapacityTask> StorageCapacityTasks => Set<StorageCapacityTask>();
     public DbSet<GoogleDriveOAuthState> GoogleDriveOAuthStates => Set<GoogleDriveOAuthState>();
     public DbSet<GoogleDriveFileMetadata> GoogleDriveFileMetadata => Set<GoogleDriveFileMetadata>();
     public DbSet<GoogleDriveStagingReservation> GoogleDriveStagingReservations => Set<GoogleDriveStagingReservation>();

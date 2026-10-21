@@ -105,12 +105,13 @@ public sealed class StorageCapacityPeriodicProbeWorker(
         var options = scope.ServiceProvider.GetRequiredService<DbContextOptions<PlatformDbContext>>();
         await using var db = PlatformDbContext.CreateForPlatformOperations(options);
         var probeService = scope.ServiceProvider.GetRequiredService<StorageCapacityProbeService>();
+        var tasks = scope.ServiceProvider.GetRequiredService<IStorageCapacityTaskQueue>();
 
         var now = time.GetUtcNow();
         var cutoff = now - StaleThreshold;
 
         var connections = await db.StorageConnections.AsNoTracking()
-            .Where(c => c.Enabled)
+            .Where(c => c.Enabled && !c.AdministrativelyDisabled)
             .Select(c => new { c.TenantId, c.Id })
             .ToListAsync(cancellationToken);
 
@@ -121,6 +122,7 @@ public sealed class StorageCapacityPeriodicProbeWorker(
         {
             try
             {
+                if (await tasks.GetPendingAsync(conn.TenantId, conn.Id, now, cancellationToken) is not null) continue;
                 var latestSnapshotTime = await db.StorageCapacitySnapshots.AsNoTracking()
                     .Where(s => s.TenantId == conn.TenantId && s.ConnectionId == conn.Id)
                     .OrderByDescending(s => s.ReportedAt)

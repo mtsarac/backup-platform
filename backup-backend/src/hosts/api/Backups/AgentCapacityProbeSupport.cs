@@ -1,35 +1,41 @@
-using BackupPlatform.Agents.Connectivity;
+using System.Text.Json;
+using BackupPlatform.Application.Agents;
+using BackupPlatform.Application.Storage;
 using BackupPlatform.Contracts.Storage;
-using BackupPlatform.Domain.Agents;
-using BackupPlatform.Domain.Identity;
+using BackupPlatform.SecretProviders.Abstractions;
 using BackupPlatform.Storage;
 
 namespace BackupPlatform.Api.Backups;
 
-public sealed class AgentConnectivityLiveness(AgentConnectivityQueryService connectivity) : ITenantAgentLiveness
+public sealed class AgentCapacityProbeService(IStorageCapacityTaskQueue queue, IStorageConnectionStore connections,
+    ISecretProvider secrets, TimeProvider time)
 {
-    public async Task<Guid?> FindActiveAgentAsync(TenantId tenantId, CancellationToken cancellationToken)
+    public async Task<CapacityProbeTaskRequest?> ClaimAsync(AgentIdentity identity, CancellationToken cancellationToken)
     {
-        var agents = await connectivity.ListAsync(tenantId, AgentConnectivityFilter.Online, cancellationToken).ConfigureAwait(false);
-        var online = agents.FirstOrDefault(a => a.Status == AgentOperationalStatus.Online || a.Connectivity == AgentConnectivityState.Online);
-        return online?.Agent.Id.Value;
-    }
-}
-
-public sealed class DefaultAgentCapacityProbeDispatcher(
-    Func<Guid, CapacityProbeTaskRequest, CancellationToken, Task<CapacityProbeTaskResult>>? dispatcher = null) : IAgentCapacityProbeDispatcher
-{
-    public Task<CapacityProbeTaskResult> DispatchAsync(Guid agentId, CapacityProbeTaskRequest request, CancellationToken cancellationToken)
-    {
-        if (dispatcher is not null)
+        var task = await queue.ClaimAsync(identity, time.GetUtcNow(), cancellationToken);
+        if (task is null) return null;
+        var record = await connections.FindAsync(task.ConnectionId, identity.TenantId, cancellationToken);
+        if (record is null) return null;
+        try
         {
-            return dispatcher(agentId, request, cancellationToken);
+            IReadOnlyDictionary<string, string>? values = null;
+            if (record.Connection.SecretReference is { } reference)
+            {
+                var secret = await secrets.ResolveAsync(new SecretReference(reference), cancellationToken);
+                values = JsonSerializer.Deserialize<Dictionary<string, string>>(secret.Reveal());
+            }
+            if (!await queue.IsLiveAsync(identity, task.TaskId, task.LeaseToken, time.GetUtcNow(), cancellationToken)) return null;
+            return task with { Secret = values };
         }
-
-        return Task.FromResult(CapacityProbeTaskResult.Failure(
-            request.TaskId,
-            request.ConnectionId,
-            CapacityProbeFailureCodes.CapacityUnavailable,
-            "No agent dispatcher transport available."));
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception)
+        {
+            await queue.CompleteAsync(identity, task.TaskId, new CapacityProbeCompletionRequest
+            {
+                LeaseToken = task.LeaseToken,
+                Result = CapacityProbeTaskResult.Failure(task.TaskId, task.ConnectionId, CapacityProbeFailureCodes.AuthenticationFailed)
+            }, time.GetUtcNow(), cancellationToken);
+            return null;
+        }
     }
 }

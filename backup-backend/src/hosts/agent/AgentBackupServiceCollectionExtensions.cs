@@ -45,6 +45,14 @@ public static class AgentBackupServiceCollectionExtensions
         services.TryAddSingleton<StagingUsageRegistry>();
 
         var options = configuration.GetSection(AgentHostOptions.SectionName).GetSection(AgentBackupOptions.SectionName).Get<AgentBackupOptions>();
+        var capacityRoots = (options?.LocalStorage?.Volumes ?? [])
+            .Where(entry => LocalVolumes.IsValidName(entry.Key) && AgentBackupOptionsValidation.IsAbsolute(entry.Value))
+            .ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.Ordinal);
+        if (options?.LocalStorage?.RootDirectory is { } capacityRoot && AgentBackupOptionsValidation.IsAbsolute(capacityRoot))
+            capacityRoots[LocalVolumes.DefaultName] = capacityRoot;
+        services.AddSingleton(provider => new BackupPlatform.Agent.Core.Storage.CapacityProbeTaskHandler(
+            provider.GetRequiredService<BackupPlatform.Contracts.Storage.ISftpCapacityProbeExecutor>(),
+            provider.GetRequiredService<ILogger<BackupPlatform.Agent.Core.Storage.CapacityProbeTaskHandler>>(), capacityRoots));
         if (options is null)
         {
             return services;

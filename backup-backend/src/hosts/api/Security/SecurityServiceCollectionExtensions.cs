@@ -228,8 +228,9 @@ public static class SecurityServiceCollectionExtensions
         });
         services.AddScoped<StorageConnectionService>();
         services.AddScoped<BackupPlatform.Storage.IStorageCapacitySnapshotStore, BackupPlatform.Infrastructure.Storage.PostgreSqlStorageCapacitySnapshotStore>();
-        services.AddScoped<BackupPlatform.Storage.ITenantAgentLiveness, BackupPlatform.Api.Backups.AgentConnectivityLiveness>();
-        services.AddScoped<BackupPlatform.Contracts.Storage.IAgentCapacityProbeDispatcher, BackupPlatform.Api.Backups.DefaultAgentCapacityProbeDispatcher>();
+        services.AddScoped<BackupPlatform.Storage.IStorageCapacityTaskQueue, BackupPlatform.Infrastructure.Storage.PostgreSqlStorageCapacityTaskQueue>();
+        services.AddScoped<BackupPlatform.Api.Backups.AgentCapacityProbeService>();
+        services.AddScoped<BackupPlatform.Storage.IPlatformStorageCapacityClient, BackupPlatform.Api.Backups.CentralStorageCapacityClient>();
         services.AddScoped<BackupPlatform.Storage.IGoogleDriveCapacityClient>(provider =>
         {
             var http = provider.GetService<HttpClient>() ?? provider.GetRequiredService<IHttpClientFactory>().CreateClient("google-drive");
@@ -238,7 +239,6 @@ public static class SecurityServiceCollectionExtensions
             return new BackupPlatform.Api.Backups.GoogleDriveCapacityClient(http, factory, secrets);
         });
         services.AddScoped<BackupPlatform.Storage.StorageCapacityProbeService>();
-        services.AddScoped<BackupPlatform.Storage.IStorageCapacityNotificationSink, BackupPlatform.Api.Storage.NotificationEngineCapacitySink>();
         services.AddSingleton<BackupPlatform.Api.Storage.StorageCapacityPeriodicProbeWorker>();
         services.AddHostedService(provider => provider.GetRequiredService<BackupPlatform.Api.Storage.StorageCapacityPeriodicProbeWorker>());
         services.AddSingleton<BackupPlatform.Application.Storage.IStorageCapacityProbeTrigger>(provider => provider.GetRequiredService<BackupPlatform.Api.Storage.StorageCapacityPeriodicProbeWorker>());
