@@ -49,6 +49,34 @@ public sealed class UploadPacerTests
         Assert.False(held.IsCompleted, "the slice may belong to another upload by now");
     }
 
+    [Fact]
+    public async Task Pacer_adapts_rate_immediately_when_window_transition_renews_policy()
+    {
+        var time = new FakeTimeProvider();
+        // Call 1: daytime limit 200,000 B/s, refresh after 2s (transition to night window coming in 2s)
+        // Call 2: night window limit 1,000,000 B/s, refresh after 10s
+        var secondCall = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var source = new Source(call =>
+        {
+            if (call == 1) return Task.FromResult(new UploadPacingPolicy(200_000, HoldsSlice: false, 200_000, TimeSpan.FromSeconds(2), Valid));
+            secondCall.TrySetResult();
+            return Task.FromResult(new UploadPacingPolicy(1_000_000, HoldsSlice: false, 1_000_000, TimeSpan.FromSeconds(10), Valid));
+        });
+
+        await using var pacer = await UploadPacer.BeginAsync(source, time, default);
+        await using var stream = pacer.Wrap(new MemoryStream(new byte[2 << 20]));
+
+        // Initial rate chunk
+        Assert.Equal(TransferRateLimiter.Chunk(200_000), await stream.ReadAsync(new byte[2 << 20]).AsTask().WaitAsync(TimeSpan.FromSeconds(5)));
+
+        // Advance until renewal happens
+        await AdvanceUntilAsync(secondCall.Task, time, TimeSpan.FromSeconds(1));
+        await SettleAsync(time, TimeSpan.FromMilliseconds(100));
+
+        // Post-transition rate chunk (updated to 1,000,000)
+        Assert.Equal(TransferRateLimiter.Chunk(1_000_000), await stream.ReadAsync(new byte[2 << 20]).AsTask().WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
     private sealed class Source(Func<int, Task<UploadPacingPolicy>> answer) : IUploadPolicySource
     {
         private readonly TaskCompletionSource _third = new(TaskCreationOptions.RunContinuationsAsynchronously);

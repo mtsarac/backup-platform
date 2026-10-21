@@ -75,6 +75,17 @@ public sealed class UploadBandwidthServiceTests
     }
 
     [Fact]
+    public async Task Dynamic_refresh_after_is_shortened_when_window_transition_is_imminent()
+    {
+        _store.Limits = new AttemptUploadLimits(Job: 500_000, Agent: null, Tenant: null, NextTransition: TimeSpan.FromSeconds(4));
+
+        var policy = await Service().PolicyAsync(Lease(), UploadSliceAction.Renew, default);
+
+        Assert.NotNull(policy);
+        Assert.Equal(4, policy.RefreshAfterSeconds);
+    }
+
+    [Fact]
     public async Task A_lease_that_holds_no_running_attempt_gets_no_policy()
     {
         _store.Limits = null;
@@ -99,5 +110,20 @@ public sealed class UploadBandwidthServiceTests
         }
 
         public Task<AttemptUploadLimits?> GrantAsync(BackupLeaseCommand lease, UploadSliceAction action, TimeSpan grantTtl, CancellationToken cancellationToken) => Task.FromResult(Limits);
+
+        public Task<IReadOnlyList<BandwidthProfileView>> ListProfilesAsync(TenantId tenantId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<BandwidthProfileView>>([]);
+
+        public Task<BandwidthProfileView?> GetProfileAsync(TenantId tenantId, Guid profileId, CancellationToken cancellationToken) =>
+            Task.FromResult<BandwidthProfileView?>(null);
+
+        public Task<BandwidthProfileView> SaveProfileAsync(TenantId tenantId, Guid? profileId, string name, string timeZoneId, IEnumerable<TransferScheduleWindowDto> windows, UserId actor, DateTimeOffset now, CancellationToken cancellationToken) =>
+            Task.FromResult(new BandwidthProfileView(profileId ?? Guid.NewGuid(), name, timeZoneId, windows.ToList()));
+
+        public Task<bool> DeleteProfileAsync(TenantId tenantId, Guid profileId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken) =>
+            Task.FromResult(true);
+
+        public Task<bool> AssignProfileAsync(TenantId tenantId, UploadBandwidthScope scope, Guid scopeId, Guid? profileId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken) =>
+            Task.FromResult(true);
     }
 }

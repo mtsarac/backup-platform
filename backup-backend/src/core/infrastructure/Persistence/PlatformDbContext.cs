@@ -102,6 +102,9 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<BackupStorageCleanup> BackupStorageCleanups => Set<BackupStorageCleanup>();
     public DbSet<UploadBandwidthLimit> UploadBandwidthLimits => Set<UploadBandwidthLimit>();
     public DbSet<UploadBandwidthGrant> UploadBandwidthGrants => Set<UploadBandwidthGrant>();
+    public DbSet<BandwidthProfile> BandwidthProfiles => Set<BandwidthProfile>();
+    public DbSet<TransferScheduleWindow> TransferScheduleWindows => Set<TransferScheduleWindow>();
+    public DbSet<BandwidthProfileAssignment> BandwidthProfileAssignments => Set<BandwidthProfileAssignment>();
     public DbSet<BackupTransferLease> BackupTransferLeases => Set<BackupTransferLease>();
     public DbSet<NotificationChannel> NotificationChannels => Set<NotificationChannel>();
     public DbSet<NotificationPolicy> NotificationPolicies => Set<NotificationPolicy>();

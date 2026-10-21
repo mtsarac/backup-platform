@@ -25,3 +25,21 @@ _Avoid_: BackupFailure, SizeMismatchError, CorruptedSize
 **AgentUpdateManifest**:
 Cryptographically signed release metadata specifying version, package digest, minimum supported version, and signature for agent fleet self-update.
 _Avoid_: ReleasePayload, UpdateScript, AutoPatch
+
+### Bandwidth & Transfer Recovery (Priority 6)
+
+**BandwidthProfile**:
+A named schedule defining upload rate limits (bytes/sec) across recurring time-of-day and day-of-week windows in an explicit IANA time zone.
+_Avoid_: SpeedLimitRule, ThrottleSchedule
+
+**TransferScheduleWindow**:
+An active time window within a BandwidthProfile governing the maximum permitted upload bandwidth during specific hours.
+_Avoid_: PacingInterval, TimeSlot
+
+**TransferCheckpoint**:
+Durable metadata recording the verified byte offset or resumable session URI reached during a transfer, enabling safe resumption after network drops or pause.
+_Avoid_: UploadState, ByteCounter
+
+**TransferPauseReason**:
+The operational cause of a paused transfer (UserRequested, ScheduleRestricted, NetworkRetrying).
+_Avoid_: HaltFlag, WaitStatus

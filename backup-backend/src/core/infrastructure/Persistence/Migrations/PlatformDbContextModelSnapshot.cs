@@ -1564,6 +1564,64 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BandwidthProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TimeZoneId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("bandwidth_profiles", (string)null);
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BandwidthProfileAssignment", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Scope")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<Guid>("ScopeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("TenantId", "Scope", "ScopeId");
+
+                    b.HasIndex("ProfileId");
+
+                    b.ToTable("bandwidth_profile_assignments", (string)null);
+                });
+
             modelBuilder.Entity("BackupPlatform.Domain.Backups.ReplicaRepairOperation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1819,6 +1877,37 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_tenant_wrap_keys_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
 
                             t.HasCheckConstraint("ck_tenant_wrap_keys_version", "\"Version\" >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.TransferScheduleWindow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("BytesPerSecond")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("integer");
+
+                    b.Property<TimeOnly>("EndTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<Guid>("ProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProfileId");
+
+                    b.ToTable("transfer_schedule_windows", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_transfer_schedule_windows_rate", "\"BytesPerSecond\" BETWEEN 16000 AND 100000000000");
                         });
                 });
 
@@ -4680,6 +4769,15 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.TransferScheduleWindow", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Backups.BandwidthProfile", null)
+                        .WithMany("Windows")
+                        .HasForeignKey("ProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("BackupPlatform.Domain.Discovery.DiscoveredDatabase", b =>
                 {
                     b.HasOne("BackupPlatform.Domain.Tenancy.Tenant", null)
@@ -5063,6 +5161,11 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Navigation("Artifacts");
 
                     b.Navigation("DestinationOutcomes");
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.BandwidthProfile", b =>
+                {
+                    b.Navigation("Windows");
                 });
 
             modelBuilder.Entity("BackupPlatform.Domain.Restores.RestoreOperation", b =>

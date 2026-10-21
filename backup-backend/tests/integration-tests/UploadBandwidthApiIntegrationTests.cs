@@ -67,6 +67,47 @@ public sealed class UploadBandwidthApiIntegrationTests(PostgreSqlFixture fixture
             Assert.Empty(after.GetProperty("jobs").EnumerateArray());
         }
     }
+    [Fact]
+    public async Task Bandwidth_profiles_can_be_created_listed_assigned_and_deleted()
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture);
+        var jobId = await scenario.CreateJobAsync();
+
+        // Create a profile
+        var newProfile = new
+        {
+            name = "Office Hours",
+            timeZoneId = "Europe/Istanbul",
+            windows = new[]
+            {
+                new { dayOfWeek = (int)DayOfWeek.Monday, startTime = "09:00:00", endTime = "18:00:00", bytesPerSecond = 500_000 }
+            }
+        };
+        using var createRes = await scenario.Admin.SendAsync(HttpMethod.Post, scenario.Root + "/bandwidth-profiles", newProfile);
+        Assert.Equal(HttpStatusCode.OK, createRes.StatusCode);
+        var createdJson = AgentWorld.ReadJson(createRes);
+        var profileId = createdJson.GetProperty("id").GetGuid();
+        Assert.Equal("Office Hours", createdJson.GetProperty("name").GetString());
+
+        // List profiles
+        using var listRes = await scenario.Admin.GetAsync(scenario.Root + "/bandwidth-profiles");
+        Assert.Equal(HttpStatusCode.OK, listRes.StatusCode);
+        var list = AgentWorld.ReadJson(listRes).EnumerateArray().ToList();
+        Assert.Contains(list, p => p.GetProperty("id").GetGuid() == profileId);
+
+        // Assign to Job
+        using var assignJobRes = await scenario.Admin.SendAsync(HttpMethod.Put, scenario.Root + $"/upload-bandwidth/jobs/{jobId}/profile", new { profileId });
+        Assert.Equal(HttpStatusCode.OK, assignJobRes.StatusCode);
+
+        // Verify in settings
+        var settings = await GetAsync(scenario);
+        var jobItem = settings.GetProperty("jobs").EnumerateArray().Single(j => j.GetProperty("jobId").GetGuid() == jobId);
+        Assert.Equal(profileId, jobItem.GetProperty("profileId").GetGuid());
+
+        // Delete profile
+        using var deleteRes = await scenario.Admin.SendAsync(HttpMethod.Delete, scenario.Root + $"/bandwidth-profiles/{profileId}");
+        Assert.Equal(HttpStatusCode.NoContent, deleteRes.StatusCode);
+    }
 
     private const long UploadBandwidth_Min = BackupPlatform.Domain.Backups.UploadBandwidth.MinimumBytesPerSecond;
 

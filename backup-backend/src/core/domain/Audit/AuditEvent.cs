@@ -69,6 +69,10 @@ public static class AuditActions
 
     // Transfer policy events
     public const string UploadBandwidthLimitChanged = "upload_bandwidth.limit_changed";
+    public const string BandwidthProfileCreated = "bandwidth_profile.created";
+    public const string BandwidthProfileUpdated = "bandwidth_profile.updated";
+    public const string BandwidthProfileDeleted = "bandwidth_profile.deleted";
+    public const string BandwidthProfileAssigned = "bandwidth_profile.assigned";
 
     // Database discovery events
     public const string DiscoverySettingsChanged = "discovery.settings_changed";
