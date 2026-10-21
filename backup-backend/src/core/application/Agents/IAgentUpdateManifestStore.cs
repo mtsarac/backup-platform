@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using BackupPlatform.Contracts.Agents;
 
-namespace BackupPlatform.Core.Application.Agents;
+namespace BackupPlatform.Application.Agents;
 
 public interface IAgentUpdateManifestStore
 {

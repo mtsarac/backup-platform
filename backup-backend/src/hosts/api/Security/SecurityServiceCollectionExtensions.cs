@@ -450,7 +450,7 @@ public static class SecurityServiceCollectionExtensions
             options.MaximumReceiveMessageSize = 4 * 1024;
             options.EnableDetailedErrors = false;
         });
-        services.AddSingleton<BackupPlatform.Core.Application.Agents.IAgentUpdateManifestStore, BackupPlatform.Core.Application.Agents.InMemoryAgentUpdateManifestStore>();
+        services.AddSingleton<BackupPlatform.Application.Agents.IAgentUpdateManifestStore, BackupPlatform.Application.Agents.InMemoryAgentUpdateManifestStore>();
     }
 
     private static void AddPolicies(IServiceCollection services)

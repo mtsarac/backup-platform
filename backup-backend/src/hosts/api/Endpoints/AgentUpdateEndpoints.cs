@@ -1,5 +1,5 @@
 using BackupPlatform.Api.Security;
-using BackupPlatform.Core.Application.Agents;
+using BackupPlatform.Application.Agents;
 using BackupPlatform.Contracts.Agents;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
