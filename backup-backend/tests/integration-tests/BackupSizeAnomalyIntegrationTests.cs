@@ -256,7 +256,8 @@ public sealed class BackupSizeAnomalyIntegrationTests : IAsyncLifetime
         using (var sync = await scenario.World.SendAgentAsync(HttpMethod.Put, "/api/agent/capabilities", scenario.Agent.CredentialId, scenario.Agent.Secret,
             body: new AgentCapabilitySyncRequest { Revision = AgentCapabilityRevision.Compute(capabilities), Capabilities = capabilities }))
             Assert.Equal(HttpStatusCode.OK, sync.StatusCode);
-        using (var heartbeat = await scenario.World.HeartbeatAsync(scenario.Agent)) Assert.Equal(HttpStatusCode.OK, heartbeat.StatusCode);
+        using (var heartbeat = await scenario.World.HeartbeatAsync(scenario.Agent, AgentWorld.Heartbeat(capabilityRevision: AgentCapabilityRevision.Compute(capabilities))))
+            Assert.Equal(HttpStatusCode.OK, heartbeat.StatusCode);
         await MeasureCapacityHttpAsync(scenario, connection, 20);
         using var healthyResponse = await scenario.Admin.GetAsync(scenario.Root + $"/backup-jobs/{job}/health");
         var healthy = AgentWorld.ReadJson(healthyResponse);
