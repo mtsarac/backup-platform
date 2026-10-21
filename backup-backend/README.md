@@ -57,7 +57,13 @@ Scores of at least 80 are Healthy, 50–79 Degraded, and below 50 Critical.
 Untested or expired (over 30 days) successful restore verification earns ten
 points; a failed latest test earns zero. Empty tenants return null average and
 state rather than a fabricated healthy score. Summaries batch latest evidence
-per job/connection and include tenant-owned capacity risks. The job detail
+per job/connection and include tenant-owned capacity risks. `recentSizeAnomalies`
+contains the latest 20 successful `SizeAnomalyWarning` runs completed during the
+seven days ending at `evaluatedAt` (inclusive), ordered by `completedAt` then
+`runId` descending. Each item exposes `runId`, `jobId`, `jobName`, `completedAt`,
+`sizeBytes`, `baselineMeanBytes`, and signed `deviationRatio`.
+`recentSizeAnomaliesTotal` counts all matching runs, including those beyond the
+list limit; legacy runs without advisory metadata are not warnings. The job detail
 screen explains all four factors. Health reads never change backup admission,
 leases, execution, or completion.
 
