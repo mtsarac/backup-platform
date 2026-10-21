@@ -18,6 +18,7 @@ import { useBackupJob, useJobOccurrences, useSaveBackupJob } from '@/features/ba
 import { Advanced, FormGrid } from '@/features/backup-jobs/job-form-fields'
 import { fieldKit } from '@/features/backup-jobs/job-field-kit'
 import { JobSummary } from '@/features/backup-jobs/job-summary'
+import { BackupHealthCard } from '@/features/backup-jobs/health-card'
 import { jobSteps, schedulePresets, stepOfField, summaryStep, validateStep } from '@/features/backup-jobs/job-wizard-model'
 import { SourceStep } from '@/features/backup-jobs/source-step'
 import { useTenantConnections, useTenantProviders } from '@/features/storage-connections/hooks'
@@ -44,9 +45,10 @@ export function BackupJobWizardPage() {
   const discoveryInstance = id ? '' : params.get('discoveryInstance') ?? ''
   const discovered = useDiscoveryInstance(discoveryInstance)
   const prefill = discovered.data ? { instance: discovered.data, databases: selectableNames(discovered.data, params.getAll('database')) } : undefined
-  const crumbs = [{ label: tx('Yedekleme işleri'), to: `/tenants/${tenantId}/backup-jobs` }, { label: id ? tx('Düzenle') : tx('Yeni iş') }]
+  const readOnly = Boolean(id) && !canOperate
+  const crumbs = [{ label: tx('Yedekleme işleri'), to: `/tenants/${tenantId}/backup-jobs` }, { label: id ? tx(readOnly ? 'Yedekleme sağlığı' : 'Düzenle') : tx('Yeni iş') }]
   let body
-  if (!canOperate) body = <Notice tone="error">{tx("Bu sayfada değişiklik yapma yetkiniz yok. Viewer rolü salt okunurdur.")}</Notice>
+  if (!canOperate) body = readOnly ? <p className="text-sm text-text-muted">{tx('Salt okunur')}</p> : <Notice tone="error">{tx("Bu sayfada değişiklik yapma yetkiniz yok. Viewer rolü salt okunurdur.")}</Notice>
   else if (id) body = <QueryState isPending={job.isPending} error={job.error}>{job.data && <JobForm key={`${tenantId}:${id}`} job={job.data} />}</QueryState>
   else if (discoveryInstance && discovered.isPending) body = <QueryState isPending error={null} />
   else body = <>
@@ -54,7 +56,8 @@ export function BackupJobWizardPage() {
     <JobForm key={`${tenantId}:new`} prefill={prefill} />
   </>
   return <div className="space-y-6">
-    <PageHeader crumbs={crumbs} title={id ? tx('Yedekleme işini düzenle') : tx('Yeni yedekleme işi')} description={tx("Kaynak, depolama, zamanlama ve saklama ayarlarını adım adım belirleyin.")} />
+    <PageHeader crumbs={crumbs} title={readOnly ? tx('Yedekleme sağlığı') : id ? tx('Yedekleme işini düzenle') : tx('Yeni yedekleme işi')} description={readOnly ? job.data?.name : tx("Kaynak, depolama, zamanlama ve saklama ayarlarını adım adım belirleyin.")} />
+    {id && <BackupHealthCard key={`${tenantId}:${id}`} jobId={id} />}
     {body}
   </div>
 }

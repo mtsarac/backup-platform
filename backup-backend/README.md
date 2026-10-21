@@ -35,6 +35,32 @@ The architecture tests enforce the dependency direction between these layers, so
 - Secrets are stored encrypted with ASP.NET Data Protection and are not logged or returned by the API.
 - Successful runs also record advisory size metadata (`sizeAnomalyStatus`, `sizeAnomalyDeviationRatio`, `sizeAnomalyBaselineBytes`, and derived `isSizeAnomaly`) in run list/detail responses. The first three successes establish a baseline; later runs compare against the last ten successful runs of that tenant/job. Only deviations greater than both 30% and two standard deviations raise `SizeAnomalyWarning`. Artifacts, checksums, and success status are unchanged. The warning audit entry and policy-admitted `backup_size_anomaly` event/deliveries commit with completion; email/webhook delivery stays asynchronous through the existing N1 outbox.
 
+### Advisory backup health
+
+Tenant viewers can read `GET /api/tenants/{tenantId}/backup-jobs/{jobId}/health`
+and `GET /api/tenants/{tenantId}/observability/health-summary`. The versioned
+equivalents are `GET /api/v1/backups/jobs/{id}/health` and
+`GET /api/v1/observability/health-summary?tenantId={tenantId}`; membership (or
+platform administrator access) is checked before reading that tenant's data.
+
+The deterministic score weights freshness (40), usable verified replicas of the
+latest successful backup (30), latest isolated restore verification (20), and
+the fullest configured destination (10). Freshness uses consecutive UTC
+occurrences of the saved cron schedule, including its time zone. Jobs without a
+schedule get an explicit unavailable freshness factor, not an assumed daily
+schedule. Missing, failed, unknown-quota, future-dated, or over-24-hour-old
+capacity observations earn no capacity points. For health scoring, 80% through
+90% inclusive earns five points and above 90% earns zero; capacity probe alerts
+retain their separate existing 90%-critical boundary.
+
+Scores of at least 80 are Healthy, 50–79 Degraded, and below 50 Critical.
+Untested or expired (over 30 days) successful restore verification earns ten
+points; a failed latest test earns zero. Empty tenants return null average and
+state rather than a fabricated healthy score. Summaries batch latest evidence
+per job/connection and include tenant-owned capacity risks. The job detail
+screen explains all four factors. Health reads never change backup admission,
+leases, execution, or completion.
+
 ## Run it
 
 You need the .NET 10 SDK and PostgreSQL 18.

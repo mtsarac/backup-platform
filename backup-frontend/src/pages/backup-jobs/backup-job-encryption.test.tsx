@@ -5,16 +5,17 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { BackupJobWizardPage } from './backup-job-wizard-page'
 import { BackupJobsPage } from './backup-jobs-page'
-import { getBackupJob, getBackupJobs, getOccurrences, saveBackupJob } from '@/features/backup-jobs/api'
+import { getBackupJob, getBackupJobHealth, getBackupJobs, getOccurrences, saveBackupJob } from '@/features/backup-jobs/api'
 import type { BackupJob } from '@/features/backup-jobs/types'
 import { ApiError } from '@/lib/api/client'
 import { getTenantConnections, getTenantProviders } from '@/features/storage-connections/api'
 import { catalog, makeConnection, makeManaged } from '@/features/storage-connections/test-fixtures'
+import { healthyJobHealth } from '@/features/backup-jobs/test-fixtures'
 
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canOperate: true, canAdmin: true }) }))
 vi.mock('@/features/agents/api', () => ({ getAgents: vi.fn().mockResolvedValue([{ agentId: 'agent-a', hostName: 'SQL Agent', operationalStatus: 'Online' }]) }))
 vi.mock('@/features/storage-connections/api')
-vi.mock('@/features/backup-jobs/api', () => ({ saveBackupJob: vi.fn(), getBackupJob: vi.fn(), getBackupJobs: vi.fn(), getOccurrences: vi.fn(), startJobRun: vi.fn(), setJobEnabled: vi.fn() }))
+vi.mock('@/features/backup-jobs/api', () => ({ saveBackupJob: vi.fn(), getBackupJob: vi.fn(), getBackupJobHealth: vi.fn(), getBackupJobs: vi.fn(), getOccurrences: vi.fn(), startJobRun: vi.fn(), setJobEnabled: vi.fn() }))
 
 const job: BackupJob = {
   id: 'job-a', backupType: 'Full', createdAt: '2026-10-01T08:00:00Z', name: 'ERP backup', agentId: 'agent-a', agentName: 'SQL Agent', enabled: true, overlapPolicy: 'Skip', schedule: null, nextOccurrenceAt: null, lastRun: null,
@@ -37,6 +38,7 @@ beforeEach(() => {
   vi.mocked(getTenantConnections).mockResolvedValue({ items: [makeConnection(), makeManaged()] })
   vi.mocked(getTenantProviders).mockResolvedValue({ items: catalog })
   vi.mocked(getOccurrences).mockResolvedValue([])
+  vi.mocked(getBackupJobHealth).mockResolvedValue(healthyJobHealth)
   vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
 })
 /** Fill the required fields and stop on the "Saklama & seçenekler" step. */

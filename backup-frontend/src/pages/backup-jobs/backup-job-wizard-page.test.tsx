@@ -5,17 +5,18 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { BackupJobWizardPage } from './backup-job-wizard-page'
-import { getBackupJob, getOccurrences, saveBackupJob, setJobEnabled } from '@/features/backup-jobs/api'
+import { getBackupJob, getBackupJobHealth, getOccurrences, saveBackupJob, setJobEnabled } from '@/features/backup-jobs/api'
 import type { BackupJob } from '@/features/backup-jobs/types'
 import { ApiError } from '@/lib/api/client'
 import { getTenantConnections, getTenantProviders } from '@/features/storage-connections/api'
 import { catalog, makeConnection, makeManaged, makeProvider } from '@/features/storage-connections/test-fixtures'
+import { healthyJobHealth } from '@/features/backup-jobs/test-fixtures'
 
 const access = vi.hoisted(() => ({ tenantId: 'tenant-a', canOperate: true, canAdmin: true }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('@/features/agents/api', () => ({ getAgents: vi.fn().mockResolvedValue([{ agentId: 'agent-a', hostName: 'SQL Agent', operationalStatus: 'Online' }]) }))
 vi.mock('@/features/storage-connections/api')
-vi.mock('@/features/backup-jobs/api', () => ({ saveBackupJob: vi.fn(), getBackupJob: vi.fn(), getBackupJobs: vi.fn(), getOccurrences: vi.fn(), startJobRun: vi.fn(), setJobEnabled: vi.fn() }))
+vi.mock('@/features/backup-jobs/api', () => ({ saveBackupJob: vi.fn(), getBackupJob: vi.fn(), getBackupJobHealth: vi.fn(), getBackupJobs: vi.fn(), getOccurrences: vi.fn(), startJobRun: vi.fn(), setJobEnabled: vi.fn() }))
 function page(cache: QueryClient, route = '/tenants/tenant-a/backup-jobs/new') {
   return <QueryClientProvider client={cache}><MemoryRouter initialEntries={[route]}><Routes><Route path="/tenants/:tenantId/backup-jobs/new" element={<BackupJobWizardPage />} /><Route path="/tenants/:tenantId/backup-jobs/:id/edit" element={<BackupJobWizardPage />} /></Routes></MemoryRouter></QueryClientProvider>
 }
@@ -56,6 +57,7 @@ beforeEach(() => {
   vi.mocked(getTenantConnections).mockResolvedValue({ items: [makeConnection(), makeManaged()] })
   vi.mocked(getTenantProviders).mockResolvedValue({ items: catalog })
   vi.mocked(getBackupJob).mockResolvedValue(makeJob())
+  vi.mocked(getBackupJobHealth).mockResolvedValue(healthyJobHealth)
   vi.mocked(getOccurrences).mockResolvedValue([])
 })
 describe('iş formu', () => {
@@ -101,6 +103,14 @@ describe('iş formu', () => {
     access.canOperate = false
     renderPage()
     expect(screen.getByRole('alert')).toHaveTextContent('yetkiniz yok')
+    expect(screen.queryByRole('button', { name: 'Kaydet' })).not.toBeInTheDocument()
+  })
+  it('Viewer can read job health without receiving edit controls', async () => {
+    access.canOperate = false
+    renderPage('/tenants/tenant-a/backup-jobs/job-a/edit')
+    const region = screen.getByRole('region', { name: 'Yedekleme sağlığı' })
+    expect(await within(region).findByText('100 / 100')).toBeInTheDocument()
+    expect(within(region).getByText('Sağlıklı')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Kaydet' })).not.toBeInTheDocument()
   })
   it('cron alanını yerel olarak yeniden doğrulamaz ve sunucu alan hatasını gösterir', async () => {
