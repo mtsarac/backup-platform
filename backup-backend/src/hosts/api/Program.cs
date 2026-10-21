@@ -34,6 +34,7 @@ app.UsePlatformSecurity();
 app.MapAuthenticationEndpoints();
 app.MapUserEndpoints();
 app.MapAgentEndpoints();
+app.MapAgentUpdateEndpoints();
 app.MapAgentAdministrationEndpoints();
 app.MapDiscoveryEndpoints();
 app.MapDatabaseCredentialEndpoints();
