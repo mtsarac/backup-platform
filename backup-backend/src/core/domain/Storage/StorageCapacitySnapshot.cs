@@ -74,6 +74,12 @@ public sealed class StorageCapacitySnapshot : ITenantOwned
     public DateTimeOffset ReportedAt { get; private set; }
     public string? ErrorMessage { get; private set; }
 
+    public void EnsureReportedAfter(DateTimeOffset previous)
+    {
+        // PostgreSQL stores microseconds; simultaneous reports must keep commit order rather than random UUID order.
+        if (ReportedAt <= previous) ReportedAt = previous.AddTicks(TimeSpan.TicksPerMicrosecond);
+    }
+
     public static StorageCapacitySnapshot AvailableResult(
         TenantId tenantId,
         Guid connectionId,

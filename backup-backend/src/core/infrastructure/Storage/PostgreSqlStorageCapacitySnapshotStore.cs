@@ -1,12 +1,16 @@
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Storage;
+using BackupPlatform.Domain.Audit;
+using BackupPlatform.Domain.Notifications;
+using BackupPlatform.Infrastructure.Notifications;
+using BackupPlatform.Notifications;
 using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.Storage;
 using Microsoft.EntityFrameworkCore;
 
 namespace BackupPlatform.Infrastructure.Storage;
 
-public sealed class PostgreSqlStorageCapacitySnapshotStore(DbContextOptions<PlatformDbContext> options) : IStorageCapacitySnapshotStore
+public sealed class PostgreSqlStorageCapacitySnapshotStore(DbContextOptions<PlatformDbContext> options, NotificationEngine notifications, TimeProvider time) : IStorageCapacitySnapshotStore
 {
     public async Task<StorageCapacitySnapshot?> GetLatestAsync(TenantId tenantId, Guid connectionId, CancellationToken cancellationToken)
     {
@@ -33,7 +37,43 @@ public sealed class PostgreSqlStorageCapacitySnapshotStore(DbContextOptions<Plat
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         await using var db = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        await SaveInTransactionAsync(db, snapshot, notifications, time, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    internal static async Task SaveInTransactionAsync(PlatformDbContext db, StorageCapacitySnapshot snapshot,
+        NotificationEngine notifications, TimeProvider time, CancellationToken cancellationToken)
+    {
+        var session = await PostgreSqlNotificationStore.OpenLifecycleSessionAsync(db, snapshot.TenantId, time, cancellationToken);
+        var latest = await db.StorageCapacitySnapshots.AsNoTracking()
+            .Where(s => s.TenantId == snapshot.TenantId && s.ConnectionId == snapshot.ConnectionId)
+            .OrderByDescending(s => s.ReportedAt).ThenByDescending(s => s.Id).FirstOrDefaultAsync(cancellationToken);
+        if (latest is not null) snapshot.EnsureReportedAfter(latest.ReportedAt);
+        var measured = snapshot.Status != StorageCapacityStatus.CapacityUnavailable;
+        var previous = latest;
+        if (measured && latest?.Status == StorageCapacityStatus.CapacityUnavailable)
+            previous = await db.StorageCapacitySnapshots.AsNoTracking()
+                .Where(s => s.TenantId == snapshot.TenantId && s.ConnectionId == snapshot.ConnectionId && s.Status != StorageCapacityStatus.CapacityUnavailable)
+                .OrderByDescending(s => s.ReportedAt).ThenByDescending(s => s.Id).FirstOrDefaultAsync(cancellationToken);
         db.StorageCapacitySnapshots.Add(snapshot);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await db.SaveChangesAsync(cancellationToken);
+        if (!measured) return;
+        var status = StorageCapacityStatus.Evaluate(snapshot.TotalBytes, snapshot.UsedBytes, snapshot.FreeBytes);
+        var previousStatus = previous is null ? null : StorageCapacityStatus.Evaluate(previous.TotalBytes, previous.UsedBytes, previous.FreeBytes);
+        if (status != previousStatus && status is StorageCapacityStatus.Warning or StorageCapacityStatus.Critical)
+        {
+            db.AuditEvents.Add(AuditEvent.Record(time.GetUtcNow(), UserId.System, AuditActorKind.System,
+                status == StorageCapacityStatus.Critical ? "storage_capacity_critical" : "storage_capacity_warning",
+                snapshot.TenantId, "storage_connection", snapshot.ConnectionId.ToString("D"),
+                new Dictionary<string, object?>
+                {
+                    ["status"] = status, ["totalBytes"] = snapshot.TotalBytes,
+                    ["usedBytes"] = snapshot.UsedBytes, ["freeBytes"] = snapshot.FreeBytes
+                }));
+        }
+        var observations = await PostgreSqlNotificationObservationSource.CollectStorageCapacityAsync(db, snapshot.TenantId, cancellationToken);
+        await notifications.ApplyAsync(session, [new ObservationSet(NotificationEventTypes.StorageCapacityCritical, true, observations)], time.GetUtcNow(), cancellationToken);
     }
 }

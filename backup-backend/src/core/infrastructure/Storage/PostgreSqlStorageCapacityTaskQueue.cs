@@ -7,12 +7,13 @@ using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Storage;
 using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.Storage;
+using BackupPlatform.Notifications;
 using Microsoft.EntityFrameworkCore;
 
 namespace BackupPlatform.Infrastructure.Storage;
 
 public sealed class PostgreSqlStorageCapacityTaskQueue(DbContextOptions<PlatformDbContext> options,
-    AgentConnectivityOptions connectivity) : IStorageCapacityTaskQueue
+    AgentConnectivityOptions connectivity, NotificationEngine notifications, TimeProvider time) : IStorageCapacityTaskQueue
 {
     public async Task<StorageCapacityResponse> EnqueueAsync(TenantId tenantId, Guid connectionId, DateTimeOffset now, CancellationToken cancellationToken)
     {
@@ -32,7 +33,7 @@ public sealed class PostgreSqlStorageCapacityTaskQueue(DbContextOptions<Platform
         if (agent == Guid.Empty)
         {
             var snapshot = StorageCapacitySnapshot.UnavailableResult(tenantId, connectionId, now, "No authorized compatible online agent is available.");
-            db.StorageCapacitySnapshots.Add(snapshot);
+            await PostgreSqlStorageCapacitySnapshotStore.SaveInTransactionAsync(db, snapshot, notifications, time, cancellationToken);
             response = StorageCapacityResponse.From(snapshot);
         }
         else
@@ -118,7 +119,7 @@ public sealed class PostgreSqlStorageCapacityTaskQueue(DbContextOptions<Platform
             ? StorageCapacitySnapshot.AvailableResult(identity.TenantId, task.ConnectionId, result.TotalBytes, result.UsedBytes, result.FreeBytes, now)
             : StorageCapacitySnapshot.UnavailableResult(identity.TenantId, task.ConnectionId, now, result.ErrorCode);
         task.Complete(now, json);
-        db.StorageCapacitySnapshots.Add(snapshot);
+        await PostgreSqlStorageCapacitySnapshotStore.SaveInTransactionAsync(db, snapshot, notifications, time, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return BackupMutationResult.Accepted;
@@ -132,8 +133,8 @@ public sealed class PostgreSqlStorageCapacityTaskQueue(DbContextOptions<Platform
             && (await EligibleAgentsAsync(db, tenantId, now, cancellationToken)).Contains(task.AgentId)
             && await db.StorageConnections.AnyAsync(c => c.Id == connectionId && c.TenantId == tenantId && c.Enabled && !c.AdministrativelyDisabled, cancellationToken)) return task;
         task.Complete(now, null);
-        db.StorageCapacitySnapshots.Add(StorageCapacitySnapshot.UnavailableResult(tenantId, connectionId, now, "Capacity probe expired or its agent is unavailable."));
-        await db.SaveChangesAsync(cancellationToken);
+        var unavailable = StorageCapacitySnapshot.UnavailableResult(tenantId, connectionId, now, "Capacity probe expired or its agent is unavailable.");
+        await PostgreSqlStorageCapacitySnapshotStore.SaveInTransactionAsync(db, unavailable, notifications, time, cancellationToken);
         return null;
     }
     private async Task<bool> IsLiveAsync(PlatformDbContext db, AgentIdentity identity, StorageCapacityTask task, Guid token,
@@ -147,6 +148,8 @@ public sealed class PostgreSqlStorageCapacityTaskQueue(DbContextOptions<Platform
     private Task<List<Guid>> EligibleAgentsAsync(PlatformDbContext db, TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var cutoff = now - connectivity.OfflineTimeout;
+        var minimum = BackupPlatform.Contracts.Agents.AgentProtocol.Current.SupportedVersions.Minimum;
+        var maximum = BackupPlatform.Contracts.Agents.AgentProtocol.Current.SupportedVersions.Maximum;
         return db.Database.SqlQuery<Guid>($"""
             SELECT a."Id" AS "Value" FROM agents a
             JOIN agent_connectivity live ON live."AgentId" = a."Id" AND live."TenantId" = a."TenantId"
@@ -154,6 +157,8 @@ public sealed class PostgreSqlStorageCapacityTaskQueue(DbContextOptions<Platform
             WHERE a."TenantId" = {tenantId.Value} AND a."Status" = 2 AND live."LastSeenAt" >= {cutoff}
               AND cap."Identifier" = {CapacityProbeProtocol.Capability} AND cap."Support" = 1
               AND cap."Revision" = live."CapabilityRevision"
+              AND ROW(live."ReportedProtocolMajor", live."ReportedProtocolMinor") >= ROW({minimum.Major}, {minimum.Minor})
+              AND ROW(live."ReportedProtocolMajor", live."ReportedProtocolMinor") <= ROW({maximum.Major}, {maximum.Minor})
             ORDER BY a."Id"
             """).ToListAsync(cancellationToken);
     }

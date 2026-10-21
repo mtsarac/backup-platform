@@ -72,6 +72,11 @@ describe('Storage connections list and detail', () => {
       freeBytes: 200_000_000_000,
       status: 'Available',
       reportedAt: '2026-10-21T10:00:00Z',
+      historyLimit: 30,
+      history: [{
+        reportedAt: '2026-10-21T10:00:00Z', totalBytes: 500_000_000_000,
+        usedBytes: 300_000_000_000, freeBytes: 200_000_000_000, status: 'Available',
+      }],
     })
     vi.mocked(api.probeTenantConnectionCapacity).mockResolvedValue({
       connectionId: 'conn-local',
@@ -84,9 +89,10 @@ describe('Storage connections list and detail', () => {
 
     mount(detail('conn-local'))
     expect(await screen.findByText('Depolama Kapasitesi')).toBeInTheDocument()
-    expect(await screen.findByText('500 GB')).toBeInTheDocument()
-    expect(screen.getByText('300 GB')).toBeInTheDocument()
-    expect(screen.getByText('200 GB')).toBeInTheDocument()
+    expect(await screen.findByRole('table', { name: 'Kapasite geçmişi — en son 30 ölçüm' })).toBeInTheDocument()
+    expect(screen.getAllByText('500 GB')).toHaveLength(2)
+    expect(screen.getAllByText('300 GB')).toHaveLength(2)
+    expect(screen.getAllByText('200 GB')).toHaveLength(2)
 
     const probeBtn = screen.getByRole('button', { name: 'Kapasiteyi Sorgula' })
     await userEvent.click(probeBtn)

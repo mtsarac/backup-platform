@@ -27,7 +27,9 @@ public sealed class CapacityProbeTaskWorker(ICapacityProbeTaskClient client, IAg
             || task.LeaseExpiresAt <= time.GetUtcNow()) return false;
         lock (_gate)
         {
-            foreach (var pair in _seen.Where(pair => pair.Value <= time.GetUtcNow()).ToArray()) _seen.Remove(pair.Key);
+            var now = time.GetUtcNow();
+            foreach (var pair in _seen)
+                if (pair.Value <= now) _seen.Remove(pair.Key);
             if (_seen.ContainsKey(task.LeaseToken) || !_queue.Writer.TryWrite(task)) return false;
             _seen.Add(task.LeaseToken, task.LeaseExpiresAt);
             return true;

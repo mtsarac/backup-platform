@@ -123,6 +123,7 @@ public sealed class StorageCapacityThresholdsAndAlertsIntegrationTests(PostgreSq
         {
             var events = await context.NotificationEvents.Where(e => e.TenantId == tenantId && e.Type == NotificationEventTypes.StorageCapacityCritical).ToListAsync();
             Assert.Empty(events);
+            Assert.Single(await context.AuditEvents.Where(e => e.TenantId == tenantId && e.Action == "storage_capacity_warning").ToListAsync());
         }
 
         // 5. Probe with 95% usage (>= 90%) -> Critical, emits storage_capacity_critical event!
@@ -144,6 +145,7 @@ public sealed class StorageCapacityThresholdsAndAlertsIntegrationTests(PostgreSq
 
             var deliveries = await context.NotificationDeliveries.Where(d => d.EventId == ev.Id).ToListAsync();
             Assert.NotEmpty(deliveries);
+            Assert.Single(await context.AuditEvents.Where(e => e.TenantId == tenantId && e.Action == "storage_capacity_critical").ToListAsync());
         }
 
         // 6. Deduplication: Probe again while still at 95% -> No new event should be created
@@ -154,6 +156,7 @@ public sealed class StorageCapacityThresholdsAndAlertsIntegrationTests(PostgreSq
         {
             var events = await context.NotificationEvents.Where(e => e.TenantId == tenantId && e.Type == NotificationEventTypes.StorageCapacityCritical).ToListAsync();
             Assert.Single(events); // Still only 1 event, not duplicated!
+            Assert.Single(await context.AuditEvents.Where(e => e.TenantId == tenantId && e.Action == "storage_capacity_critical").ToListAsync());
         }
         // 6b. Flap Prevention: Probe fails and returns CapacityUnavailable -> Condition must NOT resolve or flap!
         world.Clock.Advance(TimeSpan.FromSeconds(1));

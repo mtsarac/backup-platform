@@ -262,6 +262,12 @@ public sealed class StorageCapacityProbeIntegrationTests(PostgreSqlFixture fixtu
             Assert.Empty(AgentWorld.ReadJson(foreignPoll).GetProperty("tasks").EnumerateArray());
             using var denied = await CompleteAsync(original, foreign, first);
             Assert.Equal(HttpStatusCode.NotFound, denied.StatusCode);
+            var sibling = await original.EnrollAsync(setup, installationId: Guid.NewGuid());
+            await DeclareCapacityAsync(original, sibling);
+            using var wrongOwner = await CompleteAsync(original, sibling, first);
+            Assert.Equal(HttpStatusCode.Conflict, wrongOwner.StatusCode);
+            using var siblingPoll = await original.PollAsync(sibling);
+            Assert.Empty(AgentWorld.ReadJson(siblingPoll).GetProperty("tasks").EnumerateArray());
         }
 
         clock.Advance(TimeSpan.FromSeconds(121));
@@ -353,6 +359,96 @@ public sealed class StorageCapacityProbeIntegrationTests(PostgreSqlFixture fixtu
             Assert.Equal("CapacityUnavailable", AgentWorld.ReadJson(unavailable).GetProperty("status").GetString());
         }
         finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public async Task CriticalAgentCompletion_CommitsSnapshotOutboxAndAuditAtomically_AndRetriesAfterDatabaseFailure()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var setup = await world.CreateTenantAsync();
+        var agent = await ReadyAgentAsync(world, setup);
+        var notifications = new BackupPlatform.IntegrationTests.Notifications.NotificationWorld(fixture);
+        await notifications.EnableAsync(setup.Tenant.Id, eventTypes: [BackupPlatform.Domain.Notifications.NotificationEventTypes.StorageCapacityCritical], severity: "warning");
+        await notifications.AddWebhookAsync(setup.Tenant.Id, "https://webhook.example.com/capacity", "Capacity webhook");
+        var id = await AddConnectionAsync(world, setup, "local", new() { ["volume"] = "local" });
+        using var queued = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/v1/storage/connections/{id}/probe");
+        Assert.Equal(HttpStatusCode.Accepted, queued.StatusCode);
+        var task = await ClaimAsync(world, agent);
+        var body = new CapacityProbeCompletionRequest
+        {
+            LeaseToken = task.LeaseToken,
+            Result = CapacityProbeTaskResult.Success(task.TaskId, id, 100, 92, 8)
+        };
+        var name = "p5a_capacity_" + Guid.NewGuid().ToString("N");
+        await using (var db = fixture.CreatePlatformContext())
+            await db.Database.ExecuteSqlRawAsync($"""
+                CREATE FUNCTION {name}() RETURNS trigger LANGUAGE plpgsql AS $fn$
+                BEGIN
+                    IF NEW."TenantId" = '{setup.Tenant.Id.Value}'::uuid THEN
+                        RAISE EXCEPTION 'p5a_capacity_atomic_failure';
+                    END IF;
+                    RETURN NEW;
+                END $fn$;
+                CREATE TRIGGER {name} BEFORE INSERT ON notification_events FOR EACH ROW EXECUTE FUNCTION {name}();
+                """);
+        try
+        {
+            var failure = await Record.ExceptionAsync(async () =>
+            {
+                using var response = await world.SendAgentAsync(HttpMethod.Post, $"/api/agent/capacity-probes/{task.TaskId}/complete",
+                    agent.CredentialId, agent.Secret, body: body);
+                Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+            });
+            if (failure is not null) Assert.Contains("p5a_capacity_atomic_failure", failure.ToString());
+            await using var db = fixture.CreatePlatformContext();
+            Assert.Empty(await db.StorageCapacitySnapshots.Where(s => s.TenantId == setup.Tenant.Id && s.ConnectionId == id).ToListAsync());
+            Assert.Empty(await db.NotificationEvents.Where(e => e.TenantId == setup.Tenant.Id).ToListAsync());
+            Assert.Empty(await db.AuditEvents.Where(e => e.TenantId == setup.Tenant.Id && e.Action == "storage_capacity_critical").ToListAsync());
+            Assert.Null((await db.StorageCapacityTasks.SingleAsync(t => t.Id == task.TaskId)).CompletedAt);
+        }
+        finally
+        {
+            await using var db = fixture.CreatePlatformContext();
+            await db.Database.ExecuteSqlRawAsync($"DROP TRIGGER {name} ON notification_events; DROP FUNCTION {name}();");
+        }
+        using var accepted = await world.SendAgentAsync(HttpMethod.Post, $"/api/agent/capacity-probes/{task.TaskId}/complete",
+            agent.CredentialId, agent.Secret, body: body);
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+        using var replay = await world.SendAgentAsync(HttpMethod.Post, $"/api/agent/capacity-probes/{task.TaskId}/complete",
+            agent.CredentialId, agent.Secret, body: body);
+        Assert.Equal(HttpStatusCode.OK, replay.StatusCode);
+        using var capacity = await setup.Admin.GetAsync($"/api/v1/storage/connections/{id}/capacity");
+        Assert.Equal("Critical", AgentWorld.ReadJson(capacity).GetProperty("status").GetString());
+        await using (var db = fixture.CreatePlatformContext())
+        {
+            var measurement = Assert.Single(await db.StorageCapacitySnapshots.Where(s => s.TenantId == setup.Tenant.Id && s.ConnectionId == id).ToListAsync());
+            Assert.Equal(92, measurement.UsedBytes);
+            var notification = Assert.Single(await db.NotificationEvents.Where(e => e.TenantId == setup.Tenant.Id).ToListAsync());
+            Assert.Equal("storage_capacity_critical", notification.Type);
+            Assert.NotEmpty(await db.NotificationDeliveries.Where(d => d.EventId == notification.Id).ToListAsync());
+            Assert.Single(await db.AuditEvents.Where(e => e.TenantId == setup.Tenant.Id && e.Action == "storage_capacity_critical").ToListAsync());
+        }
+    }
+
+    [Fact]
+    public async Task AbandonedTaskExpires_ReportsUnavailable_AndNextProbeGetsNewDurableTask()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var setup = await world.CreateTenantAsync();
+        var agent = await ReadyAgentAsync(world, setup);
+        var id = await AddConnectionAsync(world, setup, "local", new() { ["volume"] = "local" });
+        using var queued = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/v1/storage/connections/{id}/probe");
+        var task = await ClaimAsync(world, agent);
+        world.Clock.Advance(TimeSpan.FromMinutes(11));
+        await DeclareCapacityAsync(world, agent);
+        using var capacity = await setup.Admin.GetAsync($"/api/v1/storage/connections/{id}/capacity");
+        Assert.Equal("CapacityUnavailable", AgentWorld.ReadJson(capacity).GetProperty("status").GetString());
+        Assert.Equal(JsonValueKind.Null, AgentWorld.ReadJson(capacity).GetProperty("totalBytes").ValueKind);
+        using var stale = await CompleteAsync(world, agent, task);
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        using var next = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/v1/storage/connections/{id}/probe");
+        Assert.Equal(HttpStatusCode.Accepted, next.StatusCode);
+        Assert.NotEqual(task.TaskId, AgentWorld.ReadJson(next).GetProperty("taskId").GetGuid());
     }
 
     private static async Task<EnrolledAgent> ReadyAgentAsync(AgentWorld world, TenantSetup setup)

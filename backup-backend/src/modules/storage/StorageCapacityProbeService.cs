@@ -42,6 +42,12 @@ public sealed class StorageCapacityProbeService(
 
         var connection = record.Connection;
         var now = _time.GetUtcNow();
+        if (!connection.EffectiveEnabled)
+        {
+            var unavailable = StorageCapacitySnapshot.UnavailableResult(tenantId, connectionId, now, "Storage connection is disabled.");
+            await SaveAndNotifyAsync(unavailable, cancellationToken).ConfigureAwait(false);
+            return StorageCapacityResponse.From(unavailable);
+        }
 
         if (string.Equals(connection.ProviderType, StorageProviderTypes.GoogleDrive, StringComparison.OrdinalIgnoreCase))
         {
@@ -88,20 +94,20 @@ public sealed class StorageCapacityProbeService(
             return StorageCapacityResponse.From(unavailable);
         }
 
+        StorageCapacitySnapshot snapshot;
         try
         {
             var (total, used, free) = await googleDriveClient.QueryCapacityAsync(connection, cancellationToken).ConfigureAwait(false);
-            var snapshot = StorageCapacitySnapshot.AvailableResult(tenantId, connection.Id, total, used, free, now);
-            await SaveAndNotifyAsync(snapshot, cancellationToken).ConfigureAwait(false);
-            return StorageCapacityResponse.From(snapshot);
+            snapshot = StorageCapacitySnapshot.AvailableResult(tenantId, connection.Id, total, used, free, now);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception ex)
         {
-            logger?.LogWarning(ex, "Direct Google Drive capacity query failed for connection {ConnectionId}", connection.Id);
-            var snapshot = StorageCapacitySnapshot.UnavailableResult(tenantId, connection.Id, now, ex.Message);
-            await SaveAndNotifyAsync(snapshot, cancellationToken).ConfigureAwait(false);
-            return StorageCapacityResponse.From(snapshot);
+            logger?.LogWarning("Google Drive capacity query failed for connection {ConnectionId} ({ExceptionType}).", connection.Id, ex.GetType().Name);
+            snapshot = StorageCapacitySnapshot.UnavailableResult(tenantId, connection.Id, now, "Google Drive capacity is unavailable.");
         }
+        await SaveAndNotifyAsync(snapshot, cancellationToken).ConfigureAwait(false);
+        return StorageCapacityResponse.From(snapshot);
     }
 
     private Task<StorageCapacityResponse> ProbeAgentSideAsync(
