@@ -23,6 +23,15 @@ public sealed class StorageCapacityProbeService(
         var pending = await taskQueue.GetPendingAsync(tenantId, connectionId, _time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
         var snapshots = await snapshotStore.GetHistoryAsync(tenantId, connectionId, StorageCapacityResponse.MaximumHistory, cancellationToken).ConfigureAwait(false);
         var response = pending ?? (snapshots.Count == 0 ? null : StorageCapacityResponse.From(snapshots[0]));
+        var connection = await connectionStore.FindAsync(connectionId, tenantId, cancellationToken).ConfigureAwait(false);
+        if (connection is not null && pending is null
+            && (connection.Connection.ProviderType == StorageProviderTypes.Local || connection.Connection.ProviderType == StorageProviderTypes.Sftp)
+            && !await taskQueue.HasCompatibleAgentAsync(tenantId, _time.GetUtcNow(), cancellationToken).ConfigureAwait(false))
+            response = new StorageCapacityResponse
+            {
+                ConnectionId = connectionId, Status = StorageCapacityStatus.CapacityUnavailable,
+                ReportedAt = _time.GetUtcNow(), ErrorMessage = "No authorized compatible online agent is available."
+            };
         return response is null ? null : response with
         {
             History = snapshots.Select(s => new StorageCapacityHistoryEntry(s.ReportedAt, s.TotalBytes, s.UsedBytes, s.FreeBytes,

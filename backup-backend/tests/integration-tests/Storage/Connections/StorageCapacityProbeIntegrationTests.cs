@@ -128,6 +128,12 @@ public sealed class StorageCapacityProbeIntegrationTests(PostgreSqlFixture fixtu
         await using var db = fixture.CreatePlatformContext();
         var snapshot = Assert.Single(await db.StorageCapacitySnapshots.Where(s => s.TenantId == setup.Tenant.Id && s.ConnectionId == connectionId).ToListAsync());
         Assert.Equal(measured.GetProperty("totalBytes").GetInt64(), snapshot.TotalBytes);
+        world.Clock.Advance(TimeSpan.FromSeconds(121));
+        using var offline = await setup.Admin.GetAsync($"/api/v1/storage/connections/{connectionId}/capacity");
+        var unavailable = AgentWorld.ReadJson(offline);
+        Assert.Equal("CapacityUnavailable", unavailable.GetProperty("status").GetString());
+        Assert.Equal(JsonValueKind.Null, unavailable.GetProperty("totalBytes").ValueKind);
+        Assert.Equal(snapshot.TotalBytes, Assert.Single(unavailable.GetProperty("history").EnumerateArray()).GetProperty("totalBytes").GetInt64());
     }
 
     [Fact]

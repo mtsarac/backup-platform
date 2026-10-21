@@ -15,6 +15,12 @@ namespace BackupPlatform.Infrastructure.Storage;
 public sealed class PostgreSqlStorageCapacityTaskQueue(DbContextOptions<PlatformDbContext> options,
     AgentConnectivityOptions connectivity, NotificationEngine notifications, TimeProvider time) : IStorageCapacityTaskQueue
 {
+    public async Task<bool> HasCompatibleAgentAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var db = PlatformDbContext.CreateForPlatformOperations(options);
+        return (await EligibleAgentsAsync(db, tenantId, now, cancellationToken)).Count != 0;
+    }
+
     public async Task<StorageCapacityResponse> EnqueueAsync(TenantId tenantId, Guid connectionId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var db = PlatformDbContext.CreateForPlatformOperations(options);
@@ -61,7 +67,7 @@ public sealed class PostgreSqlStorageCapacityTaskQueue(DbContextOptions<Platform
     public async Task<CapacityProbeTaskRequest?> ClaimAsync(AgentIdentity identity, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var db = PlatformDbContext.CreateForPlatformOperations(options);
-        if (!(await EligibleAgentsAsync(db, identity.TenantId, now, cancellationToken)).Contains(identity.AgentId.Value)) return null;
+        if ((await EligibleAgentsAsync(db, identity.TenantId, now, cancellationToken, identity.AgentId.Value)).Count == 0) return null;
         var connectionIds = await db.StorageCapacityTasks.AsNoTracking()
             .Where(t => t.TenantId == identity.TenantId && t.AgentId == identity.AgentId.Value && t.CompletedAt == null)
             .OrderBy(t => t.CreatedAt).Select(t => t.ConnectionId).Take(32).ToListAsync(cancellationToken);
@@ -130,7 +136,7 @@ public sealed class PostgreSqlStorageCapacityTaskQueue(DbContextOptions<Platform
         var task = await db.StorageCapacityTasks.SingleOrDefaultAsync(t => t.TenantId == tenantId && t.ConnectionId == connectionId && t.CompletedAt == null, cancellationToken);
         if (task is null) return null;
         if (task.ExpiresAt > now && (task.Attempts < 3 || task.LeaseExpiresAt > now)
-            && (await EligibleAgentsAsync(db, tenantId, now, cancellationToken)).Contains(task.AgentId)
+            && (await EligibleAgentsAsync(db, tenantId, now, cancellationToken, task.AgentId)).Count != 0
             && await db.StorageConnections.AnyAsync(c => c.Id == connectionId && c.TenantId == tenantId && c.Enabled && !c.AdministrativelyDisabled, cancellationToken)) return task;
         task.Complete(now, null);
         var unavailable = StorageCapacitySnapshot.UnavailableResult(tenantId, connectionId, now, "Capacity probe expired or its agent is unavailable.");
@@ -141,11 +147,11 @@ public sealed class PostgreSqlStorageCapacityTaskQueue(DbContextOptions<Platform
         DateTimeOffset now, CancellationToken cancellationToken) =>
         task.CompletedAt is null && task.AgentId == identity.AgentId.Value && task.LeaseToken == token && token != Guid.Empty
         && task.LeaseExpiresAt > now && task.ExpiresAt > now
-        && (await EligibleAgentsAsync(db, identity.TenantId, now, cancellationToken)).Contains(identity.AgentId.Value)
+        && (await EligibleAgentsAsync(db, identity.TenantId, now, cancellationToken, identity.AgentId.Value)).Count != 0
         && await db.StorageConnections.AnyAsync(c => c.Id == task.ConnectionId && c.TenantId == identity.TenantId
             && c.Enabled && !c.AdministrativelyDisabled && c.UpdatedAt == task.ConnectionUpdatedAt, cancellationToken);
 
-    private Task<List<Guid>> EligibleAgentsAsync(PlatformDbContext db, TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken)
+    private Task<List<Guid>> EligibleAgentsAsync(PlatformDbContext db, TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken, Guid agentId = default)
     {
         var cutoff = now - connectivity.OfflineTimeout;
         var minimum = BackupPlatform.Contracts.Agents.AgentProtocol.Current.SupportedVersions.Minimum;
@@ -159,7 +165,8 @@ public sealed class PostgreSqlStorageCapacityTaskQueue(DbContextOptions<Platform
               AND cap."Revision" = live."CapabilityRevision"
               AND ROW(live."ReportedProtocolMajor", live."ReportedProtocolMinor") >= ROW({minimum.Major}, {minimum.Minor})
               AND ROW(live."ReportedProtocolMajor", live."ReportedProtocolMinor") <= ROW({maximum.Major}, {maximum.Minor})
-            ORDER BY a."Id"
+              AND ({agentId} = {Guid.Empty} OR a."Id" = {agentId})
+            ORDER BY a."Id" LIMIT 1
             """).ToListAsync(cancellationToken);
     }
 
