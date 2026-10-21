@@ -49,9 +49,9 @@ the fullest configured destination (10). Freshness uses consecutive UTC
 occurrences of the saved cron schedule, including its time zone. Jobs without a
 schedule get an explicit unavailable freshness factor, not an assumed daily
 schedule. Missing, failed, unknown-quota, future-dated, or over-24-hour-old
-capacity observations earn no capacity points. For health scoring, 80% through
-90% inclusive earns five points and above 90% earns zero; capacity probe alerts
-retain their separate existing 90%-critical boundary.
+capacity observations earn no capacity points. Capacity probes and health share
+the same thresholds: below 80% earns ten points, 80% up to (but excluding) 90%
+earns five, and 90% or above is Critical and earns zero.
 
 Scores of at least 80 are Healthy, 50–79 Degraded, and below 50 Critical.
 Untested or expired (over 30 days) successful restore verification earns ten
@@ -66,6 +66,35 @@ seven days ending at `evaluatedAt` (inclusive), ordered by `completedAt` then
 list limit; legacy runs without advisory metadata are not warnings. The job detail
 screen explains all four factors. Health reads never change backup admission,
 leases, execution, or completion.
+
+### Capacity task routing and history
+
+On-prem probes return HTTP 202 with `status: "Pending"` and a task identifier.
+New Agents advertise the `storage.capacity-probe` capability; task envelopes use
+`type: "capacity-probe"`. A Local connection targets its unique configured job
+Agent, including jobs using the provider's default connection. Multiple distinct
+job writers are ambiguous and unavailable. Without a job writer, exactly one
+authorized compatible online Agent is required; an offline writer never falls
+back to a different host. SFTP may use any authorized compatible online Agent.
+Named Local volumes resolve only through the Agent's configured local roots.
+SFTP private-network access requires the operator's narrow
+`Agent:Backup:Sftp:AllowedPrivateNetworks` allowlist. An SFTP server without
+usable statvfs reports CapacityUnavailable; the Agent never substitutes its own
+host filesystem's capacity.
+
+Capacity and health reads use the same current routing/liveness checks. Expired
+or retry-exhausted tasks are unavailable immediately, without GET-side writes;
+the periodic worker persists terminal task state. Capacity GET returns the latest
+30 measurements, newest first, with `historyLimit: 30`. Snapshot, threshold audit,
+notification condition/event, and outbox delivery commit atomically.
+
+Downgrading `StorageCapacityTaskTransport` requires snapshot rows to be
+representable by the old schema: only Available or CapacityUnavailable. If any
+Warning or Critical row exists, the downgrade refuses the narrower constraint
+and PostgreSQL rolls the entire migration back, preserving all rows, the task
+table, and migration history. It never rewrites measurements or deletes rows to
+make a downgrade pass.
+
 
 ## Run it
 

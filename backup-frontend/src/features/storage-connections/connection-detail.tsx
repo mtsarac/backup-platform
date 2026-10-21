@@ -110,7 +110,7 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
             </div>
             <div aria-hidden="true" className="h-2 overflow-hidden rounded-full bg-surface-3">
               <div
-                className={`h-full rounded-full ${percentUsed > 90 ? 'bg-error' : percentUsed > 75 ? 'bg-warning' : 'bg-primary'}`}
+                className={`h-full rounded-full ${isCritical ? 'bg-error' : isWarning ? 'bg-warning' : 'bg-primary'}`}
                 style={{ width: `${percentUsed}%` }}
               />
             </div>

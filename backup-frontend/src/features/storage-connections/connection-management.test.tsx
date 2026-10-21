@@ -120,6 +120,21 @@ describe('Storage connections list and detail', () => {
     expect(screen.getByRole('button', { name: 'Kapasiteyi Sorgula' })).toBeEnabled()
   })
 
+  it.each([
+    { used: 79_900, status: 'Available' as const, tone: 'bg-primary' },
+    { used: 80_000, status: 'Warning' as const, tone: 'bg-warning' },
+    { used: 89_900, status: 'Warning' as const, tone: 'bg-warning' },
+    { used: 90_000, status: 'Critical' as const, tone: 'bg-error' },
+  ])('uses backend $status color at $used bytes without rounded threshold drift', async ({ used, status, tone }) => {
+    vi.mocked(api.getTenantConnectionCapacity).mockResolvedValue({
+      connectionId: 'conn-local', totalBytes: 100_000, usedBytes: used, freeBytes: 100_000 - used,
+      status, reportedAt: '2026-10-21T10:00:00Z',
+    })
+    mount(detail('conn-local'))
+    const label = await screen.findByText('Doluluk Oranı')
+    expect(label.parentElement?.nextElementSibling?.firstElementChild).toHaveClass(tone)
+  })
+
   it('displays Warning badge at 80% and Critical badge at 90% capacity on detail and list', async () => {
     // 1. Detail page with 85% usage shows Warning badge
     vi.mocked(api.getTenantConnectionCapacity).mockResolvedValueOnce({

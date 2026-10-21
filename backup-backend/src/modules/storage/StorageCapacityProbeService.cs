@@ -25,8 +25,7 @@ public sealed class StorageCapacityProbeService(
         var response = pending ?? (snapshots.Count == 0 ? null : StorageCapacityResponse.From(snapshots[0]));
         var connection = await connectionStore.FindAsync(connectionId, tenantId, cancellationToken).ConfigureAwait(false);
         if (connection is not null && pending is null
-            && (connection.Connection.ProviderType == StorageProviderTypes.Local || connection.Connection.ProviderType == StorageProviderTypes.Sftp)
-            && !await taskQueue.HasCompatibleAgentAsync(tenantId, _time.GetUtcNow(), cancellationToken).ConfigureAwait(false))
+            && !await taskQueue.CanUseSnapshotAsync(tenantId, connectionId, _time.GetUtcNow(), cancellationToken).ConfigureAwait(false))
             response = new StorageCapacityResponse
             {
                 ConnectionId = connectionId, Status = StorageCapacityStatus.CapacityUnavailable,
@@ -54,7 +53,7 @@ public sealed class StorageCapacityProbeService(
         if (!connection.EffectiveEnabled)
         {
             var unavailable = StorageCapacitySnapshot.UnavailableResult(tenantId, connectionId, now, "Storage connection is disabled.");
-            await SaveAndNotifyAsync(unavailable, cancellationToken).ConfigureAwait(false);
+            await snapshotStore.SaveAsync(unavailable, cancellationToken).ConfigureAwait(false);
             return StorageCapacityResponse.From(unavailable);
         }
 
@@ -73,11 +72,12 @@ public sealed class StorageCapacityProbeService(
                 snapshot = StorageCapacitySnapshot.AvailableResult(tenantId, connection.Id, total, used, free, now);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-            catch (Exception)
+            catch (Exception ex)
             {
+                logger?.LogWarning("Central capacity query failed for connection {ConnectionId} ({ExceptionType}).", connection.Id, ex.GetType().Name);
                 snapshot = StorageCapacitySnapshot.UnavailableResult(tenantId, connection.Id, now, "Platform storage capacity is unavailable.");
             }
-            await SaveAndNotifyAsync(snapshot, cancellationToken).ConfigureAwait(false);
+            await snapshotStore.SaveAsync(snapshot, cancellationToken).ConfigureAwait(false);
             return StorageCapacityResponse.From(snapshot);
         }
 
@@ -88,7 +88,7 @@ public sealed class StorageCapacityProbeService(
         }
 
         var unsupportedSnapshot = StorageCapacitySnapshot.UnavailableResult(tenantId, connectionId, now, $"Unsupported provider type: {connection.ProviderType}");
-        await SaveAndNotifyAsync(unsupportedSnapshot, cancellationToken).ConfigureAwait(false);
+        await snapshotStore.SaveAsync(unsupportedSnapshot, cancellationToken).ConfigureAwait(false);
         return StorageCapacityResponse.From(unsupportedSnapshot);
     }
 
@@ -99,7 +99,7 @@ public sealed class StorageCapacityProbeService(
         {
             logger?.LogWarning("Google Drive capacity client is not configured.");
             var unavailable = StorageCapacitySnapshot.UnavailableResult(tenantId, connection.Id, now, "Google Drive capacity query is not configured on this host.");
-            await SaveAndNotifyAsync(unavailable, cancellationToken).ConfigureAwait(false);
+            await snapshotStore.SaveAsync(unavailable, cancellationToken).ConfigureAwait(false);
             return StorageCapacityResponse.From(unavailable);
         }
 
@@ -115,7 +115,7 @@ public sealed class StorageCapacityProbeService(
             logger?.LogWarning("Google Drive capacity query failed for connection {ConnectionId} ({ExceptionType}).", connection.Id, ex.GetType().Name);
             snapshot = StorageCapacitySnapshot.UnavailableResult(tenantId, connection.Id, now, "Google Drive capacity is unavailable.");
         }
-        await SaveAndNotifyAsync(snapshot, cancellationToken).ConfigureAwait(false);
+        await snapshotStore.SaveAsync(snapshot, cancellationToken).ConfigureAwait(false);
         return StorageCapacityResponse.From(snapshot);
     }
 
@@ -124,6 +124,4 @@ public sealed class StorageCapacityProbeService(
         taskQueue.EnqueueAsync(tenantId, connection.Id, now, cancellationToken);
 
 
-    private Task SaveAndNotifyAsync(StorageCapacitySnapshot snapshot, CancellationToken cancellationToken) =>
-        snapshotStore.SaveAsync(snapshot, cancellationToken);
 }

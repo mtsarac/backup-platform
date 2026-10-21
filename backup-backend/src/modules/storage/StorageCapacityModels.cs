@@ -12,9 +12,10 @@ public interface IStorageCapacitySnapshotStore
 
 public interface IStorageCapacityTaskQueue
 {
-    Task<bool> HasCompatibleAgentAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<bool> CanUseSnapshotAsync(TenantId tenantId, Guid connectionId, DateTimeOffset now, CancellationToken cancellationToken);
     Task<StorageCapacityResponse> EnqueueAsync(TenantId tenantId, Guid connectionId, DateTimeOffset now, CancellationToken cancellationToken);
     Task<StorageCapacityResponse?> GetPendingAsync(TenantId tenantId, Guid connectionId, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<StorageCapacityResponse?> RefreshPendingAsync(TenantId tenantId, Guid connectionId, DateTimeOffset now, CancellationToken cancellationToken);
     Task<BackupPlatform.Contracts.Storage.CapacityProbeTaskRequest?> ClaimAsync(BackupPlatform.Application.Agents.AgentIdentity identity, DateTimeOffset now, CancellationToken cancellationToken);
     Task<bool> IsLiveAsync(BackupPlatform.Application.Agents.AgentIdentity identity, Guid taskId, Guid token, DateTimeOffset now, CancellationToken cancellationToken);
     Task<BackupPlatform.Application.Backups.BackupMutationResult> CompleteAsync(BackupPlatform.Application.Agents.AgentIdentity identity, Guid taskId, BackupPlatform.Contracts.Storage.CapacityProbeCompletionRequest request, DateTimeOffset now, CancellationToken cancellationToken);
