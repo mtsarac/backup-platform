@@ -173,7 +173,8 @@ public sealed class BackupSizeAnomalyIntegrationTests : IAsyncLifetime
         Assert.Equal(2, (await _world.DeliveriesAsync(agent.TenantId)).Count);
         Assert.Equal(2, await _world.DeliverAsync());
         Assert.Contains("Backup size anomaly", Assert.Single(smtp.Messages));
-        var webhook = JsonDocument.Parse(Assert.Single(hook.Requests).Body).RootElement;
+        using var payload = JsonDocument.Parse(Assert.Single(hook.Requests).Body);
+        var webhook = payload.RootElement;
         Assert.Equal("backup_size_anomaly", webhook.GetProperty("type").GetString());
         Assert.Equal("warning", webhook.GetProperty("severity").GetString());
         Assert.Equal(0, await _world.Engine().SweepAsync(default));
@@ -232,7 +233,7 @@ public sealed class BackupSizeAnomalyIntegrationTests : IAsyncLifetime
     private static BackupPlatform.Application.Backups.BackupCompletion SizedSuccess(DateTimeOffset now, long bytes)
     {
         var request = Success(now);
-        return request with { Artifact = request.Artifact! with { SizeBytes = bytes, Replicas = [request.Artifact.Replicas[0] with { SizeBytes = bytes }] } };
+        return request with { Artifact = request.Artifact! with { SizeBytes = bytes, Replicas = [request.Artifact!.Replicas[0] with { SizeBytes = bytes }] } };
     }
 
     private static async Task<(TaskClaim Claim, BackupTaskCompletionRequest Request)> CompleteHttpAsync(BackupApiScenario scenario, Guid job, long bytes)
@@ -241,7 +242,7 @@ public sealed class BackupSizeAnomalyIntegrationTests : IAsyncLifetime
         var claim = await scenario.ClaimAsync();
         await scenario.StartAttemptAsync(claim);
         var request = scenario.SuccessRequest(claim);
-        request = request with { Artifact = request.Artifact! with { SizeBytes = bytes, Replicas = [request.Artifact.Replicas[0] with { SizeBytes = bytes }] } };
+        request = request with { Artifact = request.Artifact! with { SizeBytes = bytes, Replicas = [request.Artifact!.Replicas[0] with { SizeBytes = bytes }] } };
         using var response = await scenario.CompleteRawAsync(claim, request);
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         scenario.Clock.Advance(TimeSpan.FromSeconds(1));
