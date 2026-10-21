@@ -17,6 +17,7 @@ using BackupPlatform.Domain.Storage;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Storage;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
@@ -259,6 +260,7 @@ public sealed class StorageCapacityProbeIntegrationTests(PostgreSqlFixture fixtu
             agent = await ReadyAgentAsync(original, setup);
             foreign = await ReadyAgentAsync(original, await original.CreateTenantAsync());
             connectionId = await AddConnectionAsync(original, setup, "local", new() { ["volume"] = "local" });
+            await AddWriterAsync(original, setup, agent, connectionId);
             using var queued = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/v1/storage/connections/{connectionId}/probe");
             Assert.Equal(HttpStatusCode.Accepted, queued.StatusCode);
             first = await ClaimAsync(original, agent);
@@ -450,6 +452,139 @@ public sealed class StorageCapacityProbeIntegrationTests(PostgreSqlFixture fixtu
         Assert.NotEqual(task.TaskId, AgentWorld.ReadJson(next).GetProperty("taskId").GetGuid());
     }
 
+    [Fact]
+    public async Task CapacityCapabilityUsesValidNamespacedIdentifierThroughAuthenticatedHttpSync()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var setup = await world.CreateTenantAsync();
+        var agent = await world.EnrollAsync(setup);
+        using var invalid = await world.SyncCapabilitiesAsync(agent, AgentWorld.CapabilitySnapshot(AgentWorld.CapabilityReport("capacity-probe")));
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        Assert.Equal("storage.capacity-probe", CapacityProbeProtocol.Capability);
+        await DeclareCapacityAsync(world, agent);
+        var id = await AddConnectionAsync(world, setup, "local", new() { ["volume"] = "local" });
+        using var probe = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/v1/storage/connections/{id}/probe");
+        Assert.Equal(HttpStatusCode.Accepted, probe.StatusCode);
+        Assert.Equal("capacity-probe", CapacityProbeProtocol.TaskType);
+        Assert.Equal(agent.AgentId, (await ClaimAsync(world, agent)).AgentId);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LocalProbeUsesUniqueWriter_NotLowestGuidOrAnotherOnlineHost(bool defaultConnection)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "bp-writer-capacity-" + Guid.NewGuid().ToString("N"));
+        var otherRoot = Path.Combine(Path.GetTempPath(), "bp-other-capacity-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(otherRoot);
+        try
+        {
+            await using var world = await AgentWorld.CreateAsync(fixture);
+            var setup = await world.CreateTenantAsync();
+            var first = await ReadyAgentAsync(world, setup);
+            var second = await world.EnrollAsync(setup, installationId: Guid.NewGuid());
+            await DeclareCapacityAsync(world, second);
+            var writer = first.AgentId.CompareTo(second.AgentId) > 0 ? first : second;
+            var other = writer == first ? second : first;
+            var connection = await AddConnectionAsync(world, setup, "local", new() { ["volume"] = "writer-disk" }, defaultConnection);
+            using (var ambiguous = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/v1/storage/connections/{connection}/probe"))
+                Assert.Equal("CapacityUnavailable", AgentWorld.ReadJson(ambiguous).GetProperty("status").GetString());
+            await AddWriterAsync(world, setup, writer, defaultConnection ? null : connection);
+            world.Clock.Advance(TimeSpan.FromSeconds(1));
+            using var queued = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/v1/storage/connections/{connection}/probe");
+            Assert.Equal(HttpStatusCode.Accepted, queued.StatusCode);
+            using (var wrongHost = await world.PollAsync(other))
+                Assert.Empty(AgentWorld.ReadJson(wrongHost).GetProperty("tasks").EnumerateArray());
+            var task = await ClaimAsync(world, writer);
+            Assert.Equal(writer.AgentId, task.AgentId);
+            var wrongHandler = new CapacityProbeTaskHandler(localVolumeDirectories: new Dictionary<string, string> { ["other-disk"] = otherRoot });
+            Assert.Equal(CapacityProbeFailureCodes.InvalidConfiguration, (await wrongHandler.ExecuteAsync(task)).ErrorCode);
+            var measured = await ExecuteWorkerAsync(world, setup, writer, connection,
+                new CapacityProbeTaskHandler(localVolumeDirectories: new Dictionary<string, string> { ["writer-disk"] = root }), task);
+            Assert.Contains(measured.GetProperty("status").GetString(), new[] { "Available", "Warning", "Critical" });
+            world.Clock.Advance(TimeSpan.FromSeconds(121));
+            await DeclareCapacityAsync(world, other);
+            using (var unavailable = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/v1/storage/connections/{connection}/probe"))
+                Assert.Equal("CapacityUnavailable", AgentWorld.ReadJson(unavailable).GetProperty("status").GetString());
+            using (var wrongHost = await world.PollAsync(other))
+                Assert.Empty(AgentWorld.ReadJson(wrongHost).GetProperty("tasks").EnumerateArray());
+            await DeclareCapacityAsync(world, writer);
+            await AddWriterAsync(world, setup, other, defaultConnection ? null : connection);
+            using var multipleWriters = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/v1/storage/connections/{connection}/probe");
+            Assert.Equal("CapacityUnavailable", AgentWorld.ReadJson(multipleWriters).GetProperty("status").GetString());
+        }
+        finally { Directory.Delete(root, recursive: true); Directory.Delete(otherRoot, recursive: true); }
+    }
+
+    [Fact]
+    public async Task DowngradeRefusesWarningAndCriticalRows_AndRollsBackSchemaDataAndMigrationHistory()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var setup = await world.CreateTenantAsync();
+        var agent = await ReadyAgentAsync(world, setup);
+        var connection = await AddConnectionAsync(world, setup, "local", new() { ["volume"] = "local" });
+        var pending = new StorageCapacityTask(setup.Tenant.Id, connection, agent.AgentId, world.Clock.GetUtcNow());
+        await using (var db = fixture.CreatePlatformContext())
+        {
+            db.StorageCapacityTasks.Add(pending);
+            db.StorageCapacitySnapshots.AddRange(
+                new StorageCapacitySnapshot(Guid.NewGuid(), setup.Tenant.Id, connection, 100, 80, 20, "Warning", world.Clock.GetUtcNow()),
+                new StorageCapacitySnapshot(Guid.NewGuid(), setup.Tenant.Id, connection, 100, 90, 10, "Critical", world.Clock.GetUtcNow()));
+            await db.SaveChangesAsync();
+            var migrator = db.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>();
+            var refused = await Assert.ThrowsAsync<Npgsql.PostgresException>(() => migrator.MigrateAsync("20261021100000_StorageCapacitySnapshots"));
+            Assert.Equal("23514", refused.SqlState);
+        }
+        await using var preserved = fixture.CreatePlatformContext();
+        Assert.Contains("20261021110000_StorageCapacityTaskTransport", await preserved.Database.GetAppliedMigrationsAsync());
+        Assert.NotNull(await preserved.StorageCapacityTasks.SingleOrDefaultAsync(t => t.Id == pending.Id));
+        var statuses = await preserved.StorageCapacitySnapshots.Where(s => s.TenantId == setup.Tenant.Id && s.ConnectionId == connection).Select(s => s.Status).ToListAsync();
+        Assert.Equal(2, statuses.Count);
+        Assert.Contains("Warning", statuses);
+        Assert.Contains("Critical", statuses);
+    }
+
+    private static async Task AddWriterAsync(AgentWorld world, TenantSetup setup, EnrolledAgent agent, Guid? connectionId)
+    {
+        var configuration = new BackupPlatform.Domain.Backups.BackupConfiguration("mssql", "db", "sql", null, true, null, true, true, "default", "", true, "Required", "Preferred")
+        {
+            Destinations = [new("local", connectionId, true)]
+        };
+        await using var db = world.Database.CreatePlatformContext();
+        db.BackupJobs.Add(new BackupPlatform.Domain.Backups.BackupJob(Guid.NewGuid(), setup.Tenant.Id, "Capacity writer", new AgentId(agent.AgentId), configuration, world.Clock.GetUtcNow()));
+        await db.SaveChangesAsync();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("null")]
+    [InlineData("{invalid-json")]
+    public async Task MissingOrMalformedCredentialDocumentNeverBecomesAgentWork(string? document)
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var setup = await world.CreateTenantAsync();
+        var agent = await ReadyAgentAsync(world, setup);
+        var connection = await AddConnectionAsync(world, setup, "sftp", new() { ["host"] = "sftp.example.test" });
+        var reference = "capacity-test-" + Guid.NewGuid().ToString("N");
+        await using (var db = fixture.CreatePlatformContext())
+        {
+            (await db.StorageConnections.SingleAsync(c => c.Id == connection)).AttachSecret(reference, ["password"], world.Clock.GetUtcNow());
+            await db.SaveChangesAsync();
+        }
+        if (document is not null)
+            await world.Factory.Services.GetRequiredService<BackupPlatform.SecretProviders.Abstractions.ISecretStore>()
+                .SetAsync(new BackupPlatform.SecretProviders.Abstractions.SecretReference(reference), new BackupPlatform.SecretProviders.Abstractions.SecretValue(document), default);
+        using var queued = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/v1/storage/connections/{connection}/probe");
+        Assert.Equal(HttpStatusCode.Accepted, queued.StatusCode);
+        using var poll = await world.PollAsync(agent);
+        Assert.Equal(HttpStatusCode.OK, poll.StatusCode);
+        Assert.Empty(AgentWorld.ReadJson(poll).GetProperty("tasks").EnumerateArray());
+        using var capacity = await setup.Admin.GetAsync($"/api/v1/storage/connections/{connection}/capacity");
+        Assert.Equal("CapacityUnavailable", AgentWorld.ReadJson(capacity).GetProperty("status").GetString());
+        Assert.Equal(CapacityProbeFailureCodes.AuthenticationFailed, AgentWorld.ReadJson(capacity).GetProperty("errorMessage").GetString());
+    }
+
     private static async Task<EnrolledAgent> ReadyAgentAsync(AgentWorld world, TenantSetup setup)
     {
         var agent = await world.EnrollAsync(setup);
@@ -466,12 +601,12 @@ public sealed class StorageCapacityProbeIntegrationTests(PostgreSqlFixture fixtu
         Assert.Equal(HttpStatusCode.OK, heartbeat.StatusCode);
     }
 
-    internal static async Task<Guid> AddConnectionAsync(AgentWorld world, TenantSetup setup, string provider, Dictionary<string, string> configuration)
+    internal static async Task<Guid> AddConnectionAsync(AgentWorld world, TenantSetup setup, string provider, Dictionary<string, string> configuration, bool isDefault = false)
     {
         var id = Guid.NewGuid();
         await using var db = world.Database.CreatePlatformContext();
         db.StorageConnections.Add(new StorageConnection(id, setup.Tenant.Id, "Capacity " + id, provider,
-            StorageOwnership.TenantManaged, StorageQuotaScopes.Tenant, configuration, false, world.Clock.GetUtcNow()));
+            StorageOwnership.TenantManaged, StorageQuotaScopes.Tenant, configuration, isDefault, world.Clock.GetUtcNow()));
         await db.SaveChangesAsync();
         return id;
     }
@@ -494,9 +629,9 @@ public sealed class StorageCapacityProbeIntegrationTests(PostgreSqlFixture fixtu
             });
 
     private static async Task<JsonElement> ExecuteWorkerAsync(AgentWorld world, TenantSetup setup, EnrolledAgent agent,
-        Guid connectionId, CapacityProbeTaskHandler handler)
+        Guid connectionId, CapacityProbeTaskHandler handler, CapacityProbeTaskRequest? claimed = null)
     {
-        var task = await ClaimAsync(world, agent);
+        var task = claimed ?? await ClaimAsync(world, agent);
         var identity = new AgentLocalIdentity(agent.AgentId, new Uri("https://localhost/"), agent.InstallationId,
             new AgentStoredCredential(agent.CredentialId, agent.Secret, 1));
         var client = new HttpCapacityProbeTaskClient(world.Anonymous, new AgentBackendEndpoint(identity.ServerUri), world.Clock);

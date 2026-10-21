@@ -4,11 +4,13 @@ using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Restores;
 using BackupPlatform.Domain.Storage;
 using BackupPlatform.Infrastructure.Persistence;
+using BackupPlatform.Agents.Connectivity;
+using BackupPlatform.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 
 namespace BackupPlatform.Infrastructure.Backups;
 
-public sealed class PostgreSqlBackupHealthStore(DbContextOptions<PlatformDbContext> options) : IBackupHealthStore
+public sealed class PostgreSqlBackupHealthStore(DbContextOptions<PlatformDbContext> options, AgentConnectivityOptions connectivity) : IBackupHealthStore
 {
     public async Task<TenantId?> FindJobTenantAsync(Guid jobId, CancellationToken cancellationToken)
     {
@@ -46,7 +48,7 @@ public sealed class PostgreSqlBackupHealthStore(DbContextOptions<PlatformDbConte
             .ToDictionary(group => group.Key, group => group.Select(copy => copy.Replica.StorageConnectionId).Distinct().Count());
         var connections = await db.StorageConnections.AsNoTracking().Where(connection => connection.TenantId == tenantId)
             .Select(connection => new { connection.Id, connection.ProviderType, connection.IsDefault }).ToListAsync(cancellationToken);
-        var snapshots = await LatestSnapshotsAsync(db, tenantId, cancellationToken);
+        var snapshots = await LatestSnapshotsAsync(db, tenantId, now, cancellationToken);
         return rows.Select(row =>
         {
             var verified = row.LastSuccess is null ? 0 : verifiedByAttempt.GetValueOrDefault(row.LastSuccess.AttemptId);
@@ -62,7 +64,7 @@ public sealed class PostgreSqlBackupHealthStore(DbContextOptions<PlatformDbConte
     public async Task<IReadOnlyList<BackupCapacityRisk>> ReadCapacityRisksAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var db = PlatformDbContext.CreateForPlatformOperations(options);
-        var snapshots = await LatestSnapshotsAsync(db, tenantId, cancellationToken);
+        var snapshots = await LatestSnapshotsAsync(db, tenantId, now, cancellationToken);
         var connections = await db.StorageConnections.AsNoTracking().Where(connection => connection.TenantId == tenantId)
             .Select(connection => new { connection.Id, connection.Name }).ToListAsync(cancellationToken);
         return connections.Where(connection => snapshots.TryGetValue(connection.Id, out var snapshot) && BackupHealthEvaluator.HasKnownCapacity(snapshot, now))
@@ -94,8 +96,15 @@ public sealed class PostgreSqlBackupHealthStore(DbContextOptions<PlatformDbConte
         return (items, total);
     }
 
-    private static async Task<Dictionary<Guid, StorageCapacitySnapshot>> LatestSnapshotsAsync(PlatformDbContext db, TenantId tenantId, CancellationToken cancellationToken) =>
-        (await db.StorageCapacitySnapshots.AsNoTracking().Where(snapshot => snapshot.TenantId == tenantId)
+    private async Task<Dictionary<Guid, StorageCapacitySnapshot>> LatestSnapshotsAsync(PlatformDbContext db, TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var snapshots = (await db.StorageCapacitySnapshots.AsNoTracking().Where(snapshot => snapshot.TenantId == tenantId)
             .GroupBy(snapshot => snapshot.ConnectionId).Select(group => group.OrderByDescending(snapshot => snapshot.ReportedAt).ThenByDescending(snapshot => snapshot.Id).First())
             .ToListAsync(cancellationToken)).ToDictionary(snapshot => snapshot.ConnectionId);
+        var ids = snapshots.Keys.ToArray();
+        var connections = await db.StorageConnections.AsNoTracking().Where(connection => connection.TenantId == tenantId && ids.Contains(connection.Id)).ToListAsync(cancellationToken);
+        foreach (var connection in connections)
+            if (!await StorageCapacityAgentRouting.CanUseSnapshotAsync(db, connection, now, connectivity, cancellationToken)) snapshots.Remove(connection.Id);
+        return snapshots;
+    }
 }

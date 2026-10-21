@@ -122,7 +122,7 @@ public sealed class StorageCapacityPeriodicProbeWorker(
         {
             try
             {
-                if (await tasks.GetPendingAsync(conn.TenantId, conn.Id, now, cancellationToken) is not null) continue;
+                if (await tasks.RefreshPendingAsync(conn.TenantId, conn.Id, now, cancellationToken) is not null) continue;
                 var latestSnapshotTime = await db.StorageCapacitySnapshots.AsNoTracking()
                     .Where(s => s.TenantId == conn.TenantId && s.ConnectionId == conn.Id)
                     .OrderByDescending(s => s.ReportedAt)

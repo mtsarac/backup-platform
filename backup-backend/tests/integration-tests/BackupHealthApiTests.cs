@@ -4,6 +4,8 @@ using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Restores;
 using BackupPlatform.Domain.Storage;
+using BackupPlatform.Contracts.Storage;
+using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Tenancy;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -72,18 +74,24 @@ public sealed class BackupHealthApiTests(PostgreSqlFixture fixture) : IClassFixt
     }
 
     [Theory]
-    [InlineData(79, 10)]
-    [InlineData(80, 5)]
-    [InlineData(90, 5)]
-    [InlineData(91, 0)]
-    public async Task CapacityUsesDocumentedHealthBoundaries(int used, int score)
+    [InlineData(79, 10, "Available")]
+    [InlineData(80, 5, "Warning")]
+    [InlineData(90, 0, "Critical")]
+    [InlineData(91, 0, "Critical")]
+    public async Task CapacityUsesDocumentedHealthBoundaries(int used, int score, string status)
     {
         await using var scenario = await CreateScenarioAsync();
         var job = await scenario.CreateJobAsync();
         await scenario.StartRunAsync(job);
         await scenario.SucceedNextAsync();
         await AddEvidenceAsync(scenario, job, restorePassed: true, used: used);
-        Assert.Equal(score, (await HealthAsync(scenario, job)).GetProperty("factors").GetProperty("storageCapacity").GetProperty("score").GetInt32());
+        var factor = (await HealthAsync(scenario, job)).GetProperty("factors").GetProperty("storageCapacity");
+        Assert.Equal(score, factor.GetProperty("score").GetInt32());
+        Assert.Equal(status, factor.GetProperty("status").GetString());
+        await using var db = fixture.CreatePlatformContext();
+        var connection = await db.StorageConnections.Where(c => c.TenantId == scenario.Setup.Tenant.Id && c.ProviderType == "local" && c.IsDefault).Select(c => c.Id).SingleAsync();
+        using var capacity = await scenario.Admin.GetAsync($"/api/v1/storage/connections/{connection}/capacity");
+        Assert.Equal(status, AgentWorld.ReadJson(capacity).GetProperty("status").GetString());
     }
 
     [Theory]
@@ -216,11 +224,68 @@ public sealed class BackupHealthApiTests(PostgreSqlFixture fixture) : IClassFixt
         Assert.Equal("capacity_unavailable", factors.GetProperty("storageCapacity").GetProperty("reason").GetString());
     }
 
+    [Theory]
+    [InlineData("offline")]
+    [InlineData("unsupported")]
+    [InlineData("expired")]
+    public async Task CapacityAndHealthReadsAgreeWhenFreshAgentMeasurementIsNoLongerApplicable(string reason)
+    {
+        await using var scenario = await CreateScenarioAsync();
+        var job = await scenario.CreateJobAsync();
+        await scenario.StartRunAsync(job);
+        await scenario.SucceedNextAsync();
+        await AddEvidenceAsync(scenario, job, restorePassed: true);
+        Assert.Equal(10, (await HealthAsync(scenario, job)).GetProperty("factors").GetProperty("storageCapacity").GetProperty("score").GetInt32());
+        Guid connection;
+        scenario.Clock.Advance(TimeSpan.FromSeconds(1));
+        await using (var db = fixture.CreatePlatformContext())
+        {
+            connection = await db.StorageConnections.Where(c => c.TenantId == scenario.Setup.Tenant.Id && c.ProviderType == "local" && c.IsDefault).Select(c => c.Id).SingleAsync();
+            db.StorageCapacitySnapshots.Add(StorageCapacitySnapshot.AvailableResult(scenario.Setup.Tenant.Id, connection, 100, 95, 5, scenario.Clock.GetUtcNow()));
+            await db.SaveChangesAsync();
+        }
+        using (var summary = await scenario.Admin.GetAsync(scenario.Root + "/observability/health-summary"))
+            Assert.Single(AgentWorld.ReadJson(summary).GetProperty("capacityRisks").EnumerateArray());
+        if (reason == "offline") scenario.Clock.Advance(TimeSpan.FromSeconds(121));
+        else if (reason == "unsupported")
+        {
+            var unsupported = AgentWorld.CapabilitySnapshot(AgentWorld.CapabilityReport(CapacityProbeProtocol.Capability, "Unsupported"));
+            using var sync = await scenario.World.SyncCapabilitiesAsync(scenario.Agent, unsupported);
+            Assert.Equal(HttpStatusCode.OK, sync.StatusCode);
+            using var heartbeat = await scenario.World.HeartbeatAsync(scenario.Agent, AgentWorld.Heartbeat(capabilityRevision: unsupported.Revision));
+            Assert.Equal(HttpStatusCode.OK, heartbeat.StatusCode);
+        }
+        else
+        {
+            await using var db = fixture.CreatePlatformContext();
+            db.StorageCapacityTasks.Add(new StorageCapacityTask(scenario.Setup.Tenant.Id, connection, scenario.Agent.AgentId, scenario.Clock.GetUtcNow().AddMinutes(-11)));
+            await db.SaveChangesAsync();
+        }
+        using var capacity = await scenario.Admin.GetAsync($"/api/v1/storage/connections/{connection}/capacity");
+        Assert.Equal(HttpStatusCode.OK, capacity.StatusCode);
+        Assert.Equal("CapacityUnavailable", AgentWorld.ReadJson(capacity).GetProperty("status").GetString());
+        Assert.Equal(JsonValueKind.Null, AgentWorld.ReadJson(capacity).GetProperty("totalBytes").ValueKind);
+        var factor = (await HealthAsync(scenario, job)).GetProperty("factors").GetProperty("storageCapacity");
+        Assert.Equal(0, factor.GetProperty("score").GetInt32());
+        Assert.Equal("capacity_unavailable", factor.GetProperty("reason").GetString());
+        using var unavailableSummary = await scenario.Admin.GetAsync(scenario.Root + "/observability/health-summary");
+        Assert.Empty(AgentWorld.ReadJson(unavailableSummary).GetProperty("capacityRisks").EnumerateArray());
+        await using var unchanged = fixture.CreatePlatformContext();
+        Assert.Equal(2, await unchanged.StorageCapacitySnapshots.CountAsync(s => s.TenantId == scenario.Setup.Tenant.Id && s.ConnectionId == connection));
+        if (reason == "expired") Assert.Null((await unchanged.StorageCapacityTasks.SingleAsync(t => t.TenantId == scenario.Setup.Tenant.Id && t.ConnectionId == connection)).CompletedAt);
+    }
+
     private async Task<BackupApiScenario> CreateScenarioAsync()
     {
         var scenario = await BackupApiScenario.CreateAsync(fixture);
         // Health fixtures own measurement timestamps; live capacity transport is tested at its separate consumer seam.
         await scenario.World.Factory.Services.GetRequiredService<BackupPlatform.Api.Storage.StorageCapacityPeriodicProbeWorker>().StopAsync(CancellationToken.None);
+        var capabilities = AgentWorld.CapabilitySnapshot(
+            AgentWorld.CapabilityReport(BackupTaskProtocol.MultiDestinationCapability),
+            AgentWorld.CapabilityReport(BackupTaskProtocol.UploadBandwidthLimitCapability),
+            AgentWorld.CapabilityReport(CapacityProbeProtocol.Capability));
+        using (var sync = await scenario.World.SyncCapabilitiesAsync(scenario.Agent, capabilities)) Assert.Equal(HttpStatusCode.OK, sync.StatusCode);
+        using (var heartbeat = await scenario.World.HeartbeatAsync(scenario.Agent, AgentWorld.Heartbeat(capabilityRevision: capabilities.Revision))) Assert.Equal(HttpStatusCode.OK, heartbeat.StatusCode);
         return scenario;
     }
 

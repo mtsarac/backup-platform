@@ -251,7 +251,7 @@ public sealed class BackupSizeAnomalyIntegrationTests : IAsyncLifetime
         [
             new() { Identifier = BackupTaskProtocol.MultiDestinationCapability, Support = "Supported" },
             new() { Identifier = BackupTaskProtocol.UploadBandwidthLimitCapability, Support = "Supported" },
-            new() { Identifier = "capacity-probe", Support = "Supported" }
+            new() { Identifier = CapacityProbeProtocol.Capability, Support = "Supported" }
         ];
         using (var sync = await scenario.World.SendAgentAsync(HttpMethod.Put, "/api/agent/capabilities", scenario.Agent.CredentialId, scenario.Agent.Secret,
             body: new AgentCapabilitySyncRequest { Revision = AgentCapabilityRevision.Compute(capabilities), Capabilities = capabilities }))
@@ -420,6 +420,7 @@ public sealed class BackupSizeAnomalyIntegrationTests : IAsyncLifetime
 
     private static async Task<(Guid TaskId, Guid LeaseToken, CapacityProbeTaskResult Result)> MeasureCapacityHttpAsync(BackupApiScenario scenario, Guid connection, long used)
     {
+        scenario.Clock.Advance(TimeSpan.FromSeconds(1));
         using var probe = await scenario.Admin.SendAsync(HttpMethod.Post, $"/api/v1/storage/connections/{connection}/probe");
         Assert.Equal(HttpStatusCode.Accepted, probe.StatusCode);
         var taskId = AgentWorld.ReadJson(probe).GetProperty("taskId").GetGuid();

@@ -30,7 +30,7 @@ public sealed class BackupHealthEvaluator(IBackupHealthStore store, TimeProvider
     private static BackupJobHealth Evaluate(BackupHealthEvidence evidence, DateTimeOffset now)
     {
         var freshness = Freshness(evidence, now);
-        var required = evidence.Job.Configuration.RequiredVerifiedReplicaCount;
+        var required = Math.Max(1, evidence.Job.Configuration.RequiredVerifiedReplicaCount);
         var replicas = Math.Min(required, evidence.VerifiedReplicas);
         var replication = new BackupHealthFactor((int)Math.Floor(30d * replicas / required), 30, replicas >= required ? "Available" : "Degraded",
             replicas >= required ? "replicas_verified" : replicas == 0 ? "no_verified_replica" : "replicas_missing");
@@ -63,9 +63,14 @@ public sealed class BackupHealthEvaluator(IBackupHealthStore store, TimeProvider
     {
         if (snapshots.Count == 0 || snapshots.Any(snapshot => snapshot is null || !HasKnownCapacity(snapshot, now)))
             return new(0, 10, "Unavailable", "capacity_unavailable");
-        var worst = snapshots.Max(snapshot => (double)(snapshot!.UsedBytes ?? snapshot.TotalBytes!.Value - snapshot.FreeBytes!.Value) / snapshot.TotalBytes!.Value);
-        return worst > .90 ? new(0, 10, "Critical", "capacity_critical")
-            : worst >= .80 ? new(5, 10, "Warning", "capacity_warning") : new(10, 10, "Available", "capacity_available");
+        var warning = false;
+        foreach (var snapshot in snapshots)
+        {
+            var status = StorageCapacityStatus.Evaluate(snapshot!.TotalBytes, snapshot.UsedBytes, snapshot.FreeBytes);
+            if (status == StorageCapacityStatus.Critical) return new(0, 10, "Critical", "capacity_critical");
+            warning |= status == StorageCapacityStatus.Warning;
+        }
+        return warning ? new(5, 10, "Warning", "capacity_warning") : new(10, 10, "Available", "capacity_available");
     }
 
     public static bool HasKnownCapacity(StorageCapacitySnapshot snapshot, DateTimeOffset now) =>

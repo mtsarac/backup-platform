@@ -8,7 +8,7 @@ using BackupPlatform.Storage;
 namespace BackupPlatform.Api.Backups;
 
 public sealed class AgentCapacityProbeService(IStorageCapacityTaskQueue queue, IStorageConnectionStore connections,
-    ISecretProvider secrets, TimeProvider time)
+    ISecretProvider secrets, TimeProvider time, ILogger<AgentCapacityProbeService> logger)
 {
     public async Task<CapacityProbeTaskRequest?> ClaimAsync(AgentIdentity identity, CancellationToken cancellationToken)
     {
@@ -16,20 +16,19 @@ public sealed class AgentCapacityProbeService(IStorageCapacityTaskQueue queue, I
         if (task is null) return null;
         var record = await connections.FindAsync(task.ConnectionId, identity.TenantId, cancellationToken);
         if (record is null) return null;
+        IReadOnlyDictionary<string, string>? values = null;
         try
         {
-            IReadOnlyDictionary<string, string>? values = null;
             if (record.Connection.SecretReference is { } reference)
             {
                 var secret = await secrets.ResolveAsync(new SecretReference(reference), cancellationToken);
-                values = JsonSerializer.Deserialize<Dictionary<string, string>>(secret.Reveal());
+                values = JsonSerializer.Deserialize<Dictionary<string, string>>(secret.Reveal())
+                    ?? throw new JsonException("The storage credential document is null.");
             }
-            if (!await queue.IsLiveAsync(identity, task.TaskId, task.LeaseToken, time.GetUtcNow(), cancellationToken)) return null;
-            return task with { Secret = values };
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (Exception)
+        catch (Exception exception) when (exception is SecretUnavailableException or JsonException)
         {
+            logger.LogWarning("Capacity credentials unavailable for connection {ConnectionId} ({ExceptionType}).", task.ConnectionId, exception.GetType().Name);
             await queue.CompleteAsync(identity, task.TaskId, new CapacityProbeCompletionRequest
             {
                 LeaseToken = task.LeaseToken,
@@ -37,5 +36,7 @@ public sealed class AgentCapacityProbeService(IStorageCapacityTaskQueue queue, I
             }, time.GetUtcNow(), cancellationToken);
             return null;
         }
+        if (!await queue.IsLiveAsync(identity, task.TaskId, task.LeaseToken, time.GetUtcNow(), cancellationToken)) return null;
+        return task with { Secret = values };
     }
 }

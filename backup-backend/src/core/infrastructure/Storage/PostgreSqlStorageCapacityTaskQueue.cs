@@ -15,10 +15,11 @@ namespace BackupPlatform.Infrastructure.Storage;
 public sealed class PostgreSqlStorageCapacityTaskQueue(DbContextOptions<PlatformDbContext> options,
     AgentConnectivityOptions connectivity, NotificationEngine notifications, TimeProvider time) : IStorageCapacityTaskQueue
 {
-    public async Task<bool> HasCompatibleAgentAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task<bool> CanUseSnapshotAsync(TenantId tenantId, Guid connectionId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var db = PlatformDbContext.CreateForPlatformOperations(options);
-        return (await EligibleAgentsAsync(db, tenantId, now, cancellationToken)).Count != 0;
+        var connection = await db.StorageConnections.AsNoTracking().SingleOrDefaultAsync(c => c.TenantId == tenantId && c.Id == connectionId, cancellationToken);
+        return connection is not null && await StorageCapacityAgentRouting.CanUseSnapshotAsync(db, connection, now, connectivity, cancellationToken);
     }
 
     public async Task<StorageCapacityResponse> EnqueueAsync(TenantId tenantId, Guid connectionId, DateTimeOffset now, CancellationToken cancellationToken)
@@ -33,10 +34,9 @@ public sealed class PostgreSqlStorageCapacityTaskQueue(DbContextOptions<Platform
             return Pending(pending);
         }
         var connection = await db.StorageConnections.SingleOrDefaultAsync(c => c.Id == connectionId && c.TenantId == tenantId, cancellationToken);
-        var agent = connection is { EffectiveEnabled: true }
-            ? (await EligibleAgentsAsync(db, tenantId, now, cancellationToken)).FirstOrDefault() : Guid.Empty;
+        var agent = connection is null ? null : await StorageCapacityAgentRouting.ResolveAsync(db, connection, now, connectivity, cancellationToken);
         StorageCapacityResponse response;
-        if (agent == Guid.Empty)
+        if (agent is null)
         {
             var snapshot = StorageCapacitySnapshot.UnavailableResult(tenantId, connectionId, now, "No authorized compatible online agent is available.");
             await PostgreSqlStorageCapacitySnapshotStore.SaveInTransactionAsync(db, snapshot, notifications, time, cancellationToken);
@@ -44,7 +44,7 @@ public sealed class PostgreSqlStorageCapacityTaskQueue(DbContextOptions<Platform
         }
         else
         {
-            var task = new StorageCapacityTask(tenantId, connectionId, agent, now);
+            var task = new StorageCapacityTask(tenantId, connectionId, agent.Value, now);
             db.StorageCapacityTasks.Add(task);
             response = Pending(task);
         }
@@ -53,7 +53,7 @@ public sealed class PostgreSqlStorageCapacityTaskQueue(DbContextOptions<Platform
         return response;
     }
 
-    public async Task<StorageCapacityResponse?> GetPendingAsync(TenantId tenantId, Guid connectionId, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task<StorageCapacityResponse?> RefreshPendingAsync(TenantId tenantId, Guid connectionId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var db = PlatformDbContext.CreateForPlatformOperations(options);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
@@ -64,10 +64,21 @@ public sealed class PostgreSqlStorageCapacityTaskQueue(DbContextOptions<Platform
         return task is null ? null : Pending(task);
     }
 
+    public async Task<StorageCapacityResponse?> GetPendingAsync(TenantId tenantId, Guid connectionId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var db = PlatformDbContext.CreateForPlatformOperations(options);
+        var task = await db.StorageCapacityTasks.AsNoTracking().SingleOrDefaultAsync(t => t.TenantId == tenantId && t.ConnectionId == connectionId && t.CompletedAt == null, cancellationToken);
+        if (task is null) return null;
+        return await IsPendingAsync(db, task, now, cancellationToken) ? Pending(task) : new StorageCapacityResponse
+        {
+            ConnectionId = connectionId, Status = StorageCapacityStatus.CapacityUnavailable, ReportedAt = now,
+            ErrorMessage = "Capacity probe expired or its authorized agent is unavailable."
+        };
+    }
+
     public async Task<CapacityProbeTaskRequest?> ClaimAsync(AgentIdentity identity, DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var db = PlatformDbContext.CreateForPlatformOperations(options);
-        if ((await EligibleAgentsAsync(db, identity.TenantId, now, cancellationToken, identity.AgentId.Value)).Count == 0) return null;
         var connectionIds = await db.StorageCapacityTasks.AsNoTracking()
             .Where(t => t.TenantId == identity.TenantId && t.AgentId == identity.AgentId.Value && t.CompletedAt == null)
             .OrderBy(t => t.CreatedAt).Select(t => t.ConnectionId).Take(32).ToListAsync(cancellationToken);
@@ -135,39 +146,27 @@ public sealed class PostgreSqlStorageCapacityTaskQueue(DbContextOptions<Platform
     {
         var task = await db.StorageCapacityTasks.SingleOrDefaultAsync(t => t.TenantId == tenantId && t.ConnectionId == connectionId && t.CompletedAt == null, cancellationToken);
         if (task is null) return null;
-        if (task.ExpiresAt > now && (task.Attempts < 3 || task.LeaseExpiresAt > now)
-            && (await EligibleAgentsAsync(db, tenantId, now, cancellationToken, task.AgentId)).Count != 0
-            && await db.StorageConnections.AnyAsync(c => c.Id == connectionId && c.TenantId == tenantId && c.Enabled && !c.AdministrativelyDisabled, cancellationToken)) return task;
+        if (await IsPendingAsync(db, task, now, cancellationToken)) return task;
         task.Complete(now, null);
         var unavailable = StorageCapacitySnapshot.UnavailableResult(tenantId, connectionId, now, "Capacity probe expired or its agent is unavailable.");
         await PostgreSqlStorageCapacitySnapshotStore.SaveInTransactionAsync(db, unavailable, notifications, time, cancellationToken);
         return null;
     }
     private async Task<bool> IsLiveAsync(PlatformDbContext db, AgentIdentity identity, StorageCapacityTask task, Guid token,
-        DateTimeOffset now, CancellationToken cancellationToken) =>
-        task.CompletedAt is null && task.AgentId == identity.AgentId.Value && task.LeaseToken == token && token != Guid.Empty
-        && task.LeaseExpiresAt > now && task.ExpiresAt > now
-        && (await EligibleAgentsAsync(db, identity.TenantId, now, cancellationToken, identity.AgentId.Value)).Count != 0
-        && await db.StorageConnections.AnyAsync(c => c.Id == task.ConnectionId && c.TenantId == identity.TenantId
-            && c.Enabled && !c.AdministrativelyDisabled && c.UpdatedAt == task.ConnectionUpdatedAt, cancellationToken);
-
-    private Task<List<Guid>> EligibleAgentsAsync(PlatformDbContext db, TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken, Guid agentId = default)
+        DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var cutoff = now - connectivity.OfflineTimeout;
-        var minimum = BackupPlatform.Contracts.Agents.AgentProtocol.Current.SupportedVersions.Minimum;
-        var maximum = BackupPlatform.Contracts.Agents.AgentProtocol.Current.SupportedVersions.Maximum;
-        return db.Database.SqlQuery<Guid>($"""
-            SELECT a."Id" AS "Value" FROM agents a
-            JOIN agent_connectivity live ON live."AgentId" = a."Id" AND live."TenantId" = a."TenantId"
-            JOIN agent_capabilities cap ON cap."AgentId" = a."Id" AND cap."TenantId" = a."TenantId"
-            WHERE a."TenantId" = {tenantId.Value} AND a."Status" = 2 AND live."LastSeenAt" >= {cutoff}
-              AND cap."Identifier" = {CapacityProbeProtocol.Capability} AND cap."Support" = 1
-              AND cap."Revision" = live."CapabilityRevision"
-              AND ROW(live."ReportedProtocolMajor", live."ReportedProtocolMinor") >= ROW({minimum.Major}, {minimum.Minor})
-              AND ROW(live."ReportedProtocolMajor", live."ReportedProtocolMinor") <= ROW({maximum.Major}, {maximum.Minor})
-              AND ({agentId} = {Guid.Empty} OR a."Id" = {agentId})
-            ORDER BY a."Id" LIMIT 1
-            """).ToListAsync(cancellationToken);
+        if (task.CompletedAt is not null || task.AgentId != identity.AgentId.Value || task.LeaseToken != token || token == Guid.Empty
+            || task.LeaseExpiresAt <= now || task.ExpiresAt <= now) return false;
+        var connection = await db.StorageConnections.AsNoTracking().SingleOrDefaultAsync(c => c.Id == task.ConnectionId && c.TenantId == identity.TenantId, cancellationToken);
+        return connection is not null && connection.UpdatedAt == task.ConnectionUpdatedAt
+            && await StorageCapacityAgentRouting.ResolveAsync(db, connection, now, connectivity, cancellationToken) == task.AgentId;
+    }
+
+    private async Task<bool> IsPendingAsync(PlatformDbContext db, StorageCapacityTask task, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (task.ExpiresAt <= now || task.Attempts >= 3 && task.LeaseExpiresAt <= now) return false;
+        var connection = await db.StorageConnections.AsNoTracking().SingleOrDefaultAsync(c => c.Id == task.ConnectionId && c.TenantId == task.TenantId, cancellationToken);
+        return connection is not null && await StorageCapacityAgentRouting.ResolveAsync(db, connection, now, connectivity, cancellationToken) == task.AgentId;
     }
 
     private static Task LockAsync(PlatformDbContext db, TenantId tenantId, Guid connectionId, CancellationToken cancellationToken) =>

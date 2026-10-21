@@ -3,7 +3,7 @@ namespace BackupPlatform.Contracts.Storage;
 public static class CapacityProbeProtocol
 {
     public const string TaskType = "capacity-probe";
-    public const string Capability = "capacity-probe";
+    public const string Capability = "storage.capacity-probe";
 }
 
 public static class CapacityProbeFailureCodes

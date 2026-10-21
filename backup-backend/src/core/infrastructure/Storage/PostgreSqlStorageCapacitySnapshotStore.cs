@@ -50,7 +50,6 @@ public sealed class PostgreSqlStorageCapacitySnapshotStore(DbContextOptions<Plat
         var latest = await db.StorageCapacitySnapshots.AsNoTracking()
             .Where(s => s.TenantId == snapshot.TenantId && s.ConnectionId == snapshot.ConnectionId)
             .OrderByDescending(s => s.ReportedAt).ThenByDescending(s => s.Id).FirstOrDefaultAsync(cancellationToken);
-        if (latest is not null) snapshot.EnsureReportedAfter(latest.ReportedAt);
         var measured = snapshot.Status != StorageCapacityStatus.CapacityUnavailable;
         var previous = latest;
         if (measured && latest?.Status == StorageCapacityStatus.CapacityUnavailable)

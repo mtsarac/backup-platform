@@ -16,8 +16,8 @@ const reasons: Record<string, string> = {
   restore_passed: 'Son 30 gün içinde izole geri yükleme testi başarılı.',
   restore_untested: 'Son 30 gün içinde başarılı izole geri yükleme testi yok.',
   capacity_unavailable: 'Güncel ve ölçülebilir depolama kapasitesi bilgisi yok.',
-  capacity_critical: 'En dolu depolama hedefi %90 üzerinde.',
-  capacity_warning: 'En dolu depolama hedefi %80–%90 aralığında.',
+  capacity_critical: 'En dolu depolama hedefi %90 veya üzerinde.',
+  capacity_warning: 'En dolu depolama hedefi %80 veya üzerinde, %90 altında.',
   capacity_available: 'Depolama hedefleri %80 altında.',
 }
 const labels = { freshness: 'Yedek güncelliği', replication: 'Doğrulanmış kopyalar', restoreVerification: 'İzole geri yükleme testi', storageCapacity: 'Depolama kapasitesi' } as const

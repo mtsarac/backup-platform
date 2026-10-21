@@ -56,7 +56,7 @@ public sealed class SftpCapacityProbeExecutor(SftpNetworkOptions network, ILogge
         catch (OperationCanceledException) when (requestCancellation.IsCancellationRequested) { throw; }
         catch (Exception ex)
         {
-            logger?.LogWarning(ex, "SFTP capacity probe failed for connection {ConnectionId}", request.ConnectionId);
+            logger?.LogWarning("SFTP capacity probe failed for connection {ConnectionId} ({ExceptionType}).", request.ConnectionId, ex.GetType().Name);
             return CapacityProbeTaskResult.Failure(request.TaskId, request.ConnectionId, CapacityProbeFailureCodes.CapacityUnavailable);
         }
     }
