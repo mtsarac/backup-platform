@@ -10,6 +10,7 @@ using BackupPlatform.SnapshotProviders.Abstractions;
 
 namespace BackupPlatform.BackupProviders.FileSystem;
 
+/// <summary>Preserve allows confined relative targets, including dangling targets, but not targets traversing other links.</summary>
 public enum FileSymlinkPolicy { Skip, Preserve }
 
 public sealed record FileSystemBackupSource(string RootDirectory, IReadOnlyList<string> Includes, IReadOnlyList<string> Excludes,
@@ -177,6 +178,7 @@ public sealed class FileSystemBackupProvider(IEnumerable<ISnapshotProvider> snap
         var entries = manifest.Files.Where(entry => selection is null || selection.Any(path => Covers(path, entry.RelativePath))).ToArray();
         if (selection is not null && selection.Any(path => !entries.Any(entry => Covers(path, entry.RelativePath))))
             throw new ArgumentException("A restore selection is not present in the manifest.", nameof(selectedFiles));
+        var plannedLinks = entries.Where(entry => entry.IsSymlink).Select(entry => entry.RelativePath).ToHashSet(Paths);
         foreach (var entry in entries)
         {
             if (entry.WindowsAccessControl is { } descriptor)
@@ -186,7 +188,7 @@ public sealed class FileSystemBackupProvider(IEnumerable<ISnapshotProvider> snap
                 windowsPermissions.ValidateAccessControl(descriptor);
             }
             var target = CheckedPath(root, entry.RelativePath);
-            if (entry.IsSymlink) ValidateLink(root, entry.RelativePath, entry.SymlinkTarget!);
+            if (entry.IsSymlink) ValidateLink(root, entry.RelativePath, entry.SymlinkTarget!, plannedLinks);
             if (!entry.IsDirectory && Directory.Exists(target)) throw new IOException("A restore file conflicts with a directory.");
             if (File.Exists(target) && (entry.IsDirectory || !overwrite)) throw new IOException("An existing restore target cannot be overwritten.");
         }
@@ -240,6 +242,7 @@ public sealed class FileSystemBackupProvider(IEnumerable<ISnapshotProvider> snap
                 var slash = entry.RelativePath.LastIndexOf('/');
                 if (slash >= 0) EnsureDirectories(root, entry.RelativePath[..slash], createdDirectories);
                 var target = CheckedPath(root, entry.RelativePath);
+                if (entry.IsSymlink) ValidateLink(root, entry.RelativePath, entry.SymlinkTarget!, plannedLinks);
                 string? backup = null;
                 if (File.Exists(target))
                 {
@@ -250,7 +253,6 @@ public sealed class FileSystemBackupProvider(IEnumerable<ISnapshotProvider> snap
                 applied.Add((target, backup, false));
                 if (entry.IsSymlink)
                 {
-                    ValidateLink(root, entry.RelativePath, entry.SymlinkTarget!);
                     if (entry.IsDirectory) Directory.CreateSymbolicLink(target, entry.SymlinkTarget!);
                     else File.CreateSymbolicLink(target, entry.SymlinkTarget!);
                 }
@@ -419,13 +421,25 @@ public sealed class FileSystemBackupProvider(IEnumerable<ISnapshotProvider> snap
         return result;
     }
 
-    private static void ValidateLink(string root, string relative, string target)
+    private static void ValidateLink(string root, string relative, string target, HashSet<string>? plannedLinks = null)
     {
         if (string.IsNullOrEmpty(target) || Path.IsPathRooted(target) || target.Contains('\\') || target.Contains(':') || target.Any(char.IsControl))
             throw new InvalidDataException("Only confined relative symbolic links can be preserved.");
-        var resolved = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(Path.Combine(root, relative))!, target));
-        if (!IsWithin(root, resolved) && !Paths.Equals(root, resolved)) throw new InvalidDataException("A symbolic link escapes the source or target root.");
-        _ = CheckedPath(root, Path.GetRelativePath(root, resolved).Replace('\\', '/'));
+        var resolved = Path.GetDirectoryName(Path.Combine(root, relative))!;
+        // Check before collapsing dot segments: a link followed by ".." is not a lexical parent traversal.
+        foreach (var part in target.Split('/'))
+        {
+            if (part is "" or ".") continue;
+            if (part == "..")
+            {
+                if (Paths.Equals(root, resolved)) throw new InvalidDataException("A symbolic link escapes the source or target root.");
+                resolved = Path.GetDirectoryName(resolved)!;
+                continue;
+            }
+            resolved = CheckedPath(resolved, part);
+            if (plannedLinks?.Contains(Path.GetRelativePath(root, resolved).Replace('\\', '/')) == true)
+                throw new InvalidDataException("A symbolic link target traverses another symbolic link or reparse point.");
+        }
     }
 
     private void RequirePlatformPermissions()

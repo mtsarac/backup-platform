@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Text.Json;
 using BackupPlatform.BackupProviders.Abstractions;
 using BackupPlatform.BackupProviders.FileSystem;
 using Xunit;
@@ -169,6 +170,135 @@ public sealed class FileSystemBackupProviderTests
             Assert.Empty(Directory.EnumerateDirectories(target));
         }
         finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Theory]
+    [InlineData("a/..", false)]
+    [InlineData("a/..", true)]
+    [InlineData("dir/../a/..", false)]
+    [InlineData("a/../data.txt", false)]
+    [InlineData("a", false)]
+    [InlineData("x", false)]
+    [InlineData("x/..", false)]
+    public async Task Planned_link_chains_are_rejected_before_any_destination_replacement(string linkTarget, bool reverseLinks)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "bp-planned-links-" + Guid.NewGuid().ToString("N"));
+        var source = Path.Combine(root, "source");
+        var staging = Path.Combine(root, "staging");
+        var target = Path.Combine(root, "target");
+        Directory.CreateDirectory(source);
+        Directory.CreateDirectory(staging);
+        Directory.CreateDirectory(Path.Combine(target, "dir"));
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(source, "data.txt"), "replacement");
+            await File.WriteAllTextAsync(Path.Combine(target, "data.txt"), "original");
+            var permissions = new RecordingWindowsPermissions();
+            var provider = new FileSystemBackupProvider([], permissions);
+            var (_, archivePath) = await provider.CreateBackupAsync(new(source, ["**"], []), staging, null, default);
+            FileManifestEntry[] links =
+            [
+                new("a", 0, "", DateTimeOffset.UtcNow, IsSymlink: true, SymlinkTarget: ".", IsDirectory: true),
+                new("x", 0, "", DateTimeOffset.UtcNow, IsSymlink: true, SymlinkTarget: linkTarget, IsDirectory: true)
+            ];
+            AddManifestLinks(archivePath, reverseLinks ? links.Reverse().ToArray() : links);
+
+            var error = await Assert.ThrowsAsync<InvalidDataException>(() => provider.RestoreAsync(archivePath, target, true, null, null, default));
+            Assert.Equal("A symbolic link target traverses another symbolic link or reparse point.", error.Message);
+
+            Assert.Equal("original", await File.ReadAllTextAsync(Path.Combine(target, "data.txt")));
+            Assert.Empty(permissions.Applied);
+            Assert.Equal(["data.txt", "dir"], Directory.EnumerateFileSystemEntries(target).Select(path => Path.GetFileName(path)!).Order().ToArray());
+            await provider.RestoreAsync(archivePath, target, true, ["data.txt"], null, default);
+            Assert.Equal("replacement", await File.ReadAllTextAsync(Path.Combine(target, "data.txt")));
+            await Assert.ThrowsAsync<InvalidDataException>(() => provider.RestoreAsync(archivePath, target, true, ["a", "x"], null, default));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [LinuxFact]
+    public async Task Existing_links_hidden_by_dotdot_are_rejected_including_dangling_and_cyclic_links()
+    {
+        foreach (var existingTarget in new[] { ".", "../outside", "missing", "a" })
+        foreach (var linkTarget in new[] { "a/..", "a/../data.txt", "dir/../a/../data.txt" })
+        {
+            var root = Path.Combine(Path.GetTempPath(), "bp-existing-links-" + Guid.NewGuid().ToString("N"));
+            var source = Path.Combine(root, "source");
+            var staging = Path.Combine(root, "staging");
+            var target = Path.Combine(root, "target");
+            Directory.CreateDirectory(source);
+            Directory.CreateDirectory(staging);
+            Directory.CreateDirectory(Path.Combine(target, "dir"));
+            Directory.CreateDirectory(Path.Combine(root, "outside"));
+            try
+            {
+                await File.WriteAllTextAsync(Path.Combine(source, "data.txt"), "replacement");
+                await File.WriteAllTextAsync(Path.Combine(target, "data.txt"), "original");
+                Directory.CreateSymbolicLink(Path.Combine(target, "a"), existingTarget);
+                var permissions = new RecordingWindowsPermissions();
+                var provider = new FileSystemBackupProvider([], permissions);
+                var (_, archivePath) = await provider.CreateBackupAsync(new(source, ["**"], []), staging, null, default);
+                AddManifestLinks(archivePath, new FileManifestEntry("x", 0, "", DateTimeOffset.UtcNow, IsSymlink: true, SymlinkTarget: linkTarget, IsDirectory: true));
+
+                await Assert.ThrowsAnyAsync<IOException>(() => provider.RestoreAsync(archivePath, target, true, null, null, default));
+
+                Assert.Equal("original", await File.ReadAllTextAsync(Path.Combine(target, "data.txt")));
+                Assert.Equal(existingTarget, new DirectoryInfo(Path.Combine(target, "a")).LinkTarget);
+                Assert.Empty(permissions.Applied);
+                Assert.False(Directory.Exists(Path.Combine(target, "x")));
+            }
+            finally { Directory.Delete(root, recursive: true); }
+        }
+    }
+
+    [LinuxFact]
+    public async Task Preserved_confined_links_roundtrip_with_filters_and_explicit_selection()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "bp-confined-links-" + Guid.NewGuid().ToString("N"));
+        var source = Path.Combine(root, "source");
+        var staging = Path.Combine(root, "staging");
+        var target = Path.Combine(root, "target");
+        var selectedTarget = Path.Combine(root, "selected-target");
+        Directory.CreateDirectory(Path.Combine(source, "sub"));
+        Directory.CreateDirectory(staging);
+        Directory.CreateDirectory(target);
+        Directory.CreateDirectory(selectedTarget);
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(source, "data.txt"), "confined content");
+            await File.WriteAllTextAsync(Path.Combine(source, "ignored.log"), "excluded");
+            File.CreateSymbolicLink(Path.Combine(source, "sub", "file-link"), "../data.txt");
+            Directory.CreateSymbolicLink(Path.Combine(source, "sub", "root-link"), "..");
+            File.CreateSymbolicLink(Path.Combine(source, "dangling-link"), "not-created");
+            Directory.CreateSymbolicLink(Path.Combine(source, "root-link"), ".");
+            var provider = new FileSystemBackupProvider([], null);
+            var (manifest, archivePath) = await provider.CreateBackupAsync(
+                new(source, ["**"], ["*.log"], FileSymlinkPolicy.Preserve), staging, null, default);
+
+            Assert.Equal(4, manifest.Files.Count(entry => entry.IsSymlink));
+            await provider.RestoreAsync(archivePath, target, false, null, null, default);
+
+            Assert.Equal("confined content", await File.ReadAllTextAsync(Path.Combine(target, "sub", "file-link")));
+            Assert.Equal("..", new DirectoryInfo(Path.Combine(target, "sub", "root-link")).LinkTarget);
+            Assert.Equal(".", new DirectoryInfo(Path.Combine(target, "root-link")).LinkTarget);
+            Assert.Equal("not-created", new FileInfo(Path.Combine(target, "dangling-link")).LinkTarget);
+            Assert.False(File.Exists(Path.Combine(target, "ignored.log")));
+            await provider.RestoreAsync(archivePath, selectedTarget, false, ["sub/file-link"], null, default);
+            Assert.Equal("../data.txt", new FileInfo(Path.Combine(selectedTarget, "sub", "file-link")).LinkTarget);
+            Assert.False(File.Exists(Path.Combine(selectedTarget, "data.txt")));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    private static void AddManifestLinks(string archivePath, params FileManifestEntry[] links)
+    {
+        using var archive = ZipFile.Open(archivePath, ZipArchiveMode.Update);
+        var entry = archive.GetEntry("manifest.json")!;
+        FileBackupManifest manifest;
+        using (var stream = entry.Open()) manifest = JsonSerializer.Deserialize<FileBackupManifest>(stream)!;
+        entry.Delete();
+        using var output = archive.CreateEntry("manifest.json").Open();
+        JsonSerializer.Serialize(output, manifest with { Files = [.. manifest.Files, .. links] });
     }
 
     private sealed class RecordingWindowsPermissions : IWindowsFilePermissions
