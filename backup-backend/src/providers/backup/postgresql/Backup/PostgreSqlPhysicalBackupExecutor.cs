@@ -180,7 +180,7 @@ internal sealed class PostgreSqlPhysicalBackupExecutor(PostgreSqlBackupProvider 
             throw new Stopped(new BackupFailure(kind, stage, result.TimedOut ? "postgres.physical.timeout" : reason,
                 result.TimedOut ? "The physical PostgreSQL client operation timed out." : "The physical PostgreSQL client operation failed. No artifact was published.", result.TimedOut ? BackupFailureCause.Timeout : BackupFailureCause.Unclassified));
         }
-        void Report() { try { progress?.Report(new BackupProgress(stage, null, null, null, time.GetUtcNow())); } catch { } }
+        void Report() => progress?.Report(new BackupProgress(stage, null, null, null, time.GetUtcNow()));
     }
 
     private static string Escape(string value) => value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("=", "\\=", StringComparison.Ordinal);

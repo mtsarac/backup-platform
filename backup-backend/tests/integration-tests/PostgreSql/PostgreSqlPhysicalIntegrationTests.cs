@@ -42,4 +42,28 @@ public sealed class PostgreSqlPhysicalIntegrationTests(PostgreSqlProviderFixture
         Assert.NotNull(inspected.Failure);
         Assert.Null(inspected.Inspection);
     }
+
+    [Fact]
+    public async Task Failed_progress_reporting_cannot_publish_an_unobserved_physical_backup()
+    {
+        var database = await fixture.DatabaseAsync(populated: true);
+        var provider = new PostgreSqlBackupProvider(NullLogger<PostgreSqlBackupProvider>.Instance,
+            fixture.Options with { BackupMode = PostgreSqlBackupMode.Physical });
+        var name = Guid.NewGuid().ToString("N") + ".tar";
+        var result = await provider.ExecuteFullBackupAsync(fixture.Settings, fixture.Credential,
+            new FullBackupRequest(database, StagingArea.SameHost(fixture.DirectoryPath), name,
+                new FullBackupOptions(checksum: BackupOptionMode.IfSupported, compression: BackupOptionMode.Off)),
+            new FailedProgress(), default);
+        Assert.Equal(FullBackupStatus.Failed, result.Status);
+        Assert.Equal("postgres.physical.operation_failed", result.Failure?.ReasonCode);
+        Assert.Null(result.StagedFile);
+        Assert.False(File.Exists(Path.Combine(fixture.DirectoryPath, name)));
+        Assert.DoesNotContain(Directory.EnumerateDirectories(fixture.DirectoryPath),
+            path => Path.GetFileName(path).StartsWith(".physical-", StringComparison.Ordinal));
+    }
+
+    private sealed class FailedProgress : IProgress<BackupProgress>
+    {
+        public void Report(BackupProgress value) => throw new IOException("Progress sink is unavailable.");
+    }
 }
