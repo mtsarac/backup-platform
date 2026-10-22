@@ -134,7 +134,7 @@ public sealed class ReplicaRepairService(
             var targetDestination = admission.TargetDestination;
             var candidateSources = admission.CandidateSources ?? [];
 
-            var destinationTarget = targetDestination.StorageProvider is "sftp" or "google-drive" && targetDestination.StorageConnectionId is { } connId && connId != Guid.Empty
+            var destinationTarget = targetDestination.StorageProvider is "sftp" or "google-drive" or "s3" or "smb" && targetDestination.StorageConnectionId is { } connId && connId != Guid.Empty
                 ? connId.ToString("D")
                 : targetDestination.StorageProvider;
 
@@ -161,7 +161,7 @@ public sealed class ReplicaRepairService(
                     continue;
                 }
 
-                var sourceTarget = candidate.StorageProvider is "sftp" or "google-drive" && candidate.StorageConnectionId != Guid.Empty
+                var sourceTarget = candidate.StorageProvider is "sftp" or "google-drive" or "s3" or "smb" && candidate.StorageConnectionId != Guid.Empty
                     ? candidate.StorageConnectionId.ToString("D")
                     : candidate.StorageTarget;
 

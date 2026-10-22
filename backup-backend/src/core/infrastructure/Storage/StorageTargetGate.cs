@@ -101,6 +101,10 @@ internal static class StorageTargetGate
         {
             return new(null, BackupAdmissionDenialCodes.AgentMultiDestinationUnsupported);
         }
+        if (configuration.Engine == "file-system" && !await SupportsCapabilityAsync(context, tenantId, agentId, "file-system.backup.full", cancellationToken))
+            return new(null, BackupAdmissionDenialCodes.AgentEngineUnsupported);
+        if (configuration.EnforceThreeTwoOne && !await SupportsCapabilityAsync(context, tenantId, agentId, "backup.three-two-one", cancellationToken))
+            return new(null, BackupAdmissionDenialCodes.DestinationCombinationUnsupported);
         bool? supportsDirect = null;
         foreach (var dest in effectiveDestinations)
         {
@@ -135,13 +139,24 @@ internal static class StorageTargetGate
             // The volume is read from the connection here, in the one admission point, so a client can never name one and a later edit cannot move an admitted run.
             var volume = connection.ProviderType == StorageProviderTypes.Local ? connection.Configuration.GetValueOrDefault("volume") : null;
             var isDirect = dest.StorageProvider == StorageProviderTypes.Local;
-            if (dest.StorageProvider is StorageProviderTypes.Sftp or StorageProviderTypes.GoogleDrive)
+            if (dest.StorageProvider is StorageProviderTypes.Sftp or StorageProviderTypes.GoogleDrive or StorageProviderTypes.S3 or StorageProviderTypes.Smb)
             {
                 supportsDirect ??= await SupportsDirectStorageAsync(context, tenantId, agentId, cancellationToken);
                 isDirect = supportsDirect.Value;
             }
-            resolvedDestinations.Add(dest with { StorageConnectionId = connection.Id, StorageTarget = volume, Direct = isDirect });
+            if (dest.StorageProvider is StorageProviderTypes.S3 or StorageProviderTypes.Smb
+                && (!isDirect || !await SupportsCapabilityAsync(context, tenantId, agentId, $"storage.{dest.StorageProvider}", cancellationToken)))
+                return new(null, BackupAdmissionDenialCodes.DestinationCombinationUnsupported);
+            var media = connection.Configuration.GetValueOrDefault("mediaClass")
+                ?? (connection.ProviderType is StorageProviderTypes.S3 or StorageProviderTypes.GoogleDrive ? "object-storage" : "disk");
+            var site = connection.Configuration.GetValueOrDefault("site");
+            resolvedDestinations.Add(dest with { StorageConnectionId = connection.Id, StorageTarget = volume, Direct = isDirect,
+                MediaClass = media, Site = site,
+                OffsiteVerified = site is not null && configuration.SourceSite is not null && site != configuration.SourceSite });
         }
+        if (configuration.EnforceThreeTwoOne && (resolvedDestinations.Select(d => d.MediaClass).Distinct().Count() < 2
+            || !resolvedDestinations.Any(d => d.OffsiteVerified)))
+            return new(null, BackupAdmissionDenialCodes.DestinationCombinationUnsupported);
 
         return new(configuration with { Destinations = resolvedDestinations }, null);
     }
@@ -156,6 +171,10 @@ internal static class StorageTargetGate
         context.AgentCapabilities.AsNoTracking().AnyAsync(record => record.TenantId == tenantId && record.AgentId == agentId
             && record.Identifier == BackupPlatform.Contracts.Backups.TaskStorageProtocol.DirectCapability
             && record.Support == BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, cancellationToken);
+
+    private static Task<bool> SupportsCapabilityAsync(PlatformDbContext context, TenantId tenantId, AgentId agentId, string capability, CancellationToken cancellationToken) =>
+        context.AgentCapabilities.AsNoTracking().AnyAsync(record => record.TenantId == tenantId && record.AgentId == agentId
+            && record.Identifier == capability && record.Support == BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, cancellationToken);
 
     /// <summary>
     /// The connection that holds the copies of a run snapshot destination that names none (a run admitted before storage connections existed): the tenant's

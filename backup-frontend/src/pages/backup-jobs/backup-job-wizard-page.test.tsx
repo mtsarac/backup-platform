@@ -61,6 +61,44 @@ beforeEach(() => {
   vi.mocked(getOccurrences).mockResolvedValue([])
 })
 describe('iş formu', () => {
+  it('saves file selections, wildcard filters and symlink policy without database credentials', async () => {
+    vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
+    renderPage()
+    await reach(1)
+    fireEvent.click(screen.getByRole('radio', { name: 'Dosya / Klasör' }))
+    expect(screen.queryByLabelText('Veritabanı parolası')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Dosya kaynağı referansı'), { target: { value: 'documents' } })
+    fireEvent.change(screen.getByLabelText('Yedeklenecek dosya ve klasörler'), { target: { value: '../outside' } })
+    next()
+    expect(screen.getByLabelText('Yedeklenecek dosya ve klasörler')).toHaveAttribute('aria-invalid', 'true')
+    fireEvent.change(screen.getByLabelText('Yedeklenecek dosya ve klasörler'), { target: { value: 'reports\nnotes.txt\n' } })
+    fireEvent.change(screen.getByLabelText('Dahil Edilecekler'), { target: { value: '**/*.txt\nreports/**' } })
+    fireEvent.change(screen.getByLabelText('Hariç Tutulacaklar'), { target: { value: '**/temp/**' } })
+    fireEvent.change(screen.getByLabelText('Sembolik Link Politikası'), { target: { value: 'Preserve' } })
+    next(4)
+    expect(screen.getByText('documents')).toBeInTheDocument()
+    await submit()
+    await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration).toMatchObject({
+      engine: 'file-system', host: 'localhost', port: null, database: 'documents', integratedSecurity: true,
+      databaseCredentialReference: null, databaseLogin: null, copyOnly: false,
+      files: { paths: ['reports', 'notes.txt'], includes: ['**/*.txt', 'reports/**'], excludes: ['**/temp/**'], symlinkPolicy: 'Preserve' },
+    })
+  })
+  it('clears file-only configuration when switching back to a database engine', async () => {
+    vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
+    renderPage()
+    await reach(1)
+    fireEvent.click(screen.getByRole('radio', { name: 'Dosya / Klasör' }))
+    fireEvent.change(screen.getByLabelText('Dosya kaynağı referansı'), { target: { value: 'documents' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'Microsoft SQL Server' }))
+    fireEvent.change(screen.getByLabelText('SQL Server ana bilgisayarı / veritabanı sunucusu'), { target: { value: 'sql' } })
+    fireEvent.change(screen.getByLabelText('Veritabanı'), { target: { value: 'ERP' } })
+    next(4)
+    await submit()
+    await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration).toMatchObject({ engine: 'mssql', files: null })
+  })
   it('does not resubmit the obsolete copy-only switch when editing a PostgreSQL job', async () => {
     const job = makeJob()
     vi.mocked(getBackupJob).mockResolvedValue({ ...job, configuration: {

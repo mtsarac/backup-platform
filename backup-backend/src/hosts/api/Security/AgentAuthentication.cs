@@ -4,6 +4,7 @@ using BackupPlatform.Agents.Credentials;
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Contracts.Agents;
 using BackupPlatform.Domain.Identity;
+using BackupPlatform.Domain.Agents;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 
@@ -69,13 +70,33 @@ public sealed class AgentAuthenticationOptions : AuthenticationSchemeOptions { }
 
 public sealed class AgentAuthenticationHandler(
     IOptionsMonitor<AgentAuthenticationOptions> options, ILoggerFactory logger, UrlEncoder encoder, AgentCredentialService credentials,
-    AgentAuthFailureLimiter failureLimiter)
+    AgentAuthFailureLimiter failureLimiter, IServiceProvider services)
     : AuthenticationHandler<AgentAuthenticationOptions>(options, logger, encoder)
 {
     private const string RateLimitedItem = "BackupPlatform.Agent.RateLimited";
 
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        var certificate = await Context.Connection.GetClientCertificateAsync(Context.RequestAborted);
+        if (certificate is not null)
+        {
+            if (!Request.IsHttps) return AuthenticateResult.Fail("Agent certificates require TLS.");
+            var authority = services.GetService<AgentCertificateAuthority>();
+            var identity = authority?.Validate(certificate);
+            if (identity is null) return AuthenticateResult.Fail("Agent certificate authentication failed.");
+            var record = await services.GetRequiredService<IAgentRegistryStore>().FindCredentialAsync(identity.CredentialId, Context.RequestAborted);
+            var pendingAllowed = Context.GetEndpoint()?.Metadata.GetMetadata<AllowPendingAgentCredential>() is not null;
+            if (record is null || record.AgentStatus != AgentStatus.Active || record.AgentTenantId != identity.TenantId ||
+                record.Credential.AgentId != identity.AgentId || record.Credential.TenantId != identity.TenantId ||
+                record.Credential.Generation != identity.CredentialGeneration ||
+                (record.Credential.Status == AgentCredentialStatus.Active
+                    ? record.AgentCredentialGeneration != identity.CredentialGeneration
+                    : record.Credential.Status != AgentCredentialStatus.Pending || !pendingAllowed ||
+                      record.Credential.IsExpired(services.GetRequiredService<TimeProvider>().GetUtcNow()) ||
+                      record.AgentCredentialGeneration + 1 != identity.CredentialGeneration))
+                return AuthenticateResult.Fail("Agent certificate authentication failed.");
+            return AuthenticateResult.Success(new AuthenticationTicket(AgentAuthentication.CreatePrincipal(identity), Scheme.Name));
+        }
         var headers = Request.Headers.Authorization;
         if (headers.Count == 0)
         {

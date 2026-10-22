@@ -522,3 +522,100 @@ describe('RestoreWizardPage', () => {
     expect(precheckBtn).toBeEnabled()
   })
 })
+
+describe('file archive restore', () => {
+  const passed: RestoreView = { ...sampleRestore, id: 'file-precheck', purpose: 'Precheck', status: 'Succeeded', options: { verifyChecksum: true, verifyBackup: true, files: { paths: null, relativeDirectory: '' } } }
+  beforeEach(() => {
+    vi.mocked(RestoreApi.getRestoreTargets).mockResolvedValue({ ...sampleTargets, engine: 'file-system' })
+    vi.mocked(RestoreApi.startRestorePrecheck).mockResolvedValue(passed)
+    vi.mocked(RestoreApi.getRestore).mockResolvedValue(passed)
+  })
+
+  it('shows persisted file selections in restore history and detail instead of database mode labels', async () => {
+    const fileRestore: RestoreView = { ...sampleRestore, options: { verifyChecksum: true, verifyBackup: true, files: { paths: ['reports', 'notes.txt'], relativeDirectory: 'recovery' } } }
+    vi.mocked(RestoreApi.getRestores).mockResolvedValue({ ...sampleRestorePage, items: [fileRestore] })
+    const list = renderWithClient(<RestoresPage />)
+    expect(await screen.findByText('Dosya / klasör geri yükleme')).toBeInTheDocument()
+    expect(screen.getByText('recovery')).toBeInTheDocument()
+    list.unmount()
+    vi.mocked(RestoreApi.getRestore).mockResolvedValue(fileRestore)
+    renderWithClient(<Routes><Route path="/tenants/:tenantId/restores/:id" element={<RestoreDetailPage />} /></Routes>, '/tenants/tenant-a/restores/restore-1')
+    await screen.findByRole('heading', { name: /Geri yükleme · RestoredSalesDB/ })
+    fireEvent.click(screen.getByRole('tab', { name: 'Kaynak ve seçenekler' }))
+    expect(screen.getByText('reports, notes.txt')).toBeInTheDocument()
+    expect(screen.getByText('recovery')).toBeInTheDocument()
+    expect(screen.queryByText('Etkin bağlantıları sonlandır')).not.toBeInTheDocument()
+  })
+
+  it('restores the whole directory to its original source agent with exact overwrite confirmation', async () => {
+    renderWithClient(<Routes><Route path="/tenants/:tenantId/artifacts/:id/restore" element={<RestoreWizardPage />} /><Route path="/tenants/:tenantId/restores/:id" element={<p>File restore started</p>} /></Routes>, '/tenants/tenant-a/artifacts/artifact-1/restore')
+    fireEvent.click(await screen.findByRole('radio', { name: 'Özgün konum' }))
+    expect(screen.queryByLabelText('Hedef göreli klasör')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Veritabanı parolası')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Mevcut dosyaların üzerine yazmaya izin ver' }))
+    const check = screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/ })
+    expect(check).toBeDisabled()
+    const confirmation = screen.getByLabelText('Üzerine yazmayı onaylamak için hedef kaynak referansını yazın: SalesDB')
+    fireEvent.change(confirmation, { target: { value: 'wrong' } })
+    expect(check).toBeDisabled()
+    fireEvent.change(confirmation, { target: { value: 'SalesDB' } })
+    fireEvent.click(check)
+    const execute = screen.getByRole('button', { name: 'Dosyaları geri yükle' })
+    await waitFor(() => expect(execute).toBeEnabled())
+    expect(RestoreApi.startRestorePrecheck).toHaveBeenCalledWith('tenant-a', 'artifact-1', expect.objectContaining({
+      agentId: 'agent-1', databaseName: 'SalesDB', mode: 'ReplaceExistingDatabase',
+      target: expect.objectContaining({ host: 'localhost', port: null, integratedSecurity: true, databaseCredentialReference: null }),
+      options: { terminateActiveConnections: false, verifyChecksum: true, verifyBackup: true, files: { paths: null, relativeDirectory: '' } },
+    }), expect.any(String))
+    fireEvent.click(execute)
+    await waitFor(() => expect(RestoreApi.startRestore).toHaveBeenCalledWith('tenant-a', 'artifact-1', expect.objectContaining({
+      precheckId: 'file-precheck', confirmOverwrite: 'SalesDB', options: expect.objectContaining({ files: { paths: null, relativeDirectory: '' } }),
+    }), expect.any(String)))
+    expect(await screen.findByText('File restore started')).toBeInTheDocument()
+  })
+
+  it('restores only selected paths under an alternate configured root and invalidates stale prechecks', async () => {
+    renderWithClient(<Routes><Route path="/tenants/:tenantId/artifacts/:id/restore" element={<RestoreWizardPage />} /></Routes>, '/tenants/tenant-a/artifacts/artifact-1/restore')
+    const root = await screen.findByRole('textbox', { name: 'Hedef dosya kaynağı referansı' })
+    fireEvent.change(root, { target: { value: 'recovery' } })
+    fireEvent.change(screen.getByLabelText('Hedef göreli klasör'), { target: { value: '../escape' } })
+    expect(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/ })).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('Hedef göreli klasör'), { target: { value: 'restored/2026' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'Seçili dosya ve klasörler' }))
+    expect(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/ })).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('Geri yüklenecek göreli yollar'), { target: { value: 'reports\nnotes.txt' } })
+    fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/ }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Dosyaları geri yükle' })).toBeEnabled())
+    expect(RestoreApi.startRestorePrecheck).toHaveBeenCalledWith('tenant-a', 'artifact-1', expect.objectContaining({
+      databaseName: 'recovery', mode: 'NewDatabase', options: expect.objectContaining({ files: { paths: ['reports', 'notes.txt'], relativeDirectory: 'restored/2026' } }),
+    }), expect.any(String))
+    fireEvent.change(screen.getByLabelText('Geri yüklenecek göreli yollar'), { target: { value: 'other.txt' } })
+    expect(screen.getByRole('button', { name: 'Dosyaları geri yükle' })).toBeDisabled()
+    expect(RestoreApi.startRestore).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: /Ön Kontrolü Çalıştır/ }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Dosyaları geri yükle' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Dosyaları geri yükle' }))
+    await waitFor(() => expect(RestoreApi.startRestore).toHaveBeenCalledWith('tenant-a', 'artifact-1', expect.objectContaining({
+      databaseName: 'recovery', precheckId: 'file-precheck', options: expect.objectContaining({ files: { paths: ['other.txt'], relativeDirectory: 'restored/2026' } }),
+    }), expect.any(String)))
+  })
+
+  it('keeps the same idempotency key when a precheck request has an uncertain outcome', async () => {
+    vi.mocked(RestoreApi.startRestorePrecheck).mockRejectedValueOnce(new Error('timeout')).mockResolvedValue(passed)
+    renderWithClient(<Routes><Route path="/tenants/:tenantId/artifacts/:id/restore" element={<RestoreWizardPage />} /></Routes>, '/tenants/tenant-a/artifacts/artifact-1/restore')
+    const check = await screen.findByRole('button', { name: /Ön Kontrolü Çalıştır/ })
+    fireEvent.click(check)
+    await waitFor(() => expect(check).toBeEnabled())
+    fireEvent.click(check)
+    await waitFor(() => expect(RestoreApi.startRestorePrecheck).toHaveBeenCalledTimes(2))
+    const calls = vi.mocked(RestoreApi.startRestorePrecheck).mock.calls
+    expect(calls[1][3]).toBe(calls[0][3])
+  })
+
+  it('disables original location when its source-agent mapping is unavailable', async () => {
+    vi.mocked(RestoreApi.getRestoreTargets).mockResolvedValue({ ...sampleTargets, engine: 'file-system', targets: [] })
+    renderWithClient(<Routes><Route path="/tenants/:tenantId/artifacts/:id/restore" element={<RestoreWizardPage />} /></Routes>, '/tenants/tenant-a/artifacts/artifact-1/restore')
+    expect(await screen.findByRole('radio', { name: 'Özgün konum' })).toBeDisabled()
+    expect(screen.getByRole('radio', { name: 'Alternatif konum' })).toBeChecked()
+  })
+})

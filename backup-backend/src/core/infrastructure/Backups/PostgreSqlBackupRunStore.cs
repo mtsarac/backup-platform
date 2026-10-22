@@ -27,7 +27,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
 {
     // Arbitrary fixed application key for the claim critical section.
     private const long ClaimLockKey = 0x4250_434C_4149_4D01;
-    private static readonly BackupStatus[] ActiveStatuses = [BackupStatus.Pending, BackupStatus.Leased, BackupStatus.Running, BackupStatus.RetryPending];
+    private static readonly BackupStatus[] ActiveStatuses = [BackupStatus.Pending, BackupStatus.Leased, BackupStatus.Running, BackupStatus.RetryPending, BackupStatus.Paused];
     private readonly BackupExecutionOptions _limits = limits ?? new BackupExecutionOptions();
 
     /// <summary>A sample in [0,1) for retry jitter.</summary>
@@ -189,6 +189,33 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         await transaction.CommitAsync(cancellationToken);
         return run;
     }
+    public async Task<BackupMutationResult> SetPauseAsync(TenantId tenantId, Guid runId, bool resume, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var owner = await context.BackupRuns.AsNoTracking().Where(x => x.TenantId == tenantId && x.Id == runId).Select(x => x.AgentId).SingleOrDefaultAsync(cancellationToken);
+        if (owner is null) return BackupMutationResult.NotFound;
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        if (!await LockAgentAsync(context, tenantId, owner, cancellationToken)) return BackupMutationResult.NotFound;
+        var run = await Runs(context).SingleAsync(x => x.TenantId == tenantId && x.Id == runId, cancellationToken);
+        try
+        {
+            if (resume) run.Resume(now); else run.RequestPause();
+        }
+        catch (InvalidOperationException) { return BackupMutationResult.Conflict; }
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return BackupMutationResult.Accepted;
+    }
+    public async Task<IReadOnlyList<TransferCheckpoint>> GetCheckpointsAsync(TenantId tenantId, Guid attemptId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        return await context.Set<TransferCheckpoint>().AsNoTracking().Where(x => x.TenantId == tenantId && x.AttemptId == attemptId).ToListAsync(cancellationToken);
+    }
+    public async Task<TenantId?> FindRunTenantAsync(Guid runId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        return await context.BackupRuns.AsNoTracking().Where(x => x.Id == runId).Select(x => x.TenantId).SingleOrDefaultAsync(cancellationToken);
+    }
     public async Task<BackupRetryResult> RetryRunAsync(TenantId tenantId, Guid runId, DateTimeOffset now, CancellationToken cancellationToken, UserId? actor = null)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
@@ -278,9 +305,9 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         foreach (var candidateId in candidateIds)
         {
             var candidate = await Runs(context).SingleAsync(run => run.TenantId == tenantId && run.Id == candidateId, cancellationToken);
-            if (candidate.Configuration.Engine == "postgres" && !await context.AgentCapabilities.AsNoTracking().AnyAsync(
+            if (candidate.Configuration.Engine is "postgres" or "file-system" && !await context.AgentCapabilities.AsNoTracking().AnyAsync(
                 capability => capability.TenantId == tenantId && capability.AgentId == agentId &&
-                    capability.Identifier == "postgres.backup.full" && capability.Support == BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, cancellationToken)) continue;
+                    capability.Identifier == candidate.Configuration.Engine + ".backup.full" && capability.Support == BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, cancellationToken)) continue;
             // A retry or a queued run reaches an agent without passing admission again, so the capability is fenced here too: such a run waits for an agent that can execute it.
             supportsMultiDestination ??= await StorageTargetGate.SupportsMultiDestinationAsync(context, tenantId, agentId, cancellationToken);
             if (supportsMultiDestination != true) continue;
@@ -328,12 +355,25 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
     public Task<BackupMutationResult> StartAttemptAsync(BackupLeaseCommand command, CancellationToken cancellationToken) =>
         MutateAsync(command, run => run.Start(command.LeaseToken, command.Now, command.SoftwareVersion!, command.ProtocolVersion!, command.Platform!), cancellationToken);
     public Task<BackupMutationResult> ReportProgressAsync(BackupLeaseCommand command, BackupProgress progress, CancellationToken cancellationToken) =>
-        MutateAsync(command, run => run.Progress(command.LeaseToken, command.Now, progress.Stage, progress.Percent), cancellationToken);
+        MutateAsync(command, run => run.Progress(command.LeaseToken, command.Now, progress.Stage, progress.Percent), cancellationToken,
+            progress.Checkpoint is not { } checkpoint ? null : async (context, run) =>
+            {
+                if (!run.CurrentAttempt.HasLease(command.LeaseToken, command.Now)) throw new InvalidOperationException("Stale checkpoint.");
+                if (!run.Configuration.Destinations.Any(d => d.StorageProvider == checkpoint.StorageProvider && d.StorageConnectionId == checkpoint.DestinationId))
+                    throw new ArgumentException("Checkpoint destination is outside the snapshot.");
+                var rows = context.Set<TransferCheckpoint>();
+                var previous = await rows.SingleOrDefaultAsync(x => x.TenantId == command.TenantId && x.AttemptId == command.AttemptId &&
+                    x.StorageProvider == checkpoint.StorageProvider && x.DestinationId == checkpoint.DestinationId, cancellationToken);
+                if (previous is not null) rows.Remove(previous);
+                if (previous is not null) await context.SaveChangesAsync(cancellationToken);
+                rows.Add(new TransferCheckpoint(command.TenantId, command.AttemptId, checkpoint.StorageProvider, checkpoint.DestinationId,
+                    checkpoint.VerifiedByteOffset, checkpoint.ProviderState, command.Now));
+            });
     public Task<BackupMutationResult> RecordTransferAsync(BackupLeaseCommand command, BackupTransferIntent transfer, CancellationToken cancellationToken) =>
         MutateAsync(command, run =>
         {
             var destination = run.Configuration.Destinations.SingleOrDefault(d => d.StorageConnectionId == transfer.StorageConnectionId);
-            if (destination is not { StorageProvider: "sftp" or "google-drive", StorageExecutionLocation: BackupStorageExecutionLocation.Backend } ||
+            if (destination is not { StorageProvider: "sftp" or "google-drive" or "s3" or "smb", StorageExecutionLocation: BackupStorageExecutionLocation.Backend } ||
                 !ManagedBackupLayout.TryParseStorageKey(transfer.Key, out var layout) || layout is null || layout.IsPartial ||
                 layout.TenantId != command.TenantId.Value || layout.JobId != run.JobId || layout.RunId != run.Id || layout.AttemptId != command.AttemptId)
                 throw new ArgumentException("The upload intent does not belong to this attempt.");
@@ -346,6 +386,12 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         }, cancellationToken);
     public Task<BackupMutationResult> CompleteAttemptAsync(BackupLeaseCommand command, ApplicationCompletion completion, CancellationToken cancellationToken)
     {
+        if (completion.Outcome == "Paused")
+        {
+            if (!Enum.TryParse<TransferPauseReason>(completion.ReasonCode, out var reason) || !Enum.IsDefined(reason))
+                return Task.FromResult(BackupMutationResult.Conflict);
+            return MutateAsync(command, run => run.Pause(command.LeaseToken, command.Now, reason), cancellationToken);
+        }
         // Replicas the agent already transferred are carried across the completion under the same agent lock; each destination is resolved from the run's snapshot when the domain completion is mapped.
         var connections = new Dictionary<string, Guid>(StringComparer.Ordinal);
         IReadOnlyList<BackupArtifactResult> retained = [];
@@ -377,7 +423,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         var mutation = await MutateAsync(command, run =>
         {
             run.Renew(command.LeaseToken, command.Now, leaseDuration);
-            result = new BackupLeaseResult(run.CurrentAttempt.LeaseExpiresAt!.Value, run.CancellationRequestedAt.HasValue);
+            result = new BackupLeaseResult(run.CurrentAttempt.LeaseExpiresAt!.Value, run.CancellationRequestedAt.HasValue, run.CurrentAttempt.PauseRequested);
         }, cancellationToken);
         return mutation == BackupMutationResult.Accepted ? result : null;
     }
@@ -391,8 +437,9 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         foreach (var attempt in stale)
         {
             var changed = false;
+            var retained = await scan.Set<TransferCheckpoint>().AnyAsync(x => x.TenantId == attempt.TenantId && x.AttemptId == attempt.Id, cancellationToken);
             var result = await MutateAsync(new BackupLeaseCommand(attempt.TenantId, attempt.AgentId, attempt.Id, Guid.Empty, now),
-                run => changed = run.Expire(now, Jitter()), cancellationToken);
+                run => changed = run.Expire(now, Jitter(), retained), cancellationToken);
             if (result == BackupMutationResult.Accepted && changed) expired++;
         }
         return expired;
@@ -433,10 +480,13 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         if (run is null) return BackupMutationResult.NotFound;
         // Only the run's current attempt can be addressed: once a retry exists, every callback of an older attempt is stale.
         if (run.CurrentAttempt.Id != command.AttemptId) return BackupMutationResult.Conflict;
-        if (prepare is not null) await prepare(context, run);
         var wasTerminal = run.IsTerminal;
         var attemptWasTerminal = run.CurrentAttempt.IsTerminal;
-        try { mutate(run); }
+        try
+        {
+            if (prepare is not null) await prepare(context, run);
+            mutate(run);
+        }
         catch (InvalidOperationException) { return BackupMutationResult.Conflict; }
         catch (ArgumentException) { return BackupMutationResult.Conflict; }
         BackupAudit.RecordCompletion(context, run, wasTerminal, attemptWasTerminal, command.Now);
@@ -549,7 +599,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
                     layout.TenantId != command.TenantId.Value || layout.JobId != run.JobId || layout.RunId != run.Id || layout.AttemptId != command.AttemptId)
                     throw new ArgumentException("An orphan requires artifact metadata and an object key owned by this attempt.");
                 // The object exists physically but never verified: it is recorded as a Failed replica so its bytes stay accounted for and retention can remove it.
-                var target = destination.StorageProvider is "sftp" or "google-drive" ? connection.ToString("D") : destination.StorageProvider;
+                var target = destination.StorageProvider is "sftp" or "google-drive" or "s3" or "smb" ? connection.ToString("D") : destination.StorageProvider;
                 var orphan = NewReplica(destination, connection, artifact.Id, target, report.Key!, artifact.SizeBytes, artifact.ArtifactChecksum, artifact.ChecksumAlgorithm,
                     "Failed", "None", report.CompletedAt, null);
                 artifact.AddReplica(orphan);

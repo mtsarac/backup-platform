@@ -16,10 +16,10 @@ public sealed class AgentCapabilityCatalogTests
         var supported = catalog.Capabilities.Where(c => c.Support == AgentCapabilitySupportNames.Supported).Select(c => c.Identifier).Order(StringComparer.Ordinal);
         var unsupported = catalog.Capabilities.Where(c => c.Support == AgentCapabilitySupportNames.Unsupported).Select(c => c.Identifier).Order(StringComparer.Ordinal);
         Assert.Equal(
-            ["backup.multi-destination", "backup.quota-bounded-upload", "backup.upload-bandwidth-limit", "discovery.database-inventory", "mssql.backup.checksum", "mssql.backup.compression", "mssql.backup.copy-only", "mssql.backup.full", "mssql.restore.database", "mssql.restore.discovery", "mssql.restore.precheck", "mssql.restore.verification", "mssql.restore.verify-only",
-             "postgres.backup.checksum", "postgres.backup.compression", "postgres.backup.copy-only", "postgres.backup.full", "postgres.restore.discovery", "postgres.restore.full", "postgres.restore.precheck", "postgres.restore.verification", "postgres.restore.verify", "storage.agent-direct", "storage.backend-relay", "storage.download"], supported);
+            ["backup.multi-destination", "backup.quota-bounded-upload", "backup.three-two-one", "backup.upload-bandwidth-limit", "discovery.database-inventory", "file-system.backup.full", "file-system.restore.discovery", "file-system.restore.full", "file-system.restore.precheck", "mssql.backup.checksum", "mssql.backup.compression", "mssql.backup.copy-only", "mssql.backup.full", "mssql.restore.database", "mssql.restore.discovery", "mssql.restore.precheck", "mssql.restore.verification", "mssql.restore.verify-only",
+             "postgres.backup.checksum", "postgres.backup.compression", "postgres.backup.copy-only", "postgres.backup.full", "postgres.restore.discovery", "postgres.restore.full", "postgres.restore.precheck", "postgres.restore.verification", "postgres.restore.verify", "storage.agent-direct", "storage.backend-relay", "storage.capacity-probe", "storage.download", "storage.s3", "storage.smb"], supported);
         Assert.Equal(["mssql.backup.differential", "mssql.backup.log", "postgres.backup.differential", "postgres.backup.incremental", "postgres.backup.wal"], unsupported);
-        Assert.Equal(30, catalog.Capabilities.Count);
+        Assert.Equal(38, catalog.Capabilities.Count);
         Assert.All(catalog.Capabilities.Where(c => c.Support == AgentCapabilitySupportNames.Supported),
             c => Assert.Equal("agent", Assert.Single(c.Metadata!, entry => entry.Key == "scope").Value));
         Assert.Equal(AgentCapabilityRevision.Compute(catalog.Capabilities), catalog.Revision);

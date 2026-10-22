@@ -53,6 +53,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
   function updateDestinations(newDestinations: BackupDestination[], newRequiredCount?: number) {
     let nextCount = newRequiredCount ?? requiredCount
     if (nextCount > newDestinations.length) nextCount = newDestinations.length
+    if (configuration.enforceThreeTwoOne) nextCount = Math.max(3, nextCount)
     if (nextCount < 1) nextCount = 1
 
     onChange({
@@ -71,7 +72,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
   }
 
   function handleRemove(index: number) {
-    if (destinations.length <= 1) return
+    if (destinations.length <= (configuration.enforceThreeTwoOne ? 3 : 1)) return
     const wasPrimary = destinations[index].isPrimary
     const remaining = destinations.filter((_, i) => i !== index)
     if (wasPrimary && remaining.length > 0) {
@@ -182,6 +183,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
                     <button
                       type="button"
                       aria-label={tx("{0} hedefini kaldır", { "0": destProv?.displayName ?? dest.storageProvider })}
+                      disabled={Boolean(configuration.enforceThreeTwoOne) && destinations.length <= 3}
                       onClick={() => handleRemove(index)}
                       className="text-xs text-destructive hover:underline px-2 py-1 rounded hover:bg-surface"
                     >{tx("Kaldır")}</button>
@@ -241,7 +243,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
             <input
               id="required-replica-count"
               type="number"
-              min={1}
+              min={configuration.enforceThreeTwoOne ? 3 : 1}
               max={destinations.length}
               value={requiredCount}
               className={selectClass}
@@ -254,10 +256,25 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
               {destinations.length}{' '}{tx("hedeften en az")}{' '}{requiredCount}{' '}{tx("tanesi doğrulanmalıdır.")}</p>
           </div>
         </div>
-
         {destinations.length > 1 && (
-          <div role="status" className="rounded-md border border-warning/40 bg-warning/10 p-3 text-xs text-warning">{tx("Multi-destination backup execution is not yet available. This configuration can be saved, but backup runs cannot start until replication support is enabled.")}</div>
+          <p className="rounded-md border border-warning/40 bg-warning-subtle/30 px-3 py-2 text-xs text-text-heading">
+            {tx('Multi-destination backup execution is not yet available. This configuration can be saved, but backup runs cannot start until replication support is enabled.')}
+          </p>
         )}
+
+        <label htmlFor="enforce-three-two-one" className="flex items-center gap-2 text-sm">
+          <input id="enforce-three-two-one" type="checkbox" checked={Boolean(configuration.enforceThreeTwoOne)}
+            disabled={destinations.length < 3}
+            onChange={event => onChange({ ...configuration, enforceThreeTwoOne: event.target.checked,
+              requiredVerifiedReplicaCount: event.target.checked ? Math.max(3, requiredCount) : requiredCount })} />
+          {tx('3-2-1 koruması: 3 doğrulanmış kopya, 2 medya sınıfı, 1 doğrulanmış off-site')}
+        </label>
+        <p className="text-xs text-text-muted">{tx('En az üç hedef ekleyin. Bağlantılarda fiziksel site ve medya sınıfını tanımlayın; uzak bağlantının erişim testini çalıştırın. Aynı site veya aynı medya üzerindeki kopyalar tek başına 3-2-1 sağlamaz.')}</p>
+        {configuration.enforceThreeTwoOne && <div className="space-y-1">
+          <label htmlFor="backup-source-site" className="block text-sm font-medium">{tx('Kaynak fiziksel site')}</label>
+          <input id="backup-source-site" className={selectClass} required maxLength={64} pattern="[A-Za-z0-9_-]+"
+            value={configuration.sourceSite ?? ''} onChange={event => onChange({ ...configuration, sourceSite: event.target.value })} />
+        </div>}
       </div>
     </>
   )

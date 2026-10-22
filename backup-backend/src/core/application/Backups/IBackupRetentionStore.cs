@@ -38,10 +38,10 @@ public sealed record BackupAttemptActivity(Guid AttemptId, TenantId TenantId, Gu
     /// Whether anything about the attempt's run is still in flight: queued, leased, running or waiting for a retry. Files of such a run are never
     /// cleaned up, including those of an attempt of it that already failed.
     /// </summary>
-    public bool RunIsActive => RunStatus is BackupStatus.Pending or BackupStatus.Leased or BackupStatus.Running or BackupStatus.RetryPending;
+    public bool RunIsActive => RunStatus is BackupStatus.Pending or BackupStatus.Leased or BackupStatus.Running or BackupStatus.RetryPending or BackupStatus.Paused;
 
     /// <summary>The attempt itself holds (or may still use) a lease.</summary>
-    public bool AttemptIsLive => AttemptStatus is BackupStatus.Pending or BackupStatus.Leased or BackupStatus.Running;
+    public bool AttemptIsLive => AttemptStatus is BackupStatus.Pending or BackupStatus.Leased or BackupStatus.Running or BackupStatus.Paused;
 
     /// <summary>A repair may still be writing files of an otherwise terminal backup attempt.</summary>
     public bool RepairIsActive { get; init; }

@@ -212,6 +212,7 @@ public sealed record FullBackupOptions
 
     /// <summary>The engine's native backup compression.</summary>
     public BackupOptionMode Compression { get; }
+    public FileBackupSelection? Files { get; init; }
 
     private static BackupOptionMode Validate(BackupOptionMode mode, string name) =>
         Enum.IsDefined(mode) ? mode : throw new ArgumentOutOfRangeException(name, mode, "Unknown option mode.");

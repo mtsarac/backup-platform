@@ -1,6 +1,7 @@
 import { tx } from '@/lib/i18n'
 import type { BackupConfiguration, RetryPolicy, Schedule } from '@/features/backup-jobs/types'
 import { loginErrors } from '@/features/backup-jobs/database-login-validation'
+import { validFilePaths } from './file-path-list'
 
 export const jobSteps = ['Genel', 'Kaynak', 'Depolama', 'Zamanlama', 'Saklama & seçenekler', 'Özet'] as const
 export const summaryStep = jobSteps.length - 1
@@ -15,8 +16,8 @@ export function scheduleLabel(schedule: Schedule | null | undefined) {
 // Field-name prefixes owned by each step; server field errors are routed back to the step that shows them.
 const owners: readonly (readonly string[])[] = [
   ['name', 'agentId', 'enabled'],
-  ['configuration.engine', 'configuration.host', 'configuration.database', 'configuration.databaseCredentialReference', 'configuration.databaseLogin.userName', 'configuration.databaseLogin.password', 'configuration.port', 'configuration.integratedSecurity', 'configuration.encrypt', 'configuration.trustServerCertificate'],
-  ['configuration.destinations', 'configuration.requiredVerifiedReplicaCount', 'configuration.storagePrefix', 'configuration.stagingReference'],
+  ['configuration.engine', 'configuration.host', 'configuration.database', 'configuration.files', 'configuration.databaseCredentialReference', 'configuration.databaseLogin.userName', 'configuration.databaseLogin.password', 'configuration.port', 'configuration.integratedSecurity', 'configuration.encrypt', 'configuration.trustServerCertificate'],
+  ['configuration.destinations', 'configuration.requiredVerifiedReplicaCount', 'configuration.enforceThreeTwoOne', 'configuration.sourceSite', 'configuration.storagePrefix', 'configuration.stagingReference'],
   ['cronExpression', 'timeZone', 'missedRunGraceSeconds', 'overlapPolicy', 'retryPolicy.'],
   ['retention.', 'configuration.copyOnly', 'configuration.checksumPolicy', 'configuration.compressionPolicy', 'configuration.encryptionPolicy'],
 ]
@@ -39,6 +40,14 @@ export function validateStep(step: number, values: StepValues): Record<string, s
     if (!values.agentId) errors.agentId = tx('Bir Agent seçin.')
   } else if (step === 1) {
     const { host, database, port } = values.configuration
+    if (values.configuration.engine === 'file-system') {
+      if (!/^[A-Za-z0-9_.-]{1,128}$/.test(database)) errors['configuration.database'] = tx('Geçerli bir dosya kaynağı referansı girin.')
+      const files = values.configuration.files
+      if (!files || !validFilePaths(files.paths)) errors['configuration.files.paths'] = tx('1–256 geçerli göreli yol girin.')
+      if (files && !validFilePaths(files.includes, false, false)) errors['configuration.files.includes'] = tx('En fazla 256 geçerli göreli filtre girin.')
+      if (files && !validFilePaths(files.excludes, false, false)) errors['configuration.files.excludes'] = tx('En fazla 256 geçerli göreli filtre girin.')
+      return errors
+    }
     if (!host.trim()) errors['configuration.host'] = tx('Database sunucusunun host adını girin.')
     if (!database.trim()) errors['configuration.database'] = tx('Database adını girin.')
     if (values.configuration.engine === 'postgres') {

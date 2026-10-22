@@ -4,7 +4,7 @@ export type ProviderTopology = 'AgentDirect' | 'BackendRelayed'
 export type ExecutionLocation = 'Agent' | 'Backend'
 export type ConnectionOwnership = 'PlatformManaged' | 'TenantManaged'
 export type ConfigFieldKind = 'Text' | 'Number' | 'Boolean'
-export type TestMode = 'BackendRoundTrip' | 'AgentSide' | 'None'
+export type TestMode = 'BackendRoundTrip' | 'BackendReadAccess' | 'AgentSide' | 'None'
 export type TestStatus = 'Succeeded' | 'Failed' | 'NotTestable'
 
 export const connectionOwnerships: readonly ConnectionOwnership[] = ['PlatformManaged', 'TenantManaged']

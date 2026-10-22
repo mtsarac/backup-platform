@@ -32,10 +32,19 @@ public static class BackupInputValidation
         Check(Text(request.Name, 200), "name");
         Check(request.AgentId != Guid.Empty, "agentId");
         Check(c is not null, "configuration");
-        Check(c!.Engine is "mssql" or "postgres", "configuration.engine");
+        Check(c!.Engine is "mssql" or "postgres" or "file-system", "configuration.engine");
         Check(Text(c.Database, 128), "configuration.database");
         Check(c.Engine != "postgres" || c.Database == c.Database.Trim() && System.Text.Encoding.UTF8.GetByteCount(c.Database) <= 63, "configuration.database");
         Check(c.Engine != "postgres" || !c.IntegratedSecurity, "configuration.integratedSecurity");
+        if (c.Engine == "file-system")
+        {
+            Check(Reference(c.Database), "configuration.database");
+            Check(c.Host == "localhost" && c.Port is null && c.IntegratedSecurity && c.DatabaseCredentialReference is null && c.DatabaseLogin is null, "configuration.host");
+            Check(c.Files is not null, "configuration.files");
+            try { new FileBackupPolicy { Paths = c.Files!.Paths, Includes = c.Files.Includes, Excludes = c.Files.Excludes, SymlinkPolicy = c.Files.SymlinkPolicy }.Validate(); }
+            catch (ArgumentException) { throw new InvalidBackupJobException("configuration.files"); }
+        }
+        else Check(c.Files is null, "configuration.files");
         Check(Text(c.Host, 253) && c.Host.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '.' or '-' or '_' or '\\' or ':'), "configuration.host");
         Check(c.Port is null or >= 1 and <= 65535, "configuration.port");
         Check(c.StagingReference == "default", "configuration.stagingReference");
@@ -54,13 +63,15 @@ public static class BackupInputValidation
         {
             var d = destinations[i];
             var prefix = $"configuration.destinations[{i}].";
-            Check(d.StorageProvider is "local" or "central" or "sftp" or "google-drive", $"{prefix}storageProvider");
+            Check(d.StorageProvider is "local" or "central" or "sftp" or "google-drive" or "s3" or "smb", $"{prefix}storageProvider");
             Check(d.StorageExecutionLocation is "Backend" or "Agent" && (d.StorageExecutionLocation != "Agent" || d.StorageProvider == "local"), $"{prefix}storageExecutionLocation");
-            Check(d.StorageProvider is not ("sftp" or "google-drive") || c.StoragePrefix == string.Empty, "configuration.storagePrefix");
-            Check(d.StorageProvider is not ("sftp" or "google-drive") || d.StorageConnectionId is { } connection && connection != Guid.Empty, $"{prefix}storageConnectionId");
+            Check(d.StorageProvider is not ("sftp" or "google-drive" or "s3" or "smb") || c.StoragePrefix == string.Empty, "configuration.storagePrefix");
+            Check(d.StorageProvider is not ("sftp" or "google-drive" or "s3" or "smb") || d.StorageConnectionId is { } connection && connection != Guid.Empty, $"{prefix}storageConnectionId");
         }
 
         Check(c.RequiredVerifiedReplicaCount >= 1 && c.RequiredVerifiedReplicaCount <= destinations.Count, "configuration.requiredVerifiedReplicaCount");
+        Check(!c.EnforceThreeTwoOne || c.RequiredVerifiedReplicaCount >= 3 && c.SourceSite is { Length: > 0 and <= 64 }
+            && c.SourceSite.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '-' or '_'), "configuration.sourceSite");
         if (request.RetryPolicy is { } retry)
         {
             Check(retry.MaxAttempts is null or >= 1 and <= BackupRetryPolicy.MaximumAttemptsLimit, "retryPolicy.maxAttempts");
@@ -83,7 +94,9 @@ public static class BackupInputValidation
     }
 
     public static bool IsValidProgress(BackupTaskProgressRequest request) => request.LeaseToken != Guid.Empty && Stages.Contains(request.Stage) &&
-        (request.Percent is null || double.IsFinite(request.Percent.Value) && request.Percent is >= 0 and <= 100);
+        (request.Percent is null || double.IsFinite(request.Percent.Value) && request.Percent is >= 0 and <= 100) &&
+        (request.Checkpoint is not { } checkpoint || checkpoint.DestinationId != Guid.Empty && checkpoint.VerifiedByteOffset >= 0 &&
+            checkpoint.StorageProvider is { Length: > 0 and <= 32 } && checkpoint.ProviderState is not { Length: > 2097152 });
 
     private const int MaxDestinations = 16;
 
@@ -94,6 +107,8 @@ public static class BackupInputValidation
     public static bool IsValidCompletion(BackupTaskCompletionRequest request, BackupConfiguration configuration)
     {
         if (request.LeaseToken == Guid.Empty || request.Destinations is not { Count: <= MaxDestinations } || request.Destinations.Any(d => d is null)) return false;
+        if (request.Status == "Paused") return request.Artifact is null && request.Destinations.Count == 0 &&
+            request.FailureCode is "Operator" or "TimeRule" or "PausedByNetworkError";
         var snapshot = configuration.Destinations;
         if (request.Status == "Cancelled" && request.FailureCode is not (null or "Cancelled")) return false;
         if (request.Status == "Failed" && (request.FailureCode is null || !BackupFailureCodes.IsAgentReportable(request.FailureCode))) return false;
@@ -103,10 +118,18 @@ public static class BackupInputValidation
         if (request.Status == "Succeeded" && request.FailureCode is not null) return false;
         if (a.SizeBytes <= 0 || a.CreatedAt == default || a.ChecksumAlgorithm != "sha256" || !Checksum(a.SourceChecksum) || !Checksum(a.ArtifactChecksum) ||
             !ValidEncryption(a) || a.Replicas is null || a.Replicas.Count > snapshot.Count || !Metadata(a, configuration)) return false;
-        if (request.Status == "Succeeded" ? a.Replicas.Count == 0 : a.Replicas.Count != 0 || !request.Destinations.Any(d => d.ObjectMayRemain)) return false;
+        var policyFailureWithCopies = configuration.EnforceThreeTwoOne && request.Status == "Failed" && request.FailureCode == BackupFailureCodes.StorageUnavailable
+            && a.Replicas.Count > 0 && (!BackupReplicationEvaluator.MeetsThreeTwoOne(
+                snapshot.Where(destination => a.Replicas.Any(replica => replica.StorageProvider == destination.StorageProvider
+                    && replica.StorageConnectionId == destination.StorageConnectionId)).Select(d => (d.MediaClass, d.Site, d.OffsiteVerified)), configuration.SourceSite)
+                || a.Replicas.Count < configuration.RequiredVerifiedReplicaCount);
+        if (request.Status == "Succeeded" ? a.Replicas.Count == 0 : !policyFailureWithCopies && (a.Replicas.Count != 0 || !request.Destinations.Any(d => d.ObjectMayRemain))) return false;
+        if (request.Status == "Succeeded" && configuration.EnforceThreeTwoOne && (a.Replicas.Count < configuration.RequiredVerifiedReplicaCount || !BackupReplicationEvaluator.MeetsThreeTwoOne(
+            snapshot.Where(destination => a.Replicas.Any(replica => replica.StorageProvider == destination.StorageProvider
+                && replica.StorageConnectionId == destination.StorageConnectionId)).Select(d => (d.MediaClass, d.Site, d.OffsiteVerified)), configuration.SourceSite))) return false;
         return a.Replicas.All(r => r is not null && Destination(snapshot, r.StorageProvider, r.StorageConnectionId) is { } destination && Reference(r.StorageTarget) &&
             (destination.StorageExecutionLocation != BackupStorageExecutionLocation.Agent || r.StorageTarget == (destination.StorageTarget ?? r.StorageProvider)) &&
-            (destination.StorageProvider is not ("sftp" or "google-drive") || r.StorageTarget == destination.StorageConnectionId?.ToString("D")) &&
+            (destination.StorageProvider is not ("sftp" or "google-drive" or "s3" or "smb") || r.StorageTarget == destination.StorageConnectionId?.ToString("D")) &&
             Text(r.Key, StorageObjectKey.MaxLength) && SafeKey(r.Key) && r.SizeBytes == a.SizeBytes && r.ChecksumAlgorithm == a.ChecksumAlgorithm &&
             Checksum(r.Checksum) && r.Checksum.Equals(a.ArtifactChecksum, StringComparison.OrdinalIgnoreCase) && r.VerificationState == "Verified" &&
             r.VerificationMethod is "ReadBack" or "ServerSideChecksum" && r.CreatedAt != default && r.VerifiedAt is not null && r.VerifiedAt >= r.CreatedAt) &&

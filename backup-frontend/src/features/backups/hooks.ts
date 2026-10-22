@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useVisibleTab } from '@/hooks/use-visible-tab'
 import { storageQueryKeys, useRefreshQuotaWhenFinished } from '@/features/storage/hooks'
 import { useTenant } from '@/features/tenancy/use-tenant'
-import { cancelBackup, getBackup, getBackups, retryBackup } from './api'
+import { cancelBackup, getBackup, getBackups, pauseBackup, resumeBackup, retryBackup } from './api'
 import { isActiveRun } from './presentation'
 import type { BackupRun, BackupRunFilters } from './types'
 
@@ -57,5 +57,7 @@ export function useBackupActions(id: string) {
   }
   const retry = useMutation({ mutationFn: () => retryBackup(tenantId, id), onSuccess, retry: false })
   const cancel = useMutation({ mutationFn: () => cancelBackup(tenantId, id), onSuccess, retry: false })
-  return { retry, cancel }
+  const pause = useMutation({ mutationFn: () => pauseBackup(tenantId, id), onSuccess, retry: false })
+  const resume = useMutation({ mutationFn: () => resumeBackup(tenantId, id), onSuccess, retry: false })
+  return { retry, cancel, pause, resume }
 }

@@ -43,6 +43,10 @@ function Assert-PurgeStore([string] $Path) {
 
 # Validate all purge targets before stopping/removing the service.
 if ($RemoveIdentity) { $StoreDirectory = Assert-PurgeStore $StoreDirectory }
+if (Get-ScheduledTask -TaskName 'BackupAgentUpdate' -ErrorAction SilentlyContinue) {
+    Stop-ScheduledTask -TaskName 'BackupAgentUpdate' -ErrorAction SilentlyContinue
+    Unregister-ScheduledTask -TaskName 'BackupAgentUpdate' -Confirm:$false
+}
 $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($service) {
     if ($service.Status -ne 'Stopped') {

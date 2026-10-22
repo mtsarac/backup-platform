@@ -10,6 +10,8 @@
     <ProjectReference Include="..\..\core\contracts\BackupPlatform.Contracts.csproj" />
     <ProjectReference Include="..\..\providers\storage\sftp\BackupPlatform.StorageProviders.Sftp.csproj" />
     <ProjectReference Include="..\..\providers\storage\google-drive\BackupPlatform.StorageProviders.GoogleDrive.csproj" />
+    <ProjectReference Include="..\..\providers\storage\s3\BackupPlatform.StorageProviders.S3.csproj" />
+    <ProjectReference Include="..\..\providers\storage\smb\BackupPlatform.StorageProviders.Smb.csproj" />
   </ItemGroup>
 
   <ItemGroup>

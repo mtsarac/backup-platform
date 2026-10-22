@@ -877,7 +877,7 @@ public sealed class BackupRetryPersistenceTests(PostgreSqlFixture fixture) : ICl
         await AssertViolationAsync(context, PostgresErrorCodes.CheckViolation,
             $"UPDATE backup_runs SET \"RetryMaxAttempts\" = 11 WHERE \"Id\" = {scheduled.Id}", "ck_backup_runs_retry_policy");
         await AssertViolationAsync(context, PostgresErrorCodes.CheckViolation,
-            $"UPDATE backup_runs SET \"Status\" = 9 WHERE \"Id\" = {scheduled.Id}", "ck_backup_runs_status");
+            $"UPDATE backup_runs SET \"Status\" = 10 WHERE \"Id\" = {scheduled.Id}", "ck_backup_runs_status");
         // A run waits for a retry exactly while it is RetryPending: schedule and state are tied to the status.
         await AssertViolationAsync(context, PostgresErrorCodes.CheckViolation,
             $"UPDATE backup_runs SET \"NextAttemptAt\" = {Due} WHERE \"Id\" = {pending.Id}", "ck_backup_runs_retry_schedule");

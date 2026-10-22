@@ -28,8 +28,8 @@ const columns: Column<PrecheckItem>[] = [
 ]
 
 /** The precheck verdict first, the individual checks second: what happened, and what the user may do next. */
-export function PrecheckResults({ data, failed, passed, onRecheck, recheckDisabled }: {
-  data: RestoreView; failed: boolean; passed: boolean; onRecheck: () => void; recheckDisabled: boolean
+export function PrecheckResults({ data, failed, passed, onRecheck, recheckDisabled, fileArchive = false }: {
+  data: RestoreView; failed: boolean; passed: boolean; onRecheck: () => void; recheckDisabled: boolean; fileArchive?: boolean
 }) {
   useLanguage()
   const items = data.result?.preCheck ?? []
@@ -45,8 +45,8 @@ export function PrecheckResults({ data, failed, passed, onRecheck, recheckDisabl
     {passed && warnings.length === 0 && <Notice tone="success" title={tx("Tüm ön kontroller başarıyla tamamlandı. Geri yükleme güvenle başlatılabilir.")} />}
     <DataTable rows={items} columns={columns} keyExtractor={(item) => `${item.checkId}:${item.reasonCode}:${item.status}:${items.indexOf(item)}`} emptyMessage={tx("Henüz kontrol sonucu bildirilmedi.")} />
     {source && <Facts columns={2}>
-      <Fact label={tx("Kaynak Database")}>{source.databaseName}</Fact>
-      <Fact label={tx("Hedef Database motoru sürümü")}>{data.result?.targetServer?.version ?? tx('Bilinmiyor')}</Fact>
+      <Fact label={fileArchive ? tx('Dosya kaynağı referansı') : tx("Kaynak Database")}>{source.databaseName}</Fact>
+      {!fileArchive && <Fact label={tx("Hedef Database motoru sürümü")}>{data.result?.targetServer?.version ?? tx('Bilinmiyor')}</Fact>}
       <Fact label={tx("Backup doğrulandı")}>{data.result?.backupVerified ? tx('Evet') : tx('Hayır')}</Fact>
       <Fact label={tx("Checksum doğrulandı")}>{data.result?.checksumVerified ? tx('Evet') : tx('Hayır')}</Fact>
     </Facts>}

@@ -69,8 +69,10 @@ public static class UploadBandwidthEndpoints
             minimumBytesPerSecond = UploadBandwidth.MinimumBytesPerSecond,
             maximumBytesPerSecond = UploadBandwidth.MaximumBytesPerSecond,
             tenant = new { bytesPerSecond = settings.Tenant, profileId = settings.TenantProfileId },
-            agents = settings.Agents.Select(pair => new { agentId = pair.Key, bytesPerSecond = pair.Value, profileId = settings.AgentProfiles?.GetValueOrDefault(pair.Key) }),
-            jobs = settings.Jobs.Select(pair => new { jobId = pair.Key, bytesPerSecond = pair.Value, profileId = settings.JobProfiles?.GetValueOrDefault(pair.Key) })
+            agents = settings.Agents.Keys.Union(settings.AgentProfiles?.Keys ?? []).Select(id =>
+                new { agentId = id, bytesPerSecond = settings.Agents.TryGetValue(id, out var rate) ? (long?)rate : null, profileId = settings.AgentProfiles?.GetValueOrDefault(id) }),
+            jobs = settings.Jobs.Keys.Union(settings.JobProfiles?.Keys ?? []).Select(id =>
+                new { jobId = id, bytesPerSecond = settings.Jobs.TryGetValue(id, out var rate) ? (long?)rate : null, profileId = settings.JobProfiles?.GetValueOrDefault(id) })
         });
     }
 
@@ -94,6 +96,10 @@ public static class UploadBandwidthEndpoints
         catch (ArgumentException exception)
         {
             return Results.BadRequest(new { error = "invalid_request", message = exception.Message });
+        }
+        catch (KeyNotFoundException)
+        {
+            return Results.NotFound();
         }
     }
 

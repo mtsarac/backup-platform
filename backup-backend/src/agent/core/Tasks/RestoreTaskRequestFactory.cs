@@ -80,7 +80,8 @@ public sealed class RestoreTaskRequestFactory(
                 })
             {
                 StorageOverride = task.Source.Access is "BackendRelayed" or "AgentDirect" ? storageFactory!.CreateRestore(task) : LocalVolumeOverride(task.Source),
-                Decryption = decryption
+                Decryption = decryption,
+                Files = task.Options.Files is { } files ? new FileRestoreSelection(files.Paths, files.RelativeDirectory) : null
             };
         }
         catch (ArgumentException)
@@ -151,7 +152,7 @@ public sealed class RestoreTaskRequestFactory(
 
     private static bool HasValidIdentityAndTarget(RestoreTaskSnapshot task) =>
         task.Version == 1 && task.OperationId != Guid.Empty && task.AttemptId != Guid.Empty && task.TenantId != Guid.Empty
-        && task.Engine is ("mssql" or "postgres")
+        && task.Engine is ("mssql" or "postgres" or "file-system")
         && task.LeaseToken != Guid.Empty && task.Target is not null
         && (task.Engine != "postgres" || !task.Target.IntegratedSecurity)
         && !string.IsNullOrWhiteSpace(task.Target.Host) && task.Target.Host.Length <= MaxHostLength
@@ -165,7 +166,9 @@ public sealed class RestoreTaskRequestFactory(
             || task.Source is null || task.Options is null
             || string.IsNullOrWhiteSpace(task.DatabaseName) || task.DatabaseName.Length > MaxDatabaseNameLength || task.DatabaseName.Any(char.IsControl)
             || task.Engine == "postgres" && System.Text.Encoding.UTF8.GetByteCount(task.DatabaseName) > 63
-            || !HasValidSource(task.Source))
+            || !HasValidSource(task.Source)
+            || task.Engine == "file-system" && (task.Target.Host != "localhost" || task.Target.Port is not null || !task.Target.IntegratedSecurity || task.Options.TerminateActiveConnections)
+            || task.Engine != "file-system" && task.Options.Files is not null)
         {
             throw new RestoreTaskRequestException(RestoreAgentFailureCodes.InvalidConfiguration);
         }
@@ -188,7 +191,7 @@ public sealed class RestoreTaskRequestFactory(
         && string.Equals(source.ChecksumAlgorithm, "sha256", StringComparison.Ordinal)
         && ((source.Access, source.StorageProvider, source.StorageExecutionLocation) is
             ("AgentLocal", "local", "Agent") or ("CentralStorage", "central", "Backend")
-            || (source.Access, source.StorageProvider, source.StorageExecutionLocation) is ("BackendRelayed" or "AgentDirect", "sftp" or "google-drive", "Backend" or "Agent")
+            || (source.Access, source.StorageProvider, source.StorageExecutionLocation) is ("BackendRelayed" or "AgentDirect", "sftp" or "google-drive" or "s3" or "smb", "Backend" or "Agent")
             && Guid.TryParse(source.StorageTarget, out var connectionId) && connectionId != Guid.Empty
             && storageFactory is not null);
 

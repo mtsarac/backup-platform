@@ -10,6 +10,7 @@ namespace BackupPlatform.Storage;
 public static class StorageTestCodes
 {
     public const string Ok = "ok";
+    public const string AccessVerified = "access_verified";
     public const string StorageNotConfigured = "storage_not_configured";
     public const string AgentSideStorage = "agent_side_storage";
     public const string ProviderNotImplemented = "provider_not_implemented";
@@ -265,4 +266,24 @@ public sealed class GoogleDriveConnectionTester(Func<StorageConnection, ISecretP
     }
 
     private static string CodeFor(StorageFailureKind kind) => CentralConnectionTester.CodeFor(kind);
+}
+
+public sealed class S3ConnectionTester(Func<StorageConnection, ISecretProvider, IStorageProvider> factory) : IStorageConnectionTester
+{
+    public string ProviderType => StorageProviderTypes.S3;
+    public async Task<StorageTestResult> TestAsync(StorageConnection connection, ISecretProvider secrets, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (factory(connection, secrets) is not IS3AccessChecker checker)
+                return new(StorageTestStatus.Failed, StorageTestCodes.IoError, "The S3 provider cannot verify bucket access.");
+            await checker.CheckAccessAsync(cancellationToken);
+            return new(StorageTestStatus.Succeeded, StorageTestCodes.AccessVerified,
+                "Authenticated bucket access and configured Object Lock were checked. Each backup independently verifies uploaded bytes and WORM retention.");
+        }
+        catch (StorageException error)
+        {
+            return new(StorageTestStatus.Failed, CentralConnectionTester.CodeFor(error.Kind), error.Message);
+        }
+    }
 }

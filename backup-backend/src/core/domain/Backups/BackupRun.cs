@@ -171,7 +171,7 @@ public sealed class BackupRun : ITenantOwned
         {
             case BackupStatus.Succeeded: return BackupManualRetryResult.Succeeded;
             case BackupStatus.Cancelled: return BackupManualRetryResult.Cancelled;
-            case BackupStatus.Pending or BackupStatus.Leased or BackupStatus.Running: return BackupManualRetryResult.InProgress;
+            case BackupStatus.Pending or BackupStatus.Leased or BackupStatus.Running or BackupStatus.Paused: return BackupManualRetryResult.InProgress;
         }
         if (!RetryPolicy.HasAttemptsRemaining(CurrentAttemptNumber)) return BackupManualRetryResult.AttemptsExhausted;
         AddAttempt(attemptId, now, now, "BackupRetryStarted");
@@ -196,10 +196,30 @@ public sealed class BackupRun : ITenantOwned
     }
     public void Renew(Guid token, DateTimeOffset now, TimeSpan duration) => CurrentAttempt.Renew(token, now, duration);
     public void Progress(Guid token, DateTimeOffset now, string stage, double? percent) => CurrentAttempt.Progress(token, now, stage, percent);
+    public void RequestPause() => CurrentAttempt.RequestPause();
+    public void Pause(Guid token, DateTimeOffset now, TransferPauseReason reason)
+    {
+        if (CancellationRequestedAt.HasValue) throw new InvalidOperationException("Cancellation is already requested.");
+        CurrentAttempt.Pause(token, now, reason);
+        Status = BackupStatus.Paused;
+        Fact("BackupRunPaused", CurrentAttempt.Id, now);
+    }
+    public void Resume(DateTimeOffset now)
+    {
+        CurrentAttempt.Resume();
+        Status = BackupStatus.Pending;
+        Fact("BackupRunResumed", CurrentAttempt.Id, now);
+    }
 
     /// <param name="jitter">A sample in [0,1) used to shorten a retry delay; the caller owns randomness so the domain stays deterministic.</param>
     public void Complete(Guid token, DateTimeOffset now, BackupCompletion completion, double jitter = 0)
     {
+        if (completion.Status != BackupStatus.Succeeded && completion.Artifact is { } artifact &&
+            artifact.Replicas.Any(replica => replica.VerificationState == "Verified") &&
+            !(Configuration.EnforceThreeTwoOne && completion.Status == BackupStatus.Failed &&
+              completion.FailureCode == BackupFailureCodes.StorageUnavailable &&
+              !BackupReplicationEvaluator.ForArtifact(Configuration, artifact.Replicas).PolicySatisfied))
+            throw new ArgumentException("Only a replication policy failure may retain verified copies from an unsuccessful attempt.");
         if (!CurrentAttempt.Complete(token, now, completion, RetentionPolicy)) return;
         AfterAttemptEnded(now, jitter);
     }
@@ -211,6 +231,9 @@ public sealed class BackupRun : ITenantOwned
         Fact("BackupCancellationRequested", CurrentAttempt.Id, now);
         switch (Status)
         {
+            case BackupStatus.Paused:
+                CurrentAttempt.Resume();
+                goto case BackupStatus.Pending;
             case BackupStatus.Pending:
                 CurrentAttempt.CancelPending(now);
                 EndCancelled(now);
@@ -222,9 +245,15 @@ public sealed class BackupRun : ITenantOwned
         }
     }
 
-    public bool Expire(DateTimeOffset now, double jitter = 0)
+    public bool Expire(DateTimeOffset now, double jitter = 0, bool retainTransfer = false)
     {
-        if (!CurrentAttempt.Expire(now)) return false;
+        if (!CurrentAttempt.Expire(now, retainTransfer)) return false;
+        if (CurrentAttempt.Status == BackupStatus.Paused)
+        {
+            Status = BackupStatus.Paused;
+            Fact("BackupRunPaused", CurrentAttempt.Id, now);
+            return true;
+        }
         AfterAttemptEnded(now, jitter);
         return true;
     }

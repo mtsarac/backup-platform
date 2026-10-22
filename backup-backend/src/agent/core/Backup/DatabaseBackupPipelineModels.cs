@@ -102,6 +102,7 @@ public sealed record DatabaseBackupPipelineRequest
     /// destinations can even be reached; what a run with fewer verified copies than required MEANS is the backend's replication compliance, not the engine's success.
     /// </summary>
     public int RequiredVerifiedReplicas { get; init; } = 1;
+    public Func<IReadOnlyList<BackupDestinationResult>, bool>? ReplicationPolicySatisfied { get; init; }
 
     /// <summary>Upper bound for the upload and verification of ONE destination; null selects <see cref="DefaultDestinationTimeout"/>. A destination that exceeds it fails alone.</summary>
     public TimeSpan? DestinationTimeout { get; init; }
@@ -113,6 +114,12 @@ public sealed record DatabaseBackupPipelineRequest
 
     /// <summary>Null means the job does not encrypt; otherwise handed to the artifact preparer unchanged.</summary>
     public ArtifactEncryption? Encryption { get; init; }
+    public Guid AttemptId { get; init; }
+    public bool ResumeTransfer { get; init; }
+    public CancellationToken PauseToken { get; init; }
+    public CancellationToken ShutdownToken { get; init; }
+    public IReadOnlyList<BackupPlatform.Contracts.Backups.TransferCheckpointContract> Checkpoints { get; init; } = [];
+    public Func<BackupPlatform.Contracts.Backups.TransferCheckpointContract, CancellationToken, Task>? RecordCheckpointAsync { get; init; }
 }
 
 /// <summary>One copy target of an execution. <see cref="StorageOverride"/> is a task-scoped (lease-bound, relayed) provider; <see cref="ConnectionId"/> is the snapshot destination it belongs to.</summary>
@@ -172,7 +179,8 @@ public enum DatabaseBackupStatus
 {
     Succeeded = 1,
     Failed,
-    Cancelled
+    Cancelled,
+    Paused
 }
 
 public enum BackupDestinationState
@@ -213,6 +221,7 @@ public sealed record DatabaseBackupPipelineResult
 
     /// <summary>Why the execution did not succeed; always set unless <see cref="Status"/> is Succeeded, and then Kind is Cancelled for cancellation.</summary>
     public BackupFailure? Failure { get; init; }
+    public string? PauseReason { get; init; }
 
     public DatabaseBackupType BackupType { get; init; } = DatabaseBackupType.Full;
 

@@ -111,18 +111,23 @@ public sealed class UploadBandwidthGovernorTests
     [Fact]
     public async Task The_upload_does_not_begin_until_a_slice_is_free()
     {
+        var time = new ScheduledTimeProvider(_time);
+        var governor = new UploadBandwidthGovernor(_client, new FakeCredentialStore(TestIdentity.Create()), Guid.NewGuid(), _lease, time);
         _client.OnUploadPolicy = _ => Policy(share: 0);
-        var start = _governor.BeginAsync(StorageTopology.AgentDirect, default);
-        await SettleAsync(TimeSpan.FromSeconds(3));
-        await SettleAsync(TimeSpan.FromSeconds(3));
+        var start = governor.BeginAsync(StorageTopology.AgentDirect, default);
+        await time.WaitForTimerAsync();
+        _time.Advance(TimeSpan.FromSeconds(3));
+        await time.WaitForTimerAsync();
+        _time.Advance(TimeSpan.FromSeconds(3));
+        await time.WaitForTimerAsync();
         Assert.False(start.IsCompleted, "with no slice the request would sit open without a byte flowing");
         Assert.All(_client.UploadPolicies, request => Assert.False(request.Release));
         Assert.True(_client.UploadPolicies.Count >= 3, "the waiting upload keeps renewing its place in the queue");
 
         _client.OnUploadPolicy = _ => Policy(share: 500_000);
-        await SettleAsync(TimeSpan.FromSeconds(3));
+        _time.Advance(TimeSpan.FromSeconds(3));
 
-        await using var session = await start;
+        await using var session = await start.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal(TransferRateLimiter.Chunk(500_000), await ReadAsync(session));
     }
 
@@ -229,5 +234,19 @@ public sealed class UploadBandwidthGovernorTests
 
         _client.OnUploadPolicy = _ => Failure(AgentBackendFailureKind.Rejected);
         await Assert.ThrowsAsync<UploadPolicyException>(() => _governor.BeginAsync(StorageTopology.BackendRelayed, default));
+    }
+    private sealed class ScheduledTimeProvider(FakeTimeProvider inner) : TimeProvider
+    {
+        private readonly global::System.Threading.Channels.Channel<bool> _scheduled = global::System.Threading.Channels.Channel.CreateUnbounded<bool>();
+        public override DateTimeOffset GetUtcNow() => inner.GetUtcNow();
+        public override long GetTimestamp() => inner.GetTimestamp();
+        public override long TimestampFrequency => inner.TimestampFrequency;
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            var timer = inner.CreateTimer(callback, state, dueTime, period);
+            _scheduled.Writer.TryWrite(true);
+            return timer;
+        }
+        public Task WaitForTimerAsync() => _scheduled.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
     }
 }

@@ -629,7 +629,7 @@ internal sealed class DatabaseRestoreExecution
                 _inspection!,
                 _plan!,
                 _request.RestoreTimeout,
-                new AgentPath(_staging.FilePath(_stagedName!)));
+                new AgentPath(_staging.FilePath(_stagedName!))) { Files = _request.Files };
         }
         catch (ArgumentException exception)
         {

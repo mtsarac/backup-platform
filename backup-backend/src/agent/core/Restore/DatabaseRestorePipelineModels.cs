@@ -122,6 +122,7 @@ public sealed record DatabaseRestorePipelineRequest
 
     /// <summary>Null for a plain (v1) replica; otherwise the staged replica is ciphertext that is decrypted and verified before the engine sees it.</summary>
     public ArtifactDecryption? Decryption { get; init; }
+    public FileRestoreSelection? Files { get; init; }
 
     /// <summary>The replica's key. Must be a key of the platform's own layout whose tenant is <see cref="TenantId"/>.</summary>
     public StorageObjectKey StorageKey { get; }

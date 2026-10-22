@@ -501,7 +501,7 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
                 AssertForbiddenDependencies(configuration, graph, node.Name, dep =>
                     IsProviderImplementation(dep)
                     && !(node.Name == "BackupPlatform.Agent.Transport"
-                        && dep.Name is "BackupPlatform.StorageProviders.Sftp" or "BackupPlatform.StorageProviders.GoogleDrive"));
+                        && dep.Name is "BackupPlatform.StorageProviders.Sftp" or "BackupPlatform.StorageProviders.GoogleDrive" or "BackupPlatform.StorageProviders.S3" or "BackupPlatform.StorageProviders.Smb"));
             }
         }
     }
@@ -538,6 +538,8 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
     [InlineData("BackupPlatform.Agent.Core")]
     [InlineData("BackupPlatform.Agent.Transport")]
     [InlineData("BackupPlatform.Agent.Platform.Linux")]
+    [InlineData("BackupPlatform.BackupProviders.Abstractions")]
+    [InlineData("BackupPlatform.BackupProviders.FileSystem")]
     public void PlatformNeutralAndLinuxAgentProjectsMustNotUseWindowsApis(string project) =>
         AssertForbiddenExternalDependencies(project, IsDpapiApi, IsWindowsServiceApi, IsWindowsAccessControlApi);
 

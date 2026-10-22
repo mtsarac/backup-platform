@@ -246,14 +246,15 @@ function JobForm({ job, prefill }: { job?: BackupJob; prefill?: { instance: Disc
       </Section>
       <Section title={tx("Yedekleme seçenekleri")}>
         <FormGrid>
-          {configuration.engine !== 'postgres' && check(tx('Kopya yedek (COPY_ONLY: mevcut yedek zincirini etkilemez)'), configuration.copyOnly, copyOnly => setConfiguration({ ...configuration, copyOnly }))}
-          {select('configuration.checksumPolicy', configuration.engine === 'postgres' ? tx('Sayfa bütünlüğü (data_checksums)') : tx('Bütünlük doğrulaması (CHECKSUM)'), configuration.checksumPolicy, policies, value => setConfiguration({ ...configuration, checksumPolicy: value as BackupConfiguration['checksumPolicy'] }))}
+          {configuration.engine === 'mssql' && check(tx('Kopya yedek (COPY_ONLY: mevcut yedek zincirini etkilemez)'), configuration.copyOnly, copyOnly => setConfiguration({ ...configuration, copyOnly }))}
+          {configuration.engine !== 'file-system' && select('configuration.checksumPolicy', configuration.engine === 'postgres' ? tx('Sayfa bütünlüğü (data_checksums)') : tx('Bütünlük doğrulaması (CHECKSUM)'), configuration.checksumPolicy, policies, value => setConfiguration({ ...configuration, checksumPolicy: value as BackupConfiguration['checksumPolicy'] }))}
           {select('configuration.compressionPolicy', tx('Sıkıştırma (Compression)'), configuration.compressionPolicy, policies, value => setConfiguration({ ...configuration, compressionPolicy: value as BackupConfiguration['compressionPolicy'] }))}
           <div className="min-w-0 space-y-1 md:col-span-2">
             {select('configuration.encryptionPolicy', tx('Yedek şifreleme politikası'), configuration.encryptionPolicy, encryptionPolicies.map(policy => [policy, policyLabels[policy]] as const), value => setConfiguration({ ...configuration, encryptionPolicy: value as EncryptionPolicy }))}
             <p className="text-sm text-text-muted">{policyDescriptions[configuration.encryptionPolicy]}{' '}{tx("Şifreleme Agent'ta, depolamaya yazılmadan önce yapılır; yalnızca sonraki çalıştırmalar etkilenir, mevcut yedekler değişmez.")}</p>
           </div>
           {configuration.engine === 'postgres' && <p className="text-sm text-text-muted md:col-span-2">{tx("pg_dump custom arşivi mevcut yedek zincirini değiştirmez; COPY_ONLY uygulanmaz. data_checksums sunucunun sayfa doğrulamasıdır: Required yalnızca etkin kümelerde çalışır, Preferred desteklenmiyorsa uyarır. Arşiv ve replikalar her durumda SHA-256 ile doğrulanır. Sıkıştırma pg_dump arşiv sıkıştırmasıdır.")}</p>}
+          {configuration.engine === 'file-system' && <p className="text-sm text-text-muted md:col-span-2">{tx('Dosya içeriği ve manifest SHA-256 ile her zaman doğrulanır. Dosya izinleri ve zaman damgaları geri yüklenir; kopya yedek ve veritabanı sayfa doğrulaması uygulanmaz.')}</p>}
         </FormGrid>
       </Section>
     </>}

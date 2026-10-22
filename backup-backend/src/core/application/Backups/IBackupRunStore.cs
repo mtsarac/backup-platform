@@ -12,7 +12,10 @@ public sealed record BackupLeaseCommand(TenantId TenantId, AgentId AgentId, Guid
     /// <summary>Which concurrent upload of the attempt an upload-bandwidth call is about; null means the attempt's only upload. Each upload holds its own slice of the tenant limit.</summary>
     public Guid? UploadId { get; init; }
 }
-public sealed record BackupProgress(string Stage, double? Percent);
+public sealed record BackupProgress(string Stage, double? Percent)
+{
+    public BackupPlatform.Contracts.Backups.TransferCheckpointContract? Checkpoint { get; init; }
+}
 public sealed record BackupCompletion(string Outcome, string? ReasonCode, BackupArtifactResult? Artifact, IReadOnlyList<BackupDestinationReport>? Destinations = null);
 public sealed record BackupArtifactResult(long SizeBytes, string SourceChecksum, string ArtifactChecksum, string ChecksumAlgorithm, DateTimeOffset CreatedAt, string SourceMetadataJson, string AppliedOptionsJson, IReadOnlyList<BackupReplicaResult> Replicas,
     string Format = BackupArtifact.PlainFormat, string? EncryptionKeyId = null, int? EncryptionKeyVersion = null, string? EncryptionWrappedDekBase64 = null, string? EncryptionRecipientsJson = null);
@@ -24,7 +27,7 @@ public sealed record BackupClaim(BackupRun Run, BackupRunAttempt Attempt)
 {
     public long? MaxArtifactBytes { get; init; }
 }
-public sealed record BackupLeaseResult(DateTimeOffset LeaseExpiresAt, bool CancellationRequested);
+public sealed record BackupLeaseResult(DateTimeOffset LeaseExpiresAt, bool CancellationRequested, bool PauseRequested = false);
 public enum BackupMutationResult { Accepted, NotFound, Conflict }
 
 public enum BackupStartOutcome
@@ -85,6 +88,9 @@ public interface IBackupRunStore
     Task<BackupRun?> RequestCancellationAsync(TenantId tenantId, Guid runId, DateTimeOffset now, CancellationToken cancellationToken, UserId? actor = null);
     /// <summary>Operator retry: a new attempt on the same run, immediately, within the policy's attempt budget. Not related to the manual-start Idempotency-Key.</summary>
     Task<BackupRetryResult> RetryRunAsync(TenantId tenantId, Guid runId, DateTimeOffset now, CancellationToken cancellationToken, UserId? actor = null);
+    Task<BackupMutationResult> SetPauseAsync(TenantId tenantId, Guid runId, bool resume, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<IReadOnlyList<TransferCheckpoint>> GetCheckpointsAsync(TenantId tenantId, Guid attemptId, CancellationToken cancellationToken);
+    Task<TenantId?> FindRunTenantAsync(Guid runId, CancellationToken cancellationToken);
     /// <summary>
     /// Claims the agent's next eligible attempt if the agent, tenant and global limits all have a free slot; null otherwise.
     /// Order is attempt eligibility, run creation, run id.

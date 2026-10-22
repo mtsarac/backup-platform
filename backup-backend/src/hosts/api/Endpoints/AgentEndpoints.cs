@@ -28,6 +28,10 @@ public static class AgentEndpoints
     {
         var agent = endpoints.MapGroup("/api/agent").WithMetadata(new AgentApiEndpoint());
         agent.MapPost("/enroll", EnrollAsync).AllowAnonymous().RequireRateLimiting(AgentRateLimitOptions.Policies.Enrollment);
+        agent.MapPost("/certificate/enroll", EnrollCertificateAsync)
+            .WithMetadata(new AllowPendingAgentCredential(), new RequestSizeLimitAttribute(20 * 1024))
+            .RequireAuthorization(AuthorizationPolicies.Agent)
+            .RequireRateLimiting(AgentRateLimitOptions.Policies.Enrollment);
         agent.MapPost("/heartbeat", HeartbeatAsync)
             .RequireAuthorization(AuthorizationPolicies.Agent)
             .RequireRateLimiting(AgentRateLimitOptions.Policies.Heartbeat)
@@ -53,6 +57,24 @@ public static class AgentEndpoints
             .RequireAuthorization(AuthorizationPolicies.Agent);
         return endpoints;
     }
+    public sealed record CertificateEnrollmentRequest(string SigningRequestPem);
+
+    private static IResult EnrollCertificateAsync(CertificateEnrollmentRequest request, ICurrentAgent agent, HttpContext context)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        var authority = context.RequestServices.GetService<AgentCertificateAuthority>();
+        if (authority is null) return Error(StatusCodes.Status503ServiceUnavailable, "mtls_not_configured", null);
+        try
+        {
+            if (request.SigningRequestPem is null) return Error(StatusCodes.Status400BadRequest, "invalid_signing_request", null);
+            return Results.Ok(new { certificatePem = authority.Issue(request.SigningRequestPem, agent.Identity!) });
+        }
+        catch (Exception exception) when (exception is ArgumentException or System.Security.Cryptography.CryptographicException)
+        {
+            return Error(StatusCodes.Status400BadRequest, "invalid_signing_request", null);
+        }
+    }
+
 
     private const long MaximumHeartbeatBytes = 8 * 1024;
     private const long MaximumCapabilitySyncBytes = 32 * 1024;

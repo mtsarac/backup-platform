@@ -23,7 +23,7 @@ const destinationStates: Record<string, { label: string; tone: Tone | 'neutral' 
   Deleted: { get label() { return tx("Silindi") }, tone: 'neutral' },
 }
 
-const providerLabels: Record<string, string> = { get local() { return tx("Agent yerel") }, get central() { return tx("Merkezi depolama") }, sftp: 'SFTP', 'google-drive': 'Google Drive' }
+const providerLabels: Record<string, string> = { get local() { return tx("Agent yerel") }, get central() { return tx("Merkezi depolama") }, sftp: 'SFTP', 'google-drive': 'Google Drive', s3: 'S3', smb: 'SMB / NAS' }
 
 /** The status is always the backend's verdict; nothing here recomputes it from the counts. */
 export function ReplicationBadge({ replication }: { replication?: ReplicationHealth | null }) {

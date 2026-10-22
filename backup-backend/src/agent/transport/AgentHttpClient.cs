@@ -23,6 +23,10 @@ internal sealed class AgentHttpClient(HttpClient http, AgentBackendEndpoint endp
     public Task<AgentBackendResult<bool>> SendEmptyAsync(AgentLocalIdentity identity, HttpMethod method, string path, HttpContent content, CancellationToken cancellationToken) =>
         SendCoreAsync(identity, method, path, content, static (_, _) => Task.FromResult(AgentBackendResult<bool>.Success(true)), cancellationToken);
 
+    internal Task<AgentBackendResult<T>> ReadAsync<T>(AgentLocalIdentity identity, string path,
+        Func<HttpResponseMessage, CancellationToken, Task<AgentBackendResult<T>>> readSuccess, CancellationToken cancellationToken) =>
+        SendCoreAsync(identity, HttpMethod.Get, path, null, readSuccess, cancellationToken);
+
     private async Task<AgentBackendResult<T>> SendCoreAsync<T>(AgentLocalIdentity identity, HttpMethod method, string path, HttpContent? content,
         Func<HttpResponseMessage, CancellationToken, Task<AgentBackendResult<T>>> readSuccess, CancellationToken cancellationToken)
     {

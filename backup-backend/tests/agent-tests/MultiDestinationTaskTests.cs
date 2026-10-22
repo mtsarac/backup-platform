@@ -109,7 +109,7 @@ public sealed class MultiDestinationTaskTests
     {
         var destinations = kind switch
         {
-            "unknown-provider" => [ThreeDestinations[0], new BackupDestinationContract { StorageProvider = "s3", StorageConnectionId = Guid.NewGuid(), StorageExecutionLocation = "Backend" }],
+            "unknown-provider" => [ThreeDestinations[0], new BackupDestinationContract { StorageProvider = "unknown-custom-storage", StorageConnectionId = Guid.NewGuid(), StorageExecutionLocation = "Backend" }],
             "relayed-on-agent" => [ThreeDestinations[0], ThreeDestinations[1] with { StorageExecutionLocation = "Agent" }],
             "relayed-without-connection" => [ThreeDestinations[0], ThreeDestinations[1] with { StorageConnectionId = null }],
             "missing-location" => [ThreeDestinations[0], ThreeDestinations[1] with { StorageExecutionLocation = null }],

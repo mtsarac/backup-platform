@@ -14,6 +14,8 @@ using BackupPlatform.Contracts.Agents;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Contracts.Restores;
 using BackupPlatform.StorageProviders.Abstractions;
+using BackupPlatform.StorageProviders.S3;
+using BackupPlatform.StorageProviders.Smb;
 
 namespace BackupPlatform.Agent.Transport;
 
@@ -21,16 +23,18 @@ public sealed class HttpTaskStorageProviderFactory(
     HttpClient http,
     AgentBackendEndpoint endpoint,
     IAgentCredentialStore identities,
-    string? stagingDirectory = null) : ITaskStorageProviderFactory
+    string? stagingDirectory = null, IWindowsNetworkSession? windowsSession = null) : ITaskStorageProviderFactory
 {
     private readonly string? _stagingDirectory = stagingDirectory ?? Path.Combine(Path.GetTempPath(), "backup-platform-staging");
+    private static readonly HttpClient DirectHttp = new(new SocketsHttpHandler { AllowAutoRedirect = false,
+        PooledConnectionLifetime = TimeSpan.FromMinutes(2) }) { Timeout = Timeout.InfiniteTimeSpan };
 
     public IStorageProvider CreateBackup(BackupTaskSnapshot task, BackupDestinationContract destination)
     {
-        if (destination.Direct && destination.StorageProvider is "sftp" or "google-drive" && destination.StorageConnectionId is { } connectionId)
+        if (destination.Direct && destination.StorageProvider is "sftp" or "google-drive" or "s3" or "smb" && destination.StorageConnectionId is { } connectionId)
         {
             return new DirectTaskStorageProvider(http, endpoint, identities, task.AttemptId, task.LeaseToken,
-                connectionId, task.TenantId, destination.StorageProvider, _stagingDirectory, null);
+                connectionId, task.TenantId, destination.StorageProvider, _stagingDirectory, null, windowsSession);
         }
         return new Provider(http, endpoint, identities,
             $"api/agent/tasks/{task.AttemptId:D}/storage", task.LeaseToken, null, destination.StorageProvider, destination.StorageConnectionId);
@@ -38,10 +42,10 @@ public sealed class HttpTaskStorageProviderFactory(
 
     public IStorageProvider CreateRestore(RestoreTaskSnapshot task)
     {
-        if (task.Source.Access == "AgentDirect" && task.Source.StorageProvider is "sftp" or "google-drive" && Guid.TryParse(task.Source.StorageTarget, out var connectionId))
+        if (task.Source.Access == "AgentDirect" && task.Source.StorageProvider is "sftp" or "google-drive" or "s3" or "smb" && Guid.TryParse(task.Source.StorageTarget, out var connectionId))
         {
             return new DirectTaskStorageProvider(http, endpoint, identities, task.AttemptId, task.LeaseToken,
-                connectionId, task.TenantId, task.Source.StorageProvider, _stagingDirectory, task.OperationId);
+                connectionId, task.TenantId, task.Source.StorageProvider, _stagingDirectory, task.OperationId, windowsSession);
         }
         return new Provider(http, endpoint, identities,
             $"api/agent/restore-tasks/{task.AttemptId:D}/storage", task.LeaseToken, task.OperationId, task.Source.StorageProvider, null);
@@ -60,7 +64,7 @@ public sealed class HttpTaskStorageProviderFactory(
         {
             if (restore is not null || options.Overwrite != StorageOverwritePolicy.Fail || options.ExpectedLength is not > 0 || options.ExpectedChecksum is null)
                 throw new StorageException(StorageFailureKind.InvalidConfiguration, "A bounded verified backup upload is required.");
-            using var body = new StreamContent(content, 64 * 1024);
+            using var body = new BorrowedUploadContent(content, options.ExpectedLength.Value);
             body.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
             body.Headers.ContentLength = options.ExpectedLength;
             using var response = await SendAsync(HttpMethod.Put, "content", key, body, options.ExpectedChecksum.Hex, cancellationToken).ConfigureAwait(false);
@@ -177,10 +181,18 @@ public sealed class HttpTaskStorageProviderFactory(
         public override async ValueTask DisposeAsync() { await stream.DisposeAsync().ConfigureAwait(false); response.Dispose(); GC.SuppressFinalize(this); }
     }
 
+    private sealed class BorrowedUploadContent(Stream source, long length) : HttpContent
+    {
+        protected override bool TryComputeLength(out long computedLength) { computedLength = length; return true; }
+        protected override Task SerializeToStreamAsync(Stream stream, System.Net.TransportContext? context) => source.CopyToAsync(stream);
+        protected override Task SerializeToStreamAsync(Stream stream, System.Net.TransportContext? context, CancellationToken cancellationToken) =>
+            source.CopyToAsync(stream, cancellationToken);
+    }
+
     private sealed class DirectTaskStorageProvider(
         HttpClient http, AgentBackendEndpoint endpoint, IAgentCredentialStore identities,
         Guid attemptId, Guid lease, Guid connectionId, Guid tenantId, string providerType,
-        string? stagingDirectory, Guid? restoreOperationId) : IStorageProvider
+        string? stagingDirectory, Guid? restoreOperationId, IWindowsNetworkSession? windowsSession) : IStorageProvider
     {
         private readonly SemaphoreSlim _initLock = new(1, 1);
         private IStorageProvider? _targetProvider;
@@ -195,6 +207,8 @@ public sealed class HttpTaskStorageProviderFactory(
         public async Task<StorageObjectMetadata> PutAsync(StorageObjectKey key, Stream content, StoragePutOptions options,
             IProgress<long>? progress, CancellationToken cancellationToken)
         {
+            if (providerType is "s3" or "smb")
+                await RecordIntentAsync(key, options, cancellationToken).ConfigureAwait(false);
             var target = await GetProviderAsync(cancellationToken).ConfigureAwait(false);
             return await target.PutAsync(key, content, options, progress, cancellationToken).ConfigureAwait(false);
         }
@@ -245,6 +259,24 @@ public sealed class HttpTaskStorageProviderFactory(
             {
                 if (_targetProvider is not null) return _targetProvider;
                 var access = await FetchAccessAsync(cancellationToken).ConfigureAwait(false);
+                if (access.ProviderType is "s3" or "smb")
+                {
+                    var config = access.Configuration ?? throw new StorageException(StorageFailureKind.InvalidConfiguration, "Missing network storage configuration.");
+                    if (access.ProviderType == "s3")
+                    {
+                        var options = new S3StorageOptions(new Uri(config["endpoint"]), config["bucket"], config["region"], tenantId, connectionId,
+                            config.GetValueOrDefault("objectLockMode"), int.Parse(config.GetValueOrDefault("retentionDays", "0"), System.Globalization.CultureInfo.InvariantCulture));
+                        var credential = new S3Credential(access.AccessKey ?? "", access.SecretKey ?? "", access.SessionToken);
+                        _targetProvider = new S3StorageProvider(http, options, _ => ValueTask.FromResult(credential));
+                    }
+                    else
+                    {
+                        var credential = new SmbCredential(access.Username ?? "", access.Password ?? "", access.Domain);
+                        _targetProvider = new SmbStorageProvider(new(config["host"], config["share"], tenantId, connectionId),
+                            _ => ValueTask.FromResult(credential), windowsSession);
+                    }
+                    return _targetProvider;
+                }
                 if (access.ProviderType == "sftp")
                 {
                     if (string.IsNullOrWhiteSpace(access.RemoteBaseDirectory))
@@ -295,6 +327,26 @@ public sealed class HttpTaskStorageProviderFactory(
             {
                 _initLock.Release();
             }
+        }
+
+        private async Task RecordIntentAsync(StorageObjectKey key, StoragePutOptions options, CancellationToken cancellationToken)
+        {
+            if (restoreOperationId is not null || options.ExpectedLength is not > 0 || options.ExpectedChecksum is null)
+                throw new StorageException(StorageFailureKind.InvalidConfiguration, "A bounded checksummed backup upload is required.");
+            var identity = await identities.LoadAsync(cancellationToken).ConfigureAwait(false)
+                ?? throw new StorageException(StorageFailureKind.AccessDenied, "The task identity is unavailable.");
+            using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(endpoint.BaseUri, $"api/agent/tasks/{attemptId:D}/storage/intent"))
+            {
+                Content = JsonContent.Create(new TaskStorageVerifyRequest(options.ExpectedLength.Value, options.ExpectedChecksum.Hex), options: JsonSerializerOptions.Web)
+            };
+            request.Headers.TryAddWithoutValidation("Authorization", identity.Current.ToAuthorizationHeaderValue());
+            request.Headers.TryAddWithoutValidation(AgentProtocolHeader.Name, AgentProtocol.Current.Version.ToString());
+            request.Headers.TryAddWithoutValidation(TaskStorageProtocol.LeaseHeader, lease.ToString("D"));
+            request.Headers.TryAddWithoutValidation(TaskStorageProtocol.DestinationHeader, connectionId.ToString("D"));
+            request.Headers.TryAddWithoutValidation(TaskStorageProtocol.KeyHeader, key.Value);
+            using var response = await http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+                throw new StorageException(StorageFailureKind.AccessDenied, "The backend refused the direct upload intent.");
         }
 
         private async Task<TaskStorageAccessResponse> FetchAccessAsync(CancellationToken cancellationToken)

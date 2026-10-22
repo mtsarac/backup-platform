@@ -41,9 +41,9 @@ public static class RestoreSourceEvaluator
             return RestoreSourceDecision.Reject(RestoreSourceRejection.NoAccessibleReplica);
         if (replica.StorageProvider == "central")
             return RestoreSourceDecision.Accept(RestoreSourceAccess.CentralStorage);
-        return (replica.StorageProvider is "sftp" or "google-drive") && replica.StorageConnectionId != Guid.Empty
+        return (replica.StorageProvider is "sftp" or "google-drive" or "s3" or "smb") && replica.StorageConnectionId != Guid.Empty
             && Guid.TryParse(replica.StorageTarget, out var connectionId) && connectionId == replica.StorageConnectionId
-            ? RestoreSourceDecision.Accept(RestoreSourceAccess.BackendRelayed)
+            ? RestoreSourceDecision.Accept(replica.StorageProvider is "s3" or "smb" ? RestoreSourceAccess.AgentDirect : RestoreSourceAccess.BackendRelayed)
             : RestoreSourceDecision.Reject(RestoreSourceRejection.NoAccessibleReplica);
     }
 

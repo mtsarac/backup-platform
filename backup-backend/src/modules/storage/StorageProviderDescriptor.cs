@@ -21,7 +21,9 @@ public enum StorageTestMode
     /// <summary>The backend writes, verifies and deletes a probe object itself.</summary>
     BackendRoundTrip = 1,
     /// <summary>Only the agent can reach the storage; the backend cannot look, so a test reports NotTestable instead of claiming success.</summary>
-    AgentSide = 2
+    AgentSide = 2,
+    /// <summary>Authenticated access and protection settings, without writing an unaccounted WORM probe.</summary>
+    BackendReadAccess = 3
 }
 
 public enum StorageFieldKind
@@ -61,7 +63,8 @@ public sealed record StorageProviderDescriptor
         TenantCreatable = tenantCreatable && availability == StorageProviderAvailability.Available;
         PlatformCreatable = platformCreatable && availability == StorageProviderAvailability.Available;
         MaxConnectionsPerTenant = maxConnectionsPerTenant is { } max && max < 1 ? throw new ArgumentOutOfRangeException(nameof(maxConnectionsPerTenant)) : maxConnectionsPerTenant;
-        ConfigFields = [.. configFields];
+        ConfigFields = [.. configFields, new("site", "Physical site / failure domain", StorageFieldKind.Text, false, 64),
+            new("mediaClass", "Media class (disk, object-storage, tape)", StorageFieldKind.Text, false, 32)];
         SecretFields = [.. secretFields];
         TestMode = availability == StorageProviderAvailability.Available ? testMode : StorageTestMode.None;
         var names = ConfigFields.Select(field => field.Name).Concat(SecretFields.Select(field => field.Name)).ToList();
@@ -110,7 +113,7 @@ public static class BuiltInStorageProviders
 
     public static StorageProviderDescriptor Sftp { get; } = new(
         StorageProviderTypes.Sftp, "SFTP", StorageProviderAvailability.Available, StorageTopology.BackendRelayed, BackupStorageExecutionLocation.Backend,
-        ["storage.read", "storage.delete", "storage.atomic-publish", "storage.verify-absence"], [StorageOwnership.TenantManaged],
+        ["storage.read", "storage.delete", "storage.atomic-publish", "storage.resume", "storage.verify-absence"], [StorageOwnership.TenantManaged],
         tenantCreatable: true, platformCreatable: false, maxConnectionsPerTenant: null,
         [
             new("host", "Host", StorageFieldKind.Text, true, 253),
@@ -125,7 +128,7 @@ public static class BuiltInStorageProviders
 
     public static StorageProviderDescriptor GoogleDrive { get; } = new(
         StorageProviderTypes.GoogleDrive, "Google Drive", StorageProviderAvailability.Available, StorageTopology.BackendRelayed, BackupStorageExecutionLocation.Backend,
-        ["storage.read", "storage.delete", "storage.atomic-publish", "storage.verify-absence"], [StorageOwnership.TenantManaged],
+        ["storage.read", "storage.delete", "storage.atomic-publish", "storage.resume", "storage.verify-absence"], [StorageOwnership.TenantManaged],
         tenantCreatable: true, platformCreatable: false, maxConnectionsPerTenant: null,
         [
             new("accountEmail", "Google hesabı", StorageFieldKind.Text, false, 256),
@@ -135,11 +138,25 @@ public static class BuiltInStorageProviders
         [new("refreshToken", "Refresh token", false)],
         StorageTestMode.BackendRoundTrip);
 
-    public static IReadOnlyList<StorageProviderDescriptor> All { get; } = [Local, Central, Sftp, GoogleDrive];
+    public static StorageProviderDescriptor S3 { get; } = new(
+        StorageProviderTypes.S3, "S3-compatible object storage", StorageProviderAvailability.Available, StorageTopology.AgentDirect, BackupStorageExecutionLocation.Backend,
+        ["storage.read", "storage.delete", "storage.atomic-publish", "storage.multipart", "storage.resume", "storage.verify-absence"], [StorageOwnership.TenantManaged],
+        tenantCreatable: true, platformCreatable: false, maxConnectionsPerTenant: null,
+        [new("endpoint", "HTTPS endpoint", StorageFieldKind.Text, true, 512), new("bucket", "Bucket", StorageFieldKind.Text, true, 63),
+            new("region", "Signing region", StorageFieldKind.Text, true, 64),
+            new("objectLockMode", "Object Lock (COMPLIANCE or GOVERNANCE)", StorageFieldKind.Text, false, 16),
+            new("retentionDays", "WORM retention days", StorageFieldKind.Number, false, 5)],
+        [new("accessKey", "Access key", true), new("secretKey", "Secret key", true), new("sessionToken", "Session token", false)],
+        StorageTestMode.BackendReadAccess);
 
-    private static StorageProviderDescriptor Planned(string providerType, string displayName) => new(
-        providerType, displayName, StorageProviderAvailability.Planned, null, null, [], [StorageOwnership.TenantManaged],
-        tenantCreatable: false, platformCreatable: false, maxConnectionsPerTenant: null, [], [], StorageTestMode.None);
+    public static StorageProviderDescriptor Smb { get; } = new(
+        StorageProviderTypes.Smb, "SMB / NAS (encrypted SMB 3)", StorageProviderAvailability.Available, StorageTopology.AgentDirect, BackupStorageExecutionLocation.Backend,
+        ["storage.read", "storage.delete", "storage.atomic-publish", "storage.verify-absence"], [StorageOwnership.TenantManaged],
+        tenantCreatable: true, platformCreatable: false, maxConnectionsPerTenant: null,
+        [new("host", "NAS host", StorageFieldKind.Text, true, 253), new("share", "Share name", StorageFieldKind.Text, true, 80)],
+        [new("username", "Username", true), new("password", "Password", true), new("domain", "Domain", false)], StorageTestMode.AgentSide);
+
+    public static IReadOnlyList<StorageProviderDescriptor> All { get; } = [Local, Central, Sftp, GoogleDrive, S3, Smb];
 }
 
 

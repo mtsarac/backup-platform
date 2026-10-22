@@ -109,7 +109,7 @@ internal sealed class BackupRunConfiguration : IEntityTypeConfiguration<BackupRu
         BackupMapping.Base(builder, "backup_runs");
         BackupMapping.Agent(builder);
         BackupMapping.Configuration(builder);
-        BackupMapping.Status(builder, "backup_runs", 8);
+        BackupMapping.Status(builder, "backup_runs", 9);
         BackupMapping.RetryPolicy(builder, run => run.RetryPolicy);
         BackupMapping.RetentionPolicy(builder, run => run.RetentionPolicy);
         builder.ToTable("backup_runs", table =>
@@ -152,7 +152,7 @@ internal sealed class BackupRunConfiguration : IEntityTypeConfiguration<BackupRu
         builder.HasIndex(run => new { run.TenantId, run.Status, run.CreatedAt });
         builder.HasIndex(run => new { run.TenantId, run.JobId, run.CreatedAt });
         // Backstop for the Skip overlap policy: at most one active run per job whatever the application does.
-        builder.HasIndex(run => new { run.TenantId, run.JobId }).IsUnique().HasFilter("\"OverlapPolicy\" = 'Skip' AND \"Status\" IN (1,2,3,8)");
+        builder.HasIndex(run => new { run.TenantId, run.JobId }).IsUnique().HasFilter("\"OverlapPolicy\" = 'Skip' AND \"Status\" IN (1,2,3,8,9)");
         // The retry worker's only scan: due RetryPending runs, oldest due first.
         builder.HasIndex(run => new { run.NextAttemptAt, run.Id }).HasFilter("\"Status\" = 8");
         // One run per scheduled instant of a job, whichever node, wake-up refire or reconciliation tries to create it.
@@ -169,9 +169,10 @@ internal sealed class BackupAttemptConfiguration : IEntityTypeConfiguration<Back
     {
         BackupMapping.Base(builder, "backup_run_attempts");
         BackupMapping.Agent(builder);
-        BackupMapping.Status(builder, "backup_run_attempts", 7);
+        builder.Property<BackupStatus>("Status").HasConversion<int>();
         builder.ToTable("backup_run_attempts", table =>
         {
+            table.HasCheckConstraint("ck_backup_run_attempts_status", "(\"Status\" BETWEEN 1 AND 7) OR \"Status\" = 9");
             table.HasCheckConstraint("ck_backup_attempt_number", "\"Number\" >= 1");
             table.HasCheckConstraint("ck_backup_attempt_lease", "\"Status\" NOT IN (2,3) OR (\"LeaseToken\" IS NOT NULL AND \"LeaseToken\" <> '00000000-0000-0000-0000-000000000000'::uuid AND \"LeaseExpiresAt\" IS NOT NULL)");
             table.HasCheckConstraint("ck_backup_attempt_progress", "\"ProgressPercent\" IS NULL OR (\"ProgressPercent\" >= 0 AND \"ProgressPercent\" <= 100)");

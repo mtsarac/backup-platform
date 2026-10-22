@@ -1,19 +1,20 @@
 import { currentLocale, tx } from '@/lib/i18n'
 import type { BackupRunStatus, BackupTrigger } from './types'
 
-export const runStatuses: readonly BackupRunStatus[] = ['Pending', 'Leased', 'Running', 'RetryPending', 'CancellationRequested', 'Succeeded', 'Failed', 'Cancelled', 'AgentLost']
+export const runStatuses: readonly BackupRunStatus[] = ['Pending', 'Leased', 'Running', 'Paused', 'RetryPending', 'CancellationRequested', 'Succeeded', 'Failed', 'Cancelled', 'AgentLost']
 export const runStatusLabels: Record<BackupRunStatus, string> = {
   get Pending() { return tx("Bekliyor") }, get Leased() { return tx("Ajan tarafından alındı") }, get Running() { return tx("Çalışıyor") },
   get RetryPending() { return tx("Yeniden deneme bekliyor") }, get CancellationRequested() { return tx("İptal istendi") },
+  get Paused() { return tx('Duraklatıldı') },
   get Succeeded() { return tx("Başarılı") }, get Failed() { return tx("Başarısız") }, get Cancelled() { return tx("İptal edildi") }, get AgentLost() { return tx("Ajan bağlantısı kayboldu") },
 }
 
 export function isActiveRun(status: string): boolean {
-  return ['Pending', 'Leased', 'Running', 'RetryPending', 'CancellationRequested'].includes(status)
+  return ['Pending', 'Leased', 'Running', 'Paused', 'RetryPending', 'CancellationRequested'].includes(status)
 }
 
 export function canCancelRun(status: string): boolean {
-  return ['Pending', 'Leased', 'Running', 'RetryPending'].includes(status)
+  return ['Pending', 'Leased', 'Running', 'Paused', 'RetryPending'].includes(status)
 }
 
 export function canRetryRun(status: string): boolean {

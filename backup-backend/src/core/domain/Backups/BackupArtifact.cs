@@ -277,7 +277,7 @@ public static class BackupArtifactEngine
             found = true;
             engine = property.Value.GetString();
         }
-        return engine is "mssql" or "postgres" ? engine : null;
+        return engine is "mssql" or "postgres" or "file-system" ? engine : null;
     }
 }
 

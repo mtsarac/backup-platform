@@ -120,7 +120,7 @@ public sealed record BackupDestinationHealth(
 
 /// <summary>
 /// Replication compliance of one artifact (or of the attempt that tried to create it), independent of the engine's outcome and of the run's status:
-/// <see cref="Status"/> says whether the verified copies meet the policy, <see cref="PolicySatisfied"/> is exactly <c>VerifiedReplicas &gt;= RequiredVerifiedReplicas</c>.
+/// <see cref="Status"/> says whether verified copies meet the admitted count, media diversity and off-site policy.
 /// <see cref="Destinations"/> is empty when only the replicas are known (an artifact listing).
 /// </summary>
 public sealed record BackupReplicationHealth(
@@ -129,6 +129,12 @@ public sealed record BackupReplicationHealth(
 /// <summary>THE definition of replication health. A pure projection of stored facts, so it can never drift from them.</summary>
 public static class BackupReplicationEvaluator
 {
+    public static bool MeetsThreeTwoOne(IEnumerable<(string? MediaClass, string? Site, bool OffsiteVerified)> verifiedCopies, string? sourceSite)
+    {
+        var copies = verifiedCopies.ToArray();
+        return copies.Length >= 3 && copies.Where(d => d.MediaClass is not null).Select(d => d.MediaClass).Distinct().Count() >= 2
+            && sourceSite is not null && copies.Any(d => d.OffsiteVerified && d.Site is not null && d.Site != sourceSite);
+    }
     public static string StatusOf(int required, int verified, int total) =>
         verified <= 0 ? BackupReplicationStatuses.Unavailable
         : verified < required ? BackupReplicationStatuses.InsufficientReplicas
@@ -142,6 +148,23 @@ public static class BackupReplicationEvaluator
         var total1 = Math.Max(total, required1);
         var verified = replicas.Where(IsUsableVerified).Select(replica => (replica.StorageProvider, replica.StorageConnectionId)).Distinct().Count();
         return new(required1, verified, total1, StatusOf(required1, verified, total1), verified >= required1, []);
+    }
+
+    public static BackupReplicationHealth ForArtifact(BackupConfiguration snapshot, IEnumerable<BackupReplica> replicas)
+    {
+        var usable = replicas.Where(IsUsableVerified).ToArray();
+        var health = ForArtifact(snapshot.RequiredVerifiedReplicaCount, snapshot.Destinations.Count, usable);
+        return ApplyPolicy(snapshot, health, destination => usable.Any(replica => replica.StorageProvider == destination.StorageProvider
+            && replica.StorageConnectionId == destination.StorageConnectionId));
+    }
+
+    private static BackupReplicationHealth ApplyPolicy(BackupConfiguration snapshot, BackupReplicationHealth health, Func<BackupDestination, bool> verified)
+    {
+        if (!snapshot.EnforceThreeTwoOne) return health;
+        var copies = snapshot.Destinations.Where(verified).ToArray();
+        var satisfied = health.PolicySatisfied && MeetsThreeTwoOne(copies.Select(d => (d.MediaClass, d.Site, d.OffsiteVerified)), snapshot.SourceSite);
+        return health with { PolicySatisfied = satisfied,
+            Status = !satisfied && health.Status == BackupReplicationStatuses.Healthy ? BackupReplicationStatuses.Degraded : health.Status };
     }
 
     /// <summary>
@@ -170,7 +193,9 @@ public static class BackupReplicationEvaluator
         }).ToArray();
         var required = Math.Max(1, snapshot.RequiredVerifiedReplicaCount);
         var verified = destinations.Count(destination => destination.State == BackupDestinationStates.Verified);
-        return new(required, verified, destinations.Length, StatusOf(required, verified, destinations.Length), verified >= required, destinations);
+        var health = new BackupReplicationHealth(required, verified, destinations.Length, StatusOf(required, verified, destinations.Length), verified >= required, destinations);
+        return ApplyPolicy(snapshot, health, destination => destinations.Any(copy => copy.StorageProvider == destination.StorageProvider
+            && copy.StorageConnectionId == destination.StorageConnectionId && copy.State == BackupDestinationStates.Verified));
     }
 
     private static bool IsUsableVerified(BackupReplica replica) => replica.VerificationState == "Verified" && replica.IsUsable;

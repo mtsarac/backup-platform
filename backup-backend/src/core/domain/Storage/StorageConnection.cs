@@ -29,6 +29,8 @@ public static class StorageProviderTypes
     public const string Central = "central";
     public const string Sftp = "sftp";
     public const string GoogleDrive = "google-drive";
+    public const string S3 = "s3";
+    public const string Smb = "smb";
 
     public static bool IsValid(string? value) =>
         value is { Length: >= 1 and <= 32 } && value.All(character => character is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '-') && value[0] != '-' && value[^1] != '-';

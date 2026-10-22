@@ -29,6 +29,8 @@ internal sealed class AuditEventConfiguration : IEntityTypeConfiguration<AuditEv
         builder.Property(auditEvent => auditEvent.TargetId).HasMaxLength(128).IsRequired();
         builder.Property(auditEvent => auditEvent.DetailsJson).HasColumnType("jsonb").IsRequired();
         builder.Property(auditEvent => auditEvent.SupportSessionId);
+        builder.Property<string>(AuditSigningInterceptor.KeyProperty).HasMaxLength(128);
+        builder.Property<string>(AuditSigningInterceptor.SignatureProperty).HasMaxLength(256);
         builder.HasIndex(auditEvent => new { auditEvent.SupportSessionId, auditEvent.At }).HasDatabaseName("ix_audit_events_support_session").HasFilter("\"SupportSessionId\" IS NOT NULL");
         builder.HasIndex(auditEvent => new { auditEvent.At, auditEvent.Id });
         builder.HasIndex(auditEvent => new { auditEvent.TenantId, auditEvent.At });

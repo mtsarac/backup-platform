@@ -24,6 +24,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/agent/core/BackupPlatform.Agent.Core.csproj" />
     <ProjectReference Include="../../src/agent/platform-windows/BackupPlatform.Agent.Platform.Windows.csproj" />
+    <ProjectReference Include="../../src/providers/backup/file-system/BackupPlatform.BackupProviders.FileSystem.csproj" />
     <!-- Built, not referenced: the probe is started as a separate process and copied next to the tests. -->
     <ProjectReference Include="../windows-test-probe/BackupPlatform.Agent.Platform.Windows.TestProbe.csproj" ReferenceOutputAssembly="false" OutputItemType="ProbeAssembly" />
   </ItemGroup>

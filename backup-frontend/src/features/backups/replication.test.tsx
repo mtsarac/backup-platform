@@ -17,7 +17,12 @@ const state = vi.hoisted(() => ({
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canOperate: true }) }))
 vi.mock('@/features/backups/hooks', () => ({
   useBackup: () => ({ data: state.run, isPending: false, error: null }),
-  useBackupActions: () => ({ retry: { isPending: false, error: null, mutateAsync: vi.fn(), reset: vi.fn() }, cancel: { isPending: false, error: null, mutateAsync: vi.fn(), reset: vi.fn() } }),
+  useBackupActions: () => ({
+    retry: { isPending: false, error: null, mutateAsync: vi.fn(), reset: vi.fn() },
+    cancel: { isPending: false, error: null, mutateAsync: vi.fn(), reset: vi.fn() },
+    pause: { isPending: false, error: null, mutateAsync: vi.fn(), reset: vi.fn() },
+    resume: { isPending: false, error: null, mutateAsync: vi.fn(), reset: vi.fn() },
+  }),
   useBackups: () => ({ data: state.page, isPending: false, isFetching: false, error: null }),
 }))
 vi.mock('@/features/backup-jobs/hooks', () => ({ useBackupJobs: () => ({ data: [], isPending: false, error: null }) }))

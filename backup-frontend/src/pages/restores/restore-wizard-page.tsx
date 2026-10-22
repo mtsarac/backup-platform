@@ -20,6 +20,7 @@ import type { RestoreMode, RestoreOptions, RestoreTarget, RestoreTargetsResponse
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { StoredLoginPanel } from '@/features/restores/stored-login-panel'
 import { ApiError } from '@/lib/api/client'
+import { FileRestoreWizard } from '@/features/restores/file-restore-wizard'
 
 
 export function RestoreWizardPage() {
@@ -39,12 +40,12 @@ export function RestoreWizardPage() {
   return (
     <div className="space-y-6">
       <PageHeader title={tx("Backup Geri Yükleme Sihirbazı")}
-        description={targetsQuery.data?.engine === 'postgres' ? tx("PostgreSQL pg_dump custom arşivini pg_restore ile hedef PostgreSQL sunucusuna geri yükleyin.") : tx("Doğrulanmış backup'ı aynı Database motoruna güvenli ve denetlenebilir adımlarla geri yükleyin.")}
+        description={targetsQuery.data?.engine === 'file-system' ? tx('Dosya arşivini özgün veya alternatif konuma, tümüyle ya da seçili yollarla geri yükleyin.') : targetsQuery.data?.engine === 'postgres' ? tx("PostgreSQL pg_dump custom arşivini pg_restore ile hedef PostgreSQL sunucusuna geri yükleyin.") : tx("Doğrulanmış backup'ı aynı Database motoruna güvenli ve denetlenebilir adımlarla geri yükleyin.")}
         crumbs={[{ label: tx('Backup dosyaları'), to: `/tenants/${tenantId}/artifacts` }, { label: artifactQuery.data?.databaseName ?? tx('Backup detayları'), to: `/tenants/${tenantId}/artifacts/${id}` }, { label: tx('Geri yükleme') }]}
       />
       <QueryState isPending={artifactQuery.isPending || targetsQuery.isPending} error={artifactQuery.error || targetsQuery.error}>
         {artifactQuery.data && targetsQuery.data && (
-          <RestoreWizard
+          targetsQuery.data.engine === 'file-system' ? <FileRestoreWizard key={`${tenantId}:${id}`} tenantId={tenantId} artifact={artifactQuery.data} targets={targetsQuery.data} /> : <RestoreWizard
             key={`${tenantId}:${id}`}
             tenantId={tenantId}
             artifact={artifactQuery.data}

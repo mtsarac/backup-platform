@@ -11,6 +11,17 @@ var builder = WebApplication.CreateBuilder(isBootstrap ? args.Where(argument => 
 // Hosting's request-start messages include the query string: OAuth callback credentials and the one-click unsubscribe token (NotificationRecipientApiIntegrationTests pins this).
 builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
 builder.Services.AddPlatformSecurity();
+builder.Services.AddExternalSecrets(builder.Configuration);
+builder.Services.AddAgentCertificates(builder.Configuration);
+if (builder.Configuration.GetValue<bool>("AgentSecurity:Mtls:Enabled"))
+{
+    builder.WebHost.ConfigureKestrel(server => server.ConfigureHttpsDefaults(https =>
+    {
+        https.ClientCertificateMode = Microsoft.AspNetCore.Server.Kestrel.Https.ClientCertificateMode.AllowCertificate;
+        // AgentAuthentication validates the private CA and live credential generation, not the host trust store.
+        https.ClientCertificateValidation = (_, _, _) => true;
+    }));
+}
 
 var app = builder.Build();
 _ = app.Services.GetRequiredService<DbContextOptions<PlatformDbContext>>();
@@ -35,6 +46,7 @@ app.MapAuthenticationEndpoints();
 app.MapUserEndpoints();
 app.MapAgentEndpoints();
 app.MapAgentUpdateEndpoints();
+app.MapAuditReportingEndpoints();
 app.MapAgentAdministrationEndpoints();
 app.MapDiscoveryEndpoints();
 app.MapDatabaseCredentialEndpoints();

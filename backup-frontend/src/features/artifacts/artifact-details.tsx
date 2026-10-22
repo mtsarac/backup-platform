@@ -64,15 +64,16 @@ export function ArtifactMetadata({ artifact }: { artifact: ArtifactPresentation 
   useLanguage()
   const meta = artifact.backupMetadata
   const isPg = meta?.engine === 'postgres'
-  return <Section title={isPg ? tx('PostgreSQL backup metadata') : tx('Database backup metadata')} description={isPg ? tx('pg_dump custom-format mantıksal Full Backup bilgileri.') : tx('Database motorunun bu backup için bildirdiği teknik bilgiler.')}>
+  const isFiles = meta?.engine === 'file-system'
+  return <Section title={isFiles ? tx('Dosya arşivi bilgileri') : isPg ? tx('PostgreSQL backup metadata') : tx('Database backup metadata')} description={isFiles ? tx('Dosya içeriği, izinler ve zaman damgaları SHA-256 manifestiyle korunur.') : isPg ? tx('pg_dump custom-format mantıksal Full Backup bilgileri.') : tx('Database motorunun bu backup için bildirdiği teknik bilgiler.')}>
     {meta ? <Facts columns={3}>
       <Fact label={tx("Engine")}>{meta.engine ?? '—'}</Fact>
       <Fact label={tx("Backup başladı")}>{artifactDate(meta.backupStartedAt)}</Fact>
       <Fact label={tx("Backup tamamlandı")}>{artifactDate(meta.backupFinishedAt)}</Fact>
       <Fact label={tx("Sunucu")}>{meta.instance?.serverName ?? '—'}</Fact>
-      {!isPg && <Fact label={tx("SQL Server Instance")}>{meta.instance?.instanceName ?? '—'}</Fact>}
+      {!isPg && !isFiles && <Fact label={tx("SQL Server Instance")}>{meta.instance?.instanceName ?? '—'}</Fact>}
       <Fact label={tx("Sunucu sürümü")}>{meta.instance?.version ?? '—'}</Fact>
-      {!isPg && <>
+      {!isPg && !isFiles && <>
         <Fact label={tx("SQL Server edition")}>{meta.instance?.edition ?? '—'}</Fact>
         <Fact label={tx("SQL Server platform")}>{meta.instance?.hostPlatform ?? '—'}</Fact>
         <Fact label={tx("Recovery model")}>{meta.sqlDetails?.recoveryModel ?? '—'}</Fact>
@@ -92,8 +93,8 @@ export function ArtifactMetadata({ artifact }: { artifact: ArtifactPresentation 
       <Fact label={tx("Backup doğrulaması")}>{meta.verification?.state ?? '—'} · {meta.verification?.method ?? '—'}</Fact>
       <Fact label={tx("Doğrulama başladı")}>{artifactDate(meta.verification?.startedAt)}</Fact>
       <Fact label={tx("Doğrulama tamamlandı")}>{artifactDate(meta.verification?.finishedAt)}</Fact>
-      {!isPg && <Fact label={tx("COPY_ONLY")}>{meta.appliedOptions?.copyOnly == null ? tx('Bildirilmedi') : meta.appliedOptions.copyOnly ? tx('Uygulandı') : tx('Uygulanmadı')}</Fact>}
-      {([[isPg ? 'data_checksums' : 'CHECKSUM', meta.appliedOptions?.checksum], ['Compression', meta.appliedOptions?.compression]] as const).map(([label, applied]) => <Fact key={label} label={label}>{applied == null ? tx('Bildirilmedi') : applied ? tx('Uygulandı') : tx('Uygulanmadı')}</Fact>)}
+      {!isPg && !isFiles && <Fact label={tx("COPY_ONLY")}>{meta.appliedOptions?.copyOnly == null ? tx('Bildirilmedi') : meta.appliedOptions.copyOnly ? tx('Uygulandı') : tx('Uygulanmadı')}</Fact>}
+      {([[isFiles ? 'SHA-256' : isPg ? 'data_checksums' : 'CHECKSUM', meta.appliedOptions?.checksum], ['Compression', meta.appliedOptions?.compression]] as const).map(([label, applied]) => <Fact key={label} label={label}>{applied == null ? tx('Bildirilmedi') : applied ? tx('Uygulandı') : tx('Uygulanmadı')}</Fact>)}
     </Facts> : <p className="text-sm text-text-muted">{tx("Bu history kaydında Database backup metadata bulunmuyor.")}</p>}
   </Section>
 }

@@ -370,6 +370,14 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("jsonb");
 
+                    b.Property<string>("SealKeyId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("SealSignature")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.Property<Guid?>("SupportSessionId")
                         .HasColumnType("uuid");
 
@@ -1246,7 +1254,7 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "JobId")
                         .IsUnique()
-                        .HasFilter("\"OverlapPolicy\" = 'Skip' AND \"Status\" IN (1,2,3,8)");
+                        .HasFilter("\"OverlapPolicy\" = 'Skip' AND \"Status\" IN (1,2,3,8,9)");
 
                     b.HasIndex("TenantId", "JobId", "CreatedAt");
 
@@ -1281,7 +1289,7 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_backup_runs_retry_state", "\"RetryState\" BETWEEN 0 AND 3 AND ((\"Status\" = 8) = (\"RetryState\" = 1))");
 
-                            t.HasCheckConstraint("ck_backup_runs_status", "\"Status\" BETWEEN 1 AND 8");
+                            t.HasCheckConstraint("ck_backup_runs_status", "\"Status\" BETWEEN 1 AND 9");
 
                             t.HasCheckConstraint("ck_backup_runs_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
 
@@ -1321,6 +1329,12 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("Number")
                         .HasColumnType("integer");
+
+                    b.Property<int?>("PauseReason")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("PauseRequested")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Platform")
                         .HasMaxLength(32)
@@ -1403,7 +1417,7 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_backup_run_attempts_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
 
-                            t.HasCheckConstraint("ck_backup_run_attempts_status", "\"Status\" BETWEEN 1 AND 7");
+                            t.HasCheckConstraint("ck_backup_run_attempts_status", "(\"Status\" BETWEEN 1 AND 7) OR \"Status\" = 9");
 
                             t.HasCheckConstraint("ck_backup_run_attempts_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
                         });
@@ -1877,6 +1891,41 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_tenant_wrap_keys_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
 
                             t.HasCheckConstraint("ck_tenant_wrap_keys_version", "\"Version\" >= 1");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.TransferCheckpoint", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AttemptId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("StorageProvider")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("DestinationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProviderState")
+                        .HasMaxLength(2097152)
+                        .HasColumnType("character varying(2097152)");
+
+                    b.Property<DateTimeOffset>("RecordedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("VerifiedByteOffset")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("TenantId", "AttemptId", "StorageProvider", "DestinationId");
+
+                    b.HasIndex("AttemptId", "TenantId");
+
+                    b.ToTable("transfer_checkpoints", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_transfer_checkpoint_offset", "\"VerifiedByteOffset\" >= 0");
                         });
                 });
 
@@ -3234,6 +3283,16 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                             b1.Property<bool>("VerifyChecksum")
                                 .HasColumnType("boolean")
                                 .HasColumnName("OptionVerifyChecksum");
+
+                            b1.ComplexProperty(typeof(Dictionary<string, object>), "Files", "BackupPlatform.Domain.Restores.RestoreOperation.Options#RestoreOptions.Files#FileRestorePolicy", b2 =>
+                                {
+                                    b2.PrimitiveCollection<string[]>("Paths")
+                                        .HasColumnType("text[]");
+
+                                    b2.Property<string>("RelativeDirectory")
+                                        .IsRequired()
+                                        .HasColumnType("text");
+                                });
                         });
 
                     b.ComplexProperty(typeof(Dictionary<string, object>), "Target", "BackupPlatform.Domain.Restores.RestoreOperation.Target#RestoreTarget", b1 =>
@@ -4766,6 +4825,16 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.TransferCheckpoint", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Backups.BackupRunAttempt", null)
+                        .WithMany()
+                        .HasForeignKey("AttemptId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 

@@ -6,6 +6,7 @@ const statuses: Record<string, { label: string; tone: 'neutral' | 'success' | 'w
   Leased: { get label() { return tx("Agent görevi aldı") }, tone: 'info' },
   Running: { get label() { return tx("Çalışıyor") }, tone: 'info' },
   RetryPending: { get label() { return tx("Yeniden denenecek") }, tone: 'warning' },
+  Paused: { get label() { return tx('Duraklatıldı') }, tone: 'warning' },
   CancellationRequested: { get label() { return tx("İptal isteniyor") }, tone: 'warning' },
   Succeeded: { get label() { return tx("Başarılı") }, tone: 'success' },
   Failed: { get label() { return tx("Başarısız") }, tone: 'error' },

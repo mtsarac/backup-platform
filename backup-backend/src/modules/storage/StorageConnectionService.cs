@@ -5,6 +5,7 @@ using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Storage;
 using BackupPlatform.SecretProviders.Abstractions;
+using BackupPlatform.StorageProviders.Abstractions;
 using Microsoft.Extensions.Logging;
 
 namespace BackupPlatform.Storage;
@@ -475,9 +476,17 @@ public sealed class StorageConnectionService(
         return new StorageConnectionView(
             connection.Id, connection.TenantId.Value, scope.IsPlatform ? record.TenantName : null, connection.Name, connection.ProviderType,
             descriptor?.DisplayName ?? connection.ProviderType, descriptor?.Availability ?? StorageProviderAvailability.Planned, connection.Ownership,
-            connection.QuotaScope, connection.Enabled, connection.IsDefault, descriptor?.Capabilities ?? [], connection.Configuration, connection.HasSecret,
+            connection.QuotaScope, connection.Enabled, connection.IsDefault, EffectiveCapabilities(connection, descriptor), connection.Configuration, connection.HasSecret,
             connection.SecretFieldNames, connection.SecretUpdatedAt, lastTest, record.ReplicaCount, record.StoredBytes, connection.CreatedAt, connection.UpdatedAt,
             connection.StateChangedAt, PermissionsFor(scope, connection, descriptor), connection.AdministrativelyDisabled, connection.EffectiveEnabled);
+    }
+    private static IReadOnlyList<string> EffectiveCapabilities(StorageConnection connection, StorageProviderDescriptor? descriptor)
+    {
+        var capabilities = descriptor?.Capabilities?.ToList() ?? [];
+        if (connection.ProviderType == StorageProviderTypes.S3 && connection.Configuration.TryGetValue("objectLockMode", out var mode)
+            && !string.IsNullOrWhiteSpace(mode) && !capabilities.Contains(StorageCapabilityIds.ImmutableStorage.Value))
+            capabilities.Add(StorageCapabilityIds.ImmutableStorage.Value);
+        return capabilities.Order(StringComparer.Ordinal).ToList();
     }
 
     private StorageResult<StorageConnectionView> Map(StorageScope scope, StorageConnectionResult result) =>
@@ -570,6 +579,7 @@ public sealed class StorageConnectionService(
             result[field.Name] = value;
         }
         if (descriptor.ProviderType == StorageProviderTypes.Sftp) SftpConnectionRules.ValidateConfiguration(result);
+        NetworkStorageConnectionRules.Validate(result, descriptor.ProviderType);
         if (descriptor.ProviderType == StorageProviderTypes.Local && !StorageProviderTypes.IsValid(result.GetValueOrDefault("volume")))
             throw new InvalidStorageConnectionException("configuration.volume", "invalid_value");
         return result;

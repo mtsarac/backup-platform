@@ -5,6 +5,7 @@ using BackupPlatform.Contracts.Agents;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Contracts.Downloads;
 using BackupPlatform.StorageProviders.Abstractions;
+using BackupPlatform.Agent.Core.Updates;
 using Microsoft.Extensions.Logging;
 
 namespace BackupPlatform.Agent.Core.Tasks;
@@ -12,7 +13,7 @@ namespace BackupPlatform.Agent.Core.Tasks;
 /// <summary>Reads only configured provider objects claimed by authenticated polling. A verified open handle is streamed outbound; the backend verifies its own copy before allowing a browser download.</summary>
 public sealed partial class DownloadTaskWorker(
     IDownloadTaskClient client, IAgentCredentialStore identities, IEnumerable<IStorageProvider> providers,
-    AgentSoftwareInfo software, TimeProvider time, ILogger<DownloadTaskWorker> logger, LocalVolumes? volumes = null) : IAgentTaskSink
+    AgentSoftwareInfo software, TimeProvider time, ILogger<DownloadTaskWorker> logger, LocalVolumes? volumes = null, AgentUpdateGate? updates = null) : IAgentTaskSink
 {
     private readonly Channel<DownloadTaskSnapshot> _queue = Channel.CreateBounded<DownloadTaskSnapshot>(new BoundedChannelOptions(1)
     {
@@ -42,7 +43,7 @@ public sealed partial class DownloadTaskWorker(
             {
                 if (entry.Value <= now && entry.Key != _activeSession) _seen.Remove(entry.Key);
             }
-            if (_seen.ContainsKey(id) || !_queue.Writer.TryWrite(task)) return false;
+            if (_seen.ContainsKey(id) || !(updates?.TryQueue(() => _queue.Writer.TryWrite(task)) ?? _queue.Writer.TryWrite(task))) return false;
             _seen.Add(id, task.LeaseExpiresAt);
             return true;
         }
@@ -71,6 +72,7 @@ public sealed partial class DownloadTaskWorker(
                 finally
                 {
                     lock (_gate) _activeSession = null;
+                    updates?.Complete();
                 }
             }
         }

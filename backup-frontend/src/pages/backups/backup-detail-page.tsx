@@ -50,15 +50,17 @@ function BackupDetail({ id }: { id: string }) {
   const [tab, setTab] = useState<Tab>('summary')
   const [confirmCancel, setConfirmCancel] = useState(false)
   const run = query.data
-  const busy = actions.retry.isPending || actions.cancel.isPending
+  const busy = actions.retry.isPending || actions.cancel.isPending || actions.pause.isPending || actions.resume.isPending
 
-  async function perform(action: 'retry' | 'cancel') {
+  async function perform(action: 'retry' | 'cancel' | 'pause' | 'resume') {
     setNotice('')
     actions.retry.reset()
     actions.cancel.reset()
+    actions.pause.reset()
+    actions.resume.reset()
     try {
       const response: BackupRun = await actions[action].mutateAsync()
-      setNotice(action === 'retry' ? tx('Yeni deneme sıraya alındı.') : response.status === 'Cancelled' ? tx('Çalıştırma iptal edildi.') : tx('İptal isteği iletildi. Ajanın işlemi durdurması bekleniyor.'))
+      setNotice(action === 'pause' ? tx('Duraklatma isteği iletildi.') : action === 'resume' ? tx('Aktarım devam etmek üzere sıraya alındı.') : action === 'retry' ? tx('Yeni deneme sıraya alındı.') : response.status === 'Cancelled' ? tx('Çalıştırma iptal edildi.') : tx('İptal isteği iletildi. Ajanın işlemi durdurması bekleniyor.'))
       setConfirmCancel(false)
     } catch {
       // The mutation's central error mapping is rendered in the page; never fabricate a state.
@@ -82,6 +84,8 @@ function BackupDetail({ id }: { id: string }) {
         meta={run && <><StatusPill status={run.status} /><ReplicationBadge replication={run.replication} /><SizeAnomalyBadge run={run} /><span className="text-sm text-text-muted">{triggerLabel(run.triggerType)} · {formatTimestamp(run.startedAt ?? run.createdAt)}</span></>}
         actions={run && canOperate && <>
           {canRetryRun(run.status) && <Button disabled={busy} onClick={() => void perform('retry')}>{actions.retry.isPending ? tx('Sıraya alınıyor…') : tx('Yeniden dene')}</Button>}
+          {(run.status === 'Running' || run.status === 'Leased') && <Button disabled={busy || run.pauseRequested} onClick={() => void perform('pause')}>{actions.pause.isPending || run.pauseRequested ? tx('İletiliyor…') : tx('Duraklat')}</Button>}
+          {run.status === 'Paused' && <Button disabled={busy} onClick={() => void perform('resume')}>{actions.resume.isPending ? tx('Sıraya alınıyor…') : tx('Devam Et')}</Button>}
           {canCancelRun(run.status) && <Button variant="destructive" disabled={busy} onClick={() => { actions.cancel.reset(); setConfirmCancel(true) }}>{actions.cancel.isPending ? tx('İletiliyor…') : tx('İptal et')}</Button>}
         </>}
       />
@@ -93,6 +97,8 @@ function BackupDetail({ id }: { id: string }) {
           {notice && run.status !== 'Succeeded' && !(run.status === 'Cancelled' && notice.startsWith(tx('İptal isteği'))) && <Notice tone="success">{notice}</Notice>}
           {actions.retry.error && <Notice tone="error">{errorMessage(actions.retry.error)}</Notice>}
           {actions.cancel.error && !confirmCancel && <Notice tone="error">{errorMessage(actions.cancel.error)}</Notice>}
+          {actions.pause.error && <Notice tone="error">{errorMessage(actions.pause.error)}</Notice>}
+          {actions.resume.error && <Notice tone="error">{errorMessage(actions.resume.error)}</Notice>}
           <Tabs label={tx("Backup Run bölümleri")} idPrefix="run" value={tab} onChange={setTab} items={tabs} />
           <div role="tabpanel" id={`run-panel-${tab}`} aria-labelledby={`run-tab-${tab}`} className="space-y-6">
             {tab === 'summary' && <>
@@ -108,6 +114,7 @@ function BackupDetail({ id }: { id: string }) {
               </Section>}
               {run.status === 'RetryPending' && <Notice tone="warning">{tx("Otomatik yeniden deneme bekleniyor. Sonraki deneme:")}{' '}{formatTimestamp(run.retry.nextAttemptAt)}. {failureMessage(run.retry.lastFailureCode)}</Notice>}
               {run.status === 'CancellationRequested' && <Notice tone="warning">{tx("İptal istendi; çalıştırma henüz iptal edilmiş değildir. Ajan sonucu bildirdiğinde durum güncellenir.")}</Notice>}
+              {run.status === 'Paused' && <Notice tone="warning">{run.pauseReason === 'PausedByNetworkError' ? tx('Ağ kesintisi nedeniyle aktarım duraklatıldı. Bağlantıyı kontrol edip Devam Et ile sürdürün.') : tx('Aktarım duraklatıldı. Hazırlanmış yedek korunur; Devam Et ile aynı baytlardan sürdürülür.')}</Notice>}
               {isActiveRun(run.status) && latest && <Section title={tx("Güncel deneme")} description={tx("{0}. deneme · {1}", { "0": latest.number, "1": progressStageLabel(latest.progressStage) })}><AttemptProgress attempt={latest} /></Section>}
               <Section title={tx("Çalıştırma özeti")}>
                 <Facts columns={3}>

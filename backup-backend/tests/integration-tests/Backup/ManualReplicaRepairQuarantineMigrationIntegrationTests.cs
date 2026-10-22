@@ -23,6 +23,8 @@ public sealed partial class ManualReplicaRepairIntegrationTests
             await database.ExecuteAsync("ALTER TABLE backup_artifacts ADD COLUMN \"Format\" varchar(16) NOT NULL DEFAULT 'v1-plain', ADD COLUMN \"EncryptionKeyId\" varchar(32), " +
                 "ADD COLUMN \"EncryptionKeyVersion\" integer, ADD COLUMN \"EncryptionWrappedDekBase64\" varchar(4096), ADD COLUMN \"EncryptionRecipientsJson\" varchar(2048)");
             await database.ExecuteAsync("ALTER TABLE backup_runs ADD COLUMN \"SizeAnomalyBaselineBytes\" bigint, ADD COLUMN \"SizeAnomalyDeviationRatio\" double precision, ADD COLUMN \"SizeAnomalyStatus\" varchar(32)");
+            await database.ExecuteAsync("ALTER TABLE audit_events ADD COLUMN \"SealKeyId\" varchar(128), ADD COLUMN \"SealSignature\" varchar(256)");
+            await database.ExecuteAsync("ALTER TABLE backup_run_attempts ADD COLUMN \"PauseRequested\" boolean NOT NULL DEFAULT false, ADD COLUMN \"PauseReason\" integer");
             var scenario = new ManualReplicaRepairIntegrationTests(database);
             var setup = await scenario.SetupAsync(QuotaAccountingMode.PhysicalReplicaBytes, new HashSet<string> { "central", "google-drive" });
             var source = setup.Artifact.Replicas.Single(r => r.StorageProvider == "central");
@@ -41,6 +43,8 @@ public sealed partial class ManualReplicaRepairIntegrationTests
             var before = (await scenario.World.StoredUsageAsync(setup.Agent.TenantId))!;
             await database.ExecuteAsync("ALTER TABLE backup_artifacts DROP COLUMN \"Format\", DROP COLUMN \"EncryptionKeyId\", DROP COLUMN \"EncryptionKeyVersion\", DROP COLUMN \"EncryptionWrappedDekBase64\", DROP COLUMN \"EncryptionRecipientsJson\"");
             await database.ExecuteAsync("ALTER TABLE backup_runs DROP COLUMN \"SizeAnomalyBaselineBytes\", DROP COLUMN \"SizeAnomalyDeviationRatio\", DROP COLUMN \"SizeAnomalyStatus\"");
+            await database.ExecuteAsync("ALTER TABLE audit_events DROP COLUMN \"SealKeyId\", DROP COLUMN \"SealSignature\"");
+            await database.ExecuteAsync("ALTER TABLE backup_run_attempts DROP COLUMN \"PauseRequested\", DROP COLUMN \"PauseReason\"");
             await using var context = database.CreatePlatformContext();
             await context.GetService<IMigrator>().MigrateAsync();
             var replicas = await context.BackupReplicas.AsNoTracking().Where(r => r.TenantId == setup.Agent.TenantId).ToListAsync();

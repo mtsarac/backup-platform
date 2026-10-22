@@ -37,6 +37,7 @@ const capabilityLabels: Record<string, string> = {
 
 const testMessages: Record<string, string> = {
   get ok() { return tx("Yazma, doğrulama ve silme sınaması başarılı.") },
+  get access_verified() { return tx("Bucket erişimi ve Object Lock ayarları doğrulandı. Yazılan her yedek ayrıca okunarak doğrulanır.") },
   get agent_side_storage() { return tx("Backend Agent diskine erişemez; bu hedef backup çalışırken Agent tarafından denetlenir.") },
   get storage_not_configured() { return tx("Depolama yapılandırılmamış.") },
   get provider_not_implemented() { return tx("Bu Storage Provider henüz uygulanmadı; test edilemez.") },
@@ -85,6 +86,7 @@ const topologyLabels: Record<ProviderTopology, string> = { get AgentDirect() { r
 const executionLocationLabels: Record<ExecutionLocation, string> = { get Agent() { return tx("Agent") }, get Backend() { return tx("Backend") } }
 const testModeLabels: Record<TestMode, string> = {
   get BackendRoundTrip() { return tx("Backend yazma / doğrulama / silme sınaması") },
+  get BackendReadAccess() { return tx("Bucket erişimi ve koruma ayarları; WORM sınama nesnesi oluşturulmaz") },
   get AgentSide() { return tx("Agent tarafında; backend erişemez, sonuç Test edilemez olur") },
   get None() { return tx("Test desteklenmiyor") },
 }

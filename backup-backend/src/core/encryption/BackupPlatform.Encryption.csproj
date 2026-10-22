@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\contracts\BackupPlatform.Contracts.csproj" />
     <InternalsVisibleTo Include="BackupPlatform.UnitTests" />
   </ItemGroup>
 

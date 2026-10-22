@@ -25,6 +25,8 @@ public sealed record BackupJobView(Guid Id, Guid AgentId, string Name, string Ba
 public sealed record BackupRunView(Guid Id, Guid JobId, Guid AgentId, string Status, string BackupType, string TriggerType, BackupExecutionConfiguration Configuration, int CurrentAttemptNumber, DateTimeOffset CreatedAt, DateTimeOffset? StartedAt, DateTimeOffset? CompletedAt, DateTimeOffset? CancellationRequestedAt, string? ReasonCode, string? Reason, BackupRetryView Retry, IReadOnlyList<BackupAttemptView> Attempts, DateTimeOffset? ScheduledFor = null, double? ScheduleDelaySeconds = null, DateTimeOffset? ClaimDeadline = null, BackupRetentionPolicyView? Retention = null, string? JobName = null, string? AgentName = null, BackupReplicationView? Replication = null, string? SizeAnomalyStatus = null, double? SizeAnomalyDeviationRatio = null, long? SizeAnomalyBaselineBytes = null)
 {
     public bool IsSizeAnomaly => SizeAnomalyStatus == BackupSizeAnomalyStatuses.SizeAnomalyWarning;
+    public string? PauseReason { get; init; }
+    public bool PauseRequested { get; init; }
 }
 /// <summary>Where the run stands in its retry lifecycle. <see cref="AttemptsUsed"/> counts attempts created, <see cref="MaxAttempts"/> is the total allowed (not a retry count).</summary>
 public sealed record BackupRetryView(int MaxAttempts, int AttemptsUsed, string State, DateTimeOffset? NextAttemptAt, string? LastFailureCode, string? LastFailureReason, bool? LastFailureRetryable, string OverlapPolicy, BackupRetryPolicyView Policy);
@@ -123,7 +125,10 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         {
             Destinations = destinations,
             RequiredVerifiedReplicaCount = c.RequiredVerifiedReplicaCount > 0 ? c.RequiredVerifiedReplicaCount : 1,
-            EncryptionPolicy = c.EncryptionPolicy
+            EncryptionPolicy = c.EncryptionPolicy,
+            EnforceThreeTwoOne = c.EnforceThreeTwoOne,
+            SourceSite = c.SourceSite,
+            Files = c.Files is { } files ? new FileBackupPolicy { Paths = files.Paths, Includes = files.Includes, Excludes = files.Excludes, SymlinkPolicy = files.SymlinkPolicy } : null
         };
     }
 
@@ -166,6 +171,10 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
             AttemptId = claim.Attempt.Id, AttemptNumber = claim.Attempt.Number,
             LeaseToken = claim.Attempt.LeaseToken!.Value, LeaseExpiresAt = claim.Attempt.LeaseExpiresAt!.Value,
             MaxArtifactBytes = claim.MaxArtifactBytes,
+            ResumeTransfer = claim.Attempt.StartedAt.HasValue,
+            Checkpoints = (await store.GetCheckpointsAsync(identity.TenantId, claim.Attempt.Id, cancellationToken))
+                .Select(x => new TransferCheckpointContract { StorageProvider = x.StorageProvider, DestinationId = x.DestinationId,
+                    VerifiedByteOffset = x.VerifiedByteOffset, ProviderState = x.ProviderState }).ToArray(),
             Configuration = ToWire(claim.Run.Configuration), CancellationRequested = claim.Run.CancellationRequestedAt is not null,
             Encryption = encryption
         };
@@ -182,6 +191,9 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
         {
             throw new ArgumentException("Invalid completion metadata.");
         }
+        if (request.Status == "Paused")
+            return await store.CompleteAttemptAsync(Command(identity, attemptId, request.LeaseToken),
+                new BackupCompletion("Paused", request.FailureCode, null), cancellationToken);
         request = await ApplyEncryptionPolicyAsync(identity.TenantId, claim.Run.Configuration, request, cancellationToken);
         var a = request.Artifact;
         var artifact = a is null ? null : new BackupArtifactResult(a.SizeBytes, a.SourceChecksum, a.ArtifactChecksum, a.ChecksumAlgorithm,
@@ -329,7 +341,7 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
             waiting.Length == 0 ? null : waiting.Min(r => r.DeleteAfter), waiting.OrderBy(r => r.DeleteAfter).FirstOrDefault()?.DeleteReason?.ToString(),
             runId, jobId, artifact.AttemptId, CancelDeleteAllowed: artifact.Replicas.Any(replica => replica.Status == BackupReplicaStatus.DeletePending && replica.VerificationState == "Verified"), BackupType: artifact.BackupType,
             BackupMetadata: BackupMetadataProjection.Read(artifact.SourceMetadataJson, artifact.AppliedOptionsJson),
-            Replication: snapshot is null ? null : ToView(BackupReplicationEvaluator.ForArtifact(snapshot.RequiredVerifiedReplicaCount, snapshot.Destinations.Count, artifact.Replicas)),
+            Replication: snapshot is null ? null : ToView(BackupReplicationEvaluator.ForArtifact(snapshot, artifact.Replicas)),
             Encryption: ToEncryptionView(artifact));
     }
 
@@ -377,7 +389,8 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
                 AttemptTrigger(run, a), ToView(BackupReplicationEvaluator.ForAttempt(run.Configuration, a)))).ToArray(),
             run.ScheduledOccurrence, run.ScheduledOccurrence is { } scheduledFor ? Math.Max(0, (run.CreatedAt - scheduledFor).TotalSeconds) : null, run.ClaimDeadline, ToView(run.RetentionPolicy),
             Replication: ToView(EffectiveReplication(run)), SizeAnomalyStatus: run.SizeAnomalyStatus,
-            SizeAnomalyDeviationRatio: run.SizeAnomalyDeviationRatio, SizeAnomalyBaselineBytes: run.SizeAnomalyBaselineBytes);
+            SizeAnomalyDeviationRatio: run.SizeAnomalyDeviationRatio, SizeAnomalyBaselineBytes: run.SizeAnomalyBaselineBytes)
+        { PauseReason = run.CurrentAttempt.PauseReason?.ToString(), PauseRequested = run.CurrentAttempt.PauseRequested };
     }
 
     /// <summary>The replication of the attempt that decides the run: the succeeded one if any, else the latest that actually transferred something.</summary>
@@ -440,8 +453,14 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
             StorageTarget = d.StorageTarget,
             StorageExecutionLocation = d.StorageExecutionLocation.ToString(),
             IsPrimary = d.IsPrimary,
-            Direct = d.Direct
+            Direct = d.Direct,
+            MediaClass = d.MediaClass,
+            Site = d.Site,
+            OffsiteVerified = d.OffsiteVerified
         }).ToArray(),
-        RequiredVerifiedReplicaCount = c.RequiredVerifiedReplicaCount
+        RequiredVerifiedReplicaCount = c.RequiredVerifiedReplicaCount,
+        EnforceThreeTwoOne = c.EnforceThreeTwoOne,
+        SourceSite = c.SourceSite,
+        Files = c.Files is { } files ? new BackupFileSelection { Paths = files.Paths, Includes = files.Includes, Excludes = files.Excludes, SymlinkPolicy = files.SymlinkPolicy } : null
     };
 }

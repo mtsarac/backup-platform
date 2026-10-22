@@ -34,6 +34,10 @@ public sealed class HttpBackupTaskClient : IBackupTaskClient
     public Task<AgentBackendResult<bool>> CompleteAsync(AgentLocalIdentity identity, Guid attemptId, BackupTaskCompletionRequest request, CancellationToken cancellationToken) =>
         _client.SendEmptyAsync(identity, Path(attemptId, "complete"), Content(request), cancellationToken);
 
+    public Task<AgentBackendResult<bool>> CanReleaseRetainedTransferAsync(AgentLocalIdentity identity, Guid attemptId, CancellationToken cancellationToken) =>
+        _client.ReadAsync(identity, Path(attemptId, "retained-transfer-release"),
+            async (response, token) => AgentBackendResult<bool>.Success(await response.Content.ReadFromJsonAsync<bool>(token)), cancellationToken);
+
     private static JsonContent Content<T>(T request) where T : class
     {
         ArgumentNullException.ThrowIfNull(request);

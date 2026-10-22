@@ -16,14 +16,22 @@ public static class BackupTaskEndpoints
             .RequireAuthorization(AuthorizationPolicies.Agent);
         tasks.MapPost("/start", StartAsync);
         tasks.MapPost("/lease", RenewAsync);
-        tasks.MapPost("/progress", ProgressAsync);
+        tasks.MapPost("/progress", ProgressAsync).WithMetadata(new RequestSizeLimitAttribute(8 * 1024 * 1024));
         tasks.MapPost("/complete", CompleteAsync);
+        tasks.MapGet("/retained-transfer-release", CanReleaseRetainedTransferAsync);
         var deletions = endpoints.MapGroup("/api/agent/replica-deletions/{replicaId:guid}")
             .WithMetadata(new AgentApiEndpoint(), new RequiresAgentProtocol(), new RequestSizeLimitAttribute(4 * 1024))
             .RequireAuthorization(AuthorizationPolicies.Agent);
         deletions.MapPost("/lease", RenewDeletionAsync);
         deletions.MapPost("/complete", CompleteDeletionAsync);
         return endpoints;
+    }
+
+    private static async Task<IResult> CanReleaseRetainedTransferAsync(Guid attemptId, ICurrentAgent agent,
+        IBackupRunStore store, CancellationToken cancellationToken)
+    {
+        var claim = await store.GetAttemptAsync(agent.Identity!.TenantId, agent.Identity.AgentId, attemptId, cancellationToken);
+        return claim is null ? Results.NotFound() : Results.Ok(claim.Attempt.IsTerminal);
     }
 
     private static async Task<IResult> StartAsync(Guid attemptId, BackupTaskStartRequest request, ICurrentAgent agent,
@@ -39,7 +47,7 @@ public static class BackupTaskEndpoints
         var lease = await store.RenewLeaseAsync(command, BackupOrchestrator.LeaseDuration, cancellationToken);
         return lease is null ? Mutation(BackupMutationResult.Conflict) : Results.Ok(new BackupTaskLeaseResponse
         {
-            LeaseExpiresAt = lease.LeaseExpiresAt, CancellationRequested = lease.CancellationRequested
+            LeaseExpiresAt = lease.LeaseExpiresAt, CancellationRequested = lease.CancellationRequested, PauseRequested = lease.PauseRequested
         });
     }
 
@@ -50,7 +58,7 @@ public static class BackupTaskEndpoints
         var lease = await store.RenewLeaseAsync(service.Command(agent.Identity!, attemptId, request.LeaseToken), BackupOrchestrator.LeaseDuration, cancellationToken);
         return lease is null ? Mutation(BackupMutationResult.Conflict) : Results.Ok(new BackupTaskLeaseResponse
         {
-            LeaseExpiresAt = lease.LeaseExpiresAt, CancellationRequested = lease.CancellationRequested
+            LeaseExpiresAt = lease.LeaseExpiresAt, CancellationRequested = lease.CancellationRequested, PauseRequested = lease.PauseRequested
         });
     }
 
@@ -58,7 +66,7 @@ public static class BackupTaskEndpoints
         BackupOrchestrator service, IBackupRunStore store, CancellationToken cancellationToken)
     {
         if (!BackupInputValidation.IsValidProgress(request)) return Invalid();
-        return Mutation(await store.ReportProgressAsync(service.Command(agent.Identity!, attemptId, request.LeaseToken), new BackupProgress(request.Stage, request.Percent), cancellationToken));
+        return Mutation(await store.ReportProgressAsync(service.Command(agent.Identity!, attemptId, request.LeaseToken), new BackupProgress(request.Stage, request.Percent) { Checkpoint = request.Checkpoint }, cancellationToken));
     }
 
     private static async Task<IResult> CompleteAsync(Guid attemptId, BackupTaskCompletionRequest request, ICurrentAgent agent,

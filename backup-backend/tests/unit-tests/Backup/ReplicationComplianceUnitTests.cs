@@ -67,6 +67,33 @@ public sealed class ReplicationComplianceUnitTests
         return run;
     }
 
+    [Fact]
+    public void Three_two_one_requires_verified_copies_on_two_media_and_a_tested_remote_site()
+    {
+        var run = SucceededRun(3, "central", "sftp", "google-drive");
+        var replicas = run.CurrentAttempt.Artifacts.Single().Replicas;
+        var snapshot = run.Configuration with
+        {
+            EnforceThreeTwoOne = true, SourceSite = "office",
+            Destinations = run.Configuration.Destinations.Select(d => d with
+            {
+                MediaClass = d.StorageProvider == "google-drive" ? "object-storage" : "disk",
+                Site = d.StorageProvider == "google-drive" ? "datacenter" : "office",
+                OffsiteVerified = d.StorageProvider == "google-drive"
+            }).ToArray()
+        };
+        Assert.True(BackupReplicationEvaluator.ForArtifact(snapshot, replicas).PolicySatisfied);
+        Assert.False(BackupReplicationEvaluator.ForArtifact(snapshot with
+        {
+            Destinations = snapshot.Destinations.Select(d => d with { OffsiteVerified = false }).ToArray()
+        }, replicas).PolicySatisfied);
+        Assert.False(BackupReplicationEvaluator.ForArtifact(snapshot with
+        {
+            Destinations = snapshot.Destinations.Select(d => d with { MediaClass = "disk" }).ToArray()
+        }, replicas).PolicySatisfied);
+        Assert.False(BackupReplicationEvaluator.ForArtifact(snapshot, replicas.Where(r => r.StorageProvider != "google-drive")).PolicySatisfied);
+    }
+
     [Theory]
     // 3 destinations, 2 required: the four rows of the specification.
     [InlineData(2, new[] { "central", "sftp", "google-drive" }, "Healthy", true)]

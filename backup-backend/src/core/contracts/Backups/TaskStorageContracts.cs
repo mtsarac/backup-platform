@@ -43,9 +43,14 @@ public sealed record TaskStorageAccessResponse
     public string? Password { get; init; }
     public string? PrivateKey { get; init; }
     public string? Passphrase { get; init; }
+    public IReadOnlyDictionary<string, string>? Configuration { get; init; }
+    public string? AccessKey { get; init; }
+    public string? SecretKey { get; init; }
+    public string? SessionToken { get; init; }
+    public string? Domain { get; init; }
 
     public override string ToString() =>
-        $"TaskStorageAccessResponse {{ ProviderType = {ProviderType}, Host = {Host}, Port = {Port}, Username = {Username}, FolderId = {FolderId}, RemoteBaseDirectory = {RemoteBaseDirectory}, HostKeyFingerprint = {HostKeyFingerprint}, ExpiresAt = {ExpiresAt}, Password = [REDACTED], PrivateKey = [REDACTED], Passphrase = [REDACTED], AccessToken = [REDACTED] }}";
+        $"TaskStorageAccessResponse {{ ProviderType = {ProviderType}, Credentials = [REDACTED] }}";
 }
 
 public sealed record TaskStorageCatalogRecord(

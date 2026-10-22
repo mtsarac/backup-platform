@@ -25,6 +25,7 @@ internal static class AgentDiscoveryServiceCollectionExtensions
         services.AddSingleton<IInstanceDetector, WindowsSqlServerDetector>();
         services.AddSingleton<IInstanceDetector, WindowsPostgreSqlDetector>();
 #endif
+        services.AddSingleton<IDockerEngineTransport, DockerEngineHttpTransport>();
         services.AddSingleton<IInstanceDetector, DockerContainerDetector>();
         services.TryAddSingleton<IListenerProbe, LoopbackListenerProbe>();
         services.AddSingleton<DiscoveryScanner>();

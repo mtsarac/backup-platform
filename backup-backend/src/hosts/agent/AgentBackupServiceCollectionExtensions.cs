@@ -6,6 +6,7 @@ using BackupPlatform.BackupProviders.MSSQL;
 using BackupPlatform.BackupProviders.PostgreSql;
 using BackupPlatform.BackupProviders.PostgreSql.Tools;
 using BackupPlatform.Agent.Core.Tasks;
+using BackupPlatform.Agent.Core.Identity;
 using BackupPlatform.StorageProviders.Abstractions;
 using BackupPlatform.StorageProviders.Central;
 using BackupPlatform.StorageProviders.Local;
@@ -33,7 +34,7 @@ public static class AgentBackupServiceCollectionExtensions
         services.AddSingleton<IDatabaseRestoreProvider, SqlServerRestoreProvider>();
         var postgreSql = configuration.GetSection(AgentHostOptions.SectionName).GetSection(AgentBackupOptions.SectionName)
             .GetSection("PostgreSql").Get<AgentPostgreSqlOptions>();
-        var clientTools = new PostgreSqlProviderOptions(postgreSql?.ClientToolsDirectory);
+        var clientTools = new PostgreSqlProviderOptions(postgreSql?.ClientToolsDirectory, postgreSql?.BackupMode ?? PostgreSqlBackupMode.Logical);
         services.AddSingleton<IDatabaseBackupProvider>(provider => new PostgreSqlBackupProvider(
             provider.GetRequiredService<ILogger<PostgreSqlBackupProvider>>(), clientTools, provider.GetRequiredService<TimeProvider>()));
         services.AddSingleton<IDatabaseRestoreProvider>(provider => new PostgreSqlRestoreProvider(
@@ -43,6 +44,27 @@ public static class AgentBackupServiceCollectionExtensions
         services.AddSingleton<IDatabaseRestorePipeline, DatabaseRestorePipeline>();
         // Shared by the pipeline (which holds the staged names of running attempts) and the staging cleanup (which must skip them).
         services.TryAddSingleton<StagingUsageRegistry>();
+        services.AddSingleton<BackupPlatform.SnapshotProviders.Abstractions.ISnapshotCommandRunner, BackupPlatform.SnapshotProviders.Abstractions.SnapshotCommandRunner>();
+        foreach (var kind in Enum.GetValues<BackupPlatform.SnapshotProviders.Abstractions.SnapshotKind>())
+        {
+            services.AddSingleton<BackupPlatform.SnapshotProviders.Abstractions.ISnapshotProvider>(provider =>
+                new BackupPlatform.SnapshotProviders.Abstractions.NativeSnapshotProvider(kind,
+                    provider.GetRequiredService<BackupPlatform.SnapshotProviders.Abstractions.ISnapshotCommandRunner>()));
+        }
+        var fileSources = configuration.GetSection("Agent:Backup:FileSources").Get<Dictionary<string, BackupPlatform.BackupProviders.FileSystem.FileSystemRoot>>();
+        if (fileSources is { Count: > 0 })
+        {
+#if AGENT_PLATFORM_WINDOWS
+            services.AddSingleton<BackupPlatform.BackupProviders.Abstractions.IWindowsFilePermissions, BackupPlatform.Agent.Platform.Windows.WindowsFilePermissions>();
+#endif
+            services.AddSingleton(provider => new BackupPlatform.BackupProviders.FileSystem.FileSystemBackupProvider(
+                provider.GetServices<BackupPlatform.SnapshotProviders.Abstractions.ISnapshotProvider>(),
+                provider.GetService<BackupPlatform.BackupProviders.Abstractions.IWindowsFilePermissions>()));
+            services.AddSingleton(provider => new BackupPlatform.BackupProviders.FileSystem.FileSystemBackupEngine(fileSources,
+                provider.GetRequiredService<BackupPlatform.BackupProviders.FileSystem.FileSystemBackupProvider>(), provider.GetRequiredService<TimeProvider>()));
+            services.AddSingleton<IDatabaseBackupProvider>(provider => provider.GetRequiredService<BackupPlatform.BackupProviders.FileSystem.FileSystemBackupEngine>());
+            services.AddSingleton<IDatabaseRestoreProvider>(provider => provider.GetRequiredService<BackupPlatform.BackupProviders.FileSystem.FileSystemBackupEngine>());
+        }
 
         var options = configuration.GetSection(AgentHostOptions.SectionName).GetSection(AgentBackupOptions.SectionName).Get<AgentBackupOptions>();
         var capacityRoots = (options?.LocalStorage?.Volumes ?? [])
@@ -74,7 +96,14 @@ public static class AgentBackupServiceCollectionExtensions
                         provider.GetRequiredService<StagingUsageRegistry>(),
                         // Cleanup age is judged against file timestamps written by this machine's own clock.
                         time is ServerAlignedTimeProvider aligned ? aligned.Local : time,
-                        provider.GetRequiredService<ILogger<StagingCleaner>>());
+                        provider.GetRequiredService<ILogger<StagingCleaner>>(),
+                        async (attemptId, token) =>
+                        {
+                            var identity = await provider.GetRequiredService<IAgentCredentialStore>().LoadAsync(token).ConfigureAwait(false);
+                            if (identity is null) return false;
+                            var result = await provider.GetRequiredService<IBackupTaskClient>().CanReleaseRetainedTransferAsync(identity, attemptId, token).ConfigureAwait(false);
+                            return result.IsSuccess && result.Value;
+                        });
                 });
                 services.AddHostedService<AgentStagingCleanupHostedService>();
             }
@@ -176,6 +205,15 @@ internal static class AgentBackupOptionsValidation
         var prefix = $"{AgentHostOptions.SectionName}:{AgentBackupOptions.SectionName}:";
         if (options.PostgreSql?.ClientToolsDirectory is { } clientTools && !IsAbsolute(clientTools))
             yield return prefix + "PostgreSql:ClientToolsDirectory must be an absolute directory path.";
+        if (options.PostgreSql is { } pg && !Enum.IsDefined(pg.BackupMode))
+            yield return prefix + "PostgreSql:BackupMode must be Logical, Physical or Streaming.";
+        foreach (var pair in options.FileSources ?? [])
+        {
+            if (!LocalVolumes.IsValidName(pair.Key) || !IsAbsolute(pair.Value.RootDirectory))
+                yield return prefix + "FileSources requires simple source references and absolute root directories.";
+            if (pair.Value.SnapshotKind is { } kind && !Enum.IsDefined(kind))
+                yield return prefix + "FileSources snapshot kind must be Vss, Lvm, Btrfs or Zfs.";
+        }
 
         if (options.Staging is { } staging)
         {
@@ -221,7 +259,7 @@ internal static class AgentBackupOptionsValidation
             }
         }
 
-        if (options.LocalStorage is { } local && (local.RootDirectory is null || !IsAbsolute(local.RootDirectory)))
+        if (options.LocalStorage is { RootDirectory: not null } local && !IsAbsolute(local.RootDirectory))
         {
             yield return prefix + "LocalStorage:RootDirectory must be an absolute path.";
         }

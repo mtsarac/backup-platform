@@ -32,8 +32,19 @@ public sealed record BackupExecutionConfiguration
     /// <summary>The only destination source (at least one, exactly one primary). A job may leave a destination's connection null (the tenant default for its provider); a run always carries the resolved one.</summary>
     public IReadOnlyList<BackupDestinationContract> Destinations { get; init; } = [];
     public int RequiredVerifiedReplicaCount { get; init; } = 1;
+    public bool EnforceThreeTwoOne { get; init; }
+    public string? SourceSite { get; init; }
+    public BackupFileSelection? Files { get; init; }
     /// <summary>"Off" (default when omitted), "Optional" or "Required". The backend turns it into <see cref="BackupTaskSnapshot.Encryption"/>.</summary>
     public string EncryptionPolicy { get; init; } = "Off";
+}
+
+public sealed record BackupFileSelection
+{
+    public IReadOnlyList<string> Paths { get; init; } = ["."];
+    public IReadOnlyList<string> Includes { get; init; } = ["**"];
+    public IReadOnlyList<string> Excludes { get; init; } = [];
+    public string SymlinkPolicy { get; init; } = "Skip";
 }
 
 public sealed record BackupDestinationContract
@@ -47,6 +58,9 @@ public sealed record BackupDestinationContract
     public bool IsPrimary { get; init; }
     /// <summary>True when the agent transfers directly to/from the storage; false when bytes are relayed through the backend.</summary>
     public bool Direct { get; init; }
+    public string? MediaClass { get; init; }
+    public string? Site { get; init; }
+    public bool OffsiteVerified { get; init; }
 }
 /// <summary>A database-authoritative claim, not a push command. Tokens fence every mutation of this attempt.</summary>
 public sealed record BackupTaskSnapshot
@@ -62,6 +76,8 @@ public sealed record BackupTaskSnapshot
     public string BackupType { get; init; } = "Full";
     public required BackupExecutionConfiguration Configuration { get; init; }
     public bool CancellationRequested { get; init; }
+    public bool ResumeTransfer { get; init; }
+    public IReadOnlyList<TransferCheckpointContract> Checkpoints { get; init; } = [];
     /// <summary>Hard-quota bound checked before any transfer; null means no hard bound, zero refuses storage.</summary>
     public long? MaxArtifactBytes { get; init; }
     /// <summary>Null means the job does not encrypt. Carries the tenant's PUBLIC wrap key only; no private or symmetric key ever travels to the agent.</summary>
@@ -85,6 +101,7 @@ public sealed record BackupTaskLeaseResponse
 {
     public DateTimeOffset LeaseExpiresAt { get; init; }
     public bool CancellationRequested { get; init; }
+    public bool PauseRequested { get; init; }
 }
 
 public sealed record BackupTaskProgressRequest
@@ -92,6 +109,7 @@ public sealed record BackupTaskProgressRequest
     public Guid LeaseToken { get; init; }
     public string Stage { get; init; } = string.Empty;
     public double? Percent { get; init; }
+    public TransferCheckpointContract? Checkpoint { get; init; }
 }
 
 /// <summary>
@@ -203,4 +221,12 @@ public sealed record BackupTaskReplica
     public string VerificationMethod { get; init; } = string.Empty;
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset? VerifiedAt { get; init; }
+}
+
+public sealed record TransferCheckpointContract
+{
+    public string StorageProvider { get; init; } = string.Empty;
+    public Guid DestinationId { get; init; }
+    public long VerifiedByteOffset { get; init; }
+    public string? ProviderState { get; init; }
 }

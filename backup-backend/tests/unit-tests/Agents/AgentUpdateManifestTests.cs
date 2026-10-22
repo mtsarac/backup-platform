@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using BackupPlatform.Contracts.Agents;
+using BackupPlatform.Encryption;
 using Xunit;
 
 namespace BackupPlatform.UnitTests.Agents;

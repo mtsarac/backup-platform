@@ -318,6 +318,7 @@ public sealed class StorageCapacityProbeIntegrationTests(PostgreSqlFixture fixtu
         Assert.Equal("CapacityUnavailable", AgentWorld.ReadJson(refused).GetProperty("status").GetString());
         using var oldPoll = await world.PollAsync(old);
         Assert.Empty(AgentWorld.ReadJson(oldPoll).GetProperty("tasks").EnumerateArray());
+        world.Clock.Advance(TimeSpan.FromSeconds(1));
         await DeclareCapacityAsync(world, old);
         using var queued = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/v1/storage/connections/{connectionId}/probe");
         Assert.Equal(HttpStatusCode.Accepted, queued.StatusCode);
@@ -520,6 +521,8 @@ public sealed class StorageCapacityProbeIntegrationTests(PostgreSqlFixture fixtu
     [Fact]
     public async Task DowngradeRefusesWarningAndCriticalRows_AndRollsBackSchemaDataAndMigrationHistory()
     {
+        await using var fixture = new PostgreSqlFixture();
+        await fixture.InitializeAsync();
         await using var world = await AgentWorld.CreateAsync(fixture);
         var setup = await world.CreateTenantAsync();
         var agent = await ReadyAgentAsync(world, setup);

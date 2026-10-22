@@ -186,7 +186,7 @@ function ArtifactDetail({ id }: { id: string }) {
                 <ArtifactIntegrity artifact={artifact} />
                 <ArtifactEncryptionSection encryption={artifact.encryption} />
                 <ArtifactRestoreAction tenantId={tenantId} artifact={artifact} />
-                <ArtifactVerificationSection tenantId={tenantId} artifact={artifact} />
+                {artifact.backupMetadata?.engine !== 'file-system' && <ArtifactVerificationSection tenantId={tenantId} artifact={artifact} />}
               </>}
               {tab === 'replicas' && <ArtifactReplicas artifact={artifact} />}
               {tab === 'download' && <ArtifactDownload tenantId={tenantId} artifactId={id} canAdmin={canAdmin} eligible={artifact.state === 'Available'} />}

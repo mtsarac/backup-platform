@@ -23,6 +23,10 @@ public static class RestoreAgentCapability
         ("postgres", RestorePurpose.Discovery) => "postgres.restore.discovery",
         ("mssql", RestorePurpose.Verification) => RestoreTaskTypes.MssqlVerificationCapability,
         ("postgres", RestorePurpose.Verification) => RestoreTaskTypes.PostgresVerificationCapability,
+        ("file-system", RestorePurpose.Execution) => "file-system.restore.full",
+        ("file-system", RestorePurpose.Precheck) => "file-system.restore.precheck",
+        ("file-system", RestorePurpose.Discovery) => "file-system.restore.discovery",
+        ("file-system", RestorePurpose.Verification) => "file-system.restore.verification",
         _ => throw new ArgumentException("Unknown restore engine or purpose.")
     };
 }

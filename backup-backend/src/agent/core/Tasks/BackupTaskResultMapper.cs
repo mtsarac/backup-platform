@@ -32,6 +32,8 @@ internal static class BackupTaskResultMapper
 {
     public static BackupTaskCompletionRequest Map(BackupTaskSnapshot task, DatabaseBackupPipelineResult result)
     {
+        if (result.Status == DatabaseBackupStatus.Paused)
+            return new BackupTaskCompletionRequest { LeaseToken = task.LeaseToken, Status = "Paused", FailureCode = result.PauseReason };
         var artifact = MapArtifact(task, result);
         if (result.Status == DatabaseBackupStatus.Succeeded && (artifact is null || artifact.Replicas.Count == 0))
         {
@@ -165,7 +167,7 @@ internal static class BackupTaskResultMapper
             Replicas = [.. copies.Select(copy => new BackupTaskReplica
             {
                 StorageProvider = copy.Replica!.Location.Provider.Value,
-                StorageTarget = copy.Destination.Storage.Value is "sftp" or "google-drive" && copy.Destination.ConnectionId is { } connection
+                StorageTarget = copy.Destination.Storage.Value is "sftp" or "google-drive" or "s3" or "smb" && copy.Destination.ConnectionId is { } connection
                     ? connection.ToString("D")
                     : task.Configuration.Destinations.FirstOrDefault(d => d.StorageConnectionId == copy.Destination.ConnectionId && d.StorageProvider == "local")?.StorageTarget
                         ?? copy.Replica.Location.Provider.Value,

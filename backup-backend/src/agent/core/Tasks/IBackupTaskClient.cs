@@ -13,4 +13,5 @@ public interface IBackupTaskClient
     Task<AgentBackendResult<UploadPolicyResponse>> GetUploadPolicyAsync(AgentLocalIdentity identity, Guid attemptId, UploadPolicyRequest request, CancellationToken cancellationToken);
     Task<AgentBackendResult<bool>> ReportProgressAsync(AgentLocalIdentity identity, Guid attemptId, BackupTaskProgressRequest request, CancellationToken cancellationToken);
     Task<AgentBackendResult<bool>> CompleteAsync(AgentLocalIdentity identity, Guid attemptId, BackupTaskCompletionRequest request, CancellationToken cancellationToken);
+    Task<AgentBackendResult<bool>> CanReleaseRetainedTransferAsync(AgentLocalIdentity identity, Guid attemptId, CancellationToken cancellationToken);
 }

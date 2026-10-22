@@ -63,6 +63,7 @@ public static class SecurityServiceCollectionExtensions
     {
         services.AddHttpContextAccessor();
         services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<AuditSealKeys>();
         services.AddSingleton<DbContextOptions<PlatformDbContext>>(CreateDatabaseOptions);
         services.AddSingleton<AgentTransferAdmission>();
         services.AddSingleton<BackupPlatform.Infrastructure.Backups.BackupTransferLeaseService>();
@@ -183,6 +184,14 @@ public static class SecurityServiceCollectionExtensions
             var factory = provider.GetRequiredService<BackupPlatform.Api.Backups.SftpConnectionProviderFactory>();
             return new SftpConnectionTester((connection, secrets) => factory.Create(connection, secrets));
         });
+        services.AddSingleton<BackupPlatform.Api.Backups.NetworkStorageConnectionProviderFactory>();
+        services.AddHttpClient("network-storage", client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
+            .RemoveAllLoggers();
+        services.AddScoped<IStorageConnectionTester>(_ => new AgentSideConnectionTester(StorageProviderTypes.Smb));
+        services.AddScoped<IStorageConnectionTester>(provider =>
+            new S3ConnectionTester((connection, secrets) =>
+                provider.GetRequiredService<BackupPlatform.Api.Backups.NetworkStorageConnectionProviderFactory>().Create(connection, secrets)));
         services.AddHttpClient();
         services.AddHttpClient("google-drive", client => client.Timeout = Timeout.InfiniteTimeSpan)
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
@@ -289,7 +298,9 @@ public static class SecurityServiceCollectionExtensions
         {
             throw new InvalidOperationException("Configure BACKUP_PLATFORM_CONNECTION_STRING or ConnectionStrings:Platform.");
         }
-        return new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(connectionString).Options;
+        var builder = new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(connectionString);
+        if (services.GetRequiredService<AuditSealKeys>().Interceptor is { } signing) builder.AddInterceptors(signing);
+        return builder.Options;
     }
 
     /// <summary>
@@ -450,7 +461,8 @@ public static class SecurityServiceCollectionExtensions
             options.MaximumReceiveMessageSize = 4 * 1024;
             options.EnableDetailedErrors = false;
         });
-        services.AddSingleton<BackupPlatform.Application.Agents.IAgentUpdateManifestStore, BackupPlatform.Application.Agents.InMemoryAgentUpdateManifestStore>();
+        services.AddSingleton<IAgentUpdateManifestStore>(provider => new FileAgentUpdateManifestStore(
+            provider.GetRequiredService<IConfiguration>()["AgentUpdates:PackagesDirectory"] ?? Path.Combine(AppContext.BaseDirectory, "agent-updates")));
     }
 
     private static void AddPolicies(IServiceCollection services)

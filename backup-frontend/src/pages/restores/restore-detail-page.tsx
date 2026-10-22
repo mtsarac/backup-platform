@@ -39,6 +39,7 @@ function RestoreDetail({ id }: { id: string }) {
   const query = useRestore(id)
   const cancel = useCancelRestore(id)
   const restore = query.data
+  const fileRestore = restore?.options.files
   const artifact = useArtifact(tenantId, restore?.artifactId ?? '')
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [notice, setNotice] = useState('')
@@ -50,7 +51,7 @@ function RestoreDetail({ id }: { id: string }) {
     try {
       const response = await cancel.mutateAsync()
       setConfirmOpen(false)
-      setNotice(response.status === 'Cancelled' ? tx('Restore iptal edildi. Hedef Database durumunu ayrıca kontrol edin.') : tx('İptal isteği iletildi; Agent sonucu bildirmeden restore tamamlanmış sayılmaz.'))
+      setNotice(response.status === 'Cancelled' && !fileRestore ? tx('Restore iptal edildi. Hedef Database durumunu ayrıca kontrol edin.') : tx('İptal isteği iletildi; Agent sonucu bildirmeden restore tamamlanmış sayılmaz.'))
     } catch {
       // The mutation error is mapped to a safe message in the confirmation dialog.
     }
@@ -60,13 +61,13 @@ function RestoreDetail({ id }: { id: string }) {
       {restore && <>
         <PageHeader title={`${restore.purpose === 'Verification' ? tx('Restore testi') : restore.purpose === 'Precheck' ? tx('Geri yükleme ön kontrolü') : restore.purpose === 'Discovery' ? tx('Hedef Database keşfi') : tx('Geri yükleme')} · ${restore.databaseName}`}
           crumbs={[{ label: tx('Geri yükleme geçmişi'), to: `/tenants/${tenantId}/restores` }, { label: restore.databaseName }]}
-          description={`${restoreModeLabel(restore.mode)} · ${restore.target.host}${restore.target.port ? `:${restore.target.port}` : ''}`}
+          description={fileRestore ? tx('Dosya / klasör geri yükleme') : `${restoreModeLabel(restore.mode)} · ${restore.target.host}${restore.target.port ? `:${restore.target.port}` : ''}`}
           meta={<><StatusPill status={restore.status} /><span className="text-sm text-text-muted">{formatTimestamp(restore.createdAt)}</span></>}
           actions={mayCancel && <Button variant="destructive" disabled={cancel.isPending} onClick={() => { cancel.reset(); setConfirmOpen(true) }}>{tx("İptal et")}</Button>} />
         {notice && (isActiveRestore(restore.status) || restore.status === 'Cancelled') && <Notice>{notice}</Notice>}
-        {restore.cancellationRequestedAt && isActiveRestore(restore.status) && <Notice tone="warning">{tx("İptal istendi; işlem henüz sona ermedi. Agent sonucu ve hedef Database durumu bekleniyor.")}</Notice>}
-        {['Failed', 'Cancelled', 'AgentLost'].includes(restore.status) && restore.purpose !== 'Verification' && <section aria-label={tx("Geri yükleme sonucu uyarısı")}><Notice tone="warning" title={tx("Hedef Database'i kontrol edin")}>
-          <p>{tx("Cancelled, Failed veya AgentLost durumu Database'in sağlıklı olduğunu göstermez. Hedef Database durumunu kontrol edin; elle müdahale gerekebilir.")}</p>
+        {restore.cancellationRequestedAt && isActiveRestore(restore.status) && <Notice tone="warning">{fileRestore ? tx('İptal isteği iletildi; Agent sonucu bildirmeden restore tamamlanmış sayılmaz.') : tx("İptal istendi; işlem henüz sona ermedi. Agent sonucu ve hedef Database durumu bekleniyor.")}</Notice>}
+        {['Failed', 'Cancelled', 'AgentLost'].includes(restore.status) && restore.purpose !== 'Verification' && <section aria-label={tx("Geri yükleme sonucu uyarısı")}><Notice tone="warning" title={fileRestore ? tx('Hedef dosyaları kontrol edin') : tx("Hedef Database'i kontrol edin")}>
+          <p>{fileRestore ? tx('Başarısız veya iptal edilmiş işlemden sonra hedef dosyaları ve varsa korunan geri dönüş verilerini kontrol edin; elle müdahale gerekebilir.') : tx("Cancelled, Failed veya AgentLost durumu Database'in sağlıklı olduğunu göstermez. Hedef Database durumunu kontrol edin; elle müdahale gerekebilir.")}</p>
           {restore.failureCode && <><p className="mt-2">{restoreFailureMessage(restore.failureCode)}</p><p className="mt-1 text-text-muted">{tx("Hata kodu:")}{' '}{safeRestoreCode(restore.failureCode)}</p></>}
         </Notice></section>}
         <Tabs label={tx("Restore bölümleri")} idPrefix="restore" value={tab} onChange={setTab} items={[
@@ -76,14 +77,14 @@ function RestoreDetail({ id }: { id: string }) {
           {tab === 'summary' && <>
             {restore.purpose === 'Verification' && <VerificationDetail restore={restore} />}
             <RollbackCopyPanel restore={restore} />
-            {restore.purpose !== 'Verification' && <Section title={tx("Hedef Database durumu")} description={targetStateDescription(restore.targetState)}>
+            {restore.purpose !== 'Verification' && <Section title={fileRestore ? tx('Hedef dosyaların durumu') : tx("Hedef Database durumu")} description={fileRestore ? undefined : targetStateDescription(restore.targetState)}>
               <p className="font-medium text-text-heading">{targetStateLabel(restore.targetState)}</p>
-              {restore.result && <p className="mt-2 text-sm">{tx("Database durumu:")}{' '}{databaseStateLabel(restore.result.databaseState)}</p>}
+              {restore.result && !fileRestore && <p className="mt-2 text-sm">{tx("Database durumu:")}{' '}{databaseStateLabel(restore.result.databaseState)}</p>}
             </Section>}
             <Section title={tx("İlerleme")}><RestoreProgress stage={restore.progress.stage} percent={restore.progress.percent} at={restore.progress.at} label={tx("Restore ilerlemesi")} /></Section>
             <Section title={tx("Restore özeti")}><Facts columns={3}>
-              <Fact label={tx("Hedef Database")}>{restore.databaseName}</Fact>
-              <Fact label={tx("Mod")}>{restoreModeLabel(restore.mode)}</Fact>
+              <Fact label={fileRestore ? tx('Hedef dosya kaynağı referansı') : tx("Hedef Database")}>{restore.databaseName}</Fact>
+              <Fact label={tx("Mod")}>{fileRestore ? restore.mode === 'ReplaceExistingDatabase' ? tx('Mevcut dosyaların üzerine yazmaya izin ver') : tx('Mevcut dosyaların üzerine yazılmaz') : restoreModeLabel(restore.mode)}</Fact>
               <Fact label={tx("Deneme sayısı")}>{restore.attempts.length}</Fact>
               <Fact label={tx("Oluşturulma")}>{formatTimestamp(restore.createdAt)}</Fact>
               <Fact label={tx("Başlangıç")}>{formatTimestamp(restore.startedAt)}</Fact>
@@ -102,7 +103,10 @@ function RestoreDetail({ id }: { id: string }) {
             <Fact label={tx("Replica koruması")}>{restore.replicaPinned ? tx('Restore için silmeye karşı korunuyor') : tx('Restore koruması sona erdi')}</Fact>
             <Fact label={tx("Checksum doğrulama isteği")}>{restore.options.verifyChecksum ? tx('Evet') : tx('Hayır')}</Fact>
             <Fact label={tx("Backup doğrulama isteği")}>{restore.options.verifyBackup ? tx('Evet') : tx('Hayır')}</Fact>
-            <Fact label={tx("Aktif bağlantıları sonlandır")}>{restore.options.terminateActiveConnections ? tx('Evet') : tx('Hayır')}</Fact>
+            {fileRestore ? <>
+              <Fact label={tx('Hedef göreli klasör')}>{fileRestore.relativeDirectory || '.'}</Fact>
+              <Fact label={tx('Geri yükleme kapsamı')}>{fileRestore.paths?.join(', ') ?? tx('Tüm dosya ve klasörler')}</Fact>
+            </> : <Fact label={tx("Aktif bağlantıları sonlandır")}>{restore.options.terminateActiveConnections ? tx('Evet') : tx('Hayır')}</Fact>}
           </Facts></Section>}
           {tab === 'attempts' && <Section title={tx("Denemeler")}>
             {restore.attempts.length === 0 ? <EmptyState title={tx("Henüz deneme oluşturulmadı.")}>{tx("Agent görevi aldığında deneme bilgileri burada görünür.")}</EmptyState> : <ol className="divide-y divide-border">{restore.attempts.map((attempt) => <li key={attempt.id} className="py-5 first:pt-0 last:pb-0"><article aria-label={tx("{0}. deneme", { "0": attempt.number })} className="space-y-4">
@@ -123,6 +127,6 @@ function RestoreDetail({ id }: { id: string }) {
       </>}
     </QueryState>
     {query.error && <Button variant="outline" onClick={() => void query.refetch()}>{tx("Tekrar dene")}</Button>}
-    <ConfirmDialog open={confirmOpen && mayCancel} onClose={() => setConfirmOpen(false)} title={tx("Restore iptal edilsin mi?")} description={tx("İptal isteği Agent'a iletilir; Database motorunun işlemi anında durmayabilir. Başlamış bir restore hedef Database'i kısmen geri yüklenmiş veya bilinmeyen durumda bırakabilir. Elle müdahale gerekebilir. İptal, Database'in sağlıklı olduğunu garanti etmez.")} pending={cancel.isPending} error={cancel.error ? restoreErrorMessage(cancel.error) : undefined} onConfirm={() => void confirmCancel()} />
+    <ConfirmDialog open={confirmOpen && mayCancel} onClose={() => setConfirmOpen(false)} title={tx("Restore iptal edilsin mi?")} description={fileRestore ? tx('Başarısız veya iptal edilmiş işlemden sonra hedef dosyaları ve varsa korunan geri dönüş verilerini kontrol edin; elle müdahale gerekebilir.') : tx("İptal isteği Agent'a iletilir; Database motorunun işlemi anında durmayabilir. Başlamış bir restore hedef Database'i kısmen geri yüklenmiş veya bilinmeyen durumda bırakabilir. Elle müdahale gerekebilir. İptal, Database'in sağlıklı olduğunu garanti etmez.")} pending={cancel.isPending} error={cancel.error ? restoreErrorMessage(cancel.error) : undefined} onConfirm={() => void confirmCancel()} />
   </div>
 }

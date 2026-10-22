@@ -505,7 +505,7 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         if (!operation.HasLease(leaseToken, now) || string.IsNullOrEmpty(operation.TargetKey)) return false;
         var artifact = await context.BackupArtifacts.Include(a => a.Replicas)
             .SingleAsync(a => a.TenantId == tenantId && a.Id == artifactId, cancellationToken);
-        var target = operation.StorageProvider is "sftp" or "google-drive" && operation.StorageConnectionId != Guid.Empty
+        var target = operation.StorageProvider is "sftp" or "google-drive" or "s3" or "smb" && operation.StorageConnectionId != Guid.Empty
             ? operation.StorageConnectionId.ToString("D") : operation.StorageProvider;
         if (!artifact.Replicas.Any(r => r.StorageConnectionId == operation.StorageConnectionId && r.Key == operation.TargetKey))
         {
@@ -688,7 +688,7 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
                 if (!artifact.Replicas.Any(r => r.StorageConnectionId == op.StorageConnectionId && r.Key == op.TargetKey))
                 {
                     var orphan = new BackupReplica(Guid.NewGuid(), op.TenantId, op.ArtifactId, op.StorageProvider,
-                        op.StorageProvider is "sftp" or "google-drive" && op.StorageConnectionId != Guid.Empty
+                        op.StorageProvider is "sftp" or "google-drive" or "s3" or "smb" && op.StorageConnectionId != Guid.Empty
                             ? op.StorageConnectionId.ToString("D") : op.StorageProvider,
                         op.TargetKey, Math.Max(1, op.TotalBytes), artifact.ArtifactChecksum, artifact.ChecksumAlgorithm,
                         "Failed", "RepairCrashRecovery", now, null, BackupStorageExecutionLocation.Backend, null,

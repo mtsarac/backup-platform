@@ -84,6 +84,13 @@ public sealed class RestoreOperation : ITenantOwned
         Mode = mode;
         OverwritePolicy = mode == RestoreMode.ReplaceExistingDatabase ? RestoreOverwritePolicy.ReplaceExisting : RestoreOverwritePolicy.Forbidden;
         Options = options ?? RestoreOptions.Default;
+        if (engine == "file-system")
+        {
+            if (Target.Host != "localhost" || Target.Port is not null || !Target.IntegratedSecurity || Target.DatabaseCredentialReference is not null || Options.TerminateActiveConnections)
+                throw new ArgumentException("File restores require a local source reference without database session options.");
+            Options.Files?.Validate();
+        }
+        else if (Options.Files is not null) throw new ArgumentException("File restore options do not apply to database restores.");
         IdempotencyKey = idempotencyKey;
         RequestFingerprint = requestFingerprint;
         RequestedByUserId = requestedByUserId;
@@ -137,6 +144,12 @@ public sealed class RestoreOperation : ITenantOwned
     public static void ValidateDatabaseName(string? name, string engine = "mssql", bool verification = false)
     {
         ValidateDatabaseNameSyntax(name);
+        if (engine == "file-system")
+        {
+            if (verification) throw new ArgumentException("Database verification is not supported for file sources.");
+            BackupGuard.Reference(name!);
+            return;
+        }
         // The platform's own prefixes are reserved: a user restore can never name a database the cleanup would later treat as disposable or as a rollback copy.
         if (verification ? !PlatformDatabaseNames.IsVerification(name) : PlatformDatabaseNames.IsReserved(name))
             throw new ArgumentException("This database name is reserved for the platform.");

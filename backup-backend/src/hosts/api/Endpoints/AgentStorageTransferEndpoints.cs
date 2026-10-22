@@ -40,6 +40,7 @@ public static class AgentStorageTransferEndpoints
         backup.MapPost("/verify", VerifyBackupAsync);
         backup.MapDelete("/content", DeleteBackupAsync);
         backup.MapPost("/access", GetBackupStorageAccessAsync);
+        backup.MapPost("/intent", RecordDirectIntentAsync);
         backup.MapGet("/catalog", GetBackupStorageCatalogAsync);
         backup.MapPost("/catalog", SaveBackupStorageCatalogAsync);
         backup.MapDelete("/catalog", DeleteBackupStorageCatalogAsync);
@@ -131,7 +132,20 @@ public static class AgentStorageTransferEndpoints
             {
                 // A paced upload is slow on purpose: widen the provider's total-transfer deadline by the throttled time.
                 var allowance = UploadPolicyResponse.DeadlineAllowance(request.ContentLength!.Value, pacing.MinimumBytesPerSecond);
-                var options = new StoragePutOptions(StorageOverwritePolicy.Fail, new ContentChecksum(ChecksumAlgorithm.Sha256, expectedChecksum), request.ContentLength, allowance);
+                var prior = (await runStore.GetCheckpointsAsync(agent.Identity!.TenantId, attemptId, token))
+                    .SingleOrDefault(x => x.DestinationId == fence.ConnectionId && x.StorageProvider == fence.ProviderType);
+                var options = new StoragePutOptions(StorageOverwritePolicy.Fail, new ContentChecksum(ChecksumAlgorithm.Sha256, expectedChecksum), request.ContentLength, allowance)
+                {
+                    Checkpoint = prior is null ? null : new(prior.VerifiedByteOffset, prior.ProviderState),
+                    RecordCheckpointAsync = async (checkpoint, checkpointToken) =>
+                    {
+                        var result = await runStore.ReportProgressAsync(command with { Now = DateTimeOffset.UtcNow },
+                            new BackupProgress("Uploading", null) { Checkpoint = new TransferCheckpointContract {
+                                StorageProvider = fence.ProviderType!, DestinationId = fence.ConnectionId.Value,
+                                VerifiedByteOffset = checkpoint.VerifiedByteOffset, ProviderState = checkpoint.ProviderState } }, checkpointToken);
+                        if (result != BackupMutationResult.Accepted) throw new StorageException(StorageFailureKind.AccessDenied, "The upload lease is no longer current.");
+                    }
+                };
                 var watch = System.Diagnostics.Stopwatch.StartNew();
                 var meta = await provider.PutAsync(new StorageObjectKey(fence.Key!), pacing.Wrap(request.Body), options, null, token);
                 // The upload alone (relay body to provider), kept apart from the separate read-back verification and from any wait for a slice: this is what a limit is judged on.
@@ -352,7 +366,7 @@ public static class AgentStorageTransferEndpoints
 
         var artifact = await downloadStore.GetArtifactAsync(agent.Identity.TenantId, operation.ArtifactId, cancellationToken);
         var replica = artifact?.Replicas.SingleOrDefault(r => r.Id == operation.ReplicaId);
-        if (replica is null || replica.StorageProvider is not ("sftp" or "google-drive") || !Guid.TryParse(replica.StorageTarget, out var connectionId))
+        if (replica is null || replica.StorageProvider is not ("sftp" or "google-drive" or "s3" or "smb") || !Guid.TryParse(replica.StorageTarget, out var connectionId))
             return (Results.Conflict(new AgentApiError { Error = "source_inaccessible", Message = "The replica storage is inaccessible." }), null, null, null);
 
         if (replica.Key != key)
@@ -412,7 +426,7 @@ public static class AgentStorageTransferEndpoints
             return (Results.Conflict(new AgentApiError { Error = "lease_conflict", Message = "Invalid lease or storage target." }), null, null, null, null, null);
 
         var destination = claim.Run.Configuration.Destinations.SingleOrDefault(candidate => candidate.StorageConnectionId == named);
-        if (destination is not { StorageProvider: "sftp" or "google-drive", Direct: true, StorageConnectionId: { } connectionId }
+        if (destination is not { StorageProvider: "sftp" or "google-drive" or "s3" or "smb", Direct: true, StorageConnectionId: { } connectionId }
             || (requiredProvider is not null && destination.StorageProvider != requiredProvider))
             return (Results.Conflict(new AgentApiError { Error = "destination_not_authorized", Message = "The destination is not part of this run or not direct mode." }), null, null, null, null, null);
 
@@ -440,7 +454,7 @@ public static class AgentStorageTransferEndpoints
 
         var artifact = await downloadStore.GetArtifactAsync(agent.Identity.TenantId, operation.ArtifactId, cancellationToken);
         var replica = artifact?.Replicas.SingleOrDefault(r => r.Id == operation.ReplicaId);
-        if (replica is null || replica.StorageProvider is not ("sftp" or "google-drive") || operation.SourceAccess != RestoreSourceAccess.AgentDirect
+        if (replica is null || replica.StorageProvider is not ("sftp" or "google-drive" or "s3" or "smb") || operation.SourceAccess != RestoreSourceAccess.AgentDirect
             || !Guid.TryParse(replica.StorageTarget, out var connectionId)
             || (requiredProvider is not null && replica.StorageProvider != requiredProvider))
             return (Results.Conflict(new AgentApiError { Error = "source_inaccessible", Message = "The replica storage is inaccessible or not direct mode." }), null, null, null, null);
@@ -450,6 +464,25 @@ public static class AgentStorageTransferEndpoints
             return (Results.Conflict(new AgentApiError { Error = "source_unavailable", Message = "The storage connection is unavailable." }), null, null, null, null);
 
         return (null, agent.Identity.TenantId.Value, connectionId, connection, replica.Key);
+    }
+
+    private static async Task<IResult> RecordDirectIntentAsync(Guid attemptId, TaskStorageVerifyRequest body, HttpRequest request,
+        ICurrentAgent agent, IBackupRunStore store, IStorageConnectionStore connections, CancellationToken cancellationToken)
+    {
+        var fence = await FenceDirectBackupAccessAsync(attemptId, request, agent, store, connections, null, cancellationToken);
+        if (fence.Result is not null) return fence.Result;
+        var claim = await store.GetAttemptAsync(agent.Identity!.TenantId, agent.Identity.AgentId, attemptId, cancellationToken);
+        var key = request.Headers[TaskStorageProtocol.KeyHeader].ToString();
+        if (claim is null || body.SizeBytes <= 0 || body.Checksum is not { Length: 64 } || body.Checksum.Any(c => !char.IsAsciiHexDigit(c))
+            || !ManagedBackupLayout.TryParseStorageKey(key, out var layout) || layout is null || layout.IsPartial
+            || layout.TenantId != fence.TenantId || layout.AttemptId != attemptId || layout.JobId != fence.JobId || layout.RunId != fence.RunId)
+            return Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "A bounded attempt-owned upload intent is required." });
+        if (claim.MaxArtifactBytes is { } maximum && body.SizeBytes > maximum)
+            return Results.Conflict(new AgentApiError { Error = "quota_exceeded", Message = "The artifact exceeds its reserved storage capacity." });
+        var command = new BackupLeaseCommand(agent.Identity.TenantId, agent.Identity.AgentId, attemptId,
+            Guid.Parse(request.Headers[TaskStorageProtocol.LeaseHeader]!), DateTimeOffset.UtcNow);
+        return await store.RecordTransferAsync(command, new(fence.ConnectionId!.Value, key, body.SizeBytes, body.Checksum), cancellationToken)
+            == BackupMutationResult.Accepted ? Results.Ok() : Results.Conflict(new AgentApiError { Error = "lease_conflict", Message = "The upload intent could not be recorded." });
     }
 
     private static async Task<IResult> GetBackupStorageAccessAsync(
@@ -542,6 +575,24 @@ public static class AgentStorageTransferEndpoints
         GoogleDriveConnectionProviderFactory driveFactory, CancellationToken cancellationToken)
     {
         request.HttpContext.Response.Headers.CacheControl = "no-store";
+        if (connection.ProviderType is StorageProviderTypes.S3 or StorageProviderTypes.Smb)
+        {
+            try
+            {
+                var fields = await NetworkStorageConnectionProviderFactory.ReadFieldsAsync(connection, secrets, cancellationToken);
+                return Results.Ok(new TaskStorageAccessResponse
+                {
+                    ProviderType = connection.ProviderType, Configuration = connection.Configuration,
+                    AccessKey = fields.GetValueOrDefault("accessKey"), SecretKey = fields.GetValueOrDefault("secretKey"),
+                    SessionToken = fields.GetValueOrDefault("sessionToken"), Username = fields.GetValueOrDefault("username"),
+                    Password = fields.GetValueOrDefault("password"), Domain = fields.GetValueOrDefault("domain")
+                });
+            }
+            catch (StorageException)
+            {
+                return Results.Conflict(new AgentApiError { Error = "authentication_failed", Message = "The storage credentials are unavailable." });
+            }
+        }
         if (connection.ProviderType == StorageProviderTypes.GoogleDrive)
         {
             var tokenResult = await driveFactory.GetAccessTokenWithExpiryAsync(connection, secrets, cancellationToken);
@@ -603,6 +654,6 @@ public static class AgentStorageTransferEndpoints
             });
         }
 
-        return Results.BadRequest(new AgentApiError { Error = "unsupported_provider", Message = "Direct access is only supported for SFTP and Google Drive." });
+        return Results.BadRequest(new AgentApiError { Error = "unsupported_provider", Message = "Direct access is not supported for this provider." });
     }
 }

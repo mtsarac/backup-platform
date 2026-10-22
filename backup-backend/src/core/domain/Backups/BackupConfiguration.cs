@@ -19,15 +19,27 @@ public sealed record BackupConfiguration(
     /// </summary>
     public int RequiredVerifiedReplicaCount { get; init; } = 1;
 
+    public bool EnforceThreeTwoOne { get; init; }
+    public string? SourceSite { get; init; }
+    public FileBackupPolicy? Files { get; init; }
+
     /// <summary>"Off" (default; also what a configuration saved before encryption existed deserializes to), "Optional" or "Required".</summary>
     public string EncryptionPolicy { get; init; } = "Off";
 
     public BackupConfiguration Validate()
     {
-        if (Engine is not ("mssql" or "postgres")) throw new ArgumentException("Unsupported database engine.");
+        if (Engine is not ("mssql" or "postgres" or "file-system")) throw new ArgumentException("Unsupported backup engine.");
         BackupGuard.Text(Database, 128);
         if (Engine == "postgres" && (Database != Database.Trim() || System.Text.Encoding.UTF8.GetByteCount(Database) > 63 || IntegratedSecurity))
             throw new ArgumentException("PostgreSQL requires a database name of at most 63 UTF-8 bytes and password authentication.");
+        if (Engine == "file-system")
+        {
+            BackupGuard.Reference(Database);
+            if (Host != "localhost" || Port is not null || !IntegratedSecurity || DatabaseCredentialReference is not null || Files is null)
+                throw new ArgumentException("File backups require a local source reference and explicit file selection.");
+            Files.Validate();
+        }
+        else if (Files is not null) throw new ArgumentException("File selection only applies to file backups.");
         BackupGuard.Text(Host, 255);
         if (Port is < 1 or > 65535) throw new ArgumentException("Invalid database port.");
         if (!IntegratedSecurity) BackupGuard.Text(DatabaseCredentialReference, 128);
@@ -61,6 +73,10 @@ public sealed record BackupConfiguration(
 
         if (RequiredVerifiedReplicaCount < 1 || RequiredVerifiedReplicaCount > effectiveDestinations.Count)
             throw new ArgumentException("RequiredVerifiedReplicaCount must be between 1 and the number of destinations.");
+        if (EnforceThreeTwoOne && (RequiredVerifiedReplicaCount < 3 || effectiveDestinations.Count < 3
+            || string.IsNullOrWhiteSpace(SourceSite) || SourceSite.Length > 64
+            || SourceSite.Any(c => !(char.IsAsciiLetterOrDigit(c) || c is '-' or '_'))))
+            throw new ArgumentException("3-2-1 requires three verified copies and a source site identifier.");
 
         return this;
     }
@@ -70,12 +86,14 @@ public sealed record BackupConfiguration(
         IntegratedSecurity == other.IntegratedSecurity && DatabaseCredentialReference == other.DatabaseCredentialReference && Encrypt == other.Encrypt &&
         TrustServerCertificate == other.TrustServerCertificate && StagingReference == other.StagingReference &&
         StoragePrefix == other.StoragePrefix && CopyOnly == other.CopyOnly && ChecksumPolicy == other.ChecksumPolicy && CompressionPolicy == other.CompressionPolicy &&
-        RequiredVerifiedReplicaCount == other.RequiredVerifiedReplicaCount && EncryptionPolicy == other.EncryptionPolicy && Destinations.SequenceEqual(other.Destinations);
+        RequiredVerifiedReplicaCount == other.RequiredVerifiedReplicaCount && EncryptionPolicy == other.EncryptionPolicy
+        && EnforceThreeTwoOne == other.EnforceThreeTwoOne && SourceSite == other.SourceSite && Equals(Files, other.Files) && Destinations.SequenceEqual(other.Destinations);
 
     public override int GetHashCode()
     {
         var hash = new HashCode();
         hash.Add(Engine); hash.Add(Database); hash.Add(Host); hash.Add(Port); hash.Add(RequiredVerifiedReplicaCount);
+        hash.Add(Files);
         foreach (var destination in Destinations) hash.Add(destination);
         return hash.ToHashCode();
     }
@@ -120,7 +138,7 @@ internal static class BackupGuard
 /// </summary>
 public enum BackupStatus
 {
-    Pending = 1, Leased = 2, Running = 3, Succeeded = 4, Failed = 5, Cancelled = 6, AgentLost = 7, RetryPending = 8
+    Pending = 1, Leased = 2, Running = 3, Succeeded = 4, Failed = 5, Cancelled = 6, AgentLost = 7, RetryPending = 8, Paused = 9
 }
 
 public sealed record BackupCompletion(BackupStatus Status, string? FailureCode, BackupArtifact? Artifact, IReadOnlyList<BackupDestinationOutcome>? Outcomes = null);

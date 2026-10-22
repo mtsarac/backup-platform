@@ -76,6 +76,7 @@ public sealed class UploadBandwidthService(IUploadBandwidthStore store, BackupEx
     public Task<BandwidthProfileView> SaveProfileAsync(TenantId tenantId, Guid? profileId, string name, string timeZoneId, IEnumerable<TransferScheduleWindowDto> windows, UserId actor, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(actor);
+        ArgumentNullException.ThrowIfNull(windows);
         return store.SaveProfileAsync(tenantId, profileId, name, timeZoneId, windows, actor, time.GetUtcNow(), cancellationToken);
     }
 

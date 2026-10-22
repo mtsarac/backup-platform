@@ -45,7 +45,7 @@ public sealed class PostgreSqlBackupUiStore(DbContextOptions<PlatformDbContext> 
         var jobs = await ReadJobsAsync(context, tenantId, null, now, cancellationToken);
         var runs = context.BackupRuns.AsNoTracking().Where(run => run.TenantId == tenantId);
         var since = now.AddHours(-24);
-        var active = await runs.CountAsync(run => run.Status == BackupStatus.Pending || run.Status == BackupStatus.Leased || run.Status == BackupStatus.Running || run.Status == BackupStatus.RetryPending, cancellationToken);
+        var active = await runs.CountAsync(run => run.Status == BackupStatus.Pending || run.Status == BackupStatus.Leased || run.Status == BackupStatus.Running || run.Status == BackupStatus.RetryPending || run.Status == BackupStatus.Paused, cancellationToken);
         var failed = await runs.CountAsync(run => run.CompletedAt >= since && (run.Status == BackupStatus.Failed || run.Status == BackupStatus.AgentLost), cancellationToken);
         var successful = await runs.Where(run => run.CompletedAt >= since && run.Status == BackupStatus.Succeeded)
             .Select(run => new

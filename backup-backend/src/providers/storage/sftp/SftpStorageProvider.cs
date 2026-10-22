@@ -17,6 +17,7 @@ public sealed class SftpStorageProvider : IStorageProvider
         StorageCapabilityIds.Read,
         StorageCapabilityIds.Delete,
         StorageCapabilityIds.AtomicPublish,
+        StorageCapabilityIds.Resume,
         StorageCapabilityIds.VerifyAbsence
     ]);
 
@@ -114,7 +115,7 @@ public sealed class SftpStorageProvider : IStorageProvider
                 }
             }
 
-            // Cleanup any stale partial temp file before uploading
+            // A retained partial is trusted only after comparing every prefix byte with the immutable source.
             var existingTemp = await TryGetItemAsync(client, tempRemotePath, cancellationToken).ConfigureAwait(false);
             if (existingTemp is not null)
             {
@@ -123,7 +124,7 @@ public sealed class SftpStorageProvider : IStorageProvider
                     throw new StorageException(StorageFailureKind.AccessDenied, "Stale partial upload is not a regular file.");
                 }
 
-                await client.DeleteFileAsync(tempRemotePath, cancellationToken).ConfigureAwait(false);
+                if (options.RecordCheckpointAsync is null) await client.DeleteFileAsync(tempRemotePath, cancellationToken).ConfigureAwait(false);
             }
 
             // Ensure parent directory exists
@@ -133,13 +134,39 @@ public sealed class SftpStorageProvider : IStorageProvider
             // Stream content to tempRemotePath with SHA256 computation
             using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             long totalWritten = 0;
+            if (options.RecordCheckpointAsync is not null && existingTemp is not null)
+            {
+                if (existingTemp.Attributes.Size > options.ExpectedLength)
+                    throw new StorageException(StorageFailureKind.IntegrityMismatch, "The retained SFTP prefix cannot be verified.");
+                if (content.CanSeek) content.Position = 0;
+                await using var prefix = await client.OpenAsync(tempRemotePath, FileMode.Open, FileAccess.Read, cancellationToken).ConfigureAwait(false);
+                var local = ArrayPool<byte>.Shared.Rent(StreamBufferSize);
+                var remote = ArrayPool<byte>.Shared.Rent(StreamBufferSize);
+                try
+                {
+                    while (totalWritten < existingTemp.Attributes.Size)
+                    {
+                        var count = (int)Math.Min(StreamBufferSize, existingTemp.Attributes.Size - totalWritten);
+                        await content.ReadExactlyAsync(local.AsMemory(0, count), cancellationToken).ConfigureAwait(false);
+                        await prefix.ReadExactlyAsync(remote.AsMemory(0, count), cancellationToken).ConfigureAwait(false);
+                        if (!CryptographicOperations.FixedTimeEquals(local.AsSpan(0, count), remote.AsSpan(0, count)))
+                            throw new StorageException(StorageFailureKind.IntegrityMismatch, "The retained SFTP prefix does not match the artifact.");
+                        hasher.AppendData(local, 0, count);
+                        totalWritten += count;
+                    }
+                }
+                finally { ArrayPool<byte>.Shared.Return(local); ArrayPool<byte>.Shared.Return(remote); }
+                await options.RecordCheckpointAsync(new(totalWritten, "sftp-v1"), cancellationToken).ConfigureAwait(false);
+            }
 
             using (var transferCts = new CancellationTokenSource(_network.TransferTimeout + options.TransferAllowance))
             using (var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, transferCts.Token))
             {
-                await using (var remoteStream = await client.OpenAsync(tempRemotePath, FileMode.CreateNew, FileAccess.Write, linkedCts.Token).ConfigureAwait(false))
+                await using (var remoteStream = await client.OpenAsync(tempRemotePath,
+                    options.RecordCheckpointAsync is not null && existingTemp is not null ? FileMode.Open : FileMode.CreateNew, FileAccess.Write, linkedCts.Token).ConfigureAwait(false))
                 {
                     uploadedTemp = true;
+                    remoteStream.Position = totalWritten;
                     var buffer = ArrayPool<byte>.Shared.Rent(StreamBufferSize);
                     try
                     {
@@ -149,6 +176,11 @@ public sealed class SftpStorageProvider : IStorageProvider
                             await remoteStream.WriteAsync(buffer.AsMemory(0, bytesRead), linkedCts.Token).ConfigureAwait(false);
                             hasher.AppendData(buffer, 0, bytesRead);
                             totalWritten += bytesRead;
+                            if (options.RecordCheckpointAsync is { } checkpoint)
+                            {
+                                await remoteStream.FlushAsync(linkedCts.Token).ConfigureAwait(false);
+                                await checkpoint(new(totalWritten, "sftp-v1"), linkedCts.Token).ConfigureAwait(false);
+                            }
                             progress?.Report(totalWritten);
                         }
 
@@ -210,7 +242,7 @@ public sealed class SftpStorageProvider : IStorageProvider
         }
         catch (Exception ex)
         {
-            if (uploadedTemp)
+            if (uploadedTemp && options.RecordCheckpointAsync is null)
             {
                 try
                 {

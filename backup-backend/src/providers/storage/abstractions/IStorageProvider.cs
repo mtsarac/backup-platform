@@ -118,7 +118,13 @@ public sealed record StoragePutOptions(
     StorageOverwritePolicy Overwrite,
     ContentChecksum? ExpectedChecksum = null,
     long? ExpectedLength = null,
-    TimeSpan TransferAllowance = default);
+    TimeSpan TransferAllowance = default)
+{
+    public StorageTransferCheckpoint? Checkpoint { get; init; }
+    public Func<StorageTransferCheckpoint, CancellationToken, Task>? RecordCheckpointAsync { get; init; }
+}
+
+public sealed record StorageTransferCheckpoint(long VerifiedByteOffset, string? ProviderState);
 
 /// <summary>A stored object as the provider knows it. <see cref="Checksum"/> is null when the provider cannot state it without reading the content again.</summary>
 public sealed record StorageObjectMetadata(

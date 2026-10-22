@@ -92,7 +92,10 @@ public sealed record RestoreTaskOptions
     public bool TerminateActiveConnections { get; init; }
     public bool VerifyChecksum { get; init; } = true;
     public bool VerifyBackup { get; init; } = true;
+    public RestoreFileSelection? Files { get; init; }
 }
+
+public sealed record RestoreFileSelection(IReadOnlyList<string>? Paths = null, string RelativeDirectory = "");
 
 /// <summary>Terminal metadata only. Tenant-facing failure text is selected by the backend from <see cref="FailureCode"/>.</summary>
 public sealed record RestoreTaskCompletionRequest

@@ -1,4 +1,5 @@
 using BackupPlatform.BackupProviders.Abstractions.Database;
+using BackupPlatform.BackupProviders.PostgreSql.Tools;
 
 namespace BackupPlatform.Agent.Host;
 
@@ -21,11 +22,13 @@ public sealed class AgentBackupOptions
 
     /// <summary>Optional directory containing pg_dump and pg_restore; absent uses the process PATH.</summary>
     public AgentPostgreSqlOptions? PostgreSql { get; set; }
+    public Dictionary<string, BackupPlatform.BackupProviders.FileSystem.FileSystemRoot>? FileSources { get; set; }
 }
 
 public sealed class AgentPostgreSqlOptions
 {
     public string? ClientToolsDirectory { get; set; }
+    public PostgreSqlBackupMode BackupMode { get; set; } = PostgreSqlBackupMode.Logical;
 }
 
 /// <summary>

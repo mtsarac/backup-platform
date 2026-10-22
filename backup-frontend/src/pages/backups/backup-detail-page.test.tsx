@@ -14,9 +14,11 @@ const state = vi.hoisted(() => ({
   query: { data: undefined as BackupRun | undefined, isPending: false, error: null as unknown },
   retry: { isPending: false, error: null as unknown, mutateAsync: vi.fn(), reset: vi.fn() },
   cancel: { isPending: false, error: null as unknown, mutateAsync: vi.fn(), reset: vi.fn() },
+  pause: { isPending: false, error: null as unknown, mutateAsync: vi.fn(), reset: vi.fn() },
+  resume: { isPending: false, error: null as unknown, mutateAsync: vi.fn(), reset: vi.fn() },
 }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canOperate: state.canOperate }) }))
-vi.mock('@/features/backups/hooks', () => ({ useBackup: () => state.query, useBackupActions: () => ({ retry: state.retry, cancel: state.cancel }) }))
+vi.mock('@/features/backups/hooks', () => ({ useBackup: () => state.query, useBackupActions: () => ({ retry: state.retry, cancel: state.cancel, pause: state.pause, resume: state.resume }) }))
 vi.mock('@/features/artifacts/artifact-details', () => ({ ArtifactDetails: () => <p>Yedek çıktısı ayrıntıları</p> }))
 
 function renderDetail() {
@@ -31,7 +33,12 @@ beforeEach(() => {
   state.retry.error = null
   state.cancel.error = null
   state.retry.isPending = false
+  state.retry.isPending = false
   state.cancel.isPending = false
+  state.pause.isPending = false
+  state.resume.isPending = false
+  state.pause.error = null
+  state.resume.error = null
 })
 
 describe('run detail controls and attention', () => {
@@ -145,7 +152,7 @@ describe('run detail controls and attention', () => {
   it.each(runStatuses)('visibly distinguishes %s with eligible controls', async (status) => {
     state.query.data = makeRun({ status })
     renderDetail()
-    const label = { Pending: 'Sırada bekliyor', Leased: /(?:Agent görevi aldı|Ajan görevi aldı)/, Running: 'Çalışıyor', RetryPending: 'Yeniden denenecek', CancellationRequested: 'İptal isteniyor', Succeeded: 'Başarılı', Failed: 'Başarısız', Cancelled: 'İptal edildi', AgentLost: '' }[status]
+    const label = { Pending: 'Sırada bekliyor', Leased: /(?:Agent görevi aldı|Ajan görevi aldı)/, Running: 'Çalışıyor', RetryPending: 'Yeniden denenecek', CancellationRequested: 'İptal isteniyor', Succeeded: 'Başarılı', Failed: 'Başarısız', Cancelled: 'İptal edildi', AgentLost: '', Paused: 'Duraklatıldı' }[status]
     if (label) expect(screen.getAllByText(label).length).toBeGreaterThan(0)
     if (['Succeeded', 'Cancelled', 'CancellationRequested'].includes(status)) {
       expect(screen.queryByRole('button', { name: 'Yeniden dene' })).not.toBeInTheDocument()

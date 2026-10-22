@@ -36,6 +36,7 @@ internal sealed class DatabaseBackupExecution
     private readonly List<BackupDestinationResult> _destinations = [];
     private bool _transferCancelled;
     private StagingCleanup _stagingCleanup = StagingCleanup.NotNeeded;
+    private RetainedTransfer? _retained;
 
     public DatabaseBackupExecution(
         DatabaseBackupPipelineRequest request,
@@ -79,6 +80,14 @@ internal sealed class DatabaseBackupExecution
         {
             await RunStagesAsync(cancellationToken).ConfigureAwait(false);
         }
+        catch (TransferPausedException paused)
+        {
+            return Build(DatabaseBackupStatus.Paused, BackupExecutionStage.Uploading, null) with { PauseReason = paused.Reason };
+        }
+        catch (OperationCanceledException) when (_request.ShutdownToken.IsCancellationRequested && _artifact is not null)
+        {
+            return Build(DatabaseBackupStatus.Paused, BackupExecutionStage.Uploading, null) with { PauseReason = "PausedByNetworkError" };
+        }
         catch (StageFailedException exception)
         {
             failure = exception.Failure;
@@ -116,11 +125,30 @@ internal sealed class DatabaseBackupExecution
         _tracker.Enter(BackupExecutionStage.Preparing);
         var (provider, targets) = ResolveProviders();
 
-        await PreCheckAsync(provider, cancellationToken).ConfigureAwait(false);
-        await BackUpAsync(provider, cancellationToken).ConfigureAwait(false);
-        await HashSourceAsync(cancellationToken).ConfigureAwait(false);
-        await PrepareArtifactAsync(cancellationToken).ConfigureAwait(false);
-        await HashArtifactAsync(cancellationToken).ConfigureAwait(false);
+        if (_request.ResumeTransfer)
+        {
+            _retained = RetainedTransfer.Load(_staging, _request.AttemptId);
+            _artifact = _retained.Artifact;
+            _sourceFile = _retained.SourceFile;
+            _startedAt = _retained.StartedAt;
+            Hold(_artifact.FileName);
+            Hold(_sourceFile.FileName);
+            await using var retainedStream = OpenForRead(_artifact.FileName);
+            if (retainedStream.Length != _artifact.SizeBytes ||
+                await ContentHasher.ComputeSha256Async(retainedStream, null, cancellationToken) != _artifact.Checksum)
+                throw Fail(BackupExecutionStage.HashingArtifact, BackupPipelineReasons.StagedFileChanged, "The retained artifact no longer matches its checkpoint.");
+        }
+        else
+        {
+            await PreCheckAsync(provider, cancellationToken).ConfigureAwait(false);
+            await BackUpAsync(provider, cancellationToken).ConfigureAwait(false);
+            await HashSourceAsync(cancellationToken).ConfigureAwait(false);
+            await PrepareArtifactAsync(cancellationToken).ConfigureAwait(false);
+            await HashArtifactAsync(cancellationToken).ConfigureAwait(false);
+            _retained = new RetainedTransfer(_artifact!, _sourceFile!, _providerResult?.Source, _providerResult?.Options,
+                _providerResult?.Verification ?? BackupVerification.NotRun, _startedAt, _providerResult?.BackupStartedAt, _providerResult?.BackupFinishedAt);
+            _retained.Save(_staging, _request.AttemptId);
+        }
         if (_request.MaxArtifactBytes is { } maximum && _artifact!.SizeBytes > maximum)
             throw Fail(BackupExecutionStage.HashingArtifact, BackupPipelineReasons.QuotaExceeded,
                 "The backup artifact exceeds its hard-quota reservation; no destination was written.", kind: BackupFailureKind.PreCheckFailed);
@@ -279,6 +307,9 @@ internal sealed class DatabaseBackupExecution
     {
         foreach (var (destination, storage) in targets)
         {
+            if (_request.PauseToken.IsCancellationRequested) throw new TransferPausedException("Operator");
+            if (!_request.ResumeTransfer && _request.RecordCheckpointAsync is { } record && destination.ConnectionId is { } destinationId)
+                await record(new TransferCheckpointContract { StorageProvider = destination.Storage.Value, DestinationId = destinationId }, cancellationToken).ConfigureAwait(false);
             if (_transferCancelled || cancellationToken.IsCancellationRequested)
             {
                 _transferCancelled = true;
@@ -294,6 +325,10 @@ internal sealed class DatabaseBackupExecution
 
         if (_destinations.Any(result => result.State == BackupDestinationState.Verified))
         {
+            if (_request.ReplicationPolicySatisfied is { } policy && !policy(_destinations))
+                throw Fail(BackupExecutionStage.VerifyingReplica, BackupPipelineReasons.StorageNotAvailable,
+                    "The verified replicas do not satisfy the admitted 3-2-1 policy.", kind: BackupFailureKind.StorageWriteFailed,
+                    cause: BackupFailureCause.StorageUnavailable);
             // At least one verified copy exists: the artifact is real and is published with whatever else happened. Cancellation does not unmake it.
             return;
         }
@@ -309,7 +344,7 @@ internal sealed class DatabaseBackupExecution
         BackupFailure? failure = null;
         BackupReplicaInfo? replica = null;
         var cancelled = false;
-        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _request.PauseToken);
         bounded.CancelAfter(_request.DestinationTimeout ?? DatabaseBackupPipelineRequest.DefaultDestinationTimeout);
         try
         {
@@ -319,8 +354,13 @@ internal sealed class DatabaseBackupExecution
                     "The requested storage provider is not available on this agent.", kind: BackupFailureKind.StorageWriteFailed, cause: BackupFailureCause.Unsupported);
             }
 
-            await UploadAsync(storage, transfer, bounded, bounded.Token).ConfigureAwait(false);
+            await UploadAsync(destination, storage, transfer, bounded, bounded.Token).ConfigureAwait(false);
             replica = await VerifyReplicaAsync(storage, transfer, bounded.Token).ConfigureAwait(false);
+        }
+        catch (TransferPausedException) { throw; }
+        catch (OperationCanceledException) when (_request.PauseToken.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            throw new TransferPausedException("Operator");
         }
         catch (StageFailedException exception)
         {
@@ -355,7 +395,7 @@ internal sealed class DatabaseBackupExecution
             replica, failure, transfer.Stored, transfer.Key, objectMayRemain, startedAt, _time.GetUtcNow());
     }
 
-    private async Task UploadAsync(IStorageProvider storage, Transfer transfer, CancellationTokenSource destinationDeadline, CancellationToken cancellationToken)
+    private async Task UploadAsync(BackupPipelineDestination destination, IStorageProvider storage, Transfer transfer, CancellationTokenSource destinationDeadline, CancellationToken cancellationToken)
     {
         const BackupExecutionStage stage = BackupExecutionStage.Uploading;
         _tracker.Enter(stage);
@@ -413,12 +453,33 @@ internal sealed class DatabaseBackupExecution
                 }
                 var progress = new CallbackProgress<long>(bytes => _tracker.Report(
                     stage, artifact.SizeBytes > 0 ? bytes * 100.0 / artifact.SizeBytes : 100, bytes, artifact.SizeBytes));
-                stored = await storage.PutAsync(
-                    transfer.Key,
-                    pacing?.Wrap(stream) ?? stream,
-                    new StoragePutOptions(_request.Overwrite, artifact.Checksum, artifact.SizeBytes),
-                    progress,
-                    cancellationToken).ConfigureAwait(false);
+                var prior = _request.Checkpoints.SingleOrDefault(x => x.StorageProvider == destination.Storage.Value && x.DestinationId == destination.ConnectionId);
+                var checkpoint = prior is null ? null : new StorageTransferCheckpoint(prior.VerifiedByteOffset, prior.ProviderState);
+                var options = new StoragePutOptions(_request.Overwrite, artifact.Checksum, artifact.SizeBytes)
+                {
+                    RecordCheckpointAsync = async (next, token) =>
+                    {
+                        if (_request.RecordCheckpointAsync is { } record && destination.ConnectionId is { } destinationId)
+                            await record(new TransferCheckpointContract { StorageProvider = destination.Storage.Value, DestinationId = destinationId,
+                                VerifiedByteOffset = next.VerifiedByteOffset, ProviderState = next.ProviderState }, token).ConfigureAwait(false);
+                        checkpoint = next;
+                    }
+                };
+                for (var retry = 0; ; retry++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    stream.Position = 0;
+                    try
+                    {
+                        stored = await storage.PutAsync(transfer.Key, pacing?.Wrap(stream) ?? stream, options with { Checkpoint = checkpoint }, progress, cancellationToken).ConfigureAwait(false);
+                        break;
+                    }
+                    catch (StorageException error) when (error.Kind is StorageFailureKind.NetworkUnavailable or StorageFailureKind.Timeout)
+                    {
+                        if (retry == 3) throw new TransferPausedException("PausedByNetworkError");
+                        await Task.Delay(TimeSpan.FromSeconds(1 << retry), _time, cancellationToken).ConfigureAwait(false);
+                    }
+                }
             }
             catch (StorageException exception)
             {
@@ -435,7 +496,7 @@ internal sealed class DatabaseBackupExecution
                 transfer.Key = ((StorageException)exception.Data[nameof(StorageException)]!).RemainingObjectKey;
                 throw;
             }
-            catch (Exception exception) when (exception is not OperationCanceledException and not StageFailedException)
+            catch (Exception exception) when (exception is not OperationCanceledException and not StageFailedException and not TransferPausedException)
             {
                 throw Fail(stage, BackupPipelineReasons.StorageUnexpected,
                     "The storage provider failed unexpectedly. Details are in the agent log.", exception, BackupFailureKind.StorageWriteFailed,
@@ -461,10 +522,21 @@ internal sealed class DatabaseBackupExecution
         StorageVerificationResult verification;
         try
         {
-            verification = await storage.VerifyAsync(
-                transfer.Key!, new StorageVerificationExpectation(artifact.SizeBytes, artifact.Checksum), cancellationToken).ConfigureAwait(false);
+            for (var retry = 0; ; retry++)
+            {
+                try
+                {
+                    verification = await storage.VerifyAsync(transfer.Key!, new StorageVerificationExpectation(artifact.SizeBytes, artifact.Checksum), cancellationToken).ConfigureAwait(false);
+                    break;
+                }
+                catch (StorageException error) when (error.Kind is StorageFailureKind.NetworkUnavailable or StorageFailureKind.Timeout)
+                {
+                    if (retry == 3) throw new TransferPausedException("PausedByNetworkError");
+                    await Task.Delay(TimeSpan.FromSeconds(1 << retry), _time, cancellationToken).ConfigureAwait(false);
+                }
+            }
         }
-        catch (Exception exception) when (exception is not OperationCanceledException and not StageFailedException)
+        catch (Exception exception) when (exception is not OperationCanceledException and not StageFailedException and not TransferPausedException)
         {
             var message = exception is StorageException storageException
                 ? storageException.Message
@@ -577,6 +649,7 @@ internal sealed class DatabaseBackupExecution
     private void CleanupAfterSuccess()
     {
         // Reached only after the replica was verified: this is the earliest point at which staging may be released.
+        _retained?.Release(_staging, _request.AttemptId);
         var failed = DeleteStaged(StagedNames());
         if (failed)
         {
@@ -593,6 +666,7 @@ internal sealed class DatabaseBackupExecution
     private async Task CleanupAfterFailureAsync(bool cancelled)
     {
         // Destinations clean up their own unverified objects as they fail (TransferOneAsync); only staging is left.
+        _retained?.Release(_staging, _request.AttemptId);
 
         // A file handed over by the provider is ours to remove; a file the provider failed on was dealt with by the provider.
         if (_stagedFile is null)
@@ -661,6 +735,12 @@ internal sealed class DatabaseBackupExecution
 
     private IEnumerable<string> StagedNames()
     {
+        if (_request.ResumeTransfer && _retained is { } retained)
+        {
+            yield return retained.SourceFile.FileName;
+            if (retained.Artifact.FileName != retained.SourceFile.FileName) yield return retained.Artifact.FileName;
+            yield break;
+        }
         if (_stagedFile is { } staged)
         {
             yield return staged.FileName;
@@ -687,14 +767,14 @@ internal sealed class DatabaseBackupExecution
             Status = status,
             FinalStage = finalStage,
             Failure = failure,
-            Source = provider?.Source,
+            Source = provider?.Source ?? _retained?.Source,
             StartedAt = _startedAt,
             FinishedAt = _time.GetUtcNow(),
-            BackupStartedAt = provider?.BackupStartedAt,
-            BackupFinishedAt = provider?.BackupFinishedAt,
-            Options = provider?.Options,
+            BackupStartedAt = provider?.BackupStartedAt ?? _retained?.BackupStartedAt,
+            BackupFinishedAt = provider?.BackupFinishedAt ?? _retained?.BackupFinishedAt,
+            Options = provider?.Options ?? _retained?.Options,
             PreCheck = _preCheck,
-            Verification = provider?.Verification ?? BackupVerification.NotRun,
+            Verification = provider?.Verification ?? _retained?.Verification ?? BackupVerification.NotRun,
             SourceFile = _sourceFile,
             Artifact = _artifact,
             Destinations = _destinations.ToArray(),

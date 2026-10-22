@@ -665,7 +665,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
     }
 
     private static bool SuccessfulPrecheck(BackupPlatform.Contracts.Restores.RestoreTaskResult? result, RestoreOptions options, string? engine) =>
-        engine is ("mssql" or "postgres") && result is { PreCheck.Count: > 0, SourceBackup: not null, FileMappings: not null } && (engine == "postgres" || result.FileMappings.Count > 0) &&
+        engine is ("mssql" or "postgres" or "file-system") && result is { PreCheck.Count: > 0, SourceBackup: not null, FileMappings: not null } && (engine != "mssql" || result.FileMappings.Count > 0) &&
         result.PreCheck.All(item => item.Status is "Passed" or "Warning" or "Skipped") &&
         (!options.VerifyChecksum || result.ChecksumVerified) && (!options.VerifyBackup || result.BackupVerified);
 

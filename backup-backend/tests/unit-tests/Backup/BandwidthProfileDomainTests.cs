@@ -31,9 +31,7 @@ public sealed class BandwidthProfileDomainTests
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new TransferScheduleWindow(Guid.NewGuid(), profileId, DayOfWeek.Monday, new TimeOnly(9, 0), new TimeOnly(17, 0), 200_000_000_000)); // > Max
 
-        // Start >= End check (must not be zero length or inverted)
-        Assert.Throws<ArgumentException>(() =>
-            new TransferScheduleWindow(Guid.NewGuid(), profileId, DayOfWeek.Monday, new TimeOnly(17, 0), new TimeOnly(9, 0), 500_000));
+        // Equal endpoints cannot distinguish an empty window from a full day.
         Assert.Throws<ArgumentException>(() =>
             new TransferScheduleWindow(Guid.NewGuid(), profileId, DayOfWeek.Monday, new TimeOnly(9, 0), new TimeOnly(9, 0), 500_000));
 

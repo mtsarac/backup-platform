@@ -14,6 +14,10 @@ public sealed record BackupDestination(
     /// <summary>The agent volume a local destination writes to (null: the default local storage). Resolved from the connection when a run is admitted.</summary>
     public string? StorageTarget { get; init; }
 
+    public string? MediaClass { get; init; }
+    public string? Site { get; init; }
+    public bool OffsiteVerified { get; init; }
+
     public BackupStorageExecutionLocation StorageExecutionLocation { get; init; } =
         StorageProvider == "local" ? BackupStorageExecutionLocation.Agent : BackupStorageExecutionLocation.Backend;
     /// <summary>True when the agent transfers directly to/from the storage; false when bytes are relayed through the platform backend.</summary>

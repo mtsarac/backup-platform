@@ -109,6 +109,66 @@ public sealed class UploadBandwidthApiIntegrationTests(PostgreSqlFixture fixture
         Assert.Equal(HttpStatusCode.NoContent, deleteRes.StatusCode);
     }
 
+    [Theory]
+    [InlineData("2026-10-25T00:44:59Z", "01:30:00", "01:45:00", 500_000L)]
+    [InlineData("2026-10-25T01:29:59Z", "01:30:00", "01:45:00", null)]
+    [InlineData("2026-03-29T00:59:59Z", "01:30:00", "03:00:00", null)]
+    public async Task Policy_refreshes_at_the_actual_dst_window_transition(string instant, string start, string end, long? expectedRate)
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture, clock: new MutableClock(DateTimeOffset.Parse(instant)));
+        var jobId = await scenario.CreateJobAsync();
+        using var created = await scenario.Admin.SendAsync(HttpMethod.Post, scenario.Root + "/bandwidth-profiles", new
+        {
+            name = "DST", timeZoneId = "Europe/London",
+            windows = new[] { new { dayOfWeek = 0, startTime = start, endTime = end, bytesPerSecond = 500_000 } }
+        });
+        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+        var profileId = AgentWorld.ReadJson(created).GetProperty("id").GetGuid();
+        using var assigned = await scenario.Admin.SendAsync(HttpMethod.Put, scenario.Root + $"/upload-bandwidth/jobs/{jobId}/profile", new { profileId });
+        Assert.Equal(HttpStatusCode.OK, assigned.StatusCode);
+        await scenario.StartRunAsync(jobId);
+        var claim = await scenario.ClaimAsync();
+        await scenario.StartAttemptAsync(claim);
+        using var response = await PolicyAsync(scenario, claim);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var policy = AgentWorld.ReadJson(response);
+        Assert.Equal(expectedRate, policy.GetProperty("jobBytesPerSecond").ValueKind == JsonValueKind.Null ? null : policy.GetProperty("jobBytesPerSecond").GetInt64());
+        Assert.Equal(1, policy.GetProperty("refreshAfterSeconds").GetInt32());
+    }
+
+    [Fact]
+    public async Task Overnight_profile_remains_effective_after_midnight_and_rejects_cross_day_overlap()
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture, clock: new MutableClock(DateTimeOffset.Parse("2026-06-16T00:59:59Z")));
+        var jobId = await scenario.CreateJobAsync();
+        using var created = await scenario.Admin.SendAsync(HttpMethod.Post, scenario.Root + "/bandwidth-profiles", new
+        {
+            name = "Night", timeZoneId = "UTC",
+            windows = new[] { new { dayOfWeek = 1, startTime = "22:00:00", endTime = "01:00:00", bytesPerSecond = 500_000 } }
+        });
+        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+        var profileId = AgentWorld.ReadJson(created).GetProperty("id").GetGuid();
+        using var assigned = await scenario.Admin.SendAsync(HttpMethod.Put, scenario.Root + $"/upload-bandwidth/jobs/{jobId}/profile", new { profileId });
+        Assert.Equal(HttpStatusCode.OK, assigned.StatusCode);
+        await scenario.StartRunAsync(jobId);
+        var claim = await scenario.ClaimAsync();
+        await scenario.StartAttemptAsync(claim);
+        using var policy = await PolicyAsync(scenario, claim);
+        Assert.Equal(500_000, AgentWorld.ReadJson(policy).GetProperty("jobBytesPerSecond").GetInt64());
+        Assert.Equal(1, AgentWorld.ReadJson(policy).GetProperty("refreshAfterSeconds").GetInt32());
+
+        using var overlap = await scenario.Admin.SendAsync(HttpMethod.Put, scenario.Root + $"/bandwidth-profiles/{profileId}", new
+        {
+            name = "Night", timeZoneId = "UTC",
+            windows = new[]
+            {
+                new { dayOfWeek = 6, startTime = "22:00:00", endTime = "02:00:00", bytesPerSecond = 500_000 },
+                new { dayOfWeek = 0, startTime = "01:00:00", endTime = "03:00:00", bytesPerSecond = 500_000 }
+            }
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, overlap.StatusCode);
+    }
+
     private const long UploadBandwidth_Min = BackupPlatform.Domain.Backups.UploadBandwidth.MinimumBytesPerSecond;
 
     [Theory]

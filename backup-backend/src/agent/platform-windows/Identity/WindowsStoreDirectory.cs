@@ -241,7 +241,8 @@ internal sealed class WindowsStoreDirectory
         {
             var name = entry.Name;
             var isStoreFile = entry is FileInfo
-                && (name == IdentityFileName || name == ".enrollment.lock"
+                && (name == IdentityFileName || name == ".enrollment.lock" || name == "client-certificate.pfx"
+                    || (name.StartsWith("client-certificate.pfx.", StringComparison.Ordinal) && Guid.TryParseExact(name["client-certificate.pfx.".Length..], "N", out _))
                     || (name.StartsWith(TemporaryPrefix, StringComparison.Ordinal) && name.EndsWith(TemporarySuffix, StringComparison.Ordinal)));
             if (!isStoreFile)
             {

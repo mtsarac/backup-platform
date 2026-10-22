@@ -30,4 +30,29 @@ public sealed record RestoreTarget(string Host, int? Port, bool IntegratedSecuri
 public sealed record RestoreOptions(bool TerminateActiveConnections = false, bool VerifyChecksum = true, bool VerifyBackup = true)
 {
     public static RestoreOptions Default { get; } = new();
+    public FileRestorePolicy? Files { get; init; }
+}
+
+public sealed record FileRestorePolicy
+{
+    public IReadOnlyList<string>? Paths { get; init; }
+    public string RelativeDirectory { get; init; } = "";
+
+    public FileRestorePolicy Validate()
+    {
+        if (Paths is { Count: 0 or > 256 } || RelativeDirectory is null) throw new ArgumentException("Invalid file restore selection.");
+        if (RelativeDirectory.Length > 0) FileBackupPolicy.ValidatePath(RelativeDirectory, allowRoot: true);
+        foreach (var path in Paths ?? []) FileBackupPolicy.ValidatePath(path, allowRoot: true);
+        return this;
+    }
+
+    public bool Equals(FileRestorePolicy? other) => other is not null && RelativeDirectory == other.RelativeDirectory
+        && (Paths is null ? other.Paths is null : other.Paths is not null && Paths.SequenceEqual(other.Paths));
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(RelativeDirectory);
+        if (Paths is not null) foreach (var path in Paths) hash.Add(path);
+        return hash.ToHashCode();
+    }
 }

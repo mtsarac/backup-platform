@@ -13,11 +13,14 @@ public sealed class PostgreSqlBackupProvider : IDatabaseBackupProvider
     private readonly ILogger<PostgreSqlBackupProvider> _logger;
     private readonly PostgreSqlClientTools _tools;
     private readonly TimeProvider _time;
+    private readonly PostgreSqlBackupMode _mode;
 
     public PostgreSqlBackupProvider(ILogger<PostgreSqlBackupProvider> logger, PostgreSqlProviderOptions? options = null, TimeProvider? timeProvider = null)
     {
         _logger = logger;
         _tools = new PostgreSqlClientTools(options ?? new PostgreSqlProviderOptions(), logger);
+        _mode = (options ?? new PostgreSqlProviderOptions()).BackupMode;
+        if (!Enum.IsDefined(_mode)) throw new ArgumentOutOfRangeException(nameof(options));
         _time = timeProvider ?? TimeProvider.System;
     }
 
@@ -39,6 +42,8 @@ public sealed class PostgreSqlBackupProvider : IDatabaseBackupProvider
     public async Task<BackupPreCheckReport> PreCheckFullBackupAsync(DatabaseConnectionSettings connection, DatabaseCredential credential,
         FullBackupPreCheckRequest request, CancellationToken cancellationToken)
     {
+        if (_mode != PostgreSqlBackupMode.Logical)
+            return await new PostgreSqlPhysicalBackupExecutor(this, _tools, _logger, _time, _mode).PreCheckAsync(connection, credential, request, cancellationToken).ConfigureAwait(false);
         var items = new List<BackupPreCheckItem>();
         if (!PostgreSqlIdentifiers.IsValidDatabaseName(request.DatabaseName))
         {
@@ -73,7 +78,9 @@ public sealed class PostgreSqlBackupProvider : IDatabaseBackupProvider
 
     public Task<FullBackupResult> ExecuteFullBackupAsync(DatabaseConnectionSettings connection, DatabaseCredential credential,
         FullBackupRequest request, IProgress<BackupProgress>? progress, CancellationToken cancellationToken) =>
-        new PostgreSqlFullBackupExecutor(this, _tools, _logger, _time).ExecuteAsync(connection, credential, request, progress, cancellationToken);
+        _mode == PostgreSqlBackupMode.Logical
+            ? new PostgreSqlFullBackupExecutor(this, _tools, _logger, _time).ExecuteAsync(connection, credential, request, progress, cancellationToken)
+            : new PostgreSqlPhysicalBackupExecutor(this, _tools, _logger, _time, _mode).ExecuteAsync(connection, credential, request, progress, cancellationToken);
 
     internal static DatabaseInstanceInfo Instance(DatabaseConnectionSettings connection, PostgreSqlServerInfo server) =>
         new(DatabaseEngineId.PostgreSql, connection.Endpoint.Host, null, server.Version, "PostgreSQL", server.HostPlatform);

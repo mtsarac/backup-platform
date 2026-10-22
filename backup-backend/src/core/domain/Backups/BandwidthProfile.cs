@@ -26,7 +26,7 @@ public sealed class BandwidthProfile : ITenantOwned
     {
         if (id == Guid.Empty) throw new ArgumentException("Profile ID cannot be empty.", nameof(id));
         ArgumentNullException.ThrowIfNull(tenantId);
-        if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Profile name cannot be empty.", nameof(name));
+        if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 200) throw new ArgumentException("Profile name must contain 1–200 characters.", nameof(name));
         ValidateZone(timeZoneId);
 
         Id = id;
@@ -47,7 +47,7 @@ public sealed class BandwidthProfile : ITenantOwned
 
     public void Update(string name, string timeZoneId, DateTimeOffset now)
     {
-        if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Profile name cannot be empty.", nameof(name));
+        if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 200) throw new ArgumentException("Profile name must contain 1–200 characters.", nameof(name));
         ValidateZone(timeZoneId);
         Name = name.Trim();
         TimeZoneId = timeZoneId;
@@ -58,19 +58,27 @@ public sealed class BandwidthProfile : ITenantOwned
     {
         ArgumentNullException.ThrowIfNull(windows);
         var list = windows.ToList();
-        // Validate overlaps per day
-        foreach (var group in list.GroupBy(w => w.DayOfWeek))
+        var week = TimeSpan.TicksPerDay * 7;
+        for (var i = 0; i < list.Count; i++)
         {
-            var ordered = group.OrderBy(w => w.StartTime).ToList();
-            for (var i = 0; i < ordered.Count - 1; i++)
+            if (list[i].ProfileId != Id) throw new ArgumentException("A window must belong to this profile.", nameof(windows));
+            var start = (int)list[i].DayOfWeek * TimeSpan.TicksPerDay + list[i].StartTime.Ticks;
+            var end = start + Duration(list[i]);
+            for (var j = 0; j < i; j++)
             {
-                if (ordered[i].EndTime > ordered[i + 1].StartTime)
-                    throw new ArgumentException($"Windows overlap on {group.Key}: {ordered[i].StartTime}-{ordered[i].EndTime} and {ordered[i + 1].StartTime}-{ordered[i + 1].EndTime}");
+                var otherStart = (int)list[j].DayOfWeek * TimeSpan.TicksPerDay + list[j].StartTime.Ticks;
+                for (var shift = -1; shift <= 1; shift++)
+                    if (start < otherStart + shift * week + Duration(list[j]) && otherStart + shift * week < end)
+                        throw new ArgumentException("Schedule windows overlap.", nameof(windows));
             }
         }
         _windows.Clear();
         _windows.AddRange(list);
     }
+
+    private static long Duration(TransferScheduleWindow window) =>
+        window.EndTime > window.StartTime ? window.EndTime.Ticks - window.StartTime.Ticks
+            : TimeSpan.TicksPerDay - window.StartTime.Ticks + window.EndTime.Ticks;
 
     /// <summary>
     /// Resolves the effective limit at the given UTC instant, and how long until the current window ends or next window starts.
@@ -80,57 +88,88 @@ public sealed class BandwidthProfile : ITenantOwned
     /// </summary>
     public (long? Limit, DateTimeOffset? NextTransition) Evaluate(DateTimeOffset utcInstant)
     {
-        var tz = ResolveZone(TimeZoneId);
-        var local = TimeZoneInfo.ConvertTime(utcInstant, tz);
-        var currentDay = local.DayOfWeek;
-        var currentTime = TimeOnly.FromTimeSpan(local.TimeOfDay);
-
-        // Find active window today
-        var active = _windows.FirstOrDefault(w => w.DayOfWeek == currentDay && currentTime >= w.StartTime && currentTime < w.EndTime);
-        long? currentLimit = active?.BytesPerSecond;
-
-        // Find the next transition instant
-        DateTimeOffset? nextTransition = null;
-
-        if (active != null)
+        if (_windows.Count == 0) return (null, null);
+        var zone = ResolveZone(TimeZoneId);
+        var localDate = TimeZoneInfo.ConvertTime(utcInstant, zone).Date;
+        DateTimeOffset? next = null;
+        for (var day = -1; day <= 7; day++)
         {
-            var activeEndDateTime = new DateTime(local.Year, local.Month, local.Day, active.EndTime.Hour, active.EndTime.Minute, active.EndTime.Second);
-            // Handle DST ambiguities using TimeZoneInfo
-            nextTransition = ConvertLocalToUtc(activeEndDateTime, tz);
-        }
-        else
-        {
-            for (var dayOffset = 0; dayOffset <= 7; dayOffset++)
+            var date = localDate.AddDays(day);
+            foreach (var window in _windows)
             {
-                var checkDate = local.DateTime.Date.AddDays(dayOffset);
-                var checkDay = checkDate.DayOfWeek;
-                var windowsOnDay = _windows.Where(w => w.DayOfWeek == checkDay).OrderBy(w => w.StartTime).ToList();
-
-                foreach (var w in windowsOnDay)
-                {
-                    if (dayOffset == 0 && w.StartTime <= currentTime) continue;
-                    var startDateTime = new DateTime(checkDate.Year, checkDate.Month, checkDate.Day, w.StartTime.Hour, w.StartTime.Minute, w.StartTime.Second);
-                    nextTransition = ConvertLocalToUtc(startDateTime, tz);
-                    break;
-                }
-                if (nextTransition != null) break;
+                if (window.DayOfWeek != date.DayOfWeek) continue;
+                Boundary(date.Add(window.StartTime.ToTimeSpan()));
+                Boundary(date.Add(window.StartTime.ToTimeSpan()).AddTicks(Duration(window)));
             }
         }
 
-        return (currentLimit, nextTransition);
-    }
+        // A clock jump can enter or leave a window without crossing either wall-clock boundary.
+        if (zone.SupportsDaylightSavingTime)
+        {
+            var previous = utcInstant;
+            var offset = zone.GetUtcOffset(previous);
+            var horizon = next ?? utcInstant.AddDays(8);
+            while (previous < horizon)
+            {
+                var probe = previous.AddHours(1);
+                if (probe > horizon) probe = horizon;
+                var probeOffset = zone.GetUtcOffset(probe);
+                if (offset != probeOffset)
+                {
+                    var low = previous.UtcTicks;
+                    var high = probe.UtcTicks;
+                    while (high - low > 1)
+                    {
+                        var middle = low + (high - low) / 2;
+                        if (zone.GetUtcOffset(new DateTimeOffset(middle, TimeSpan.Zero)) == offset) low = middle;
+                        else high = middle;
+                    }
+                    Consider(new DateTimeOffset(high, TimeSpan.Zero));
+                    horizon = next ?? horizon;
+                }
+                previous = probe;
+                offset = probeOffset;
+            }
+        }
+        return (RateAt(utcInstant), next);
 
-    private static DateTimeOffset ConvertLocalToUtc(DateTime localDateTime, TimeZoneInfo tz)
-    {
-        // When ambiguous (DST fall-back), choose standard or daylight properly
-        var offset = tz.GetUtcOffset(localDateTime);
-        var localWithOffset = new DateTimeOffset(localDateTime, offset);
-        return localWithOffset.ToUniversalTime();
+        long? RateAt(DateTimeOffset instant)
+        {
+            var local = TimeZoneInfo.ConvertTime(instant, zone);
+            var time = TimeOnly.FromTimeSpan(local.TimeOfDay);
+            foreach (var window in _windows)
+            {
+                var active = window.EndTime > window.StartTime
+                    ? window.DayOfWeek == local.DayOfWeek && time >= window.StartTime && time < window.EndTime
+                    : window.DayOfWeek == local.DayOfWeek && time >= window.StartTime
+                        || (DayOfWeek)(((int)window.DayOfWeek + 1) % 7) == local.DayOfWeek && time < window.EndTime;
+                if (active) return window.BytesPerSecond;
+            }
+            return null;
+        }
+
+        void Consider(DateTimeOffset candidate)
+        {
+            if (candidate > utcInstant && (next is null || candidate < next)
+                && RateAt(candidate) != RateAt(candidate.AddTicks(-1)))
+                next = candidate;
+        }
+
+        void Boundary(DateTime local)
+        {
+            if (zone.IsInvalidTime(local)) return;
+            if (zone.IsAmbiguousTime(local))
+            {
+                foreach (var offset in zone.GetAmbiguousTimeOffsets(local))
+                    Consider(new DateTimeOffset(local, offset).ToUniversalTime());
+            }
+            else Consider(new DateTimeOffset(local, zone.GetUtcOffset(local)).ToUniversalTime());
+        }
     }
 
     private static void ValidateZone(string zone)
     {
-        if (string.IsNullOrWhiteSpace(zone) || !ZoneShape.IsMatch(zone))
+        if (string.IsNullOrWhiteSpace(zone) || zone.Length > 64 || !ZoneShape.IsMatch(zone))
             throw new ArgumentException("An IANA time zone identifier such as Europe/Istanbul or UTC is required.", nameof(zone));
         try { _ = ResolveZone(zone); }
         catch (Exception exception) when (exception is TimeZoneNotFoundException or InvalidTimeZoneException)
@@ -153,7 +192,8 @@ public sealed class TransferScheduleWindow
     {
         if (id == Guid.Empty) throw new ArgumentException("Window ID cannot be empty.", nameof(id));
         if (profileId == Guid.Empty) throw new ArgumentException("Profile ID cannot be empty.", nameof(profileId));
-        if (startTime >= endTime) throw new ArgumentException("Window startTime must be strictly earlier than endTime.");
+        if (!Enum.IsDefined(dayOfWeek)) throw new ArgumentException("Unknown day of week.", nameof(dayOfWeek));
+        if (startTime == endTime) throw new ArgumentException("Window startTime and endTime must differ.");
         UploadBandwidth.Validate(bytesPerSecond);
 
         Id = id;

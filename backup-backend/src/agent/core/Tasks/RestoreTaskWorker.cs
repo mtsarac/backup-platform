@@ -6,6 +6,7 @@ using BackupPlatform.BackupProviders.Abstractions.Database;
 using BackupPlatform.Contracts.Agents;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Contracts.Restores;
+using BackupPlatform.Agent.Core.Updates;
 using Microsoft.Extensions.Logging;
 
 namespace BackupPlatform.Agent.Core.Tasks;
@@ -38,9 +39,10 @@ public sealed partial class RestoreTaskWorker : IAgentTaskSink
     private readonly ILogger<RestoreTaskWorker> _logger;
     private Guid? _activeAttempt;
     private int _started;
+    private readonly AgentUpdateGate? _updates;
 
     public RestoreTaskWorker(IRestoreTaskClient client, IAgentCredentialStore identities, IDatabaseRestorePipeline pipeline,
-        RestoreTaskRequestFactory requests, AgentSoftwareInfo software, TimeProvider timeProvider, ILogger<RestoreTaskWorker> logger)
+        RestoreTaskRequestFactory requests, AgentSoftwareInfo software, TimeProvider timeProvider, ILogger<RestoreTaskWorker> logger, AgentUpdateGate? updates = null)
     {
         _client = client;
         _identities = identities;
@@ -49,6 +51,7 @@ public sealed partial class RestoreTaskWorker : IAgentTaskSink
         _software = software;
         _time = timeProvider;
         _logger = logger;
+        _updates = updates;
     }
 
     public bool TryPublish(AgentTaskEnvelope task)
@@ -88,6 +91,9 @@ public sealed partial class RestoreTaskWorker : IAgentTaskSink
         or (RestoreTaskTypes.DatabaseRestoreVerification, "Verification");
 
     private bool TryEnqueue(AgentTaskEnvelope task) =>
+        _updates?.TryQueue(() => Enqueue(task)) ?? Enqueue(task);
+
+    private bool Enqueue(AgentTaskEnvelope task) =>
         _time is IAgentLoopObserver observer ? observer.Signal("restore worker", () => _queue.Writer.TryWrite(task)) : _queue.Writer.TryWrite(task);
 
     public async Task RunAsync(CancellationToken stoppingToken)
@@ -130,6 +136,7 @@ public sealed partial class RestoreTaskWorker : IAgentTaskSink
                     {
                         _activeAttempt = null;
                     }
+                    _updates?.Complete();
                 }
             }
         }

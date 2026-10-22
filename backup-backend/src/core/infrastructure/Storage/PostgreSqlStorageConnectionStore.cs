@@ -153,6 +153,14 @@ public sealed class PostgreSqlStorageConnectionStore(
             if ((movesStorage || clearsCredentials) && await HasReferencesAsync(context, owner, id, cancellationToken))
                 return new(StorageConnectionOutcome.Rejected, Code: "connection_in_use");
         }
+        if (connection.ProviderType is StorageProviderTypes.S3 or StorageProviderTypes.Smb)
+        {
+            string[] fields = connection.ProviderType == StorageProviderTypes.S3 ? ["endpoint", "bucket", "region"] : ["host", "share"];
+            var movesStorage = fields.Any(field => previousConfiguration.GetValueOrDefault(field) != connection.Configuration.GetValueOrDefault(field));
+            var clearsCredentials = previousSecret is not null && connection.SecretReference is null;
+            if ((movesStorage || clearsCredentials) && await HasReferencesAsync(context, owner, id, cancellationToken))
+                return new(StorageConnectionOutcome.Rejected, Code: "connection_in_use");
+        }
         if (!result.Changed)
         {
             return new(StorageConnectionOutcome.Unchanged, await ReadAsync(context, id, owner, cancellationToken));

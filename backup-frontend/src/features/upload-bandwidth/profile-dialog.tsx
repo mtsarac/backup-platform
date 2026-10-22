@@ -39,7 +39,7 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
   const isRateValid = parsed !== null && !('error' in parsed)
 
   function addWindow() {
-    if (!isRateValid || startTime >= endTime) return
+    if (!isRateValid || !startTime || !endTime || startTime === endTime) return
     const newWindow: TransferScheduleWindowDto = {
       dayOfWeek: day,
       startTime: startTime.length === 5 ? `${startTime}:00` : startTime,
@@ -72,7 +72,7 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
     >
       <div className="space-y-4">
         <Field label={tx("Profil Adı")}>
-          {control => <input {...control} className={inputClass} value={name} onChange={e => setName(e.target.value)} placeholder="Örn. Mesai Saatleri" required />}
+          {control => <input {...control} className={inputClass} value={name} onChange={e => setName(e.target.value)} placeholder={tx("Örn. Mesai Saatleri")} maxLength={200} required />}
         </Field>
         <Field label={tx("Zaman Dilimi (IANA)")}>
           {control => <input {...control} className={inputClass} value={timeZoneId} onChange={e => setTimeZoneId(e.target.value)} placeholder="Europe/Istanbul" required />}
@@ -98,14 +98,14 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
               {control => (
                 <div className="flex gap-1">
                   <input {...control} className={inputClass} value={rateText} onChange={e => setRateText(e.target.value)} />
-                  <select className={selectClass} value={rateUnit} onChange={e => setRateUnit(e.target.value as BandwidthUnitId)}>
+                  <select aria-label={tx("Hız Birimi")} className={selectClass} value={rateUnit} onChange={e => setRateUnit(e.target.value as BandwidthUnitId)}>
                     {bandwidthUnits.map(u => <option key={u.id} value={u.id}>{u.id}</option>)}
                   </select>
                 </div>
               )}
             </Field>
           </div>
-          <button type="button" onClick={addWindow} disabled={!isRateValid || startTime >= endTime} className="text-xs font-medium text-primary hover:underline">
+          <button type="button" onClick={addWindow} disabled={!isRateValid || !startTime || !endTime || startTime === endTime} className="text-xs font-medium text-primary hover:underline">
             + {tx("Pencereyi Listeye Ekle")}
           </button>
         </div>

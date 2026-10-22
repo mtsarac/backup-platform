@@ -69,7 +69,7 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
                 .FirstOrDefault();
         if (selected is null) throw new DownloadUnavailableException(request.ReplicaId is null ? availability.Reason! : "replica_not_found");
         if (!selected.Available) throw new DownloadUnavailableException(selected.Reason!);
-        var extension = availability.Engine switch { "postgres" => "dump", "mssql" => "bak", _ => "bin" };
+        var extension = availability.Engine switch { "postgres" => "dump", "mssql" => "bak", "file-system" => "zip", _ => "bin" };
         var filename = $"backup-{artifactId:N}.{extension}" + (availability.Format == BackupArtifact.BpeFormat && !decrypt ? ".bpe" : string.Empty);
         var session = await store.CreateAsync(new DownloadCreateCommand(tenantId, artifactId, selected.ReplicaId, userId, filename, time.GetUtcNow(), SessionLifetime, supportSessionId,
             decrypt, breakGlassRequestId), cancellationToken);

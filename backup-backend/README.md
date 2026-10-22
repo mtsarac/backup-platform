@@ -17,9 +17,9 @@ src/
   modules/           Backend features: agents, audit, backups, identity,
                      managed-service, notifications, scheduling, storage, tenancy
   providers/
-    backup/          mssql, postgresql (file-system is an empty skeleton)
-    storage/         central, local, sftp, google-drive
-    secret/          data-protection
+    backup/          mssql, postgresql, file-system
+    storage/         central, local, sftp, google-drive, s3, smb
+    secret/          data-protection (Database / Vault / AWS Secrets Manager)
   agent/             core, transport, platform-windows, platform-linux
 tests/               unit, architecture, agent, integration, windows
 deploy/              Agent installers and release README files
@@ -96,6 +96,22 @@ table, and migration history. It never rewrites measurements or deletes rows to
 make a downgrade pass.
 
 
+### Scheduled upload bandwidth
+
+Tenant administrators manage weekly profiles through
+`/api/tenants/{tenantId}/bandwidth-profiles` (or `/api/bandwidth-profiles`
+with the tenant context) and assign them using the upload-bandwidth
+`tenant/profile`, `agents/{agentId}/profile`, or `jobs/{jobId}/profile` routes.
+The most specific assignment wins: job, then agent, then tenant. Existing
+static ceilings still apply; outside profile windows the profile adds no limit.
+
+Windows use the selected IANA time zone, include their start and exclude their
+end. An end earlier than its start means the following day; equal endpoints
+are invalid. Overlaps are rejected across midnight and the Saturday/Sunday
+week boundary. Both occurrences of a repeated DST hour are evaluated, and a
+skipped hour changes the limit at the actual clock jump. Agent upload-policy
+refreshes are shortened to the next effective transition.
+
 ## Run it
 
 You need the .NET 10 SDK and PostgreSQL 18.
@@ -118,6 +134,82 @@ To enroll an agent, see "Connecting an agent" in the [root README](../README.md)
 
 The `Dockerfile` builds the API image. `docker-compose.yml` in the repository root starts it with PostgreSQL, SQL Server, and the frontend.
 
+## 3-2-1 and protected external storage
+
+The existing tenant storage-connection APIs and connection wizard support `s3`
+and `smb`; credentials use the same encrypted secret store, write-only secret
+rotation API and tenant authorization as other connections. A referenced
+connection cannot change its endpoint/bucket/share or lose its credentials.
+Disabling a connection prevents new admissions, not retention or existing reads.
+
+Enable `configuration.enforceThreeTwoOne`, set `sourceSite`, and require at least
+three verified replicas. Connections accept optional `site` and `mediaClass`
+(`disk`, `object-storage`, or `tape`). Site labels are operator-supplied physical
+failure domains, not inferred from a hostname or ownership. Defaults are disk
+for Local/Central/SFTP/SMB and object-storage for S3/Drive. A remote site counts
+only when a stored replica independently passes checksum read-back verification.
+Same-site, deleted or failed copies do not satisfy the off-site requirement; a
+successful connection probe alone never establishes compliance. Site/media facts are snapshotted at run
+admission; changing a connection never rewrites an old run's compliance.
+Policy failure keeps every successfully verified copy available and accounted
+for while reporting the run failed. Agents must advertise `backup.three-two-one`
+and the relevant `storage.s3`/`storage.smb` capabilities.
+
+S3 configuration requires an HTTPS `endpoint` (origin only), `bucket`, and
+signing `region`. Secrets are `accessKey`, `secretKey`, and optional
+`sessionToken`. Transfers go directly from the agent to the S3-compatible
+service using AWS Signature V4, multipart upload and conditional publication;
+the backend records a quota-bounded upload intent before bytes move. Each part
+is staged privately on the executing host and checked with Content-MD5; the
+complete input SHA-256/size is validated before publication, then the published
+object is read back for independent verification. Failed uploads abort their
+multipart session. Give credentials access only to the intended bucket and
+`tenants/{tenantId:N}/connections/{connectionId:N}/` prefix.
+
+For WORM, create a versioned bucket with Object Lock enabled, set
+`objectLockMode` to `COMPLIANCE` or `GOVERNANCE`, and `retentionDays` to 1–36500.
+The provider verifies bucket protection and the service's returned object
+retention; it never sends a governance-bypass header. Deletion addresses the
+actual version and refuses unexpired retention/legal hold rather than hiding
+the object behind a delete marker. Existing service-side retention survives
+credential rotation and later connection changes. Credentials need bucket
+access, multipart upload/abort, object read/delete-version and retention/legal
+hold read permissions, plus PutObjectRetention when protection is enabled.
+S3 connection tests authenticate bucket access and protection without creating
+an unaccounted locked probe; the UI distinguishes this from a write/delete test.
+Configure the bucket's incomplete-multipart lifecycle rule as crash cleanup.
+
+SMB configuration is `host` and `share`; `username`, `password`, and optional
+`domain` are secret fields. Windows uses an isolated outbound logon session,
+never global `net use` credentials; apply SMB signing/encryption policy on the
+Windows client and NAS. Linux requires `cifs-utils`, `mount.cifs`/`umount` in
+PATH and mount privileges. It mounts a private temporary directory with SMB
+3.1.1 encryption, disables client metadata/data caching, and removes its
+mode-0600 credential file after mounting. Mount failure never falls back to a
+local directory. The authenticated mount stays alive until streaming readers
+close. Writes reuse the checked atomic filesystem provider and read-back
+integrity verification. SMB tests from the backend are explicitly NotTestable;
+the agent authenticates the share when executing the backup.
+
+## Agent Auto-Update and Deployment
+
+Signed self-update is supported for `linux-x64`, `linux-arm64`, and `win-x64` using ECDsa P-256 release metadata (`AgentUpdateManifest`). Packages are streamed bounded to disk without whole-memory buffering, pinned against operator public keys, and extracted only after exact length and digest match. Untrusted archive entries (path traversal, symlinks/hardlinks, duplicates, unsafe POSIX modes, ZIP64/multi-volume structures, and decompression bombs) fail before publication. Releases never ship or overwrite configuration or identity files.
+
+Updates are deferred whenever active work is queued or executing (backup, restore, download, cleanup, deletion, or probe); active jobs are never interrupted.
+
+### Linux (systemd)
+- Executable: `/opt/backup-platform-agent/supervisor/BackupPlatform.Agent.Host --supervise-update /etc/backup-platform-agent/update-settings.json`
+- Service account: unprivileged `backup-agent:backup-agent` with `Restart=always`
+- Releases: `/opt/backup-platform-agent/releases/{version}`
+- Active pointer: atomic symlink `/opt/backup-platform-agent/current -> releases/{version}`
+- Supervisor: tracks child startup lifecycle. If an unacknowledged release crashes or fails to signal readiness within 60 seconds, the supervisor atomically rolls `/opt/backup-platform-agent/current` back to `.previous` and kills failed child instances.
+
+### Windows (Windows Service)
+- Service: `BackupAgent` running as `NT SERVICE\BackupAgent` with `start= delayed-auto`
+- Executable ACL: protected read/execute (`(OI)(CI)RX`) owned by Administrators/SYSTEM; the service account never has write permissions to its executable or binaries.
+- Privileged Helper: fixed Scheduled Task `BackupAgentUpdate` running as `SYSTEM` pointing strictly to the original protected binary `BackupPlatform.Agent.Host.exe --apply-update "<settingsPath>"`. The service account holds `GRGX` permissions (can trigger via `schtasks /Run /TN BackupAgentUpdate`, but cannot edit or replace the action).
+- Staging & Rollback: downloads stage into protected `%ProgramData%\BackupAgent.updates`. The helper revalidates package digest and signature before extraction, stages into `releases\{version}`, waits for old host clean termination via lease lock, updates `binPath`, starts the updated service, and monitors the startup health acknowledgement. If startup fails or times out, the helper rolls back `binPath` to the previous release executable and restarts the service.
+
 ## Tests
 
 Run from this directory.
@@ -127,7 +219,7 @@ Run from this directory.
 | Unit | `dotnet test tests/unit-tests -c Release` | nothing |
 | Architecture | `dotnet test tests/architecture-tests -c Release` | nothing |
 | Agent | `dotnet test tests/agent-tests -c Release` | nothing |
-| PostgreSQL integration | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName!~MsSql&FullyQualifiedName!~BackupPipelineSmoke"` | `BACKUP_PLATFORM_TEST_CONNECTION_STRING` |
+| PostgreSQL integration | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName!~MsSql&FullyQualifiedName!~BackupPipelineSmoke&FullyQualifiedName!~StorageCapacityAgentHostSmokeTests" -- xUnit.MaxParallelThreads=4` | administrative PostgreSQL connection and current/older client tools; see scripts README |
 | MSSQL integration | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName~IntegrationTests.MsSql\|FullyQualifiedName~BackupPipelineSmoke"` | PostgreSQL and MSSQL variables |
 | Windows | `dotnet test tests/windows-tests -c Release` | Windows host |
 
@@ -136,5 +228,86 @@ Integration test variables:
 - `BACKUP_PLATFORM_TEST_CONNECTION_STRING`: administrative PostgreSQL connection with `CREATEDB`. Each run creates and drops its own database.
 - `BACKUP_PLATFORM_TEST_MSSQL_HOST`, `_USER`, `_PASSWORD`: SQL Server connection.
 - `BACKUP_PLATFORM_TEST_MSSQL_STAGING_SERVER_DIR`, `_AGENT_DIR`: the same staging folder as SQL Server sees it and as the agent sees it.
+- `BACKUP_PLATFORM_TEST_POSTGRES_TOOLS_DIRECTORY`: current `pg_dump`/`pg_restore`, plus matching-major `pg_basebackup`/`pg_verifybackup`/`pg_waldump` for physical tests.
+- `BACKUP_PLATFORM_TEST_POSTGRES_OLD_TOOLS_DIRECTORY`: older client binaries for compatibility-refusal tests.
+- Physical tests also require remote replication access for the test login in `pg_hba.conf`. Limit collection parallelism on high-core hosts to avoid exhausting the database connection limit.
+- Published-host capacity smokes run separately with `BACKUP_PLATFORM_TEST_AGENT_HOST_PATH` and staging paths; the SFTP variant additionally needs an operator-approved server and pinned host key.
 
 CI runs the unit, architecture, and a fast subset of the agent tests. For the helper scripts that start disposable databases and run the integration suites, see [scripts/README.md](../scripts/README.md).
+
+## Windows file permissions
+
+File-system manifests store each regular file and directory's effective Windows
+DACL. The Windows platform adapter freezes inherited rules into a protected DACL,
+so restoring under a more permissive parent does not grant extra access. Files
+receive their ACL inside private restore staging before installation; newly
+created directories receive theirs after their children are installed. Existing
+destination directories keep their current ACL rather than changing permissions
+on unrelated contents.
+
+The agent account must be able to read source ACLs and install the restored
+objects. Ownership and privileged SACL/audit settings are not changed. Windows
+ACL manifests require the Windows adapter to restore; another platform rejects
+them before replacing selected files instead of silently discarding access
+restrictions. Unix permission bits continue to use the native Unix path.
+
+ACL regressions are covered by the platform-safe file-provider unit tests and
+`WindowsFilePermissionsTests` in the Windows suite; the latter requires Windows
+and exercises real inherited allow/deny rules against a broader restore parent.
+
+## Retained transfer cleanup and S3 recovery
+
+Paused transfers retain a durable local journal and pins for the exact staged
+artifact. The normal staging sweep asks the authenticated backend whether that
+tenant/agent's attempt is terminal before releasing those pins. Paused, queued
+for resume, actively held, unknown, and unreachable attempts remain protected.
+After cancellation or another terminal outcome, the next successful sweep
+releases the journal and applies the usual staging minimum-age cleanup.
+Keep staging cleanup enabled to reclaim cancelled retained transfers.
+
+S3 resumes verify every checkpointed part across all `ListParts` pages.
+Temporary service failures (HTTP 500/502/503/504/429), request timeouts, and
+response-body disconnects enter the same checkpoint-based network recovery
+path as connection failures; checksum mismatches remain terminal integrity
+errors rather than being retried as network faults.
+
+File backup admission and task claiming both require the agent to advertise
+`file-system.backup.full`; unsupported agents cannot receive a file-system job.
+S3 connection tests fail closed if the provider cannot authenticate bucket access;
+an access check never claims that backup bytes or retention have been verified.
+
+## File-source configuration
+
+Configure agent-local roots, for example
+`Agent__Backup__FileSources__documents__RootDirectory=/srv/documents`.
+The job wizard selects the `documents` reference and root-relative paths, not an
+arbitrary host path. Include/exclude wildcards and symlink Skip/Preserve apply to
+that selection. Optional root settings are `SnapshotKind`, `SnapshotSource`,
+`SnapshotRelativePath`, and `LvmSize`; snapshot sources require the native tools
+and privileges described in [scripts/README.md](../scripts/README.md).
+Without a snapshot, locked, unreadable, or changing files fail the backup rather
+than silently producing an incomplete artifact.
+
+Restore uses the original configured reference or another configured root plus a
+relative target directory. The wizard requires a successful precheck and explicit
+confirmation before overwriting. Selected files are manifest/checksum-verified
+before publication; changing the selection or destination invalidates precheck.
+
+## Sealed audit and backup reports
+
+Enable new audit signatures with `Audit:SigningKeyPemPath` (absolute path to an
+operator-provisioned ECDSA P-256 private key) and `Audit:SigningKeyId`. Keep the key
+outside the database and repository. Retain previous public PEM keys under
+`Audit:VerificationKeys:{keyId}` when rotating; never reuse a key ID for a
+different key. Without a signing key, records are explicitly unsealed.
+
+Platform administrators can inspect `/api/platform/audit/integrity`, with
+optional `after` and `limit` (1–1000), to distinguish Verified, Invalid,
+UnknownKey and Unsealed records. Per-record signatures detect changed payloads,
+not deletion of whole records; export records and public keys to independently
+controlled storage for deletion-resistant audit retention.
+
+Tenant viewers can query `/api/tenants/{tenantId}/reports/backups` with optional
+`from`/`to` timestamps. The default interval is the last 30 days; the maximum is
+366 days. Results include succeeded, failed and cancelled totals plus daily and
+per-job outcomes, restricted to that tenant.

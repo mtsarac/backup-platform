@@ -27,7 +27,14 @@ export function JobSummary(props: JobSummaryProps) {
       <Fact label={tx("Agent")}>{props.agentLabel}</Fact>
       <Fact label={tx("Durum")}>{props.enabled ? tx('Etkin') : tx('Devre dışı')}</Fact>
     </Facts>)}
-    {block(1, <Facts>
+    {block(1, c.engine === 'file-system' ? <Facts>
+      <Fact label={tx('Engine')}>{tx('Dosya / Klasör')}</Fact>
+      <Fact label={tx('Dosya kaynağı referansı')}>{c.database}</Fact>
+      <Fact label={tx('Yedeklenecek dosya ve klasörler')}>{c.files?.paths.join('\n')}</Fact>
+      <Fact label={tx('Dahil Edilecekler')}>{c.files?.includes.join('\n') || '**'}</Fact>
+      <Fact label={tx('Hariç Tutulacaklar')}>{c.files?.excludes.join('\n') || tx('Yok')}</Fact>
+      <Fact label={tx('Sembolik Link Politikası')}>{c.files?.symlinkPolicy === 'Preserve' ? tx('Koru') : tx('Atla')}</Fact>
+    </Facts> : <Facts>
       <Fact label={c.engine === 'postgres' ? tx('PostgreSQL host') : tx('SQL Server host / instance')}>{c.host || '—'}</Fact>
       <Fact label={tx("Database")}>{c.database || '—'}</Fact>
       <Fact label={tx("Engine")}>{c.engine === 'postgres' ? tx('PostgreSQL · pg_dump custom Full') : 'Microsoft SQL Server'}</Fact>
@@ -38,6 +45,7 @@ export function JobSummary(props: JobSummaryProps) {
     {block(2, <Facts>
       <Fact label={tx("Hedefler")}><ul className="space-y-1">{c.destinations.map((destination, index) => <li key={index}>{destination.storageProvider} · {destination.storageConnectionId ? props.connections.find(item => item.id === destination.storageConnectionId)?.name ?? tx('Bağlantı bulunamadı') : tx('Varsayılan bağlantı')} · {destination.storageExecutionLocation === 'Agent' ? tx('Agent diski') : 'Backend'}{destination.isPrimary ? tx(' · Birincil') : ''}</li>)}</ul></Fact>
       <Fact label={tx("Doğrulanmış Replica gereksinimi")}>{c.requiredVerifiedReplicaCount}</Fact>
+      {c.enforceThreeTwoOne && <Fact label={tx('3-2-1 koruması')}>{tx('3 kopya · 2 medya · doğrulanmış off-site')} · {c.sourceSite}</Fact>}
       <Fact label={tx("Hedef öneki")}>{c.storagePrefix || tx('Yok')}</Fact>
       <Fact label={tx("Geçici alan (staging)")}>{c.stagingReference || '—'}</Fact>
     </Facts>)}
@@ -51,8 +59,8 @@ export function JobSummary(props: JobSummaryProps) {
     </Facts>)}
     {block(4, <Facts>
       <Fact label={tx("Saklama")}>{!props.canAdmin && props.nextRun === undefined ? tx('Sunucunun varsayılan politikası uygulanır.') : retention.enabled ? tx("{0} · silme bekleme {1}", { "0": formatSeconds(retention.keepForSeconds), "1": formatSeconds(retention.deleteGracePeriodSeconds) }) : tx('Süresiz')}{!props.canAdmin && <span className="block text-sm text-text-muted">{tx("Yalnızca Owner / Admin değiştirebilir.")}</span>}</Fact>
-      <Fact label={tx("Kopya yedek (COPY_ONLY)")}>{c.engine === 'postgres' ? tx('Mantıksal arşiv yedek zincirini değiştirmez') : c.copyOnly ? tx('Açık') : tx('Kapalı')}</Fact>
-      <Fact label={c.engine === 'postgres' ? tx('Sayfa bütünlüğü (data_checksums)') : tx('Bütünlük doğrulaması (CHECKSUM)')}>{policyText[c.checksumPolicy]}</Fact>
+      {c.engine !== 'file-system' && <Fact label={tx("Kopya yedek (COPY_ONLY)")}>{c.engine === 'postgres' ? tx('Mantıksal arşiv yedek zincirini değiştirmez') : c.copyOnly ? tx('Açık') : tx('Kapalı')}</Fact>}
+      <Fact label={c.engine === 'file-system' ? tx('Dosya ve manifest bütünlüğü (SHA-256)') : c.engine === 'postgres' ? tx('Sayfa bütünlüğü (data_checksums)') : tx('Bütünlük doğrulaması (CHECKSUM)')}>{c.engine === 'file-system' ? tx('Zorunlu') : policyText[c.checksumPolicy]}</Fact>
       <Fact label={tx("Sıkıştırma (Compression)")}>{policyText[c.compressionPolicy]}</Fact>
       <Fact label={tx("Şifreleme")}>{policyLabels[c.encryptionPolicy]}</Fact>
     </Facts>)}

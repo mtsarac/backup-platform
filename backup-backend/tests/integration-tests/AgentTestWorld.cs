@@ -327,6 +327,12 @@ internal sealed class AgentWorld : IAsyncDisposable
         // A fixture agent can pace its uploads, so a limit never keeps a test run from being claimed (the store tests cover the agent that cannot).
         context.AgentCapabilities.Add(new AgentCapabilityRecord(new AgentId(agent.AgentId), new TenantId(agent.TenantId),
             BackupPlatform.Contracts.Backups.BackupTaskProtocol.UploadBandwidthLimitCapability, CapabilitySupport.Supported, null, "fixture", DateTimeOffset.UtcNow));
+        context.AgentCapabilities.Add(new AgentCapabilityRecord(new AgentId(agent.AgentId), new TenantId(agent.TenantId),
+            "file-system.backup.full", CapabilitySupport.Supported, null, "fixture", DateTimeOffset.UtcNow));
+        context.AgentCapabilities.Add(new AgentCapabilityRecord(new AgentId(agent.AgentId), new TenantId(agent.TenantId),
+            "file-system.restore.full", CapabilitySupport.Supported, null, "fixture", DateTimeOffset.UtcNow));
+        context.AgentCapabilities.Add(new AgentCapabilityRecord(new AgentId(agent.AgentId), new TenantId(agent.TenantId),
+            "file-system.restore.precheck", CapabilitySupport.Supported, null, "fixture", DateTimeOffset.UtcNow));
         await context.SaveChangesAsync();
         return agent;
     }

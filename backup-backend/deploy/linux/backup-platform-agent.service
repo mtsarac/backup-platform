@@ -1,0 +1,29 @@
+[Unit]
+Description=Backup Platform Agent
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/var/lib/backup-platform-agent/identity/agent-identity.json
+
+[Service]
+Type=simple
+User=backup-agent
+Group=backup-agent
+WorkingDirectory=/opt/backup-platform-agent
+EnvironmentFile=-/etc/backup-platform-agent/agent.env
+Environment=Agent__Updates__SettingsFile=/etc/backup-platform-agent/update-settings.json
+ExecStart=/opt/backup-platform-agent/supervisor/BackupPlatform.Agent.Host --supervise-update /etc/backup-platform-agent/update-settings.json
+Restart=always
+RestartSec=5
+TimeoutStopSec=120
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/backup-platform-agent /var/lib/backup-platform-agent
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

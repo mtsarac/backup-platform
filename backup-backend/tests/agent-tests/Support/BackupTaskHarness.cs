@@ -121,6 +121,8 @@ internal sealed class TaskClient(TimeProvider time) : IBackupTaskClient
     public Func<int, AgentBackendResult<bool>>? OnComplete { get; set; }
     public ConcurrentQueue<UploadPolicyRequest> UploadPolicies { get; } = new();
     public Func<UploadPolicyRequest, AgentBackendResult<UploadPolicyResponse>>? OnUploadPolicy { get; set; }
+    public Task<AgentBackendResult<bool>> CanReleaseRetainedTransferAsync(AgentLocalIdentity identity, Guid attemptId, CancellationToken cancellationToken) =>
+        Task.FromResult(AgentBackendResult<bool>.Success(false));
 
     private AgentBackendResult<BackupTaskLeaseResponse> Lease() => AgentBackendResult<BackupTaskLeaseResponse>.Success(
         new BackupTaskLeaseResponse { LeaseExpiresAt = time.GetUtcNow().AddSeconds(120) });

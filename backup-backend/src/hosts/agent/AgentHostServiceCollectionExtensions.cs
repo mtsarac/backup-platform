@@ -43,6 +43,9 @@ public static class AgentHostServiceCollectionExtensions
         services.AddSingleton(static _ => AgentCapabilityCatalog.CreateDefault());
         services.AddSingleton<ICapabilityRevisionSource, CatalogCapabilityRevisionSource>();
 
+#if AGENT_PLATFORM_WINDOWS
+        services.AddSingleton<BackupPlatform.StorageProviders.Abstractions.IWindowsNetworkSession, BackupPlatform.Agent.Platform.Windows.WindowsNetworkSession>();
+#endif
         services.AddAgentTransport();
         services.AddAgentBackupExecution(configuration);
         services.TryAddSingleton<IBackupTaskCredentialResolver, BackupTaskCredentialResolver>();
@@ -79,6 +82,7 @@ public static class AgentHostServiceCollectionExtensions
         services.AddSingleton<AgentConnectivityService>();
         services.AddSingleton<IAgentConnectivityStatus>(static provider => provider.GetRequiredService<AgentConnectivityService>());
         services.AddHostedService<AgentConnectivityWorker>();
+        services.AddAgentAutoUpdates(configuration);
         return services;
     }
 

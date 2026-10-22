@@ -28,14 +28,17 @@ public sealed class ConfiguredBackupStorageResolver : IBackupStorageResolver
     private readonly IServiceScopeFactory? _scopes;
     private readonly SftpConnectionProviderFactory? _sftp;
     private readonly GoogleDriveConnectionProviderFactory? _googleDrive;
+    private readonly NetworkStorageConnectionProviderFactory? _network;
 
-    public ConfiguredBackupStorageResolver(BackupStorageOptions options, IServiceScopeFactory? scopes = null, SftpConnectionProviderFactory? sftp = null, GoogleDriveConnectionProviderFactory? googleDrive = null)
+    public ConfiguredBackupStorageResolver(BackupStorageOptions options, IServiceScopeFactory? scopes = null, SftpConnectionProviderFactory? sftp = null,
+        GoogleDriveConnectionProviderFactory? googleDrive = null, NetworkStorageConnectionProviderFactory? network = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         options.ThrowIfInvalid();
         _scopes = scopes;
         _sftp = sftp;
         _googleDrive = googleDrive;
+        _network = network;
         var managed = new List<BackupManagedStorage>();
         if (options.Local?.RootDirectory is { } localRoot && !string.IsNullOrWhiteSpace(localRoot))
         {
@@ -60,6 +63,9 @@ public sealed class ConfiguredBackupStorageResolver : IBackupStorageResolver
     public IStorageProvider? Resolve(TenantId tenantId, string storageProvider, string storageTarget)
     {
         ArgumentNullException.ThrowIfNull(tenantId);
+        if (storageProvider is StorageProviderTypes.S3 or StorageProviderTypes.Smb)
+            return _scopes is not null && _network is not null && Guid.TryParse(storageTarget, out var networkId) && networkId != Guid.Empty
+                ? new ScopedNetworkProvider(tenantId, networkId, storageProvider, _scopes, _network) : null;
         if (storageProvider == StorageProviderTypes.Sftp)
         {
             return _scopes is not null && _sftp is not null && Guid.TryParse(storageTarget, out var connectionId) && connectionId != Guid.Empty
@@ -170,6 +176,33 @@ public sealed class ConfiguredBackupStorageResolver : IBackupStorageResolver
             var secrets = scope.ServiceProvider.GetRequiredService<ISecretProvider>();
             var provider = factory.Create(record.Connection, secrets);
             return await operation(provider, cancellationToken);
+        }
+    }
+
+    private sealed class ScopedNetworkProvider(TenantId tenantId, Guid connectionId, string providerType,
+        IServiceScopeFactory scopes, NetworkStorageConnectionProviderFactory factory) : IStorageProvider
+    {
+        public StorageProviderId Id { get; } = new(providerType);
+        public StorageTopology Topology => StorageTopology.AgentDirect;
+        public StorageCapabilities Capabilities { get; } = new([StorageCapabilityIds.Read, StorageCapabilityIds.Delete,
+            StorageCapabilityIds.AtomicPublish, StorageCapabilityIds.VerifyAbsence]);
+        public Task<StorageObjectMetadata> PutAsync(StorageObjectKey key, Stream content, StoragePutOptions options, IProgress<long>? progress, CancellationToken token) =>
+            ExecuteAsync((provider, cancellation) => provider.PutAsync(key, content, options, progress, cancellation), token);
+        public Task<bool> ExistsAsync(StorageObjectKey key, CancellationToken token) => ExecuteAsync((provider, cancellation) => provider.ExistsAsync(key, cancellation), token);
+        public Task<StorageObjectMetadata?> GetMetadataAsync(StorageObjectKey key, CancellationToken token) => ExecuteAsync((provider, cancellation) => provider.GetMetadataAsync(key, cancellation), token);
+        public Task<StorageVerificationResult> VerifyAsync(StorageObjectKey key, StorageVerificationExpectation expected, CancellationToken token) =>
+            ExecuteAsync((provider, cancellation) => provider.VerifyAsync(key, expected, cancellation), token);
+        public Task<Stream> OpenReadAsync(StorageObjectKey key, CancellationToken token) => ExecuteAsync((provider, cancellation) => provider.OpenReadAsync(key, cancellation), token);
+        public Task<bool> DeleteAsync(StorageObjectKey key, CancellationToken token) => ExecuteAsync((provider, cancellation) => provider.DeleteAsync(key, cancellation), token);
+        public IAsyncEnumerable<StorageEntry> EnumerateAsync(StorageObjectKey? prefix, DateTimeOffset modifiedBefore, CancellationToken token) =>
+            throw new StorageException(StorageFailureKind.NotSupported, "Connection storage cannot be enumerated.");
+        private async Task<T> ExecuteAsync<T>(Func<IStorageProvider, CancellationToken, Task<T>> operation, CancellationToken token)
+        {
+            await using var scope = scopes.CreateAsyncScope();
+            var record = await scope.ServiceProvider.GetRequiredService<IStorageConnectionStore>().FindAsync(connectionId, tenantId, token);
+            if (record?.Connection is not { } connection || connection.TenantId != tenantId || connection.ProviderType != providerType)
+                throw new StorageException(StorageFailureKind.InvalidConfiguration, "The storage connection is unavailable.");
+            return await operation(factory.Create(connection, scope.ServiceProvider.GetRequiredService<ISecretProvider>()), token);
         }
     }
 }
