@@ -196,7 +196,11 @@ public sealed class BackupRun : ITenantOwned
     }
     public void Renew(Guid token, DateTimeOffset now, TimeSpan duration) => CurrentAttempt.Renew(token, now, duration);
     public void Progress(Guid token, DateTimeOffset now, string stage, double? percent) => CurrentAttempt.Progress(token, now, stage, percent);
-    public void RequestPause() => CurrentAttempt.RequestPause();
+    public void RequestPause()
+    {
+        if (CancellationRequestedAt.HasValue) throw new InvalidOperationException("Cancellation is already requested.");
+        CurrentAttempt.RequestPause();
+    }
     public void Pause(Guid token, DateTimeOffset now, TransferPauseReason reason)
     {
         if (CancellationRequestedAt.HasValue) throw new InvalidOperationException("Cancellation is already requested.");
@@ -206,6 +210,7 @@ public sealed class BackupRun : ITenantOwned
     }
     public void Resume(DateTimeOffset now)
     {
+        if (CancellationRequestedAt.HasValue) throw new InvalidOperationException("Cancellation is already requested.");
         CurrentAttempt.Resume();
         Status = BackupStatus.Pending;
         Fact("BackupRunResumed", CurrentAttempt.Id, now);
@@ -247,7 +252,7 @@ public sealed class BackupRun : ITenantOwned
 
     public bool Expire(DateTimeOffset now, double jitter = 0, bool retainTransfer = false)
     {
-        if (!CurrentAttempt.Expire(now, retainTransfer)) return false;
+        if (!CurrentAttempt.Expire(now, retainTransfer && !CancellationRequestedAt.HasValue)) return false;
         if (CurrentAttempt.Status == BackupStatus.Paused)
         {
             Status = BackupStatus.Paused;
