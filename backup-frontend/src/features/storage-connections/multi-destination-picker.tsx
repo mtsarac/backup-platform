@@ -258,7 +258,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
         </div>
         {destinations.length > 1 && (
           <p className="rounded-md border border-warning/40 bg-warning-subtle/30 px-3 py-2 text-xs text-text-heading">
-            {tx('Multi-destination backup execution is not yet available. This configuration can be saved, but backup runs cannot start until replication support is enabled.')}
+            {tx('Her hedefe ayrı yazılır ve bağımsız olarak doğrulanır. Yedek, gerekli sayıda hedef doğrulandığında başarılı sayılır; başarısız bir hedef sonradan onarılabilir.')}
           </p>
         )}
 

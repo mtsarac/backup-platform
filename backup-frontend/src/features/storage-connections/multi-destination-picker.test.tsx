@@ -280,6 +280,6 @@ describe('MultiDestinationPicker', () => {
       />
     )
 
-    expect(screen.getByText(/(?:Multi-destination backup execution is not yet available|Birden fazla hedefe yedekleme henüz kullanılamıyor)/i)).toBeInTheDocument()
+    expect(screen.getByText(/(?:Each destination is written and verified independently|Her hedefe ayrı yazılır ve bağımsız olarak doğrulanır)/i)).toBeInTheDocument()
   })
 })
