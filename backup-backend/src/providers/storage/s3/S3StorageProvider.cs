@@ -218,6 +218,13 @@ public sealed class S3StorageProvider(HttpClient http, S3StorageOptions configur
 
     private sealed record MultipartState(string UploadId, string Parts, long Offset, DateTimeOffset? RetainUntil);
 
+    public async Task AbortTransferAsync(StorageObjectKey key, string providerState, CancellationToken cancellationToken)
+    {
+        var state = JsonSerializer.Deserialize<MultipartState>(providerState) ?? throw new StorageException(StorageFailureKind.InvalidConfiguration, "The S3 checkpoint is invalid.");
+        try { using var aborted = await SendAsync(HttpMethod.Delete, key, $"uploadId={Escape(state.UploadId)}", null, null, cancellationToken); }
+        catch (StorageException error) when (error.Kind == StorageFailureKind.NotFound) { } // already aborted or completed
+    }
+
     public async Task<bool> ExistsAsync(StorageObjectKey key, CancellationToken cancellationToken) => await HeadAsync(key, cancellationToken) is not null;
     public async Task<StorageObjectMetadata?> GetMetadataAsync(StorageObjectKey key, CancellationToken cancellationToken)
     {

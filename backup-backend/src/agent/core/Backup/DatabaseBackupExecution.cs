@@ -393,11 +393,28 @@ internal sealed class DatabaseBackupExecution
         {
             objectMayRemain = !await RemoveUnverifiedReplicaAsync(storage, transfer.Key).ConfigureAwait(false);
         }
+        if (cancelled && storage is not null && transfer.Key is not null && transfer.ProviderState is { } abandoned)
+            await AbortAbandonedUploadAsync(storage, transfer.Key, abandoned).ConfigureAwait(false);
 
         return new BackupDestinationResult(
             destination,
             replica is not null ? BackupDestinationState.Verified : cancelled ? BackupDestinationState.Cancelled : BackupDestinationState.Failed,
             replica, failure, transfer.Stored, transfer.Key, objectMayRemain, startedAt, _time.GetUtcNow());
+    }
+
+    /// <summary>A cancelled run never resumes, so the remote parts of its checkpointed upload are aborted; a failure is reported, not swallowed.</summary>
+    private async Task AbortAbandonedUploadAsync(IStorageProvider storage, StorageObjectKey key, string providerState)
+    {
+        try
+        {
+            using var bounded = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+            await storage.AbortTransferAsync(key, providerState, bounded.Token).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            RecordCleanupFailure(BackupExecutionStage.Uploading, BackupPipelineReasons.ReplicaCleanupFailed,
+                "An abandoned upload could not be aborted and its uploaded parts may still be present in the storage.", exception);
+        }
     }
 
     private async Task UploadAsync(BackupPipelineDestination destination, IStorageProvider storage, Transfer transfer, CancellationTokenSource destinationDeadline, CancellationToken cancellationToken)
@@ -461,6 +478,7 @@ internal sealed class DatabaseBackupExecution
                     stage, artifact.SizeBytes > 0 ? bytes * 100.0 / artifact.SizeBytes : 100, bytes, artifact.SizeBytes));
                 var prior = _request.Checkpoints.SingleOrDefault(x => x.StorageProvider == destination.Storage.Value && x.DestinationId == destination.ConnectionId);
                 var checkpoint = prior is null ? null : new StorageTransferCheckpoint(prior.VerifiedByteOffset, prior.ProviderState);
+                transfer.ProviderState = prior?.ProviderState;
                 var options = new StoragePutOptions(_request.Overwrite, artifact.Checksum, artifact.SizeBytes)
                 {
                     RecordCheckpointAsync = async (next, token) =>
@@ -469,6 +487,7 @@ internal sealed class DatabaseBackupExecution
                             await record(new TransferCheckpointContract { StorageProvider = destination.Storage.Value, DestinationId = destinationId,
                                 VerifiedByteOffset = next.VerifiedByteOffset, ProviderState = next.ProviderState }, token).ConfigureAwait(false);
                         checkpoint = next;
+                        transfer.ProviderState = next.ProviderState;
                     }
                 };
                 for (var retry = 0; ; retry++)
@@ -583,6 +602,8 @@ internal sealed class DatabaseBackupExecution
     {
         public StorageObjectKey? Key { get; set; }
         public bool Stored { get; set; }
+        /// <summary>The newest resumable-upload state; remote parts exist for it until the upload is published or aborted.</summary>
+        public string? ProviderState { get; set; }
     }
 
     private async Task<(ContentChecksum Checksum, long Size)> HashFileAsync(

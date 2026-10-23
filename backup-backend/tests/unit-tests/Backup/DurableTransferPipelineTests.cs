@@ -78,6 +78,47 @@ public sealed class DurableTransferPipelineTests
         Assert.Empty(harness.StagedFiles);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Cancelled_checkpointed_upload_is_aborted_and_a_failed_abort_is_reported(bool abortFails)
+    {
+        using var harness = new PipelineHarness();
+        using var cancel = new CancellationTokenSource();
+        harness.Storage.OnPut = async (_, _, options, token) =>
+        {
+            await options.RecordCheckpointAsync!(new(10, "state-1"), token);
+            await options.RecordCheckpointAsync!(new(20, "state-2"), token);
+            cancel.Cancel();
+            token.ThrowIfCancellationRequested();
+            throw new InvalidOperationException("Cancellation must stop the upload.");
+        };
+        if (abortFails) harness.Storage.AbortFailure = () => new StorageException(StorageFailureKind.Io, "boom");
+        var result = await harness.RunAsync(harness.Request() with { AttemptId = Guid.NewGuid(),
+            Destinations = [new(StorageProviderId.Local, harness.Storage, Guid.NewGuid(), true)], RecordCheckpointAsync = (_, _) => Task.CompletedTask }, cancel.Token);
+        Assert.Equal(DatabaseBackupStatus.Cancelled, result.Status);
+        Assert.Equal("state-2", Assert.Single(harness.Storage.Aborted).State);
+        Assert.Equal(abortFails, result.CleanupFailures.Any(x => x.ReasonCode == BackupPipelineReasons.ReplicaCleanupFailed));
+    }
+
+    [Fact]
+    public async Task Paused_upload_is_not_aborted_because_it_will_resume()
+    {
+        using var harness = new PipelineHarness();
+        using var pause = new CancellationTokenSource();
+        harness.Storage.OnPut = async (_, _, options, token) =>
+        {
+            await options.RecordCheckpointAsync!(new(10, "state-1"), token);
+            pause.Cancel();
+            token.ThrowIfCancellationRequested();
+            throw new InvalidOperationException("The transfer must pause.");
+        };
+        var result = await harness.RunAsync(harness.Request() with { AttemptId = Guid.NewGuid(), PauseToken = pause.Token,
+            Destinations = [new(StorageProviderId.Local, harness.Storage, Guid.NewGuid(), true)], RecordCheckpointAsync = (_, _) => Task.CompletedTask });
+        Assert.Equal(DatabaseBackupStatus.Paused, result.Status);
+        Assert.Empty(harness.Storage.Aborted);
+    }
+
     [Fact]
     public async Task Terminal_attempt_confirmation_releases_paused_files_but_never_active_or_resumable_files()
     {

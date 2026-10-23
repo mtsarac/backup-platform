@@ -213,6 +213,21 @@ public sealed class S3StorageProviderTests
         Assert.Equal(StorageVerificationStatus.Verified, (await Provider(http).VerifyAsync(new("backup.bak"), new(bytes.Length, checksum), default)).Status);
     }
 
+    [Theory]
+    [InlineData(HttpStatusCode.NoContent, true)]
+    [InlineData(HttpStatusCode.NotFound, true)]
+    [InlineData(HttpStatusCode.Forbidden, false)]
+    public async Task Abort_deletes_the_retained_multipart_upload_and_surfaces_real_failures(HttpStatusCode status, bool succeeds)
+    {
+        HttpRequestMessage? seen = null;
+        using var http = new HttpClient(new Handler(request => { seen = request; return new(status); }));
+        var state = System.Text.Json.JsonSerializer.Serialize(new { UploadId = "retained", Offset = 1, RetainUntil = (DateTimeOffset?)null, Parts = "<CompleteMultipartUpload/>" });
+        var abort = Provider(http).AbortTransferAsync(new("backup.bak"), state, default);
+        if (succeeds) await abort; else await Assert.ThrowsAsync<StorageException>(() => abort);
+        Assert.Equal(HttpMethod.Delete, seen!.Method);
+        Assert.Contains("uploadId=retained", seen.RequestUri!.Query);
+    }
+
     private sealed class BrokenReadStream : MemoryStream
     {
         public override int Read(byte[] buffer, int offset, int count) => throw new IOException("Disconnected");

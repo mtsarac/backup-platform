@@ -191,6 +191,14 @@ internal sealed class InMemoryStorage(PipelineHarness harness) : IStorageProvide
     public Func<StorageObjectKey, Stream, StoragePutOptions, CancellationToken, Task<StorageObjectMetadata>>? OnPut { get; set; }
     public Func<StorageObjectKey, StorageVerificationExpectation, StorageVerificationResult?>? OnVerify { get; set; }
     public Func<StorageObjectKey, Task>? OnDelete { get; set; }
+    public List<(StorageObjectKey Key, string State)> Aborted { get; } = [];
+    public Func<Exception?>? AbortFailure { get; set; }
+
+    public Task AbortTransferAsync(StorageObjectKey key, string providerState, CancellationToken cancellationToken)
+    {
+        Aborted.Add((key, providerState));
+        return AbortFailure?.Invoke() is { } failure ? Task.FromException(failure) : Task.CompletedTask;
+    }
 
     /// <summary>The staged files that existed at the moment the replica was verified.</summary>
     public string[]? StagedFilesDuringVerify { get; private set; }

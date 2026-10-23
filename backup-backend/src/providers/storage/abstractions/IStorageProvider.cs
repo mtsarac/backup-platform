@@ -259,6 +259,13 @@ public interface IStorageProvider
     Task<bool> DeleteAsync(StorageObjectKey key, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Aborts the resumable upload that <paramref name="providerState"/> (a checkpoint recorded by <see cref="PutAsync"/>) describes, so an
+    /// abandoned transfer leaves no uncounted remote data. A provider whose checkpoints hold no remote state has nothing to abort (the default).
+    /// An already-gone upload is success; any other failure is a <see cref="StorageException"/> the caller must surface.
+    /// </summary>
+    Task AbortTransferAsync(StorageObjectKey key, string providerState, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>
     /// Lists the entries stored below <paramref name="prefix"/> (the whole provider scope when null), recursively, that were last
     /// modified BEFORE <paramref name="modifiedBefore"/>. Younger entries are never returned; callers must still respect
     /// active-operation ownership and <see cref="StorageEntry.InUse"/> before deleting an entry. Only entries whose location
