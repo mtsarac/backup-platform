@@ -439,7 +439,14 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
             var changed = false;
             var retained = await scan.Set<TransferCheckpoint>().AnyAsync(x => x.TenantId == attempt.TenantId && x.AttemptId == attempt.Id, cancellationToken);
             var result = await MutateAsync(new BackupLeaseCommand(attempt.TenantId, attempt.AgentId, attempt.Id, Guid.Empty, now),
-                run => changed = run.Expire(now, Jitter(), retained), cancellationToken);
+                run => changed = run.Expire(now, Jitter(), retained), cancellationToken,
+                // A cancelled run never resumes, so its retained transfer state is released with the lost attempt.
+                async (context, run) =>
+                {
+                    if (!run.CancellationRequestedAt.HasValue || run.CurrentAttempt.Status is not (BackupStatus.Leased or BackupStatus.Running) || run.CurrentAttempt.LeaseExpiresAt > now) return;
+                    context.Set<TransferCheckpoint>().RemoveRange(await context.Set<TransferCheckpoint>()
+                        .Where(x => x.TenantId == attempt.TenantId && x.AttemptId == attempt.Id).ToListAsync(cancellationToken));
+                });
             if (result == BackupMutationResult.Accepted && changed) expired++;
         }
         return expired;

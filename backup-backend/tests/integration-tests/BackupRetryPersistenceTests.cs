@@ -382,6 +382,28 @@ public sealed class BackupRetryPersistenceTests(PostgreSqlFixture fixture) : ICl
     }
 
     [Fact]
+    public async Task StaleLeaseOfACancellingRunWithARetainedCheckpointEndsCancelledAndReleasesTheCheckpoint()
+    {
+        await using var env = await Env.IsolatedAsync();
+        var store = env.Store();
+        var world = await env.SeedAsync();
+        var run = await StartAsync(store, world);
+        var claim = await ClaimAsync(store, world, Now);
+        var command = await StartAttemptAsync(store, claim, Now);
+        var destination = Assert.Single((await env.LoadAsync(world, run.Id)).Configuration.Destinations);
+        Assert.Equal(BackupMutationResult.Accepted, await store.ReportProgressAsync(command, new BackupProgress("Uploading", 10)
+            { Checkpoint = new() { StorageProvider = destination.StorageProvider, DestinationId = destination.StorageConnectionId!.Value, VerifiedByteOffset = 4096, ProviderState = "session" } }, default));
+        Assert.Equal(BackupStatus.Running, (await store.RequestCancellationAsync(world.TenantId, run.Id, Now.AddSeconds(1), default))!.Status);
+
+        Assert.Equal(1, await store.ExpireStaleAsync(Now + Lease, default));
+
+        var ended = await env.LoadAsync(world, run.Id);
+        Assert.Equal(BackupStatus.Cancelled, ended.Status);
+        Assert.Equal(BackupStatus.AgentLost, ended.CurrentAttempt.Status);
+        Assert.Empty(await store.GetCheckpointsAsync(world.TenantId, claim.Attempt.Id, default));
+    }
+
+    [Fact]
     public async Task StaleLeaseDetectedByTheAgentsNextPollSchedulesTheSameRetry()
     {
         var env = new Env(fixture);
