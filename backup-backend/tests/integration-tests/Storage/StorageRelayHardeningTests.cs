@@ -438,6 +438,18 @@ public sealed class StorageRelayHardeningTests(PostgreSqlFixture fixture) : ICla
         Assert.Equal(HttpStatusCode.Conflict, saveResp.StatusCode);
         var body = AgentWorld.ReadJson(saveResp);
         Assert.Equal("invalid_key", body.GetProperty("error").GetString());
+
+        foreach (var key in new[] { foreignKey, $"{Guid.NewGuid():N}/{jobId:N}/{Guid.NewGuid():N}/{claim.AttemptId:N}/data.bak" })
+        {
+            using var getReq = new HttpRequestMessage(HttpMethod.Get, $"/api/agent/tasks/{claim.AttemptId}/storage/catalog?key={Uri.EscapeDataString(key)}");
+            getReq.Headers.TryAddWithoutValidation("Authorization", AgentAuthorizationScheme.FormatHeaderValue(scenario.Agent.CredentialId, scenario.Agent.Secret));
+            getReq.Headers.Add("X-Backup-Agent-Protocol", "1.0");
+            getReq.Headers.Add(TaskStorageProtocol.LeaseHeader, claim.LeaseToken.ToString("D"));
+            getReq.Headers.Add(TaskStorageProtocol.DestinationHeader, connectionId.ToString("D"));
+            using var getResp = await scenario.World.Anonymous.SendAsync(getReq);
+            Assert.Equal(HttpStatusCode.Conflict, getResp.StatusCode);
+            Assert.Equal("invalid_key", AgentWorld.ReadJson(getResp).GetProperty("error").GetString());
+        }
     }
 
     [Fact]

@@ -505,6 +505,13 @@ public static class AgentStorageTransferEndpoints
         return await ResolveAccessResponseAsync(request, fence.Connection!, secrets, driveFactory, cancellationToken);
     }
 
+    /// <summary>Conflict unless the key is a managed key of exactly this tenant, job, run and attempt; shared by catalog get, save and delete.</summary>
+    private static IResult? CatalogKeyConflict(string key, Guid attemptId, Guid tenantId, Guid runId, Guid jobId) =>
+        ManagedBackupLayout.TryParseStorageKey(key, out var layout) && layout is not null
+        && layout.TenantId == tenantId && layout.AttemptId == attemptId && layout.RunId == runId && layout.JobId == jobId
+            ? null
+            : Results.Conflict(new AgentApiError { Error = "invalid_key", Message = "The key layout does not match the attempt." });
+
     private static async Task<IResult> GetBackupStorageCatalogAsync(
         Guid attemptId, HttpRequest request, ICurrentAgent agent, IBackupRunStore store,
         IStorageConnectionStore connections, IGoogleDriveFileCatalog catalog, CancellationToken cancellationToken)
@@ -513,6 +520,7 @@ public static class AgentStorageTransferEndpoints
         if (fence.Result is not null) return fence.Result;
         var key = request.Query["key"].ToString();
         if (string.IsNullOrWhiteSpace(key)) return Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "Missing key query parameter." });
+        if (CatalogKeyConflict(key, attemptId, fence.TenantId!.Value, fence.RunId!.Value, fence.JobId!.Value) is { } conflict) return conflict;
         var record = await catalog.FindAsync(fence.TenantId!.Value, fence.ConnectionId!.Value, key, cancellationToken);
         return record is null
             ? Results.NotFound()
@@ -527,10 +535,7 @@ public static class AgentStorageTransferEndpoints
         if (fence.Result is not null) return fence.Result;
         if (string.IsNullOrWhiteSpace(body?.StorageKey) || body.Record is null || string.IsNullOrWhiteSpace(body.Record.FileId))
             return Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "Invalid catalog save payload." });
-        if (!ManagedBackupLayout.TryParseStorageKey(body.StorageKey, out var layout) || layout is null
-            || layout.TenantId != fence.TenantId!.Value
-            || layout.AttemptId != attemptId || layout.RunId != fence.RunId!.Value || layout.JobId != fence.JobId!.Value)
-            return Results.Conflict(new AgentApiError { Error = "invalid_key", Message = "The key layout does not match the attempt." });
+        if (CatalogKeyConflict(body.StorageKey, attemptId, fence.TenantId!.Value, fence.RunId!.Value, fence.JobId!.Value) is { } conflict) return conflict;
         var record = new GoogleDriveFileRecord(body.Record.FileId, body.Record.ParentFolderId, body.Record.FileName, body.Record.SizeBytes, body.Record.Checksum, body.Record.Md5Checksum);
         await catalog.SaveAsync(fence.TenantId!.Value, fence.ConnectionId!.Value, body.StorageKey, record, cancellationToken);
         return Results.Ok();
@@ -546,10 +551,7 @@ public static class AgentStorageTransferEndpoints
         var expectedFileId = request.Query["expectedFileId"].ToString();
         if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(expectedFileId))
             return Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "Missing key or expectedFileId query parameter." });
-        if (!ManagedBackupLayout.TryParseStorageKey(key, out var layout) || layout is null
-            || layout.TenantId != fence.TenantId!.Value
-            || layout.AttemptId != attemptId || layout.RunId != fence.RunId!.Value || layout.JobId != fence.JobId!.Value)
-            return Results.Conflict(new AgentApiError { Error = "invalid_key", Message = "The key layout does not match the attempt." });
+        if (CatalogKeyConflict(key, attemptId, fence.TenantId!.Value, fence.RunId!.Value, fence.JobId!.Value) is { } conflict) return conflict;
         await catalog.DeleteAsync(fence.TenantId!.Value, fence.ConnectionId!.Value, key, expectedFileId, cancellationToken);
         return Results.Ok();
     }
