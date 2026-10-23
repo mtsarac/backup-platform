@@ -11,7 +11,7 @@ public sealed partial class BackupTaskWorker
     private static readonly TimeSpan ProgressInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan CompletionRetry = TimeSpan.FromSeconds(2);
 
-    private async Task RenewLoopAsync(BackupTaskSnapshot task, BackupTaskLease lease, CancellationTokenSource requestedCancel, CancellationTokenSource requestedPause, CancellationToken cancellationToken)
+    private async Task RenewLoopAsync(BackupTaskSnapshot task, BackupTaskLease lease, CancellationTokenSource requestedCancel, CancellationTokenSource requestedPause, CancellationTokenSource timeRulePause, CancellationToken cancellationToken)
     {
         _time.StartOperation("backup renewal");
         _time.EnterOperation("backup renewal");
@@ -29,6 +29,7 @@ public sealed partial class BackupTaskWorker
                         return;
                     }
                     if (response.Value.PauseRequested) await requestedPause.CancelAsync().ConfigureAwait(false);
+                    if (response.Value.TimeRulePauseRequested) await timeRulePause.CancelAsync().ConfigureAwait(false);
                     if (response.Value.CancellationRequested)
                     {
                         await requestedCancel.CancelAsync().ConfigureAwait(false);

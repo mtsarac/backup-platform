@@ -21,6 +21,8 @@ public interface IUploadBandwidth
 /// <summary>One upload's pacing. Disposing it stops the policy renewal and gives the tenant slice back.</summary>
 public interface IUploadBandwidthSession : IAsyncDisposable
 {
+    CancellationToken TimeRulePauseToken => default;
+
     /// <summary>The stream to upload from: paced for an AgentDirect destination, <paramref name="source"/> itself for a relayed one (the backend paces that).</summary>
     Stream Wrap(Stream source);
 

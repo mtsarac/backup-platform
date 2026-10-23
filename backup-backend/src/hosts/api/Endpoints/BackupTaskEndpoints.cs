@@ -35,7 +35,7 @@ public static class BackupTaskEndpoints
     }
 
     private static async Task<IResult> StartAsync(Guid attemptId, BackupTaskStartRequest request, ICurrentAgent agent,
-        BackupOrchestrator service, IBackupRunStore store, CancellationToken cancellationToken)
+        BackupOrchestrator service, IBackupRunStore store, UploadBandwidthService bandwidth, CancellationToken cancellationToken)
     {
         if (request.LeaseToken == Guid.Empty || !Bounded(request.SoftwareVersion) || !Bounded(request.ProtocolVersion) || !Bounded(request.Platform)) return Invalid();
         var command = service.Command(agent.Identity!, attemptId, request.LeaseToken) with
@@ -47,18 +47,21 @@ public static class BackupTaskEndpoints
         var lease = await store.RenewLeaseAsync(command, BackupOrchestrator.LeaseDuration, cancellationToken);
         return lease is null ? Mutation(BackupMutationResult.Conflict) : Results.Ok(new BackupTaskLeaseResponse
         {
-            LeaseExpiresAt = lease.LeaseExpiresAt, CancellationRequested = lease.CancellationRequested, PauseRequested = lease.PauseRequested
+            LeaseExpiresAt = lease.LeaseExpiresAt, CancellationRequested = lease.CancellationRequested, PauseRequested = lease.PauseRequested,
+            TimeRulePauseRequested = (await bandwidth.PolicyAsync(command, UploadSliceAction.Observe, cancellationToken))?.PauseRequested == true
         });
     }
 
     private static async Task<IResult> RenewAsync(Guid attemptId, BackupTaskLeaseRequest request, ICurrentAgent agent,
-        BackupOrchestrator service, IBackupRunStore store, CancellationToken cancellationToken)
+        BackupOrchestrator service, IBackupRunStore store, UploadBandwidthService bandwidth, CancellationToken cancellationToken)
     {
         if (request.LeaseToken == Guid.Empty) return Invalid();
-        var lease = await store.RenewLeaseAsync(service.Command(agent.Identity!, attemptId, request.LeaseToken), BackupOrchestrator.LeaseDuration, cancellationToken);
+        var command = service.Command(agent.Identity!, attemptId, request.LeaseToken);
+        var lease = await store.RenewLeaseAsync(command, BackupOrchestrator.LeaseDuration, cancellationToken);
         return lease is null ? Mutation(BackupMutationResult.Conflict) : Results.Ok(new BackupTaskLeaseResponse
         {
-            LeaseExpiresAt = lease.LeaseExpiresAt, CancellationRequested = lease.CancellationRequested, PauseRequested = lease.PauseRequested
+            LeaseExpiresAt = lease.LeaseExpiresAt, CancellationRequested = lease.CancellationRequested, PauseRequested = lease.PauseRequested,
+            TimeRulePauseRequested = (await bandwidth.PolicyAsync(command, UploadSliceAction.Observe, cancellationToken))?.PauseRequested == true
         });
     }
 

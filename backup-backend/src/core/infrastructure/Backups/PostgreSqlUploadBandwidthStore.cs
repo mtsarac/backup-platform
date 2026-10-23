@@ -75,7 +75,7 @@ public sealed class PostgreSqlUploadBandwidthStore(DbContextOptions<PlatformDbCo
         if (jobId is null) return null;
         var limits = await LimitsAsync(context, lease.TenantId, lease.AgentId, jobId.Value, now, cancellationToken);
         if (action == UploadSliceAction.Observe) return limits;
-        if (action == UploadSliceAction.Release || limits.Tenant is null)
+        if (action == UploadSliceAction.Release || limits.Tenant is null || limits.PauseRequested)
         {
             // Nothing to divide: no lock either. A slice left over from before the tenant limit was removed is simply dropped.
             await context.UploadBandwidthGrants.Where(grant => grant.TenantId == lease.TenantId && grant.UploadId == uploadId).ExecuteDeleteAsync(cancellationToken);
@@ -106,7 +106,6 @@ public sealed class PostgreSqlUploadBandwidthStore(DbContextOptions<PlatformDbCo
         return limits with { TenantShare = share };
     }
 
-    /// <summary>Whether any ceiling applies to a run of this job on this agent; an agent that cannot throttle must not start such a run.</summary>
     /// <summary>Whether any ceiling applies to a run of this job on this agent; an agent that cannot throttle must not start such a run.</summary>
     internal static async Task<bool> AnyAsync(PlatformDbContext context, TenantId tenantId, AgentId agentId, Guid jobId, CancellationToken cancellationToken)
     {
@@ -150,14 +149,14 @@ public sealed class PostgreSqlUploadBandwidthStore(DbContextOptions<PlatformDbCo
             || a.Scope == UploadBandwidthScope.Agent && a.ScopeId == agentId.Value
             || a.Scope == UploadBandwidthScope.Tenant && a.ScopeId == tenantId.Value)).ToListAsync(cancellationToken);
 
-        var assignedProfileId = assignments.SingleOrDefault(a => a.Scope == UploadBandwidthScope.Job)?.ProfileId
-            ?? assignments.SingleOrDefault(a => a.Scope == UploadBandwidthScope.Agent)?.ProfileId
-            ?? assignments.SingleOrDefault(a => a.Scope == UploadBandwidthScope.Tenant)?.ProfileId;
+        var assignment = assignments.SingleOrDefault(a => a.Scope == UploadBandwidthScope.Job)
+            ?? assignments.SingleOrDefault(a => a.Scope == UploadBandwidthScope.Agent)
+            ?? assignments.SingleOrDefault(a => a.Scope == UploadBandwidthScope.Tenant);
 
         TimeSpan? nextTransition = null;
-        if (assignedProfileId is { } profileId)
+        if (assignment is not null)
         {
-            var profile = await context.BandwidthProfiles.Include(p => p.Windows).AsNoTracking().SingleOrDefaultAsync(p => p.TenantId == tenantId && p.Id == profileId, cancellationToken);
+            var profile = await context.BandwidthProfiles.Include(p => p.Windows).AsNoTracking().SingleOrDefaultAsync(p => p.TenantId == tenantId && p.Id == assignment.ProfileId, cancellationToken);
             if (profile != null)
             {
                 var (profileLimit, transitionInstant) = profile.Evaluate(now);
@@ -166,13 +165,11 @@ public sealed class PostgreSqlUploadBandwidthStore(DbContextOptions<PlatformDbCo
                     var remaining = transitionInstant.Value - now;
                     if (remaining > TimeSpan.Zero) nextTransition = remaining;
                 }
-                if (profileLimit != null)
-                {
-                    var scope = assignments.First(a => a.ProfileId == profileId).Scope;
-                    if (scope == UploadBandwidthScope.Job) staticJob = staticJob is null ? profileLimit : Math.Min(staticJob.Value, profileLimit.Value);
-                    else if (scope == UploadBandwidthScope.Agent) staticAgent = staticAgent is null ? profileLimit : Math.Min(staticAgent.Value, profileLimit.Value);
-                    else if (scope == UploadBandwidthScope.Tenant) staticTenant = staticTenant is null ? profileLimit : Math.Min(staticTenant.Value, profileLimit.Value);
-                }
+                return new AttemptUploadLimits(
+                    assignment.Scope == UploadBandwidthScope.Job ? profileLimit : null,
+                    assignment.Scope == UploadBandwidthScope.Agent ? profileLimit : null,
+                    assignment.Scope == UploadBandwidthScope.Tenant ? profileLimit : null,
+                    NextTransition: nextTransition);
             }
         }
 

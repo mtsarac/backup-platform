@@ -125,6 +125,45 @@ public sealed class BackupTaskWorkerTests
         Assert.Equal("Cancelled", completion.FailureCode);
         Assert.Null(completion.Artifact);
     }
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Schedule_pause_on_start_or_renewal_reaches_the_pipeline_as_TimeRule_not_operator_or_cancellation(bool onStart)
+    {
+        await using var harness = new BackupTaskHarness();
+        harness.Client.OnStart = () => AgentBackendResult<BackupTaskLeaseResponse>.Success(new BackupTaskLeaseResponse
+        {
+            LeaseExpiresAt = harness.Time.GetUtcNow().AddSeconds(120), TimeRulePauseRequested = onStart
+        });
+        harness.Client.OnRenew = () => AgentBackendResult<BackupTaskLeaseResponse>.Success(new BackupTaskLeaseResponse
+        {
+            LeaseExpiresAt = harness.Time.GetUtcNow().AddSeconds(120), TimeRulePauseRequested = true
+        });
+        harness.Pipeline.Execute = async (request, _, token) =>
+        {
+            try
+            {
+                await harness.Time.ObserveAsync("backup worker", Task.Delay(Timeout.InfiniteTimeSpan, request.TimeRulePauseToken));
+            }
+            catch (OperationCanceledException) when (request.TimeRulePauseToken.IsCancellationRequested)
+            {
+                Assert.False(token.IsCancellationRequested);
+                Assert.False(request.PauseToken.IsCancellationRequested);
+                return harness.Success(request) with { Status = DatabaseBackupStatus.Paused, PauseReason = "TimeRule" };
+            }
+            throw new InvalidOperationException("The schedule must pause the transfer.");
+        };
+        harness.Start();
+        Assert.True(harness.Worker.TryPublish(harness.Envelope()));
+        await Wait.UntilAsync(() => harness.Pipeline.Calls.Count == 1, "transfer start");
+        if (!onStart) await harness.Time.AdvanceAsync(TimeSpan.FromSeconds(10));
+        await Wait.UntilAsync(() => harness.Client.Completions.Count == 1, "paused completion");
+        var completion = Assert.Single(harness.Client.Completions);
+        Assert.Equal("Paused", completion.Status);
+        Assert.Equal("TimeRule", completion.FailureCode);
+        Assert.Null(completion.Artifact);
+    }
+
 
     [Theory]
     [InlineData(AgentBackendFailureKind.Rejected, 10)]

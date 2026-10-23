@@ -48,7 +48,7 @@ internal sealed class TransferScheduleWindowConfiguration : IEntityTypeConfigura
     public void Configure(EntityTypeBuilder<TransferScheduleWindow> builder)
     {
         builder.ToTable("transfer_schedule_windows", table => table.HasCheckConstraint("ck_transfer_schedule_windows_rate",
-            $"\"BytesPerSecond\" BETWEEN {UploadBandwidth.MinimumBytesPerSecond} AND {UploadBandwidth.MaximumBytesPerSecond}"));
+            $"\"BytesPerSecond\" = 0 OR \"BytesPerSecond\" BETWEEN {UploadBandwidth.MinimumBytesPerSecond} AND {UploadBandwidth.MaximumBytesPerSecond}"));
         builder.HasKey(window => window.Id);
         builder.Property(window => window.DayOfWeek).HasConversion<int>().IsRequired();
         builder.Property(window => window.StartTime).IsRequired();

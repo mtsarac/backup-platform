@@ -3,7 +3,7 @@ import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getUploadBandwidth, setUploadBandwidth } from '@/features/upload-bandwidth/api'
+import { getBandwidthProfiles, getUploadBandwidth, saveBandwidthProfile, setUploadBandwidth } from '@/features/upload-bandwidth/api'
 import { ApiError } from '@/lib/api/client'
 import { UploadBandwidthPage } from './upload-bandwidth-page'
 
@@ -29,6 +29,7 @@ beforeEach(() => {
   access.canAdmin = true
   jobs.mockResolvedValue([{ id: 'job-a', name: 'Günlük ERP', agentName: 'SQL-01' }])
   vi.mocked(getUploadBandwidth).mockResolvedValue(limits)
+  vi.mocked(getBandwidthProfiles).mockResolvedValue([])
   vi.mocked(setUploadBandwidth).mockResolvedValue({ scope: 'agent', scopeId: 'agent-b', bytesPerSecond: null })
 })
 
@@ -103,6 +104,43 @@ describe('upload bandwidth page', () => {
     expect(screen.getByRole('row', { name: /^Backup 01/ })).toBeInTheDocument()
     expect(screen.queryByRole('row', { name: /^Backup 26/ })).not.toBeInTheDocument()
     expect(screen.getAllByRole('row')).toHaveLength(2)
+  })
+
+  it('creates an explicit pause window as zero and round-trips it without showing an unlimited or zero-rate label', async () => {
+    const profile = { id: 'pause-profile', name: 'Mesai molası', timeZoneId: 'UTC', windows: [{ dayOfWeek: 1, startTime: '09:00:00', endTime: '18:00:00', bytesPerSecond: 0 }] }
+    vi.mocked(saveBandwidthProfile).mockResolvedValue(profile)
+    mount()
+    await openTab(/^Profiller$/)
+    fireEvent.click(await screen.findByRole('button', { name: 'Yeni Profil' }))
+    let dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByLabelText('Profil Adı'), { target: { value: profile.name } })
+    fireEvent.change(within(dialog).getByLabelText('Zaman Dilimi (IANA)'), { target: { value: 'UTC' } })
+    fireEvent.change(within(dialog).getByLabelText('Pencere Davranışı'), { target: { value: 'pause' } })
+    expect(within(dialog).getByLabelText('Hız Limiti')).toBeDisabled()
+    expect(within(dialog).getByLabelText('Hız Birimi')).toBeDisabled()
+    fireEvent.click(within(dialog).getByRole('button', { name: /Pencereyi Listeye Ekle/ }))
+    expect(within(dialog).getByText(/09:00 - 18:00 → Aktarımı Duraklat/)).toBeInTheDocument()
+    vi.mocked(getBandwidthProfiles).mockResolvedValue([profile])
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }))
+    await waitFor(() => expect(saveBandwidthProfile).toHaveBeenCalledWith('tenant-a', { id: undefined, name: profile.name, timeZoneId: 'UTC', windows: profile.windows }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(await screen.findByText('09:00 - 18:00: Aktarımı Duraklat')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Düzenle' }))
+    dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/09:00 - 18:00 → Aktarımı Duraklat/)).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }))
+    await waitFor(() => expect(saveBandwidthProfile).toHaveBeenLastCalledWith('tenant-a', profile))
+  })
+
+  it('requires explicit pause selection instead of accepting a zero rate as a static-style limit', async () => {
+    mount()
+    await openTab(/^Profiller$/)
+    fireEvent.click(await screen.findByRole('button', { name: 'Yeni Profil' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByLabelText('Hız Limiti'), { target: { value: '0' } })
+    expect(within(dialog).getByRole('button', { name: /Pencereyi Listeye Ekle/ })).toBeDisabled()
+    fireEvent.change(within(dialog).getByLabelText('Pencere Davranışı'), { target: { value: 'pause' } })
+    expect(within(dialog).getByRole('button', { name: /Pencereyi Listeye Ekle/ })).toBeEnabled()
   })
 
 

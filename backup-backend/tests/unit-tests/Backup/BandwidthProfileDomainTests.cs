@@ -40,6 +40,10 @@ public sealed class BandwidthProfileDomainTests
         Assert.Equal(new TimeOnly(9, 0), window.StartTime);
         Assert.Equal(new TimeOnly(17, 0), window.EndTime);
         Assert.Equal(500_000, window.BytesPerSecond);
+        Assert.Equal(0, new TransferScheduleWindow(Guid.NewGuid(), profileId, DayOfWeek.Monday,
+            new TimeOnly(9, 0), new TimeOnly(17, 0), 0).BytesPerSecond);
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new TransferScheduleWindow(Guid.NewGuid(), profileId, DayOfWeek.Monday, new TimeOnly(9, 0), new TimeOnly(17, 0), -1));
     }
 
     [Fact]

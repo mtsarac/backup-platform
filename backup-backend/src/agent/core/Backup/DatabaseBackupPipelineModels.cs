@@ -117,6 +117,7 @@ public sealed record DatabaseBackupPipelineRequest
     public Guid AttemptId { get; init; }
     public bool ResumeTransfer { get; init; }
     public CancellationToken PauseToken { get; init; }
+    public CancellationToken TimeRulePauseToken { get; init; }
     public CancellationToken ShutdownToken { get; init; }
     public IReadOnlyList<BackupPlatform.Contracts.Backups.TransferCheckpointContract> Checkpoints { get; init; } = [];
     public Func<BackupPlatform.Contracts.Backups.TransferCheckpointContract, CancellationToken, Task>? RecordCheckpointAsync { get; init; }

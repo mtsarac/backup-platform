@@ -81,6 +81,33 @@ public sealed class UploadBandwidthGovernorTests
     }
 
     [Fact]
+    public async Task Entering_a_pause_window_signals_cancellation_instead_of_only_waiting_at_zero_rate()
+    {
+        _client.OnUploadPolicy = _ => Policy(share: 500_000);
+        var session = await _governor.BeginAsync(StorageTopology.AgentDirect, default);
+        var paused = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = session.TimeRulePauseToken.Register(() => paused.TrySetResult());
+        _client.OnUploadPolicy = request => request.Release ? Policy() :
+            AgentBackendResult<UploadPolicyResponse>.Success(new UploadPolicyResponse { JobBytesPerSecond = 0, PauseRequested = true });
+        await SettleAsync(TimeSpan.FromSeconds(3));
+        await paused.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await session.DisposeAsync();
+        Assert.Single(_client.UploadPolicies, request => request.Release);
+    }
+
+    [Theory]
+    [InlineData(StorageTopology.AgentDirect)]
+    [InlineData(StorageTopology.BackendRelayed)]
+    public async Task Starting_inside_a_pause_window_stops_without_uploading_or_waiting_for_the_window_to_end(StorageTopology topology)
+    {
+        _client.OnUploadPolicy = _ => AgentBackendResult<UploadPolicyResponse>.Success(
+            new UploadPolicyResponse { JobBytesPerSecond = 0, PauseRequested = true });
+        var error = await Assert.ThrowsAnyAsync<Exception>(() => _governor.BeginAsync(topology, default).WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal("TransferPausedException", error.GetType().Name);
+        Assert.Single(_client.UploadPolicies);
+    }
+
+    [Fact]
     public async Task The_start_fails_closed_when_the_policy_is_refused_and_does_not_retry_a_refusal()
     {
         _client.OnUploadPolicy = _ => Failure(AgentBackendFailureKind.Rejected);

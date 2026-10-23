@@ -15,7 +15,10 @@ public sealed record UploadBandwidthSettings(long? Tenant, IReadOnlyDictionary<G
     Guid? TenantProfileId = null, IReadOnlyDictionary<Guid, Guid>? AgentProfiles = null, IReadOnlyDictionary<Guid, Guid>? JobProfiles = null);
 
 /// <summary>Every ceiling that applies to one attempt's upload, as stored. <see cref="TenantShare"/> is only set for a granted slice.</summary>
-public sealed record AttemptUploadLimits(long? Job, long? Agent, long? Tenant, long? TenantShare = null, TimeSpan? NextTransition = null);
+public sealed record AttemptUploadLimits(long? Job, long? Agent, long? Tenant, long? TenantShare = null, TimeSpan? NextTransition = null)
+{
+    public bool PauseRequested => Job == 0 || Agent == 0 || Tenant == 0;
+}
 
 /// <summary>What a call about a running attempt's upload does to its slice of the tenant limit.</summary>
 public enum UploadSliceAction
@@ -117,6 +120,7 @@ public sealed class UploadBandwidthService(IUploadBandwidthStore store, BackupEx
             JobBytesPerSecond = limits.Job,
             AgentBytesPerSecond = limits.Agent,
             TenantShareBytesPerSecond = limits.Tenant is null ? null : limits.TenantShare ?? 0,
+            PauseRequested = limits.PauseRequested,
             MinimumBytesPerSecond = limited ? Floor(lease.TenantId, limits) : null,
             RefreshAfterSeconds = refreshSeconds,
             ValidForSeconds = (int)GrantTtl.TotalSeconds

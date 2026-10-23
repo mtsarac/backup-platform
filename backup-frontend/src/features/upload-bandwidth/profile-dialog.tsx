@@ -34,8 +34,9 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
   const [endTime, setEndTime] = useState('18:00')
   const [rateText, setRateText] = useState('10')
   const [rateUnit, setRateUnit] = useState<BandwidthUnitId>('Mbit/s')
+  const [pause, setPause] = useState(false)
 
-  const parsed = parseBandwidth(rateText, rateUnit, minimum, maximum)
+  const parsed = pause ? { bytesPerSecond: 0 } : parseBandwidth(rateText, rateUnit, minimum, maximum)
   const isRateValid = parsed !== null && !('error' in parsed)
 
   function addWindow() {
@@ -61,7 +62,7 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
   return (
     <FormDialog
       title={profile ? tx("Profili Düzenle: {0}", { "0": profile.name }) : tx("Yeni Bant Genişliği Profili")}
-      description={tx("Zaman pencereli yükleme hızı profili tanımlayın.")}
+      description={tx("Profil statik sınırların yerine geçer; pencere dışında sınırsızdır. Duraklatma penceresi aktarımı saklar; devam ettirme manueldir.")}
       submitLabel={tx("Kaydet")}
       pendingLabel={tx("Kaydediliyor…")}
       pending={save.isPending}
@@ -80,7 +81,13 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
 
         <div className="rounded-lg border border-border p-3 space-y-3 bg-surface-muted/30">
           <h4 className="text-sm font-semibold text-text-heading">{tx("Pencere Ekle")}</h4>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Field label={tx("Pencere Davranışı")}>
+            {control => <select {...control} className={selectClass} value={pause ? 'pause' : 'limit'} onChange={e => setPause(e.target.value === 'pause')}>
+              <option value="limit">{tx("Hız Limiti")}</option>
+              <option value="pause">{tx("Aktarımı Duraklat")}</option>
+            </select>}
+          </Field>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <Field label={tx("Gün")}>
               {control => (
                 <select {...control} className={selectClass} value={day} onChange={e => setDay(Number(e.target.value))}>
@@ -97,8 +104,8 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
             <Field label={tx("Hız Limiti")}>
               {control => (
                 <div className="flex gap-1">
-                  <input {...control} className={inputClass} value={rateText} onChange={e => setRateText(e.target.value)} />
-                  <select aria-label={tx("Hız Birimi")} className={selectClass} value={rateUnit} onChange={e => setRateUnit(e.target.value as BandwidthUnitId)}>
+                  <input {...control} className={inputClass} value={rateText} disabled={pause} onChange={e => setRateText(e.target.value)} />
+                  <select aria-label={tx("Hız Birimi")} className={selectClass} value={rateUnit} disabled={pause} onChange={e => setRateUnit(e.target.value as BandwidthUnitId)}>
                     {bandwidthUnits.map(u => <option key={u.id} value={u.id}>{u.id}</option>)}
                   </select>
                 </div>
@@ -117,7 +124,7 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
               {windows.map((w, idx) => (
                 <div key={idx} className="flex items-center justify-between rounded border border-border px-3 py-1.5 text-xs">
                   <span>
-                    <strong>{tx(DAYS.find(d => d.value === w.dayOfWeek)?.label ?? '')}</strong>: {w.startTime.slice(0, 5)} - {w.endTime.slice(0, 5)} &rarr; {formatBandwidth(w.bytesPerSecond)}
+                    <strong>{tx(DAYS.find(d => d.value === w.dayOfWeek)?.label ?? '')}</strong>: {w.startTime.slice(0, 5)} - {w.endTime.slice(0, 5)} &rarr; {w.bytesPerSecond === 0 ? tx("Aktarımı Duraklat") : formatBandwidth(w.bytesPerSecond)}
                   </span>
                   <button type="button" onClick={() => removeWindow(idx)} className="text-error hover:underline">{tx("Kaldır")}</button>
                 </div>

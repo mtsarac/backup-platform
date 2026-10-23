@@ -156,6 +156,8 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
         }
         using var requestedCancel = new CancellationTokenSource();
         using var requestedPause = new CancellationTokenSource();
+        using var timeRulePause = new CancellationTokenSource();
+        if (started.Value.TimeRulePauseRequested) timeRulePause.Cancel();
         if (started.Value.PauseRequested) requestedPause.Cancel();
         if (task.CancellationRequested || started.Value.CancellationRequested)
         {
@@ -165,11 +167,11 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
         using var maintenance = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
         using var progressLifetime = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
         var progress = new TaskProgress();
-        var renewal = RenewLoopAsync(task, lease, requestedCancel, requestedPause, maintenance.Token);
+        var renewal = RenewLoopAsync(task, lease, requestedCancel, requestedPause, timeRulePause, maintenance.Token);
         var reporting = ReportLoopAsync(task, progress, progressLifetime.Token);
         try
         {
-            var completion = await ExecutePipelineAsync(task, progress, requestedPause.Token, stoppingToken, lifetime.Token, provider.Token).ConfigureAwait(false);
+            var completion = await ExecutePipelineAsync(task, progress, requestedPause.Token, timeRulePause.Token, stoppingToken, lifetime.Token, provider.Token).ConfigureAwait(false);
             await progressLifetime.CancelAsync().ConfigureAwait(false);
             await reporting.ConfigureAwait(false);
             if (!lifetime.IsCancellationRequested)
@@ -189,14 +191,15 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
         }
     }
 
-    private async Task<BackupTaskCompletionRequest> ExecutePipelineAsync(BackupTaskSnapshot task, TaskProgress progress, CancellationToken pauseToken, CancellationToken shutdownToken, CancellationToken leaseToken, CancellationToken cancellationToken)
+    private async Task<BackupTaskCompletionRequest> ExecutePipelineAsync(BackupTaskSnapshot task, TaskProgress progress, CancellationToken pauseToken, CancellationToken timeRulePauseToken, CancellationToken shutdownToken, CancellationToken leaseToken, CancellationToken cancellationToken)
     {
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
             var request = (await _requests.CreateAsync(task, cancellationToken).ConfigureAwait(false)) with
             {
-                AttemptId = task.AttemptId, ResumeTransfer = task.ResumeTransfer, Checkpoints = task.Checkpoints, PauseToken = pauseToken, ShutdownToken = shutdownToken,
+                AttemptId = task.AttemptId, ResumeTransfer = task.ResumeTransfer, Checkpoints = task.Checkpoints, PauseToken = pauseToken,
+                TimeRulePauseToken = timeRulePauseToken, ShutdownToken = shutdownToken,
                 RecordCheckpointAsync = async (checkpoint, _) =>
                 {
                     var response = await CallAsync(identity => _client.ReportProgressAsync(identity, task.AttemptId,

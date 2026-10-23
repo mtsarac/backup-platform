@@ -119,12 +119,44 @@ public sealed class PacedUploadPipelineTests : IDisposable
         Assert.Equal(1, bandwidth.Disposed);
     }
 
+    [Fact]
+    public async Task A_schedule_pause_cancels_the_open_direct_upload_and_preserves_its_checkpoint_and_artifact()
+    {
+        using var pause = new CancellationTokenSource();
+        var bandwidth = new FakeBandwidth { PauseToken = pause.Token };
+        var checkpoints = new List<BackupPlatform.Contracts.Backups.TransferCheckpointContract>();
+        var storage = new InMemoryStorage(_h);
+        storage.OnPut = async (_, content, options, token) =>
+        {
+            var prefix = new byte[4096];
+            await content.ReadExactlyAsync(prefix, token);
+            await options.RecordCheckpointAsync!(new(prefix.Length, "scheduled-session"), token);
+            pause.Cancel();
+            await content.ReadExactlyAsync(prefix, token);
+            throw new InvalidOperationException("The schedule must cancel the active transfer.");
+        };
+        var result = await _h.RunAsync(Request(bandwidth, storage) with
+        {
+            AttemptId = Guid.NewGuid(),
+            RecordCheckpointAsync = (checkpoint, _) => { checkpoints.Add(checkpoint); return Task.CompletedTask; }
+        });
+
+        Assert.Equal(DatabaseBackupStatus.Paused, result.Status);
+        Assert.Equal("TimeRule", result.PauseReason);
+        Assert.Equal(4096, checkpoints[^1].VerifiedByteOffset);
+        Assert.Equal("scheduled-session", checkpoints[^1].ProviderState);
+        Assert.True(File.Exists(Path.Combine(_h.StagingDirectory, result.Artifact!.FileName)));
+        Assert.Equal(StorageTopology.AgentDirect, Assert.Single(bandwidth.Seen));
+        Assert.Equal(1, bandwidth.Disposed);
+    }
+
     private sealed class Topologies : List<StorageTopology>;
 
     private sealed class FakeBandwidth(long? rate = null) : IUploadBandwidth
     {
         public bool Unavailable { get; init; }
         public TimeSpan Allowance { get; init; }
+        public CancellationToken PauseToken { get; init; }
         public int Begun;
         public int Disposed;
 
@@ -140,6 +172,7 @@ public sealed class PacedUploadPipelineTests : IDisposable
 
         private sealed class Session(FakeBandwidth owner, TransferRateLimiter limiter) : IUploadBandwidthSession
         {
+            public CancellationToken TimeRulePauseToken => owner.PauseToken;
             public Stream Wrap(Stream source) => new ThrottledStream(source, limiter);
             public TimeSpan DeadlineAllowance(long sizeBytes) => owner.Allowance;
             public ValueTask DisposeAsync()

@@ -16,6 +16,7 @@ public sealed class UploadBandwidthServiceTests
     private BackupLeaseCommand Lease() => new(_tenant, _agent, Guid.NewGuid(), Guid.NewGuid(), DateTimeOffset.UtcNow);
 
     [Theory]
+    [InlineData(0)]
     [InlineData(UploadBandwidth.MinimumBytesPerSecond - 1)]
     [InlineData(UploadBandwidth.MaximumBytesPerSecond + 1)]
     public async Task A_limit_outside_the_range_is_refused_before_it_reaches_the_store(long bytesPerSecond)
@@ -56,8 +57,21 @@ public sealed class UploadBandwidthServiceTests
 
         Assert.Equal(0, policy!.TenantShareBytesPerSecond);
         Assert.Equal(0, policy.EffectiveBytesPerSecond);
+        Assert.False(policy.PauseRequested);
         Assert.Equal((int)UploadBandwidthService.RenewalInterval.TotalSeconds, policy.RefreshAfterSeconds);
         Assert.Equal((int)UploadBandwidthService.GrantTtl.TotalSeconds, policy.ValidForSeconds);
+    }
+
+    [Theory]
+    [InlineData(0L, null, null)]
+    [InlineData(null, 0L, null)]
+    [InlineData(null, null, 0L)]
+    public async Task A_zero_profile_window_requests_a_durable_pause_at_any_scope(long? job, long? agent, long? tenant)
+    {
+        _store.Limits = new AttemptUploadLimits(job, agent, tenant);
+        var policy = await Service().PolicyAsync(Lease(), UploadSliceAction.Renew, default);
+        Assert.True(policy!.PauseRequested);
+        Assert.Equal(0, policy.EffectiveBytesPerSecond);
     }
 
     [Fact]

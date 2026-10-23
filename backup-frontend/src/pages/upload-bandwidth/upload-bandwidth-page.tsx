@@ -102,7 +102,7 @@ export function UploadBandwidthPage() {
   ]
   return <div className="space-y-6">
     <PageHeader title={tx("Upload Bandwidth")} description={tx("{0} · Yedekleme yüklemeleri için bayt/saniye cinsinden hız sınırları.", { "0": tenant.name })} />
-    <Notice tone="info">{tx("Sınırlar birbirinden bağımsız üst sınırlardır ve birlikte uygulanır; en kısıtlayıcı olan geçerli olur. Değişiklikler çalışan yüklemelere birkaç saniye içinde yansır. Geri yükleme/indirme, checksum ve heartbeat sınırlanmaz.")}</Notice>
+    <Notice tone="info">{tx("Atanan profil statik sınırların yerine geçer (iş > ajan > çalışma alanı); pencere dışında sınırsızdır. Profil yoksa statik sınırların en kısıtlayıcısı uygulanır. Duraklatılan aktarımlar manuel devam ettirilir. Geri yükleme/indirme, checksum ve heartbeat sınırlanmaz.")}</Notice>
     {!canAdmin && <Notice tone="warning">{tx("Hız sınırlarını yalnızca Owner / Admin değiştirebilir.")}</Notice>}
     <Tabs label={tx("Hız sınırı kapsamı")} idPrefix="bandwidth" value={tab} onChange={setTab} items={[{ value: 'tenant', label: tx('Tenant limiti') }, { value: 'agents', label: tx('Agent\'lar') }, { value: 'jobs', label: tx('Backup Job\'lar') }, { value: 'profiles', label: tx('Profiller') }]} />
     <div role="tabpanel" id={`bandwidth-panel-${tab}`} aria-labelledby={`bandwidth-tab-${tab}`}>
@@ -150,7 +150,7 @@ export function UploadBandwidthPage() {
                   <div className="text-xs text-text-muted space-y-1">
                     <p className="font-medium text-text">{tx("{0} zaman penceresi", { "0": p.windows.length })}</p>
                     {p.windows.slice(0, 3).map((w, idx) => (
-                      <p key={idx}>{w.startTime.slice(0, 5)} - {w.endTime.slice(0, 5)}: {formatBandwidth(w.bytesPerSecond)}</p>
+                      <p key={idx}>{w.startTime.slice(0, 5)} - {w.endTime.slice(0, 5)}: {w.bytesPerSecond === 0 ? tx("Aktarımı Duraklat") : formatBandwidth(w.bytesPerSecond)}</p>
                     ))}
                     {p.windows.length > 3 && <p>+{p.windows.length - 3} {tx("daha")}</p>}
                   </div>

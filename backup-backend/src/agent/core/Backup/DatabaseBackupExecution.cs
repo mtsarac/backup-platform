@@ -310,6 +310,7 @@ internal sealed class DatabaseBackupExecution
             if (_request.PauseToken.IsCancellationRequested) throw new TransferPausedException("Operator");
             if (!_request.ResumeTransfer && _request.RecordCheckpointAsync is { } record && destination.ConnectionId is { } destinationId)
                 await record(new TransferCheckpointContract { StorageProvider = destination.Storage.Value, DestinationId = destinationId }, cancellationToken).ConfigureAwait(false);
+            if (_request.TimeRulePauseToken.IsCancellationRequested) throw new TransferPausedException("TimeRule");
             if (_transferCancelled || cancellationToken.IsCancellationRequested)
             {
                 _transferCancelled = true;
@@ -344,7 +345,7 @@ internal sealed class DatabaseBackupExecution
         BackupFailure? failure = null;
         BackupReplicaInfo? replica = null;
         var cancelled = false;
-        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _request.PauseToken);
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _request.PauseToken, _request.TimeRulePauseToken);
         bounded.CancelAfter(_request.DestinationTimeout ?? DatabaseBackupPipelineRequest.DefaultDestinationTimeout);
         try
         {
@@ -361,6 +362,10 @@ internal sealed class DatabaseBackupExecution
         catch (OperationCanceledException) when (_request.PauseToken.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
             throw new TransferPausedException("Operator");
+        }
+        catch (OperationCanceledException) when (_request.TimeRulePauseToken.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            throw new TransferPausedException("TimeRule");
         }
         catch (StageFailedException exception)
         {
@@ -444,6 +449,7 @@ internal sealed class DatabaseBackupExecution
 
             StorageObjectMetadata stored;
             await using var pacingScope = pacing;
+            using var pauseRegistration = pacing?.TimeRulePauseToken.Register(() => destinationDeadline.Cancel());
             try
             {
                 if (pacing is not null)
@@ -480,6 +486,11 @@ internal sealed class DatabaseBackupExecution
                         await Task.Delay(TimeSpan.FromSeconds(1 << retry), _time, cancellationToken).ConfigureAwait(false);
                     }
                 }
+            }
+            catch (OperationCanceledException) when (pacing?.TimeRulePauseToken.IsCancellationRequested == true
+                && !_request.PauseToken.IsCancellationRequested && !_request.TimeRulePauseToken.IsCancellationRequested)
+            {
+                throw new TransferPausedException("TimeRule");
             }
             catch (StorageException exception)
             {

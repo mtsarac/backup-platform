@@ -1,3 +1,6 @@
+extern alias AgentCore;
+extern alias AgentTransport;
+
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -13,6 +16,19 @@ using BackupPlatform.StorageProviders.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using System.Security.Cryptography;
+using BackupPlatform.BackupProviders.Abstractions.Database;
+using BackupPlatform.Agents.Capabilities;
+using BackupPlatform.Domain.Capabilities;
+using BackupPlatform.Domain.Identity;
+using BackupPlatform.IntegrationTests.PostgreSql;
+using BackupPlatform.StorageProviders.Local;
+using Microsoft.Extensions.Logging.Abstractions;
+using AgentCore::BackupPlatform.Agent.Core.Backup;
+using AgentCore::BackupPlatform.Agent.Core.Connectivity;
+using AgentCore::BackupPlatform.Agent.Core.Identity;
+using AgentCore::BackupPlatform.Agent.Core.Tasks;
+using AgentTransport::BackupPlatform.Agent.Transport;
 
 namespace BackupPlatform.IntegrationTests;
 
@@ -168,10 +184,294 @@ public sealed class UploadBandwidthApiIntegrationTests(PostgreSqlFixture fixture
         });
         Assert.Equal(HttpStatusCode.BadRequest, overlap.StatusCode);
     }
+    [Fact]
+    public async Task The_same_profile_assigned_to_tenant_and_agent_uses_the_winning_agent_scope()
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture, clock: new MutableClock(DateTimeOffset.Parse("2026-06-15T10:00:00Z")));
+        var jobId = await scenario.CreateJobAsync();
+        using var created = await scenario.Admin.SendAsync(HttpMethod.Post, scenario.Root + "/bandwidth-profiles", new
+        {
+            name = "Shared", timeZoneId = "UTC",
+            windows = new[] { new { dayOfWeek = 1, startTime = "09:00:00", endTime = "18:00:00", bytesPerSecond = 500_000 } }
+        });
+        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+        var profileId = AgentWorld.ReadJson(created).GetProperty("id").GetGuid();
+        using var tenant = await scenario.Admin.SendAsync(HttpMethod.Put, scenario.Root + "/upload-bandwidth/tenant/profile", new { profileId });
+        using var agent = await scenario.Admin.SendAsync(HttpMethod.Put, scenario.Root + $"/upload-bandwidth/agents/{scenario.Agent.AgentId}/profile", new { profileId });
+        Assert.Equal(HttpStatusCode.OK, tenant.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, agent.StatusCode);
+        await scenario.StartRunAsync(jobId);
+        var claim = await scenario.ClaimAsync();
+        await scenario.StartAttemptAsync(claim);
+        using var response = await PolicyAsync(scenario, claim);
+        var policy = AgentWorld.ReadJson(response);
+        Assert.Equal(500_000, policy.GetProperty("agentBytesPerSecond").GetInt64());
+        Assert.Equal(JsonValueKind.Null, policy.GetProperty("tenantShareBytesPerSecond").ValueKind);
+        await using var context = fixture.CreatePlatformContext();
+        Assert.False(await context.UploadBandwidthGrants.AnyAsync(g => g.AttemptId == claim.AttemptId));
+
+        using var unassign = await scenario.Admin.SendAsync(HttpMethod.Put, scenario.Root + $"/upload-bandwidth/agents/{scenario.Agent.AgentId}/profile", new { profileId = (Guid?)null });
+        Assert.Equal(HttpStatusCode.OK, unassign.StatusCode);
+        using var tenantResponse = await PolicyAsync(scenario, claim);
+        Assert.Equal(500_000, AgentWorld.ReadJson(tenantResponse).GetProperty("tenantShareBytesPerSecond").GetInt64());
+        Assert.True(await context.UploadBandwidthGrants.AnyAsync(g => g.AttemptId == claim.AttemptId));
+        using var reassign = await scenario.Admin.SendAsync(HttpMethod.Put, scenario.Root + $"/upload-bandwidth/agents/{scenario.Agent.AgentId}/profile", new { profileId });
+        Assert.Equal(HttpStatusCode.OK, reassign.StatusCode);
+        using var agentResponse = await PolicyAsync(scenario, claim);
+        Assert.Equal(JsonValueKind.Null, AgentWorld.ReadJson(agentResponse).GetProperty("tenantShareBytesPerSecond").ValueKind);
+        Assert.False(await context.UploadBandwidthGrants.AnyAsync(g => g.AttemptId == claim.AttemptId));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_job_profile_replaces_every_static_ceiling_including_unlimited_outside_windows(bool insideWindow)
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture, clock: new MutableClock(DateTimeOffset.Parse(insideWindow ? "2026-06-15T10:00:00Z" : "2026-06-15T19:00:00Z")));
+        var jobId = await scenario.CreateJobAsync();
+        using var tenantLimit = await PutAsync(scenario, "tenant", 48_000);
+        using var agentLimit = await PutAsync(scenario, $"agents/{scenario.Agent.AgentId}", 32_000);
+        using var jobLimit = await PutAsync(scenario, $"jobs/{jobId}", 16_000);
+        Assert.Equal(HttpStatusCode.OK, tenantLimit.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, agentLimit.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, jobLimit.StatusCode);
+        using var created = await scenario.Admin.SendAsync(HttpMethod.Post, scenario.Root + "/bandwidth-profiles", new
+        {
+            name = "Emergency", timeZoneId = "UTC",
+            windows = new[] { new { dayOfWeek = 1, startTime = "09:00:00", endTime = "18:00:00", bytesPerSecond = 5_000_000 } }
+        });
+        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+        var profileId = AgentWorld.ReadJson(created).GetProperty("id").GetGuid();
+        using var assigned = await scenario.Admin.SendAsync(HttpMethod.Put, scenario.Root + $"/upload-bandwidth/jobs/{jobId}/profile", new { profileId });
+        Assert.Equal(HttpStatusCode.OK, assigned.StatusCode);
+        await scenario.StartRunAsync(jobId);
+        var claim = await scenario.ClaimAsync();
+        await scenario.StartAttemptAsync(claim);
+        using var response = await PolicyAsync(scenario, claim);
+        var policy = AgentWorld.ReadJson(response).Deserialize<UploadPolicyResponse>(JsonSerializerOptions.Web)!;
+        Assert.Equal(insideWindow ? 5_000_000L : (long?)null, policy.JobBytesPerSecond);
+        Assert.Equal(policy.JobBytesPerSecond, policy.EffectiveBytesPerSecond);
+        Assert.Null(policy.AgentBytesPerSecond);
+        Assert.Null(policy.TenantShareBytesPerSecond);
+        await using var context = fixture.CreatePlatformContext();
+        Assert.False(await context.UploadBandwidthGrants.AnyAsync(g => g.AttemptId == claim.AttemptId));
+        using var unassigned = await scenario.Admin.SendAsync(HttpMethod.Put, scenario.Root + $"/upload-bandwidth/jobs/{jobId}/profile", new { profileId = (Guid?)null });
+        Assert.Equal(HttpStatusCode.OK, unassigned.StatusCode);
+        using var fallback = await PolicyAsync(scenario, claim);
+        var defaults = AgentWorld.ReadJson(fallback).Deserialize<UploadPolicyResponse>(JsonSerializerOptions.Web)!;
+        Assert.Equal(16_000, defaults.JobBytesPerSecond);
+        Assert.Equal(32_000, defaults.AgentBytesPerSecond);
+        Assert.Equal(48_000, defaults.TenantShareBytesPerSecond);
+    }
+
+    [Fact]
+    public async Task A_zero_rate_window_signals_TimeRule_and_manual_resume_uses_a_fresh_lease_without_bypassing_the_active_window()
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture, clock: new MutableClock(DateTimeOffset.Parse("2026-06-15T08:59:59Z")));
+        var jobId = await scenario.CreateJobAsync();
+        using var created = await scenario.Admin.SendAsync(HttpMethod.Post, scenario.Root + "/bandwidth-profiles", new
+        {
+            name = "Pause", timeZoneId = "UTC",
+            windows = new[]
+            {
+                new { dayOfWeek = 1, startTime = "08:00:00", endTime = "09:00:00", bytesPerSecond = 500_000 },
+                new { dayOfWeek = 1, startTime = "09:00:00", endTime = "09:01:00", bytesPerSecond = 0 }
+            }
+        });
+        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+        Assert.Contains(AgentWorld.ReadJson(created).GetProperty("windows").EnumerateArray(), w => w.GetProperty("bytesPerSecond").GetInt64() == 0);
+        var profileId = AgentWorld.ReadJson(created).GetProperty("id").GetGuid();
+        using var assigned = await scenario.Admin.SendAsync(HttpMethod.Put, scenario.Root + "/upload-bandwidth/tenant/profile", new { profileId });
+        Assert.Equal(HttpStatusCode.OK, assigned.StatusCode);
+        var runId = await scenario.StartRunAsync(jobId);
+        var claim = await scenario.ClaimAsync();
+        await scenario.StartAttemptAsync(claim);
+        using var before = await PolicyAsync(scenario, claim);
+        Assert.False(AgentWorld.ReadJson(before).GetProperty("pauseRequested").GetBoolean());
+        Assert.Equal(1, AgentWorld.ReadJson(before).GetProperty("refreshAfterSeconds").GetInt32());
+        await using var context = fixture.CreatePlatformContext();
+        Assert.True(await context.UploadBandwidthGrants.AnyAsync(g => g.AttemptId == claim.AttemptId));
+        var run = await context.BackupRuns.AsNoTracking().SingleAsync(r => r.Id == runId);
+        var destination = Assert.Single(run.Configuration.Destinations);
+        using var checkpoint = await scenario.AgentCallAsync(claim, "progress", new BackupTaskProgressRequest
+        {
+            LeaseToken = claim.LeaseToken, Stage = "Uploading",
+            Checkpoint = new TransferCheckpointContract { StorageProvider = destination.StorageProvider, DestinationId = destination.StorageConnectionId!.Value,
+                VerifiedByteOffset = 4096, ProviderState = "time-rule-session" }
+        });
+        Assert.Equal(HttpStatusCode.NoContent, checkpoint.StatusCode);
+        scenario.Clock.Advance(TimeSpan.FromSeconds(1));
+        using var during = await PolicyAsync(scenario, claim);
+        Assert.True(AgentWorld.ReadJson(during).GetProperty("pauseRequested").GetBoolean());
+        Assert.Equal(0, AgentWorld.ReadJson(during).GetProperty("effectiveBytesPerSecond").GetInt64());
+        Assert.False(await context.UploadBandwidthGrants.AnyAsync(g => g.AttemptId == claim.AttemptId));
+        using var lease = await scenario.AgentCallAsync(claim, "lease", new BackupTaskLeaseRequest { LeaseToken = claim.LeaseToken });
+        Assert.True(AgentWorld.ReadJson(lease).GetProperty("timeRulePauseRequested").GetBoolean());
+        Assert.False(AgentWorld.ReadJson(lease).GetProperty("pauseRequested").GetBoolean());
+        using var completed = await scenario.CompleteRawAsync(claim, new BackupTaskCompletionRequest
+        {
+            LeaseToken = claim.LeaseToken, Status = "Paused", FailureCode = "TimeRule"
+        });
+        Assert.Equal(HttpStatusCode.NoContent, completed.StatusCode);
+        var attempt = await context.BackupRunAttempts.AsNoTracking().SingleAsync(a => a.Id == claim.AttemptId);
+        Assert.Equal(BackupPlatform.Domain.Backups.BackupStatus.Paused, attempt.Status);
+        Assert.Equal(BackupPlatform.Domain.Backups.TransferPauseReason.TimeRule, attempt.PauseReason);
+        Assert.Null(attempt.LeaseToken);
+        Assert.Null(attempt.LeaseExpiresAt);
+        using var resume = await scenario.Admin.SendAsync(HttpMethod.Post, scenario.Root + $"/backup-runs/{runId}/resume");
+        Assert.Equal(HttpStatusCode.OK, resume.StatusCode);
+        var resumed = await scenario.ClaimAsync();
+        Assert.Equal(claim.AttemptId, resumed.AttemptId);
+        Assert.NotEqual(claim.LeaseToken, resumed.LeaseToken);
+        using var restarted = await scenario.AgentCallAsync(resumed, "start", new BackupTaskStartRequest
+        {
+            LeaseToken = resumed.LeaseToken, SoftwareVersion = "1.2.3", ProtocolVersion = "1.0", Platform = "linux"
+        });
+        Assert.Equal(HttpStatusCode.OK, restarted.StatusCode);
+        Assert.True(AgentWorld.ReadJson(restarted).GetProperty("timeRulePauseRequested").GetBoolean());
+        using var stale = await PolicyAsync(scenario, claim);
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        var saved = await context.Set<BackupPlatform.Domain.Backups.TransferCheckpoint>().AsNoTracking().SingleAsync(c => c.AttemptId == claim.AttemptId);
+        Assert.Equal(4096, saved.VerifiedByteOffset);
+        using var repaused = await scenario.CompleteRawAsync(resumed, new BackupTaskCompletionRequest
+        {
+            LeaseToken = resumed.LeaseToken, Status = "Paused", FailureCode = "TimeRule"
+        });
+        Assert.Equal(HttpStatusCode.NoContent, repaused.StatusCode);
+        scenario.Clock.Advance(TimeSpan.FromMinutes(1));
+        Assert.Equal(BackupPlatform.Domain.Backups.BackupStatus.Paused,
+            (await context.BackupRunAttempts.AsNoTracking().SingleAsync(a => a.Id == claim.AttemptId)).Status);
+        using var resumeAfter = await scenario.Admin.SendAsync(HttpMethod.Post, scenario.Root + $"/backup-runs/{runId}/resume");
+        Assert.Equal(HttpStatusCode.OK, resumeAfter.StatusCode);
+        var outside = await scenario.ClaimAsync();
+        Assert.NotEqual(resumed.LeaseToken, outside.LeaseToken);
+        await scenario.StartAttemptAsync(outside);
+        using var after = await PolicyAsync(scenario, outside);
+        Assert.Equal(HttpStatusCode.OK, after.StatusCode);
+        Assert.False(AgentWorld.ReadJson(after).GetProperty("pauseRequested").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, AgentWorld.ReadJson(after).GetProperty("effectiveBytesPerSecond").ValueKind);
+    }
+
+    [Fact]
+    public async Task A_real_PostgreSql_dump_upload_automatically_pauses_on_the_schedule_and_commits_TimeRule_with_its_verified_prefix_and_released_lease()
+    {
+        var database = new PostgreSqlProviderFixture();
+        await database.InitializeAsync();
+        try
+        {
+            var source = await database.DatabaseAsync();
+            await database.ExecuteAsync(source, "CREATE TABLE payload AS SELECT md5(g::text) AS value FROM generate_series(1, 32768) g");
+            await using var scenario = await BackupApiScenario.CreateAsync(fixture, clock: new MutableClock(DateTimeOffset.Parse("2026-06-15T08:59:59Z")));
+            await using (var capabilities = fixture.CreatePlatformContext())
+            {
+                capabilities.AgentCapabilities.Add(new AgentCapabilityRecord(new AgentId(scenario.Agent.AgentId), new TenantId(scenario.Agent.TenantId),
+                    database.Backup.Engine.Value + ".backup.full", CapabilitySupport.Supported, null, "schedule-smoke", scenario.Clock.GetUtcNow()));
+                await capabilities.SaveChangesAsync();
+            }
+            using var jobResponse = await scenario.CreateJobRawAsync(new
+            {
+                name = "Scheduled real upload", agentId = scenario.Agent.AgentId,
+                configuration = new BackupExecutionConfiguration
+                {
+                    Engine = database.Backup.Engine.Value, Database = source, Host = database.Settings.Endpoint.Host,
+                    Port = database.Settings.Endpoint.Port, IntegratedSecurity = false, Encrypt = false, CompressionPolicy = "Disabled",
+                    DatabaseLogin = new(database.Credential.UserName, database.Credential.Password.Reveal()),
+                    Destinations = BackupTestDestinations.LocalAgent
+                }
+            });
+            Assert.True(jobResponse.StatusCode == HttpStatusCode.Created, await jobResponse.Content.ReadAsStringAsync());
+            var jobId = AgentWorld.ReadJson(jobResponse).GetProperty("id").GetGuid();
+            using var profileResponse = await scenario.Admin.SendAsync(HttpMethod.Post, scenario.Root + "/bandwidth-profiles", new
+            {
+                name = "Automatic pause", timeZoneId = "UTC",
+                windows = new[]
+                {
+                    new { dayOfWeek = 1, startTime = "08:00:00", endTime = "09:00:00", bytesPerSecond = 16_000 },
+                    new { dayOfWeek = 1, startTime = "09:00:00", endTime = "09:01:00", bytesPerSecond = 0 }
+                }
+            });
+            Assert.Equal(HttpStatusCode.OK, profileResponse.StatusCode);
+            var profileId = AgentWorld.ReadJson(profileResponse).GetProperty("id").GetGuid();
+            using var assigned = await scenario.Admin.SendAsync(HttpMethod.Put, scenario.Root + "/upload-bandwidth/tenant/profile", new { profileId });
+            Assert.Equal(HttpStatusCode.OK, assigned.StatusCode);
+            var runId = await scenario.StartRunAsync(jobId);
+            using var poll = await scenario.World.PollAsync(scenario.Agent);
+            var snapshot = Assert.Single(AgentWorld.ReadJson(poll).GetProperty("tasks").EnumerateArray()).GetProperty("backup")
+                .Deserialize<BackupTaskSnapshot>(JsonSerializerOptions.Web)!;
+            var identity = new AgentLocalIdentity(scenario.Agent.AgentId, new Uri("https://localhost/"), scenario.Agent.InstallationId,
+                new AgentStoredCredential(scenario.Agent.CredentialId, scenario.Agent.Secret, 1));
+            var identities = new ScheduleIdentity(identity);
+            var client = new HttpBackupTaskClient(scenario.World.Anonymous, new AgentBackendEndpoint(identity.ServerUri), scenario.Clock);
+            var storageRoot = Path.Combine(database.DirectoryPath, "storage");
+            var staging = Path.Combine(database.DirectoryPath, "staging");
+            Directory.CreateDirectory(storageRoot);
+            Directory.CreateDirectory(staging);
+            var storage = new LocalStorageProvider(new(storageRoot));
+            var pipeline = new DatabaseBackupPipeline([database.Backup], [storage], new PassThroughArtifactPreparer(),
+                NullLogger<DatabaseBackupPipeline>.Instance, scenario.Clock);
+            var requests = new BackupTaskRequestFactory(new ScheduleDatabaseCredential(database.Credential), [StagingArea.SameHost(staging)],
+                uploadBandwidth: task => new UploadBandwidthGovernor(client, identities, task.AttemptId, task.LeaseToken, scenario.Clock));
+            var worker = new BackupTaskWorker(client, identities, pipeline, requests, new AgentSoftwareInfo("1.2.3", "linux", null, null),
+                scenario.Clock, NullLogger<BackupTaskWorker>.Instance);
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+            var running = worker.RunAsync(deadline.Token);
+            try
+            {
+                Assert.True(worker.TryPublish(new AgentTaskEnvelope { Id = snapshot.AttemptId.ToString(), Type = "database-backup", Backup = snapshot }));
+                await using var context = fixture.CreatePlatformContext();
+                while (!await context.Set<BackupPlatform.Domain.Backups.TransferCheckpoint>().AnyAsync(
+                    checkpoint => checkpoint.AttemptId == snapshot.AttemptId && checkpoint.VerifiedByteOffset > 0, deadline.Token))
+                    await Task.Delay(20, deadline.Token);
+                Assert.True(await context.UploadBandwidthGrants.AnyAsync(grant => grant.AttemptId == snapshot.AttemptId, deadline.Token));
+                scenario.Clock.Advance(TimeSpan.FromSeconds(1));
+                while (!await context.BackupRunAttempts.AnyAsync(attempt => attempt.Id == snapshot.AttemptId &&
+                    attempt.Status == BackupPlatform.Domain.Backups.BackupStatus.Paused, deadline.Token))
+                    await Task.Delay(20, deadline.Token);
+                var attempt = await context.BackupRunAttempts.AsNoTracking().SingleAsync(a => a.Id == snapshot.AttemptId, deadline.Token);
+                Assert.Equal(BackupPlatform.Domain.Backups.TransferPauseReason.TimeRule, attempt.PauseReason);
+                Assert.Null(attempt.LeaseToken);
+                Assert.Null(attempt.LeaseExpiresAt);
+                Assert.False(await context.UploadBandwidthGrants.AnyAsync(grant => grant.AttemptId == snapshot.AttemptId, deadline.Token));
+                var checkpoint = await context.Set<BackupPlatform.Domain.Backups.TransferCheckpoint>().AsNoTracking()
+                    .SingleAsync(c => c.AttemptId == snapshot.AttemptId, deadline.Token);
+                Assert.True(checkpoint.VerifiedByteOffset > 0);
+                var partial = Assert.Single(Directory.GetFiles(storageRoot, "*.partial", SearchOption.AllDirectories));
+                var artifact = Assert.Single(Directory.GetFiles(staging), path => !path.EndsWith(".json", StringComparison.Ordinal)
+                    && !path.EndsWith(".resume-pin", StringComparison.Ordinal));
+                var retained = await File.ReadAllBytesAsync(partial, deadline.Token);
+                var staged = await File.ReadAllBytesAsync(artifact, deadline.Token);
+                Assert.Equal(checkpoint.VerifiedByteOffset, retained.Length);
+                Assert.True(retained.Length < staged.Length);
+                Assert.Equal(SHA256.HashData(staged.AsSpan(0, retained.Length)), SHA256.HashData(retained));
+                using var detail = await scenario.Admin.GetAsync(scenario.Root + $"/backup-runs/{runId}");
+                Assert.Equal("Paused", AgentWorld.ReadJson(detail).GetProperty("status").GetString());
+            }
+            finally
+            {
+                await deadline.CancelAsync();
+                await running;
+            }
+        }
+        finally { await database.DisposeAsync(); }
+    }
+
+    private sealed class ScheduleIdentity(AgentLocalIdentity identity) : IAgentCredentialStore
+    {
+        public Task<AgentLocalIdentity?> LoadAsync(CancellationToken cancellationToken) => Task.FromResult<AgentLocalIdentity?>(identity);
+        public Task SaveAsync(AgentLocalIdentity value, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task DeleteAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class ScheduleDatabaseCredential(DatabaseCredential credential) : IBackupTaskCredentialResolver
+    {
+        public ValueTask<DatabaseCredential> ResolveAsync(string reference, CancellationToken cancellationToken) => ValueTask.FromResult(credential);
+    }
+
 
     private const long UploadBandwidth_Min = BackupPlatform.Domain.Backups.UploadBandwidth.MinimumBytesPerSecond;
 
     [Theory]
+    [InlineData(0L, HttpStatusCode.BadRequest)]
     [InlineData(1L, HttpStatusCode.BadRequest)]
     [InlineData(UploadBandwidth_Min - 1, HttpStatusCode.BadRequest)]
     [InlineData(BackupPlatform.Domain.Backups.UploadBandwidth.MaximumBytesPerSecond + 1, HttpStatusCode.BadRequest)]

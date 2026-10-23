@@ -102,8 +102,11 @@ Tenant administrators manage weekly profiles through
 `/api/tenants/{tenantId}/bandwidth-profiles` (or `/api/bandwidth-profiles`
 with the tenant context) and assign them using the upload-bandwidth
 `tenant/profile`, `agents/{agentId}/profile`, or `jobs/{jobId}/profile` routes.
-The most specific assignment wins: job, then agent, then tenant. Existing
-static ceilings still apply; outside profile windows the profile adds no limit.
+The most specific assignment wins: job, then agent, then tenant. The selected
+profile replaces all static ceilings, including outside its windows (unlimited).
+Static job, agent and tenant ceilings apply together only without a profile.
+Only a selected tenant profile shares its rate among tenant uploads; job and
+agent profiles use their own scope without taking a tenant share.
 
 Windows use the selected IANA time zone, include their start and exclude their
 end. An end earlier than its start means the following day; equal endpoints
@@ -111,6 +114,15 @@ are invalid. Overlaps are rejected across midnight and the Saturday/Sunday
 week boundary. Both occurrences of a repeated DST hour are evaluated, and a
 skipped hour changes the limit at the actual clock jump. Agent upload-policy
 refreshes are shortened to the next effective transition.
+
+A window's `bytesPerSecond: 0` explicitly pauses transfers; positive rates must
+still meet the normal minimum, and zero is not valid for static ceilings.
+The agent cancels active direct uploads when their policy enters a pause window;
+lease responses also signal schedule pauses for all upload topologies. The
+existing checkpoint and staged artifact are retained, completion records
+`Paused` / `TimeRule`, and the attempt releases its lease. Resume is manual,
+obtains a fresh lease, and pauses again without uploading if the window is
+still active. Leaving a pause window does not automatically resume a run.
 
 ## Run it
 
@@ -292,6 +304,10 @@ Restore uses the original configured reference or another configured root plus a
 relative target directory. The wizard requires a successful precheck and explicit
 confirmation before overwriting. Selected files are manifest/checksum-verified
 before publication; changing the selection or destination invalidates precheck.
+Preserved symlinks must have confined relative targets without intermediate
+symlink components. Link chains are rejected rather than resolved, including
+chains planned by the selected manifest and paths hidden by `.`/`..` normalization.
+All selected links are checked before replacing any destination file.
 
 ## Sealed audit and backup reports
 

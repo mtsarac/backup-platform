@@ -9,8 +9,10 @@ namespace BackupPlatform.UnitTests.Backup;
 
 public sealed class DurableTransferPipelineTests
 {
-    [Fact]
-    public async Task PausePinsExactEncryptedArtifactAcrossANewPipelineAndResumesAtVerifiedOffset()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PausePinsExactEncryptedArtifactAcrossANewPipelineAndResumesAtVerifiedOffset(bool timeRule)
     {
         using var key = RSA.Create(4096);
         using var harness = new PipelineHarness(new EncryptingArtifactPreparer());
@@ -35,14 +37,14 @@ public sealed class DurableTransferPipelineTests
         };
         var request = harness.Request() with
         {
-            AttemptId = Guid.NewGuid(), PauseToken = pause.Token,
+            AttemptId = Guid.NewGuid(), PauseToken = timeRule ? default : pause.Token, TimeRulePauseToken = timeRule ? pause.Token : default,
             Encryption = new ArtifactEncryption(true, [new BpeRecipient(BpeRecipientType.TenantWrap, 1, key)]),
             Destinations = [new(StorageProviderId.Local, harness.Storage, Guid.NewGuid(), true)],
             RecordCheckpointAsync = (checkpoint, _) => { checkpoints.Add(checkpoint); return Task.CompletedTask; }
         };
         var paused = await harness.RunAsync(request);
         Assert.Equal(DatabaseBackupStatus.Paused, paused.Status);
-        Assert.Equal("Operator", paused.PauseReason);
+        Assert.Equal(timeRule ? "TimeRule" : "Operator", paused.PauseReason);
         Assert.Single(harness.Provider.Requests);
         var artifact = Assert.IsType<BackupArtifactInfo>(paused.Artifact);
         var artifactPath = Path.Combine(harness.StagingDirectory, artifact.FileName);
@@ -66,7 +68,7 @@ public sealed class DurableTransferPipelineTests
         harness.Storage.OnVerify = (storageKey, expected) => new(new(StorageProviderId.Local, storageKey), StorageVerificationStatus.Verified,
             StorageVerificationMethod.ReadBack, received.Length, ContentChecksum.Sha256(SHA256.HashData(received.ToArray())));
         var restarted = new DatabaseBackupPipeline([harness.Provider], [harness.Storage], new EncryptingArtifactPreparer(), NullLogger<DatabaseBackupPipeline>.Instance);
-        var resumed = await restarted.RunFullBackupAsync(request with { ResumeTransfer = true, PauseToken = default, Checkpoints = [checkpoints[^1]] }, null, CancellationToken.None);
+        var resumed = await restarted.RunFullBackupAsync(request with { ResumeTransfer = true, PauseToken = default, TimeRulePauseToken = default, Checkpoints = [checkpoints[^1]] }, null, CancellationToken.None);
         Assert.Equal(DatabaseBackupStatus.Succeeded, resumed.Status);
         Assert.Single(harness.Provider.Requests);
         Assert.Equal(originalArtifact, received.ToArray());

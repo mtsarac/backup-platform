@@ -102,6 +102,7 @@ public sealed record BackupTaskLeaseResponse
     public DateTimeOffset LeaseExpiresAt { get; init; }
     public bool CancellationRequested { get; init; }
     public bool PauseRequested { get; init; }
+    public bool TimeRulePauseRequested { get; init; }
 }
 
 public sealed record BackupTaskProgressRequest

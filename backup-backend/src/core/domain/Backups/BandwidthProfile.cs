@@ -194,7 +194,7 @@ public sealed class TransferScheduleWindow
         if (profileId == Guid.Empty) throw new ArgumentException("Profile ID cannot be empty.", nameof(profileId));
         if (!Enum.IsDefined(dayOfWeek)) throw new ArgumentException("Unknown day of week.", nameof(dayOfWeek));
         if (startTime == endTime) throw new ArgumentException("Window startTime and endTime must differ.");
-        UploadBandwidth.Validate(bytesPerSecond);
+        if (bytesPerSecond != 0) UploadBandwidth.Validate(bytesPerSecond);
 
         Id = id;
         ProfileId = profileId;

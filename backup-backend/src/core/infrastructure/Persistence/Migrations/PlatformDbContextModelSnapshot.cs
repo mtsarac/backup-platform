@@ -1956,7 +1956,7 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.ToTable("transfer_schedule_windows", null, t =>
                         {
-                            t.HasCheckConstraint("ck_transfer_schedule_windows_rate", "\"BytesPerSecond\" BETWEEN 16000 AND 100000000000");
+                            t.HasCheckConstraint("ck_transfer_schedule_windows_rate", "\"BytesPerSecond\" = 0 OR \"BytesPerSecond\" BETWEEN 16000 AND 100000000000");
                         });
                 });
 

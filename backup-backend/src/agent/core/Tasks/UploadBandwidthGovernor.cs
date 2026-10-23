@@ -16,22 +16,46 @@ public sealed class UploadBandwidthGovernor(IBackupTaskClient client, IAgentCred
 {
     public async Task<IUploadBandwidthSession> BeginAsync(StorageTopology destination, CancellationToken cancellationToken)
     {
-        if (destination == StorageTopology.AgentDirect)
-            return new PacedSession(await UploadPacer.BeginAsync(new UploadSource(this, Guid.NewGuid()), time, cancellationToken).ConfigureAwait(false));
-        var policy = await FetchAsync(UploadPolicyRequestMode.Observe, Guid.Empty, cancellationToken).ConfigureAwait(false);
-        return new ObservedSession(policy.MinimumBytesPerSecond);
+        if (destination != StorageTopology.AgentDirect)
+        {
+            var observed = await FetchAsync(UploadPolicyRequestMode.Observe, Guid.Empty, cancellationToken).ConfigureAwait(false);
+            if (observed.PauseRequested) throw new TransferPausedException("TimeRule");
+            return new ObservedSession(observed.MinimumBytesPerSecond);
+        }
+        var pause = new CancellationTokenSource();
+        try
+        {
+            using var start = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, pause.Token);
+            var pacer = await UploadPacer.BeginAsync(new UploadSource(this, Guid.NewGuid(), pause), time, start.Token).ConfigureAwait(false);
+            return new PacedSession(pacer, pause);
+        }
+        catch (OperationCanceledException) when (pause.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            pause.Dispose();
+            throw new TransferPausedException("TimeRule");
+        }
+        catch
+        {
+            pause.Dispose();
+            throw;
+        }
     }
 
     /// <summary>One paced upload: it holds its own slice of the tenant limit, whatever else the attempt uploads.</summary>
-    private sealed class UploadSource(UploadBandwidthGovernor owner, Guid uploadId) : IUploadPolicySource
+    private sealed class UploadSource(UploadBandwidthGovernor owner, Guid uploadId, CancellationTokenSource pause) : IUploadPolicySource
     {
-        public Task<UploadPacingPolicy> FetchAsync(bool release, CancellationToken cancellationToken) =>
-            owner.FetchAsync(release ? UploadPolicyRequestMode.Release : UploadPolicyRequestMode.Renew, uploadId, cancellationToken);
+        public async Task<UploadPacingPolicy> FetchAsync(bool release, CancellationToken cancellationToken)
+        {
+            var policy = await owner.FetchAsync(release ? UploadPolicyRequestMode.Release : UploadPolicyRequestMode.Renew, uploadId, cancellationToken).ConfigureAwait(false);
+            if (!release && policy.PauseRequested) pause.Cancel();
+            return new UploadPacingPolicy(policy.EffectiveBytesPerSecond, !policy.PauseRequested && policy.TenantShareBytesPerSecond is not null,
+                policy.MinimumBytesPerSecond, TimeSpan.FromSeconds(Math.Max(1, policy.RefreshAfterSeconds)), TimeSpan.FromSeconds(Math.Max(1, policy.ValidForSeconds)));
+        }
     }
 
     private enum UploadPolicyRequestMode { Renew, Release, Observe }
 
-    private async Task<UploadPacingPolicy> FetchAsync(UploadPolicyRequestMode mode, Guid uploadId, CancellationToken cancellationToken)
+    private async Task<UploadPolicyResponse> FetchAsync(UploadPolicyRequestMode mode, Guid uploadId, CancellationToken cancellationToken)
     {
         var identity = await identities.LoadAsync(cancellationToken).ConfigureAwait(false)
             ?? throw new UploadPolicyException("The local identity is unavailable, so the upload limits cannot be obtained.");
@@ -40,16 +64,19 @@ public sealed class UploadBandwidthGovernor(IBackupTaskClient client, IAgentCred
         if (!result.IsSuccess)
             throw new UploadPolicyException("The upload limits could not be obtained from the backend.",
                 result.Failure.Kind is AgentBackendFailureKind.Transient or AgentBackendFailureKind.RateLimited);
-        var policy = result.Value;
-        return new UploadPacingPolicy(policy.EffectiveBytesPerSecond, policy.TenantShareBytesPerSecond is not null, policy.MinimumBytesPerSecond,
-            TimeSpan.FromSeconds(Math.Max(1, policy.RefreshAfterSeconds)), TimeSpan.FromSeconds(Math.Max(1, policy.ValidForSeconds)));
+        return result.Value;
     }
 
-    private sealed class PacedSession(UploadPacer pacer) : IUploadBandwidthSession
+    private sealed class PacedSession(UploadPacer pacer, CancellationTokenSource pause) : IUploadBandwidthSession
     {
+        public CancellationToken TimeRulePauseToken => pause.Token;
         public Stream Wrap(Stream source) => pacer.Wrap(source);
         public TimeSpan DeadlineAllowance(long sizeBytes) => UploadPolicyResponse.DeadlineAllowance(sizeBytes, pacer.MinimumBytesPerSecond);
-        public ValueTask DisposeAsync() => pacer.DisposeAsync();
+        public async ValueTask DisposeAsync()
+        {
+            await pacer.DisposeAsync().ConfigureAwait(false);
+            pause.Dispose();
+        }
     }
 
     private sealed class ObservedSession(long? minimumBytesPerSecond) : IUploadBandwidthSession
