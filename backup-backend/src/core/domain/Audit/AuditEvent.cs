@@ -52,6 +52,8 @@ public static class AuditActions
     public const string BackupRunTriggered = "backup_run.triggered";
     public const string BackupRunRetryRequested = "backup_run.retry_requested";
     public const string BackupRunCancelRequested = "backup_run.cancel_requested";
+    public const string BackupRunPauseRequested = "backup_run.pause_requested";
+    public const string BackupRunResumed = "backup_run.resumed";
     public const string BackupRunCompleted = "backup_run.completed";
     public const string BackupRunAttemptCompleted = "backup_run.attempt_completed";
     public const string BackupRunSizeAnomaly = "backup_run.size_anomaly";

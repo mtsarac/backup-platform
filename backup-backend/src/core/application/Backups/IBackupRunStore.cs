@@ -88,7 +88,7 @@ public interface IBackupRunStore
     Task<BackupRun?> RequestCancellationAsync(TenantId tenantId, Guid runId, DateTimeOffset now, CancellationToken cancellationToken, UserId? actor = null);
     /// <summary>Operator retry: a new attempt on the same run, immediately, within the policy's attempt budget. Not related to the manual-start Idempotency-Key.</summary>
     Task<BackupRetryResult> RetryRunAsync(TenantId tenantId, Guid runId, DateTimeOffset now, CancellationToken cancellationToken, UserId? actor = null);
-    Task<BackupMutationResult> SetPauseAsync(TenantId tenantId, Guid runId, bool resume, DateTimeOffset now, CancellationToken cancellationToken);
+    Task<BackupMutationResult> SetPauseAsync(TenantId tenantId, Guid runId, bool resume, DateTimeOffset now, CancellationToken cancellationToken, UserId? actor = null);
     Task<IReadOnlyList<TransferCheckpoint>> GetCheckpointsAsync(TenantId tenantId, Guid attemptId, CancellationToken cancellationToken);
     Task<TenantId?> FindRunTenantAsync(Guid runId, CancellationToken cancellationToken);
     /// <summary>

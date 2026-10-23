@@ -84,6 +84,16 @@ public sealed class UploadBandwidthApiIntegrationTests(PostgreSqlFixture fixture
         }
     }
     [Fact]
+    public async Task Bandwidth_profiles_exist_only_under_the_tenant_route()
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture);
+        using var tenantScoped = await scenario.Admin.GetAsync(scenario.Root + "/bandwidth-profiles");
+        Assert.Equal(HttpStatusCode.OK, tenantScoped.StatusCode);
+        using var tenantless = await scenario.Admin.GetAsync("/api/bandwidth-profiles");
+        Assert.Equal(HttpStatusCode.NotFound, tenantless.StatusCode);
+    }
+
+    [Fact]
     public async Task Bandwidth_profiles_can_be_created_listed_assigned_and_deleted()
     {
         await using var scenario = await BackupApiScenario.CreateAsync(fixture);

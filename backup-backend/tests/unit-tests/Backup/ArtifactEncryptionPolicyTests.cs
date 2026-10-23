@@ -342,7 +342,7 @@ public sealed class ArtifactEncryptionPolicyTests
         public BackupCompletion? Completed;
         public Task<IReadOnlyList<TransferCheckpoint>> GetCheckpointsAsync(TenantId tenantId, Guid attemptId, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<TransferCheckpoint>>([]);
         public Task<TenantId?> FindRunTenantAsync(Guid runId, CancellationToken cancellationToken) => Task.FromResult<TenantId?>(run.Id == runId ? run.TenantId : null);
-        public Task<BackupMutationResult> SetPauseAsync(TenantId tenantId, Guid runId, bool resume, DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<BackupMutationResult> SetPauseAsync(TenantId tenantId, Guid runId, bool resume, DateTimeOffset now, CancellationToken cancellationToken, UserId? actor = null) => throw new NotSupportedException();
         public Task<BackupClaim?> ClaimNextAsync(TenantId tenantId, AgentId agentId, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken) =>
             Task.FromResult<BackupClaim?>(new BackupClaim(run, run.CurrentAttempt));
         public Task<BackupClaim?> GetAttemptAsync(TenantId tenantId, AgentId agentId, Guid attemptId, CancellationToken cancellationToken) =>

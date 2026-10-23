@@ -217,12 +217,12 @@ public static class BackupEndpoints
         return run is null ? Results.NotFound() : Results.Ok(run);
     }
 
-    private static Task<IResult> PauseAsync(Guid runId, ITenantContext tenant, IBackupRunStore store, TimeProvider time, CancellationToken cancellationToken) =>
-        SetPauseAsync(runId, tenant, store, time, false, cancellationToken);
-    private static Task<IResult> ResumeAsync(Guid runId, ITenantContext tenant, IBackupRunStore store, TimeProvider time, CancellationToken cancellationToken) =>
-        SetPauseAsync(runId, tenant, store, time, true, cancellationToken);
-    private static async Task<IResult> SetPauseAsync(Guid runId, ITenantContext tenant, IBackupRunStore store, TimeProvider time, bool resume, CancellationToken cancellationToken) =>
-        await store.SetPauseAsync(tenant.TenantId!, runId, resume, time.GetUtcNow(), cancellationToken) switch
+    private static Task<IResult> PauseAsync(Guid runId, ITenantContext tenant, IBackupRunStore store, TimeProvider time, ICurrentUser user, CancellationToken cancellationToken) =>
+        SetPauseAsync(runId, tenant, store, time, user, false, cancellationToken);
+    private static Task<IResult> ResumeAsync(Guid runId, ITenantContext tenant, IBackupRunStore store, TimeProvider time, ICurrentUser user, CancellationToken cancellationToken) =>
+        SetPauseAsync(runId, tenant, store, time, user, true, cancellationToken);
+    private static async Task<IResult> SetPauseAsync(Guid runId, ITenantContext tenant, IBackupRunStore store, TimeProvider time, ICurrentUser user, bool resume, CancellationToken cancellationToken) =>
+        await store.SetPauseAsync(tenant.TenantId!, runId, resume, time.GetUtcNow(), cancellationToken, user.UserId) switch
         {
             BackupMutationResult.Accepted => Results.Ok(),
             BackupMutationResult.NotFound => Results.NotFound(),
@@ -230,17 +230,17 @@ public static class BackupEndpoints
         };
 
     private static Task<IResult> PauseBrowserAsync(Guid runId, IBackupRunStore store, BackupPlatform.Tenancy.TenantResolutionService resolution,
-        TimeProvider time, CancellationToken cancellationToken) => SetBrowserPauseAsync(runId, store, resolution, time, false, cancellationToken);
+        TimeProvider time, ICurrentUser user, CancellationToken cancellationToken) => SetBrowserPauseAsync(runId, store, resolution, time, user, false, cancellationToken);
     private static Task<IResult> ResumeBrowserAsync(Guid runId, IBackupRunStore store, BackupPlatform.Tenancy.TenantResolutionService resolution,
-        TimeProvider time, CancellationToken cancellationToken) => SetBrowserPauseAsync(runId, store, resolution, time, true, cancellationToken);
+        TimeProvider time, ICurrentUser user, CancellationToken cancellationToken) => SetBrowserPauseAsync(runId, store, resolution, time, user, true, cancellationToken);
     private static async Task<IResult> SetBrowserPauseAsync(Guid runId, IBackupRunStore store, BackupPlatform.Tenancy.TenantResolutionService resolution,
-        TimeProvider time, bool resume, CancellationToken cancellationToken)
+        TimeProvider time, ICurrentUser user, bool resume, CancellationToken cancellationToken)
     {
         var tenantId = await store.FindRunTenantAsync(runId, cancellationToken);
         if (tenantId is null || await resolution.ResolveAsync(tenantId, cancellationToken) is not { } membership ||
             membership.Role is not (BackupPlatform.Domain.Tenancy.TenantRole.Owner or BackupPlatform.Domain.Tenancy.TenantRole.Admin or BackupPlatform.Domain.Tenancy.TenantRole.Operator))
             return Results.NotFound();
-        return await store.SetPauseAsync(tenantId, runId, resume, time.GetUtcNow(), cancellationToken) switch
+        return await store.SetPauseAsync(tenantId, runId, resume, time.GetUtcNow(), cancellationToken, user.UserId) switch
         {
             BackupMutationResult.Accepted => Results.Ok(),
             BackupMutationResult.NotFound => Results.NotFound(),

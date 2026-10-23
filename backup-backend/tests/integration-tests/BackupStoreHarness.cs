@@ -122,6 +122,8 @@ internal sealed class BackupStoreHarness(PostgreSqlFixture database)
 
     public static Completion Cancelled() => new("Cancelled", null, null);
 
+    public static Completion Paused() => new("Paused", "Operator", null);
+
     public static Completion Success(DateTimeOffset createdAt) => new("Succeeded", null, new BackupArtifactResult(100, SourceHash, ArtifactHash,
         "sha256", createdAt, "{\"DatabaseName\":\"Database\"}", "{\"CopyOnly\":true}",
         [new BackupReplicaResult("local", "default", "tenant/job/run/attempt/backup.bak", 100, ArtifactHash, "sha256", "Verified", "ReadBack", createdAt, createdAt)]));

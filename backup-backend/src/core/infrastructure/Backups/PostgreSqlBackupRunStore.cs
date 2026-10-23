@@ -193,7 +193,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         await transaction.CommitAsync(cancellationToken);
         return run;
     }
-    public async Task<BackupMutationResult> SetPauseAsync(TenantId tenantId, Guid runId, bool resume, DateTimeOffset now, CancellationToken cancellationToken)
+    public async Task<BackupMutationResult> SetPauseAsync(TenantId tenantId, Guid runId, bool resume, DateTimeOffset now, CancellationToken cancellationToken, UserId? actor = null)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         var owner = await context.BackupRuns.AsNoTracking().Where(x => x.TenantId == tenantId && x.Id == runId).Select(x => x.AgentId).SingleOrDefaultAsync(cancellationToken);
@@ -206,6 +206,10 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
             if (resume) run.Resume(now); else run.RequestPause();
         }
         catch (InvalidOperationException) { return BackupMutationResult.Conflict; }
+        context.AuditEvents.Add(AuditEvent.Record(
+            now, actor ?? UserId.System, BackupAudit.ActorKind(actor), resume ? AuditActions.BackupRunResumed : AuditActions.BackupRunPauseRequested, tenantId,
+            "backup_run", runId.ToString("D"),
+            new Dictionary<string, object?> { ["jobId"] = run.JobId.ToString("D"), ["runId"] = run.Id.ToString("D"), ["attemptId"] = run.CurrentAttempt.Id.ToString("D"), ["result"] = resume ? "resumed" : "requested" }));
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return BackupMutationResult.Accepted;

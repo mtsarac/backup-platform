@@ -99,8 +99,7 @@ make a downgrade pass.
 ### Scheduled upload bandwidth
 
 Tenant administrators manage weekly profiles through
-`/api/tenants/{tenantId}/bandwidth-profiles` (or `/api/bandwidth-profiles`
-with the tenant context) and assign them using the upload-bandwidth
+`/api/tenants/{tenantId}/bandwidth-profiles` and assign them using the upload-bandwidth
 `tenant/profile`, `agents/{agentId}/profile`, or `jobs/{jobId}/profile` routes.
 The most specific assignment wins: job, then agent, then tenant. The selected
 profile replaces all static ceilings, including outside its windows (unlimited).
@@ -123,6 +122,11 @@ existing checkpoint and staged artifact are retained, completion records
 `Paused` / `TimeRule`, and the attempt releases its lease. Resume is manual,
 obtains a fresh lease, and pauses again without uploading if the window is
 still active. Leaving a pause window does not automatically resume a run.
+
+Operators pause and resume a run with `POST /api/tenants/{tenantId}/backup-runs/{runId}/pause` and `/resume`
+(also `POST /api/backups/runs/{runId}/pause` and `/resume`, which resolve the tenant from the run). Each
+request writes a `backup_run.pause_requested` or `backup_run.resumed` audit event with the acting user
+in the same transaction as the change.
 
 ## Run it
 

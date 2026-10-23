@@ -268,6 +268,37 @@ public sealed class BackupAuditSafetyIntegrationTests(PostgreSqlFixture fixture)
         Assert.Equal(1, await kit.CountAttemptsAsync(run.Id));
     }
 
+    [Fact]
+    public async Task PauseAndResumeRecordTheHumanActorAndRejectedRequestsRecordNothing()
+    {
+        var kit = new BackupStoreHarness(fixture);
+        var agent = await kit.AddAgentAsync();
+        var actor = await AddActorAsync();
+        var job = await kit.AddJobAsync(agent);
+        var store = kit.Store(BackupStoreHarness.Limits());
+        var run = await kit.StartRunAsync(store, job, "pause-audit", Now);
+        var claim = (await BackupStoreHarness.ClaimAsync(store, agent, Now))!;
+        await BackupStoreHarness.StartAttemptAsync(store, claim, Now);
+
+        Assert.Equal(BackupMutationResult.Conflict, await store.SetPauseAsync(agent.TenantId, run.Id, true, Now.AddSeconds(1), default, actor));
+        Assert.DoesNotContain(await EventsAsync(agent.TenantId), e => e.Action is AuditActions.BackupRunPauseRequested or AuditActions.BackupRunResumed);
+
+        Assert.Equal(BackupMutationResult.Accepted, await store.SetPauseAsync(agent.TenantId, run.Id, false, Now.AddSeconds(2), default, actor));
+        await BackupStoreHarness.CompleteAsync(store, claim, BackupStoreHarness.Paused(), Now.AddSeconds(3));
+        Assert.Equal(BackupMutationResult.Accepted, await store.SetPauseAsync(agent.TenantId, run.Id, true, Now.AddSeconds(4), default, actor));
+
+        var events = await EventsAsync(agent.TenantId);
+        var paused = Assert.Single(events, e => e.Action == AuditActions.BackupRunPauseRequested);
+        var resumed = Assert.Single(events, e => e.Action == AuditActions.BackupRunResumed);
+        foreach (var entry in new[] { paused, resumed })
+        {
+            Assert.Equal(actor, entry.ActorUserId);
+            Assert.Equal(AuditActorKind.User, entry.ActorKind);
+            Assert.Equal(run.Id.ToString("D"), entry.TargetId);
+            Assert.Equal(run.Id.ToString("D"), Details(entry).GetProperty("runId").GetString());
+        }
+    }
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(true, false)]

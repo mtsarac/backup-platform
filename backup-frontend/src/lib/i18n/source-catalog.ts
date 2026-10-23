@@ -916,6 +916,8 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Yedekleme çalıştırması başlatıldı": {"tr":"Yedekleme çalıştırması başlatıldı","en":"Backup run started"},
   "Yedekleme tekrar denemesi istendi": {"tr":"Yedeklemenin yeniden denenmesi istendi","en":"Backup retry requested"},
   "Yedekleme iptali istendi": {"tr":"Yedeklemenin iptal edilmesi istendi","en":"Backup cancellation requested"},
+  "Yedekleme duraklatma istendi": {"tr":"Yedeklemenin duraklatılması istendi","en":"Backup pause requested"},
+  "Yedekleme devam ettirildi": {"tr":"Yedekleme devam ettirildi","en":"Backup resumed"},
   "Yedekleme tamamlandı": {"tr":"Yedekleme tamamlandı","en":"Backup completed"},
   "Yedekleme silme talebi oluşturuldu": {"tr":"Yedekleme silme talebi oluşturuldu","en":"Backup deletion request created"},
   "Yedekleme silme talebi iptal edildi": {"tr":"Yedekleme silme talebi iptal edildi","en":"Backup deletion request canceled"},
