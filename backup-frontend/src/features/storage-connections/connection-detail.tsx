@@ -45,6 +45,7 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
   const { data: capacity, isPending } = useTenantConnectionCapacity(connection.id)
   const probe = useProbeTenantConnectionCapacity(connection.id)
   const awaitingAgent = capacity?.status === 'Pending'
+  const notMeasurable = capacity?.status === 'NotMeasurable'
 
   const hasMetrics = capacity && !awaitingAgent && capacity.status !== 'CapacityUnavailable' && capacity.totalBytes != null
   const percentUsed = hasMetrics && capacity.totalBytes! > 0
@@ -67,7 +68,7 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
         <Button
           variant="outline"
           size="sm"
-          disabled={probe.isPending || awaitingAgent}
+          disabled={probe.isPending || awaitingAgent || notMeasurable}
           onClick={() => probe.mutate()}
         >
           {probe.isPending || awaitingAgent ? tx("Sorgulanıyor…") : tx("Kapasiteyi Sorgula")}
@@ -76,6 +77,11 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
     >
       {awaitingAgent && (
         <p role="status" className="text-sm text-text-muted">{tx("Kapasite sorgusu sırada; Agent yanıtı bekleniyor.")}</p>
+      )}
+      {notMeasurable && (
+        <Notice tone="info" title={tx("Kapasite ölçülemiyor")}>
+          {tx("Bu depolama türü kapasite veya kota bilgisi sunmadığı için doluluk ölçülemez.")}
+        </Notice>
       )}
       {capacity?.status === 'CapacityUnavailable' && (
         <Notice tone="warning" title={tx("Kapasite bilgisi alınamadı")}>
@@ -120,7 +126,7 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
             {tx("Son sorgulama: {0}", { "0": agentDate(capacity.reportedAt) })}
           </p>
         </div>
-      ) : !awaitingAgent && capacity?.status !== 'CapacityUnavailable' ? (
+      ) : !awaitingAgent && !notMeasurable && capacity?.status !== 'CapacityUnavailable' ? (
         <p className="text-sm text-text-muted">
           {isPending ? tx("Kapasite bilgisi yükleniyor…") : tx("Kapasite bilgisi henüz sorgulanmadı. “Kapasiteyi Sorgula” düğmesini kullanarak güncel durumu alabilirsiniz.")}
         </p>

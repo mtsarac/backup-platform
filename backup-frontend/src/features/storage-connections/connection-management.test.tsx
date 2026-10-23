@@ -120,6 +120,18 @@ describe('Storage connections list and detail', () => {
     expect(screen.getByRole('button', { name: 'Kapasiteyi Sorgula' })).toBeEnabled()
   })
 
+  it('explains that S3 and SMB capacity cannot be measured instead of asking for an Agent', async () => {
+    vi.mocked(api.getTenantConnectionCapacity).mockResolvedValue({
+      connectionId: 'conn-local', totalBytes: null, usedBytes: null, freeBytes: null,
+      status: 'NotMeasurable', reportedAt: '2026-10-21T10:00:00Z',
+    })
+    mount(detail('conn-local'))
+    expect(await screen.findByText('Kapasite ölçülemiyor')).toBeInTheDocument()
+    expect(screen.queryByText('Kapasite bilgisi alınamadı')).not.toBeInTheDocument()
+    expect(screen.queryByText('Doluluk Oranı')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Kapasiteyi Sorgula' })).toBeDisabled()
+  })
+
   it.each([
     { used: 79_900, status: 'Available' as const, tone: 'bg-primary' },
     { used: 80_000, status: 'Warning' as const, tone: 'bg-warning' },

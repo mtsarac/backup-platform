@@ -5,6 +5,8 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Sorgulanıyor…": {"tr":"Sorgulanıyor…","en":"Probing…"},
   "Kapasiteyi Sorgula": {"tr":"Kapasiteyi Sorgula","en":"Probe Capacity"},
   "Kapasite bilgisi alınamadı": {"tr":"Kapasite bilgisi alınamadı","en":"Capacity unavailable"},
+  "Kapasite ölçülemiyor": {"tr":"Kapasite ölçülemiyor","en":"Capacity cannot be measured"},
+  "Bu depolama türü kapasite veya kota bilgisi sunmadığı için doluluk ölçülemez.": {"tr":"Bu depolama türü kapasite veya kota bilgisi sunmadığı için doluluk ölçülemez.","en":"This storage type reports no capacity or quota, so how full it is cannot be measured."},
   "Depolama hedefine erişebilen aktif bir Agent veya bağlantı bulunamadı.": {"tr":"Depolama hedefine erişebilen aktif bir Agent veya bağlantı bulunamadı.","en":"No active Agent or connection can reach the storage destination."},
   "Toplam Alan": {"tr":"Toplam Alan","en":"Total Space"},
   "Kullanılan Alan": {"tr":"Kullanılan Alan","en":"Used Space"},

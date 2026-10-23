@@ -79,14 +79,22 @@ back to a different host. SFTP may use any authorized compatible online Agent.
 Named Local volumes resolve only through the Agent's configured local roots.
 SFTP private-network access requires the operator's narrow
 `Agent:Backup:Sftp:AllowedPrivateNetworks` allowlist. An SFTP server without
-usable statvfs reports CapacityUnavailable; the Agent never substitutes its own
-host filesystem's capacity.
+usable statvfs falls back to the server's own `df -Pk` over an SSH exec channel
+(same pinned host key); if that fails too it reports CapacityUnavailable. The
+Agent never substitutes its own host filesystem's capacity.
+
+S3 and SMB expose no capacity or quota to the platform, so their probe and GET
+return `status: "NotMeasurable"` immediately: nothing is queued to an Agent and
+no snapshot is stored. Capacity whose total or used/free amount is unknown is
+never evaluated as Available; it is CapacityUnavailable.
 
 Capacity and health reads use the same current routing/liveness checks. Expired
 or retry-exhausted tasks are unavailable immediately, without GET-side writes;
 the periodic worker persists terminal task state. Capacity GET returns the latest
 30 measurements, newest first, with `historyLimit: 30`. Snapshot, threshold audit,
 notification condition/event, and outbox delivery commit atomically.
+Snapshots older than 90 days are pruned in the same transaction as each new snapshot; a
+connection's newest snapshot and its newest measured snapshot are always kept.
 
 Downgrading `StorageCapacityTaskTransport` requires snapshot rows to be
 representable by the old schema: only Available or CapacityUnavailable. If any

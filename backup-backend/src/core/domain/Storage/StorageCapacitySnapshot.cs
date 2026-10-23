@@ -9,15 +9,24 @@ public static class StorageCapacityStatus
     public const string Warning = "Warning";
     public const string Critical = "Critical";
     public const string CapacityUnavailable = "CapacityUnavailable";
+    /// <summary>
+    /// Response-only status for providers that expose no capacity (S3 buckets and SMB shares report no quota to the platform).
+    /// It describes the provider, not a measurement, so it is never stored in a snapshot.
+    /// </summary>
+    public const string NotMeasurable = "NotMeasurable";
+
+    /// <summary>Capacity snapshots older than this are pruned; the newest snapshot and the newest measured one of a connection are always kept.</summary>
+    public static readonly TimeSpan SnapshotRetention = TimeSpan.FromDays(90);
 
     public const double WarningThresholdRatio = 0.80;
     public const double CriticalThresholdRatio = 0.90;
 
+    /// <summary>Without a known total and a known used or free amount nothing can be said about fullness: that is CapacityUnavailable, never Available.</summary>
     public static string Evaluate(long? totalBytes, long? usedBytes, long? freeBytes)
     {
-        if (totalBytes is null or <= 0) return Available;
+        if (totalBytes is null or <= 0) return CapacityUnavailable;
         var effectiveUsed = usedBytes ?? (freeBytes.HasValue ? totalBytes.Value - freeBytes.Value : (long?)null);
-        if (effectiveUsed is null) return Available;
+        if (effectiveUsed is null) return CapacityUnavailable;
 
         var ratio = (double)effectiveUsed.Value / totalBytes.Value;
         if (ratio >= CriticalThresholdRatio) return Critical;

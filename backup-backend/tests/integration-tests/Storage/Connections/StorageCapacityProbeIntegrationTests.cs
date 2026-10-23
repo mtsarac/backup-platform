@@ -107,6 +107,80 @@ public sealed class StorageCapacityProbeIntegrationTests(PostgreSqlFixture fixtu
         }
     }
 
+    [Theory]
+    [InlineData("s3")]
+    [InlineData("smb")]
+    public async Task S3AndSmbProbe_ReportNotMeasurableAndStoreNothing(string provider)
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var setup = await world.CreateTenantAsync();
+        var connectionId = await AddConnectionAsync(world, setup, provider, new());
+
+        using var probe = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/v1/storage/connections/{connectionId}/probe");
+        Assert.Equal(HttpStatusCode.OK, probe.StatusCode);
+        Assert.Equal("NotMeasurable", AgentWorld.ReadJson(probe).GetProperty("status").GetString());
+        using var read = await setup.Admin.GetAsync($"/api/v1/storage/connections/{connectionId}/capacity");
+        Assert.Equal("NotMeasurable", AgentWorld.ReadJson(read).GetProperty("status").GetString());
+
+        await using var db = fixture.CreatePlatformContext();
+        Assert.Empty(await db.StorageCapacitySnapshots.Where(snapshot => snapshot.ConnectionId == connectionId).ToListAsync());
+    }
+
+    [Fact]
+    public async Task SavingASnapshot_PrunesOldOnesButKeepsTheLatestAndTheLatestMeasured()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture, configureServices: services =>
+        {
+            services.RemoveAll<IGoogleDriveCapacityClient>();
+            services.AddSingleton<IGoogleDriveCapacityClient>(new FakeGoogleDriveCapacityClient(100, 10, 90));
+        });
+        var setup = await world.CreateTenantAsync();
+        var connectionId = await AddConnectionAsync(world, setup, StorageProviderTypes.GoogleDrive, new() { ["folderId"] = "folder-123" });
+        var now = world.Clock.GetUtcNow();
+        var tooOldMeasured = StorageCapacitySnapshot.AvailableResult(setup.Tenant.Id, connectionId, 100, 1, 99, now.AddDays(-200));
+        var tooOldUnavailable = StorageCapacitySnapshot.UnavailableResult(setup.Tenant.Id, connectionId, now.AddDays(-150), "old");
+        var recent = StorageCapacitySnapshot.AvailableResult(setup.Tenant.Id, connectionId, 100, 2, 98, now.AddDays(-5));
+        await using (var db = fixture.CreatePlatformContext())
+        {
+            db.StorageCapacitySnapshots.AddRange(tooOldMeasured, tooOldUnavailable, recent);
+            await db.SaveChangesAsync();
+        }
+
+        using var probe = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/v1/storage/connections/{connectionId}/probe");
+        Assert.Equal(HttpStatusCode.OK, probe.StatusCode);
+
+        await using var check = fixture.CreatePlatformContext();
+        var kept = await check.StorageCapacitySnapshots.Where(snapshot => snapshot.ConnectionId == connectionId).Select(snapshot => snapshot.Id).ToListAsync();
+        Assert.DoesNotContain(tooOldMeasured.Id, kept);
+        Assert.DoesNotContain(tooOldUnavailable.Id, kept);
+        Assert.Contains(recent.Id, kept);
+        Assert.Equal(2, kept.Count);
+    }
+
+    [Fact]
+    public async Task PruningNeverRemovesTheOnlyMeasuredSnapshotWhenTheLatestProbeFailed()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var setup = await world.CreateTenantAsync();
+        var connectionId = await AddConnectionAsync(world, setup, StorageProviderTypes.GoogleDrive, new() { ["folderId"] = "folder-123" });
+        var now = world.Clock.GetUtcNow();
+        var oldMeasured = StorageCapacitySnapshot.AvailableResult(setup.Tenant.Id, connectionId, 100, 95, 5, now.AddDays(-200));
+        await using (var db = fixture.CreatePlatformContext())
+        {
+            db.StorageCapacitySnapshots.Add(oldMeasured);
+            await db.SaveChangesAsync();
+        }
+
+        // No Google Drive client is configured here, so this probe is stored as CapacityUnavailable.
+        using var probe = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/v1/storage/connections/{connectionId}/probe");
+        Assert.Equal("CapacityUnavailable", AgentWorld.ReadJson(probe).GetProperty("status").GetString());
+
+        await using var check = fixture.CreatePlatformContext();
+        var kept = await check.StorageCapacitySnapshots.Where(snapshot => snapshot.ConnectionId == connectionId).ToListAsync();
+        Assert.Equal(2, kept.Count);
+        Assert.Contains(kept, snapshot => snapshot.Id == oldMeasured.Id);
+    }
+
     [Fact]
     public async Task AgentLocalDiskProbe_QueuesAuthenticatedTask_RealWorkerMeasuresRequestedFilesystem()
     {

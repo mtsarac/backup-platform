@@ -20,10 +20,11 @@ public sealed class StorageCapacityProbeService(
     public async Task<StorageCapacityResponse?> GetCapacityAsync(TenantId tenantId, Guid connectionId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(tenantId);
+        var connection = await connectionStore.FindAsync(connectionId, tenantId, cancellationToken).ConfigureAwait(false);
+        if (connection is not null && IsNotMeasurable(connection.Connection.ProviderType)) return NotMeasurable(connectionId);
         var pending = await taskQueue.GetPendingAsync(tenantId, connectionId, _time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
         var snapshots = await snapshotStore.GetHistoryAsync(tenantId, connectionId, StorageCapacityResponse.MaximumHistory, cancellationToken).ConfigureAwait(false);
         var response = pending ?? (snapshots.Count == 0 ? null : StorageCapacityResponse.From(snapshots[0]));
-        var connection = await connectionStore.FindAsync(connectionId, tenantId, cancellationToken).ConfigureAwait(false);
         if (connection is not null && pending is null && snapshots.Count > 0
             && snapshots[0].Status != StorageCapacityStatus.CapacityUnavailable
             && !await taskQueue.CanUseSnapshotAsync(tenantId, connectionId, _time.GetUtcNow(), cancellationToken).ConfigureAwait(false))
@@ -51,6 +52,7 @@ public sealed class StorageCapacityProbeService(
 
         var connection = record.Connection;
         var now = _time.GetUtcNow();
+        if (IsNotMeasurable(connection.ProviderType)) return NotMeasurable(connectionId);
         if (!connection.EffectiveEnabled)
         {
             var unavailable = StorageCapacitySnapshot.UnavailableResult(tenantId, connectionId, now, "Storage connection is disabled.");
@@ -92,6 +94,17 @@ public sealed class StorageCapacityProbeService(
         await snapshotStore.SaveAsync(unsupportedSnapshot, cancellationToken).ConfigureAwait(false);
         return StorageCapacityResponse.From(unsupportedSnapshot);
     }
+
+    // An S3 bucket has no quota and an SMB share's free space is not exposed to the platform, so there is nothing to measure or to store.
+    private static bool IsNotMeasurable(string providerType) =>
+        string.Equals(providerType, StorageProviderTypes.S3, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(providerType, StorageProviderTypes.Smb, StringComparison.OrdinalIgnoreCase);
+
+    private StorageCapacityResponse NotMeasurable(Guid connectionId) => new()
+    {
+        ConnectionId = connectionId, Status = StorageCapacityStatus.NotMeasurable, ReportedAt = _time.GetUtcNow(),
+        ErrorMessage = "This storage type does not report capacity, so it cannot be measured."
+    };
 
     private async Task<StorageCapacityResponse> ProbeGoogleDriveAsync(
         TenantId tenantId, StorageConnection connection, DateTimeOffset now, CancellationToken cancellationToken)

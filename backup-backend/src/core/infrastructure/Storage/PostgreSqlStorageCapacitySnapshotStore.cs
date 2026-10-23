@@ -58,6 +58,7 @@ public sealed class PostgreSqlStorageCapacitySnapshotStore(DbContextOptions<Plat
                 .OrderByDescending(s => s.ReportedAt).ThenByDescending(s => s.Id).FirstOrDefaultAsync(cancellationToken);
         db.StorageCapacitySnapshots.Add(snapshot);
         await db.SaveChangesAsync(cancellationToken);
+        await PruneAsync(db, snapshot, cancellationToken);
         if (!measured) return;
         var status = StorageCapacityStatus.Evaluate(snapshot.TotalBytes, snapshot.UsedBytes, snapshot.FreeBytes);
         var previousStatus = previous is null ? null : StorageCapacityStatus.Evaluate(previous.TotalBytes, previous.UsedBytes, previous.FreeBytes);
@@ -74,5 +75,18 @@ public sealed class PostgreSqlStorageCapacitySnapshotStore(DbContextOptions<Plat
         }
         var observations = await PostgreSqlNotificationObservationSource.CollectStorageCapacityAsync(db, snapshot.TenantId, cancellationToken);
         await notifications.ApplyAsync(session, [new ObservationSet(NotificationEventTypes.StorageCapacityCritical, true, observations)], time.GetUtcNow(), cancellationToken);
+    }
+
+    /// <summary>Drops this connection's snapshots past the retention window, always keeping the one just saved and the newest measured one.</summary>
+    private static async Task PruneAsync(PlatformDbContext db, StorageCapacitySnapshot saved, CancellationToken cancellationToken)
+    {
+        var cutoff = saved.ReportedAt - StorageCapacityStatus.SnapshotRetention;
+        var newestMeasured = saved.Status != StorageCapacityStatus.CapacityUnavailable ? saved.Id
+            : await db.StorageCapacitySnapshots.AsNoTracking()
+                .Where(s => s.TenantId == saved.TenantId && s.ConnectionId == saved.ConnectionId && s.Status != StorageCapacityStatus.CapacityUnavailable)
+                .OrderByDescending(s => s.ReportedAt).ThenByDescending(s => s.Id).Select(s => s.Id).FirstOrDefaultAsync(cancellationToken);
+        await db.StorageCapacitySnapshots
+            .Where(s => s.TenantId == saved.TenantId && s.ConnectionId == saved.ConnectionId && s.ReportedAt < cutoff && s.Id != saved.Id && s.Id != newestMeasured)
+            .ExecuteDeleteAsync(cancellationToken);
     }
 }
