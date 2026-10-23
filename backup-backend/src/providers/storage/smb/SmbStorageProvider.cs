@@ -23,16 +23,18 @@ public sealed record SmbStorageOptions(string Host, string Share, Guid TenantId,
 }
 
 public sealed class SmbStorageProvider(SmbStorageOptions configuration,
-    Func<CancellationToken, ValueTask<SmbCredential>> credentials, IWindowsNetworkSession? windowsSession) : IStorageProvider
+    Func<CancellationToken, ValueTask<SmbCredential>> credentials, IWindowsNetworkSession? windowsSession,
+    Func<string, string[], CancellationToken, Task>? runCommand = null) : IStorageProvider
 {
     private readonly SmbStorageOptions _options = configuration.Validate();
+    private readonly Func<string, string[], CancellationToken, Task> _run = runCommand ?? RunAsync;
     public StorageProviderId Id { get; } = new("smb");
     public StorageCapabilities Capabilities { get; } = new([StorageCapabilityIds.Read, StorageCapabilityIds.Delete,
         StorageCapabilityIds.AtomicPublish, StorageCapabilityIds.VerifyAbsence]);
     public StorageTopology Topology => StorageTopology.AgentDirect;
 
     public Task<StorageObjectMetadata> PutAsync(StorageObjectKey key, Stream content, StoragePutOptions options, IProgress<long>? progress, CancellationToken token) =>
-        ExecuteAsync((provider, cancellation) => provider.PutAsync(key, content, options, progress, cancellation), token);
+        ExecuteAsync((provider, cancellation) => provider.PutAsync(key, content, options, progress, cancellation), token, key);
     public Task<bool> ExistsAsync(StorageObjectKey key, CancellationToken token) => ExecuteAsync((provider, cancellation) => provider.ExistsAsync(key, cancellation), token);
     public Task<StorageObjectMetadata?> GetMetadataAsync(StorageObjectKey key, CancellationToken token) => ExecuteAsync((provider, cancellation) => provider.GetMetadataAsync(key, cancellation), token);
     public Task<StorageVerificationResult> VerifyAsync(StorageObjectKey key, StorageVerificationExpectation expected, CancellationToken token) =>
@@ -53,7 +55,8 @@ public sealed class SmbStorageProvider(SmbStorageOptions configuration,
         throw new StorageException(StorageFailureKind.NotSupported, "SMB enumeration is not exposed through a connection.");
 
     private ShareProvider Provider(string root) => new(root, _options);
-    private async Task<T> ExecuteAsync<T>(Func<IStorageProvider, CancellationToken, Task<T>> operation, CancellationToken token)
+    // writtenKey: the object a successful operation leaves behind; if the unmount then fails the result is not lost, the object is reported as possibly remaining.
+    private async Task<T> ExecuteAsync<T>(Func<IStorageProvider, CancellationToken, Task<T>> operation, CancellationToken token, StorageObjectKey? writtenKey = null)
     {
         var credential = await ReadCredentialAsync(token);
         if (OperatingSystem.IsWindows())
@@ -63,8 +66,17 @@ public sealed class SmbStorageProvider(SmbStorageOptions configuration,
                 () => operation(Provider($"\\\\{_options.Host}\\{_options.Share}"), token)).ConfigureAwait(false);
         }
         if (!OperatingSystem.IsLinux()) throw new StorageException(StorageFailureKind.NotSupported, "SMB storage requires Windows or Linux with cifs-utils.");
-        await using var mount = await MountAsync(credential, token);
-        return await operation(Provider(mount.Root), token);
+        var mount = await MountAsync(credential, token);
+        T result;
+        try { result = await operation(Provider(mount.Root), token); }
+        catch { await mount.DisposeAsync(); throw; }
+        try { await mount.DisposeAsync(); }
+        catch (Exception unmount) when (writtenKey is not null && unmount is not OperationCanceledException)
+        {
+            throw new StorageException(StorageFailureKind.Io, "The object was written but the SMB share could not be unmounted cleanly.", unmount,
+                objectMayRemain: true, remainingObjectKey: writtenKey);
+        }
+        return result;
     }
 
     private async ValueTask<SmbCredential> ReadCredentialAsync(CancellationToken token)
@@ -90,10 +102,10 @@ public sealed class SmbStorageProvider(SmbStorageOptions configuration,
                 UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite, Options = FileOptions.Asynchronous }))
             await using (var writer = new StreamWriter(file))
                 await writer.WriteAsync($"username={credential.Username}\npassword={credential.Password}\ndomain={credential.Domain ?? ""}\n".AsMemory(), token);
-            await RunAsync("mount.cifs", [$"//{_options.Host}/{_options.Share}", root, "-o",
+            await _run("mount.cifs", [$"//{_options.Host}/{_options.Share}", root, "-o",
                 $"credentials={credentialPath},vers=3.1.1,seal,cache=none,actimeo=0,nosuid,nodev,noexec"], token);
             mounted = true;
-            return new MountLease(root);
+            return new MountLease(root, _run);
         }
         finally
         {
@@ -130,13 +142,13 @@ public sealed class SmbStorageProvider(SmbStorageOptions configuration,
     private sealed class ShareProvider(string root, SmbStorageOptions options) : FileSystemStorageProvider(new("smb"), StorageTopology.AgentDirect, root,
         ["tenants", options.TenantId.ToString("N"), "connections", options.ConnectionId.ToString("N")]);
 
-    private sealed class MountLease(string root) : IAsyncDisposable
+    private sealed class MountLease(string root, Func<string, string[], CancellationToken, Task> run) : IAsyncDisposable
     {
         public string Root => root;
         public async ValueTask DisposeAsync()
         {
             using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(35));
-            await RunAsync("umount", [root], cleanup.Token);
+            await run("umount", [root], cleanup.Token);
             Directory.Delete(root);
         }
     }
