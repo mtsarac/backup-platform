@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using BackupPlatform.Application.Agents;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Audit;
@@ -610,7 +611,8 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         DateTimeOffset now,
         TimeSpan leaseDuration,
         CancellationToken cancellationToken,
-        TenantId? tenantId = null)
+        TenantId? tenantId = null,
+        bool backendExecutedOnly = false)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var tx = await context.Database.BeginTransactionAsync(cancellationToken);
@@ -625,6 +627,10 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
             SELECT pending."Id" AS "Value" FROM replica_repair_operations pending
             WHERE pending."Status" = 'Pending' AND (pending."NextRetryAt" IS NULL OR pending."NextRetryAt" <= {now})
               AND ({tenantId == null} OR pending."TenantId" = {(tenantId == null ? Guid.Empty : tenantId.Value)})
+              AND (NOT {backendExecutedOnly} OR pending."StorageProvider" NOT IN ('sftp', 'google-drive') OR NOT EXISTS (
+                  SELECT 1 FROM backup_replicas source
+                  WHERE source."TenantId" = pending."TenantId" AND source."ArtifactId" = pending."ArtifactId" AND source."Id" = pending."SourceReplicaId"
+                    AND source."StorageProvider" IN ('sftp', 'google-drive', 's3', 'smb')))
               AND (SELECT COUNT(*) FROM replica_repair_operations active
                    WHERE active."Status" = 'InProgress' AND active."TenantId" = pending."TenantId") < {IReplicaRepairStore.MaxTenantConcurrentRepairs}
             ORDER BY COALESCE(pending."NextRetryAt", pending."CreatedAt") ASC, pending."Id"
@@ -652,6 +658,80 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         await context.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
         return operation;
+    }
+
+    public async Task<ReplicaRepairOperation?> ClaimAgentRepairAsync(
+        AgentIdentity identity,
+        DateTimeOffset now,
+        TimeSpan leaseDuration,
+        CancellationToken cancellationToken)
+    {
+        var leaseOwner = ReplicaRepairOperation.AgentLeaseOwner(identity.AgentId.Value);
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+
+        // Every poll of every agent comes here and most find nothing: refuse without the cluster-wide claim lock first, and decide under it only when work exists.
+        if (!await context.ReplicaRepairOperations.AnyAsync(r => r.TenantId == identity.TenantId && r.Status == ReplicaRepairStatus.Pending
+                && (r.StorageProvider == "sftp" || r.StorageProvider == "google-drive") && (r.NextRetryAt == null || r.NextRetryAt <= now), cancellationToken)
+            || !await context.AgentCapabilities.AsNoTracking().AnyAsync(record => record.TenantId == identity.TenantId && record.AgentId == identity.AgentId
+                && record.Identifier == ReplicaLifecycleProtocol.Capability
+                && record.Support == BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, cancellationToken))
+            return null;
+
+        await using var tx = await context.Database.BeginTransactionAsync(cancellationToken);
+        await context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({ClaimLockKey})", cancellationToken);
+
+        if (await context.ReplicaRepairOperations.AnyAsync(r => r.Status == ReplicaRepairStatus.InProgress && r.LeaseOwner == leaseOwner
+                && r.LeaseExpiresAt > now, cancellationToken))
+            return null;
+        // Expired leases still occupy capacity until recovery fences the old transfer.
+        if (await context.ReplicaRepairOperations.CountAsync(r => r.Status == ReplicaRepairStatus.InProgress, cancellationToken) >=
+            IReplicaRepairStore.MaxGlobalConcurrentRepairs)
+            return null;
+
+        var dueId = await context.Database.SqlQuery<Guid>($"""
+            SELECT pending."Id" AS "Value" FROM replica_repair_operations pending
+            WHERE pending."Status" = 'Pending' AND (pending."NextRetryAt" IS NULL OR pending."NextRetryAt" <= {now})
+              AND pending."TenantId" = {identity.TenantId.Value}
+              AND pending."StorageProvider" IN ('sftp', 'google-drive')
+              AND EXISTS (SELECT 1 FROM backup_replicas source
+                  WHERE source."TenantId" = pending."TenantId" AND source."ArtifactId" = pending."ArtifactId" AND source."Id" = pending."SourceReplicaId"
+                    AND source."StorageProvider" IN ('sftp', 'google-drive', 's3', 'smb'))
+              AND (SELECT COUNT(*) FROM replica_repair_operations active
+                   WHERE active."Status" = 'InProgress' AND active."TenantId" = pending."TenantId") < {IReplicaRepairStore.MaxTenantConcurrentRepairs}
+            ORDER BY COALESCE(pending."NextRetryAt", pending."CreatedAt") ASC, pending."Id"
+            LIMIT 1
+            FOR UPDATE OF pending SKIP LOCKED
+            """).SingleOrDefaultAsync(cancellationToken);
+        if (dueId == Guid.Empty) return null;
+
+        var operation = await context.ReplicaRepairOperations.SingleAsync(r => r.Id == dueId, cancellationToken);
+        if (operation.Status != ReplicaRepairStatus.Pending) return null;
+        if (operation.CancellationRequestedAt != null)
+        {
+            operation.CancelPending(now);
+            await context.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+            return null;
+        }
+
+        operation.Claim(Guid.NewGuid(), leaseOwner, now, leaseDuration);
+        await context.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+        return operation;
+    }
+
+    public async Task<ReplicaRepairOperation?> FindOperationAsync(TenantId tenantId, Guid operationId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        return await context.ReplicaRepairOperations.AsNoTracking()
+            .SingleOrDefaultAsync(r => r.TenantId == tenantId && r.Id == operationId, cancellationToken);
+    }
+
+    public async Task<BackupArtifact?> FindArtifactAsync(TenantId tenantId, Guid artifactId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        return await context.BackupArtifacts.AsNoTracking().Include(a => a.Replicas)
+            .SingleOrDefaultAsync(a => a.TenantId == tenantId && a.Id == artifactId, cancellationToken);
     }
 
     public async Task<int> RecoverStaleRepairsAsync(

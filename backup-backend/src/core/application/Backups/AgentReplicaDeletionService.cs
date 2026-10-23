@@ -13,6 +13,9 @@ public sealed class AgentReplicaDeletionService(IAgentReplicaDeletionStore store
         CancellationToken cancellationToken) =>
         store.RenewAsync(identity, replicaId, request, time.GetUtcNow(), options.DeleteLeaseDuration, cancellationToken);
 
+    public Task<DeletionStorageTarget?> AuthorizeStorageAsync(AgentIdentity identity, Guid replicaId, Guid leaseToken, CancellationToken cancellationToken) =>
+        store.AuthorizeStorageAsync(identity, replicaId, leaseToken, time.GetUtcNow(), cancellationToken);
+
     public Task<BackupMutationResult> CompleteAsync(AgentIdentity identity, Guid replicaId, DeleteReplicaCompletionRequest request,
         CancellationToken cancellationToken) =>
         store.CompleteAsync(identity, replicaId, request, time.GetUtcNow(), cancellationToken);

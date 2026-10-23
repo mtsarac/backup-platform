@@ -603,7 +603,7 @@ public static class AgentStorageTransferEndpoints
     }
 
 
-    private static async Task<IResult> ResolveAccessResponseAsync(
+    internal static async Task<IResult> ResolveAccessResponseAsync(
         HttpRequest request, StorageConnection connection, ISecretProvider secrets,
         GoogleDriveConnectionProviderFactory driveFactory, CancellationToken cancellationToken)
     {

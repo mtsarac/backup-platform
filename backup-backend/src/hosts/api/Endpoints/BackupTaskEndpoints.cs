@@ -1,8 +1,11 @@
+using BackupPlatform.Api.Backups;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Contracts.Agents;
 using BackupPlatform.Contracts.Backups;
+using BackupPlatform.SecretProviders.Abstractions;
+using BackupPlatform.Storage;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BackupPlatform.Api.Endpoints;
@@ -24,6 +27,7 @@ public static class BackupTaskEndpoints
             .RequireAuthorization(AuthorizationPolicies.Agent);
         deletions.MapPost("/lease", RenewDeletionAsync);
         deletions.MapPost("/complete", CompleteDeletionAsync);
+        deletions.MapPost("/storage/access", GetDeletionStorageAccessAsync);
         return endpoints;
     }
 
@@ -84,6 +88,19 @@ public static class BackupTaskEndpoints
         if (request.OperationId == Guid.Empty || request.LeaseToken == Guid.Empty) return Invalid();
         var lease = await service.RenewAsync(agent.Identity!, replicaId, request, cancellationToken);
         return lease is null ? Mutation(BackupMutationResult.Conflict) : Results.Ok(lease);
+    }
+
+    /// <summary>Releases the connection's access only to the agent that holds the live lease of this very removal; the client names neither connection nor key.</summary>
+    private static async Task<IResult> GetDeletionStorageAccessAsync(Guid replicaId, HttpRequest request, ICurrentAgent agent, AgentReplicaDeletionService service,
+        IStorageConnectionStore connections, ISecretProvider secrets, GoogleDriveConnectionProviderFactory driveFactory, CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(request.Headers[TaskStorageProtocol.LeaseHeader], out var lease) || lease == Guid.Empty) return Invalid();
+        var target = await service.AuthorizeStorageAsync(agent.Identity!, replicaId, lease, cancellationToken);
+        if (target is null) return Mutation(BackupMutationResult.Conflict);
+        var connection = (await connections.FindAsync(target.StorageConnectionId, agent.Identity!.TenantId, cancellationToken))?.Connection;
+        if (connection is null || connection.TenantId != agent.Identity.TenantId || connection.ProviderType != target.StorageProvider)
+            return Results.Conflict(new AgentApiError { Error = "destination_unavailable", Message = "The storage connection is not available." });
+        return await AgentStorageTransferEndpoints.ResolveAccessResponseAsync(request, connection, secrets, driveFactory, cancellationToken);
     }
 
     private static async Task<IResult> CompleteDeletionAsync(Guid replicaId, DeleteReplicaCompletionRequest request, ICurrentAgent agent,

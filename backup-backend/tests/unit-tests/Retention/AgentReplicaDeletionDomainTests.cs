@@ -156,4 +156,39 @@ public sealed class AgentReplicaDeletionDomainTests
         Assert.Equal(operation, replica.DeleteOperationId);
         Assert.False(replica.SameAgentCompletion(operation, token, false, BackupDeleteFailureCodes.IoError));
     }
+
+    [Theory]
+    [InlineData("sftp")]
+    [InlineData("google-drive")]
+    public void ExternalReplicaDeletionIsAgentClaimedAndFencedAcrossTakeoverWhileQuotaStaysUntilVerifiedAbsence(string provider)
+    {
+        var connection = Guid.NewGuid();
+        var replica = new BackupReplica(Guid.NewGuid(), TenantId.New(), Guid.NewGuid(), provider, connection.ToString("D"), "managed/repair.bak",
+            100, Hash, "sha256", "Failed", "RepairCrashRecovery", Now, null, storageConnectionId: connection);
+        replica.ReopenOrphan(Now);
+        var operation = Guid.NewGuid();
+        var first = Guid.NewGuid();
+        var firstAgent = Guid.NewGuid();
+        Assert.True(replica.DispatchAgentDeletion(operation, Now, Now.AddMinutes(1)));
+        Assert.True(replica.WaitingForAgent);
+        Assert.True(BackupReplicaStorage.Occupies(replica.Status));
+        Assert.True(replica.ClaimAgentDeletion(operation, first, Now, Lease, firstAgent));
+        Assert.Equal(BackupReplica.AgentLeaseOwner(firstAgent), replica.DeleteLeaseOwner);
+        Assert.False(replica.CompleteDelete(first, Now));
+        Assert.False(replica.FailDelete(first, Now, "io_error", Now.AddMinutes(1)));
+
+        var expiry = Now + Lease;
+        Assert.False(replica.BeginDelete(Guid.NewGuid(), "backend", expiry, Lease));
+        Assert.False(replica.CompleteAgentDeletion(operation, first, expiry, true, null, null));
+        Assert.True(BackupReplicaStorage.Occupies(replica.Status));
+        var second = Guid.NewGuid();
+        var secondAgent = Guid.NewGuid();
+        Assert.True(replica.ClaimAgentDeletion(operation, second, expiry, Lease, secondAgent));
+        Assert.Equal(BackupReplica.AgentLeaseOwner(secondAgent), replica.DeleteLeaseOwner);
+        Assert.False(replica.RenewAgentDeletion(operation, first, expiry, Lease));
+        Assert.False(replica.CompleteAgentDeletion(operation, first, expiry, true, null, null));
+        Assert.True(replica.CompleteAgentDeletion(operation, second, expiry, true, null, null));
+        Assert.False(BackupReplicaStorage.Occupies(replica.Status));
+        Assert.True(replica.SameAgentCompletion(operation, second, true, null));
+    }
 }

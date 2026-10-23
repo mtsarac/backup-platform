@@ -25,6 +25,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
             await database.ExecuteAsync("ALTER TABLE backup_runs ADD COLUMN \"SizeAnomalyBaselineBytes\" bigint, ADD COLUMN \"SizeAnomalyDeviationRatio\" double precision, ADD COLUMN \"SizeAnomalyStatus\" varchar(32)");
             await database.ExecuteAsync("ALTER TABLE audit_events ADD COLUMN \"SealKeyId\" varchar(128), ADD COLUMN \"SealSignature\" varchar(256)");
             await database.ExecuteAsync("ALTER TABLE backup_run_attempts ADD COLUMN \"PauseRequested\" boolean NOT NULL DEFAULT false, ADD COLUMN \"PauseReason\" integer");
+            await database.ExecuteAsync("ALTER TABLE backup_replicas ADD COLUMN \"DeleteAgentId\" uuid");
             var scenario = new ManualReplicaRepairIntegrationTests(database);
             var setup = await scenario.SetupAsync(QuotaAccountingMode.PhysicalReplicaBytes, new HashSet<string> { "central", "google-drive" });
             var source = setup.Artifact.Replicas.Single(r => r.StorageProvider == "central");
@@ -45,6 +46,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
             await database.ExecuteAsync("ALTER TABLE backup_runs DROP COLUMN \"SizeAnomalyBaselineBytes\", DROP COLUMN \"SizeAnomalyDeviationRatio\", DROP COLUMN \"SizeAnomalyStatus\"");
             await database.ExecuteAsync("ALTER TABLE audit_events DROP COLUMN \"SealKeyId\", DROP COLUMN \"SealSignature\"");
             await database.ExecuteAsync("ALTER TABLE backup_run_attempts DROP COLUMN \"PauseRequested\", DROP COLUMN \"PauseReason\"");
+            await database.ExecuteAsync("ALTER TABLE backup_replicas DROP COLUMN \"DeleteAgentId\"");
             await using var context = database.CreatePlatformContext();
             await context.GetService<IMigrator>().MigrateAsync();
             var replicas = await context.BackupReplicas.AsNoTracking().Where(r => r.TenantId == setup.Agent.TenantId).ToListAsync();
@@ -64,6 +66,8 @@ public sealed partial class ManualReplicaRepairIntegrationTests
             Assert.Equal(1, await context.BackupReplicas.CountAsync(r => r.TenantId == setup.Agent.TenantId && r.Key == key));
             var downgrade = await Assert.ThrowsAsync<PostgresException>(() => context.GetService<IMigrator>().MigrateAsync(previous));
             Assert.Equal(PostgresErrorCodes.RaiseException, downgrade.SqlState);
+            // Later additive migrations may already have rolled back before quarantine refuses its own downgrade; restore the current read model.
+            await context.GetService<IMigrator>().MigrateAsync();
             Assert.Equal(BackupReplicaStatus.Quarantined, (await context.BackupReplicas.AsNoTracking().SingleAsync(r => r.Id == conflict.Id)).Status);
         }
         finally

@@ -51,6 +51,8 @@ public sealed class RestoreTaskRequestFactoryTests
             LastRestoreTask = task;
             return restoreProvider;
         }
+
+        public IStorageProvider CreateScoped(DirectStorageScope scope) => throw new NotSupportedException();
     }
 
     private sealed class StubStorageProvider : IStorageProvider
@@ -121,6 +123,42 @@ public sealed class RestoreTaskRequestFactoryTests
         Assert.Same(stubProvider, request.StorageOverride);
         Assert.Equal(1, factory.RestoreCalls);
         Assert.Same(task, factory.LastRestoreTask);
+    }
+
+    [Theory]
+    [InlineData("sftp", "Execution")]
+    [InlineData("google-drive", "Execution")]
+    [InlineData("sftp", "Precheck")]
+    [InlineData("sftp", "Verification")]
+    [InlineData("google-drive", "Verification")]
+    public async Task AgentDirectExternalSourceReadsThroughTheDirectProviderForEveryRestorePurpose(string provider, string purpose)
+    {
+        var stubProvider = new StubStorageProvider();
+        var factory = new FakeTaskStorageProviderFactory(stubProvider);
+        var requestFactory = new RestoreTaskRequestFactory(_credentials, [_staging], factory);
+        // R1 restores into a disposable platform-named database; the source is read exactly like a normal restore.
+        var task = CreateSnapshot("AgentDirect", provider, "Backend", Guid.NewGuid().ToString("D")) with
+        {
+            Purpose = purpose,
+            DatabaseName = purpose == "Verification" ? "bp_verify_" + new string('a', 32) : "SalesRestored"
+        };
+
+        var request = await requestFactory.CreateAsync(task, CancellationToken.None);
+
+        Assert.Same(stubProvider, request.StorageOverride);
+        Assert.Equal(1, factory.RestoreCalls);
+        Assert.Equal(purpose == "Verification" ? RestorePipelinePurpose.Verification : purpose == "Precheck" ? RestorePipelinePurpose.Precheck : RestorePipelinePurpose.Execution, request.Purpose);
+    }
+
+    [Fact]
+    public async Task AgentDirectExternalSourceWithoutStorageFactoryIsRefused()
+    {
+        var requestFactory = new RestoreTaskRequestFactory(_credentials, [_staging], storageFactory: null);
+        var task = CreateSnapshot("AgentDirect", "sftp", "Backend", Guid.NewGuid().ToString("D"));
+
+        var ex = await Assert.ThrowsAsync<RestoreTaskRequestException>(() => requestFactory.CreateAsync(task, CancellationToken.None).AsTask());
+
+        Assert.Equal(RestoreAgentFailureCodes.InvalidConfiguration, ex.FailureCode);
     }
 
     [Fact]

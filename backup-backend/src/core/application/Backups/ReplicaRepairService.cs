@@ -14,7 +14,7 @@ public sealed record ReplicaRepairStartResult(
     string? Code = null,
     string? Message = null);
 
-public sealed class ReplicaRepairService(
+public sealed partial class ReplicaRepairService(
     IReplicaRepairStore store,
     IBackupStorageResolver storageResolver,
     TimeProvider time,
@@ -160,6 +160,11 @@ public sealed class ReplicaRepairService(
                     logger.LogInformation("AgentLocal source {ReplicaId} cannot be read via backend relay without agent transport.", candidate.Id);
                     continue;
                 }
+                // Central-involving repairs still run here; never fall back to relaying an external-to-external copy when the central source cannot be opened.
+                if (BackupReplica.IsAgentExecutedProvider(targetDestination.StorageProvider)
+                    && claimed.LeaseOwner?.StartsWith("agent:", StringComparison.Ordinal) != true
+                    && candidate.StorageProvider is "sftp" or "google-drive" or "s3" or "smb")
+                    continue;
 
                 var sourceTarget = candidate.StorageProvider is "sftp" or "google-drive" or "s3" or "smb" && candidate.StorageConnectionId != Guid.Empty
                     ? candidate.StorageConnectionId.ToString("D")
@@ -483,7 +488,7 @@ public sealed class ReplicaRepairService(
         CancellationToken cancellationToken) =>
         store.ListOperationsAsync(tenantId, artifactId, cancellationToken);
 
-    private async Task FailOrRetryAsync(
+    private async Task<bool> FailOrRetryAsync(
         ReplicaRepairOperation claimed,
         Guid leaseToken,
         string failureCode,
@@ -497,13 +502,13 @@ public sealed class ReplicaRepairService(
             var nextRetryAt = now + delay;
             logger.LogInformation("Repair operation {OperationId} failed with transient code {Code}. Scheduling retry {Attempt}/{Max} at {NextRetryAt}.",
                 claimed.Id, failureCode, claimed.AttemptCount + 1, claimed.MaxAttempts, nextRetryAt);
-            await store.ScheduleRetryAsync(claimed.TenantId, claimed.Id, leaseToken, failureCode, reason, nextRetryAt, now, cancellationToken);
+            return await store.ScheduleRetryAsync(claimed.TenantId, claimed.Id, leaseToken, failureCode, reason, nextRetryAt, now, cancellationToken);
         }
         else
         {
             logger.LogWarning("Repair operation {OperationId} failed permanently or exhausted retries: {Code} - {Reason}.",
                 claimed.Id, failureCode, reason);
-            await store.FailOperationAsync(claimed.TenantId, claimed.Id, leaseToken, failureCode, reason, now, cancellationToken);
+            return await store.FailOperationAsync(claimed.TenantId, claimed.Id, leaseToken, failureCode, reason, now, cancellationToken);
         }
     }
 

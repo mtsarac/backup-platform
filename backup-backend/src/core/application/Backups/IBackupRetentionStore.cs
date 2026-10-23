@@ -70,8 +70,11 @@ public interface IBackupRetentionStore
     /// <summary>
     /// Atomically claims due backend replicas and durably dispatches due agent replicas. Only backend replicas are returned for physical IO.
     /// Active agent leases are never taken by a backend worker; unclaimed dispatches are checked again at a bounded cadence.
+    /// <paramref name="dispatchExternalToAgents"/> also dispatches SFTP and Google Drive replicas to agents instead of returning them for backend IO
+    /// (the backend then holds no credential for them; shortcut: the backend-IO branch stays only until the relay cutover).
     /// </summary>
-    Task<IReadOnlyList<ClaimedReplicaDeletion>> ClaimDueDeletionsAsync(string owner, DateTimeOffset now, TimeSpan lease, int limit, CancellationToken cancellationToken);
+    Task<IReadOnlyList<ClaimedReplicaDeletion>> ClaimDueDeletionsAsync(string owner, DateTimeOffset now, TimeSpan lease, int limit, CancellationToken cancellationToken,
+        bool dispatchExternalToAgents = false);
 
     /// <summary>Records verified absence as Deleted. False when the lease token no longer matches or the replica is not Deleting.</summary>
     Task<bool> CompleteDeletionAsync(Guid replicaId, Guid leaseToken, DateTimeOffset now, CancellationToken cancellationToken);

@@ -156,7 +156,9 @@ public sealed class AutomaticReplicaRepairWorker(
                 time.GetUtcNow(),
                 TimeSpan.FromMinutes(10),
                 cancellationToken,
-                tenantId);
+                tenantId,
+                // External-to-external repair is pulled by agents; central-involving repair keeps its backend path.
+                backendExecutedOnly: true);
             if (claimed is null)
             {
                 break;

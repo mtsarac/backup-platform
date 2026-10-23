@@ -60,6 +60,7 @@ app.MapBackupEndpoints();
 app.MapBackupHealthEndpoints();
 app.MapBackupArtifactEndpoints();
 app.MapBackupTaskEndpoints();
+app.MapReplicaRepairTaskEndpoints();
 app.MapUploadBandwidthEndpoints();
 app.MapRestoreEndpoints();
 app.MapRestoreTaskEndpoints();

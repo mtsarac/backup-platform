@@ -21,17 +21,20 @@ public sealed partial class DeleteReplicaTaskWorker : IAgentTaskSink
     private readonly IDeleteReplicaTaskClient _client;
     private readonly IAgentCredentialStore _identities;
     private readonly IDeleteReplicaProviderResolver _providers;
+    private readonly ITaskStorageProviderFactory? _external;
     private readonly TimeProvider _time;
     private readonly ILogger<DeleteReplicaTaskWorker> _logger;
     private Claim? _active;
     private int _started;
 
     public DeleteReplicaTaskWorker(IDeleteReplicaTaskClient client, IAgentCredentialStore identities,
-        IDeleteReplicaProviderResolver providers, TimeProvider timeProvider, ILogger<DeleteReplicaTaskWorker> logger)
+        IDeleteReplicaProviderResolver providers, TimeProvider timeProvider, ILogger<DeleteReplicaTaskWorker> logger,
+        ITaskStorageProviderFactory? external = null)
     {
         _client = client;
         _identities = identities;
         _providers = providers;
+        _external = external;
         _time = timeProvider;
         _logger = logger;
     }
@@ -140,7 +143,7 @@ public sealed partial class DeleteReplicaTaskWorker : IAgentTaskSink
             {
                 return Completion(task, DeleteReplicaFailureCodes.InvalidLocation);
             }
-            var resolution = _providers.Resolve(task.StorageProvider, task.StorageTarget);
+            var resolution = task.StorageProvider is "sftp" or "google-drive" ? ResolveExternal(task) : _providers.Resolve(task.StorageProvider, task.StorageTarget);
             if (resolution.Provider is not { } provider)
             {
                 return Completion(task, resolution.FailureCode ?? DeleteReplicaFailureCodes.InvalidConfiguration);
@@ -176,11 +179,18 @@ public sealed partial class DeleteReplicaTaskWorker : IAgentTaskSink
         }
     }
 
+    /// <summary>An external replica is removed through the connection's own provider, opened with access the backend releases only to this live lease.</summary>
+    private DeleteReplicaProviderResolution ResolveExternal(DeleteReplicaTaskSnapshot task) =>
+        _external is not null && Guid.TryParse(task.StorageTarget, out var connectionId) && connectionId != Guid.Empty
+            ? new(_external.CreateScoped(new DirectStorageScope($"api/agent/replica-deletions/{task.ReplicaId:D}/storage/access",
+                task.LeaseToken, task.TenantId, connectionId, task.StorageProvider)), null)
+            : new(null, DeleteReplicaFailureCodes.InvalidConfiguration);
+
     private static bool TryResolveKey(DeleteReplicaTaskSnapshot task, out StorageObjectKey? key)
     {
         return StorageObjectKey.TryCreate(task.StorageKey, out key)
             && ManagedBackupLayout.TryParseStorageKey(task.StorageKey, out var managed)
-            && managed is { IsPartial: false }
+            && managed is not null && (!managed.IsPartial || task.StorageProvider is "sftp" or "google-drive")
             && managed.TenantId == task.TenantId && managed.JobId == task.JobId
             && managed.RunId == task.RunId && managed.AttemptId == task.AttemptId
             && string.Equals(managed.Prefix, task.StoragePrefix, StringComparison.Ordinal);

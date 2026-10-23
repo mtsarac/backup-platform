@@ -167,7 +167,7 @@ public static class AgentEndpoints
 
     private static async Task<IResult> PollAsync(
         string? cursor, ICurrentAgent currentAgent, AgentConnectivityService service, BackupOrchestrator backups,
-        AgentReplicaDeletionService deletions, RestoreService restores, AgentDownloadSource downloads, ILogger<AgentDownloadSource> logger,
+        AgentReplicaDeletionService deletions, ReplicaRepairService repairs, RestoreService restores, AgentDownloadSource downloads, ILogger<AgentDownloadSource> logger,
         BackupPlatform.Api.Backups.AgentCapacityProbeService capacity,
         CancellationToken cancellationToken)
     {
@@ -177,6 +177,7 @@ public static class AgentEndpoints
             return Error(StatusCodes.Status400BadRequest, AgentErrorCodes.InvalidRequest, "Invalid field: cursor.");
         }
         var deletion = await deletions.ClaimAsync(currentAgent.Identity!, cancellationToken);
+        var repair = await repairs.ClaimForAgentAsync(currentAgent.Identity!, cancellationToken);
         // A restore is explicit user work on a target and never runs beside a backup of the same agent: it is claimed first, and when one was claimed the backup claim is
         // skipped (the store would refuse it anyway while the restore holds the agent).
         var restore = await restores.ClaimAsync(currentAgent.Identity!, cancellationToken);
@@ -193,6 +194,7 @@ public static class AgentEndpoints
         }
         var tasks = new List<AgentTaskEnvelope>(3);
         if (deletion is not null) tasks.Add(new AgentTaskEnvelope { Id = deletion.ReplicaId.ToString(), Type = "delete-replica", DeleteReplica = deletion });
+        if (repair is not null) tasks.Add(new AgentTaskEnvelope { Id = repair.OperationId.ToString(), Type = BackupPlatform.Contracts.Backups.ReplicaLifecycleProtocol.RepairTaskType, ReplicaRepair = repair });
         if (restore is not null)
         {
             var taskType = restore.Purpose switch

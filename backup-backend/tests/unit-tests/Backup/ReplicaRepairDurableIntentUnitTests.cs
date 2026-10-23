@@ -260,6 +260,28 @@ public sealed class ReplicaRepairDurableIntentUnitTests
         Assert.Throws<InvalidOperationException>(() => op.SetTargetIntent(Guid.NewGuid(), "key.bak"));
     }
 
+    [Fact]
+    public async Task BackendRepair_DoesNotRelayExternalSourceAfterCentralSourceCannotBeOpened()
+    {
+        var targetId = Guid.NewGuid();
+        var (artifact, source, admission) = CreateSetup(targetId);
+        var external = new BackupReplica(Guid.NewGuid(), Tenant, artifact.Id, "s3", "source", "scope/external.bak",
+            Size, Checksum, "sha256", "Verified", "ReadBack", T0, T0, BackupStorageExecutionLocation.Backend,
+            storageConnectionId: Guid.NewGuid());
+        admission = admission with { CandidateSources = [source, external] };
+        var store = new FakeRepairStore();
+        var provider = new FakeStorageProvider(ArtifactData, Checksum) { OpenReadThrows = new StorageException(StorageFailureKind.NotFound, "Unavailable central source.") };
+        var service = new ReplicaRepairService(store, new FakeStorageResolver(provider), new FakeTimeProvider(T0), NullLogger<ReplicaRepairService>.Instance);
+        var operation = new ReplicaRepairOperation(Guid.NewGuid(), Tenant, artifact.Id, targetId, "sftp", source.Id, T0);
+        operation.Claim(Guid.NewGuid(), "backend-node", T0, TimeSpan.FromMinutes(10));
+
+        await service.ExecuteRepairAsync(Tenant, artifact.Id, operation.Id, admission, claimedOperation: operation);
+
+        Assert.Equal(1, provider.OpenReadCalls);
+        Assert.Null(store.CompletedReplica);
+        Assert.Equal(ReplicaRepairFailureCodes.SourceInaccessible, store.FailureCode);
+    }
+
     private sealed class FakeStorageResolver(IStorageProvider provider) : IBackupStorageResolver
     {
         public IReadOnlyList<BackupManagedStorage> ManagedStorages => [];
@@ -278,6 +300,8 @@ public sealed class ReplicaRepairDurableIntentUnitTests
         public bool DeleteResult { get; set; } = true;
         public Exception? DeleteThrows { get; set; }
         public int VerifyCalls { get; private set; }
+        public Exception? OpenReadThrows { get; set; }
+        public int OpenReadCalls { get; private set; }
 
         public Task<StorageObjectMetadata> PutAsync(StorageObjectKey key, Stream content, StoragePutOptions options, IProgress<long>? progress, CancellationToken cancellationToken)
         {
@@ -290,8 +314,12 @@ public sealed class ReplicaRepairDurableIntentUnitTests
             return Task.FromResult(new StorageObjectMetadata(new StorageLocation(Id, key), data.Length, new ContentChecksum(ChecksumAlgorithm.Sha256, checksum), DateTimeOffset.UtcNow));
         }
 
-        public Task<Stream> OpenReadAsync(StorageObjectKey key, CancellationToken cancellationToken) =>
-            Task.FromResult<Stream>(new MemoryStream(data));
+        public Task<Stream> OpenReadAsync(StorageObjectKey key, CancellationToken cancellationToken)
+        {
+            OpenReadCalls++;
+            if (OpenReadThrows is not null) throw OpenReadThrows;
+            return Task.FromResult<Stream>(new MemoryStream(data));
+        }
 
         public Task<StorageVerificationResult> VerifyAsync(StorageObjectKey key, StorageVerificationExpectation expected, CancellationToken cancellationToken)
         {
@@ -382,7 +410,10 @@ public sealed class ReplicaRepairDurableIntentUnitTests
         public Task<ReplicaRepairAdmissionResult> AdmitRepairAsync(TenantId tenantId, Guid artifactId, Guid? storageConnectionId, string? storageProvider, DateTimeOffset now, CancellationToken cancellationToken, Guid? excludeOperationId = null) => throw new NotSupportedException();
         public Task<ReplicaRepairAdmissionResult> CreateOperationAsync(ReplicaRepairOperation operation, CancellationToken cancellationToken) => Task.FromResult(new ReplicaRepairAdmissionResult(true, null, null));
         public Task<ReplicaRepairOperation?> ClaimOperationAsync(TenantId tenantId, Guid operationId, Guid leaseToken, string leaseOwner, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<ReplicaRepairOperation?> ClaimDueRepairAsync(string leaseOwner, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken, TenantId? tenantId = null) => throw new NotSupportedException();
+        public Task<ReplicaRepairOperation?> ClaimDueRepairAsync(string leaseOwner, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken, TenantId? tenantId = null, bool backendExecutedOnly = false) => throw new NotSupportedException();
+        public Task<ReplicaRepairOperation?> ClaimAgentRepairAsync(BackupPlatform.Application.Agents.AgentIdentity identity, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<ReplicaRepairOperation?> FindOperationAsync(TenantId tenantId, Guid operationId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<BackupArtifact?> FindArtifactAsync(TenantId tenantId, Guid artifactId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> RecoverStaleRepairsAsync(DateTimeOffset now, TimeSpan initialRetryDelay, CancellationToken cancellationToken) => Task.FromResult(0);
         public Task<IReadOnlyList<ReplicaRepairOperation>> DiscoverEligibleRepairsAsync(DateTimeOffset now, int maxBatch, CancellationToken cancellationToken, TenantId? tenantId = null) => Task.FromResult<IReadOnlyList<ReplicaRepairOperation>>([]);
 

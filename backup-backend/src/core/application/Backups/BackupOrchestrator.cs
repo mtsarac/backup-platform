@@ -355,7 +355,7 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
 
     public static BackupReplicaView ToView(BackupReplica r) => new(r.Id, r.StorageProvider, r.StorageTarget, r.Key, r.SizeBytes, r.Checksum, r.ChecksumAlgorithm,
         r.VerificationState, r.VerificationMethod, r.CreatedAt, r.VerifiedAt, r.Status.ToString(), r.IsUsable, r.DeleteRequestedAt, r.DeleteAfter,
-        r.DeleteReason?.ToString(), r.DeletedAt, r.DeleteAttempts, r.DeleteFailureCode, r.DeleteNextAttemptAt, r.ExecutionLocation.ToString(), r.WaitingForAgent,
+        r.DeleteReason?.ToString(), r.DeletedAt, r.DeleteAttempts, r.DeleteFailureCode, r.DeleteNextAttemptAt, r.AgentExecuted ? nameof(BackupStorageExecutionLocation.Agent) : r.ExecutionLocation.ToString(), r.WaitingForAgent,
         r.StorageConnectionId == Guid.Empty ? null : r.StorageConnectionId);
 
     public static BackupJobView ToView(BackupJob job, DateTimeOffset now) => new(job.Id, job.AgentId.Value, job.Name, job.BackupType, job.OverlapPolicy.ToString(),

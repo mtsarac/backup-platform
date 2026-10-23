@@ -43,6 +43,16 @@ public sealed class BackupRetentionServiceTests
     }
 
     [Fact]
+    public async Task TheBackendNeverDeletesExternalReplicasItselfItAsksTheStoreToDispatchThemToAgents()
+    {
+        var rig = new Rig();
+
+        await rig.Service.RunCycleAsync(CancellationToken.None);
+
+        Assert.True(Assert.Single(rig.Store.DispatchedExternal));
+    }
+
+    [Fact]
     public async Task DeletesTheObjectThenVerifiesAbsenceThenRecordsItDeleted()
     {
         var rig = new Rig();

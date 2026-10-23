@@ -60,6 +60,7 @@ public sealed class AgentCapabilityCatalog
         Supported(DownloadTaskTypes.Capability),
         Supported(TaskStorageProtocol.Capability),
         Supported(TaskStorageProtocol.DirectCapability),
+        Supported(ReplicaLifecycleProtocol.Capability),
         Supported("storage.s3"),
         Supported("storage.smb"),
         Supported("backup.three-two-one"),

@@ -267,8 +267,9 @@ internal sealed class FlakyRetentionStore(IBackupRetentionStore inner) : IBackup
     public Task<BackupRetentionApplication> ApplyExpiredRetentionAsync(DateTimeOffset now, int limit, CancellationToken cancellationToken) =>
         inner.ApplyExpiredRetentionAsync(now, limit, cancellationToken);
 
-    public Task<IReadOnlyList<ClaimedReplicaDeletion>> ClaimDueDeletionsAsync(string owner, DateTimeOffset now, TimeSpan lease, int limit, CancellationToken cancellationToken) =>
-        inner.ClaimDueDeletionsAsync(owner, now, lease, limit, cancellationToken);
+    public Task<IReadOnlyList<ClaimedReplicaDeletion>> ClaimDueDeletionsAsync(string owner, DateTimeOffset now, TimeSpan lease, int limit, CancellationToken cancellationToken,
+        bool dispatchExternalToAgents = false) =>
+        inner.ClaimDueDeletionsAsync(owner, now, lease, limit, cancellationToken, dispatchExternalToAgents);
 
     public Task<bool> CompleteDeletionAsync(Guid replicaId, Guid leaseToken, DateTimeOffset now, CancellationToken cancellationToken)
     {

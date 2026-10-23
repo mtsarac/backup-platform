@@ -40,7 +40,7 @@ public sealed class BackupRetentionService(
         for (var batch = 0; batch < options.MaxBatchesPerCycle; batch++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var claims = await store.ClaimDueDeletionsAsync(node.Value, time.GetUtcNow(), options.DeleteLeaseDuration, options.BatchSize, cancellationToken);
+            var claims = await store.ClaimDueDeletionsAsync(node.Value, time.GetUtcNow(), options.DeleteLeaseDuration, options.BatchSize, cancellationToken, dispatchExternalToAgents: true);
             claimed += claims.Count;
             foreach (var claim in claims)
             {

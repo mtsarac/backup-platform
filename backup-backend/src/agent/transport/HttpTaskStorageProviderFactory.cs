@@ -51,6 +51,10 @@ public sealed class HttpTaskStorageProviderFactory(
             $"api/agent/restore-tasks/{task.AttemptId:D}/storage", task.LeaseToken, task.OperationId, task.Source.StorageProvider, null);
     }
 
+    public IStorageProvider CreateScoped(DirectStorageScope scope) =>
+        new DirectTaskStorageProvider(http, endpoint, identities, Guid.Empty, scope.LeaseToken, scope.ConnectionId, scope.TenantId,
+            scope.ProviderType, _stagingDirectory, null, windowsSession, scope.AccessPath);
+
     private sealed class Provider(HttpClient http, AgentBackendEndpoint endpoint, IAgentCredentialStore identities,
         string path, Guid lease, Guid? restore, string providerType, Guid? destination) : IStorageProvider
     {
@@ -192,10 +196,11 @@ public sealed class HttpTaskStorageProviderFactory(
     private sealed class DirectTaskStorageProvider(
         HttpClient http, AgentBackendEndpoint endpoint, IAgentCredentialStore identities,
         Guid attemptId, Guid lease, Guid connectionId, Guid tenantId, string providerType,
-        string? stagingDirectory, Guid? restoreOperationId, IWindowsNetworkSession? windowsSession) : IStorageProvider
+        string? stagingDirectory, Guid? restoreOperationId, IWindowsNetworkSession? windowsSession, string? scopedAccessPath = null) : IStorageProvider, IScopedDriveRecordSource
     {
         private readonly SemaphoreSlim _initLock = new(1, 1);
         private IStorageProvider? _targetProvider;
+        private InMemoryGoogleDriveFileCatalog? _scopedCatalog;
         private string? _cachedAccessToken;
         private DateTimeOffset _accessTokenExpiresAt = DateTimeOffset.MinValue;
 
@@ -235,6 +240,16 @@ public sealed class HttpTaskStorageProviderFactory(
         {
             var target = await GetProviderAsync(cancellationToken).ConfigureAwait(false);
             return await target.DeleteAsync(key, cancellationToken).ConfigureAwait(false);
+        }
+
+        public async Task<TaskStorageCatalogRecord?> FindRecordAsync(StorageObjectKey key, CancellationToken cancellationToken)
+        {
+            if (_scopedCatalog is null)
+            {
+                return null;
+            }
+            var record = await _scopedCatalog.FindAsync(tenantId, connectionId, key.Value, cancellationToken).ConfigureAwait(false);
+            return record is null ? null : new TaskStorageCatalogRecord(record.FileId, record.ParentFolderId, record.FileName, record.SizeBytes, record.Checksum, record.Md5Checksum);
         }
 
         public async Task AbortTransferAsync(StorageObjectKey key, string providerState, CancellationToken cancellationToken)
@@ -310,7 +325,10 @@ public sealed class HttpTaskStorageProviderFactory(
                         connectionId,
                         folderId: access.FolderId,
                         stagingDirectory: stagingDirectory);
-                    var catalog = new BackendGoogleDriveFileCatalog(http, endpoint, identities, attemptId, lease, connectionId, restoreOperationId);
+                    // A delete or repair scope has no attempt catalog: the provider works from an in-memory one and finds objects by their Drive properties.
+                    IGoogleDriveFileCatalog catalog = scopedAccessPath is null
+                        ? new BackendGoogleDriveFileCatalog(http, endpoint, identities, attemptId, lease, connectionId, restoreOperationId)
+                        : _scopedCatalog = new InMemoryGoogleDriveFileCatalog();
                     _targetProvider = GoogleDriveStorageProvider.CreateDirect(
                         http,
                         options,
@@ -361,18 +379,18 @@ public sealed class HttpTaskStorageProviderFactory(
             if (identity is null || lease == Guid.Empty)
                 throw new StorageException(StorageFailureKind.AccessDenied, "The storage task identity is unavailable.");
 
-            var relativePath = restoreOperationId is null
+            var relativePath = scopedAccessPath ?? (restoreOperationId is null
                 ? $"api/agent/tasks/{attemptId:D}/storage/access"
-                : $"api/agent/restore-tasks/{attemptId:D}/storage/access";
+                : $"api/agent/restore-tasks/{attemptId:D}/storage/access");
 
             using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(endpoint.BaseUri, relativePath));
             request.Headers.TryAddWithoutValidation("Authorization", identity.Current.ToAuthorizationHeaderValue());
             request.Headers.TryAddWithoutValidation(AgentProtocolHeader.Name, AgentProtocol.Current.Version.ToString());
             request.Headers.TryAddWithoutValidation(TaskStorageProtocol.LeaseHeader, lease.ToString("D"));
-            if (restoreOperationId is null)
+            if (scopedAccessPath is null && restoreOperationId is null)
                 request.Headers.TryAddWithoutValidation(TaskStorageProtocol.DestinationHeader, connectionId.ToString("D"));
-            else
-                request.Headers.TryAddWithoutValidation(TaskStorageProtocol.RestoreHeader, restoreOperationId.Value.ToString("D"));
+            else if (restoreOperationId is { } restore)
+                request.Headers.TryAddWithoutValidation(TaskStorageProtocol.RestoreHeader, restore.ToString("D"));
 
             try
             {

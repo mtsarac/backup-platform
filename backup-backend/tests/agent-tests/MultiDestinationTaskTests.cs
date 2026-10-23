@@ -45,6 +45,7 @@ public sealed class MultiDestinationTaskTests
             return new NullStorage(destination.StorageProvider);
         }
         public IStorageProvider CreateRestore(RestoreTaskSnapshot task) => throw new NotSupportedException();
+        public IStorageProvider CreateScoped(DirectStorageScope scope) => throw new NotSupportedException();
     }
 
     private sealed class NullStorage(string id) : IStorageProvider

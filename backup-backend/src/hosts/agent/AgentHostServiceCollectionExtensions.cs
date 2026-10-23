@@ -66,6 +66,7 @@ public static class AgentHostServiceCollectionExtensions
         services.AddSingleton<RestoreCleanupWorker>();
         services.TryAddSingleton<IDeleteReplicaProviderResolver, DeleteReplicaProviderResolver>();
         services.AddSingleton<DeleteReplicaTaskWorker>();
+        services.AddSingleton<ReplicaRepairTaskWorker>();
         services.AddSingleton<DownloadTaskWorker>();
         services.AddSingleton(provider => configuration.GetSection("Agent:Backup:Sftp")
             .Get<BackupPlatform.StorageProviders.Sftp.SftpNetworkOptions>() ?? new BackupPlatform.StorageProviders.Sftp.SftpNetworkOptions());
@@ -74,6 +75,7 @@ public static class AgentHostServiceCollectionExtensions
         services.AddHostedService<AgentCapacityTaskHostedService>();
         services.AddSingleton<IAgentTaskSink, AgentTaskDispatcher>();
         services.AddHostedService<AgentDeletionTaskHostedService>();
+        services.AddHostedService<AgentRepairTaskHostedService>();
         services.AddHostedService<AgentBackupTaskHostedService>();
         services.AddHostedService<AgentRestoreTaskHostedService>();
         services.AddHostedService<AgentRestoreCleanupHostedService>();

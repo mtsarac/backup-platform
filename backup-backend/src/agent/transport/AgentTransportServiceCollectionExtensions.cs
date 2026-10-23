@@ -70,6 +70,13 @@ public static class AgentTransportServiceCollectionExtensions
             })
             .ConfigurePrimaryHttpMessageHandler(AgentMtlsTransport.CreateHandler)
             .SetHandlerLifetime(TimeSpan.FromMinutes(2));
+        services.AddHttpClient<IReplicaRepairTaskClient, HttpReplicaRepairTaskClient>(client =>
+            {
+                client.Timeout = RequestTimeout;
+                client.MaxResponseContentBufferSize = 1024 * 1024;
+            })
+            .ConfigurePrimaryHttpMessageHandler(AgentMtlsTransport.CreateHandler)
+            .SetHandlerLifetime(TimeSpan.FromMinutes(2));
         services.AddHttpClient<ICapacityProbeTaskClient, HttpCapacityProbeTaskClient>(client =>
             {
                 client.Timeout = RequestTimeout;

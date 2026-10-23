@@ -388,6 +388,38 @@ public sealed class RestoreSourceEvaluatorTests
     }
 
     [Theory]
+    [InlineData("sftp")]
+    [InlineData("google-drive")]
+    public void AnExternalReplicaIsReadDirectlyByAnAgentThatSupportsDirectStorage(string provider)
+    {
+        var artifact = Artifact();
+        var connectionId = Guid.NewGuid();
+        var replica = new BackupReplica(Guid.NewGuid(), artifact.TenantId, artifact.Id, provider, connectionId.ToString("D"),
+            "tenant/sales.bak", artifact.SizeBytes, Hash, "sha256", "Verified", "ReadBack", Now.AddDays(-1), Now.AddDays(-1),
+            BackupStorageExecutionLocation.Backend, null, connectionId);
+        AddTo(artifact, replica);
+
+        Assert.Equal(RestoreSourceAccess.AgentDirect, RestoreSourceEvaluator.Evaluate(artifact, replica, Agent, Now, directStorage: true).Access);
+        Assert.Same(replica, RestoreSourceEvaluator.SelectReplica(artifact, Agent, Now, directStorage: true));
+        // An agent without the capability keeps the backend relay: direct access is never assumed.
+        Assert.Equal(RestoreSourceAccess.BackendRelayed, RestoreSourceEvaluator.Evaluate(artifact, replica, Agent, Now).Access);
+    }
+
+    [Fact]
+    public void DirectStorageDoesNotMakeAnUnverifiedExternalReplicaEligible()
+    {
+        var artifact = Artifact();
+        var connectionId = Guid.NewGuid();
+        var unverified = new BackupReplica(Guid.NewGuid(), artifact.TenantId, artifact.Id, "sftp", connectionId.ToString("D"),
+            "tenant/sales.bak", artifact.SizeBytes, Hash, "sha256", "Unverified", "ReadBack", Now.AddDays(-1), null,
+            BackupStorageExecutionLocation.Backend, null, connectionId);
+        AddTo(artifact, unverified);
+
+        Assert.Null(RestoreSourceEvaluator.SelectReplica(artifact, Agent, Now, directStorage: true));
+        Assert.Equal(RestoreSourceRejection.ReplicaNotVerified, RestoreSourceEvaluator.Explain(artifact, Agent, Now, directStorage: true));
+    }
+
+    [Theory]
     [InlineData("")]
     [InlineData("not-a-guid")]
     public void AnSftpReplicaWithInvalidOrMismatchedTargetGuidIsRejected(string target)

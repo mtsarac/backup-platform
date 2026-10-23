@@ -80,7 +80,8 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
         return new BackupRetentionApplication(candidates.Count, moved);
     }
 
-    public async Task<IReadOnlyList<ClaimedReplicaDeletion>> ClaimDueDeletionsAsync(string owner, DateTimeOffset now, TimeSpan lease, int limit, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ClaimedReplicaDeletion>> ClaimDueDeletionsAsync(string owner, DateTimeOffset now, TimeSpan lease, int limit, CancellationToken cancellationToken,
+        bool dispatchExternalToAgents = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(owner);
         now = now.ToUniversalTime();
@@ -94,7 +95,8 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
             WHERE (("Status" = 'DeletePending' AND "DeleteAfter" <= {now})
                OR ("Status" = 'DeleteFailed' AND "DeleteNextAttemptAt" <= {now})
                OR ("Status" = 'Deleting' AND ("DeleteLeaseExpiresAt" <= {now}
-                   OR ("ExecutionLocation" = 'Agent' AND "DeleteLeaseToken" IS NULL AND "DeleteNextAttemptAt" <= {now}))))
+                   OR ("DeleteLeaseToken" IS NULL AND "DeleteNextAttemptAt" <= {now}
+                       AND ("ExecutionLocation" = 'Agent' OR ({dispatchExternalToAgents} AND "StorageProvider" IN ('sftp', 'google-drive')))))))
               AND NOT EXISTS (SELECT 1 FROM restore_replica_pins pin WHERE pin."ReplicaId" = backup_replicas."Id" AND pin."ReleasedAt" IS NULL)
               AND NOT EXISTS (SELECT 1 FROM replica_repair_operations repair WHERE repair."SourceReplicaId" = backup_replicas."Id" AND repair."TenantId" = backup_replicas."TenantId" AND repair."Status" IN ('Pending', 'InProgress'))
               AND NOT EXISTS (SELECT 1 FROM backup_artifacts artifact JOIN backup_run_attempts attempt
@@ -126,18 +128,18 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
         var changed = false;
         foreach (var replica in replicas.OrderBy(replica => position[replica.Id]))
         {
-            if (replica.ExecutionLocation == BackupStorageExecutionLocation.Agent)
-            {
-                changed |= replica.DispatchAgentDeletion(replica.DeleteOperationId ?? Guid.NewGuid(), now,
-                    now + retentionOptions.DeleteRetryDelay(Math.Max(1, replica.DeleteAttempts)));
-                continue;
-            }
-            if (replica.StorageProvider is "sftp" or "google-drive" or "s3" or "smb")
+            if (replica.ExecutionLocation == BackupStorageExecutionLocation.Backend && replica.StorageProvider is "sftp" or "google-drive" or "s3" or "smb")
             {
                 // A timed-out attempt can still have a remote PUT in flight; do not publish absence ahead of that writer.
                 // Taken for this transaction only (the row stays locked until commit, so a writer waits for it): a live writer lease means skip.
                 var transferLock = BackupTransferLock.Id(replica.StorageConnectionId, replica.Key);
                 if (!await BackupTransferLeases.TryTakeAsync(context, transferLock, Guid.NewGuid(), TimeSpan.Zero, cancellationToken)) continue;
+            }
+            if (replica.ExecutionLocation == BackupStorageExecutionLocation.Agent || dispatchExternalToAgents && replica.AgentExecuted)
+            {
+                changed |= replica.DispatchAgentDeletion(replica.DeleteOperationId ?? Guid.NewGuid(), now,
+                    now + retentionOptions.DeleteRetryDelay(Math.Max(1, replica.DeleteAttempts)));
+                continue;
             }
             // The domain re-validates due-ness on the locked, freshly read row.
             if (!replica.BeginDelete(Guid.NewGuid(), owner, now, lease)) continue;
