@@ -237,6 +237,12 @@ public sealed class HttpTaskStorageProviderFactory(
             return await target.DeleteAsync(key, cancellationToken).ConfigureAwait(false);
         }
 
+        public async Task AbortTransferAsync(StorageObjectKey key, string providerState, CancellationToken cancellationToken)
+        {
+            var target = await GetProviderAsync(cancellationToken).ConfigureAwait(false);
+            await target.AbortTransferAsync(key, providerState, cancellationToken).ConfigureAwait(false);
+        }
+
         public async Task<Stream> OpenReadAsync(StorageObjectKey key, CancellationToken cancellationToken)
         {
             var target = await GetProviderAsync(cancellationToken).ConfigureAwait(false);
