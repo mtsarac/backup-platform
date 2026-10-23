@@ -464,7 +464,7 @@ internal sealed class DatabaseBackupExecution
                     exception, BackupFailureKind.StorageWriteFailed, BackupFailureCause.StorageUnavailable);
             }
 
-            StorageObjectMetadata stored;
+            StorageObjectMetadata? stored = null;
             await using var pacingScope = pacing;
             using var pauseRegistration = pacing?.TimeRulePauseToken.Register(() => destinationDeadline.Cancel());
             try
@@ -511,6 +511,10 @@ internal sealed class DatabaseBackupExecution
             {
                 throw new TransferPausedException("TimeRule");
             }
+            catch (StorageException exception) when (exception.Kind == StorageFailureKind.AlreadyExists && _request.ResumeTransfer)
+            {
+                // A destination that finished before the pause still holds this attempt's object under its deterministic key: it is verified, not re-uploaded.
+            }
             catch (StorageException exception)
             {
                 if (exception is { ObjectMayRemain: true, RemainingObjectKey: { } remaining })
@@ -535,7 +539,7 @@ internal sealed class DatabaseBackupExecution
 
             // From here on an object exists under the final key; if anything below fails it must not be left behind unverified.
             transfer.Stored = true;
-            if (stored.SizeBytes != artifact.SizeBytes || (stored.Checksum is { } checksum && checksum != artifact.Checksum))
+            if (stored is not null && (stored.SizeBytes != artifact.SizeBytes || (stored.Checksum is { } checksum && checksum != artifact.Checksum)))
             {
                 throw Fail(stage, BackupPipelineReasons.StorageIntegrityMismatch,
                     "The storage reported a different size or checksum than the artifact that was sent.", kind: BackupFailureKind.StorageWriteFailed,

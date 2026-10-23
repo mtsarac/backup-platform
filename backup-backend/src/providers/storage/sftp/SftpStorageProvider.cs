@@ -22,6 +22,7 @@ public sealed class SftpStorageProvider : IStorageProvider
     ]);
 
     private const int StreamBufferSize = 64 * 1024;
+    private const int CheckpointIntervalBytes = 8 * 1024 * 1024;
 
     private readonly SftpStorageOptions _options;
     private readonly SftpNetworkOptions _network;
@@ -167,6 +168,7 @@ public sealed class SftpStorageProvider : IStorageProvider
                 {
                     uploadedTemp = true;
                     remoteStream.Position = totalWritten;
+                    var lastCheckpoint = totalWritten;
                     var buffer = ArrayPool<byte>.Shared.Rent(StreamBufferSize);
                     try
                     {
@@ -176,10 +178,13 @@ public sealed class SftpStorageProvider : IStorageProvider
                             await remoteStream.WriteAsync(buffer.AsMemory(0, bytesRead), linkedCts.Token).ConfigureAwait(false);
                             hasher.AppendData(buffer, 0, bytesRead);
                             totalWritten += bytesRead;
-                            if (options.RecordCheckpointAsync is { } checkpoint)
+                            // Each checkpoint is a flush plus a backend round trip, so it is taken per interval, not per buffer; resume trusts the remote
+                            // partial's size after a full prefix comparison, so a coarse checkpoint loses no progress.
+                            if (options.RecordCheckpointAsync is { } checkpoint && totalWritten - lastCheckpoint >= CheckpointIntervalBytes)
                             {
                                 await remoteStream.FlushAsync(linkedCts.Token).ConfigureAwait(false);
                                 await checkpoint(new(totalWritten, "sftp-v1"), linkedCts.Token).ConfigureAwait(false);
+                                lastCheckpoint = totalWritten;
                             }
                             progress?.Report(totalWritten);
                         }

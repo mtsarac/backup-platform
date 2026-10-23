@@ -54,6 +54,38 @@ public sealed class MultiDestinationPipelineTests : IDisposable
     }
 
     [Fact]
+    public async Task Resume_after_a_pause_verifies_the_destination_that_finished_instead_of_failing_or_re_uploading_it()
+    {
+        using var pause = new CancellationTokenSource();
+        var stores = new[] { NewStorage(), NewStorage() };
+        stores[1].OnPut = (_, _, _, token) =>
+        {
+            pause.Cancel();
+            token.ThrowIfCancellationRequested();
+            throw new InvalidOperationException("The pause signal must cancel the open transfer.");
+        };
+        var request = Request([Destination("central", stores[0], true), Destination("sftp", stores[1])], required: 2) with
+        {
+            AttemptId = Guid.NewGuid(), PauseToken = pause.Token, RecordCheckpointAsync = (_, _) => Task.CompletedTask
+        };
+
+        var paused = await _h.RunAsync(request);
+
+        Assert.Equal(DatabaseBackupStatus.Paused, paused.Status);
+        Assert.Equal(PipelineHarness.BackupBytes, Assert.Single(stores[0].Objects).Value);
+        Assert.Empty(stores[1].Objects);
+
+        // Storage refuses to overwrite: the first destination's object from before the pause is verified, never rewritten.
+        stores[1].OnPut = null;
+        var resumed = await _h.RunAsync(request with { ResumeTransfer = true, PauseToken = default });
+
+        Assert.Equal(DatabaseBackupStatus.Succeeded, resumed.Status);
+        Assert.All(resumed.Destinations, destination => Assert.Equal(BackupDestinationState.Verified, destination.State));
+        Assert.Equal(2, resumed.Destinations.Count);
+        Assert.All(stores, store => Assert.Equal(PipelineHarness.BackupBytes, Assert.Single(store.Objects).Value));
+    }
+
+    [Fact]
     public async Task One_engine_backup_becomes_three_verified_replicas_of_one_artifact()
     {
         var stores = new[] { NewStorage(), NewStorage(), NewStorage() };
