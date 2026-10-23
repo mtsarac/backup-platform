@@ -11,7 +11,7 @@ public sealed class DownloadSession : ITenantOwned
 {
     private DownloadSession() { TenantId = null!; StorageProvider = null!; StorageTarget = null!; Key = null!; Checksum = null!; Filename = null!; }
     public DownloadSession(Guid id, BackupArtifact artifact, BackupReplica replica, Guid userId, string filename, DateTimeOffset now, TimeSpan lifetime, Guid? supportSessionId = null,
-        bool decrypted = false, Guid? breakGlassRequestId = null)
+        bool decrypted = false, Guid? breakGlassRequestId = null, Guid? directAgentId = null)
     {
         if (supportSessionId == Guid.Empty || breakGlassRequestId == Guid.Empty) throw new ArgumentException("A support session or break-glass id must not be empty.", nameof(supportSessionId));
         if (decrypted && (artifact.Format != BackupArtifact.BpeFormat || supportSessionId is not null) || breakGlassRequestId is not null && !decrypted)
@@ -22,7 +22,9 @@ public sealed class DownloadSession : ITenantOwned
             artifact.ChecksumAlgorithm != "sha256") throw new ArgumentException("The replica cannot be downloaded.");
         Id = id; TenantId = artifact.TenantId; ArtifactId = artifact.Id; ReplicaId = replica.Id; UserId = userId; SupportSessionId = supportSessionId;
         Decrypted = decrypted; BreakGlassRequestId = breakGlassRequestId;
-        AgentId = replica.ExecutionLocation == BackupStorageExecutionLocation.Agent ? replica.OwningAgentId : null;
+        if (directAgentId == Guid.Empty || directAgentId is not null && replica.StorageProvider is not ("sftp" or "google-drive"))
+            throw new ArgumentException("A direct executor is only valid for external storage.");
+        AgentId = replica.ExecutionLocation == BackupStorageExecutionLocation.Agent ? replica.OwningAgentId : directAgentId;
         StorageProvider = replica.StorageProvider; StorageTarget = replica.StorageTarget; Key = replica.Key;
         Checksum = artifact.ArtifactChecksum; SizeBytes = artifact.SizeBytes; Filename = filename;
         CreatedAt = now.ToUniversalTime(); ExpiresAt = CreatedAt + lifetime;
@@ -35,7 +37,7 @@ public sealed class DownloadSession : ITenantOwned
     public Guid UserId { get; private set; }
     /// <summary>The support access session this download was authorized through; null for an ordinary tenant download. Fixed at creation.</summary>
     public Guid? SupportSessionId { get; private set; }
-    /// <summary>The backend verifies staged ciphertext and plaintext before streaming (tenant wrap key); checksum and size still describe the stored ciphertext.</summary>
+    /// <summary>The serving host verifies private ciphertext and plaintext staging before streaming; metadata still describes stored ciphertext.</summary>
     public bool Decrypted { get; private set; }
     /// <summary>The break-glass request this download spent; null otherwise. A download belongs to the channel it was created through. Fixed at creation.</summary>
     public Guid? BreakGlassRequestId { get; private set; }

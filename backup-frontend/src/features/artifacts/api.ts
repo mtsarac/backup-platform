@@ -48,7 +48,7 @@ export interface DownloadAvailability {
   format: ArtifactFormat
 }
 /** `decrypted` downloads carry the plaintext `sourceChecksum` and have no Content-Length; `sizeBytes` stays the stored ciphertext size. */
-export interface PreparedDownload { sessionId: string; downloadUrl: string; filename: string; checksum: string; sizeBytes: number; decrypted: boolean }
+export interface PreparedDownload { sessionId: string; downloadUrl: string; filename: string; checksum: string; sizeBytes: number; decrypted: boolean; direct?: boolean }
 export interface DownloadStatus {
   sessionId: string
   state: 'Preparing' | 'Ready' | 'Streaming' | 'Completed' | 'Failed' | 'Cancelled'

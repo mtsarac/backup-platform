@@ -14,6 +14,7 @@ import { getSupportDownloadAvailability, getSupportDownloadStatus, prepareSuppor
 import { supportKeys } from './hooks'
 import { SupportQueryState } from './support-query-state'
 import type { SupportScope } from './types'
+import { DirectDownloadButton } from '@/features/artifacts/direct-download-button'
 
 export function SupportArtifactDownload({ scope, artifactId, eligible }: { scope: SupportScope; artifactId: string; eligible: boolean }) {
   useLanguage()
@@ -34,7 +35,7 @@ function DownloadController({ scope, artifactId, eligible }: { scope: SupportSco
   const safeUrl = download && download.downloadUrl.startsWith('/') && !download.downloadUrl.startsWith('//') && nativeDownloadUrl(download.downloadUrl) && !/[?#]/.test(download.downloadUrl)
   const status = useQuery({ queryKey: supportKeys.data(scope, 'downloads', 'status', artifactId, download?.sessionId), queryFn: ({ signal }) => getSupportDownloadStatus(scope.sessionId, artifactId, download!.sessionId, signal), enabled: enabled && Boolean(download), retry: false, refetchInterval: query => visible && !query.state.error && !['Completed', 'Failed', 'Cancelled'].includes(query.state.data?.state ?? '') ? 1000 : false })
   useEffect(() => {
-    if (!active.current || !enabled || !download || !safeUrl || status.data?.state !== 'Ready' || started.current) return
+    if (!active.current || !enabled || !download || download.direct || !safeUrl || status.data?.state !== 'Ready' || started.current) return
     started.current = true
     const anchor = document.createElement('a')
     // Exact relative API URL, cookie-authenticated browser navigation. No file bytes or tokens in JS.
@@ -58,6 +59,7 @@ function DownloadController({ scope, artifactId, eligible }: { scope: SupportSco
     </>}</SupportQueryState>}
     <Button disabled={!enabled || busy || Boolean(error) || !availability.data?.available || Boolean(selected && !selected.available)} onClick={() => { if (submitting.current || !enabled) return; submitting.current = true; started.current = false; prepare.mutate() }}>{busy ? tx('İndirme hazırlanıyor…') : tx('İndir')}</Button>
     {download && !safeUrl && <Notice tone="error">{tx("İndirme bağlantısı güvenli değil. Yeni bir indirme başlatın.")}</Notice>}
+    {download?.direct && <DirectDownloadButton key={download.sessionId} session={download} />}
     {status.data && <p role={status.data.state === 'Failed' ? 'alert' : 'status'} className="text-sm">{status.data.state === 'Failed' ? failureMessage(status.data.failureCode) : status.data.state === 'Preparing' ? tx('İndirme hazırlanıyor…') : status.data.state === 'Ready' || status.data.state === 'Streaming' ? tx('İndirme başlatıldı. Dosyayı tarayıcınız kaydediyor.') : status.data.state === 'Completed' ? tx('İndirme tamamlandı.') : tx('İndirme iptal edildi.')} · {artifactSize(status.data.transferredBytes)}</p>}
     </div>
   </Section>

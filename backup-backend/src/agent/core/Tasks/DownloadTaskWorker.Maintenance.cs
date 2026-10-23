@@ -36,13 +36,15 @@ public sealed partial class DownloadTaskWorker
         }
     }
 
-    private async Task CompleteAsync(DownloadTaskSnapshot task, string failure, CancellationToken cancellationToken)
+    private async Task CompleteAsync(DownloadTaskSnapshot task, string? failure, CancellationToken cancellationToken)
     {
         var request = new DownloadTaskCompletionRequest
         {
             LeaseToken = task.LeaseToken,
-            Status = failure == DownloadAgentFailureCodes.Cancelled ? "Cancelled" : "Failed",
-            FailureCode = failure
+            Status = failure is null ? "Completed" : failure == DownloadAgentFailureCodes.Cancelled ? "Cancelled" : "Failed",
+            FailureCode = failure,
+            TransferredBytes = failure is null ? task.SizeBytes : 0,
+            Checksum = failure is null ? task.Decrypt ? task.SourceChecksum : task.Checksum : null
         };
         while (true)
         {

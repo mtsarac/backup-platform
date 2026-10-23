@@ -2,6 +2,7 @@ import { tx } from '@/lib/i18n'
 import { ApiError } from './client'
 
 const messages: Record<string, string> = {
+  get DirectPathUnavailable() { return tx('DirectPathUnavailable: Doğrudan Agent bağlantısı veya güvenli diske yazma desteği kullanılamıyor. Backend aktarımına geçilmez.') },
   get replica_unavailable() { return tx("Replica şu anda indirme için kullanılamıyor.") },
   get replica_not_found() { return tx("Replica bulunamadı veya bu Backup altında erişilemiyor.") },
   get storage_read_not_supported() { return tx("Storage Provider güvenli indirmeyi desteklemiyor.") },

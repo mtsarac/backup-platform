@@ -17,6 +17,7 @@ public static class DownloadEndpoints
         group.MapPost("/downloads", PrepareAsync);
         group.MapGet("/downloads/{sessionId:guid}", StatusAsync);
         group.MapGet("/downloads/{sessionId:guid}/content", ContentAsync);
+        group.MapPost("/downloads/{sessionId:guid}/content", ContentAsync).WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(64 * 1024));
         return endpoints;
     }
 
@@ -69,12 +70,14 @@ public static class DownloadEndpoints
     }
 
     private static async Task<IResult> ContentAsync(Guid artifactId, Guid sessionId, ITenantContext tenant, ICurrentUser user,
-        DownloadService service, DownloadStreamer streamer, ILogger<DownloadService> logger, CancellationToken cancellationToken)
+        DownloadService service, DownloadStreamer streamer, DirectDownloadSignals signals, HttpContext http, ILogger<DownloadService> logger, CancellationToken cancellationToken)
     {
         try
         {
             var session = await service.GetOwnedAsync(tenant.TenantId!, artifactId, sessionId, user.UserId!.Value, cancellationToken);
             if (session is null) return Results.NotFound();
+            if (session.AgentId is not null) return await signals.BrowserAsync(http, session);
+            if (!HttpMethods.IsGet(http.Request.Method)) return Results.BadRequest();
             if (session.State != DownloadState.Ready) return Results.Conflict(new { error = session.FailureCode ?? "download_not_ready" });
             return new NativeDownloadResult(session, streamer);
         }

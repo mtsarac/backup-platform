@@ -31,7 +31,7 @@ internal sealed class DownloadApiScenario : IAsyncDisposable
     public string ArtifactPath => Root + $"/backup-artifacts/{Accepted.ArtifactId}";
     public PostgreSqlDownloadStore Store() => new(new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(World.Database.ConnectionString).Options);
 
-    public static async Task<DownloadApiScenario> CreateAsync(PostgreSqlFixture fixture, bool agentLocal = false)
+    public static async Task<DownloadApiScenario> CreateAsync(PostgreSqlFixture fixture, bool agentLocal = false, bool kestrel = false, Action<IServiceCollection>? configureServices = null)
     {
         var backup = await RestoreApiScenario.CreateAsync(fixture);
         var bytes = Enumerable.Range(0, 1024).Select(index => (byte)(index % 251)).ToArray();
@@ -63,7 +63,7 @@ internal sealed class DownloadApiScenario : IAsyncDisposable
         var file = Path.Combine(directory, "tenants", "download-tenant", accepted.Key.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         await File.WriteAllBytesAsync(file, bytes);
-        var world = await AgentWorld.CreateAsync(fixture, clock: backup.Clock, configuration: new Dictionary<string, string?>
+        var world = await AgentWorld.CreateAsync(fixture, clock: backup.Clock, kestrel: kestrel, configureServices: configureServices, configuration: new Dictionary<string, string?>
         {
             ["Backups:Storage:Central:RootDirectory"] = directory,
             [$"Backups:Storage:Central:TenantScopes:{backup.TenantId}"] = "download-tenant"

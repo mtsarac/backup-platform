@@ -72,7 +72,7 @@ public sealed class PostgreSqlDownloadStore(DbContextOptions<PlatformDbContext> 
         if (replica.Status != BackupReplicaStatus.Available || replica.VerificationState != "Verified" ||
             replica.Checksum != artifact.ArtifactChecksum || replica.SizeBytes != artifact.SizeBytes || artifact.ChecksumAlgorithm != "sha256") return null;
         var lifetime = grant is null ? command.Lifetime : TimeSpan.FromTicks(Math.Min(command.Lifetime.Ticks, (grant.ExpiresAt - command.Now).Ticks));
-        var download = new DownloadSession(downloadId, artifact, replica, command.UserId, command.Filename, command.Now, lifetime, command.SupportSessionId, command.Decrypted, command.BreakGlassRequestId);
+        var download = new DownloadSession(downloadId, artifact, replica, command.UserId, command.Filename, command.Now, lifetime, command.SupportSessionId, command.Decrypted, command.BreakGlassRequestId, command.DirectAgentId);
         context.DownloadSessions.Add(download);
         if (grant is not null)
             context.AuditEvents.Add(PostgreSqlArtifactBreakGlassStore.Audit(AuditActions.BreakGlassConsumed, grant, new UserId(command.UserId), command.Now,

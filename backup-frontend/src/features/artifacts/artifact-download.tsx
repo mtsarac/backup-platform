@@ -9,6 +9,7 @@ import { nativeDownloadUrl } from './native-download-url'
 import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
 import { getDownloadAvailability, getDownloadStatus, prepareDownload } from './api'
 import { artifactSize } from './format'
+import { DirectDownloadButton } from './direct-download-button'
 
 export function ArtifactDownload({ tenantId, artifactId, canAdmin, eligible }: { tenantId: string; artifactId: string; canAdmin: boolean; eligible: boolean }) {
   useLanguage()
@@ -41,7 +42,7 @@ function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tena
     retry: false,
   })
   useEffect(() => {
-    if (!active.current || !canAdmin || !eligible || !session || !downloadUrl || status.data?.state !== 'Ready' || started.current) return
+    if (!active.current || !canAdmin || !eligible || !session || session.direct || !downloadUrl || status.data?.state !== 'Ready' || started.current) return
     // Use the browser's cookie-authenticated navigation; file bytes never enter JavaScript memory.
     started.current = true
     const anchor = document.createElement('a')
@@ -61,7 +62,7 @@ function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tena
     catch { setCopyNotice(tx('Checksum kopyalanamadı. Değeri seçerek kopyalayabilirsiniz.')) }
   }
   const finalState = status.data?.state
-  return <Section title={tx("Download Backup")} description={tx("Dosya tarayıcınızdan doğrudan indirilir; içeriği uygulama belleğine alınmaz.")} className="max-w-3xl">
+  return <Section title={tx("Download Backup")} description={tx("Harici depolama indirmeleri yetkili Agent üzerinden doğrudan diske aktarılır; platform depolaması tarayıcının indirme yöneticisini kullanır.")} className="max-w-3xl">
     <div className="space-y-4">
       {availability.isPending && <p role="status" className="text-sm text-text-muted">{tx("İndirme kullanılabilirliği kontrol ediliyor…")}</p>}
       {failure && <Notice tone="error">{errorMessage(failure)}</Notice>}
@@ -77,21 +78,22 @@ function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tena
           {session?.decrypted && <Fact label={tx("Çözülmüş dosyanın SHA256 checksum değeri")}><code className="block break-all font-mono text-sm">{session.checksum}</code></Fact>}
         </Facts>
         <label className="block text-sm font-medium text-text-heading">{tx("İndirme hedefi")}<select aria-label={tx("İndirme hedefi")} className={`${selectClass} w-full`} value={replicaId} disabled={busy} onChange={event => setReplicaId(event.target.value)}>
-            <option value="">{tx("Otomatik · en uygun replika (Fallback destekli)")}</option>
+            <option value="">{tx("Otomatik · en uygun doğrulanmış replika")}</option>
             {availability.data.replicas.map(replica => <option key={replica.replicaId} value={replica.replicaId} disabled={!replica.available}>{replica.storageProvider} · {replica.storageTarget}{!replica.available ? ` · ${failureMessage(replica.reason)}` : ''}</option>)}
           </select>
         </label>
         {!replicaId && availability.data.replicas.filter(r => r.available).length > 1 && (
-          <p className="text-sm text-text-muted">{tx("Otomatik seçimde, aktarım başlamadan önce backend'in okuyabildiği alternatif doğrulanmış replika denenebilir. Aktarım başladıktan sonra hata oluşursa indirme durur; otomatik yeniden başlatılmaz.")}</p>
+          <p className="text-sm text-text-muted">{tx("Harici depolamada backend veya TURN aktarımı kullanılmaz. Doğrudan yol kurulamazsa açık hata verilir.")}</p>
         )}
         {availability.data.format === 'v2-bpe' && <fieldset className="space-y-2" disabled={busy}>
           <legend className="text-sm font-medium text-text-heading">{tx("İndirilecek dosya")}</legend>
           <label className="flex min-h-11 items-start gap-3 rounded-lg bg-surface-2 p-3 text-sm"><input type="radio" name="download-form" className="mt-1 size-4 accent-primary" checked={!decrypt} onChange={() => setDecrypt(false)} /><span><span className="block font-medium">{tx("Şifreli dosya (.bpe) · varsayılan")}</span><span className="block text-text-muted">{tx("Depolanan dosya olduğu gibi iner ve anahtar olmadan okunamaz. Çevrimdışı çözmek için bp-decrypt kullanılır.")}</span></span></label>
-          <label className="flex min-h-11 items-start gap-3 rounded-lg bg-surface-2 p-3 text-sm"><input type="radio" name="download-form" className="mt-1 size-4 accent-primary" checked={decrypt} onChange={() => setDecrypt(true)} /><span><span className="block font-medium">{tx("Çözülmüş dosya")}</span><span className="block text-text-muted">{tx("Backend dosyanın tamamını güvenli geçici alanda çözer; şifreli ve düz veri checksum doğrulanmadan hiçbir düz veri gönderilmez. İşlem audit kaydına yazılır. İndirilen dosya şifresizdir, güvenle saklayın.")}</span></span></label>
+          <label className="flex min-h-11 items-start gap-3 rounded-lg bg-surface-2 p-3 text-sm"><input type="radio" name="download-form" className="mt-1 size-4 accent-primary" checked={decrypt} onChange={() => setDecrypt(true)} /><span><span className="block font-medium">{tx("Çözülmüş dosya")}</span><span className="block text-text-muted">{tx("Harici depolamada Agent dosyanın tamamını özel geçici alanda çözer; şifreli ve düz veri checksum doğrulanmadan düz veri gönderilmez. Yetkili anahtar erişimi audit kaydına yazılır. İndirilen dosya şifresizdir, güvenle saklayın.")}</span></span></label>
         </fieldset>}
         {!availability.data.available && <Notice tone="warning">{tx("İndirme kullanılamıyor: Hiçbir doğrulanmış kopya erişilebilir değil (")}{failureMessage(availability.data.reason)}).</Notice>}
         <Button disabled={busy || !availability.data.available || Boolean(selected && !selected.available)} onClick={() => { started.current = false; prepare.mutate() }}>{prepare.isPending || finalState === 'Preparing' ? tx('İndirme hazırlanıyor…') : availability.data.format === 'v2-bpe' && decrypt ? tx('Çözülmüş dosyayı indir') : tx('Download Backup')}</Button>
       </>}
+      {session?.direct && <DirectDownloadButton key={session.sessionId} session={session} />}
       {session && !status.data && !status.error && <p role="status" className="text-sm text-text-muted">{tx("İndirme hazırlanıyor…")}</p>}
       {status.data && <Notice tone={finalState === 'Failed' ? 'error' : finalState === 'Completed' ? 'success' : 'info'}>
         {finalState === 'Preparing' ? tx('İndirme hazırlanıyor…') : finalState === 'Ready' || finalState === 'Streaming' ? tx('İndirme başlatıldı. Dosya tarayıcınız tarafından kaydediliyor.') : finalState === 'Completed' ? tx('Dosya aktarımı tamamlandı.') : finalState === 'Cancelled' ? tx('İndirme iptal edildi.') : tx("İndirme başarısız: {0}", { "0": failureMessage(status.data.failureCode) })}

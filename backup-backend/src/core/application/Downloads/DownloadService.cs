@@ -12,10 +12,10 @@ namespace BackupPlatform.Application.Downloads;
 public sealed record ReplicaDownloadAvailability(Guid ReplicaId, string StorageProvider, string StorageTarget, bool Available, string? Reason);
 public sealed record DownloadAvailability(bool Available, string? Reason, IReadOnlyList<ReplicaDownloadAvailability> Replicas, string Checksum, long SizeBytes, string? Engine = "mssql",
     string Format = BackupArtifact.PlainFormat);
-/// <param name="Decrypt">Tenant administrators only: the backend verifies private ciphertext and plaintext staging before handing out plaintext.</param>
+/// <param name="Decrypt">Tenant administrators only: the serving agent verifies ciphertext and plaintext before direct delivery.</param>
 public sealed record PrepareDownloadRequest(Guid? ReplicaId = null, bool Decrypt = false);
 /// <param name="Checksum">What the client can verify: the plaintext SHA-256 for a decrypted download, otherwise the stored file's. <paramref name="SizeBytes"/> is always the stored size.</param>
-public sealed record PreparedDownload(Guid SessionId, string DownloadUrl, string Filename, string Checksum, long SizeBytes, bool Decrypted = false);
+public sealed record PreparedDownload(Guid SessionId, string DownloadUrl, string Filename, string Checksum, long SizeBytes, bool Decrypted = false, bool Direct = false);
 public sealed record DownloadStatus(Guid SessionId, string State, string? FailureCode, long TransferredBytes);
 public sealed class DownloadUnavailableException(string code) : Exception("The backup cannot be downloaded.") { public string Code { get; } = code; }
 
@@ -69,17 +69,23 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
                 .FirstOrDefault();
         if (selected is null) throw new DownloadUnavailableException(request.ReplicaId is null ? availability.Reason! : "replica_not_found");
         if (!selected.Available) throw new DownloadUnavailableException(selected.Reason!);
+        artifact ??= await store.GetArtifactAsync(tenantId, artifactId, cancellationToken);
+        if (artifact is null) return null;
+        var replica = artifact.Replicas.Single(item => item.Id == selected.ReplicaId);
+        var external = replica.StorageProvider is "sftp" or "google-drive";
+        var directAgent = external ? await agentSource.SelectAgentAsync(tenantId, replica, cancellationToken) : null;
+        if (external && directAgent is null) throw new DownloadUnavailableException("DirectPathUnavailable");
         var extension = availability.Engine switch { "postgres" => "dump", "mssql" => "bak", "file-system" => "zip", _ => "bin" };
         var filename = $"backup-{artifactId:N}.{extension}" + (availability.Format == BackupArtifact.BpeFormat && !decrypt ? ".bpe" : string.Empty);
         var session = await store.CreateAsync(new DownloadCreateCommand(tenantId, artifactId, selected.ReplicaId, userId, filename, time.GetUtcNow(), SessionLifetime, supportSessionId,
-            decrypt, breakGlassRequestId), cancellationToken);
+            decrypt, breakGlassRequestId, directAgent), cancellationToken);
         if (session is null) throw new DownloadUnavailableException("replica_unavailable");
         var url = breakGlassRequestId is { } breakGlass
             ? $"/api/platform/artifact-break-glass/{breakGlass}/downloads/{session.Id}/content"
             : supportSessionId is { } support
                 ? $"/api/platform/support-sessions/{support}/artifacts/{artifactId}/downloads/{session.Id}/content"
                 : $"/api/tenants/{tenantId.Value}/backup-artifacts/{artifactId}/downloads/{session.Id}/content";
-        return new PreparedDownload(session.Id, url, filename, artifact?.SourceChecksum ?? session.Checksum, session.SizeBytes, decrypt);
+        return new PreparedDownload(session.Id, url, filename, decrypt ? artifact.SourceChecksum : session.Checksum, session.SizeBytes, decrypt, session.AgentId is not null);
     }
 
     /// <summary>
@@ -100,6 +106,8 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
 
     public async Task<(Stream Stream, DownloadSession Session)> OpenReadWithFallbackAsync(DownloadSession session, CancellationToken cancellationToken)
     {
+        if (session.AgentId is not null || session.StorageProvider is "sftp" or "google-drive")
+            throw new DownloadUnavailableException("DirectPathUnavailable");
         if (!session.IsPinned(time.GetUtcNow())) throw new DownloadUnavailableException("download_interrupted");
         var artifact = await store.GetArtifactAsync(session.TenantId, session.ArtifactId, cancellationToken);
         if (artifact is null) throw new DownloadUnavailableException("artifact_not_found");
@@ -190,7 +198,8 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
         if (replica.TenantId != artifact.TenantId || replica.ArtifactId != artifact.Id || replica.Status != BackupReplicaStatus.Available ||
             replica.VerificationState != "Verified" || replica.Checksum != artifact.ArtifactChecksum || replica.SizeBytes != artifact.SizeBytes ||
             artifact.ChecksumAlgorithm != "sha256") return "replica_unavailable";
-        if (replica.ExecutionLocation == BackupStorageExecutionLocation.Agent) return await agentSource.GetUnavailableReasonAsync(artifact.TenantId, replica, cancellationToken);
+        if (replica.ExecutionLocation == BackupStorageExecutionLocation.Agent || replica.StorageProvider is "sftp" or "google-drive")
+            return await agentSource.GetUnavailableReasonAsync(artifact.TenantId, replica, cancellationToken);
         var provider = storage.Resolve(artifact.TenantId, replica.StorageProvider, replica.StorageTarget);
         if (provider is null) return "storage_not_configured";
         if (!provider.Capabilities.Supports(StorageCapabilityIds.Read)) return "storage_read_not_supported";

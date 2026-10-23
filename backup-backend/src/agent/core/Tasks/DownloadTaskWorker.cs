@@ -10,10 +10,11 @@ using Microsoft.Extensions.Logging;
 
 namespace BackupPlatform.Agent.Core.Tasks;
 
-/// <summary>Reads only configured provider objects claimed by authenticated polling. A verified open handle is streamed outbound; the backend verifies its own copy before allowing a browser download.</summary>
+/// <summary>Verifies a claimed source privately, then serves its authorized browser over direct DTLS; backend calls contain metadata only.</summary>
 public sealed partial class DownloadTaskWorker(
     IDownloadTaskClient client, IAgentCredentialStore identities, IEnumerable<IStorageProvider> providers,
-    AgentSoftwareInfo software, TimeProvider time, ILogger<DownloadTaskWorker> logger, LocalVolumes? volumes = null, AgentUpdateGate? updates = null) : IAgentTaskSink
+    AgentSoftwareInfo software, TimeProvider time, ILogger<DownloadTaskWorker> logger, LocalVolumes? volumes = null, AgentUpdateGate? updates = null,
+    ITaskStorageProviderFactory? storageFactory = null) : IAgentTaskSink
 {
     private readonly Channel<DownloadTaskSnapshot> _queue = Channel.CreateBounded<DownloadTaskSnapshot>(new BoundedChannelOptions(1)
     {
@@ -102,7 +103,7 @@ public sealed partial class DownloadTaskWorker(
         try
         {
             var failure = await TransferAsync(task, transfer.Token).ConfigureAwait(false);
-            if (failure is not null && !lifetime.IsCancellationRequested)
+            if (!lifetime.IsCancellationRequested)
             {
                 await CompleteAsync(task, failure, lifetime.Token).ConfigureAwait(false);
             }
@@ -121,14 +122,30 @@ public sealed partial class DownloadTaskWorker(
         {
             cancellationToken.ThrowIfCancellationRequested();
             var (provider, key, checksum) = ResolveSource(task);
-            await using var content = await provider.OpenReadAsync(key, cancellationToken).ConfigureAwait(false);
-            if (!content.CanRead || !content.CanSeek) return DownloadAgentFailureCodes.SourceInaccessible;
+            await using var source = await provider.OpenReadAsync(key, cancellationToken).ConfigureAwait(false);
+            await using var content = CreatePrivateDownloadFile();
+            await CopyBoundedAsync(source, content, task.SizeBytes, cancellationToken).ConfigureAwait(false);
             if (content.Length != task.SizeBytes) return DownloadAgentFailureCodes.IntegrityMismatch;
-            var actual = await ContentHasher.ComputeSha256Async(content, null, cancellationToken).ConfigureAwait(false);
-            if (actual != checksum || content.Position != task.SizeBytes) return DownloadAgentFailureCodes.IntegrityMismatch;
             content.Position = 0;
-            var response = await CallAsync(identity => client.UploadAsync(identity, task, content, cancellationToken), cancellationToken).ConfigureAwait(false);
-            return response.IsSuccess ? null : DownloadAgentFailureCodes.AgentUnavailable;
+            var actual = await ContentHasher.ComputeSha256Async(content, null, cancellationToken).ConfigureAwait(false);
+            if (actual != checksum) return DownloadAgentFailureCodes.IntegrityMismatch;
+            content.Position = 0;
+            if (!task.Decrypt) return await SendDirectAsync(task, content, checksum.Hex, cancellationToken).ConfigureAwait(false);
+            if (task.SourceChecksum is null) return DownloadAgentFailureCodes.InvalidConfiguration;
+            await using var plaintext = CreatePrivateDownloadFile();
+            await BackupPlatform.Encryption.BpeDecryptor.DecryptAsync(content, plaintext, async (_, token) =>
+            {
+                var keyResult = await CallAsync(identity => client.KeyAsync(identity, task.SessionId,
+                    new DownloadSignalRequest { LeaseToken = task.LeaseToken }, token), token).ConfigureAwait(false);
+                if (!keyResult.IsSuccess) throw new UnauthorizedAccessException("The artifact key is unavailable.");
+                var dek = Convert.FromBase64String(keyResult.Value.DekBase64);
+                if (dek.Length != 32) { System.Security.Cryptography.CryptographicOperations.ZeroMemory(dek); throw new UnauthorizedAccessException(); }
+                return dek;
+            }, cancellationToken).ConfigureAwait(false);
+            plaintext.Position = 0;
+            var plaintextHash = await ContentHasher.ComputeSha256Async(plaintext, null, cancellationToken).ConfigureAwait(false);
+            if (plaintextHash.Hex != task.SourceChecksum) return DownloadAgentFailureCodes.IntegrityMismatch;
+            return await SendDirectAsync(task, plaintext, plaintextHash.Hex, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -137,6 +154,10 @@ public sealed partial class DownloadTaskWorker(
         catch (ArgumentException)
         {
             return DownloadAgentFailureCodes.InvalidConfiguration;
+        }
+        catch (BackupPlatform.Encryption.BpeFormatException)
+        {
+            return DownloadAgentFailureCodes.IntegrityMismatch;
         }
         catch (StorageException exception)
         {
@@ -160,11 +181,19 @@ public sealed partial class DownloadTaskWorker(
 
     private (IStorageProvider Provider, StorageObjectKey Key, ContentChecksum Checksum) ResolveSource(DownloadTaskSnapshot task)
     {
-        if (task.StorageProvider != "local" || task.ChecksumAlgorithm != "sha256" || task.SizeBytes <= 0
-            || task.StorageTarget != "local" && !LocalVolumes.IsValidName(task.StorageTarget))
+        if (task.ChecksumAlgorithm != "sha256" || task.SizeBytes <= 0
+            || task.StorageProvider == "local" && task.StorageTarget != "local" && !LocalVolumes.IsValidName(task.StorageTarget))
         {
             throw new ArgumentException("The download source is invalid.");
         }
+        if (task.StorageProvider is "sftp" or "google-drive")
+        {
+            if (task.ConnectionId is not { } connection || connection == Guid.Empty || storageFactory is null) throw new ArgumentException("The direct connection is missing.");
+            return (storageFactory.CreateScoped(new DirectStorageScope($"api/agent/downloads/{task.SessionId:D}/storage/access",
+                task.LeaseToken, task.TenantId, connection, task.StorageProvider)), new StorageObjectKey(task.StorageKey),
+                new ContentChecksum(ChecksumAlgorithm.Sha256, task.Checksum));
+        }
+        if (task.StorageProvider != "local") throw new ArgumentException("The direct source is unsupported.");
         var providerId = new StorageProviderId(task.StorageProvider);
         var key = new StorageObjectKey(task.StorageKey);
         var checksum = new ContentChecksum(ChecksumAlgorithm.Sha256, task.Checksum);

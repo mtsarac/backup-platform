@@ -70,8 +70,8 @@ internal sealed class FakeDownloadClient(TimeProvider time) : IDownloadTaskClien
     public ConcurrentQueue<BackupTaskStartRequest> Starts { get; } = new();
     public ConcurrentQueue<BackupTaskLeaseRequest> Renewals { get; } = new();
     public ConcurrentQueue<DownloadTaskCompletionRequest> Completions { get; } = new();
-    public ConcurrentQueue<byte[]> Uploads { get; } = new();
-    public Func<Stream, CancellationToken, Task<AgentBackendResult<bool>>>? OnUpload { get; set; }
+    public ConcurrentQueue<DownloadSignalRequest> Signals { get; } = new();
+    public Func<CancellationToken, Task<AgentBackendResult<DownloadSignal>>>? OnSignal { get; set; }
     public Func<AgentBackendResult<BackupTaskLeaseResponse>>? OnRenew { get; set; }
     public Func<AgentBackendResult<BackupTaskLeaseResponse>>? OnStart { get; set; }
 
@@ -87,14 +87,14 @@ internal sealed class FakeDownloadClient(TimeProvider time) : IDownloadTaskClien
         return Task.FromResult(OnRenew?.Invoke() ?? Lease());
     }
 
-    public async Task<AgentBackendResult<bool>> UploadAsync(AgentLocalIdentity identity, DownloadTaskSnapshot task, Stream content, CancellationToken cancellationToken)
+    public Task<AgentBackendResult<DownloadSignal>> SignalAsync(AgentLocalIdentity identity, Guid sessionId, DownloadSignalRequest request, CancellationToken cancellationToken)
     {
-        if (OnUpload is not null) return await OnUpload(content, cancellationToken);
-        using var copy = new MemoryStream();
-        await content.CopyToAsync(copy, cancellationToken);
-        Uploads.Enqueue(copy.ToArray());
-        return AgentBackendResult<bool>.Success(true);
+        Signals.Enqueue(request);
+        return OnSignal?.Invoke(cancellationToken) ?? Task.FromResult(AgentBackendResult<DownloadSignal>.Success(new DownloadSignal(null)));
     }
+
+    public Task<AgentBackendResult<BackupPlatform.Contracts.Restores.ArtifactKeyUnwrapResponse>> KeyAsync(AgentLocalIdentity identity, Guid sessionId, DownloadSignalRequest request, CancellationToken cancellationToken) =>
+        Task.FromResult(Failures.Fail<BackupPlatform.Contracts.Restores.ArtifactKeyUnwrapResponse>(AgentBackendFailureKind.Rejected));
 
     public Task<AgentBackendResult<bool>> CompleteAsync(AgentLocalIdentity identity, Guid sessionId, DownloadTaskCompletionRequest request, CancellationToken cancellationToken)
     {

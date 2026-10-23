@@ -9,13 +9,11 @@ import { useVisibleTab } from '@/hooks/use-visible-tab'
 import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
 import { downloadBreakGlass, getBreakGlassDownloadStatus } from './api'
 import { encryptionKeys } from './hooks'
+import { DirectDownloadButton } from '@/features/artifacts/direct-download-button'
 
 const finished = ['Completed', 'Failed', 'Cancelled']
 
-/**
- * The approved request is single use: the first successful start consumes it, so this button is never offered twice for one request and
- * the file is handed to the browser as a cookie-authenticated navigation (plaintext never enters JavaScript memory).
- */
+/** The approved grant is spent once; direct external downloads verify and publish through an explicit disk-save action. */
 /** Stays mounted through the Approved -> Consumed flip so the progress of the transfer it started remains visible. */
 export function BreakGlassDownload({ requestId, canStart }: { requestId: string; canStart: boolean }) {
   useLanguage()
@@ -33,7 +31,7 @@ export function BreakGlassDownload({ requestId, canStart }: { requestId: string;
     refetchInterval: query => visible && !query.state.error && !finished.includes(query.state.data?.state ?? '') ? 1000 : false,
   })
   useEffect(() => {
-    if (!session || !url || status.data?.state !== 'Ready' || started.current) return
+    if (!session || session.direct || !url || status.data?.state !== 'Ready' || started.current) return
     started.current = true
     const anchor = document.createElement('a')
     anchor.href = url
@@ -51,6 +49,7 @@ export function BreakGlassDownload({ requestId, canStart }: { requestId: string;
     {error && <Notice tone="error">{errorMessage(error)}</Notice>}
     {session && !url && <Notice tone="error">{tx("İndirme bağlantısı güvenli değil. Yeni bir istek açın.")}</Notice>}
     {!session && <Button disabled={busy} onClick={() => { if (submitting.current) return; submitting.current = true; started.current = false; start.mutate() }}>{start.isPending ? tx('İndirme hazırlanıyor…') : tx('Çözülmüş dosyayı indir')}</Button>}
+    {session?.direct && <DirectDownloadButton key={session.sessionId} session={session} />}
     {session && url && !state && !status.error && <p role="status" className="text-sm text-text-muted">{tx("İndirme hazırlanıyor…")}</p>}
     {state && <Notice tone={state === 'Failed' ? 'error' : state === 'Completed' ? 'success' : 'info'}>
       {state === 'Preparing' ? tx('İndirme hazırlanıyor…') : state === 'Ready' || state === 'Streaming' ? tx('İndirme başlatıldı. Dosya tarayıcınız tarafından kaydediliyor.') : state === 'Completed' ? tx('Dosya aktarımı tamamlandı.') : state === 'Cancelled' ? tx('İndirme iptal edildi.') : tx("İndirme başarısız: {0}", { "0": failureMessage(status.data?.failureCode) })}

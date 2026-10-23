@@ -7,6 +7,7 @@ public static class AgentDownloadRegistration
     public static IServiceCollection AddAgentDownloads(this IServiceCollection services)
     {
         services.AddSingleton<AgentDownloadSpool>();
+        services.AddSingleton<DirectDownloadSignals>();
         services.AddScoped<AgentDownloadSource>();
         services.AddScoped<IAgentDownloadSource>(provider => provider.GetRequiredService<AgentDownloadSource>());
         services.AddHostedService<AgentDownloadSpoolCleanup>();

@@ -44,6 +44,7 @@ public static class ArtifactBreakGlassEndpoints
         group.MapPost("/{requestId:guid}/download", PrepareDownloadAsync);
         group.MapGet("/{requestId:guid}/downloads/{downloadId:guid}", DownloadStatusAsync);
         group.MapGet("/{requestId:guid}/downloads/{downloadId:guid}/content", DownloadContentAsync);
+        group.MapPost("/{requestId:guid}/downloads/{downloadId:guid}/content", DownloadContentAsync).WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(64 * 1024));
 
         // The tenant's own view: who asked to read which of its artifacts, why, who approved, whether it was used. Read-only.
         endpoints.MapGet("/api/tenants/{tenantId:guid}/artifact-break-glass", TenantListAsync).WithMetadata(new TenantScopedEndpoint())
@@ -205,7 +206,7 @@ public static class ArtifactBreakGlassEndpoints
     }
 
     private static async Task<IResult> DownloadContentAsync(Guid requestId, Guid downloadId, ICurrentUser user, ArtifactBreakGlassService service, DownloadService downloads,
-        DownloadStreamer streamer, ILogger<DownloadService> logger, CancellationToken cancellationToken)
+        DownloadStreamer streamer, DirectDownloadSignals signals, HttpContext http, ILogger<DownloadService> logger, CancellationToken cancellationToken)
     {
         var row = await service.GetAsync(requestId, cancellationToken);
         if (row is null) return NotFound();
@@ -213,6 +214,8 @@ public static class ArtifactBreakGlassEndpoints
         {
             var session = await downloads.GetOwnedAsync(row.Request.TenantId, row.Request.ArtifactId, downloadId, user.UserId!.Value, cancellationToken, breakGlassRequestId: requestId);
             if (session is null) return Results.NotFound();
+            if (session.AgentId is not null) return await signals.BrowserAsync(http, session);
+            if (!HttpMethods.IsGet(http.Request.Method)) return Results.BadRequest();
             if (session.State != DownloadState.Ready) return Results.Conflict(new { error = session.FailureCode ?? "download_not_ready" });
             return new StreamResult(session, streamer);
         }
