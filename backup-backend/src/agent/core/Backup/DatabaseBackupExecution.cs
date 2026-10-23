@@ -393,8 +393,10 @@ internal sealed class DatabaseBackupExecution
         {
             objectMayRemain = !await RemoveUnverifiedReplicaAsync(storage, transfer.Key).ConfigureAwait(false);
         }
-        if (cancelled && storage is not null && transfer.Key is not null && transfer.ProviderState is { } abandoned)
-            await AbortAbandonedUploadAsync(storage, transfer.Key, abandoned).ConfigureAwait(false);
+        // A verified or aborted upload no longer needs the journal; one whose abort failed stays journaled so a later sweep aborts it.
+        if (replica is not null || storage is null || transfer.Key is null || transfer.ProviderState is not { } abandoned
+            || await AbortAbandonedUploadAsync(storage, transfer.Key, abandoned).ConfigureAwait(false))
+            ForgetUpload(destination);
 
         return new BackupDestinationResult(
             destination,
@@ -402,19 +404,38 @@ internal sealed class DatabaseBackupExecution
             replica, failure, transfer.Stored, transfer.Key, objectMayRemain, startedAt, _time.GetUtcNow());
     }
 
-    /// <summary>A cancelled run never resumes, so the remote parts of its checkpointed upload are aborted; a failure is reported, not swallowed.</summary>
-    private async Task AbortAbandonedUploadAsync(IStorageProvider storage, StorageObjectKey key, string providerState)
+    /// <summary>A failed or cancelled destination never resumes, so the remote parts of its checkpointed upload are aborted. False when it could not be proven aborted; that is reported, not swallowed.</summary>
+    private async Task<bool> AbortAbandonedUploadAsync(IStorageProvider storage, StorageObjectKey key, string providerState)
     {
         try
         {
             using var bounded = new CancellationTokenSource(TimeSpan.FromMinutes(2));
             await storage.AbortTransferAsync(key, providerState, bounded.Token).ConfigureAwait(false);
+            return true;
         }
         catch (Exception exception)
         {
             RecordCleanupFailure(BackupExecutionStage.Uploading, BackupPipelineReasons.ReplicaCleanupFailed,
                 "An abandoned upload could not be aborted and its uploaded parts may still be present in the storage.", exception);
+            return false;
         }
+    }
+
+    /// <summary>Journals the newest checkpoint of a destination's upload BEFORE the server hears of it, so no remote upload id exists that the agent cannot abort later.</summary>
+    private void JournalUpload(BackupPipelineDestination destination, StorageObjectKey? key, string providerState)
+    {
+        if (_retained is null || destination.ConnectionId is not { } destinationId || key is null) return;
+        _retained = _retained.With(new RetainedUpload(destination.Storage.Value, destinationId, key.Value, providerState));
+        _retained.Save(_staging, _request.AttemptId);
+    }
+
+    private void ForgetUpload(BackupPipelineDestination destination)
+    {
+        if (_retained is null || destination.ConnectionId is not { } destinationId) return;
+        _retained = _retained.Without(destination.Storage.Value, destinationId);
+        // A journal that cannot be rewritten keeps a stale entry; aborting a finished upload later is harmless.
+        try { _retained.Save(_staging, _request.AttemptId); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
     }
 
     private async Task UploadAsync(BackupPipelineDestination destination, IStorageProvider storage, Transfer transfer, CancellationTokenSource destinationDeadline, CancellationToken cancellationToken)
@@ -483,11 +504,12 @@ internal sealed class DatabaseBackupExecution
                 {
                     RecordCheckpointAsync = async (next, token) =>
                     {
+                        transfer.ProviderState = next.ProviderState;
+                        if (next.ProviderState is { } state) JournalUpload(destination, transfer.Key, state);
                         if (_request.RecordCheckpointAsync is { } record && destination.ConnectionId is { } destinationId)
                             await record(new TransferCheckpointContract { StorageProvider = destination.Storage.Value, DestinationId = destinationId,
                                 VerifiedByteOffset = next.VerifiedByteOffset, ProviderState = next.ProviderState }, token).ConfigureAwait(false);
                         checkpoint = next;
-                        transfer.ProviderState = next.ProviderState;
                     }
                 };
                 for (var retry = 0; ; retry++)
@@ -682,10 +704,16 @@ internal sealed class DatabaseBackupExecution
         _holds.Clear();
     }
 
+    /// <summary>The journal pins the staged files; it stays while a remote upload could not be aborted, so the cleaner can abort it once the attempt is terminal.</summary>
+    private void ReleaseJournal()
+    {
+        if (_retained is { HasUploads: false }) _retained.Release(_staging, _request.AttemptId);
+    }
+
     private void CleanupAfterSuccess()
     {
         // Reached only after the replica was verified: this is the earliest point at which staging may be released.
-        _retained?.Release(_staging, _request.AttemptId);
+        ReleaseJournal();
         var failed = DeleteStaged(StagedNames());
         if (failed)
         {
@@ -702,7 +730,7 @@ internal sealed class DatabaseBackupExecution
     private async Task CleanupAfterFailureAsync(bool cancelled)
     {
         // Destinations clean up their own unverified objects as they fail (TransferOneAsync); only staging is left.
-        _retained?.Release(_staging, _request.AttemptId);
+        ReleaseJournal();
 
         // A file handed over by the provider is ours to remove; a file the provider failed on was dealt with by the provider.
         if (_stagedFile is null)

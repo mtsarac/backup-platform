@@ -109,7 +109,8 @@ public static class AgentBackupServiceCollectionExtensions
                             if (identity is null) return false;
                             var result = await provider.GetRequiredService<IBackupTaskClient>().CanReleaseRetainedTransferAsync(identity, attemptId, token).ConfigureAwait(false);
                             return result.IsSuccess && result.Value;
-                        });
+                        },
+                        provider.GetService<IRetainedUploadAborter>());
                 });
                 services.AddHostedService<AgentStagingCleanupHostedService>();
             }

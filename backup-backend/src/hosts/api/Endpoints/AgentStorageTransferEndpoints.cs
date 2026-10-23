@@ -40,6 +40,7 @@ public static class AgentStorageTransferEndpoints
         backup.MapPost("/verify", VerifyBackupAsync);
         backup.MapDelete("/content", DeleteBackupAsync);
         backup.MapPost("/access", GetBackupStorageAccessAsync);
+        backup.MapPost("/abort-access", GetAbortAccessAsync);
         backup.MapPost("/intent", RecordDirectIntentAsync);
         backup.MapGet("/catalog", GetBackupStorageCatalogAsync);
         backup.MapPost("/catalog", SaveBackupStorageCatalogAsync);
@@ -483,6 +484,36 @@ public static class AgentStorageTransferEndpoints
             Guid.Parse(request.Headers[TaskStorageProtocol.LeaseHeader]!), DateTimeOffset.UtcNow);
         return await store.RecordTransferAsync(command, new(fence.ConnectionId!.Value, key, body.SizeBytes, body.Checksum), cancellationToken)
             == BackupMutationResult.Accepted ? Results.Ok() : Results.Conflict(new AgentApiError { Error = "lease_conflict", Message = "The upload intent could not be recorded." });
+    }
+
+    /// <summary>
+    /// The one route a TERMINAL attempt keeps, because its lease (and the lease-bound <c>/access</c>) is gone while remote multipart parts may remain. Served only to the agent
+    /// that owns the attempt, only for a direct S3 destination of the run's own snapshot, and only once the attempt is terminal: a live attempt is fenced by its lease and gets
+    /// no second path. The agent uses the credential for one thing, aborting its own journaled upload.
+    /// </summary>
+    private static async Task<IResult> GetAbortAccessAsync(
+        Guid attemptId, HttpRequest request, ICurrentAgent agent, IBackupRunStore store,
+        IStorageConnectionStore connections, ISecretProvider secrets,
+        GoogleDriveConnectionProviderFactory driveFactory, CancellationToken cancellationToken)
+    {
+        if (attemptId == Guid.Empty || agent.Identity is null) return Results.Unauthorized();
+        if (!Guid.TryParse(request.Headers[TaskStorageProtocol.DestinationHeader].FirstOrDefault(), out var named) || named == Guid.Empty)
+            return Results.BadRequest(new AgentApiError { Error = "invalid_request", Message = "The destination header is missing or invalid." });
+
+        var claim = await store.GetAttemptAsync(agent.Identity.TenantId, agent.Identity.AgentId, attemptId, cancellationToken);
+        if (claim is null || !claim.Attempt.IsTerminal)
+            return Results.Conflict(new AgentApiError { Error = "attempt_not_terminal", Message = "Abort access is only available for a finished attempt." });
+
+        var destination = claim.Run.Configuration.Destinations.SingleOrDefault(candidate => candidate.StorageConnectionId == named);
+        if (destination is not { StorageProvider: "s3", Direct: true, StorageConnectionId: { } connectionId })
+            return Results.Conflict(new AgentApiError { Error = "destination_not_authorized", Message = "The destination is not a direct S3 destination of this run." });
+
+        // Not required to be enabled: aborting is clean-up, and a disabled connection must not keep an upload's parts alive.
+        var connection = (await connections.FindAsync(connectionId, agent.Identity.TenantId, cancellationToken))?.Connection;
+        if (connection is null || connection.TenantId != agent.Identity.TenantId || connection.ProviderType != destination.StorageProvider)
+            return Results.Conflict(new AgentApiError { Error = "destination_unavailable", Message = "The destination storage connection is not available." });
+
+        return await ResolveAccessResponseAsync(request, connection, secrets, driveFactory, cancellationToken);
     }
 
     private static async Task<IResult> GetBackupStorageAccessAsync(

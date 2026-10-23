@@ -3,10 +3,21 @@ using BackupPlatform.BackupProviders.Abstractions.Database;
 
 namespace BackupPlatform.Agent.Core.Backup;
 
+/// <summary>
+/// A resumable upload that may hold remote parts. <see cref="StorageProvider"/>/<see cref="DestinationId"/> name the snapshot destination, <see cref="ProviderState"/> is the newest checkpoint state;
+/// it lives in the local journal because the server forgets its checkpoint rows once it expires a cancelled run.
+/// </summary>
+public sealed record RetainedUpload(string StorageProvider, Guid DestinationId, string Key, string ProviderState);
+
 internal sealed record RetainedTransfer(BackupArtifactInfo Artifact, BackupSourceFile SourceFile, DatabaseBackupSource? Source,
-    BackupOptionsOutcome? Options, BackupVerification Verification, DateTimeOffset StartedAt, DateTimeOffset? BackupStartedAt, DateTimeOffset? BackupFinishedAt)
+    BackupOptionsOutcome? Options, BackupVerification Verification, DateTimeOffset StartedAt, DateTimeOffset? BackupStartedAt, DateTimeOffset? BackupFinishedAt,
+    IReadOnlyList<RetainedUpload>? Uploads = null)
 {
     private static string Manifest(AgentStagingDirectory directory, Guid attemptId) => directory.FilePath($"transfer-{attemptId:N}.json");
+    internal bool HasUploads => Uploads is { Count: > 0 };
+    internal RetainedTransfer Without(string storageProvider, Guid destinationId) =>
+        this with { Uploads = (Uploads ?? []).Where(upload => upload.StorageProvider != storageProvider || upload.DestinationId != destinationId).ToArray() };
+    internal RetainedTransfer With(RetainedUpload upload) => this with { Uploads = [.. Without(upload.StorageProvider, upload.DestinationId).Uploads!, upload] };
     internal static bool IsPinned(AgentStagingDirectory directory, string name) => File.Exists(directory.FilePath(name + ".resume-pin"));
     internal void Save(AgentStagingDirectory directory, Guid attemptId)
     {

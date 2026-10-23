@@ -1,3 +1,4 @@
+using BackupPlatform.Agent.Core.Backup;
 using BackupPlatform.Agent.Core.Connectivity;
 using BackupPlatform.Agent.Core.Discovery;
 using BackupPlatform.Agent.Core.Restore;
@@ -99,6 +100,13 @@ public static class AgentTransportServiceCollectionExtensions
             .ConfigurePrimaryHttpMessageHandler(AgentMtlsTransport.CreateHandler)
             .SetHandlerLifetime(TimeSpan.FromMinutes(2));
         services.AddHttpClient<ITaskStorageProviderFactory, HttpTaskStorageProviderFactory>(client =>
+            {
+                client.Timeout = Timeout.InfiniteTimeSpan;
+                client.MaxResponseContentBufferSize = 1024 * 1024;
+            })
+            .ConfigurePrimaryHttpMessageHandler(AgentMtlsTransport.CreateHandler)
+            .SetHandlerLifetime(TimeSpan.FromMinutes(2));
+        services.AddHttpClient<IRetainedUploadAborter, HttpRetainedUploadAborter>(client =>
             {
                 client.Timeout = Timeout.InfiniteTimeSpan;
                 client.MaxResponseContentBufferSize = 1024 * 1024;
