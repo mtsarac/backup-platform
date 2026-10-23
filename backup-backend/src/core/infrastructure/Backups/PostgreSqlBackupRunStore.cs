@@ -12,6 +12,9 @@ using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using ApplicationCompletion = BackupPlatform.Application.Backups.BackupCompletion;
 using DomainCompletion = BackupPlatform.Domain.Backups.BackupCompletion;
 
@@ -23,12 +26,13 @@ namespace BackupPlatform.Infrastructure.Backups;
 /// agent limits are decided against a consistent count of Leased/Running attempts by any number of backend instances. Releasing
 /// transitions (complete, expire, cancel) never wait on that lock, so the two lock orders cannot cycle.
 /// </summary>
-public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext> options, IBackupAdmissionPolicy admission, BackupExecutionOptions? limits = null, Func<double>? jitter = null, NotificationOptions? notifications = null) : IBackupRunStore
+public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext> options, IBackupAdmissionPolicy admission, BackupExecutionOptions? limits = null, Func<double>? jitter = null, NotificationOptions? notifications = null, ILogger<PostgreSqlBackupRunStore>? log = null) : IBackupRunStore
 {
     // Arbitrary fixed application key for the claim critical section.
     private const long ClaimLockKey = 0x4250_434C_4149_4D01;
     private static readonly BackupStatus[] ActiveStatuses = [BackupStatus.Pending, BackupStatus.Leased, BackupStatus.Running, BackupStatus.RetryPending, BackupStatus.Paused];
     private readonly BackupExecutionOptions _limits = limits ?? new BackupExecutionOptions();
+    private readonly ILogger logger = log ?? NullLogger<PostgreSqlBackupRunStore>.Instance;
 
     /// <summary>A sample in [0,1) for retry jitter.</summary>
     private double Jitter() => jitter is null ? Random.Shared.NextDouble() : Math.Clamp(jitter(), 0, 0.999999);
@@ -497,7 +501,23 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         catch (InvalidOperationException) { return BackupMutationResult.Conflict; }
         catch (ArgumentException) { return BackupMutationResult.Conflict; }
         BackupAudit.RecordCompletion(context, run, wasTerminal, attemptWasTerminal, command.Now);
-        if (!wasTerminal && run.Status == BackupStatus.Succeeded)
+        if (!wasTerminal && run.Status == BackupStatus.Succeeded) await EvaluateSizeAnomalyAsync(context, transaction, run, command.Now, cancellationToken);
+        try { await context.SaveChangesAsync(cancellationToken); }
+        catch (DbUpdateConcurrencyException) { return BackupMutationResult.Conflict; }
+        await transaction.CommitAsync(cancellationToken);
+        return BackupMutationResult.Accepted;
+    }
+    /// <summary>
+    /// ADR-0001: an anomaly fault is advisory and never fails the completion. The block runs under a savepoint (a failed Postgres statement
+    /// otherwise poisons the whole transaction) and is undone on failure, leaving the anomaly status unknown. Persisting the evaluation
+    /// is not guarded: a save failure still rolls back the completion and its notification outbox together.
+    /// </summary>
+    private async Task EvaluateSizeAnomalyAsync(PlatformDbContext context, IDbContextTransaction transaction, BackupRun run, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        const string savepoint = "size_anomaly";
+        await transaction.CreateSavepointAsync(savepoint, cancellationToken);
+        var tracked = context.ChangeTracker.Entries().Select(entry => entry.Entity).ToHashSet(ReferenceEqualityComparer.Instance);
+        try
         {
             var baseline = await context.BackupRuns.AsNoTracking()
                 .Where(previous => previous.TenantId == run.TenantId && previous.JobId == run.JobId && previous.Status == BackupStatus.Succeeded && previous.Id != run.Id)
@@ -509,19 +529,26 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
             {
                 var jobName = await context.BackupJobs.Where(job => job.TenantId == run.TenantId && job.Id == run.JobId).Select(job => job.Name).SingleAsync(cancellationToken);
                 await PostgreSqlNotificationStore.RecordOccurrenceAsync(context, run.TenantId,
-                    PostgreSqlNotificationObservationSource.SizeAnomaly(run, jobName), notifications ?? new NotificationOptions(), command.Now, cancellationToken);
-                context.AuditEvents.Add(AuditEvent.Record(command.Now, UserId.System, AuditActorKind.System, AuditActions.BackupRunSizeAnomaly, run.TenantId,
+                    PostgreSqlNotificationObservationSource.SizeAnomaly(run, jobName), notifications ?? new NotificationOptions(), now, cancellationToken);
+                context.AuditEvents.Add(AuditEvent.Record(now, UserId.System, AuditActorKind.System, AuditActions.BackupRunSizeAnomaly, run.TenantId,
                     "backup_run", run.Id.ToString("D"), new Dictionary<string, object?>
                     {
                         ["jobId"] = run.JobId, ["status"] = run.SizeAnomalyStatus,
                         ["deviationRatio"] = run.SizeAnomalyDeviationRatio, ["baselineBytes"] = run.SizeAnomalyBaselineBytes
                     }));
             }
+            await transaction.ReleaseSavepointAsync(savepoint, cancellationToken);
         }
-        try { await context.SaveChangesAsync(cancellationToken); }
-        catch (DbUpdateConcurrencyException) { return BackupMutationResult.Conflict; }
-        await transaction.CommitAsync(cancellationToken);
-        return BackupMutationResult.Accepted;
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            await transaction.RollbackToSavepointAsync(savepoint, cancellationToken);
+            foreach (var entry in context.ChangeTracker.Entries().Where(entry => !tracked.Contains(entry.Entity)).ToList()) entry.State = EntityState.Detached;
+            var runEntry = context.Entry(run);
+            runEntry.Property(nameof(BackupRun.SizeAnomalyStatus)).CurrentValue = null;
+            runEntry.Property(nameof(BackupRun.SizeAnomalyDeviationRatio)).CurrentValue = null;
+            runEntry.Property(nameof(BackupRun.SizeAnomalyBaselineBytes)).CurrentValue = null;
+            logger.LogError(exception, "Size anomaly evaluation failed for backup run {RunId}; the run completes without an anomaly verdict.", run.Id);
+        }
     }
     internal static async Task<Guid?> ActiveRunIdAsync(PlatformDbContext context, TenantId tenantId, Guid jobId, Guid? exceptRunId, CancellationToken cancellationToken)
     {

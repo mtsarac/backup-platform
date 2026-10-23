@@ -162,6 +162,53 @@ public sealed class BackupSizeAnomalyIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Anomaly_evaluation_fault_is_logged_and_the_run_still_completes()
+    {
+        var kit = _world.Quota.Harness;
+        var agent = await kit.AddAgentAsync();
+        var job = await kit.AddJobAsync(agent);
+        await _world.AddEmailAsync(agent.TenantId);
+        await _world.EnableAsync(agent.TenantId, [NotificationEventTypes.BackupSizeAnomaly]);
+        for (var index = 0; index < 3; index++) await CompleteStoreAsync(agent, job, 1000);
+        var log = new CapturedLogger();
+        var store = new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRunStore(
+            new DbContextOptionsBuilder<BackupPlatform.Infrastructure.Persistence.PlatformDbContext>().UseNpgsql(_database.ConnectionString).Options,
+            AdmitAllBackupAdmission.Instance, null, () => 0, null, log);
+        var now = _world.Clock.GetUtcNow();
+        var run = await kit.StartRunAsync(store, job, "anomaly-fault", now);
+        var claim = (await ClaimAsync(store, agent, now))!;
+        await StartAttemptAsync(store, claim, now);
+        // The notification policy read fails inside the anomaly block and aborts the Postgres transaction unless the block is isolated.
+        await using (var context = _database.CreatePlatformContext())
+            await context.Database.ExecuteSqlRawAsync("ALTER TABLE notification_policies RENAME TO notification_policies_fault");
+        try { await CompleteAsync(store, claim, SizedSuccess(now, 500), now); }
+        finally
+        {
+            await using var context = _database.CreatePlatformContext();
+            await context.Database.ExecuteSqlRawAsync("ALTER TABLE notification_policies_fault RENAME TO notification_policies");
+        }
+        var completed = (await kit.Store().GetRunAsync(agent.TenantId, run.Id, default))!;
+        Assert.Equal(BackupStatus.Succeeded, completed.Status);
+        Assert.Single(completed.CurrentAttempt.Artifacts);
+        Assert.Null(completed.SizeAnomalyStatus);
+        Assert.Empty(await _world.EventsAsync(agent.TenantId));
+        await using var audit = _database.CreatePlatformContext();
+        Assert.Empty(await audit.AuditEvents.Where(entry => entry.TenantId == agent.TenantId && entry.Action == AuditActions.BackupRunSizeAnomaly).ToListAsync());
+        Assert.Contains(log.Errors, error => error.Contains(run.Id.ToString(), StringComparison.OrdinalIgnoreCase));
+    }
+
+    private sealed class CapturedLogger : Microsoft.Extensions.Logging.ILogger<BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRunStore>
+    {
+        public List<string> Errors { get; } = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel >= Microsoft.Extensions.Logging.LogLevel.Error) Errors.Add(formatter(state, exception));
+        }
+    }
+
+    [Fact]
     public async Task Anomaly_reaches_configured_email_and_webhook_once_without_changing_backup_success()
     {
         await using var smtp = new TestSmtpServer();
