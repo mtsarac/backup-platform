@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -72,13 +73,87 @@ public sealed class SnapshotCommandRunner : ISnapshotCommandRunner
 }
 
 /// <summary>VSS with writers, LVM, Btrfs and ZFS snapshot creation and cleanup. No filesystem freeze is left behind on failure.</summary>
-public sealed class NativeSnapshotProvider(SnapshotKind kind, ISnapshotCommandRunner commands) : ISnapshotProvider
+public sealed class NativeSnapshotProvider(SnapshotKind kind, ISnapshotCommandRunner commands, Func<string, bool>? isMounted = null) : ISnapshotProvider
 {
+    // The agent names every snapshot it creates bp_<32 hex>; only such names are ever swept.
+    private static readonly Regex OwnedName = new("^bp_[0-9a-f]{32}$", RegexOptions.CultureInvariant | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
+    private static readonly Regex OwnedZfsSnapshot = new("^[A-Za-z0-9][A-Za-z0-9_./:-]*@(bp_[0-9a-f]{32})$", RegexOptions.CultureInvariant | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
+    private static readonly Regex LvmName = new("^[A-Za-z0-9_+.-]+$", RegexOptions.CultureInvariant | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
+    private readonly ConcurrentDictionary<string, byte> live = new(StringComparer.Ordinal);
+    private readonly Func<string, bool> mounted = isMounted ?? IsMounted;
     public SnapshotKind Kind { get; } = kind;
 
+    /// <summary>A snapshot is live from the moment its creation starts until its lease is cleaned up, so a sweep never removes one a backup is still reading.</summary>
     public async Task<SnapshotLease> CreateAsync(SnapshotRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        var name = request.Name;
+        live[name] = 0;
+        SnapshotLease lease;
+        try { lease = await CreateCoreAsync(request, cancellationToken).ConfigureAwait(false); }
+        catch { live.TryRemove(name, out _); throw; }
+        return new SnapshotLease(lease.Path, async () => { await lease.DisposeAsync().ConfigureAwait(false); live.TryRemove(name, out _); });
+    }
+
+    /// <summary>
+    /// Removes snapshots this agent created that no live lease owns: what a crashed process or a rollback that could not finish left behind.
+    /// <paramref name="snapshotDirectory"/> is the directory snapshots are created in (Btrfs subvolumes and LVM mount points live there; ZFS needs no directory).
+    /// A failure on one leftover does not stop the others; all failures are rethrown together. Returns the number removed. VSS is not swept.
+    /// </summary>
+    public async Task<int> SweepLeftoversAsync(string snapshotDirectory, CancellationToken cancellationToken)
+    {
+        if (!Path.IsPathFullyQualified(snapshotDirectory)) throw new ArgumentException("Snapshot directory must be absolute.", nameof(snapshotDirectory));
+        var leftovers = new List<(string Description, Func<Task> Remove)>();
+        switch (Kind)
+        {
+            case SnapshotKind.Btrfs:
+                if (!Directory.Exists(snapshotDirectory)) return 0;
+                foreach (var directory in Directory.EnumerateDirectories(snapshotDirectory))
+                {
+                    var name = Path.GetFileName(directory);
+                    if (OwnedName.IsMatch(name) && !live.ContainsKey(name))
+                        leftovers.Add((name, () => Run("btrfs", ["subvolume", "delete", directory], CancellationToken.None)));
+                }
+                break;
+            case SnapshotKind.Zfs:
+                foreach (var line in (await Run("zfs", ["list", "-H", "-t", "snapshot", "-o", "name"], cancellationToken).ConfigureAwait(false)).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    if (OwnedZfsSnapshot.Match(line) is { Success: true } match && !live.ContainsKey(match.Groups[1].Value))
+                        leftovers.Add((line, () => Run("zfs", ["destroy", line], CancellationToken.None)));
+                break;
+            case SnapshotKind.Lvm:
+                foreach (var line in (await Run("lvs", ["--noheadings", "--separator", "/", "-o", "vg_name,lv_name"], cancellationToken).ConfigureAwait(false)).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    var parts = line.Split('/');
+                    if (parts is not [var vg, var lv] || !LvmName.IsMatch(vg) || !OwnedName.IsMatch(lv) || live.ContainsKey(lv)) continue;
+                    var mountPoint = Path.Combine(snapshotDirectory, lv);
+                    leftovers.Add((lv, async () =>
+                    {
+                        if (mounted(mountPoint)) await Run("umount", [mountPoint], CancellationToken.None).ConfigureAwait(false);
+                        await Run("lvremove", ["--force", "/dev/" + vg + "/" + lv], CancellationToken.None).ConfigureAwait(false);
+                        if (Directory.Exists(mountPoint)) Directory.Delete(mountPoint);
+                    }));
+                }
+                break;
+            default: return 0;
+        }
+        var removed = 0;
+        var failures = new List<Exception>();
+        foreach (var (description, remove) in leftovers)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try { await remove().ConfigureAwait(false); removed++; }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
+            { failures.Add(new IOException("A leftover " + Kind + " snapshot could not be removed: " + description, exception)); }
+        }
+        if (failures.Count > 0) throw new AggregateException(failures);
+        return removed;
+    }
+
+    private static bool IsMounted(string path) =>
+        OperatingSystem.IsLinux() && File.ReadLines("/proc/self/mounts").Any(line => line.Split(' ') is [_, var target, ..] && target == path);
+
+    private async Task<SnapshotLease> CreateCoreAsync(SnapshotRequest request, CancellationToken cancellationToken)
+    {
         cancellationToken.ThrowIfCancellationRequested();
         if (!Regex.IsMatch(request.Name, "^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1)))
             throw new ArgumentException("Snapshot name must be a simple unique identifier.", nameof(request));

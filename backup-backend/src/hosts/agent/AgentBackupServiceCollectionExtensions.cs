@@ -85,6 +85,12 @@ public static class AgentBackupServiceCollectionExtensions
         if (AgentBackupOptionsValidation.TryCreateStaging(options.Staging, out var staging))
         {
             services.AddSingleton(staging);
+            var snapshotKinds = fileSources?.Values.Select(source => source.SnapshotKind).OfType<BackupPlatform.SnapshotProviders.Abstractions.SnapshotKind>().Distinct().ToArray() ?? [];
+            if (snapshotKinds.Length > 0)
+                services.AddHostedService(provider => new AgentSnapshotSweepHostedService(
+                    provider.GetServices<BackupPlatform.SnapshotProviders.Abstractions.ISnapshotProvider>().OfType<BackupPlatform.SnapshotProviders.Abstractions.NativeSnapshotProvider>()
+                        .Where(native => snapshotKinds.Contains(native.Kind)).ToArray(),
+                    staging.AgentDirectory.Value, provider.GetRequiredService<TimeProvider>(), provider.GetRequiredService<ILogger<AgentSnapshotSweepHostedService>>()));
             if (AgentBackupOptionsValidation.TryCreateCleanup(options.Staging?.Cleanup, out var cleanup))
             {
                 services.AddSingleton(cleanup);
