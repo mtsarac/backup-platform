@@ -434,13 +434,14 @@ public sealed class BackupRunRetryTests
     }
 
     [Fact]
-    public void RequestPauseIsRejectedOnACancellingRun()
+    public void ResumeAndRequestPauseAreRejectedOnACancellingRun()
     {
         var run = NewRun();
         Begin(run, Now);
         run.RequestCancellation(Now.AddSeconds(1));
 
         Assert.Throws<InvalidOperationException>(() => run.RequestPause());
+        Assert.Throws<InvalidOperationException>(() => run.Resume(Now.AddSeconds(2)));
         Assert.Equal(BackupStatus.Running, run.Status);
     }
 
