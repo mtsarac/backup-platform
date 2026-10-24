@@ -1,6 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { Section } from '@/components/ui/section'
-import { FormGrid } from '@/features/backup-jobs/job-form-fields'
+import { Advanced, FormGrid, Question } from '@/features/backup-jobs/job-form-fields'
 import { fieldKit, type FieldErrors } from '@/features/backup-jobs/job-field-kit'
 import type { BackupConfiguration } from '@/features/backup-jobs/types'
 import { DatabaseLoginFields } from '@/features/backup-jobs/database-login-fields'
@@ -16,7 +15,7 @@ export function EngineGroup({ configuration, onChange }: Pick<GroupProps, 'confi
   const isPg = configuration.engine === 'postgres'
   const isFiles = configuration.engine === 'file-system'
   const files = configuration.files ?? defaultFiles
-  return <div role="group" aria-label={tx('Engine')} className="mb-4 flex flex-wrap gap-4">
+  return <div role="group" aria-label={tx('Kaynak türü')} className="mb-4 flex flex-wrap gap-4">
     <label className="flex items-center gap-2 cursor-pointer font-medium text-sm text-text-heading">
       <input type="radio" name="engine" value="mssql" checked={configuration.engine === 'mssql'} onChange={() => onChange({ ...configuration, engine: 'mssql', database: '', host: '', port: null, integratedSecurity: true, databaseCredentialReference: null, databaseLogin: null, files: null, copyOnly: true, checksumPolicy: 'Required' })} className="size-4 accent-primary" />
       Microsoft SQL Server
@@ -51,30 +50,33 @@ export function FileSourceGroup({ configuration, errors, onChange }: GroupProps)
 /** Question group: which database server and how to connect (SQL Server / PostgreSQL). */
 export function DatabaseSourceGroup({ configuration, errors, onChange, discovery }: GroupProps & { discovery?: DiscoverySourceProps }) {
   useLanguage()
-  const { text, number, check } = fieldKit(errors)
+  const { text, number, check, withErrors } = fieldKit(errors)
   const isPg = configuration.engine === 'postgres'
-  return <FormGrid>
+  return <>
+    <FormGrid>
     {discovery && <DiscoverySourcePicker {...discovery} />}
     {text('configuration.host', isPg ? tx('PostgreSQL host') : tx('SQL Server host / instance'), configuration.host, host => onChange({ ...configuration, host }))}
     {text('configuration.database', 'Database', configuration.database, database => onChange({ ...configuration, database }), Boolean(discovery?.selected.length))}
     {!(!isPg && configuration.integratedSecurity) && <DatabaseLoginFields idPrefix="configuration-login" login={configuration.databaseLogin} hasStored={Boolean(configuration.databaseCredentialReference)}
       errors={{ userName: errors['configuration.databaseLogin.userName'], password: errors['configuration.databaseLogin.password'] }}
       onChange={databaseLogin => onChange({ ...configuration, databaseLogin })} />}
-    {number('configuration.port', isPg ? tx('Port (varsayılan 5432)') : tx('Port (isteğe bağlı)'), configuration.port, port => onChange({ ...configuration, port }))}
     {!isPg && check(tx('Windows kimlik doğrulaması (integrated security)'), configuration.integratedSecurity, integratedSecurity => onChange({ ...configuration, integratedSecurity, databaseLogin: null, databaseCredentialReference: integratedSecurity ? null : configuration.databaseCredentialReference }))}
-    {check(tx('Bağlantıyı şifrele'), configuration.encrypt, encrypt => onChange({ ...configuration, encrypt }))}
-    {check(tx('Sunucu sertifikasına güven'), configuration.trustServerCertificate, trustServerCertificate => onChange({ ...configuration, trustServerCertificate }))}
     <p className="text-sm text-text-muted md:col-span-2">{tx("Parola şifrelenerek saklanır ve bir daha gösterilmez. Bu iş yalnızca burada girilen kullanıcıyla bağlanır; aynı makinedeki diğer SQL Server sürümlerinin ve kullanıcıların girişleri birbirine karışmaz.")}</p>
     {isPg && <p className="text-sm text-text-muted md:col-span-2">{tx("Full Backup, pg_dump custom-format mantıksal arşividir; WAL/PITR veya fiziksel küme yedeği değildir. Database adı en fazla 63 UTF-8 byte olabilir. PostgreSQL kullanıcı adı ve parolası gerekir.")}</p>}
-  </FormGrid>
+    </FormGrid>
+    <Advanced open={withErrors('configuration.port')}>
+      {number('configuration.port', isPg ? tx('Port (varsayılan 5432)') : tx('Port (isteğe bağlı)'), configuration.port, port => onChange({ ...configuration, port }))}
+      {check(tx('Bağlantıyı şifrele'), configuration.encrypt, encrypt => onChange({ ...configuration, encrypt }))}
+      {check(tx('Sunucu sertifikasına güven'), configuration.trustServerCertificate, trustServerCertificate => onChange({ ...configuration, trustServerCertificate }))}
+    </Advanced>
+  </>
 }
 
 export function SourceStep({ discovery, ...group }: GroupProps & { discovery?: DiscoverySourceProps }) {
   useLanguage()
   const isFiles = group.configuration.engine === 'file-system'
-  const isPg = group.configuration.engine === 'postgres'
-  return <Section title={isFiles ? tx('Dosya Kaynağı') : isPg ? tx("PostgreSQL kaynak ve bağlantı") : tx("MSSQL kaynak ve bağlantı")} description={isFiles ? tx('Agent üzerinde yapılandırılmış dosya kaynağını ve yedeklenecek göreli yolları seçin.') : isPg ? tx("Yedeği alınacak PostgreSQL sunucusu ve veritabanı.") : tx("Yedeği alınacak SQL Server Instance ve Database.")}>
+  return <Question title={isFiles ? tx('Hangi dosya ve klasörleri yedekleyeceğiz?') : tx('Hangi veritabanını yedekleyeceğiz?')} why={tx('Yedeğin neyi kapsayacağını ve oraya nasıl ulaşılacağını bilmemiz gerekir.')}>
     <EngineGroup configuration={group.configuration} onChange={group.onChange} />
     {isFiles ? <FileSourceGroup {...group} /> : <DatabaseSourceGroup {...group} discovery={discovery} />}
-  </Section>
+  </Question>
 }

@@ -41,15 +41,17 @@ beforeEach(() => {
   vi.mocked(getBackupJobHealth).mockResolvedValue(healthyJobHealth)
   vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
 })
-/** Fill the required fields and stop on the "Saklama & seçenekler" step. */
+/** Fill the required fields and stop on the "Şifreleme" step. */
 async function reachOptionsStep() {
-  await screen.findByRole('option', { name: /(?:SQL Agent|SQL Ajanı)/ })
   fireEvent.change(screen.getByLabelText('İş adı'), { target: { value: 'ERP backup' } })
-  fireEvent.change(screen.getByLabelText('Ajan'), { target: { value: 'agent-a' } })
+  next()
+  await screen.findByRole('option', { name: /(?:SQL Agent|SQL Ajanı)/ })
+  fireEvent.change(screen.getByLabelText('Yedekleme bilgisayarı'), { target: { value: 'agent-a' } })
+  next()
   next()
   fireEvent.change(screen.getByLabelText('SQL Server ana bilgisayarı / veritabanı sunucusu'), { target: { value: 'sql' } })
   fireEvent.change(screen.getByLabelText('Veritabanı'), { target: { value: 'ERP' } })
-  next(); next(); next()
+  next(); next(); next(); next()
   await screen.findByLabelText('Yedek şifreleme politikası')
 }
 
@@ -86,7 +88,7 @@ describe('encryption policy in the job wizard', () => {
     renderWizard('/tenants/tenant-a/backup-jobs/job-a/edit')
     await waitFor(() => expect(screen.getByRole('button', { name: 'Kaydet' })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Hatalı alana git: Saklama & seçenekler' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Hatalı alana git: Şifreleme' }))
     expect(await screen.findByLabelText('Yedek şifreleme politikası')).toHaveValue('Optional')
     expect(document.getElementById('configuration.encryptionPolicy-error')).toHaveTextContent(/.+/)
   })

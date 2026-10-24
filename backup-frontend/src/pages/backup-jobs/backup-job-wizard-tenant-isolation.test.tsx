@@ -17,11 +17,12 @@ vi.mock('@/features/agents/api', () => ({ getAgents: vi.fn().mockResolvedValue([
 vi.mock('@/features/storage-connections/api')
 vi.mock('@/features/backup-jobs/api', () => ({ getBackupJob: vi.fn(), getBackupJobHealth: vi.fn(), getOccurrences: vi.fn(), saveBackupJob: vi.fn() }))
 
-/** Fills the required fields of steps 1-2 and lands on the Depolama step. */
+/** Fills the required fields of the first steps and lands on the Depolama step. */
 async function reachStorage(name: string) {
-  await screen.findByRole('option', { name: /(?:SQL Agent|SQL Ajanı)/ })
   fireEvent.change(screen.getByLabelText('İş adı'), { target: { value: name } })
-  fireEvent.change(screen.getByLabelText("Ajan"), { target: { value: 'agent-a' } })
+  fireEvent.click(screen.getByRole('button', { name: 'İleri' }))
+  await screen.findByRole('option', { name: /(?:SQL Agent|SQL Ajanı)/ })
+  fireEvent.change(screen.getByLabelText("Yedekleme bilgisayarı"), { target: { value: 'agent-a' } })
   fireEvent.click(screen.getByRole('button', { name: 'İleri' }))
   fireEvent.change(screen.getByLabelText("SQL Server ana bilgisayarı / veritabanı sunucusu"), { target: { value: 'sql' } })
   fireEvent.change(screen.getByLabelText("Veritabanı"), { target: { value: 'ERP' } })
