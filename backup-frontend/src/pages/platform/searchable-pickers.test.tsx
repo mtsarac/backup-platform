@@ -55,9 +55,9 @@ describe('setup and support name pickers', () => {
     renderPlatform(<CreateManagedTargetDialog onClose={vi.fn()} />)
     fireEvent.change(await screen.findByRole('combobox', { name: tx('Tenant') }), { target: { value: 'Acme' } })
     fireEvent.click(await screen.findByRole('option', { name: 'Acme' }))
-    fireEvent.change(screen.getByRole('combobox', { name: tx('Storage Provider') }), { target: { value: 'central' } })
-    fireEvent.change(screen.getByRole('textbox', { name: tx('Ad') }), { target: { value: 'Offsite' } })
-    fireEvent.click(screen.getByRole('button', { name: tx('Managed target ekle') }))
+    fireEvent.change(screen.getByRole('combobox', { name: tx('Depolama sağlayıcısı') }), { target: { value: 'central' } })
+    fireEvent.change(screen.getByRole('textbox', { name: tx('Hedef adı') }), { target: { value: 'Offsite' } })
+    fireEvent.click(screen.getByRole('button', { name: tx('Yönetilen hedef ekle') }))
     await waitFor(() => expect(storageApi.createPlatformConnection).toHaveBeenCalledWith('tenant-acme', expect.objectContaining({ name: 'Offsite', providerType: 'central' })))
   })
 

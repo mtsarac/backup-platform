@@ -1,9 +1,9 @@
-import { formatDateTime } from '@/lib/format'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import * as api from '@/features/platform/api'
 import { makePlatformAgent, paged, renderPlatform } from '@/features/platform/test-utils'
 import { ApiError } from '@/lib/api/client'
+import { setViewport } from '@/test/viewport'
 import { PlatformAgentsPage } from './platform-agents-page'
 
 vi.mock('@/features/platform/api')
@@ -19,26 +19,37 @@ beforeEach(() => {
 })
 
 describe('platform global agents list', () => {
-  it('shows tenant, lifecycle, connectivity, OS, versions, capabilities and last seen', async () => {
+  it('leads with the computer, its workspace, connection state and last seen, keeping OS, versions and capabilities out of the list', async () => {
+    const threeHoursAgo = new Date(Date.now() - 3 * 3_600_000).toISOString()
+    vi.mocked(api.getPlatformAgents).mockResolvedValue(paged([
+      makePlatformAgent({ lastSeenAt: threeHoursAgo }),
+      makePlatformAgent({ tenantId: 'tenant-b', tenantName: 'Globex', agentId: 'agent-b', hostName: 'SQL-02', status: 'Revoked', connectivity: 'offline', lastSeenAt: null }),
+    ]))
     renderPlatform(<PlatformAgentsPage />)
+    expect(await screen.findByRole('heading', { level: 1, name: 'Yedekleme bilgisayarları' })).toBeInTheDocument()
     const first = (await screen.findByRole('link', { name: 'SQL-01' })).closest('tr')!
     expect(within(first).getByRole('link', { name: 'Acme A.Ş.' })).toHaveAttribute('href', '/platform/tenants/tenant-a')
     expect(screen.getByRole('link', { name: 'SQL-01' })).toHaveAttribute('href', '/platform/tenants/tenant-a/agents/agent-a')
-    expect(within(first).getByText('Etkin')).toBeInTheDocument()
     expect(within(first).getByText('Çevrimiçi')).toBeInTheDocument()
-    expect(within(first).getByText('Windows Server 2025')).toBeInTheDocument()
-    expect(within(first).getByText('1.4.0')).toBeInTheDocument()
-    expect(within(first).getByText('Protokol: 1.0')).toBeInTheDocument()
-    expect(within(first).getByText('3 yetenek')).toBeInTheDocument()
-    expect(within(first).getByText(formatDateTime('2026-10-06T12:00:00Z'))).toBeInTheDocument()
-    expect(within(first).queryByText('Henüz bildirilmedi')).not.toBeInTheDocument()
+    expect(within(first).getByText('3 saat önce')).toHaveAttribute('title', expect.stringContaining('2026'))
+    for (const hidden of ['Etkin', 'Windows', 'Windows Server 2025', '1.4.0', 'agent-a', /yetenek/i]) expect(within(first).queryByText(hidden)).not.toBeInTheDocument()
 
     const second = screen.getByRole('link', { name: 'SQL-02' }).closest('tr')!
     expect(within(second).getByText('İptal edildi')).toBeInTheDocument()
     expect(within(second).getByText('Çevrimdışı')).toBeInTheDocument()
-    // capabilities never reported, and last seen never recorded
-    expect(within(second).getAllByText('Henüz bildirilmedi')).toHaveLength(2)
+    expect(within(second).getByText('Henüz bağlanmadı')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /iptal|devre dışı bırak/i })).not.toBeInTheDocument()
+  })
+
+  it('becomes cards on a phone with the computer, workspace, connection state and last seen', async () => {
+    setViewport(false)
+    renderPlatform(<PlatformAgentsPage />)
+    const card = (await screen.findByRole('link', { name: 'SQL-01' })).closest('li')!
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(within(card).getByRole('link', { name: 'Acme A.Ş.' })).toBeInTheDocument()
+    expect(within(card).getByText('Çevrimiçi')).toBeInTheDocument()
+    expect(within(card).getByText('Son görülme')).toBeInTheDocument()
+    expect(within(card).queryByText('Windows Server 2025')).not.toBeInTheDocument()
   })
 
   it('passes tenant, connectivity, lifecycle and search filters from the URL to the API', async () => {
@@ -46,7 +57,7 @@ describe('platform global agents list', () => {
     await screen.findByRole('link', { name: 'SQL-01' })
     expect(api.getPlatformAgents).toHaveBeenCalledWith({ tenantId: 'tenant-a', connectivity: 'offline', status: 'Revoked', search: 'sql', page: 2, pageSize: 25 }, expect.any(AbortSignal))
     expect(screen.getByRole('combobox', { name: 'Bağlantı' })).toHaveValue('offline')
-    expect(screen.getByRole('combobox', { name: 'Yaşam döngüsü' })).toHaveValue('Revoked')
+    expect(screen.getByRole('combobox', { name: 'Kayıt durumu' })).toHaveValue('Revoked')
   })
 
   it('changing a filter updates the URL and resets the page', async () => {
@@ -60,7 +71,7 @@ describe('platform global agents list', () => {
   it('renders the empty state for filters without results', async () => {
     vi.mocked(api.getPlatformAgents).mockResolvedValue(paged([]))
     renderPlatform(<PlatformAgentsPage />, { path: '/platform/agents?connectivity=unknown' })
-    expect(await screen.findByText("Filtrelere uygun ajan bulunamadı.")).toBeInTheDocument()
+    expect(await screen.findByText("Filtrelere uygun bilgisayar bulunamadı.")).toBeInTheDocument()
   })
 
   it('renders the authorization state for 403', async () => {
