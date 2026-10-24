@@ -112,7 +112,7 @@ public static class BuiltInStorageProviders
         tenantCreatable: false, platformCreatable: true, maxConnectionsPerTenant: 1, [], [], StorageTestMode.BackendRoundTrip);
 
     public static StorageProviderDescriptor Sftp { get; } = new(
-        StorageProviderTypes.Sftp, "SFTP", StorageProviderAvailability.Available, StorageTopology.BackendRelayed, BackupStorageExecutionLocation.Backend,
+        StorageProviderTypes.Sftp, "SFTP", StorageProviderAvailability.Available, StorageTopology.AgentDirect, BackupStorageExecutionLocation.Backend,
         ["storage.read", "storage.delete", "storage.atomic-publish", "storage.resume", "storage.verify-absence"], [StorageOwnership.TenantManaged],
         tenantCreatable: true, platformCreatable: false, maxConnectionsPerTenant: null,
         [
@@ -124,10 +124,10 @@ public static class BuiltInStorageProviders
             new("hostKeyFingerprint", "SSH host key fingerprint (SHA256)", StorageFieldKind.Text, true, 64)
         ],
         [new("password", "Password", false), new("privateKey", "SSH private key", false), new("passphrase", "Private key passphrase", false)],
-        StorageTestMode.BackendRoundTrip);
+        StorageTestMode.AgentSide);
 
     public static StorageProviderDescriptor GoogleDrive { get; } = new(
-        StorageProviderTypes.GoogleDrive, "Google Drive", StorageProviderAvailability.Available, StorageTopology.BackendRelayed, BackupStorageExecutionLocation.Backend,
+        StorageProviderTypes.GoogleDrive, "Google Drive", StorageProviderAvailability.Available, StorageTopology.AgentDirect, BackupStorageExecutionLocation.Backend,
         ["storage.read", "storage.delete", "storage.atomic-publish", "storage.resume", "storage.verify-absence"], [StorageOwnership.TenantManaged],
         tenantCreatable: true, platformCreatable: false, maxConnectionsPerTenant: null,
         [
@@ -136,7 +136,7 @@ public static class BuiltInStorageProviders
             new("folderId", "Klasör ID", StorageFieldKind.Text, false, 128)
         ],
         [new("refreshToken", "Refresh token", false)],
-        StorageTestMode.BackendRoundTrip);
+        StorageTestMode.AgentSide);
 
     public static StorageProviderDescriptor S3 { get; } = new(
         StorageProviderTypes.S3, "S3-compatible object storage", StorageProviderAvailability.Available, StorageTopology.AgentDirect, BackupStorageExecutionLocation.Backend,

@@ -371,7 +371,7 @@ public sealed class RestoreSourceEvaluatorTests
     }
 
     [Fact]
-    public void AnAvailableVerifiedBackendSftpReplicaWithMatchingConnectionTargetIsReadViaBackendRelayed()
+    public void AnAvailableVerifiedBackendSftpReplicaWithoutDirectStorageIsRefusedAsNoAccessibleReplica()
     {
         var artifact = Artifact();
         var connectionId = Guid.NewGuid();
@@ -380,11 +380,11 @@ public sealed class RestoreSourceEvaluatorTests
             BackupStorageExecutionLocation.Backend, null, connectionId);
         AddTo(artifact, replica);
 
-        var decision = RestoreSourceEvaluator.Evaluate(artifact, replica, Agent, Now);
+        var decision = RestoreSourceEvaluator.Evaluate(artifact, replica, Agent, Now, directStorage: false);
 
-        Assert.True(decision.Eligible);
-        Assert.Equal(RestoreSourceAccess.BackendRelayed, decision.Access);
-        Assert.Null(decision.Rejection);
+        Assert.False(decision.Eligible);
+        Assert.Null(decision.Access);
+        Assert.Equal(RestoreSourceRejection.NoAccessibleReplica, decision.Rejection);
     }
 
     [Theory]
@@ -401,8 +401,8 @@ public sealed class RestoreSourceEvaluatorTests
 
         Assert.Equal(RestoreSourceAccess.AgentDirect, RestoreSourceEvaluator.Evaluate(artifact, replica, Agent, Now, directStorage: true).Access);
         Assert.Same(replica, RestoreSourceEvaluator.SelectReplica(artifact, Agent, Now, directStorage: true));
-        // An agent without the capability keeps the backend relay: direct access is never assumed.
-        Assert.Equal(RestoreSourceAccess.BackendRelayed, RestoreSourceEvaluator.Evaluate(artifact, replica, Agent, Now).Access);
+        // An agent without the capability is refused: relay is retired, direct access is never assumed.
+        Assert.Null(RestoreSourceEvaluator.Evaluate(artifact, replica, Agent, Now, directStorage: false).Access);
     }
 
     [Fact]
@@ -449,7 +449,7 @@ public sealed class RestoreSourceEvaluatorTests
         AddTo(artifact, replica);
 
         var anotherAgent = AgentId.New();
-        var selected = RestoreSourceEvaluator.SelectReplica(artifact, anotherAgent, Now);
+        var selected = RestoreSourceEvaluator.SelectReplica(artifact, anotherAgent, Now, directStorage: true);
 
         Assert.Same(replica, selected);
     }

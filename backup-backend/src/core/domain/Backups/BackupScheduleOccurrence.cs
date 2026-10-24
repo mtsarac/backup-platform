@@ -51,6 +51,7 @@ public static class BackupAdmissionDenialCodes
     public const string MultiDestinationExecutionNotSupported = "multi_destination_execution_not_supported";
     /// <summary>The job has several destinations and its agent does not advertise multi-destination execution. Fail-closed for manual and scheduled runs alike.</summary>
     public const string AgentMultiDestinationUnsupported = "agent_multi_destination_unsupported";
+    public const string AgentDirectStorageUnsupported = "agent_direct_storage_unsupported";
     /// <summary>The job's destinations cannot all be executed as configured (the same connection twice after resolution).</summary>
     public const string DestinationCombinationUnsupported = "destination_combination_unsupported";
     public const string AgentEngineUnsupported = "agent_engine_unsupported";

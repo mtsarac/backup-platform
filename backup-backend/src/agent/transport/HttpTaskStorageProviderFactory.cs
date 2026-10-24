@@ -212,7 +212,7 @@ public sealed class HttpTaskStorageProviderFactory(
         public async Task<StorageObjectMetadata> PutAsync(StorageObjectKey key, Stream content, StoragePutOptions options,
             IProgress<long>? progress, CancellationToken cancellationToken)
         {
-            if (providerType is "s3" or "smb")
+            if (scopedAccessPath is null && restoreOperationId is null)
                 await RecordIntentAsync(key, options, cancellationToken).ConfigureAwait(false);
             var target = await GetProviderAsync(cancellationToken).ConfigureAwait(false);
             return await target.PutAsync(key, content, options, progress, cancellationToken).ConfigureAwait(false);

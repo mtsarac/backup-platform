@@ -14,6 +14,9 @@ internal static class BackupTestDestinations
     public static BackupDestinationContract Relayed(string provider, Guid connectionId, bool primary = false) =>
         new() { StorageProvider = provider, StorageConnectionId = connectionId, StorageExecutionLocation = "Backend", IsPrimary = primary };
 
+    public static BackupDestinationContract Direct(string provider, Guid connectionId, bool primary = false) =>
+        new() { StorageProvider = provider, StorageConnectionId = connectionId, StorageExecutionLocation = "Backend", IsPrimary = primary, Direct = true };
+
     /// <summary>A local destination written by the agent: the default for jobs that do not care where the artifact goes.</summary>
     public static IReadOnlyList<BackupDestinationContract> LocalAgent => [Local()];
 

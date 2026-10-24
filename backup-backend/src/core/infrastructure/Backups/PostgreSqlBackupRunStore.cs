@@ -319,6 +319,12 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
             // A retry or a queued run reaches an agent without passing admission again, so the capability is fenced here too: such a run waits for an agent that can execute it.
             supportsMultiDestination ??= await StorageTargetGate.SupportsMultiDestinationAsync(context, tenantId, agentId, cancellationToken);
             if (supportsMultiDestination != true) continue;
+            if (candidate.Configuration.Destinations.Any(destination => destination.StorageProvider is "sftp" or "google-drive"))
+            {
+                // Legacy snapshots stay immutable and wait for an explicit fresh run; they are never silently relayed or retargeted.
+                if (candidate.Configuration.Destinations.Any(destination => destination.StorageProvider is "sftp" or "google-drive" && !destination.Direct)
+                    || !await StorageTargetGate.SupportsDirectStorageAsync(context, tenantId, agentId, cancellationToken)) continue;
+            }
             // The backend paces every upload it relays itself; only an AgentDirect destination depends on the agent. A limit that such an agent cannot follow would be
             // silently ignored, so that run waits for an agent that can pace its uploads.
             if (candidate.Configuration.Destinations.Any(destination => destination.StorageExecutionLocation == BackupStorageExecutionLocation.Agent)

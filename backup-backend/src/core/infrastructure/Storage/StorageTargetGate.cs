@@ -143,6 +143,8 @@ internal static class StorageTargetGate
             {
                 supportsDirect ??= await SupportsDirectStorageAsync(context, tenantId, agentId, cancellationToken);
                 isDirect = supportsDirect.Value;
+                if (!isDirect && dest.StorageProvider is StorageProviderTypes.Sftp or StorageProviderTypes.GoogleDrive)
+                    return new(null, BackupAdmissionDenialCodes.AgentDirectStorageUnsupported);
             }
             if (dest.StorageProvider is StorageProviderTypes.S3 or StorageProviderTypes.Smb
                 && (!isDirect || !await SupportsCapabilityAsync(context, tenantId, agentId, $"storage.{dest.StorageProvider}", cancellationToken)))

@@ -74,7 +74,7 @@ public sealed class RestoreDirectSourceTests(PostgreSqlFixture fixture) : IClass
     }
 
     [Fact]
-    public async Task AnAgentWithoutDirectStorageKeepsTheBackendRelayAndTheBackendProbe()
+    public async Task AnAgentWithoutDirectStorageIsRefusedWithNoRelayFallback()
     {
         var seed = await SeedExternalAsync("sftp", direct: false);
         var resolver = new RecordingResolver();
@@ -82,10 +82,9 @@ public sealed class RestoreDirectSourceTests(PostgreSqlFixture fixture) : IClass
 
         var created = await store.CreateAsync(Command(seed), default);
 
-        Assert.Equal(RestoreCreateOutcome.Created, created.Outcome);
-        Assert.Equal(RestoreSourceAccess.BackendRelayed, created.Operation!.SourceAccess);
-        // The relay path must still prove the replica readable before it hands the restore out; the resolver finds no storage, so there is nothing to claim.
+        Assert.Equal(RestoreCreateOutcome.SourceRejected, created.Outcome);
+        Assert.Equal(RestoreSourceRejection.NoAccessibleReplica, created.Rejection);
         Assert.Null(await ClaimAsync(store, seed.Agent, Now));
-        Assert.True(resolver.Resolutions > 0);
+        Assert.Equal(0, resolver.Resolutions);
     }
 }
