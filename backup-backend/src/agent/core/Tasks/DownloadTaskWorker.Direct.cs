@@ -38,7 +38,7 @@ public sealed partial class DownloadTaskWorker
 
     private async Task<string?> SendDirectAsync(DownloadTaskSnapshot task, FileStream file, string checksum, CancellationToken token)
     {
-        var offer = await CallAsync(identity => client.SignalAsync(identity, task.SessionId,
+        var offer = await BackupTaskLease.CallAsync(identities, null, identity => client.SignalAsync(identity, task.SessionId,
             new DownloadSignalRequest { LeaseToken = task.LeaseToken }, token), token).ConfigureAwait(false);
         if (!offer.IsSuccess || offer.Value.Sdp is null) return DownloadAgentFailureCodes.DirectPathUnavailable;
         await file.FlushAsync(token).ConfigureAwait(false);
@@ -65,7 +65,7 @@ public sealed partial class DownloadTaskWorker
             var line = await process.StandardOutput.ReadLineAsync(negotiation.Token).ConfigureAwait(false);
             if (line is null || line.Length > 65536) return DownloadAgentFailureCodes.DirectPathUnavailable;
             using var answer = JsonDocument.Parse(line);
-            var result = await CallAsync(identity => client.SignalAsync(identity, task.SessionId,
+            var result = await BackupTaskLease.CallAsync(identities, null, identity => client.SignalAsync(identity, task.SessionId,
                 new DownloadSignalRequest { LeaseToken = task.LeaseToken, Sdp = answer.RootElement.GetProperty("sdp").GetString() }, token), token).ConfigureAwait(false);
             if (!result.IsSuccess) return DownloadAgentFailureCodes.DirectPathUnavailable;
             await process.WaitForExitAsync(token).ConfigureAwait(false);

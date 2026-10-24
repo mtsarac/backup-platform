@@ -143,7 +143,7 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
         }
         using var lease = new BackupTaskLease(task.LeaseExpiresAt, _time);
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, lease.Token);
-        var started = await CallAsync(identity => _client.StartAsync(identity, task.AttemptId, new BackupTaskStartRequest
+        var started = await BackupTaskLease.CallAsync(_identities, null, identity => _client.StartAsync(identity, task.AttemptId, new BackupTaskStartRequest
         {
             LeaseToken = task.LeaseToken,
             SoftwareVersion = _software.Version,
@@ -202,7 +202,7 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
                 TimeRulePauseToken = timeRulePauseToken, ShutdownToken = shutdownToken,
                 RecordCheckpointAsync = async (checkpoint, _) =>
                 {
-                    var response = await CallAsync(identity => _client.ReportProgressAsync(identity, task.AttemptId,
+                    var response = await BackupTaskLease.CallAsync(_identities, null, identity => _client.ReportProgressAsync(identity, task.AttemptId,
                         new BackupTaskProgressRequest { LeaseToken = task.LeaseToken, Stage = "Uploading", Checkpoint = checkpoint }, leaseToken), leaseToken).ConfigureAwait(false);
                     if (!response.IsSuccess) throw new IOException("The transfer checkpoint could not be committed.");
                 }

@@ -7,7 +7,6 @@ namespace BackupPlatform.Agent.Core.Tasks;
 
 public sealed partial class DownloadTaskWorker
 {
-    private static readonly TimeSpan RenewalInterval = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan CompletionRetry = TimeSpan.FromSeconds(2);
 
     private async Task RenewLoopAsync(DownloadTaskSnapshot task, BackupTaskLease lease, CancellationTokenSource requestedCancel, CancellationToken cancellationToken)
@@ -16,15 +15,15 @@ public sealed partial class DownloadTaskWorker
         {
             while (true)
             {
-                await Task.Delay(RenewalInterval, time, cancellationToken).ConfigureAwait(false);
-                var response = await CallAsync(identity => client.RenewAsync(identity, task.SessionId,
+                await Task.Delay(BackupTaskLease.RenewalInterval, time, cancellationToken).ConfigureAwait(false);
+                var response = await BackupTaskLease.CallAsync(identities, null, identity => client.RenewAsync(identity, task.SessionId,
                     new BackupTaskLeaseRequest { LeaseToken = task.LeaseToken }, cancellationToken), cancellationToken).ConfigureAwait(false);
                 if (response.IsSuccess)
                 {
                     if (!lease.Renew(response.Value.LeaseExpiresAt)) return;
                     if (response.Value.CancellationRequested) await requestedCancel.CancelAsync().ConfigureAwait(false);
                 }
-                else if (response.Failure.Kind is not (AgentBackendFailureKind.Transient or AgentBackendFailureKind.RateLimited))
+                else if (!BackupTaskLease.IsRetryable(response.Failure))
                 {
                     await lease.LoseAsync().ConfigureAwait(false);
                     return;
@@ -48,29 +47,11 @@ public sealed partial class DownloadTaskWorker
         };
         while (true)
         {
-            var response = await CallAsync(identity => client.CompleteAsync(identity, task.SessionId, request, cancellationToken), cancellationToken).ConfigureAwait(false);
-            if (response.IsSuccess || response.Failure.Kind is not (AgentBackendFailureKind.Transient or AgentBackendFailureKind.RateLimited)) return;
+            var response = await BackupTaskLease.CallAsync(identities, null, identity => client.CompleteAsync(identity, task.SessionId, request, cancellationToken), cancellationToken).ConfigureAwait(false);
+            if (response.IsSuccess || !BackupTaskLease.IsRetryable(response.Failure)) return;
             var delay = response.Failure.RetryAfter is { } retry && retry > CompletionRetry ? retry : CompletionRetry;
             await Task.Delay(delay, time, cancellationToken).ConfigureAwait(false);
         }
     }
 
-    private async Task<AgentBackendResult<T>> CallAsync<T>(Func<AgentLocalIdentity, Task<AgentBackendResult<T>>> call, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var identity = await identities.LoadAsync(cancellationToken).ConfigureAwait(false);
-            return identity is null
-                ? AgentBackendResult<T>.Fail(new AgentBackendFailure(AgentBackendFailureKind.Unauthorized, "The local identity is unavailable."))
-                : await call(identity).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception)
-        {
-            return AgentBackendResult<T>.Fail(new AgentBackendFailure(AgentBackendFailureKind.Transient, "The download backend could not be reached."));
-        }
-    }
 }

@@ -87,7 +87,7 @@ public sealed partial class DownloadTaskWorker(
         if (task.LeaseExpiresAt <= time.GetUtcNow()) return;
         using var lease = new BackupTaskLease(task.LeaseExpiresAt, time);
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, lease.Token);
-        var started = await CallAsync(identity => client.StartAsync(identity, task.SessionId, new BackupTaskStartRequest
+        var started = await BackupTaskLease.CallAsync(identities, null, identity => client.StartAsync(identity, task.SessionId, new BackupTaskStartRequest
         {
             LeaseToken = task.LeaseToken,
             SoftwareVersion = software.Version,
@@ -135,7 +135,7 @@ public sealed partial class DownloadTaskWorker(
             await using var plaintext = CreatePrivateDownloadFile();
             await BackupPlatform.Encryption.BpeDecryptor.DecryptAsync(content, plaintext, async (_, token) =>
             {
-                var keyResult = await CallAsync(identity => client.KeyAsync(identity, task.SessionId,
+                var keyResult = await BackupTaskLease.CallAsync(identities, null, identity => client.KeyAsync(identity, task.SessionId,
                     new DownloadSignalRequest { LeaseToken = task.LeaseToken }, token), token).ConfigureAwait(false);
                 if (!keyResult.IsSuccess) throw new UnauthorizedAccessException("The artifact key is unavailable.");
                 var dek = Convert.FromBase64String(keyResult.Value.DekBase64);

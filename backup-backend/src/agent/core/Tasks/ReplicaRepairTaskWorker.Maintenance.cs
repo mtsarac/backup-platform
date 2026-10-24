@@ -6,7 +6,6 @@ namespace BackupPlatform.Agent.Core.Tasks;
 
 public sealed partial class ReplicaRepairTaskWorker
 {
-    private static readonly TimeSpan RenewalInterval = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan TransportRetry = TimeSpan.FromSeconds(2);
 
     private async Task<bool> AuthorizeAsync(RepairRun run, CancellationToken cancellationToken)
@@ -32,7 +31,7 @@ public sealed partial class ReplicaRepairTaskWorker
             while (true)
             {
                 var remaining = run.Lease.ExpiresAt - _time.GetUtcNow();
-                var delay = TimeSpan.FromTicks(Math.Clamp(remaining.Ticks / 3, TimeSpan.TicksPerMillisecond, RenewalInterval.Ticks));
+                var delay = BackupTaskLease.RenewalDelay(remaining);
                 await Task.Delay(delay, _time, cancellationToken).ConfigureAwait(false);
                 if (!await AuthorizeAsync(run, cancellationToken).ConfigureAwait(false))
                 {
@@ -56,8 +55,8 @@ public sealed partial class ReplicaRepairTaskWorker
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var result = await CallAsync(task, call, cancellationToken).ConfigureAwait(false);
-            if (result.IsSuccess || !IsRetryable(result.Failure))
+            var result = await BackupTaskLease.CallAsync(_identities, task.AgentId, call, cancellationToken).ConfigureAwait(false);
+            if (result.IsSuccess || !BackupTaskLease.IsRetryable(result.Failure))
             {
                 return result;
             }
@@ -65,27 +64,4 @@ public sealed partial class ReplicaRepairTaskWorker
         }
     }
 
-    private async Task<AgentBackendResult<T>> CallAsync<T>(ReplicaRepairTaskSnapshot task,
-        Func<AgentLocalIdentity, Task<AgentBackendResult<T>>> call, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var identity = await _identities.LoadAsync(cancellationToken).ConfigureAwait(false);
-            if (identity is null || identity.AgentId != task.AgentId)
-            {
-                return AgentBackendResult<T>.Fail(new AgentBackendFailure(AgentBackendFailureKind.Unauthorized, "The task does not belong to the local identity."));
-            }
-            return await call(identity).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception)
-        {
-            return AgentBackendResult<T>.Fail(new AgentBackendFailure(AgentBackendFailureKind.Transient, "The repair backend could not be reached."));
-        }
-    }
-
-    private static bool IsRetryable(AgentBackendFailure failure) => failure.Kind is AgentBackendFailureKind.Transient or AgentBackendFailureKind.RateLimited;
 }

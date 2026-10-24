@@ -7,7 +7,6 @@ namespace BackupPlatform.Agent.Core.Tasks;
 
 public sealed partial class BackupTaskWorker
 {
-    private static readonly TimeSpan RenewalInterval = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan ProgressInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan CompletionRetry = TimeSpan.FromSeconds(2);
 
@@ -19,8 +18,8 @@ public sealed partial class BackupTaskWorker
         {
             while (true)
             {
-                await _time.ObserveAsync("backup renewal", Task.Delay(RenewalInterval, _time, cancellationToken)).ConfigureAwait(false);
-                var response = await CallAsync(identity => _client.RenewAsync(identity, task.AttemptId,
+                await _time.ObserveAsync("backup renewal", Task.Delay(BackupTaskLease.RenewalInterval, _time, cancellationToken)).ConfigureAwait(false);
+                var response = await BackupTaskLease.CallAsync(_identities, null, identity => _client.RenewAsync(identity, task.AttemptId,
                     new BackupTaskLeaseRequest { LeaseToken = task.LeaseToken }, cancellationToken), cancellationToken).ConfigureAwait(false);
                 if (response.IsSuccess)
                 {
@@ -35,7 +34,7 @@ public sealed partial class BackupTaskWorker
                         await requestedCancel.CancelAsync().ConfigureAwait(false);
                     }
                 }
-                else if (response.Failure.Kind is not (AgentBackendFailureKind.Transient or AgentBackendFailureKind.RateLimited))
+                else if (!BackupTaskLease.IsRetryable(response.Failure))
                 {
                     await lease.LoseAsync().ConfigureAwait(false);
                     return;
@@ -64,7 +63,7 @@ public sealed partial class BackupTaskWorker
                 {
                     continue;
                 }
-                await CallAsync(identity => _client.ReportProgressAsync(identity, task.AttemptId, new BackupTaskProgressRequest
+                await BackupTaskLease.CallAsync(_identities, null, identity => _client.ReportProgressAsync(identity, task.AttemptId, new BackupTaskProgressRequest
                 {
                     LeaseToken = task.LeaseToken,
                     Stage = current.Stage.ToString(),
@@ -86,32 +85,13 @@ public sealed partial class BackupTaskWorker
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var response = await CallAsync(identity => _client.CompleteAsync(identity, attemptId, completion, cancellationToken), cancellationToken).ConfigureAwait(false);
-            if (response.IsSuccess || response.Failure.Kind is not (AgentBackendFailureKind.Transient or AgentBackendFailureKind.RateLimited))
+            var response = await BackupTaskLease.CallAsync(_identities, null, identity => _client.CompleteAsync(identity, attemptId, completion, cancellationToken), cancellationToken).ConfigureAwait(false);
+            if (response.IsSuccess || !BackupTaskLease.IsRetryable(response.Failure))
             {
                 return;
             }
             var delay = response.Failure.RetryAfter is { } requested && requested > CompletionRetry ? requested : CompletionRetry;
             await _time.ObserveAsync("backup worker", Task.Delay(delay, _time, cancellationToken)).ConfigureAwait(false);
-        }
-    }
-
-    private async Task<AgentBackendResult<T>> CallAsync<T>(Func<AgentLocalIdentity, Task<AgentBackendResult<T>>> call, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var identity = await _identities.LoadAsync(cancellationToken).ConfigureAwait(false);
-            return identity is null
-                ? AgentBackendResult<T>.Fail(new AgentBackendFailure(AgentBackendFailureKind.Unauthorized, "The local identity is unavailable."))
-                : await call(identity).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception)
-        {
-            return AgentBackendResult<T>.Fail(new AgentBackendFailure(AgentBackendFailureKind.Transient, "The task backend could not be reached."));
         }
     }
 
@@ -138,7 +118,42 @@ internal sealed class BackupTaskLease : IDisposable
         _expiry = new CancellationTokenSource(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero, time);
     }
 
+    /// <summary>How often a running task renews; a short remaining lease renews sooner (see <see cref="RenewalDelay"/>).</summary>
+    public static readonly TimeSpan RenewalInterval = TimeSpan.FromSeconds(10);
+
     public CancellationToken Token => _expiry.Token;
+
+    /// <summary>A third of what is left of the lease, never longer than <see cref="RenewalInterval"/> and never zero.</summary>
+    public static TimeSpan RenewalDelay(TimeSpan remaining) =>
+        TimeSpan.FromTicks(Math.Clamp(remaining.Ticks / 3, TimeSpan.TicksPerMillisecond, RenewalInterval.Ticks));
+
+    public static bool IsRetryable(AgentBackendFailure failure) => failure.Kind is AgentBackendFailureKind.Transient or AgentBackendFailureKind.RateLimited;
+
+    /// <summary>
+    /// Calls the task backend as the local identity. <paramref name="agentId"/> pins the task to that identity (a task claimed by another agent is refused);
+    /// an unreachable backend is a retryable <see cref="AgentBackendFailureKind.Transient"/>, never an exception.
+    /// </summary>
+    public static async Task<AgentBackendResult<T>> CallAsync<T>(IAgentCredentialStore identities, Guid? agentId,
+        Func<AgentLocalIdentity, Task<AgentBackendResult<T>>> call, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var identity = await identities.LoadAsync(cancellationToken).ConfigureAwait(false);
+            if (identity is null || agentId is { } expected && identity.AgentId != expected)
+            {
+                return AgentBackendResult<T>.Fail(new AgentBackendFailure(AgentBackendFailureKind.Unauthorized, "The task does not belong to the local identity."));
+            }
+            return await call(identity).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return AgentBackendResult<T>.Fail(new AgentBackendFailure(AgentBackendFailureKind.Transient, "The task backend could not be reached."));
+        }
+    }
 
     public DateTimeOffset ExpiresAt
     {

@@ -157,7 +157,7 @@ public sealed partial class RestoreTaskWorker : IAgentTaskSink
         }
         using var lease = new BackupTaskLease(task.LeaseExpiresAt, _time);
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, lease.Token);
-        var started = await CallAsync(identity => _client.StartAsync(identity, task.AttemptId, new BackupTaskStartRequest
+        var started = await BackupTaskLease.CallAsync(_identities, null, identity => _client.StartAsync(identity, task.AttemptId, new BackupTaskStartRequest
         {
             LeaseToken = task.LeaseToken,
             SoftwareVersion = _software.Version,
