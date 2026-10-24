@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { Route } from 'react-router-dom'
 import { PlatformAdminRoute } from '@/components/auth/platform-admin-route'
 import { PlatformShell } from '@/components/layout/platform-shell'
@@ -70,6 +71,8 @@ describe('PlatformAdminRoute guard', () => {
     expect(screen.getAllByText("Platform Yönetimi").length).toBeGreaterThan(0)
     expect(screen.getByText("Platform Yöneticisi")).toBeInTheDocument()
     expect(screen.getByText('Platform Operatörü')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: "Temayı değiştir" })).not.toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Görünüm' }))
     expect(screen.getByRole('button', { name: "Temayı değiştir" })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Çıkış' })).toBeInTheDocument()
     expect(screen.queryByLabelText("Çalışma Alanı")).not.toBeInTheDocument()

@@ -62,6 +62,8 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Bu alan için yetkiniz yok": {"tr":"Bu alan için yetkiniz yok","en":"You do not have permission to access this area"},
   "Ana sayfaya dön": {"tr":"Ana sayfaya dön","en":"Return to home"},
   "Erişilebilirlik araçları": {"tr":"Erişilebilirlik araçları","en":"Accessibility tools"},
+  "Görünüm": {"tr":"Görünüm","en":"Display"},
+  "Koyu tema": {"tr":"Koyu tema","en":"Dark theme"},
   "Yazıyı küçült": {"tr":"Yazıyı küçült","en":"Decrease text size"},
   "A-": {"tr":"A-","en":"A-"},
   "Yazıyı büyüt": {"tr":"Yazıyı büyüt","en":"Increase text size"},

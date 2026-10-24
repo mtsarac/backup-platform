@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 
 /** Shared look for filter controls (select, date, search); pair with `FilterField`. */
-export const filterControlClass = 'block min-h-10 w-full rounded-lg border border-border-strong/60 bg-surface px-3 text-sm text-text shadow-card placeholder:text-text-muted/70 disabled:opacity-60'
+export const filterControlClass = 'block min-h-11 w-full rounded-lg border border-border-strong/60 bg-surface px-3 text-sm text-text shadow-card placeholder:text-text-muted/70 disabled:opacity-60'
 
 /** One row of filters above a list. `onClear` adds the standard "Filtreleri temizle" button. */
 export function Filters({ label, children, onClear, footer }: { label: string; children: ReactNode; onClear?: () => void; footer?: ReactNode }) {

@@ -187,25 +187,18 @@ body {
     @apply border-border outline-ring/50;
   }
 
-  :focus-visible {
-    outline: 3px solid var(--ring);
-    outline-offset: 2px;
-  }
-
   h1, h2, h3 {
     letter-spacing: -0.012em;
     text-wrap: balance;
   }
 
-  @media (max-width: 48rem) {
-    [data-slot="button"] {
-      min-height: 2.75rem;
-      min-width: 2.75rem;
-    }
+  [data-slot="button"], button, summary {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
 
-    input:not([type="checkbox"]):not([type="radio"]), select {
-      min-height: 2.75rem;
-    }
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea {
+    min-height: 2.75rem;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -216,6 +209,11 @@ body {
       scroll-behavior: auto !important;
     }
   }
+}
+
+:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 2px;
 }
 
 /* High-contrast mode: toggled by the A11y toolbar via .hc on <html>. */
