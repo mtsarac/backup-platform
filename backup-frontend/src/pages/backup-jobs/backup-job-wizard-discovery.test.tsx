@@ -26,7 +26,7 @@ function mount(route = '/tenants/tenant-a/backup-jobs/new') {
 const next = (times = 1) => { for (let i = 0; i < times; i++) fireEvent.click(screen.getByRole('button', { name: 'İleri' })) }
 async function toSummary() {
   fireEvent.change(await screen.findByLabelText('İş adı'), { target: { value: 'ERP' } })
-  next(5)
+  next(7)
 }
 beforeEach(() => {
   vi.clearAllMocks()
@@ -83,8 +83,9 @@ describe('wizard with discovered databases', () => {
   it('keeps manual entry working and makes no discovery request until the picker is opened', async () => {
     mount()
     fireEvent.change(await screen.findByLabelText('İş adı'), { target: { value: 'ERP' } })
+    next()
     await screen.findByRole('option', { name: /(?:SQL Agent|SQL Ajanı)/ })
-    fireEvent.change(screen.getByLabelText("Ajan"), { target: { value: 'agent-a' } })
+    fireEvent.change(screen.getByLabelText("Yedekleme bilgisayarı"), { target: { value: 'agent-a' } })
     next()
     expect(screen.getByLabelText("Veritabanı")).toBeEnabled()
     expect(getDiscoveryInstances).not.toHaveBeenCalled()

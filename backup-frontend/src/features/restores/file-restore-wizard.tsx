@@ -69,7 +69,6 @@ export function FileRestoreWizard({ tenantId, artifact, targets }: { tenantId: s
   const directoryValid = original || directory === '' || validFilePath(directory)
   const pathsValid = scope === 'all' || validFilePaths(paths)
   const valid = eligible && referenceValid && directoryValid && pathsValid
-  const busy = startPrecheck.isPending || startRestore.isPending
   // Only a passed check that matches the current settings opens the confirmation step.
   const shownStep = step === 4 && !passed ? 3 : step
 

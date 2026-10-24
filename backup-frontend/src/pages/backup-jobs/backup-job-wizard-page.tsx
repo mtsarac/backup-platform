@@ -8,6 +8,7 @@ import { useDiscoveryInstance } from '@/features/discovery/hooks'
 import { selectableNames } from '@/features/discovery/job-prefill'
 import { useBackupJob } from '@/features/backup-jobs/hooks'
 import { BackupHealthCard } from '@/features/backup-jobs/health-card'
+import { JobDetails } from '@/features/backup-jobs/job-details'
 import { JobForm } from '@/features/backup-jobs/job-form'
 import { AccessDenied } from '@/components/auth/access-denied'
 import { errorMessage } from '@/lib/api/failure-messages'
@@ -34,6 +35,7 @@ export function BackupJobWizardPage() {
   return <div className="space-y-6">
     <PageHeader crumbs={crumbs} title={readOnly ? tx('Yedekleme sağlığı') : id ? tx('Yedekleme işini düzenle') : tx('Yeni yedekleme işi')} description={readOnly ? job.data?.name : tx("Kaynak, depolama, zamanlama ve saklama ayarlarını adım adım belirleyin.")} />
     {id && <BackupHealthCard key={`${tenantId}:${id}`} jobId={id} />}
+    {job.data && <JobDetails job={job.data} />}
     {body}
   </div>
 }
