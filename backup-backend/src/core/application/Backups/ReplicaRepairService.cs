@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Storage;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using BackupPlatform.Contracts.Backups;
@@ -134,7 +135,7 @@ public sealed partial class ReplicaRepairService(
             var targetDestination = admission.TargetDestination;
             var candidateSources = admission.CandidateSources ?? [];
 
-            var destinationTarget = targetDestination.StorageProvider is "sftp" or "google-drive" or "s3" or "smb" && targetDestination.StorageConnectionId is { } connId && connId != Guid.Empty
+            var destinationTarget = StorageProviderTypes.External(targetDestination.StorageProvider) && targetDestination.StorageConnectionId is { } connId && connId != Guid.Empty
                 ? connId.ToString("D")
                 : targetDestination.StorageProvider;
 
@@ -161,12 +162,12 @@ public sealed partial class ReplicaRepairService(
                     continue;
                 }
                 // Central-involving repairs still run here; never fall back to relaying an external-to-external copy when the central source cannot be opened.
-                if (BackupReplica.IsAgentExecutedProvider(targetDestination.StorageProvider)
+                if (StorageProviderTypes.AgentExecuted(targetDestination.StorageProvider)
                     && claimed.LeaseOwner?.StartsWith("agent:", StringComparison.Ordinal) != true
-                    && candidate.StorageProvider is "sftp" or "google-drive" or "s3" or "smb")
+                    && StorageProviderTypes.External(candidate.StorageProvider))
                     continue;
 
-                var sourceTarget = candidate.StorageProvider is "sftp" or "google-drive" or "s3" or "smb" && candidate.StorageConnectionId != Guid.Empty
+                var sourceTarget = StorageProviderTypes.External(candidate.StorageProvider) && candidate.StorageConnectionId != Guid.Empty
                     ? candidate.StorageConnectionId.ToString("D")
                     : candidate.StorageTarget;
 

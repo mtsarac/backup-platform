@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Storage;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Tenancy;
 
@@ -52,7 +53,7 @@ public sealed class BackupReplica : ITenantOwned
             throw new ArgumentException("Invalid replica metadata.");
         if ((verificationState == "Verified") != verifiedAt.HasValue || verifiedAt < createdAt)
             throw new ArgumentException("Invalid replica verification timestamp.");
-        var location = executionLocation ?? (storageProvider == "local" ? BackupStorageExecutionLocation.Agent : BackupStorageExecutionLocation.Backend);
+        var location = executionLocation ?? (storageProvider == StorageProviderTypes.Local ? BackupStorageExecutionLocation.Agent : BackupStorageExecutionLocation.Backend);
         if (!Enum.IsDefined(location) || (location == BackupStorageExecutionLocation.Agent &&
             (storageProvider != "local" || owningAgentId is null || owningAgentId == Guid.Empty)))
             throw new ArgumentException("Agent replicas require a local provider and an owning agent.");
@@ -122,10 +123,10 @@ public sealed class BackupReplica : ITenantOwned
     public bool? DeleteCompletionAbsenceVerified { get; private set; }
     public string? DeleteCompletionFailureCode { get; private set; }
     /// <summary>External providers whose physical removal (and repair) only an agent performs; the backend holds no credential for them.</summary>
-    public static bool IsAgentExecutedProvider(string provider) => provider is "sftp" or "google-drive";
+    public static bool IsAgentExecutedProvider(string provider) => StorageProviderTypes.AgentExecuted(provider);
 
     /// <summary>Removal of this replica is performed by an agent: its local disk, or an external provider it can reach directly.</summary>
-    public bool AgentExecuted => ExecutionLocation == BackupStorageExecutionLocation.Agent || IsAgentExecutedProvider(StorageProvider);
+    public bool AgentExecuted => ExecutionLocation == BackupStorageExecutionLocation.Agent || StorageProviderTypes.AgentExecuted(StorageProvider);
 
     public bool WaitingForAgent => AgentExecuted && Status == BackupReplicaStatus.Deleting && DeleteLeaseToken is null;
 

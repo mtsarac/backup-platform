@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Storage;
 using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Application.Downloads;
@@ -18,14 +19,14 @@ public sealed class AgentDownloadSource(IDownloadStore store, AgentConnectivityQ
     {
         bool Eligible(AgentStatusView agent) => agent.Status == AgentOperationalStatus.Online
             && agent.Capabilities?.Capabilities.Any(item => item.Identifier == DownloadTaskTypes.Capability && item.Support == CapabilitySupport.Supported) == true
-            && (replica.StorageProvider == "local" || agent.Capabilities.Capabilities.Any(item => item.Identifier == TaskStorageProtocol.DirectCapability && item.Support == CapabilitySupport.Supported));
-        if (replica.StorageProvider == "local")
+            && (replica.StorageProvider == StorageProviderTypes.Local || agent.Capabilities.Capabilities.Any(item => item.Identifier == TaskStorageProtocol.DirectCapability && item.Support == CapabilitySupport.Supported));
+        if (replica.StorageProvider == StorageProviderTypes.Local)
         {
             if (replica.OwningAgentId is not { } owner) return null;
             var status = await agents.GetAsync(tenantId, new AgentId(owner), cancellationToken);
             return status is not null && Eligible(status) ? owner : null;
         }
-        if (replica.StorageProvider is not ("sftp" or "google-drive")) return null;
+        if (!StorageProviderTypes.AgentExecuted(replica.StorageProvider)) return null;
         return (await agents.ListAsync(tenantId, AgentConnectivityFilter.Online, cancellationToken)).FirstOrDefault(Eligible)?.Agent.Id.Value;
     }
 
@@ -116,7 +117,7 @@ public sealed class AgentDownloadSource(IDownloadStore store, AgentConnectivityQ
         var artifact = await store.GetArtifactAsync(agent.TenantId, session.ArtifactId, cancellationToken);
         var replica = artifact?.Replicas.SingleOrDefault(item => item.Id == session.ReplicaId);
         return artifact is not null && replica is not null && replica.TenantId == session.TenantId && replica.ArtifactId == session.ArtifactId
-            && (replica.StorageProvider is "sftp" or "google-drive" || replica.OwningAgentId == session.AgentId && replica.ExecutionLocation == BackupStorageExecutionLocation.Agent)
+            && (StorageProviderTypes.AgentExecuted(replica.StorageProvider) || replica.OwningAgentId == session.AgentId && replica.ExecutionLocation == BackupStorageExecutionLocation.Agent)
             && replica.Status is not (BackupReplicaStatus.Deleting or BackupReplicaStatus.Deleted)
             && replica.VerificationState == "Verified" && replica.StorageProvider == session.StorageProvider
             && replica.StorageTarget == session.StorageTarget && replica.Key == session.Key && replica.Checksum == session.Checksum

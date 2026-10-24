@@ -121,7 +121,7 @@ public sealed class RestoreTaskRequestFactory(
     internal async ValueTask<(DatabaseConnectionSettings Connection, DatabaseCredential Credential)> CreateCleanupTargetAsync(RestoreCleanupSnapshot task, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(task);
-        if (task.Version != 1 || task.OperationId == Guid.Empty || task.TenantId == Guid.Empty || task.LeaseToken == Guid.Empty || task.Engine is not ("mssql" or "postgres")
+        if (task.Version != 1 || task.OperationId == Guid.Empty || task.TenantId == Guid.Empty || task.LeaseToken == Guid.Empty || task.Engine is not (DatabaseEngineKeys.MsSql or DatabaseEngineKeys.PostgreSql)
             || task.Target is null || (task.Engine == "postgres" && task.Target.IntegratedSecurity)
             || string.IsNullOrWhiteSpace(task.Target.Host) || task.Target.Host.Length > MaxHostLength || task.Target.Host.Any(char.IsControl)
             || !BackupTaskRequestFactory.HasValidAuthentication(task.Target.IntegratedSecurity, task.Target.DatabaseCredentialReference))
@@ -152,7 +152,7 @@ public sealed class RestoreTaskRequestFactory(
 
     private static bool HasValidIdentityAndTarget(RestoreTaskSnapshot task) =>
         task.Version == 1 && task.OperationId != Guid.Empty && task.AttemptId != Guid.Empty && task.TenantId != Guid.Empty
-        && task.Engine is ("mssql" or "postgres" or "file-system")
+        && DatabaseEngineKeys.IsValid(task.Engine)
         && task.LeaseToken != Guid.Empty && task.Target is not null
         && (task.Engine != "postgres" || !task.Target.IntegratedSecurity)
         && !string.IsNullOrWhiteSpace(task.Target.Host) && task.Target.Host.Length <= MaxHostLength
@@ -191,7 +191,7 @@ public sealed class RestoreTaskRequestFactory(
         && string.Equals(source.ChecksumAlgorithm, "sha256", StringComparison.Ordinal)
         && ((source.Access, source.StorageProvider, source.StorageExecutionLocation) is
             ("AgentLocal", "local", "Agent") or ("CentralStorage", "central", "Backend")
-            || (source.Access, source.StorageProvider, source.StorageExecutionLocation) is ("BackendRelayed" or "AgentDirect", "sftp" or "google-drive" or "s3" or "smb", "Backend" or "Agent")
+            || (source.Access, source.StorageProvider, source.StorageExecutionLocation) is ("BackendRelayed" or "AgentDirect", StorageProviderKinds.Sftp or StorageProviderKinds.GoogleDrive or StorageProviderKinds.S3 or StorageProviderKinds.Smb, "Backend" or "Agent")
             && Guid.TryParse(source.StorageTarget, out var connectionId) && connectionId != Guid.Empty
             && storageFactory is not null);
 

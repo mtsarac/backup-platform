@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Storage;
 using System.Security.Cryptography;
 using System.Text;
 using BackupPlatform.Contracts.Backups;
@@ -128,7 +129,7 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
         var changed = false;
         foreach (var replica in replicas.OrderBy(replica => position[replica.Id]))
         {
-            if (replica.ExecutionLocation == BackupStorageExecutionLocation.Backend && replica.StorageProvider is "sftp" or "google-drive" or "s3" or "smb")
+            if (replica.ExecutionLocation == BackupStorageExecutionLocation.Backend && StorageProviderTypes.External(replica.StorageProvider))
             {
                 // A timed-out attempt can still have a remote PUT in flight; do not publish absence ahead of that writer.
                 // Taken for this transaction only (the row stays locked until commit, so a writer waits for it): a live writer lease means skip.
@@ -428,7 +429,7 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
         }
     }
 
-    private static string SafeStorageProvider(string provider) => provider is "local" or "central" or "sftp" or "google-drive" or "s3" or "smb" ? provider : "other";
+    private static string SafeStorageProvider(string provider) => provider is StorageProviderTypes.Local or StorageProviderTypes.Central || StorageProviderTypes.External(provider) ? provider : "other";
 
     public async Task<ClaimedStorageCleanup?> BeginSweptDeletionAsync(
         string storageProvider, string storageName, TenantId? storageScope, ManagedStorageKey key, string objectKey,

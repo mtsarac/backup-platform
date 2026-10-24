@@ -14,8 +14,6 @@ namespace BackupPlatform.Agent.Core.Tasks;
 public sealed partial class ReplicaRepairTaskWorker : IAgentTaskSink
 {
     private const long ProgressStep = 10L * 1024 * 1024;
-    private static readonly string[] SourceProviders = ["sftp", "google-drive", "s3", "smb"];
-    private static readonly string[] TargetProviders = ["sftp", "google-drive"];
 
     private readonly Channel<ReplicaRepairTaskSnapshot> _queue = Channel.CreateBounded<ReplicaRepairTaskSnapshot>(new BoundedChannelOptions(1)
     {
@@ -73,10 +71,10 @@ public sealed partial class ReplicaRepairTaskWorker : IAgentTaskSink
         task.OperationId != Guid.Empty && task.TenantId != Guid.Empty && task.AgentId != Guid.Empty
         && task.ArtifactId != Guid.Empty && task.LeaseToken != Guid.Empty && task.LeaseExpiresAt > now
         && task.SizeBytes > 0 && task.Checksum.Length == ContentChecksum.Sha256HexLength && task.Checksum.All(Uri.IsHexDigit)
-        && task.Target.StorageConnectionId != Guid.Empty && TargetProviders.Contains(task.Target.StorageProvider)
+        && task.Target.StorageConnectionId != Guid.Empty && StorageProviderKinds.AgentExecuted(task.Target.StorageProvider)
         && task.Sources is { Count: > 0 }
         && task.Sources.All(source => source.ReplicaId != Guid.Empty && source.StorageConnectionId != Guid.Empty
-            && SourceProviders.Contains(source.StorageProvider) && StorageObjectKey.TryCreate(source.StorageKey, out _));
+            && StorageProviderKinds.External(source.StorageProvider) && StorageObjectKey.TryCreate(source.StorageKey, out _));
 
     public async Task RunAsync(CancellationToken stoppingToken)
     {

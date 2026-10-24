@@ -143,7 +143,7 @@ public sealed partial class DeleteReplicaTaskWorker : IAgentTaskSink
             {
                 return Completion(task, DeleteReplicaFailureCodes.InvalidLocation);
             }
-            var resolution = task.StorageProvider is "sftp" or "google-drive" ? ResolveExternal(task) : _providers.Resolve(task.StorageProvider, task.StorageTarget);
+            var resolution = StorageProviderKinds.AgentExecuted(task.StorageProvider) ? ResolveExternal(task) : _providers.Resolve(task.StorageProvider, task.StorageTarget);
             if (resolution.Provider is not { } provider)
             {
                 return Completion(task, resolution.FailureCode ?? DeleteReplicaFailureCodes.InvalidConfiguration);
@@ -190,7 +190,7 @@ public sealed partial class DeleteReplicaTaskWorker : IAgentTaskSink
     {
         return StorageObjectKey.TryCreate(task.StorageKey, out key)
             && ManagedBackupLayout.TryParseStorageKey(task.StorageKey, out var managed)
-            && managed is not null && (!managed.IsPartial || task.StorageProvider is "sftp" or "google-drive")
+            && managed is not null && (!managed.IsPartial || StorageProviderKinds.AgentExecuted(task.StorageProvider))
             && managed.TenantId == task.TenantId && managed.JobId == task.JobId
             && managed.RunId == task.RunId && managed.AttemptId == task.AttemptId
             && string.Equals(managed.Prefix, task.StoragePrefix, StringComparison.Ordinal);

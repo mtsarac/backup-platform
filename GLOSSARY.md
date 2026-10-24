@@ -85,3 +85,12 @@ _Avoid_: Tenant anahtarı in user-facing recovery settings
 **Wrap key** (shown as "Şifreleme anahtarı"):
 The application's key for opening encrypted backups. Rotation protects future backups with a new key; retiring an older key removes online decryption for its backups and requires offline recovery.
 _Avoid_: TWK in default user-facing text
+
+### Storage Providers
+
+**StorageProvider**:
+The kind of external or local place a backup replica is stored: `local` (the agent's own disk), `central` (the platform's managed storage), `sftp`, `google-drive`, `s3` or `smb`.
+_Avoid_: StorageType, StorageKind, ProviderName
+
+**AgentExecuted**:
+A StorageProvider whose physical removal and repair only an agent performs because the backend holds no credential for it: `sftp` and `google-drive`. `s3` and `smb` are external but still handled by the backend today.

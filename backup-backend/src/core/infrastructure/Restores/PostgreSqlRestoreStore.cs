@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Backups;
 using System.Linq.Expressions;
 using System.Text.Json.Nodes;
 using BackupPlatform.Application.Backups;
@@ -5,7 +6,6 @@ using BackupPlatform.Application.Restores;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Audit;
-using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Capabilities;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Restores;
@@ -672,7 +672,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
     }
 
     private static bool SuccessfulPrecheck(BackupPlatform.Contracts.Restores.RestoreTaskResult? result, RestoreOptions options, string? engine) =>
-        engine is ("mssql" or "postgres" or "file-system") && result is { PreCheck.Count: > 0, SourceBackup: not null, FileMappings: not null } && (engine != "mssql" || result.FileMappings.Count > 0) &&
+        DatabaseEngines.IsValid(engine) && result is { PreCheck.Count: > 0, SourceBackup: not null, FileMappings: not null } && (engine != "mssql" || result.FileMappings.Count > 0) &&
         result.PreCheck.All(item => item.Status is "Passed" or "Warning" or "Skipped") &&
         (!options.VerifyChecksum || result.ChecksumVerified) && (!options.VerifyBackup || result.BackupVerified);
 

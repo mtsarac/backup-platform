@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Storage;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Tenancy;
@@ -22,7 +23,7 @@ public sealed class DownloadSession : ITenantOwned
             artifact.ChecksumAlgorithm != "sha256") throw new ArgumentException("The replica cannot be downloaded.");
         Id = id; TenantId = artifact.TenantId; ArtifactId = artifact.Id; ReplicaId = replica.Id; UserId = userId; SupportSessionId = supportSessionId;
         Decrypted = decrypted; BreakGlassRequestId = breakGlassRequestId;
-        if (directAgentId == Guid.Empty || directAgentId is not null && replica.StorageProvider is not ("sftp" or "google-drive"))
+        if (directAgentId == Guid.Empty || directAgentId is not null && !StorageProviderTypes.AgentExecuted(replica.StorageProvider))
             throw new ArgumentException("A direct executor is only valid for external storage.");
         AgentId = replica.ExecutionLocation == BackupStorageExecutionLocation.Agent ? replica.OwningAgentId : directAgentId;
         StorageProvider = replica.StorageProvider; StorageTarget = replica.StorageTarget; Key = replica.Key;

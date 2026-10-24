@@ -35,9 +35,9 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
         if (configuration.Engine == "postgres" && credential is not PasswordDatabaseCredential) throw new BackupTaskCredentialException();
         var targets = configuration.Destinations.Select(destination => new BackupPipelineDestination(
             new StorageProviderId(destination.StorageProvider),
-            destination.StorageProvider is "sftp" or "google-drive" or "s3" or "smb"
+            StorageProviderKinds.External(destination.StorageProvider)
                 ? (storageFactory ?? throw new ArgumentException("Backend-relayed storage is not configured.")).CreateBackup(task, destination)
-                : destination.StorageProvider == "local" && destination.StorageTarget is { } volume
+                : destination.StorageProvider == StorageProviderKinds.Local && destination.StorageTarget is { } volume
                     ? volumes?.Resolve(volume) ?? throw new ArgumentException("The local storage volume is not configured on this agent.")
                     : null,
             destination.StorageConnectionId,
@@ -132,7 +132,7 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
     private static void ValidateConfiguration(BackupExecutionConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
-        if (configuration.Engine is not ("mssql" or "postgres" or "file-system") || configuration.StagingReference != "default"
+        if (!DatabaseEngineKeys.IsValid(configuration.Engine) || configuration.StagingReference != "default"
             || string.IsNullOrWhiteSpace(configuration.Database) || configuration.Database.Length > 128
             || configuration.Database.Any(char.IsControl) || configuration.Host is null || configuration.Host.Length > 253
             || configuration.Engine == "postgres" && (configuration.Database != configuration.Database.Trim() || System.Text.Encoding.UTF8.GetByteCount(configuration.Database) > 63 || configuration.IntegratedSecurity))
@@ -161,11 +161,11 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
         // An unsupported provider/location combination is refused here, explicitly: no destination is ever skipped silently.
         foreach (var destination in destinations)
         {
-            if (destination.StorageProvider is not ("local" or "central" or "sftp" or "google-drive" or "s3" or "smb"))
+            if (destination.StorageProvider is not (StorageProviderKinds.Local or StorageProviderKinds.Central) && !StorageProviderKinds.External(destination.StorageProvider))
             {
                 throw new ArgumentException("The destination storage provider is unsupported.");
             }
-            if (destination.StorageTarget is not null && (destination.StorageProvider != "local" || !LocalVolumes.IsValidName(destination.StorageTarget)))
+            if (destination.StorageTarget is not null && (destination.StorageProvider != StorageProviderKinds.Local || !LocalVolumes.IsValidName(destination.StorageTarget)))
             {
                 throw new ArgumentException("The destination storage target is invalid.");
             }
@@ -173,7 +173,7 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
             {
                 throw new ArgumentException("The destination storage execution location is unsupported.");
             }
-            if (destination.StorageProvider is "sftp" or "google-drive" or "s3" or "smb")
+            if (StorageProviderKinds.External(destination.StorageProvider))
             {
                 if (destination.StorageConnectionId is null || destination.StorageConnectionId == Guid.Empty || configuration.StoragePrefix != string.Empty)
                 {

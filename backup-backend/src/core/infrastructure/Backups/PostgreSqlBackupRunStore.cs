@@ -1,8 +1,9 @@
+using BackupPlatform.Domain.Storage;
+using BackupPlatform.Domain.Backups;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Audit;
-using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Restores;
 using BackupPlatform.Infrastructure.ManagedService;
@@ -313,16 +314,16 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         foreach (var candidateId in candidateIds)
         {
             var candidate = await Runs(context).SingleAsync(run => run.TenantId == tenantId && run.Id == candidateId, cancellationToken);
-            if (candidate.Configuration.Engine is "postgres" or "file-system" && !await context.AgentCapabilities.AsNoTracking().AnyAsync(
+            if (candidate.Configuration.Engine is DatabaseEngines.PostgreSql or DatabaseEngines.FileSystem && !await context.AgentCapabilities.AsNoTracking().AnyAsync(
                 capability => capability.TenantId == tenantId && capability.AgentId == agentId &&
                     capability.Identifier == candidate.Configuration.Engine + ".backup.full" && capability.Support == BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, cancellationToken)) continue;
             // A retry or a queued run reaches an agent without passing admission again, so the capability is fenced here too: such a run waits for an agent that can execute it.
             supportsMultiDestination ??= await StorageTargetGate.SupportsMultiDestinationAsync(context, tenantId, agentId, cancellationToken);
             if (supportsMultiDestination != true) continue;
-            if (candidate.Configuration.Destinations.Any(destination => destination.StorageProvider is "sftp" or "google-drive"))
+            if (candidate.Configuration.Destinations.Any(destination => StorageProviderTypes.AgentExecuted(destination.StorageProvider)))
             {
                 // Legacy snapshots stay immutable and wait for an explicit fresh run; they are never silently relayed or retargeted.
-                if (candidate.Configuration.Destinations.Any(destination => destination.StorageProvider is "sftp" or "google-drive" && !destination.Direct)
+                if (candidate.Configuration.Destinations.Any(destination => StorageProviderTypes.AgentExecuted(destination.StorageProvider) && !destination.Direct)
                     || !await StorageTargetGate.SupportsDirectStorageAsync(context, tenantId, agentId, cancellationToken)) continue;
             }
             // The backend paces every upload it relays itself; only an AgentDirect destination depends on the agent. A limit that such an agent cannot follow would be
@@ -387,7 +388,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         MutateAsync(command, run =>
         {
             var destination = run.Configuration.Destinations.SingleOrDefault(d => d.StorageConnectionId == transfer.StorageConnectionId);
-            if (destination is not { StorageProvider: "sftp" or "google-drive" or "s3" or "smb", StorageExecutionLocation: BackupStorageExecutionLocation.Backend } ||
+            if (destination is not { StorageProvider: StorageProviderTypes.Sftp or StorageProviderTypes.GoogleDrive or StorageProviderTypes.S3 or StorageProviderTypes.Smb, StorageExecutionLocation: BackupStorageExecutionLocation.Backend } ||
                 !ManagedBackupLayout.TryParseStorageKey(transfer.Key, out var layout) || layout is null || layout.IsPartial ||
                 layout.TenantId != command.TenantId.Value || layout.JobId != run.JobId || layout.RunId != run.Id || layout.AttemptId != command.AttemptId)
                 throw new ArgumentException("The upload intent does not belong to this attempt.");
@@ -643,7 +644,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
                     layout.TenantId != command.TenantId.Value || layout.JobId != run.JobId || layout.RunId != run.Id || layout.AttemptId != command.AttemptId)
                     throw new ArgumentException("An orphan requires artifact metadata and an object key owned by this attempt.");
                 // The object exists physically but never verified: it is recorded as a Failed replica so its bytes stay accounted for and retention can remove it.
-                var target = destination.StorageProvider is "sftp" or "google-drive" or "s3" or "smb" ? connection.ToString("D") : destination.StorageProvider;
+                var target = StorageProviderTypes.External(destination.StorageProvider) ? connection.ToString("D") : destination.StorageProvider;
                 var orphan = NewReplica(destination, connection, artifact.Id, target, report.Key!, artifact.SizeBytes, artifact.ArtifactChecksum, artifact.ChecksumAlgorithm,
                     "Failed", "None", report.CompletedAt, null);
                 artifact.AddReplica(orphan);

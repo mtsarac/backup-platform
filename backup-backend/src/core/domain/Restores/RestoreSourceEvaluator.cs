@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Storage;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 
@@ -42,9 +43,9 @@ public static class RestoreSourceEvaluator
             return RestoreSourceDecision.Reject(RestoreSourceRejection.NoAccessibleReplica);
         if (replica.StorageProvider == "central")
             return RestoreSourceDecision.Accept(RestoreSourceAccess.CentralStorage);
-        return (replica.StorageProvider is "sftp" or "google-drive" or "s3" or "smb") && replica.StorageConnectionId != Guid.Empty
+        return (StorageProviderTypes.External(replica.StorageProvider)) && replica.StorageConnectionId != Guid.Empty
             && Guid.TryParse(replica.StorageTarget, out var connectionId) && connectionId == replica.StorageConnectionId
-            ? replica.StorageProvider is "s3" or "smb" || directStorage
+            ? replica.StorageProvider is StorageProviderTypes.S3 or StorageProviderTypes.Smb || directStorage
                 ? RestoreSourceDecision.Accept(RestoreSourceAccess.AgentDirect)
                 : RestoreSourceDecision.Reject(RestoreSourceRejection.NoAccessibleReplica)
             : RestoreSourceDecision.Reject(RestoreSourceRejection.NoAccessibleReplica);

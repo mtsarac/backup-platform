@@ -32,6 +32,12 @@ public static class StorageProviderTypes
     public const string S3 = "s3";
     public const string Smb = "smb";
 
+    /// <summary>External providers whose physical removal and repair only an agent performs; the backend holds no credential for them.</summary>
+    public static bool AgentExecuted([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? provider) => provider is Sftp or GoogleDrive;
+
+    /// <summary>Destinations outside the platform's own disks; the backend stores no payload for them.</summary>
+    public static bool External([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] string? provider) => provider is Sftp or GoogleDrive or S3 or Smb;
+
     public static bool IsValid(string? value) =>
         value is { Length: >= 1 and <= 32 } && value.All(character => character is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '-') && value[0] != '-' && value[^1] != '-';
 }

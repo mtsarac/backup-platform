@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Storage;
 using System.Text.Json;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Backups;
@@ -32,7 +33,7 @@ public static class BackupInputValidation
         Check(Text(request.Name, 200), "name");
         Check(request.AgentId != Guid.Empty, "agentId");
         Check(c is not null, "configuration");
-        Check(c!.Engine is "mssql" or "postgres" or "file-system", "configuration.engine");
+        Check(DatabaseEngines.IsValid(c!.Engine), "configuration.engine");
         Check(Text(c.Database, 128), "configuration.database");
         Check(c.Engine != "postgres" || c.Database == c.Database.Trim() && System.Text.Encoding.UTF8.GetByteCount(c.Database) <= 63, "configuration.database");
         Check(c.Engine != "postgres" || !c.IntegratedSecurity, "configuration.integratedSecurity");
@@ -63,10 +64,10 @@ public static class BackupInputValidation
         {
             var d = destinations[i];
             var prefix = $"configuration.destinations[{i}].";
-            Check(d.StorageProvider is "local" or "central" or "sftp" or "google-drive" or "s3" or "smb", $"{prefix}storageProvider");
-            Check(d.StorageExecutionLocation is "Backend" or "Agent" && (d.StorageExecutionLocation != "Agent" || d.StorageProvider == "local"), $"{prefix}storageExecutionLocation");
-            Check(d.StorageProvider is not ("sftp" or "google-drive" or "s3" or "smb") || c.StoragePrefix == string.Empty, "configuration.storagePrefix");
-            Check(d.StorageProvider is not ("sftp" or "google-drive" or "s3" or "smb") || d.StorageConnectionId is { } connection && connection != Guid.Empty, $"{prefix}storageConnectionId");
+            Check(d.StorageProvider is StorageProviderTypes.Local or StorageProviderTypes.Central || StorageProviderTypes.External(d.StorageProvider), $"{prefix}storageProvider");
+            Check(d.StorageExecutionLocation is "Backend" or "Agent" && (d.StorageExecutionLocation != "Agent" || d.StorageProvider == StorageProviderTypes.Local), $"{prefix}storageExecutionLocation");
+            Check(!StorageProviderTypes.External(d.StorageProvider) || c.StoragePrefix == string.Empty, "configuration.storagePrefix");
+            Check(!StorageProviderTypes.External(d.StorageProvider) || d.StorageConnectionId is { } connection && connection != Guid.Empty, $"{prefix}storageConnectionId");
         }
 
         Check(c.RequiredVerifiedReplicaCount >= 1 && c.RequiredVerifiedReplicaCount <= destinations.Count, "configuration.requiredVerifiedReplicaCount");
@@ -129,7 +130,7 @@ public static class BackupInputValidation
                 && replica.StorageConnectionId == destination.StorageConnectionId)).Select(d => (d.MediaClass, d.Site, d.OffsiteVerified)), configuration.SourceSite))) return false;
         return a.Replicas.All(r => r is not null && Destination(snapshot, r.StorageProvider, r.StorageConnectionId) is { } destination && Reference(r.StorageTarget) &&
             (destination.StorageExecutionLocation != BackupStorageExecutionLocation.Agent || r.StorageTarget == (destination.StorageTarget ?? r.StorageProvider)) &&
-            (destination.StorageProvider is not ("sftp" or "google-drive" or "s3" or "smb") || r.StorageTarget == destination.StorageConnectionId?.ToString("D")) &&
+            (!StorageProviderTypes.External(destination.StorageProvider) || r.StorageTarget == destination.StorageConnectionId?.ToString("D")) &&
             Text(r.Key, StorageObjectKey.MaxLength) && SafeKey(r.Key) && r.SizeBytes == a.SizeBytes && r.ChecksumAlgorithm == a.ChecksumAlgorithm &&
             Checksum(r.Checksum) && r.Checksum.Equals(a.ArtifactChecksum, StringComparison.OrdinalIgnoreCase) && r.VerificationState == "Verified" &&
             r.VerificationMethod is "ReadBack" or "ServerSideChecksum" && r.CreatedAt != default && r.VerifiedAt is not null && r.VerifiedAt >= r.CreatedAt) &&

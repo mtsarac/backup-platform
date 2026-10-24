@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Backups;
 using System.Text.Json;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Tenancy;
@@ -277,7 +278,7 @@ public static class BackupArtifactEngine
             found = true;
             engine = property.Value.GetString();
         }
-        return engine is "mssql" or "postgres" or "file-system" ? engine : null;
+        return DatabaseEngines.IsValid(engine) ? engine : null;
     }
 }
 

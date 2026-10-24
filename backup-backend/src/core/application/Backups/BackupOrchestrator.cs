@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Storage;
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Application.Storage;
 using BackupPlatform.Contracts.Backups;
@@ -116,7 +117,7 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
                 "Agent" => BackupStorageExecutionLocation.Agent,
                 _ => throw new ArgumentException("Invalid storage execution location for destination.")
             },
-            Direct = d.StorageProvider == "local"
+            Direct = d.StorageProvider == StorageProviderTypes.Local
         }).ToArray();
 
         return new(c.Engine, c.Database, c.Host, c.Port,

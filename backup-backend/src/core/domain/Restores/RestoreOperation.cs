@@ -157,7 +157,7 @@ public sealed class RestoreOperation : ITenantOwned
         if (engine == "postgres" && (System.Text.Encoding.UTF8.GetByteCount(name!) > 63 ||
             name!.Equals("postgres", StringComparison.OrdinalIgnoreCase) || name.Equals("template0", StringComparison.OrdinalIgnoreCase) ||
             name.Equals("template1", StringComparison.OrdinalIgnoreCase))) throw new ArgumentException("Invalid PostgreSQL target database name.");
-        if (engine is not ("mssql" or "postgres")) throw new ArgumentException("Unknown database engine.");
+        if (engine is not (DatabaseEngines.MsSql or DatabaseEngines.PostgreSql)) throw new ArgumentException("Unknown database engine.");
     }
 
     public static void ValidateDatabaseNameSyntax(string? name)

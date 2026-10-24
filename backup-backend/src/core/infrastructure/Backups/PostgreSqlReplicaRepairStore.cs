@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Storage;
 using System.Collections.Concurrent;
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Application.Backups;
@@ -5,7 +6,6 @@ using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
-using BackupPlatform.Domain.Storage;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Infrastructure.ManagedService;
 using BackupPlatform.Infrastructure.Persistence;
@@ -506,7 +506,7 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         if (!operation.HasLease(leaseToken, now) || string.IsNullOrEmpty(operation.TargetKey)) return false;
         var artifact = await context.BackupArtifacts.Include(a => a.Replicas)
             .SingleAsync(a => a.TenantId == tenantId && a.Id == artifactId, cancellationToken);
-        var target = operation.StorageProvider is "sftp" or "google-drive" or "s3" or "smb" && operation.StorageConnectionId != Guid.Empty
+        var target = StorageProviderTypes.External(operation.StorageProvider) && operation.StorageConnectionId != Guid.Empty
             ? operation.StorageConnectionId.ToString("D") : operation.StorageProvider;
         if (!artifact.Replicas.Any(r => r.StorageConnectionId == operation.StorageConnectionId && r.Key == operation.TargetKey))
         {
@@ -671,7 +671,7 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
 
         // Every poll of every agent comes here and most find nothing: refuse without the cluster-wide claim lock first, and decide under it only when work exists.
         if (!await context.ReplicaRepairOperations.AnyAsync(r => r.TenantId == identity.TenantId && r.Status == ReplicaRepairStatus.Pending
-                && (r.StorageProvider == "sftp" || r.StorageProvider == "google-drive") && (r.NextRetryAt == null || r.NextRetryAt <= now), cancellationToken)
+                && (r.StorageProvider == StorageProviderTypes.Sftp || r.StorageProvider == StorageProviderTypes.GoogleDrive) && (r.NextRetryAt == null || r.NextRetryAt <= now), cancellationToken)
             || !await context.AgentCapabilities.AsNoTracking().AnyAsync(record => record.TenantId == identity.TenantId && record.AgentId == identity.AgentId
                 && record.Identifier == ReplicaLifecycleProtocol.Capability
                 && record.Support == BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, cancellationToken))
@@ -768,7 +768,7 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
                 if (!artifact.Replicas.Any(r => r.StorageConnectionId == op.StorageConnectionId && r.Key == op.TargetKey))
                 {
                     var orphan = new BackupReplica(Guid.NewGuid(), op.TenantId, op.ArtifactId, op.StorageProvider,
-                        op.StorageProvider is "sftp" or "google-drive" or "s3" or "smb" && op.StorageConnectionId != Guid.Empty
+                        StorageProviderTypes.External(op.StorageProvider) && op.StorageConnectionId != Guid.Empty
                             ? op.StorageConnectionId.ToString("D") : op.StorageProvider,
                         op.TargetKey, Math.Max(1, op.TotalBytes), artifact.ArtifactChecksum, artifact.ChecksumAlgorithm,
                         "Failed", "RepairCrashRecovery", now, null, BackupStorageExecutionLocation.Backend, null,

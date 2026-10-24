@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Storage;
 using BackupPlatform.Api.Backups;
 using System.Security.Cryptography;
 using BackupPlatform.Api.Endpoints;
@@ -84,7 +85,7 @@ public static class AgentDownloadEndpoints
     {
         if (!Guid.TryParse(request.Headers[TaskStorageProtocol.LeaseHeader], out var lease)) return Rejected();
         var session = await source.GetFencedAsync(agent.Identity!, sessionId, lease, cancellationToken);
-        if (session is null || session.StorageProvider is not ("sftp" or "google-drive")) return Rejected();
+        if (session is null || !StorageProviderTypes.AgentExecuted(session.StorageProvider)) return Rejected();
         var artifact = await store.GetArtifactAsync(session.TenantId, session.ArtifactId, cancellationToken);
         var replica = artifact?.Replicas.SingleOrDefault(item => item.Id == session.ReplicaId);
         if (replica is null) return Rejected();

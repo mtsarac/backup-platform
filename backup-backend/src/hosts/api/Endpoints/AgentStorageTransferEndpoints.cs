@@ -116,7 +116,7 @@ public static class AgentStorageTransferEndpoints
             return (Results.Conflict(new AgentApiError { Error = "lease_conflict", Message = "Invalid lease or storage target." }), null, null, null, null, null);
 
         var destination = claim.Run.Configuration.Destinations.SingleOrDefault(candidate => candidate.StorageConnectionId == named);
-        if (destination is not { StorageProvider: "sftp" or "google-drive" or "s3" or "smb", Direct: true, StorageConnectionId: { } connectionId }
+        if (destination is not { StorageProvider: StorageProviderTypes.Sftp or StorageProviderTypes.GoogleDrive or StorageProviderTypes.S3 or StorageProviderTypes.Smb, Direct: true, StorageConnectionId: { } connectionId }
             || (requiredProvider is not null && destination.StorageProvider != requiredProvider))
             return (Results.Conflict(new AgentApiError { Error = "destination_not_authorized", Message = "The destination is not part of this run or not direct mode." }), null, null, null, null, null);
 
@@ -144,7 +144,7 @@ public static class AgentStorageTransferEndpoints
 
         var artifact = await downloadStore.GetArtifactAsync(agent.Identity.TenantId, operation.ArtifactId, cancellationToken);
         var replica = artifact?.Replicas.SingleOrDefault(r => r.Id == operation.ReplicaId);
-        if (replica is null || replica.StorageProvider is not ("sftp" or "google-drive" or "s3" or "smb") || operation.SourceAccess != RestoreSourceAccess.AgentDirect
+        if (replica is null || !StorageProviderTypes.External(replica.StorageProvider) || operation.SourceAccess != RestoreSourceAccess.AgentDirect
             || !Guid.TryParse(replica.StorageTarget, out var connectionId)
             || (requiredProvider is not null && replica.StorageProvider != requiredProvider))
             return (Results.Conflict(new AgentApiError { Error = "source_inaccessible", Message = "The replica storage is inaccessible or not direct mode." }), null, null, null, null);

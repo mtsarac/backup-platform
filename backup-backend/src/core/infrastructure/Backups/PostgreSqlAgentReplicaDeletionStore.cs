@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Storage;
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Contracts.Backups;
@@ -197,7 +198,7 @@ public sealed class PostgreSqlAgentReplicaDeletionStore(DbContextOptions<Platfor
             var primary = authority?.Configuration.Destinations.FirstOrDefault(d => d.IsPrimary);
             if (authority is null || primary is null || authority.AgentId != identity.AgentId.Value ||
                 primary.StorageExecutionLocation != BackupStorageExecutionLocation.Agent ||
-                primary.StorageProvider != "local" || replica.StorageProvider != primary.StorageProvider)
+                primary.StorageProvider != StorageProviderTypes.Local || replica.StorageProvider != primary.StorageProvider)
                 return DeleteReplicaFailureCodes.InvalidConfiguration;
             if (replica.StorageTarget != primary.StorageProvider) return DeleteReplicaFailureCodes.StorageTargetUnknown;
         }

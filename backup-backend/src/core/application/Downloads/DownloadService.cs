@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Storage;
 using System.Buffers;
 using System.Security.Cryptography;
 using BackupPlatform.Application.Backups;
@@ -72,7 +73,7 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
         artifact ??= await store.GetArtifactAsync(tenantId, artifactId, cancellationToken);
         if (artifact is null) return null;
         var replica = artifact.Replicas.Single(item => item.Id == selected.ReplicaId);
-        var external = replica.StorageProvider is "sftp" or "google-drive";
+        var external = StorageProviderTypes.AgentExecuted(replica.StorageProvider);
         var directAgent = external ? await agentSource.SelectAgentAsync(tenantId, replica, cancellationToken) : null;
         if (external && directAgent is null) throw new DownloadUnavailableException("DirectPathUnavailable");
         var extension = availability.Engine switch { "postgres" => "dump", "mssql" => "bak", "file-system" => "zip", _ => "bin" };
@@ -106,7 +107,7 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
 
     public async Task<(Stream Stream, DownloadSession Session)> OpenReadWithFallbackAsync(DownloadSession session, CancellationToken cancellationToken)
     {
-        if (session.AgentId is not null || session.StorageProvider is "sftp" or "google-drive")
+        if (session.AgentId is not null || StorageProviderTypes.AgentExecuted(session.StorageProvider))
             throw new DownloadUnavailableException("DirectPathUnavailable");
         if (!session.IsPinned(time.GetUtcNow())) throw new DownloadUnavailableException("download_interrupted");
         var artifact = await store.GetArtifactAsync(session.TenantId, session.ArtifactId, cancellationToken);
@@ -198,7 +199,7 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
         if (replica.TenantId != artifact.TenantId || replica.ArtifactId != artifact.Id || replica.Status != BackupReplicaStatus.Available ||
             replica.VerificationState != "Verified" || replica.Checksum != artifact.ArtifactChecksum || replica.SizeBytes != artifact.SizeBytes ||
             artifact.ChecksumAlgorithm != "sha256") return "replica_unavailable";
-        if (replica.ExecutionLocation == BackupStorageExecutionLocation.Agent || replica.StorageProvider is "sftp" or "google-drive")
+        if (replica.ExecutionLocation == BackupStorageExecutionLocation.Agent || StorageProviderTypes.AgentExecuted(replica.StorageProvider))
             return await agentSource.GetUnavailableReasonAsync(artifact.TenantId, replica, cancellationToken);
         var provider = storage.Resolve(artifact.TenantId, replica.StorageProvider, replica.StorageTarget);
         if (provider is null) return "storage_not_configured";

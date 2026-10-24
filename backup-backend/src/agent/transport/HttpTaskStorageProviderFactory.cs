@@ -31,7 +31,7 @@ public sealed class HttpTaskStorageProviderFactory(
 
     public IStorageProvider CreateBackup(BackupTaskSnapshot task, BackupDestinationContract destination)
     {
-        if (destination.Direct && destination.StorageProvider is "sftp" or "google-drive" or "s3" or "smb" && destination.StorageConnectionId is { } connectionId)
+        if (destination.Direct && StorageProviderKinds.External(destination.StorageProvider) && destination.StorageConnectionId is { } connectionId)
         {
             return new DirectTaskStorageProvider(http, endpoint, identities, task.AttemptId, task.LeaseToken,
                 connectionId, task.TenantId, destination.StorageProvider, _stagingDirectory, null, windowsSession);
@@ -42,7 +42,7 @@ public sealed class HttpTaskStorageProviderFactory(
 
     public IStorageProvider CreateRestore(RestoreTaskSnapshot task)
     {
-        if (task.Source.Access == "AgentDirect" && task.Source.StorageProvider is "sftp" or "google-drive" or "s3" or "smb" && Guid.TryParse(task.Source.StorageTarget, out var connectionId))
+        if (task.Source.Access == "AgentDirect" && StorageProviderKinds.External(task.Source.StorageProvider) && Guid.TryParse(task.Source.StorageTarget, out var connectionId))
         {
             return new DirectTaskStorageProvider(http, endpoint, identities, task.AttemptId, task.LeaseToken,
                 connectionId, task.TenantId, task.Source.StorageProvider, _stagingDirectory, task.OperationId, windowsSession);
@@ -280,7 +280,7 @@ public sealed class HttpTaskStorageProviderFactory(
             {
                 if (_targetProvider is not null) return _targetProvider;
                 var access = await FetchAccessAsync(cancellationToken).ConfigureAwait(false);
-                if (access.ProviderType is "s3" or "smb")
+                if (access.ProviderType is StorageProviderKinds.S3 or StorageProviderKinds.Smb)
                 {
                     var config = access.Configuration ?? throw new StorageException(StorageFailureKind.InvalidConfiguration, "Missing network storage configuration.");
                     if (access.ProviderType == "s3")

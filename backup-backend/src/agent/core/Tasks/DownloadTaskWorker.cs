@@ -182,18 +182,18 @@ public sealed partial class DownloadTaskWorker(
     private (IStorageProvider Provider, StorageObjectKey Key, ContentChecksum Checksum) ResolveSource(DownloadTaskSnapshot task)
     {
         if (task.ChecksumAlgorithm != "sha256" || task.SizeBytes <= 0
-            || task.StorageProvider == "local" && task.StorageTarget != "local" && !LocalVolumes.IsValidName(task.StorageTarget))
+            || task.StorageProvider == StorageProviderKinds.Local && task.StorageTarget != "local" && !LocalVolumes.IsValidName(task.StorageTarget))
         {
             throw new ArgumentException("The download source is invalid.");
         }
-        if (task.StorageProvider is "sftp" or "google-drive")
+        if (StorageProviderKinds.AgentExecuted(task.StorageProvider))
         {
             if (task.ConnectionId is not { } connection || connection == Guid.Empty || storageFactory is null) throw new ArgumentException("The direct connection is missing.");
             return (storageFactory.CreateScoped(new DirectStorageScope($"api/agent/downloads/{task.SessionId:D}/storage/access",
                 task.LeaseToken, task.TenantId, connection, task.StorageProvider)), new StorageObjectKey(task.StorageKey),
                 new ContentChecksum(ChecksumAlgorithm.Sha256, task.Checksum));
         }
-        if (task.StorageProvider != "local") throw new ArgumentException("The direct source is unsupported.");
+        if (task.StorageProvider != StorageProviderKinds.Local) throw new ArgumentException("The direct source is unsupported.");
         var providerId = new StorageProviderId(task.StorageProvider);
         var key = new StorageObjectKey(task.StorageKey);
         var checksum = new ContentChecksum(ChecksumAlgorithm.Sha256, task.Checksum);

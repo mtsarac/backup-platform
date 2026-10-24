@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Backups;
 namespace BackupPlatform.Domain.Backups;
 
 /// <summary>Execution input contains references, never credentials or host-local paths.</summary>
@@ -28,7 +29,7 @@ public sealed record BackupConfiguration(
 
     public BackupConfiguration Validate()
     {
-        if (Engine is not ("mssql" or "postgres" or "file-system")) throw new ArgumentException("Unsupported backup engine.");
+        if (!DatabaseEngines.IsValid(Engine)) throw new ArgumentException("Unsupported backup engine.");
         BackupGuard.Text(Database, 128);
         if (Engine == "postgres" && (Database != Database.Trim() || System.Text.Encoding.UTF8.GetByteCount(Database) > 63 || IntegratedSecurity))
             throw new ArgumentException("PostgreSQL requires a database name of at most 63 UTF-8 bytes and password authentication.");

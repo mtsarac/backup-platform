@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Storage;
 using System.Reflection;
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Contracts.Backups;
@@ -22,8 +23,6 @@ public sealed partial class ReplicaRepairService
         .GetFields(BindingFlags.Public | BindingFlags.Static)
         .Select(field => (string)field.GetRawConstantValue()!)
         .ToHashSet(StringComparer.Ordinal);
-
-    private static bool IsExternalProvider(string provider) => provider is "sftp" or "google-drive" or "s3" or "smb";
 
     public async Task<ReplicaRepairTaskSnapshot?> ClaimForAgentAsync(AgentIdentity identity, CancellationToken cancellationToken)
     {
@@ -53,7 +52,7 @@ public sealed partial class ReplicaRepairService
             // The agent reads a source straight from its provider: a central or agent-local replica has no such path, and nothing is relayed or copied through the backend.
             var candidates = admission.CandidateSources ?? [];
             var sources = candidates
-                .Where(c => c.ExecutionLocation == BackupStorageExecutionLocation.Backend && c.StorageConnectionId != Guid.Empty && IsExternalProvider(c.StorageProvider))
+                .Where(c => c.ExecutionLocation == BackupStorageExecutionLocation.Backend && c.StorageConnectionId != Guid.Empty && StorageProviderTypes.External(c.StorageProvider))
                 .Select(c => new ReplicaRepairSourceContract
                 {
                     ReplicaId = c.Id, StorageProvider = c.StorageProvider, StorageConnectionId = c.StorageConnectionId, StorageKey = c.Key
@@ -112,7 +111,7 @@ public sealed partial class ReplicaRepairService
         var source = (await store.FindArtifactAsync(operation.TenantId, operation.ArtifactId, cancellationToken))?.Replicas
             .FirstOrDefault(replica => replica.Id == request.SourceReplicaId);
         if (source is null || source.ExecutionLocation != BackupStorageExecutionLocation.Backend
-            || source.StorageConnectionId == Guid.Empty || !IsExternalProvider(source.StorageProvider))
+            || source.StorageConnectionId == Guid.Empty || !StorageProviderTypes.External(source.StorageProvider))
             return BackupMutationResult.Conflict;
 
         var expectedKey = AgentTargetKey(source.Key, operationId, request.LeaseToken);
@@ -194,7 +193,7 @@ public sealed partial class ReplicaRepairService
         var operation = await LiveOperationAsync(identity, operationId, leaseToken, time.GetUtcNow(), cancellationToken);
         if (operation is null) return null;
         if (!source)
-            return BackupReplica.IsAgentExecutedProvider(operation.StorageProvider) && operation.StorageConnectionId != Guid.Empty
+            return StorageProviderTypes.AgentExecuted(operation.StorageProvider) && operation.StorageConnectionId != Guid.Empty
                 ? new ReplicaRepairAccessTarget(operation.StorageConnectionId, operation.StorageProvider)
                 : null;
 
@@ -202,7 +201,7 @@ public sealed partial class ReplicaRepairService
         if (operation.TargetKey is null || operation.SourceReplicaId is not { } sourceId) return null;
         var replica = (await store.FindArtifactAsync(operation.TenantId, operation.ArtifactId, cancellationToken))?.Replicas.FirstOrDefault(r => r.Id == sourceId);
         return replica is { StorageConnectionId: var connectionId } && connectionId != Guid.Empty
-            && replica.ExecutionLocation == BackupStorageExecutionLocation.Backend && IsExternalProvider(replica.StorageProvider)
+            && replica.ExecutionLocation == BackupStorageExecutionLocation.Backend && StorageProviderTypes.External(replica.StorageProvider)
             && operation.TargetKey == AgentTargetKey(replica.Key, operation.Id, leaseToken)
                 ? new ReplicaRepairAccessTarget(connectionId, replica.StorageProvider)
                 : null;
