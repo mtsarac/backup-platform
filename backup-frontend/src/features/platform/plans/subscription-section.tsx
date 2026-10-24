@@ -1,38 +1,53 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
+import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
+import { linkClass } from '@/components/ui/form-styles'
 import { Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
-import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { TechnicalDetails } from '@/components/ui/technical-details'
+import { formatDateTime } from '@/lib/format'
 import { PlatformQueryState } from '../platform-query-state'
 import { AssignPlanDialog } from './assign-plan-dialog'
 import { useResumeSubscription, useSuspendSubscription, useTenantSubscription } from './hooks'
 import { OverrideDialog } from './override-dialog'
-import { StorageLimitText } from './storage-limit-text'
-import { subscriptionActions } from './subscription-actions'
+import { formatBytes, formatGb } from './storage'
+import { subscriptionActions, type SubscriptionAction } from './subscription-actions'
 import { SubscriptionHistory } from './subscription-history'
 import { assignedByLabel, overrideLabel, sourceLabel } from './subscription-labels'
 import type { Subscription } from './types'
-import { formatDateTime } from '@/lib/format'
-import { StatusPill } from '@/components/data/status-pill'
 
-type Dialog = 'assign' | 'suspend' | 'resume' | 'override' | null
+const actionLabels: Record<SubscriptionAction, () => string> = {
+  assign: () => tx('Plan ata'),
+  change: () => tx('Planı değiştir'),
+  suspend: () => tx('Askıya al'),
+  resume: () => tx('Yeniden etkinleştir'),
+  override: () => tx('Özel limit'),
+}
 
 function Current({ subscription }: { subscription: Subscription }) {
   useLanguage()
   const effective = subscription.effectiveStorageLimit
-  const override = subscription.storageLimitOverride
-  return <Facts columns={3}>
-    <Fact label="Plan"><span className="font-medium">{subscription.planName}</span></Fact>
-    <Fact label={tx("Durum")}><StatusPill domain="subscription" status={subscription.status} /></Fact>
-    <Fact label={tx("Etkin depolama limiti")}><StorageLimitText bytes={effective.unlimited ? null : effective.bytes} /><div className="text-xs text-text-muted">{tx("Kaynak:")}{' '}{sourceLabel(effective.source)}</div></Fact>
-    <Fact label={tx("Plan limiti")}><StorageLimitText bytes={subscription.planStorageLimitBytes} /></Fact>
-    <Fact label={tx("Override")}>{override.kind === 'limited' && override.bytes !== null ? <StorageLimitText bytes={override.bytes} /> : overrideLabel(override)}</Fact>
-    <Fact label={tx("Başlangıç")}>{formatDateTime(subscription.startsAt, tx('Henüz bildirilmedi'))}</Fact>
-    <Fact label={tx("Bitiş")}>{subscription.endsAt ? formatDateTime(subscription.endsAt, tx('Henüz bildirilmedi')) : tx('Süresiz')}</Fact>
-    <Fact label={tx("Atayan")}>{assignedByLabel(subscription)}</Fact>
-  </Facts>
+  const unknown = tx('Henüz bildirilmedi')
+  return <div className="space-y-4">
+    <Facts columns={3}>
+      <Fact label="Plan"><span className="font-medium">{subscription.planName}</span></Fact>
+      <Fact label={tx("Durum")}><StatusPill domain="subscription" status={subscription.status} /></Fact>
+      <Fact label={tx("Etkin depolama limiti")}><span className="font-medium">{formatGb(effective.unlimited ? null : effective.bytes)}</span><div className="text-xs text-text-muted">{tx("Kaynak:")}{' '}{sourceLabel(effective.source)}</div></Fact>
+    </Facts>
+    {subscription.status === 'Expired' && <Notice tone="warning">{tx("Abonelik süresi doldu. Yeni bir plan atayabilirsiniz.")}</Notice>}
+    <TechnicalDetails items={[
+      ...(!effective.unlimited && effective.bytes !== null ? [{ label: tx("Etkin depolama limiti (bayt)"), value: formatBytes(effective.bytes) }] : []),
+      ...(subscription.planStorageLimitBytes !== null ? [{ label: tx("Plan limiti (bayt)"), value: formatBytes(subscription.planStorageLimitBytes) }] : []),
+      { label: tx("Override"), value: overrideLabel(subscription.storageLimitOverride) },
+      { label: tx("Başlangıç"), value: formatDateTime(subscription.startsAt, unknown) },
+      { label: tx("Bitiş"), value: subscription.endsAt ? formatDateTime(subscription.endsAt, unknown) : tx('Süresiz') },
+      { label: tx("Atayan"), value: assignedByLabel(subscription) },
+      { label: tx("Abonelik kimliği"), value: subscription.subscriptionId },
+    ]} />
+  </div>
 }
 
 export function SubscriptionSection({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
@@ -40,30 +55,35 @@ export function SubscriptionSection({ tenantId, tenantName }: { tenantId: string
   const query = useTenantSubscription(tenantId)
   const suspend = useSuspendSubscription(tenantId)
   const resume = useResumeSubscription(tenantId)
-  const [dialog, setDialog] = useState<Dialog>(null)
+  const [dialog, setDialog] = useState<SubscriptionAction | null>(null)
   const subscription = query.data?.subscription ?? null
-  const actions = subscriptionActions(subscription)
+  const { primary, others } = subscriptionActions(subscription)
   const close = () => setDialog(null)
+  function open(action: SubscriptionAction) {
+    suspend.reset()
+    resume.reset()
+    setDialog(action)
+  }
+  const button = (action: SubscriptionAction, variant: 'default' | 'outline') => <Button key={action} variant={variant} onClick={() => open(action)}>{actionLabels[action]()}</Button>
   return <div className="space-y-6">
-    <Section title={tx("Abonelik")} description={tx("Plan, etkin depolama limiti ve limit override.")}
-      actions={query.data && <>
-        {actions.assign && <Button variant={subscription ? 'outline' : 'default'} onClick={() => setDialog('assign')}>{actions.assign === 'change' ? tx('Planı değiştir') : tx('Plan ata')}</Button>}
-        {actions.suspend && <Button variant="outline" onClick={() => { suspend.reset(); setDialog('suspend') }}>{tx("Askıya al")}</Button>}
-        {actions.resume && <Button variant="outline" onClick={() => { resume.reset(); setDialog('resume') }}>{tx("Yeniden etkinleştir")}</Button>}
-        {actions.override && <Button variant="outline" onClick={() => setDialog('override')}>{tx("Limit override")}</Button>}
-      </>}>
+    <Section title={tx("Plan ve kota")} description={tx("Çalışma alanının planı, aboneliği ve geçerli depolama limiti.")}
+      actions={subscription && button(primary, 'default')}>
       <PlatformQueryState isPending={query.isPending} error={query.error}>
         {query.data && (subscription
           ? <div className="space-y-4">
             <Current subscription={subscription} />
-            {subscription.status === 'Expired' && <Notice tone="warning">{tx("Abonelik süresi doldu. Yeni bir plan atayabilirsiniz.")}</Notice>}
+            {others.length > 0 && <details>
+              <summary className={`${linkClass} inline-flex min-h-11 cursor-pointer select-none items-center text-sm`}>{tx("Diğer işlemler")}</summary>
+              <div className="flex flex-wrap gap-2 pt-2">{others.map((action) => button(action, 'outline'))}</div>
+            </details>}
           </div>
-          : <EmptyState message={tx("Bu tenant için henüz bir plan atanmadı.")} />)}
+          : <EmptyState message={tx("Bu çalışma alanı için henüz bir plan atanmadı.")} action={button('assign', 'default')} />)}
       </PlatformQueryState>
     </Section>
     {subscription && <SubscriptionHistory tenantId={tenantId} />}
-    {dialog === 'assign' && <AssignPlanDialog tenantId={tenantId} current={subscription} onClose={close} />}
-    {dialog === 'override' && subscription && <OverrideDialog tenantId={tenantId} subscription={subscription} onClose={close} />}
+    {dialog === 'assign' && <AssignPlanDialog tenantId={tenantId} replacing={null} onClose={close} />}
+    {dialog === 'change' && subscription && <AssignPlanDialog tenantId={tenantId} replacing={subscription} onClose={close} />}
+    {dialog === 'override' && subscription && <OverrideDialog tenantId={tenantId} tenantName={tenantName} subscription={subscription} onClose={close} />}
     <ConfirmDialog open={dialog === 'suspend'} onClose={close} title={tx("Abonelik askıya alınsın mı?")} confirmLabel={tx("Askıya al")}
       consequence={{
         what: tx("“{0}” çalışma alanının aboneliği askıya alınır ve depolama limiti hemen değişir.", { "0": tenantName }),

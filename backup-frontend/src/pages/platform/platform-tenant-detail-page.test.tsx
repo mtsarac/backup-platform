@@ -118,6 +118,18 @@ describe('platform tenant detail', () => {
     expect(screen.queryByRole('heading', { name: 'Destek erişimi' })).not.toBeInTheDocument()
   })
 
+  it('manages the plan and quota only on the storage tab', async () => {
+    mount()
+    expect(await screen.findByRole('heading', { name: 'Acme A.Ş.' })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Plan ve kota' })).not.toBeInTheDocument()
+    expect(api.getTenantSubscription).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('tab', { name: 'Depolama ve bilgisayarlar' }))
+    const plan = within(await screen.findByRole('region', { name: 'Plan ve kota' }))
+    expect(await plan.findByText('Bu çalışma alanı için henüz bir plan atanmadı.')).toBeInTheDocument()
+    expect(plan.getByRole('button', { name: 'Plan ata' })).toBeInTheDocument()
+    expect(api.getTenantSubscription).toHaveBeenCalledWith('tenant-a', expect.any(AbortSignal))
+  })
+
   it('shows counts, filtered links, memberships and recent tenant audit', async () => {
     mount()
     expect(await screen.findByRole('heading', { name: 'Acme A.Ş.' })).toBeInTheDocument()

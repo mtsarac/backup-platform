@@ -4,15 +4,15 @@ import { subscriptionActions } from './subscription-actions'
 
 describe('subscription action matrix', () => {
   it('offers only assign without a subscription', () => {
-    expect(subscriptionActions(null)).toEqual({ assign: 'assign', suspend: false, resume: false, override: false })
+    expect(subscriptionActions(null)).toEqual({ primary: 'assign', others: [] })
   })
-  it('Active: change plan, suspend, override', () => {
-    expect(subscriptionActions(makeSubscription({ status: 'Active' }))).toEqual({ assign: 'change', suspend: true, resume: false, override: true })
+  it('Active: change plan first, then suspend and override', () => {
+    expect(subscriptionActions(makeSubscription({ status: 'Active' }))).toEqual({ primary: 'change', others: ['suspend', 'override'] })
   })
-  it('Suspended: change plan, resume, override', () => {
-    expect(subscriptionActions(makeSubscription({ status: 'Suspended' }))).toEqual({ assign: 'change', suspend: false, resume: true, override: true })
+  it('Suspended: resume first, then change plan and override', () => {
+    expect(subscriptionActions(makeSubscription({ status: 'Suspended' }))).toEqual({ primary: 'resume', others: ['change', 'override'] })
   })
-  it('Expired: assign only', () => {
-    expect(subscriptionActions(makeSubscription({ status: 'Expired' }))).toEqual({ assign: 'assign', suspend: false, resume: false, override: false })
+  it('Expired: assign a new plan only', () => {
+    expect(subscriptionActions(makeSubscription({ status: 'Expired' }))).toEqual({ primary: 'assign', others: [] })
   })
 })

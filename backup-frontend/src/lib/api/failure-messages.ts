@@ -234,6 +234,8 @@ export interface ErrorDescription {
   technical: TechnicalItem[]
 }
 
+const subscriptionUnchanged = () => tx("Abonelik ve depolama limiti değişmedi; yedekleriniz etkilenmedi.")
+
 // Codes whose consequence for the data is specific; every other failure gets the honest generic line for its kind.
 const guidance: Record<string, { dataImpact: () => string; action: () => string }> = {
   quota_exceeded: { dataImpact: () => tx("Mevcut yedekleriniz silinmedi ve geri yüklenebilir."), action: () => tx("Depolama alanı açmak için yöneticinize danışın.") },
@@ -243,6 +245,13 @@ const guidance: Record<string, { dataImpact: () => string; action: () => string 
   AgentLost: { dataImpact: () => tx("Bu deneme tamamlanmadı; önceki başarılı yedekleriniz korunur."), action: () => tx("Yedekleme bilgisayarının açık ve bağlı olduğunu kontrol edip yeniden deneyin.") },
   connection_in_use: { dataImpact: () => tx("Bağlantı silinmedi; yedeklemeler kullanmaya devam ediyor."), action: () => tx("Önce bu bağlantıyı kullanan işleri başka bir depolamaya taşıyın.") },
   private_key_rejected: { dataImpact: () => tx("Özel anahtar gönderilmedi ve kaydedilmedi."), action: () => tx("Yalnızca genel anahtarı girin.") },
+  plan_already_assigned: { dataImpact: () => subscriptionUnchanged(), action: () => tx("Farklı bir plan seçin.") },
+  plan_disabled: { dataImpact: () => subscriptionUnchanged(), action: () => tx("Etkin bir plan seçin.") },
+  subscription_not_active: { dataImpact: () => subscriptionUnchanged(), action: () => tx("Abonelik durumu yenilendi; geçerli işlemlerden birini seçin.") },
+  subscription_not_suspended: { dataImpact: () => subscriptionUnchanged(), action: () => tx("Abonelik durumu yenilendi; geçerli işlemlerden birini seçin.") },
+  subscription_not_open: { dataImpact: () => subscriptionUnchanged(), action: () => tx("Yeni bir plan atayın.") },
+  subscription_expired: { dataImpact: () => subscriptionUnchanged(), action: () => tx("Yeni bir plan atayın.") },
+  subscription_not_found: { dataImpact: () => subscriptionUnchanged(), action: () => tx("Önce bir plan atayın.") },
 }
 
 function technicalItems(error: unknown): TechnicalItem[] {

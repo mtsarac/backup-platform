@@ -18,6 +18,7 @@ import { bareListClass } from '@/features/platform/list-empty'
 import { platformPaths } from '@/features/platform/paths'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { TenantStorageSection } from '@/features/platform/storage/tenant-storage-section'
+import { SubscriptionSection } from '@/features/platform/plans/subscription-section'
 import { inputClass, linkClass } from '@/components/ui/form-styles'
 import { SupportAccessSection } from '@/features/platform/support/support-access-section'
 import { MembershipsSection } from '@/features/platform/tenant-members'
@@ -143,6 +144,7 @@ function TenantTabs({ tenant }: { tenant: PlatformTenantDetail }) {
       {tab === 'people' && <MembershipsSection tenantId={tenant.tenantId} tenantName={tenant.name} />}
       {tab === 'storage-computers' && <>
         <TenantStorageSection tenantId={tenant.tenantId} tenantName={tenant.name} />
+        <SubscriptionSection tenantId={tenant.tenantId} tenantName={tenant.name} />
         <PlatformTenantConnections tenantId={tenant.tenantId} tenantName={tenant.name} />
         <Section title={tx("Yedekleme bilgisayarlarının durumu")} actions={<Link className={`${linkClass} inline-flex min-h-11 items-center text-sm`} to={platformPaths.agents(tenant.tenantId)}>{tx("Yedekleme bilgisayarlarını görüntüle")}</Link>}>
           <AgentBreakdown counts={tenant.agents} />
