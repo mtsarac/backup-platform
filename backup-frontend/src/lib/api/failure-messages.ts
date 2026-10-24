@@ -47,6 +47,7 @@ const messages: Record<string, string> = {
   get storage_connection_unavailable() { return tx("Hedef depolama bağlantısı bulunamadı veya bu Job'un Storage Provider'ına ait değil; yeni backup başlatılamaz.") },
   get multi_destination_execution_not_supported() { return tx("Bu zamanlanmış çalışma, çoklu hedefli yedekleme desteklenmeden önce kaydedilmişti; çalıştırma başlatılmadı ve otomatik olarak yeniden denenmez.") },
   get agent_multi_destination_unsupported() { return tx("İşin Agent'ı çoklu hedefli yedekleme desteği bildirmedi: Agent eski olabilir veya bağlantısını henüz tamamlamamış olabilir (yeni Agent ilk heartbeat'inden birkaç saniye sonra bildirir). Kısa süre sonra yeniden deneyin ya da Agent'ı güncelleyin. Yeni backup başlatılamadı.") },
+  get agent_direct_storage_unsupported() { return tx("Bu SFTP/Google Drive hedefi eski relay modunda yapılandırılmış veya Agent doğrudan depolama desteği bildirmedi. Relay kapatıldı: Agent'ı güncelleyin ve hedefi doğrudan aktarım için yeniden kaydedin. Mevcut yedekler etkilenmedi; yeni backup başlatılamadı.") },
   get agent_engine_unsupported() { return tx('Agent seçilen yedekleme motorunu desteklemiyor. Agent yeteneklerini kontrol edin veya Agent’ı güncelleyin.') },
   get destination_combination_unsupported() { return tx("İşin hedefleri aynı depolama bağlantısına çözülüyor; her hedef ayrı bir bağlantı olmalı. Yeni backup başlatılamadı.") },
   get storage_connection_not_found() { return tx("Depolama bağlantısı bulunamadı. Liste güncel olmayabilir.") },
