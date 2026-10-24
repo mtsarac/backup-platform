@@ -1,7 +1,7 @@
 import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { ConfirmDialog, TypedConfirmDialog } from '@/components/ui/confirm-dialog'
 import { EditConnectionDialog, SecretDialog } from './connection-dialogs'
 import { useGoogleDriveConnect, useGoogleDriveDisconnect, type ConnectionOps } from './hooks'
 import { openGoogleOAuthPopup } from './google-oauth'
@@ -95,7 +95,7 @@ export function ConnectionActions({ connection, descriptor, ops, show = ['edit',
       }}
       pending={ops.setEnabled.isPending} error={ops.setEnabled.error} errorScope="storageConnection"
       onConfirm={() => { if (!cannotEnable) ops.setEnabled.mutate({ connection, enabled: !toggledOn }, { onSuccess: close }) }} />
-    <ConfirmDialog open={dialog === 'delete'} onClose={close} title={tx("“{0}” silinsin mi?", { "0": connection.name })} confirmLabel={tx("Bağlantıyı sil")}
+    <TypedConfirmDialog name={connection.name} open={dialog === 'delete'} onClose={close} title={tx("“{0}” silinsin mi?", { "0": connection.name })} confirmLabel={tx("Bağlantıyı sil")}
       consequence={{
         what: tx("Bağlantı kalıcı olarak silinir. Bir yedek kopyası veya yedekleme işi hâlâ bu bağlantıyı kullanıyorsa silinemez; önce bunların başka bir depolamaya taşınması gerekir."),
         who: tx("Bu bağlantıyı kullanan yedekleme işleri ve kopyalar etkilenir."),

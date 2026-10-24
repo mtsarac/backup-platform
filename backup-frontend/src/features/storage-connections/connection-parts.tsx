@@ -11,6 +11,14 @@ export function HealthBadge({ connection }: { connection: Parameters<typeof conn
   return <StatusPill level={health.level}>{health.label}</StatusPill>
 }
 
+/** Space running out in everyday words; nothing for a healthy or unmeasured destination. */
+export function CapacityPill({ status }: { status: string | undefined }) {
+  useLanguage()
+  if (status === 'Critical') return <StatusPill level="urgent">{tx("Alan dolmak üzere")}</StatusPill>
+  if (status === 'Warning') return <StatusPill level="attention">{tx("Alan azalıyor")}</StatusPill>
+  return null
+}
+
 export function ConnectionState({ connection }: { connection: Pick<ConnectionView, 'enabled' | 'effectiveEnabled' | 'administrativelyDisabled'> }) {
   useLanguage()
   return <div className="space-y-1">

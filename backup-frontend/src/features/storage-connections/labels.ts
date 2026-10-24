@@ -1,6 +1,8 @@
-import { tx } from '@/lib/i18n'
+import { currentLocale, tx } from '@/lib/i18n'
 import type { StatusLevel } from '@/lib/status'
 import { ApiError } from '@/lib/api/client'
+import type { TechnicalItem } from '@/components/ui/technical-details'
+import { formatBytes } from '@/lib/format'
 import type {
   ConfigurationValue, ConnectionTest, ConnectionView, ExecutionLocation, ProviderDescriptor, ProviderTopology, TestMode,
   
@@ -89,7 +91,7 @@ export function testModeLabel(mode: TestMode) {
 
 /** The semantics of disabling, straight from the API contract: the confirm dialog and the platform page both state them. */
 export const disableEffects: readonly string[] = [
-  'Bu hedefi kullanan yeni backup\'lar (manuel ve zamanlanmış) başlatılamaz; zamanlanmış çalışmalar "AdmissionDenied" olarak kaydedilir.',
+  'Bu hedefi kullanan yeni yedeklemeler (elle başlatılan ve zamanlanmış) başlatılamaz.',
   'Zaten başlamış çalışmalar sürer ve Replica\'larını yayımlar.',
   'Mevcut Replica\'lar silinmez ve kullanılabilir kalır: indirme, geri yükleme, saklama süresine göre silme ve kota hesabı değişmeden devam eder.',
 ]
@@ -148,4 +150,15 @@ export function errorField(error: unknown): string | undefined {
 export function invalidFieldName(error: unknown, prefix: 'configuration' | 'secret'): string | undefined {
   const field = errorField(error)
   return field?.startsWith(`${prefix}.`) ? field.slice(prefix.length + 1) : undefined
+}
+
+/** What a destination holds, for the collapsed technical details: the friendly size and share first, then the exact byte count. */
+export function footprintItems(connection: Pick<ConnectionView, 'storedBytes' | 'replicaCount'>, total: number): TechnicalItem[] {
+  const share = total > 0 ? Math.round((connection.storedBytes / total) * 100) : 0
+  return [
+    { label: tx("Saklanan veri"), value: formatBytes(connection.storedBytes) },
+    { label: tx("Replica"), value: `${connection.replicaCount.toLocaleString(currentLocale())} ${tx("Replica")}` },
+    { label: tx("Tenant'taki payı"), value: tx('%{0}', { '0': share.toLocaleString(currentLocale()) }) },
+    { label: tx("Tam boyut (bayt)"), value: connection.storedBytes.toLocaleString(currentLocale()) },
+  ]
 }
