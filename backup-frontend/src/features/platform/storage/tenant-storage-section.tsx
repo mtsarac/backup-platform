@@ -5,12 +5,11 @@ import { RefreshCw, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
-import { ConfirmDialog } from '@/features/agents/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { accountingModeLabels, enforcementModeLabels, scopeLabels } from '@/features/storage/labels'
 import { QuotaSummary, StandingBadge } from '@/features/storage/quota-summary'
 import { platformPaths } from '@/features/platform/paths'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
-import { errorMessage } from '@/lib/api/failure-messages'
 import { usePlatformTenantQuota, useRebuildUsage, useReconcileUsage } from './hooks'
 import { formatDateTime } from '@/lib/format'
 
@@ -108,10 +107,14 @@ export function TenantStorageSection({ tenantId, tenantName }: { tenantId: strin
         open={confirmOp === 'reconcile'}
         onClose={() => setConfirmOp(null)}
         title={tx("Depolama kullanımı doğrulansın mı (Reconcile)?")}
-        description={tx("“{0}” tenant'ının aktif artifact ve replika kayıtları taranarak izlenen kullanım ile senkronize edilir. Zaman aşımına uğramış rezervasyonlar serbest bırakılır.", { "0": tenantName })}
-        confirmLabel="Reconcile Çalıştır"
+        consequence={{
+          what: tx("“{0}” çalışma alanının aktif yedek dosyaları ve kopyaları taranarak izlenen kullanım ile eşitlenir; süresi dolan rezervasyonlar serbest bırakılır.", { "0": tenantName }),
+          who: tx("Yalnızca bu çalışma alanının kota hesabı etkilenir; yedekler değişmez."),
+          reversible: tx("Evet. İşlem yalnızca sayıları günceller; istediğiniz zaman yeniden çalıştırabilirsiniz."),
+        }}
+        confirmLabel={tx("Doğrulamayı çalıştır")}
         pending={reconcile.isPending}
-        error={reconcile.error ? errorMessage(reconcile.error) : undefined}
+        error={reconcile.error}
         onConfirm={runReconcile}
       />
 
@@ -119,10 +122,14 @@ export function TenantStorageSection({ tenantId, tenantName }: { tenantId: strin
         open={confirmOp === 'rebuild'}
         onClose={() => setConfirmOp(null)}
         title={tx("Depolama kullanımı sıfırdan hesaplansın mı (Rebuild)?")}
-        description={tx("“{0}” tenant'ının kullanım tablosu sıfırlanıp tüm artifact ve replikaları geçerli kota politikası ({1}) kurallarına göre baştan hesaplanacaktır. Bu işlem audit kaydı oluşturur.", { "0": tenantName, "1": quota?.policy.key ?? tx('varsayılan') })}
-        confirmLabel="Rebuild Çalıştır"
+        consequence={{
+          what: tx("“{0}” çalışma alanının kullanım tablosu sıfırlanır; tüm yedek dosyaları ve kopyaları geçerli kota politikası ({1}) kurallarına göre baştan hesaplanır. İşlem denetim kaydı oluşturur.", { "0": tenantName, "1": quota?.policy.key ?? tx('varsayılan') }),
+          who: tx("Yalnızca bu çalışma alanının kota hesabı etkilenir; yedekler değişmez. Hesap sürerken kullanım rakamları geçici olarak değişebilir."),
+          reversible: tx("Evet. Hesabı istediğiniz zaman yeniden çalıştırabilirsiniz."),
+        }}
+        confirmLabel={tx("Sıfırdan hesapla")}
         pending={rebuild.isPending}
-        error={rebuild.error ? errorMessage(rebuild.error) : undefined}
+        error={rebuild.error}
         onConfirm={runRebuild}
       />
       </div>

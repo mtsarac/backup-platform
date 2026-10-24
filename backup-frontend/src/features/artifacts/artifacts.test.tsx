@@ -96,7 +96,7 @@ describe('Backup dosyaları', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Silme isteği oluştur' }))
     const dialog = await screen.findByRole('dialog')
     await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Vazgeç' })).toHaveFocus())
-    expect(within(dialog).getByText(/fiziksel dosyaları hemen silmez/)).toBeInTheDocument()
+    for (const heading of ["Ne olacak?", "Kimleri etkiler?", "Geri alınabilir mi?"]) expect(within(dialog).getByText(heading)).toBeInTheDocument()
     expect(request.mock.calls.some(([, options]) => options?.method === 'DELETE')).toBe(false)
     fireEvent.click(within(dialog).getByRole('button', { name: 'Bekleme süresini başlat' }))
     await screen.findByText(/Silme isteği alındı/)

@@ -26,7 +26,8 @@ import { connectionUnavailableReason, primaryDestination, resolveDestinationConn
 import { MultiDestinationPicker } from '@/features/storage-connections/multi-destination-picker'
 import type { BackupJob, BackupJobInput, BackupConfiguration, Schedule, RetryPolicy, RetentionPolicy } from '@/features/backup-jobs/types'
 import { ApiError } from '@/lib/api/client'
-import { accessDenied, errorMessage, failureMessage } from '@/lib/api/failure-messages'
+import { AccessDenied } from '@/components/auth/access-denied'
+import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
 import { encryptionPolicies, type EncryptionPolicy } from '@/features/artifact-encryption/types'
 import { policyDescriptions, policyLabels } from '@/features/artifact-encryption/labels'
 import { formatDateTime } from '@/lib/format'
@@ -49,7 +50,7 @@ export function BackupJobWizardPage() {
   const readOnly = Boolean(id) && !canOperate
   const crumbs = [{ label: tx('Yedekleme işleri'), to: `/tenants/${tenantId}/backup-jobs` }, { label: id ? tx(readOnly ? 'Yedekleme sağlığı' : 'Düzenle') : tx('Yeni iş') }]
   let body
-  if (!canOperate) body = readOnly ? <p className="text-sm text-text-muted">{tx('Salt okunur')}</p> : <ErrorNotice {...accessDenied(tx("Bu sayfada değişiklik yapma yetkiniz yok. Viewer rolü salt okunurdur."))} />
+  if (!canOperate) body = readOnly ? <p className="text-sm text-text-muted">{tx('Salt okunur')}</p> : <AccessDenied what={tx("Bu sayfada değişiklik yapma yetkiniz yok. Viewer rolü salt okunurdur.")} />
   else if (id) body = <QueryState isPending={job.isPending} error={job.error}>{job.data && <JobForm key={`${tenantId}:${id}`} job={job.data} />}</QueryState>
   else if (discoveryInstance && discovered.isPending) body = <QueryState isPending error={null} />
   else body = <>

@@ -1,7 +1,6 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
-import { errorMessage } from '@/lib/api/failure-messages'
-import { FormDialog } from './form-dialog'
+import { FormDialog } from '@/components/ui/form-dialog'
 import { useSetStorageLimitOverride } from './hooks'
 import { resolveOverride, type OverrideDraft } from './override-draft'
 import { OverrideFields } from './override-fields'
@@ -20,9 +19,9 @@ export function OverrideDialog({ tenantId, subscription, onClose }: { tenantId: 
     setValidation('')
     save.mutate(resolved.value, { onSuccess: onClose })
   }
-  return <FormDialog title={tx("Depolama limiti override")} submitLabel="Kaydet" pendingLabel="Kaydediliyor…" pending={save.isPending}
+  return <FormDialog title={tx("Depolama limiti override")} submitLabel={tx("Kaydet")} pendingLabel={tx("Kaydediliyor…")} pending={save.isPending}
     description={tx("Override, bu aboneliğin plan limitinin yerine geçer. “Yok” seçilirse plan limiti geçerli olur.")}
-    error={save.error ? errorMessage(save.error) : undefined} onSubmit={submit} onClose={onClose}>
+    error={save.error} onSubmit={submit} onClose={onClose}>
     <OverrideFields draft={draft} onChange={setDraft} error={validation} />
   </FormDialog>
 }

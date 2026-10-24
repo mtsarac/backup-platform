@@ -2,9 +2,8 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Field } from '@/components/ui/field'
 import { ApiError } from '@/lib/api/client'
-import { errorMessage } from '@/lib/api/failure-messages'
 import { inputClass } from '../styles'
-import { FormDialog } from './form-dialog'
+import { FormDialog } from '@/components/ui/form-dialog'
 import { useCreatePlan, useUpdatePlan } from './hooks'
 import { gbErrorMessage, parseGb, toGbInput } from './storage'
 import type { Plan } from './types'
@@ -48,7 +47,7 @@ export function CreatePlanDialog({ onClose }: { onClose: () => void }) {
     create.mutate({ name: name.trim(), ...limit, enabled }, { onSuccess: onClose })
   }
   const field = create.error instanceof ApiError ? create.error.field : undefined
-  return <FormDialog title={tx("Yeni plan")} description={tx("Plan, tenant abonelikleri için depolama limitini belirler. Oluşturduktan sonra tenant'a atayın.")} submitLabel="Plan oluştur" pendingLabel="Oluşturuluyor…" pending={create.isPending} disabled={!name.trim()} error={create.error ? errorMessage(create.error) : undefined} onSubmit={submit} onClose={onClose}>
+  return <FormDialog title={tx("Yeni plan")} description={tx("Plan, tenant abonelikleri için depolama limitini belirler. Oluşturduktan sonra tenant'a atayın.")} submitLabel={tx("Plan oluştur")} pendingLabel={tx("Oluşturuluyor…")} pending={create.isPending} disabled={!name.trim()} error={create.error} onSubmit={submit} onClose={onClose}>
     <CommonFields name={name} setName={setName} unlimited={unlimited} setUnlimited={setUnlimited} sizeText={sizeText} setSizeText={setSizeText} sizeError={sizeError} nameInvalid={field === 'name'} sizeInvalid={field === 'storageLimit'} />
     <label className="flex items-center gap-2 text-sm text-text"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />{tx("Etkin (yeni atamalarda seçilebilir)")}</label>
   </FormDialog>
@@ -71,7 +70,7 @@ export function EditPlanDialog({ plan, onClose }: { plan: Plan; onClose: () => v
     update.mutate({ name: name.trim(), ...limit, ...(plan.quotaPolicyReference ? { quotaPolicyReference: plan.quotaPolicyReference } : {}) }, { onSuccess: onClose })
   }
   const field = update.error instanceof ApiError ? update.error.field : undefined
-  return <FormDialog title={tx("Planı düzenle: {0}", { "0": plan.name })} description={tx("Ad ve limit değişikliği bu planı kullanan aboneliklere de yansır.")} submitLabel="Kaydet" pendingLabel="Kaydediliyor…" pending={update.isPending} disabled={!name.trim()} error={update.error ? errorMessage(update.error) : undefined} onSubmit={submit} onClose={onClose}>
+  return <FormDialog title={tx("Planı düzenle: {0}", { "0": plan.name })} description={tx("Ad ve limit değişikliği bu planı kullanan aboneliklere de yansır.")} submitLabel={tx("Kaydet")} pendingLabel={tx("Kaydediliyor…")} pending={update.isPending} disabled={!name.trim()} error={update.error} onSubmit={submit} onClose={onClose}>
     <CommonFields name={name} setName={setName} unlimited={unlimited} setUnlimited={setUnlimited} sizeText={sizeText} setSizeText={setSizeText} sizeError={sizeError} nameInvalid={field === 'name'} sizeInvalid={field === 'storageLimit'} />
   </FormDialog>
 }

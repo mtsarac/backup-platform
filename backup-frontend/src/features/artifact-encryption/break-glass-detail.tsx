@@ -5,11 +5,10 @@ import { Field } from '@/components/ui/field'
 import { Button } from '@/components/ui/button'
 import { Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
-import { ConfirmDialog } from '@/features/agents/confirm-dialog'
-import { FormDialog } from '@/features/platform/plans/form-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { FormDialog } from '@/components/ui/form-dialog'
 import { inputClass } from '@/features/platform/styles'
 import { useSupportCountdown } from '@/features/platform/support/use-support-countdown'
-import { errorMessage } from '@/lib/api/failure-messages'
 import { BreakGlassDownload } from './break-glass-download'
 import { encryptionKeys, useBreakGlassDecision } from './hooks'
 import type { BreakGlassRequest } from './types'
@@ -76,11 +75,15 @@ export function BreakGlassDetail({ request, receivedAt }: { request: BreakGlassR
     {request.status === 'Expired' && <Notice tone="warning">{tx("İsteğin süresi doldu; hiçbir veri çözülmedi.")}</Notice>}
 
     <ConfirmDialog open={approving} onClose={() => setApproving(false)} title={tx("İstek onaylansın mı?")}
-      description={tx("“{0}” tenant'ındaki Backup, isteyen yönetici tarafından çözülerek bir kez indirilebilecek. İşlem audit kaydına yazılır ve tenant sahiplerine bildirilir.", { "0": request.tenantName ?? request.tenantId })}
-      confirmLabel={tx("Onayla")} pending={approve.isPending} error={approve.error ? errorMessage(approve.error) : undefined}
+      consequence={{
+        what: tx("“{0}” çalışma alanındaki yedek, isteği açan yönetici tarafından çözülerek bir kez indirilebilecek.", { "0": request.tenantName ?? request.tenantId }),
+        who: tx("Bu çalışma alanının sahipleri bilgilendirilir; işlem denetim kaydına yazılır."),
+        reversible: tx("Hayır. Onay verildikten sonra süre dolana kadar tek seferlik indirme açık kalır."),
+      }}
+      confirmLabel={tx("Onayla")} pending={approve.isPending} error={approve.error}
       onConfirm={() => approve.mutate(undefined, { onSuccess: () => setApproving(false) })} />
     {denying && <FormDialog title={tx("İstek reddedilsin mi?")} description={tx("Ret gerekçesi audit kaydına yazılır.")} submitLabel={tx("Reddet")} pendingLabel={tx("Reddediliyor…")} pending={deny.isPending}
-      error={deny.error ? errorMessage(deny.error) : undefined} onSubmit={submitDeny} onClose={() => setDenying(false)}>
+      error={deny.error} onSubmit={submitDeny} onClose={() => setDenying(false)}>
       <Field label={tx("Ret gerekçesi")} error={denyError}>{control => <textarea {...control} className={inputClass} rows={3} maxLength={500} value={denyReason} onChange={event => { setDenyReason(event.target.value); setDenyError('') }} />}</Field>
     </FormDialog>}
   </div>

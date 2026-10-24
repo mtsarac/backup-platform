@@ -2,13 +2,13 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { selectClass } from '@/features/platform/styles'
-import { useEffect, useRef, useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
-import { nativeDownloadUrl } from './native-download-url'
 import { failureMessage } from '@/lib/api/failure-messages'
 import { getDownloadAvailability, getDownloadStatus, prepareDownload } from './api'
-import { DirectDownloadButton } from './direct-download-button'
+import { DownloadFlowStatus } from './download-flow-status'
+import { useDownloadFlow } from './use-download-flow'
 import { formatBytes } from '@/lib/format'
 
 export function ArtifactDownload({ tenantId, artifactId, canAdmin, eligible }: { tenantId: string; artifactId: string; canAdmin: boolean; eligible: boolean }) {
@@ -18,55 +18,35 @@ export function ArtifactDownload({ tenantId, artifactId, canAdmin, eligible }: {
 }
 function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tenantId: string; artifactId: string; canAdmin: boolean; eligible: boolean }) {
   useLanguage()
-  const active = useRef(true)
-  const started = useRef(false)
   const [replicaId, setReplicaId] = useState('')
   const [decrypt, setDecrypt] = useState(false)
   const [copyNotice, setCopyNotice] = useState('')
-  useEffect(() => { active.current = true; return () => { active.current = false } }, [])
   const availability = useQuery({
     queryKey: ['tenant', tenantId, 'backup-artifacts', 'download-availability', artifactId, canAdmin],
     queryFn: ({ signal }) => getDownloadAvailability(tenantId, artifactId, signal), enabled: canAdmin && eligible,
     refetchInterval: 10_000,
   })
   // The decrypt flag is only sent when chosen: the default request stays exactly the stored-file download.
-  const prepare = useMutation({ mutationFn: () => decrypt ? prepareDownload(tenantId, artifactId, replicaId || undefined, true) : prepareDownload(tenantId, artifactId, replicaId || undefined) })
-  const session = prepare.data
-  const downloadUrl = nativeDownloadUrl(session?.downloadUrl)
-  const navigationError = Boolean(session && !downloadUrl)
-  const status = useQuery({
-    queryKey: ['tenant', tenantId, 'backup-artifacts', 'download-status', artifactId, session?.sessionId],
-    queryFn: ({ signal }) => getDownloadStatus(tenantId, artifactId, session!.sessionId, signal),
-    enabled: canAdmin && eligible && Boolean(session),
-    refetchInterval: (query) => query.state.data && ['Completed', 'Failed', 'Cancelled'].includes(query.state.data.state) ? false : 1000,
-    retry: false,
+  // Remounting on scope/permission changes (the key above) plus `active` keeps a pending request from starting a download in a new scope.
+  const flow = useDownloadFlow({
+    active: canAdmin && eligible,
+    prepare: () => decrypt ? prepareDownload(tenantId, artifactId, replicaId || undefined, true) : prepareDownload(tenantId, artifactId, replicaId || undefined),
+    fetchStatus: (sessionId, signal) => getDownloadStatus(tenantId, artifactId, sessionId, signal),
+    statusKey: sessionId => ['tenant', tenantId, 'backup-artifacts', 'download-status', artifactId, sessionId],
   })
-  useEffect(() => {
-    if (!active.current || !canAdmin || !eligible || !session || session.direct || !downloadUrl || status.data?.state !== 'Ready' || started.current) return
-    // Use the browser's cookie-authenticated navigation; file bytes never enter JavaScript memory.
-    started.current = true
-    const anchor = document.createElement('a')
-    anchor.href = downloadUrl
-    anchor.download = session.filename
-    document.body.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
-  }, [canAdmin, eligible, session, status.data?.state, downloadUrl])
+  const { session } = flow
   if (!canAdmin) return <Notice tone="info">{tx("Download Backup yalnızca Owner / Admin için açıktır.")}</Notice>
   if (!eligible) return <Notice tone="info">{tx("Bu Backup silme sürecinde veya silinmiş; indirme kullanılamıyor.")}</Notice>
   const selected = availability.data?.replicas.find(replica => replica.replicaId === replicaId)
-  const busy = prepare.isPending || Boolean(session && !status.error && !navigationError && (!status.data || ['Preparing', 'Ready', 'Streaming'].includes(status.data.state)))
-  const failure = prepare.error || status.error || availability.error
+  const busy = flow.busy
   async function copyChecksum() {
     try { await navigator.clipboard.writeText(availability.data!.checksum); setCopyNotice(tx('Checksum kopyalandı.')) }
     catch { setCopyNotice(tx('Checksum kopyalanamadı. Değeri seçerek kopyalayabilirsiniz.')) }
   }
-  const finalState = status.data?.state
   return <Section title={tx("Download Backup")} description={tx("Harici depolama indirmeleri yetkili Agent üzerinden doğrudan diske aktarılır; platform depolaması tarayıcının indirme yöneticisini kullanır.")} className="max-w-3xl">
     <div className="space-y-4">
       {availability.isPending && <p role="status" className="text-sm text-text-muted">{tx("İndirme kullanılabilirliği kontrol ediliyor…")}</p>}
-      {failure && <ErrorNotice error={failure} />}
-      {navigationError && <ErrorNotice what={tx("İndirme bağlantısı güvenli değil.")} dataImpact={tx("Dosya indirilmedi; yedeğiniz değişmedi.")} action={tx("Yeni bir indirme başlatın.")} />}
+      {availability.error ? <ErrorNotice error={availability.error} /> : null}
       {availability.data && <>
         <Facts columns={1}>
           <Fact label={tx("Boyut")}>{formatBytes(availability.data.sizeBytes)}</Fact>
@@ -91,15 +71,9 @@ function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tena
           <label className="flex min-h-11 items-start gap-3 rounded-lg bg-surface-2 p-3 text-sm"><input type="radio" name="download-form" className="mt-1 size-4 accent-primary" checked={decrypt} onChange={() => setDecrypt(true)} /><span><span className="block font-medium">{tx("Çözülmüş dosya")}</span><span className="block text-text-muted">{tx("Harici depolamada Agent dosyanın tamamını özel geçici alanda çözer; şifreli ve düz veri checksum doğrulanmadan düz veri gönderilmez. Yetkili anahtar erişimi audit kaydına yazılır. İndirilen dosya şifresizdir, güvenle saklayın.")}</span></span></label>
         </fieldset>}
         {!availability.data.available && <Notice tone="warning">{tx("İndirme kullanılamıyor: Hiçbir doğrulanmış kopya erişilebilir değil (")}{failureMessage(availability.data.reason)}).</Notice>}
-        <Button disabled={busy || !availability.data.available || Boolean(selected && !selected.available)} onClick={() => { started.current = false; prepare.mutate() }}>{prepare.isPending || finalState === 'Preparing' ? tx('İndirme hazırlanıyor…') : availability.data.format === 'v2-bpe' && decrypt ? tx('Çözülmüş dosyayı indir') : tx('Download Backup')}</Button>
+        <Button disabled={busy || !availability.data.available || Boolean(selected && !selected.available)} onClick={() => void flow.start()}>{flow.pending || flow.state === 'Preparing' ? tx('İndirme hazırlanıyor…') : availability.data.format === 'v2-bpe' && decrypt ? tx('Çözülmüş dosyayı indir') : tx('Download Backup')}</Button>
       </>}
-      {session?.direct && <DirectDownloadButton key={session.sessionId} session={session} />}
-      {session && !status.data && !status.error && <p role="status" className="text-sm text-text-muted">{tx("İndirme hazırlanıyor…")}</p>}
-      {status.data && finalState === 'Failed' && <ErrorNotice title={tx("İndirme başarısız")} failureCode={status.data.failureCode} />}
-      {status.data && finalState !== 'Failed' && <Notice tone={finalState === 'Completed' ? 'success' : 'info'}>
-        {finalState === 'Preparing' ? tx('İndirme hazırlanıyor…') : finalState === 'Ready' || finalState === 'Streaming' ? tx('İndirme başlatıldı. Dosya tarayıcınız tarafından kaydediliyor.') : finalState === 'Completed' ? tx('Dosya aktarımı tamamlandı.') : tx('İndirme iptal edildi.')}
-        {status.data.transferredBytes > 0 && tx(" · {0} aktarıldı", { "0": formatBytes(status.data.transferredBytes) })}
-      </Notice>}
+      <DownloadFlowStatus flow={flow} />
     </div>
   </Section>
 }

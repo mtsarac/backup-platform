@@ -1,6 +1,7 @@
 import { formatDateTime } from '@/lib/format'
 import { screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
+import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -35,7 +36,7 @@ const delivery = (overrides: Partial<NotificationDelivery> = {}): NotificationDe
 let client: QueryClient
 function mount() {
   client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-  return render(<QueryClientProvider client={client}><NotificationsPage /></QueryClientProvider>)
+  return render(<MemoryRouter><QueryClientProvider client={client}><NotificationsPage /></QueryClientProvider></MemoryRouter>)
 }
 
 const openTab = async (user: ReturnType<typeof userEvent.setup>, name: string) => user.click(await screen.findByRole('tab', { name }))

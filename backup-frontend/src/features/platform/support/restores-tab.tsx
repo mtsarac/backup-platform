@@ -7,11 +7,11 @@ import { Button } from '@/components/ui/button'
 import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
-import { ConfirmDialog } from '@/features/agents/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { canCancelRestore, databaseStateLabel, isActiveRestore, restoreProgressPercent, restoreStageLabel, restoreStatuses, targetStateDescription, targetStateLabel } from '@/features/restores/presentation'
 import type { RestoreView } from '@/features/restores/types'
-import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
+import { failureMessage } from '@/lib/api/failure-messages'
 import { useCancelSupportRestore, useSupportRestore, useSupportRestores } from './hooks'
 import { supportAccess, supportScope } from './presentation'
 import { SupportRestoreForm } from './restore-form'
@@ -69,7 +69,13 @@ function SupportRestoreDetail({ session, id }: { session: SupportSession; id: st
       {restore.result && <p className="text-sm">{tx("Checksum doğrulandı:")}{' '}{restore.result.checksumVerified ? tx('Evet') : tx('Hayır')}{' '}{tx("· Backup doğrulandı:")}{' '}{restore.result.backupVerified ? tx('Evet') : tx('Hayır')}</p>}
       <h3 className="font-medium">{tx("Denemeler")}</h3>{restore.attempts.map(attempt => <div key={attempt.id} className="flex flex-wrap gap-3 text-sm">{attempt.number}{tx(". attempt")}<StatusPill status={attempt.status} /><span>{formatDateTime(attempt.startedAt)} → {formatDateTime(attempt.completedAt)}</span><span>{targetStateLabel(attempt.targetState)}</span>{attempt.failureCode && <span>{failureMessage(attempt.failureCode, 'restore')}</span>}</div>)}
     </>}</SupportQueryState>
-    <ConfirmDialog open={confirm && mayCancel} onClose={() => setConfirm(false)} title={tx("Restore iptal edilsin mi?")} description={tx("İptal isteği Agent'a iletilir; Database motoru anında durmayabilir. Hedef Database kısmen geri yüklenmiş veya bilinmeyen durumda kalabilir. İptal, Database sağlığını garanti etmez.")} pending={cancel.isPending} error={cancel.error ? errorMessage(cancel.error) : undefined} onConfirm={() => { if (mayCancel && !cancel.isPending) cancel.mutate(undefined, { onSuccess: () => setConfirm(false) }) }} />
+    <ConfirmDialog open={confirm && mayCancel} onClose={() => setConfirm(false)} title={tx("Geri yükleme iptal edilsin mi?")}
+      consequence={{
+        what: tx("İptal isteği yedekleme bilgisayarına iletilir; veritabanı motoru anında durmayabilir. Hedef veritabanı kısmen geri yüklenmiş veya bilinmeyen durumda kalabilir."),
+        who: tx("Hedef müşteri veritabanı etkilenir. İptal, veritabanının sağlıklı olduğunu garanti etmez."),
+        reversible: tx("Hayır. Gerekirse geri yüklemeyi yeniden başlatmanız ve hedefi elle kontrol etmeniz gerekir."),
+      }}
+      confirmLabel={tx("İptali onayla")} pending={cancel.isPending} error={cancel.error} onConfirm={() => { if (mayCancel && !cancel.isPending) cancel.mutate(undefined, { onSuccess: () => setConfirm(false) }) }} />
     </div>
   </Section>
 }

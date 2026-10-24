@@ -10,7 +10,7 @@ import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
 import { Tabs } from '@/components/ui/tabs'
-import { ConfirmDialog } from '@/features/agents/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { ArtifactDeletedNotice, ArtifactIntegrity, ArtifactMetadata, ArtifactReplicas, ArtifactRetention, ArtifactSummary } from '@/features/artifacts/artifact-details'
 import { ArtifactDownload } from '@/features/artifacts/artifact-download'
 import { ArtifactVerificationSection } from '@/features/restores/verification'
@@ -21,7 +21,7 @@ import { ReplicationSection } from '@/features/backups/replication'
 import type { ReplicationDestination } from '@/features/artifacts/types'
 import { useArtifact, useArtifactActions, useReplicaRepair, useRepairStatus, useArtifactRepairs } from '@/features/artifacts/hooks'
 import { useTenant } from '@/features/tenancy/use-tenant'
-import { type ErrorDescription, describeError, describeFailure, errorMessage } from '@/lib/api/failure-messages'
+import { type ErrorDescription, describeError, describeFailure } from '@/lib/api/failure-messages'
 import { formatDateTime } from '@/lib/format'
 
 type ArtifactTab = 'summary' | 'replicas' | 'download' | 'retention' | 'metadata'
@@ -198,11 +198,19 @@ function ArtifactDetail({ id }: { id: string }) {
         </>}
       </QueryState>
       <ConfirmDialog open={dialogOpen && canRequestDelete} onClose={() => setDialogOpen(false)} title={tx("Backup için silme isteği")}
-        description={tx("Bu işlem fiziksel dosyaları hemen silmez. Backup için tanımlı bekleme süresi başlar. Süre dolduğunda replikalar kalıcı olarak kaldırılır; fiziksel silme başlamadan önce isteği iptal edebilirsiniz. Geçmiş kaydı korunur.")}
-        pending={requestDelete.isPending} error={requestDelete.error ? errorMessage(requestDelete.error) : undefined} confirmLabel="Bekleme süresini başlat" onConfirm={startDelete} />
+        consequence={{
+          what: tx("Yedek dosyası hemen silinmez; tanımlı bekleme süresi başlar. Süre dolunca kopyalar kalıcı olarak kaldırılır, geçmiş kaydı korunur."),
+          who: tx("Bu yedek dosyasından yapılacak indirmeler ve geri yüklemeler, bekleme süresi dolduktan sonra kullanılamaz."),
+          reversible: tx("Evet, fiziksel silme başlamadan önce isteği iptal edebilirsiniz. Süre dolunca silme geri alınamaz."),
+        }}
+        pending={requestDelete.isPending} error={requestDelete.error} confirmLabel={tx("Bekleme süresini başlat")} onConfirm={startDelete} />
       <ConfirmDialog open={Boolean(repairDestination) && canRepair} onClose={() => setRepairDestination(null)} title={tx("Replika onarılsın mı?")}
-        description={<>{tx("Doğrulanmış bir Replica'dan")}{' '}<strong>{repairDestination?.storageProvider}</strong>{' '}{tx("hedefine yeni bir kopya aktarılır ve checksum doğrulanır. Depolama alanı ve aktarım kotası kullanılır. Kaynak Replica korunur.")}</>}
-        pending={startRepair.isPending} error={visibleRepairError?.what} confirmLabel="Onarımı başlat" onConfirm={() => { if (repairDestination) handleRepair(repairDestination) }} />
+        consequence={{
+          what: <>{tx("Doğrulanmış bir kopyadan")}{' '}<strong>{repairDestination?.storageProvider}</strong>{' '}{tx("hedefine yeni bir kopya aktarılır ve sağlama toplamı doğrulanır.")}</>,
+          who: tx("Depolama alanı ve aktarım kotası kullanılır. Kaynak kopya korunur."),
+          reversible: tx("Evet. Onarım sürerken iptal edebilirsiniz; kaynak kopyanız değişmez."),
+        }}
+        pending={startRepair.isPending} error={visibleRepairError} confirmLabel={tx("Onarımı başlat")} onConfirm={() => { if (repairDestination) handleRepair(repairDestination) }} />
     </div>
   )
 }

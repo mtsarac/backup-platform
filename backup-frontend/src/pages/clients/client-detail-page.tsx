@@ -14,10 +14,10 @@ import { useTenant } from '@/features/tenancy/use-tenant'
 import { useAgent, agentQueryKeys } from '@/features/agents/hooks'
 import { revokeAgent } from '@/features/agents/api'
 import { CapabilityList } from '@/features/agents/capabilities'
-import { ConfirmDialog } from '@/features/agents/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useBackupJobs } from '@/features/backup-jobs/hooks'
 import type { BackupJob } from '@/features/backup-jobs/types'
-import { errorMessage, notFound } from '@/lib/api/failure-messages'
+import { notFound } from '@/lib/api/failure-messages'
 import { formatDateTime } from '@/lib/format'
 
 type Tab = 'general' | 'capabilities' | 'jobs'
@@ -96,7 +96,13 @@ function AgentDetailContent({ tenantId, id, canAdmin }: { tenantId: string; id: 
         </div>
       </>}
     </QueryState>}
-    <ConfirmDialog open={confirmOpen} onClose={() => setConfirmOpen(false)} title={tx("Agent kaydı iptal edilsin mi?")} description={tx("Bu işlem geri alınamaz. Agent artık bu çalışma alanına bağlanamaz; yeniden kayıt için yeni bir kimlik gerekir.")} pending={revoke.isPending} error={revoke.error ? errorMessage(revoke.error) : undefined} onConfirm={() => { if (canAdmin) revoke.mutate() }} />
+    <ConfirmDialog open={confirmOpen} onClose={() => setConfirmOpen(false)} title={tx("Bilgisayar kaydı iptal edilsin mi?")}
+      consequence={{
+        what: tx("Bu yedekleme bilgisayarı artık bu çalışma alanına bağlanamaz."),
+        who: tx("Bu bilgisayarda çalışan yedekleme işleri durur."),
+        reversible: tx("Hayır. Yeniden kayıt için yeni bir kimlik gerekir."),
+      }}
+      confirmLabel={tx("İptali onayla")} pending={revoke.isPending} error={revoke.error} onConfirm={() => { if (canAdmin) revoke.mutate() }} />
   </div>
 }
 

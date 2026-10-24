@@ -1,7 +1,7 @@
 import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { ConfirmDialog } from '@/features/agents/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { EditConnectionDialog, SecretDialog } from './connection-dialogs'
 import { useGoogleDriveConnect, useGoogleDriveDisconnect, type ConnectionOps } from './hooks'
 import { openGoogleOAuthPopup } from './google-oauth'
@@ -73,27 +73,43 @@ export function ConnectionActions({ connection, descriptor, ops, show = ['edit',
 
     {dialog === 'edit' && <EditConnectionDialog connection={connection} configFields={descriptor?.configFields ?? []} ops={ops} onClose={close} />}
     {dialog === 'secret' && <SecretDialog connection={connection} fields={secretFields} ops={ops} onClose={close} />}
-    <ConfirmDialog open={dialog === 'clearSecret'} onClose={close} title={tx("“{0}” kimlik bilgisi temizlensin mi?", { "0": connection.name })} confirmLabel="Kimlik bilgisini temizle"
-      description={tx("Kayıtlı kimlik bilgisi silinir. Yeniden ayarlanana kadar bu hedefe erişim gerektiren işlemler başarısız olabilir.")}
-      pending={ops.clearSecret.isPending} error={ops.clearSecret.error ? errorMessage(ops.clearSecret.error, 'storageConnection') : undefined}
+    <ConfirmDialog open={dialog === 'clearSecret'} onClose={close} title={tx("“{0}” kimlik bilgisi temizlensin mi?", { "0": connection.name })} confirmLabel={tx("Kimlik bilgisini temizle")}
+      consequence={{
+        what: tx("Kayıtlı kimlik bilgisi silinir. Yeniden ayarlanana kadar bu depolamaya erişim gerektiren işlemler başarısız olabilir."),
+        who: tx("Bu depolamayı kullanan yedekleme işleri ve geri yüklemeler etkilenir."),
+        reversible: tx("Evet. Yeni bir kimlik bilgisi ayarlayabilirsiniz; silinen değer geri gelmez."),
+      }}
+      pending={ops.clearSecret.isPending} error={ops.clearSecret.error} errorScope="storageConnection"
       onConfirm={() => ops.clearSecret.mutate(connection, { onSuccess: close })} />
     <ConfirmDialog open={dialog === 'toggle'} onClose={close} title={ops.scope === 'platform' ? `“${connection.name}”: ${toggleLabel.toLocaleLowerCase(currentLocale())}?` : connection.enabled ? tx("“{0}” devre dışı bırakılsın mı?", { "0": connection.name }) : tx("“{0}” etkinleştirilsin mi?", { "0": connection.name })}
       confirmLabel={toggleLabel}
-      description={<>
-        {ops.scope === 'platform' && <span className="block">{tx("Yalnızca platform kilidi değişir; sahibin etkin / devre dışı tercihi korunur.")}</span>}
-        {toggledOn
-          ? disableEffects.map((effect) => <span key={effect} className="mt-1 block">• {tx(effect)}</span>)
-          : <span className="block">{ops.scope === 'platform' && !connection.enabled ? tx('Kilit kalksa da sahip tercihi devre dışı olduğu için yeni backup başlatılamaz.') : tx(enableEffect)}</span>}
-      </>}
-      pending={ops.setEnabled.isPending} error={ops.setEnabled.error ? errorMessage(ops.setEnabled.error, 'storageConnection') : undefined}
+      consequence={{
+        what: <>
+          {ops.scope === 'platform' && <span className="block">{tx("Yalnızca platform kilidi değişir; sahibin etkin / devre dışı tercihi korunur.")}</span>}
+          {toggledOn
+            ? disableEffects.map((effect) => <span key={effect} className="mt-1 block">• {tx(effect)}</span>)
+            : <span className="block">{ops.scope === 'platform' && !connection.enabled ? tx('Kilit kalksa da sahip tercihi devre dışı olduğu için yeni backup başlatılamaz.') : tx(enableEffect)}</span>}
+        </>,
+        who: tx("Bu depolamayı kullanan yedekleme işleri etkilenir."),
+        reversible: tx("Evet. Bu ayarı istediğiniz zaman geri değiştirebilirsiniz."),
+      }}
+      pending={ops.setEnabled.isPending} error={ops.setEnabled.error} errorScope="storageConnection"
       onConfirm={() => { if (!cannotEnable) ops.setEnabled.mutate({ connection, enabled: !toggledOn }, { onSuccess: close }) }} />
-    <ConfirmDialog open={dialog === 'delete'} onClose={close} title={tx("“{0}” silinsin mi?", { "0": connection.name })} confirmLabel="Bağlantıyı sil"
-      description={tx("Bağlantı kalıcı olarak silinir. Replica veya Backup Job hâlâ bu bağlantıyı kullanıyorsa silinemez; önce bunların başka bir hedefe taşınması gerekir.")}
-      pending={ops.remove.isPending} error={ops.remove.error ? errorMessage(ops.remove.error, 'storageConnection') : undefined}
+    <ConfirmDialog open={dialog === 'delete'} onClose={close} title={tx("“{0}” silinsin mi?", { "0": connection.name })} confirmLabel={tx("Bağlantıyı sil")}
+      consequence={{
+        what: tx("Bağlantı kalıcı olarak silinir. Bir yedek kopyası veya yedekleme işi hâlâ bu bağlantıyı kullanıyorsa silinemez; önce bunların başka bir depolamaya taşınması gerekir."),
+        who: tx("Bu bağlantıyı kullanan yedekleme işleri ve kopyalar etkilenir."),
+        reversible: tx("Hayır. Bağlantıyı yeniden eklemeniz gerekir."),
+      }}
+      pending={ops.remove.isPending} error={ops.remove.error} errorScope="storageConnection"
       onConfirm={() => ops.remove.mutate(connection, { onSuccess: close })} />
-    <ConfirmDialog open={dialog === 'disconnectGoogle'} onClose={close} title={tx("“{0}” Google bağlantısı kesilsin mi?", { "0": connection.name })} confirmLabel="Bağlantıyı kes"
-      description={tx("Kayıtlı Google erişim izni iptal edilir. Aynı Google hesabını ve uygulamayı kullanan diğer bağlantıların da erişimi iptal olabilir; bunlar yeniden yetkilendirilmelidir. Yeniden yetkilendirilene kadar bu hedefe erişim gerektiren işlemler başarısız olabilir.")}
-      pending={disconnectGoogle.isPending} error={disconnectGoogle.error ? errorMessage(disconnectGoogle.error, 'storageConnection') : undefined}
+    <ConfirmDialog open={dialog === 'disconnectGoogle'} onClose={close} title={tx("“{0}” Google bağlantısı kesilsin mi?", { "0": connection.name })} confirmLabel={tx("Bağlantıyı kes")}
+      consequence={{
+        what: tx("Kayıtlı Google erişim izni iptal edilir. Yeniden yetkilendirilene kadar bu depolamaya erişim gerektiren işlemler başarısız olabilir."),
+        who: tx("Aynı Google hesabını ve uygulamayı kullanan diğer bağlantıların da erişimi iptal olabilir; bunların yeniden yetkilendirilmesi gerekir."),
+        reversible: tx("Evet. Google hesabını yeniden bağlayarak erişimi geri verebilirsiniz."),
+      }}
+      pending={disconnectGoogle.isPending} error={disconnectGoogle.error} errorScope="storageConnection"
       onConfirm={() => disconnectGoogle.mutate({ tenantId: connection.tenantId, connectionId: connection.id }, { onSuccess: close })} />
   </div>
 }

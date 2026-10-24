@@ -6,8 +6,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { QueryState } from '@/components/data/query-state'
-import { ConfirmDialog } from '@/features/agents/confirm-dialog'
-import { errorMessage } from '@/lib/api/failure-messages'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useAuth } from '@/features/auth/use-auth'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { AddChannelDialog, ChannelSecretDialog, EditChannelDialog } from './channel-dialogs'
@@ -65,18 +64,28 @@ function ChannelCard({ channel }: { channel: NotificationChannel }) {
     {dialog === 'edit' && <EditChannelDialog channel={channel} onClose={close} />}
     {dialog === 'secret' && <ChannelSecretDialog channel={channel} onClose={close} />}
     <ConfirmDialog open={dialog === 'clearSecret'} onClose={close} title={tx("“{0}” secret’ı temizlensin mi?", { "0": channel.name })} confirmLabel={tx("Secret’ı temizle")}
-      description={tx("Kayıtlı secret silinir; yeniden ayarlanana kadar webhook gönderimleri başarısız olur.")}
-      pending={clearSecret.isPending} error={clearSecret.error ? errorMessage(clearSecret.error) : undefined}
+      consequence={{
+        what: tx("Kayıtlı gizli değer silinir; yeniden ayarlanana kadar bu kanala yapılan gönderimler başarısız olur."),
+        who: tx("Bu kanalı kullanan tüm bildirimler etkilenir."),
+        reversible: tx("Evet. Yeni bir değer ayarlayarak yeniden çalıştırabilirsiniz; eski değer geri gelmez."),
+      }}
+      pending={clearSecret.isPending} error={clearSecret.error}
       onConfirm={() => clearSecret.mutate(channel.id, { onSuccess: close })} />
-    <ConfirmDialog open={dialog === 'delete'} onClose={close} title={tx("“{0}” silinsin mi?", { "0": channel.name })} confirmLabel="Kanalı sil"
-      description={tx("Kanal silinir. Gönderim geçmişi korunur.")}
-      pending={remove.isPending} error={remove.error ? errorMessage(remove.error) : undefined}
+    <ConfirmDialog open={dialog === 'delete'} onClose={close} title={tx("“{0}” silinsin mi?", { "0": channel.name })} confirmLabel={tx("Kanalı sil")}
+      consequence={{
+        what: tx("Kanal silinir ve bu kanala bildirim gönderilmez. Gönderim geçmişi korunur."),
+        who: tx("Bu kanalı kullanan tüm bildirimler etkilenir."),
+        reversible: tx("Hayır. Kanalı yeniden eklemeniz gerekir."),
+      }}
+      pending={remove.isPending} error={remove.error}
       onConfirm={() => remove.mutate(channel.id, { onSuccess: close })} />
     <ConfirmDialog open={dialog === 'ownerSecurity'} onClose={close}
       title={boundToMe ? tx('Güvenlik alıcısı kaldırılsın mı?') : tx('Bu adres güvenlik alıcınız olsun mu?')}
-      description={boundToMe ? tx('Bu adres artık sizin zorunlu break-glass bildirimlerinizi almaz. Başka bir doğrulanmış adres kaydedin.') : tx('Bu e-posta adresinin size ait olduğunu onaylıyorsunuz. Tenant sahibi olduğunuz sürece zorunlu break-glass bildirimleri genel politika kapalı olsa da bu adrese gönderilir.')}
+      consequence={boundToMe
+        ? { what: tx('Bu adres artık zorunlu acil destek erişimi bildirimlerinizi almaz.'), who: tx('Yalnızca sizin bildirimleriniz etkilenir.'), reversible: tx('Evet. Aynı adresi yeniden güvenlik alıcısı yapabilirsiniz; önce başka bir doğrulanmış adres kaydedin.') }
+        : { what: tx('Bu e-posta adresinin size ait olduğunu onaylıyorsunuz. Tenant sahibi olduğunuz sürece zorunlu acil destek erişimi bildirimleri, genel politika kapalı olsa da bu adrese gönderilir.'), who: tx('Yalnızca sizin bildirimleriniz etkilenir.'), reversible: tx('Evet. Daha sonra güvenlik alıcılığını kaldırabilirsiniz.') }}
       confirmLabel={boundToMe ? tx('Kaldır') : tx('Kaydet')} pending={securityRecipient.isPending}
-      error={securityRecipient.error ? errorMessage(securityRecipient.error) : undefined}
+      error={securityRecipient.error}
       onConfirm={() => securityRecipient.mutate({ id: channel.id, enabled: !boundToMe }, { onSuccess: close })} />
   </article></li>
 }

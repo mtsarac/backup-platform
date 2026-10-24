@@ -14,7 +14,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
 import { platformCrumb } from '@/features/platform/crumbs'
 import { bareTableClass } from '@/features/platform/list-empty'
-import { ConfirmDialog } from '@/features/agents/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { allocatedPercent } from '@/features/storage/format'
 import { PlanName } from '@/features/storage/quota-badges'
 import { QuotaMeter } from '@/features/storage/quota-meter'
@@ -24,7 +24,6 @@ import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { SearchForm } from '@/features/platform/search-form'
 import { linkClass } from '@/features/platform/styles'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
-import { errorMessage } from '@/lib/api/failure-messages'
 import { useStorageUsage, useReconcileUsage, useRebuildUsage } from '@/features/platform/storage/hooks'
 import { formatBytes, formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
@@ -246,14 +245,14 @@ export function PlatformStoragePage() {
         open={Boolean(activeReconcile)}
         onClose={() => setActiveReconcile(null)}
         title={tx("Depolama eşitlemesi çalıştırılsın mı?")}
-        description={
-          activeReconcile
-            ? tx("“{0}” için mevcut artifact ve replikalar taranacak, kullanım güncellenecek ve süresi geçmiş rezervasyonlar iptal edilecektir.", { "0": activeReconcile.tenantName })
-            : ''
-        }
+        consequence={{
+          what: activeReconcile && tx("“{0}” için mevcut yedek dosyaları ve kopyalar taranır, kullanım güncellenir ve süresi geçmiş rezervasyonlar iptal edilir.", { "0": activeReconcile.tenantName }),
+          who: tx("Yalnızca bu çalışma alanının kota hesabı etkilenir; yedekler değişmez."),
+          reversible: tx("Evet. İşlem yalnızca sayıları günceller; istediğiniz zaman yeniden çalıştırabilirsiniz."),
+        }}
         confirmLabel={tx("Uzlaştırmayı Çalıştır")}
         pending={reconcile.isPending}
-        error={reconcile.error ? errorMessage(reconcile.error) : undefined}
+        error={reconcile.error}
         onConfirm={runReconcile}
       />
 
@@ -261,14 +260,14 @@ export function PlatformStoragePage() {
         open={Boolean(activeRebuild)}
         onClose={() => setActiveRebuild(null)}
         title={tx("Depolama baştan hesaplansın mı?")}
-        description={
-          activeRebuild
-            ? tx("“{0}” için kullanım kaydı baştan hesaplanacaktır. Mevcut veritabanı kayıtları geçerli kota politikasına göre yeniden taranır.", { "0": activeRebuild.tenantName })
-            : ''
-        }
+        consequence={{
+          what: activeRebuild && tx("“{0}” için kullanım kaydı baştan hesaplanır. Mevcut yedek kayıtları geçerli kota politikasına göre yeniden taranır.", { "0": activeRebuild.tenantName }),
+          who: tx("Yalnızca bu çalışma alanının kota hesabı etkilenir; yedekler değişmez."),
+          reversible: tx("Evet. Hesabı istediğiniz zaman yeniden çalıştırabilirsiniz."),
+        }}
         confirmLabel={tx("Yeniden Hesaplamayı Çalıştır")}
         pending={rebuild.isPending}
-        error={rebuild.error ? errorMessage(rebuild.error) : undefined}
+        error={rebuild.error}
         onConfirm={runRebuild}
       />
     </div>

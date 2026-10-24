@@ -2,9 +2,11 @@ import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 import { useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
+import { SecretField } from '@/components/ui/secret-field'
+import { useSecretValue } from '@/components/ui/secret-value'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
-import { ConfirmDialog } from '@/features/agents/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { inputClass, selectClass } from '@/features/platform/styles'
 import {
   useClearEmailSecret, useClearSmsSecret, useSetEmailSecret, useSetSmsSecret, useUpdateEmailTransport, useUpdateSmsTransport,
@@ -29,12 +31,11 @@ function SecretControl({ label, transport, onSet, onClear }: {
   onClear: { mutate: () => void; isPending: boolean; error: unknown; reset: () => void }
 }) {
   useLanguage()
-  const [value, setValue] = useState('')
+  const secret = useSecretValue()
   const [confirmClear, setConfirmClear] = useState(false)
   function submit(event: FormEvent) {
     event.preventDefault()
-    const next = value
-    setValue('')
+    const next = secret.take()
     onClear.reset()
     onSet.mutate(next)
   }
@@ -44,13 +45,19 @@ function SecretControl({ label, transport, onSet, onClear }: {
     <p className="text-sm text-text-muted">{tx(label)}: {transport.hasSecret ? tx("kayıtlı ({0})", { "0": formatDateTime(transport.secretUpdatedAt, tx('Henüz bildirilmedi')) }) : tx('ayarlanmadı')}{tx(". Kayıtlı değer geri okunamaz.")}</p>
     <form onSubmit={submit} className="space-y-3">
       <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-0 flex-1 basis-48"><Field label={tx("Yeni {0}", { "0": label.toLocaleLowerCase(currentLocale()) })}>{(control) => <input {...control} className={inputClass} type="password" autoComplete="new-password" value={value} onChange={(event) => setValue(event.target.value)} />}</Field></div>
-        <Button type="submit" variant="outline" disabled={!value || onSet.isPending}>{onSet.isPending ? tx('Kaydediliyor…') : tx('Ayarla')}</Button>
+        <div className="min-w-0 flex-1 basis-48"><SecretField label={tx("Yeni {0}", { "0": label.toLocaleLowerCase(currentLocale()) })} saved={transport.hasSecret} value={secret.value} onChange={secret.set} /></div>
+        <Button type="submit" variant="outline" disabled={!secret.value || onSet.isPending}>{onSet.isPending ? tx('Kaydediliyor…') : tx('Ayarla')}</Button>
         {transport.hasSecret && <Button type="button" variant="outline" disabled={onClear.isPending} onClick={() => { onSet.reset(); onClear.reset(); setConfirmClear(true) }}>{tx("Temizle")}</Button>}
       </div>
       {Boolean(error) && <ErrorNotice error={error} />}
     </form>
-    <ConfirmDialog open={confirmClear} onClose={() => setConfirmClear(false)} title={tx("{0} temizlensin mi?", { "0": label })} description={tx("Kayıtlı kimlik bilgisi silinecek. Kimlik doğrulaması kullanan bildirim gönderimleri, yeni bir değer ayarlanana kadar başarısız olabilir.")} confirmLabel={tx("Gizli değeri temizle")} pending={onClear.isPending} onConfirm={() => { onClear.mutate(); setConfirmClear(false) }} />
+    <ConfirmDialog open={confirmClear} onClose={() => setConfirmClear(false)} title={tx("{0} temizlensin mi?", { "0": label })}
+      consequence={{
+        what: tx("Kayıtlı kimlik bilgisi silinir; yeni bir değer ayarlanana kadar kimlik doğrulaması gerektiren bildirim gönderimleri başarısız olabilir."),
+        who: tx("Bu kanaldan bildirim alan tüm çalışma alanları etkilenir."),
+        reversible: tx("Evet. Yeni bir değer ayarlayabilirsiniz; silinen değer geri gelmez."),
+      }}
+      confirmLabel={tx("Gizli değeri temizle")} pending={onClear.isPending} onConfirm={() => { onClear.mutate(); setConfirmClear(false) }} />
   </div>
 }
 

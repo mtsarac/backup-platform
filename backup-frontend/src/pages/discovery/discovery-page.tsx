@@ -6,7 +6,6 @@ import { DataTable, type Column } from '@/components/data/data-table'
 import { QueryState } from '@/components/data/query-state'
 import { EmptyState } from '@/components/ui/empty-state'
 import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
-import { ErrorNotice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Badge } from '@/components/ui/badge'
 import { useAgents } from '@/features/agents/hooks'
@@ -19,7 +18,7 @@ import { discoveryInstancePath } from '@/lib/routes'
 import { AgentStatusBar } from './agent-status-bar'
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
-import { accessDenied } from '@/lib/api/failure-messages'
+import { AccessDenied } from '@/components/auth/access-denied'
 
 const isForbidden = (error: unknown) => error instanceof ApiError && error.status === 403
 
@@ -48,7 +47,7 @@ export function DiscoveryPage() {
     { key: 'change', header: tx('Değişiklik'), render: item => <span className="flex flex-wrap gap-1">{item.presence === 'Missing' && <StatusPill domain="presence" status="Missing" />}{item.lastChange ? <StatusPill domain="lastChange" status={item.lastChange.kind} /> : null}</span> },
   ]
   let body
-  if (isForbidden(instances.error) || isForbidden(statuses.error)) body = <ErrorNotice title={tx("Yetki yok")} {...accessDenied(tx("Keşfedilen veritabanlarını görüntüleme yetkiniz yok."))} />
+  if (isForbidden(instances.error) || isForbidden(statuses.error)) body = <AccessDenied title={tx("Yetki yok")} what={tx("Keşfedilen veritabanlarını görüntüleme yetkiniz yok.")} />
   else if (agents.isSuccess && agentList.length === 0) body = <div className="rounded-xl border border-border bg-surface"><EmptyState icon={Radar} message={tx("Henüz Agent yok; veritabanları kayıtlı bir Agent'ın bulunduğu makinede keşfedilir, önce bir Agent kaydedin.")} /></div>
   else if (agents.isSuccess && !agentList.some(item => supportsDiscovery(item.capabilities))) body = <div className="rounded-xl border border-border bg-surface"><EmptyState icon={Radar} message={tx("Hiçbir Agent veritabanı keşfi yeteneğini bildirmedi; Agent'ları güncelleyin veya veritabanlarını Backup Job sihirbazında elle girin.")} /></div>
   else body = <>

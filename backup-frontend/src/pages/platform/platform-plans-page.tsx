@@ -8,7 +8,7 @@ import { FilterField, Filters, filterControlClass } from '@/components/ui/filter
 import { PageHeader } from '@/components/ui/page-header'
 import { platformCrumb } from '@/features/platform/crumbs'
 import { ListEmpty } from '@/features/platform/list-empty'
-import { ConfirmDialog } from '@/features/agents/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { SearchForm } from '@/features/platform/search-form'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
@@ -16,7 +16,6 @@ import { usePlans, useSetPlanEnabled } from '@/features/platform/plans/hooks'
 import { CreatePlanDialog, EditPlanDialog } from '@/features/platform/plans/plan-form-dialog'
 import { StorageLimitText } from '@/features/platform/plans/storage-limit-text'
 import type { EnabledFilter, Plan } from '@/features/platform/plans/types'
-import { errorMessage } from '@/lib/api/failure-messages'
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 
@@ -69,8 +68,12 @@ export function PlatformPlansPage() {
     {editing && <EditPlanDialog plan={editing} onClose={() => setEditing(null)} />}
     <ConfirmDialog open={Boolean(toggling)} onClose={() => setToggling(null)} pending={setEnabled.isPending}
       title={toggling?.enabled ? tx('Plan devre dışı bırakılsın mı?') : tx('Plan etkinleştirilsin mi?')}
-      description={toggling ? (toggling.enabled ? tx("“{0}” yeni atamalarda seçilemez. Bu planı kullanan mevcut abonelikler başka bir plana taşınmaz.", { "0": toggling.name }) : tx("“{0}” yeni atamalarda yeniden seçilebilir olacak.", { "0": toggling.name })) : ''}
-      confirmLabel={toggling?.enabled ? tx('Devre dışı bırak') : tx('Etkinleştir')} error={setEnabled.error ? errorMessage(setEnabled.error) : undefined}
+      consequence={{
+        what: toggling && (toggling.enabled ? tx("“{0}” yeni atamalarda seçilemez.", { "0": toggling.name }) : tx("“{0}” yeni atamalarda yeniden seçilebilir olur.", { "0": toggling.name })),
+        who: tx("Bu planı kullanan mevcut abonelikler etkilenmez; başka bir plana taşınmaz."),
+        reversible: tx("Evet. Planı istediğiniz zaman yeniden etkinleştirebilir veya devre dışı bırakabilirsiniz."),
+      }}
+      confirmLabel={toggling?.enabled ? tx('Devre dışı bırak') : tx('Etkinleştir')} error={setEnabled.error}
       onConfirm={() => { if (toggling) setEnabled.mutate({ planId: toggling.planId, enabled: !toggling.enabled }, { onSuccess: () => setToggling(null) }) }} />
   </div>
 }

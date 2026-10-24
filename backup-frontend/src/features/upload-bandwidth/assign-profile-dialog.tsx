@@ -1,9 +1,8 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Field } from '@/components/ui/field'
-import { FormDialog } from '@/features/platform/plans/form-dialog'
+import { FormDialog } from '@/components/ui/form-dialog'
 import { selectClass } from '@/features/platform/styles'
-import { errorMessage } from '@/lib/api/failure-messages'
 import { useAssignBandwidthProfile, useBandwidthProfiles } from './hooks'
 import type { BandwidthTarget } from './types'
 
@@ -26,7 +25,7 @@ export function AssignProfileDialog({ target, name, currentProfileId, onClose }:
       submitLabel={tx("Kaydet")}
       pendingLabel={tx("Kaydediliyor…")}
       pending={assign.isPending}
-      error={assign.error ? errorMessage(assign.error) : undefined}
+      error={assign.error}
       onSubmit={submit}
       onClose={onClose}
     >
