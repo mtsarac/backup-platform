@@ -19,14 +19,38 @@ describe('break-glass dual control', () => {
     expect(screen.getByText(/farklı bir PlatformAdmin onaylamalıdır/)).toBeInTheDocument()
   })
 
-  it('lets a different admin approve after confirming, and shows the countdown from the server clock', async () => {
+  it('never lets the requester approve or deny even when the server flag is wrong', () => {
+    mount(makeBreakGlass({ isRequester: true, canApprove: true }))
+    expect(screen.queryByRole('button', { name: 'Onayla' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Reddet' })).not.toBeInTheDocument()
+  })
+
+  it('lets a different admin approve only after typing the confirmation name, and shows the countdown from the server clock', async () => {
     vi.mocked(api.approveBreakGlass).mockResolvedValue(makeBreakGlass({ status: 'Approved', canApprove: false }))
     mount(makeBreakGlass())
     expect(screen.getByText('0 sa 55 dk 0 sn')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Onayla' }))
     expect(api.approveBreakGlass).not.toHaveBeenCalled()
-    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Onayla' }))
+    const dialog = await screen.findByRole('dialog')
+    const confirm = within(dialog).getByRole('button', { name: 'Onayla' })
+    const input = within(dialog).getByRole('textbox', { name: /Acme/ })
+    expect(confirm).toBeDisabled()
+    for (const wrong of ['acme', 'Acme ', 'Acm']) { fireEvent.change(input, { target: { value: wrong } }); expect(confirm).toBeDisabled() }
+    fireEvent.click(confirm)
+    expect(api.approveBreakGlass).not.toHaveBeenCalled()
+    fireEvent.change(input, { target: { value: 'Acme' } })
+    fireEvent.click(confirm)
     await waitFor(() => expect(api.approveBreakGlass).toHaveBeenCalledWith('request-a'))
+  })
+
+  it('keeps ids and raw status under collapsed copyable technical details, out of the main view', () => {
+    mount(makeBreakGlass())
+    const details = screen.getByText('Teknik ayrıntılar').closest('details') as HTMLDetailsElement
+    expect(details.open).toBe(false)
+    expect(within(details).getByText('11111111-1111-1111-1111-111111111111')).toBeInTheDocument()
+    expect(within(details).getByText('request-a')).toBeInTheDocument()
+    expect(within(details).getAllByRole('button', { name: /^Kopyala/ }).length).toBeGreaterThan(1)
+    expect(screen.getAllByText('11111111-1111-1111-1111-111111111111')).toHaveLength(1)
   })
 
   it('requires a reason to deny and sends it', async () => {
@@ -53,6 +77,18 @@ describe('break-glass dual control', () => {
     const anchor = click.mock.instances[0] as HTMLAnchorElement
     expect(anchor.download).toBe('backup.bak')
     expect(anchor.href).toContain('/api/platform/artifact-break-glass/request-a/downloads/s1/content')
+  })
+
+  it('warns before the download that starting it spends the single-use grant, then offers it no more', async () => {
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    vi.mocked(api.downloadBreakGlass).mockResolvedValue({ sessionId: 's1', downloadUrl: '/api/platform/artifact-break-glass/request-a/downloads/s1/content', filename: 'backup.bak', checksum: 'plain-sha', sizeBytes: 10, decrypted: true })
+    vi.mocked(api.getBreakGlassDownloadStatus).mockResolvedValue({ sessionId: 's1', state: 'Ready', transferredBytes: 0 })
+    mount(makeBreakGlass({ status: 'Approved', isRequester: true, canApprove: false, canDownload: true }))
+    expect(screen.getByText('Tek kullanımlık çözülmüş indirme')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Çözülmüş dosyayı indir' }))
+    await waitFor(() => expect(api.downloadBreakGlass).toHaveBeenCalledOnce())
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Çözülmüş dosyayı indir' })).not.toBeInTheDocument())
+    expect(screen.queryByText('Tek kullanımlık çözülmüş indirme')).not.toBeInTheDocument()
   })
 
   it('never navigates an unsafe download URL', async () => {

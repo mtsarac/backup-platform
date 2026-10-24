@@ -37,6 +37,15 @@ describe('break-glass list', () => {
     expect(api.getBreakGlassRequests).toHaveBeenCalledWith({ page: 1, pageSize: 25, status: 'Pending', mine: true, tenantId: 'tenant-a' }, expect.any(AbortSignal))
   })
 
+  it('filters by tenant name through a searchable picker and never shows raw ids in the list', async () => {
+    list('?tenantId=22222222-2222-2222-2222-222222222222')
+    const picker = await screen.findByRole('combobox', { name: tx('Tenant') })
+    await waitFor(() => expect(picker).toHaveValue('Acme'))
+    expect(screen.queryByText('11111111-1111-1111-1111-111111111111')).not.toBeInTheDocument()
+    expect(screen.queryByText(/^11111111/)).not.toBeInTheDocument()
+    expect(screen.queryByText('22222222-2222-2222-2222-222222222222')).not.toBeInTheDocument()
+  })
+
   it('opens the request dialog prefilled from a deep link and clears the link when closed', async () => {
     list('?requestTenantId=22222222-2222-2222-2222-222222222222&requestArtifactId=11111111-1111-1111-1111-111111111111')
     const dialog = await screen.findByRole('dialog')
@@ -62,7 +71,9 @@ describe('break-glass detail page', () => {
     vi.mocked(api.approveBreakGlass).mockRejectedValue(new ApiError(403, { error: 'self_approval_forbidden' }))
     detail()
     fireEvent.click(await screen.findByRole('button', { name: 'Onayla' }))
-    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Onayla' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /Acme/ }), { target: { value: 'Acme' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Onayla' }))
     expect(await screen.findByText(/farklı bir PlatformAdmin gerekir/)).toBeInTheDocument()
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Vazgeç' }))
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Onayla' })).not.toBeInTheDocument())

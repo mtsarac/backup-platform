@@ -12,7 +12,7 @@ export function PlatformBreakGlassDetailPage() {
   const { requestId = '' } = useParams()
   const query = useBreakGlassRequest(requestId)
   return <div className="space-y-6">
-    <PageHeader crumbs={[platformCrumb, { label: tx('Break-glass'), to: platformPaths.breakGlass }]} title={tx("Break-glass isteği")} />
+    <PageHeader crumbs={[platformCrumb, { label: tx('Acil destek erişimi'), to: platformPaths.breakGlass }]} title={tx("Acil destek erişimi isteği")} />
     <PlatformQueryState isPending={query.isPending} error={query.error}>
       {query.data && <BreakGlassDetail key={query.data.id} request={query.data} receivedAt={query.dataUpdatedAt} />}
     </PlatformQueryState>

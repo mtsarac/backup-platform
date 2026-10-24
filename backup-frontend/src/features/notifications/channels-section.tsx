@@ -59,7 +59,7 @@ function ChannelCard({ channel }: { channel: NotificationChannel }) {
       ...(channel.kind === 'webhook' ? [{ label: tx('Kimlik doğrulama'), value: authenticationLabels[channel.authentication] }] : []),
       ...(usesSecret ? [{ label: tx('Gizli anahtar'), value: channel.hasSecret ? tx('Secret kayıtlı') : tx('Secret ayarlanmadı') }] : []),
     ]}>
-      {channel.kind === 'email' && <p className="text-sm text-text-muted">{channel.securityOwnerUserId ? tx('Bu adres bir tenant sahibinin zorunlu güvenlik bildirimlerini alır. Hedef adres değişirse kayıt kaldırılır.') : tx('Break-glass bildirimi için tenant sahibi doğrulanmış kendi e-posta adresini güvenlik alıcısı olarak kaydetmelidir. Genel bildirim politikası bu bildirimleri kapatmaz.')}</p>}
+      {channel.kind === 'email' && <p className="text-sm text-text-muted">{channel.securityOwnerUserId ? tx('Bu adres bir tenant sahibinin zorunlu güvenlik bildirimlerini alır. Hedef adres değişirse kayıt kaldırılır.') : tx('Acil destek erişimi bildirimi için tenant sahibi doğrulanmış kendi e-posta adresini güvenlik alıcısı olarak kaydetmelidir. Genel bildirim politikası bu bildirimleri kapatmaz.')}</p>}
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" aria-label={label(channel.enabled ? tx('devre dışı bırak') : tx('etkinleştir'))} disabled={toggle.isPending} onClick={() => toggle.mutate({ id: channel.id, enabled: !channel.enabled })}>{channel.enabled ? tx('Devre dışı bırak') : tx('Etkinleştir')}</Button>
         {owner && channel.kind === 'email' && (boundToMe || !channel.securityOwnerUserId) && <Button variant="outline"
