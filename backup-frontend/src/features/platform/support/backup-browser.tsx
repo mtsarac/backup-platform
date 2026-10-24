@@ -18,10 +18,11 @@ import { failureMessage } from '@/lib/api/failure-messages'
 import { SupportArtifactDownload } from './artifact-download'
 import { useSupportArtifact, useSupportArtifacts, useSupportJobs, useSupportRuns } from './hooks'
 import { supportAccess, supportScope } from './presentation'
-import { SupportQueryState } from './support-query-state'
 import type { SupportArtifact, SupportJob, SupportRun, SupportSession } from './types'
 import { formatBytes, formatDateTime, formatSeconds } from '@/lib/format'
 import { statusLabel } from '@/lib/status'
+import { QueryState } from '@/components/data/query-state'
+import { errorMessage } from '@/lib/api/failure-messages'
 
 export function SupportBackupBrowser({ session }: { session: SupportSession }) {
   useLanguage()
@@ -99,11 +100,11 @@ export function SupportBackupBrowser({ session }: { session: SupportSession }) {
         <FilterField label={tx("Bitiş tarihi")}><input className={filterControlClass} type="date" value={to} onChange={event => update({ to: event.target.value })} /></FilterField>
       </>}
     </Filters>}
-    {jobs.error && <SupportQueryState isPending={false} error={jobs.error} />}
-    {view === 'jobs' ? <SupportQueryState isPending={jobs.isPending} error={jobs.error}><DataList rows={jobs.data ?? []} columns={jobColumns} keyExtractor={job => job.id} /></SupportQueryState> : invalidDates && view === 'artifacts' ? <Notice tone="warning">{tx("Tarih aralığı geçersiz. Bitiş başlangıçtan önce olamaz.")}</Notice> : <SupportQueryState isPending={listing.isPending} error={listing.error}>
+    {jobs.error && <QueryState forbiddenMessage={errorMessage} isPending={false} error={jobs.error} />}
+    {view === 'jobs' ? <QueryState forbiddenMessage={errorMessage} isPending={jobs.isPending} error={jobs.error}><DataList rows={jobs.data ?? []} columns={jobColumns} keyExtractor={job => job.id} /></QueryState> : invalidDates && view === 'artifacts' ? <Notice tone="warning">{tx("Tarih aralığı geçersiz. Bitiş başlangıçtan önce olamaz.")}</Notice> : <QueryState forbiddenMessage={errorMessage} isPending={listing.isPending} error={listing.error}>
       {view === 'runs' ? <DataList rows={runs.data?.items ?? []} columns={runColumns} keyExtractor={run => run.id} /> : <DataList rows={artifacts.data?.items ?? []} columns={columns} keyExtractor={artifact => artifact.id} />}
       {listing.data && <Pagination page={page} pageSize={listing.data.pageSize} totalCount={listing.data.totalCount} disabled={listing.isFetching} onPageChange={next => update({ browserPage: next })} />}
-    </SupportQueryState>}
+    </QueryState>}
     </div>
     {get('artifact') && <SupportArtifactPanel key={get('artifact')} session={session} artifactId={get('artifact')} />}
   </div>
@@ -115,11 +116,11 @@ function SupportArtifactPanel({ session, artifactId }: { session: SupportSession
   const access = supportAccess(session)
   return <Section title={tx("Yedek dosyası ayrıntıları")} actions={<Button variant="outline" onClick={() => update({ artifact: '' })}>{tx("Detayları gizle")}</Button>}>
     <div className="space-y-4">
-    <SupportQueryState isPending={artifact.isPending} error={artifact.error}>{artifact.data && <>
+    <QueryState forbiddenMessage={errorMessage} isPending={artifact.isPending} error={artifact.error}>{artifact.data && <>
       <div className="flex flex-wrap gap-3"><Button disabled={!access.restore || artifact.data.state !== 'Available' || artifact.data.backupType !== 'Full'} onClick={() => update({ tab: 'restores', restoreArtifact: artifactId, restoreId: '' })}>{tx("Restore…")}</Button>{!access.restore && <p className="text-sm text-text-muted">{tx("RestoreBackup izni gerekir.")}</p>}</div>
       <SupportArtifactDownload scope={supportScope(session, 'download')} artifactId={artifactId} eligible={artifact.data.state === 'Available'} />
       <ArtifactDetails artifact={artifact.data} />
-    </>}</SupportQueryState>
+    </>}</QueryState>
     </div>
   </Section>
 }

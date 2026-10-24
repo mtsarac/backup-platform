@@ -19,11 +19,10 @@ import { useDiscoveryAgents, useDiscoveryInstances } from '@/features/discovery/
 import { supportsDiscovery } from '@/features/discovery/status'
 import type { DiscoveryEngine, DiscoveryInstanceSummary } from '@/features/discovery/types'
 import { useTenant } from '@/features/tenancy/use-tenant'
-import { ApiError } from '@/lib/api/client'
+import { isForbidden } from '@/lib/api/client'
 import { discoveryInstancePath } from '@/lib/routes'
 import { ComputerScanCard } from './computer-scan-card'
 
-const isForbidden = (error: unknown) => error instanceof ApiError && error.status === 403
 const framed = 'rounded-xl border border-border bg-surface'
 
 export function DiscoveryPage() {

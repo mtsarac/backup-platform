@@ -14,13 +14,14 @@ import { useCreateTenant, usePlatformTenants } from '@/features/platform/hooks'
 import { ListEmpty } from '@/features/platform/list-empty'
 import { platformPaths } from '@/features/platform/paths'
 import { FormDialog } from '@/components/ui/form-dialog'
-import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { SearchForm } from '@/features/platform/search-form'
 import { inputClass, linkClass } from '@/components/ui/form-styles'
 import type { PlatformTenant } from '@/features/platform/types'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { ApiError } from '@/lib/api/client'
 import { StatusPill } from '@/components/data/status-pill'
+import { QueryState } from '@/components/data/query-state'
+import { platformOnlyMessage } from '@/components/auth/access-denied'
 
 function CreateTenantDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (name: string) => void }) {
   useLanguage()
@@ -56,14 +57,14 @@ export function PlatformTenantsPage() {
     <Filters label={tx("Tenant filtreleri")} onClear={search ? () => update({ search: '' }) : undefined}>
       <SearchForm className="sm:col-span-2" label={tx("Tenant ara")} value={search} onSearch={(value) => update({ search: value })} placeholder={tx("Tenant adı")} />
     </Filters>
-    <PlatformQueryState isPending={query.isPending} error={query.error}>
+    <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">
         {data.totalCount === 0 && !search
           ? <ListEmpty icon={Building2} message={tx("Henüz tenant yok.")} action={newTenant} />
           : <DataList caption={tx('Çalışma alanları')} rows={data.items} columns={columns} keyExtractor={(tenant) => tenant.tenantId} emptyMessage={tx("Aramaya uygun tenant bulunamadı.")} />}
         {data.totalCount > 0 && <Pagination label={tx("Tenant sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
       </div>}
-    </PlatformQueryState>
+    </QueryState>
     {creating && <CreateTenantDialog onClose={() => setCreating(false)} onCreated={setCreated} />}
   </div>
 }

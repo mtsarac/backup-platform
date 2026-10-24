@@ -9,7 +9,6 @@ import { Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { formatDateTime } from '@/lib/format'
-import { PlatformQueryState } from '../platform-query-state'
 import { AssignPlanDialog } from './assign-plan-dialog'
 import { useResumeSubscription, useSuspendSubscription, useTenantSubscription } from './hooks'
 import { OverrideDialog } from './override-dialog'
@@ -18,6 +17,8 @@ import { subscriptionActions, type SubscriptionAction } from './subscription-act
 import { SubscriptionHistory } from './subscription-history'
 import { assignedByLabel, overrideLabel, sourceLabel } from './subscription-labels'
 import type { Subscription } from './types'
+import { QueryState } from '@/components/data/query-state'
+import { platformOnlyMessage } from '@/components/auth/access-denied'
 
 const actionLabels: Record<SubscriptionAction, () => string> = {
   assign: () => tx('Plan ata'),
@@ -68,7 +69,7 @@ export function SubscriptionSection({ tenantId, tenantName }: { tenantId: string
   return <div className="space-y-6">
     <Section title={tx("Plan ve kota")} description={tx("Çalışma alanının planı, aboneliği ve geçerli depolama limiti.")}
       actions={subscription && button(primary, 'default')}>
-      <PlatformQueryState isPending={query.isPending} error={query.error}>
+      <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
         {query.data && (subscription
           ? <div className="space-y-4">
             <Current subscription={subscription} />
@@ -78,7 +79,7 @@ export function SubscriptionSection({ tenantId, tenantName }: { tenantId: string
             </details>}
           </div>
           : <EmptyState message={tx("Bu çalışma alanı için henüz bir plan atanmadı.")} action={button('assign', 'default')} />)}
-      </PlatformQueryState>
+      </QueryState>
     </Section>
     {subscription && <SubscriptionHistory tenantId={tenantId} />}
     {dialog === 'assign' && <AssignPlanDialog tenantId={tenantId} replacing={null} onClose={close} />}

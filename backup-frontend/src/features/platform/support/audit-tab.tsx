@@ -9,9 +9,10 @@ import { auditDetailItems, auditResultLabel } from '@/features/audit/audit-detai
 import { bareListClass } from '@/features/platform/list-empty'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { useSupportAudit } from './hooks'
-import { SupportQueryState } from './support-query-state'
 import type { SupportAuditEntry, SupportSession } from './types'
 import { formatDateTime } from '@/lib/format'
+import { QueryState } from '@/components/data/query-state'
+import { errorMessage } from '@/lib/api/failure-messages'
 
 export function SupportAuditTab({ session }: { session: SupportSession }) {
   useLanguage()
@@ -33,8 +34,8 @@ export function SupportAuditTab({ session }: { session: SupportSession }) {
       ...auditDetailItems(item.details),
     ]} /> },
   ]
-  return <SupportQueryState isPending={query.isPending} error={query.error}>{query.data && <div className="space-y-4">
+  return <QueryState forbiddenMessage={errorMessage} isPending={query.isPending} error={query.error}>{query.data && <div className="space-y-4">
     <Section title={tx("Oturum audit kayıtları")} description={tx("Destek erişimi ve bu erişimle yapılan işlemler.")} flush className="overflow-hidden"><DataList caption={tx('Oturum audit kayıtları')} className={bareListClass} rows={query.data.items} columns={columns} keyExtractor={item => item.id} emptyMessage={tx("Bu oturum için audit kaydı yok.")} /></Section>
     <Pagination page={page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={next => update({ auditPage: next })} />
-  </div>}</SupportQueryState>
+  </div>}</QueryState>
 }

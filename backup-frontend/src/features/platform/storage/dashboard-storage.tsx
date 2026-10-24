@@ -5,11 +5,12 @@ import { Section } from '@/components/ui/section'
 import type { StorageUsageRow } from '@/features/storage/types'
 import { bareListClass } from '../list-empty'
 import { platformPaths } from '../paths'
-import { PlatformQueryState } from '../platform-query-state'
 import { linkClass } from '@/components/ui/form-styles'
 import { useStorageUsage } from './hooks'
 import { formatBytes } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
+import { QueryState } from '@/components/data/query-state'
+import { platformOnlyMessage } from '@/components/auth/access-denied'
 
 const columns: Column<StorageUsageRow>[] = [
   { key: 'tenant', get header() { return tx("Tenant") }, wrap: true, render: (row) => <Link className={linkClass} to={platformPaths.tenant(row.tenantId)}>{row.tenantName}</Link> },
@@ -25,8 +26,8 @@ export function DashboardStorage() {
   const query = useStorageUsage({ page: 1, pageSize: 5 })
   return <Section title={tx("Depolama kullanımı")} description={query.data ? tx("{0} tenant · İlk {1} kayıt gösteriliyor; tüm kullanım için listeyi açın.", { "0": query.data.totalCount, "1": query.data.items.length }) : tx('Kullanılan ve rezerve alan, etkin limit ve kota durumu.')} flush className="overflow-hidden"
     actions={<Link className={`${linkClass} text-sm`} to={platformPaths.storage}>{tx("Tüm depolama kullanımı")}</Link>}>
-    <PlatformQueryState isPending={query.isPending} error={query.error}>
+    <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {query.data && <DataList className={bareListClass} rows={query.data.items} columns={columns} keyExtractor={(row) => row.tenantId} emptyMessage={tx("Henüz depolama kullanım kaydı yok.")} />}
-    </PlatformQueryState>
+    </QueryState>
   </Section>
 }

@@ -8,7 +8,7 @@ import { useTenantStorageQuota } from '@/features/storage/hooks'
 import { accountingModeHelp, accountingModeLabels, enforcementModeHelp, enforcementModeLabels, isLegacyUnlimited, scopeLabels } from '@/features/storage/labels'
 import { PlanName } from '@/features/storage/quota-badges'
 import { Fact, QuotaSummary, StandingBadge, StorageNotices } from '@/features/storage/quota-summary'
-import { ApiError } from '@/lib/api/client'
+import { isForbidden } from '@/lib/api/client'
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { AccessDenied } from '@/components/auth/access-denied'
@@ -17,7 +17,7 @@ export function StorageUsageTab() {
   useLanguage()
   const query = useTenantStorageQuota()
   const quota = query.data
-  const forbidden = query.error instanceof ApiError && query.error.status === 403
+  const forbidden = isForbidden(query.error)
   if (forbidden) return <AccessDenied title={tx("Bu tenant'ın depolama bilgisine erişiminiz yok")} what={tx("Depolama kullanımını yalnızca bu tenant'ın üyeleri görebilir.")} />
   if (!quota) return <QueryState isPending={query.isPending} error={query.error} />
   return <div className="space-y-5">

@@ -21,12 +21,13 @@ import { removeSupportData, supportKeys, useEndSupportSession, useSupportSession
 import { endedMessages, supportAccess, supportSessionDetails } from '@/features/platform/support/presentation'
 import { SupportRestoresTab } from '@/features/platform/support/restores-tab'
 import { PermissionBadges } from '@/features/platform/support/session-table'
-import { SupportQueryState } from '@/features/platform/support/support-query-state'
 import { useSupportCountdown } from '@/features/platform/support/use-support-countdown'
 import type { SupportSession } from '@/features/platform/support/types'
-import { ApiError } from '@/lib/api/client'
+import { isForbidden, type ApiError } from '@/lib/api/client'
 import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
+import { QueryState } from '@/components/data/query-state'
+import { errorMessage } from '@/lib/api/failure-messages'
 
 const crumbs = [{ label: 'Platform', to: platformPaths.root }, { get label() { return tx("Support Sessions") }, to: platformPaths.supportSessions }]
 
@@ -43,7 +44,7 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
   useEffect(() => { if (mutationDenied) removeSupportData(client, sessionId) }, [client, mutationDenied, sessionId])
   useEffect(() => {
     function denied(error: unknown, mutation = false) {
-      if (error instanceof ApiError && error.status === 403 && error.code === 'support_access_denied') {
+      if (isForbidden(error) && error.code === 'support_access_denied') {
         if (mutation) setMutationDenied(error)
         void client.invalidateQueries({ queryKey: supportKeys.session(sessionId), exact: true })
       }
@@ -54,7 +55,7 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
   }, [client, sessionId])
   const error = mutationDenied ?? query.error
   if (query.data && !error) return <SessionView session={query.data} receivedAt={query.dataUpdatedAt} />
-  return <div className="space-y-6"><PageHeader crumbs={crumbs} title={tx("Support Session")} /><SupportQueryState isPending={query.isPending} error={error} /></div>
+  return <div className="space-y-6"><PageHeader crumbs={crumbs} title={tx("Support Session")} /><QueryState forbiddenMessage={errorMessage} isPending={query.isPending} error={error} /></div>
 }
 function SessionView({ session, receivedAt }: { session: SupportSession; receivedAt: number }) {
   useLanguage()

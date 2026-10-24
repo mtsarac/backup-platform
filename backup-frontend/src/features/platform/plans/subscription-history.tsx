@@ -5,12 +5,13 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Section } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { formatDateTime } from '@/lib/format'
-import { PlatformQueryState } from '../platform-query-state'
 import { useListParams } from '../use-list-params'
 import { useSubscriptionHistory } from './hooks'
 import { formatBytes, formatGb } from './storage'
 import { assignedByLabel, overrideLabel, sourceLabel } from './subscription-labels'
 import type { Subscription } from './types'
+import { QueryState } from '@/components/data/query-state'
+import { platformOnlyMessage } from '@/components/auth/access-denied'
 
 const HISTORY_PAGE_SIZE = 10
 
@@ -44,11 +45,11 @@ export function SubscriptionHistory({ tenantId }: { tenantId: string }) {
   const data = query.data
   return <div className="space-y-3">
     <Section title={tx("Abonelik geçmişi")} description={tx("Değiştirilen ve süresi dolan abonelikler korunur.")}>
-      <PlatformQueryState isPending={query.isPending} error={query.error}>
+      <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
         {data && (data.items.length === 0
           ? <EmptyState message={tx("Abonelik geçmişi yok.")} />
           : <ul aria-label={tx("Abonelik geçmişi")} className="space-y-3">{data.items.map((row) => <HistoryCard key={row.subscriptionId} row={row} />)}</ul>)}
-      </PlatformQueryState>
+      </QueryState>
     </Section>
     {data && data.totalCount > 0 && <Pagination label={tx("Abonelik geçmişi sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ subPage: next })} />}
   </div>

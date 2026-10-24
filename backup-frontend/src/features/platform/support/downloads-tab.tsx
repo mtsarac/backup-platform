@@ -10,9 +10,10 @@ import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-
 import { failureMessage } from '@/lib/api/failure-messages'
 import { useSupportDownloads } from './hooks'
 import { supportScope } from './presentation'
-import { SupportQueryState } from './support-query-state'
 import type { SupportDownload, SupportSession } from './types'
 import { formatBytes, formatDateTime } from '@/lib/format'
+import { QueryState } from '@/components/data/query-state'
+import { errorMessage } from '@/lib/api/failure-messages'
 
 export function SupportDownloadsTab({ session }: { session: SupportSession }) {
   useLanguage()
@@ -29,8 +30,8 @@ export function SupportDownloadsTab({ session }: { session: SupportSession }) {
     { key: 'released', card: 'hidden', header: tx('Bitiş'), render: item => formatDateTime(item.releasedAt) },
   ]
   if (!scope.enabled) return <Notice>{tx("Download geçmişi için etkin oturum sahipliği ve ViewBackupMetadata veya DownloadBackup izni gerekir.")}</Notice>
-  return <SupportQueryState isPending={query.isPending} error={query.error}>{query.data && <div className="space-y-4">
+  return <QueryState forbiddenMessage={errorMessage} isPending={query.isPending} error={query.error}>{query.data && <div className="space-y-4">
     <Section title={tx("Download geçmişi")} description={tx("Başlatılan indirmeler, aktarım miktarı ve sonuçları.")} flush className="overflow-hidden"><DataList className={bareListClass} rows={query.data.items} columns={columns} keyExtractor={item => item.downloadId} /></Section>
     <Pagination page={page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={next => update({ downloadPage: next })} />
-  </div>}</SupportQueryState>
+  </div>}</QueryState>
 }

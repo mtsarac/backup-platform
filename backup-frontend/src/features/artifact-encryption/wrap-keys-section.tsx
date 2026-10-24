@@ -8,7 +8,6 @@ import { Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { bareListClass } from '@/features/platform/list-empty'
 import { platformPaths } from '@/features/platform/paths'
-import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { linkClass } from '@/components/ui/form-styles'
 import { useWrapKeyActions, useWrapKeys } from './hooks'
 import { TechnicalDetails } from '@/components/ui/technical-details'
@@ -16,6 +15,8 @@ import type { WrapKey } from './types'
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { RelativeTime } from '@/components/data/relative-time'
+import { QueryState } from '@/components/data/query-state'
+import { platformOnlyMessage } from '@/components/auth/access-denied'
 
 /** TWK lifecycle of one tenant: versions, state and how many artifacts each version still protects. No key material is ever shown. */
 export function WrapKeysSection({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
@@ -43,12 +44,12 @@ export function WrapKeysSection({ tenantId, tenantName }: { tenantId: string; te
       <Link className={`${linkClass} inline-flex min-h-11 items-center text-sm`} to={`${platformPaths.breakGlass}?tenantId=${encodeURIComponent(tenantId)}`}>{tx("Acil destek erişimi istekleri")}</Link>
       <Button onClick={() => { rotate.reset(); setRotating(true) }}>{tx("Anahtarı döndür")}</Button>
     </>}>
-    <PlatformQueryState isPending={keys.isPending} error={keys.error}>
+    <QueryState forbiddenMessage={platformOnlyMessage} isPending={keys.isPending} error={keys.error}>
       {keys.data && <div className="space-y-3">
         {keys.data.items.length === 0 && <div className="px-5 pt-4"><Notice tone="info">{tx("Bu tenant henüz şifreli yedek almadı; ilk şifreli çalıştırmada etkin bir anahtar oluşturulur.")}</Notice></div>}
         {keys.data.items.length > 0 && <DataList className={bareListClass} rows={keys.data.items} columns={columns} keyExtractor={key => String(key.version)} />}
       </div>}
-    </PlatformQueryState>
+    </QueryState>
     <ConfirmDialog open={rotating} onClose={() => setRotating(false)} title={tx("Anahtar döndürülsün mü?")}
       consequence={{
         what: tx("“{0}” için yeni bir anahtar sürümü etkin olur; şu anki anahtar yalnızca çözme için kalır.", { "0": tenantName }),

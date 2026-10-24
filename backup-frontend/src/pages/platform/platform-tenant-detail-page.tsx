@@ -16,7 +16,6 @@ import { platformCrumb } from '@/features/platform/crumbs'
 import { usePlatformAudit, usePlatformTenant, useRenameTenant, useSetTenantEnrollment } from '@/features/platform/hooks'
 import { bareListClass } from '@/features/platform/list-empty'
 import { platformPaths } from '@/features/platform/paths'
-import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { TenantStorageSection } from '@/features/platform/storage/tenant-storage-section'
 import { SubscriptionSection } from '@/features/platform/plans/subscription-section'
 import { inputClass, linkClass } from '@/components/ui/form-styles'
@@ -37,6 +36,8 @@ import { useBreakGlassRequests, useTenantEncryption } from '@/features/artifact-
 import { BreakGlassTable } from '@/features/artifact-encryption/break-glass-table'
 import { TenantKeysSection } from '@/features/artifact-encryption/tenant-recovery-key-section'
 import { PLATFORM_PAGE_SIZE } from '@/features/platform/use-list-params'
+import { QueryState } from '@/components/data/query-state'
+import { platformOnlyMessage } from '@/components/auth/access-denied'
 
 const tabs = [
   { value: 'summary', get label() { return tx("Özet") } },
@@ -92,9 +93,9 @@ function RecentAudit({ tenantId }: { tenantId: string }) {
   useLanguage()
   const query = usePlatformAudit({ tenantId, page: 1, pageSize: 10 })
   return <Section title={tx("Son audit kayıtları")} flush className="overflow-hidden" actions={<Link className={`${linkClass} text-sm`} to={platformPaths.audit(tenantId)}>{tx("Tüm audit kayıtları")}</Link>}>
-    <PlatformQueryState isPending={query.isPending} error={query.error}>
+    <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {query.data && <AuditTable className={bareListClass} rows={query.data.items} showTenant={false} emptyMessage={tx("Bu tenant için audit kaydı yok.")} />}
-    </PlatformQueryState>
+    </QueryState>
   </Section>
 }
 
@@ -109,9 +110,9 @@ function Header({ tenant }: { tenant: PlatformTenantDetail }) {
 
 function RecoveryKeys({ tenant }: { tenant: PlatformTenantDetail }) {
   const encryption = useTenantEncryption(tenant.tenantId)
-  return <PlatformQueryState isPending={encryption.isPending} error={encryption.error}>
+  return <QueryState forbiddenMessage={platformOnlyMessage} isPending={encryption.isPending} error={encryption.error}>
     {encryption.data && <TenantKeysSection tenantId={tenant.tenantId} tenantName={tenant.name} encryption={encryption.data} />}
-  </PlatformQueryState>
+  </QueryState>
 }
 
 function EmergencyAccessHistory({ tenantId }: { tenantId: string }) {
@@ -119,12 +120,12 @@ function EmergencyAccessHistory({ tenantId }: { tenantId: string }) {
   const { page, update } = useListParams('breakGlassPage')
   const query = useBreakGlassRequests({ tenantId, page, pageSize: PLATFORM_PAGE_SIZE })
   return <Section title={tx('Acil destek erişimi geçmişi')}>
-    <PlatformQueryState isPending={query.isPending} error={query.error}>
+    <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {query.data && <div className="space-y-4">
         <BreakGlassTable rows={query.data.items} />
         {query.data.totalCount > 0 && <Pagination label={tx('Acil destek erişimi sayfaları')} page={page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={next => update({ breakGlassPage: next })} />}
       </div>}
-    </PlatformQueryState>
+    </QueryState>
   </Section>
 }
 
@@ -172,11 +173,11 @@ export function PlatformTenantDetailPage() {
   const tenant = query.data
   return <div className="space-y-6">
     {!tenant && <PageHeader crumbs={[platformCrumb, { label: tx('Tenants'), to: platformPaths.tenants }]} title={tx("Tenant")} />}
-    <PlatformQueryState isPending={query.isPending} error={query.error}>
+    <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {tenant && <>
         <Header tenant={tenant} />
         <TenantTabs tenant={tenant} />
       </>}
-    </PlatformQueryState>
+    </QueryState>
   </div>
 }

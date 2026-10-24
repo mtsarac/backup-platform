@@ -10,12 +10,13 @@ import { platformCrumb } from '@/features/platform/crumbs'
 import { bareListClass, ListEmpty } from '@/features/platform/list-empty'
 import { accountingModeLabels, enforcementModeLabels, scopeLabels } from '@/features/storage/labels'
 import type { QuotaPolicy } from '@/features/storage/types'
-import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { useQuotaPolicies } from '@/features/platform/storage/hooks'
 import { QuotaPolicyDialog } from '@/features/platform/storage/quota-policy-dialog'
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { TechnicalDetails } from '@/components/ui/technical-details'
+import { QueryState } from '@/components/data/query-state'
+import { platformOnlyMessage } from '@/components/auth/access-denied'
 
 export function PlatformQuotaPoliciesPage() {
   useLanguage()
@@ -45,11 +46,11 @@ export function PlatformQuotaPoliciesPage() {
       <Button variant="outline" onClick={() => void query.refetch()} disabled={query.isFetching}><RefreshCw aria-hidden="true" className={`size-4 ${query.isFetching ? 'animate-spin motion-reduce:animate-none' : ''}`} />{tx("Yenile")}</Button>
       <Button onClick={() => setIsCreating(true)}><Plus aria-hidden="true" className="size-4" />{tx("Yeni Politika")}</Button>
     </>} />
-    <PlatformQueryState isPending={query.isPending} error={query.error}>
+    <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {query.data && (policies.length === 0
         ? <ListEmpty message={tx("Tanımlı kota politikası bulunamadı.")} action={<Button onClick={() => setIsCreating(true)}>{tx("Yeni Politika")}</Button>} />
         : <Section title={tx("Kota politikaları")} description={tx("{0} politika · Değişiklikler mevcut kullanım hesaplamalarını etkileyebilir.", { "0": policies.length })} flush className="overflow-hidden"><DataList className={bareListClass} rows={policies} columns={columns} keyExtractor={(policy) => policy.policyId} /></Section>)}
-    </PlatformQueryState>
+    </QueryState>
     {isCreating && <QuotaPolicyDialog onClose={() => setIsCreating(false)} />}
     {editingPolicy && <QuotaPolicyDialog policy={editingPolicy} onClose={() => setEditingPolicy(null)} />}
   </div>

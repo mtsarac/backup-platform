@@ -12,11 +12,12 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { useAddMembership, useChangeMembershipRole, usePlatformMemberships, usePlatformUsers, useRemoveMembership } from './hooks'
 import { bareListClass } from './list-empty'
-import { PlatformQueryState } from './platform-query-state'
 import { SearchForm } from './search-form'
 import { inlineSelectClass, selectClass } from '@/components/ui/form-styles'
 import { membershipRoles, type MembershipRole, type PlatformMembership } from './types'
 import { PLATFORM_PAGE_SIZE, useListParams } from './use-list-params'
+import { QueryState } from '@/components/data/query-state'
+import { platformOnlyMessage } from '@/components/auth/access-denied'
 
 function isRole(value: string): value is MembershipRole {
   return membershipRoles.some((role) => role === value)
@@ -73,11 +74,11 @@ export function MembershipsSection({ tenantId, tenantName }: { tenantId: string;
     <AddMemberForm tenantId={tenantId} />
     <Section title={tx("Üyelikler")} description={tx("Rol değişikliği hemen uygulanır; üyeliği kaldırmak kullanıcı hesabını silmez.")} flush className="overflow-hidden">
       {changeRole.error && <div className="p-4"><ErrorNotice error={changeRole.error} /></div>}
-      <PlatformQueryState isPending={query.isPending} error={query.error}>
+      <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
         {data && (data.totalCount === 0
           ? <EmptyState icon={Users} message={tx("Bu tenant'ın henüz üyesi yok; yukarıdan bir kullanıcı ekleyin.")} />
           : <DataList className={bareListClass} rows={data.items} columns={columns} keyExtractor={(member) => member.userId} emptyMessage={tx("Bu tenant'ın henüz üyesi yok.")} />)}
-      </PlatformQueryState>
+      </QueryState>
     </Section>
     {data && data.totalCount > 0 && <Pagination label={tx("Üyelik sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ memberPage: next })} />}
     <ConfirmDialog open={Boolean(selected)} onClose={() => setSelected(null)} title={tx("Üyelik kaldırılsın mı?")} confirmLabel={tx("Üyeliği kaldır")}

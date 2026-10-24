@@ -8,7 +8,6 @@ import { PageHeader } from '@/components/ui/page-header'
 import { platformCrumb } from '@/features/platform/crumbs'
 import { ListEmpty } from '@/features/platform/list-empty'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { SearchForm } from '@/features/platform/search-form'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { usePlans, useSetPlanEnabled } from '@/features/platform/plans/hooks'
@@ -18,6 +17,8 @@ import { TechnicalDetails } from '@/components/ui/technical-details'
 import type { EnabledFilter, Plan } from '@/features/platform/plans/types'
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
+import { QueryState } from '@/components/data/query-state'
+import { platformOnlyMessage } from '@/components/auth/access-denied'
 
 function enabledFilter(value: string): EnabledFilter | undefined {
   return value === 'true' || value === 'false' ? value : undefined
@@ -64,7 +65,7 @@ export function PlatformPlansPage() {
         <option value="">{tx("Tümü")}</option><option value="true">{tx("Etkin")}</option><option value="false">{tx("Devre dışı")}</option>
       </select></FilterField>
     </Filters>
-    <PlatformQueryState isPending={query.isPending} error={query.error}>
+    <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">
         {data.items.length === 0 ? <ListEmpty message={filtered ? tx('Filtreye uygun plan bulunamadı.') : tx("Henüz plan yok.")} action={filtered
           ? <Button onClick={() => update({ search: '', enabled: '' })}>{tx("Filtreleri temizle")}</Button>
@@ -72,7 +73,7 @@ export function PlatformPlansPage() {
           : <DataList rows={data.items} columns={columns} keyExtractor={(plan) => plan.planId} />}
         {data.totalCount > 0 && <Pagination label={tx("Plan sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
       </div>}
-    </PlatformQueryState>
+    </QueryState>
     {creating && <CreatePlanDialog onClose={() => setCreating(false)} />}
     {editing && <EditPlanDialog plan={editing} onClose={() => setEditing(null)} />}
     <ConfirmDialog open={Boolean(toggling)} onClose={() => setToggling(null)} pending={setEnabled.isPending}

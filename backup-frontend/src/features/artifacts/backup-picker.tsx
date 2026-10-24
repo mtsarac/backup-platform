@@ -5,8 +5,9 @@ import { useArtifact, useArtifacts } from '@/features/artifacts/hooks'
 import type { BackupArtifact } from '@/features/artifacts/types'
 import { formatDateTime } from '@/lib/format'
 import { useSupportArtifact, useSupportArtifacts } from '@/features/platform/support/hooks'
-import { SupportQueryState } from '@/features/platform/support/support-query-state'
 import type { SupportScope } from '@/features/platform/support/types'
+import { QueryState } from '@/components/data/query-state'
+import { errorMessage } from '@/lib/api/failure-messages'
 
 // shortcut: the list endpoint has no name search, so only the 100 newest backups are searchable; move the search to the endpoint when tenants outgrow that.
 const loaded = { page: 1, pageSize: 100, state: '', from: '', to: '' } as const
@@ -47,6 +48,6 @@ function SupportBackupPicker({ scope, value, onChange }: { scope: SupportScope; 
     <SearchablePicker label={tx("Yedek dosyası")} placeholder={tx("Yedek dosyası seçin")} options={options} value={value} onChange={onChange}
       selectedLabel={value ? scope.enabled && outside.data ? backupOption(outside.data).label : tx("Seçili yedek dosyası") : undefined}
       disabled={!scope.enabled || list.isPending || Boolean(list.error)} />
-    {list.error && <SupportQueryState isPending={false} error={list.error} />}
+    {list.error && <QueryState forbiddenMessage={errorMessage} isPending={false} error={list.error} />}
   </div>
 }

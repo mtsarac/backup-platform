@@ -8,10 +8,11 @@ import { Section } from '@/components/ui/section'
 import { AgentBreakdown } from '@/features/platform/agent-breakdown'
 import { usePlatformSummary } from '@/features/platform/hooks'
 import { platformPaths } from '@/features/platform/paths'
-import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { DashboardStorage } from '@/features/platform/storage/dashboard-storage'
 import { linkClass } from '@/components/ui/form-styles'
 import type { PlatformSummary } from '@/features/platform/types'
+import { QueryState } from '@/components/data/query-state'
+import { platformOnlyMessage } from '@/components/auth/access-denied'
 
 interface Attention { key: string; text: string; to: string }
 
@@ -31,7 +32,7 @@ export function PlatformDashboardPage() {
   const data = query.data
   return <div className="space-y-6">
     <PageHeader title={tx("Platform özeti")} description={tx("Tüm çalışma alanlarının genel durumu.")} />
-    <PlatformQueryState isPending={query.isPending} error={query.error}>
+    <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {data && <>
         <DashboardAttention data={data} />
         <details className="rounded-xl border border-border bg-surface shadow-card">
@@ -51,7 +52,7 @@ export function PlatformDashboardPage() {
           </div>
         </details>
       </>}
-    </PlatformQueryState>
+    </QueryState>
   </div>
 }
 

@@ -8,9 +8,10 @@ import { AuditTable } from '@/features/platform/audit-table'
 import { platformCrumb } from '@/features/platform/crumbs'
 import { usePlatformAudit } from '@/features/platform/hooks'
 import { bareListClass } from '@/features/platform/list-empty'
-import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { TenantPicker } from '@/features/platform/tenant-picker'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
+import { QueryState } from '@/components/data/query-state'
+import { platformOnlyMessage } from '@/components/auth/access-denied'
 
 export function PlatformAuditPage() {
   useLanguage()
@@ -23,11 +24,11 @@ export function PlatformAuditPage() {
     <Filters label={tx("Audit filtreleri")} footer={tenantId && <div className="flex flex-wrap items-center gap-2 text-sm"><span>{tx("Tek bir tenant'a göre filtreleniyor.")}</span><Button variant="outline" size="sm" onClick={() => update({ tenantId: '' })}>{tx("Tenant filtresini kaldır")}</Button></div>}>
       <TenantPicker value={tenantId} onChange={(value) => update({ tenantId: value })} />
     </Filters>
-    <PlatformQueryState isPending={query.isPending} error={query.error}>
+    <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">
         <Section title={tx("Denetim geçmişi")} flush className="overflow-hidden"><AuditTable className={bareListClass} rows={data.items} emptyMessage={tenantId ? tx('Bu tenant için audit kaydı yok.') : tx('Henüz audit kaydı yok.')} /></Section>
         {data.totalCount > 0 && <Pagination label={tx("Audit sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
       </div>}
-    </PlatformQueryState>
+    </QueryState>
   </div>
 }

@@ -15,12 +15,13 @@ import { platformCrumb } from '@/features/platform/crumbs'
 import { useCreateUser, usePlatformUsers } from '@/features/platform/hooks'
 import { ListEmpty } from '@/features/platform/list-empty'
 import { FormDialog } from '@/components/ui/form-dialog'
-import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { SearchForm } from '@/features/platform/search-form'
 import { inputClass } from '@/components/ui/form-styles'
 import type { PlatformUser } from '@/features/platform/types'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { ApiError } from '@/lib/api/client'
+import { QueryState } from '@/components/data/query-state'
+import { platformOnlyMessage } from '@/components/auth/access-denied'
 
 function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (name: string) => void }) {
   useLanguage()
@@ -59,13 +60,13 @@ export function PlatformUsersPage() {
     <PageHeader crumbs={[platformCrumb]} title={tx("Kullanıcılar")} description={tx("Platform Yöneticisi yetkisi çalışma alanı rolü değildir; üyelikler çalışma alanı sayfasından yönetilir.")} actions={<Button onClick={() => { setCreated(''); setCreating(true) }}><Plus aria-hidden="true" />{tx("Yeni kullanıcı")}</Button>} />
     {created && <Notice tone="success">{tx("“{0}” kullanıcısı oluşturuldu.", { "0": created })}</Notice>}
     <Filters label={tx("Kullanıcı filtreleri")} onClear={search ? () => update({ search: '' }) : undefined}><SearchForm className="sm:col-span-2" label={tx("Kullanıcı ara")} value={search} onSearch={(value) => update({ search: value })} placeholder={tx("Ad veya kullanıcı adı")} /></Filters>
-    <PlatformQueryState isPending={query.isPending} error={query.error}>
+    <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">
         {data.totalCount === 0 && !search ? <ListEmpty icon={Users} message={tx("Henüz kullanıcı yok.")} action={<Button onClick={() => setCreating(true)}>{tx("Yeni kullanıcı")}</Button>} />
           : <DataList caption={tx("Kullanıcılar")} rows={data.items} columns={columns} keyExtractor={(user) => user.userId} emptyMessage={tx("Aramaya uygun kullanıcı bulunamadı.")} />}
         {data.totalCount > 0 && <Pagination label={tx("Kullanıcı sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
       </div>}
-    </PlatformQueryState>
+    </QueryState>
     {creating && <CreateUserDialog onClose={() => setCreating(false)} onCreated={setCreated} />}
   </div>
 }

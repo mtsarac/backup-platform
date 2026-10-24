@@ -7,10 +7,11 @@ import { Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { accountingModeLabels, enforcementModeLabels, scopeLabels } from '@/features/storage/labels'
 import { QuotaSummary, StandingBadge } from '@/features/storage/quota-summary'
-import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { usePlatformTenantQuota, useRebuildUsage, useReconcileUsage } from './hooks'
 import { formatDateTime } from '@/lib/format'
 import { TechnicalDetails } from '@/components/ui/technical-details'
+import { QueryState } from '@/components/data/query-state'
+import { platformOnlyMessage } from '@/components/auth/access-denied'
 
 export function TenantStorageSection({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
   useLanguage()
@@ -79,7 +80,7 @@ export function TenantStorageSection({ tenantId, tenantName }: { tenantId: strin
       <div className="space-y-4">
       {lastResult && <Notice tone="success">{lastResult}</Notice>}
 
-      <PlatformQueryState isPending={query.isPending} error={query.error}>
+      <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
         {quota && (
           <div className="space-y-4">
             <QuotaSummary quota={quota} />
@@ -99,7 +100,7 @@ export function TenantStorageSection({ tenantId, tenantName }: { tenantId: strin
 
           </div>
         )}
-      </PlatformQueryState>
+      </QueryState>
 
       <ConfirmDialog
         open={confirmOp === 'reconcile'}

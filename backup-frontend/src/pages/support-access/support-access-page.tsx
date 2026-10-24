@@ -32,9 +32,8 @@ const summaryLabels: Record<keyof SupportAccessSummary, string> = {
 
 function AccessQueryState({ isPending, error, children }: { isPending: boolean; error: unknown; children: ReactNode }) {
   useLanguage()
-  if (error instanceof ApiError && error.status === 403) return <AccessDenied what={tx('Destek erişimi geçmişini yalnızca tenant Owner / Admin görüntüleyebilir.')} />
   if (error instanceof ApiError && error.status === 404) return <ErrorNotice {...notFound(tx("Destek oturumu bulunamadı veya bu tenant'a ait değil."))} />
-  return <QueryState isPending={isPending} error={error}>{children}</QueryState>
+  return <QueryState isPending={isPending} error={error} forbiddenMessage={() => tx('Destek erişimi geçmişini yalnızca tenant Owner / Admin görüntüleyebilir.')}>{children}</QueryState>
 }
 
 function sessionDetails(session: SupportAccessSession) {

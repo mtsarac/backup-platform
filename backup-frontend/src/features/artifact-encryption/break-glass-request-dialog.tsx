@@ -11,9 +11,10 @@ import { TenantPicker } from '@/features/platform/tenant-picker'
 import { BackupPicker } from '@/features/artifacts/backup-picker'
 import { removeSupportData, useSupportSession, useSupportSessions } from '@/features/platform/support/hooks'
 import { supportAccess } from '@/features/platform/support/presentation'
-import { SupportQueryState } from '@/features/platform/support/support-query-state'
 import { useSupportCountdown } from '@/features/platform/support/use-support-countdown'
 import { useCreateBreakGlass } from './hooks'
+import { QueryState } from '@/components/data/query-state'
+import { errorMessage } from '@/lib/api/failure-messages'
 
 
 /** Mounted only while open, so every opening starts clean. */
@@ -78,7 +79,7 @@ function EmergencyBackupPicker({ tenantId, value, onChange }: { tenantId: string
   }, [client, enabled, session])
   return <div className="space-y-2">
     <BackupPicker tenantId={tenantId} value={value} onChange={onChange} supportScope={{ tenantId, sessionId: session?.id ?? '', enabled }} />
-    {(sessions.error || detail.error) && <SupportQueryState isPending={false} error={sessions.error ?? detail.error} />}
+    {(sessions.error || detail.error) && <QueryState forbiddenMessage={errorMessage} isPending={false} error={sessions.error ?? detail.error} />}
     {!sessions.isPending && !enabled && <p className="text-sm text-text-muted">{tx("Yedek dosyalarını adla seçmek için bu müşteri üzerinde yedek bilgilerini görüntüleme izinli bir destek oturumu açın.")}{' '}
       <Link className="text-primary underline" to={`${platformPaths.supportSessions}?tenantId=${encodeURIComponent(tenantId)}`}>{tx("Destek erişimi")}</Link>
     </p>}

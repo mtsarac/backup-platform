@@ -12,9 +12,10 @@ import { isActiveRestore, safeRestoreCode } from '@/features/restores/presentati
 import type { SupportRestoreTargets, SupportSession } from './types'
 import { useSupportRestore, useSupportRestoreActions, useSupportRestoreTargets } from './hooks'
 import { supportScope } from './presentation'
-import { SupportQueryState } from './support-query-state'
 import { formatBytes } from '@/lib/format'
 import { failureMessage } from '@/lib/api/failure-messages'
+import { QueryState } from '@/components/data/query-state'
+import { errorMessage } from '@/lib/api/failure-messages'
 
 const customerWarning = 'Bu hedef müşterinin canlı (production) ortamı olabilir; izole bir Support Restore Environment değildir.'
 export function SupportRestoreForm({ session, artifactId, onStarted }: { session: SupportSession; artifactId: string; onStarted: (id: string) => void }) {
@@ -22,7 +23,7 @@ export function SupportRestoreForm({ session, artifactId, onStarted }: { session
   const scope = supportScope(session, 'restore')
   const targets = useSupportRestoreTargets(scope, artifactId)
   if (!scope.enabled) return <section><p role="status">{tx("Etkin oturum sahipliği ve RestoreBackup izni gerekir.")}</p><Button disabled>{tx("Precheck")}</Button><Button disabled>{tx("Restore başlat")}</Button></section>
-  return <SupportQueryState isPending={targets.isPending} error={targets.error}>{targets.data && <RestoreForm key={`${session.id}:${session.tenantId}:${artifactId}:${session.status}`} session={session} artifactId={artifactId} targets={targets.data} onStarted={onStarted} />}</SupportQueryState>
+  return <QueryState forbiddenMessage={errorMessage} isPending={targets.isPending} error={targets.error}>{targets.data && <RestoreForm key={`${session.id}:${session.tenantId}:${artifactId}:${session.status}`} session={session} artifactId={artifactId} targets={targets.data} onStarted={onStarted} />}</QueryState>
 }
 function RestoreForm({ session, artifactId, targets, onStarted }: { session: SupportSession; artifactId: string; targets: SupportRestoreTargets; onStarted: (id: string) => void }) {
   useLanguage()
@@ -83,7 +84,7 @@ function RestoreForm({ session, artifactId, targets, onStarted }: { session: Sup
     </fieldset>
     {!eligible && <p role="status" className="text-sm">{tx("Uygun, çevrimiçi ve restore/precheck destekleyen bir Agent ve ona ait hedef gerekir. Yalnızca Full backup geri yüklenebilir.")}</p>}
     {validation && <p role="alert" className="text-sm text-error">{validation}</p>}
-    <SupportQueryState isPending={false} error={precheck.error || start.error || operation.error} />
+    <QueryState forbiddenMessage={errorMessage} isPending={false} error={precheck.error || start.error || operation.error} />
     <Button variant="outline" disabled={!eligible || busy || !scope.enabled || !databaseName.trim()} onClick={runPrecheck}>{busy && !start.isPending ? tx('Ön Kontrol çalışıyor…') : checked ? tx('Ön Kontrolü tekrar çalıştır') : tx('Ön Kontrol')}</Button>
     {checked && operation.data && <section aria-label={tx("Precheck sonucu")} className="space-y-2 rounded-lg border border-border bg-surface-2 p-4"><StatusPill status={operation.data.status} />{!matching && <p role="status">{tx("Ayarlar değişti. Start için yeniden başarılı Precheck gerekir.")}</p>}<ul className="space-y-1 text-sm">{operation.data.result?.preCheck.map((check, index) => <li key={`${check.checkId}:${index}`}>{safeRestoreCode(check.checkId)} · {tx(check.status)} · {check.status === 'Failed' ? failureMessage(check.reasonCode, 'restore') : check.message || safeRestoreCode(check.reasonCode)}</li>)}</ul>{operation.data.failureCode && <p className="text-sm text-error">{failureMessage(operation.data.failureCode, 'restore')}</p>}{passed && <p className="text-sm text-success">{tx("Precheck başarılı. Canlı ortam uyarısını onaylayarak başlatabilirsiniz.")}</p>}</section>}
     <label className="flex items-start gap-2 rounded-lg border border-warning/30 p-4 text-sm"><input type="checkbox" className="mt-0.5" checked={acknowledged} disabled={!scope.enabled || start.isPending} onChange={event => setAcknowledged(event.target.checked)} />{tx("Bu işlemin müşterinin canlı ortamında çalışabileceğini anladım ve yeni Database geri yüklemesini onaylıyorum.")}</label>

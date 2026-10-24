@@ -10,11 +10,12 @@ import { PageHeader } from '@/components/ui/page-header'
 import { platformCrumb } from '@/features/platform/crumbs'
 import { usePlatformAgents } from '@/features/platform/hooks'
 import { platformPaths } from '@/features/platform/paths'
-import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { SearchForm } from '@/features/platform/search-form'
 import { TenantPicker } from '@/features/platform/tenant-picker'
 import type { AgentConnectivity, AgentLifecycle, PlatformAgent } from '@/features/platform/types'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
+import { QueryState } from '@/components/data/query-state'
+import { platformOnlyMessage } from '@/components/auth/access-denied'
 
 const connectivityValues: AgentConnectivity[] = ['online', 'offline', 'unknown']
 const lifecycleValues: AgentLifecycle[] = ['PendingEnrollment', 'Active', 'Disabled', 'Revoked']
@@ -48,11 +49,11 @@ export function PlatformAgentsPage() {
       <FilterField label={tx("Bağlantı")}><select className={filterControlClass} value={connectivity ?? ''} onChange={(event) => update({ connectivity: event.target.value })}><option value="">{tx("Tümü")}</option><option value="online">{tx("Çevrimiçi")}</option><option value="offline">{tx("Çevrimdışı")}</option><option value="unknown">{tx("Bilinmiyor")}</option></select></FilterField>
       <FilterField label={tx("Kayıt durumu")}><select className={filterControlClass} value={status ?? ''} onChange={(event) => update({ status: event.target.value })}><option value="">{tx("Tümü")}</option><option value="PendingEnrollment">{tx("Kayıt bekliyor")}</option><option value="Active">{tx("Etkin")}</option><option value="Disabled">{tx("Devre dışı")}</option><option value="Revoked">{tx("İptal edildi")}</option></select></FilterField>
     </Filters>
-    <PlatformQueryState isPending={query.isPending} error={query.error}>
+    <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">
         <DataList caption={tx("Yedekleme bilgisayarları")} rows={data.items} columns={columns} keyExtractor={(agent) => `${agent.tenantId}:${agent.agentId}`} emptyMessage={filtered ? tx('Filtrelere uygun bilgisayar bulunamadı.') : tx('Henüz hiçbir çalışma alanına yedekleme bilgisayarı eklenmedi.')} />
         {data.totalCount > 0 && <Pagination label={tx("Bilgisayar sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
       </div>}
-    </PlatformQueryState>
+    </QueryState>
   </div>
 }

@@ -5,7 +5,6 @@ import { Pagination } from '@/components/data/pagination'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/ui/page-header'
 import { platformCrumb } from '@/features/platform/crumbs'
-import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { SearchForm } from '@/features/platform/search-form'
 import { selectClass } from '@/components/ui/form-styles'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
@@ -14,6 +13,8 @@ import { usePlatformConnectionOps, usePlatformConnections, usePlatformProviders 
 import { platformLockMeaning } from '@/features/storage-connections/labels'
 import { PlatformConnectionTable } from '@/features/storage-connections/platform-connection-table'
 import { connectionOwnerships, type ConnectionOwnership, type PlatformConnectionFilters } from '@/features/storage-connections/types'
+import { QueryState } from '@/components/data/query-state'
+import { platformOnlyMessage } from '@/components/auth/access-denied'
 
 /** `ownership` absent = the default view (PlatformManaged); `all` is the explicit unfiltered view. */
 function ownershipFilter(value: string): ConnectionOwnership | undefined {
@@ -76,12 +77,12 @@ export function PlatformStorageConnectionsPage() {
     </section>
     {tenantId && <p className="flex flex-wrap items-center gap-2 text-sm text-text-muted">{tx("Tek bir çalışma alanına göre filtrelendi.")}{' '}<Button variant="outline" size="sm" onClick={() => update({ tenantId: undefined })}>{tx("Çalışma alanı filtresini kaldır")}</Button></p>}
 
-    <PlatformQueryState isPending={query.isPending} error={query.error}>
+    <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {data && <>
         <PlatformConnectionTable rows={data.items} providers={providers.data?.items ?? []} ops={ops} showTenant emptyMessage={tx("Kriterlere uygun depolama hedefi bulunamadı.")} />
         {data.totalCount > 0 && <Pagination label={tx("Depolama hedefi sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
       </>}
-    </PlatformQueryState>
+    </QueryState>
 
     {adding && <CreateManagedTargetDialog onClose={() => setAdding(false)} />}
   </div>

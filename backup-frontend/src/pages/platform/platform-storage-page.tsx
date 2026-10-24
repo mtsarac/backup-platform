@@ -17,7 +17,6 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { QuotaMeter } from '@/features/storage/quota-meter'
 import type { StorageUsageRow, QuotaState, EntitlementStatus } from '@/features/storage/types'
 import { platformPaths } from '@/features/platform/paths'
-import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { SearchForm } from '@/features/platform/search-form'
 import { linkClass } from '@/components/ui/form-styles'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
@@ -25,6 +24,8 @@ import { useStorageUsage, useReconcileUsage, useRebuildUsage } from '@/features/
 import { formatBytes, formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { TechnicalDetails } from '@/components/ui/technical-details'
+import { QueryState } from '@/components/data/query-state'
+import { platformOnlyMessage } from '@/components/auth/access-denied'
 
 export function PlatformStoragePage() {
   useLanguage()
@@ -209,7 +210,7 @@ export function PlatformStoragePage() {
         </select></FilterField>
       </Filters>
 
-      <PlatformQueryState isPending={query.isPending} error={query.error}>
+      <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
         {data && (
           <div className="space-y-4">
             <Section title={tx("Çalışma alanlarının kullanımı")} description={tx("Gösterilen kullanım, kullanılan ve ayrılmış alanın toplamıdır. Doğrulama ve baştan hesaplama yalnızca kullanım kayıtlarını günceller; yedek dosyalarını silmez.")} flush className="overflow-hidden">
@@ -231,7 +232,7 @@ export function PlatformStoragePage() {
             )}
           </div>
         )}
-      </PlatformQueryState>
+      </QueryState>
 
       <ConfirmDialog
         open={Boolean(activeReconcile)}

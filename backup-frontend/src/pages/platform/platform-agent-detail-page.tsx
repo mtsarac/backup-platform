@@ -8,7 +8,8 @@ import { AgentTechnicalDetails } from '@/features/agents/agent-technical-details
 import { platformCrumb } from '@/features/platform/crumbs'
 import { usePlatformAgent } from '@/features/platform/hooks'
 import { platformPaths } from '@/features/platform/paths'
-import { PlatformQueryState } from '@/features/platform/platform-query-state'
+import { QueryState } from '@/components/data/query-state'
+import { platformOnlyMessage } from '@/components/auth/access-denied'
 
 /** Connection state and last seen lead; lifecycle, system, versions and capabilities are collapsed in the technical details. */
 export function PlatformAgentDetailPage() {
@@ -20,8 +21,8 @@ export function PlatformAgentDetailPage() {
     <PageHeader crumbs={[platformCrumb, { label: tx('Yedekleme bilgisayarları'), to: platformPaths.agents() }]} title={agent?.hostName ?? (query.isPending ? tx('Yedekleme bilgisayarı') : tx('Adsız bilgisayar'))}
       description={agent && <>{tx("Çalışma alanı:")}{' '}<Link className={linkClass} to={platformPaths.tenant(agent.tenantId)}>{agent.tenantName}</Link>{' · '}<span>{tx("Son görülme")}{': '}{agent.lastSeenAt ? <RelativeTime value={agent.lastSeenAt} /> : tx('Henüz bağlanmadı')}</span></>}
       meta={agent && <><StatusPill domain="agent" status={agent.connectivity} />{agent.status !== 'Active' && <StatusPill domain="agent" status={agent.status} />}</>} />
-    <PlatformQueryState isPending={query.isPending} error={query.error}>
+    <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {agent && <AgentTechnicalDetails agent={agent} />}
-    </PlatformQueryState>
+    </QueryState>
   </div>
 }

@@ -10,9 +10,10 @@ import { useBreakGlassRequests } from '@/features/artifact-encryption/hooks'
 import { breakGlassStatuses, type BreakGlassStatus } from '@/features/artifact-encryption/types'
 import { TenantPicker } from '@/features/platform/tenant-picker'
 import { platformCrumb } from '@/features/platform/crumbs'
-import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { statusLabel } from '@/lib/status'
+import { QueryState } from '@/components/data/query-state'
+import { platformOnlyMessage } from '@/components/auth/access-denied'
 
 export function PlatformBreakGlassPage() {
   useLanguage()
@@ -38,10 +39,10 @@ export function PlatformBreakGlassPage() {
       <FilterField label={tx("Durum")}><select aria-label={tx("Durum")} className={filterControlClass} value={status} onChange={event => update({ status: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{breakGlassStatuses.map(value => <option key={value} value={value}>{statusLabel('breakGlass', value)}</option>)}</select></FilterField>
       <label className="flex min-h-11 items-center gap-2 self-end text-sm font-medium text-text-heading"><input type="checkbox" className="size-4 accent-primary" checked={mine} onChange={event => update({ mine: event.target.checked ? 'true' : 'false' })} />{tx("Yalnızca benim isteklerim")}</label>
     </Filters>
-    <PlatformQueryState isPending={query.isPending} error={query.error}>{query.data && <div className="space-y-4">
+    <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>{query.data && <div className="space-y-4">
       <BreakGlassTable rows={query.data.items} />
       <Pagination page={page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={next => update({ page: next })} />
-    </div>}</PlatformQueryState>
+    </div>}</QueryState>
     {dialogOpen && <BreakGlassRequestDialog initialTenantId={prefillTenant} initialArtifactId={prefillArtifact} onClose={closeDialog} />}
   </div>
 }

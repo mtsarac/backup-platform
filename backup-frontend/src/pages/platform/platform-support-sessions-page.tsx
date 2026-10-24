@@ -7,10 +7,11 @@ import { platformPaths } from '@/features/platform/paths'
 import { useSupportSessions } from '@/features/platform/support/hooks'
 import { supportStatuses } from '@/features/platform/support/presentation'
 import { SupportSessionTable } from '@/features/platform/support/session-table'
-import { SupportQueryState } from '@/features/platform/support/support-query-state'
 import type { SupportStatus } from '@/features/platform/support/types'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { statusLabel } from '@/lib/status'
+import { QueryState } from '@/components/data/query-state'
+import { errorMessage } from '@/lib/api/failure-messages'
 
 export function PlatformSupportSessionsPage() {
   useLanguage()
@@ -29,9 +30,9 @@ export function PlatformSupportSessionsPage() {
       <FilterField label={tx("Durum")}><select aria-label={tx("Durum")} className={filterControlClass} value={status} onChange={event => update({ status: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{supportStatuses.map(value => <option key={value} value={value}>{statusLabel('supportSession', value)}</option>)}</select></FilterField>
       <label className="flex min-h-11 items-center gap-2 self-end text-sm font-medium text-text-heading"><input type="checkbox" className="size-4 accent-primary" checked={mine} onChange={event => update({ mine: event.target.checked ? 'true' : 'false' })} />{tx("Yalnızca benim oturumlarım")}</label>
     </Filters>
-    <SupportQueryState isPending={query.isPending} error={query.error}>{query.data && <div className="space-y-4">
+    <QueryState forbiddenMessage={errorMessage} isPending={query.isPending} error={query.error}>{query.data && <div className="space-y-4">
       <SupportSessionTable rows={query.data.items} />
       <Pagination page={page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={next => update({ page: next })} />
-    </div>}</SupportQueryState>
+    </div>}</QueryState>
   </div>
 }
