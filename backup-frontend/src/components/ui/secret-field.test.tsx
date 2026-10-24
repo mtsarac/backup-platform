@@ -7,10 +7,10 @@ import { useSecretValue } from './secret-value'
 afterEach(cleanup)
 const SECRET = 'hunter2-very-secret'
 
-function Form({ saved = false, onSubmit }: { saved?: boolean; onSubmit?: (value: string) => void }) {
+function Form({ saved = false, multiline = false, onSubmit }: { saved?: boolean; multiline?: boolean; onSubmit?: (value: string) => void }) {
   const secret = useSecretValue()
   return <form onSubmit={event => { event.preventDefault(); onSubmit?.(secret.take()) }}>
-    <SecretField label="Parola" value={secret.value} onChange={secret.set} saved={saved} />
+    <SecretField label="Parola" value={secret.value} onChange={secret.set} saved={saved} multiline={multiline} />
     <button type="submit">Kaydet</button>
   </form>
 }
@@ -43,5 +43,20 @@ describe('SecretField', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
     expect(submitted).toEqual([SECRET])
     expect(screen.getByLabelText('Parola')).toHaveValue('')
+  })
+  it('masks pasted multiline keys, preserves every byte for submission, and supports clearing and replacing them', () => {
+    const key = ['test-key-header', 'private-key-material', 'test-key-footer', ''].join('\n')
+    const submitted: string[] = []
+    const { container } = render(<Form multiline onSubmit={value => submitted.push(value)} />)
+    const input = screen.getByLabelText('Parola')
+    expect(input).toHaveAttribute('type', 'password')
+    fireEvent.paste(input, { clipboardData: { getData: () => key } })
+    expect(container.textContent).not.toContain('private-key-material')
+    fireEvent.keyDown(input, { key: 'Backspace' })
+    expect(input).toHaveValue('')
+    fireEvent.paste(input, { clipboardData: { getData: () => key } })
+    fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
+    expect(submitted).toEqual([key])
+    expect(input).toHaveValue('')
   })
 })

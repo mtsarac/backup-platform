@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { StorageProvidersTab } from '@/pages/storage/storage-providers-tab'
 import { ApiError } from '@/lib/api/client'
 import * as api from './api'
-import { catalog, fakeProvider, makeConnection, makeManaged, tenantAdminPermissions } from './test-fixtures'
+import { catalog, fakeProvider, makeConnection, makeManaged, makeProvider, tenantAdminPermissions } from './test-fixtures'
 import { ConnectionList } from './connection-list'
 import { ConnectionDetail } from './connection-detail'
 import { ConnectionWizard } from './connection-wizard'
@@ -302,7 +302,7 @@ describe('Provider catalog', () => {
   it('does not allow the non-admin role to create, including a direct wizard URL', async () => {
     access.canAdmin = false
     mount(`${base}/connections/new`)
-    expect(screen.getByText("Bağlantı eklemek için Sahip / Yönetici rolü gerekir")).toBeInTheDocument()
+    expect(screen.getByText("Yöneticinize danışın")).toBeInTheDocument()
     expect(api.getTenantConnections).not.toHaveBeenCalled()
     expect(api.createTenantConnection).not.toHaveBeenCalled()
   })
@@ -321,6 +321,9 @@ async function fillWizard() {
   await user.click(screen.getByRole('button', { name: 'İleri' }))
   expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
   await user.type(screen.getByRole('textbox', { name: 'Ad' }), ' Arşiv ')
+  expect(screen.queryByLabelText("Kova")).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'İleri' }))
+  expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
   await user.type(screen.getByLabelText("Kova"), 'archive')
   await user.type(screen.getByLabelText("Bağlantı noktası"), '9000')
   await user.click(screen.getByLabelText('TLS kullan'))
@@ -335,14 +338,24 @@ async function fillWizard() {
 
 describe('Connection wizard', () => {
   it('validates each step, creates typed settings once, tests, and forgets submitted credentials', async () => {
-    const connection = s3({ id: 'new', name: 'Arşiv' })
-    vi.mocked(api.createTenantConnection).mockResolvedValue(connection)
+    const connection = s3({ id: 'new', name: 'Arşiv', hasSecret: true })
+    const { promise, resolve: finishCreate } = Promise.withResolvers<ConnectionView>()
+    vi.mocked(api.createTenantConnection).mockReturnValue(promise)
     vi.mocked(api.testTenantConnection).mockResolvedValue({ connection, test: { status: 'Succeeded', code: 'ok', message: '', testedAt: '2026-10-06T10:00:00Z', durationMs: 12 } })
     const { client } = mount(`${base}/connections/new`)
     const user = await fillWizard()
+    expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent(/Özet/)
+    const technical = screen.getByText('Teknik ayrıntılar').closest('details')!
+    expect(technical).not.toHaveAttribute('open')
+    expect(within(technical).getByRole('button', { name: /Kopyala: Kova/ })).toBeInTheDocument()
     expect(document.body.textContent).not.toContain(SECRET_A)
     await user.click(screen.getByRole('button', { name: 'Bağlantıyı oluştur ve test et' }))
+    expect(screen.getByRole('button', { name: 'Oluşturuluyor…' })).toBeDisabled()
+    expect(api.testTenantConnection).not.toHaveBeenCalled()
+    expect(document.body.textContent).not.toContain(SECRET_B)
+    finishCreate(connection)
     expect(await screen.findByText('Bağlantı çalışıyor')).toBeInTheDocument()
+    expect(screen.getByText('Kimlik bilgisi kayıtlı')).toBeInTheDocument()
     expect(api.createTenantConnection).toHaveBeenCalledExactlyOnceWith('tenant-a', { providerType: 'fake-s3', name: 'Arşiv', configuration: { bucket: 'archive', port: '9000', useTls: 'true' }, secret: { accessKey: SECRET_A, secretKey: SECRET_B } })
     expect(api.testTenantConnection).toHaveBeenCalledWith('tenant-a', 'new')
     expect(JSON.stringify(client.getQueryCache().getAll().map(entry => entry.queryKey))).not.toContain(SECRET_A)
@@ -361,6 +374,71 @@ describe('Connection wizard', () => {
     expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: 'Geri' }))
     expect(screen.getByLabelText("Kova")).toHaveValue('archive')
+  })
+
+  it('keeps an available provider preselected after loading its catalog', async () => {
+    mount(`${base}/connections/new?provider=fake-s3`)
+    expect(await screen.findByRole('radio', { name: /Sahte S3/ })).toBeChecked()
+    await userEvent.click(screen.getByRole('button', { name: 'İleri' }))
+    expect(screen.getByRole('textbox', { name: 'Ad' })).toBeInTheDocument()
+    expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Ad')
+    expect(screen.getAllByText(/Neden soruluyor/)).toHaveLength(1)
+  })
+
+  it('does not accept provider preselection for a provider that cannot be created', async () => {
+    mount(`${base}/connections/new?provider=local`)
+    expect(await screen.findByRole('radio', { name: /Yerel/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
+    expect(api.createTenantConnection).not.toHaveBeenCalled()
+  })
+
+  it('uses the selected SFTP sign-in method, never renders a pasted key, and wipes it after rejection', async () => {
+    const user = userEvent.setup()
+    const key = ['test-private-key-header', 'private-key-content', 'test-private-key-footer', ''].join('\n')
+    serve([], [makeProvider({
+      providerType: 'sftp', displayName: 'SFTP', tenantCreatable: true, maxConnectionsPerTenant: null,
+      configFields: [
+        { name: 'host', label: 'Host', kind: 'Text', required: true },
+        { name: 'port', label: 'Port', kind: 'Number', required: true },
+        { name: 'username', label: 'Username', kind: 'Text', required: true },
+        { name: 'authenticationType', label: 'Authentication type', kind: 'Text', required: true },
+        { name: 'remoteBaseDirectory', label: 'Remote base directory', kind: 'Text', required: true },
+        { name: 'hostKeyFingerprint', label: 'SSH host key fingerprint (SHA256)', kind: 'Text', required: true },
+      ],
+      secretFields: [{ name: 'password', label: 'Password', required: true }, { name: 'privateKey', label: 'SSH private key', required: false }, { name: 'passphrase', label: 'Key passphrase (optional)', required: false }],
+    })])
+    vi.mocked(api.createTenantConnection).mockRejectedValue(new ApiError(400, { error: 'invalid_request' }))
+    mount(`${base}/connections/new?provider=sftp`)
+    await user.click(await screen.findByRole('button', { name: 'İleri' }))
+    await user.type(screen.getByRole('textbox', { name: 'Ad' }), 'Sunucu arşivi')
+    await user.click(screen.getByRole('button', { name: 'İleri' }))
+    await user.type(screen.getByLabelText('Sunucu'), 'backup.internal')
+    expect(screen.getByLabelText('Bağlantı noktası')).toHaveValue(22)
+    await user.type(screen.getByLabelText('Kullanıcı adı'), 'backup-user')
+    await user.type(screen.getByLabelText('Yedeklerin saklanacağı klasör'), '/backups')
+    await user.type(screen.getByLabelText('Sunucunun güvenlik parmak izi (SHA256)'), 'SHA256:trusted')
+    await user.selectOptions(screen.getByRole('combobox'), 'private-key')
+    await user.click(screen.getByRole('button', { name: 'İleri' }))
+    const input = screen.getByLabelText('SSH özel anahtarı')
+    expect(input).toHaveAttribute('type', 'password')
+    expect(screen.queryByLabelText('Parola')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
+    await user.click(input)
+    await user.paste(key)
+    expect(document.body.textContent).not.toContain('private-key-content')
+    await user.click(screen.getByRole('button', { name: 'İleri' }))
+    expect(document.body.textContent).not.toContain('private-key-content')
+    await user.click(screen.getByRole('button', { name: 'Bağlantıyı oluştur ve test et' }))
+    await screen.findByRole('alert')
+    expect(api.createTenantConnection).toHaveBeenCalledExactlyOnceWith('tenant-a', {
+      providerType: 'sftp', name: 'Sunucu arşivi',
+      configuration: { host: 'backup.internal', port: '22', username: 'backup-user', authenticationType: 'private-key', remoteBaseDirectory: '/backups', hostKeyFingerprint: 'SHA256:trusted' },
+      secret: { privateKey: key },
+    })
+    expect(api.testTenantConnection).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Geri' }))
+    expect(screen.getByLabelText('SSH özel anahtarı')).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
   })
 })
 

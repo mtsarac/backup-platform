@@ -29,6 +29,8 @@ The agent only connects outward. It polls the backend for work and renews a leas
 - **Agent install** with one command on Windows (service) or Linux (systemd).
 - **Multi-tenant access** with Owner, Admin, Operator, and Viewer roles, a separate platform admin, support access, and an audit log. The UI is available in Turkish and English.
 
+Storage connections are added through a guided provider, name, settings, credentials and review flow; steps that do not apply are skipped. Credentials are write-only and cleared when submitted, even if saving fails. Paste multiline private keys into their masked field; their line breaks are preserved, and the clear action removes the whole entry. Saving and testing are separate operations; Google Drive asks for account authorization in its popup before testing. The review keeps connection internals in collapsed, copyable technical details.
+
 ## Repository layout
 
 ```text

@@ -10,8 +10,9 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { Stepper } from '@/components/ui/stepper'
 import { inputClass } from '@/components/ui/form-styles'
+import { TechnicalDetails } from '@/components/ui/technical-details'
 import { useTenant } from '@/features/tenancy/use-tenant'
-import { activeSecretFields, buildConfiguration, configurationComplete, initialFieldValues, providerPayload, secretsComplete } from './descriptor-values'
+import { activeSecretFields, buildConfiguration, configurationComplete, editableConfigFields, initialFieldValues, providerPayload, secretsComplete } from './descriptor-values'
 import type { FieldValues } from './descriptor-values'
 import { openGoogleOAuthPopup } from './google-oauth'
 import { useCreateTenantConnection, useGoogleDriveConnect, useTenantConnectionOps, useTenantConnections, useTenantProviders } from './hooks'
@@ -23,21 +24,41 @@ import { ProviderFields } from './provider-form'
 import type { ConnectionView, ProviderDescriptor } from './types'
 import { describeError } from '@/lib/api/failure-messages'
 
-type StepKey = 'provider' | 'connection' | 'credentials' | 'review'
-const stepLabels: Record<StepKey, string> = { get provider() { return tx("Sağlayıcı") }, get connection() { return tx("Bağlantı") }, get credentials() { return tx("Kimlik bilgisi") }, get review() { return tx("Özet ve test") } }
+type StepKey = 'provider' | 'connection' | 'settings' | 'credentials' | 'review'
+const stepLabels: Record<StepKey, string> = {
+  get provider() { return tx("Sağlayıcı") },
+  get connection() { return tx("Ad") },
+  get settings() { return tx("Bağlantı ayarları") },
+  get credentials() { return tx("Giriş bilgileri") },
+  get review() { return tx("Özet ve test") },
+}
+const stepQuestions: Record<StepKey, () => string> = {
+  provider: () => tx("Yedekler nerede saklansın?"),
+  connection: () => tx("Bu depolamaya ne ad verelim?"),
+  settings: () => tx("Depolamaya nasıl ulaşalım?"),
+  credentials: () => tx("Depolamaya nasıl giriş yapılsın?"),
+  review: () => tx("Bağlantı oluşturulsun mu?"),
+}
+const stepReasons: Record<StepKey, () => string> = {
+  provider: () => tx("Neden soruluyor? Yedek dosyalarınızı saklayacak hizmeti seçmeniz gerekir."),
+  connection: () => tx("Neden soruluyor? Bu ad, depolamayı listelerde ve yedekleme ayarlarında tanımanızı sağlar."),
+  settings: () => tx("Neden soruluyor? Yedeklerin yazılacağı sunucu ve klasöre ulaşmak için bu ayarlar gerekir."),
+  credentials: () => tx("Neden soruluyor? Yedekleri saklamak için depolamaya giriş izni gerekir. Girdiğiniz gizli bilgiler kayıttan sonra gösterilmez."),
+  review: () => tx("Neden soruluyor? Kaydetmeden önce seçimlerinizi kontrol edin. Önce bağlantı oluşturulur, ardından ayrı bir işlemle test edilir; mevcut yedekleriniz değişmez."),
+}
 
 /** What a person needs to have at hand, in plain words, per provider. Unknown providers just show the descriptor's own fields. */
 const prerequisites: Record<string, string> = {
   get sftp() { return tx("Sunucu adresi, kullanıcı adı, sunucu anahtarı parmak izi (SHA256) ve parola ya da özel anahtar.") },
   get 'google-drive'() { return tx("Yedeklerin saklanacağı Google hesabı. Hesap izni açılan Google penceresinde verilir; parola burada girilmez.") },
-  get local() { return tx("Agent'ın bulunduğu bilgisayarın diski.") },
+  get local() { return tx("Yedekleme bilgisayarının diski.") },
   get central() { return tx("Platform tarafından işletilir.") },
 }
 
 function ProviderStep({ providers, connections, value, onChange }: { providers: readonly ProviderDescriptor[]; connections: readonly ConnectionView[]; value: string; onChange: (providerType: string) => void }) {
   useLanguage()
   return <fieldset className="space-y-3">
-    <legend className="sr-only">{tx("Storage Provider")}</legend>
+    <legend className="sr-only">{tx("Depolama sağlayıcısı")}</legend>
     <ul className="grid gap-3 md:grid-cols-2">{providers.map((provider) => {
       const state = tenantCreateState(provider, connections)
       const selected = value === provider.providerType
@@ -48,7 +69,6 @@ function ProviderStep({ providers, connections, value, onChange }: { providers: 
           <span className="min-w-0 space-y-1">
             <span className="block font-medium text-text-heading">{tx(provider.displayName)}</span>
             <span className="block text-sm text-text-muted">{state.creatable ? prerequisites[provider.providerType] ?? topologyLabel(provider.topology) : `${state.reason}.`}</span>
-            {state.creatable && <span className="block text-xs text-text-muted">{topologyLabel(provider.topology)}</span>}
           </span>
         </label>
       </li>
@@ -60,11 +80,11 @@ export function ConnectionWizard() {
   useLanguage()
   const { tenantId, canAdmin } = useTenant()
   const storage = `/tenants/${tenantId}/storage`
-  if (!canAdmin) return <><PageHeader title={tx("Bağlantı ekle")} crumbs={[{ label: tx('Storage'), to: storage }, { label: tx('Bağlantı ekle') }]} /><Notice tone="warning" title={tx("Bağlantı eklemek için Owner / Admin rolü gerekir")} action={<Link to={storage} className={buttonVariants({ variant: 'outline', size: 'sm' })}>{tx("Storage'a dön")}</Link>} /></>
+  if (!canAdmin) return <><PageHeader title={tx("Bağlantı ekle")} crumbs={[{ label: tx('Depolama'), to: storage }, { label: tx('Bağlantı ekle') }]} /><Notice tone="warning" title={tx("Yöneticinize danışın")} action={<Link to={storage} className={buttonVariants({ variant: 'outline', size: 'sm' })}>{tx("Depolamaya dön")}</Link>}>{tx("Bağlantı eklemek için çalışma alanı yöneticinizden yardım isteyin.")}</Notice></>
   return <ConnectionWizardForm key={tenantId} />
 }
 
-/** Provider → settings → credentials → test. Creating and testing remain separate API operations. */
+/** Creating and testing remain separate API operations. */
 function ConnectionWizardForm() {
   useLanguage()
   const { tenantId } = useTenant()
@@ -90,7 +110,8 @@ function ConnectionWizardForm() {
   const config = useMemo<FieldValues>(() => provider ? { ...initialFieldValues(provider.configFields, {}, provider.providerType), ...edits } : {}, [provider, edits])
   const storage = `/tenants/${tenantId}/storage`
   const needsCredentials = provider !== undefined && activeSecretFields(provider.providerType, config, provider.secretFields).length > 0
-  const steps: StepKey[] = provider && !needsCredentials ? ['provider', 'connection', 'review'] : ['provider', 'connection', 'credentials', 'review']
+  const needsSettings = provider && editableConfigFields(provider.providerType, provider.configFields).length > 0
+  const steps: StepKey[] = ['provider', 'connection', ...(needsSettings ? ['settings' as const] : []), ...(needsCredentials ? ['credentials' as const] : []), 'review']
   const stepIndex = Math.max(0, steps.indexOf(step))
   const google = (created?.providerType ?? provider?.providerType) === 'google-drive'
 
@@ -102,7 +123,8 @@ function ConnectionWizardForm() {
 
   const stepValid: Record<StepKey, boolean> = {
     provider: Boolean(provider),
-    connection: Boolean(provider) && name.trim() !== '' && configurationComplete(provider?.configFields ?? [], config),
+    connection: Boolean(provider) && name.trim() !== '',
+    settings: Boolean(provider) && configurationComplete(provider?.configFields ?? [], config),
     credentials: Boolean(provider) && secretsComplete(activeSecretFields(provider?.providerType ?? '', config, provider?.secretFields ?? []), secret),
     review: Boolean(provider) && name.trim() !== '' && configurationComplete(provider?.configFields ?? [], config) && secretsComplete(activeSecretFields(provider?.providerType ?? '', config, provider?.secretFields ?? []), secret),
   }
@@ -133,7 +155,7 @@ function ConnectionWizardForm() {
     googleConnect.mutate({ tenantId: connection.tenantId, connectionId: connection.id }, { onSuccess: ({ authorizationUrl }) => openGoogleOAuthPopup(authorizationUrl, () => ops.test.mutate(connection)) })
   }
 
-  const crumbs = [{ label: tx('Storage'), to: storage }, { label: tx('Bağlantı ekle') }]
+  const crumbs = [{ label: tx('Depolama'), to: storage }, { label: tx('Bağlantı ekle') }]
 
   if (created) {
     const test = ops.test.data?.test
@@ -141,14 +163,15 @@ function ConnectionWizardForm() {
     return <>
       <PageHeader title={tx("Bağlantı oluşturuldu")} description={`${created.name} · ${created.providerDisplayName}`} crumbs={crumbs} />
       <Section title={tx("Bağlantı testi")}>
+        {created.hasSecret && <p className="mb-4 text-sm text-text-muted">{tx("Kimlik bilgisi kayıtlı")}</p>}
         <div className="space-y-4">
           {google && !test && !testing && <Notice tone="info" title={tx("Google hesabını yetkilendirin")}>{tx("Hesap izni verilmeden bağlantı kullanılamaz. Düğmeye bastığınızda Google penceresi açılır; izin verdikten sonra bağlantı otomatik test edilir.")}</Notice>}
           {Boolean(googleConnect.error) && <ErrorNotice title={tx("Google yetkilendirmesi başlatılamadı")} error={googleConnect.error} scope="storageConnection" />}
-          {testing && <Notice tone="info" title={tx("Bağlantı test ediliyor…")}>{tx("Hedefe yazılıyor, okunuyor ve silinerek doğrulanıyor.")}</Notice>}
+          {testing && <Notice tone="info" title={tx("Bağlantı test ediliyor…")}>{tx("Küçük bir test dosyası yazılıp okunur ve silinir; mevcut yedekleriniz değişmez.")}</Notice>}
           {Boolean(ops.test.error) && !testing && <ErrorNotice title={tx("Test tamamlanamadı")} error={ops.test.error} scope="storageConnection" />}
           {test?.status === 'Succeeded' && <Notice tone="success" title={tx("Bağlantı çalışıyor")}>{testMessage(test)}</Notice>}
           {test?.status === 'Failed' && <ErrorNotice title={tx("Test başarısız")} what={testMessage(test)} dataImpact={tx("Bağlantı kaydedildi ama henüz doğrulanmadı; yedekler bu depolamaya yazılamayabilir.")} action={tx("Ayarları düzeltip yeniden test edin.")} />}
-          {test?.status === 'NotTestable' && <Notice tone="info" title={tx("Bu hedef Agent tarafında denetlenir")}>{testMessage(test)}</Notice>}
+          {test?.status === 'NotTestable' && <Notice tone="info" title={tx("Bu depolamayı yedekleme bilgisayarı denetler")}>{testMessage(test)}</Notice>}
           <div className="flex flex-wrap gap-2">
             {google && !testing && test?.status !== 'Succeeded' && <Button disabled={googleConnect.isPending} onClick={() => authorizeGoogle(created)}><ExternalLink aria-hidden="true" className="size-4" />{googleConnect.isPending ? tx('Yönlendiriliyor…') : tx('Google Hesabını Bağla')}</Button>}
             {!google && !testing && (test?.status === 'Failed' || Boolean(ops.test.error)) && <Button variant="outline" onClick={() => ops.test.mutate(created)}><RefreshCw aria-hidden="true" className="size-4" />{tx("Yeniden test et")}</Button>}
@@ -163,33 +186,40 @@ function ConnectionWizardForm() {
 
   const stepNames = steps.map((key) => stepLabels[key])
   return <>
-    <PageHeader title={tx("Bağlantı ekle")} description={tx("Backup'ların yazılacağı yeni bir depolama hedefi kurun. Bağlantı oluşturulduktan hemen sonra test edilir.")} crumbs={crumbs} />
+    <PageHeader title={tx("Bağlantı ekle")} description={tx("Yedekleriniz için yeni bir depolama ekleyin. Adım adım ayarlayın, kontrol edin ve test edin.")} crumbs={crumbs} />
     <Stepper steps={stepNames} current={stepIndex} />
     <form onSubmit={step === 'review' ? submit : next} noValidate>
-      <Section title={stepLabels[step]}>
+      <Section title={stepQuestions[step]()} description={stepReasons[step]()}>
         <div className="max-w-2xl space-y-5">
           <QueryState isPending={providers.isPending || connections.isPending} error={providers.error ?? connections.error}>
             {step === 'provider' && <ProviderStep providers={creatable} connections={connections.data?.items ?? []} value={chosen} onChange={choose} />}
             {step === 'connection' && provider && <>
               <p className="text-sm text-text-muted">{tx(provider.displayName)}</p>
               <label className="block space-y-1 text-sm font-medium text-text-heading">{tx("Ad")}<input className={inputClass} value={name} required aria-label={tx("Ad")} aria-invalid={errorField(createError) === 'name'} onChange={(event) => setName(event.target.value)} />
-                <span className="block text-sm font-normal text-text-muted">{tx("Bu hedefi listelerde ve Backup Job seçimlerinde böyle göreceksiniz.")}</span>
+                <span className="block text-sm font-normal text-text-muted">{tx("Örneğin: Ofis yedekleri veya Arşiv depolaması.")}</span>
               </label>
+            </>}
+            {step === 'settings' && provider && <>
               <ProviderFields part="configuration" provider={provider} config={config} secret={secret} error={createError} onConfig={(field, value) => setEdits((current) => ({ ...current, [field]: value }))} onSecret={(field, value) => setSecret((current) => ({ ...current, [field]: value }))} />
               {google && <Notice tone="info">{tx("Hesap izni bir sonraki adımlarda, bağlantı oluşturulunca Google penceresinde istenir.")}</Notice>}
             </>}
             {step === 'credentials' && provider && <ProviderFields part="credentials" provider={provider} config={config} secret={secret} error={createError} onConfig={(field, value) => setEdits((current) => ({ ...current, [field]: value }))} onSecret={(field, value) => setSecret((current) => ({ ...current, [field]: value }))} />}
             {step === 'review' && provider && <div className="space-y-5">
               <Facts>
-                <Fact label={tx("Storage Provider")}>{tx(provider.displayName)}</Fact>
+                <Fact label={tx("Depolama sağlayıcısı")}>{tx(provider.displayName)}</Fact>
                 <Fact label={tx("Ad")}>{name.trim()}</Fact>
-                {configurationSummary({ configuration: buildConfiguration(provider.configFields, config) }, provider).filter((item) => item.value !== '—').map((item) => <Fact key={item.name} label={tx(item.label)}>{item.value}</Fact>)}
-                <Fact label={tx("Kimlik bilgisi")}>{google ? tx('Google hesabı bir sonraki adımda yetkilendirilir') : needsCredentials ? tx('Girildi (kaydedildikten sonra gösterilmez)') : tx('Gerekmiyor')}</Fact>
-                <Fact label={tx("Veri yolu")}>{topologyLabel(provider.topology)} · {executionLocationLabel(provider.executionLocation)}</Fact>
-                <Fact label="Test">{testModeLabel(provider.testMode)}</Fact>
+                <Fact label={tx("Giriş bilgileri")}>{google ? tx('Google hesabı bir sonraki adımda yetkilendirilir') : needsCredentials ? tx('Girildi (kaydedildikten sonra gösterilmez)') : tx('Gerekmiyor')}</Fact>
               </Facts>
-              <CapabilityChips capabilities={provider.capabilities} label={tx("{0} yetenekleri", { "0": tx(provider.displayName) })} />
-              {Boolean(createError) && <ErrorNotice title={tx("Bağlantı oluşturulamadı")} {...describeError(createError, 'storageConnection')} {...(needsCredentials ? { action: tx('Güvenlik nedeniyle kimlik bilgisi alanları temizlendi; Kimlik bilgisi adımında yeniden girin.') } : {})} />}
+              {google && <Notice tone="info">{tx("Bağlantıyı kaydettikten sonra Google hesabınızı açılan pencereden bağlayın. Google parolanızı burada girmeyin.")}</Notice>}
+              <TechnicalDetails items={[
+                ...configurationSummary({ configuration: buildConfiguration(provider.configFields, config) }, provider).filter((item) => item.value !== '—').map((item) => ({ label: tx(item.label), value: item.value })),
+                { label: tx("Veri yolu"), value: `${topologyLabel(provider.topology)} · ${executionLocationLabel(provider.executionLocation)}` },
+                { label: tx("Test yöntemi"), value: testModeLabel(provider.testMode) },
+                { label: tx("Yetenek kodları"), value: provider.capabilities.join(', ') || '—' },
+              ]}>
+                <CapabilityChips capabilities={provider.capabilities} label={tx("{0} yetenekleri", { "0": tx(provider.displayName) })} />
+              </TechnicalDetails>
+              {Boolean(createError) && <ErrorNotice title={tx("Bağlantı oluşturulamadı")} {...describeError(createError, 'storageConnection')} {...(needsCredentials ? { action: tx('Güvenlik nedeniyle giriş bilgileri temizlendi; Giriş bilgileri adımında yeniden girin.') } : {})} />}
             </div>}
           </QueryState>
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
