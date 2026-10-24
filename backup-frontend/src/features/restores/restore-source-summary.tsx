@@ -5,12 +5,12 @@ import { TechnicalDetails } from '@/components/ui/technical-details'
 import type { BackupArtifact } from '@/features/artifacts/types'
 import { formatBytes } from '@/lib/format'
 
-export function RestoreSourceSummary({ artifact, isPg }: { artifact: BackupArtifact; isPg: boolean }) {
+export function RestoreSourceSummary({ artifact, isPg, fileArchive = false }: { artifact: BackupArtifact; isPg: boolean; fileArchive?: boolean }) {
   useLanguage()
   return <>
     <section aria-label={tx("Yedek dosyası bilgisi")} className="space-y-2 rounded-xl border border-border bg-surface-2 p-4 text-sm">
       <div className="flex flex-wrap items-center justify-between gap-2 font-medium">
-        <span className="min-w-0 break-words">{tx("Yedek dosyası:")}{' '}{artifact.databaseName ?? tx('Bilinmeyen veritabanı')} · {formatBytes(artifact.sizeBytes)}</span>
+        <span className="min-w-0 break-words">{tx("Yedek dosyası:")}{' '}{artifact.databaseName ?? (fileArchive ? tx('Bilinmeyen dosya kaynağı') : tx('Bilinmeyen veritabanı'))} · {formatBytes(artifact.sizeBytes)}</span>
         <StatusPill status={artifact.state} />
       </div>
       <TechnicalDetails items={[
