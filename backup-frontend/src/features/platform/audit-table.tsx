@@ -6,6 +6,7 @@ import { platformPaths } from './paths'
 import { linkClass } from '@/components/ui/form-styles'
 import type { AuditDetailValue, PlatformAuditEntry } from './types'
 import { formatDateTime } from '@/lib/format'
+import { supportActionLabels } from '@/features/support-access/labels'
 
 const actionLabels: Record<string, string> = {
   get 'tenant.created'() { return tx("Tenant oluşturuldu") },
@@ -81,7 +82,7 @@ const actorLabels: Record<PlatformAuditEntry['actorKind'], string> = {
 }
 
 function auditActionLabel(action: string) {
-  return Object.hasOwn(actionLabels, action) ? actionLabels[action] : action
+  return Object.hasOwn(actionLabels, action) ? actionLabels[action] : Object.hasOwn(supportActionLabels, action) ? supportActionLabels[action] : action
 }
 
 function detailValue(value: AuditDetailValue) {

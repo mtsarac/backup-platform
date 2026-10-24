@@ -8,8 +8,8 @@ import { TenantKeysSection } from './tenant-recovery-key-section'
 
 vi.mock('./api')
 beforeEach(() => vi.resetAllMocks())
-const mount = (encryption = makeTenantEncryption()) => renderPlatform(<TenantKeysSection tenantId="tenant-a" encryption={encryption} />)
-const publicPem = '-----BEGIN PUBLIC KEY-----\ntest-public-key\n-----END PUBLIC KEY-----'
+const mount = (encryption = makeTenantEncryption()) => renderPlatform(<TenantKeysSection tenantId="tenant-a" tenantName="Acme" encryption={encryption} />)
+const publicPem = '-----BEGIN PUBLIC KEY-----\ndGVzdC1wdWJsaWMta2V5\n-----END PUBLIC KEY-----'
 
 describe('tenant recovery public key', () => {
   it('warns when platform recovery is absent and states the RSA4096 requirement', () => {
@@ -27,7 +27,7 @@ describe('tenant recovery public key', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Anahtarı kaydet' }))
     await waitFor(() => expect(api.setTenantRecoveryKey).toHaveBeenCalledWith('tenant-a', publicPem))
     await waitFor(() => expect(field).toHaveValue(''))
-    expect(screen.getByText(/Tenant kurtarma anahtarı kaydedildi/)).toBeInTheDocument()
+    expect(screen.getByText(/Kurtarma anahtarınız kaydedildi/)).toBeInTheDocument()
   })
 
   it('rejects accidental private key entry before any API call with accessible feedback', () => {
@@ -51,7 +51,10 @@ describe('tenant recovery public key', () => {
     expect(await screen.findByRole('alert')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Anahtarı kaldır' }))
     expect(api.removeTenantRecoveryKey).not.toHaveBeenCalled()
-    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Kaldır' }))
+    const dialog = within(await screen.findByRole('dialog'))
+    expect(dialog.getByRole('button', { name: 'Kaldır' })).toBeDisabled()
+    fireEvent.change(dialog.getByRole('textbox'), { target: { value: 'Acme' } })
+    fireEvent.click(dialog.getByRole('button', { name: 'Kaldır' }))
     await waitFor(() => expect(api.removeTenantRecoveryKey).toHaveBeenCalledWith('tenant-a'))
   })
 })

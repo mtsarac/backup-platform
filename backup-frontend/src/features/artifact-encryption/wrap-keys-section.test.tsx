@@ -19,10 +19,10 @@ describe('tenant wrap key lifecycle', () => {
     mount()
     const rows = await screen.findAllByRole('row')
     expect(rows).toHaveLength(4)
-    expect(within(rows[1]).getByText('v2')).toBeInTheDocument()
     expect(within(rows[2]).getByText('7')).toBeInTheDocument()
-    expect(document.body.textContent).not.toContain('c'.repeat(32))
-    expect(screen.getByTitle('c'.repeat(32))).toHaveTextContent('cccccccccccc…')
+    const details = within(rows[2]).getByText('c'.repeat(32)).closest('details')!
+    expect(details).not.toHaveAttribute('open')
+    expect(within(details).getByRole('button', { name: 'Kopyala: Anahtar kimliği', hidden: true })).toBeInTheDocument()
   })
 
   it('cannot retire the active key and offers nothing for a retired one', async () => {
@@ -30,7 +30,10 @@ describe('tenant wrap key lifecycle', () => {
     const rows = await screen.findAllByRole('row')
     expect(within(rows[1]).getByRole('button', { name: 'Emekli et' })).toBeDisabled()
     expect(within(rows[2]).getByRole('button', { name: 'Emekli et' })).toBeEnabled()
-    expect(within(rows[3]).queryByRole('button')).not.toBeInTheDocument()
+    expect(within(rows[3]).queryByRole('button', { name: 'Emekli et' })).not.toBeInTheDocument()
+    fireEvent.click(within(rows[1]).getByRole('button', { name: 'Emekli et' }))
+    expect(api.retireWrapKey).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('rotates only after confirmation and refreshes the list', async () => {
@@ -38,6 +41,7 @@ describe('tenant wrap key lifecycle', () => {
     mount()
     fireEvent.click(await screen.findByRole('button', { name: 'Anahtarı döndür' }))
     expect(api.rotateWrapKey).not.toHaveBeenCalled()
+    expect(within(await screen.findByRole('dialog')).queryByRole('textbox')).not.toBeInTheDocument()
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Döndür' }))
     await waitFor(() => expect(api.rotateWrapKey).toHaveBeenCalledWith('tenant-a'))
     await waitFor(() => expect(api.getWrapKeys).toHaveBeenCalledTimes(2))
@@ -49,9 +53,15 @@ describe('tenant wrap key lifecycle', () => {
     const rows = await screen.findAllByRole('row')
     fireEvent.click(within(rows[2]).getByRole('button', { name: 'Emekli et' }))
     const dialog = await screen.findByRole('dialog')
-    expect(dialog).toHaveTextContent('v1 hâlâ 7 yedeğin')
-    expect(dialog).toHaveTextContent('çevrimdışı çözülebilir')
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Emekli et' }))
+    expect(dialog).toHaveTextContent('7')
+    expect(dialog).toHaveTextContent('çevrimdışı')
+    const confirm = within(dialog).getByRole('button', { name: 'Emekli et' })
+    expect(confirm).toBeDisabled()
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'acme' } })
+    expect(confirm).toBeDisabled()
+    expect(api.retireWrapKey).not.toHaveBeenCalled()
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'Acme' } })
+    fireEvent.click(confirm)
     await waitFor(() => expect(api.retireWrapKey).toHaveBeenCalledWith('tenant-a', 1))
   })
 
@@ -60,7 +70,9 @@ describe('tenant wrap key lifecycle', () => {
     mount()
     const rows = await screen.findAllByRole('row')
     fireEvent.click(within(rows[2]).getByRole('button', { name: 'Emekli et' }))
-    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Emekli et' }))
+    const dialog = within(await screen.findByRole('dialog'))
+    fireEvent.change(dialog.getByRole('textbox'), { target: { value: 'Acme' } })
+    fireEvent.click(dialog.getByRole('button', { name: 'Emekli et' }))
     expect(await screen.findByText('Etkin anahtar emekli edilemez. Önce anahtarı döndürün.')).toBeInTheDocument()
   })
 
