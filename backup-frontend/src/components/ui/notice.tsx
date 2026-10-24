@@ -45,7 +45,7 @@ export function ErrorNotice(props: ErrorNoticeProps) {
   return <div role="alert" className={cn('flex gap-3 rounded-lg border px-4 py-3', box, props.className)}>
     <Icon aria-hidden="true" className={cn('mt-0.5 size-5 shrink-0', text)} />
     <div className="min-w-0 flex-1 space-y-2">
-      {props.title && <p className={cn('font-medium', text)}>{props.title}</p>}
+      {props.title && <div className={cn('font-medium', text)}>{props.title}</div>}
       <p className="text-sm font-medium text-text">{what}</p>
       <p className="text-sm text-text"><span className="font-medium">{tx("Verileriniz için:")}</span>{' '}{dataImpact}</p>
       <p className="text-sm text-text"><span className="font-medium">{tx("Ne yapmalı:")}</span>{' '}{action}</p>

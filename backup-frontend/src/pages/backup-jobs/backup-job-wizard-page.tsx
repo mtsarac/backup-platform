@@ -1,6 +1,6 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useParams, useSearchParams } from 'react-router-dom'
-import { ErrorNotice, Notice } from '@/components/ui/notice'
+import { Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { QueryState } from '@/components/data/query-state'
 import { useTenant } from '@/features/tenancy/use-tenant'
@@ -9,7 +9,8 @@ import { selectableNames } from '@/features/discovery/job-prefill'
 import { useBackupJob } from '@/features/backup-jobs/hooks'
 import { BackupHealthCard } from '@/features/backup-jobs/health-card'
 import { JobForm } from '@/features/backup-jobs/job-form'
-import { accessDenied, errorMessage } from '@/lib/api/failure-messages'
+import { AccessDenied } from '@/components/auth/access-denied'
+import { errorMessage } from '@/lib/api/failure-messages'
 
 export function BackupJobWizardPage() {
   useLanguage()
@@ -23,7 +24,7 @@ export function BackupJobWizardPage() {
   const readOnly = Boolean(id) && !canOperate
   const crumbs = [{ label: tx('Yedekleme işleri'), to: `/tenants/${tenantId}/backup-jobs` }, { label: id ? tx(readOnly ? 'Yedekleme sağlığı' : 'Düzenle') : tx('Yeni iş') }]
   let body
-  if (!canOperate) body = readOnly ? <p className="text-sm text-text-muted">{tx('Salt okunur')}</p> : <ErrorNotice {...accessDenied(tx("Bu sayfada değişiklik yapma yetkiniz yok. Viewer rolü salt okunurdur."))} />
+  if (!canOperate) body = readOnly ? <p className="text-sm text-text-muted">{tx('Salt okunur')}</p> : <AccessDenied what={tx("Bu sayfada değişiklik yapma yetkiniz yok. Viewer rolü salt okunurdur.")} />
   else if (id) body = <QueryState isPending={job.isPending} error={job.error}>{job.data && <JobForm key={`${tenantId}:${id}`} job={job.data} />}</QueryState>
   else if (discoveryInstance && discovered.isPending) body = <QueryState isPending error={null} />
   else body = <>

@@ -5,12 +5,11 @@ import { DataList, type Column } from '@/components/data/data-list'
 import { Button } from '@/components/ui/button'
 import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
-import { ConfirmDialog } from '@/features/agents/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { bareListClass } from '@/features/platform/list-empty'
 import { platformPaths } from '@/features/platform/paths'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { linkClass } from '@/components/ui/form-styles'
-import { errorMessage } from '@/lib/api/failure-messages'
 import { useWrapKeyActions, useWrapKeys } from './hooks'
 import { KeyId } from './presentation'
 import type { WrapKey } from './types'
@@ -45,14 +44,22 @@ export function WrapKeysSection({ tenantId, tenantName }: { tenantId: string; te
       </div>}
     </PlatformQueryState>
     <ConfirmDialog open={rotating} onClose={() => setRotating(false)} title={tx("Anahtar döndürülsün mü?")}
-      description={tx("“{0}” için yeni bir anahtar sürümü etkin olur; şu anki etkin anahtar yalnızca çözme moduna geçer. Sonraki şifreli Backup'lar yeni anahtarı kullanır, eskiler değişmez.", { "0": tenantName })}
-      confirmLabel={tx("Döndür")} pending={rotate.isPending} error={rotate.error ? errorMessage(rotate.error) : undefined}
+      consequence={{
+        what: tx("“{0}” için yeni bir anahtar sürümü etkin olur; şu anki anahtar yalnızca çözme için kalır.", { "0": tenantName }),
+        who: tx("Bundan sonra alınacak şifreli yedekler yeni anahtarı kullanır; eski yedekler değişmez ve okunmaya devam eder."),
+        reversible: tx("Hayır. Yeni anahtar sürümü silinemez; ancak eski dosyalarınız etkilenmez."),
+      }}
+      confirmLabel={tx("Döndür")} pending={rotate.isPending} error={rotate.error}
       onConfirm={() => rotate.mutate(undefined, { onSuccess: () => setRotating(false) })} />
     <ConfirmDialog open={Boolean(retiring)} onClose={() => setRetiring(null)} title={tx("Anahtar emekli edilsin mi?")}
-      description={retiring && (retiring.artifactCount > 0
-        ? tx("v{0} hâlâ {1} Backup'ın anahtarı. Emekli edilen anahtar hiçbir dosyayı açmaz; bu Backup'lar yalnızca Platform kurtarma anahtarı ile çevrimdışı çözülebilir ve ürün içinden geri yüklenemez.", { "0": retiring.version, "1": retiring.artifactCount })
-        : tx("v{0} ile şifrelenmiş Backup yok. Emekli edilen anahtar hiçbir dosyayı açmaz.", { "0": retiring.version }))}
-      confirmLabel={tx("Emekli et")} pending={retire.isPending} error={retire.error ? errorMessage(retire.error) : undefined}
+      consequence={{
+        what: retiring && (retiring.artifactCount > 0
+          ? tx("v{0} hâlâ {1} yedeğin anahtarı. Emekli edilen anahtar hiçbir dosyayı açmaz; bu yedekler yalnızca platform kurtarma anahtarıyla çevrimdışı çözülebilir.", { "0": retiring.version, "1": retiring.artifactCount })
+          : tx("v{0} ile şifrelenmiş yedek yok. Emekli edilen anahtar hiçbir dosyayı açmaz.", { "0": retiring.version })),
+        who: tx("Bu anahtarla şifrelenmiş yedekleri olan tüm işler ve geri yüklemeler etkilenir."),
+        reversible: tx("Hayır. Emekli edilen anahtar yeniden etkinleştirilemez."),
+      }}
+      confirmLabel={tx("Emekli et")} pending={retire.isPending} error={retire.error}
       onConfirm={() => { if (retiring) retire.mutate(retiring.version, { onSuccess: () => setRetiring(null) }) }} />
   </Section>
 }

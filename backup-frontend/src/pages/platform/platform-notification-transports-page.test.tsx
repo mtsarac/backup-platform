@@ -63,7 +63,7 @@ describe('platform notification transports page', () => {
     renderPlatform(<PlatformNotificationTransportsPage />)
     await user.click(await screen.findByRole('button', { name: 'Temizle' }))
     expect(api.clearEmailSecret).not.toHaveBeenCalled()
-    expect(await screen.findByRole('dialog')).toHaveTextContent('Kimlik doğrulaması kullanan bildirim gönderimleri')
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Geri alınabilir mi?')
     await user.click(screen.getByRole('button', { name: "Gizli değeri temizle" }))
     await waitFor(() => expect(api.clearEmailSecret).toHaveBeenCalled())
   })

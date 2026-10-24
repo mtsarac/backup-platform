@@ -2,7 +2,7 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { RefreshCw } from 'lucide-react'
 import { QueryState } from '@/components/data/query-state'
 import { Button } from '@/components/ui/button'
-import { ErrorNotice, Notice } from '@/components/ui/notice'
+import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { useTenantStorageQuota } from '@/features/storage/hooks'
 import { accountingModeHelp, accountingModeLabels, enforcementModeHelp, enforcementModeLabels, isLegacyUnlimited, scopeLabels } from '@/features/storage/labels'
@@ -11,19 +11,14 @@ import { Fact, QuotaSummary, StandingBadge, StorageNotices } from '@/features/st
 import { ApiError } from '@/lib/api/client'
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
-import { accessDenied } from '@/lib/api/failure-messages'
-
-function Forbidden() {
-  useLanguage()
-  return <ErrorNotice title={tx("Bu tenant'ın depolama bilgisine erişiminiz yok")} {...accessDenied(tx("Depolama kullanımını yalnızca bu tenant'ın üyeleri görebilir."))} />
-}
+import { AccessDenied } from '@/components/auth/access-denied'
 
 export function StorageUsageTab() {
   useLanguage()
   const query = useTenantStorageQuota()
   const quota = query.data
   const forbidden = query.error instanceof ApiError && query.error.status === 403
-  if (forbidden) return <Forbidden />
+  if (forbidden) return <AccessDenied title={tx("Bu tenant'ın depolama bilgisine erişiminiz yok")} what={tx("Depolama kullanımını yalnızca bu tenant'ın üyeleri görebilir.")} />
   if (!quota) return <QueryState isPending={query.isPending} error={query.error} />
   return <div className="space-y-5">
     {query.isError && <Notice tone="warning">{tx("Güncel veri alınamadı; son başarılı okuma gösteriliyor (")}{formatDateTime(quota.calculatedAt, tx('Henüz bildirilmedi'))}{' '}{tx("hesaplaması).")}</Notice>}

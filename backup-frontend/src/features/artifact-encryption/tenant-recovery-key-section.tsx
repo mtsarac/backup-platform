@@ -4,9 +4,8 @@ import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
-import { ConfirmDialog } from '@/features/agents/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { inputClass } from '@/components/ui/form-styles'
-import { errorMessage } from '@/lib/api/failure-messages'
 import { useTenantRecoveryKeyActions } from './hooks'
 import { KeyId } from './presentation'
 import type { TenantEncryption } from './types'
@@ -53,8 +52,12 @@ export function TenantKeysSection({ tenantId, encryption }: { tenantId: string; 
     </Section>
 
     <ConfirmDialog open={removing} onClose={() => setRemoving(false)} title={tx("Tenant kurtarma anahtarı kaldırılsın mı?")}
-      description={tx("Sonraki şifreli Backup'lara bu alıcı eklenmez. Mevcut dosyalardaki alıcı kaydı değişmez; özel anahtarınız onları açmaya devam eder.")}
-      confirmLabel={tx("Kaldır")} pending={remove.isPending} error={remove.error ? errorMessage(remove.error) : undefined}
+      consequence={{
+        what: tx("Sonraki şifreli yedeklere bu kurtarma anahtarı eklenmez."),
+        who: tx("Yalnızca bundan sonra alınacak yedekler etkilenir; mevcut dosyalardaki kayıt değişmez ve özel anahtarınız onları açmaya devam eder."),
+        reversible: tx("Evet. Aynı genel anahtarı yeniden yükleyerek tekrar ekleyebilirsiniz."),
+      }}
+      confirmLabel={tx("Kaldır")} pending={remove.isPending} error={remove.error}
       onConfirm={() => remove.mutate(undefined, { onSuccess: () => setRemoving(false) })} />
   </>
 }

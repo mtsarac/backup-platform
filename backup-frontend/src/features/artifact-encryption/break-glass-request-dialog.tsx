@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { Field } from '@/components/ui/field'
 import { ErrorNotice } from '@/components/ui/notice'
 import { platformPaths } from '@/features/platform/paths'
-import { FormDialog } from '@/features/platform/plans/form-dialog'
+import { FormDialog } from '@/components/ui/form-dialog'
 import { inputClass } from '@/components/ui/form-styles'
 import { useCreateBreakGlass } from './hooks'
 

@@ -1,5 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { PlatformAccessDenied } from '@/components/auth/platform-access-denied'
+import { AccessDenied } from '@/components/auth/access-denied'
 import { QueryState } from '@/components/data/query-state'
 import { PageHeader } from '@/components/ui/page-header'
 import { useTenantEncryption } from '@/features/artifact-encryption/hooks'
@@ -10,7 +10,7 @@ import { useTenant } from '@/features/tenancy/use-tenant'
 export function EncryptionPage() {
   useLanguage()
   const { tenantId, canAdmin } = useTenant()
-  if (!canAdmin) return <PlatformAccessDenied description={tx("Şifreleme anahtarlarını ve break-glass geçmişini yalnızca tenant Owner / Admin görüntüleyebilir.")} />
+  if (!canAdmin) return <AccessDenied what={tx("Şifreleme anahtarlarını ve break-glass geçmişini yalnızca tenant Owner / Admin görüntüleyebilir.")} />
   return <EncryptionContent key={tenantId} tenantId={tenantId} />
 }
 

@@ -1,6 +1,6 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import type { ReactNode } from 'react'
-import { PlatformAccessDenied } from '@/components/auth/platform-access-denied'
+import { AccessDenied } from '@/components/auth/access-denied'
 import { DataList } from '@/components/data/data-list'
 import { Pagination } from '@/components/data/pagination'
 import { QueryState } from '@/components/data/query-state'
@@ -26,7 +26,7 @@ const summaryLabels: Record<keyof SupportAccessSummary, string> = {
 
 function AccessQueryState({ isPending, error, children }: { isPending: boolean; error: unknown; children: ReactNode }) {
   useLanguage()
-  if (error instanceof ApiError && error.status === 403) return <PlatformAccessDenied description={tx("Destek erişimi geçmişini yalnızca tenant Owner / Admin görüntüleyebilir.")} />
+  if (error instanceof ApiError && error.status === 403) return <AccessDenied what={tx("Destek erişimi geçmişini yalnızca tenant Owner / Admin görüntüleyebilir.")} />
   if (error instanceof ApiError && error.status === 404) return <ErrorNotice {...notFound(tx("Destek oturumu bulunamadı veya bu tenant'a ait değil."))} />
   return <QueryState isPending={isPending} error={error}>{children}</QueryState>
 }
@@ -39,7 +39,7 @@ function Summary({ summary }: { summary: SupportAccessSummary }) {
 export function SupportAccessPage() {
   useLanguage()
   const { tenantId, canAdmin } = useTenant()
-  if (!canAdmin) return <PlatformAccessDenied description={tx("Destek erişimi geçmişini yalnızca tenant Owner / Admin görüntüleyebilir.")} />
+  if (!canAdmin) return <AccessDenied what={tx("Destek erişimi geçmişini yalnızca tenant Owner / Admin görüntüleyebilir.")} />
   return <SupportAccessContent key={tenantId} tenantId={tenantId} />
 }
 

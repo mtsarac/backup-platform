@@ -1,9 +1,10 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useEffect, useState } from 'react'
 import { Field } from '@/components/ui/field'
-import { FormDialog } from '@/features/platform/plans/form-dialog'
+import { SecretField } from '@/components/ui/secret-field'
+import { useSecretValue } from '@/components/ui/secret-value'
+import { FormDialog } from '@/components/ui/form-dialog'
 import { inputClass, selectClass } from '@/components/ui/form-styles'
-import { errorMessage } from '@/lib/api/failure-messages'
 import { ApiError } from '@/lib/api/client'
 import { useCreateChannel, useSetChannelSecret, useUpdateChannel } from './hooks'
 import { authenticationLabels, kindLabels } from './labels'
@@ -32,20 +33,20 @@ export function AddChannelDialog({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState('')
   const [target, setTarget] = useState('')
   const [authentication, setAuthentication] = useState<WebhookAuthentication>('none')
-  const [secret, setSecret] = useState('')
+  const secret = useSecretValue()
   const reset = create.reset
   useEffect(() => reset, [reset])
   const webhook = kind === 'webhook'
   const hint = targetHints[kind]
 
   function submit() {
-    const input = { kind, name: name.trim(), target: target.trim(), ...(webhook ? { authentication, ...(authentication !== 'none' && secret ? { secret } : {}) } : {}) }
-    setSecret('')
+    const taken = secret.take()
+    const input = { kind, name: name.trim(), target: target.trim(), ...(webhook ? { authentication, ...(authentication !== 'none' && taken ? { secret: taken } : {}) } : {}) }
     create.mutate(input, { onSuccess: onClose })
   }
 
-  return <FormDialog title={tx("Kanal ekle")} submitLabel="Kanal ekle" pendingLabel="Ekleniyor…" pending={create.isPending} disabled={!name.trim() || !target.trim()}
-    error={create.error ? errorMessage(create.error) : undefined} onSubmit={submit} onClose={onClose}>
+  return <FormDialog title={tx("Kanal ekle")} submitLabel={tx("Kanal ekle")} pendingLabel={tx("Ekleniyor…")} pending={create.isPending} disabled={!name.trim() || !target.trim()}
+    error={create.error} onSubmit={submit} onClose={onClose}>
     <Field label={tx("Tür")}>
       {(control) => <select {...control} className={`${selectClass} w-full`} value={kind} onChange={(event) => setKind(event.target.value as ChannelKind)}>{channelKinds.map((item) => <option key={item} value={item}>{kindLabels[item]}</option>)}</select>}
     </Field>
@@ -56,9 +57,8 @@ export function AddChannelDialog({ onClose }: { onClose: () => void }) {
       {(control) => <input {...control} className={inputClass} value={target} placeholder={hint.placeholder} required aria-invalid={invalidField(create.error, 'target')} onChange={(event) => setTarget(event.target.value)} />}
     </Field>
     {webhook && <AuthenticationSelect value={authentication} onChange={setAuthentication} />}
-    {webhook && authentication !== 'none' && <Field label={authentication === 'bearer' ? tx('Bearer token') : tx('HMAC imza anahtarı')} hint={tx("Yalnızca bir kez girilir ve bir daha gösterilmez. Şimdi girmezseniz sonradan ayarlayın; ayarlanana kadar gönderimler başarısız olur.")}>
-      {(control) => <input {...control} className={inputClass} type="password" autoComplete="new-password" value={secret} aria-invalid={invalidField(create.error, 'secret')} onChange={(event) => setSecret(event.target.value)} />}
-    </Field>}
+    {webhook && authentication !== 'none' && <SecretField label={authentication === 'bearer' ? tx('Bearer token') : tx('HMAC imza anahtarı')} hint={tx("Yalnızca bir kez girilir ve bir daha gösterilmez. Şimdi girmezseniz sonradan ayarlayın; ayarlanana kadar gönderimler başarısız olur.")}
+      value={secret.value} invalid={invalidField(create.error, 'secret')} onChange={secret.set} />}
   </FormDialog>
 }
 
@@ -80,9 +80,9 @@ export function EditChannelDialog({ channel, onClose }: { channel: NotificationC
     } }, { onSuccess: onClose })
   }
 
-  return <FormDialog title={tx("Kanalı düzenle: {0}", { "0": channel.name })} submitLabel="Kaydet" pendingLabel="Kaydediliyor…" pending={update.isPending} disabled={!name.trim()}
+  return <FormDialog title={tx("Kanalı düzenle: {0}", { "0": channel.name })} submitLabel={tx("Kaydet")} pendingLabel={tx("Kaydediliyor…")} pending={update.isPending} disabled={!name.trim()}
     description={webhook && authentication === 'none' && channel.authentication !== 'none' ? tx('Kimlik doğrulamayı kapatmak kayıtlı secret’ı siler.') : undefined}
-    error={update.error ? errorMessage(update.error) : undefined} onSubmit={submit} onClose={onClose}>
+    error={update.error} onSubmit={submit} onClose={onClose}>
     <Field label={tx("Ad")}>
       {(control) => <input {...control} className={inputClass} value={name} maxLength={100} required aria-invalid={invalidField(update.error, 'name')} onChange={(event) => setName(event.target.value)} />}
     </Field>
@@ -97,20 +97,16 @@ export function EditChannelDialog({ channel, onClose }: { channel: NotificationC
 export function ChannelSecretDialog({ channel, onClose }: { channel: NotificationChannel; onClose: () => void }) {
   useLanguage()
   const set = useSetChannelSecret()
-  const [value, setValue] = useState('')
+  const secret = useSecretValue()
   const reset = set.reset
   useEffect(() => reset, [reset])
 
   function submit() {
-    const next = value
-    setValue('')
-    set.mutate({ id: channel.id, value: next }, { onSuccess: onClose })
+    set.mutate({ id: channel.id, value: secret.take() }, { onSuccess: onClose })
   }
 
-  return <FormDialog title={tx("{0}: {1} ayarla", { "0": channel.name, "1": channel.authentication === 'bearer' ? tx('Bearer token') : tx('HMAC anahtarı') })} submitLabel={tx("Secret’ı kaydet")} pendingLabel={tx("Kaydediliyor…")} pending={set.isPending} disabled={!value}
-    description={tx("Değer yalnızca gönderilir; bir daha gösterilmez.")} error={set.error ? errorMessage(set.error) : undefined} onSubmit={submit} onClose={onClose}>
-    <Field label={tx("Yeni secret")}>
-      {(control) => <input {...control} className={inputClass} type="password" autoComplete="new-password" value={value} aria-invalid={invalidField(set.error, 'value')} onChange={(event) => setValue(event.target.value)} />}
-    </Field>
+  return <FormDialog title={tx("{0}: {1} ayarla", { "0": channel.name, "1": channel.authentication === 'bearer' ? tx('Bearer token') : tx('HMAC anahtarı') })} submitLabel={tx("Secret’ı kaydet")} pendingLabel={tx("Kaydediliyor…")} pending={set.isPending} disabled={!secret.value}
+    description={tx("Değer yalnızca gönderilir; bir daha gösterilmez.")} error={set.error} onSubmit={submit} onClose={onClose}>
+    <SecretField label={tx("Yeni secret")} value={secret.value} invalid={invalidField(set.error, 'value')} onChange={secret.set} />
   </FormDialog>
 }

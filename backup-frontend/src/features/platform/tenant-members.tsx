@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
-import { ConfirmDialog } from '@/features/agents/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { useAddMembership, useChangeMembershipRole, usePlatformMemberships, usePlatformUsers, useRemoveMembership } from './hooks'
 import { bareListClass } from './list-empty'
@@ -80,9 +80,13 @@ export function MembershipsSection({ tenantId, tenantName }: { tenantId: string;
       </PlatformQueryState>
     </Section>
     {data && data.totalCount > 0 && <Pagination label={tx("Üyelik sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ memberPage: next })} />}
-    <ConfirmDialog open={Boolean(selected)} onClose={() => setSelected(null)} title={tx("Üyelik kaldırılsın mı?")} confirmLabel="Üyeliği kaldır"
-      description={selected ? tx("{0} kullanıcısı “{1}” tenant'ından çıkarılacak. Kullanıcı hesabı silinmez.", { "0": selected.displayName, "1": tenantName }) : ''}
-      pending={remove.isPending} error={remove.error ? errorMessage(remove.error) : undefined}
+    <ConfirmDialog open={Boolean(selected)} onClose={() => setSelected(null)} title={tx("Üyelik kaldırılsın mı?")} confirmLabel={tx("Üyeliği kaldır")}
+      consequence={{
+        what: selected && tx("{0} kullanıcısı “{1}” çalışma alanından çıkarılır.", { "0": selected.displayName, "1": tenantName }),
+        who: tx("Yalnızca bu kullanıcının bu çalışma alanındaki erişimi etkilenir; kullanıcı hesabı silinmez."),
+        reversible: tx("Evet. Kullanıcıyı yeniden ekleyebilirsiniz."),
+      }}
+      pending={remove.isPending} error={remove.error}
       onConfirm={() => { if (selected) remove.mutate(selected.userId, { onSuccess: () => setSelected(null) }) }} />
   </div>
 }

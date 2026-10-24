@@ -1,5 +1,6 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useId } from 'react'
+import { SecretField as SecretInput } from '@/components/ui/secret-field'
 import { inputClass, selectClass } from '@/components/ui/form-styles'
 import type { FieldValues } from './descriptor-values'
 import type { ConfigField, SecretField } from './types'
@@ -38,19 +39,14 @@ export function ConfigFieldInputs({ fields, values, onChange, invalidName, provi
 }
 
 /** Only newly entered values live in caller state. Stored credentials are never prefilled. */
-export function SecretFieldInputs({ fields, values, onChange, invalidName, providerType }: { fields: readonly SecretField[]; values: Record<string, string>; onChange: (name: string, value: string) => void; invalidName?: string; providerType?: string }) {
+export function SecretFieldInputs({ fields, values, onChange, invalidName, providerType, savedNames = [] }: { fields: readonly SecretField[]; values: Record<string, string>; onChange: (name: string, value: string) => void; invalidName?: string; providerType?: string; savedNames?: readonly string[] }) {
   useLanguage()
   const prefix = useId()
-  return <>{fields.map((field) => {
-    const id = `${prefix}-${field.name}`
-    return <div key={field.name} className="space-y-1 text-sm">
-      <label htmlFor={id} className="block font-medium text-text-heading">{tx(field.label)}</label>
-      {providerType === 'sftp' && field.name === 'privateKey'
-        ? <textarea id={id} className={`${inputClass} mt-0 h-auto font-mono`} rows={6} autoComplete="off" spellCheck={false} autoCapitalize="none" value={values[field.name] ?? ''} aria-invalid={invalidName === field.name} onChange={(event) => onChange(field.name, event.target.value)} />
-        : <input id={id} className={`${inputClass} mt-0`} type="password" autoComplete="new-password" value={values[field.name] ?? ''} aria-invalid={invalidName === field.name}
-          onChange={(event) => onChange(field.name, event.target.value)} />}
-      {providerType === 'sftp' && field.name === 'passphrase' && <span className="block text-sm text-text-muted">{tx("İsteğe bağlı; yalnızca şifreli özel anahtar için girin.")}</span>}
-      {field.required && <span className="block text-sm text-text-muted">{tx("Zorunlu alan.")}</span>}
-    </div>
-  })}</>
+  return <>{fields.map((field) => <SecretInput key={field.name} id={`${prefix}-${field.name}`} label={tx(field.label)} className={`${inputClass} mt-0`}
+    multiline={providerType === 'sftp' && field.name === 'privateKey'} saved={savedNames.includes(field.name)} invalid={invalidName === field.name}
+    hint={(providerType === 'sftp' && field.name === 'passphrase') || field.required ? <>
+      {providerType === 'sftp' && field.name === 'passphrase' && <span className="block">{tx("İsteğe bağlı; yalnızca şifreli özel anahtar için girin.")}</span>}
+      {field.required && <span className="block">{tx("Zorunlu alan.")}</span>}
+    </> : undefined}
+    value={values[field.name] ?? ''} onChange={(value) => onChange(field.name, value)} />)}</>
 }

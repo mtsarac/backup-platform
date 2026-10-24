@@ -6,7 +6,7 @@ import { Field } from '@/components/ui/field'
 import { ErrorNotice } from '@/components/ui/notice'
 import { ApiError } from '@/lib/api/client'
 import { platformPaths } from '../paths'
-import { FormDialog } from '../plans/form-dialog'
+import { FormDialog } from '@/components/ui/form-dialog'
 import { inputClass, linkClass } from '@/components/ui/form-styles'
 import { useOpenSupportSession } from './hooks'
 import { permissionDescriptions, permissionLabels } from './presentation'
@@ -79,7 +79,7 @@ export function OpenSessionDialog({ tenantId, tenantName, onClose }: { tenantId:
   }
 
   return <FormDialog title={tx("Destek oturumu aç")} description={tx("“{0}” tenant'ına süreli ve gerekçeli destek erişimi verilir. İşlemler audit kayıtlarına yazılır ve tenant yöneticileri tarafından görülebilir.", { "0": tenantName })}
-    submitLabel="Oturumu aç" pendingLabel="Oturum açılıyor…" pending={open.isPending} onSubmit={submit} onClose={close}>
+    submitLabel={tx("Oturumu aç")} pendingLabel={tx("Oturum açılıyor…")} pending={open.isPending} onSubmit={submit} onClose={close}>
     <fieldset disabled={open.isPending} className="space-y-4">
       <Field label={tx("Tenant")}>{control => <input {...control} className={inputClass} value={tenantName} readOnly />}</Field>
       <Field label={tx("Erişim gerekçesi")} hint={tx("Gerekçe zorunludur; en fazla 500 karakter.")} error={reasonError}>

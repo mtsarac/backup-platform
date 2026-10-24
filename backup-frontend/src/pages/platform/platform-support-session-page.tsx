@@ -9,9 +9,9 @@ import { Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { Tabs } from '@/components/ui/tabs'
-import { ConfirmDialog } from '@/features/agents/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { platformPaths } from '@/features/platform/paths'
-import { FormDialog } from '@/features/platform/plans/form-dialog'
+import { FormDialog } from '@/components/ui/form-dialog'
 import { inputClass } from '@/components/ui/form-styles'
 import { useListParams } from '@/features/platform/use-list-params'
 import { SupportAuditTab } from '@/features/platform/support/audit-tab'
@@ -25,7 +25,6 @@ import { SupportQueryState } from '@/features/platform/support/support-query-sta
 import { useSupportCountdown } from '@/features/platform/support/use-support-countdown'
 import type { SupportSession } from '@/features/platform/support/types'
 import { ApiError } from '@/lib/api/client'
-import { errorMessage } from '@/lib/api/failure-messages'
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 
@@ -135,9 +134,15 @@ function SessionActions({ session }: { session: SupportSession }) {
   }
   return <>
     {session.isOwner ? <Button variant="outline" disabled={!active || busy} onClick={() => { close.reset(); setCloseOpen(true) }}>{tx("Close session")}</Button> : <Button variant="destructive" disabled={!active || busy} onClick={() => { revoke.reset(); setReason(''); setInvalid(false); setRevokeOpen(true) }}>{tx("Revoke")}</Button>}
-    <ConfirmDialog open={closeOpen && active} onClose={() => setCloseOpen(false)} title={tx("Destek oturumu kapatılsın mı?")} description={tx("Müşteri metadata önbelleği kaldırılır; yeni download, precheck veya restore başlatılamaz. Geçmiş ve audit kayıtları korunur.")} confirmLabel="Oturumu kapat" pending={busy} error={close.error ? errorMessage(close.error) : undefined} onConfirm={end} />
-    {revokeOpen && active && <FormDialog title={tx("Destek erişimini geri al")} description={tx("Oturumun erişimi hemen sona erer. Gerekçe audit kaydına eklenir.")} submitLabel="Erişimi geri al" pendingLabel="Erişim geri alınıyor…" pending={busy}
-      error={revoke.error ? errorMessage(revoke.error) : undefined} onSubmit={revokeAccess} onClose={() => setRevokeOpen(false)}>
+    <ConfirmDialog open={closeOpen && active} onClose={() => setCloseOpen(false)} title={tx("Destek oturumu kapatılsın mı?")}
+      consequence={{
+        what: tx("Müşteri üst veri önbelleği kaldırılır; yeni indirme, ön kontrol veya geri yükleme başlatılamaz."),
+        who: tx("Yalnızca bu destek oturumu kapanır; geçmiş ve denetim kayıtları korunur."),
+        reversible: tx("Hayır. Gerekirse yeni bir destek oturumu açmanız gerekir."),
+      }}
+      confirmLabel={tx("Oturumu kapat")} pending={busy} error={close.error} onConfirm={end} />
+    {revokeOpen && active && <FormDialog title={tx("Destek erişimini geri al")} description={tx("Oturumun erişimi hemen sona erer. Gerekçe audit kaydına eklenir.")} submitLabel={tx("Erişimi geri al")} pendingLabel={tx("Erişim geri alınıyor…")} pending={busy}
+      error={revoke.error} onSubmit={revokeAccess} onClose={() => setRevokeOpen(false)}>
       <Field label={tx("Gerekçe")} hint={tx("Zorunlu; en fazla 500 karakter.")} error={invalid ? tx('Gerekçe zorunludur ve en fazla 500 karakter olabilir.') : undefined}>
         {control => <textarea {...control} className={inputClass} rows={3} value={reason} maxLength={500} disabled={busy} onChange={event => setReason(event.target.value)} />}
       </Field>

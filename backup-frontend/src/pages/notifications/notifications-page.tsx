@@ -1,13 +1,12 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
-import { ErrorNotice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Tabs } from '@/components/ui/tabs'
 import { ChannelsSection } from '@/features/notifications/channels-section'
 import { DeliveriesSection } from '@/features/notifications/deliveries-section'
 import { PolicySection } from '@/features/notifications/policy-section'
 import { useTenant } from '@/features/tenancy/use-tenant'
-import { accessDenied } from '@/lib/api/failure-messages'
+import { AccessDenied } from '@/components/auth/access-denied'
 
 type Tab = 'policy' | 'channels' | 'deliveries'
 
@@ -18,7 +17,7 @@ export function NotificationsPage() {
   const [tab, setTab] = useState<Tab>('policy')
   if (!canAdmin) return <div className="space-y-6">
     <PageHeader title={tx("Bildirimler")} />
-    <ErrorNotice title={tx("Bildirimleri yönetme yetkiniz yok")} {...accessDenied(tx("Bildirim ayarlarını yalnızca bu tenant'ın Owner ve Admin rolleri görebilir."))} />
+    <AccessDenied title={tx("Bildirimleri yönetme yetkiniz yok")} what={tx("Bildirim ayarlarını yalnızca bu tenant'ın Owner ve Admin rolleri görebilir.")} />
   </div>
   return <div className="space-y-6">
     <PageHeader title={tx("Bildirimler")} description={tx("{0} · E-posta, webhook ve SMS ile uyarı bildirimleri.", { "0": tenant.name })} />

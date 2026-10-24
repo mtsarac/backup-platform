@@ -4,8 +4,7 @@ import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
-import { ConfirmDialog } from '@/features/agents/confirm-dialog'
-import { errorMessage } from '@/lib/api/failure-messages'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { PlatformQueryState } from '../platform-query-state'
 import { AssignPlanDialog } from './assign-plan-dialog'
 import { useResumeSubscription, useSuspendSubscription, useTenantSubscription } from './hooks'
@@ -65,13 +64,21 @@ export function SubscriptionSection({ tenantId, tenantName }: { tenantId: string
     {subscription && <SubscriptionHistory tenantId={tenantId} />}
     {dialog === 'assign' && <AssignPlanDialog tenantId={tenantId} current={subscription} onClose={close} />}
     {dialog === 'override' && subscription && <OverrideDialog tenantId={tenantId} subscription={subscription} onClose={close} />}
-    <ConfirmDialog open={dialog === 'suspend'} onClose={close} title={tx("Abonelik askıya alınsın mı?")} confirmLabel="Askıya al"
-      description={tx("“{0}” tenant'ının aboneliği askıya alınacak; daha sonra yeniden etkinleştirilebilir.", { "0": tenantName })}
-      pending={suspend.isPending} error={suspend.error ? errorMessage(suspend.error) : undefined}
+    <ConfirmDialog open={dialog === 'suspend'} onClose={close} title={tx("Abonelik askıya alınsın mı?")} confirmLabel={tx("Askıya al")}
+      consequence={{
+        what: tx("“{0}” çalışma alanının aboneliği askıya alınır ve depolama limiti hemen değişir.", { "0": tenantName }),
+        who: tx("Bu çalışma alanının tüm kullanıcıları ve yedekleme işleri etkilenir."),
+        reversible: tx("Evet. Aboneliği yeniden etkinleştirebilirsiniz."),
+      }}
+      pending={suspend.isPending} error={suspend.error}
       onConfirm={() => suspend.mutate(undefined, { onSuccess: close })} />
-    <ConfirmDialog open={dialog === 'resume'} onClose={close} title={tx("Abonelik yeniden etkinleştirilsin mi?")} confirmLabel="Yeniden etkinleştir"
-      description={tx("“{0}” tenant'ının askıdaki aboneliği yeniden etkin olacak.", { "0": tenantName })}
-      pending={resume.isPending} error={resume.error ? errorMessage(resume.error) : undefined}
+    <ConfirmDialog open={dialog === 'resume'} onClose={close} title={tx("Abonelik yeniden etkinleştirilsin mi?")} confirmLabel={tx("Yeniden etkinleştir")}
+      consequence={{
+        what: tx("“{0}” çalışma alanının askıdaki aboneliği yeniden etkin olur ve depolama limiti hemen geri gelir.", { "0": tenantName }),
+        who: tx("Bu çalışma alanının tüm kullanıcıları ve yedekleme işleri etkilenir."),
+        reversible: tx("Evet. Aboneliği yeniden askıya alabilirsiniz."),
+      }}
+      pending={resume.isPending} error={resume.error}
       onConfirm={() => resume.mutate(undefined, { onSuccess: close })} />
   </div>
 }

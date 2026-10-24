@@ -1,9 +1,8 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Field } from '@/components/ui/field'
-import { FormDialog } from '@/features/platform/plans/form-dialog'
+import { FormDialog } from '@/components/ui/form-dialog'
 import { inputClass, selectClass } from '@/components/ui/form-styles'
-import { errorMessage } from '@/lib/api/failure-messages'
 import { useSaveBandwidthProfile } from './hooks'
 import type { BandwidthProfile, TransferScheduleWindowDto } from './types'
 import { bandwidthUnits, formatBandwidth, parseBandwidth } from './units'
@@ -67,7 +66,7 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
       pendingLabel={tx("Kaydediliyor…")}
       pending={save.isPending}
       disabled={!name.trim()}
-      error={save.error ? errorMessage(save.error) : undefined}
+      error={save.error}
       onSubmit={submit}
       onClose={onClose}
     >

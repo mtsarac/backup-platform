@@ -9,7 +9,7 @@ import { Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
 import { Tabs } from '@/components/ui/tabs'
-import { ConfirmDialog } from '@/features/agents/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { AgentBreakdown } from '@/features/platform/agent-breakdown'
 import { AuditTable } from '@/features/platform/audit-table'
 import { platformCrumb } from '@/features/platform/crumbs'
@@ -68,8 +68,12 @@ function EnrollmentSection({ tenant }: { tenant: PlatformTenantDetail }) {
     actions={<Button role="switch" aria-checked={enabled} aria-label={tx("Yeni Agent kayıtlarına izin ver")} variant="outline" onClick={() => { change.reset(); setConfirmOpen(true) }}>{enabled ? tx('Kaydı kapat') : tx('Kaydı aç')}</Button>}>
     <p className="text-[0.9375rem]"><StatusPill level={enabled ? 'safe' : 'neutral'}>{enabled ? tx('Yeni Agent kaydı açık') : tx('Yeni Agent kaydı kapalı')}</StatusPill> <span className="ml-1 text-text-muted">{tenant.enrollment.changedAt ? tx("Son değişiklik: {0}", { "0": formatDateTime(tenant.enrollment.changedAt, tx('Henüz bildirilmedi')) }) : tx('Politika henüz hiç değiştirilmedi.')}</span></p>
     <ConfirmDialog open={confirmOpen} onClose={() => setConfirmOpen(false)} title={enabled ? tx('Agent kaydı kapatılsın mı?') : tx('Agent kaydı açılsın mı?')}
-      description={enabled ? tx("“{0}” tenant'ında yeni Agent kayıtları engellenecek. Mevcut Agent'lar etkilenmez.", { "0": tenant.name }) : tx("“{0}” tenant'ında yeni Agent kayıtlarına izin verilecek.", { "0": tenant.name })}
-      confirmLabel={enabled ? tx('Kaydı kapat') : tx('Kaydı aç')} pending={change.isPending} error={change.error ? errorMessage(change.error) : undefined}
+      consequence={{
+        what: enabled ? tx("“{0}” çalışma alanında yeni yedekleme bilgisayarı kayıtları engellenir.", { "0": tenant.name }) : tx("“{0}” çalışma alanında yeni yedekleme bilgisayarı kayıtlarına izin verilir.", { "0": tenant.name }),
+        who: tx("Mevcut yedekleme bilgisayarları etkilenmez; yalnızca yeni kayıtlar etkilenir."),
+        reversible: tx("Evet. Kaydı istediğiniz zaman yeniden açabilir veya kapatabilirsiniz."),
+      }}
+      confirmLabel={enabled ? tx('Kaydı kapat') : tx('Kaydı aç')} pending={change.isPending} error={change.error}
       onConfirm={() => change.mutate(!enabled, { onSuccess: () => setConfirmOpen(false) })} />
   </Section>
 }

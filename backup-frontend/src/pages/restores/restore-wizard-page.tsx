@@ -21,7 +21,8 @@ import { StoredLoginPanel } from '@/features/restores/stored-login-panel'
 import { ApiError } from '@/lib/api/client'
 import { FileRestoreWizard } from '@/features/restores/file-restore-wizard'
 import { formatBytes } from '@/lib/format'
-import { accessDenied, errorMessage, failureMessage } from '@/lib/api/failure-messages'
+import { AccessDenied } from '@/components/auth/access-denied'
+import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
 
 
 export function RestoreWizardPage() {
@@ -34,7 +35,7 @@ export function RestoreWizardPage() {
   if (!canOperate) {
     return <div className="space-y-6">
       <PageHeader title={tx("Backup Geri Yükleme Sihirbazı")} crumbs={[{ label: tx('Backup dosyaları'), to: `/tenants/${tenantId}/artifacts` }, { label: tx('Backup detayları'), to: `/tenants/${tenantId}/artifacts/${id}` }, { label: tx('Geri yükleme') }]} />
-      <ErrorNotice {...accessDenied(tx("Bu sayfada geri yükleme (Restore) işlemi yapma yetkiniz yok. Restore başlatma yalnızca Owner, Admin ve Operator rollerine açıktır. Viewer rolü salt okunurdur."))} />
+      <AccessDenied what={tx("Bu sayfada geri yükleme (Restore) işlemi yapma yetkiniz yok. Restore başlatma yalnızca Owner, Admin ve Operator rollerine açıktır. Viewer rolü salt okunurdur.")} />
     </div>
   }
 

@@ -13,14 +13,13 @@ import { platformCrumb } from '@/features/platform/crumbs'
 import { useCreateTenant, usePlatformTenants } from '@/features/platform/hooks'
 import { ListEmpty } from '@/features/platform/list-empty'
 import { platformPaths } from '@/features/platform/paths'
-import { FormDialog } from '@/features/platform/plans/form-dialog'
+import { FormDialog } from '@/components/ui/form-dialog'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { SearchForm } from '@/features/platform/search-form'
 import { inputClass, linkClass } from '@/components/ui/form-styles'
 import type { PlatformTenant } from '@/features/platform/types'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { ApiError } from '@/lib/api/client'
-import { errorMessage } from '@/lib/api/failure-messages'
 import { StatusPill } from '@/components/data/status-pill'
 
 function CreateTenantDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (name: string) => void }) {
@@ -30,7 +29,7 @@ function CreateTenantDialog({ onClose, onCreated }: { onClose: () => void; onCre
   const nameInvalid = create.error instanceof ApiError && create.error.field === 'name'
   return <FormDialog title={tx("Yeni tenant")} description={tx("Tenant, müşteriye ait yalıtılmış çalışma alanıdır. Üyeleri ve abonelik planını oluşturduktan sonra tenant detayından yönetirsiniz.")}
     submitLabel={tx("Tenant oluştur")} pendingLabel={tx("Oluşturuluyor…")} pending={create.isPending} disabled={!name.trim()}
-    error={create.error ? errorMessage(create.error) : undefined} onClose={onClose}
+    error={create.error} onClose={onClose}
     onSubmit={() => create.mutate(name.trim(), { onSuccess: (tenant) => { onCreated(tenant.name); onClose() } })}>
     <Field label={tx("Tenant adı")}>{(control) => <input {...control} className={inputClass} value={name} maxLength={200} required aria-invalid={nameInvalid} onChange={(event) => setName(event.target.value)} />}</Field>
   </FormDialog>

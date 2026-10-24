@@ -14,9 +14,9 @@ import { useTenant } from '@/features/tenancy/use-tenant'
 import { agentQueryKeys, useEnrollmentPolicy, useEnrollmentTokens } from '@/features/agents/hooks'
 import { revokeEnrollmentToken, setEnrollmentPolicy } from '@/features/agents/api'
 import type { EnrollmentToken } from '@/features/agents/types'
-import { ConfirmDialog } from '@/features/agents/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { AddAgentDialog } from '@/features/agents/add-agent-dialog'
-import { accessDenied, errorMessage } from '@/lib/api/failure-messages'
+import { AccessDenied } from '@/components/auth/access-denied'
 import { formatDateTime } from '@/lib/format'
 
 export function AgentRegisterPage() {
@@ -24,7 +24,7 @@ export function AgentRegisterPage() {
   useLanguage()
   return canAdmin ? <EnrollmentContent key={tenantId} tenantId={tenantId} /> : <div className="space-y-6">
     <PageHeader title={tx("Ajan Kaydı")} description={tx("Bu çalışma alanındaki yeni ajan kayıtlarını ve kurulum komutlarını yönetin.")} />
-    <ErrorNotice title={tx("Yetkiniz yok")} {...accessDenied(tx("Agent kaydını yönetmek için çalışma alanı yöneticisi olmalısınız."))} control={<Link className={linkClass} to={`/tenants/${tenantId}/agents`}>{tx("Agent'lara dön")}</Link>} />
+    <AccessDenied title={tx("Yetkiniz yok")} what={tx("Agent kaydını yönetmek için çalışma alanı yöneticisi olmalısınız.")} control={<Link className={linkClass} to={`/tenants/${tenantId}/agents`}>{tx("Agent'lara dön")}</Link>} />
   </div>
 }
 
@@ -67,6 +67,12 @@ function EnrollmentContent({ tenantId }: { tenantId: string }) {
       <QueryState isPending={tokens.isPending} error={tokens.error}><DataList rows={tokens.data ?? []} columns={columns} keyExtractor={(token) => token.tokenId} emptyMessage={tx("Aktif kayıt token'ı yok.")} className="rounded-none border-0 shadow-none" /></QueryState>
     </Section>
     {createOpen && policy.data?.enabled && !changePolicy.isPending && <AddAgentDialog tenantId={tenantId} onClose={() => setCreateOpen(false)} />}
-    <ConfirmDialog open={Boolean(selected)} onClose={() => setSelected(null)} title={tx("Kayıt token'ı iptal edilsin mi?")} description={tx("Bu token yeni agent kaydı için kullanılamayacak. Mevcut agent'lar etkilenmez.")} pending={revoke.isPending} error={revoke.error ? errorMessage(revoke.error) : undefined} onConfirm={() => { if (selected) revoke.mutate(selected.tokenId) }} />
+    <ConfirmDialog open={Boolean(selected)} onClose={() => setSelected(null)} title={tx("Kayıt anahtarı iptal edilsin mi?")}
+      consequence={{
+        what: tx("Bu anahtar yeni bilgisayar kaydı için kullanılamaz."),
+        who: tx("Yalnızca bu anahtarla henüz kaydolmamış bilgisayarlar etkilenir; mevcut yedekleme bilgisayarları etkilenmez."),
+        reversible: tx("Hayır. Yeni bir kayıt anahtarı oluşturmanız gerekir."),
+      }}
+      confirmLabel={tx("İptali onayla")} pending={revoke.isPending} error={revoke.error} onConfirm={() => { if (selected) revoke.mutate(selected.tokenId) }} />
   </div>
 }

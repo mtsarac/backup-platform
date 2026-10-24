@@ -12,7 +12,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { Tabs } from '@/components/ui/tabs'
 import { ArtifactDetails } from '@/features/artifacts/artifact-details'
-import { ConfirmDialog } from '@/features/agents/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useBackup, useBackupActions } from '@/features/backups/hooks'
 import { canCancelRun, canRetryRun, isActiveRun, progressStageLabel, retryStateLabels, triggerLabel } from '@/features/backups/presentation'
 import { ReplicationBadge, ReplicationSection } from '@/features/backups/replication'
@@ -20,7 +20,7 @@ import { SizeAnomalyBadge, SizeAnomalyComparison } from '@/features/backups/size
 import type { BackupAttempt, BackupRun } from '@/features/backups/types'
 import { linkClass } from '@/components/ui/form-styles'
 import { useTenant } from '@/features/tenancy/use-tenant'
-import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
+import { failureMessage } from '@/lib/api/failure-messages'
 import { formatDateTime, formatDuration, formatSeconds } from '@/lib/format'
 
 type Tab = 'summary' | 'attempts' | 'replication' | 'timing'
@@ -91,9 +91,13 @@ function BackupDetail({ id }: { id: string }) {
       />
       <QueryState isPending={query.isPending} error={query.error} empty={!query.isPending && !run}>
         {run && <>
-          <ConfirmDialog open={confirmCancel && canOperate && canCancelRun(run.status)} onClose={() => setConfirmCancel(false)} title={tx("Bu çalıştırma iptal edilsin mi?")} confirmLabel="İptali onayla"
-            description={tx("Agent'a iptal isteği iletilir. Agent işlemi durdurana kadar çalıştırma iptal edilmiş sayılmaz; yarım kalan yedek kullanılamaz.")}
-            pending={actions.cancel.isPending} error={actions.cancel.error ? errorMessage(actions.cancel.error) : undefined} onConfirm={() => void perform('cancel')} />
+          <ConfirmDialog open={confirmCancel && canOperate && canCancelRun(run.status)} onClose={() => setConfirmCancel(false)} title={tx("Bu çalıştırma iptal edilsin mi?")} confirmLabel={tx("İptali onayla")}
+            consequence={{
+              what: tx("Yedekleme bilgisayarına iptal isteği iletilir. İşlem durana kadar deneme iptal edilmiş sayılmaz; yarım kalan yedek kullanılamaz."),
+              who: tx("Yalnızca bu yedekleme denemesi etkilenir; önceki yedekleriniz korunur."),
+              reversible: tx("Hayır. İptal edilen denemeyi sürdüremezsiniz; yeni bir deneme başlatmanız gerekir."),
+            }}
+            pending={actions.cancel.isPending} error={actions.cancel.error} onConfirm={() => void perform('cancel')} />
           {notice && run.status !== 'Succeeded' && !(run.status === 'Cancelled' && notice.startsWith(tx('İptal isteği'))) && <Notice tone="success">{notice}</Notice>}
           {actions.retry.error && <ErrorNotice error={actions.retry.error} />}
           {actions.cancel.error && !confirmCancel && <ErrorNotice error={actions.cancel.error} />}

@@ -2,8 +2,7 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Field } from '@/components/ui/field'
 import { ApiError } from '@/lib/api/client'
-import { errorMessage } from '@/lib/api/failure-messages'
-import { FormDialog } from '@/features/platform/plans/form-dialog'
+import { FormDialog } from '@/components/ui/form-dialog'
 import { inputClass, selectClass } from '@/components/ui/form-styles'
 import { parseQuotaScopeLabels, parseStorageConnectionIds, type ScopeValuesResult } from '@/features/storage/scope-input'
 import { QuotaConnectionPicker } from '@/features/storage-connections/quota-connection-picker'
@@ -122,10 +121,11 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
       pendingLabel={isEditing ? tx('Kaydediliyor…') : tx('Oluşturuluyor…')}
       pending={mutation.isPending}
       disabled={!name.trim() || (!isEditing && !key.trim())}
-      error={scopeError || (mutation.error ? errorMessage(mutation.error) : undefined)}
+      error={mutation.error}
       onSubmit={handleSubmit}
       onClose={onClose}
     >
+      {scopeError && <p role="alert" className="text-sm text-error">{scopeError}</p>}
       <fieldset className="space-y-4">
         <legend className="mb-3 text-sm font-semibold text-text-heading">{tx("Kimlik ve durum")}</legend>
         {!isEditing && <Field label={tx("Politika Anahtarı (Key)")} hint={tx("Benzersiz kimlik. Oluşturulduktan sonra değiştirilemez.")}>

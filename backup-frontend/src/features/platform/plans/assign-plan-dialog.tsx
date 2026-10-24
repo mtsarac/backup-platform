@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Field } from '@/components/ui/field'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { inputClass, selectClass } from '@/components/ui/form-styles'
-import { FormDialog } from './form-dialog'
+import { FormDialog } from '@/components/ui/form-dialog'
 import { useAssignSubscriptionPlan, usePlans } from './hooks'
 import { resolveOverride, type OverrideDraft } from './override-draft'
 import { OverrideFields } from './override-fields'
@@ -37,9 +37,9 @@ export function AssignPlanDialog({ tenantId, current, onClose }: { tenantId: str
     setEndsAtError('')
     assign.mutate(input, { onSuccess: onClose })
   }
-  return <FormDialog title={changing ? tx('Planı değiştir') : tx('Plan ata')} submitLabel={changing ? tx('Planı değiştir') : tx('Plan ata')} pendingLabel="Kaydediliyor…"
+  return <FormDialog title={changing ? tx('Planı değiştir') : tx('Plan ata')} submitLabel={changing ? tx('Planı değiştir') : tx('Plan ata')} pendingLabel={tx("Kaydediliyor…")}
     description={changing ? tx("Mevcut abonelik “{0}” planından değiştirilir ve geçmişte “Değiştirildi” olarak kalır. Override yeni plana taşınmaz.", { "0": current.planName }) : tx('Bu tenant için yeni bir abonelik başlatılır.')}
-    pending={assign.isPending} disabled={!planId} error={assign.error ? errorMessage(assign.error) : undefined} onSubmit={submit} onClose={onClose}>
+    pending={assign.isPending} disabled={!planId} error={assign.error} onSubmit={submit} onClose={onClose}>
     <Field label="Plan">{(control) => <select {...control} className={`${selectClass} w-full`} value={planId} disabled={plans.isPending} onChange={(event) => setPlanId(event.target.value)}>
         <option value="">{plans.isPending ? tx('Planlar yükleniyor…') : plans.error ? tx('Planlar alınamadı') : tx('Plan seçin')}</option>
         {options.map((plan) => <option key={plan.planId} value={plan.planId} disabled={current?.planId === plan.planId}>{plan.name} · {formatGb(plan.storageLimitBytes)}{current?.planId === plan.planId ? tx(' (mevcut)') : ''}</option>)}

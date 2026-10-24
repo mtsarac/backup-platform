@@ -3,15 +3,14 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
-import { ConfirmDialog } from '@/features/agents/confirm-dialog'
-import { inputClass } from '@/components/ui/form-styles'
+import { TypedConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { useRemoveRollbackCopy, useRetryRestoreCleanup } from './hooks'
 import { isActiveRestore, verificationCheckLabel, verificationCleanupText } from './presentation'
 import type { RestoreView } from './types'
 import { formatDateTime, formatDuration } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
-import { describeFailure, errorMessage } from '@/lib/api/failure-messages'
+import { describeFailure } from '@/lib/api/failure-messages'
 
 /** Detail of a disposable-database restore test: outcome, checks and whether the temporary database is gone. */
 export function VerificationDetail({ restore }: { restore: RestoreView }) {
@@ -41,7 +40,7 @@ export function VerificationDetail({ restore }: { restore: RestoreView }) {
         {cleanup.state === 'Pending' && !isActiveRestore(restore.status) && cleanup.nextAttemptAt && <p className="text-xs text-text-muted">{tx("Sonraki deneme:")}{' '}{formatDateTime(cleanup.nextAttemptAt)}</p>}
         {canOperate && cleanup.state === 'Pending' && cleanup.canRequest && <>
           <Button variant="outline" disabled={retry.isPending} onClick={() => retry.mutate('')}>{retry.isPending ? tx('İşleniyor…') : tx('Temizliği yeniden dene')}</Button>
-          {retry.error && <p role="alert" className="text-sm text-error">{errorMessage(retry.error, 'restore')}</p>}
+          {retry.error && <ErrorNotice error={retry.error} scope="restore" />}
         </>}
       </div>
     </Section>}
@@ -54,20 +53,22 @@ export function RollbackCopyPanel({ restore }: { restore: RestoreView }) {
   const { canAdmin } = useTenant()
   const remove = useRemoveRollbackCopy(restore.id)
   const [open, setOpen] = useState(false)
-  const [typed, setTyped] = useState('')
   const cleanup = restore.cleanup
   if (cleanup?.kind !== 'RollbackCopy' || cleanup.state !== 'Retained') return null
   const name = cleanup.databaseName ?? ''
   async function confirm() {
-    if (typed !== name || remove.isPending) return
-    try { await remove.mutateAsync(typed); setOpen(false) } catch { /* shown in dialog */ }
+    if (remove.isPending) return
+    try { await remove.mutateAsync(name); setOpen(false) } catch { /* shown in dialog */ }
   }
-  return <Section title={tx("Rollback kopyası")} actions={canAdmin && cleanup.canRequest && <Button variant="destructive" onClick={() => { remove.reset(); setTyped(''); setOpen(true) }}>{tx("Rollback kopyasını kaldır")}</Button>}>
+  return <Section title={tx("Rollback kopyası")} actions={canAdmin && cleanup.canRequest && <Button variant="destructive" onClick={() => { remove.reset(); setOpen(true) }}>{tx("Rollback kopyasını kaldır")}</Button>}>
     <p className="text-sm">{tx("Rollback kopyası saklanıyor:")}{' '}<code className="font-mono">{name}</code>{tx(". Otomatik olarak asla kaldırılmaz.")}</p>
     {cleanup.retainedUntil && <p className="mt-1 text-sm text-text-muted">{tx("Koruma süresi sonu:")}{' '}{formatDateTime(cleanup.retainedUntil)}</p>}
-    <ConfirmDialog open={open} onClose={() => setOpen(false)} title={tx("Rollback kopyası kaldırılsın mı?")} confirmLabel="Kalıcı olarak kaldır" confirmDisabled={typed !== name}
-      pending={remove.isPending} error={remove.error ? errorMessage(remove.error, 'restore') : undefined} onConfirm={() => void confirm()}
-      description={<span className="block space-y-3"><span className="block">{tx("Bu işlem önceki Database'i kalıcı olarak siler ve geri alınamaz. Onaylamak için Database adını yazın:")}{' '}<code className="font-mono">{name}</code></span>
-        <input aria-label={tx("Database adı onayı")} className={inputClass} value={typed} onChange={(event) => setTyped(event.target.value)} autoComplete="off" /></span>} />
+    <TypedConfirmDialog open={open} onClose={() => setOpen(false)} title={tx("Rollback kopyası kaldırılsın mı?")} confirmLabel={tx("Kalıcı olarak kaldır")} name={name}
+      pending={remove.isPending} error={remove.error} errorScope="restore" onConfirm={() => void confirm()}
+      consequence={{
+        what: tx("Önceki veritabanı kalıcı olarak silinir."),
+        who: tx("Geri yükleme öncesindeki veriye dönüş yolu kapanır."),
+        reversible: tx("Hayır. Silinen veritabanı geri getirilemez."),
+      }} />
   </Section>
 }

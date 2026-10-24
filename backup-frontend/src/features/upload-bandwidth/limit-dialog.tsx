@@ -1,9 +1,8 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Field } from '@/components/ui/field'
-import { FormDialog } from '@/features/platform/plans/form-dialog'
+import { FormDialog } from '@/components/ui/form-dialog'
 import { inputClass, selectClass } from '@/components/ui/form-styles'
-import { errorMessage } from '@/lib/api/failure-messages'
 import { useSetUploadBandwidth } from './hooks'
 import type { BandwidthTarget } from './types'
 import { bandwidthErrorMessage, bandwidthUnits, formatBandwidth, parseBandwidth, toInput } from './units'
@@ -32,8 +31,8 @@ export function LimitDialog({ target, name, current, minimum, maximum, onClose }
     if (invalid) return
     save.mutate({ target, bytesPerSecond: parsed?.bytesPerSecond ?? null }, { onSuccess: onClose })
   }
-  return <FormDialog title={tx("Yükleme hız sınırı: {0}", { "0": name })} description={scopeHelp[target.scope]} submitLabel="Kaydet" pendingLabel="Kaydediliyor…" pending={save.isPending} disabled={invalid}
-    error={save.error ? errorMessage(save.error) : undefined} onSubmit={submit} onClose={onClose}>
+  return <FormDialog title={tx("Yükleme hız sınırı: {0}", { "0": name })} description={scopeHelp[target.scope]} submitLabel={tx("Kaydet")} pendingLabel={tx("Kaydediliyor…")} pending={save.isPending} disabled={invalid}
+    error={save.error} onSubmit={submit} onClose={onClose}>
     <label className="flex min-h-11 items-center gap-3 text-[0.9375rem] text-text">
       <input type="checkbox" className="size-5 accent-primary" checked={unlimited} onChange={event => setUnlimited(event.target.checked)} />{tx("Limitsiz (sınır yok)")}</label>
     <div className="grid gap-3 sm:grid-cols-[1fr_auto]">

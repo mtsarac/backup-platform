@@ -10,14 +10,14 @@ import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { Tabs } from '@/components/ui/tabs'
-import { ConfirmDialog } from '@/features/agents/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useArtifact } from '@/features/artifacts/hooks'
 import { useCancelRestore, useRestore } from '@/features/restores/hooks'
 import { RollbackCopyPanel, VerificationDetail } from '@/features/restores/verification-detail'
 import { canCancelRestore, databaseStateLabel, isActiveRestore, restoreModeLabel, restoreProgressPercent, restoreStageLabel, safeRestoreCode, targetStateDescription, targetStateLabel } from '@/features/restores/presentation'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { formatDateTime } from '@/lib/format'
-import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
+import { failureMessage } from '@/lib/api/failure-messages'
 
 function RestoreProgress({ stage, percent: rawPercent, at, label }: { stage: string | null; percent: number | null; at: string | null; label: string }) {
   useLanguage()
@@ -129,6 +129,14 @@ function RestoreDetail({ id }: { id: string }) {
       </>}
     </QueryState>
     {query.error && <Button variant="outline" onClick={() => void query.refetch()}>{tx("Tekrar dene")}</Button>}
-    <ConfirmDialog open={confirmOpen && mayCancel} onClose={() => setConfirmOpen(false)} title={tx("Restore iptal edilsin mi?")} description={fileRestore ? tx('Başarısız veya iptal edilmiş işlemden sonra hedef dosyaları ve varsa korunan geri dönüş verilerini kontrol edin; elle müdahale gerekebilir.') : tx("İptal isteği Agent'a iletilir; Database motorunun işlemi anında durmayabilir. Başlamış bir restore hedef Database'i kısmen geri yüklenmiş veya bilinmeyen durumda bırakabilir. Elle müdahale gerekebilir. İptal, Database'in sağlıklı olduğunu garanti etmez.")} pending={cancel.isPending} error={cancel.error ? errorMessage(cancel.error, 'restore') : undefined} onConfirm={() => void confirmCancel()} />
+    <ConfirmDialog open={confirmOpen && mayCancel} onClose={() => setConfirmOpen(false)} title={tx("Geri yükleme iptal edilsin mi?")}
+      consequence={{
+        what: fileRestore
+          ? tx('Başarısız veya iptal edilmiş işlemden sonra hedef dosyaları ve varsa korunan geri dönüş verilerini kontrol etmeniz gerekebilir.')
+          : tx("İptal isteği yedekleme bilgisayarına iletilir; veritabanı motoru işlemi anında durdurmayabilir. Başlamış bir geri yükleme hedef veritabanını kısmen geri yüklenmiş veya bilinmeyen durumda bırakabilir."),
+        who: tx("Hedef veritabanı etkilenir. İptal, veritabanının sağlıklı olduğunu garanti etmez."),
+        reversible: tx("Hayır. Elle müdahale gerekebilir; geri yüklemeyi yeniden başlatabilirsiniz."),
+      }}
+      confirmLabel={tx("İptali onayla")} pending={cancel.isPending} error={cancel.error} errorScope="restore" onConfirm={() => void confirmCancel()} />
   </div>
 }
