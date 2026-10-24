@@ -46,7 +46,7 @@ export function DiscoverySourcePicker({ agents, agentId: wizardAgentId, selected
         {agentId && <QueryState isPending={instances.isPending} error={instances.error}>
           <Field id="discovery-instance" label={tx("Instance")} hint={tx("Yalnızca kimlik doğrulanmış ve adresi bilinen Instance'lar listelenir.")}>{control => <select {...control} className={`${selectClass} w-full`} value={instanceId} onChange={event => { setInstanceId(event.target.value); setPicked([]) }}>
             <option value="">{tx("Instance seçin")}</option>{usable.map(item => <option key={item.id} value={item.id}>{item.displayName} · {engineLabels[item.engine]} · {item.host}:{item.port}</option>)}</select>}</Field>
-          {usable.length === 0 && <p className="mt-2 text-sm text-text-muted">{tx("Kullanılabilir Instance yok. Keşfedilen Veritabanları sayfasından kimlik bilgisi bağlayın.")}</p>}
+          {usable.length === 0 && <p className="mt-2 text-sm text-text-muted">{tx("Kullanılabilir sunucu yok. Veritabanı bulma sayfasından giriş bilgilerini kaydedin.")}</p>}
         </QueryState>}
         {instanceId && <QueryState isPending={detail.isPending} error={detail.error}>
           {instance && <><DatabaseTable instance={instance} selected={picked} onChange={setPicked} />
