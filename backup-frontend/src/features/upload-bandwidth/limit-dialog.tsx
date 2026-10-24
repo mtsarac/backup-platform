@@ -3,9 +3,10 @@ import { useState } from 'react'
 import { Field } from '@/components/ui/field'
 import { FormDialog } from '@/components/ui/form-dialog'
 import { inputClass, selectClass } from '@/components/ui/form-styles'
+import { TechnicalDetails } from '@/components/ui/technical-details'
 import { useSetUploadBandwidth } from './hooks'
 import type { BandwidthTarget } from './types'
-import { bandwidthErrorMessage, bandwidthUnits, formatBandwidth, parseBandwidth, toInput } from './units'
+import { bandwidthErrorMessage, bandwidthUnits, formatBandwidth, formatExactRate, parseBandwidth, toInput, unitLabel } from './units'
 import type { BandwidthUnitId } from './units'
 
 const scopeHelp = {
@@ -41,10 +42,11 @@ export function LimitDialog({ target, name, current, minimum, maximum, onClose }
       </Field>
       <Field label={tx("Birim")}>
         {control => <select {...control} className={`${selectClass} w-full`} value={unit} disabled={unlimited} onChange={event => setUnit(event.target.value as BandwidthUnitId)}>
-          {bandwidthUnits.map(item => <option key={item.id} value={item.id}>{item.id}</option>)}
+          {bandwidthUnits.map(item => <option key={item.id} value={item.id}>{unitLabel(item.id)}</option>)}
         </select>}
       </Field>
     </div>
-    <p className="text-sm text-text-muted">{tx("1 Mbit/s = 125.000 B/s · 1 MB/s = 1.000.000 B/s. En az")}{' '}{formatBandwidth(minimum)}{tx(", en çok")}{' '}{formatBandwidth(maximum)}.</p>
+    <p className="text-sm text-text-muted">{tx("En az {0}, en çok {1}.", { "0": formatBandwidth(minimum), "1": formatBandwidth(maximum) })}</p>
+    <TechnicalDetails items={parsed && 'bytesPerSecond' in parsed ? [{ label: tx("Kaydedilecek değer"), value: formatExactRate(parsed.bytesPerSecond) }] : []} />
   </FormDialog>
 }

@@ -12,6 +12,12 @@ export const bandwidthUnits = [
 export type BandwidthUnitId = (typeof bandwidthUnits)[number]['id']
 
 
+/** The unit as written to the user ("Mbit/sn" in Turkish); the ids stay `Mbit/s` etc. because they are form values. */
+const unitLabels: Record<BandwidthUnitId, () => string> = {
+  'Mbit/s': () => tx('Mbit/sn'), 'MB/s': () => tx('MB/sn'), 'KB/s': () => tx('KB/sn'), 'B/s': () => tx('B/sn'),
+}
+export const unitLabel = (unit: BandwidthUnitId) => unitLabels[unit]()
+
 const unitSize = (unit: BandwidthUnitId) => bandwidthUnits.find(item => item.id === unit)?.bytesPerSecond ?? 1
 
 /** The first unit (Mbit/s, MB/s, KB/s, B/s) in which `bytesPerSecond` is a whole number; B/s always fits. */
@@ -19,15 +25,15 @@ export function cleanUnit(bytesPerSecond: number) {
   return bandwidthUnits.find(unit => bytesPerSecond % unit.bytesPerSecond === 0) ?? bandwidthUnits[bandwidthUnits.length - 1]
 }
 
-/** `10 Mbit/s` for 1,250,000 B/s. */
+/** `10 Mbit/sn` for 1,250,000 B/s. */
 export function formatBandwidth(bytesPerSecond: number): string {
   const unit = cleanUnit(bytesPerSecond)
-  return `${(bytesPerSecond / unit.bytesPerSecond).toLocaleString(currentLocale())} ${unit.id}`
+  return `${(bytesPerSecond / unit.bytesPerSecond).toLocaleString(currentLocale())} ${unitLabel(unit.id)}`
 }
 
-/** `1.250.000 B/s` (Turkish grouping), shown beside the friendly value so a bits/bytes mix-up is visible. */
+/** `1.250.000 B/sn` (Turkish grouping): the exact value for technical details, never the headline. */
 export function formatExactRate(bytesPerSecond: number): string {
-  return `${bytesPerSecond.toLocaleString(currentLocale())} B/s`
+  return `${bytesPerSecond.toLocaleString(currentLocale())} ${unitLabel('B/s')}`
 }
 
 /** Editor text that round-trips through `parseBandwidth` (plain digits, no grouping). */
@@ -57,5 +63,5 @@ export function parseBandwidth(text: string, unit: BandwidthUnitId, minimum: num
 export function bandwidthErrorMessage(error: 'invalid' | 'out_of_range', minimum: number, maximum: number) {
   return error === 'invalid'
     ? tx('Değeri sayı olarak girin (en fazla 6 ondalık basamak); sonuç tam bayt/sn olmalıdır.')
-    : tx("Hız {0} ({1}) ile {2} ({3}) arasında olmalıdır.", { "0": formatBandwidth(minimum), "1": formatExactRate(minimum), "2": formatBandwidth(maximum), "3": formatExactRate(maximum) })
+    : tx("Hız {0} ile {1} arasında olmalıdır.", { "0": formatBandwidth(minimum), "1": formatBandwidth(maximum) })
 }
