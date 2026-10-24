@@ -31,7 +31,7 @@ public sealed class HttpTaskStorageProviderFactory(
 
     public IStorageProvider CreateBackup(BackupTaskSnapshot task, BackupDestinationContract destination)
     {
-        if (destination.Direct && StorageProviderKinds.External(destination.StorageProvider) && destination.StorageConnectionId is { } connectionId)
+        if (destination.Direct && AgentStorageProviders.External(destination.StorageProvider) && destination.StorageConnectionId is { } connectionId)
         {
             return new DirectTaskStorageProvider(http, endpoint, identities, task.AttemptId, task.LeaseToken,
                 connectionId, task.TenantId, destination.StorageProvider, _stagingDirectory, null, windowsSession);
@@ -42,7 +42,7 @@ public sealed class HttpTaskStorageProviderFactory(
 
     public IStorageProvider CreateRestore(RestoreTaskSnapshot task)
     {
-        if (task.Source.Access == "AgentDirect" && StorageProviderKinds.External(task.Source.StorageProvider) && Guid.TryParse(task.Source.StorageTarget, out var connectionId))
+        if (task.Source.Access == "AgentDirect" && AgentStorageProviders.External(task.Source.StorageProvider) && Guid.TryParse(task.Source.StorageTarget, out var connectionId))
         {
             return new DirectTaskStorageProvider(http, endpoint, identities, task.AttemptId, task.LeaseToken,
                 connectionId, task.TenantId, task.Source.StorageProvider, _stagingDirectory, task.OperationId, windowsSession);
@@ -280,10 +280,10 @@ public sealed class HttpTaskStorageProviderFactory(
             {
                 if (_targetProvider is not null) return _targetProvider;
                 var access = await FetchAccessAsync(cancellationToken).ConfigureAwait(false);
-                if (access.ProviderType is StorageProviderKinds.S3 or StorageProviderKinds.Smb)
+                if (access.ProviderType is AgentStorageProviders.S3 or AgentStorageProviders.Smb)
                 {
                     var config = access.Configuration ?? throw new StorageException(StorageFailureKind.InvalidConfiguration, "Missing network storage configuration.");
-                    if (access.ProviderType == "s3")
+                    if (access.ProviderType == AgentStorageProviders.S3)
                     {
                         var options = new S3StorageOptions(new Uri(config["endpoint"]), config["bucket"], config["region"], tenantId, connectionId,
                             config.GetValueOrDefault("objectLockMode"), int.Parse(config.GetValueOrDefault("retentionDays", "0"), System.Globalization.CultureInfo.InvariantCulture));
@@ -298,7 +298,7 @@ public sealed class HttpTaskStorageProviderFactory(
                     }
                     return _targetProvider;
                 }
-                if (access.ProviderType == "sftp")
+                if (access.ProviderType == AgentStorageProviders.Sftp)
                 {
                     if (string.IsNullOrWhiteSpace(access.RemoteBaseDirectory))
                         throw new StorageException(StorageFailureKind.InvalidConfiguration, "Missing SFTP remote base directory.");
@@ -318,7 +318,7 @@ public sealed class HttpTaskStorageProviderFactory(
                     _targetProvider = new SftpStorageProvider(options, _ => ValueTask.FromResult(credential));
                     return _targetProvider;
                 }
-                if (access.ProviderType == "google-drive")
+                if (access.ProviderType == AgentStorageProviders.GoogleDrive)
                 {
                     var options = new GoogleDriveStorageOptions(
                         tenantId,

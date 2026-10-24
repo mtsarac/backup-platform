@@ -1,6 +1,6 @@
 namespace BackupPlatform.BackupProviders.Abstractions.Database;
 
-/// <summary>The engine keys the platform backs up. One definition shared by the backend and the agent.</summary>
+/// <summary>The engine keys the platform backs up. The agent-side copy of the domain's DatabaseEngines (the domain depends on nothing, so the agent cannot share it); a unit test keeps the two in step.</summary>
 public static class DatabaseEngineKeys
 {
     public const string MsSql = "mssql";

@@ -216,7 +216,7 @@ public sealed partial class ReplicaRepairService
     {
         if (!Enum.TryParse<StorageVerificationMethod>(request.VerificationMethod, out var method) || !Enum.IsDefined(method))
             throw new ArgumentException("A verification method is required.", nameof(request));
-        var isDrive = operation.StorageProvider == "google-drive";
+        var isDrive = operation.StorageProvider == StorageProviderTypes.GoogleDrive;
         if (isDrive && string.IsNullOrWhiteSpace(request.DriveRecord?.FileId))
             throw new ArgumentException("A Google Drive target requires its object record.", nameof(request));
         if (string.IsNullOrEmpty(operation.TargetKey) || operation.StorageConnectionId == Guid.Empty) return BackupMutationResult.Conflict;

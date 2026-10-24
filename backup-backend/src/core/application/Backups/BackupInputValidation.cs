@@ -37,7 +37,7 @@ public static class BackupInputValidation
         Check(Text(c.Database, 128), "configuration.database");
         Check(c.Engine != "postgres" || c.Database == c.Database.Trim() && System.Text.Encoding.UTF8.GetByteCount(c.Database) <= 63, "configuration.database");
         Check(c.Engine != "postgres" || !c.IntegratedSecurity, "configuration.integratedSecurity");
-        if (c.Engine == "file-system")
+        if (c.Engine == DatabaseEngines.FileSystem)
         {
             Check(Reference(c.Database), "configuration.database");
             Check(c.Host == "localhost" && c.Port is null && c.IntegratedSecurity && c.DatabaseCredentialReference is null && c.DatabaseLogin is null, "configuration.host");

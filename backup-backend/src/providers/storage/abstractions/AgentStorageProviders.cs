@@ -1,7 +1,7 @@
 namespace BackupPlatform.StorageProviders.Abstractions;
 
-/// <summary>The agent-side copy of the domain's StorageProviderTypes (the domain depends on nothing, so the agent cannot share it). A unit test keeps the two in step.</summary>
-public static class StorageProviderKinds
+/// <summary>The agent-side copy of the domain's StorageProviderTypes (the domain depends on nothing, so the agent cannot share it); a unit test keeps the two in step.</summary>
+public static class AgentStorageProviders
 {
     public const string Local = "local";
     public const string Central = "central";

@@ -13,20 +13,20 @@ public static class RestoreAgentCapability
     public const string PrecheckIdentifier = "mssql.restore.precheck";
     public const string DiscoveryIdentifier = "mssql.restore.discovery";
 
-    public static string ForPurpose(RestorePurpose purpose, string engine = "mssql") => (engine, purpose) switch
+    public static string ForPurpose(RestorePurpose purpose, string engine = DatabaseEngines.MsSql) => (engine, purpose) switch
     {
-        ("mssql", RestorePurpose.Execution) => Identifier,
-        ("mssql", RestorePurpose.Precheck) => PrecheckIdentifier,
-        ("mssql", RestorePurpose.Discovery) => DiscoveryIdentifier,
-        ("postgres", RestorePurpose.Execution) => "postgres.restore.full",
-        ("postgres", RestorePurpose.Precheck) => "postgres.restore.precheck",
-        ("postgres", RestorePurpose.Discovery) => "postgres.restore.discovery",
+        (DatabaseEngines.MsSql, RestorePurpose.Execution) => Identifier,
+        (DatabaseEngines.MsSql, RestorePurpose.Precheck) => PrecheckIdentifier,
+        (DatabaseEngines.MsSql, RestorePurpose.Discovery) => DiscoveryIdentifier,
+        (DatabaseEngines.PostgreSql, RestorePurpose.Execution) => "postgres.restore.full",
+        (DatabaseEngines.PostgreSql, RestorePurpose.Precheck) => "postgres.restore.precheck",
+        (DatabaseEngines.PostgreSql, RestorePurpose.Discovery) => "postgres.restore.discovery",
         ("mssql", RestorePurpose.Verification) => RestoreTaskTypes.MssqlVerificationCapability,
-        ("postgres", RestorePurpose.Verification) => RestoreTaskTypes.PostgresVerificationCapability,
-        ("file-system", RestorePurpose.Execution) => "file-system.restore.full",
-        ("file-system", RestorePurpose.Precheck) => "file-system.restore.precheck",
-        ("file-system", RestorePurpose.Discovery) => "file-system.restore.discovery",
-        ("file-system", RestorePurpose.Verification) => "file-system.restore.verification",
+        (DatabaseEngines.PostgreSql, RestorePurpose.Verification) => RestoreTaskTypes.PostgresVerificationCapability,
+        (DatabaseEngines.FileSystem, RestorePurpose.Execution) => "file-system.restore.full",
+        (DatabaseEngines.FileSystem, RestorePurpose.Precheck) => "file-system.restore.precheck",
+        (DatabaseEngines.FileSystem, RestorePurpose.Discovery) => "file-system.restore.discovery",
+        (DatabaseEngines.FileSystem, RestorePurpose.Verification) => "file-system.restore.verification",
         _ => throw new ArgumentException("Unknown restore engine or purpose.")
     };
 }
@@ -66,7 +66,7 @@ public sealed record RestoreCreateResult(RestoreCreateOutcome Outcome, RestoreOp
     Domain.Support.SupportAccessDenial? SupportDenial = null);
 
 /// <summary>A claimed restore attempt with the replica it reads (the persisted location, never a caller-supplied one).</summary>
-public sealed record RestoreClaim(RestoreOperation Operation, RestoreAttempt Attempt, BackupReplica Replica, string Engine = "mssql", string ArtifactFormat = BackupArtifact.PlainFormat, string SourceChecksum = "");
+public sealed record RestoreClaim(RestoreOperation Operation, RestoreAttempt Attempt, BackupReplica Replica, string Engine = DatabaseEngines.MsSql, string ArtifactFormat = BackupArtifact.PlainFormat, string SourceChecksum = "");
 
 public sealed record RestoreLeaseCommand(TenantId TenantId, AgentId AgentId, Guid AttemptId, Guid LeaseToken, DateTimeOffset Now)
 {

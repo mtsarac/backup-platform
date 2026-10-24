@@ -33,7 +33,7 @@ public sealed record BackupConfiguration(
         BackupGuard.Text(Database, 128);
         if (Engine == "postgres" && (Database != Database.Trim() || System.Text.Encoding.UTF8.GetByteCount(Database) > 63 || IntegratedSecurity))
             throw new ArgumentException("PostgreSQL requires a database name of at most 63 UTF-8 bytes and password authentication.");
-        if (Engine == "file-system")
+        if (Engine == DatabaseEngines.FileSystem)
         {
             BackupGuard.Reference(Database);
             if (Host != "localhost" || Port is not null || !IntegratedSecurity || DatabaseCredentialReference is not null || Files is null)

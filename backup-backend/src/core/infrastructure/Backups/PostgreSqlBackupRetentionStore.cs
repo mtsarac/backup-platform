@@ -160,7 +160,7 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var replica = await context.BackupReplicas.SingleOrDefaultAsync(entity => entity.Id == replicaId, cancellationToken);
         if (replica is null || !replica.CompleteDelete(leaseToken, now)) return false;
-        if (replica.StorageProvider == "google-drive")
+        if (replica.StorageProvider == StorageProviderTypes.GoogleDrive)
         {
             await context.GoogleDriveFileMetadata.Where(m =>
                 m.TenantId == replica.TenantId && m.ConnectionId == replica.StorageConnectionId && m.StorageKey == replica.Key)

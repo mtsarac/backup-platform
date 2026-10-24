@@ -269,7 +269,7 @@ public static class BackupArtifactEngine
     public static string? Read(string metadata)
     {
         using var document = JsonDocument.Parse(metadata);
-        string? engine = "mssql";
+        string? engine = DatabaseEngines.MsSql;
         var found = false;
         foreach (var property in document.RootElement.EnumerateObject())
         {

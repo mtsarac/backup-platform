@@ -41,7 +41,7 @@ public static class RestoreSourceEvaluator
         }
         if (replica.ExecutionLocation != BackupStorageExecutionLocation.Backend)
             return RestoreSourceDecision.Reject(RestoreSourceRejection.NoAccessibleReplica);
-        if (replica.StorageProvider == "central")
+        if (replica.StorageProvider == StorageProviderTypes.Central)
             return RestoreSourceDecision.Accept(RestoreSourceAccess.CentralStorage);
         return (StorageProviderTypes.External(replica.StorageProvider)) && replica.StorageConnectionId != Guid.Empty
             && Guid.TryParse(replica.StorageTarget, out var connectionId) && connectionId == replica.StorageConnectionId

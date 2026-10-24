@@ -18,7 +18,7 @@ public sealed class HttpRetainedUploadAborter(HttpClient http, AgentBackendEndpo
 {
     public async Task AbortAsync(Guid attemptId, RetainedUpload upload, CancellationToken cancellationToken)
     {
-        if (upload.StorageProvider != "s3") return;
+        if (upload.StorageProvider != AgentStorageProviders.S3) return;
         if (!ManagedBackupLayout.TryParseStorageKey(upload.Key, out var layout) || layout is null || layout.AttemptId != attemptId)
             throw new StorageException(StorageFailureKind.InvalidConfiguration, "The journaled upload key does not belong to the attempt.");
         var identity = await identities.LoadAsync(cancellationToken).ConfigureAwait(false)

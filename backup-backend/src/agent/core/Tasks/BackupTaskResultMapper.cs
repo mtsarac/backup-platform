@@ -167,9 +167,9 @@ internal static class BackupTaskResultMapper
             Replicas = [.. copies.Select(copy => new BackupTaskReplica
             {
                 StorageProvider = copy.Replica!.Location.Provider.Value,
-                StorageTarget = StorageProviderKinds.External(copy.Destination.Storage.Value) && copy.Destination.ConnectionId is { } connection
+                StorageTarget = AgentStorageProviders.External(copy.Destination.Storage.Value) && copy.Destination.ConnectionId is { } connection
                     ? connection.ToString("D")
-                    : task.Configuration.Destinations.FirstOrDefault(d => d.StorageConnectionId == copy.Destination.ConnectionId && d.StorageProvider == StorageProviderKinds.Local)?.StorageTarget
+                    : task.Configuration.Destinations.FirstOrDefault(d => d.StorageConnectionId == copy.Destination.ConnectionId && d.StorageProvider == AgentStorageProviders.Local)?.StorageTarget
                         ?? copy.Replica.Location.Provider.Value,
                 StorageConnectionId = copy.Destination.ConnectionId,
                 Key = copy.Replica.Location.Key.Value,

@@ -167,8 +167,8 @@ public sealed class RestoreTaskRequestFactory(
             || string.IsNullOrWhiteSpace(task.DatabaseName) || task.DatabaseName.Length > MaxDatabaseNameLength || task.DatabaseName.Any(char.IsControl)
             || task.Engine == "postgres" && System.Text.Encoding.UTF8.GetByteCount(task.DatabaseName) > 63
             || !HasValidSource(task.Source)
-            || task.Engine == "file-system" && (task.Target.Host != "localhost" || task.Target.Port is not null || !task.Target.IntegratedSecurity || task.Options.TerminateActiveConnections)
-            || task.Engine != "file-system" && task.Options.Files is not null)
+            || task.Engine == DatabaseEngineKeys.FileSystem && (task.Target.Host != "localhost" || task.Target.Port is not null || !task.Target.IntegratedSecurity || task.Options.TerminateActiveConnections)
+            || task.Engine != DatabaseEngineKeys.FileSystem && task.Options.Files is not null)
         {
             throw new RestoreTaskRequestException(RestoreAgentFailureCodes.InvalidConfiguration);
         }
@@ -191,7 +191,7 @@ public sealed class RestoreTaskRequestFactory(
         && string.Equals(source.ChecksumAlgorithm, "sha256", StringComparison.Ordinal)
         && ((source.Access, source.StorageProvider, source.StorageExecutionLocation) is
             ("AgentLocal", "local", "Agent") or ("CentralStorage", "central", "Backend")
-            || (source.Access, source.StorageProvider, source.StorageExecutionLocation) is ("BackendRelayed" or "AgentDirect", StorageProviderKinds.Sftp or StorageProviderKinds.GoogleDrive or StorageProviderKinds.S3 or StorageProviderKinds.Smb, "Backend" or "Agent")
+            || (source.Access, source.StorageProvider, source.StorageExecutionLocation) is ("BackendRelayed" or "AgentDirect", AgentStorageProviders.Sftp or AgentStorageProviders.GoogleDrive or AgentStorageProviders.S3 or AgentStorageProviders.Smb, "Backend" or "Agent")
             && Guid.TryParse(source.StorageTarget, out var connectionId) && connectionId != Guid.Empty
             && storageFactory is not null);
 

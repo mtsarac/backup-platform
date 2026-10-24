@@ -11,7 +11,7 @@ using Microsoft.Extensions.Logging;
 namespace BackupPlatform.Application.Downloads;
 
 public sealed record ReplicaDownloadAvailability(Guid ReplicaId, string StorageProvider, string StorageTarget, bool Available, string? Reason);
-public sealed record DownloadAvailability(bool Available, string? Reason, IReadOnlyList<ReplicaDownloadAvailability> Replicas, string Checksum, long SizeBytes, string? Engine = "mssql",
+public sealed record DownloadAvailability(bool Available, string? Reason, IReadOnlyList<ReplicaDownloadAvailability> Replicas, string Checksum, long SizeBytes, string? Engine = DatabaseEngines.MsSql,
     string Format = BackupArtifact.PlainFormat);
 /// <param name="Decrypt">Tenant administrators only: the serving agent verifies ciphertext and plaintext before direct delivery.</param>
 public sealed record PrepareDownloadRequest(Guid? ReplicaId = null, bool Decrypt = false);
@@ -76,7 +76,7 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
         var external = StorageProviderTypes.AgentExecuted(replica.StorageProvider);
         var directAgent = external ? await agentSource.SelectAgentAsync(tenantId, replica, cancellationToken) : null;
         if (external && directAgent is null) throw new DownloadUnavailableException("DirectPathUnavailable");
-        var extension = availability.Engine switch { "postgres" => "dump", "mssql" => "bak", "file-system" => "zip", _ => "bin" };
+        var extension = availability.Engine switch { DatabaseEngines.PostgreSql => "dump", DatabaseEngines.MsSql => "bak", DatabaseEngines.FileSystem => "zip", _ => "bin" };
         var filename = $"backup-{artifactId:N}.{extension}" + (availability.Format == BackupArtifact.BpeFormat && !decrypt ? ".bpe" : string.Empty);
         var session = await store.CreateAsync(new DownloadCreateCommand(tenantId, artifactId, selected.ReplicaId, userId, filename, time.GetUtcNow(), SessionLifetime, supportSessionId,
             decrypt, breakGlassRequestId, directAgent), cancellationToken);

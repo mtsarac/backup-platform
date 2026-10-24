@@ -109,7 +109,7 @@ public sealed class PostgreSqlAgentReplicaDeletionStore(DbContextOptions<Platfor
         if (!replica.CompleteAgentDeletion(request.OperationId, request.LeaseToken, now, request.AbsenceVerified, request.FailureCode, next))
             return BackupMutationResult.Conflict;
         RecordDeletionOutcome(context, replica, identity, now, request.AbsenceVerified, request.FailureCode);
-        if (request.AbsenceVerified && replica.StorageProvider == "google-drive")
+        if (request.AbsenceVerified && replica.StorageProvider == StorageProviderTypes.GoogleDrive)
         {
             // The object is gone from Drive, so its catalog record goes in the same transaction as the Deleted status.
             await context.GoogleDriveFileMetadata.Where(metadata =>

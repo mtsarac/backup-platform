@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Storage;
 using BackupPlatform.Domain.Backups;
 using System.Linq.Expressions;
 using System.Text.Json.Nodes;
@@ -447,7 +448,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         {
             var provider = storage.Resolve(replica.TenantId, replica.StorageProvider, replica.StorageTarget);
             // Central storage can be mounted only on the agent; absence of a backend mount is not evidence of source failure.
-            if (provider is null) return replica.StorageProvider == "central";
+            if (provider is null) return replica.StorageProvider == StorageProviderTypes.Central;
             if (!provider.Capabilities.Supports(StorageCapabilityIds.Read)) return false;
             await using var source = await provider.OpenReadAsync(new StorageObjectKey(replica.Key), cancellationToken);
             return source.CanRead;
@@ -488,7 +489,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
 
     public async Task<BackupMutationResult> CompleteAsync(RestoreLeaseCommand command, RestoreCompletion completion, CancellationToken cancellationToken)
     {
-        string? engine = "mssql";
+        string? engine = DatabaseEngines.MsSql;
         if (completion.Status == RestoreStatus.Succeeded && completion.TargetState == RestoreTargetState.NotModified)
         {
             await using var context = PlatformDbContext.CreateForPlatformOperations(options);
@@ -672,7 +673,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
     }
 
     private static bool SuccessfulPrecheck(BackupPlatform.Contracts.Restores.RestoreTaskResult? result, RestoreOptions options, string? engine) =>
-        DatabaseEngines.IsValid(engine) && result is { PreCheck.Count: > 0, SourceBackup: not null, FileMappings: not null } && (engine != "mssql" || result.FileMappings.Count > 0) &&
+        DatabaseEngines.IsValid(engine) && result is { PreCheck.Count: > 0, SourceBackup: not null, FileMappings: not null } && (engine != DatabaseEngines.MsSql || result.FileMappings.Count > 0) &&
         result.PreCheck.All(item => item.Status is "Passed" or "Warning" or "Skipped") &&
         (!options.VerifyChecksum || result.ChecksumVerified) && (!options.VerifyBackup || result.BackupVerified);
 

@@ -55,7 +55,7 @@ public sealed class BackupReplica : ITenantOwned
             throw new ArgumentException("Invalid replica verification timestamp.");
         var location = executionLocation ?? (storageProvider == StorageProviderTypes.Local ? BackupStorageExecutionLocation.Agent : BackupStorageExecutionLocation.Backend);
         if (!Enum.IsDefined(location) || (location == BackupStorageExecutionLocation.Agent &&
-            (storageProvider != "local" || owningAgentId is null || owningAgentId == Guid.Empty)))
+            (storageProvider != StorageProviderTypes.Local || owningAgentId is null || owningAgentId == Guid.Empty)))
             throw new ArgumentException("Agent replicas require a local provider and an owning agent.");
         ExecutionLocation = location;
         OwningAgentId = location == BackupStorageExecutionLocation.Agent ? owningAgentId : null;
@@ -122,9 +122,6 @@ public sealed class BackupReplica : ITenantOwned
     public Guid? DeleteCompletionToken { get; private set; }
     public bool? DeleteCompletionAbsenceVerified { get; private set; }
     public string? DeleteCompletionFailureCode { get; private set; }
-    /// <summary>External providers whose physical removal (and repair) only an agent performs; the backend holds no credential for them.</summary>
-    public static bool IsAgentExecutedProvider(string provider) => StorageProviderTypes.AgentExecuted(provider);
-
     /// <summary>Removal of this replica is performed by an agent: its local disk, or an external provider it can reach directly.</summary>
     public bool AgentExecuted => ExecutionLocation == BackupStorageExecutionLocation.Agent || StorageProviderTypes.AgentExecuted(StorageProvider);
 

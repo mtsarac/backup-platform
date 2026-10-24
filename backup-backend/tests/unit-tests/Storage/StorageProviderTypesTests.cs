@@ -17,7 +17,7 @@ public sealed class StorageProviderTypesTests
     {
         Assert.Equal(agentExecuted, StorageProviderTypes.AgentExecuted(provider));
         Assert.Equal(external, StorageProviderTypes.External(provider));
-        Assert.Equal(agentExecuted, StorageProviderKinds.AgentExecuted(provider));
-        Assert.Equal(external, StorageProviderKinds.External(provider));
+        Assert.Equal(agentExecuted, AgentStorageProviders.AgentExecuted(provider));
+        Assert.Equal(external, AgentStorageProviders.External(provider));
     }
 }

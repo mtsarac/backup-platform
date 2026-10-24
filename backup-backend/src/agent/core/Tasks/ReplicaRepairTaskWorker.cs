@@ -71,10 +71,10 @@ public sealed partial class ReplicaRepairTaskWorker : IAgentTaskSink
         task.OperationId != Guid.Empty && task.TenantId != Guid.Empty && task.AgentId != Guid.Empty
         && task.ArtifactId != Guid.Empty && task.LeaseToken != Guid.Empty && task.LeaseExpiresAt > now
         && task.SizeBytes > 0 && task.Checksum.Length == ContentChecksum.Sha256HexLength && task.Checksum.All(Uri.IsHexDigit)
-        && task.Target.StorageConnectionId != Guid.Empty && StorageProviderKinds.AgentExecuted(task.Target.StorageProvider)
+        && task.Target.StorageConnectionId != Guid.Empty && AgentStorageProviders.AgentExecuted(task.Target.StorageProvider)
         && task.Sources is { Count: > 0 }
         && task.Sources.All(source => source.ReplicaId != Guid.Empty && source.StorageConnectionId != Guid.Empty
-            && StorageProviderKinds.External(source.StorageProvider) && StorageObjectKey.TryCreate(source.StorageKey, out _));
+            && AgentStorageProviders.External(source.StorageProvider) && StorageObjectKey.TryCreate(source.StorageKey, out _));
 
     public async Task RunAsync(CancellationToken stoppingToken)
     {
@@ -188,7 +188,7 @@ public sealed partial class ReplicaRepairTaskWorker : IAgentTaskSink
                     await CleanupAsync(run, target, targetKey, lifetime).ConfigureAwait(false));
             }
             TaskStorageCatalogRecord? driveRecord = null;
-            if (task.Target.StorageProvider == "google-drive"
+            if (task.Target.StorageProvider == AgentStorageProviders.GoogleDrive
                 && (target is not IScopedDriveRecordSource records
                     || (driveRecord = await records.FindRecordAsync(new StorageObjectKey(targetKey), transfer).ConfigureAwait(false)) is null))
             {

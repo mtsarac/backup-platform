@@ -16,7 +16,7 @@ public sealed record RestoreTargetAgent(Guid AgentId, string? HostName, string S
 public sealed record RestoreTargetJob(Guid JobId, string JobName, Guid AgentId, string Database, RestoreTargetView Target);
 
 public sealed record RestoreTargets(Guid ArtifactId, string SourceDatabase, string BackupType, long SizeBytes, IReadOnlyList<RestoreTargetAgent> Agents, IReadOnlyList<RestoreTargetJob> Targets,
-    string Engine = "mssql");
+    string Engine = DatabaseEngines.MsSql);
 
 /// <summary>
 /// What a restore of one artifact can be aimed at: the tenant's agents (with what each can do and whether it can read the backup) and the SQL Servers its
