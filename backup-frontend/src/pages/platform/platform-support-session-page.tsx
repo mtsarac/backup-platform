@@ -1,13 +1,13 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Lock } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Fact, Facts, Section } from '@/components/ui/section'
+import { TechnicalDetails } from '@/components/ui/technical-details'
 import { Tabs } from '@/components/ui/tabs'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { platformPaths } from '@/features/platform/paths'
@@ -18,14 +18,14 @@ import { SupportAuditTab } from '@/features/platform/support/audit-tab'
 import { SupportBackupBrowser } from '@/features/platform/support/backup-browser'
 import { SupportDownloadsTab } from '@/features/platform/support/downloads-tab'
 import { removeSupportData, supportKeys, useEndSupportSession, useSupportSession } from '@/features/platform/support/hooks'
-import { endedMessages, supportAccess } from '@/features/platform/support/presentation'
+import { endedMessages, supportAccess, supportSessionDetails } from '@/features/platform/support/presentation'
 import { SupportRestoresTab } from '@/features/platform/support/restores-tab'
 import { PermissionBadges } from '@/features/platform/support/session-table'
 import { SupportQueryState } from '@/features/platform/support/support-query-state'
 import { useSupportCountdown } from '@/features/platform/support/use-support-countdown'
 import type { SupportSession } from '@/features/platform/support/types'
 import { ApiError } from '@/lib/api/client'
-import { formatDateTime } from '@/lib/format'
+import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 
 const crumbs = [{ label: 'Platform', to: platformPaths.root }, { get label() { return tx("Support Sessions") }, to: platformPaths.supportSessions }]
@@ -65,27 +65,26 @@ function SessionView({ session, receivedAt }: { session: SupportSession; receive
   const access = supportAccess(effective)
   const expired = session.status === 'Active' && countdown.seconds === 0
   useEffect(() => { if (expired) { removeSupportData(client, session.id); void client.invalidateQueries({ queryKey: supportKeys.session(session.id), exact: true }) } }, [client, expired, session.id])
+  // Only tabs the session's permissions open are offered; an unheld one in the URL falls back to the overview.
   const tabs = [
     { value: 'overview', label: tx('Overview'), enabled: true },
     { value: 'browser', label: tx('Backup Browser'), enabled: access.view },
     { value: 'downloads', label: tx('Downloads'), enabled: access.downloads },
     { value: 'restores', label: tx('Restore Operations'), enabled: access.restores },
     { value: 'audit', label: tx('Audit'), enabled: true },
-  ]
+  ].filter(item => item.enabled)
   const tab = tabs.some(item => item.value === get('tab')) ? get('tab') : 'overview'
-  const selected = tabs.find(item => item.value === tab)!
   const active = effective.status === 'Active'
   return <div className="space-y-6">
     <PageHeader crumbs={crumbs} title={tx("{0} · Support Session", { "0": effective.tenantName })} description={tx("Oturumu açan: {0}", { "0": effective.actorDisplayName ?? effective.platformAdminId })}
-      meta={<><StatusPill domain="supportSession" status={effective.status} /><span aria-label={tx("Oturum süresi")} className="text-sm text-text-muted">{active ? tx("Kalan süre: {0}", { "0": countdown.label }) : tx('Erişim sona erdi.')}{' '}{tx("· Süre sonu:")}{' '}{formatDateTime(effective.expiresAt)}</span></>}
+      meta={<><StatusPill domain="supportSession" status={effective.status} /><span aria-label={tx("Oturum süresi")} className="text-sm text-text-muted">{active ? tx("Kalan süre: {0}", { "0": countdown.label }) : tx('Erişim sona erdi.')}{' '}{tx("· Süre sonu:")}{' '}<RelativeTime value={effective.expiresAt} /></span></>}
       actions={<SessionActions session={effective} />} />
     {effective.status !== 'Active' ? <Notice tone="warning">{endedMessages[effective.status]}{' '}{tx("Yalnızca oturum özeti ve audit okunabilir.")}</Notice>
       : !effective.isOwner && <Notice tone="warning">{tx("Bu oturumun sahibi değilsiniz. Müşteri verileri yalnızca oturumu açan PlatformAdmin'e açıktır. Özeti ve audit kayıtlarını görebilir veya gerekçeyle erişimi geri alabilirsiniz.")}</Notice>}
     <div>
-      <Tabs label={tx("Destek oturumu sekmeleri")} idPrefix="support" value={tab} onChange={value => update({ tab: value })}
-        items={tabs.map(item => ({ value: item.value, disabled: !item.enabled, label: item.enabled ? tx(item.label) : <span className="inline-flex items-center gap-1.5">{tx(item.label)}<Lock aria-hidden="true" className="size-3.5" /></span> }))} />
+      <Tabs label={tx("Destek oturumu sekmeleri")} idPrefix="support" value={tab} onChange={value => update({ tab: value })} items={tabs} />
       <div role="tabpanel" id={`support-panel-${tab}`} aria-labelledby={`support-tab-${tab}`} className="pt-6">
-        {tab === 'overview' ? <SessionOverview session={effective} /> : tab === 'audit' ? <SupportAuditTab session={effective} /> : !selected.enabled ? <Notice>{tx("Bu sekme için etkin oturum sahipliği ve uygun izin gerekir. Müşteri verileri yüklenmedi.")}</Notice> : tab === 'browser' ? <SupportBackupBrowser key={`${effective.id}:${effective.tenantId}:${effective.status}`} session={effective} /> : tab === 'downloads' ? <SupportDownloadsTab session={effective} /> : <SupportRestoresTab key={`${effective.id}:${effective.tenantId}:${effective.status}`} session={effective} />}
+        {tab === 'overview' ? <SessionOverview session={effective} /> : tab === 'audit' ? <SupportAuditTab session={effective} /> : tab === 'browser' ? <SupportBackupBrowser key={`${effective.id}:${effective.tenantId}:${effective.status}`} session={effective} /> : tab === 'downloads' ? <SupportDownloadsTab session={effective} /> : <SupportRestoresTab key={`${effective.id}:${effective.tenantId}:${effective.status}`} session={effective} />}
       </div>
     </div>
   </div>
@@ -103,13 +102,11 @@ function SessionOverview({ session }: { session: SupportSession }) {
           <Fact label={tx("Gerekçe")}><span className="whitespace-pre-wrap">{session.reason}</span></Fact>
           <Fact label={tx("İzinler")}><PermissionBadges permissions={session.permissions} /></Fact>
         </Facts>
-        <Facts>
-          <Fact label={tx("Başlangıç")}>{formatDateTime(session.startedAt)}</Fact>
-          <Fact label={tx("Süre sonu")}>{formatDateTime(session.expiresAt)}</Fact>
-          <Fact label={tx("Kapanış")}>{formatDateTime(session.closedAt)}</Fact>
+        {session.closedAt && <Facts>
           <Fact label={tx("Kapatan / erişimi geri alan")}>{session.closedByDisplayName ?? session.closedBy ?? '—'}</Fact>
           <Fact label={tx("Kapanış gerekçesi")}>{session.closeReason ?? '—'}</Fact>
-        </Facts>
+        </Facts>}
+        <TechnicalDetails items={supportSessionDetails(session, { plainView: true })} />
       </div>
     </Section>
   </div>
