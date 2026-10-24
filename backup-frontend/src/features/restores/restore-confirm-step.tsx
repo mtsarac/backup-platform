@@ -5,7 +5,7 @@ import { TypedConfirmDialog } from '@/components/ui/confirm-dialog'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
-import { restoreModeLabel } from './presentation'
+import { describeStartFailure, restoreModeLabel } from './presentation'
 import type { BackupArtifact } from '@/features/artifacts/types'
 import type { RestoreMode, RestoreTarget, RestoreTargetAgent } from './types'
 import { ApiError } from '@/lib/api/client'
@@ -34,12 +34,7 @@ export function RestoreConfirmStep({ isPg, artifact, mode, targetDatabaseName, a
   const replacing = mode === 'ReplaceExistingDatabase'
   const databaseName = targetDatabaseName.trim()
   const retryLabel = executionRetryable ? tx('Tekrar dene') : undefined
-  // A failure that is not an API answer leaves it unknown whether the restore began; retrying is safe because the same request key is reused.
-  const failure = executionError == null ? undefined : executionError instanceof ApiError ? executionError : {
-    what: tx('Geri yükleme başlatılamadı.'),
-    dataImpact: tx('Geri yüklemenin başlayıp başlamadığını geri yükleme listesinden kontrol edin.'),
-    action: tx('Aynı işlemi tekrar deneyin; yeniden denemeler ikinci bir geri yükleme oluşturmaz.'),
-  }
+  const failure = describeStartFailure(executionError)
 
   function start() {
     if (replacing) setConfirmOpen(true)
