@@ -7166,4 +7166,13 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "{0} aktarımı platform tarafından yapılandırılmamış veya etkin değil; bu tür seçili olsa da bildirim gönderilemez.": {"tr":"{0} aktarımı platform tarafından yapılandırılmamış veya etkin değil; bu tür seçili olsa da bildirim gönderilemez.","en":"{0} delivery is not configured by the platform or is disabled; notifications cannot be sent even if this type is selected."},
   "Bir platform yöneticisi şifreli yedeklerinize acil destek erişimi kullandığında kritik uyarı gönderilir. Bu olay kapatılamaz; genel kanallara gönderim için bildirimlerin etkin ve en az bir kanalın hazır olması gerekir. Sahiplerin kayıtlı güvenlik adresleri ayrıca her zaman bilgilendirilir.": {"tr":"Bir platform yöneticisi şifreli yedeklerinize acil destek erişimi kullandığında kritik uyarı gönderilir. Bu olay kapatılamaz; genel kanallara gönderim için bildirimlerin etkin ve en az bir kanalın hazır olması gerekir. Sahiplerin kayıtlı güvenlik adresleri ayrıca her zaman bilgilendirilir.","en":"A critical alert is sent when a platform administrator uses emergency support access for your encrypted backups. This event cannot be turned off; general-channel delivery requires notifications to be enabled and at least one ready channel. Owners' registered security addresses are also always notified."},
   "{0} · {1}": {"tr":"{0} · {1}","en":"{0} · {1}"},
+  "Platform sağlıklı mı?": {"tr":"Platform sağlıklı mı?","en":"Is the platform healthy?"},
+  "Tüm çalışma alanlarının genel durumu.": {"tr":"Tüm çalışma alanlarının genel durumu.","en":"Overall status across all workspaces."},
+  "Son 24 saatte {0} yedekleme denemesi başarısız oldu.": {"tr":"Son 24 saatte {0} yedekleme denemesi başarısız oldu.","en":"{0} backup attempts failed in the last 24 hours."},
+  "{0} yedekleme bilgisayarı çevrimdışı.": {"tr":"{0} yedekleme bilgisayarı çevrimdışı.","en":"{0} backup computers are offline."},
+  "{0} yedekleme bilgisayarının bağlantı durumu bilinmiyor.": {"tr":"{0} yedekleme bilgisayarının bağlantı durumu bilinmiyor.","en":"The connection status of {0} backup computers is unknown."},
+  "{0} yedekleme bilgisayarı devre dışı bırakılmış.": {"tr":"{0} yedekleme bilgisayarı devre dışı bırakılmış.","en":"{0} backup computers are disabled."},
+  "Etkin yedekleme işleri": {"tr":"Etkin yedekleme işleri","en":"Enabled backup jobs"},
+  "Başarısız yedeklemeler · son 24 saat": {"tr":"Başarısız yedeklemeler · son 24 saat","en":"Failed backups · last 24 hours"},
+  "Yedekleme bilgisayarlarının durumu": {"tr":"Yedekleme bilgisayarlarının durumu","en":"Backup computer status"},
 }
