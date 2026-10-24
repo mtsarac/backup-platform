@@ -44,21 +44,21 @@ export function CreateManagedTargetDialog({ tenant, onClose }: { tenant?: Picked
     create.mutate({ tenantId, input }, { onSuccess: () => { reset(); onClose() } })
   }
 
-  return <FormDialog title={tenant ? tx("Managed target ekle: {0}", { "0": tenant.name }) : tx('Managed target ekle')}
-    description={tx("Seçilen tenant için platform tarafından işletilen (PlatformManaged) bir depolama hedefi oluşturur.")}
-    submitLabel={tx("Managed target ekle")} pendingLabel={tx("Ekleniyor…")} pending={create.isPending}
+  return <FormDialog title={tenant ? tx("Yönetilen hedef ekle: {0}", { "0": tenant.name }) : tx('Yönetilen hedef ekle')}
+    description={tx("Seçtiğiniz çalışma alanı için platformun işlettiği bir depolama hedefi oluşturur.")}
+    submitLabel={tx("Yönetilen hedef ekle")} pendingLabel={tx("Ekleniyor…")} pending={create.isPending}
     disabled={!tenantId || !provider || !name.trim() || quotaScopeInvalid || !configurationComplete(provider.configFields, config) || !secretsComplete(activeSecretFields(provider.providerType, config, provider.secretFields), secret)}
     error={create.error ?? providers.error} errorScope="storageConnection" onSubmit={submit} onClose={onClose}>
-    {tenant ? <p className="text-sm text-text-muted">{tx("Tenant:")}{' '}<span className="font-medium text-text">{tenant.name}</span></p> : <TenantPicker value={tenantId} onChange={setTenantId} />}
-    <label className="block text-sm text-text-muted">{tx("Storage Provider")}<select className={`${selectClass} w-full`} value={providerType} onChange={(event) => chooseProvider(event.target.value)} disabled={providers.isPending}>
+    {tenant ? <p className="text-sm text-text-muted">{tx("Çalışma alanı:")}{' '}<span className="font-medium text-text">{tenant.name}</span></p> : <TenantPicker value={tenantId} onChange={setTenantId} />}
+    <label className="block text-sm text-text-muted">{tx("Depolama sağlayıcısı")}<select className={`${selectClass} w-full`} value={providerType} onChange={(event) => chooseProvider(event.target.value)} disabled={providers.isPending}>
         <option value="">{providers.isPending ? tx('Sağlayıcılar yükleniyor…') : creatable.length === 0 ? tx('Oluşturulabilir sağlayıcı yok') : tx('Sağlayıcı seçin')}</option>
         {creatable.map((item) => <option key={item.providerType} value={item.providerType}>{item.displayName}</option>)}
       </select>
     </label>
-    <label className="block text-sm text-text-muted">{tx("Ad")}<input className={inputClass} value={name} required aria-invalid={errorField(create.error) === 'name'} onChange={(event) => setName(event.target.value)} />
+    <label className="block text-sm text-text-muted">{tx("Hedef adı")}<input className={inputClass} value={name} required aria-invalid={errorField(create.error) === 'name'} onChange={(event) => setName(event.target.value)} />
     </label>
     <label className="block text-sm text-text-muted">{tx("Kota kapsamı (isteğe bağlı)")}<input className={inputClass} value={quotaScope} maxLength={64} placeholder="managed" aria-invalid={quotaScopeInvalid || errorField(create.error) === 'quotaScope'} onChange={(event) => setQuotaScope(event.target.value)} />
-      <span className="mt-1 block text-xs">{tx("Boş bırakılırsa sunucu varsayılanı uygulanır. Küçük harf, rakam ve “-”, 1-64 karakter.")}</span>
+      <span className="mt-1 block text-xs">{tx("Bu hedefin hangi kota grubuna sayılacağını belirler. Boş bırakırsanız platform varsayılanı kullanılır.")}</span>
       {quotaScopeInvalid && <span role="alert" className="mt-1 block text-xs text-error">{tx("Kota kapsamı yalnızca küçük harf, rakam ve “-” içerebilir (1-64 karakter).")}</span>}
     </label>
     {provider && <ProviderFields provider={provider} config={config} secret={secret} error={create.error}

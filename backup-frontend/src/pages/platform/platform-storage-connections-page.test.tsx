@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import * as platformApi from '@/features/platform/api'
 import { paged, renderPlatform } from '@/features/platform/test-utils'
@@ -8,6 +8,7 @@ import * as api from '@/features/storage-connections/api'
 import { catalog, fakeProvider, makeConnection, makeManaged, noPermissions } from '@/features/storage-connections/test-fixtures'
 import type { ConnectionView } from '@/features/storage-connections/types'
 import { ApiError } from '@/lib/api/client'
+import { setViewport } from '@/test/viewport'
 import { PlatformStorageConnectionsPage } from './platform-storage-connections-page'
 
 vi.mock('@/features/platform/api')
@@ -22,7 +23,7 @@ function mount(path = '/platform/storage-connections') {
   return renderPlatform(<PlatformStorageConnectionsPage />, { path, route: '/platform/storage-connections' })
 }
 const rowOf = (name: string) => within(screen.getByText(name).closest('tr') as HTMLElement)
-const rowButtons = (name: string) => rowOf(name).queryAllByRole('button').map((button) => button.textContent)
+const rowButtons = (name: string) => rowOf(name).queryAllByRole('button').map((button) => button.textContent).filter((label) => label !== 'Kopyala')
 const location = () => screen.getByTestId('location').textContent
 
 function serve(items: ConnectionView[], overrides: { totalCount?: number } = {}) {
@@ -37,7 +38,7 @@ beforeEach(() => {
 })
 
 describe('platform storage targets list', () => {
-  it('highlights PlatformManaged by default and renders the row facts', async () => {
+  it('shows PlatformManaged by default with name, workspace, state, last test and size, and keeps replicas, quota scope and id in collapsed details', async () => {
     mount()
     expect(await screen.findByText('Managed Storage')).toBeInTheDocument()
     expect(api.getPlatformConnections).toHaveBeenCalledWith(expect.objectContaining({ ownership: 'PlatformManaged', page: 1, pageSize: 25 }), expect.any(AbortSignal))
@@ -45,11 +46,25 @@ describe('platform storage targets list', () => {
     expect(screen.getByRole('link', { name: 'Acme A.Ş.' })).toHaveAttribute('href', '/platform/tenants/tenant-a')
     const row = rowOf('Managed Storage')
     expect(row.getByText('Platform yönetimli')).toBeInTheDocument()
-    expect(row.getByText('managed')).toBeInTheDocument()
     expect(row.getByText('Etkin')).toBeInTheDocument()
     expect(row.getByText('Başarılı')).toBeInTheDocument()
-    expect(row.getByText(/3 (?:Replica|Kopya)/)).toBeInTheDocument()
-    expect(row.getByText('123 MB')).toBeInTheDocument()
+    expect(row.getByText('123 MB')).toBeVisible()
+    for (const technical of ['managed', 'conn-central', /3 (?:Replica|Kopya)/]) expect(row.getByText(technical)).not.toBeVisible()
+    fireEvent.click(row.getByText('Teknik ayrıntılar'))
+    for (const technical of ['managed', 'conn-central', /3 (?:Replica|Kopya)/]) expect(row.getByText(technical)).toBeVisible()
+    expect(row.getByRole('button', { name: 'Kopyala: Bağlantı kimliği' })).toBeInTheDocument()
+  })
+
+  it('becomes cards on a phone with the action buttons and no sideways table', async () => {
+    setViewport(false)
+    mount()
+    const card = within((await screen.findByText('Managed Storage')).closest('li') as HTMLElement)
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(card.getByRole('link', { name: 'Acme A.Ş.' })).toBeInTheDocument()
+    expect(card.getByText('Etkin')).toBeInTheDocument()
+    expect(card.getByText('Başarılı')).toBeInTheDocument()
+    expect(card.getByRole('button', { name: 'Managed Storage bağlantısı: test et' })).toBeInTheDocument()
+    expect(card.getByText('conn-central')).not.toBeVisible()
   })
 
   it('explains the platform lock in one always-visible sentence instead of a collapsed section', async () => {
@@ -67,7 +82,7 @@ describe('platform storage targets list', () => {
     await user.selectOptions(screen.getByLabelText('Sahiplik'), 'all')
     await waitFor(() => expect(location()).toBe('/platform/storage-connections?ownership=all'))
     await waitFor(() => expect(api.getPlatformConnections).toHaveBeenLastCalledWith(expect.objectContaining({ ownership: undefined, page: 1 }), expect.any(AbortSignal)))
-    await user.selectOptions(screen.getByLabelText("Depolama Sağlayıcısı"), 'central')
+    await user.selectOptions(screen.getByLabelText("Depolama sağlayıcısı"), 'central')
     await user.selectOptions(screen.getByLabelText('Durum'), 'false')
     await waitFor(() => expect(location()).toBe('/platform/storage-connections?ownership=all&providerType=central&enabled=false'))
     await waitFor(() => expect(api.getPlatformConnections).toHaveBeenLastCalledWith(expect.objectContaining({ ownership: undefined, providerType: 'central', enabled: false }), expect.any(AbortSignal)))
@@ -191,7 +206,7 @@ describe('Managed target ekle', () => {
     await screen.findByText('Managed Storage')
     await user.click(screen.getByRole('button', { name: "Yönetilen hedef ekle" }))
     const dialog = await screen.findByRole('dialog')
-    const providerSelect = within(dialog).getByLabelText("Depolama Sağlayıcısı")
+    const providerSelect = within(dialog).getByLabelText("Depolama sağlayıcısı")
     const options = within(providerSelect).getAllByRole('option').map((option) => option.textContent)
     expect(options).toEqual(['Sağlayıcı seçin', 'Managed Storage (Central)', 'Fake S3'])
     const submit = within(dialog).getByRole('button', { name: "Yönetilen hedef ekle" })
@@ -199,7 +214,7 @@ describe('Managed target ekle', () => {
     await user.type(within(dialog).getByRole('combobox', { name: "Çalışma Alanı" }), 'Acme')
     await user.click(await within(dialog).findByRole('option', { name: 'Acme A.Ş.' }))
     await user.selectOptions(providerSelect, 'central')
-    await user.type(within(dialog).getByLabelText('Ad'), 'Arşiv hedefi')
+    await user.type(within(dialog).getByLabelText('Hedef adı'), 'Arşiv hedefi')
     await user.click(submit)
     await waitFor(() => expect(api.createPlatformConnection).toHaveBeenCalledWith('tenant-a', { providerType: 'central', name: 'Arşiv hedefi', ownership: 'PlatformManaged' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
@@ -214,8 +229,8 @@ describe('Managed target ekle', () => {
     const dialog = await screen.findByRole('dialog')
     await user.type(within(dialog).getByRole('combobox', { name: "Çalışma Alanı" }), 'Acme')
     await user.click(await within(dialog).findByRole('option', { name: 'Acme A.Ş.' }))
-    await user.selectOptions(within(dialog).getByLabelText("Depolama Sağlayıcısı"), 'fake-s3')
-    await user.type(within(dialog).getByLabelText('Ad'), 'S3')
+    await user.selectOptions(within(dialog).getByLabelText("Depolama sağlayıcısı"), 'fake-s3')
+    await user.type(within(dialog).getByLabelText('Hedef adı'), 'S3')
     await user.type(within(dialog).getByLabelText(/Kota kapsamı/), 'Bad Scope')
     expect(within(dialog).getByRole('button', { name: "Yönetilen hedef ekle" })).toBeDisabled()
     await user.clear(within(dialog).getByLabelText(/Kota kapsamı/))
@@ -239,8 +254,8 @@ describe('Managed target ekle', () => {
     const dialog = await screen.findByRole('dialog')
     await user.type(within(dialog).getByRole('combobox', { name: "Çalışma Alanı" }), 'Acme')
     await user.click(await within(dialog).findByRole('option', { name: 'Acme A.Ş.' }))
-    await user.selectOptions(within(dialog).getByLabelText("Depolama Sağlayıcısı"), 'central')
-    await user.type(within(dialog).getByLabelText('Ad'), 'İkinci')
+    await user.selectOptions(within(dialog).getByLabelText("Depolama sağlayıcısı"), 'central')
+    await user.type(within(dialog).getByLabelText('Hedef adı'), 'İkinci')
     await user.click(within(dialog).getByRole('button', { name: "Yönetilen hedef ekle" }))
     expect(await within(dialog).findByText("Bu depolama sağlayıcısı için bağlantı sınırına ulaşıldı.")).toBeInTheDocument()
   })

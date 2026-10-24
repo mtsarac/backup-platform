@@ -1,9 +1,10 @@
-import { currentLocale, tx, useLanguage } from '@/lib/i18n'
+import { tx, useLanguage } from '@/lib/i18n'
 import { Badge } from '@/components/ui/badge'
+import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { capabilityLabel, connectionHealth, secretStatusLabel, platformLockState, testMessage } from './labels'
 import type { ConnectionTest, ConnectionView } from './types'
-import { formatBytes, formatDateTime } from '@/lib/format'
+import { formatDateTime } from '@/lib/format'
 
 export function HealthBadge({ connection }: { connection: Parameters<typeof connectionHealth>[0] }) {
   useLanguage()
@@ -44,7 +45,7 @@ export function LastTest({ test }: { test: ConnectionTest | null }) {
   useLanguage()
   if (!test) return <span className="text-text-muted">{tx("Henüz test edilmedi")}</span>
   return <div className="space-y-0.5">
-    <div className="flex flex-wrap items-center gap-1.5"><StatusPill domain="connectionTest" status={String(test.status)} /><span className="text-xs text-text-muted">{formatDateTime(test.testedAt, tx('Henüz bildirilmedi'))}</span></div>
+    <div className="flex flex-wrap items-center gap-1.5"><StatusPill domain="connectionTest" status={String(test.status)} /><span className="text-xs text-text-muted"><RelativeTime value={test.testedAt} /></span></div>
     {(test.code || test.message) && <p className="whitespace-normal break-words text-xs text-text-muted">{testMessage(test)}</p>}
   </div>
 }
@@ -61,13 +62,5 @@ export function SecretStatus({ connection }: { connection: Pick<ConnectionView, 
   return <span className="inline-flex flex-wrap items-center gap-1.5">
     <StatusPill level={connection.hasSecret ? 'safe' : 'neutral'}>{secretStatusLabel(connection)}</StatusPill>
     {connection.hasSecret && connection.secretUpdatedAt && <span className="text-xs text-text-muted">{formatDateTime(connection.secretUpdatedAt, tx('Henüz bildirilmedi'))}</span>}
-  </span>
-}
-
-export function Footprint({ connection }: { connection: Pick<ConnectionView, 'replicaCount' | 'storedBytes'> }) {
-  useLanguage()
-  return <span className="inline-flex flex-col">
-    <span>{connection.replicaCount.toLocaleString(currentLocale())}{' '}{tx("Replica")}</span>
-    <span className="text-xs text-text-muted" title={formatBytes(connection.storedBytes)}>{formatBytes(connection.storedBytes)}</span>
   </span>
 }

@@ -10,44 +10,20 @@ import { Button } from '@/components/ui/button'
 import { ErrorNotice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
-import { TechnicalDetails, type TechnicalItem } from '@/components/ui/technical-details'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { useAgent, agentQueryKeys } from '@/features/agents/hooks'
 import { revokeAgent } from '@/features/agents/api'
-import type { AgentDetail } from '@/features/agents/types'
-import { CapabilityList } from '@/features/agents/capabilities'
+import { AgentTechnicalDetails } from '@/features/agents/agent-technical-details'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useBackupJobs } from '@/features/backup-jobs/hooks'
 import type { BackupJob } from '@/features/backup-jobs/types'
 import { notFound } from '@/lib/api/failure-messages'
-import { formatDateTime } from '@/lib/format'
 
 export function ClientDetailPage() {
   useLanguage()
   const { tenantId, canAdmin } = useTenant()
   const { id = '' } = useParams()
   return <AgentDetailContent key={`${tenantId}:${id}`} tenantId={tenantId} id={id} canAdmin={canAdmin} />
-}
-
-/** Every identifier, version and lifecycle value of the computer; values the computer never reported are left out. */
-function technicalItems(agent: AgentDetail): TechnicalItem[] {
-  const date = (value: string | null | undefined) => value ? formatDateTime(value) : null
-  return ([
-    [tx("Bilgisayar kimliği"), agent.agentId],
-    [tx("Platform"), agent.platform],
-    [tx("İşletim sistemi"), agent.osDescription],
-    [tx("Yedekleme programı sürümü"), agent.agentVersion],
-    [tx("Protokol sürümü"), agent.protocolVersion],
-    [tx("Çalışma ortamı"), agent.runtimeVersion],
-    [tx("Yaşam döngüsü"), agent.status],
-    [tx("Çalışma durumu"), agent.operationalStatus],
-    [tx("Kayıt zamanı"), date(agent.enrolledAt)],
-    [tx("Son durum sinyali"), date(agent.lastHeartbeatAt)],
-    [tx("Son bağlantı"), date(agent.lastConnectedAt)],
-    [tx("Yeteneklerin bildirilme zamanı"), date(agent.capabilitiesReportedAt)],
-    [tx("Bildirilen yetenek revizyonu"), agent.capabilityRevision],
-    [tx("Kaydedilen yetenek revizyonu"), agent.capabilitiesRevision],
-  ] as const).flatMap(([label, value]) => value ? [{ label, value }] : [])
 }
 
 function AgentDetailContent({ tenantId, id, canAdmin }: { tenantId: string; id: string; canAdmin: boolean }) {
@@ -72,15 +48,7 @@ function AgentDetailContent({ tenantId, id, canAdmin }: { tenantId: string; id: 
           meta={<><StatusPill status={agent.connectivity} />{agent.status !== 'Active' && <StatusPill domain="agent" status={agent.status} />}</>}
           actions={canAdmin && agent.status !== 'Revoked' && <Button variant="destructive" onClick={() => { revoke.reset(); setConfirmOpen(true) }}>{tx("Bilgisayar kaydını iptal et")}</Button>} />
         <AgentJobs agentId={id} />
-        <TechnicalDetails items={technicalItems(agent)}>
-          <section className="space-y-3">
-            <h3 className="text-sm font-semibold text-text-heading">{tx("Bildirilen yetenekler")}</h3>
-            {agent.capabilities.length ? <>
-              <CapabilityList capabilities={agent.capabilities} />
-              <p className="text-sm text-text-muted">{tx("Bilgisayar düzeyindeki destek, veritabanı sunucusunun gerçek desteğini garanti etmez; her yedekten önce ön kontrol yapılır.")}</p>
-            </> : <p className="text-text-muted">{tx("Yetenekler henüz bildirilmedi.")}</p>}
-          </section>
-        </TechnicalDetails>
+        <AgentTechnicalDetails agent={agent} />
       </>}
     </QueryState>}
     <ConfirmDialog open={confirmOpen} onClose={() => setConfirmOpen(false)} title={tx("Bilgisayar kaydı iptal edilsin mi?")}

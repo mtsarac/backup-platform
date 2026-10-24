@@ -5,6 +5,7 @@ import * as api from '@/features/platform/api'
 import { paged, renderPlatform } from '@/features/platform/test-utils'
 import type { PlatformUser } from '@/features/platform/types'
 import { ApiError } from '@/lib/api/client'
+import { setViewport } from '@/test/viewport'
 import { PlatformUsersPage } from './platform-users-page'
 
 vi.mock('@/features/platform/api')
@@ -35,6 +36,18 @@ describe('platform users', () => {
     expect(screen.getByRole('columnheader', { name: 'Platform rolü' })).toBeInTheDocument()
   })
 
+  it('becomes cards on a phone with name, login, platform role and workspace count', async () => {
+    setViewport(false)
+    renderPlatform(<PlatformUsersPage />)
+    const adminCard = (await screen.findByRole('heading', { name: 'Root Admin' })).closest('li')!
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(within(adminCard).getByText('Platform Yöneticisi')).toBeInTheDocument()
+    expect(within(adminCard).getByText('root')).toBeInTheDocument()
+    const memberCard = screen.getByRole('heading', { name: 'Ayşe Yılmaz' }).closest('li')!
+    expect(within(memberCard).queryByText('Platform Yöneticisi')).not.toBeInTheDocument()
+    expect(within(memberCard).getByText('3')).toBeInTheDocument()
+  })
+
   it('creates a user, clears the password and refreshes the list', async () => {
     vi.mocked(api.createUser).mockResolvedValue({ userId: 'u3', displayName: 'Deniz Kaya', loginIdentifier: 'deniz', isPlatformAdmin: false, membershipCount: 0 })
     renderPlatform(<PlatformUsersPage />)
@@ -44,6 +57,7 @@ describe('platform users', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Kullanıcı oluştur' }))
     expect(api.createUser).toHaveBeenCalledWith({ loginIdentifier: 'deniz', displayName: 'Deniz Kaya', password: 'a-very-long-password' })
     expect(await screen.findByRole('cell', { name: 'Deniz Kaya' })).toBeInTheDocument()
+    expect(screen.getByText('“Deniz Kaya” kullanıcısı oluşturuldu.')).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(document.body.innerHTML).not.toContain('a-very-long-password')
     await userEvent.click(screen.getByRole('button', { name: 'Yeni kullanıcı' }))

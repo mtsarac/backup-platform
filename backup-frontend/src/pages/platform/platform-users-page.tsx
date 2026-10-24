@@ -34,7 +34,7 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
       onSuccess: (user) => { setLoginIdentifier(''); setDisplayName(''); onCreated(user.displayName); onClose() },
     })
   }
-  return <FormDialog title={tx("Yeni kullanıcı")} description={tx("Bu işlem yalnızca kullanıcı hesabını oluşturur. Tenant üyeliği ve rolünü tenant detayından ekleyin.")} submitLabel={tx("Kullanıcı oluştur")} pendingLabel={tx("Oluşturuluyor…")} pending={create.isPending} onSubmit={submit} onClose={onClose} error={create.error}>
+  return <FormDialog title={tx("Yeni kullanıcı")} description={tx("Bu işlem yalnızca kullanıcı hesabını oluşturur. Çalışma alanı üyeliğini ve rolünü çalışma alanı sayfasından ekleyin.")} submitLabel={tx("Kullanıcı oluştur")} pendingLabel={tx("Oluşturuluyor…")} pending={create.isPending} onSubmit={submit} onClose={onClose} error={create.error}>
     <Field label={tx("Kullanıcı adı")} hint={tx("3-128 karakter: harf, rakam, nokta, alt çizgi, tire.")}>{(control) => <input {...control} className={inputClass} value={loginIdentifier} required autoComplete="off" aria-invalid={invalidField === 'loginIdentifier'} onChange={(event) => setLoginIdentifier(event.target.value)} />}</Field>
     <Field label={tx("Görünen ad")}>{(control) => <input {...control} className={inputClass} value={displayName} required autoComplete="off" aria-invalid={invalidField === 'displayName'} onChange={(event) => setDisplayName(event.target.value)} />}</Field>
     <SecretField label={tx("Şifre")} hint={tx("En az 12 karakter.")} required value={password.value} invalid={invalidField === 'password'} onChange={password.set} />
@@ -50,19 +50,19 @@ export function PlatformUsersPage() {
   const [created, setCreated] = useState('')
   const data = query.data
   const columns: Column<PlatformUser>[] = [
-    { key: 'displayName', header: tx('Ad'), wrap: true, render: (user) => <span className="font-medium">{user.displayName}</span> },
+    { key: 'displayName', card: 'title', header: tx('Ad'), wrap: true, render: (user) => <span className="font-medium">{user.displayName}</span> },
+    { key: 'platform', card: 'status', header: tx('Platform rolü'), render: (user) => user.isPlatformAdmin ? <Badge tone="warning">{tx("PlatformAdmin")}</Badge> : null },
     { key: 'login', header: tx('Kullanıcı adı'), wrap: true, render: (user) => user.loginIdentifier ?? '—' },
-    { key: 'platform', header: tx('Platform rolü'), render: (user) => user.isPlatformAdmin ? <Badge tone="warning">{tx("PlatformAdmin")}</Badge> : <span className="text-text-muted">—</span> },
-    { key: 'memberships', header: tx('Tenant üyelikleri'), render: (user) => user.membershipCount },
+    { key: 'memberships', header: tx('Çalışma alanı üyelikleri'), render: (user) => user.membershipCount },
   ]
   return <div className="space-y-6">
-    <PageHeader crumbs={[platformCrumb]} title={tx("Users")} description={tx("PlatformAdmin yetkisi tenant rolü değildir; üyelikler tenant detayından yönetilir.")} actions={<Button onClick={() => { setCreated(''); setCreating(true) }}><Plus aria-hidden="true" />{tx("Yeni kullanıcı")}</Button>} />
-    {created && <Notice tone="success">“{created}{tx("” kullanıcısı oluşturuldu.")}</Notice>}
+    <PageHeader crumbs={[platformCrumb]} title={tx("Kullanıcılar")} description={tx("Platform Yöneticisi yetkisi çalışma alanı rolü değildir; üyelikler çalışma alanı sayfasından yönetilir.")} actions={<Button onClick={() => { setCreated(''); setCreating(true) }}><Plus aria-hidden="true" />{tx("Yeni kullanıcı")}</Button>} />
+    {created && <Notice tone="success">{tx("“{0}” kullanıcısı oluşturuldu.", { "0": created })}</Notice>}
     <Filters label={tx("Kullanıcı filtreleri")} onClear={search ? () => update({ search: '' }) : undefined}><SearchForm className="sm:col-span-2" label={tx("Kullanıcı ara")} value={search} onSearch={(value) => update({ search: value })} placeholder={tx("Ad veya kullanıcı adı")} /></Filters>
     <PlatformQueryState isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">
         {data.totalCount === 0 && !search ? <ListEmpty icon={Users} message={tx("Henüz kullanıcı yok.")} action={<Button onClick={() => setCreating(true)}>{tx("Yeni kullanıcı")}</Button>} />
-          : <DataList rows={data.items} columns={columns} keyExtractor={(user) => user.userId} emptyMessage={tx("Aramaya uygun kullanıcı bulunamadı.")} />}
+          : <DataList caption={tx("Kullanıcılar")} rows={data.items} columns={columns} keyExtractor={(user) => user.userId} emptyMessage={tx("Aramaya uygun kullanıcı bulunamadı.")} />}
         {data.totalCount > 0 && <Pagination label={tx("Kullanıcı sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
       </div>}
     </PlatformQueryState>
