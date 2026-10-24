@@ -44,7 +44,7 @@ const base: RestoreView = {
   verificationOutcome: 'Restored',
 }
 const cleanupOf = (patch: Partial<RestoreCleanup>): RestoreCleanup => ({ kind: 'VerificationDatabase', state: 'Completed', databaseName: 'bp_verify_ab12', attempts: 1, nextAttemptAt: null, lastFailureCode: null, reason: null, needsAttention: false, canRequest: false, retainedUntil: null, ...patch })
-const withResult = (restore: RestoreView, passed = true): RestoreView => ({ ...restore, result: { verification: {
+const withResult = (restore: RestoreView, passed = true): RestoreView => ({ ...restore, result: { preCheck: [], warnings: [], verification: {
   checks: [{ checkId: 'database-online', status: 'Passed', reasonCode: 'ok', message: 'Online.' }, { checkId: 'integrity', status: passed ? 'Passed' : 'Failed', reasonCode: 'x', message: 'Integrity message.' }],
   userTableCount: 4, readableTableCount: 4, cleanup: 'Dropped', cleanupReasonCode: null,
 }, retainedDatabaseName: null } as unknown as RestoreView['result'] })

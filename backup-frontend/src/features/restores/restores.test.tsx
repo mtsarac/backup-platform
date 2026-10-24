@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { render } from '@/test/render'
 import { ApiError } from '@/lib/api/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -34,6 +35,7 @@ vi.mock('@/features/agents/api', () => ({
 
 vi.mock('@/features/artifacts/api', () => ({
   getArtifact: vi.fn(),
+  listArtifacts: vi.fn(),
 }))
 
 const sampleArtifact: BackupArtifact = {
@@ -83,6 +85,8 @@ const sampleArtifact: BackupArtifact = {
     },
   ],
 }
+
+const hrArtifact: BackupArtifact = { ...sampleArtifact, id: 'artifact-2', databaseName: 'HRDB', jobName: 'Nightly HR' }
 
 const sampleTargets: RestoreTargetsResponse = {
   artifactId: 'artifact-1',
@@ -233,6 +237,7 @@ beforeEach(() => {
     },
   ])
   vi.mocked(ArtifactApi.getArtifact).mockResolvedValue(sampleArtifact)
+  vi.mocked(ArtifactApi.listArtifacts).mockResolvedValue({ items: [sampleArtifact, hrArtifact], totalCount: 2, page: 1, pageSize: 100 })
   vi.mocked(RestoreApi.startRestorePrecheck).mockResolvedValue(sampleRestore)
   vi.mocked(RestoreApi.startRestore).mockResolvedValue(sampleRestore)
 })
@@ -273,6 +278,67 @@ describe('RestoresPage', () => {
     expect(screen.getByText("Yeni veritabanı")).toBeInTheDocument()
     expect(screen.getAllByText('Çalışıyor').length).toBeGreaterThan(0)
   })
+
+  it('never shows or asks for a raw backup file id', async () => {
+    renderWithClient(<RestoresPage />)
+    await screen.findByText('RestoredSalesDB')
+    expect(screen.queryByText('artifact-1')).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/ID/)).not.toBeInTheDocument()
+  })
+
+  it('filters by a backup found through the picker by its name', async () => {
+    renderWithClient(<RestoresPage />)
+    await screen.findByText('RestoredSalesDB')
+    await userEvent.type(screen.getByRole('combobox', { name: 'Yedek dosyası' }), 'hr')
+    expect(within(screen.getByRole('listbox')).getAllByRole('option')).toHaveLength(1)
+    await userEvent.click(screen.getByRole('option', { name: /HRDB/ }))
+    await waitFor(() => expect(RestoreApi.getRestores).toHaveBeenLastCalledWith('tenant-a', expect.objectContaining({ artifactId: 'artifact-2' }), expect.anything()))
+    expect(screen.getByRole('combobox', { name: 'Yedek dosyası' })).toHaveDisplayValue(/HRDB/)
+  })
+
+  it('names the filtered backup even when it is older than the ones the picker loaded', async () => {
+    vi.mocked(ArtifactApi.getArtifact).mockResolvedValue({ ...sampleArtifact, id: 'artifact-9', databaseName: 'OldDB' })
+    renderWithClient(<RestoresPage />, '/?artifactId=artifact-9')
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Yedek dosyası' })).toHaveDisplayValue(/OldDB/))
+    expect(RestoreApi.getRestores).toHaveBeenCalledWith('tenant-a', expect.objectContaining({ artifactId: 'artifact-9' }), expect.anything())
+  })
+
+  it('names the source backup and the backup computer instead of showing ids', async () => {
+    vi.mocked(RestoreApi.getRestores).mockResolvedValue({ ...sampleRestorePage, items: [{ ...sampleRestore, sourceDatabaseName: 'SalesDB', sourceJobName: 'Nightly Sales Backup' }] })
+    renderWithClient(<RestoresPage />)
+    expect(await screen.findByRole('link', { name: 'SalesDB' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/artifact-1')
+    expect(within(screen.getByRole('table')).getByText('SQL Server Agent 1')).toBeInTheDocument()
+  })
+
+  describe('when there is nothing to list', () => {
+    beforeEach(() => vi.mocked(RestoreApi.getRestores).mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 25 }))
+    const emptyActions = () => within(screen.getByTestId('restores-empty')).queryAllByRole('link').concat(within(screen.getByTestId('restores-empty')).queryAllByRole('button'))
+
+    it('offers one way forward: opening the backups to restore one', async () => {
+      renderWithClient(<RestoresPage />)
+      await screen.findByTestId('restores-empty')
+      const actions = emptyActions()
+      expect(actions).toHaveLength(1)
+      expect(actions[0]).toHaveAttribute('href', '/tenants/tenant-a/artifacts')
+    })
+
+    it('sends a viewer to the administrator instead of offering the action', async () => {
+      tenancy.canOperate = false
+      renderWithClient(<RestoresPage />)
+      await screen.findByTestId('restores-empty')
+      expect(emptyActions()).toHaveLength(0)
+      expect(within(screen.getByTestId('restores-empty')).getByText('Yöneticinize danışın')).toBeInTheDocument()
+    })
+
+    it('offers clearing the filters when they are what hides the restores', async () => {
+      renderWithClient(<RestoresPage />, '/?status=Failed')
+      await screen.findByTestId('restores-empty')
+      expect(screen.getAllByRole('button', { name: 'Filtreleri temizle' })).toHaveLength(1)
+      fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
+      await waitFor(() => expect(RestoreApi.getRestores).toHaveBeenLastCalledWith('tenant-a', expect.objectContaining({ status: '' }), expect.anything()))
+    })
+  })
 })
 
 describe('RestoreDetailPage', () => {
@@ -286,7 +352,7 @@ describe('RestoreDetailPage', () => {
 
     expect(await screen.findByText(/Geri yükleme · RestoredSalesDB/i)).toBeInTheDocument()
     expect(screen.getAllByText(/Geri yükleniyor · %65,5/i).length).toBeGreaterThanOrEqual(1)
-    const cancelButton = screen.getByRole('button', { name: /İptal et/i })
+    const cancelButton = screen.getByRole('button', { name: /Geri yüklemeyi iptal et/i })
     expect(cancelButton).toBeEnabled()
 
     fireEvent.click(cancelButton)
@@ -314,17 +380,67 @@ describe('RestoreDetailPage', () => {
     expect(screen.getByText(/Kısmen geri yüklendi/i)).toBeInTheDocument()
   })
 
+  const detailRoutes = <Routes><Route path="/tenants/:tenantId/restores/:id" element={<RestoreDetailPage />} /></Routes>
+  const detailUrl = '/tenants/tenant-a/restores/restore-1'
+  /** Visible text is whatever lies outside the collapsed technical section. */
+  const visibleLeaves = (text: string) => [...document.body.querySelectorAll('*')].filter(node => node.children.length === 0 && node.textContent?.includes(text) && !node.closest('details'))
+  const failed: RestoreView = { ...sampleRestore, status: 'Failed', targetState: 'PartiallyRestored', failureCode: 'SqlRestoreFailed', sourceDatabaseName: 'SalesDB', sourceJobName: 'Nightly Sales Backup', completedAt: '2026-10-08T12:20:00Z' }
+
+  it('names the source backup and the backup computer, and never shows ids or codes outside the technical details', async () => {
+    vi.mocked(RestoreApi.getRestore).mockResolvedValue(failed)
+    renderWithClient(detailRoutes, detailUrl)
+    expect(await screen.findByRole('link', { name: 'SalesDB' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/artifact-1')
+    expect(screen.getByText('SQL Server Agent 1')).toBeInTheDocument()
+    expect(screen.getByText(/Kısmen geri yüklendi/)).toBeInTheDocument()
+    for (const raw of ['restore-1', 'artifact-1', 'agent-1', 'replica-1', 'PartiallyRestored', 'SqlRestoreFailed', 'localhost']) expect(visibleLeaves(raw), raw).toEqual([])
+  })
+
+  it('keeps the technical details collapsed and every value in them copyable', async () => {
+    vi.mocked(RestoreApi.getRestore).mockResolvedValue(failed)
+    renderWithClient(detailRoutes, detailUrl)
+    await screen.findByRole('link', { name: 'SalesDB' })
+    const sections = screen.getAllByText('Teknik ayrıntılar').map(summary => summary.closest('details'))
+    expect(sections.length).toBeGreaterThan(0)
+    for (const section of sections) expect(section).not.toHaveAttribute('open')
+    for (const label of ['Geri yükleme kimliği', 'Yedek dosyası kimliği', 'Yedekleme bilgisayarı kimliği', 'Yedek kopyası kimliği', 'Hedef durumu kodu', 'Hedef sunucu']) {
+      expect(screen.getByRole('button', { name: `Kopyala: ${label}` }), label).toBeInTheDocument()
+    }
+  })
+
+  it('tells a failed restore as what happened, what it means for the database and what to do', async () => {
+    vi.mocked(RestoreApi.getRestore).mockResolvedValue(failed)
+    renderWithClient(detailRoutes, detailUrl)
+    const notice = await screen.findByRole('alert')
+    expect(within(notice).getByText('Verileriniz için:')).toBeInTheDocument()
+    expect(within(notice).getByText('Ne yapmalı:')).toBeInTheDocument()
+    expect(within(notice).getByText('SqlRestoreFailed').closest('details')).not.toHaveAttribute('open')
+  })
+
   it('keeps source safety options and attempt progress accessible in their tabs', async () => {
-    renderWithClient(<Routes><Route path="/tenants/:tenantId/restores/:id" element={<RestoreDetailPage />} /></Routes>, '/tenants/tenant-a/restores/restore-1')
+    renderWithClient(detailRoutes, detailUrl)
     expect(await screen.findByRole('heading', { name: /Geri yükleme · RestoredSalesDB/i })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: 'Kaynak ve seçenekler' }))
-    expect(screen.getByText("Geri yükleme için silmeye karşı korunuyor")).toBeInTheDocument()
     expect(screen.getByText("Etkin bağlantıları sonlandır")).toBeInTheDocument()
+    expect(screen.getByText("Geri yükleme için silmeye karşı korunuyor").closest('details')).not.toBeNull()
     fireEvent.click(screen.getByRole('tab', { name: 'Denemeler' }))
     expect(screen.getByRole('article', { name: '1. deneme' })).toBeInTheDocument()
     expect(screen.getByRole('progressbar', { name: '1. deneme ilerlemesi' })).toHaveAttribute('aria-valuenow', '65.5')
     fireEvent.click(screen.getByRole('tab', { name: 'Doğrulama sonucu' }))
     expect(screen.getByText(/Doğrulama sonucu henüz bildirilmedi/)).toBeInTheDocument()
+  })
+
+  it('names every reported check in plain words and keeps engine ids and warning codes in the technical details', async () => {
+    vi.mocked(RestoreApi.getRestore).mockResolvedValue({
+      ...sampleRestore, status: 'Succeeded',
+      result: { checksumVerified: true, backupVerified: true, databaseState: 'ONLINE', targetStateNote: null, preCheck: [{ checkId: 'restore.disk-space', status: 'Passed', reasonCode: 'ok', message: 'Enough.' }], warnings: [{ code: 'SomeWarning', message: 'x' }], sourceBackup: null, targetServer: null, fileMappings: [], startedAt: null, finishedAt: null, restoreStartedAt: null, restoreFinishedAt: null },
+    })
+    renderWithClient(detailRoutes, detailUrl)
+    await screen.findByRole('heading', { name: /Geri yükleme · RestoredSalesDB/i })
+    fireEvent.click(screen.getByRole('tab', { name: 'Doğrulama sonucu' }))
+    expect(screen.getByText('Yeterli disk alanı var')).toBeInTheDocument()
+    for (const raw of ['restore.disk-space', 'SomeWarning']) expect(visibleLeaves(raw), raw).toEqual([])
+    expect(screen.getByRole('button', { name: 'Kopyala: restore.disk-space' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Kopyala: SomeWarning' })).toBeInTheDocument()
   })
 })
 

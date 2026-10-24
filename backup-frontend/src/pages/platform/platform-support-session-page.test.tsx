@@ -160,7 +160,7 @@ describe('support session detail', () => {
     vi.mocked(api.getSupportRestore).mockResolvedValue(makeRestore({ id: 'execution-a', purpose: 'Execution', status: 'Running', targetState: 'Unknown' }))
     mount('?tab=restores&restoreId=execution-a')
     expect(await screen.findByRole('button', { name: "Geri yüklemeyi iptal et" })).toBeDisabled()
-    expect(screen.getByText(/Ajan hedef veritabanının durumunu belirleyemedi|Ajan hedef Veritabanı durumunu belirleyemedi/)).toBeInTheDocument()
+    expect(screen.getByText(/Yedekleme bilgisayarı veritabanının durumunu belirleyemedi/)).toBeInTheDocument()
     expect(api.cancelSupportRestore).not.toHaveBeenCalled()
   })
   it('a denied cancel renders the authorization state and refreshes the session rather than trusting stale permissions', async () => {

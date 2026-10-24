@@ -1,21 +1,22 @@
 import { tx } from '@/lib/i18n'
 import { ApiError } from '@/lib/api/client'
-import type { RestoreCleanup, RestoreMode, RestoreStatus, RestoreTargetState } from './types'
+import type { TechnicalItem } from '@/components/ui/technical-details'
+import type { RestoreCleanup, RestoreMode, RestoreResult, RestoreStatus, RestoreTargetState } from './types'
 
 export const restoreStatuses: readonly RestoreStatus[] = ['Pending', 'Leased', 'Running', 'Succeeded', 'Failed', 'Cancelled', 'AgentLost']
 export function isActiveRestore(status: string): boolean { return ['Pending', 'Leased', 'Running'].includes(status) }
 export function canCancelRestore(status: string, cancellationRequestedAt?: string | null): boolean { return isActiveRestore(status) && !cancellationRequestedAt }
 export function restoreModeLabel(mode: RestoreMode): string { return mode === 'NewDatabase' ? tx('Yeni Database') : tx('Mevcut Database üzerine yaz') }
 export function targetStateLabel(state?: RestoreTargetState | null): string {
-  return state ? ({ NotModified: tx('Değiştirilmedi · NotModified'), Online: tx('Çevrimiçi · Online'), PartiallyRestored: tx('Kısmen geri yüklendi · PartiallyRestored'), Unknown: tx('Bilinmiyor · Unknown') })[state] : tx('Henüz bildirilmedi')
+  return state ? ({ NotModified: tx('Değiştirilmedi'), Online: tx('Çevrimiçi'), PartiallyRestored: tx('Kısmen geri yüklendi'), Unknown: tx('Bilinmiyor') })[state] : tx('Henüz bildirilmedi')
 }
 export function targetStateDescription(state?: RestoreTargetState | null): string {
   switch (state) {
-    case 'NotModified': return tx('Hedef Database değiştirilmedi. Bu bilgi Database sağlığının kontrol edildiği anlamına gelmez.')
-    case 'Online': return tx('Agent, geri yüklenen hedef Database durumunu Online olarak bildirdi.')
-    case 'PartiallyRestored': return tx('Hedef değiştirildi fakat geri yükleme tamamlanmadı. Database RESTORING durumunda, hasarlı veya eksik olabilir; üzerine yazılan eski içerik kaybolmuş olabilir. Elle müdahale gerekebilir.')
-    case 'Unknown': return tx('Agent hedef Database durumunu belirleyemedi. Database sağlıklı kabul edilmemelidir; elle kontrol ve müdahale gerekebilir.')
-    default: return tx('Hedef Database durumu henüz bildirilmedi. İşlem durumundan Database sağlığı çıkarılamaz.')
+    case 'NotModified': return tx('Hedef veritabanı değiştirilmedi. Bu, veritabanının sağlığının kontrol edildiği anlamına gelmez.')
+    case 'Online': return tx('Yedekleme bilgisayarı, geri yüklenen veritabanının çalışır durumda olduğunu bildirdi.')
+    case 'PartiallyRestored': return tx('Hedef değiştirildi ama geri yükleme tamamlanmadı. Veritabanı hasarlı veya eksik olabilir; üzerine yazılan eski içerik kaybolmuş olabilir. Elle müdahale gerekebilir.')
+    case 'Unknown': return tx('Yedekleme bilgisayarı veritabanının durumunu belirleyemedi. Veritabanını sağlıklı saymayın; elle kontrol edin.')
+    default: return tx('Veritabanının durumu henüz bildirilmedi. İşlemin durumundan veritabanının sağlığı anlaşılamaz.')
   }
 }
 export function restoreStageLabel(stage?: string | null): string {
@@ -68,4 +69,13 @@ export function describeStartFailure(error: unknown) {
     dataImpact: tx('Geri yüklemenin başlayıp başlamadığını geri yükleme listesinden kontrol edin.'),
     action: tx('Aynı işlemi tekrar deneyin; yeniden denemeler ikinci bir geri yükleme oluşturmaz.'),
   }
+}
+/** The engines' own wording and codes for each check; the table above says the same thing in everyday words. */
+export function technicalChecks(items: RestoreResult['preCheck']): TechnicalItem[] {
+  const seen = new Map<string, number>()
+  return items.map((item) => {
+    const count = (seen.get(item.checkId) ?? 0) + 1
+    seen.set(item.checkId, count)
+    return { label: count > 1 ? `${item.checkId} (${count})` : item.checkId, value: [item.status, safeRestoreCode(item.reasonCode), item.message].filter(Boolean).join(' · ') }
+  })
 }
