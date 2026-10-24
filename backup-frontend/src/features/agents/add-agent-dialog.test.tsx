@@ -34,11 +34,13 @@ function mount() {
   const view = render(<QueryClientProvider client={client}><AddAgentDialog tenantId="tenant-a" onClose={close} /></QueryClientProvider>)
   return { client, close, ...view }
 }
-async function issue() {
-  fireEvent.click(screen.getByRole('tab', { name: 'Otomatik kurulum' }))
-  const name = screen.getByRole('textbox', { name: 'Ajan adı' }) as HTMLInputElement
+/** Walks the plain steps: which computer, then the key and command. Automatic mode is the one-command variant. */
+async function issue(mode: 'guided' | 'automatic' = 'automatic') {
+  const name = screen.getByRole('textbox', { name: 'Bilgisayarın adı' }) as HTMLInputElement
   if (!name.value) fireEvent.change(name, { target: { value: 'Backup agent' } })
   fireEvent.change(screen.getByRole('textbox', { name: "Sunucu HTTPS adresi" }), { target: { value: 'https://backend.example:7443' } })
+  fireEvent.click(screen.getByRole('button', { name: 'İleri' }))
+  if (mode === 'automatic') fireEvent.click(screen.getByRole('tab', { name: 'Tek komutla kurulum' }))
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: "Kayıt anahtarı oluştur" })) })
 }
 
@@ -63,18 +65,57 @@ describe('Enrollment commands', () => {
   })
 })
 
-describe('Add Agent lifecycle', () => {
+describe('Adding a backup computer', () => {
+  it('asks which computer first, creates no key until the user asks for one, and can step back', async () => {
+    mount()
+    await act(async () => {})
+    expect(screen.getByRole('heading', { name: 'Yedekleme bilgisayarı ekle' })).toBeInTheDocument()
+    expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Bilgisayar')
+    expect(screen.getByText(/Neden soruluyor/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'İleri' }))
+    expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Kurulum')
+    expect(api.createEnrollmentToken).not.toHaveBeenCalled()
+    expect(screen.queryByRole('textbox', { name: 'Tek kullanımlık kurulum komutu' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Geri' }))
+    expect(screen.getByRole('textbox', { name: 'Bilgisayarın adı' })).toBeInTheDocument()
+  })
+  it('keeps the server address and key lifetime under collapsed technical details, opened when the address is unknown', async () => {
+    vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: null, packages: { 'win-x64': true, 'linux-x64': true } })
+    mount()
+    await act(async () => {})
+    const address = screen.getByRole('textbox', { name: 'Sunucu HTTPS adresi' })
+    expect(address).toBeVisible()
+    expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
+    fireEvent.change(address, { target: { value: 'https://backend.example:7443' } })
+    expect(screen.getByRole('button', { name: 'İleri' })).toBeEnabled()
+  })
+  it('hides the server address when it is already known', async () => {
+    mount()
+    await act(async () => {})
+    expect(screen.getByRole('textbox', { name: 'Sunucu HTTPS adresi' })).not.toBeVisible()
+    expect(screen.getByRole('spinbutton', { name: 'Geçerlilik süresi (dakika)' })).not.toBeVisible()
+  })
+  it('shows the connected computer by name and keeps its id, system and version collapsed', async () => {
+    mount(); await issue()
+    vi.mocked(api.getEnrollmentTokenStatus).mockResolvedValue({ tokenId: 'token-a', expiresAt, state: 'Consumed', agentId: 'agent-a' })
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000) })
+    expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Bağlantı')
+    expect(screen.getByText('Backup host')).toBeVisible()
+    for (const value of ['agent-a', 'Windows Server', '1.2']) expect(screen.getByText(value)).not.toBeVisible()
+  })
   it('waits, clears consumed plaintext, observes connecting, completes only on heartbeat online and stops', async () => {
     const { client } = mount()
     await issue()
-    expect(screen.getByRole('status')).toHaveTextContent('Bekleniyor')
+    expect(screen.getByRole('status')).toHaveTextContent('bekleniyor')
     expect(screen.getByRole('textbox', { name: "Tek kullanımlık kurulum komutu" })).toHaveValue(enrollmentCommands('Windows', 'https://backend.example:7443', 'transient-secret', 'Backup agent'))
     vi.mocked(api.getEnrollmentTokenStatus).mockResolvedValue({ tokenId: 'token-a', expiresAt, state: 'Consumed', agentId: 'agent-a' })
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
     expect(screen.getByRole('status')).toHaveTextContent('Kayıt tamamlandı')
     expect(screen.queryByRole('textbox', { name: "Tek kullanımlık kurulum komutu" })).not.toBeInTheDocument()
+    expect(screen.queryByDisplayValue(/transient-secret/)).not.toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('transient-secret')
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000) })
-    expect(screen.getByRole('status')).toHaveTextContent('Bağlanıyor')
+    expect(screen.getByRole('status')).toHaveTextContent('bağlanıyor')
     expect(screen.getByText('agent-a')).toBeInTheDocument()
     expect(screen.getByText('Windows Server')).toBeInTheDocument()
     vi.mocked(api.getAgent).mockResolvedValue({ ...detail, connectivity: 'online' })
@@ -180,8 +221,8 @@ describe('Add Agent lifecycle', () => {
   })
   it('renders the Linux command using the selected platform and optional name', async () => {
     mount()
-    fireEvent.change(screen.getByRole('combobox', { name: 'Platform' }), { target: { value: 'Linux' } })
-    fireEvent.change(screen.getByRole('textbox', { name: 'Ajan adı' }), { target: { value: 'Linux host' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'İşletim sistemi' }), { target: { value: 'Linux' } })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Bilgisayarın adı' }), { target: { value: 'Linux host' } })
     await issue()
     expect(screen.getByRole('textbox', { name: "Tek kullanımlık kurulum komutu" })).toHaveValue(enrollmentCommands('Linux', 'https://backend.example:7443', 'transient-secret', 'Linux host'))
   })
@@ -235,18 +276,18 @@ describe('Add Agent lifecycle', () => {
     await act(async () => { resolve({ tokenId: 'late', token: 'late-secret', expiresAt }) })
     expect(screen.queryByDisplayValue(/late-secret/)).not.toBeInTheDocument()
   })
-  it.each(['Viewer', 'Operator', 'PlatformAdmin'])('%s without tenant Admin cannot add Agent', async () => {
+  it.each(['Viewer', 'Operator', 'PlatformAdmin'])('%s without tenant Admin cannot add a backup computer', async () => {
     tenancy.canAdmin = false
     render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><ClientsPage /></MemoryRouter></QueryClientProvider>)
     await act(async () => {})
-    expect(screen.queryByRole('button', { name: "Ajan ekle" })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Yedekleme bilgisayarı ekle' })).not.toBeInTheDocument()
     expect(api.createEnrollmentToken).not.toHaveBeenCalled()
   })
-  it('tenant Admin sees Add Agent, and tenant changes unmount plaintext', async () => {
+  it('tenant Admin sees the add button, and tenant changes unmount plaintext', async () => {
     const client = new QueryClient()
     const tree = <QueryClientProvider client={client}><MemoryRouter><ClientsPage /></MemoryRouter></QueryClientProvider>
     const view = render(tree)
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: "Ajan ekle" })) })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Yedekleme bilgisayarı ekle' })) })
     await issue()
     expect(within(screen.getByRole('dialog')).getByRole('textbox', { name: "Tek kullanımlık kurulum komutu" })).toBeInTheDocument()
     tenancy.tenantId = 'tenant-b'

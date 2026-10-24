@@ -11,8 +11,11 @@ import { AgentRegisterPage } from '@/pages/clients/agent-register-page'
 import { AddAgentDialog } from './add-agent-dialog'
 import type { AgentDetail, CreatedEnrollmentToken } from './types'
 import * as api from './api'
+import * as jobsApi from '@/features/backup-jobs/api'
+import { setViewport } from '@/test/viewport'
 
 const tenancy = vi.hoisted(() => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true, tenant: { tenantId: 'tenant-a', name: 'Test', role: 'Owner' } }))
+vi.mock('@/features/backup-jobs/api', () => ({ getBackupJobs: vi.fn() }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => tenancy }))
 vi.mock('./api', () => ({ getAgentDistribution: vi.fn(), getAgents: vi.fn(), getAgent: vi.fn(), revokeAgent: vi.fn(), getEnrollmentPolicy: vi.fn(), setEnrollmentPolicy: vi.fn(), getEnrollmentTokens: vi.fn(), getEnrollmentTokenStatus: vi.fn(), createEnrollmentToken: vi.fn(), revokeEnrollmentToken: vi.fn() }))
 
@@ -35,6 +38,7 @@ beforeEach(() => {
   vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: 'https://backend.example:7443', packages: { 'win-x64': true, 'linux-x64': true } })
   Object.assign(tenancy, { tenantId: 'tenant-a', canAdmin: true, canOperate: true })
   tenancy.tenant.role = 'Owner'
+  vi.mocked(jobsApi.getBackupJobs).mockResolvedValue([])
   vi.mocked(api.getAgents).mockResolvedValue([agent])
   vi.mocked(api.getAgent).mockResolvedValue(agent)
   vi.mocked(api.getEnrollmentPolicy).mockResolvedValue({ tenantId: 'tenant-a', enabled: true })
@@ -47,7 +51,21 @@ beforeEach(() => {
   vi.mocked(api.setEnrollmentPolicy).mockResolvedValue({ tenantId: 'tenant-a', enabled: false })
 })
 
-describe('Agent read views', () => {
+describe('Backup computers list', () => {
+  it('leads with name, online state and last seen, and keeps platform, version, id and capabilities out of the list', async () => {
+    const threeHoursAgo = new Date(Date.now() - 3 * 3_600_000).toISOString()
+    vi.mocked(api.getAgents).mockResolvedValue([{ ...agent, lastSeenAt: threeHoursAgo }])
+    mount(<ClientsPage />)
+    expect(screen.getByRole('heading', { level: 1, name: 'Yedekleme bilgisayarları' })).toBeInTheDocument()
+    const link = await screen.findByRole('link', { name: 'SQL-01' })
+    expect(link).toHaveAttribute('href', '/tenants/tenant-a/agents/agent-a')
+    const row = link.closest('tr')!
+    expect(within(row).getByText('Çevrimiçi')).toBeInTheDocument()
+    expect(within(row).getByText('3 saat önce')).toHaveAttribute('title', expect.stringContaining('2026'))
+    for (const hidden of ['Windows', '1.2.0', 'agent-a', /yetenek/]) expect(within(row).queryByText(hidden)).not.toBeInTheDocument()
+    expect(api.getAgents).toHaveBeenCalledWith('tenant-a', expect.any(AbortSignal))
+  })
+
   it('keeps revoked and disabled lifecycle separate from offline connectivity', async () => {
     vi.mocked(api.getAgents).mockResolvedValue([
       { ...agent, hostName: 'Revoked host', status: 'Revoked', operationalStatus: 'Revoked', connectivity: 'offline' },
@@ -55,64 +73,121 @@ describe('Agent read views', () => {
     ])
     mount(<ClientsPage />)
     const revoked = (await screen.findByRole('link', { name: 'Revoked host' })).closest('tr')!
-    expect(within(revoked).getAllByText('İptal edildi')).toHaveLength(2)
+    expect(within(revoked).getByText('İptal edildi')).toBeInTheDocument()
     expect(within(revoked).getByText('Çevrimdışı')).toBeInTheDocument()
     const disabled = screen.getByRole('link', { name: 'Disabled host' }).closest('tr')!
-    expect(within(disabled).getAllByText('Devre dışı')).toHaveLength(2)
+    expect(within(disabled).getByText('Devre dışı')).toBeInTheDocument()
     expect(within(disabled).getByText('Çevrimiçi')).toBeInTheDocument()
-    expect(api.getAgents).toHaveBeenCalledWith('tenant-a', expect.any(AbortSignal))
-    expect(screen.getByRole('link', { name: 'Revoked host' })).toHaveAttribute('href', '/tenants/tenant-a/agents/agent-a')
   })
 
-  it.each(['Viewer', 'Operator'])('%s can read safe detail but cannot revoke', async (role) => {
+  it('becomes cards on a phone with name, online state and last seen', async () => {
+    setViewport(false)
+    mount(<ClientsPage />)
+    const card = (await screen.findByRole('link', { name: 'SQL-01' })).closest('li')!
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(within(card).getByText('Çevrimiçi')).toBeInTheDocument()
+    expect(within(card).getByText('Son görülme')).toBeInTheDocument()
+    expect(within(card).queryByText('Windows')).not.toBeInTheDocument()
+  })
+
+  it('filters by name and connection state', async () => {
+    vi.mocked(api.getAgents).mockResolvedValue([agent, { ...agent, agentId: 'agent-b', hostName: 'Depo-PC', connectivity: 'offline' }])
+    mount(<ClientsPage />)
+    await screen.findByRole('link', { name: 'Depo-PC' })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Bilgisayar ara' }), { target: { value: 'sql' } })
+    expect(screen.queryByRole('link', { name: 'Depo-PC' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'SQL-01' })).toBeInTheDocument()
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Bilgisayar ara' }), { target: { value: '' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Durum' }), { target: { value: 'offline' } })
+    expect(screen.queryByRole('link', { name: 'SQL-01' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Depo-PC' })).toBeInTheDocument()
+  })
+
+  it('an administrator with no computers gets one primary action; others are told to ask their administrator', async () => {
+    vi.mocked(api.getAgents).mockResolvedValue([])
+    const admin = mount(<ClientsPage />)
+    await screen.findByText(/Henüz yedekleme bilgisayarı eklenmedi/)
+    expect(screen.getAllByRole('button', { name: 'Yedekleme bilgisayarı ekle' })).toHaveLength(1)
+    admin.unmount()
+    tenancy.canAdmin = false
+    mount(<ClientsPage />)
+    await screen.findByText(/Henüz yedekleme bilgisayarı eklenmedi/)
+    expect(screen.getByText('Yöneticinize danışın')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Yedekleme bilgisayarı ekle' })).not.toBeInTheDocument()
+  })
+
+  it('does not offer the enrolment tabs to a non-administrator', async () => {
+    tenancy.canAdmin = false
+    mount(<ClientsPage />)
+    await screen.findByRole('link', { name: 'SQL-01' })
+    expect(screen.queryByRole('navigation', { name: 'Yedekleme bilgisayarı bölümleri' })).not.toBeInTheDocument()
+  })
+})
+
+describe('Backup computer page', () => {
+  it.each(['Viewer', 'Operator'])('%s can read the computer but cannot remove it', async (role) => {
     tenancy.canAdmin = false
     tenancy.tenant.role = role
     mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
-    expect(await screen.findByRole('heading', { name: 'SQL-01' })).toBeInTheDocument()
-    expect(screen.getByText('.NET 10')).toBeInTheDocument()
-    expect(screen.getByText('Windows Server')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: "Ajan kaydını iptal et" })).not.toBeInTheDocument()
-    expect(screen.queryByText('agent-a')).not.toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'SQL-01' })).toBeInTheDocument()
+    expect(screen.getByText('Çevrimiçi')).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: 'Sayfa yolu' })).toHaveTextContent('Yedekleme bilgisayarları')
+    expect(screen.queryByRole('button', { name: 'Bilgisayar kaydını iptal et' })).not.toBeInTheDocument()
     expect(api.getAgent).toHaveBeenCalledWith('tenant-a', 'agent-a', expect.any(AbortSignal))
   })
 
-  it('lists persisted capabilities with known names and separate supported/unsupported/unknown states', async () => {
+  it('keeps platform, versions, identifiers and lifecycle in collapsed, copyable technical details', async () => {
+    mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    await screen.findByRole('heading', { level: 1, name: 'SQL-01' })
+    for (const value of ['agent-a', 'Windows', 'Windows Server', '1.2.0', '.NET 10']) expect(screen.getByText(value)).not.toBeVisible()
+    fireEvent.click(screen.getByText('Teknik ayrıntılar'))
+    for (const value of ['agent-a', 'Windows Server', '1.2.0', '.NET 10']) expect(screen.getByText(value)).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Kopyala: Bilgisayar kimliği' })).toBeInTheDocument()
+  })
+
+  it('lists reported capabilities under technical details with separate supported, unsupported and unknown states', async () => {
     const capabilities = [
       { identifier: 'mssql.backup.full', support: 'Supported', metadata: { scope: 'agent' } },
       { identifier: 'mssql.backup.checksum', support: 'Supported' },
       { identifier: 'mssql.backup.differential', support: 'Unsupported' },
       { identifier: 'vendor.custom-feature', support: 'Unknown' },
     ]
-    vi.mocked(api.getAgents).mockResolvedValue([{ ...agent, capabilities }])
     vi.mocked(api.getAgent).mockResolvedValue({ ...agent, capabilities, capabilitiesRevision: 'c1-abc', capabilitiesReportedAt: '2026-10-06T12:00:00Z' })
-    const list = mount(<ClientsPage />)
-    const row = (await screen.findByRole('link', { name: 'SQL-01' })).closest('tr')!
-    expect(within(row).getByText('4 yetenek')).toBeInTheDocument()
-    expect(within(row).getByText('2 destekleniyor')).toBeInTheDocument()
-    expect(within(row).queryByText("MSSQL Tam Yedekleme")).not.toBeInTheDocument()
-    list.unmount()
     mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
-    fireEvent.click(await screen.findByRole('tab', { name: 'Yetenekler' }))
-    const section = (await screen.findByRole('heading', { name: 'Bildirilen yetenekler' })).closest('section')!
+    await screen.findByRole('heading', { level: 1, name: 'SQL-01' })
+    const section = screen.getByRole('heading', { name: 'Bildirilen yetenekler' }).parentElement!
+    expect(section).not.toBeVisible()
+    fireEvent.click(screen.getByText('Teknik ayrıntılar'))
     expect(within(section).getAllByText('Destekleniyor')).toHaveLength(2)
     expect(within(section).getByText('Desteklenmiyor')).toBeInTheDocument()
     expect(within(section).getByText('Bilinmiyor')).toBeInTheDocument()
     expect(within(section).getByText('vendor.custom-feature')).toBeInTheDocument()
-    expect(within(section).getByText("MSSQL Tam Yedekleme")).toBeInTheDocument()
+    expect(within(section).getByText('MSSQL Tam Yedekleme')).toBeInTheDocument()
     expect(screen.getByText('c1-abc')).toBeInTheDocument()
   })
 
   it('says capabilities were not reported yet instead of inventing support', async () => {
-    vi.mocked(api.getAgents).mockResolvedValue([{ ...agent, capabilities: [] }])
-    mount(<ClientsPage />)
-    const row = (await screen.findByRole('link', { name: 'SQL-01' })).closest('tr')!
-    expect(within(row).getByText('Henüz bildirilmedi')).toBeInTheDocument()
+    vi.mocked(api.getAgent).mockResolvedValue({ ...agent, capabilities: [] })
+    mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    await screen.findByRole('heading', { level: 1, name: 'SQL-01' })
+    fireEvent.click(screen.getByText('Teknik ayrıntılar'))
+    expect(screen.getByText('Yetenekler henüz bildirilmedi.')).toBeVisible()
   })
 
-  it('requires focused confirmation before admin revocation and invalidates only related scopes', async () => {
+  it('shows only this computer\'s backup jobs', async () => {
+    vi.mocked(jobsApi.getBackupJobs).mockResolvedValue([
+      { id: 'job-1', name: 'Muhasebe', agentId: 'agent-a', enabled: true, lastRun: null, nextOccurrenceAt: null },
+      { id: 'job-2', name: 'Başka bilgisayarın işi', agentId: 'agent-z', enabled: true, lastRun: null, nextOccurrenceAt: null },
+    ] as never)
+    mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    expect(await screen.findByText('Muhasebe')).toBeInTheDocument()
+    expect(screen.queryByText('Başka bilgisayarın işi')).not.toBeInTheDocument()
+  })
+
+  it('requires focused confirmation before an administrator removes a computer and invalidates only related scopes', async () => {
     const { client } = mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
     const invalidate = vi.spyOn(client, 'invalidateQueries')
-    fireEvent.click(await screen.findByRole('button', { name: "Ajan kaydını iptal et" }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Bilgisayar kaydını iptal et' }))
     const dialog = await screen.findByRole('dialog')
     await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Vazgeç' })).toHaveFocus())
     expect(api.revokeAgent).not.toHaveBeenCalled()
@@ -123,23 +198,24 @@ describe('Agent read views', () => {
   })
 })
 
-describe('Enrollment', () => {
+describe('Adding a computer from the new-computer page', () => {
   it.each(['Viewer', 'Operator'])('%s cannot query or mutate enrollment administration', (role) => {
     tenancy.canAdmin = false
     tenancy.tenant.role = role
     mount(<AgentRegisterPage />)
+    expect(screen.getByRole('heading', { level: 1, name: 'Yeni bilgisayar kaydı' })).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent('yöneticisi')
     expect(api.getEnrollmentPolicy).not.toHaveBeenCalled()
     expect(api.getEnrollmentTokens).not.toHaveBeenCalled()
-    expect(screen.queryByRole('button', { name: "Kayıt anahtarı oluştur" })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Yedekleme bilgisayarı ekle' })).not.toBeInTheDocument()
   })
 
   it('shows policy off and disables token creation, while admin may enable enrollment', async () => {
     vi.mocked(api.getEnrollmentPolicy).mockResolvedValue({ tenantId: 'tenant-a', enabled: false })
     mount(<AgentRegisterPage />)
-    const toggle = await screen.findByRole('switch', { name: "Yeni ajan kayıtlarına izin ver" })
+    const toggle = await screen.findByRole('switch', { name: "Yeni bilgisayar kayıtlarına izin ver" })
     expect(toggle).toHaveAttribute('aria-checked', 'false')
-    expect(screen.getByRole('button', { name: "Kayıt anahtarı oluştur" })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Yedekleme bilgisayarı ekle' })).toBeDisabled()
     fireEvent.click(toggle)
     await waitFor(() => expect(api.setEnrollmentPolicy).toHaveBeenCalledWith('tenant-a', true))
   })
@@ -147,10 +223,11 @@ describe('Enrollment', () => {
   it('shows plaintext once without query or mutation cache persistence, and clears it on close', async () => {
     const { client } = mount(<AgentRegisterPage />)
     await screen.findByRole('switch')
-    fireEvent.click(screen.getByRole('button', { name: "Kayıt anahtarı oluştur" }))
+    fireEvent.click(screen.getByRole('button', { name: 'Yedekleme bilgisayarı ekle' }))
     const dialog = await screen.findByRole('dialog')
     const lifetime = within(dialog).getByRole('spinbutton', { name: 'Geçerlilik süresi (dakika)' })
     fireEvent.change(lifetime, { target: { value: '60' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'İleri' }))
     fireEvent.click(within(dialog).getByRole('button', { name: "Kayıt anahtarı oluştur" }))
     expect(await screen.findByDisplayValue('secret-once-only')).toBeInTheDocument()
     expect(api.createEnrollmentToken).toHaveBeenCalledWith('tenant-a', 60, expect.any(AbortSignal))
@@ -161,7 +238,7 @@ describe('Enrollment', () => {
     expect(screen.queryByText('token-a')).not.toBeInTheDocument()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Kapat' }))
     await waitFor(() => expect(screen.queryByDisplayValue('secret-once-only')).not.toBeInTheDocument())
-    fireEvent.click(screen.getByRole('button', { name: "Kayıt anahtarı oluştur" }))
+    fireEvent.click(screen.getByRole('button', { name: 'Yedekleme bilgisayarı ekle' }))
     expect(await screen.findByRole('spinbutton')).toHaveValue(1440)
     expect(screen.queryByDisplayValue('secret-once-only')).not.toBeInTheDocument()
   })
@@ -182,6 +259,7 @@ describe('Enrollment', () => {
     vi.mocked(api.createEnrollmentToken).mockReturnValue(promise)
     const onCreated = vi.fn()
     const view = mount(<AddAgentDialog tenantId="tenant-a" onClose={vi.fn()} onCreated={onCreated} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'İleri' }))
     fireEvent.click(await screen.findByRole('button', { name: "Kayıt anahtarı oluştur" }))
     const signal = vi.mocked(api.createEnrollmentToken).mock.calls[0]![2]
     view.unmount()
@@ -193,8 +271,9 @@ describe('Enrollment', () => {
   it('clears plaintext when the tenant changes without a route unmount', async () => {
     const { client, rerender } = mount(<AgentRegisterPage />)
     await screen.findByRole('switch')
-    fireEvent.click(screen.getByRole('button', { name: "Kayıt anahtarı oluştur" }))
+    fireEvent.click(screen.getByRole('button', { name: 'Yedekleme bilgisayarı ekle' }))
     const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'İleri' }))
     fireEvent.click(within(dialog).getByRole('button', { name: "Kayıt anahtarı oluştur" }))
     await screen.findByDisplayValue('secret-once-only')
     tenancy.tenantId = 'tenant-b'
