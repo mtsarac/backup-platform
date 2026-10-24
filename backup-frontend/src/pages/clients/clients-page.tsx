@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { Server } from 'lucide-react'
 import { DataList, type Column } from '@/components/data/data-list'
 import { QueryState } from '@/components/data/query-state'
+import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -12,11 +13,9 @@ import { PageHeader } from '@/components/ui/page-header'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { useAgents } from '@/features/agents/hooks'
 import type { Agent } from '@/features/agents/types'
-import { CapabilitySummary } from '@/features/agents/capabilities'
 import { AgentsTabs } from '@/features/agents/agents-tabs'
 import { AddAgentDialog } from '@/features/agents/add-agent-dialog'
 import { linkClass } from '@/components/ui/form-styles'
-import { formatDateTime } from '@/lib/format'
 
 export function ClientsPage() {
   useLanguage()
@@ -29,25 +28,24 @@ export function ClientsPage() {
   const filtered = search !== '' || connectivity !== 'all'
   const rows = (query.data ?? []).filter((agent) =>
     (connectivity === 'all' || agent.connectivity === connectivity) &&
-    `${agent.hostName ?? ''} ${agent.platform} ${agent.agentVersion ?? ''}`.toLocaleLowerCase(currentLocale()).includes(term))
+    (agent.hostName ?? tx('Adsız bilgisayar')).toLocaleLowerCase(currentLocale()).includes(term))
   const columns: Column<Agent>[] = [
-    { key: 'hostName', header: tx('Agent'), wrap: true, render: (agent) => <div><Link className={linkClass} to={`/tenants/${tenantId}/agents/${agent.agentId}`}>{agent.hostName ?? tx('Adsız agent')}</Link><div className="break-all font-mono text-xs text-text-muted">{agent.agentId}</div></div> },
-    { key: 'platform', header: 'Platform', wrap: true, render: (agent) => <div><div>{agent.platform}</div><div className="text-sm text-text-muted">{tx("Sürüm")}{' '}{agent.agentVersion ?? tx('bildirilmedi')}</div></div> },
-    { key: 'connectivity', card: 'status', header: tx('Durum'), render: (agent) => <div className="flex flex-wrap items-center gap-1.5"><StatusPill status={agent.connectivity} />{agent.status !== 'Active' && <StatusPill domain="agent" status={agent.status} />}{agent.operationalStatus.toLowerCase() !== agent.connectivity.toLowerCase() && <StatusPill domain="agent" status={agent.operationalStatus} />}</div> },
-    { key: 'lastSeenAt', header: tx('Son görülme'), render: (agent) => formatDateTime(agent.lastSeenAt, tx('Henüz bildirilmedi')) },
-    { key: 'capabilities', header: tx('Yetenekler'), render: (agent) => <CapabilitySummary capabilities={agent.capabilities} /> },
+    { key: 'hostName', header: tx('Bilgisayar'), card: 'title', wrap: true, render: (agent) => <Link className={linkClass} to={`/tenants/${tenantId}/agents/${agent.agentId}`}>{agent.hostName ?? tx('Adsız bilgisayar')}</Link> },
+    { key: 'connectivity', card: 'status', header: tx('Durum'), render: (agent) => <div className="flex flex-wrap items-center gap-1.5"><StatusPill status={agent.connectivity} />{agent.status !== 'Active' && <StatusPill domain="agent" status={agent.status} />}</div> },
+    { key: 'lastSeenAt', header: tx('Son görülme'), render: (agent) => agent.lastSeenAt ? <RelativeTime value={agent.lastSeenAt} /> : tx('Henüz bağlanmadı') },
   ]
-  const addButton = canAdmin && <Button onClick={() => setAddingTenant(tenantId)}>{tx("Agent ekle")}</Button>
+  const empty = query.data?.length === 0
+  const addButton = canAdmin && <Button onClick={() => setAddingTenant(tenantId)}>{tx("Yedekleme bilgisayarı ekle")}</Button>
   return <div className="space-y-6">
-    <PageHeader title={tx("Agent'lar")} description={tx("Yedekleme işlerini çalıştıran makineler ve bağlantı durumları.")} actions={addButton} />
+    <PageHeader title={tx("Yedekleme bilgisayarları")} description={tx("Veritabanı yedeklerini alan bilgisayarlar ve açık olup olmadıkları.")} actions={!empty && addButton} />
     <AgentsTabs />
-    <Filters label={tx("Agent filtreleri")} onClear={filtered ? () => { setSearch(''); setConnectivity('all') } : undefined}>
-      <FilterField label={tx("Agent ara")} className="sm:col-span-2"><input className={filterControlClass} placeholder={tx("Makine adı, platform veya sürüm")} value={search} onChange={(event) => setSearch(event.target.value)} /></FilterField>
-      <FilterField label={tx("Bağlantı")}><select className={filterControlClass} value={connectivity} onChange={(event) => setConnectivity(event.target.value)}><option value="all">{tx("Tümü")}</option><option value="online">{tx("Çevrimiçi")}</option><option value="offline">{tx("Çevrimdışı")}</option><option value="unknown">{tx("Bilinmiyor")}</option></select></FilterField>
-    </Filters>
+    {!empty && <Filters label={tx("Bilgisayar filtreleri")} onClear={filtered ? () => { setSearch(''); setConnectivity('all') } : undefined}>
+      <FilterField label={tx("Bilgisayar ara")} className="sm:col-span-2"><input type="search" aria-label={tx("Bilgisayar ara")} className={filterControlClass} placeholder={tx("Bilgisayar adı")} value={search} onChange={(event) => setSearch(event.target.value)} /></FilterField>
+      <FilterField label={tx("Durum")}><select className={filterControlClass} value={connectivity} onChange={(event) => setConnectivity(event.target.value)}><option value="all">{tx("Tümü")}</option><option value="online">{tx("Çevrimiçi")}</option><option value="offline">{tx("Çevrimdışı")}</option><option value="unknown">{tx("Bilinmiyor")}</option></select></FilterField>
+    </Filters>}
     <QueryState isPending={query.isPending} error={query.error}>
-      {query.data?.length === 0 ? <div className="rounded-xl border border-border bg-surface"><EmptyState icon={Server} message={tx("Henüz kayıtlı Agent yok.")} canAct={canAdmin} action={addButton} /></div>
-        : <DataList rows={rows} columns={columns} keyExtractor={(agent) => agent.agentId} emptyMessage={filtered ? tx('Filtrelere uygun agent bulunamadı.') : tx('Henüz kayıtlı agent yok.')} />}
+      {empty ? <div className="rounded-xl border border-border bg-surface"><EmptyState icon={Server} message={tx("Henüz yedekleme bilgisayarı eklenmedi.")} canAct={canAdmin} action={addButton} /></div>
+        : <DataList rows={rows} columns={columns} keyExtractor={(agent) => agent.agentId} caption={tx("Yedekleme bilgisayarları")} emptyMessage={filtered ? tx('Filtrelere uygun bilgisayar bulunamadı.') : tx('Henüz yedekleme bilgisayarı eklenmedi.')} />}
     </QueryState>
     {canAdmin && addingTenant === tenantId && <AddAgentDialog key={tenantId} tenantId={tenantId} onClose={() => setAddingTenant(null)} />}
   </div>

@@ -14,14 +14,6 @@ function sortCapabilities(capabilities: AgentCapability[]) {
   return [...capabilities].sort((a, b) => (supportOrder[a.support] ?? 1) - (supportOrder[b.support] ?? 1) || a.identifier.localeCompare(b.identifier))
 }
 
-/** Table summary: a count only; the full list lives on the Agent detail page. Never claims support for something not reported. */
-export function CapabilitySummary({ capabilities }: { capabilities: AgentCapability[] }) {
-  useLanguage()
-  if (capabilities.length === 0) return <span className="text-text-muted">{tx("Henüz bildirilmedi")}</span>
-  const supported = capabilities.filter((item) => item.support === 'Supported').length
-  return <div><div>{capabilities.length}{' '}{tx("yetenek")}</div><div className="text-sm text-text-muted">{supported}{' '}{tx("destekleniyor")}</div></div>
-}
-
 /** Full list grouped by support state; unknown support values land with the unknown ones. */
 export function CapabilityList({ capabilities }: { capabilities: AgentCapability[] }) {
   useLanguage()
