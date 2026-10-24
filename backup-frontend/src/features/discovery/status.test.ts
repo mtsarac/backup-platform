@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canCreateJob, databaseBlockedReason, databaseSelectable, isScanActive, supportsDiscovery } from './status'
+import { canCreateJob, databaseAvailability, databaseSelectable, isScanActive, supportsDiscovery } from './status'
 import { makeDatabase, makeInstance } from './test-fixtures'
 
 describe('canCreateJob', () => {
@@ -24,7 +24,7 @@ describe('databaseSelectable', () => {
   ])('rejects a %s database', (_name, patch) => {
     const database = makeDatabase(patch)
     expect(databaseSelectable(database, instance)).toBe(false)
-    expect(databaseBlockedReason(database, instance)).toBeTruthy()
+    expect(databaseAvailability(database, instance).reason).toBeTruthy()
   })
   it('accepts Unknown full-backup support but never on an unusable instance', () => {
     expect(databaseSelectable(makeDatabase({ fullBackup: 'Unknown' }), instance)).toBe(true)
@@ -44,5 +44,34 @@ describe('supportsDiscovery', () => {
     expect(supportsDiscovery([{ identifier: 'discovery.database-inventory', support: 'Supported' }])).toBe(true)
     expect(supportsDiscovery([{ identifier: 'discovery.database-inventory', support: 'Unsupported' }])).toBe(false)
     expect(supportsDiscovery([])).toBe(false)
+  })
+})
+describe('databaseAvailability', () => {
+  const instance = makeInstance()
+  it('calls an online user database that no job covers backupable, without a reason', () => {
+    expect(databaseAvailability(makeDatabase(), instance)).toEqual({ kind: 'available', reason: null })
+  })
+  it('tells an already covered database apart from an unbackupable one', () => {
+    const covered = databaseAvailability(makeDatabase({ jobs: [{ id: 'j', name: 'n', enabled: true }] }), instance)
+    expect(covered.kind).toBe('covered')
+    expect(covered.reason).toBeTruthy()
+  })
+  it.each([
+    ['a system database', { isSystem: true }],
+    ['an offline database', { state: 'Offline' as const }],
+    ['a database without full backup support', { fullBackup: 'Unsupported' as const, fullBackupReasonCode: 'connections-disallowed' }],
+    ['a database no longer seen', { presence: 'Missing' as const }],
+  ])('gives %s a plain reason', (_name, patch) => {
+    const result = databaseAvailability(makeDatabase(patch), instance)
+    expect(result.kind).toBe('unavailable')
+    expect(result.reason).toBeTruthy()
+  })
+  it('never shows a raw reason code as the reason', () => {
+    const result = databaseAvailability(makeDatabase({ fullBackup: 'Unsupported', fullBackupReasonCode: 'weird_new_code' }), instance)
+    expect(result.kind).toBe('unavailable')
+    expect(result.reason).not.toContain('weird_new_code')
+  })
+  it('is unavailable for every database of an unusable instance', () => {
+    expect(databaseAvailability(makeDatabase(), makeInstance({ access: 'CredentialsRequired' })).kind).toBe('unavailable')
   })
 })
