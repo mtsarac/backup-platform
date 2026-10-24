@@ -1,5 +1,6 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useEffect, useRef, useState } from 'react'
+import { useIdempotencyKey } from '@/lib/idempotency-key'
 import { Button } from '@/components/ui/button'
 import { StatusPill } from '@/components/data/status-pill'
 import { Field } from '@/components/ui/field'
@@ -37,8 +38,8 @@ function RestoreForm({ session, artifactId, targets, onStarted }: { session: Sup
   const [acknowledged, setAcknowledged] = useState(false)
   const [checked, setChecked] = useState<{ id: string; fingerprint: string } | null>(null)
   const [validation, setValidation] = useState('')
-  const precheckKey = useRef({ body: '', key: crypto.randomUUID() })
-  const restoreKey = useRef({ body: '', key: crypto.randomUUID() })
+  const precheckKey = useIdempotencyKey()
+  const restoreKey = useIdempotencyKey()
   const submitting = useRef(false)
   const mounted = useRef(true)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
@@ -57,20 +58,16 @@ function RestoreForm({ session, artifactId, targets, onStarted }: { session: Sup
     if (isPg && new TextEncoder().encode(databaseName.trim()).length > 63) { setValidation(tx('PostgreSQL Database adı en fazla 63 UTF-8 byte olabilir.')); return }
     setValidation('')
     submitting.current = true
-    // Same request retains its key across failed transport retries. A completed check is a new operation.
-    if (precheckKey.current.body !== fingerprint || (operation.data && !isActiveRestore(operation.data.status))) precheckKey.current = { body: fingerprint, key: crypto.randomUUID() }
-    precheck.mutate({ input, idempotencyKey: precheckKey.current.key }, {
+    precheck.mutate({ input, idempotencyKey: precheckKey.keyFor(input) }, {
       onSuccess: result => { if (mounted.current) { setChecked({ id: result.id, fingerprint }); setAcknowledged(false) } },
-      onSettled: () => { submitting.current = false },
+      onSettled: (_result, error) => { precheckKey.settle(error); submitting.current = false },
     })
   }
   function startRestore() {
     if (!scope.enabled || !eligible || !passed || !acknowledged || !checked || submitting.current || busy || operation.error) return
     submitting.current = true
     const request = { ...input, precheckId: checked.id }
-    const body = JSON.stringify(request)
-    if (restoreKey.current.body !== body) restoreKey.current = { body, key: crypto.randomUUID() }
-    start.mutate({ input: request, idempotencyKey: restoreKey.current.key }, { onSuccess: result => { if (mounted.current) onStarted(result.id) }, onSettled: () => { submitting.current = false } })
+    start.mutate({ input: request, idempotencyKey: restoreKey.keyFor(request) }, { onSuccess: result => { if (mounted.current) onStarted(result.id) }, onSettled: (_result, error) => { restoreKey.settle(error); submitting.current = false } })
   }
   return <section aria-label={tx("Support Restore")}>
     <Section title={tx("Yeni Database geri yükleme")} description={<>{tx("Kaynak:")}{' '}{targets.sourceDatabase} · {formatBytes(targets.sizeBytes)}{' '}{tx("· NewDatabase")}</>}>

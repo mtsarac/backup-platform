@@ -5,7 +5,7 @@ import { Stepper } from '@/components/ui/stepper'
 import type { BackupArtifact } from '@/features/artifacts/types'
 import { useRestore, useStartRestore, useStartRestoreDiscovery, useStartRestorePrecheck } from './hooks'
 import type { RestoreMode, RestoreOptions, RestoreTarget, RestoreTargetsResponse, RestoreView, StartRestoreDiscoveryVariables, StartRestorePrecheckVariables, StartRestoreVariables } from './types'
-import { ApiError } from '@/lib/api/client'
+import { isUncertainError, useIdempotencyKey } from '@/lib/idempotency-key'
 import { RestoreSourceSummary } from './restore-source-summary'
 import { RestoreTargetStep } from './restore-target-step'
 import { RestoreModeStep } from './restore-mode-step'
@@ -73,6 +73,9 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
 
   const startRestore = useStartRestore()
   const restoreAttemptRef = useRef<RequestAttempt<StartRestoreVariables> | null>(null)
+  const discoveryKey = useIdempotencyKey()
+  const precheckKey = useIdempotencyKey()
+  const restoreKey = useIdempotencyKey()
   const pendingRef = useRef({ discovery: false, precheck: false, execution: false })
   const [executionError, setExecutionError] = useState<unknown>(null)
 
@@ -98,9 +101,9 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
   const precheckFingerprint = JSON.stringify([discoveryFingerprint, targetDatabaseName.trim(), mode, options])
   const currentDiscovery = discoveryOperation?.fingerprint === discoveryFingerprint
   const currentPrecheck = precheckOperation?.fingerprint === precheckFingerprint
-  const discoveryRetryable = discoveryError != null && (!(discoveryError instanceof ApiError) || discoveryError.status >= 500)
-  const precheckRetryable = precheckError != null && (!(precheckError instanceof ApiError) || precheckError.status >= 500)
-  const executionRetryable = executionError != null && (!(executionError instanceof ApiError) || executionError.status >= 500)
+  const discoveryRetryable = isUncertainError(discoveryError)
+  const precheckRetryable = isUncertainError(precheckError)
+  const executionRetryable = isUncertainError(executionError)
   const discoveryData = currentDiscovery && discoveryQuery.data?.id === discoveryOperationId ? discoveryQuery.data : undefined
   const precheckData = currentPrecheck
     ? (precheckQuery.data?.id === precheckOperationId ? precheckQuery.data : precheckDataState) ?? undefined
@@ -111,11 +114,13 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
 
   function invalidateExecution() {
     restoreAttemptRef.current = null
+    restoreKey.reset()
     setExecutionError(null)
   }
 
   function invalidatePrecheck() {
     precheckAttemptRef.current = null
+    precheckKey.reset()
     setPrecheckOperation(null)
     setPrecheckDataState(null)
     setPrecheckError(null)
@@ -124,6 +129,7 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
 
   function invalidateDiscovery() {
     discoveryAttemptRef.current = null
+    discoveryKey.reset()
     setDiscoveryOperation(null)
     setDiscoveryError(null)
     invalidatePrecheck()
@@ -146,17 +152,11 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
 
   async function triggerDiscovery() {
     if (!eligibleForRestore || !targetValid || pendingRef.current.discovery) return
-    const previous = discoveryAttemptRef.current
-    const attempt: RequestAttempt<StartRestoreDiscoveryVariables> = previous && discoveryRetryable && previous.fingerprint === discoveryFingerprint
-      ? previous
-      : {
-          fingerprint: discoveryFingerprint,
-          variables: {
-            artifactId: artifact.id,
-            idempotencyKey: crypto.randomUUID(),
-            request: { agentId: selectedAgentId, target: { ...effectiveTarget } },
-          },
-        }
+    const request = { agentId: selectedAgentId, target: { ...effectiveTarget } }
+    const attempt: RequestAttempt<StartRestoreDiscoveryVariables> = {
+      fingerprint: discoveryFingerprint,
+      variables: { artifactId: artifact.id, idempotencyKey: discoveryKey.keyFor(request), request },
+    }
     invalidatePrecheck()
     setDiscoveryOperation(null)
     setDiscoveryError(null)
@@ -164,9 +164,11 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
     pendingRef.current.discovery = true
     try {
       const result = await startDiscovery.mutateAsync(attempt.variables)
+      discoveryKey.settle()
       if (discoveryAttemptRef.current !== attempt) return
       setDiscoveryOperation({ fingerprint: attempt.fingerprint, id: result.id })
     } catch (error) {
+      discoveryKey.settle(error)
       if (discoveryAttemptRef.current !== attempt) return
       setDiscoveryError(error)
     } finally {
@@ -176,23 +178,18 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
 
   async function triggerPrecheck(fresh = false) {
     if (!eligibleForRestore || !targetValid || !databaseNameValid || pendingRef.current.precheck || pendingRef.current.execution) return
-    const previous = precheckAttemptRef.current
-    const attempt: RequestAttempt<StartRestorePrecheckVariables> = !fresh && previous && precheckRetryable && previous.fingerprint === precheckFingerprint
-      ? previous
-      : {
-          fingerprint: precheckFingerprint,
-          variables: {
-            artifactId: artifact.id,
-            idempotencyKey: crypto.randomUUID(),
-            request: {
-              agentId: selectedAgentId,
-              target: { ...effectiveTarget },
-              databaseName: targetDatabaseName.trim(),
-              mode,
-              options: { ...options },
-            },
-          },
-        }
+    if (fresh) precheckKey.reset()
+    const request = {
+      agentId: selectedAgentId,
+      target: { ...effectiveTarget },
+      databaseName: targetDatabaseName.trim(),
+      mode,
+      options: { ...options },
+    }
+    const attempt: RequestAttempt<StartRestorePrecheckVariables> = {
+      fingerprint: precheckFingerprint,
+      variables: { artifactId: artifact.id, idempotencyKey: precheckKey.keyFor(request), request },
+    }
     invalidateExecution()
     setPrecheckOperation(null)
     setPrecheckDataState(null)
@@ -201,11 +198,13 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
     pendingRef.current.precheck = true
     try {
       const result = await startPrecheck.mutateAsync(attempt.variables)
+      precheckKey.settle()
       if (precheckAttemptRef.current !== attempt) return
       setPrecheckDataState(result)
       setPrecheckOperation({ fingerprint: attempt.fingerprint, id: result.id })
       setStep(3)
     } catch (error) {
+      precheckKey.settle(error)
       if (precheckAttemptRef.current !== attempt) return
       setPrecheckError(error)
     } finally {
@@ -216,33 +215,29 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
   async function triggerExecution() {
     if (!eligibleForRestore || !precheckPassed || !currentPrecheck || !precheckOperationId || pendingRef.current.precheck || pendingRef.current.execution) return
     const fingerprint = JSON.stringify([precheckFingerprint, precheckOperationId])
-    const previous = restoreAttemptRef.current
-    const attempt: RequestAttempt<StartRestoreVariables> = previous && executionRetryable && previous.fingerprint === fingerprint
-      ? previous
-      : {
-          fingerprint,
-          variables: {
-            artifactId: artifact.id,
-            idempotencyKey: crypto.randomUUID(),
-            request: {
-              agentId: selectedAgentId,
-              target: { ...effectiveTarget },
-              databaseName: targetDatabaseName.trim(),
-              mode,
-              confirmOverwrite: mode === 'ReplaceExistingDatabase' ? targetDatabaseName.trim() : undefined,
-              options: { ...options },
-              precheckId: precheckOperationId,
-            },
-          },
-        }
+    const request = {
+      agentId: selectedAgentId,
+      target: { ...effectiveTarget },
+      databaseName: targetDatabaseName.trim(),
+      mode,
+      confirmOverwrite: mode === 'ReplaceExistingDatabase' ? targetDatabaseName.trim() : undefined,
+      options: { ...options },
+      precheckId: precheckOperationId,
+    }
+    const attempt: RequestAttempt<StartRestoreVariables> = {
+      fingerprint,
+      variables: { artifactId: artifact.id, idempotencyKey: restoreKey.keyFor(request), request },
+    }
     restoreAttemptRef.current = attempt
     pendingRef.current.execution = true
     setExecutionError(null)
     try {
       const result = await startRestore.mutateAsync(attempt.variables)
+      restoreKey.settle()
       if (restoreAttemptRef.current !== attempt) return
       navigate(`/tenants/${tenantId}/restores/${result.id}`)
     } catch (error) {
+      restoreKey.settle(error)
       if (restoreAttemptRef.current !== attempt) return
       setExecutionError(error)
     } finally {

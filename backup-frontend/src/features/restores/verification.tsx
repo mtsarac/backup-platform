@@ -1,5 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
@@ -13,8 +13,9 @@ import { useTenant } from '@/features/tenancy/use-tenant'
 import { StoredLoginPanel } from './stored-login-panel'
 import { useRestores, useRestoreTargets, useStartRestoreVerification } from './hooks'
 import { verificationCleanupText } from './presentation'
-import type { RestoreTarget, StartRestoreVerificationVariables } from './types'
+import type { RestoreTarget } from './types'
 import { formatDateTime, formatDuration } from '@/lib/format'
+import { useIdempotencyKey } from '@/lib/idempotency-key'
 import { errorMessage } from '@/lib/api/failure-messages'
 
 export function ArtifactVerificationSection({ tenantId, artifact }: { tenantId: string; artifact: BackupArtifact }) {
@@ -48,7 +49,7 @@ function VerificationForm({ tenantId, artifactId, onClose }: { tenantId: string;
   const navigate = useNavigate()
   const targets = useRestoreTargets(artifactId)
   const start = useStartRestoreVerification()
-  const attempt = useRef<{ fingerprint: string; variables: StartRestoreVerificationVariables } | null>(null)
+  const idempotencyKey = useIdempotencyKey()
   const [agentId, setAgentId] = useState('')
   const [targetIndex, setTargetIndex] = useState(0)
   const [custom, setCustom] = useState<RestoreTarget>({ host: '', port: null, integratedSecurity: true, databaseCredentialReference: null, encrypt: true, trustServerCertificate: false })
@@ -63,18 +64,14 @@ function VerificationForm({ tenantId, artifactId, onClose }: { tenantId: string;
   const valid = Boolean(selectedAgent) && Boolean(target.host)
   async function submit() {
     if (!valid || start.isPending) return
-    const fingerprint = JSON.stringify([selectedAgent, target])
-    // A retry after a transport/5xx failure keeps its Idempotency-Key; any edit gets a new one.
-    const next = attempt.current?.fingerprint === fingerprint && error != null ? attempt.current : {
-      fingerprint,
-      variables: { artifactId, idempotencyKey: crypto.randomUUID(), request: { agentId: selectedAgent, target: { ...target }, options: { verifyChecksum: true, verifyBackup: true } } },
-    }
-    attempt.current = next
+    const request = { agentId: selectedAgent, target: { ...target }, options: { verifyChecksum: true, verifyBackup: true } }
     setError(null)
     try {
-      const restore = await start.mutateAsync(next.variables)
+      const restore = await start.mutateAsync({ artifactId, idempotencyKey: idempotencyKey.keyFor(request), request })
+      idempotencyKey.settle()
       navigate(`/tenants/${tenantId}/restores/${restore.id}`)
     } catch (caught) {
+      idempotencyKey.settle(caught)
       setError(caught)
     }
   }

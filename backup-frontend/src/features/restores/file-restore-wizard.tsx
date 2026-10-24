@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { tx, useLanguage } from '@/lib/i18n'
-import { ApiError } from '@/lib/api/client'
+import { isUncertainError, useIdempotencyKey } from '@/lib/idempotency-key'
 import { Stepper } from '@/components/ui/stepper'
 import { validFilePath, validFilePaths } from '@/features/backup-jobs/file-path-list'
 import type { BackupArtifact } from '@/features/artifacts/types'
@@ -11,15 +11,12 @@ import { FileRestoreScopeStep } from './file-restore-scope-step'
 import { FileRestoreTargetStep } from './file-restore-target-step'
 import { RestoreCheckStep } from './restore-check-step'
 import { RestoreSourceSummary } from './restore-source-summary'
-import type { RestoreTargetsResponse, RestoreView, StartRestorePrecheckVariables, StartRestoreVariables } from './types'
+import type { RestoreTargetsResponse, RestoreView } from './types'
 
 const localTarget = { host: 'localhost', port: null, integratedSecurity: true, databaseCredentialReference: null, encrypt: true, trustServerCertificate: false }
 
-interface Attempt<Variables> { fingerprint: string; variables: Variables }
 /** A failure belongs to the settings it happened under: changing them makes it irrelevant. */
 interface Failure { fingerprint: string; error: unknown }
-
-const isUncertain = (error: unknown) => error != null && (!(error instanceof ApiError) || error.status >= 500)
 
 export function FileRestoreWizard({ tenantId, artifact, targets }: { tenantId: string; artifact: BackupArtifact; targets: RestoreTargetsResponse }) {
   useLanguage()
@@ -38,8 +35,8 @@ export function FileRestoreWizard({ tenantId, artifact, targets }: { tenantId: s
   const [precheck, setPrecheck] = useState<{ fingerprint: string; data: RestoreView } | null>(null)
   const [precheckFailure, setPrecheckFailure] = useState<Failure | null>(null)
   const [executionFailure, setExecutionFailure] = useState<Failure | null>(null)
-  const precheckAttempt = useRef<Attempt<StartRestorePrecheckVariables> | null>(null)
-  const executionAttempt = useRef<Attempt<StartRestoreVariables> | null>(null)
+  const precheckKey = useIdempotencyKey()
+  const executionKey = useIdempotencyKey()
   const pending = useRef(false)
   const mounted = useRef(true)
   const startPrecheck = useStartRestorePrecheck()
@@ -74,39 +71,37 @@ export function FileRestoreWizard({ tenantId, artifact, targets }: { tenantId: s
 
   async function check(fresh = false) {
     if (!valid || pending.current) return
-    const previous = precheckAttempt.current
-    const attempt = !fresh && previous?.fingerprint === fingerprint && isUncertain(precheckError) ? previous : {
-      fingerprint, variables: { artifactId: artifact.id, request, idempotencyKey: crypto.randomUUID() },
-    }
-    precheckAttempt.current = attempt
-    executionAttempt.current = null
+    if (fresh) precheckKey.reset()
+    const attempt = { fingerprint, variables: { artifactId: artifact.id, request, idempotencyKey: precheckKey.keyFor(request) } }
+    executionKey.reset()
     setPrecheck(null)
     setPrecheckFailure(null)
     setExecutionFailure(null)
     pending.current = true
     try {
       const data = await startPrecheck.mutateAsync(attempt.variables)
+      precheckKey.settle()
       if (!mounted.current) return
       setPrecheck({ fingerprint: attempt.fingerprint, data })
       setStep(3)
     } catch (error) {
+      precheckKey.settle(error)
       if (mounted.current) setPrecheckFailure({ fingerprint: attempt.fingerprint, error })
     } finally { pending.current = false }
   }
 
   async function restore() {
     if (!valid || !passed || !current || !precheck || pending.current) return
-    const previous = executionAttempt.current
-    const attempt = previous?.fingerprint === executionFingerprint && isUncertain(executionError) ? previous : {
-      fingerprint: executionFingerprint, variables: { artifactId: artifact.id, idempotencyKey: crypto.randomUUID(), request: { ...request, precheckId: precheck.data.id, ...(overwrite ? { confirmOverwrite: targetReference } : {}) } },
-    }
-    executionAttempt.current = attempt
+    const executionRequest = { ...request, precheckId: precheck.data.id, ...(overwrite ? { confirmOverwrite: targetReference } : {}) }
+    const attempt = { fingerprint: executionFingerprint, variables: { artifactId: artifact.id, idempotencyKey: executionKey.keyFor(executionRequest), request: executionRequest } }
     setExecutionFailure(null)
     pending.current = true
     try {
       const data = await startRestore.mutateAsync(attempt.variables)
+      executionKey.settle()
       if (mounted.current) navigate(`/tenants/${tenantId}/restores/${data.id}`)
     } catch (error) {
+      executionKey.settle(error)
       if (mounted.current) setExecutionFailure({ fingerprint: attempt.fingerprint, error })
     } finally { pending.current = false }
   }
@@ -128,14 +123,14 @@ export function FileRestoreWizard({ tenantId, artifact, targets }: { tenantId: s
 
     {shownStep === 2 && <FileRestoreScopeStep
       instancePrefix={id} scope={scope} paths={paths} pathsValid={pathsValid} overwrite={overwrite}
-      precheckError={precheckError} precheckRetryable={isUncertain(precheckError)} precheckStarting={startPrecheck.isPending} restoreStarting={startRestore.isPending}
+      precheckError={precheckError} precheckRetryable={isUncertainError(precheckError)} precheckStarting={startPrecheck.isPending} restoreStarting={startRestore.isPending}
       canCheck={valid} onScopeChange={setScope} onPathsChange={setPaths} onOverwriteChange={setOverwrite}
       onBack={() => setStep(1)} onRunPrecheck={() => void check()}
     />}
 
     {shownStep === 3 && <RestoreCheckStep
       fileArchive precheckData={result} precheckLoading={startPrecheck.isPending || (current && query.isPending)}
-      precheckDisplayError={precheckError || (current && query.error)} precheckError={precheckError} precheckRetryable={isUncertain(precheckError)}
+      precheckDisplayError={precheckError || (current && query.error)} precheckError={precheckError} precheckRetryable={isUncertainError(precheckError)}
       precheckFailed={failed} precheckPassed={passed} precheckStarting={startPrecheck.isPending} restoreStarting={startRestore.isPending}
       onRunPrecheck={(fresh) => void check(fresh)} onBack={() => setStep(2)} onContinue={() => setStep(4)}
     />}
@@ -143,7 +138,7 @@ export function FileRestoreWizard({ tenantId, artifact, targets }: { tenantId: s
     {shownStep === 4 && <FileRestoreConfirmStep
       artifact={artifact} agent={agent} agentId={agentId} original={original} targetReference={targetReference} relativeDirectory={relativeDirectory}
       scope={scope} paths={paths} overwrite={overwrite} precheckPassed={passed} precheckStarting={startPrecheck.isPending} restoreStarting={startRestore.isPending}
-      executionError={executionError} executionRetryable={isUncertain(executionError)} eligible={eligible}
+      executionError={executionError} executionRetryable={isUncertainError(executionError)} eligible={eligible}
       onBack={() => setStep(3)} onStart={() => void restore()}
     />}
   </div>
