@@ -16,8 +16,8 @@ vi.mock('@/lib/api/client', () => ({
   tenantPath: (tenantId: string, path: string) => `tenants/${tenantId}/${path}`,
   ApiError: class ApiError extends Error {},
 }))
-const permissions = vi.hoisted(() => ({ canAdmin: true }))
-vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canAdmin: permissions.canAdmin, canOperate: true }) }))
+const permissions = vi.hoisted(() => ({ canAdmin: true, canOperate: true }))
+vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canAdmin: permissions.canAdmin, canOperate: permissions.canOperate }) }))
 
 vi.mock('./api', async (importOriginal) => ({
   ...await importOriginal<typeof ArtifactApi>(),
@@ -36,7 +36,7 @@ function artifact(overrides: Partial<BackupArtifact> = {}): BackupArtifact {
     id: 'artifact-a', sizeBytes: 4096, sourceChecksum: 'source123', artifactChecksum: 'abc123', checksumAlgorithm: 'SHA256',
     createdAt: '2026-10-05T10:00:00Z', acceptedAt: '2026-10-05T10:02:00Z', retentionExpiresAt: '2026-11-05T10:02:00Z', retentionPinnedAt: null,
     state: 'Available', deleteAfter: null, deleteReason: null, runId: 'run-internal', jobId: 'job-internal', attemptId: 'attempt-internal',
-    jobName: 'Günlük SQL', databaseName: 'Accounting', agentName: 'SQL Agent', replicas: [{ ...replica }], ...overrides,
+    jobName: 'Günlük SQL', databaseName: 'Accounting', agentName: 'SQL Agent', backupType: 'Full', replicas: [{ ...replica }], ...overrides,
   }
 }
 function pending(overrides: Partial<BackupReplica> = {}) {
@@ -52,7 +52,8 @@ function mount(page: 'list' | 'detail' = 'detail') {
 }
 const request = vi.mocked(apiRequest)
 afterEach(() => { cleanup(); vi.clearAllMocks() })
-beforeEach(() => { permissions.canAdmin = true })
+beforeEach(() => { permissions.canAdmin = true; permissions.canOperate = true })
+const openDetails = () => fireEvent.click(screen.getByText('Teknik ayrıntılar', { selector: 'summary' }))
 
 describe('Backup dosyaları', () => {
   it('shows PostgreSQL archive facts without SQL Server physical backup metadata', async () => {
@@ -64,28 +65,32 @@ describe('Backup dosyaları', () => {
       postgreSqlDetails: { archiveFormat: 'custom', clientVersion: '18.6', encoding: 'UTF8', collation: 'C', dataChecksums: 'on', databaseSizeBytes: '16384', extensions: 'hstore' },
     } }))
     mount()
-    fireEvent.click(await screen.findByRole('tab', { name: /üst veri/i }))
-    expect(screen.getByRole('heading', { name: /PostgreSQL/ })).toBeInTheDocument()
-    expect(screen.getByText('UTF8')).toBeInTheDocument()
+    await screen.findByText('Ne zaman silinecek?')
+    expect(screen.getByText('UTF8')).not.toBeVisible()
+    openDetails()
+    expect(screen.getByRole('heading', { name: /PostgreSQL/ })).toBeVisible()
+    expect(screen.getByText('UTF8')).toBeVisible()
     expect(screen.getByText('hstore')).toBeInTheDocument()
     expect(screen.queryByText("Kurtarma modeli")).not.toBeInTheDocument()
     expect(screen.queryByText("SQL Server sürüm türü")).not.toBeInTheDocument()
   })
-  it('clears the selected tab and destructive confirmation when navigating to another Artifact', async () => {
+  it('clears the opened details and destructive confirmation when navigating to another Artifact', async () => {
     request.mockResolvedValue(artifact())
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
     const router = createMemoryRouter([{ path: '/tenants/:tenantId/artifacts/:id', element: <ArtifactDetailPage /> }], { initialEntries: ['/tenants/tenant-a/artifacts/artifact-a'] })
     render(<QueryClientProvider client={client}><RouterProvider router={router} /></QueryClientProvider>)
-    fireEvent.click(await screen.findByRole('tab', { name: /üst veri/i }))
+    await screen.findByText('Ne zaman silinecek?')
+    openDetails()
     fireEvent.click(screen.getByRole('button', { name: 'Silme isteği oluştur' }))
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
     await act(async () => { await router.navigate('/tenants/tenant-a/artifacts/artifact-b') })
-    expect(await screen.findByRole('tab', { name: 'Özet' })).toHaveAttribute('aria-selected', 'true')
+    await screen.findByText('Ne zaman silinecek?')
+    expect(screen.getByText('Teknik ayrıntılar', { selector: 'summary' }).closest('details')).not.toHaveAttribute('open')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(request.mock.calls.some(([, options]) => options?.method === 'DELETE')).toBe(false)
   })
 
-  it('silmeden önce erişilebilir onay ister ve fiziksel silme yerine bekleme süresini başlatır', async () => {
+  it('silme isteği için dosyanın adını yazdırır ve fiziksel silme yerine bekleme süresini başlatır', async () => {
     let current = artifact()
     request.mockImplementation(async (_path, options) => {
       if (options?.method === 'DELETE') current = pending()
@@ -95,13 +100,20 @@ describe('Backup dosyaları', () => {
     const invalidate = vi.spyOn(client, 'invalidateQueries')
     fireEvent.click(await screen.findByRole('button', { name: 'Silme isteği oluştur' }))
     const dialog = await screen.findByRole('dialog')
-    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Vazgeç' })).toHaveFocus())
     for (const heading of ["Ne olacak?", "Kimleri etkiler?", "Geri alınabilir mi?"]) expect(within(dialog).getByText(heading)).toBeInTheDocument()
+    const confirm = within(dialog).getByRole('button', { name: 'Bekleme süresini başlat' })
+    expect(confirm).toBeDisabled()
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'accounting' } })
+    expect(confirm).toBeDisabled()
+    fireEvent.click(confirm)
     expect(request.mock.calls.some(([, options]) => options?.method === 'DELETE')).toBe(false)
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Bekleme süresini başlat' }))
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'Accounting' } })
+    expect(confirm).toBeEnabled()
+    fireEvent.click(confirm)
     await screen.findByText(/Silme isteği alındı/)
     expect(request).toHaveBeenCalledWith('tenants/tenant-a/backup-artifacts/artifact-a', { method: 'DELETE' })
     expect(screen.getByText(/Fiziksel silmeye kalan süre/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Silmeyi iptal et' })).toBeEnabled()
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant', 'tenant-a', 'backup-artifacts'] })
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant', 'tenant-a', 'dashboard'] })
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant', 'tenant-a', 'backup-runs'] })
@@ -124,8 +136,7 @@ describe('Backup dosyaları', () => {
     request.mockResolvedValue(pending({ waitingForAgent: true, deleteFailureCode: 'agent_unavailable', deleteNextAttemptAt: '2099-10-06T10:05:00Z' }))
     mount()
     await screen.findByRole('button', { name: 'Silmeyi iptal et' })
-    fireEvent.click(screen.getByRole('tab', { name: "Kopyalar" }))
-    expect(await screen.findByText(/Fiziksel silme için Ajan bekleniyor/)).toBeInTheDocument()
+    expect(await screen.findByText(/Fiziksel silme için Ajan bekleniyor/)).toBeVisible()
     expect(screen.getByRole('button', { name: 'Silmeyi iptal et' })).toBeInTheDocument()
     expect(screen.getByText('Sonraki silme denemesi')).toBeInTheDocument()
     expect(screen.getByText('Silme yürütücüsü')).toBeInTheDocument()
@@ -136,7 +147,6 @@ describe('Backup dosyaları', () => {
     mount()
     await screen.findByText(/Fiziksel silme başladığı için/)
     expect(screen.queryByRole('button', { name: 'Silmeyi iptal et' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('tab', { name: "Kopyalar" }))
     expect(screen.getByRole('alert')).toHaveTextContent('Silme tamamlanamadı')
     expect(screen.queryByText(/password=hidden/)).not.toBeInTheDocument()
   })
@@ -145,8 +155,8 @@ describe('Backup dosyaları', () => {
     request.mockResolvedValue(artifact({ state: 'Deleted', replicas: [{ ...replica, status: 'Deleted', usable: false, deletedAt: '2026-10-06T10:00:00Z' }] }))
     mount()
     await screen.findByText(/Bu kayıt yalnızca yedekleme geçmişidir/)
-    fireEvent.click(screen.getByRole('tab', { name: "Kopyalar" }))
-    expect(await screen.findByText(/Fiziksel dosya kaldırıldı/)).toBeInTheDocument()
+    openDetails()
+    expect(await screen.findByText(/Fiziksel dosya kaldırıldı/)).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Silme isteği oluştur' })).not.toBeInTheDocument()
     expect(screen.queryByText('replica-internal')).not.toBeInTheDocument()
     expect(screen.queryByText('not-shown-key')).not.toBeInTheDocument()
@@ -159,6 +169,57 @@ describe('Backup dosyaları', () => {
     mount()
     await screen.findByText(/yalnızca yöneticilere açıktır/)
     expect(screen.queryByRole('button', { name: 'Silme isteği oluştur' })).not.toBeInTheDocument()
+  })
+
+  it('önce dosyanın sağlam olup olmadığını, geri yüklenip yüklenemeyeceğini ve ne zaman silineceğini söyler', async () => {
+    request.mockResolvedValue(artifact())
+    mount()
+    await screen.findByText('Dosya sağlam mı?')
+    for (const question of ['Geri yüklenebilir mi?', 'Ne zaman silinecek?']) expect(screen.getByText(question)).toBeVisible()
+    expect(screen.getByText('Sağlam')).toBeVisible()
+    expect(screen.getByText('Geri yüklenebilir')).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Geri yükle' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/artifact-a/restore')
+    // The checksums, replicas and metadata wait behind the collapsed details.
+    for (const checksum of screen.getAllByText('abc123')) expect(checksum).not.toBeVisible()
+    expect(screen.getByText('Teknik ayrıntılar', { selector: 'summary' }).closest('details')).not.toHaveAttribute('open')
+    openDetails()
+    expect(screen.getAllByText('abc123')[0]).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Kopyala: Yedek dosyası sağlama toplamı' })).toBeVisible()
+  })
+
+  it('doğrulanmış kopya yoksa sağlam demez; silinmiş dosya geri yüklenemez', async () => {
+    request.mockResolvedValue(artifact({ replicas: [{ ...replica, verificationState: 'Pending' }] }))
+    mount()
+    await screen.findByText('Dosya sağlam mı?')
+    expect(screen.queryByText('Sağlam')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Geri yükle' })).not.toBeInTheDocument()
+    cleanup()
+    request.mockResolvedValue(artifact({ state: 'Deleted', replicas: [{ ...replica, status: 'Deleted', usable: false, deletedAt: '2026-10-06T10:00:00Z' }] }))
+    mount()
+    await screen.findByText('Dosya sağlam mı?')
+    expect(screen.getByText('Geri yüklenemez')).toBeVisible()
+    expect(screen.queryByRole('link', { name: 'Geri yükle' })).not.toBeInTheDocument()
+  })
+
+  it('geri yükleme yetkisi olmayana Yöneticinize danışın der', async () => {
+    permissions.canOperate = false
+    request.mockResolvedValue(artifact())
+    mount()
+    await screen.findByText('Dosya sağlam mı?')
+    expect(screen.queryByRole('link', { name: 'Geri yükle' })).not.toBeInTheDocument()
+    expect(screen.getByText(/Yöneticinize danışın/)).toBeVisible()
+  })
+
+  it('saklama süresini ve etkin silme korumasını silme cevabında gösterir', async () => {
+    request.mockResolvedValue(artifact({ retentionExpiresAt: '2099-01-01T00:00:00Z', retentionPinnedAt: null }))
+    mount()
+    await screen.findByText('Ne zaman silinecek?')
+    expect(screen.getByText(/Saklama süresi dolunca silinir/)).toBeVisible()
+    cleanup()
+    request.mockResolvedValue(artifact({ retentionExpiresAt: '2026-11-05T10:02:00Z', retentionPinnedAt: '2026-10-07T00:00:00Z' }))
+    mount()
+    await screen.findByText('Ne zaman silinecek?')
+    expect(screen.getByText(/Otomatik silme koruması etkin/)).toBeVisible()
   })
 
   it('kullanılabilir ve silinmiş dosyaları listeler; filtre sunucu sorgusuna ve tenant kapsamına gider', async () => {

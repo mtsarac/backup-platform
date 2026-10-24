@@ -5,7 +5,6 @@ import { ApiError } from '@/lib/api/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ArtifactRestoreAction } from '@/features/artifacts/artifact-restore-action'
 import type { BackupArtifact } from '@/features/artifacts/types'
 import { RestoresPage } from '@/pages/restores/restores-page'
 import { RestoreDetailPage } from '@/pages/restores/restore-detail-page'
@@ -245,29 +244,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
-})
-
-describe('ArtifactRestoreAction', () => {
-  it('renders Restore Backup button when user canOperate and artifact is eligible', () => {
-    renderWithClient(<ArtifactRestoreAction tenantId="tenant-a" artifact={sampleArtifact} />)
-    const button = screen.getByRole('button', { name: /Yedeklemeyi Geri Yükle/i })
-    expect(button).toBeEnabled()
-  })
-
-  it('blocks Viewer role from restoring', () => {
-    tenancy.canOperate = false
-    renderWithClient(<ArtifactRestoreAction tenantId="tenant-a" artifact={sampleArtifact} />)
-    expect(screen.queryByRole('button', { name: /Yedeklemeyi Geri Yükle/i })).not.toBeInTheDocument()
-    expect(screen.getByText(/Görüntüleyici rolü bu işlem için yetkili değildir/i)).toBeInTheDocument()
-  })
-
-  it('shows disabled button and explanation when artifact is deleted or unverified', () => {
-    const deletedArtifact: BackupArtifact = { ...sampleArtifact, state: 'Deleted' }
-    renderWithClient(<ArtifactRestoreAction tenantId="tenant-a" artifact={deletedArtifact} />)
-    const button = screen.getByRole('button', { name: /Yedeklemeyi Geri Yükle/i })
-    expect(button).toBeDisabled()
-    expect(screen.getByText(/silindiği için geri yüklenemez/i)).toBeInTheDocument()
-  })
 })
 
 describe('RestoresPage', () => {

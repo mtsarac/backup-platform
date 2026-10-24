@@ -25,6 +25,13 @@ describe('TechnicalDetails', () => {
     expect(writeText).toHaveBeenCalledWith('a1b2c3')
   })
 
+  it('can hold richer technical content that stays hidden until opened', async () => {
+    render(<TechnicalDetails items={[]}><p>Kopya tablosu</p></TechnicalDetails>)
+    expect(screen.getByText('Kopya tablosu')).not.toBeVisible()
+    await userEvent.click(screen.getByText('Teknik ayrıntılar'))
+    expect(screen.getByText('Kopya tablosu')).toBeVisible()
+  })
+
   it('renders nothing when there is nothing technical to show', () => {
     const { container } = render(<TechnicalDetails items={[]} />)
     expect(container).toBeEmptyDOMElement()
