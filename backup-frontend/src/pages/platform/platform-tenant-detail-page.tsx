@@ -29,10 +29,19 @@ import { errorMessage } from '@/lib/api/failure-messages'
 import { WrapKeysSection } from '@/features/artifact-encryption/wrap-keys-section'
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
+import { Pagination } from '@/components/data/pagination'
+import { RelativeTime } from '@/components/data/relative-time'
+import { TechnicalDetails } from '@/components/ui/technical-details'
+import { useBreakGlassRequests, useTenantEncryption } from '@/features/artifact-encryption/hooks'
+import { BreakGlassTable } from '@/features/artifact-encryption/break-glass-table'
+import { TenantKeysSection } from '@/features/artifact-encryption/tenant-recovery-key-section'
+import { PLATFORM_PAGE_SIZE } from '@/features/platform/use-list-params'
 
 const tabs = [
-  { value: 'overview', get label() { return tx("Genel") } }, { value: 'members', get label() { return tx("Üyeler") } },
-  { value: 'storage', get label() { return tx("Depolama") } }, { value: 'agents', get label() { return tx("Agent'lar") } }, { value: 'support', get label() { return tx("Destek erişimi") } }, { value: 'encryption', get label() { return tx("Şifreleme") } },
+  { value: 'summary', get label() { return tx("Özet") } },
+  { value: 'people', get label() { return tx("Kişiler") } },
+  { value: 'storage-computers', get label() { return tx("Depolama ve bilgisayarlar") } },
+  { value: 'security', get label() { return tx("Güvenlik") } },
 ] as const
 type TabValue = (typeof tabs)[number]['value']
 
@@ -64,10 +73,10 @@ function EnrollmentSection({ tenant }: { tenant: PlatformTenantDetail }) {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const change = useSetTenantEnrollment(tenant.tenantId)
   const enabled = tenant.enrollment.enabled
-  return <Section title={tx("Agent kayıt politikası")} description={tx("Kaydı kapatmak mevcut Agent'ları iptal etmez; yalnızca yeni kayıtları engeller.")}
-    actions={<Button role="switch" aria-checked={enabled} aria-label={tx("Yeni Agent kayıtlarına izin ver")} variant="outline" onClick={() => { change.reset(); setConfirmOpen(true) }}>{enabled ? tx('Kaydı kapat') : tx('Kaydı aç')}</Button>}>
-    <p className="text-[0.9375rem]"><StatusPill level={enabled ? 'safe' : 'neutral'}>{enabled ? tx('Yeni Agent kaydı açık') : tx('Yeni Agent kaydı kapalı')}</StatusPill> <span className="ml-1 text-text-muted">{tenant.enrollment.changedAt ? tx("Son değişiklik: {0}", { "0": formatDateTime(tenant.enrollment.changedAt, tx('Henüz bildirilmedi')) }) : tx('Politika henüz hiç değiştirilmedi.')}</span></p>
-    <ConfirmDialog open={confirmOpen} onClose={() => setConfirmOpen(false)} title={enabled ? tx('Agent kaydı kapatılsın mı?') : tx('Agent kaydı açılsın mı?')}
+  return <Section title={tx("Yedekleme bilgisayarı kaydı")} description={tx("Kaydı kapatmak mevcut yedekleme bilgisayarlarını etkilemez; yalnızca yeni kayıtları engeller.")}
+    actions={<Button role="switch" aria-checked={enabled} aria-label={tx("Yeni yedekleme bilgisayarı kayıtlarına izin ver")} variant="outline" onClick={() => { change.reset(); setConfirmOpen(true) }}>{enabled ? tx('Kaydı kapat') : tx('Kaydı aç')}</Button>}>
+    <p className="text-[0.9375rem]"><StatusPill level={enabled ? 'safe' : 'neutral'}>{enabled ? tx('Yeni bilgisayar kaydı açık') : tx('Yeni bilgisayar kaydı kapalı')}</StatusPill>{tenant.enrollment.changedAt && <span className="ml-2 text-text-muted"><RelativeTime value={tenant.enrollment.changedAt} /></span>}</p>
+    <ConfirmDialog open={confirmOpen} onClose={() => setConfirmOpen(false)} title={enabled ? tx('Bilgisayar kaydı kapatılsın mı?') : tx('Bilgisayar kaydı açılsın mı?')}
       consequence={{
         what: enabled ? tx("“{0}” çalışma alanında yeni yedekleme bilgisayarı kayıtları engellenir.", { "0": tenant.name }) : tx("“{0}” çalışma alanında yeni yedekleme bilgisayarı kayıtlarına izin verilir.", { "0": tenant.name }),
         who: tx("Mevcut yedekleme bilgisayarları etkilenmez; yalnızca yeni kayıtlar etkilenir."),
@@ -94,35 +103,62 @@ function Header({ tenant }: { tenant: PlatformTenantDetail }) {
     meta={<>
       <StatusPill level={tenant.enrollment.enabled ? 'safe' : 'neutral'}>{tenant.enrollment.enabled ? tx('Kayıt açık') : tx('Kayıt kapalı')}</StatusPill>
     </>}
-    actions={<Link className={buttonVariants({ variant: 'outline' })} to={platformPaths.agents(tenant.tenantId)}>{tx("Bu tenant'ın Agent'ları")}</Link>} />
+    actions={<Link className={buttonVariants({ variant: 'outline' })} to={platformPaths.agents(tenant.tenantId)}>{tx("Yedekleme bilgisayarlarını görüntüle")}</Link>} />
+}
+
+function RecoveryKeys({ tenant }: { tenant: PlatformTenantDetail }) {
+  const encryption = useTenantEncryption(tenant.tenantId)
+  return <PlatformQueryState isPending={encryption.isPending} error={encryption.error}>
+    {encryption.data && <TenantKeysSection tenantId={tenant.tenantId} tenantName={tenant.name} encryption={encryption.data} />}
+  </PlatformQueryState>
+}
+
+function EmergencyAccessHistory({ tenantId }: { tenantId: string }) {
+  useLanguage()
+  const { page, update } = useListParams('breakGlassPage')
+  const query = useBreakGlassRequests({ tenantId, page, pageSize: PLATFORM_PAGE_SIZE })
+  return <Section title={tx('Acil destek erişimi geçmişi')}>
+    <PlatformQueryState isPending={query.isPending} error={query.error}>
+      {query.data && <div className="space-y-4">
+        <BreakGlassTable rows={query.data.items} />
+        {query.data.totalCount > 0 && <Pagination label={tx('Acil destek erişimi sayfaları')} page={page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={next => update({ breakGlassPage: next })} />}
+      </div>}
+    </PlatformQueryState>
+  </Section>
 }
 
 function TenantTabs({ tenant }: { tenant: PlatformTenantDetail }) {
   useLanguage()
   const { get, update } = useListParams()
   const requested = get('tab')
-  const tab: TabValue = tabs.find((item) => item.value === requested)?.value ?? 'overview'
+  const tab: TabValue = tabs.find((item) => item.value === requested)?.value ?? 'summary'
   return <div className="space-y-6">
-    <Tabs label={tx("Tenant bölümleri")} idPrefix="tenant" value={tab} items={tabs} onChange={(value) => update({ tab: value === 'overview' ? '' : value, memberPage: '', subPage: '' })} />
+    <Tabs label={tx("Tenant bölümleri")} idPrefix="tenant" value={tab} items={tabs} onChange={(value) => update({ tab: value, memberPage: '', subPage: '', breakGlassPage: '' })} />
     <div role="tabpanel" id={`tenant-panel-${tab}`} aria-labelledby={`tenant-tab-${tab}`} className="space-y-6">
-      {tab === 'overview' && <>
-        <div className="grid gap-4 sm:grid-cols-3"><KpiCard label={tx("Üyeler")} value={tenant.memberCount} /><KpiCard label={tx("Agents")} value={tenant.agents.total} /><KpiCard label={tx("Etkin Backup Jobs")} value={tenant.enabledBackupJobs} /></div>
+      {tab === 'summary' && <>
+        <div className="grid gap-4 sm:grid-cols-3"><KpiCard label={tx("Kişiler")} value={tenant.memberCount} /><KpiCard label={tx("Yedekleme bilgisayarları")} value={tenant.agents.total} /><KpiCard label={tx("Etkin yedekleme işleri")} value={tenant.enabledBackupJobs} /></div>
         <RenameForm key={tenant.name} tenantId={tenant.tenantId} name={tenant.name} />
         <RecentAudit tenantId={tenant.tenantId} />
       </>}
-      {tab === 'members' && <MembershipsSection tenantId={tenant.tenantId} tenantName={tenant.name} />}
-      {tab === 'storage' && <>
+      {tab === 'people' && <MembershipsSection tenantId={tenant.tenantId} tenantName={tenant.name} />}
+      {tab === 'storage-computers' && <>
         <TenantStorageSection tenantId={tenant.tenantId} tenantName={tenant.name} />
         <PlatformTenantConnections tenantId={tenant.tenantId} tenantName={tenant.name} />
-      </>}
-      {tab === 'agents' && <>
-        <Section title={tx("Agent durumu")} description={tx("Bağlantı kesilmesi ile devre dışı bırakma ayrı durumlardır.")} actions={<Link className={`${linkClass} text-sm`} to={platformPaths.agents(tenant.tenantId)}>{tx("Agent listesini aç")}</Link>}>
+        <Section title={tx("Yedekleme bilgisayarlarının durumu")} actions={<Link className={`${linkClass} inline-flex min-h-11 items-center text-sm`} to={platformPaths.agents(tenant.tenantId)}>{tx("Yedekleme bilgisayarlarını görüntüle")}</Link>}>
           <AgentBreakdown counts={tenant.agents} />
         </Section>
         <EnrollmentSection tenant={tenant} />
+        <TechnicalDetails items={[
+          { label: tx('Tenant kimliği'), value: tenant.tenantId },
+          { label: tx('Son değişiklik'), value: formatDateTime(tenant.enrollment.changedAt) },
+        ]} />
       </>}
-      {tab === 'support' && <SupportAccessSection tenantId={tenant.tenantId} tenantName={tenant.name} />}
-      {tab === 'encryption' && <WrapKeysSection tenantId={tenant.tenantId} tenantName={tenant.name} />}
+      {tab === 'security' && <>
+        <SupportAccessSection tenantId={tenant.tenantId} tenantName={tenant.name} />
+        <WrapKeysSection tenantId={tenant.tenantId} tenantName={tenant.name} />
+        <RecoveryKeys tenant={tenant} />
+        <EmergencyAccessHistory tenantId={tenant.tenantId} />
+      </>}
     </div>
   </div>
 }

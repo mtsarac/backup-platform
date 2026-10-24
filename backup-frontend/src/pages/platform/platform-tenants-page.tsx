@@ -44,15 +44,15 @@ export function PlatformTenantsPage() {
   const [created, setCreated] = useState('')
   const data = query.data
   const columns: Column<PlatformTenant>[] = [
-    { key: 'name', header: tx('Tenant'), wrap: true, render: (tenant) => <Link className={`${linkClass} font-semibold`} to={platformPaths.tenant(tenant.tenantId)}>{tenant.name}</Link> },
-    { key: 'members', header: tx('Üye sayısı'), render: (tenant) => tenant.memberCount },
-    { key: 'agents', header: tx('Agents'), render: (tenant) => tenant.agentCount },
-    { key: 'enrollment', header: tx('Agent kaydı'), render: (tenant) => <StatusPill level={tenant.enrollmentEnabled ? 'safe' : 'neutral'}>{tenant.enrollmentEnabled ? tx('Açık') : tx('Kapalı')}</StatusPill> },
+    { key: 'name', card: 'title', header: tx('Çalışma alanı'), wrap: true, render: (tenant) => <Link className={`${linkClass} inline-flex min-h-11 items-center font-semibold`} to={platformPaths.tenant(tenant.tenantId)}>{tenant.name}</Link> },
+    { key: 'members', header: tx('Kişiler'), render: (tenant) => tenant.memberCount },
+    { key: 'agents', header: tx('Yedekleme bilgisayarları'), render: (tenant) => tenant.agentCount },
+    { key: 'enrollment', card: 'status', header: tx('Bilgisayar kaydı'), render: (tenant) => <StatusPill level={tenant.enrollmentEnabled ? 'safe' : 'neutral'}>{tenant.enrollmentEnabled ? tx('Kayıt açık') : tx('Kayıt kapalı')}</StatusPill> },
   ]
   const newTenant = <Button onClick={() => { setCreated(''); setCreating(true) }}><Plus aria-hidden="true" />{tx("Yeni tenant")}</Button>
   return <div className="space-y-6">
-    <PageHeader crumbs={[platformCrumb]} title={tx("Tenants")} description={tx("Tüm tenant'ları yönetin; üyelikler ve Agent kayıt politikası tenant detayındadır.")} actions={newTenant} />
-    {created && <Notice tone="success">“{created}{tx("” tenant'ı oluşturuldu.")}</Notice>}
+    <PageHeader crumbs={[platformCrumb]} title={tx("Çalışma alanları")} description={tx("Çalışma alanlarının kişilerini, bilgisayarlarını ve kayıt durumunu inceleyin.")} actions={newTenant} />
+    {created && <Notice tone="success">{tx("“{0}” çalışma alanı oluşturuldu.", { "0": created })}</Notice>}
     <Filters label={tx("Tenant filtreleri")} onClear={search ? () => update({ search: '' }) : undefined}>
       <SearchForm className="sm:col-span-2" label={tx("Tenant ara")} value={search} onSearch={(value) => update({ search: value })} placeholder={tx("Tenant adı")} />
     </Filters>
@@ -60,7 +60,7 @@ export function PlatformTenantsPage() {
       {data && <div className="space-y-4">
         {data.totalCount === 0 && !search
           ? <ListEmpty icon={Building2} message={tx("Henüz tenant yok.")} action={newTenant} />
-          : <DataList rows={data.items} columns={columns} keyExtractor={(tenant) => tenant.tenantId} emptyMessage={tx("Aramaya uygun tenant bulunamadı.")} />}
+          : <DataList caption={tx('Çalışma alanları')} rows={data.items} columns={columns} keyExtractor={(tenant) => tenant.tenantId} emptyMessage={tx("Aramaya uygun tenant bulunamadı.")} />}
         {data.totalCount > 0 && <Pagination label={tx("Tenant sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
       </div>}
     </PlatformQueryState>

@@ -6,6 +6,7 @@ import { paged, renderPlatform } from '@/features/platform/test-utils'
 import type { PlatformTenant } from '@/features/platform/types'
 import { ApiError } from '@/lib/api/client'
 import { PlatformTenantsPage } from './platform-tenants-page'
+import { setViewport } from '@/test/viewport'
 
 vi.mock('@/features/platform/api')
 
@@ -29,9 +30,23 @@ describe('platform tenants list', () => {
     const row = (await screen.findByRole('link', { name: 'Acme A.Ş.' })).closest('tr')!
     expect(screen.getByRole('link', { name: 'Acme A.Ş.' })).toHaveAttribute('href', '/platform/tenants/tenant-a')
     expect(within(row).getByText('4')).toBeInTheDocument()
-    expect(within(row).getByText('Açık')).toBeInTheDocument()
-    expect(within(screen.getByRole('link', { name: 'Globex' }).closest('tr')!).getByText('Kapalı')).toBeInTheDocument()
+    expect(within(row).getByText('Kayıt açık')).toBeInTheDocument()
+    expect(within(screen.getByRole('link', { name: 'Globex' }).closest('tr')!).getByText('Kayıt kapalı')).toBeInTheDocument()
     expect(api.getTenants).toHaveBeenCalledWith({ search: '', page: 1, pageSize: 25 }, expect.any(AbortSignal))
+  })
+
+  it('shows workspace names, people, computers and enrollment as cards on small screens', async () => {
+    setViewport(false)
+    renderPlatform(<PlatformTenantsPage />)
+    const link = await screen.findByRole('link', { name: 'Acme A.Ş.' })
+    const card = within(link.closest('li')!)
+    expect(screen.getByRole('list', { name: 'Çalışma alanları' })).toBeInTheDocument()
+    expect(card.getByText('Kişiler')).toBeInTheDocument()
+    expect(card.getByText('4')).toBeInTheDocument()
+    expect(card.getByText('Yedekleme bilgisayarları')).toBeInTheDocument()
+    expect(card.getByText('2')).toBeInTheDocument()
+    expect(card.getByText('Kayıt açık')).toBeInTheDocument()
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })
 
   it('paginates through the URL and searches from page one', async () => {
