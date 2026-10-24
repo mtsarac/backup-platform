@@ -15,6 +15,7 @@ import { useQuotaPolicies } from '@/features/platform/storage/hooks'
 import { QuotaPolicyDialog } from '@/features/platform/storage/quota-policy-dialog'
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
+import { TechnicalDetails } from '@/components/ui/technical-details'
 
 export function PlatformQuotaPoliciesPage() {
   useLanguage()
@@ -23,12 +24,20 @@ export function PlatformQuotaPoliciesPage() {
   const [isCreating, setIsCreating] = useState(false)
   const policies = query.data?.items ?? []
   const columns: Column<QuotaPolicy>[] = [
-    { key: 'name', header: tx('Politika'), wrap: true, render: (policy) => <div className="space-y-1"><span className="font-semibold">{policy.name}</span><div className="flex flex-wrap gap-1.5">{policy.isDefault && <Badge tone="info">{tx("Varsayılan")}</Badge>}<StatusPill level={policy.enabled ? 'safe' : 'neutral'}>{policy.enabled ? tx('Etkin') : tx('Devre Dışı')}</StatusPill></div><p className="text-sm text-text-muted">{tx("Anahtar:")}{' '}<code>{policy.key}</code>{' '}{tx("· Sürüm: v")}{policy.version}</p></div> },
-    { key: 'accounting', header: tx('Hesaplama modu'), wrap: true, render: (policy) => accountingModeLabels[policy.accountingMode] },
-    { key: 'enforcement', header: tx('Uygulama modu'), wrap: true, render: (policy) => enforcementModeLabels[policy.enforcementMode] },
-    { key: 'thresholds', header: tx('Eşikler'), render: (policy) => <div className="text-sm tabular-nums"><div>{tx("Warning: %")}{policy.warningThresholdPercent}</div><div>{tx("Critical: %")}{policy.criticalThresholdPercent}</div></div> },
-    { key: 'scope', card: 'hidden', header: tx('Kapsam'), wrap: true, render: (policy) => <span className="text-sm text-text-muted">{scopeLabels(policy.includedStorageScopes).join('; ')}</span> },
-    { key: 'updatedAt', card: 'hidden', header: tx('Güncellendi'), render: (policy) => formatDateTime(policy.updatedAt, tx('Henüz bildirilmedi')) },
+    { key: 'name', header: tx('Politika'), wrap: true, render: (policy) => <div className="space-y-1"><span className="font-semibold">{policy.name}</span>{policy.isDefault && <div><Badge tone="info">{tx("Varsayılan")}</Badge></div>}</div> },
+    { key: 'status', card: 'status', header: tx('Durum'), render: (policy) => <StatusPill level={policy.enabled ? 'safe' : 'neutral'}>{policy.enabled ? tx('Etkin') : tx('Devre dışı')}</StatusPill> },
+    { key: 'enforcement', header: tx('Sınıra ulaşınca'), wrap: true, render: (policy) => enforcementModeLabels[policy.enforcementMode] },
+    { key: 'technical', header: tx('Teknik ayrıntılar'), wrap: true, render: (policy) => <TechnicalDetails items={[
+      { label: tx("Politika kimliği"), value: policy.policyId },
+      { label: tx("Politika anahtarı"), value: policy.key },
+      { label: tx("Politika sürümü"), value: String(policy.version) },
+      { label: tx("Hesaplama Modu"), value: accountingModeLabels[policy.accountingMode] },
+      { label: tx("Uyarı eşiği (%)"), value: String(policy.warningThresholdPercent) },
+      { label: tx("Kritik eşik (%)"), value: String(policy.criticalThresholdPercent) },
+      { label: tx("Kapsam"), value: scopeLabels(policy.includedStorageScopes).join('; ') },
+      { label: tx("Oluşturulma zamanı"), value: formatDateTime(policy.createdAt) },
+      { label: tx("Güncellendi"), value: formatDateTime(policy.updatedAt) },
+    ]} /> },
     { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (policy) => <Button variant="outline" size="sm" onClick={() => setEditingPolicy(policy)}>{tx("Düzenle")}</Button> },
   ]
   return <div className="space-y-6">

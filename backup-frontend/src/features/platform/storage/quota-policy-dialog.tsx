@@ -4,9 +4,11 @@ import { Field } from '@/components/ui/field'
 import { ApiError } from '@/lib/api/client'
 import { FormDialog } from '@/components/ui/form-dialog'
 import { inputClass, selectClass } from '@/components/ui/form-styles'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { accountingModeLabels, enforcementModeLabels, scopeLabels } from '@/features/storage/labels'
 import { parseQuotaScopeLabels, parseStorageConnectionIds, type ScopeValuesResult } from '@/features/storage/scope-input'
 import { QuotaConnectionPicker } from '@/features/storage-connections/quota-connection-picker'
-import type { AccountingMode, EnforcementMode, QuotaPolicy, ScopeKind, ScopeSelector } from '@/features/storage/types'
+import type { AccountingMode, EnforcementMode, QuotaPolicy, QuotaPolicyInput, ScopeKind, ScopeSelector } from '@/features/storage/types'
 import { useCreateQuotaPolicy, useUpdateQuotaPolicy } from './hooks'
 
 interface Props {
@@ -34,6 +36,7 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
   const [quotaScopes, setQuotaScopes] = useState<string>((initialScope?.kind === 'quotaScope' ? initialScope.values ?? [] : ['managed']).join(', '))
   const [connectionIds, setConnectionIds] = useState<string>((initialScope?.kind === 'storageConnection' ? initialScope.values ?? [] : []).join('\n'))
   const [scopeError, setScopeError] = useState<string | null>(null)
+  const [confirmation, setConfirmation] = useState<QuotaPolicyInput | null>(null)
 
   const create = useCreateQuotaPolicy()
   const update = useUpdateQuotaPolicy(policy?.policyId ?? '')
@@ -82,18 +85,12 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
     includedStorageScopes.push(...(policy?.includedStorageScopes?.slice(1) ?? []))
 
     if (isEditing) {
-      update.mutate(
-        {
-          name: name.trim(),
-          accountingMode,
-          enforcementMode,
-          warningThresholdPercent: Number(warningThreshold),
-          criticalThresholdPercent: Number(criticalThreshold),
-          enabled,
-          includedStorageScopes,
-        },
-        { onSuccess: onClose },
-      )
+      setConfirmation({
+        name: name.trim(), accountingMode, enforcementMode,
+        warningThresholdPercent: Number(warningThreshold),
+        criticalThresholdPercent: Number(criticalThreshold),
+        enabled, includedStorageScopes,
+      })
     } else {
       create.mutate(
         {
@@ -112,6 +109,21 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
   }
 
   const errField = mutation.error instanceof ApiError ? mutation.error.field : undefined
+  if (confirmation && policy) return <ConfirmDialog open title={tx("Kota politikası değiştirilsin mi?")}
+    consequence={{
+      what: <div className="space-y-2">
+        <p>{tx("“{0}” için uyarı eşiği %{1} → %{2}, kritik eşik %{3} → %{4} olur.", { "0": policy.name, "1": policy.warningThresholdPercent, "2": confirmation.warningThresholdPercent, "3": policy.criticalThresholdPercent, "4": confirmation.criticalThresholdPercent })}</p>
+        <p>{tx("Hesaplama: {0}. Sınırda yapılacak işlem: {1}. Kapsam: {2}.", { "0": accountingModeLabels[confirmation.accountingMode], "1": enforcementModeLabels[confirmation.enforcementMode], "2": scopeLabels(confirmation.includedStorageScopes).join('; ') })}</p>
+        {!confirmation.enabled && <p>{tx("Politika devre dışı kalır; bu politikaya bağlı çalışma alanları varsayılan politikaya geçer.")}</p>}
+      </div>,
+      who: policy.isDefault
+        ? tx("Varsayılan “{0}” politikasını kullanan tüm çalışma alanları etkilenir: aboneliği olmayanlar ve planında etkin bir özel politika bulunmayanlar dahil. Kullanım hesapları ve yeni yedek başlatma kararları değişebilir.", { "0": policy.name })
+        : tx("Planında “{0}” politikası seçili olan çalışma alanları ve kullanım kaydı bu politikayla hesaplanan çalışma alanları etkilenir. Kullanım hesapları ve yeni yedek başlatma kararları değişebilir.", { "0": policy.name }),
+      reversible: tx("Politikayı tekrar düzenleyebilirsiniz. Kullanım yeniden hesaplanabilir; mevcut yedek dosyaları silinmez."),
+    }}
+    confirmLabel={tx("Kaydet")} pending={update.isPending} error={update.error}
+    onClose={() => setConfirmation(null)}
+    onConfirm={() => update.mutate(confirmation, { onSuccess: onClose })} />
 
   return (
     <FormDialog

@@ -21,6 +21,22 @@ function rowOf(name: string) {
   return row
 }
 
+async function confirmPlan(name: string) {
+  const calls = vi.mocked(api.updatePlan).mock.calls.length
+  await userEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
+  const dialog = await screen.findByRole('dialog')
+  const confirm = within(dialog).getByRole('button', { name: 'Kaydet' })
+  expect(confirm).toBeDisabled()
+  expect(api.updatePlan).toHaveBeenCalledTimes(calls)
+  const input = within(dialog).getByRole('textbox')
+  await userEvent.type(input, `${name} `)
+  expect(confirm).toBeDisabled()
+  await userEvent.clear(input)
+  await userEvent.type(input, name)
+  await userEvent.click(confirm)
+  return dialog
+}
+
 beforeEach(() => {
   vi.resetAllMocks()
   vi.mocked(api.getPlans).mockResolvedValue(paged([five, custom, legacyPlan]))
@@ -54,21 +70,23 @@ describe('platform plans page states', () => {
 })
 
 describe('platform plans list', () => {
-  it('shows decimal GB with exact bytes, system badge, tenant count and read-only system row', async () => {
+  it('shows decimal GB and tenant count, with exact bytes and policy references in collapsed details and no system mutations', async () => {
     mount()
     await screen.findByText('Legacy Unlimited')
     const fiveRow = rowOf('5 GB')
     expect(within(fiveRow).getAllByText('5 GB')).toHaveLength(2)
-    expect(within(fiveRow).getByText('5.000.000.000 bayt')).toBeInTheDocument()
+    const details = within(fiveRow).getByText('5000000000').closest('details')
+    expect(details).not.toHaveAttribute('open')
+    await userEvent.click(within(details!).getByText('Teknik ayrıntılar'))
+    expect(within(details!).getByRole('button', { name: /Kopyala:.*[Ll]imit/ })).toBeInTheDocument()
     expect(within(fiveRow).getByText('3')).toBeInTheDocument()
     const customRow = rowOf('Özel 2,5')
     expect(within(customRow).getByText('2,5 GB')).toBeInTheDocument()
     expect(within(customRow).getByText('Devre dışı')).toBeInTheDocument()
-    expect(within(customRow).getByText('Politika referansı: ref-1')).toBeInTheDocument()
+    expect(within(customRow).getByText('ref-1').closest('details')).not.toHaveAttribute('open')
     const legacyRow = rowOf('Legacy Unlimited')
     expect(within(legacyRow).getByText(/(?:Sınırsız|Limitsiz)/)).toBeInTheDocument()
-    expect(within(legacyRow).getByText("Sistem / Eski")).toBeInTheDocument()
-    expect(within(legacyRow).queryByRole('button')).not.toBeInTheDocument()
+    expect(within(legacyRow).queryByRole('button', { name: /düzenle|etkinleştir|devre dışı bırak/i })).not.toBeInTheDocument()
     expect(within(legacyRow).getByText('Sistem planı; salt okunur.')).toBeInTheDocument()
     expect(api.getPlans).toHaveBeenCalledWith({ enabled: undefined, search: '', page: 1, pageSize: 25 }, expect.any(AbortSignal))
   })
@@ -160,7 +178,7 @@ describe('plan edit and enable/disable', () => {
     expect(within(dialog).getByLabelText(/(?:Depolama sınırı|Depolama limiti)/)).toHaveValue('5')
     await userEvent.clear(within(dialog).getByLabelText('Plan adı'))
     await userEvent.type(within(dialog).getByLabelText('Plan adı'), 'Beş')
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }))
+    await confirmPlan('5 GB')
     await waitFor(() => expect(api.updatePlan).toHaveBeenCalledWith('plan-5', { name: 'Beş', storageLimitBytes: 5_000_000_000 }))
   })
 
@@ -174,13 +192,13 @@ describe('plan edit and enable/disable', () => {
     const size = within(dialog).getByLabelText(/(?:Depolama sınırı|Depolama limiti)/)
     await userEvent.clear(size)
     await userEvent.type(size, '7,125')
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }))
+    await confirmPlan('Özel 2,5')
     await waitFor(() => expect(api.updatePlan).toHaveBeenLastCalledWith('plan-25', { name: 'Özel 2,5', storageLimitBytes: 7_125_000_000, quotaPolicyReference: 'ref-1' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     await userEvent.click(screen.getByRole('button', { name: 'Özel 2,5 planını düzenle' }))
     dialog = await screen.findByRole('dialog')
     await userEvent.click(within(dialog).getByRole('checkbox', { name: /(?:Sınırsız|Limitsiz)/ }))
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }))
+    await confirmPlan('Özel 2,5')
     await waitFor(() => expect(api.updatePlan).toHaveBeenLastCalledWith('plan-25', { name: 'Özel 2,5', unlimited: true, quotaPolicyReference: 'ref-1' }))
   })
 
@@ -189,8 +207,7 @@ describe('plan edit and enable/disable', () => {
     mount()
     await screen.findByText('Legacy Unlimited')
     await userEvent.click(screen.getByRole('button', { name: '5 GB planını düzenle' }))
-    const dialog = await screen.findByRole('dialog')
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }))
+    const dialog = await confirmPlan('5 GB')
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('aynı anda değiştirildi')
   })
 

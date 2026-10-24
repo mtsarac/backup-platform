@@ -1,17 +1,16 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { RefreshCw, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
-import { Fact, Facts, Section } from '@/components/ui/section'
-import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { Section } from '@/components/ui/section'
+import { ConfirmDialog, TypedConfirmDialog } from '@/components/ui/confirm-dialog'
 import { accountingModeLabels, enforcementModeLabels, scopeLabels } from '@/features/storage/labels'
 import { QuotaSummary, StandingBadge } from '@/features/storage/quota-summary'
-import { platformPaths } from '@/features/platform/paths'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { usePlatformTenantQuota, useRebuildUsage, useReconcileUsage } from './hooks'
 import { formatDateTime } from '@/lib/format'
+import { TechnicalDetails } from '@/components/ui/technical-details'
 
 export function TenantStorageSection({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
   useLanguage()
@@ -66,7 +65,7 @@ export function TenantStorageSection({ tenantId, tenantName }: { tenantId: strin
               reconcile.reset()
               setConfirmOp('reconcile')
             }}
-          >{tx("Reconcile")}</Button>
+          >{tx("Kullanımı doğrula")}</Button>
           <Button
             variant="outline"
             size="sm"
@@ -75,7 +74,7 @@ export function TenantStorageSection({ tenantId, tenantName }: { tenantId: strin
               setConfirmOp('rebuild')
             }}
           >
-            <RotateCcw className="size-3.5" />{tx("Rebuild")}</Button>
+            <RotateCcw className="size-3.5" />{tx("Baştan hesapla")}</Button>
       </>}>
       <div className="space-y-4">
       {lastResult && <Notice tone="success">{lastResult}</Notice>}
@@ -85,20 +84,19 @@ export function TenantStorageSection({ tenantId, tenantName }: { tenantId: strin
           <div className="space-y-4">
             <QuotaSummary quota={quota} />
 
-            <details className="rounded-lg bg-surface-2 p-4">
-              <summary className="cursor-pointer text-sm font-medium text-text-heading">{tx("Kota politikası ve kapsam")}</summary>
-              <div className="pt-4"><Facts columns={2}>
-                <Fact label={tx("Kota Politikası")}><Link to={platformPaths.quotaPolicies} className="font-medium text-primary hover:underline">{quota.policy.key} (v{quota.policy.version})</Link></Fact>
-                <Fact label={tx("Hesaplama Modu")}>{accountingModeLabels[quota.accountingMode]}</Fact>
-                <Fact label={tx("Uygulama Modu")}>{enforcementModeLabels[quota.enforcementMode]}</Fact>
-                <Fact label={tx("Kapsam")}>{scopeLabels(quota.includedStorageScopes).join('; ')}</Fact>
-              </Facts></div>
-            </details>
+            <TechnicalDetails items={[
+              { label: tx("Çalışma alanı kimliği"), value: tenantId },
+              { label: tx("Politika kimliği"), value: quota.policy.policyId },
+              { label: tx("Politika anahtarı"), value: quota.policy.key },
+              { label: tx("Politika sürümü"), value: String(quota.policy.version) },
+              { label: tx("Hesaplama Modu"), value: accountingModeLabels[quota.accountingMode] },
+              { label: tx("Uygulama Modu"), value: enforcementModeLabels[quota.enforcementMode] },
+              { label: tx("Kapsam"), value: scopeLabels(quota.includedStorageScopes).join('; ') },
+              { label: tx("Son Hesaplama"), value: formatDateTime(quota.calculatedAt, tx('Henüz bildirilmedi')) },
+            ]} />
 
             {!quota.newBackupsAllowed && <ErrorNotice what={tx("Yeni yedekleme başlatma engellendi.")} dataImpact={tx("Mevcut yedekler silinmedi ve geri yüklenebilir.")} action={tx("Kota ve abonelik durumunu gözden geçirin.")} technical={[{ label: tx("Red kodu"), value: quota.denialCode ?? tx("bilinmiyor") }]} />}
 
-            <div className="text-xs text-text-muted">{tx("Son hesaplama zamanı:")}{' '}{formatDateTime(quota.calculatedAt, tx('Henüz bildirilmedi'))}
-            </div>
           </div>
         )}
       </PlatformQueryState>
@@ -118,8 +116,9 @@ export function TenantStorageSection({ tenantId, tenantName }: { tenantId: strin
         onConfirm={runReconcile}
       />
 
-      <ConfirmDialog
+      <TypedConfirmDialog
         open={confirmOp === 'rebuild'}
+        name={tenantName}
         onClose={() => setConfirmOp(null)}
         title={tx("Depolama kullanımı sıfırdan hesaplansın mı (Rebuild)?")}
         consequence={{

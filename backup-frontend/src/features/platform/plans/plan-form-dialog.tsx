@@ -4,9 +4,10 @@ import { Field } from '@/components/ui/field'
 import { ApiError } from '@/lib/api/client'
 import { inputClass } from '@/components/ui/form-styles'
 import { FormDialog } from '@/components/ui/form-dialog'
+import { TypedConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useCreatePlan, useUpdatePlan } from './hooks'
 import { gbErrorMessage, parseGb, toGbInput } from './storage'
-import type { Plan } from './types'
+import type { Plan, PlanInput } from './types'
 
 type Size = { bytes: number } | { unlimited: true }
 
@@ -61,15 +62,25 @@ export function EditPlanDialog({ plan, onClose }: { plan: Plan; onClose: () => v
   const [sizeText, setSizeText] = useState(initialText)
   const [sizeError, setSizeError] = useState('')
   const update = useUpdatePlan(plan.planId)
+  const [confirmation, setConfirmation] = useState<PlanInput | null>(null)
   function submit() {
     const unchanged: Size | null = plan.storageLimitBytes === null ? null : { bytes: plan.storageLimitBytes }
     const resolved = resolveSize(unlimited, sizeText, unchanged, initialText)
     if ('error' in resolved) { setSizeError(resolved.error); return }
     setSizeError('')
     const limit = 'unlimited' in resolved.size ? { unlimited: true } : { storageLimitBytes: resolved.size.bytes }
-    update.mutate({ name: name.trim(), ...limit, ...(plan.quotaPolicyReference ? { quotaPolicyReference: plan.quotaPolicyReference } : {}) }, { onSuccess: onClose })
+    setConfirmation({ name: name.trim(), ...limit, ...(plan.quotaPolicyReference ? { quotaPolicyReference: plan.quotaPolicyReference } : {}) })
   }
   const field = update.error instanceof ApiError ? update.error.field : undefined
+  if (confirmation) return <TypedConfirmDialog open name={plan.name} title={tx("Plan değişikliği onaylansın mı?")}
+    consequence={{
+      what: tx("“{0}” planının adı ve depolama limiti güncellenir.", { "0": plan.name }),
+      who: tx("Bu planı kullanan tüm abonelerin depolama limiti değişir ({0} çalışma alanı). Yeni limitin üzerinde kalan çalışma alanlarında yeni yedekler engellenebilir.", { "0": plan.tenantCount }),
+      reversible: tx("Planı tekrar düzenleyebilirsiniz; bu işlem mevcut yedekleri silmez."),
+    }}
+    confirmLabel={tx("Kaydet")} pending={update.isPending} error={update.error}
+    onClose={() => setConfirmation(null)}
+    onConfirm={() => update.mutate(confirmation, { onSuccess: onClose })} />
   return <FormDialog title={tx("Planı düzenle: {0}", { "0": plan.name })} description={tx("Ad ve limit değişikliği bu planı kullanan aboneliklere de yansır.")} submitLabel={tx("Kaydet")} pendingLabel={tx("Kaydediliyor…")} pending={update.isPending} disabled={!name.trim()} error={update.error} onSubmit={submit} onClose={onClose}>
     <CommonFields name={name} setName={setName} unlimited={unlimited} setUnlimited={setUnlimited} sizeText={sizeText} setSizeText={setSizeText} sizeError={sizeError} nameInvalid={field === 'name'} sizeInvalid={field === 'storageLimit'} />
   </FormDialog>
