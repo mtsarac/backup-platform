@@ -153,7 +153,7 @@ describe('run detail controls and attention', () => {
   it.each(runStatuses)('visibly distinguishes %s with eligible controls', async (status) => {
     state.query.data = makeRun({ status })
     renderDetail()
-    const label = { Pending: 'Sırada bekliyor', Leased: /(?:Agent görevi aldı|Ajan görevi aldı)/, Running: 'Çalışıyor', RetryPending: 'Yeniden denenecek', CancellationRequested: 'İptal isteniyor', Succeeded: 'Başarılı', Failed: 'Başarısız', Cancelled: 'İptal edildi', AgentLost: '', Paused: 'Duraklatıldı' }[status]
+    const label = { Pending: 'Sırada bekliyor', Leased: /(?:Agent görevi aldı|Yedekleme bilgisayarı görevi aldı)/, Running: 'Çalışıyor', RetryPending: 'Yeniden denenecek', CancellationRequested: 'İptal isteniyor', Succeeded: 'Başarılı', Failed: 'Başarısız', Cancelled: 'İptal edildi', AgentLost: '', Paused: 'Duraklatıldı' }[status]
     if (label) expect(screen.getAllByText(label).length).toBeGreaterThan(0)
     if (['Succeeded', 'Cancelled', 'CancellationRequested'].includes(status)) {
       expect(screen.queryByRole('button', { name: 'Yeniden dene' })).not.toBeInTheDocument()

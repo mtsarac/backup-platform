@@ -34,7 +34,7 @@ it.each([
   ['storage_connection_disabled', /(?:yeni backup başlatılamaz|yeni yedekleme başlatılamaz)/],
   ['storage_connection_unavailable', /(?:Hedef depolama bağlantısı bulunamadı|yeni backup başlatılamaz|yeni yedekleme başlatılamaz)/],
   ['quota_size_unknown', /(?:kesin depolama kotasında|kesin depolama kotası kapsamında)/],
-  ['quota_bounded_upload_unsupported', /(?:Agent, yükleme öncesinde|Ajan, yükleme öncesinde)/],
+  ['quota_bounded_upload_unsupported', /(?:Agent, yükleme öncesinde|Yedekleme bilgisayarı, yükleme öncesinde)/],
 ])('Şimdi çalıştır, %s reddini Türkçe gösterir', async (code, text) => {
   vi.mocked(startJobRun).mockRejectedValue(new ApiError(409, { error: 'admission_denied', code }))
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })

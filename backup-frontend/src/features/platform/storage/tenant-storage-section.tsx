@@ -4,7 +4,7 @@ import { RefreshCw, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
-import { ConfirmDialog, TypedConfirmDialog } from '@/components/ui/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { accountingModeLabels, enforcementModeLabels, scopeLabels } from '@/features/storage/labels'
 import { QuotaSummary, StandingBadge } from '@/features/storage/quota-summary'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
@@ -116,7 +116,7 @@ export function TenantStorageSection({ tenantId, tenantName }: { tenantId: strin
         onConfirm={runReconcile}
       />
 
-      <TypedConfirmDialog
+      <ConfirmDialog
         open={confirmOp === 'rebuild'}
         name={tenantName}
         onClose={() => setConfirmOp(null)}

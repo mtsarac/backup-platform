@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
-import { TypedConfirmDialog } from '@/components/ui/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { inputClass } from '@/components/ui/form-styles'
 import { useTenantRecoveryKeyActions } from './hooks'
 import type { TenantEncryption } from './types'
@@ -96,7 +96,7 @@ export function TenantKeysSection({ tenantId, tenantName, encryption }: { tenant
       </form>
     </Section>
 
-    <TypedConfirmDialog open={removing} onClose={() => setRemoving(false)} name={tenantName} title={tx("Kurtarma anahtarınız kaldırılsın mı?")}
+    <ConfirmDialog open={removing} onClose={() => setRemoving(false)} name={tenantName} title={tx("Kurtarma anahtarınız kaldırılsın mı?")}
       consequence={{
         what: tx("Sonraki şifreli yedeklere bu kurtarma anahtarı eklenmez. Kendi özel anahtarınızla acil kurtarma yolunuz bu yeni yedeklerde kullanılamaz; platformun acil destek erişimi değişmez."),
         who: tx("Yalnızca bundan sonra alınacak yedekler etkilenir; mevcut dosyalardaki kayıt değişmez ve özel anahtarınız onları açmaya devam eder."),

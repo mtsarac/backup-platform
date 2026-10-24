@@ -100,7 +100,7 @@ describe('instance detail page', () => {
     expect(screen.getByLabelText('Veritabanı parolası')).toHaveValue('')
     fireEvent.click(screen.getByRole('button', { name: 'Bağlantıyı doğrula' }))
     await waitFor(() => expect(verifyDiscoveryInstance).toHaveBeenCalledWith('tenant-a', 'inst-1'))
-    expect(await screen.findByText(/Ajan sürümü keşfi desteklemiyor/)).toBeInTheDocument()
+    expect(await screen.findByText(/Yedekleme bilgisayarı sürümü keşfi desteklemiyor/)).toBeInTheDocument()
   })
   it('sends typed credentials once and clears them on submission', async () => {
     mount()

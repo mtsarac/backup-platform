@@ -45,7 +45,7 @@ export function AssignPlanDialog({ tenantId, replacing, onClose }: { tenantId: s
   return <FormDialog title={replacing ? tx('Planı değiştir') : tx('Plan ata')} submitLabel={replacing ? tx('Planı değiştir') : tx('Plan ata')} pendingLabel={tx("Kaydediliyor…")}
     description={replacing ? tx("Mevcut abonelik “{0}” planından değiştirilir ve geçmişte “Değiştirildi” olarak kalır. Override yeni plana taşınmaz.", { "0": replacing.planName }) : tx('Bu çalışma alanı için yeni bir abonelik başlatılır.')}
     pending={assign.isPending} disabled={!chosen} error={assign.error} onSubmit={submit} onClose={onClose}>
-    <SearchablePicker label="Plan" placeholder="Plan seçin" value={chosen?.planId ?? ''} selectedLabel={chosen?.name} onSearchChange={setSearch}
+    <SearchablePicker label={tx("Plan")} placeholder={tx("Plan seçin")} value={chosen?.planId ?? ''} selectedLabel={chosen?.name} onSearchChange={setSearch}
       onChange={(planId) => setChosen(options.find((plan) => plan.planId === planId) ?? null)}
       options={options.map((plan) => ({ value: plan.planId, label: plan.name, description: formatGb(plan.storageLimitBytes) }))} />
     {plans.error && <ErrorNotice title={tx("Planlar alınamadı")} error={plans.error} onRetry={() => void plans.refetch()} />}

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
-import { TypedConfirmDialog } from '@/components/ui/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { canCancelRestore, databaseStateLabel, isActiveRestore, restoreProgressPercent, restoreStageLabel, restoreStatuses, targetStateDescription, targetStateLabel } from '@/features/restores/presentation'
@@ -78,7 +78,7 @@ function SupportRestoreDetail({ session, id }: { session: SupportSession; id: st
       {restore.result && <p className="text-sm">{tx("Checksum doğrulandı:")}{' '}{restore.result.checksumVerified ? tx('Evet') : tx('Hayır')}{' '}{tx("· Backup doğrulandı:")}{' '}{restore.result.backupVerified ? tx('Evet') : tx('Hayır')}</p>}
       <h3 className="font-medium">{tx("Denemeler")}</h3>{restore.attempts.map(attempt => <div key={attempt.id} className="flex flex-wrap gap-3 text-sm">{attempt.number}{tx(". attempt")}<StatusPill status={attempt.status} /><span>{formatDateTime(attempt.startedAt)} → {formatDateTime(attempt.completedAt)}</span><span>{targetStateLabel(attempt.targetState)}</span>{attempt.failureCode && <span>{failureMessage(attempt.failureCode, 'restore')}</span>}</div>)}
     </>}</SupportQueryState>
-    <TypedConfirmDialog name={restore?.databaseName ?? ''} open={confirm && mayCancel} onClose={() => setConfirm(false)} title={tx("Geri yükleme iptal edilsin mi?")}
+    <ConfirmDialog name={restore?.databaseName ?? ''} open={confirm && mayCancel} onClose={() => setConfirm(false)} title={tx("Geri yükleme iptal edilsin mi?")}
       consequence={{
         what: tx("İptal isteği yedekleme bilgisayarına iletilir; veritabanı motoru anında durmayabilir. Hedef veritabanı kısmen geri yüklenmiş veya bilinmeyen durumda kalabilir."),
         who: tx("Hedef müşteri veritabanı etkilenir. İptal, veritabanının sağlıklı olduğunu garanti etmez."),

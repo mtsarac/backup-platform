@@ -90,6 +90,6 @@ describe('wizard with discovered databases', () => {
     expect(screen.getByLabelText("Veritabanı")).toBeEnabled()
     expect(getDiscoveryInstances).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Keşfedilen veritabanlarından seç' }))
-    expect(screen.getByLabelText("Keşif Ajanı")).toBeInTheDocument()
+    expect(screen.getByLabelText("Veritabanı bulma bilgisayarı")).toBeInTheDocument()
   })
 })

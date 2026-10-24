@@ -28,7 +28,7 @@ describe('secure Backup download', () => {
     expect(screen.getByRole('status')).toHaveTextContent('kontrol ediliyor')
     expect(await screen.findByRole('option', { name: 'Central · Managed storage' })).toBeEnabled()
     expect(screen.getByRole('option', { name: /Local · Agent storage/ })).toBeDisabled()
-    expect(screen.getByRole('option', { name: /Local · Agent storage/ })).toHaveTextContent('Ajan kullanılamıyor')
+    expect(screen.getByRole('option', { name: /Local · Agent storage/ })).toHaveTextContent('Yedekleme bilgisayarı kullanılamıyor')
   })
   it('prepares selected replica and starts a native anchor download without fetching file bytes', async () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
@@ -89,7 +89,7 @@ describe('secure Backup download', () => {
     vi.mocked(getDownloadAvailability).mockResolvedValue({ ...availability, available: false, reason: 'agent_unavailable' })
     mount()
     expect(await screen.findByRole('button', { name: "Yedeklemeyi İndir" })).toBeDisabled()
-    expect(screen.getByText(/İndirme kullanılamıyor/)).toHaveTextContent('Ajan kullanılamıyor')
+    expect(screen.getByText(/İndirme kullanılamıyor/)).toHaveTextContent('Yedekleme bilgisayarı kullanılamıyor')
     cleanup()
     vi.mocked(getDownloadAvailability).mockResolvedValue(availability)
     vi.mocked(prepareDownload).mockRejectedValue(new Error('secret storage path'))

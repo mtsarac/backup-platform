@@ -5,7 +5,7 @@ import { DataList, type Column } from '@/components/data/data-list'
 import { Button } from '@/components/ui/button'
 import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
-import { ConfirmDialog, TypedConfirmDialog } from '@/components/ui/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { bareListClass } from '@/features/platform/list-empty'
 import { platformPaths } from '@/features/platform/paths'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
@@ -57,7 +57,7 @@ export function WrapKeysSection({ tenantId, tenantName }: { tenantId: string; te
       }}
       confirmLabel={tx("Döndür")} pending={rotate.isPending} error={rotate.error}
       onConfirm={() => rotate.mutate(undefined, { onSuccess: () => setRotating(false) })} />
-    <TypedConfirmDialog open={Boolean(retiring)} onClose={() => setRetiring(null)} name={tenantName} title={tx("Anahtar emekli edilsin mi?")}
+    <ConfirmDialog open={Boolean(retiring)} onClose={() => setRetiring(null)} name={tenantName} title={tx("Anahtar emekli edilsin mi?")}
       consequence={{
         what: retiring && <div className="space-y-3">
           <p>{tx("{0} yedek artık uygulamada açılamaz. Bu dosyalar yalnızca kurtarma özel anahtarıyla çevrimdışı çözülebilir; bu anahtar yoksa erişim kaybolur.", { "0": retiring.artifactCount })}</p>

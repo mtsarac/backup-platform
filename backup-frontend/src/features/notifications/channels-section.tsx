@@ -6,7 +6,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { QueryState } from '@/components/data/query-state'
-import { ConfirmDialog, TypedConfirmDialog } from '@/components/ui/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useAuth } from '@/features/auth/use-auth'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { AddChannelDialog, ChannelSecretDialog, EditChannelDialog } from './channel-dialogs'
@@ -83,7 +83,7 @@ function ChannelCard({ channel }: { channel: NotificationChannel }) {
       }}
       pending={clearSecret.isPending} error={clearSecret.error}
       onConfirm={() => clearSecret.mutate(channel.id, { onSuccess: close })} />
-    <TypedConfirmDialog open={dialog === 'delete'} name={channel.name} onClose={close} title={tx("“{0}” silinsin mi?", { "0": channel.name })} confirmLabel={tx("Kanalı sil")}
+    <ConfirmDialog open={dialog === 'delete'} name={channel.name} onClose={close} title={tx("“{0}” silinsin mi?", { "0": channel.name })} confirmLabel={tx("Kanalı sil")}
       consequence={{
         what: tx("Kanal silinir ve bu kanala bildirim gönderilmez. Gönderim geçmişi korunur."),
         who: tx("Bu kanalı kullanan tüm bildirimler etkilenir."),
