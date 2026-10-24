@@ -18,7 +18,6 @@ export const permissionDescriptions: Record<SupportPermission, string> = {
   get DownloadBackup() { return tx("Artifact dosyasını indirmeye izin verir.") },
   get RestoreBackup() { return tx("Yalnızca yeni Database oluşturur; mevcut Database değiştirilmez.") },
 }
-export const statusLabels: Record<SupportStatus, string> = { get Active() { return tx("Etkin") }, get Expired() { return tx("Süresi doldu") }, get Closed() { return tx("Kapatıldı") }, get Revoked() { return tx("Erişim geri alındı") } }
 export const endedMessages: Record<Exclude<SupportStatus, 'Active'>, string> = {
   get Expired() { return tx("Destek oturumunun süresi doldu. Müşteri verilerine erişim ve tüm işlemler kapalıdır.") },
   get Closed() { return tx("Destek oturumu kapatıldı. Müşteri verilerine erişim ve tüm işlemler kapalıdır.") },

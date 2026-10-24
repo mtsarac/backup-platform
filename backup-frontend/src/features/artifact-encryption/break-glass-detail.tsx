@@ -6,15 +6,15 @@ import { Button } from '@/components/ui/button'
 import { Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
-import { artifactDate } from '@/features/artifacts/format'
 import { FormDialog } from '@/features/platform/plans/form-dialog'
 import { inputClass } from '@/features/platform/styles'
 import { useSupportCountdown } from '@/features/platform/support/use-support-countdown'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { BreakGlassDownload } from './break-glass-download'
 import { encryptionKeys, useBreakGlassDecision } from './hooks'
-import { BreakGlassStatusBadge } from './presentation'
 import type { BreakGlassRequest } from './types'
+import { formatDateTime } from '@/lib/format'
+import { StatusPill } from '@/components/data/status-pill'
 
 /** `receivedAt` is when the view was fetched: the countdown follows the server clock, not a possibly skewed browser clock. */
 export function BreakGlassDetail({ request, receivedAt }: { request: BreakGlassRequest; receivedAt: number }) {
@@ -41,17 +41,17 @@ export function BreakGlassDetail({ request, receivedAt }: { request: BreakGlassR
   return <div className="space-y-6">
     <Section title={tx("İstek")} description={tx("Tek bir şifreli Backup için süreli, gerekçeli ve çift onaylı çözme isteği.")}>
       <Facts>
-        <Fact label={tx("Durum")}><BreakGlassStatusBadge status={request.status} /></Fact>
+        <Fact label={tx("Durum")}><StatusPill domain="breakGlass" status={request.status} /></Fact>
         {open && <Fact label={tx("Kalan süre")}><span className="tabular-nums">{countdown.label}</span></Fact>}
         <Fact label={tx("Tenant")}>{request.tenantName ?? request.tenantId}</Fact>
         <Fact label={tx("Backup")}><code className="break-all font-mono text-sm">{request.artifactId}</code></Fact>
         <Fact label={tx("Gerekçe")}>{request.reason}</Fact>
         <Fact label={tx("İsteyen")}>{request.requestedByName ?? request.requestedBy}{request.isRequester && <span className="text-text-muted">{' '}{tx("(siz)")}</span>}</Fact>
-        <Fact label={tx("Açılış")}>{artifactDate(request.createdAt)}</Fact>
-        <Fact label={tx("Süre sonu")}>{artifactDate(request.expiresAt)}</Fact>
-        {request.decidedAt && <Fact label={request.status === 'Denied' ? tx("Reddeden") : tx("Onaylayan")}>{request.decidedByName ?? request.decidedBy} · {artifactDate(request.decidedAt)}</Fact>}
+        <Fact label={tx("Açılış")}>{formatDateTime(request.createdAt)}</Fact>
+        <Fact label={tx("Süre sonu")}>{formatDateTime(request.expiresAt)}</Fact>
+        {request.decidedAt && <Fact label={request.status === 'Denied' ? tx("Reddeden") : tx("Onaylayan")}>{request.decidedByName ?? request.decidedBy} · {formatDateTime(request.decidedAt)}</Fact>}
         {request.decisionReason && <Fact label={tx("Ret gerekçesi")}>{request.decisionReason}</Fact>}
-        {request.consumedAt && <Fact label={tx("Kullanıldı")}>{artifactDate(request.consumedAt)}</Fact>}
+        {request.consumedAt && <Fact label={tx("Kullanıldı")}>{formatDateTime(request.consumedAt)}</Fact>}
       </Facts>
     </Section>
 
@@ -72,7 +72,7 @@ export function BreakGlassDetail({ request, receivedAt }: { request: BreakGlassR
 
     {expiredLocally && <Notice tone="warning" action={<Button size="sm" variant="outline" onClick={refresh}>{tx("Yenile")}</Button>}>{tx("İsteğin süresi doldu. Sunucudaki durum yenilenir; yeni bir istek açmanız gerekir.")}</Notice>}
     {request.status === 'Consumed' && <Notice tone="success">{tx("Bu istek kullanıldı. Tek kullanımlıktır; yeniden indirmek için yeni bir istek açın.")}</Notice>}
-    {request.status === 'Denied' && <Notice tone="error">{tx("Bu istek reddedildi.")}</Notice>}
+    {request.status === 'Denied' && <Notice tone="warning">{tx("Bu istek reddedildi; hiçbir veri çözülmedi.")}</Notice>}
     {request.status === 'Expired' && <Notice tone="warning">{tx("İsteğin süresi doldu; hiçbir veri çözülmedi.")}</Notice>}
 
     <ConfirmDialog open={approving} onClose={() => setApproving(false)} title={tx("İstek onaylansın mı?")}

@@ -1,3 +1,4 @@
+import { formatDateTime } from '@/lib/format'
 import { screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import userEvent from '@testing-library/user-event'
@@ -231,7 +232,7 @@ describe('delivery history', () => {
     expect(row.getByText('Başarısız')).toBeInTheDocument()
     expect(row.getByText('smtp_unavailable')).toBeInTheDocument()
     expect(row.getByText('4')).toBeInTheDocument()
-    expect(row.getByText(new Date('2026-10-14T12:00:00Z').toLocaleString('tr-TR'))).toBeInTheDocument()
+    expect(row.getByText(formatDateTime('2026-10-14T12:00:00Z'))).toBeInTheDocument()
   })
 
   it('sends status, kind and eventType filters and resets to page 1', async () => {

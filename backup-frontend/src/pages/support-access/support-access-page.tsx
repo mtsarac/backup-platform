@@ -1,19 +1,22 @@
-import { currentLocale, tx, useLanguage } from '@/lib/i18n'
+import { tx, useLanguage } from '@/lib/i18n'
 import type { ReactNode } from 'react'
 import { PlatformAccessDenied } from '@/components/auth/platform-access-denied'
 import { DataTable } from '@/components/data/data-table'
 import { Pagination } from '@/components/data/pagination'
 import { QueryState } from '@/components/data/query-state'
 import { Button } from '@/components/ui/button'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Fact, Facts, Section } from '@/components/ui/section'
-import { PermissionBadges, SupportStatusPill } from '@/features/platform/support/session-table'
+import { PermissionBadges } from '@/features/platform/support/session-table'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { useSupportAccessActivity, useSupportAccessSession, useSupportAccessSessions } from '@/features/support-access/hooks'
 import type { SupportAccessSummary } from '@/features/support-access/types'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { ApiError } from '@/lib/api/client'
+import { formatDateTime } from '@/lib/format'
+import { StatusPill } from '@/components/data/status-pill'
+import { notFound } from '@/lib/api/failure-messages'
 
 const summaryLabels: Record<keyof SupportAccessSummary, string> = {
   get artifactsViewed() { return tx("Görüntülenen Artifact") }, get downloadsStarted() { return tx("Başlatılan indirme") },
@@ -24,7 +27,7 @@ const summaryLabels: Record<keyof SupportAccessSummary, string> = {
 function AccessQueryState({ isPending, error, children }: { isPending: boolean; error: unknown; children: ReactNode }) {
   useLanguage()
   if (error instanceof ApiError && error.status === 403) return <PlatformAccessDenied description={tx("Destek erişimi geçmişini yalnızca tenant Owner / Admin görüntüleyebilir.")} />
-  if (error instanceof ApiError && error.status === 404) return <Notice tone="error">{tx("Destek oturumu bulunamadı veya bu tenant'a ait değil.")}</Notice>
+  if (error instanceof ApiError && error.status === 404) return <ErrorNotice {...notFound(tx("Destek oturumu bulunamadı veya bu tenant'a ait değil."))} />
   return <QueryState isPending={isPending} error={error}>{children}</QueryState>
 }
 
@@ -51,10 +54,10 @@ function SupportAccessContent({ tenantId }: { tenantId: string }) {
       {query.data && <div className="space-y-4">
         <DataTable rows={query.data.items} keyExtractor={(row) => row.id} emptyMessage={tx("Henüz destek erişimi kaydı yok.")} columns={[
           { key: 'actor', header: tx('İşlemi yapan'), render: (row) => row.actorDisplayName ?? tx('Bilinmiyor'), wrap: true },
-          { key: 'when', header: tx('Zaman'), render: (row) => <div>{tx("Başlangıç:")}{' '}{new Date(row.startedAt).toLocaleString(currentLocale())}<br />{tx("Bitiş:")}{' '}{new Date(row.expiresAt).toLocaleString(currentLocale())}</div> },
+          { key: 'when', header: tx('Zaman'), render: (row) => <div>{tx("Başlangıç:")}{' '}{formatDateTime(row.startedAt)}<br />{tx("Bitiş:")}{' '}{formatDateTime(row.expiresAt)}</div> },
           { key: 'reason', header: tx('Gerekçe'), render: (row) => row.reason, wrap: true },
           { key: 'permissions', header: tx('İzinler'), render: (row) => <PermissionBadges permissions={row.permissions} />, wrap: true },
-          { key: 'status', header: tx('Durum'), render: (row) => <SupportStatusPill status={row.status} /> },
+          { key: 'status', header: tx('Durum'), render: (row) => <StatusPill domain="supportSession" status={row.status} /> },
           { key: 'summary', header: tx('İşlem özeti'), render: (row) => <Summary summary={row.summary} />, wrap: true },
           { key: 'detail', header: tx('Etkinlik'), render: (row) => <Button variant="outline" size="sm" onClick={() => update({ sessionId: row.id, activityPage: '', page })}>{tx("Etkinliği görüntüle")}</Button> },
         ]} />
@@ -72,12 +75,12 @@ function SessionDetail({ tenantId, sessionId, onClose }: { tenantId: string; ses
     <AccessQueryState isPending={query.isPending} error={query.error}>{query.data && <div className="space-y-6">
       <Facts>
         <Fact label={tx("İşlemi yapan")}>{query.data.actorDisplayName ?? tx('Bilinmiyor')}</Fact>
-        <Fact label={tx("Durum")}><SupportStatusPill status={query.data.status} /></Fact>
+        <Fact label={tx("Durum")}><StatusPill domain="supportSession" status={query.data.status} /></Fact>
         <Fact label={tx("Gerekçe")}>{query.data.reason}</Fact>
         <Fact label={tx("İzinler")}><PermissionBadges permissions={query.data.permissions} /></Fact>
-        <Fact label={tx("Başlangıç")}>{new Date(query.data.startedAt).toLocaleString(currentLocale())}</Fact>
-        <Fact label={tx("Süre sonu")}>{new Date(query.data.expiresAt).toLocaleString(currentLocale())}</Fact>
-        <Fact label={tx("Kapanış")}>{query.data.closedAt ? new Date(query.data.closedAt).toLocaleString(currentLocale()) : '—'}</Fact>
+        <Fact label={tx("Başlangıç")}>{formatDateTime(query.data.startedAt)}</Fact>
+        <Fact label={tx("Süre sonu")}>{formatDateTime(query.data.expiresAt)}</Fact>
+        <Fact label={tx("Kapanış")}>{query.data.closedAt ? formatDateTime(query.data.closedAt) : '—'}</Fact>
         <Fact label={tx("Kapanış gerekçesi")}>{query.data.closeReason ?? '—'}</Fact>
       </Facts>
       <div className="rounded-lg bg-surface-2 p-4"><Summary summary={query.data.summary} /></div>
@@ -93,7 +96,7 @@ function SessionActivity({ tenantId, sessionId }: { tenantId: string; sessionId:
   return <div className="space-y-3"><h3 className="font-semibold">{tx("Etkinlik geçmişi")}</h3>
     <AccessQueryState isPending={query.isPending} error={query.error}>{query.data && <>
       <DataTable rows={query.data.items} keyExtractor={(row) => row.id} emptyMessage={tx("Bu oturum için etkinlik kaydı yok.")} columns={[
-        { key: 'at', header: tx('Zaman'), render: (row) => new Date(row.at).toLocaleString(currentLocale()) },
+        { key: 'at', header: tx('Zaman'), render: (row) => formatDateTime(row.at) },
         { key: 'action', header: tx('İşlem'), render: (row) => row.action, wrap: true },
         { key: 'target', header: tx('Hedef'), render: (row) => <div>{row.targetType}<p className="break-all font-mono text-xs text-text-muted">{row.targetId}</p></div>, wrap: true },
         { key: 'result', header: tx('Sonuç'), render: (row) => row.result ?? '—', wrap: true },

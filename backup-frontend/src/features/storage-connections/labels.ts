@@ -1,26 +1,10 @@
 import { tx } from '@/lib/i18n'
+import type { StatusLevel } from '@/lib/status'
 import { ApiError } from '@/lib/api/client'
-import { errorMessage } from '@/lib/api/failure-messages'
 import type {
-  ConfigurationValue, ConnectionOwnership, ConnectionTest, ConnectionView, ExecutionLocation, ProviderAvailability, ProviderDescriptor, ProviderTopology, TestMode,
-  TestStatus,
+  ConfigurationValue, ConnectionTest, ConnectionView, ExecutionLocation, ProviderDescriptor, ProviderTopology, TestMode,
+  
 } from './types'
-
-type Tone = 'neutral' | 'success' | 'warning' | 'error' | 'info'
-
-export const ownershipTone: Record<ConnectionOwnership, Tone> = { PlatformManaged: 'info', TenantManaged: 'neutral' }
-
-/** NotTestable is never green: the backend could not check the destination, which says nothing about whether it works. */
-export const testStatusMeta: Record<TestStatus, { label: string; tone: Tone }> = {
-  Succeeded: { get label() { return tx("Başarılı") }, tone: 'success' },
-  Failed: { get label() { return tx("Başarısız") }, tone: 'error' },
-  NotTestable: { get label() { return tx("Test edilemez") }, tone: 'neutral' },
-}
-
-export const availabilityMeta: Record<ProviderAvailability, { label: string; tone: Tone }> = {
-  Available: { get label() { return tx("Kullanılabilir") }, tone: 'success' },
-  Planned: { get label() { return tx("Yakında") }, tone: 'neutral' },
-}
 
 const capabilityLabels: Record<string, string> = {
   get 'storage.read'() { return tx("Okuma") },
@@ -66,20 +50,20 @@ export function capabilityLabel(capability: string): string {
   return Object.hasOwn(capabilityLabels, capability) ? capabilityLabels[capability] : capability
 }
 
-export type Health = { key: 'disabled' | 'reauthorize' | 'failed' | 'untested' | 'agent-side' | 'healthy'; label: string; tone: Tone }
+export type Health = { key: 'disabled' | 'reauthorize' | 'failed' | 'untested' | 'agent-side' | 'healthy'; label: string; level: StatusLevel }
 
 /**
  * One at-a-glance state for a destination, strongest problem first. It only restates what the API reported (enablement, the last test,
  * the Google re-authorization flag): a destination is never called healthy without a successful test.
  */
 export function connectionHealth(connection: Pick<ConnectionView, 'effectiveEnabled' | 'lastTest' | 'providerType' | 'hasSecret' | 'configuration'>): Health {
-  if (!connection.effectiveEnabled) return { key: 'disabled', label: tx('Devre dışı'), tone: 'warning' }
-  if (connection.providerType === 'google-drive' && (!connection.hasSecret || connection.configuration?.reauthorizationRequired === 'true')) return { key: 'reauthorize', label: tx('Yeniden yetkilendirme gerekli'), tone: 'warning' }
+  if (!connection.effectiveEnabled) return { key: 'disabled', label: tx('Devre dışı'), level: 'attention' }
+  if (connection.providerType === 'google-drive' && (!connection.hasSecret || connection.configuration?.reauthorizationRequired === 'true')) return { key: 'reauthorize', label: tx('Yeniden yetkilendirme gerekli'), level: 'attention' }
   const test = connection.lastTest
-  if (!test) return { key: 'untested', label: tx('Test edilmedi'), tone: 'neutral' }
-  if (test.status === 'Failed') return { key: 'failed', label: tx('Bağlantı sorunu'), tone: 'error' }
-  if (test.status === 'NotTestable') return { key: 'agent-side', label: tx('Agent tarafında denetlenir'), tone: 'neutral' }
-  return { key: 'healthy', label: tx('Sağlıklı'), tone: 'success' }
+  if (!test) return { key: 'untested', label: tx('Test edilmedi'), level: 'neutral' }
+  if (test.status === 'Failed') return { key: 'failed', label: tx('Bağlantı sorunu'), level: 'urgent' }
+  if (test.status === 'NotTestable') return { key: 'agent-side', label: tx('Agent tarafında denetlenir'), level: 'neutral' }
+  return { key: 'healthy', label: tx('Sağlıklı'), level: 'safe' }
 }
 
 const topologyLabels: Record<ProviderTopology, string> = { get AgentDirect() { return tx("Agent doğrudan yazar") }, get BackendRelayed() { return tx("Backend üzerinden aktarılır") } }
@@ -149,13 +133,6 @@ export function tenantCreateState(provider: ProviderDescriptor, connections: rea
 
 export function isPlatformCreatable(provider: ProviderDescriptor) {
   return provider.availability === 'Available' && provider.platformCreatable
-}
-
-/** The connection routes reuse `concurrent_update`, which the shared mapper words for plans. */
-export function connectionErrorMessage(error: unknown): string {
-  if (error instanceof ApiError && (error.reason ?? error.code) === 'concurrent_update') return tx('Bağlantı başka bir işlemle aynı anda değiştirildi. Sayfayı yenileyip tekrar deneyin.')
-  if (error instanceof ApiError && (error.reason ?? error.code) === 'rotation_test_failed') return tx('Yeni kimlik bilgisi veya sunucu parmak izi doğrulanamadı. Mevcut bağlantı ve kimlik bilgisi korunuyor.')
-  return errorMessage(error)
 }
 
 /** The request field the backend rejected (`name`, `configuration.<field>`, `secret.<field>`, `quotaScope`...), when it named one. */

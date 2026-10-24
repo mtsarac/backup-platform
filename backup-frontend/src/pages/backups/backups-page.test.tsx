@@ -23,16 +23,16 @@ beforeEach(() => {
 
 describe('run history filters and pagination', () => {
   it('shows anomaly and signed comparison beside success while normal runs have no warning badge', () => {
-    state.page = { items: [makeRun({ status: 'Succeeded', isSizeAnomaly: true, sizeAnomalyStatus: 'SizeAnomalyWarning', sizeAnomalyBaselineBytes: 1000, sizeAnomalyDeviationRatio: 2 }),
-      makeRun({ id: 'normal-run', status: 'Succeeded', sizeAnomalyStatus: 'Normal', sizeAnomalyBaselineBytes: 1000, sizeAnomalyDeviationRatio: 0.05 })], totalCount: 2, page: 1, pageSize: 25 }
+    state.page = { items: [makeRun({ status: 'Succeeded', isSizeAnomaly: true, sizeAnomalyStatus: 'SizeAnomalyWarning', sizeAnomalyBaselineBytes: 5_000_000_000, sizeAnomalyDeviationRatio: 2 }),
+      makeRun({ id: 'normal-run', status: 'Succeeded', sizeAnomalyStatus: 'Normal', sizeAnomalyBaselineBytes: 5_000_000_000, sizeAnomalyDeviationRatio: 0.05 })], totalCount: 2, page: 1, pageSize: 25 }
     render(<MemoryRouter><BackupsPage /></MemoryRouter>)
     const [warningRow, normalRow] = screen.getAllByRole('row').slice(1)
     expect(within(warningRow).getByText('Boyut Anomalisi')).toBeInTheDocument()
     expect(within(warningRow).getByText('Başarılı')).toBeInTheDocument()
     expect(within(normalRow).getByText('Başarılı')).toBeInTheDocument()
     expect(within(normalRow).queryByText('Boyut Anomalisi')).not.toBeInTheDocument()
-    expect(within(warningRow).getByText(/Geçmiş ortalama: 1000 B/)).toHaveTextContent('+%200')
-    expect(within(normalRow).getByText(/Geçmiş ortalama: 1000 B/)).toHaveTextContent('+%5')
+    expect(within(warningRow).getByText(/Geçmiş ortalama: 5 GB/)).toHaveTextContent('+%200')
+    expect(within(normalRow).getByText(/Geçmiş ortalama: 5 GB/)).toHaveTextContent('+%5')
   })
 
   it('submits all filters to query hook, resets page on change, and clears filters', () => {

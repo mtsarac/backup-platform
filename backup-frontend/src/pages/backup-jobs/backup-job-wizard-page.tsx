@@ -1,9 +1,9 @@
-import { currentLocale, tx, useLanguage } from '@/lib/i18n'
+import { tx, useLanguage } from '@/lib/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
 import { Stepper } from '@/components/ui/stepper'
@@ -26,9 +26,10 @@ import { connectionUnavailableReason, primaryDestination, resolveDestinationConn
 import { MultiDestinationPicker } from '@/features/storage-connections/multi-destination-picker'
 import type { BackupJob, BackupJobInput, BackupConfiguration, Schedule, RetryPolicy, RetentionPolicy } from '@/features/backup-jobs/types'
 import { ApiError } from '@/lib/api/client'
-import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
+import { accessDenied, errorMessage, failureMessage } from '@/lib/api/failure-messages'
 import { encryptionPolicies, type EncryptionPolicy } from '@/features/artifact-encryption/types'
 import { policyDescriptions, policyLabels } from '@/features/artifact-encryption/labels'
+import { formatDateTime } from '@/lib/format'
 
 const initialConfiguration: BackupConfiguration = { engine: 'mssql', database: '', host: '', port: null, integratedSecurity: true, databaseCredentialReference: null, encrypt: true, trustServerCertificate: false, stagingReference: 'default', storagePrefix: '', destinations: [{ storageProvider: 'local', storageConnectionId: null, storageExecutionLocation: 'Agent', isPrimary: true }], requiredVerifiedReplicaCount: 1, copyOnly: true, checksumPolicy: 'Required', compressionPolicy: 'Preferred', encryptionPolicy: 'Off' }
 const initialSchedule: Schedule = { enabled: true, cronExpression: '0 2 * * *', timeZone: 'Europe/Istanbul', missedRunGraceSeconds: 3600, overlapPolicy: 'Skip' }
@@ -48,7 +49,7 @@ export function BackupJobWizardPage() {
   const readOnly = Boolean(id) && !canOperate
   const crumbs = [{ label: tx('Yedekleme işleri'), to: `/tenants/${tenantId}/backup-jobs` }, { label: id ? tx(readOnly ? 'Yedekleme sağlığı' : 'Düzenle') : tx('Yeni iş') }]
   let body
-  if (!canOperate) body = readOnly ? <p className="text-sm text-text-muted">{tx('Salt okunur')}</p> : <Notice tone="error">{tx("Bu sayfada değişiklik yapma yetkiniz yok. Viewer rolü salt okunurdur.")}</Notice>
+  if (!canOperate) body = readOnly ? <p className="text-sm text-text-muted">{tx('Salt okunur')}</p> : <ErrorNotice {...accessDenied(tx("Bu sayfada değişiklik yapma yetkiniz yok. Viewer rolü salt okunurdur."))} />
   else if (id) body = <QueryState isPending={job.isPending} error={job.error}>{job.data && <JobForm key={`${tenantId}:${id}`} job={job.data} />}</QueryState>
   else if (discoveryInstance && discovered.isPending) body = <QueryState isPending error={null} />
   else body = <>
@@ -113,7 +114,7 @@ function JobForm({ job, prefill }: { job?: BackupJob; prefill?: { instance: Disc
   const { text, number, check, select } = fieldKit(errors)
   const withErrors = (...names: string[]) => names.some(item => errors[item])
   const nextOccurrence = job && (job.nextOccurrenceAt ?? job.schedule?.nextOccurrenceAt)
-  const nextRun = job ? nextOccurrence ? new Date(nextOccurrence).toLocaleString(currentLocale()) : tx('Planlanmamış') : undefined
+  const nextRun = job ? nextOccurrence ? formatDateTime(nextOccurrence) : tx('Planlanmamış') : undefined
   const agent = agents.data?.find(item => item.agentId === agentId)
 
   useEffect(() => {
@@ -264,13 +265,11 @@ function JobForm({ job, prefill }: { job?: BackupJob; prefill?: { instance: Disc
         <ul className="space-y-1 text-sm">{selected.map(database => <li key={database}>{name} – {database}{results[database] === 'ok' && <span className="text-success">{' '}{tx("· Oluşturuldu")}</span>}{results[database] && results[database] !== 'ok' && <span role="alert" className="text-error">{' '}{tx("· Oluşturulamadı:")}{' '}{results[database]}</span>}</li>)}</ul>
         {failedCount > 0 && <p className="mt-3 text-sm text-text-muted">{tx("Başarısız olanlar yeniden denenebilir; oluşturulanlar tekrar gönderilmez.")}</p>}
       </Section>}
-      {job && <Section title={tx("Son zamanlama oluşumları")}><QueryState isPending={occurrences.isPending} error={occurrences.error} empty={occurrences.data?.length === 0}><ul className="space-y-2 text-sm">{occurrences.data?.map(item => <li key={item.id}>{new Date(item.scheduledAt).toLocaleString(currentLocale())} · {tx(item.outcome)} · {item.outcome === 'AdmissionDenied' ? failureMessage(item.reason) : item.reason}{item.runId && <> · <Link className="text-primary underline" to={`/tenants/${tenantId}/backup-runs/${item.runId}`}>{tx("Çalıştırmayı aç")}</Link></>}</li>)}</ul></QueryState></Section>}
+      {job && <Section title={tx("Son zamanlama oluşumları")}><QueryState isPending={occurrences.isPending} error={occurrences.error} empty={occurrences.data?.length === 0}><ul className="space-y-2 text-sm">{occurrences.data?.map(item => <li key={item.id}>{formatDateTime(item.scheduledAt)} · {tx(item.outcome)} · {item.outcome === 'AdmissionDenied' ? failureMessage(item.reason) : item.reason}{item.runId && <> · <Link className="text-primary underline" to={`/tenants/${tenantId}/backup-runs/${item.runId}`}>{tx("Çalıştırmayı aç")}</Link></>}</li>)}</ul></QueryState></Section>}
       {cannotSave && <Notice tone="warning" title={tx("Depolama hedefi kaydedilemiyor")} action={<Button type="button" variant="outline" size="sm" aria-label={tx("Adıma git: Depolama (hedef sorunu)")} onClick={() => go(2)}>{tx("Adıma git")}</Button>}>{tx("Hedef depolama bağlantısı doğrulanamadı veya kullanılamıyor. Depolama adımında hedefi düzeltin.")}</Notice>}
     </>}
-    {saveError && <Notice tone="error" title={tx("İş kaydedilemedi")}>
-      <p>{errorMessage(saveError)}</p>
-      {errorSteps.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{errorSteps.map(item => <Button key={item} type="button" variant="outline" size="sm" aria-label={tx("Hatalı alana git: {0}", { "0": jobSteps[item] })} onClick={() => go(item)}>{tx("Adıma git")}</Button>)}</div>}
-    </Notice>}
+    {saveError && <ErrorNotice title={tx("İş kaydedilemedi")} error={saveError}
+      control={errorSteps.length > 0 ? <div className="flex flex-wrap gap-2">{errorSteps.map(item => <Button key={item} type="button" variant="outline" size="sm" aria-label={tx("Hatalı alana git: {0}", { "0": jobSteps[item] })} onClick={() => go(item)}>{tx("Adıma git")}</Button>)}</div> : undefined} />}
     <div className="flex flex-wrap items-center justify-between gap-3">
       <Button type="button" variant="outline" disabled={step === 0 || save.isPending} onClick={() => go(step - 1)}>{tx("Geri")}</Button>
       <div className="flex flex-wrap items-center gap-3">

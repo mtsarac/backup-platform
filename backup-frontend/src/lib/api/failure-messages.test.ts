@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from './client'
-import { errorMessage } from './failure-messages'
+import { describeError, errorMessage, failureMessage } from './failure-messages'
 
 describe('platform failure messages', () => {
   it.each([
@@ -55,5 +55,45 @@ describe('platform failure messages', () => {
   it('keeps generic wording for codeless 403 and 404', () => {
     expect(errorMessage(new ApiError(403))).toBe('Bu işlem için yetkiniz yok.')
     expect(errorMessage(new ApiError(404, { error: 'something_else' }))).toBe("Kayıt bulunamadı veya bu çalışma alanı kapsamında erişilemiyor.")
+  })
+})
+
+describe('three-part error description', () => {
+  it('says what happened, what it means for the data and what to do, for every kind of failure', () => {
+    const failures: unknown[] = [new ApiError(401), new ApiError(403), new ApiError(404), new ApiError(409, { error: 'already_member' }), new ApiError(500), new Error('offline')]
+    for (const failure of failures) {
+      const { what, dataImpact, action } = describeError(failure)
+      expect([what, dataImpact, action].every(part => part.trim().length > 0)).toBe(true)
+      expect(new Set([what, dataImpact, action]).size).toBe(3)
+    }
+  })
+
+  it('keeps the plain message as the first part', () => {
+    expect(describeError(new ApiError(500)).what).toBe(errorMessage(new ApiError(500)))
+  })
+
+  it('reassures about stored backups for quota failures', () => {
+    const { dataImpact } = describeError(new ApiError(409, { error: 'admission_denied', code: 'quota_exceeded' }))
+    expect(dataImpact).toContain('silinmedi')
+  })
+
+  it('moves the raw code, status and field into technical details, never the plain message', () => {
+    const { technical } = describeError(new ApiError(400, { error: 'invalid_request', field: 'name', code: 'invalid_length' }))
+    expect(technical.map(item => item.value)).toEqual(['invalid_length', '400', 'name'])
+    expect(describeError(new Error('offline')).technical).toEqual([])
+  })
+
+  it('never exposes a code that is not a plain identifier', () => {
+    expect(describeError(new ApiError(400, { code: '<script>alert(1)</script>' })).technical.map(item => item.value)).toEqual(['400'])
+  })
+
+  it('uses the restore wording for restore failures and the connection wording for connection conflicts', () => {
+    expect(errorMessage(new ApiError(409, { error: 'restore_rejected', reason: 'TargetDatabaseExists' }), 'restore')).toBe('Hedef veritabanı zaten var. Yeni veritabanı modu mevcut veritabanının üzerine yazmaz.')
+    expect(errorMessage(new ApiError(409, { error: 'concurrent_update' }), 'storageConnection')).toContain('Bağlantı')
+    expect(errorMessage(new ApiError(500), 'restore')).toBe(errorMessage(new ApiError(500)))
+  })
+
+  it('looks up a bare failure code in the scope too', () => {
+    expect(failureMessage('NotClaimed', 'restore')).toContain('Hedef değiştirilmedi')
   })
 })

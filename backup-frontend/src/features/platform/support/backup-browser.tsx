@@ -8,8 +8,8 @@ import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { Tabs } from '@/components/ui/tabs'
 import { ArtifactDetails } from '@/features/artifacts/artifact-details'
-import { artifactDate, artifactSize, artifactState } from '@/features/artifacts/format'
-import { runStatuses, runStatusLabels } from '@/features/backups/presentation'
+import { artifactState } from '@/features/artifacts/format'
+import { runStatuses } from '@/features/backups/presentation'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { failureMessage } from '@/lib/api/failure-messages'
 import { SupportArtifactDownload } from './artifact-download'
@@ -17,6 +17,8 @@ import { useSupportArtifact, useSupportArtifacts, useSupportJobs, useSupportRuns
 import { supportAccess, supportScope } from './presentation'
 import { SupportQueryState } from './support-query-state'
 import type { SupportArtifact, SupportJob, SupportRun, SupportSession } from './types'
+import { formatBytes, formatDateTime } from '@/lib/format'
+import { statusLabel } from '@/lib/status'
 
 export function SupportBackupBrowser({ session }: { session: SupportSession }) {
   useLanguage()
@@ -34,9 +36,9 @@ export function SupportBackupBrowser({ session }: { session: SupportSession }) {
     { key: 'database', header: tx('Database'), wrap: true, render: artifact => <button className="font-medium text-primary hover:underline" onClick={() => update({ artifact: artifact.id })}>{artifact.databaseName ?? tx('Database bildirilmedi')}</button> },
     { key: 'job', header: tx('Backup Job'), wrap: true, render: artifact => artifact.jobName ?? '—' },
     { key: 'agent', header: tx('Agent'), wrap: true, render: artifact => artifact.agentName ?? '—' },
-    { key: 'size', header: tx('Boyut'), render: artifact => artifactSize(artifact.sizeBytes) },
-    { key: 'created', header: tx('Oluşturulma'), render: artifact => artifactDate(artifact.createdAt) },
-    { key: 'retention', header: tx('Saklama sonu'), render: artifact => artifact.retentionExpiresAt ? artifactDate(artifact.retentionExpiresAt) : tx('Süre sınırı yok') },
+    { key: 'size', header: tx('Boyut'), render: artifact => formatBytes(artifact.sizeBytes) },
+    { key: 'created', header: tx('Oluşturulma'), render: artifact => formatDateTime(artifact.createdAt) },
+    { key: 'retention', header: tx('Saklama sonu'), render: artifact => artifact.retentionExpiresAt ? formatDateTime(artifact.retentionExpiresAt) : tx('Süre sınırı yok') },
     { key: 'state', header: tx('Durum'), render: artifact => <StatusPill status={artifactState(artifact)} /> },
     { key: 'replicas', header: tx('Replikalar'), render: artifact => <div className="flex flex-wrap gap-1">{artifact.replicas.map(replica => <StatusPill key={replica.id} status={replica.verificationState} />)}</div> },
   ]
@@ -56,9 +58,9 @@ export function SupportBackupBrowser({ session }: { session: SupportSession }) {
     { key: 'agent', header: tx('Agent'), wrap: true, render: run => run.agentName },
     { key: 'status', header: tx('Durum'), render: run => <StatusPill status={run.status} /> },
     { key: 'trigger', header: tx('Tetikleyici'), render: run => run.triggerType },
-    { key: 'times', header: tx('Başlangıç / Bitiş'), render: run => <div>{artifactDate(run.startedAt)}<br />{artifactDate(run.completedAt)}</div> },
+    { key: 'times', header: tx('Başlangıç / Bitiş'), render: run => <div>{formatDateTime(run.startedAt)}<br />{formatDateTime(run.completedAt)}</div> },
     { key: 'reason', header: tx('Sonuç'), wrap: true, render: run => run.reasonCode ? failureMessage(run.reasonCode) : '—' },
-    { key: 'attempts', header: tx('Denemeler'), wrap: true, render: run => <details><summary>{run.currentAttemptNumber}{tx(". attempt ·")}{' '}{run.attempts.length}{' '}{tx("kayıt")}</summary>{run.attempts.map(attempt => <p key={attempt.number}>{attempt.number} · {tx(attempt.status)} · {artifactDate(attempt.startedAt)} · {artifactDate(attempt.completedAt)}{attempt.reasonCode ? ` · ${failureMessage(attempt.reasonCode)}` : ''}</p>)}</details> },
+    { key: 'attempts', header: tx('Denemeler'), wrap: true, render: run => <details><summary>{run.currentAttemptNumber}{tx(". attempt ·")}{' '}{run.attempts.length}{' '}{tx("kayıt")}</summary>{run.attempts.map(attempt => <p key={attempt.number}>{attempt.number} · {tx(attempt.status)} · {formatDateTime(attempt.startedAt)} · {formatDateTime(attempt.completedAt)}{attempt.reasonCode ? ` · ${failureMessage(attempt.reasonCode)}` : ''}</p>)}</details> },
     { key: 'artifacts', header: tx('Artifact'), wrap: true, render: run => <div className="grid gap-2">{run.artifactIds.map((id, index) => <div key={id}><button className="text-primary hover:underline" onClick={() => update({ view: 'artifacts', artifact: id })}>{tx("Artifact")}{' '}{index + 1}{' '}{tx("ayrıntıları")}</button><p className="break-all font-mono text-xs text-text-muted">{id}</p></div>)}</div> },
   ]
   if (!access.view) return <Notice>{tx("Backup Browser için etkin oturum sahipliği ve ViewBackupMetadata izni gerekir.")}</Notice>
@@ -68,14 +70,14 @@ export function SupportBackupBrowser({ session }: { session: SupportSession }) {
     <div role="tabpanel" id={`support-browser-panel-${view}`} aria-labelledby={`support-browser-tab-${view}`} className="space-y-4">
     {view !== 'jobs' && <Filters label={tx("Backup filtreleri")}>
       <FilterField label={tx("Backup Job")}><select className={filterControlClass} value={jobId} onChange={event => update({ jobId: event.target.value })}><option value="">{tx("Tüm Backup Jobs")}</option>{jobs.data?.map(job => <option key={job.id} value={job.id}>{job.name}</option>)}</select></FilterField>
-      {view === 'runs' ? <FilterField label={tx("Run durumu")}><select className={filterControlClass} value={get('runStatus')} onChange={event => update({ runStatus: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{runStatuses.map(status => <option key={status} value={status}>{tx(runStatusLabels[status])}</option>)}</select></FilterField> : <>
+      {view === 'runs' ? <FilterField label={tx("Run durumu")}><select className={filterControlClass} value={get('runStatus')} onChange={event => update({ runStatus: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{runStatuses.map(status => <option key={status} value={status}>{statusLabel('general', status)}</option>)}</select></FilterField> : <>
         <FilterField label={tx("Artifact durumu")}><select className={filterControlClass} value={get('state')} onChange={event => update({ state: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{['Available', 'DeletePending', 'DeleteFailed', 'Deleted'].map(state => <option key={state}>{state}</option>)}</select></FilterField>
         <FilterField label={tx("Başlangıç tarihi")}><input className={filterControlClass} type="date" value={from} onChange={event => update({ from: event.target.value })} /></FilterField>
         <FilterField label={tx("Bitiş tarihi")}><input className={filterControlClass} type="date" value={to} onChange={event => update({ to: event.target.value })} /></FilterField>
       </>}
     </Filters>}
     {jobs.error && <SupportQueryState isPending={false} error={jobs.error} />}
-    {view === 'jobs' ? <SupportQueryState isPending={jobs.isPending} error={jobs.error}><DataTable rows={jobs.data ?? []} columns={jobColumns} keyExtractor={job => job.id} /></SupportQueryState> : invalidDates && view === 'artifacts' ? <Notice tone="error">{tx("Tarih aralığı geçersiz. Bitiş başlangıçtan önce olamaz.")}</Notice> : <SupportQueryState isPending={listing.isPending} error={listing.error}>
+    {view === 'jobs' ? <SupportQueryState isPending={jobs.isPending} error={jobs.error}><DataTable rows={jobs.data ?? []} columns={jobColumns} keyExtractor={job => job.id} /></SupportQueryState> : invalidDates && view === 'artifacts' ? <Notice tone="warning">{tx("Tarih aralığı geçersiz. Bitiş başlangıçtan önce olamaz.")}</Notice> : <SupportQueryState isPending={listing.isPending} error={listing.error}>
       {view === 'runs' ? <DataTable rows={runs.data?.items ?? []} columns={runColumns} keyExtractor={run => run.id} /> : <DataTable rows={artifacts.data?.items ?? []} columns={columns} keyExtractor={artifact => artifact.id} />}
       {listing.data && <Pagination page={page} pageSize={listing.data.pageSize} totalCount={listing.data.totalCount} disabled={listing.isFetching} onPageChange={next => update({ browserPage: next })} />}
     </SupportQueryState>}

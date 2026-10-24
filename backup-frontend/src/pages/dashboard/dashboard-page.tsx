@@ -1,4 +1,4 @@
-import { currentLocale, tx, useLanguage } from '@/lib/i18n'
+import { tx, useLanguage } from '@/lib/i18n'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { AlertCircle, CheckCircle2, Database, HardDrive, LayoutGrid, List, Monitor, Plus, ShieldAlert } from 'lucide-react'
@@ -12,13 +12,14 @@ import { KpiCard } from '@/components/data/kpi-card'
 import { DataTable, type Column } from '@/components/data/data-table'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
 import type { BackupRun } from '@/features/backups/types'
 import { ReplicationBadge } from '@/features/backups/replication'
 import type { BackupJob } from '@/features/backup-jobs/types'
 import { ObservabilityPanel } from './observability-panel'
+import { formatDateTime } from '@/lib/format'
 
 interface Dashboard {
   jobs: { total: number; enabled: number; scheduled: number }
@@ -69,7 +70,7 @@ export function DashboardPage() {
   const columns: Column<BackupRun>[] = [
     { key: 'job', header: tx('Job / Database'), wrap: true, render: run => <Link className="font-medium text-primary underline-offset-4 hover:underline" to={`${base}/backup-runs/${run.id}`}>{run.jobName} / {run.configuration.database}</Link> },
     { key: 'agent', header: tx('Agent'), render: run => run.agentName ?? '—' },
-    { key: 'date', header: tx('Başlangıç'), render: run => new Date(run.startedAt ?? run.createdAt).toLocaleString(currentLocale()) },
+    { key: 'date', header: tx('Başlangıç'), render: run => formatDateTime(run.startedAt ?? run.createdAt) },
     { key: 'status', header: tx('Durum'), render: run => <span className="inline-flex flex-wrap items-center gap-2"><StatusPill status={run.status} /><ReplicationBadge replication={run.replication} /></span> },
     { key: 'attention', header: tx('Bilgi'), wrap: true, render: run => run.reasonCode ? failureMessage(run.reasonCode) : run.status === 'RetryPending' ? tx('Yeni attempt bekleniyor.') : run.status === 'CancellationRequested' ? tx('Agent iptali henüz tamamlamadı.') : '—' },
   ]
@@ -87,9 +88,9 @@ export function DashboardPage() {
           <KpiCard label={tx("Başarısız · son 24 saat")} value={data.runs.failedLast24Hours} tone={data.runs.failedLast24Hours > 0 ? 'error' : undefined} icon={<AlertCircle className="size-5" />} />
         </div>
         <ObservabilityPanel tenantId={tenantId} />
-        {data.artifacts.deleteFailed > 0 && <Notice tone="error">{data.artifacts.deleteFailed}{' '}{tx("artifact silinemedi.")}{' '}<Link className="font-medium underline" to={`${base}/artifacts?state=DeleteFailed`}>{tx("Silme hatalarını inceleyin.")}</Link></Notice>}
-        {data.runs.storageFailedLast24Hours > 0 && <Notice tone="error">{data.runs.storageFailedLast24Hours}{' '}{tx("backup sırasında storage yazma veya replica doğrulama hatası oluştu.")}{' '}<Link className="font-medium underline" to={`${base}/backup-runs?status=Failed`}>{tx("Başarısız backups")}</Link></Notice>}
-        {replicationShort > 0 && <Notice tone="error">{replicationShort}{' '}{tx("backup son 24 saatte kullanılabilir yedek üretti, ancak gereken doğrulanmış replika sayısına ulaşamadı.")}{' '}<Link className="font-medium underline" to={`${base}/backup-runs?status=Succeeded`}>{tx("Replikasyon sonuçlarını inceleyin.")}</Link></Notice>}
+        {data.artifacts.deleteFailed > 0 && <ErrorNotice what={`${data.artifacts.deleteFailed} ${tx("artifact silinemedi.")}`} dataImpact={tx("Silinemeyen dosyalar depoda duruyor; diğer yedekleriniz etkilenmedi.")} action={tx("Nedenini inceleyip silmeyi yeniden deneyin.")} control={<Link className="font-medium underline" to={`${base}/artifacts?state=DeleteFailed`}>{tx("Silme hatalarını inceleyin.")}</Link>} />}
+        {data.runs.storageFailedLast24Hours > 0 && <ErrorNotice what={`${data.runs.storageFailedLast24Hours} ${tx("backup sırasında storage yazma veya replica doğrulama hatası oluştu.")}`} dataImpact={tx("Başarısız denemeler yedek üretmedi; önceki başarılı yedekleriniz korunur.")} action={tx("Başarısız yedeklemeleri inceleyin.")} control={<Link className="font-medium underline" to={`${base}/backup-runs?status=Failed`}>{tx("Başarısız backups")}</Link>} />}
+        {replicationShort > 0 && <ErrorNotice what={`${replicationShort} ${tx("backup son 24 saatte kullanılabilir yedek üretti, ancak gereken doğrulanmış replika sayısına ulaşamadı.")}`} dataImpact={tx("Yedekler kullanılabilir durumda ama gereken kopya sayısına ulaşılamadı.")} action={tx("Eksik kopyaları onarmak için sonuçları inceleyin.")} control={<Link className="font-medium underline" to={`${base}/backup-runs?status=Succeeded`}>{tx("Replikasyon sonuçlarını inceleyin.")}</Link>} />}
         <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
           <section className="min-w-0 space-y-3" aria-labelledby="recent-runs-heading">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -112,7 +113,7 @@ export function DashboardPage() {
               <Row label={tx("Aktif Runs")} value={data.runs.active} /><Row label={tx("Etkin Jobs")} value={data.jobs.enabled} /><Row label={tx("Silme bekleyen artifacts")} value={data.artifacts.deletePending} />
             </dl></Section>
             <Section title={tx("Sonraki scheduled backups")}>{data.upcomingJobs.length
-              ? <ul className="divide-y divide-border">{data.upcomingJobs.map(job => <li key={job.id} className="space-y-0.5 py-2 first:pt-0 last:pb-0"><Link className="font-medium text-primary underline-offset-4 hover:underline" to={`${base}/backup-jobs/${job.id}/edit`}>{job.name}</Link><p className="text-sm text-text-muted">{job.schedule?.nextOccurrenceAt ? new Date(job.schedule.nextOccurrenceAt).toLocaleString(currentLocale()) : '—'} · {job.schedule?.timeZone}</p></li>)}</ul>
+              ? <ul className="divide-y divide-border">{data.upcomingJobs.map(job => <li key={job.id} className="space-y-0.5 py-2 first:pt-0 last:pb-0"><Link className="font-medium text-primary underline-offset-4 hover:underline" to={`${base}/backup-jobs/${job.id}/edit`}>{job.name}</Link><p className="text-sm text-text-muted">{job.schedule?.nextOccurrenceAt ? formatDateTime(job.schedule.nextOccurrenceAt) : '—'} · {job.schedule?.timeZone}</p></li>)}</ul>
               : <p className="text-sm text-text-muted">{tx("Etkin schedule yok.")}</p>}</Section>
           </div>
         </div>

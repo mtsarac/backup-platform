@@ -7,11 +7,11 @@ import { PageHeader } from '@/components/ui/page-header'
 import { BreakGlassRequestDialog } from '@/features/artifact-encryption/break-glass-request-dialog'
 import { BreakGlassTable } from '@/features/artifact-encryption/break-glass-table'
 import { useBreakGlassRequests } from '@/features/artifact-encryption/hooks'
-import { breakGlassStatusLabels } from '@/features/artifact-encryption/labels'
 import { breakGlassStatuses, type BreakGlassStatus } from '@/features/artifact-encryption/types'
 import { platformCrumb } from '@/features/platform/crumbs'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
+import { statusLabel } from '@/lib/status'
 
 export function PlatformBreakGlassPage() {
   useLanguage()
@@ -36,7 +36,7 @@ export function PlatformBreakGlassPage() {
       <span className="text-sm text-text-muted">{tx("Tenant filtresi:")}{' '}<code className="break-all rounded bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-text">{tenantId}</code></span>
       <Button size="sm" variant="outline" onClick={() => update({ tenantId: '' })}>{tx("Tenant filtresini kaldır")}</Button>
     </> : undefined}>
-      <FilterField label={tx("Durum")}><select aria-label={tx("Durum")} className={filterControlClass} value={status} onChange={event => update({ status: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{breakGlassStatuses.map(value => <option key={value} value={value}>{breakGlassStatusLabels[value].label}</option>)}</select></FilterField>
+      <FilterField label={tx("Durum")}><select aria-label={tx("Durum")} className={filterControlClass} value={status} onChange={event => update({ status: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{breakGlassStatuses.map(value => <option key={value} value={value}>{statusLabel('breakGlass', value)}</option>)}</select></FilterField>
       <label className="flex min-h-10 items-center gap-2 self-end text-sm font-medium text-text-heading"><input type="checkbox" className="size-4 accent-primary" checked={mine} onChange={event => update({ mine: event.target.checked ? 'true' : 'false' })} />{tx("Yalnızca benim isteklerim")}</label>
     </Filters>
     <PlatformQueryState isPending={query.isPending} error={query.error}>{query.data && <div className="space-y-4">

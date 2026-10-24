@@ -1,12 +1,12 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import type { ReactNode } from 'react'
-import { Info, ShieldAlert } from 'lucide-react'
-import { agentDate } from '@/features/agents/format'
-import { allocatedPercent, formatCapacity } from './format'
+import { allocatedPercent } from './format'
 import { isLegacyUnlimited } from './labels'
-import { EntitlementStatusBadge, QuotaStateBadge } from './quota-badges'
 import { QuotaMeter } from './quota-meter'
 import type { TenantQuota } from './types'
+import { formatBytes, formatDateTime } from '@/lib/format'
+import { StatusPill } from '@/components/data/status-pill'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 
 type Standing = Pick<TenantQuota, 'limitBytes' | 'unlimited' | 'usedBytes' | 'reservedBytes' | 'remainingBytes' | 'state' | 'subscriptionStatus' | 'plan' | 'calculatedAt'>
 
@@ -17,7 +17,7 @@ export function Fact({ label, children, hint }: { label: string; children: React
 
 function Capacity({ bytes }: { bytes: number }) {
   useLanguage()
-  return <span className="text-lg font-semibold text-text-heading">{formatCapacity(bytes)}</span>
+  return <span className="text-lg font-semibold text-text-heading">{formatBytes(bytes)}</span>
 }
 
 /**
@@ -26,7 +26,7 @@ function Capacity({ bytes }: { bytes: number }) {
  */
 export function StandingBadge({ quota }: { quota: Pick<TenantQuota, 'state' | 'subscriptionStatus'> }) {
   useLanguage()
-  return quota.subscriptionStatus === 'NoSubscription' ? <EntitlementStatusBadge status="NoSubscription" /> : <QuotaStateBadge state={quota.state} />
+  return quota.subscriptionStatus === 'NoSubscription' ? <StatusPill domain="subscription" status="NoSubscription" /> : <StatusPill domain="quota" status={quota.state} />
 }
 
 /** Used and Reserved side by side, the committed total against the limit, the meter and what is left. */
@@ -40,7 +40,7 @@ export function QuotaSummary({ quota }: { quota: Standing }) {
       <Fact label={tx("Kullanılan (Used)")} hint={tx("Saklanan backup'ların kapasiteye sayılan boyutu.")}><Capacity bytes={quota.usedBytes} /></Fact>
       <Fact label={tx("Rezerve (Reserved)")} hint={tx("Çalışan veya sıradaki backup'lar için ayrılan tahmini alan.")}><Capacity bytes={quota.reservedBytes} /></Fact>
       <Fact label={tx("Toplam")} hint={percent === null ? undefined : tx("%{0} ayrılmış", { "0": percent })}>
-        <span className="text-lg font-semibold text-text-heading">{noLimit ? formatCapacity(committed) : `${formatCapacity(committed)} / ${formatCapacity(quota.limitBytes ?? 0)}`}</span>
+        <span className="text-lg font-semibold text-text-heading">{noLimit ? formatBytes(committed) : `${formatBytes(committed)} / ${formatBytes(quota.limitBytes ?? 0)}`}</span>
       </Fact>
     </dl>
     <QuotaMeter usedBytes={quota.usedBytes} reservedBytes={quota.reservedBytes} limitBytes={quota.limitBytes} state={quota.state} />
@@ -49,18 +49,8 @@ export function QuotaSummary({ quota }: { quota: Standing }) {
         ? (quota.subscriptionStatus === 'NoSubscription' ? tx('Tanımlı değil (abonelik yok)') : isLegacyUnlimited(quota.plan) ? tx('Limitsiz (Legacy Unlimited)') : 'Limitsiz')
         : <Capacity bytes={quota.limitBytes ?? 0} />}</Fact>
       <Fact label={tx("Kalan")}>{quota.remainingBytes === null ? '—' : <Capacity bytes={quota.remainingBytes} />}</Fact>
-      <Fact label={tx("Son hesaplama")}>{agentDate(quota.calculatedAt)}</Fact>
+      <Fact label={tx("Son hesaplama")}>{formatDateTime(quota.calculatedAt, tx('Henüz bildirilmedi'))}</Fact>
     </dl>
-  </div>
-}
-
-function Notice({ tone, title, children }: { tone: 'error' | 'warning' | 'info'; title: string; children: ReactNode }) {
-  useLanguage()
-  const classes = tone === 'error' ? 'border-error/30 bg-error-subtle text-error' : tone === 'warning' ? 'border-warning/30 bg-warning-subtle text-warning' : 'border-info/30 bg-info-subtle text-info'
-  const Icon = tone === 'info' ? Info : ShieldAlert
-  return <div role={tone === 'info' ? 'status' : 'alert'} className={`space-y-1 rounded-lg border p-4 ${classes}`}>
-    <div className="flex items-center gap-2"><Icon className="size-4 shrink-0" aria-hidden="true" /><h2 className="font-medium">{title}</h2></div>
-    <div className="space-y-1 text-sm">{children}</div>
   </div>
 }
 
@@ -91,11 +81,8 @@ export function StorageNotices({ quota }: { quota: Pick<TenantQuota, 'subscripti
         <p>{tx("Kullanım limite ulaştı. Bu tenant'ın kota politikası yalnızca uyarır; yeni backup'lar kota nedeniyle engellenmiyor.")}</p>
         <p>{tx(dataSafe)}</p>
       </Notice>
-      : <Notice tone="error" title={tx("Depolama kotası doldu (OverQuota)")}>
-        <p>{tx("Kullanılan ve rezerve edilen alan limite ulaştığı için yeni backup'lar başlatılamıyor (quota_exceeded).")}</p>
-        <p>{tx(dataSafe)}</p>
-        <p>{tx("Yer açmak için eski backup'ları silebilir ya da daha büyük bir plan için platform yöneticinizle iletişime geçebilirsiniz.")}</p>
-      </Notice>)}
+      : <ErrorNotice title={tx("Depolama kotası doldu (OverQuota)")} what={tx("Kullanılan ve rezerve edilen alan limite ulaştığı için yeni backup'lar başlatılamıyor (quota_exceeded).")} dataImpact={tx(dataSafe)}
+        action={tx("Yer açmak için eski backup'ları silebilir ya da daha büyük bir plan için platform yöneticinizle iletişime geçebilirsiniz.")} />)}
     {(quota.state === 'Warning' || quota.state === 'Critical') && <Notice tone="info" title={quota.state === 'Critical' ? tx('Kapasite kritik seviyede') : tx('Kapasite dolmaya yaklaşıyor')}>
       <p>{tx("Politika eşikleri: Warning %")}{quota.warningThreshold}{tx(", Critical %")}{quota.criticalThreshold}{tx(". Limite ulaşıldığında yeni backup'lar engellenebilir; mevcut backup'lar korunur.")}</p>
     </Notice>}

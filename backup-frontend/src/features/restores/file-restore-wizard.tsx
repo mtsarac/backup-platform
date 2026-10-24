@@ -4,14 +4,13 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { ApiError } from '@/lib/api/client'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { inputClass, selectClass } from '@/features/platform/styles'
 import { FilePathList, validFilePath, validFilePaths } from '@/features/backup-jobs/file-path-list'
 import type { BackupArtifact } from '@/features/artifacts/types'
 import { useRestore, useStartRestore, useStartRestorePrecheck } from './hooks'
 import { PrecheckResults } from './precheck-results'
-import { restoreErrorMessage, restoreFailureMessage } from './presentation'
 import type { RestoreTargetsResponse, RestoreView, StartRestorePrecheckVariables, StartRestoreVariables } from './types'
 
 const localTarget = { host: 'localhost', port: null, integratedSecurity: true, databaseCredentialReference: null, encrypt: true, trustServerCertificate: false }
@@ -110,7 +109,7 @@ export function FileRestoreWizard({ tenantId, artifact, targets }: { tenantId: s
           <option value="">{tx('Agent seçin')}</option>
           {targets.agents.map(item => <option key={item.agentId} value={item.agentId} disabled={!item.canRestore || !item.canPrecheck || !item.sourceEligible || (original && item.agentId !== originalAgent?.agentId)}>{item.hostName ?? item.agentId}</option>)}
         </select>}</Field>
-        {agent && !eligible && <Notice tone="error">{restoreFailureMessage(agent.rejectionCode)}</Notice>}
+        {agent && !eligible && <ErrorNotice failureCode={agent.rejectionCode} scope="restore" />}
         <fieldset className="flex flex-wrap gap-4">
           <legend className="mb-2 text-sm font-medium">{tx('Geri yükleme konumu')}</legend>
           <label className="flex items-center gap-2"><input type="radio" name={`${id}-location`} checked={original} disabled={!originalAgent} onChange={() => { if (originalAgent) { setLocation('original'); setAgentId(originalAgent.agentId); setConfirmation('') } }} />{tx('Özgün konum')}</label>
@@ -144,10 +143,10 @@ export function FileRestoreWizard({ tenantId, artifact, targets }: { tenantId: s
         <Fact label={tx('Dosya ve manifest bütünlüğü (SHA-256)')}>{tx('Zorunlu')}</Fact>
       </Facts>
     </Section>
-    {precheckError != null && <Notice tone="error">{restoreErrorMessage(precheckError)}</Notice>}
-    {current && query.error && <Notice tone="error">{restoreErrorMessage(query.error)}</Notice>}
+    {precheckError != null && <ErrorNotice error={precheckError} scope="restore" />}
+    {current && query.error && <ErrorNotice error={query.error} scope="restore" />}
     {result && <Section title={tx('Ön Kontrol (Precheck) Sonuçları')}><PrecheckResults fileArchive data={result} failed={failed} passed={passed} onRecheck={() => void check(true)} recheckDisabled={busy || !valid} /></Section>}
-    {executionError != null && <Notice tone="error">{restoreErrorMessage(executionError)}</Notice>}
+    {executionError != null && <ErrorNotice error={executionError} scope="restore" />}
     <div className="flex flex-wrap justify-end gap-3">
       <Button type="button" variant="outline" disabled={!valid || busy} onClick={() => void check()}>{startPrecheck.isPending ? tx('Ön Kontrol Başlatılıyor…') : tx('Ön Kontrolü Çalıştır →')}</Button>
       <Button type="button" variant={overwrite ? 'destructive' : 'default'} disabled={!valid || !passed || busy} onClick={() => void restore()}>{startRestore.isPending ? tx('Geri Yükleme Başlatılıyor…') : tx('Dosyaları geri yükle')}</Button>

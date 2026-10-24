@@ -1,24 +1,7 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { Badge } from '@/components/ui/badge'
 import { Fact } from '@/components/ui/section'
-import { breakGlassStatusLabels, formatLabels, policyShortLabels, recipientLabels, wrapKeyStateLabels } from './labels'
-import type { ArtifactEncryption, BreakGlassStatus, EncryptionPolicy, WrapKeyState } from './types'
-
-export function PolicyBadge({ policy }: { policy: EncryptionPolicy | undefined }) {
-  useLanguage()
-  const value = policy ?? 'Off'
-  return <Badge tone={value === 'Off' ? 'neutral' : 'success'}>{policyShortLabels[value]}</Badge>
-}
-export function WrapKeyStateBadge({ state }: { state: WrapKeyState }) {
-  useLanguage()
-  const meta = wrapKeyStateLabels[state]
-  return <Badge dot tone={meta.tone}>{meta.label}</Badge>
-}
-export function BreakGlassStatusBadge({ status }: { status: BreakGlassStatus }) {
-  useLanguage()
-  const meta = breakGlassStatusLabels[status]
-  return <Badge dot tone={meta.tone}>{meta.label}</Badge>
-}
+import { formatLabels, recipientLabels } from './labels'
+import type { ArtifactEncryption } from './types'
 
 /** Short key ids are enough to match a key against the ceremony log; the full id stays in the title. */
 export function KeyId({ value }: { value: string }) {

@@ -61,7 +61,7 @@ describe('break-glass dual control', () => {
     vi.mocked(api.getBreakGlassDownloadStatus).mockResolvedValue({ sessionId: 's1', state: 'Ready', transferredBytes: 0 })
     mount(makeBreakGlass({ status: 'Approved', isRequester: true, canApprove: false, canDownload: true }))
     fireEvent.click(screen.getByRole('button', { name: 'Çözülmüş dosyayı indir' }))
-    expect(await screen.findByText('İndirme bağlantısı güvenli değil. Yeni bir istek açın.')).toBeInTheDocument()
+    expect(await screen.findByText('İndirme bağlantısı güvenli değil.')).toBeInTheDocument()
     expect(click).not.toHaveBeenCalled()
   })
 

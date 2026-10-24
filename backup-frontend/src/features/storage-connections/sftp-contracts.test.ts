@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@/lib/api/client'
 import { activeSecretFields, buildConfiguration, buildSecretValues, configurationComplete, initialFieldValues, secretsComplete } from './descriptor-values'
-import { connectionErrorMessage, testMessage } from './labels'
+import { testMessage } from './labels'
 import { connectionOptions } from './job-connection-picker-utils'
 import { makeConnection, makeProvider } from './test-fixtures'
 import type { ConfigField, SecretField } from './types'
+import { errorMessage } from '@/lib/api/failure-messages'
 
 describe('SFTP frontend contracts and behaviors', () => {
   const configFields: ConfigField[] = [
@@ -69,8 +70,8 @@ describe('SFTP frontend contracts and behaviors', () => {
   })
 
   it('words rotation and in-use errors cleanly', () => {
-    expect(connectionErrorMessage(new ApiError(409, { error: 'rotation_test_failed' }))).toMatch(/Yeni kimlik bilgisi veya sunucu parmak izi/)
-    expect(connectionErrorMessage(new ApiError(409, { error: 'connection_in_use' }))).toMatch(/kullanılıyor/)
+    expect(errorMessage(new ApiError(409, { error: 'rotation_test_failed' }), 'storageConnection')).toMatch(/Yeni kimlik bilgisi veya sunucu parmak izi/)
+    expect(errorMessage(new ApiError(409, { error: 'connection_in_use' }), 'storageConnection')).toMatch(/kullanılıyor/)
   })
 
   it('formats connectionOptions for shared picker with and without tenant name', () => {

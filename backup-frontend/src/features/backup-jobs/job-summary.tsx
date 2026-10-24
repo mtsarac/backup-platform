@@ -4,9 +4,9 @@ import { Button } from '@/components/ui/button'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { jobSteps, scheduleLabel } from '@/features/backup-jobs/job-wizard-model'
 import type { BackupConfiguration, RetentionPolicy, RetryPolicy, Schedule } from '@/features/backup-jobs/types'
-import { formatSeconds } from '@/features/backups/presentation'
 import { policyLabels } from '@/features/artifact-encryption/labels'
 import type { ConnectionView } from '@/features/storage-connections/types'
+import { formatSeconds } from '@/lib/format'
 
 export interface JobSummaryProps {
   name: string; agentLabel: string; enabled: boolean; configuration: BackupConfiguration

@@ -3,16 +3,16 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { RefreshCw, RotateCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
-import { agentDate } from '@/features/agents/format'
 import { accountingModeLabels, enforcementModeLabels, scopeLabels } from '@/features/storage/labels'
 import { QuotaSummary, StandingBadge } from '@/features/storage/quota-summary'
 import { platformPaths } from '@/features/platform/paths'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { usePlatformTenantQuota, useRebuildUsage, useReconcileUsage } from './hooks'
+import { formatDateTime } from '@/lib/format'
 
 export function TenantStorageSection({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
   useLanguage()
@@ -96,9 +96,9 @@ export function TenantStorageSection({ tenantId, tenantName }: { tenantId: strin
               </Facts></div>
             </details>
 
-            {!quota.newBackupsAllowed && <Notice tone="error">{tx("Yeni backup başlatma engellendi (red kodu:")}{' '}<code>{quota.denialCode ?? 'bilinmiyor'}</code>).</Notice>}
+            {!quota.newBackupsAllowed && <ErrorNotice what={tx("Yeni yedekleme başlatma engellendi.")} dataImpact={tx("Mevcut yedekler silinmedi ve geri yüklenebilir.")} action={tx("Kota ve abonelik durumunu gözden geçirin.")} technical={[{ label: tx("Red kodu"), value: quota.denialCode ?? tx("bilinmiyor") }]} />}
 
-            <div className="text-xs text-text-muted">{tx("Son hesaplama zamanı:")}{' '}{agentDate(quota.calculatedAt)}
+            <div className="text-xs text-text-muted">{tx("Son hesaplama zamanı:")}{' '}{formatDateTime(quota.calculatedAt, tx('Henüz bildirilmedi'))}
             </div>
           </div>
         )}

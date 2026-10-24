@@ -5,7 +5,6 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
-import { agentDate } from '@/features/agents/format'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { PlatformQueryState } from '../platform-query-state'
 import { AssignPlanDialog } from './assign-plan-dialog'
@@ -15,8 +14,9 @@ import { StorageLimitText } from './storage-limit-text'
 import { subscriptionActions } from './subscription-actions'
 import { SubscriptionHistory } from './subscription-history'
 import { assignedByLabel, overrideLabel, sourceLabel } from './subscription-labels'
-import { SubscriptionStatusPill } from './subscription-presentation'
 import type { Subscription } from './types'
+import { formatDateTime } from '@/lib/format'
+import { StatusPill } from '@/components/data/status-pill'
 
 type Dialog = 'assign' | 'suspend' | 'resume' | 'override' | null
 
@@ -26,12 +26,12 @@ function Current({ subscription }: { subscription: Subscription }) {
   const override = subscription.storageLimitOverride
   return <Facts columns={3}>
     <Fact label="Plan"><span className="font-medium">{subscription.planName}</span></Fact>
-    <Fact label={tx("Durum")}><SubscriptionStatusPill status={subscription.status} /></Fact>
+    <Fact label={tx("Durum")}><StatusPill domain="subscription" status={subscription.status} /></Fact>
     <Fact label={tx("Etkin depolama limiti")}><StorageLimitText bytes={effective.unlimited ? null : effective.bytes} /><div className="text-xs text-text-muted">{tx("Kaynak:")}{' '}{sourceLabel(effective.source)}</div></Fact>
     <Fact label={tx("Plan limiti")}><StorageLimitText bytes={subscription.planStorageLimitBytes} /></Fact>
     <Fact label={tx("Override")}>{override.kind === 'limited' && override.bytes !== null ? <StorageLimitText bytes={override.bytes} /> : overrideLabel(override)}</Fact>
-    <Fact label={tx("Başlangıç")}>{agentDate(subscription.startsAt)}</Fact>
-    <Fact label={tx("Bitiş")}>{subscription.endsAt ? agentDate(subscription.endsAt) : tx('Süresiz')}</Fact>
+    <Fact label={tx("Başlangıç")}>{formatDateTime(subscription.startsAt, tx('Henüz bildirilmedi'))}</Fact>
+    <Fact label={tx("Bitiş")}>{subscription.endsAt ? formatDateTime(subscription.endsAt, tx('Henüz bildirilmedi')) : tx('Süresiz')}</Fact>
     <Fact label={tx("Atayan")}>{assignedByLabel(subscription)}</Fact>
   </Facts>
 }
@@ -59,7 +59,7 @@ export function SubscriptionSection({ tenantId, tenantName }: { tenantId: string
             <Current subscription={subscription} />
             {subscription.status === 'Expired' && <Notice tone="warning">{tx("Abonelik süresi doldu. Yeni bir plan atayabilirsiniz.")}</Notice>}
           </div>
-          : <EmptyState title={tx("Abonelik yok")}>{tx("Bu tenant için henüz bir plan atanmadı.")}</EmptyState>)}
+          : <EmptyState message={tx("Bu tenant için henüz bir plan atanmadı.")} />)}
       </PlatformQueryState>
     </Section>
     {subscription && <SubscriptionHistory tenantId={tenantId} />}

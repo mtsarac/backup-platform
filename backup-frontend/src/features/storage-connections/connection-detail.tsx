@@ -5,18 +5,18 @@ import { QueryState } from '@/components/data/query-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { Tabs } from '@/components/ui/tabs'
-import { agentDate } from '@/features/agents/format'
-import { formatCapacity, formatExactBytes } from '@/features/storage/format'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { ConnectionActions } from './connection-actions'
-import { CapabilityChips, HealthBadge, OwnershipBadge, SecretStatus } from './connection-parts'
+import { CapabilityChips, HealthBadge, SecretStatus } from './connection-parts'
 import { useTenantConnectionCapacity, useProbeTenantConnectionCapacity, useTenantConnectionOps, useTenantConnections, useTenantProviders } from './hooks'
 import { configurationSummary, connectionHealth, disableEffects, enableEffect, executionLocationLabel, testMessage, testModeLabel, topologyLabel } from './labels'
 import type { ConnectionView, ProviderDescriptor } from './types'
+import { formatBytes, formatDateTime } from '@/lib/format'
+import { StatusPill } from '@/components/data/status-pill'
 
 const tabs = [
   { value: 'overview', get label() { return tx("Genel bakış") } },
@@ -33,10 +33,10 @@ function HealthNotice({ connection }: { connection: ConnectionView }) {
   const test = connection.lastTest
   if (health.key === 'disabled') return <Notice tone="warning" title={tx("Bu hedef devre dışı")}>{tx("Yeni backup başlatılamaz. Mevcut backup'lar indirilebilir ve geri yüklenebilir kalır.")}</Notice>
   if (health.key === 'reauthorize') return <Notice tone="warning" title={tx("Google hesabının yeniden yetkilendirilmesi gerekiyor")}>{tx("Kimlik bilgisi sekmesinden hesabı yeniden bağlayın; bağlanana kadar bu hedefe erişen işlemler başarısız olabilir.")}</Notice>
-  if (health.key === 'failed' && test) return <Notice tone="error" title={tx("Son test başarısız")}>{testMessage(test)} <span className="text-text-muted">({agentDate(test.testedAt)})</span></Notice>
+  if (health.key === 'failed' && test) return <ErrorNotice title={tx("Son test başarısız")} what={testMessage(test)} dataImpact={tx("Yeni yedekler bu depolamaya yazılamayabilir; mevcut yedekleriniz silinmedi.")} action={tx("Ayarları düzeltip bağlantıyı yeniden test edin.")} technical={[{ label: tx("Test zamanı"), value: formatDateTime(test.testedAt, tx('Henüz bildirilmedi')) }]} />
   if (health.key === 'untested') return <Notice tone="info" title={tx("Bağlantı henüz test edilmedi")}>{tx("Çalıştığından emin olmak için “Test et” düğmesini kullanın.")}</Notice>
   if (health.key === 'agent-side' && test) return <Notice tone="info" title={tx("Bu hedef Agent tarafında denetlenir")}>{testMessage(test)}</Notice>
-  if (test) return <Notice tone="success" title={tx("Bağlantı sağlıklı")}>{tx("Son test")}{' '}{agentDate(test.testedAt)}{' '}{tx("tarihinde başarılı oldu.")}</Notice>
+  if (test) return <Notice tone="success" title={tx("Bağlantı sağlıklı")}>{tx("Son test")}{' '}{formatDateTime(test.testedAt, tx('Henüz bildirilmedi'))}{' '}{tx("tarihinde başarılı oldu.")}</Notice>
   return null
 }
 
@@ -59,8 +59,8 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
       title={
         <span className="flex items-center gap-2">
           <span>{tx("Depolama Kapasitesi")}</span>
-          {isCritical && <Badge tone="error">{tx("Kritik")}</Badge>}
-          {isWarning && <Badge tone="warning">{tx("Uyarı")}</Badge>}
+          {isCritical && <StatusPill level="urgent">{tx("Kritik")}</StatusPill>}
+          {isWarning && <StatusPill level="attention">{tx("Uyarı")}</StatusPill>}
         </span>
       }
       description={tx("Fiziksel disk ve kota durumu.")}
@@ -93,18 +93,18 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
         <div className="space-y-4">
           <Facts columns={3}>
             <Fact label={tx("Toplam Alan")}>
-              <span className="text-lg font-semibold text-text-heading" title={formatExactBytes(capacity.totalBytes!)}>
-                {formatCapacity(capacity.totalBytes!)}
+              <span className="text-lg font-semibold text-text-heading" title={formatBytes(capacity.totalBytes!)}>
+                {formatBytes(capacity.totalBytes!)}
               </span>
             </Fact>
             <Fact label={tx("Kullanılan Alan")}>
-              <span className="text-lg font-semibold text-text-heading" title={capacity.usedBytes != null ? formatExactBytes(capacity.usedBytes) : undefined}>
-                {capacity.usedBytes != null ? formatCapacity(capacity.usedBytes) : '—'}
+              <span className="text-lg font-semibold text-text-heading" title={capacity.usedBytes != null ? formatBytes(capacity.usedBytes) : undefined}>
+                {capacity.usedBytes != null ? formatBytes(capacity.usedBytes) : '—'}
               </span>
             </Fact>
             <Fact label={tx("Boş Alan")}>
-              <span className="text-lg font-semibold text-text-heading" title={capacity.freeBytes != null ? formatExactBytes(capacity.freeBytes) : undefined}>
-                {capacity.freeBytes != null ? formatCapacity(capacity.freeBytes) : '—'}
+              <span className="text-lg font-semibold text-text-heading" title={capacity.freeBytes != null ? formatBytes(capacity.freeBytes) : undefined}>
+                {capacity.freeBytes != null ? formatBytes(capacity.freeBytes) : '—'}
               </span>
             </Fact>
           </Facts>
@@ -123,7 +123,7 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
           </div>
 
           <p className="text-xs text-text-muted">
-            {tx("Son sorgulama: {0}", { "0": agentDate(capacity.reportedAt) })}
+            {tx("Son sorgulama: {0}", { "0": formatDateTime(capacity.reportedAt, tx('Henüz bildirilmedi')) })}
           </p>
         </div>
       ) : !awaitingAgent && !notMeasurable && capacity?.status !== 'CapacityUnavailable' ? (
@@ -144,10 +144,10 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
               <th scope="col" className="p-2">{tx("Durum")}</th>
             </tr></thead>
             <tbody>{capacity.history.map((measurement, index) => <tr key={`${measurement.reportedAt}-${index}`} className="border-t border-border">
-              <td className="p-2">{agentDate(measurement.reportedAt)}</td>
-              <td className="p-2">{measurement.totalBytes == null ? '—' : formatCapacity(measurement.totalBytes)}</td>
-              <td className="p-2">{measurement.usedBytes == null ? '—' : formatCapacity(measurement.usedBytes)}</td>
-              <td className="p-2">{measurement.freeBytes == null ? '—' : formatCapacity(measurement.freeBytes)}</td>
+              <td className="p-2">{formatDateTime(measurement.reportedAt, tx('Henüz bildirilmedi'))}</td>
+              <td className="p-2">{measurement.totalBytes == null ? '—' : formatBytes(measurement.totalBytes)}</td>
+              <td className="p-2">{measurement.usedBytes == null ? '—' : formatBytes(measurement.usedBytes)}</td>
+              <td className="p-2">{measurement.freeBytes == null ? '—' : formatBytes(measurement.freeBytes)}</td>
               <td className="p-2">{measurement.status === 'Critical' ? tx("Kritik") : measurement.status === 'Warning' ? tx("Uyarı") : measurement.status === 'Available' ? tx("Kullanılabilir") : tx("Kapasite bilgisi alınamadı")}</td>
             </tr>)}</tbody>
           </table>
@@ -170,12 +170,12 @@ function Overview({ connection, descriptor, total }: { connection: ConnectionVie
     <HealthNotice connection={connection} />
     <Section title={tx("Depolama ve kullanım")}>
       <Facts columns={3}>
-        <Fact label={tx("Saklanan veri")}><span title={formatExactBytes(connection.storedBytes)} className="text-lg font-semibold text-text-heading">{formatCapacity(connection.storedBytes)}</span></Fact>
+        <Fact label={tx("Saklanan veri")}><span title={formatBytes(connection.storedBytes)} className="text-lg font-semibold text-text-heading">{formatBytes(connection.storedBytes)}</span></Fact>
         <Fact label={tx("Replica")}><span className="text-lg font-semibold text-text-heading">{connection.replicaCount.toLocaleString(currentLocale())}</span></Fact>
         <Fact label={tx("Tenant'taki payı")}>{tx('%{0}', { '0': share.toLocaleString(currentLocale()) })}</Fact>
         <Fact label={tx("Kota kapsamı")}><code>{connection.quotaScope}</code></Fact>
-        <Fact label={tx("Oluşturulma")}>{agentDate(connection.createdAt)}</Fact>
-        <Fact label={tx("Son güncelleme")}>{agentDate(connection.updatedAt)}</Fact>
+        <Fact label={tx("Oluşturulma")}>{formatDateTime(connection.createdAt, tx('Henüz bildirilmedi'))}</Fact>
+        <Fact label={tx("Son güncelleme")}>{formatDateTime(connection.updatedAt, tx('Henüz bildirilmedi'))}</Fact>
       </Facts>
     </Section>
     <CapacitySection connection={connection} />
@@ -254,7 +254,7 @@ export function ConnectionDetail() {
 
   return <>
     <PageHeader crumbs={crumbs} title={connection.name} description={connection.providerDisplayName}
-      meta={<><HealthBadge connection={connection} /><OwnershipBadge ownership={connection.ownership} />{connection.isDefault && <Badge tone="accent">{tx("Varsayılan")}</Badge>}</>}
+      meta={<><HealthBadge connection={connection} /><StatusPill domain="ownership" status={connection.ownership} />{connection.isDefault && <Badge tone="accent">{tx("Varsayılan")}</Badge>}</>}
       actions={<ConnectionActions connection={connection} descriptor={descriptor} ops={ops} show={['test']} />} />
     <Tabs idPrefix="connection" label={tx("Bağlantı bölümleri")} value={active} items={visibleTabs} onChange={(value) => setParams(value === 'overview' ? {} : { tab: value }, { replace: true })} />
     <div role="tabpanel" id={`connection-panel-${active}`} aria-labelledby={`connection-tab-${active}`} className="space-y-5">

@@ -1,8 +1,8 @@
-import { Badge } from '@/components/ui/badge'
+import { StatusPill } from '@/components/data/status-pill'
 import { Section } from '@/components/ui/section'
-import { formatTimestamp } from '@/features/backups/presentation'
 import { tx, useLanguage } from '@/lib/i18n'
 import { useBackupHealth } from './health'
+import { formatDateTime } from '@/lib/format'
 
 const reasons: Record<string, string> = {
   schedule_unavailable: 'Zamanlama olmadığı için yedek güncelliği değerlendirilemiyor.',
@@ -21,15 +21,13 @@ const reasons: Record<string, string> = {
   capacity_available: 'Depolama hedefleri %80 altında.',
 }
 const labels = { freshness: 'Yedek güncelliği', replication: 'Doğrulanmış kopyalar', restoreVerification: 'İzole geri yükleme testi', storageCapacity: 'Depolama kapasitesi' } as const
-const states = { Healthy: 'Sağlıklı', Degraded: 'Dikkat gerektiren', Critical: 'Kritik' } as const
-const tones = { Healthy: 'success', Degraded: 'warning', Critical: 'error' } as const
 
 export function BackupHealthCard({ jobId }: { jobId: string }) {
   useLanguage()
   const query = useBackupHealth(jobId)
   const health = query.data
   return <Section title={tx('Yedekleme sağlığı')} description={tx('Sağlık durumu yalnızca bilgilendirir; yedeklemeleri engellemez.')}
-    actions={health && !query.error ? <Badge tone={tones[health.state]} dot>{tx(states[health.state])}</Badge> : undefined}>
+    actions={health && !query.error ? <StatusPill domain="backupHealth" status={health.state} /> : undefined}>
     {query.isPending ? <p role="status" className="text-sm text-text-muted">{tx('Sağlık bilgisi yükleniyor…')}</p>
       : query.error || !health ? <p role="alert" className="text-sm text-error">{tx('Sağlık bilgisi alınamadı.')}</p>
       : <div className="space-y-4">
@@ -45,7 +43,7 @@ export function BackupHealthCard({ jobId }: { jobId: string }) {
             </div>
           })}
         </dl>
-        <p className="text-xs text-text-muted">{tx('Değerlendirme zamanı:')}{' '}{formatTimestamp(health.evaluatedAt)}</p>
+        <p className="text-xs text-text-muted">{tx('Değerlendirme zamanı:')}{' '}{formatDateTime(health.evaluatedAt)}</p>
       </div>}
   </Section>
 }

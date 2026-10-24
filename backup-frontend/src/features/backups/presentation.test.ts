@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { canCancelRun, canRetryRun, dateFilterInstant, formatDuration, isActiveRun, runStatuses, runStatusLabels, triggerLabel } from './presentation'
+import { canCancelRun, canRetryRun, dateFilterInstant, isActiveRun, runStatuses, triggerLabel } from './presentation'
+import { formatDuration } from '@/lib/format'
+import { statusLabel } from '@/lib/status'
 
 afterEach(() => vi.useRealTimers())
 
 describe('backup state presentation', () => {
   it('distinguishes all run states, polling eligibility and actionable states', () => {
-    expect(new Set(runStatuses.map((status) => runStatusLabels[status])).size).toBe(runStatuses.length)
+    expect(new Set(runStatuses.map((status) => statusLabel('general', status))).size).toBe(runStatuses.length)
     for (const status of ['Pending', 'Leased', 'Running', 'RetryPending', 'CancellationRequested']) expect(isActiveRun(status)).toBe(true)
     for (const status of ['Succeeded', 'Failed', 'Cancelled', 'AgentLost']) expect(isActiveRun(status)).toBe(false)
     expect(canCancelRun('Running')).toBe(true)

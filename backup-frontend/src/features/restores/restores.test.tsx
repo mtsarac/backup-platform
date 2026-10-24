@@ -323,7 +323,7 @@ describe('RestoreDetailPage', () => {
     expect(screen.getByRole('article', { name: '1. deneme' })).toBeInTheDocument()
     expect(screen.getByRole('progressbar', { name: '1. deneme ilerlemesi' })).toHaveAttribute('aria-valuenow', '65.5')
     fireEvent.click(screen.getByRole('tab', { name: 'Doğrulama sonucu' }))
-    expect(screen.getByText('Doğrulama sonucu henüz bildirilmedi.')).toBeInTheDocument()
+    expect(screen.getByText(/Doğrulama sonucu henüz bildirilmedi/)).toBeInTheDocument()
   })
 })
 

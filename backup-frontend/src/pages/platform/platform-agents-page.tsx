@@ -6,8 +6,6 @@ import { Button } from '@/components/ui/button'
 import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
 import { PageHeader } from '@/components/ui/page-header'
 import { platformCrumb } from '@/features/platform/crumbs'
-import { agentDate } from '@/features/agents/format'
-import { AgentState } from '@/features/agents/presentation'
 import { CapabilityReporting } from '@/features/platform/capability-reporting'
 import { usePlatformAgents } from '@/features/platform/hooks'
 import { platformPaths } from '@/features/platform/paths'
@@ -16,6 +14,8 @@ import { SearchForm } from '@/features/platform/search-form'
 import { linkClass } from '@/features/platform/styles'
 import type { AgentConnectivity, AgentLifecycle, PlatformAgent } from '@/features/platform/types'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
+import { formatDateTime } from '@/lib/format'
+import { StatusPill } from '@/components/data/status-pill'
 
 const connectivityValues: AgentConnectivity[] = ['online', 'offline', 'unknown']
 const lifecycleValues: AgentLifecycle[] = ['PendingEnrollment', 'Active', 'Disabled', 'Revoked']
@@ -37,12 +37,12 @@ export function PlatformAgentsPage() {
   const columns: Column<PlatformAgent>[] = [
     { key: 'tenant', header: tx('Tenant'), wrap: true, render: (agent) => <Link className={linkClass} to={platformPaths.tenant(agent.tenantId)}>{agent.tenantName}</Link> },
     { key: 'agent', header: tx('Agent'), wrap: true, render: (agent) => <Link className={linkClass} to={platformPaths.agent(agent.tenantId, agent.agentId)}>{agent.hostName ?? tx('Adsız agent')}</Link> },
-    { key: 'status', header: tx('Yaşam döngüsü'), render: (agent) => <AgentState value={agent.status} /> },
-    { key: 'connectivity', header: tx('Bağlantı'), render: (agent) => <AgentState value={agent.connectivity} /> },
+    { key: 'status', header: tx('Yaşam döngüsü'), render: (agent) => <StatusPill domain="agent" status={agent.status} /> },
+    { key: 'connectivity', header: tx('Bağlantı'), render: (agent) => <StatusPill domain="agent" status={agent.connectivity} /> },
     { key: 'os', header: tx('İşletim sistemi'), wrap: true, render: (agent) => <div><div>{agent.platform}</div><div className="text-xs text-text-muted">{agent.osDescription ?? tx('Bildirilmedi')}</div></div> },
     { key: 'version', header: tx('Yazılım / protokol'), render: (agent) => <div><div>{agent.agentVersion ?? tx('Bildirilmedi')}</div><div className="text-xs text-text-muted">{tx("Protokol:")}{' '}{agent.protocolVersion ?? tx('Bildirilmedi')}</div></div> },
     { key: 'capabilities', header: tx('Yetenekler'), render: (agent) => <CapabilityReporting agent={agent} /> },
-    { key: 'lastSeenAt', header: tx('Son görülme'), render: (agent) => agentDate(agent.lastSeenAt) },
+    { key: 'lastSeenAt', header: tx('Son görülme'), render: (agent) => formatDateTime(agent.lastSeenAt, tx('Henüz bildirilmedi')) },
   ]
   return <div className="space-y-6">
     <PageHeader crumbs={[platformCrumb]} title={tx("Agents")} description={tx("Tüm tenant'lardaki Agent'lar. Yaşam döngüsü ve bağlantı durumu ayrı gösterilir; bu görünüm salt okunurdur.")} />

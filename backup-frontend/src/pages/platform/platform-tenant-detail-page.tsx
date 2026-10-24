@@ -2,7 +2,6 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { KpiCard } from '@/components/data/kpi-card'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { Field } from '@/components/ui/field'
@@ -10,7 +9,6 @@ import { Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
 import { Tabs } from '@/components/ui/tabs'
-import { agentDate } from '@/features/agents/format'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
 import { AgentBreakdown } from '@/features/platform/agent-breakdown'
 import { AuditTable } from '@/features/platform/audit-table'
@@ -29,6 +27,8 @@ import { PlatformTenantConnections } from '@/features/storage-connections/platfo
 import { ApiError } from '@/lib/api/client'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { WrapKeysSection } from '@/features/artifact-encryption/wrap-keys-section'
+import { formatDateTime } from '@/lib/format'
+import { StatusPill } from '@/components/data/status-pill'
 
 const tabs = [
   { value: 'overview', get label() { return tx("Genel") } }, { value: 'members', get label() { return tx("Üyeler") } },
@@ -66,7 +66,7 @@ function EnrollmentSection({ tenant }: { tenant: PlatformTenantDetail }) {
   const enabled = tenant.enrollment.enabled
   return <Section title={tx("Agent kayıt politikası")} description={tx("Kaydı kapatmak mevcut Agent'ları iptal etmez; yalnızca yeni kayıtları engeller.")}
     actions={<Button role="switch" aria-checked={enabled} aria-label={tx("Yeni Agent kayıtlarına izin ver")} variant="outline" onClick={() => { change.reset(); setConfirmOpen(true) }}>{enabled ? tx('Kaydı kapat') : tx('Kaydı aç')}</Button>}>
-    <p className="text-[0.9375rem]"><Badge tone={enabled ? 'success' : 'neutral'} dot>{enabled ? tx('Yeni Agent kaydı açık') : tx('Yeni Agent kaydı kapalı')}</Badge> <span className="ml-1 text-text-muted">{tenant.enrollment.changedAt ? tx("Son değişiklik: {0}", { "0": agentDate(tenant.enrollment.changedAt) }) : tx('Politika henüz hiç değiştirilmedi.')}</span></p>
+    <p className="text-[0.9375rem]"><StatusPill level={enabled ? 'safe' : 'neutral'}>{enabled ? tx('Yeni Agent kaydı açık') : tx('Yeni Agent kaydı kapalı')}</StatusPill> <span className="ml-1 text-text-muted">{tenant.enrollment.changedAt ? tx("Son değişiklik: {0}", { "0": formatDateTime(tenant.enrollment.changedAt, tx('Henüz bildirilmedi')) }) : tx('Politika henüz hiç değiştirilmedi.')}</span></p>
     <ConfirmDialog open={confirmOpen} onClose={() => setConfirmOpen(false)} title={enabled ? tx('Agent kaydı kapatılsın mı?') : tx('Agent kaydı açılsın mı?')}
       description={enabled ? tx("“{0}” tenant'ında yeni Agent kayıtları engellenecek. Mevcut Agent'lar etkilenmez.", { "0": tenant.name }) : tx("“{0}” tenant'ında yeni Agent kayıtlarına izin verilecek.", { "0": tenant.name })}
       confirmLabel={enabled ? tx('Kaydı kapat') : tx('Kaydı aç')} pending={change.isPending} error={change.error ? errorMessage(change.error) : undefined}
@@ -88,7 +88,7 @@ function Header({ tenant }: { tenant: PlatformTenantDetail }) {
   useLanguage()
   return <PageHeader crumbs={[platformCrumb, { label: tx('Tenants'), to: platformPaths.tenants }]} title={tenant.name}
     meta={<>
-      <Badge tone={tenant.enrollment.enabled ? 'success' : 'neutral'} dot>{tenant.enrollment.enabled ? tx('Kayıt açık') : tx('Kayıt kapalı')}</Badge>
+      <StatusPill level={tenant.enrollment.enabled ? 'safe' : 'neutral'}>{tenant.enrollment.enabled ? tx('Kayıt açık') : tx('Kayıt kapalı')}</StatusPill>
     </>}
     actions={<Link className={buttonVariants({ variant: 'outline' })} to={platformPaths.agents(tenant.tenantId)}>{tx("Bu tenant'ın Agent'ları")}</Link>} />
 }

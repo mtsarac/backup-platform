@@ -2,11 +2,11 @@ import { useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { tx } from '@/lib/i18n'
 import { Button } from '@/components/ui/button'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { DatabaseLoginFields } from '@/features/backup-jobs/database-login-fields'
 import type { DatabaseLogin } from '@/features/backup-jobs/types'
 import { storeDatabaseLogin } from './api'
-import { errorMessage } from '@/lib/api/failure-messages'
+import { type ErrorDescription, describeError } from '@/lib/api/failure-messages'
 
 interface Props {
   tenantId: string
@@ -24,7 +24,7 @@ interface Props {
 export function StoredLoginPanel({ tenantId, agentId, idPrefix, reference, onStored }: Props) {
   const [login, setLogin] = useState<DatabaseLogin | null>(null)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<ErrorDescription | null>(null)
   const save = async () => {
     if (!login || !agentId) return
     setSaving(true)
@@ -34,7 +34,7 @@ export function StoredLoginPanel({ tenantId, agentId, idPrefix, reference, onSto
       onStored(result.reference)
       setLogin(null)
     } catch (failure) {
-      setError(errorMessage(failure))
+      setError(describeError(failure))
     } finally {
       setSaving(false)
     }
@@ -45,6 +45,6 @@ export function StoredLoginPanel({ tenantId, agentId, idPrefix, reference, onSto
       {saving && <Loader2 aria-hidden="true" className="animate-spin" />}{tx("Girişi kaydet")}
     </Button>
     {reference && !login && <Notice tone="success">{tx("Bu hedef için kayıtlı bir veritabanı girişi seçili.")}</Notice>}
-    {error && <Notice tone="error">{error}</Notice>}
+    {error && <ErrorNotice {...error} />}
   </div>
 }

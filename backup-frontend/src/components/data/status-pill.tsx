@@ -1,33 +1,34 @@
-import { tx, useLanguage } from '@/lib/i18n'
-import { Badge } from '@/components/ui/badge'
+import type { ReactNode } from 'react'
+import { AlertTriangle, CheckCircle2, Circle, Clock, Info, LoaderCircle, OctagonAlert, type LucideIcon } from 'lucide-react'
+import { useLanguage } from '@/lib/i18n'
+import { levelLabel, statusMeta, type StatusDomain, type StatusLevel } from '@/lib/status'
+import { cn } from '@/lib/utils'
 
-const statuses: Record<string, { label: string; tone: 'neutral' | 'success' | 'warning' | 'error' | 'info' }> = {
-  Pending: { get label() { return tx("Sırada bekliyor") }, tone: 'neutral' },
-  Leased: { get label() { return tx("Agent görevi aldı") }, tone: 'info' },
-  Running: { get label() { return tx("Çalışıyor") }, tone: 'info' },
-  RetryPending: { get label() { return tx("Yeniden denenecek") }, tone: 'warning' },
-  Paused: { get label() { return tx('Duraklatıldı') }, tone: 'warning' },
-  CancellationRequested: { get label() { return tx("İptal isteniyor") }, tone: 'warning' },
-  Succeeded: { get label() { return tx("Başarılı") }, tone: 'success' },
-  Failed: { get label() { return tx("Başarısız") }, tone: 'error' },
-  Cancelled: { get label() { return tx("İptal edildi") }, tone: 'neutral' },
-  AgentLost: { get label() { return tx("Agent bağlantısı kaybedildi") }, tone: 'error' },
-  Active: { get label() { return tx("Etkin") }, tone: 'success' },
-  Disabled: { get label() { return tx("Devre dışı") }, tone: 'warning' },
-  Revoked: { get label() { return tx("Erişimi iptal edildi") }, tone: 'error' },
-  online: { get label() { return tx("Çevrimiçi") }, tone: 'success' },
-  offline: { get label() { return tx("Çevrimdışı") }, tone: 'neutral' },
-  unknown: { get label() { return tx("Bağlantı bilinmiyor") }, tone: 'neutral' },
-  Available: { get label() { return tx("Kullanılabilir") }, tone: 'success' },
-  Quarantined: { get label() { return tx("Karantinada · sahiplik incelemesi gerekli") }, tone: 'warning' },
-  DeletePending: { get label() { return tx("Silme bekliyor") }, tone: 'warning' },
-  DeleteFailed: { get label() { return tx("Silme başarısız") }, tone: 'error' },
-  Deleted: { get label() { return tx("Silindi") }, tone: 'neutral' },
-  Deleting: { get label() { return tx("Fiziksel silme sürüyor") }, tone: 'warning' },
-  Verified: { get label() { return tx("Doğrulandı") }, tone: 'success' },
+const levels: Record<StatusLevel, { icon: LucideIcon; className: string }> = {
+  safe: { icon: CheckCircle2, className: 'bg-success-subtle text-success' },
+  attention: { icon: AlertTriangle, className: 'bg-warning-subtle text-warning' },
+  urgent: { icon: OctagonAlert, className: 'bg-error-subtle text-error' },
+  running: { icon: LoaderCircle, className: 'bg-info-subtle text-info' },
+  pending: { icon: Clock, className: 'bg-muted text-text-muted' },
+  info: { icon: Info, className: 'bg-info-subtle text-info' },
+  neutral: { icon: Circle, className: 'bg-muted text-text-muted' },
 }
-export function StatusPill({ status }: { status: string }) {
+
+type Props = { className?: string } & (
+  | { status: string; domain?: StatusDomain; level?: undefined; children?: undefined }
+  | { level: StatusLevel; children?: ReactNode; status?: undefined; domain?: undefined }
+)
+
+/**
+ * Every status is colour + icon + text, so it reads without colour. Look a status up in the dictionary (`status`, optionally in a
+ * `domain`), or give a `level` with the text of a computed state; a bare level says its own word ("Güvende", "Dikkat", "Acil").
+ */
+export function StatusPill({ status, domain = 'general', level, children, className }: Props) {
   useLanguage()
-  const meta = statuses[status] ?? { label: status, tone: 'neutral' as const }
-  return <Badge tone={meta.tone} dot>{tx(meta.label)}</Badge>
+  const meta = level ? { level, label: undefined } : statusMeta(domain, status)
+  const { icon: Icon, className: tone } = levels[meta.level]
+  return <span className={cn('inline-flex max-w-full items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium leading-5', tone, className)}>
+    <Icon aria-hidden="true" className="size-3.5 shrink-0" />
+    {children ?? meta.label ?? levelLabel(meta.level)}
+  </span>
 }

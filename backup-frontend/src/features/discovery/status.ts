@@ -4,61 +4,7 @@ import type { DiscoveryAgentStatus, DiscoveryDatabase, DiscoveryInstanceSummary 
 
 export const DISCOVERY_CAPABILITY = 'discovery.database-inventory'
 export const SCAN_POLL_MS = 3000
-export type Tone = 'neutral' | 'success' | 'warning' | 'error' | 'info'
-type Meta = { label: string; tone: Tone }
-
-export const reachabilityMeta: Record<string, Meta> = {
-  Reachable: { get label() { return tx("Erişilebilir") }, tone: 'success' },
-  Unreachable: { get label() { return tx("Erişilemiyor") }, tone: 'error' },
-  Unknown: { get label() { return tx("Bilinmiyor") }, tone: 'neutral' },
-}
-export const accessMeta: Record<string, Meta> = {
-  CredentialsRequired: { get label() { return tx("Kimlik bilgisi gerekli") }, tone: 'warning' },
-  Authenticated: { get label() { return tx("Kimlik doğrulandı") }, tone: 'success' },
-  AuthenticationFailed: { get label() { return tx("Kimlik doğrulaması başarısız") }, tone: 'error' },
-  Unreachable: { get label() { return tx("Bağlanılamadı") }, tone: 'error' },
-  Error: { get label() { return tx("Hata") }, tone: 'error' },
-  Unknown: { get label() { return tx("Bilinmiyor") }, tone: 'neutral' },
-}
-export const presenceMeta: Record<string, Meta> = {
-  Present: { get label() { return tx("Mevcut") }, tone: 'success' },
-  Missing: { get label() { return tx("Kayıp") }, tone: 'neutral' },
-}
-export const lastChangeMeta: Record<string, Meta> = {
-  Discovered: { get label() { return tx("Yeni") }, tone: 'info' },
-  Changed: { get label() { return tx("Değişti") }, tone: 'warning' },
-  Recovered: { get label() { return tx("Yeniden erişilebilir") }, tone: 'success' },
-  Unreachable: { get label() { return tx("Erişilemiyor") }, tone: 'error' },
-  Missing: { get label() { return tx("Kayboldu") }, tone: 'neutral' },
-  Reappeared: { get label() { return tx("Yeniden göründü") }, tone: 'info' },
-}
-export const fullBackupMeta: Record<string, Meta> = {
-  Supported: { get label() { return tx("Full Backup destekleniyor") }, tone: 'success' },
-  Unsupported: { get label() { return tx("Full Backup desteklenmiyor") }, tone: 'error' },
-  Unknown: { get label() { return tx("Full Backup durumu bilinmiyor") }, tone: 'neutral' },
-}
-export const databaseStateMeta: Record<string, Meta> = {
-  Online: { get label() { return tx("Çevrimiçi") }, tone: 'success' },
-  Offline: { get label() { return tx("Çevrimdışı") }, tone: 'warning' },
-  Unknown: { get label() { return tx("Bilinmiyor") }, tone: 'neutral' },
-}
 export const sourceLabels: Record<string, string> = { get Service() { return tx("Servis") }, get Listener() { return tx("Dinleyici (port)") }, Docker: 'Docker' }
-export const sourceStatusMeta: Record<string, Meta> = {
-  Scanned: { get label() { return tx("Tarandı") }, tone: 'success' },
-  Unavailable: { get label() { return tx("Kullanılamıyor") }, tone: 'warning' },
-  Disabled: { get label() { return tx("Kapalı") }, tone: 'neutral' },
-  Failed: { get label() { return tx("Başarısız") }, tone: 'error' },
-}
-export const outcomeMeta: Record<string, Meta> = {
-  Completed: { get label() { return tx("Tamamlandı") }, tone: 'success' },
-  Partial: { get label() { return tx("Kısmen tamamlandı") }, tone: 'warning' },
-  Failed: { get label() { return tx("Başarısız") }, tone: 'error' },
-}
-export const scanStateMeta: Record<string, Meta> = {
-  Idle: { get label() { return tx("Boşta") }, tone: 'neutral' },
-  Requested: { get label() { return tx("Tarama istendi") }, tone: 'info' },
-  Running: { get label() { return tx("Taranıyor") }, tone: 'info' },
-}
 export const engineLabels: Record<string, string> = { mssql: 'MSSQL', postgres: 'PostgreSQL' }
 
 // Reason codes are agent-produced fixed codes; unknown ones are shown as the bare code, never as free text.

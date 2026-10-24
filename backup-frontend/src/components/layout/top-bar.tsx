@@ -5,11 +5,11 @@ import { A11yToolbar } from './a11y-toolbar'
 import { LanguageSwitcher } from './language-switcher'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice } from '@/components/ui/notice'
 import { useAuth } from '@/features/auth/use-auth'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { useTheme } from '@/hooks/use-theme'
-import { errorMessage } from '@/lib/api/failure-messages'
+import { type ErrorDescription, describeError } from '@/lib/api/failure-messages'
 import { useTranslation } from '@/lib/i18n'
 
 /** Shared by the tenant and platform shells: context on the left, account and display controls on the right. */
@@ -17,9 +17,9 @@ export function ShellBar({ onMenuToggle, context, badges }: { onMenuToggle: () =
   const { logout, user } = useAuth()
   const { resolvedTheme, toggleTheme } = useTheme()
   const { t } = useTranslation()
-  const [error, setError] = useState('')
+  const [error, setError] = useState<ErrorDescription | null>(null)
   const [busy, setBusy] = useState(false)
-  async function signOut() { setBusy(true); setError(''); try { await logout() } catch (error) { setError(errorMessage(error)) } finally { setBusy(false) } }
+  async function signOut() { setBusy(true); setError(null); try { await logout() } catch (error) { setError(describeError(error)) } finally { setBusy(false) } }
   return <>
     <header className="sticky top-0 z-10 flex min-h-16 min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border bg-surface/95 px-4 py-2 backdrop-blur sm:px-6">
       <div className="flex min-w-0 items-center gap-3 max-sm:w-full">
@@ -35,7 +35,7 @@ export function ShellBar({ onMenuToggle, context, badges }: { onMenuToggle: () =
         <Button variant="outline" size="sm" disabled={busy} onClick={() => { void signOut() }}><LogOut aria-hidden="true" className="size-4" />{t('shell.signOut')}</Button>
       </div>
     </header>
-    {error && <div className="px-4 pt-3 sm:px-6"><Notice tone="error">{tx(error)}</Notice></div>}
+    {error && <div className="px-4 pt-3 sm:px-6"><ErrorNotice {...error} /></div>}
   </>
 }
 

@@ -6,20 +6,21 @@ import { QueryState } from '@/components/data/query-state'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { Tabs } from '@/components/ui/tabs'
 import { ArtifactDetails } from '@/features/artifacts/artifact-details'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
 import { useBackup, useBackupActions } from '@/features/backups/hooks'
-import { canCancelRun, canRetryRun, formatDuration, formatSeconds, formatTimestamp, isActiveRun, progressStageLabel, retryStateLabels, triggerLabel } from '@/features/backups/presentation'
+import { canCancelRun, canRetryRun, isActiveRun, progressStageLabel, retryStateLabels, triggerLabel } from '@/features/backups/presentation'
 import { ReplicationBadge, ReplicationSection } from '@/features/backups/replication'
 import { SizeAnomalyBadge, SizeAnomalyComparison } from '@/features/backups/size-anomaly'
 import type { BackupAttempt, BackupRun } from '@/features/backups/types'
 import { linkClass } from '@/features/platform/styles'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
+import { formatDateTime, formatDuration, formatSeconds } from '@/lib/format'
 
 type Tab = 'summary' | 'attempts' | 'replication' | 'timing'
 
@@ -81,7 +82,7 @@ function BackupDetail({ id }: { id: string }) {
         crumbs={[{ label: tx('Backup Run\'lar'), to: `/tenants/${tenantId}/backup-runs` }, { label: run?.jobName ?? tx('Backup Run') }]}
         title={run?.jobName ?? tx('Backup Run')}
         description={run ? `${run.configuration.database} · ${run.agentName ?? 'Agent'}` : undefined}
-        meta={run && <><StatusPill status={run.status} /><ReplicationBadge replication={run.replication} /><SizeAnomalyBadge run={run} /><span className="text-sm text-text-muted">{triggerLabel(run.triggerType)} · {formatTimestamp(run.startedAt ?? run.createdAt)}</span></>}
+        meta={run && <><StatusPill status={run.status} /><ReplicationBadge replication={run.replication} /><SizeAnomalyBadge run={run} /><span className="text-sm text-text-muted">{triggerLabel(run.triggerType)} · {formatDateTime(run.startedAt ?? run.createdAt)}</span></>}
         actions={run && canOperate && <>
           {canRetryRun(run.status) && <Button disabled={busy} onClick={() => void perform('retry')}>{actions.retry.isPending ? tx('Sıraya alınıyor…') : tx('Yeniden dene')}</Button>}
           {(run.status === 'Running' || run.status === 'Leased') && <Button disabled={busy || run.pauseRequested} onClick={() => void perform('pause')}>{actions.pause.isPending || run.pauseRequested ? tx('İletiliyor…') : tx('Duraklat')}</Button>}
@@ -95,10 +96,10 @@ function BackupDetail({ id }: { id: string }) {
             description={tx("Agent'a iptal isteği iletilir. Agent işlemi durdurana kadar çalıştırma iptal edilmiş sayılmaz; yarım kalan yedek kullanılamaz.")}
             pending={actions.cancel.isPending} error={actions.cancel.error ? errorMessage(actions.cancel.error) : undefined} onConfirm={() => void perform('cancel')} />
           {notice && run.status !== 'Succeeded' && !(run.status === 'Cancelled' && notice.startsWith(tx('İptal isteği'))) && <Notice tone="success">{notice}</Notice>}
-          {actions.retry.error && <Notice tone="error">{errorMessage(actions.retry.error)}</Notice>}
-          {actions.cancel.error && !confirmCancel && <Notice tone="error">{errorMessage(actions.cancel.error)}</Notice>}
-          {actions.pause.error && <Notice tone="error">{errorMessage(actions.pause.error)}</Notice>}
-          {actions.resume.error && <Notice tone="error">{errorMessage(actions.resume.error)}</Notice>}
+          {actions.retry.error && <ErrorNotice error={actions.retry.error} />}
+          {actions.cancel.error && !confirmCancel && <ErrorNotice error={actions.cancel.error} />}
+          {actions.pause.error && <ErrorNotice error={actions.pause.error} />}
+          {actions.resume.error && <ErrorNotice error={actions.resume.error} />}
           <Tabs label={tx("Backup Run bölümleri")} idPrefix="run" value={tab} onChange={setTab} items={tabs} />
           <div role="tabpanel" id={`run-panel-${tab}`} aria-labelledby={`run-tab-${tab}`} className="space-y-6">
             {tab === 'summary' && <>
@@ -112,7 +113,7 @@ function BackupDetail({ id }: { id: string }) {
                   <p className="text-text">{run.retry.lastFailureRetryable === false ? tx('Bu hata otomatik olarak yeniden denenmez. Elle yeniden deneme, kalan deneme hakkı ve işin çakışma politikasına bağlıdır.') : tx('Otomatik yeniden deneme sona erdi. Elle yeniden deneme, kalan deneme hakkı ve işin çakışma politikasına bağlıdır.')}</p>
                 </div>
               </Section>}
-              {run.status === 'RetryPending' && <Notice tone="warning">{tx("Otomatik yeniden deneme bekleniyor. Sonraki deneme:")}{' '}{formatTimestamp(run.retry.nextAttemptAt)}. {failureMessage(run.retry.lastFailureCode)}</Notice>}
+              {run.status === 'RetryPending' && <Notice tone="warning">{tx("Otomatik yeniden deneme bekleniyor. Sonraki deneme:")}{' '}{formatDateTime(run.retry.nextAttemptAt)}. {failureMessage(run.retry.lastFailureCode)}</Notice>}
               {run.status === 'CancellationRequested' && <Notice tone="warning">{tx("İptal istendi; çalıştırma henüz iptal edilmiş değildir. Ajan sonucu bildirdiğinde durum güncellenir.")}</Notice>}
               {run.status === 'Paused' && <Notice tone="warning">{run.pauseReason === 'PausedByNetworkError' ? tx('Ağ kesintisi nedeniyle aktarım duraklatıldı. Bağlantıyı kontrol edip Devam Et ile sürdürün.') : tx('Aktarım duraklatıldı. Hazırlanmış yedek korunur; Devam Et ile aynı baytlardan sürdürülür.')}</Notice>}
               {isActiveRun(run.status) && latest && <Section title={tx("Güncel deneme")} description={tx("{0}. deneme · {1}", { "0": latest.number, "1": progressStageLabel(latest.progressStage) })}><AttemptProgress attempt={latest} /></Section>}
@@ -124,23 +125,23 @@ function BackupDetail({ id }: { id: string }) {
                   <Fact label={tx("Yedek türü")}>{tx(run.backupType)}</Fact>
                   <Fact label={tx("Veritabanı motoru")}>{run.configuration.engine}</Fact>
                   <Fact label={tx("Deneme sayısı")}>{run.currentAttemptNumber} / {run.retry.maxAttempts}</Fact>
-                  <Fact label={tx("Başlangıç")}>{formatTimestamp(run.startedAt)}</Fact>
-                  <Fact label={tx("Bitiş")}>{formatTimestamp(run.completedAt)}</Fact>
+                  <Fact label={tx("Başlangıç")}>{formatDateTime(run.startedAt)}</Fact>
+                  <Fact label={tx("Bitiş")}>{formatDateTime(run.completedAt)}</Fact>
                   <Fact label={tx("Süre")}>{formatDuration(run.startedAt, run.completedAt)}</Fact>
                 </Facts>
               </Section>
             </>}
             {tab === 'attempts' && (run.attempts.length === 0
-              ? <div className="rounded-xl border border-border bg-surface"><EmptyState icon={History} title={tx("Henüz deneme oluşturulmadı.")} /></div>
+              ? <div className="rounded-xl border border-border bg-surface"><EmptyState icon={History} message={tx("Henüz deneme oluşturulmadı.")} /></div>
               : run.attempts.map((attempt) => <Section key={attempt.id} title={tx("{0}. deneme · {1}", { "0": attempt.number, "1": triggerLabel(attempt.trigger) })} actions={<><StatusPill status={attempt.status} /><ReplicationBadge replication={attempt.replication} /></>}>
                 <div className="space-y-4">
                   <Facts columns={3}>
-                    <Fact label={tx("Oluşturulma")}>{formatTimestamp(attempt.createdAt)}</Fact>
-                    <Fact label={tx("Başlangıç")}>{formatTimestamp(attempt.startedAt)}</Fact>
-                    <Fact label={tx("Bitiş")}>{formatTimestamp(attempt.completedAt)}</Fact>
+                    <Fact label={tx("Oluşturulma")}>{formatDateTime(attempt.createdAt)}</Fact>
+                    <Fact label={tx("Başlangıç")}>{formatDateTime(attempt.startedAt)}</Fact>
+                    <Fact label={tx("Bitiş")}>{formatDateTime(attempt.completedAt)}</Fact>
                     <Fact label={tx("Süre")}>{formatDuration(attempt.startedAt, attempt.completedAt)}</Fact>
                     <Fact label={tx("Aşama")}>{progressStageLabel(attempt.progressStage)}</Fact>
-                    <Fact label={tx("Son ilerleme")}>{formatTimestamp(attempt.progressAt)}</Fact>
+                    <Fact label={tx("Son ilerleme")}>{formatDateTime(attempt.progressAt)}</Fact>
                   </Facts>
                   <AttemptProgress attempt={attempt} />
                   {attempt.reasonCode && <div className="text-sm"><p className="text-error">{failureMessage(attempt.reasonCode)}</p><p className="mt-1 text-text-muted">{tx("Hata kodu:")}{' '}{attempt.reasonCode}</p>{attempt.retryable != null && <p className="mt-1 text-text-muted">{attempt.retryable ? tx('Otomatik yeniden denemeye uygun (politika sınırları içinde).') : tx('Otomatik yeniden denemeye uygun değil; elle yeniden deneme ayrı bir işlemdir.')}</p>}</div>}
@@ -154,20 +155,20 @@ function BackupDetail({ id }: { id: string }) {
             {tab === 'timing' && <>
               <Section title={tx("Zaman çizelgesi")}>
                 <Facts columns={3}>
-                  <Fact label={tx("Oluşturulma")}>{formatTimestamp(run.createdAt)}</Fact>
-                  <Fact label={tx("Planlanan zaman")}>{formatTimestamp(run.scheduledFor)}</Fact>
+                  <Fact label={tx("Oluşturulma")}>{formatDateTime(run.createdAt)}</Fact>
+                  <Fact label={tx("Planlanan zaman")}>{formatDateTime(run.scheduledFor)}</Fact>
                   <Fact label={tx("Planlama gecikmesi")}>{run.scheduleDelaySeconds == null ? '—' : formatSeconds(run.scheduleDelaySeconds)}</Fact>
-                  <Fact label={tx("Ajan alım son zamanı")}>{formatTimestamp(run.claimDeadline)}</Fact>
-                  <Fact label={tx("Başlangıç")}>{formatTimestamp(run.startedAt)}</Fact>
-                  <Fact label={tx("İptal isteği")}>{formatTimestamp(run.cancellationRequestedAt)}</Fact>
-                  <Fact label={tx("Bitiş")}>{formatTimestamp(run.completedAt)}</Fact>
+                  <Fact label={tx("Ajan alım son zamanı")}>{formatDateTime(run.claimDeadline)}</Fact>
+                  <Fact label={tx("Başlangıç")}>{formatDateTime(run.startedAt)}</Fact>
+                  <Fact label={tx("İptal isteği")}>{formatDateTime(run.cancellationRequestedAt)}</Fact>
+                  <Fact label={tx("Bitiş")}>{formatDateTime(run.completedAt)}</Fact>
                   <Fact label={tx("Süre")}>{formatDuration(run.startedAt, run.completedAt)}</Fact>
                 </Facts>
               </Section>
               <Section title={tx("Yeniden deneme ve saklama politikası")}>
                 <Facts columns={3}>
                   <Fact label={tx("Yeniden deneme durumu")}>{retryStateLabels[run.retry.state] ?? run.retry.state}</Fact>
-                  <Fact label={tx("Sonraki deneme")}>{formatTimestamp(run.retry.nextAttemptAt)}</Fact>
+                  <Fact label={tx("Sonraki deneme")}>{formatDateTime(run.retry.nextAttemptAt)}</Fact>
                   <Fact label={tx("Çakışma politikası")}>{run.retry.overlapPolicy === 'Skip' ? tx('Aktif iş varsa atla') : tx('Sıraya al')}</Fact>
                   <Fact label={tx("Yeniden deneme ilk gecikmesi")}>{formatSeconds(run.retry.policy.initialDelaySeconds)}</Fact>
                   <Fact label={tx("Yeniden deneme üst gecikmesi")}>{formatSeconds(run.retry.policy.maxDelaySeconds)}</Fact>
