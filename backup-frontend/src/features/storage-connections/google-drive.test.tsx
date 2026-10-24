@@ -79,7 +79,7 @@ describe('Google Drive storage destination', () => {
     vi.mocked(api.getTenantProviders).mockResolvedValue({ items: [googleDriveProvider] })
     vi.mocked(api.createTenantConnection).mockResolvedValue(connection)
     vi.mocked(api.getGoogleDriveAuthorizeUrl).mockResolvedValue({ authorizationUrl })
-    vi.mocked(api.testTenantConnection).mockResolvedValue({ connection, test: { status: 'Succeeded', code: 'ok', message: '', testedAt: '2026-10-24T12:00:00Z' } })
+    vi.mocked(api.testTenantConnection).mockResolvedValue({ connection, test: { status: 'Succeeded', code: 'ok', message: '', testedAt: '2026-10-24T12:00:00Z', durationMs: 12 } })
     const popup = { close: vi.fn() } as unknown as Window
     const open = vi.spyOn(window, 'open').mockReturnValue(popup)
     const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })

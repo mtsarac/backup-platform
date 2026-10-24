@@ -7064,4 +7064,5 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Sunucunun güvenlik parmak izi (SHA256)": {"tr":"Sunucunun güvenlik parmak izi (SHA256)","en":"Server security fingerprint (SHA256)"},
   "Çok satırlı anahtarın tamamını yapıştırın. Değiştirmek için yeniden yapıştırın veya girişi temizleyin.": {"tr":"Çok satırlı anahtarın tamamını yapıştırın. Değiştirmek için yeniden yapıştırın veya girişi temizleyin.","en":"Paste the entire multiline key. To replace it, paste again or clear the entry."},
   "Girişi temizle": {"tr":"Girişi temizle","en":"Clear entry"},
+  "Yetenek kodları": {"tr":"Yetenek kodları","en":"Capability codes"},
 }
