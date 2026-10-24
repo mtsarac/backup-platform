@@ -7,8 +7,9 @@ import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
 import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
-import { Fact, Facts, Section } from '@/components/ui/section'
-import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { Section } from '@/components/ui/section'
+import { TypedConfirmDialog } from '@/components/ui/confirm-dialog'
+import { TechnicalDetails } from '@/components/ui/technical-details'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { canCancelRestore, databaseStateLabel, isActiveRestore, restoreProgressPercent, restoreStageLabel, restoreStatuses, targetStateDescription, targetStateLabel } from '@/features/restores/presentation'
 import type { RestoreView } from '@/features/restores/types'
@@ -27,8 +28,8 @@ export function SupportRestoresTab({ session }: { session: SupportSession }) {
   const scope = supportScope(session, 'restores')
   const query = useSupportRestores(scope, { page, pageSize: PLATFORM_PAGE_SIZE, status: get('restoreStatus') })
   const columns: Column<RestoreView>[] = [
-    { key: 'database', header: tx('Yeni Database'), wrap: true, render: item => <button className="font-medium text-primary hover:underline" onClick={() => update({ restoreId: item.id, restoreArtifact: '' })}>{item.databaseName}</button> },
-    { key: 'source', header: tx('Kaynak Artifact'), wrap: true, render: item => item.sourceDatabaseName ?? item.artifactId },
+    { key: 'database', card: 'title', header: tx('Yeni veritabanı'), wrap: true, render: item => <button className="font-medium text-primary hover:underline" onClick={() => update({ restoreId: item.id, restoreArtifact: '' })}>{item.databaseName}</button> },
+    { key: 'source', header: tx('Kaynak veritabanı'), wrap: true, render: item => item.sourceDatabaseName ?? '—' },
     { key: 'target', header: tx('Hedef'), wrap: true, render: item => `${item.target.host}${item.target.port ? `:${item.target.port}` : ''}` },
     { key: 'status', card: 'status', header: tx('Durum'), render: item => <StatusPill status={item.status} /> },
     { key: 'progress', header: tx('İlerleme'), render: item => `${restoreStageLabel(item.progress.stage)} · ${restoreProgressPercent(item.progress.percent) ?? '—'}%` },
@@ -59,18 +60,25 @@ function SupportRestoreDetail({ session, id }: { session: SupportSession; id: st
   return <Section title={tx("Restore detayları")}>
     <div className="space-y-4">
     <SupportQueryState isPending={query.isPending} error={query.error || (!confirm && cancel.error)}>{restore && <>
-      <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-medium">{restore.databaseName}{' '}{tx("· NewDatabase")}</h3><StatusPill status={restore.status} /><Button variant="destructive" disabled={!mayCancel || cancel.isPending} onClick={() => { cancel.reset(); setConfirm(true) }}>{tx("Restore iptal et")}</Button></div>
-      <p className="break-words text-sm">{restore.target.host}{restore.target.port ? `:${restore.target.port}` : ''}{' '}{tx("· Agent")}{' '}<code className="break-all text-xs">{restore.agentId}</code></p>
+      <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-medium">{restore.databaseName}{' '}{tx("· yeni veritabanı")}</h3><StatusPill status={restore.status} /><Button variant="destructive" disabled={!mayCancel || cancel.isPending} onClick={() => { cancel.reset(); setConfirm(true) }}>{tx("Restore iptal et")}</Button></div>
+      <p className="break-words text-sm">{restore.target.host}{restore.target.port ? `:${restore.target.port}` : ''}</p>
       <ProgressBar label={tx("Restore ilerlemesi")} value={percent} />
       <p className="text-sm">{restoreStageLabel(restore.progress.stage)} · {percent === undefined ? tx('Yüzde bildirilmedi') : tx('%{0}', { '0': percent })} · {formatDateTime(restore.progress.at)}</p>
       <Notice tone="warning" title={tx("Hedef Database durumu")}><p>{targetStateLabel(restore.targetState)}</p><p>{targetStateDescription(restore.targetState)}</p>{restore.result && <p>{tx("Database durumu:")}{' '}{databaseStateLabel(restore.result.databaseState)}</p>}{['Failed', 'Cancelled', 'AgentLost'].includes(restore.status) && <p className="font-medium">{tx("Bu işlem durumu Database'in sağlıklı olduğunu göstermez. Elle kontrol ve müdahale gerekebilir.")}</p>}</Notice>
       {restore.failureCode && <ErrorNotice failureCode={restore.failureCode} scope="restore" />}
       {restore.cancellationRequestedAt && isActiveRestore(restore.status) && <Notice>{tx("İptal istendi. Agent sonucu ve hedef Database durumu bekleniyor.")}</Notice>}
-      <Facts columns={3}><Fact label={tx("Oluşturulma")}>{formatDateTime(restore.createdAt)}</Fact><Fact label={tx("Başlangıç")}>{formatDateTime(restore.startedAt)}</Fact><Fact label={tx("Bitiş")}>{formatDateTime(restore.completedAt)}</Fact></Facts>
+      <TechnicalDetails items={[
+        { label: tx('Geri yükleme kimliği'), value: restore.id },
+        { label: tx('Yedekleme bilgisayarı kimliği'), value: restore.agentId },
+        { label: tx('Yedek dosyası kimliği'), value: restore.artifactId },
+        { label: tx('Oluşturulma'), value: formatDateTime(restore.createdAt) },
+        { label: tx('Başlangıç'), value: formatDateTime(restore.startedAt) },
+        { label: tx('Bitiş'), value: formatDateTime(restore.completedAt) },
+      ]} />
       {restore.result && <p className="text-sm">{tx("Checksum doğrulandı:")}{' '}{restore.result.checksumVerified ? tx('Evet') : tx('Hayır')}{' '}{tx("· Backup doğrulandı:")}{' '}{restore.result.backupVerified ? tx('Evet') : tx('Hayır')}</p>}
       <h3 className="font-medium">{tx("Denemeler")}</h3>{restore.attempts.map(attempt => <div key={attempt.id} className="flex flex-wrap gap-3 text-sm">{attempt.number}{tx(". attempt")}<StatusPill status={attempt.status} /><span>{formatDateTime(attempt.startedAt)} → {formatDateTime(attempt.completedAt)}</span><span>{targetStateLabel(attempt.targetState)}</span>{attempt.failureCode && <span>{failureMessage(attempt.failureCode, 'restore')}</span>}</div>)}
     </>}</SupportQueryState>
-    <ConfirmDialog open={confirm && mayCancel} onClose={() => setConfirm(false)} title={tx("Geri yükleme iptal edilsin mi?")}
+    <TypedConfirmDialog name={restore?.databaseName ?? ''} open={confirm && mayCancel} onClose={() => setConfirm(false)} title={tx("Geri yükleme iptal edilsin mi?")}
       consequence={{
         what: tx("İptal isteği yedekleme bilgisayarına iletilir; veritabanı motoru anında durmayabilir. Hedef veritabanı kısmen geri yüklenmiş veya bilinmeyen durumda kalabilir."),
         who: tx("Hedef müşteri veritabanı etkilenir. İptal, veritabanının sağlıklı olduğunu garanti etmez."),

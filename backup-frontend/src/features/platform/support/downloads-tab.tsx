@@ -4,6 +4,7 @@ import { Pagination } from '@/components/data/pagination'
 import { StatusPill } from '@/components/data/status-pill'
 import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
+import { TechnicalDetails } from '@/components/ui/technical-details'
 import { bareListClass } from '@/features/platform/list-empty'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { failureMessage } from '@/lib/api/failure-messages'
@@ -20,7 +21,7 @@ export function SupportDownloadsTab({ session }: { session: SupportSession }) {
   const query = useSupportDownloads(scope, { page, pageSize: PLATFORM_PAGE_SIZE })
   const columns: Column<SupportDownload>[] = [
     { key: 'filename', card: 'title', header: tx('Dosya'), wrap: true, render: item => item.filename },
-    { key: 'artifact', header: tx('Artifact'), wrap: true, render: item => <div><button className="text-primary hover:underline" onClick={() => update({ tab: 'browser', view: 'artifacts', artifact: item.artifactId })}>{tx("Artifact ayrıntıları")}</button><p className="break-all font-mono text-xs text-text-muted">{item.artifactId}</p></div> },
+    { key: 'artifact', header: tx('Yedek dosyası'), wrap: true, render: item => <div className="space-y-2"><button className="text-primary hover:underline" onClick={() => update({ tab: 'browser', view: 'artifacts', artifact: item.artifactId })}>{tx("Yedek dosyası ayrıntıları")}</button><TechnicalDetails items={[{ label: tx('Yedek dosyası kimliği'), value: item.artifactId }]} /></div> },
     { key: 'state', card: 'status', header: tx('Durum'), render: item => <StatusPill status={item.state} /> },
     { key: 'bytes', header: tx('Aktarım / Boyut'), render: item => `${formatBytes(item.transferredBytes)} / ${formatBytes(item.sizeBytes)}` },
     { key: 'failure', header: tx('Sonuç'), wrap: true, render: item => item.failureCode ? failureMessage(item.failureCode) : '—' },
