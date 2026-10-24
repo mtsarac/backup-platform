@@ -4,13 +4,14 @@ import { Section } from '@/components/ui/section'
 import { QueryState } from '@/components/data/query-state'
 import { apiRequest, tenantPath } from '@/lib/api/client'
 import { currentLocale, tx, useLanguage } from '@/lib/i18n'
-import type { BackupJobHealth } from '@/features/backup-jobs/health'
+import type { BackupHealthState, BackupJobHealth } from '@/features/backup-jobs/health'
 import { formatBytes, formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 
 interface HealthSummary {
   totalJobs: number
   averageScore: number | null
+  state: BackupHealthState | null
   healthy: number
   degraded: number
   critical: number
