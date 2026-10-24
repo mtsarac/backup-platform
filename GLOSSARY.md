@@ -18,6 +18,10 @@ _Avoid_: DiskStats, StorageUsageRecord
 Composite operational health status (Healthy, Degraded, Critical) reflecting backup age, replication count, restore verification, and storage availability.
 _Avoid_: HealthScoreOnly, BackupStatusFlag
 
+**TenantHealthState**:
+The BackupHealthState of a whole tenant: the worst state among its backup jobs. A tenant with no backup jobs has no state.
+_Avoid_: AverageHealth, OverallScore
+
 **SizeAnomalyWarning**:
 An advisory warning generated when an artifact's physical size diverges significantly from its historical baseline without failing the backup attempt.
 _Avoid_: BackupFailure, SizeMismatchError, CorruptedSize
@@ -49,3 +53,27 @@ _Avoid_: HaltFlag, WaitStatus
 **AgentDirect**:
 Artifact payload I/O performed by the agent against SFTP, Google Drive, S3 or SMB. The backend brokers authorization, tasks, leases, quota and metadata; it is not an external-storage payload relay.
 _Avoid_: BackendRelay, ProxyUpload
+
+### User-Facing Names
+
+Plain-language labels shown in the interface in place of technical domain terms. The domain terms stay unchanged in code and APIs; only the displayed label differs.
+
+**Agent** (shown as "Yedekleme bilgisayarı"):
+The installed program on a customer machine that runs backups and moves payload to storage.
+_Avoid_: Ajan, Client in user-facing text
+
+**Artifact** (shown as "Yedek dosyası"):
+The stored output of one successful backup run.
+_Avoid_: Artifact in user-facing text
+
+**Backup run** (shown as "Yedekleme denemesi"):
+One execution of a backup job, successful or not.
+_Avoid_: Run, Çalıştırma in user-facing text
+
+**Discovery** (shown as "Veritabanı bulma"):
+Scanning an agent's machine for databases that can be backed up.
+_Avoid_: Keşif in user-facing text
+
+**Break-glass access** (shown as "Acil destek erişimi"):
+Time-limited access a platform operator is granted to a tenant's data to resolve an urgent support case.
+_Avoid_: Break-glass in user-facing text
