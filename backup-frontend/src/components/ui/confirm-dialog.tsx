@@ -20,6 +20,8 @@ interface ConfirmProps {
   onConfirm: () => void
   confirmLabel: string
   confirmDisabled?: boolean
+  /** Inputs the action needs (for example a value to set), shown under the consequences. */
+  children?: ReactNode
 }
 
 const isDescribed = (error: unknown): error is ErrorDescription => typeof error === 'object' && error !== null && 'dataImpact' in error
@@ -34,7 +36,7 @@ function Consequences({ consequence }: { consequence: Consequence }) {
 }
 
 /** The typed name lives inside the popup, so it is forgotten whenever the dialog closes. */
-function Body({ title, consequence, pending, error, errorScope, onConfirm, confirmLabel, confirmDisabled, name }: Omit<ConfirmProps, 'open' | 'onClose'> & { name?: string }) {
+function Body({ title, consequence, pending, error, errorScope, onConfirm, confirmLabel, confirmDisabled, children, name }: Omit<ConfirmProps, 'open' | 'onClose'> & { name?: string }) {
   const cancelRef = useRef<HTMLButtonElement>(null)
   const inputId = useId()
   const [typed, setTyped] = useState('')
@@ -44,6 +46,7 @@ function Body({ title, consequence, pending, error, errorScope, onConfirm, confi
     <Dialog.Title className="text-lg font-semibold text-text-heading">{title}</Dialog.Title>
     <Dialog.Description render={<div />} className="text-sm"><Consequences consequence={consequence} /></Dialog.Description>
     <form onSubmit={submit} className="space-y-4">
+      {children}
       {name !== undefined && <div className="space-y-1">
         <label htmlFor={inputId} className="block text-sm font-medium text-text-heading">{tx("Onaylamak için adı yazın: {0}", { "0": name })}</label>
         <input id={inputId} value={typed} onChange={event => setTyped(event.target.value)} disabled={pending} autoComplete="off" spellCheck={false} className="block min-h-11 w-full rounded-lg border border-border-strong/70 bg-surface px-3 py-2 font-mono text-text shadow-card disabled:opacity-60" />
