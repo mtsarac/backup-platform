@@ -1,16 +1,14 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { AlertCircle, CheckCircle2, Database, HardDrive, LayoutGrid, List, Monitor, Plus, ShieldAlert } from 'lucide-react'
-import { useState } from 'react'
+import { AlertCircle, CheckCircle2, Database, HardDrive, Monitor, Plus, ShieldAlert } from 'lucide-react'
 import { apiRequest, tenantPath } from '@/lib/api/client'
 import { failureMessage } from '@/lib/api/failure-messages'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { QueryState } from '@/components/data/query-state'
 import { StatusPill } from '@/components/data/status-pill'
 import { KpiCard } from '@/components/data/kpi-card'
-import { DataTable, type Column } from '@/components/data/data-table'
-import { Button } from '@/components/ui/button'
+import { DataList, type Column } from '@/components/data/data-list'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { ErrorNotice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
@@ -29,8 +27,6 @@ interface Dashboard {
   recentRuns: BackupRun[]
   upcomingJobs: BackupJob[]
 }
-
-const VIEW_KEY = 'backup-dashboard-view'
 
 const bannerTones = {
   error: { box: 'border-error/40 bg-error-subtle', text: 'text-error', icon: ShieldAlert },
@@ -64,14 +60,12 @@ export function DashboardPage() {
   const { tenantId, tenant, canAdmin } = useTenant()
   const query = useQuery({ queryKey: ['tenant', tenantId, 'dashboard'], queryFn: ({ signal }) => apiRequest<Dashboard>(tenantPath(tenantId, 'dashboard'), { signal }), refetchInterval: 15_000, refetchIntervalInBackground: false })
   const data = query.data
-  const [layout, setLayout] = useState<'table' | 'cards'>(() => localStorage.getItem(VIEW_KEY) === 'table' ? 'table' : 'cards')
-  const pickLayout = (next: 'table' | 'cards') => { localStorage.setItem(VIEW_KEY, next); setLayout(next) }
   const base = `/tenants/${tenantId}`
   const columns: Column<BackupRun>[] = [
     { key: 'job', header: tx('Job / Database'), wrap: true, render: run => <Link className="font-medium text-primary underline-offset-4 hover:underline" to={`${base}/backup-runs/${run.id}`}>{run.jobName} / {run.configuration.database}</Link> },
     { key: 'agent', header: tx('Agent'), render: run => run.agentName ?? '—' },
     { key: 'date', header: tx('Başlangıç'), render: run => formatDateTime(run.startedAt ?? run.createdAt) },
-    { key: 'status', header: tx('Durum'), render: run => <span className="inline-flex flex-wrap items-center gap-2"><StatusPill status={run.status} /><ReplicationBadge replication={run.replication} /></span> },
+    { key: 'status', header: tx('Durum'), card: 'status', render: run => <span className="inline-flex flex-wrap items-center gap-2"><StatusPill status={run.status} /><ReplicationBadge replication={run.replication} /></span> },
     { key: 'attention', header: tx('Bilgi'), wrap: true, render: run => run.reasonCode ? failureMessage(run.reasonCode) : run.status === 'RetryPending' ? tx('Yeni attempt bekleniyor.') : run.status === 'CancellationRequested' ? tx('Agent iptali henüz tamamlamadı.') : '—' },
   ]
   const replicationShort = data?.runs.replicationInsufficientLast24Hours ?? 0
@@ -95,13 +89,9 @@ export function DashboardPage() {
           <section className="min-w-0 space-y-3" aria-labelledby="recent-runs-heading">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 id="recent-runs-heading" className="text-base font-semibold text-text-heading">{tx("Son backups")}</h2>
-              <div className="flex items-center gap-2">
-                <Button variant={layout === 'cards' ? 'default' : 'outline'} size="sm" aria-pressed={layout === 'cards'} onClick={() => pickLayout('cards')}><LayoutGrid />{tx("Kartlar")}</Button>
-                <Button variant={layout === 'table' ? 'default' : 'outline'} size="sm" aria-pressed={layout === 'table'} onClick={() => pickLayout('table')}><List />{tx("Liste")}</Button>
-                <Link className="text-sm font-medium text-primary underline-offset-4 hover:underline" to={`${base}/backup-runs`}>{tx("Tüm history")}</Link>
-              </div>
+              <Link className="text-sm font-medium text-primary underline-offset-4 hover:underline" to={`${base}/backup-runs`}>{tx("Tüm history")}</Link>
             </div>
-            <DataTable layout={layout} rows={data.recentRuns} columns={columns} keyExtractor={run => run.id} emptyMessage={tx("Bu tenant için henüz backup kaydı yok.")} />
+            <DataList rows={data.recentRuns} columns={columns} keyExtractor={run => run.id} emptyMessage={tx("Bu tenant için henüz backup kaydı yok.")} />
           </section>
           <div className="space-y-4">
             <Section title={tx("Agent bağlantı durumu ve yaşam döngüsü")}><dl className="divide-y divide-border">

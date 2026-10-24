@@ -2,8 +2,8 @@ import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, DatabaseBackup } from 'lucide-react'
-import { DataTable } from '@/components/data/data-table'
-import type { Column } from '@/components/data/data-table'
+import { DataList } from '@/components/data/data-list'
+import type { Column } from '@/components/data/data-list'
 import { Pagination } from '@/components/data/pagination'
 import { QueryState } from '@/components/data/query-state'
 import { StatusPill } from '@/components/data/status-pill'
@@ -17,7 +17,7 @@ import { useTenant } from '@/features/tenancy/use-tenant'
 import { useBackupJobs, useRunBackupJob, useToggleBackupJob } from '@/features/backup-jobs/hooks'
 import { scheduleLabel } from '@/features/backup-jobs/job-wizard-model'
 import type { BackupJob } from '@/features/backup-jobs/types'
-import { linkClass } from '@/features/platform/styles'
+import { linkClass } from '@/components/ui/form-styles'
 import { ApiError } from '@/lib/api/client'
 import { formatDateTime, formatSeconds } from '@/lib/format'
 
@@ -40,8 +40,8 @@ export function BackupJobsPage() {
     { key: 'name', header: tx('İş adı'), wrap: true, render: job => <span className="space-y-1"><Link to={`${base}/backup-jobs/${job.id}/edit`} className={`block font-medium ${linkClass}`}>{job.name}</Link><StatusPill status={job.enabled ? 'Active' : 'Disabled'} /></span> },
     { key: 'agent', header: tx('Agent'), wrap: true, render: job => job.agentName || tx('Agent adı bulunamadı') },
     { key: 'database', header: tx('Database'), wrap: true, render: job => job.configuration.database },
-    { key: 'encryption', header: tx('Şifreleme'), render: job => <StatusPill domain="encryptionPolicy" status={job.configuration.encryptionPolicy ?? 'Off'} /> },
-    { key: 'schedule', header: tx('Zamanlama'), wrap: true, render: job => {
+    { key: 'encryption', card: 'hidden', header: tx('Şifreleme'), render: job => <StatusPill domain="encryptionPolicy" status={job.configuration.encryptionPolicy ?? 'Off'} /> },
+    { key: 'schedule', card: 'hidden', header: tx('Zamanlama'), wrap: true, render: job => {
       const next = job.nextOccurrenceAt ?? job.schedule?.nextOccurrenceAt
       return <span className="space-y-0.5">
         <span className="block">{scheduleLabel(job.schedule)}{job.schedule && !job.schedule.enabled && tx(' (kapalı)')}</span>
@@ -50,7 +50,7 @@ export function BackupJobsPage() {
       </span>
     } },
     { key: 'last', header: tx('Son çalıştırma'), wrap: true, render: job => job.lastRun ? <Link to={`${base}/backup-runs/${job.lastRun.id}`} className="space-y-1 text-primary hover:underline"><StatusPill status={job.lastRun.status} /><span className="block text-sm">{formatDateTime(job.lastRun.createdAt)}</span></Link> : <span className="text-text-muted">{tx("Henüz çalıştırılmadı")}</span> },
-    { key: 'actions', header: tx('İşlemler'), wrap: true, render: job => canOperate ? <div className="flex flex-wrap items-center gap-2">
+    { key: 'actions', card: 'actions', header: tx('İşlemler'), wrap: true, render: job => canOperate ? <div className="flex flex-wrap items-center gap-2">
       <Button size="sm" disabled={run.isPending || !job.enabled} onClick={event => { if (event.detail > 1) return; setActionError(null); setStartedRun(undefined); void run.run(job.id).then(result => { if (result) setStartedRun(result.id) }).catch(setActionError) }}>{tx("Şimdi çalıştır")}</Button>
       <Link to={`${base}/backup-jobs/${job.id}/edit`} className={linkClass}>{tx("Düzenle")}</Link>
       <Button size="sm" variant="outline" disabled={toggle.isPending} onClick={() => { setActionError(null); toggle.mutate({ id: job.id, enabled: !job.enabled }, { onError: setActionError }) }}>{job.enabled ? tx('Devre dışı bırak') : tx('Etkinleştir')}</Button>
@@ -74,7 +74,7 @@ export function BackupJobsPage() {
           <FilterField label={tx("İş, Agent veya Database ara")}><input type="search" value={search} aria-label={tx("İş, Agent veya Database ara")} onChange={event => { setSearch(event.target.value); setPage(1) }} className={filterControlClass} /></FilterField>
           <FilterField label={tx("Durum")}><select value={state} aria-label={tx("Durum")} onChange={event => { setState(event.target.value as typeof state); setPage(1) }} className={filterControlClass}><option value="all">{tx("Tümü")}</option><option value="enabled">{tx("Etkin")}</option><option value="disabled">{tx("Devre dışı")}</option></select></FilterField>
         </Filters>
-        <DataTable rows={filtered.slice((current - 1) * pageSize, current * pageSize)} columns={columns} keyExtractor={job => job.id} emptyMessage={tx("Aramanızla eşleşen iş yok.")} />
+        <DataList rows={filtered.slice((current - 1) * pageSize, current * pageSize)} columns={columns} keyExtractor={job => job.id} emptyMessage={tx("Aramanızla eşleşen iş yok.")} />
         {filtered.length > pageSize && <Pagination label={tx("Yedekleme işi sayfaları")} page={current} pageSize={pageSize} totalCount={filtered.length} onPageChange={setPage} />}
       </div>}
     </QueryState>

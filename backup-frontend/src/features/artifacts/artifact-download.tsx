@@ -1,7 +1,7 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
-import { selectClass } from '@/features/platform/styles'
+import { selectClass } from '@/components/ui/form-styles'
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'

@@ -1,15 +1,15 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { DataTable, type Column } from '@/components/data/data-table'
+import { DataList, type Column } from '@/components/data/data-list'
 import { Button } from '@/components/ui/button'
 import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
-import { bareTableClass } from '@/features/platform/list-empty'
+import { bareListClass } from '@/features/platform/list-empty'
 import { platformPaths } from '@/features/platform/paths'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
-import { linkClass } from '@/features/platform/styles'
+import { linkClass } from '@/components/ui/form-styles'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { useWrapKeyActions, useWrapKeys } from './hooks'
 import { KeyId } from './presentation'
@@ -26,11 +26,11 @@ export function WrapKeysSection({ tenantId, tenantName }: { tenantId: string; te
   const [retiring, setRetiring] = useState<WrapKey | null>(null)
   const columns: Column<WrapKey>[] = [
     { key: 'version', header: tx('Sürüm'), render: key => <span className="font-medium tabular-nums">v{key.version}</span> },
-    { key: 'keyId', header: tx('Anahtar kimliği'), render: key => <KeyId value={key.keyId} /> },
-    { key: 'state', header: tx('Durum'), render: key => <StatusPill domain="wrapKey" status={key.state} /> },
+    { key: 'keyId', card: 'hidden', header: tx('Anahtar kimliği'), render: key => <KeyId value={key.keyId} /> },
+    { key: 'state', card: 'status', header: tx('Durum'), render: key => <StatusPill domain="wrapKey" status={key.state} /> },
     { key: 'created', header: tx('Oluşturulma'), render: key => formatDateTime(key.createdAt) },
     { key: 'artifacts', header: tx('Bu anahtarla şifreli Backup'), render: key => <span className="tabular-nums">{key.artifactCount}</span> },
-    { key: 'actions', header: tx('İşlemler'), render: key => key.state === 'Retired' ? <span className="text-text-muted">—</span>
+    { key: 'actions', card: 'actions', header: tx('İşlemler'), render: key => key.state === 'Retired' ? <span className="text-text-muted">—</span>
       : <Button size="sm" variant="outline" disabled={key.state === 'Active'} title={key.state === 'Active' ? tx('Etkin anahtar önce döndürülmelidir.') : undefined} onClick={() => { retire.reset(); setRetiring(key) }}>{tx("Emekli et")}</Button> },
   ]
   return <Section title={tx("Şifreleme anahtarları")} description={tx("Tenant wrap key (TWK) sürümleri. Döndürme yeni Backup'lar için yeni anahtarı etkin yapar; eski anahtar yalnızca çözme için kalır ve eski dosyalar okunmaya devam eder.")} flush className="overflow-hidden"
@@ -41,7 +41,7 @@ export function WrapKeysSection({ tenantId, tenantName }: { tenantId: string; te
     <PlatformQueryState isPending={keys.isPending} error={keys.error}>
       {keys.data && <div className="space-y-3">
         {keys.data.items.length === 0 && <div className="px-5 pt-4"><Notice tone="info">{tx("Bu tenant henüz şifreli yedek almadı; ilk şifreli çalıştırmada etkin bir anahtar oluşturulur.")}</Notice></div>}
-        {keys.data.items.length > 0 && <DataTable className={bareTableClass} rows={keys.data.items} columns={columns} keyExtractor={key => String(key.version)} />}
+        {keys.data.items.length > 0 && <DataList className={bareListClass} rows={keys.data.items} columns={columns} keyExtractor={key => String(key.version)} />}
       </div>}
     </PlatformQueryState>
     <ConfirmDialog open={rotating} onClose={() => setRotating(false)} title={tx("Anahtar döndürülsün mü?")}

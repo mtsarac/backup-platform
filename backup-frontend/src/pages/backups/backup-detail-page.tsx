@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { History } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { QueryState } from '@/components/data/query-state'
+import { ProgressBar } from '@/components/data/progress-bar'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -17,7 +18,7 @@ import { canCancelRun, canRetryRun, isActiveRun, progressStageLabel, retryStateL
 import { ReplicationBadge, ReplicationSection } from '@/features/backups/replication'
 import { SizeAnomalyBadge, SizeAnomalyComparison } from '@/features/backups/size-anomaly'
 import type { BackupAttempt, BackupRun } from '@/features/backups/types'
-import { linkClass } from '@/features/platform/styles'
+import { linkClass } from '@/components/ui/form-styles'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
 import { formatDateTime, formatDuration, formatSeconds } from '@/lib/format'
@@ -29,9 +30,7 @@ function AttemptProgress({ attempt }: { attempt: BackupAttempt }) {
   const percent = attempt.progressPercent == null ? undefined : Math.min(100, Math.max(0, attempt.progressPercent))
   return <div className="space-y-2">
     <p className="text-sm text-text-muted">{tx("İlerleme:")}{' '}{percent == null ? tx('Yüzde bildirilmedi') : tx('%{0}', { '0': percent.toLocaleString(currentLocale(), { maximumFractionDigits: 1 }) })}</p>
-    <div role="progressbar" aria-label={tx("{0}. deneme ilerlemesi", { "0": attempt.number })} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} className="h-2 overflow-hidden rounded-full bg-surface-2">
-      {percent != null && <div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />}
-    </div>
+    <ProgressBar label={tx("{0}. deneme ilerlemesi", { "0": attempt.number })} value={percent} />
   </div>
 }
 

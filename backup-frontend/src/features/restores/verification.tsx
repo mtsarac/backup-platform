@@ -4,10 +4,11 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
+import { DataList } from '@/components/data/data-list'
 import { StatusPill } from '@/components/data/status-pill'
 import { restoreIneligibility } from '@/features/artifacts/restore-eligibility'
 import type { BackupArtifact } from '@/features/artifacts/types'
-import { inputClass, selectClass } from '@/features/platform/styles'
+import { inputClass, selectClass } from '@/components/ui/form-styles'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { StoredLoginPanel } from './stored-login-panel'
 import { useRestores, useRestoreTargets, useStartRestoreVerification } from './hooks'
@@ -31,17 +32,13 @@ export function ArtifactVerificationSection({ tenantId, artifact }: { tenantId: 
         : latest ? <p className="flex flex-wrap items-center gap-2 text-sm">{latest.verificationOutcome ? <StatusPill domain="verification" status={latest.verificationOutcome} /> : <StatusPill status={latest.status} />}<span>{formatDateTime(latest.startedAt ?? latest.createdAt)}</span>{latest.completedAt && <span className="text-text-muted">{tx("· Süre:")}{' '}{formatDuration(latest.startedAt, latest.completedAt)}</span>}</p>
           : !history.isPending && <p className="text-sm text-text-muted">{tx("Henüz test edilmedi.")}</p>}
       {formOpen && canOperate && <VerificationForm tenantId={tenantId} artifactId={artifact.id} onClose={() => setFormOpen(false)} />}
-      {rows.length > 0 && <div className="overflow-x-auto"><table className="w-full text-left text-sm">
-        <caption className="sr-only">{tx("Son restore testleri")}</caption>
-        <thead><tr className="text-text-muted"><th className="py-2 pr-4 font-medium">{tx("Sonuç")}</th><th className="py-2 pr-4 font-medium">{tx("Başlangıç")}</th><th className="py-2 pr-4 font-medium">{tx("Süre")}</th><th className="py-2 pr-4 font-medium">{tx("Agent")}</th><th className="py-2 font-medium">{tx("Ayrıntı")}</th></tr></thead>
-        <tbody className="divide-y divide-border">{rows.map((row) => <tr key={row.id}>
-          <td className="py-2 pr-4">{row.verificationOutcome ? <StatusPill domain="verification" status={row.verificationOutcome} /> : <StatusPill status={row.status} />}{row.cleanup && row.cleanup.state !== 'Completed' && <p className="mt-1 text-xs text-text-muted">{verificationCleanupText(row.cleanup)}</p>}</td>
-          <td className="py-2 pr-4">{formatDateTime(row.startedAt ?? row.createdAt)}</td>
-          <td className="py-2 pr-4">{row.completedAt ? formatDuration(row.startedAt, row.completedAt) : '—'}</td>
-          <td className="py-2 pr-4 break-all font-mono text-xs">{row.agentId}</td>
-          <td className="py-2"><Link className="text-primary hover:underline" to={`/tenants/${tenantId}/restores/${row.id}`}>{tx("Aç")}</Link></td>
-        </tr>)}</tbody>
-      </table></div>}
+      {rows.length > 0 && <DataList caption={tx("Son restore testleri")} rows={rows} keyExtractor={row => row.id} columns={[
+        { key: 'outcome', header: tx('Sonuç'), card: 'status', render: row => <>{row.verificationOutcome ? <StatusPill domain="verification" status={row.verificationOutcome} /> : <StatusPill status={row.status} />}{row.cleanup && row.cleanup.state !== 'Completed' && <p className="mt-1 text-xs text-text-muted">{verificationCleanupText(row.cleanup)}</p>}</> },
+        { key: 'started', header: tx('Başlangıç'), render: row => formatDateTime(row.startedAt ?? row.createdAt) },
+        { key: 'duration', header: tx('Süre'), render: row => row.completedAt ? formatDuration(row.startedAt, row.completedAt) : '—' },
+        { key: 'agent', header: tx('Agent'), card: 'hidden', render: row => <span className="break-all font-mono text-xs">{row.agentId}</span> },
+        { key: 'open', header: tx('Ayrıntı'), card: 'actions', render: row => <Link className="text-primary hover:underline" to={`/tenants/${tenantId}/restores/${row.id}`}>{tx("Aç")}</Link> },
+      ]} />}
     </div>
   </Section>
 }

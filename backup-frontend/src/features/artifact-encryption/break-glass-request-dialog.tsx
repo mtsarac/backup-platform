@@ -5,7 +5,7 @@ import { Field } from '@/components/ui/field'
 import { ErrorNotice } from '@/components/ui/notice'
 import { platformPaths } from '@/features/platform/paths'
 import { FormDialog } from '@/features/platform/plans/form-dialog'
-import { inputClass } from '@/features/platform/styles'
+import { inputClass } from '@/components/ui/form-styles'
 import { useCreateBreakGlass } from './hooks'
 
 const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i

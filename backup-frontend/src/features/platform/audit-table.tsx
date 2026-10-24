@@ -1,9 +1,9 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { Link } from 'react-router-dom'
-import { DataTable, type Column } from '@/components/data/data-table'
+import { DataList, type Column } from '@/components/data/data-list'
 import { Badge } from '@/components/ui/badge'
 import { platformPaths } from './paths'
-import { linkClass } from './styles'
+import { linkClass } from '@/components/ui/form-styles'
 import type { AuditDetailValue, PlatformAuditEntry } from './types'
 import { formatDateTime } from '@/lib/format'
 
@@ -101,11 +101,11 @@ export function AuditTable({ rows, emptyMessage, showTenant = true, className }:
   useLanguage()
   const columns: Column<PlatformAuditEntry>[] = [
     { key: 'at', header: tx('Zaman'), render: (entry) => formatDateTime(entry.at, tx('Henüz bildirilmedi')) },
-    { key: 'action', header: tx('İşlem'), wrap: true, render: (entry) => <span className="font-medium">{auditActionLabel(entry.action)}</span> },
+    { key: 'action', card: 'title', header: tx('İşlem'), wrap: true, render: (entry) => <span className="font-medium">{auditActionLabel(entry.action)}</span> },
     { key: 'actor', header: tx('Yapan'), wrap: true, render: (entry) => <div className="flex flex-wrap items-center gap-1.5"><span>{entry.actorDisplayName ?? tx('Bilinmeyen kullanıcı')}</span><Badge tone={entry.actorKind === 'PlatformAdmin' ? 'warning' : entry.actorKind === 'System' || entry.actorKind === 'Anonymous' ? 'neutral' : 'info'}>{actorLabels[entry.actorKind]}</Badge></div> },
     ...(showTenant ? [{ key: 'tenant', header: tx('Tenant'), wrap: true, render: (entry: PlatformAuditEntry) => entry.tenantId ? <Link className={linkClass} to={platformPaths.tenant(entry.tenantId)}>{entry.tenantName ?? 'Tenant'}</Link> : <span className="text-text-muted">—</span> }] : []),
-    { key: 'target', header: tx('Hedef'), wrap: true, render: (entry) => entry.targetType },
-    { key: 'details', header: tx('Ayrıntılar'), wrap: true, render: (entry) => <Details details={entry.details} /> },
+    { key: 'target', card: 'hidden', header: tx('Hedef'), wrap: true, render: (entry) => entry.targetType },
+    { key: 'details', card: 'hidden', header: tx('Ayrıntılar'), wrap: true, render: (entry) => <Details details={entry.details} /> },
   ]
-  return <DataTable rows={rows} columns={columns} keyExtractor={(entry) => entry.id} emptyMessage={emptyMessage} className={className} />
+  return <DataList rows={rows} columns={columns} keyExtractor={(entry) => entry.id} emptyMessage={emptyMessage} className={className} />
 }

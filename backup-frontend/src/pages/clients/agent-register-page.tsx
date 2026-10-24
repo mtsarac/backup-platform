@@ -3,13 +3,13 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { QueryState } from '@/components/data/query-state'
-import { DataTable, type Column } from '@/components/data/data-table'
+import { DataList, type Column } from '@/components/data/data-list'
 import { Button } from '@/components/ui/button'
 import { ErrorNotice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
 import { AgentsTabs } from '@/features/agents/agents-tabs'
-import { linkClass } from '@/features/platform/styles'
+import { linkClass } from '@/components/ui/form-styles'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { agentQueryKeys, useEnrollmentPolicy, useEnrollmentTokens } from '@/features/agents/hooks'
 import { revokeEnrollmentToken, setEnrollmentPolicy } from '@/features/agents/api'
@@ -53,7 +53,7 @@ function EnrollmentContent({ tenantId }: { tenantId: string }) {
   const columns: Column<EnrollmentToken>[] = [
     { key: 'createdAt', header: tx('Oluşturulma'), render: (token) => formatDateTime(token.createdAt, tx('Henüz bildirilmedi')) },
     { key: 'expiresAt', header: tx('Son kullanma'), render: (token) => formatDateTime(token.expiresAt, tx('Henüz bildirilmedi')) },
-    { key: 'actions', header: tx('İşlemler'), render: (token) => <Button variant="destructive" aria-label={tx("{0} tarihinde oluşturulan token'ı iptal et", { "0": formatDateTime(token.createdAt, tx('Henüz bildirilmedi')) })} onClick={() => { revoke.reset(); setSelected(token) }}>{tx("İptal et")}</Button> },
+    { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (token) => <Button variant="destructive" aria-label={tx("{0} tarihinde oluşturulan token'ı iptal et", { "0": formatDateTime(token.createdAt, tx('Henüz bildirilmedi')) })} onClick={() => { revoke.reset(); setSelected(token) }}>{tx("İptal et")}</Button> },
   ]
   return <div className="space-y-6">
     <PageHeader title={t('agents.enrollmentTitle')} description={t('agents.enrollmentDescription')} />
@@ -65,7 +65,7 @@ function EnrollmentContent({ tenantId }: { tenantId: string }) {
       </Section>}
     </QueryState>
     <Section title={t('agents.activeTokensTitle')} description={t('agents.activeTokensDesc')} flush actions={<Button disabled={!policy.data?.enabled || Boolean(policy.error) || changePolicy.isPending} onClick={() => setCreateOpen(true)}>{t('agents.createToken')}</Button>}>
-      <QueryState isPending={tokens.isPending} error={tokens.error}><DataTable rows={tokens.data ?? []} columns={columns} keyExtractor={(token) => token.tokenId} emptyMessage={tx("Aktif kayıt token'ı yok.")} className="rounded-none border-0 shadow-none" /></QueryState>
+      <QueryState isPending={tokens.isPending} error={tokens.error}><DataList rows={tokens.data ?? []} columns={columns} keyExtractor={(token) => token.tokenId} emptyMessage={tx("Aktif kayıt token'ı yok.")} className="rounded-none border-0 shadow-none" /></QueryState>
     </Section>
     {createOpen && policy.data?.enabled && !changePolicy.isPending && <AddAgentDialog tenantId={tenantId} onClose={() => setCreateOpen(false)} />}
     <ConfirmDialog open={Boolean(selected)} onClose={() => setSelected(null)} title={tx("Kayıt token'ı iptal edilsin mi?")} description={tx("Bu token yeni agent kaydı için kullanılamayacak. Mevcut agent'lar etkilenmez.")} pending={revoke.isPending} error={revoke.error ? errorMessage(revoke.error) : undefined} onConfirm={() => { if (selected) revoke.mutate(selected.tokenId) }} />

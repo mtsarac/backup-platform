@@ -2,7 +2,7 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Radar } from 'lucide-react'
-import { DataTable, type Column } from '@/components/data/data-table'
+import { DataList, type Column } from '@/components/data/data-list'
 import { QueryState } from '@/components/data/query-state'
 import { EmptyState } from '@/components/ui/empty-state'
 import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
@@ -38,14 +38,14 @@ export function DiscoveryPage() {
     { key: 'name', header: tx('Instance'), wrap: true, render: item => <Link className="font-medium text-primary underline-offset-4 hover:underline" to={discoveryInstancePath(tenantId, item.id)}>{item.displayName}</Link> },
     { key: 'agent', header: tx('Agent'), wrap: true, render: item => agentName(item.agentId) },
     { key: 'engine', header: tx('Motor'), render: item => engineLabels[item.engine] ?? item.engine },
-    { key: 'source', header: tx('Kaynak'), render: item => sourceLabels[item.source] ?? item.source },
-    { key: 'address', header: tx('Adres'), render: item => `${item.host}${item.port != null ? `:${item.port}` : ''}` },
-    { key: 'version', header: tx('Sürüm / edition'), wrap: true, render: item => [item.version, item.edition].filter(Boolean).join(' · ') || '—' },
-    { key: 'reach', header: tx('Erişilebilirlik'), render: item => <StatusPill domain="reachability" status={item.reachability} /> },
-    { key: 'access', header: tx('Erişim'), wrap: true, render: item => <StatusPill domain="access" status={item.access} /> },
+    { key: 'source', card: 'hidden', header: tx('Kaynak'), render: item => sourceLabels[item.source] ?? item.source },
+    { key: 'address', card: 'hidden', header: tx('Adres'), render: item => `${item.host}${item.port != null ? `:${item.port}` : ''}` },
+    { key: 'version', card: 'hidden', header: tx('Sürüm / edition'), wrap: true, render: item => [item.version, item.edition].filter(Boolean).join(' · ') || '—' },
+    { key: 'reach', card: 'status', header: tx('Erişilebilirlik'), render: item => <StatusPill domain="reachability" status={item.reachability} /> },
+    { key: 'access', card: 'hidden', header: tx('Erişim'), wrap: true, render: item => <StatusPill domain="access" status={item.access} /> },
     { key: 'backup', header: tx('Full Backup'), wrap: true, render: item => <StatusPill domain="fullBackup" status={item.fullBackup} /> },
-    { key: 'seen', header: tx('Son görülme'), render: item => formatDateTime(item.lastSeenAt, tx('Henüz bildirilmedi')) },
-    { key: 'change', header: tx('Değişiklik'), render: item => <span className="flex flex-wrap gap-1">{item.presence === 'Missing' && <StatusPill domain="presence" status="Missing" />}{item.lastChange ? <StatusPill domain="lastChange" status={item.lastChange.kind} /> : null}</span> },
+    { key: 'seen', card: 'hidden', header: tx('Son görülme'), render: item => formatDateTime(item.lastSeenAt, tx('Henüz bildirilmedi')) },
+    { key: 'change', card: 'status', header: tx('Değişiklik'), render: item => <span className="flex flex-wrap gap-1">{item.presence === 'Missing' && <StatusPill domain="presence" status="Missing" />}{item.lastChange ? <StatusPill domain="lastChange" status={item.lastChange.kind} /> : null}</span> },
   ]
   let body
   if (isForbidden(instances.error) || isForbidden(statuses.error)) body = <ErrorNotice title={tx("Yetki yok")} {...accessDenied(tx("Keşfedilen veritabanlarını görüntüleme yetkiniz yok."))} />
@@ -60,7 +60,7 @@ export function DiscoveryPage() {
     <QueryState isPending={instances.isPending} error={instances.error}>
       {instances.data && (instances.data.items.length === 0
         ? <div className="rounded-xl border border-border bg-surface"><EmptyState icon={Radar} message={tx("Keşfedilen Instance yok; 'Yeniden Tara' ile yeni bir tarama isteyebilir veya filtreleri değiştirebilirsiniz.")} /></div>
-        : <DataTable rows={instances.data.items} columns={columns} keyExtractor={item => item.id} />)}
+        : <DataList rows={instances.data.items} columns={columns} keyExtractor={item => item.id} />)}
     </QueryState>
   </>
   return <div className="space-y-6">

@@ -3,7 +3,7 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { RefreshCw, ShieldCheck } from 'lucide-react'
-import { DataTable, type Column } from '@/components/data/data-table'
+import { DataList, type Column } from '@/components/data/data-list'
 import { Pagination } from '@/components/data/pagination'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -13,7 +13,7 @@ import { Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
 import { platformCrumb } from '@/features/platform/crumbs'
-import { bareTableClass } from '@/features/platform/list-empty'
+import { bareListClass } from '@/features/platform/list-empty'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
 import { allocatedPercent } from '@/features/storage/format'
 import { PlanName } from '@/features/storage/quota-badges'
@@ -22,7 +22,7 @@ import type { StorageUsageRow, QuotaState, EntitlementStatus } from '@/features/
 import { platformPaths } from '@/features/platform/paths'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { SearchForm } from '@/features/platform/search-form'
-import { linkClass } from '@/features/platform/styles'
+import { linkClass } from '@/components/ui/form-styles'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { useStorageUsage, useReconcileUsage, useRebuildUsage } from '@/features/platform/storage/hooks'
@@ -146,6 +146,7 @@ export function PlatformStoragePage() {
     },
     {
       key: 'state',
+      card: 'status',
       header: tx('Kota Durumu'),
       render: (row) => (
         <div className="space-y-1">
@@ -162,6 +163,7 @@ export function PlatformStoragePage() {
     },
     {
       key: 'policy',
+      card: 'hidden',
       header: tx('Politika'),
       render: (row) => (
         <div className="text-xs">
@@ -172,6 +174,7 @@ export function PlatformStoragePage() {
     },
     {
       key: 'calculatedAt',
+      card: 'hidden',
       header: tx('Son Hesaplama'),
       render: (row) => (
         <span className="text-xs text-text-muted">
@@ -181,6 +184,7 @@ export function PlatformStoragePage() {
     },
     {
       key: 'actions',
+      card: 'actions',
       header: tx('İşlemler'),
       render: (row) => (
         <div className="flex flex-wrap gap-1.5">
@@ -226,7 +230,7 @@ export function PlatformStoragePage() {
         {data && (
           <div className="space-y-4">
             <Section title={tx("Tenant kullanımı")} description={tx("Kullanılan ve rezerve alanın toplamı etkin limit ile karşılaştırılır. Reconcile ve Rebuild kullanım kayıtlarını günceller; Backup dosyalarını silmez.")} flush className="overflow-hidden">
-              <DataTable className={bareTableClass} rows={data.items} columns={columns} keyExtractor={(row) => row.tenantId} emptyMessage={tx("Kriterlere uygun tenant kullanımı bulunamadı.")} />
+              <DataList className={bareListClass} rows={data.items} columns={columns} keyExtractor={(row) => row.tenantId} emptyMessage={tx("Kriterlere uygun tenant kullanımı bulunamadı.")} />
             </Section>
             {data.totalCount > 0 && (
               <Pagination

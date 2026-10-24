@@ -5,7 +5,7 @@ import { Field } from '@/components/ui/field'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
-import { inputClass, selectClass } from '@/features/platform/styles'
+import { inputClass, selectClass } from '@/components/ui/form-styles'
 import {
   useClearEmailSecret, useClearSmsSecret, useSetEmailSecret, useSetSmsSecret, useUpdateEmailTransport, useUpdateSmsTransport,
 } from './hooks'

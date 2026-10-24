@@ -1,7 +1,7 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { inputClass } from '@/features/platform/styles'
+import { inputClass } from '@/components/ui/form-styles'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { usePlatformConnections, usePlatformProviders } from './hooks'
 import { connectionOptions } from './job-connection-picker-utils'

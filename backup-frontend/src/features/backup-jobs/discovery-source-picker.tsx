@@ -10,7 +10,7 @@ import { useDiscoveryInstance, useDiscoveryInstances } from '@/features/discover
 import { selectableNames } from '@/features/discovery/job-prefill'
 import { canCreateJob, engineLabels, supportsDiscovery } from '@/features/discovery/status'
 import type { DiscoveryInstanceDetail } from '@/features/discovery/types'
-import { selectClass } from '@/features/platform/styles'
+import { selectClass } from '@/components/ui/form-styles'
 
 export interface DiscoverySourceProps {
   agents: readonly Agent[]

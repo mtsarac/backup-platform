@@ -1,8 +1,8 @@
 import { screen, within } from '@testing-library/react'
 import { render } from '@/test/render'
-import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { setViewport } from '@/test/viewport'
 import { makeRun } from '@/features/backups/test-data'
 import type { BackupRun } from '@/features/backups/types'
 import { DashboardPage } from './dashboard-page'
@@ -110,11 +110,15 @@ describe('dashboard simplified status', () => {
   })
 
 
-  it('defaults to card view and switches to the table', async () => {
+  it('lists recent runs as cards on a narrow screen and as a table on a large one', () => {
     state.data.recentRuns = [makeRun({ status: 'Succeeded' })]
-    renderDashboard()
+    setViewport(false)
+    const narrow = renderDashboard()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Liste' }))
+    expect(screen.getByRole('listitem')).toHaveTextContent('Günlük SQL yedeği')
+    narrow.unmount()
+    setViewport(true)
+    renderDashboard()
     expect(screen.getByRole('table')).toBeInTheDocument()
   })
 })

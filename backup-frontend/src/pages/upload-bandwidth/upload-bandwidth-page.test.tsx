@@ -100,7 +100,7 @@ describe('upload bandwidth page', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sonraki' }))
     expect(screen.getByRole('row', { name: /^Backup 26/ })).toBeInTheDocument()
     expect(screen.queryByRole('row', { name: /^Backup 01/ })).not.toBeInTheDocument()
-    fireEvent.change(screen.getByRole('searchbox', { name: "Backup Job ara" }), { target: { value: 'Backup 01' } })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Yedekleme İşi ara' }), { target: { value: 'Backup 01' } })
     expect(screen.getByRole('row', { name: /^Backup 01/ })).toBeInTheDocument()
     expect(screen.queryByRole('row', { name: /^Backup 26/ })).not.toBeInTheDocument()
     expect(screen.getAllByRole('row')).toHaveLength(2)

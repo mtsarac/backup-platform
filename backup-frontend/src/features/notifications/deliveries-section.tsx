@@ -1,8 +1,8 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import type { ChangeEvent } from 'react'
-import { DataTable } from '@/components/data/data-table'
-import type { Column } from '@/components/data/data-table'
+import { DataList } from '@/components/data/data-list'
+import type { Column } from '@/components/data/data-list'
 import { Pagination } from '@/components/data/pagination'
 import { Send } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -21,11 +21,11 @@ const PAGE_SIZE = 25
 
 const columns: Column<NotificationDelivery>[] = [
   { key: 'createdAt', get header() { return tx("Oluşturma") }, render: (row) => formatDateTime(row.createdAt, tx('Henüz bildirilmedi')) },
-  { key: 'event', get header() { return tx("Olay") }, wrap: true, render: (row) => <div>{eventTypeLabels[row.eventType]} · {phaseLabels[row.phase]}<div className="text-xs text-text-muted">{severityLabels[row.severity]} · {row.subjectName}</div></div> },
+  { key: 'event', card: 'title', get header() { return tx("Olay") }, wrap: true, render: (row) => <div>{eventTypeLabels[row.eventType]} · {phaseLabels[row.phase]}<div className="text-xs text-text-muted">{severityLabels[row.severity]} · {row.subjectName}</div></div> },
   { key: 'channel', get header() { return tx("Kanal") }, wrap: true, render: (row) => <div>{row.channelName}<div className="text-xs text-text-muted">{kindLabels[row.channelKind]} · {row.targetDisplay}</div></div> },
-  { key: 'status', get header() { return tx("Durum") }, render: (row) => { return <div className="flex flex-col items-start gap-1"><StatusPill domain="delivery" status={row.status} />{row.errorCode && <code className="break-all text-sm text-text-muted">{row.errorCode}</code>}</div> } },
-  { key: 'attempts', get header() { return tx("Deneme") }, render: (row) => row.attempts },
-  { key: 'next', get header() { return tx("Sonraki deneme") }, render: (row) => row.nextAttemptAt ? formatDateTime(row.nextAttemptAt, tx('Henüz bildirilmedi')) : '—' },
+  { key: 'status', card: 'status', get header() { return tx("Durum") }, render: (row) => { return <div className="flex flex-col items-start gap-1"><StatusPill domain="delivery" status={row.status} />{row.errorCode && <code className="break-all text-sm text-text-muted">{row.errorCode}</code>}</div> } },
+  { key: 'attempts', card: 'hidden', get header() { return tx("Deneme") }, render: (row) => row.attempts },
+  { key: 'next', card: 'hidden', get header() { return tx("Sonraki deneme") }, render: (row) => row.nextAttemptAt ? formatDateTime(row.nextAttemptAt, tx('Henüz bildirilmedi')) : '—' },
 ]
 
 export function DeliveriesSection() {
@@ -50,7 +50,7 @@ export function DeliveriesSection() {
         {data && (data.totalCount === 0
           ? <div className="rounded-xl border border-border bg-surface"><EmptyState icon={Send} message={tx("Gönderim kaydı bulunamadı.")} /></div>
           : <>
-            <DataTable rows={data.items} columns={columns} keyExtractor={(row) => row.id} />
+            <DataList rows={data.items} columns={columns} keyExtractor={(row) => row.id} />
             <Pagination page={data.page} pageSize={data.pageSize} totalCount={data.totalCount} onPageChange={setPage} disabled={deliveries.isFetching} />
           </>)}
       </QueryState>
