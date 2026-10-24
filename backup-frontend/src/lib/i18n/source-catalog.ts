@@ -6485,4 +6485,11 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Depolama alanı dolmak üzere": {"tr":"Depolama alanı dolmak üzere","en":"Storage is almost full"},
   "Depolama alanı doluyor": {"tr":"Depolama alanı doluyor","en":"Storage is filling up"},
   "Dikkat gerekiyor": {"tr":"Dikkat gerekiyor","en":"Needs attention"},
+  "Yedeklerim": {"tr":"Yedeklerim","en":"My backups"},
+  "Yedek dosyaları": {"tr":"Yedek dosyaları","en":"Backup files"},
+  "Geri yüklemeler": {"tr":"Geri yüklemeler","en":"Restores"},
+  "Bilgisayarlarım ve Depolama": {"tr":"Bilgisayarlarım ve Depolama","en":"My computers and storage"},
+  "Veritabanı bulma": {"tr":"Veritabanı bulma","en":"Database discovery"},
+  "Depolama alanları": {"tr":"Depolama alanları","en":"Storage locations"},
+  "Yükleme bant genişliği": {"tr":"Yükleme bant genişliği","en":"Upload bandwidth"},
 }

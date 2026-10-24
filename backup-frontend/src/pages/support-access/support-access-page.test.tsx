@@ -35,14 +35,14 @@ beforeEach(() => {
 describe('tenant support transparency', () => {
   it.each(['Owner', 'Admin'] as const)('shows the tenant support navigation for %s', (role) => {
     renderAccess(role, '/tenants/tenant-a/support-access', <Sidebar />)
-    const links = screen.getAllByRole('link', { name: /Support Access|Destek Erişimi/, hidden: true })
+    const links = screen.getAllByRole('link', { name: /Support access|Destek erişimi/, hidden: true })
     expect(links.length).toBeGreaterThan(0)
     for (const link of links) expect(link).toHaveAttribute('href', '/tenants/tenant-a/support-access')
   })
 
   it.each(['Operator', 'Viewer'] as const)('hides the tenant support navigation for %s', (role) => {
     renderAccess(role, '/tenants/tenant-a/support-access', <Sidebar />)
-    expect(screen.queryByRole('link', { name: /Support Access|Destek Erişimi/, hidden: true })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Support access|Destek erişimi/, hidden: true })).not.toBeInTheDocument()
   })
 
   it.each(['Owner', 'Admin'] as const)('renders history, all six counters and read-only activity for %s', async (role) => {

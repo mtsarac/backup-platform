@@ -35,7 +35,7 @@ describe('Platform Administration entry points', () => {
   it('tenant sidebar hides it from a user who is only a tenant Owner', () => {
     renderPlatform(<Sidebar />, { user: tenantOwner })
     expect(screen.queryByText(/Platform Administration|Platform Yönetimi/)).not.toBeInTheDocument()
-    expect(screen.getAllByText(/Yedekleme İşleri|Yedekleme İşleri/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Yedekleme işleri/).length).toBeGreaterThan(0)
   })
 
   it('tenant picker links PlatformAdmin users and hides it for others', () => {

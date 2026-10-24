@@ -23,7 +23,7 @@ export function LoginPage() {
   const { login, isAuthenticated, sessionExpired } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const [email, setEmail] = useState('')
+  const [loginIdentifier, setLoginIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<ErrorDescription | null>(null)
   const [loading, setLoading] = useState(false)
@@ -39,7 +39,7 @@ export function LoginPage() {
     setError(null)
     setLoading(true)
     try {
-      await login(email, password)
+      await login(loginIdentifier, password)
       setPassword('')
       navigate(from, { replace: true })
     } catch (error) {
@@ -71,7 +71,7 @@ export function LoginPage() {
           </div>
           <div className="space-y-1"><h1 className="text-2xl font-semibold text-text-heading">{tx("Giriş yapın")}</h1><p className="text-[0.9375rem] text-text-muted">{tx("Hesabınızla yönetim konsoluna devam edin.")}</p></div>
           <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-border bg-surface p-6 shadow-card">
-            <Field label={tx("Kullanıcı adı")}>{(control) => <input {...control} type="text" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} className={`${inputClass} mt-0`} required />}</Field>
+            <Field label={tx("Kullanıcı adı")}>{(control) => <input {...control} type="text" autoComplete="username" value={loginIdentifier} onChange={(e) => setLoginIdentifier(e.target.value)} className={`${inputClass} mt-0`} required />}</Field>
             <Field label={tx("Şifre")}>{(control) => <input {...control} type="password" value={password} autoComplete="current-password" onChange={(e) => setPassword(e.target.value)} className={`${inputClass} mt-0`} required />}</Field>
             {sessionExpired && <Notice tone="warning">{tx("Oturumunuz sona erdi. Yeniden giriş yapın.")}</Notice>}
             {error && <ErrorNotice {...error} />}
