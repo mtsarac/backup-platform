@@ -79,6 +79,7 @@ describe('tenant support transparency', () => {
   it.each(['Operator', 'Viewer'] as const)('blocks %s before any query mounts', (role) => {
     renderAccess(role, '/tenants/tenant-a/support-access?sessionId=session-a')
     expect(screen.getByRole('alert')).toHaveTextContent(/(?:Owner \/ Admin|Sahibi \/ Yöneticisi)/)
+    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
     expect(api.getSupportAccessSessions).not.toHaveBeenCalled()
     expect(api.getSupportAccessSession).not.toHaveBeenCalled()
     expect(api.getSupportAccessActivity).not.toHaveBeenCalled()

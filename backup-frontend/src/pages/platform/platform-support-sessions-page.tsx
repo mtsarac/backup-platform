@@ -27,7 +27,7 @@ export function PlatformSupportSessionsPage() {
       <Button size="sm" variant="outline" onClick={() => update({ tenantId: '' })}>{tx("Çalışma alanı filtresini kaldır")}</Button>
     </> : undefined}>
       <FilterField label={tx("Durum")}><select aria-label={tx("Durum")} className={filterControlClass} value={status} onChange={event => update({ status: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{supportStatuses.map(value => <option key={value} value={value}>{statusLabel('supportSession', value)}</option>)}</select></FilterField>
-      <label className="flex min-h-10 items-center gap-2 self-end text-sm font-medium text-text-heading"><input type="checkbox" className="size-4 accent-primary" checked={mine} onChange={event => update({ mine: event.target.checked ? 'true' : 'false' })} />{tx("Yalnızca benim oturumlarım")}</label>
+      <label className="flex min-h-11 items-center gap-2 self-end text-sm font-medium text-text-heading"><input type="checkbox" className="size-4 accent-primary" checked={mine} onChange={event => update({ mine: event.target.checked ? 'true' : 'false' })} />{tx("Yalnızca benim oturumlarım")}</label>
     </Filters>
     <SupportQueryState isPending={query.isPending} error={query.error}>{query.data && <div className="space-y-4">
       <SupportSessionTable rows={query.data.items} />

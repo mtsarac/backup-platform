@@ -125,7 +125,7 @@ export function ArtifactReplicas({ artifact }: { artifact: ArtifactPresentation 
           <Fact label={tx("Doğrulama zamanı")}>{formatDateTime(replica.verifiedAt)}</Fact>
         </Facts>
         <details className="rounded-lg border border-border bg-surface-2 px-4 py-3" open={deleting}>
-          <summary className="min-h-6 cursor-pointer text-sm font-medium text-text-heading">{tx("Checksum ve silme ayrıntıları")}</summary>
+          <summary className="min-h-11 cursor-pointer text-sm font-medium text-text-heading">{tx("Checksum ve silme ayrıntıları")}</summary>
           <div className="pt-4"><Facts columns={3}>
             <Fact label={tx("Checksum")}><code className="break-all font-mono text-sm">{replica.checksum}</code></Fact>
             <Fact label={tx("Checksum algoritması")}>{replica.checksumAlgorithm}</Fact>

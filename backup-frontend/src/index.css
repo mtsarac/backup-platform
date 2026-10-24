@@ -167,6 +167,11 @@
 
 }
 
+/* The top bar is sticky: keep keyboard focus and anchors from scrolling underneath it (rem, so it follows the text-size setting). */
+html {
+  scroll-padding-top: 8rem;
+}
+
 body {
   margin: 0;
   font-size: 1rem;
@@ -198,6 +203,20 @@ body {
   }
 
   input:not([type="checkbox"]):not([type="radio"]), select, textarea {
+    min-height: 2.75rem;
+  }
+
+  /* Standalone links get the same 44 px target as buttons; links inside a paragraph keep their line box (running text). */
+  a[href]:not(p a, .sr-only) {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+    overflow-wrap: anywhere;
+  }
+
+  /* A checkbox or radio is only as tappable as its label. */
+  label:has(> input:is([type="checkbox"], [type="radio"])) {
     min-height: 2.75rem;
   }
 

@@ -42,7 +42,7 @@ export function TopBar({ onMenuToggle }: { onMenuToggle: () => void }) {
   return <ShellBar onMenuToggle={onMenuToggle}
     context={<div className="flex min-w-0 items-center gap-2">
       <label htmlFor="tenant-select" className="text-sm text-text-muted">{tx("Çalışma Alanı")}</label>
-      <select id="tenant-select" value={tenantId} onChange={(event) => { void switchTenant(event.target.value) }} className="min-h-11 max-w-52 rounded-lg border border-border-strong/60 bg-surface px-3 text-sm font-medium text-text sm:max-w-72">{tenants.map((item) => <option key={item.tenantId} value={item.tenantId}>{item.name}</option>)}</select>
+      <select id="tenant-select" value={tenantId} onChange={(event) => { void switchTenant(event.target.value) }} className="min-h-11 min-w-0 max-w-52 flex-1 rounded-lg border border-border-strong/60 bg-surface px-3 text-sm font-medium text-text sm:max-w-72">{tenants.map((item) => <option key={item.tenantId} value={item.tenantId}>{item.name}</option>)}</select>
     </div>}
     badges={<><Badge tone="info">{tx(tenant.membershipRole ?? tenant.role)}</Badge>{user?.isPlatformAdmin && <Badge tone="warning">{tx("Platform Yöneticisi")}</Badge>}</>} />
 }

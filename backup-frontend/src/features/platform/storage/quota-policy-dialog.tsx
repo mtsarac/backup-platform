@@ -144,7 +144,7 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
           {(control) => <input {...control} className={inputClass} value={key} maxLength={64} required aria-invalid={errField === 'key'} onChange={(event) => setKey(event.target.value)} placeholder="ornek-politika-key" />}
         </Field>}
         <Field label={tx("Politika Adı")}>{(control) => <input {...control} className={inputClass} value={name} maxLength={100} required aria-invalid={errField === 'name'} onChange={(event) => setName(event.target.value)} />}</Field>
-        <label className="flex min-h-8 items-center gap-2 text-sm text-text"><input className="size-4" type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />{tx("Etkin politika (planlarda seçilebilir)")}</label>
+        <label className="flex min-h-11 items-center gap-2 text-sm text-text"><input className="size-4" type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />{tx("Etkin politika (planlarda seçilebilir)")}</label>
       </fieldset>
       <fieldset className="space-y-4 border-t border-border pt-4">
         <legend className="pt-4 text-sm font-semibold text-text-heading">{tx("Hesaplama ve eşikler")}</legend>
@@ -169,8 +169,8 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
           {(control) => <input {...control} className={inputClass} value={providerTypes} onChange={(event) => setProviderTypes(event.target.value)} placeholder="central, local" />}
         </Field>}
         {scopeKind === 'ownershipType' && <div className="space-y-2 text-sm"><p className="text-text-muted">{tx("Dahil edilecek sahiplik türleri:")}</p><div className="space-y-2">
-          <label className="flex min-h-8 items-center gap-2"><input className="size-4" type="checkbox" checked={ownershipTypes.includes('PlatformManaged')} onChange={() => toggleOwnership('PlatformManaged')} />{tx("PlatformManaged (Platform yönetimli / central)")}</label>
-          <label className="flex min-h-8 items-center gap-2"><input className="size-4" type="checkbox" checked={ownershipTypes.includes('TenantManaged')} onChange={() => toggleOwnership('TenantManaged')} />{tx("TenantManaged (Tenant yönetimli / local)")}</label>
+          <label className="flex min-h-11 items-center gap-2"><input className="size-4" type="checkbox" checked={ownershipTypes.includes('PlatformManaged')} onChange={() => toggleOwnership('PlatformManaged')} />{tx("PlatformManaged (Platform yönetimli / central)")}</label>
+          <label className="flex min-h-11 items-center gap-2"><input className="size-4" type="checkbox" checked={ownershipTypes.includes('TenantManaged')} onChange={() => toggleOwnership('TenantManaged')} />{tx("TenantManaged (Tenant yönetimli / local)")}</label>
         </div></div>}
         {scopeKind === 'quotaScope' && <Field label={tx("Kota kapsamı etiketleri (virgülle ayırın):")} hint={tx("Bir depolama bağlantısının kota kapsamı etiketiyle eşleşir. Küçük harf, rakam ve “-”; her etiket 1-64 karakter.")}>
           {(control) => <input {...control} className={inputClass} value={quotaScopes} onChange={(event) => setQuotaScopes(event.target.value)} placeholder="managed, tenant" aria-invalid={scopeError !== null} />}

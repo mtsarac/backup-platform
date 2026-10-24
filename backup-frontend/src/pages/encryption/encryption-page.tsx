@@ -10,18 +10,21 @@ import { useTenant } from '@/features/tenancy/use-tenant'
 export function EncryptionPage() {
   useLanguage()
   const { tenantId, tenant, canAdmin } = useTenant()
-  if (!canAdmin) return <AccessDenied what={tx("Şifreleme korumasını ve acil destek erişimi geçmişini yalnızca çalışma alanı sahibi veya yöneticisi görüntüleyebilir.")} />
-  return <EncryptionContent key={tenantId} tenantId={tenantId} tenantName={tenant.name} />
+  return <div className="space-y-6">
+    <PageHeader title={tx("Şifreleme")} description={tx("Şifreli yedeklerinizin korumasını ve acil destek erişimi geçmişini inceleyin.")} />
+    {canAdmin
+      ? <EncryptionContent key={tenantId} tenantId={tenantId} tenantName={tenant.name} />
+      : <AccessDenied what={tx("Şifreleme korumasını ve acil destek erişimi geçmişini yalnızca çalışma alanı sahibi veya yöneticisi görüntüleyebilir.")} />}
+  </div>
 }
 
 function EncryptionContent({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
   useLanguage()
   const encryption = useTenantEncryption(tenantId)
-  return <div className="space-y-6">
-    <PageHeader title={tx("Şifreleme")} description={tx("Şifreli yedeklerinizin korumasını ve acil destek erişimi geçmişini inceleyin.")} />
+  return <>
     <QueryState isPending={encryption.isPending} error={encryption.error}>
       {encryption.data && <TenantKeysSection tenantId={tenantId} tenantName={tenantName} encryption={encryption.data} />}
     </QueryState>
     <TenantBreakGlassSection tenantId={tenantId} />
-  </div>
+  </>
 }

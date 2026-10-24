@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
   run: undefined as BackupRun | undefined,
   page: undefined as BackupRunPage | undefined,
 }))
+vi.mock('@tanstack/react-query', async importOriginal => ({ ...await importOriginal<typeof import('@tanstack/react-query')>(), useQueryClient: () => ({ refetchQueries: vi.fn() }) }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canOperate: true }) }))
 vi.mock('@/features/backups/hooks', () => ({
   useBackup: () => ({ data: state.run, isPending: false, error: null }),

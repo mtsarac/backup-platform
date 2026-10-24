@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   pause: { isPending: false, error: null as unknown, mutateAsync: vi.fn(), reset: vi.fn() },
   resume: { isPending: false, error: null as unknown, mutateAsync: vi.fn(), reset: vi.fn() },
 }))
+vi.mock('@tanstack/react-query', async importOriginal => ({ ...await importOriginal<typeof import('@tanstack/react-query')>(), useQueryClient: () => ({ refetchQueries: vi.fn() }) }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canOperate: state.canOperate }) }))
 vi.mock('@/features/backups/hooks', () => ({ useBackup: () => state.query, useBackupActions: () => ({ retry: state.retry, cancel: state.cancel, pause: state.pause, resume: state.resume }) }))
 vi.mock('@/features/artifacts/artifact-details', () => ({ ArtifactDetails: () => <p>Yedek çıktısı ayrıntıları</p> }))

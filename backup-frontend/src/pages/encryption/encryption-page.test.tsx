@@ -23,6 +23,7 @@ describe('tenant encryption page', () => {
   it.each(['Operator', 'Viewer'] as const)('makes no request for %s', (role) => {
     mount(role)
     expect(screen.getByText('Bu alan için yetkiniz yok')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
     expect(api.getTenantEncryption).not.toHaveBeenCalled()
     expect(api.getTenantBreakGlass).not.toHaveBeenCalled()
   })

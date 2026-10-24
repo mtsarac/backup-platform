@@ -18,7 +18,7 @@ function CommonFields({ name, setName, unlimited, setUnlimited, sizeText, setSiz
   useLanguage()
   return <>
     <Field label={tx("Plan adı")}>{(control) => <input {...control} className={inputClass} value={name} maxLength={100} required aria-invalid={nameInvalid} onChange={(event) => setName(event.target.value)} />}</Field>
-    <label className="flex min-h-8 items-center gap-2 text-sm text-text"><input className="size-4" type="checkbox" checked={unlimited} onChange={(event) => setUnlimited(event.target.checked)} />{tx("Limitsiz")}</label>
+    <label className="flex min-h-11 items-center gap-2 text-sm text-text"><input className="size-4" type="checkbox" checked={unlimited} onChange={(event) => setUnlimited(event.target.checked)} />{tx("Limitsiz")}</label>
     {!unlimited && <Field label={tx("Depolama limiti (GB)")} hint={tx("1 GB = 1.000.000.000 bayt (ondalık). En fazla 3 ondalık basamak.")} error={sizeError}>
       {(control) => <input {...control} className={inputClass} inputMode="decimal" value={sizeText} required aria-invalid={sizeInvalid || Boolean(sizeError)} onChange={(event) => setSizeText(event.target.value)} />}
     </Field>}

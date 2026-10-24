@@ -54,7 +54,10 @@ function sessionDetails(session: SupportAccessSession) {
 export function SupportAccessPage() {
   useLanguage()
   const { tenantId, canAdmin } = useTenant()
-  if (!canAdmin) return <AccessDenied what={tx('Destek erişimi geçmişini yalnızca tenant Owner / Admin görüntüleyebilir.')} />
+  if (!canAdmin) return <div className="space-y-6">
+    <PageHeader title={tx('Destek erişimi')} />
+    <AccessDenied what={tx('Destek erişimi geçmişini yalnızca tenant Owner / Admin görüntüleyebilir.')} />
+  </div>
   return <SupportAccessContent key={tenantId} tenantId={tenantId} />
 }
 

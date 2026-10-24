@@ -38,7 +38,7 @@ const state = vi.hoisted(() => ({
   },
   observability: {} as ReturnType<typeof emptyObservability>,
 }))
-vi.mock('@tanstack/react-query', () => ({ useQuery: ({ queryKey }: { queryKey: string[] }) => ({ data: queryKey.includes('observability') ? state.observability : state.data, isPending: false, error: null }) }))
+vi.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ refetchQueries: vi.fn() }), useQuery: ({ queryKey }: { queryKey: string[] }) => ({ data: queryKey.includes('observability') ? state.observability : state.data, isPending: false, error: null }) }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', tenant: { name: 'Tenant A' }, canAdmin: state.canAdmin }) }))
 
 function renderDashboard() {
