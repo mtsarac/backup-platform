@@ -41,5 +41,11 @@ Durable metadata recording the verified byte offset or resumable session URI rea
 _Avoid_: UploadState, ByteCounter
 
 **TransferPauseReason**:
-The operational cause of a paused transfer (UserRequested, ScheduleRestricted, NetworkRetrying).
+The operational cause of a paused transfer: `Operator` (manual pause), `TimeRule` (a closed transfer window), or `PausedByNetworkError` (three retries exhausted).
 _Avoid_: HaltFlag, WaitStatus
+
+### Direct Storage Transfers
+
+**AgentDirect**:
+Artifact payload I/O performed by the agent against SFTP, Google Drive, S3 or SMB. The backend brokers authorization, tasks, leases, quota and metadata; it is not an external-storage payload relay.
+_Avoid_: BackendRelay, ProxyUpload
