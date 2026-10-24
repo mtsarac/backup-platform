@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ApiError } from '@/lib/api/client'
+import { changeLanguage } from '@/lib/i18n/runtime'
 import * as api from '../api'
 import { paged, renderPlatform } from '../test-utils'
 import { legacyPlan, makePlan, makeSubscription } from './test-fixtures'
@@ -186,6 +187,14 @@ describe('assign and change plan', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Plan ata' }))
     const dialog = await dialogByName()
     expect(within(dialog).getByRole('button', { name: 'Plan ata' })).toBeDisabled()
+  })
+
+  it('translates the plan picker placeholder', async () => {
+    changeLanguage('en')
+    serve(null)
+    mount()
+    await userEvent.click(await screen.findByRole('button', { name: 'Assign plan' }))
+    expect(within(await dialogByName()).getByPlaceholderText('Select a plan')).toBeInTheDocument()
   })
 
   it('sends an exact-byte override and an ISO end date', async () => {

@@ -4,7 +4,7 @@ import { Field } from '@/components/ui/field'
 import { ApiError } from '@/lib/api/client'
 import { inputClass } from '@/components/ui/form-styles'
 import { FormDialog } from '@/components/ui/form-dialog'
-import { TypedConfirmDialog } from '@/components/ui/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useCreatePlan, useUpdatePlan } from './hooks'
 import { gbErrorMessage, parseGb, toGbInput } from './storage'
 import type { Plan, PlanInput } from './types'
@@ -72,7 +72,7 @@ export function EditPlanDialog({ plan, onClose }: { plan: Plan; onClose: () => v
     setConfirmation({ name: name.trim(), ...limit, ...(plan.quotaPolicyReference ? { quotaPolicyReference: plan.quotaPolicyReference } : {}) })
   }
   const field = update.error instanceof ApiError ? update.error.field : undefined
-  if (confirmation) return <TypedConfirmDialog open name={plan.name} title={tx("Plan değişikliği onaylansın mı?")}
+  if (confirmation) return <ConfirmDialog open name={plan.name} title={tx("Plan değişikliği onaylansın mı?")}
     consequence={{
       what: tx("“{0}” planının adı ve depolama limiti güncellenir.", { "0": plan.name }),
       who: tx("Bu planı kullanan tüm abonelerin depolama limiti değişir ({0} çalışma alanı). Yeni limitin üzerinde kalan çalışma alanlarında yeni yedekler engellenebilir.", { "0": plan.tenantCount }),

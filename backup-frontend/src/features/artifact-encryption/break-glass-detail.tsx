@@ -5,7 +5,7 @@ import { Field } from '@/components/ui/field'
 import { Button } from '@/components/ui/button'
 import { Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
-import { TypedConfirmDialog } from '@/components/ui/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { FormDialog } from '@/components/ui/form-dialog'
 import { inputClass } from '@/components/ui/form-styles'
 import { useSupportCountdown } from '@/features/platform/support/use-support-countdown'
@@ -89,7 +89,7 @@ export function BreakGlassDetail({ request, receivedAt }: { request: BreakGlassR
     {request.status === 'Denied' && <Notice tone="warning">{tx("Bu istek reddedildi; hiçbir veri çözülmedi.")}</Notice>}
     {request.status === 'Expired' && <Notice tone="warning">{tx("İsteğin süresi doldu; hiçbir veri çözülmedi.")}</Notice>}
 
-    <TypedConfirmDialog open={approving} onClose={() => setApproving(false)} name={tenantName} title={tx("İstek onaylansın mı?")}
+    <ConfirmDialog open={approving} onClose={() => setApproving(false)} name={tenantName} title={tx("İstek onaylansın mı?")}
       consequence={{
         what: tx("“{0}” çalışma alanındaki yedek, isteği açan yönetici tarafından çözülerek bir kez indirilebilecek.", { "0": tenantName }),
         who: tx("Bu çalışma alanının sahipleri bilgilendirilir; işlem denetim kaydına yazılır."),

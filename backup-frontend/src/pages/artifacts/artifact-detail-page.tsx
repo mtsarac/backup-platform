@@ -8,7 +8,7 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
-import { ConfirmDialog, TypedConfirmDialog } from '@/components/ui/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { ArtifactDeletedNotice } from '@/features/artifacts/artifact-details'
 import { ArtifactAnswers } from '@/features/artifacts/artifact-answers'
 import { ArtifactTechnical } from '@/features/artifacts/artifact-technical'
@@ -179,7 +179,7 @@ function ArtifactDetail({ id }: { id: string }) {
           <ArtifactTechnical artifact={artifact} />
         </>}
       </QueryState>
-      <TypedConfirmDialog open={dialogOpen && canRequestDelete} onClose={() => setDialogOpen(false)} title={tx("Yedek dosyası için silme isteği")} name={artifact ? artifactName(artifact) : ''}
+      <ConfirmDialog open={dialogOpen && canRequestDelete} onClose={() => setDialogOpen(false)} title={tx("Yedek dosyası için silme isteği")} name={artifact ? artifactName(artifact) : ''}
         consequence={{
           what: tx("Yedek dosyası hemen silinmez; bekleme süresi başlar. Süre dolunca kopyalar kalıcı olarak kaldırılır, geçmiş kaydı korunur. Kalan süre bu sayfada görünür."),
           who: tx("Bu dosyadan yapılacak indirmeler ve geri yüklemeler, bekleme süresi dolduktan sonra kullanılamaz."),

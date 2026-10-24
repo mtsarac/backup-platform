@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { render } from '@/test/render'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { changeLanguage } from '@/lib/i18n/runtime'
 import { setViewport } from '@/test/viewport'
 import { makeRun } from '@/features/backups/test-data'
 import type { BackupRun } from '@/features/backups/types'
@@ -159,7 +160,7 @@ describe('dashboard replication monitoring', () => {
     } })]
     renderDashboard()
     await openDetails()
-    expect(screen.getByRole('alert')).toHaveTextContent(/1 (?:backup|yedekleme) son 24 saatte kullanılabilir yedek (?:üretti|oluşturdu), ancak gereken doğrulanmış (?:replika|kopya) sayısına ulaşamadı\./)
+    expect(screen.getByRole('alert')).toHaveTextContent('Son 24 saatte 1 yedekleme kullanılabilir yedek oluşturdu, ancak gereken doğrulanmış kopya sayısına ulaşamadı.')
     expect(screen.getByRole('link', { name: "Çoğaltma sonuçlarını inceleyin." })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs?status=Succeeded')
     expect(screen.getAllByText('Başarılı').length).toBeGreaterThan(0)
     expect(screen.getByText("Doğrulanmış kopya sayısı yetersiz")).toBeInTheDocument()
@@ -170,7 +171,7 @@ describe('dashboard replication monitoring', () => {
     state.data.runs.replicationInsufficientLast24Hours = 9
     renderDashboard()
     await openDetails()
-    expect(screen.getByRole('alert')).toHaveTextContent(/9 (?:backup|yedekleme) son 24 saatte/)
+    expect(screen.getByRole('alert')).toHaveTextContent('Son 24 saatte 9 yedekleme')
   })
 
   it('shows degraded policy-compliant copies without an insufficient-replication alert', () => {
@@ -203,7 +204,43 @@ describe('dashboard failure notices', () => {
   })
 })
 
+describe('dashboard sentences and labels', () => {
+  it('writes each alert as one whole sentence so the count sits where the language wants it', async () => {
+    changeLanguage('en')
+    state.data.runs.storageFailedLast24Hours = 6
+    state.data.artifacts.deleteFailed = 2
+    state.data.runs.replicationInsufficientLast24Hours = 3
+    renderDashboard()
+    await userEvent.click(screen.getByText('Details'))
+    const alerts = screen.getAllByRole('alert').map(alert => alert.textContent)
+    expect(alerts).toEqual(expect.arrayContaining([
+      expect.stringContaining('2 backup file(s) could not be deleted.'),
+      expect.stringContaining('Storage write or replica verification failed for 6 backup(s) in the last 24 hours.'),
+      expect.stringContaining('3 backup(s) in the last 24 hours produced a usable backup but did not reach the required number of verified copies.'),
+    ]))
+  })
+
+  it('names the counters in plain words instead of raw state names', async () => {
+    renderDashboard()
+    await openDetails()
+    for (const label of ['Planlı yedekleme işleri', 'Yeniden denenecek', 'İptal isteniyor', 'Etkin yedekleme denemeleri', 'Etkin yedekleme işleri', 'Silinmeyi bekleyen yedek dosyaları']) expect(screen.getByText(label)).toBeInTheDocument()
+    for (const jargon of ['Scheduled Jobs', 'RetryPending', 'CancellationRequested', 'Aktif Runs', 'Etkin Jobs']) expect(screen.queryByText(jargon)).not.toBeInTheDocument()
+  })
+})
+
 describe('dashboard recent runs', () => {
+  it('keeps the database and replication inside the run\'s technical details and explains a waiting run in a sentence', () => {
+    setViewport(true)
+    state.data.recentRuns = [makeRun({ status: 'RetryPending', replication: { requiredVerifiedReplicas: 2, verifiedReplicas: 1, destinationCount: 2, status: 'InsufficientReplicas', policySatisfied: false, destinations: [] } })]
+    renderDashboard()
+    const row = screen.getAllByRole('row')[1]
+    expect(within(row).getByText('Yeniden deneme bekleniyor.')).toBeVisible()
+    expect(within(row).queryByText('RetryPending')).not.toBeInTheDocument()
+    const details = within(row).getByText('Teknik ayrıntılar').closest('details')!
+    expect(within(details).getByText('Doğrulanmış kopya sayısı yetersiz')).not.toBeVisible()
+    expect(within(details).getByText(makeRun().configuration.database)).not.toBeVisible()
+  })
+
   it('lists recent runs as cards on a narrow screen and as a table on a large one', () => {
     state.data.recentRuns = [makeRun({ status: 'Succeeded' })]
     setViewport(false)

@@ -33,7 +33,7 @@ describe('platform failure messages', () => {
     [409, { error: 'admission_denied', code: 'quota_exceeded' }, 'Depolama kotası doldu; yeni yedekleme başlatılamadı. Mevcut yedekler silinmedi ve geri yüklenebilir.'],
     [409, { error: 'admission_denied', code: 'quota_size_unknown' }, 'Yedek boyutu henüz bilinmediği için kesin depolama kotasında güvenli alan ayrılamadı; yeni yedekleme başlatılmadı. Boyut tahmininin belirlenmesi için yöneticiye başvurun.'],
     [422, { error: 'storage_error', code: 'QuotaExceeded' }, 'Gerçek yedek boyutu kesin depolama kotasında kullanılabilir alanı aşıyor; hedefe yükleme reddedildi.'],
-    [409, { error: 'admission_denied', code: 'quota_bounded_upload_unsupported' }, 'Ajan, yükleme öncesinde kesin depolama kotasını uygulamayı desteklemiyor; ajanı güncelleyin. Yeni yedekleme başlatılmadı.'],
+    [409, { error: 'admission_denied', code: 'quota_bounded_upload_unsupported' }, 'Yedekleme bilgisayarı, yükleme öncesinde kesin depolama kotasını uygulamayı desteklemiyor; yedekleme bilgisayarını güncelleyin. Yeni yedekleme başlatılmadı.'],
     [409, { error: 'admission_denied', code: 'subscription_required' }, 'Etkin bir abonelik bulunmadığı için yeni yedekleme başlatılamadı.'],
     [409, { error: 'admission_denied', code: 'storage_connection_disabled' }, 'Hedef depolama bağlantısı devre dışı; yeni yedekleme başlatılamaz.'],
     [409, { error: 'admission_denied', code: 'storage_connection_unavailable' }, 'Hedef depolama bağlantısı bulunamadı veya bu işin depolama sağlayıcısına ait değil; yeni yedekleme başlatılamaz.'],

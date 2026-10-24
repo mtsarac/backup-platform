@@ -13,7 +13,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
 import { platformCrumb } from '@/features/platform/crumbs'
 import { bareListClass, ListEmpty } from '@/features/platform/list-empty'
-import { ConfirmDialog, TypedConfirmDialog } from '@/components/ui/confirm-dialog'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { QuotaMeter } from '@/features/storage/quota-meter'
 import type { StorageUsageRow, QuotaState, EntitlementStatus } from '@/features/storage/types'
 import { platformPaths } from '@/features/platform/paths'
@@ -248,7 +248,7 @@ export function PlatformStoragePage() {
         onConfirm={runReconcile}
       />
 
-      <TypedConfirmDialog
+      <ConfirmDialog
         open={Boolean(activeRebuild)}
         name={activeRebuild?.tenantName ?? ''}
         onClose={() => setActiveRebuild(null)}

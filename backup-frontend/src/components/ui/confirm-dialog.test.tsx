@@ -2,7 +2,7 @@ import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { render } from '@/test/render'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/lib/api/client'
-import { ConfirmDialog, TypedConfirmDialog } from './confirm-dialog'
+import { ConfirmDialog } from './confirm-dialog'
 
 afterEach(cleanup)
 const consequence = { what: 'Kanal kalıcı olarak silinir.', who: 'Bu kanala bağlı bildirimler durur.', reversible: 'Hayır, yeniden eklemeniz gerekir.' }
@@ -31,9 +31,9 @@ describe('ConfirmDialog', () => {
   })
 })
 
-describe('TypedConfirmDialog', () => {
+describe('ConfirmDialog with a name', () => {
   function open(onConfirm = vi.fn()) {
-    render(<TypedConfirmDialog open onClose={() => {}} title="Silinsin mi?" consequence={consequence} name="Muhasebe" pending={false} onConfirm={onConfirm} confirmLabel="Sil" />)
+    render(<ConfirmDialog open onClose={() => {}} title="Silinsin mi?" consequence={consequence} name="Muhasebe" pending={false} onConfirm={onConfirm} confirmLabel="Sil" />)
     return onConfirm
   }
   it('blocks the action until the exact name is typed', () => {
@@ -55,10 +55,10 @@ describe('TypedConfirmDialog', () => {
     expect(onConfirm).not.toHaveBeenCalled()
   })
   it('forgets the typed name when reopened', () => {
-    const view = render(<TypedConfirmDialog open onClose={() => {}} title="t" consequence={consequence} name="Muhasebe" pending={false} onConfirm={() => {}} confirmLabel="Sil" />)
+    const view = render(<ConfirmDialog open onClose={() => {}} title="t" consequence={consequence} name="Muhasebe" pending={false} onConfirm={() => {}} confirmLabel="Sil" />)
     fireEvent.change(screen.getByRole('textbox', { name: /Muhasebe/ }), { target: { value: 'Muhasebe' } })
-    view.rerender(<TypedConfirmDialog open={false} onClose={() => {}} title="t" consequence={consequence} name="Muhasebe" pending={false} onConfirm={() => {}} confirmLabel="Sil" />)
-    view.rerender(<TypedConfirmDialog open onClose={() => {}} title="t" consequence={consequence} name="Muhasebe" pending={false} onConfirm={() => {}} confirmLabel="Sil" />)
+    view.rerender(<ConfirmDialog open={false} onClose={() => {}} title="t" consequence={consequence} name="Muhasebe" pending={false} onConfirm={() => {}} confirmLabel="Sil" />)
+    view.rerender(<ConfirmDialog open onClose={() => {}} title="t" consequence={consequence} name="Muhasebe" pending={false} onConfirm={() => {}} confirmLabel="Sil" />)
     expect(screen.getByRole('textbox', { name: /Muhasebe/ })).toHaveValue('')
   })
 })

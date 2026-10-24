@@ -136,7 +136,7 @@ describe('Backup dosyaları', () => {
     request.mockResolvedValue(pending({ waitingForAgent: true, deleteFailureCode: 'agent_unavailable', deleteNextAttemptAt: '2099-10-06T10:05:00Z' }))
     mount()
     await screen.findByRole('button', { name: 'Silmeyi iptal et' })
-    expect(await screen.findByText(/Fiziksel silme için Ajan bekleniyor/)).toBeVisible()
+    expect(await screen.findByText(/Fiziksel silme için yedekleme bilgisayarı bekleniyor/)).toBeVisible()
     expect(screen.getByRole('button', { name: 'Silmeyi iptal et' })).toBeInTheDocument()
     expect(screen.getByText('Sonraki silme denemesi')).toBeInTheDocument()
     expect(screen.getByText('Silme yürütücüsü')).toBeInTheDocument()

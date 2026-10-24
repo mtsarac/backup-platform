@@ -22,6 +22,8 @@ interface ConfirmProps {
   confirmDisabled?: boolean
   /** Inputs the action needs (for example a value to set), shown under the consequences. */
   children?: ReactNode
+  /** When set, the action stays blocked until the user types this name exactly; for deletions and other hard-to-undo actions. */
+  name?: string
 }
 
 const isDescribed = (error: unknown): error is ErrorDescription => typeof error === 'object' && error !== null && 'dataImpact' in error
@@ -36,7 +38,7 @@ function Consequences({ consequence }: { consequence: Consequence }) {
 }
 
 /** The typed name lives inside the popup, so it is forgotten whenever the dialog closes. */
-function Body({ title, consequence, pending, error, errorScope, onConfirm, confirmLabel, confirmDisabled, children, name }: Omit<ConfirmProps, 'open' | 'onClose'> & { name?: string }) {
+function Body({ title, consequence, pending, error, errorScope, onConfirm, confirmLabel, confirmDisabled, children, name }: Omit<ConfirmProps, 'open' | 'onClose'>) {
   const cancelRef = useRef<HTMLButtonElement>(null)
   const inputId = useId()
   const [typed, setTyped] = useState('')
@@ -60,7 +62,8 @@ function Body({ title, consequence, pending, error, errorScope, onConfirm, confi
   </Dialog.Popup>
 }
 
-function Shell({ open, onClose, pending, ...body }: ConfirmProps & { name?: string }) {
+/** Consequence dialog for risky actions; pass `name` to also require typing it. */
+export function ConfirmDialog({ open, onClose, pending, ...body }: ConfirmProps) {
   useLanguage()
   return <Dialog.Root open={open} onOpenChange={next => { if (!next && !pending) onClose() }} disablePointerDismissal={pending}>
     <Dialog.Portal>
@@ -69,9 +72,3 @@ function Shell({ open, onClose, pending, ...body }: ConfirmProps & { name?: stri
     </Dialog.Portal>
   </Dialog.Root>
 }
-
-/** Plain consequence dialog: no typing, for risky but contained or reversible actions. */
-export function ConfirmDialog(props: ConfirmProps) { return <Shell {...props} /> }
-
-/** The action stays blocked until the user types `name` exactly; for deletions and other hard-to-undo actions. */
-export function TypedConfirmDialog(props: ConfirmProps & { name: string }) { return <Shell {...props} /> }

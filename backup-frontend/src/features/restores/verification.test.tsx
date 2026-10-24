@@ -77,7 +77,7 @@ describe('artifact restore verification', () => {
     expect(RestoreApi.getRestores).toHaveBeenCalledWith('tenant-a', { purpose: 'Verification', artifactId: 'artifact-1', pageSize: 10 }, expect.anything())
     fireEvent.click(screen.getByRole('button', { name: "Geri yükleme testi başlat" }))
     expect(await screen.findByText(/(?:Production Veritabanı değiştirilmez|Canlı veritabanı değiştirilmez)/)).toBeInTheDocument()
-    const agentOptions = within(screen.getByLabelText("Ajan")).getAllByRole('option')
+    const agentOptions = within(screen.getByLabelText("Yedekleme bilgisayarı")).getAllByRole('option')
     expect(agentOptions).toHaveLength(1)
     expect(agentOptions[0]).toHaveTextContent('Verifier')
     fireEvent.click(screen.getByRole('button', { name: 'Testi başlat' }))
