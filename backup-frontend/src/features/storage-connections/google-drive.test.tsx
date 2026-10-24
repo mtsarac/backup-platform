@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as api from './api'
 import { makeConnection, tenantAdminPermissions } from './test-fixtures'
 import { ConnectionDetail } from './connection-detail'
+import { ConnectionWizard } from './connection-wizard'
 import type { ConnectionView, ProviderDescriptor } from './types'
 
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canAdmin: true, canOperate: true }) }))
@@ -68,5 +69,45 @@ describe('Google Drive storage destination', () => {
     expect(api.disconnectGoogleDrive).not.toHaveBeenCalled()
     await userEvent.click(within(dialog).getByRole('button', { name: 'Bağlantıyı kes' }))
     await waitFor(() => expect(api.disconnectGoogleDrive).toHaveBeenCalledWith('tenant-a', 'drive'))
+  })
+
+  it('creates a preselected Google destination without token fields and tests only after its popup completes', async () => {
+    const user = userEvent.setup()
+    const connection = makeConnection({ id: 'drive-new', name: 'Bulut arşivi', providerType: 'google-drive', providerDisplayName: 'Google Drive' })
+    const authorizationUrl = `https://accounts.google.com/o/oauth2/v2/auth?redirect_uri=${encodeURIComponent('http://localhost:5252/api/platform/google-drive/oauth/callback')}`
+    vi.mocked(api.getTenantConnections).mockResolvedValue({ items: [] })
+    vi.mocked(api.getTenantProviders).mockResolvedValue({ items: [googleDriveProvider] })
+    vi.mocked(api.createTenantConnection).mockResolvedValue(connection)
+    vi.mocked(api.getGoogleDriveAuthorizeUrl).mockResolvedValue({ authorizationUrl })
+    vi.mocked(api.testTenantConnection).mockResolvedValue({ connection, test: { status: 'Succeeded', code: 'ok', message: '', testedAt: '2026-10-24T12:00:00Z', durationMs: 12 } })
+    const popup = { close: vi.fn() } as unknown as Window
+    const open = vi.spyOn(window, 'open').mockReturnValue(popup)
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/new?provider=google-drive']}><ConnectionWizard /></MemoryRouter></QueryClientProvider>)
+    try {
+      expect(await screen.findByRole('radio', { name: /Google Drive/ })).toBeChecked()
+      await user.click(screen.getByRole('button', { name: 'İleri' }))
+      await user.type(screen.getByRole('textbox', { name: 'Ad' }), 'Bulut arşivi')
+      await user.click(screen.getByRole('button', { name: 'İleri' }))
+      expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent(/Özet/)
+      expect(screen.queryByLabelText('Yenileme anahtarı')).not.toBeInTheDocument()
+      expect(document.querySelector('input[type=password], textarea')).toBeNull()
+      await user.click(screen.getByRole('button', { name: 'Bağlantıyı oluştur ve test et' }))
+      const authorize = await screen.findByRole('button', { name: /Google hesabını bağla/i })
+      expect(api.createTenantConnection).toHaveBeenCalledExactlyOnceWith('tenant-a', { providerType: 'google-drive', name: 'Bulut arşivi', configuration: {} })
+      expect(api.testTenantConnection).not.toHaveBeenCalled()
+      await user.click(authorize)
+      await waitFor(() => expect(open).toHaveBeenCalledWith(authorizationUrl, 'google_oauth', expect.any(String)))
+      expect(api.getGoogleDriveAuthorizeUrl).toHaveBeenCalledWith('tenant-a', 'drive-new')
+      expect(api.testTenantConnection).not.toHaveBeenCalled()
+      act(() => window.dispatchEvent(new MessageEvent('message', { data: { type: 'GOOGLE_DRIVE_OAUTH_COMPLETED' }, origin: 'https://untrusted.example', source: popup })))
+      expect(api.testTenantConnection).not.toHaveBeenCalled()
+      act(() => window.dispatchEvent(new MessageEvent('message', { data: { type: 'GOOGLE_DRIVE_OAUTH_COMPLETED' }, origin: 'http://localhost:5252', source: popup })))
+      expect(await screen.findByText('Bağlantı çalışıyor')).toBeInTheDocument()
+      expect(api.testTenantConnection).toHaveBeenCalledExactlyOnceWith('tenant-a', 'drive-new')
+      expect(popup.close).toHaveBeenCalledOnce()
+    } finally {
+      open.mockRestore()
+    }
   })
 })
