@@ -1,29 +1,14 @@
-import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Section } from '@/components/ui/section'
 import { QueryState } from '@/components/data/query-state'
-import { apiRequest, tenantPath } from '@/lib/api/client'
 import { currentLocale, tx, useLanguage } from '@/lib/i18n'
-import type { BackupHealthState, BackupJobHealth } from '@/features/backup-jobs/health'
+import { useHealthSummary } from './health-summary'
 import { formatBytes, formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 
-interface HealthSummary {
-  totalJobs: number
-  averageScore: number | null
-  state: BackupHealthState | null
-  healthy: number
-  degraded: number
-  critical: number
-  jobs: BackupJobHealth[]
-  capacityRisks: { connectionId: string; connectionName: string; status: string; totalBytes: number | null; usedBytes: number | null; freeBytes: number | null; reportedAt: string }[]
-  recentSizeAnomalies: { runId: string; jobId: string; jobName: string; completedAt: string; sizeBytes: number; baselineMeanBytes: number; deviationRatio: number }[]
-  recentSizeAnomaliesTotal: number
-}
-
 export function ObservabilityPanel({ tenantId }: { tenantId: string }) {
   useLanguage()
-  const query = useQuery({ queryKey: ['tenant', tenantId, 'observability'], queryFn: ({ signal }) => apiRequest<HealthSummary>(tenantPath(tenantId, 'observability/health-summary'), { signal }), refetchInterval: 15_000, refetchIntervalInBackground: false })
+  const query = useHealthSummary(tenantId)
   const data = query.data
   const base = `/tenants/${tenantId}`
   return <Section title={tx('Gözlemlenebilirlik & Güvenilirlik')}>
