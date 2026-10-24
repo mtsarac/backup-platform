@@ -9,7 +9,7 @@ export function PlatformNotificationTransportsPage() {
   useLanguage()
   const query = useNotificationTransports()
   return <div className="space-y-6">
-    <PageHeader crumbs={[platformCrumb]} title={tx("Bildirim altyapısı")} description={tx("Tenant bildirimlerinin kullandığı platform genelindeki SMTP ve SMS ağ geçidi ayarları. Secret değerleri hiçbir zaman gösterilmez.")} />
+    <PageHeader crumbs={[platformCrumb]} title={tx("Bildirim altyapısı")} description={tx("Tenant bildirimlerinin kullandığı e-posta ve SMS gönderimi çalışıyor mu? Gizli değerler hiçbir zaman gösterilmez.")} />
     <PlatformQueryState isPending={query.isPending} error={query.error}>
       {query.data && <>
         <EmailTransportCard transport={query.data.email} />

@@ -16,7 +16,8 @@ import { TechnicalDetails } from '@/components/ui/technical-details'
 import { PermissionBadges } from '@/features/platform/support/session-table'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { useSupportAccessActivity, useSupportAccessSession, useSupportAccessSessions } from '@/features/support-access/hooks'
-import { supportActionLabels } from '@/features/support-access/labels'
+import { auditActionLabel } from '@/features/audit/action-labels'
+import { auditResultLabel } from '@/features/audit/audit-details'
 import type { SupportAccessSession, SupportAccessSummary } from '@/features/support-access/types'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { ApiError } from '@/lib/api/client'
@@ -115,10 +116,10 @@ function SessionActivity({ tenantId, sessionId }: { tenantId: string; sessionId:
       {query.data.items.length === 0 ? <EmptyState message={tx('Bu oturum için etkinlik kaydı yok.')} /> : <ul aria-label={tx('Etkinlik geçmişi')} className="space-y-3">
         {query.data.items.map(row => <li key={row.id} className="space-y-3 rounded-xl border border-border p-4">
           <div className="flex flex-wrap items-start justify-between gap-2">
-            <h4 className="break-words font-medium">{Object.hasOwn(supportActionLabels, row.action) ? supportActionLabels[row.action] : tx('Destek işlemi')}</h4>
+            <h4 className="break-words font-medium">{auditActionLabel(row.action) ?? tx('Destek işlemi')}</h4>
             <RelativeTime value={row.at} />
           </div>
-          <Fact label={tx('Sonuç')}>{row.result === 'Success' ? tx('Tamamlandı') : row.result === 'Failed' || row.result === 'Failure' ? tx('Başarısız') : tx('Sonuç teknik ayrıntılarda')}</Fact>
+          <Fact label={tx('Sonuç')}>{auditResultLabel(row.result)}</Fact>
           {(row.targetType === 'Artifact' || row.targetType === 'backup_artifact') && <Link className={`${linkClass} inline-flex min-h-11 items-center`} to={`/tenants/${tenantId}/artifacts/${encodeURIComponent(row.targetId)}`}>{tx('Yedek dosyasını görüntüle')}</Link>}
           <TechnicalDetails items={[
             { label: tx('Etkinlik kimliği'), value: row.id },
