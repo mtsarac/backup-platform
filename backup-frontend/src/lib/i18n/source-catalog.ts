@@ -1,5 +1,18 @@
 // UI source copy only. Stable wire values and customer-entered names are never catalog lookups.
 export const sourceCatalog: Record<string, { tr: string; en: string }> = {
+  "Kişiler": { tr: "Kişiler", en: "People" },
+  "Depolama ve bilgisayarlar": { tr: "Depolama ve bilgisayarlar", en: "Storage and computers" },
+  "Yedekleme bilgisayarı kaydı": { tr: "Yedekleme bilgisayarı kaydı", en: "Backup computer enrollment" },
+  "Kaydı kapatmak mevcut yedekleme bilgisayarlarını etkilemez; yalnızca yeni kayıtları engeller.": { tr: "Kaydı kapatmak mevcut yedekleme bilgisayarlarını etkilemez; yalnızca yeni kayıtları engeller.", en: "Closing enrollment does not affect existing backup computers; it only prevents new registrations." },
+  "Yeni yedekleme bilgisayarı kayıtlarına izin ver": { tr: "Yeni yedekleme bilgisayarı kayıtlarına izin ver", en: "Allow new backup computer registrations" },
+  "Yeni bilgisayar kaydı açık": { tr: "Yeni bilgisayar kaydı açık", en: "New computer enrollment open" },
+  "Yeni bilgisayar kaydı kapalı": { tr: "Yeni bilgisayar kaydı kapalı", en: "New computer enrollment closed" },
+  "Bilgisayar kaydı kapatılsın mı?": { tr: "Bilgisayar kaydı kapatılsın mı?", en: "Close computer enrollment?" },
+  "Bilgisayar kaydı açılsın mı?": { tr: "Bilgisayar kaydı açılsın mı?", en: "Open computer enrollment?" },
+  "Yedekleme bilgisayarlarını görüntüle": { tr: "Yedekleme bilgisayarlarını görüntüle", en: "View backup computers" },
+  "Bilgisayar kaydı": { tr: "Bilgisayar kaydı", en: "Computer enrollment" },
+  "Çalışma alanlarının kişilerini, bilgisayarlarını ve kayıt durumunu inceleyin.": { tr: "Çalışma alanlarının kişilerini, bilgisayarlarını ve kayıt durumunu inceleyin.", en: "Review workspace people, computers and enrollment status." },
+  "“{0}” çalışma alanı oluşturuldu.": { tr: "“{0}” çalışma alanı oluşturuldu.", en: "Workspace “{0}” was created." },
   "Platform çalışanlarının şifreli yedeklerinizi açma istekleri. Her istek gerekçeli, iki kişi tarafından onaylanan, süreli ve tek kullanımlıktır.": { tr: "Platform çalışanlarının şifreli yedeklerinizi açma istekleri. Her istek gerekçeli, iki kişi tarafından onaylanan, süreli ve tek kullanımlıktır.", en: "Requests by platform staff to open your encrypted backups. Each request has a reason, requires two-person approval, expires and can be used only once." },
   "Henüz acil destek erişimi isteği yok.": { tr: "Henüz acil destek erişimi isteği yok.", en: "No emergency support access has been requested yet." },
   "Acil destek erişimi geçmişi": { tr: "Acil destek erişimi geçmişi", en: "Emergency support access history" },
