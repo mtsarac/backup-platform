@@ -2,10 +2,10 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { Link } from 'react-router-dom'
 import { DataTable, type Column } from '@/components/data/data-table'
 import { Badge } from '@/components/ui/badge'
-import { agentDate } from '@/features/agents/format'
 import { platformPaths } from './paths'
 import { linkClass } from './styles'
 import type { AuditDetailValue, PlatformAuditEntry } from './types'
+import { formatDateTime } from '@/lib/format'
 
 const actionLabels: Record<string, string> = {
   get 'tenant.created'() { return tx("Tenant oluşturuldu") },
@@ -100,7 +100,7 @@ function Details({ details }: { details: PlatformAuditEntry['details'] }) {
 export function AuditTable({ rows, emptyMessage, showTenant = true, className }: { rows: readonly PlatformAuditEntry[]; emptyMessage: string; showTenant?: boolean; className?: string }) {
   useLanguage()
   const columns: Column<PlatformAuditEntry>[] = [
-    { key: 'at', header: tx('Zaman'), render: (entry) => agentDate(entry.at) },
+    { key: 'at', header: tx('Zaman'), render: (entry) => formatDateTime(entry.at, tx('Henüz bildirilmedi')) },
     { key: 'action', header: tx('İşlem'), wrap: true, render: (entry) => <span className="font-medium">{auditActionLabel(entry.action)}</span> },
     { key: 'actor', header: tx('Yapan'), wrap: true, render: (entry) => <div className="flex flex-wrap items-center gap-1.5"><span>{entry.actorDisplayName ?? tx('Bilinmeyen kullanıcı')}</span><Badge tone={entry.actorKind === 'PlatformAdmin' ? 'warning' : entry.actorKind === 'System' || entry.actorKind === 'Anonymous' ? 'neutral' : 'info'}>{actorLabels[entry.actorKind]}</Badge></div> },
     ...(showTenant ? [{ key: 'tenant', header: tx('Tenant'), wrap: true, render: (entry: PlatformAuditEntry) => entry.tenantId ? <Link className={linkClass} to={platformPaths.tenant(entry.tenantId)}>{entry.tenantName ?? 'Tenant'}</Link> : <span className="text-text-muted">—</span> }] : []),

@@ -3,21 +3,21 @@ import { Dialog } from '@base-ui/react/dialog'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts } from '@/components/ui/section'
 import { Tabs } from '@/components/ui/tabs'
 import { useLanguage, tx } from '@/lib/i18n'
 import { inputClass, selectClass } from '@/features/platform/styles'
-import { CopyButton } from './copy-button'
+import { CopyButton } from '@/components/ui/copy-button'
 import { API_BASE_URL } from '@/lib/api/client'
-import { errorMessage } from '@/lib/api/failure-messages'
+import { type ErrorDescription, accessDenied, describeError } from '@/lib/api/failure-messages'
 import { createEnrollmentToken, getAgentDistribution, getEnrollmentTokenStatus, revokeEnrollmentToken } from './api'
 import { agentQueryKeys } from './hooks'
-import { agentDate } from './format'
 import { enrollmentCommands, httpsServerOrigin, suggestedServerOrigin } from './enrollment-commands'
 import type { AgentPlatform, InstallationMode } from './enrollment-commands'
 import type { AgentDistribution } from './api'
 import { useEnrollmentMonitor } from './use-enrollment-monitor'
+import { formatDateTime } from '@/lib/format'
 
 /** Mounted only for a tenant administrator while open. Secrets never leave transient state. */
 export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: string; onClose: () => void; onCreated?: () => void }) {
@@ -27,13 +27,13 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
   const [server, setServer] = useState(() => httpsServerOrigin(import.meta.env.VITE_AGENT_PUBLIC_URL ?? '') || suggestedServerOrigin(API_BASE_URL, window.location.origin))
   const [mode, setMode] = useState<InstallationMode>('interactive')
   const [distribution, setDistribution] = useState<AgentDistribution | null>(null)
-  const [distributionError, setDistributionError] = useState('')
+  const [distributionError, setDistributionError] = useState<ErrorDescription | null>(null)
   const [name, setName] = useState('')
   const [lifetime, setLifetime] = useState('1440')
   const [ticket, setTicket] = useState<{ tokenId: string; expiresAt: string } | null>(null)
   const [secret, setSecret] = useState('')
   const [pending, setPending] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<ErrorDescription | null>(null)
   const request = useRef<AbortController | null>(null)
   const serverRef = useRef<HTMLInputElement>(null)
   const serverEdited = useRef(false)
@@ -46,7 +46,7 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
       setDistribution(result)
       const publicOrigin = httpsServerOrigin(import.meta.env.VITE_AGENT_PUBLIC_URL ?? '') || httpsServerOrigin(result.serverUrl ?? '')
       if (publicOrigin && !serverEdited.current) setServer(publicOrigin)
-    }).catch(cause => { if (!controller.signal.aborted) setDistributionError(errorMessage(cause)) })
+    }).catch(cause => { if (!controller.signal.aborted) setDistributionError(describeError(cause)) })
     return () => controller.abort()
   }, [])
   useEffect(() => {
@@ -60,7 +60,7 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
     if (pending || !httpsServerOrigin(server)) return
     const controller = new AbortController()
     request.current = controller
-    setPending(true); setError(''); setSecret('')
+    setPending(true); setError(null); setSecret('')
     try {
       // Always resolve safe status before replacing: a consumption racing regeneration must not be revoked.
       if (ticket) {
@@ -77,7 +77,7 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
       void client.invalidateQueries({ queryKey: agentQueryKeys.tokens(tenantId) })
       void client.invalidateQueries({ queryKey: ['tenant', tenantId, 'dashboard'] })
       onCreated?.()
-    } catch (cause) { if (!controller.signal.aborted) setError(errorMessage(cause)) }
+    } catch (cause) { if (!controller.signal.aborted) setError(describeError(cause)) }
     finally { if (!controller.signal.aborted) setPending(false) }
   }
   const labels = { Waiting: tx('Bekleniyor'), Checking: tx('Token gizlendi; kayıt durumu doğrulanıyor'), Enrolled: tx('Kayıt tamamlandı'), Connecting: tx('Bağlanıyor'), Online: tx('Çevrimiçi'), Expired: tx('Token süresi doldu'), Revoked: tx('Token iptal edildi'), Consumed: tx('Token kullanıldı; Agent bilgisi bulunamadı') }
@@ -99,8 +99,8 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
           <p>{platform === 'Windows' ? tx('Open PowerShell as Administrator on the target Windows machine.') : tx('Open a terminal with sudo access on the target Linux machine. The installer creates a systemd service.')}</p>
           <p>{tx('The server TLS certificate must be trusted on the target machine. Never disable certificate verification.')}</p>
           {!distribution && !distributionError && <p>{tx('Checking installer availability…')}</p>}
-          {distributionError && <Notice tone="error">{tx(distributionError)}</Notice>}
-          {distribution && !distribution.packages[platform === 'Windows' ? 'win-x64' : 'linux-x64'] && <Notice tone="error">{tx('The installer package is not published for this platform. Contact your administrator.')}</Notice>}
+          {distributionError && <ErrorNotice {...distributionError} />}
+          {distribution && !distribution.packages[platform === 'Windows' ? 'win-x64' : 'linux-x64'] && <ErrorNotice {...accessDenied(tx('The installer package is not published for this platform. Contact your administrator.'))} />}
         </section>
         {ticket && <section className="space-y-3 rounded-lg border border-border bg-surface-2 p-4">
           <h2 className="font-medium text-text-heading">{tx("2. Kaydedin ve başlatın")}</h2>
@@ -109,7 +109,7 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
             <Field label={tx("Tek seferlik kurulum komutu")}>{(control) => <textarea {...control} readOnly rows={4} value={distribution?.packages[platform === 'Windows' ? 'win-x64' : 'linux-x64'] ? enrollmentCommands(platform, server, secret, name, mode, language) : ''} className="mt-1 block w-full resize-none break-all rounded-lg border border-border-strong/70 bg-surface p-3 font-mono text-sm text-text" />}</Field>
             <CopyButton value={distribution?.packages[platform === 'Windows' ? 'win-x64' : 'linux-x64'] ? enrollmentCommands(platform, server, secret, name, mode, language) : ''} label={tx("Kurulum komutunu kopyala")} />
             {mode === 'automatic' && !name.trim() && <Notice tone="warning">{tx('Enter an agent name to generate an automatic installation command.')}</Notice>}
-            <p className="text-sm text-text-muted">{tx('Do not share the key or save it in logs, configuration files or shell history. It will not be shown again after closing.')} {agentDate(ticket.expiresAt)}</p>
+            <p className="text-sm text-text-muted">{tx('Do not share the key or save it in logs, configuration files or shell history. It will not be shown again after closing.')} {formatDateTime(ticket.expiresAt, tx('Henüz bildirilmedi'))}</p>
           </>}
           <p role="status" className="rounded-lg border border-border bg-surface px-3 py-2 font-medium text-text">{tx(labels[monitor.phase])}</p>
           {monitor.phase === 'Waiting' && <p className="text-sm text-text-muted">{tx("Komutu hedef makinede çalıştırın. Kayıt ve ilk heartbeat bekleniyor.")}</p>}
@@ -117,7 +117,7 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
           {monitor.agent && <Facts><Fact label={tx("Agent ID")}><span className="break-all font-mono text-sm">{monitor.agent.agentId}</span></Fact><Fact label={tx("Ad")}>{monitor.agent.hostName ?? tx('Bildirilmedi')}</Fact><Fact label={tx("İşletim sistemi")}>{monitor.agent.osDescription ?? monitor.agent.platform}</Fact><Fact label={tx("Sürüm")}>{monitor.agent.agentVersion ?? tx('Bildirilmedi')}</Fact><Fact label={tx("Bağlantı")}>{monitor.agent.connectivity === 'online' ? tx('Çevrimiçi') : monitor.agent.connectivity === 'offline' ? tx('Çevrimdışı') : tx('Bilinmiyor')}</Fact></Facts>}
           {monitor.phase === 'Online' && <p className="text-sm font-medium text-success">{tx("Agent çevrimiçi. Kurulum tamamlandı.")}</p>}
         </section>}
-        {(error || monitor.error) && <Notice tone="error">{tx(error || monitor.error)}</Notice>}
+        {(error || monitor.error) && <ErrorNotice {...(error ?? monitor.error!)} />}
         <div className="flex flex-wrap justify-end gap-2"><Dialog.Close render={<Button variant="outline" />}>{monitor.phase === 'Online' ? tx('Tamam') : tx('Kapat')}</Dialog.Close>{monitor.paused && <Button variant="outline" onClick={monitor.retry}>{tx("Takibi tekrar dene")}</Button>}{monitor.phase !== 'Online' && <Button type="submit" form="add-agent" disabled={pending || !httpsServerOrigin(server)}>{pending ? tx('Oluşturuluyor…') : ticket ? tx('Yeni token oluştur') : tx('Token oluştur')}</Button>}</div>
       </Dialog.Popup>
     </Dialog.Portal>

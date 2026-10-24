@@ -3,18 +3,17 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { QueryState } from '@/components/data/query-state'
-import { agentDate } from '@/features/agents/format'
 import { inputClass, selectClass } from '@/features/platform/styles'
-import { errorMessage } from '@/lib/api/failure-messages'
 import { useNotificationPolicy, useUpdateNotificationPolicy } from './hooks'
 import { eventTypeLabels, kindLabels, severityLabels } from './labels'
 import { thresholdRanges, toThresholds, validateThresholds } from './policy-validation'
 import type { ThresholdField } from './policy-validation'
 import { channelKinds, eventTypes, severities } from './types'
 import type { ChannelKind, EventType, NotificationPolicy, Severity } from './types'
+import { formatDateTime } from '@/lib/format'
 
 const thresholdLabels: Record<ThresholdField, string> = {
   get staleAfterHours() { return tx("Backup güncel değil eşiği (saat)") },
@@ -72,10 +71,10 @@ function PolicyForm({ policy }: { policy: NotificationPolicy }) {
     <div className="grid gap-4 sm:grid-cols-2">{(Object.keys(thresholdRanges) as ThresholdField[]).map((field) => <Field key={field} label={thresholdLabels[field]} error={submitted ? errors[field] : undefined}>
       {(control) => <input {...control} className={inputClass} inputMode="numeric" value={thresholds[field]} onChange={(event) => setThresholds({ ...thresholds, [field]: event.target.value })} />}
     </Field>)}</div>
-    {save.isError && <Notice tone="error">{errorMessage(save.error)}</Notice>}
+    {save.isError && <ErrorNotice error={save.error} />}
     {save.isSuccess && <Notice tone="success">{tx("Politika kaydedildi.")}</Notice>}
     <div className="flex flex-wrap items-center gap-3 border-t border-border pt-4"><Button type="submit" disabled={save.isPending}>{save.isPending ? tx('Kaydediliyor…') : tx('Politikayı kaydet')}</Button>
-      <span className="text-sm text-text-muted">{policy.updatedAt ? tx("Son güncelleme: {0}", { "0": agentDate(policy.updatedAt) }) : tx('Henüz kaydedilmedi; varsayılan değerler gösteriliyor.')}</span></div>
+      <span className="text-sm text-text-muted">{policy.updatedAt ? tx("Son güncelleme: {0}", { "0": formatDateTime(policy.updatedAt, tx('Henüz bildirilmedi')) }) : tx('Henüz kaydedilmedi; varsayılan değerler gösteriliyor.')}</span></div>
   </form>
 }
 

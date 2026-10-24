@@ -7,8 +7,9 @@ import { ConfigFieldInputs, SecretFieldInputs } from './descriptor-fields'
 import { activeSecretFields, buildConfiguration, buildSecretValues, configurationComplete, hasSecretInput, initialFieldValues, secretsComplete } from './descriptor-values'
 import type { FieldValues } from './descriptor-values'
 import type { ConnectionOps } from './hooks'
-import { connectionErrorMessage, errorField, invalidFieldName } from './labels'
+import { errorField, invalidFieldName } from './labels'
 import type { ConfigField, ConnectionView, PlatformUpdateConnectionInput, SecretField } from './types'
+import { errorMessage } from '@/lib/api/failure-messages'
 
 interface EditProps {
   connection: ConnectionView
@@ -36,7 +37,7 @@ export function EditConnectionDialog({ connection, configFields, ops, onClose }:
   const valid = (!canEdit || (name.trim() !== '' && configurationComplete(configFields, values))) && !quotaScopeInvalid
 
   return <FormDialog title={tx("Bağlantıyı düzenle: {0}", { "0": connection.name })} submitLabel="Kaydet" pendingLabel="Kaydediliyor…" pending={mutation.isPending}
-    disabled={Object.keys(input).length === 0 || !valid} error={mutation.error ? connectionErrorMessage(mutation.error) : undefined}
+    disabled={Object.keys(input).length === 0 || !valid} error={mutation.error ? errorMessage(mutation.error, 'storageConnection') : undefined}
     onSubmit={() => mutation.mutate({ connection, input }, { onSuccess: onClose })} onClose={onClose}>
     <label className="block text-sm text-text-muted">{tx("Ad")}<input className={inputClass} value={name} required disabled={!canEdit} aria-invalid={errorField(mutation.error) === 'name'} onChange={(event) => setName(event.target.value)} />
     </label>
@@ -78,7 +79,7 @@ export function SecretDialog({ connection, fields, ops, onClose }: SecretProps) 
   return <FormDialog title={`${connection.hasSecret ? tx('Kimlik bilgisini yenile') : tx('Kimlik bilgisi ayarla')}: ${connection.name}`}
     description={tx("Değerler yalnızca sunucuya gönderilir; kaydedildikten sonra bir daha gösterilmez. Hata olursa alanları yeniden girmeniz gerekir.")}
     submitLabel="Kaydet" pendingLabel="Kaydediliyor…" pending={mutation.isPending}
-    disabled={!hasSecretInput(buildSecretValues(activeFields, values)) || !secretsComplete(activeFields, values)} error={mutation.error ? connectionErrorMessage(mutation.error) : undefined}
+    disabled={!hasSecretInput(buildSecretValues(activeFields, values)) || !secretsComplete(activeFields, values)} error={mutation.error ? errorMessage(mutation.error, 'storageConnection') : undefined}
     onSubmit={submit} onClose={onClose}>
     {connection.providerType === 'sftp' && <p className="text-xs text-text-muted">{tx("Bu işlem kayıtlı kimlik bilgisinin tamamını değiştirir. Yeni")}{' '}{connection.configuration.authenticationType === 'private-key' ? tx('özel anahtarı ve gerekiyorsa parolasını') : tx('parolayı')}{' '}{tx("girin. Boş anahtar parolası eski parolayı korumaz.")}</p>}
     <SecretFieldInputs providerType={connection.providerType} fields={activeFields} values={values} invalidName={invalidFieldName(mutation.error, 'secret')} onChange={(field, value) => setValues((current) => ({ ...current, [field]: value }))} />

@@ -15,9 +15,8 @@ import { Section } from '@/components/ui/section'
 import { platformCrumb } from '@/features/platform/crumbs'
 import { bareTableClass } from '@/features/platform/list-empty'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
-import { agentDate } from '@/features/agents/format'
-import { formatCapacity, allocatedPercent } from '@/features/storage/format'
-import { QuotaStateBadge, EntitlementStatusBadge, PlanName } from '@/features/storage/quota-badges'
+import { allocatedPercent } from '@/features/storage/format'
+import { PlanName } from '@/features/storage/quota-badges'
 import { QuotaMeter } from '@/features/storage/quota-meter'
 import type { StorageUsageRow, QuotaState, EntitlementStatus } from '@/features/storage/types'
 import { platformPaths } from '@/features/platform/paths'
@@ -27,6 +26,8 @@ import { linkClass } from '@/features/platform/styles'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { useStorageUsage, useReconcileUsage, useRebuildUsage } from '@/features/platform/storage/hooks'
+import { formatBytes, formatDateTime } from '@/lib/format'
+import { StatusPill } from '@/components/data/status-pill'
 
 export function PlatformStoragePage() {
   useLanguage()
@@ -101,7 +102,7 @@ export function PlatformStoragePage() {
       render: (row) => (
         <div className="space-y-1">
           <div><PlanName plan={row.plan} /></div>
-          <div><EntitlementStatusBadge status={row.subscriptionStatus} /></div>
+          <div><StatusPill domain="subscription" status={row.subscriptionStatus} /></div>
         </div>
       ),
     },
@@ -122,9 +123,9 @@ export function PlatformStoragePage() {
         return (
           <div className="min-w-0 space-y-1">
             <div className="text-sm tabular-nums">
-              <span className="font-semibold text-text-heading">{formatCapacity(committed)}</span>
+              <span className="font-semibold text-text-heading">{formatBytes(committed)}</span>
               {limit !== null && (
-                <span className="text-text-muted"> / {formatCapacity(limit)}</span>
+                <span className="text-text-muted"> / {formatBytes(limit)}</span>
               )}
             </div>
             {limit !== null && (
@@ -148,12 +149,12 @@ export function PlatformStoragePage() {
       header: tx('Kota Durumu'),
       render: (row) => (
         <div className="space-y-1">
-          {row.state ? <QuotaStateBadge state={row.state} /> : <span className="text-xs text-text-muted">—</span>}
+          {row.state ? <StatusPill domain="quota" status={row.state} /> : <span className="text-xs text-text-muted">—</span>}
           {!row.newBackupsAllowed && (
             <div>
-              <Badge tone="error" className="text-[10px]">
+              <StatusPill level="urgent">
                 {row.denialCode === 'quota_exceeded' ? tx('Kota Doldu') : tx('Engellendi')}
-              </Badge>
+              </StatusPill>
             </div>
           )}
         </div>
@@ -174,7 +175,7 @@ export function PlatformStoragePage() {
       header: tx('Son Hesaplama'),
       render: (row) => (
         <span className="text-xs text-text-muted">
-          {row.calculatedAt ? agentDate(row.calculatedAt) : '—'}
+          {row.calculatedAt ? formatDateTime(row.calculatedAt, tx('Henüz bildirilmedi')) : '—'}
         </span>
       ),
     },

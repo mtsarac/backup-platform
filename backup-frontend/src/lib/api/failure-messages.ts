@@ -1,5 +1,6 @@
 import { tx } from '@/lib/i18n'
 import { ApiError } from './client'
+import type { TechnicalItem } from '@/components/ui/technical-details'
 
 const messages: Record<string, string> = {
   get DirectPathUnavailable() { return tx('DirectPathUnavailable: Doğrudan Agent bağlantısı veya güvenli diske yazma desteği kullanılamıyor. Backend aktarımına geçilmez.') },
@@ -166,16 +167,51 @@ const messages: Record<string, string> = {
   get not_rsa() { return tx("Yalnızca RSA genel anahtarları desteklenir.") },
   get too_weak() { return tx("RSA anahtarı en az 4096 bit olmalıdır.") },
 }
+// Wording that differs from the shared table where the failure happens (restore) or where a shared code means something else (connections).
+export type ErrorScope = 'restore' | 'storageConnection'
+const scopedMessages: Record<ErrorScope, Record<string, string>> = {
+  restore: {
+  get ReplicaUnavailable() { return tx("Replica geri yükleme için kullanılamıyor.") }, get ArtifactTransferFailed() { return tx("Artifact aktarımı tamamlanamadı.") },
+  get ChecksumMismatch() { return tx("Artifact checksum değeri eşleşmedi.") }, get BackupInvalid() { return tx("Backup doğrulaması başarısız oldu.") },
+  get BackupTypeUnsupported() { return tx("Bu backup türü geri yükleme için desteklenmiyor.") }, get IncompatibleVersion() { return tx("Kaynak ve hedef Database motoru sürümleri uyumlu değil.") },
+  get FileMappingFailed() { return tx("Database dosya eşlemesi oluşturulamadı.") }, get PreCheckFailed() { return tx("Geri yükleme ön kontrolleri başarısız oldu.") },
+  get TargetDatabaseExists() { return tx("Hedef Database zaten var. Yeni Database modu üzerine yazmaz.") }, get TargetDatabaseNotFound() { return tx("Üzerine yazılacak hedef Database bulunamadı.") },
+  get TargetInUse() { return tx("Hedef Database kullanımda.") }, get TargetProtected() { return tx("Korunan hedef Database değiştirilemez.") },
+  get InsufficientDiskSpace() { return tx("Hedefte yeterli disk alanı yok.") }, get SqlRestoreFailed() { return tx("Database geri yükleme işlemi tamamlanamadı.") },
+  get VerificationFailed() { return tx("Backup geri yüklendi ancak geri yüklenen Database bütünlük veya veri okuma kontrollerinden geçemedi.") },
+  get confirmation_mismatch() { return tx("Yazdığınız Database adı eşleşmiyor.") }, get retention_not_elapsed() { return tx("Rollback kopyasının koruma süresi henüz dolmadı.") },
+  get cleanup_not_applicable() { return tx("Bu işlem için temizlik şu anda uygulanamaz.") },
+  get NotClaimed() { return tx("Restore süresi içinde Agent tarafından alınmadı. Hedef değiştirilmedi.") },
+  get precheck_rejected() { return tx("Ön kontrol bu geri yükleme ile eşleşmiyor veya başarılı değil. Ön kontrolü yeniden çalıştırın.") },
+  get agent_transfer_required() { return tx("Replica başka bir Agent üzerinde. Agentlar arası aktarım desteklenmiyor.") },
+  get no_accessible_replica() { return tx("Bu Agent tarafından erişilebilen Replica yok.") }, get replica_not_restorable() { return tx("Replica geri yüklemeye uygun değil.") },
+  get replica_not_verified() { return tx("Replica doğrulanmadı.") }, get checksum_unavailable() { return tx("Artifact checksum bilgisi yok.") }, get backup_type_unsupported() { return tx("Backup türü desteklenmiyor.") },
+  get overwrite_confirmation_required() { return tx("Üzerine yazmayı hedef Database adıyla onaylayın.") },
+  },
+  storageConnection: {
+    get concurrent_update() { return tx('Bağlantı başka bir işlemle aynı anda değiştirildi. Sayfayı yenileyip tekrar deneyin.') },
+    get rotation_test_failed() { return tx('Yeni kimlik bilgisi veya sunucu parmak izi doğrulanamadı. Mevcut bağlantı ve kimlik bilgisi korunuyor.') },
+  },
+}
 // Codes whose text must win over the generic 403/404 wording.
 const statusSpecificCodes: Record<string, true> = { tenant_not_found: true, user_not_found: true, membership_not_found: true, agent_not_found: true, plan_not_found: true, quota_policy_not_found: true, subscription_not_found: true, platform_admin_required: true, enrollment_disabled: true, storage_connection_not_found: true, platform_managed_provider: true, notification_channel_not_found: true, self_approval_forbidden: true, not_requester: true, decrypt_not_permitted: true, key_not_found: true, artifact_not_found: true }
-export function failureMessage(code?: string | null): string {
+const lookup = (table: Record<string, string>, code: string) => Object.hasOwn(table, code) ? table[code] : undefined
+
+export function failureMessage(code?: string | null, scope?: ErrorScope): string {
   if (!code) return tx('İşlem başarısız oldu.')
-  return messages[code] ?? (/^[A-Za-z0-9_.-]{1,80}$/.test(code) ? tx("İşlem başarısız oldu ({0}).", { "0": code }) : tx('İşlem başarısız oldu.'))
+  const known = (scope && lookup(scopedMessages[scope], code)) ?? lookup(messages, code)
+  return known ?? (/^[A-Za-z0-9_.-]{1,80}$/.test(code) ? tx("İşlem başarısız oldu ({0}).", { "0": code }) : tx('İşlem başarısız oldu.'))
 }
-export function errorMessage(error: unknown): string {
+
+/** Failures that carry a request body the user can fix: the scoped wording applies only there, never to auth, missing-resource or server failures. */
+const isRequestFailure = (error: ApiError) => error.status !== 401 && error.status !== 403 && error.status !== 404 && error.status < 500
+
+/** What happened, in plain words. A single sentence, used wherever a full notice does not fit (dialogs, inline hints). */
+export function errorMessage(error: unknown, scope?: ErrorScope): string {
   if (error instanceof ApiError) {
     if (error.status === 401) return tx('Oturumunuz sona erdi. Yeniden giriş yapın.')
     const code = error.reason ?? error.code
+    if (scope && isRequestFailure(error)) return failureMessage(code, scope)
     if (error.code === 'support_access_denied') return failureMessage(code)
     if (error.code === 'support_session_not_found' || error.code === 'not_session_owner' || error.code === 'replace_forbidden' || error.code === 'support_unavailable') return failureMessage(code)
     if ((error.status === 403 || error.status === 404) && code && Object.hasOwn(statusSpecificCodes, code)) return messages[code]
@@ -185,4 +221,72 @@ export function errorMessage(error: unknown): string {
     return failureMessage(code)
   }
   return tx('Sunucuya ulaşılamadı. Bağlantınızı kontrol edip tekrar deneyin.')
+}
+
+export interface ErrorDescription {
+  /** What happened. */
+  what: string
+  /** What it means for the user's data. */
+  dataImpact: string
+  /** The one thing to do next. */
+  action: string
+  /** Raw code, status and field: for the collapsed technical details only. */
+  technical: TechnicalItem[]
+}
+
+// Codes whose consequence for the data is specific; every other failure gets the honest generic line for its kind.
+const guidance: Record<string, { dataImpact: () => string; action: () => string }> = {
+  quota_exceeded: { dataImpact: () => tx("Mevcut yedekleriniz silinmedi ve geri yüklenebilir."), action: () => tx("Depolama alanı açmak için yöneticinize danışın.") },
+  quota_size_unknown: { dataImpact: () => tx("Mevcut yedekleriniz silinmedi ve geri yüklenebilir."), action: () => tx("Yöneticinize danışın.") },
+  QuotaExceeded: { dataImpact: () => tx("Mevcut yedekleriniz silinmedi ve geri yüklenebilir."), action: () => tx("Depolama alanı açmak için yöneticinize danışın.") },
+  integrity_mismatch: { dataImpact: () => tx("Dosya doğrulanamadığı için kullanılmadı; yedeğiniz değişmedi."), action: () => tx("Yeni bir indirme başlatın.") },
+  AgentLost: { dataImpact: () => tx("Bu deneme tamamlanmadı; önceki başarılı yedekleriniz korunur."), action: () => tx("Yedekleme bilgisayarının açık ve bağlı olduğunu kontrol edip yeniden deneyin.") },
+  connection_in_use: { dataImpact: () => tx("Bağlantı silinmedi; yedeklemeler kullanmaya devam ediyor."), action: () => tx("Önce bu bağlantıyı kullanan işleri başka bir depolamaya taşıyın.") },
+  private_key_rejected: { dataImpact: () => tx("Özel anahtar gönderilmedi ve kaydedilmedi."), action: () => tx("Yalnızca genel anahtarı girin.") },
+}
+
+function technicalItems(error: unknown): TechnicalItem[] {
+  if (!(error instanceof ApiError)) return []
+  const code = error.reason ?? error.code
+  const items: TechnicalItem[] = []
+  if (code && /^[A-Za-z0-9_.-]{1,80}$/.test(code)) items.push({ label: tx("Hata kodu"), value: code })
+  items.push({ label: tx("HTTP durumu"), value: String(error.status) })
+  if (error.field && /^[A-Za-z0-9_.-]{1,80}$/.test(error.field)) items.push({ label: tx("Alan"), value: error.field })
+  return items
+}
+
+/** A failure reported as a bare code (a run, a replica, a restore), not as a failed request. */
+export function describeFailure(code: string | null | undefined, scope?: ErrorScope): ErrorDescription {
+  const what = failureMessage(code, scope)
+  const technical = code && /^[A-Za-z0-9_.-]{1,80}$/.test(code) ? [{ label: tx("Hata kodu"), value: code }] : []
+  const key = code ?? ''
+  if (Object.hasOwn(guidance, key)) return { what, dataImpact: guidance[key].dataImpact(), action: guidance[key].action(), technical }
+  if (scope === 'restore') return { what, dataImpact: tx("Yedeğiniz değişmedi; hedef veritabanının durumunu kontrol edin."), action: tx("Ayrıntıları kontrol edip geri yüklemeyi yeniden deneyin."), technical }
+  return { what, dataImpact: tx("Mevcut yedekleriniz etkilenmedi."), action: tx("Ayrıntıları kontrol edip yeniden deneyin."), technical }
+}
+
+/** A permission wall is a failure too: nothing was changed, and the way forward is a person who can grant access. */
+export function accessDenied(what: string): ErrorDescription {
+  return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Yöneticinize danışın."), technical: [] }
+}
+
+/** A record that is gone or not theirs: nothing changed, and the way forward is to pick again from the list. */
+export function notFound(what: string): ErrorDescription {
+  return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Sayfayı yenileyip kaydı listeden yeniden seçin."), technical: [] }
+}
+
+/** Every failure the user sees says what happened, what it means for the data and what to do next. */
+export function describeError(error: unknown, scope?: ErrorScope): ErrorDescription {
+  const what = errorMessage(error, scope)
+  const technical = technicalItems(error)
+  const key = error instanceof ApiError ? error.reason ?? error.code ?? '' : ''
+  const known = Object.hasOwn(guidance, key) ? guidance[key] : undefined
+  if (known) return { what, dataImpact: known.dataImpact(), action: known.action(), technical }
+  const uncertain = tx("Mevcut yedekleriniz etkilenmedi; işlemin tamamlanıp tamamlanmadığını listeden kontrol edin.")
+  if (!(error instanceof ApiError)) return { what, dataImpact: uncertain, action: tx("İnternet bağlantınız düzeldiğinde işlemi tekrarlayın."), technical }
+  if (error.status === 401) return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Giriş yaptıktan sonra işlemi tekrarlayın."), technical }
+  if (error.status === 403) return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Yöneticinize danışın."), technical }
+  if (error.status === 404) return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Sayfayı yenileyip kaydı listeden yeniden seçin."), technical }
+  if (error.status >= 500) return { what, dataImpact: uncertain, action: tx("Sorun sürerse teknik ayrıntıları destek ekibine iletin."), technical }
+  return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Bilgileri kontrol edip tekrar deneyin."), technical }
 }

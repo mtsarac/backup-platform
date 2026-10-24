@@ -61,17 +61,17 @@ describe('discovery page', () => {
   it('renders the empty state when there are no agents', async () => {
     vi.mocked(getAgents).mockResolvedValue([])
     mount()
-    expect(await screen.findByText("Henüz ajan yok.")).toBeInTheDocument()
+    expect(await screen.findByText(/Henüz ajan yok/)).toBeInTheDocument()
   })
   it('renders the unsupported state when no agent reports the capability', async () => {
     vi.mocked(getAgents).mockResolvedValue([legacyAgent] as never)
     mount()
-    expect(await screen.findByText("Ajan sürümü keşfi desteklemiyor.")).toBeInTheDocument()
+    expect(await screen.findByText(/Hiçbir ajan veritabanı keşfi yeteneğini bildirmedi/)).toBeInTheDocument()
   })
   it('renders the empty instance state', async () => {
     vi.mocked(getDiscoveryInstances).mockResolvedValue({ items: [] })
     mount()
-    expect(await screen.findByText("Keşfedilen veritabanı sunucusu yok.")).toBeInTheDocument()
+    expect(await screen.findByText(/Keşfedilen veritabanı sunucusu yok/)).toBeInTheDocument()
   })
   it('renders a permission state on 403 and a generic error otherwise', async () => {
     vi.mocked(getDiscoveryInstances).mockRejectedValue(new ApiError(403))

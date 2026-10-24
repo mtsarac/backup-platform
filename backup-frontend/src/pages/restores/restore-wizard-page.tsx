@@ -5,7 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { QueryState } from '@/components/data/query-state'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { Stepper } from '@/components/ui/stepper'
@@ -13,14 +13,15 @@ import { inputClass, selectClass } from '@/features/platform/styles'
 import { PrecheckResults } from '@/features/restores/precheck-results'
 import { useArtifact } from '@/features/artifacts/hooks'
 import type { BackupArtifact } from '@/features/artifacts/types'
-import { artifactSize } from '@/features/artifacts/format'
 import { useRestore, useRestoreTargets, useStartRestore, useStartRestoreDiscovery, useStartRestorePrecheck } from '@/features/restores/hooks'
-import { restoreErrorMessage, restoreFailureMessage, restoreModeLabel } from '@/features/restores/presentation'
+import { restoreModeLabel } from '@/features/restores/presentation'
 import type { RestoreMode, RestoreOptions, RestoreTarget, RestoreTargetsResponse, RestoreView, StartRestoreDiscoveryVariables, StartRestorePrecheckVariables, StartRestoreVariables } from '@/features/restores/types'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { StoredLoginPanel } from '@/features/restores/stored-login-panel'
 import { ApiError } from '@/lib/api/client'
 import { FileRestoreWizard } from '@/features/restores/file-restore-wizard'
+import { formatBytes } from '@/lib/format'
+import { accessDenied, errorMessage, failureMessage } from '@/lib/api/failure-messages'
 
 
 export function RestoreWizardPage() {
@@ -33,7 +34,7 @@ export function RestoreWizardPage() {
   if (!canOperate) {
     return <div className="space-y-6">
       <PageHeader title={tx("Backup Geri Yükleme Sihirbazı")} crumbs={[{ label: tx('Backup dosyaları'), to: `/tenants/${tenantId}/artifacts` }, { label: tx('Backup detayları'), to: `/tenants/${tenantId}/artifacts/${id}` }, { label: tx('Geri yükleme') }]} />
-      <Notice tone="error">{tx("Bu sayfada geri yükleme (Restore) işlemi yapma yetkiniz yok. Restore başlatma yalnızca Owner, Admin ve Operator rollerine açıktır. Viewer rolü salt okunurdur.")}</Notice>
+      <ErrorNotice {...accessDenied(tx("Bu sayfada geri yükleme (Restore) işlemi yapma yetkiniz yok. Restore başlatma yalnızca Owner, Admin ve Operator rollerine açıktır. Viewer rolü salt okunurdur."))} />
     </div>
   }
 
@@ -310,7 +311,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
       {/* Artifact Summary */}
       <section aria-label={tx("Kaynak Backup Bilgisi")} className="space-y-2 rounded-xl border border-border bg-surface-2 p-4 text-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 font-medium">
-          <span className="min-w-0 break-words">{tx("Kaynak:")}{' '}{artifact.databaseName ?? tx('Bilinmeyen Database')} · {artifactSize(artifact.sizeBytes)}</span>
+          <span className="min-w-0 break-words">{tx("Kaynak:")}{' '}{artifact.databaseName ?? tx('Bilinmeyen Database')} · {formatBytes(artifact.sizeBytes)}</span>
           <StatusPill status={artifact.state} />
         </div>
         <details>
@@ -356,7 +357,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
                       <XCircle className="size-4 shrink-0 mt-0.5" />
                       <div>
                         <p className="font-medium">{tx("Bu Agent seçilemez veya backup'a erişemez:")}</p>
-                        <p className="mt-1 text-sm">{restoreFailureMessage(activeAgent.rejectionCode)}</p>
+                        <p className="mt-1 text-sm">{failureMessage(activeAgent.rejectionCode, 'restore')}</p>
                       </div>
                     </div>
                   )}
@@ -561,7 +562,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
                       />
                     )}
                     {(discoveryError != null || (currentDiscovery && discoveryQuery.error)) && (
-                      <div role="alert" className="text-sm text-error">{restoreErrorMessage(discoveryError || discoveryQuery.error)}</div>
+                      <div role="alert" className="text-sm text-error">{errorMessage(discoveryError || discoveryQuery.error, 'restore')}</div>
                     )}
                   </div>
 
@@ -617,7 +618,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
           </Section>
 
           {precheckError != null && (
-            <Notice tone="error">{restoreErrorMessage(precheckError)}</Notice>
+            <ErrorNotice error={precheckError} scope="restore" />
           )}
 
           <div className="flex flex-wrap justify-between gap-3">
@@ -663,7 +664,7 @@ function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProps) {
               </Notice>}
             </div>
           </Section>
-          {executionError != null && <Notice tone="error">{executionError instanceof ApiError ? restoreErrorMessage(executionError) : tx('Geri yükleme başlatılamadı.')}</Notice>}
+          {executionError != null && (executionError instanceof ApiError ? <ErrorNotice error={executionError} scope="restore" /> : <ErrorNotice what={tx('Geri yükleme başlatılamadı.')} dataImpact={tx('Geri yüklemenin başlayıp başlamadığını geri yükleme listesinden kontrol edin.')} action={tx('Aynı işlemi tekrar deneyin; yeniden denemeler ikinci bir geri yükleme oluşturmaz.')} />)}
 
           <div className="flex flex-wrap justify-between gap-3">
             <Button variant="outline" onClick={() => setStep(2)}>{tx("← Mod Ayarlarına Dön")}</Button>

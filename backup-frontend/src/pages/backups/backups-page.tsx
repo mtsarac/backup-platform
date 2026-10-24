@@ -10,18 +10,19 @@ import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { useAgents } from '@/features/agents/hooks'
 import { useBackupJobs } from '@/features/backup-jobs/hooks'
 import { useBackups } from '@/features/backups/hooks'
-import { dateFilterInstant, formatDuration, formatTimestamp, runStatuses, runStatusLabels, triggerLabel } from '@/features/backups/presentation'
+import { dateFilterInstant, runStatuses, triggerLabel } from '@/features/backups/presentation'
 import { ReplicationBadge } from '@/features/backups/replication'
 import { SizeAnomalyBadge, SizeAnomalyComparison } from '@/features/backups/size-anomaly'
 import type { BackupRun, BackupRunFilters, BackupRunStatus, BackupTrigger } from '@/features/backups/types'
 import { linkClass } from '@/features/platform/styles'
 import { useTenant } from '@/features/tenancy/use-tenant'
-import { errorMessage } from '@/lib/api/failure-messages'
+import { formatDateTime, formatDuration } from '@/lib/format'
+import { statusLabel } from '@/lib/status'
 
 export function BackupsPage() {
   useLanguage()
@@ -47,8 +48,8 @@ export function BackupsPage() {
       <SizeAnomalyBadge run={run} /><SizeAnomalyComparison run={run} />
       <span className="text-sm text-text-muted">{tx("Deneme")}{' '}{run.currentAttemptNumber} / {run.retry.maxAttempts}</span>
     </div> },
-    { key: 'trigger', header: tx('Tetikleyici'), wrap: true, render: (run) => <div>{triggerLabel(run.triggerType)}<p className="text-sm text-text-muted">{tx("Planlanan:")}{' '}{formatTimestamp(run.scheduledFor)}</p></div> },
-    { key: 'started', header: tx('Başlangıç'), render: (run) => formatTimestamp(run.startedAt) },
+    { key: 'trigger', header: tx('Tetikleyici'), wrap: true, render: (run) => <div>{triggerLabel(run.triggerType)}<p className="text-sm text-text-muted">{tx("Planlanan:")}{' '}{formatDateTime(run.scheduledFor)}</p></div> },
+    { key: 'started', header: tx('Başlangıç'), render: (run) => formatDateTime(run.startedAt) },
     { key: 'duration', header: tx('Süre'), render: (run) => formatDuration(run.startedAt, run.completedAt) },
   ]
   const filterError = jobs.error ?? agents.error
@@ -61,7 +62,7 @@ export function BackupsPage() {
         <FilterField label={tx("Durum")}>
           <select aria-label={tx("Durum")} className={filterControlClass} value={filters.status ?? ''} onChange={(event) => updateFilters({ status: event.target.value as BackupRunStatus | '' })}>
             <option value="">{tx("Tüm durumlar")}</option>
-            {runStatuses.map((status) => <option key={status} value={status}>{tx(runStatusLabels[status])}</option>)}
+            {runStatuses.map((status) => <option key={status} value={status}>{statusLabel('general', status)}</option>)}
           </select>
         </FilterField>
         <FilterField label={tx("İş")}>
@@ -88,11 +89,11 @@ export function BackupsPage() {
           <input aria-label={tx("Oluşturulma sonu")} type="date" min={fromDay || undefined} className={filterControlClass} value={toDay} onChange={(event) => { setToDay(event.target.value); updateFilters({ to: dateFilterInstant(event.target.value, true) }) }} />
         </FilterField>
       </Filters>
-      {invalidDateRange && <Notice tone="error">{tx("Başlangıç tarihi bitiş tarihinden sonra olamaz.")}</Notice>}
-      {filterError && <Notice tone="error">{tx("Filtre seçenekleri yüklenemedi:")}{' '}{errorMessage(filterError)}</Notice>}
+      {invalidDateRange && <Notice tone="warning">{tx("Başlangıç tarihi bitiş tarihinden sonra olamaz.")}</Notice>}
+      {filterError && <ErrorNotice title={tx("Filtre seçenekleri yüklenemedi")} error={filterError} />}
       <QueryState isPending={backups.isPending} error={backups.error}>
         {backups.data && (backups.data.totalCount === 0
-          ? <div className="rounded-xl border border-border bg-surface"><EmptyState icon={Activity} title={tx("Bu filtrelerde Backup Run bulunamadı.")} action={<Button variant="outline" onClick={clearFilters}>{tx("Filtreleri temizle")}</Button>}>{tx("Filtreleri değiştirin veya temizleyin. Yeni çalıştırmalar Backup Job'lardan başlatılır.")}</EmptyState></div>
+          ? <div className="rounded-xl border border-border bg-surface"><EmptyState icon={Activity} message={tx("Bu filtrelerde Backup Run bulunamadı.")} action={<Button variant="outline" onClick={clearFilters}>{tx("Filtreleri temizle")}</Button>} /></div>
           : <>
             <DataTable rows={backups.data.items} columns={columns} keyExtractor={(run) => run.id} />
             <Pagination label={tx("Yedekleme sayfaları")} page={page} pageSize={pageSize} totalCount={backups.data.totalCount} disabled={backups.isFetching} onPageChange={(next) => setFilters((current) => ({ ...current, page: next }))} />

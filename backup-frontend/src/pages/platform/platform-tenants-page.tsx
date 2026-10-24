@@ -4,7 +4,6 @@ import { Building2, Plus } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { DataTable, type Column } from '@/components/data/data-table'
 import { Pagination } from '@/components/data/pagination'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { Filters } from '@/components/ui/filters'
@@ -22,6 +21,7 @@ import type { PlatformTenant } from '@/features/platform/types'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { ApiError } from '@/lib/api/client'
 import { errorMessage } from '@/lib/api/failure-messages'
+import { StatusPill } from '@/components/data/status-pill'
 
 function CreateTenantDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (name: string) => void }) {
   useLanguage()
@@ -48,7 +48,7 @@ export function PlatformTenantsPage() {
     { key: 'name', header: tx('Tenant'), wrap: true, render: (tenant) => <Link className={`${linkClass} font-semibold`} to={platformPaths.tenant(tenant.tenantId)}>{tenant.name}</Link> },
     { key: 'members', header: tx('Üye sayısı'), render: (tenant) => tenant.memberCount },
     { key: 'agents', header: tx('Agents'), render: (tenant) => tenant.agentCount },
-    { key: 'enrollment', header: tx('Agent kaydı'), render: (tenant) => <Badge tone={tenant.enrollmentEnabled ? 'success' : 'neutral'} dot>{tenant.enrollmentEnabled ? tx('Açık') : tx('Kapalı')}</Badge> },
+    { key: 'enrollment', header: tx('Agent kaydı'), render: (tenant) => <StatusPill level={tenant.enrollmentEnabled ? 'safe' : 'neutral'}>{tenant.enrollmentEnabled ? tx('Açık') : tx('Kapalı')}</StatusPill> },
   ]
   const newTenant = <Button onClick={() => { setCreated(''); setCreating(true) }}><Plus aria-hidden="true" />{tx("Yeni tenant")}</Button>
   return <div className="space-y-6">
@@ -60,7 +60,7 @@ export function PlatformTenantsPage() {
     <PlatformQueryState isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">
         {data.totalCount === 0 && !search
-          ? <ListEmpty icon={Building2} title={tx("Henüz tenant yok.")} action={newTenant}>{tx("İlk tenant'ı oluşturarak üye ve Agent eklemeye başlayın.")}</ListEmpty>
+          ? <ListEmpty icon={Building2} message={tx("Henüz tenant yok.")} action={newTenant} />
           : <DataTable rows={data.items} columns={columns} keyExtractor={(tenant) => tenant.tenantId} emptyMessage={tx("Aramaya uygun tenant bulunamadı.")} />}
         {data.totalCount > 0 && <Pagination label={tx("Tenant sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
       </div>}

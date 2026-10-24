@@ -56,7 +56,7 @@ describe('subscription section states', () => {
   it('shows an explicit empty state for a tenant without subscription, with only the assign action', async () => {
     serve(null)
     mount()
-    expect(await screen.findByText('Abonelik yok')).toBeInTheDocument()
+    expect(await screen.findByText('Bu çalışma alanı için henüz bir plan atanmadı.')).toBeInTheDocument()
     expect(buttonNames()).toEqual(['Plan ata'])
     expect(api.getSubscriptionHistory).not.toHaveBeenCalled()
   })

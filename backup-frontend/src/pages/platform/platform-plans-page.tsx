@@ -8,7 +8,6 @@ import { FilterField, Filters, filterControlClass } from '@/components/ui/filter
 import { PageHeader } from '@/components/ui/page-header'
 import { platformCrumb } from '@/features/platform/crumbs'
 import { ListEmpty } from '@/features/platform/list-empty'
-import { agentDate } from '@/features/agents/format'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { SearchForm } from '@/features/platform/search-form'
@@ -18,6 +17,8 @@ import { CreatePlanDialog, EditPlanDialog } from '@/features/platform/plans/plan
 import { StorageLimitText } from '@/features/platform/plans/storage-limit-text'
 import type { EnabledFilter, Plan } from '@/features/platform/plans/types'
 import { errorMessage } from '@/lib/api/failure-messages'
+import { formatDateTime } from '@/lib/format'
+import { StatusPill } from '@/components/data/status-pill'
 
 function enabledFilter(value: string): EnabledFilter | undefined {
   return value === 'true' || value === 'false' ? value : undefined
@@ -37,11 +38,11 @@ export function PlatformPlansPage() {
   const filtered = Boolean(search || enabled)
   const columns: Column<Plan>[] = [
     { key: 'name', header: 'Plan', wrap: true, render: (plan) => <div><span className="font-medium">{plan.name}</span>{plan.quotaPolicyReference && <div className="text-xs text-text-muted">{tx("Politika referansı:")}{' '}{plan.quotaPolicyReference}</div>}</div> },
-    { key: 'enabled', header: tx('Durum'), render: (plan) => <Badge tone={plan.enabled ? 'success' : 'neutral'}>{plan.enabled ? tx('Etkin') : tx('Devre dışı')}</Badge> },
+    { key: 'enabled', header: tx('Durum'), render: (plan) => <StatusPill level={plan.enabled ? 'safe' : 'neutral'}>{plan.enabled ? tx('Etkin') : tx('Devre dışı')}</StatusPill> },
     { key: 'limit', header: tx('Depolama limiti'), render: (plan) => <StorageLimitText bytes={plan.storageLimitBytes} /> },
     { key: 'system', header: tx('Tür'), render: (plan) => plan.isSystem ? <Badge tone="warning">{tx("Sistem / Legacy")}</Badge> : <span className="text-text-muted">{tx("Özel")}</span> },
     { key: 'tenants', header: tx('Tenant sayısı'), render: (plan) => plan.tenantCount },
-    { key: 'updated', header: tx('Güncellendi'), render: (plan) => agentDate(plan.updatedAt) },
+    { key: 'updated', header: tx('Güncellendi'), render: (plan) => formatDateTime(plan.updatedAt, tx('Henüz bildirilmedi')) },
     { key: 'actions', header: tx('İşlemler'), wrap: true, render: (plan) => plan.isSystem
       ? <span className="text-xs text-text-muted">{tx("Sistem planı; salt okunur.")}</span>
       : <div className="flex flex-wrap gap-2">
@@ -59,7 +60,7 @@ export function PlatformPlansPage() {
     </Filters>
     <PlatformQueryState isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">
-        {!filtered && data.totalCount === 0 ? <ListEmpty title={tx("Henüz plan yok.")} action={<Button onClick={() => setCreating(true)}>{tx("Yeni plan")}</Button>}>{tx("Bir plan oluşturun, sonra tenant'ın Abonelik bölümünden atayın.")}</ListEmpty>
+        {!filtered && data.totalCount === 0 ? <ListEmpty message={tx("Henüz plan yok.")} action={<Button onClick={() => setCreating(true)}>{tx("Yeni plan")}</Button>} />
           : <DataTable rows={data.items} columns={columns} keyExtractor={(plan) => plan.planId} emptyMessage={filtered ? tx('Filtreye uygun plan bulunamadı.') : tx('Henüz plan yok.')} />}
         {data.totalCount > 0 && <Pagination label={tx("Plan sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
       </div>}

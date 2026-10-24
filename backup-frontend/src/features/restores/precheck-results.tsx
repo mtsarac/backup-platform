@@ -4,10 +4,11 @@ import { DataTable } from '@/components/data/data-table'
 import type { Column } from '@/components/data/data-table'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts } from '@/components/ui/section'
-import { restoreFailureMessage, safeRestoreCode } from './presentation'
+import { safeRestoreCode } from './presentation'
 import type { RestoreResult, RestoreView } from './types'
+import { describeFailure, failureMessage } from '@/lib/api/failure-messages'
 
 type PrecheckItem = RestoreResult['preCheck'][number]
 
@@ -24,7 +25,7 @@ const columns: Column<PrecheckItem>[] = [
     const { label, icon: Icon, className } = checkStatus[item.status]
     return <span className={`inline-flex items-center gap-1.5 font-medium ${className}`}><Icon aria-hidden="true" className="size-4" />{tx(label)}</span>
   } },
-  { key: 'message', get header() { return tx("Açıklama") }, wrap: true, render: (item) => <span className="text-text-muted">{item.status === 'Failed' ? restoreFailureMessage(item.reasonCode) : item.message || safeRestoreCode(item.reasonCode)}</span> },
+  { key: 'message', get header() { return tx("Açıklama") }, wrap: true, render: (item) => <span className="text-text-muted">{item.status === 'Failed' ? failureMessage(item.reasonCode, 'restore') : item.message || safeRestoreCode(item.reasonCode)}</span> },
 ]
 
 /** The precheck verdict first, the individual checks second: what happened, and what the user may do next. */
@@ -40,7 +41,7 @@ export function PrecheckResults({ data, failed, passed, onRecheck, recheckDisabl
       <div className="flex items-center gap-2"><span className="font-medium text-text-heading">{tx("Durum:")}</span><StatusPill status={data.status} /></div>
       <Button variant="outline" size="sm" onClick={onRecheck} disabled={recheckDisabled}><RotateCcw aria-hidden="true" className="size-4" />{tx("Yeniden Kontrol Et")}</Button>
     </div>
-    {failed && <Notice tone="error" title={tx("Ön kontrol başarısız oldu! Restore başlatılamaz.")}>{data.failureCode ? restoreFailureMessage(data.failureCode) : tx('Aşağıdaki kontrollerden en az biri başarısız oldu. Hataları giderdikten sonra tekrar deneyin.')}</Notice>}
+    {failed && <ErrorNotice title={tx("Ön kontrol başarısız oldu! Restore başlatılamaz.")} {...(data.failureCode ? describeFailure(data.failureCode, 'restore') : { what: tx('Aşağıdaki kontrollerden en az biri başarısız oldu. Hataları giderdikten sonra tekrar deneyin.'), dataImpact: tx('Geri yükleme başlamadı; hedef veritabanı değişmedi.'), action: tx('Başarısız kontrolleri giderip ön kontrolü yeniden çalıştırın.'), technical: [] })} />}
     {passed && warnings.length > 0 && <Notice tone="warning" title={tx("Ön kontrol uyarılarla geçti.")}>{tx("Aşağıdaki uyarıları inceleyerek devam edebilirsiniz.")}</Notice>}
     {passed && warnings.length === 0 && <Notice tone="success" title={tx("Tüm ön kontroller başarıyla tamamlandı. Geri yükleme güvenle başlatılabilir.")} />}
     <DataTable rows={items} columns={columns} keyExtractor={(item) => `${item.checkId}:${item.reasonCode}:${item.status}:${items.indexOf(item)}`} emptyMessage={tx("Henüz kontrol sonucu bildirilmedi.")} />

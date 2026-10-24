@@ -1,25 +1,24 @@
 import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 import { useState, type FormEvent } from 'react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
-import { agentDate } from '@/features/agents/format'
 import { inputClass, selectClass } from '@/features/platform/styles'
-import { errorMessage } from '@/lib/api/failure-messages'
 import {
   useClearEmailSecret, useClearSmsSecret, useSetEmailSecret, useSetSmsSecret, useUpdateEmailTransport, useUpdateSmsTransport,
 } from './hooks'
 import type { EmailSecurity, EmailTransport, SmsAuthentication, SmsTransport } from './types'
+import { formatDateTime } from '@/lib/format'
+import { StatusPill } from '@/components/data/status-pill'
 
 const emailSecurityLabels: Record<EmailSecurity, string> = { starttls: 'STARTTLS', get implicit() { return tx("Implicit TLS") }, get none() { return tx("Şifreleme yok") } }
 const smsAuthLabels: Record<SmsAuthentication, string> = { get none() { return tx("Yok") }, get bearer() { return tx("Bearer token") }, get basic() { return tx("Basic (kullanıcı + parola)") }, get header() { return tx("Özel header") } }
 
 function StateBadges({ transport }: { transport: { configured: boolean; enabled: boolean } }) {
   useLanguage()
-  return <div className="flex flex-wrap gap-1.5"><Badge tone={transport.configured ? 'success' : 'neutral'} dot>{transport.configured ? tx('Yapılandırıldı') : tx('Yapılandırılmadı')}</Badge><Badge tone={transport.enabled ? 'success' : 'warning'} dot>{transport.enabled ? tx('Etkin') : tx('Devre dışı')}</Badge></div>
+  return <div className="flex flex-wrap gap-1.5"><StatusPill level={transport.configured ? 'safe' : 'neutral'}>{transport.configured ? tx('Yapılandırıldı') : tx('Yapılandırılmadı')}</StatusPill><StatusPill level={transport.enabled ? 'safe' : 'attention'}>{transport.enabled ? tx('Etkin') : tx('Devre dışı')}</StatusPill></div>
 }
 
 /** One write-only secret control: the value is sent and cleared from state, never shown again; the API only reports `hasSecret`. */
@@ -42,14 +41,14 @@ function SecretControl({ label, transport, onSet, onClear }: {
   const error = onSet.error ?? onClear.error
   return <div className="space-y-3 border-t border-border pt-5">
     <h3 className="text-sm font-semibold text-text-heading">{tx("Kimlik bilgileri")}</h3>
-    <p className="text-sm text-text-muted">{tx(label)}: {transport.hasSecret ? tx("kayıtlı ({0})", { "0": agentDate(transport.secretUpdatedAt) }) : tx('ayarlanmadı')}{tx(". Kayıtlı değer geri okunamaz.")}</p>
+    <p className="text-sm text-text-muted">{tx(label)}: {transport.hasSecret ? tx("kayıtlı ({0})", { "0": formatDateTime(transport.secretUpdatedAt, tx('Henüz bildirilmedi')) }) : tx('ayarlanmadı')}{tx(". Kayıtlı değer geri okunamaz.")}</p>
     <form onSubmit={submit} className="space-y-3">
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-0 flex-1 basis-48"><Field label={tx("Yeni {0}", { "0": label.toLocaleLowerCase(currentLocale()) })}>{(control) => <input {...control} className={inputClass} type="password" autoComplete="new-password" value={value} onChange={(event) => setValue(event.target.value)} />}</Field></div>
         <Button type="submit" variant="outline" disabled={!value || onSet.isPending}>{onSet.isPending ? tx('Kaydediliyor…') : tx('Ayarla')}</Button>
         {transport.hasSecret && <Button type="button" variant="outline" disabled={onClear.isPending} onClick={() => { onSet.reset(); onClear.reset(); setConfirmClear(true) }}>{tx("Temizle")}</Button>}
       </div>
-      {Boolean(error) && <Notice tone="error">{errorMessage(error)}</Notice>}
+      {Boolean(error) && <ErrorNotice error={error} />}
     </form>
     <ConfirmDialog open={confirmClear} onClose={() => setConfirmClear(false)} title={tx("{0} temizlensin mi?", { "0": label })} description={tx("Kayıtlı kimlik bilgisi silinecek. Kimlik doğrulaması kullanan bildirim gönderimleri, yeni bir değer ayarlanana kadar başarısız olabilir.")} confirmLabel={tx("Gizli değeri temizle")} pending={onClear.isPending} onConfirm={() => { onClear.mutate(); setConfirmClear(false) }} />
   </div>
@@ -90,7 +89,7 @@ export function EmailTransportCard({ transport }: { transport: EmailTransport })
         <Field label={tx("Gönderen adı")}>{(control) => <input {...control} className={inputClass} value={fromName} onChange={(event) => setFromName(event.target.value)} />}</Field>
       </div>
       <p className="text-xs text-text-muted">{tx("“Şifreleme yok” seçeneği kullanıcı adı/parola yapılandırıldığında reddedilir.")}</p>
-      {save.isError && <Notice tone="error">{errorMessage(save.error)}</Notice>}
+      {save.isError && <ErrorNotice error={save.error} />}
       {save.isSuccess && <Notice tone="success">{tx("E-posta aktarımı kaydedildi.")}</Notice>}
       <Button type="submit" disabled={save.isPending || !valid}>{save.isPending ? tx('Kaydediliyor…') : tx('E-posta ayarlarını kaydet')}</Button>
     </form>
@@ -133,7 +132,7 @@ export function SmsTransportCard({ transport }: { transport: SmsTransport }) {
         {authentication === 'basic' && <Field label={tx("Kullanıcı adı")}>{(control) => <input {...control} className={inputClass} value={username} autoComplete="off" onChange={(event) => setUsername(event.target.value)} />}</Field>}
         {authentication === 'header' && <Field label={tx("Header adı")}>{(control) => <input {...control} className={inputClass} value={headerName} onChange={(event) => setHeaderName(event.target.value)} />}</Field>}
       </div>
-      {save.isError && <Notice tone="error">{errorMessage(save.error)}</Notice>}
+      {save.isError && <ErrorNotice error={save.error} />}
       {save.isSuccess && <Notice tone="success">{tx("SMS aktarımı kaydedildi.")}</Notice>}
       <Button type="submit" disabled={save.isPending || !endpoint.trim()}>{save.isPending ? tx('Kaydediliyor…') : tx('SMS ayarlarını kaydet')}</Button>
     </form>

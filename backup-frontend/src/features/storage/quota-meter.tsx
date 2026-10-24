@@ -1,7 +1,8 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
-import { allocatedPercent, formatCapacity } from './format'
+import { allocatedPercent } from './format'
 import type { QuotaState } from './types'
+import { formatBytes } from '@/lib/format'
 
 const fillByState: Record<QuotaState, string> = {
   Normal: 'bg-success',
@@ -31,7 +32,7 @@ export function QuotaMeter({ usedBytes, reservedBytes, limitBytes, state, label 
   const fill = fillByState[state]
   return <div className="space-y-1.5">
     <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}
-      aria-valuetext={tx("{0} / {1} ayrılmış (%{2})", { "0": formatCapacity(committed), "1": formatCapacity(limitBytes), "2": percent })}
+      aria-valuetext={tx("{0} / {1} ayrılmış (%{2})", { "0": formatBytes(committed), "1": formatBytes(limitBytes), "2": percent })}
       className="flex h-3 w-full overflow-hidden rounded-full bg-surface-2">
       <div className={cn('h-full transition-all', fill)} style={{ width: `${usedWidth}%` }} />
       <div className={cn('h-full opacity-45 transition-all', fill)} style={{ width: `${reservedWidth}%` }} />

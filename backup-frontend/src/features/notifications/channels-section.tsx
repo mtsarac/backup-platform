@@ -1,21 +1,22 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { BellOff } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { QueryState } from '@/components/data/query-state'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
-import { agentDate } from '@/features/agents/format'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { useAuth } from '@/features/auth/use-auth'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { AddChannelDialog, ChannelSecretDialog, EditChannelDialog } from './channel-dialogs'
 import { useClearChannelSecret, useDeleteChannel, useNotificationChannels, useSetChannelEnabled, useSetOwnerSecurityRecipient, useTestChannel } from './hooks'
-import { authenticationLabels, deliveryStatusLabels, kindLabels } from './labels'
+import { authenticationLabels, kindLabels } from './labels'
 import type { NotificationChannel } from './types'
+import { formatDateTime } from '@/lib/format'
+import { StatusPill } from '@/components/data/status-pill'
+import { statusLabel } from '@/lib/status'
 
 type Dialog = 'edit' | 'secret' | 'clearSecret' | 'delete' | 'ownerSecurity'
 
@@ -40,11 +41,11 @@ function ChannelCard({ channel }: { channel: NotificationChannel }) {
   return <li className="py-4 first:pt-0 last:pb-0"><article aria-label={channel.name} className="space-y-3">
     <div className="flex flex-wrap items-start justify-between gap-2">
       <div className="min-w-0"><h3 className="break-words font-medium text-text-heading">{channel.name}</h3><p className="break-all text-sm text-text-muted">{kindLabels[channel.kind]} · {channel.targetDisplay}</p></div>
-      <div className="flex flex-wrap gap-1"><Badge dot tone={channel.enabled ? 'success' : 'warning'}>{channel.enabled ? tx('Etkin') : tx('Devre dışı')}</Badge>{unconfirmed && <Badge tone="warning">{tx("Adres onayı bekleniyor")}</Badge>}</div>
+      <div className="flex flex-wrap gap-1"><StatusPill status={channel.enabled ? 'Active' : 'Disabled'} />{unconfirmed && <StatusPill level="attention">{tx("Adres onayı bekleniyor")}</StatusPill>}</div>
     </div>
     <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
       {channel.kind === 'webhook' && <div><dt className="text-text-muted">{tx("Kimlik doğrulama")}</dt><dd>{authenticationLabels[channel.authentication]}{usesSecret && <> · {channel.hasSecret ? tx('Secret kayıtlı') : <span className="text-warning">{tx("Secret ayarlanmadı")}</span>}</>}</dd></div>}
-      <div><dt className="text-text-muted">{tx("Son gönderim")}</dt><dd>{last ? <>{tx(deliveryStatusLabels[last.status].label)} · {agentDate(last.at)}{last.errorCode && <> · <code>{last.errorCode}</code></>}</> : tx('Henüz gönderim yok')}</dd></div>
+      <div><dt className="text-text-muted">{tx("Son gönderim")}</dt><dd>{last ? <>{statusLabel('delivery', last.status)} · {formatDateTime(last.at, tx('Henüz bildirilmedi'))}{last.errorCode && <> · <code>{last.errorCode}</code></>}</> : tx('Henüz gönderim yok')}</dd></div>
     </dl>
     {channel.kind === 'email' && <p className="text-sm text-text-muted">{channel.securityOwnerUserId ? tx('Bu adres bir tenant sahibinin zorunlu güvenlik bildirimlerini alır. Hedef adres değişirse kayıt kaldırılır.') : tx('Break-glass bildirimi için tenant sahibi doğrulanmış kendi e-posta adresini güvenlik alıcısı olarak kaydetmelidir. Genel bildirim politikası bu bildirimleri kapatmaz.')}</p>}
     <div className="flex flex-wrap gap-2">
@@ -58,8 +59,8 @@ function ChannelCard({ channel }: { channel: NotificationChannel }) {
       {usesSecret && channel.hasSecret && <Button variant="outline" size="sm" aria-label={label(tx('secret temizle'))} onClick={() => { clearSecret.reset(); setDialog('clearSecret') }}>{tx("Secret temizle")}</Button>}
       <Button variant="destructive" size="sm" aria-label={label('sil')} onClick={() => { remove.reset(); setDialog('delete') }}>{tx("Sil")}</Button>
     </div>
-    {toggle.error && <Notice tone="error">{errorMessage(toggle.error)}</Notice>}
-    {test.error && <Notice tone="error">{errorMessage(test.error)}</Notice>}
+    {toggle.error && <ErrorNotice error={toggle.error} />}
+    {test.error && <ErrorNotice error={test.error} />}
     {test.isSuccess && <Notice tone="success">{unconfirmed ? tx('Onay isteği adrese gönderilmek üzere kuyruğa alındı; sonucu Gönderim geçmişi sekmesinde görün.') : tx('Test bildirimi kuyruğa alındı; sonucu Gönderim geçmişi sekmesinde görün.')}</Notice>}
     {dialog === 'edit' && <EditChannelDialog channel={channel} onClose={close} />}
     {dialog === 'secret' && <ChannelSecretDialog channel={channel} onClose={close} />}
@@ -88,7 +89,7 @@ export function ChannelsSection() {
   return <Section title={tx("Kanallar")} description={tx("Bildirimlerin gönderileceği adresler. Hedefler güvenlik için yalnızca kısaltılmış biçimde gösterilir.")} actions={channels.data?.items.length ? addButton : undefined}>
     <QueryState isPending={channels.isPending} error={channels.error}>
       {channels.data && (channels.data.items.length === 0
-        ? <EmptyState icon={BellOff} title={tx("Henüz bildirim kanalı yok.")} action={addButton}>{tx("E-posta, webhook veya SMS kanalı ekleyerek uyarıları almaya başlayın.")}</EmptyState>
+        ? <EmptyState icon={BellOff} message={tx("Henüz bildirim kanalı yok.")} action={addButton} />
         : <ul className="divide-y divide-border">{channels.data.items.map((channel) => <ChannelCard key={channel.id} channel={channel} />)}</ul>)}
     </QueryState>
     {adding && <AddChannelDialog onClose={() => setAdding(false)} />}

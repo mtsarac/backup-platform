@@ -5,7 +5,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { QueryState } from '@/components/data/query-state'
 import { DataTable, type Column } from '@/components/data/data-table'
 import { Button } from '@/components/ui/button'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
 import { AgentsTabs } from '@/features/agents/agents-tabs'
@@ -14,18 +14,18 @@ import { useTenant } from '@/features/tenancy/use-tenant'
 import { agentQueryKeys, useEnrollmentPolicy, useEnrollmentTokens } from '@/features/agents/hooks'
 import { revokeEnrollmentToken, setEnrollmentPolicy } from '@/features/agents/api'
 import type { EnrollmentToken } from '@/features/agents/types'
-import { agentDate } from '@/features/agents/format'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
 import { AddAgentDialog } from '@/features/agents/add-agent-dialog'
-import { errorMessage } from '@/lib/api/failure-messages'
+import { accessDenied, errorMessage } from '@/lib/api/failure-messages'
 import { useTranslation } from '@/lib/i18n'
+import { formatDateTime } from '@/lib/format'
 
 export function AgentRegisterPage() {
   const { tenantId, canAdmin } = useTenant()
   const { t } = useTranslation()
   return canAdmin ? <EnrollmentContent key={tenantId} tenantId={tenantId} /> : <div className="space-y-6">
     <PageHeader title={t('agents.enrollmentTitle')} description={t('agents.enrollmentDescription')} />
-    <Notice tone="error" title={tx("Yetkiniz yok")} action={<Link className={linkClass} to={`/tenants/${tenantId}/agents`}>{tx("Agent'lara dön")}</Link>}>{tx("Agent kaydını yönetmek için çalışma alanı yöneticisi olmalısınız.")}</Notice>
+    <ErrorNotice title={tx("Yetkiniz yok")} {...accessDenied(tx("Agent kaydını yönetmek için çalışma alanı yöneticisi olmalısınız."))} control={<Link className={linkClass} to={`/tenants/${tenantId}/agents`}>{tx("Agent'lara dön")}</Link>} />
   </div>
 }
 
@@ -51,9 +51,9 @@ function EnrollmentContent({ tenantId }: { tenantId: string }) {
     ])
   } })
   const columns: Column<EnrollmentToken>[] = [
-    { key: 'createdAt', header: tx('Oluşturulma'), render: (token) => agentDate(token.createdAt) },
-    { key: 'expiresAt', header: tx('Son kullanma'), render: (token) => agentDate(token.expiresAt) },
-    { key: 'actions', header: tx('İşlemler'), render: (token) => <Button variant="destructive" aria-label={tx("{0} tarihinde oluşturulan token'ı iptal et", { "0": agentDate(token.createdAt) })} onClick={() => { revoke.reset(); setSelected(token) }}>{tx("İptal et")}</Button> },
+    { key: 'createdAt', header: tx('Oluşturulma'), render: (token) => formatDateTime(token.createdAt, tx('Henüz bildirilmedi')) },
+    { key: 'expiresAt', header: tx('Son kullanma'), render: (token) => formatDateTime(token.expiresAt, tx('Henüz bildirilmedi')) },
+    { key: 'actions', header: tx('İşlemler'), render: (token) => <Button variant="destructive" aria-label={tx("{0} tarihinde oluşturulan token'ı iptal et", { "0": formatDateTime(token.createdAt, tx('Henüz bildirilmedi')) })} onClick={() => { revoke.reset(); setSelected(token) }}>{tx("İptal et")}</Button> },
   ]
   return <div className="space-y-6">
     <PageHeader title={t('agents.enrollmentTitle')} description={t('agents.enrollmentDescription')} />
@@ -61,7 +61,7 @@ function EnrollmentContent({ tenantId }: { tenantId: string }) {
     <QueryState isPending={policy.isPending} error={policy.error}>
       {policy.data && <Section title={tx("Yeni kayıt izni")} description={policy.data.enabled ? tx('Agent kaydı açık.') : tx('Agent kaydı kapalı.')} actions={<Button role="switch" aria-checked={policy.data.enabled} aria-label={tx("Yeni agent kayıtlarına izin ver")} variant="outline" disabled={changePolicy.isPending} onClick={() => changePolicy.mutate(!policy.data!.enabled)}>{changePolicy.isPending ? tx('Kaydediliyor…') : policy.data.enabled ? tx('Kaydı kapat') : tx('Kaydı aç')}</Button>}>
         <p className="text-sm text-text-muted">{tx("Kaydı kapatmak mevcut agent'ları iptal etmez; yeni kayıtları engeller.")}</p>
-        {changePolicy.error && <Notice tone="error" className="mt-3">{errorMessage(changePolicy.error)}</Notice>}
+        {changePolicy.error && <ErrorNotice className="mt-3" error={changePolicy.error} />}
       </Section>}
     </QueryState>
     <Section title={t('agents.activeTokensTitle')} description={t('agents.activeTokensDesc')} flush actions={<Button disabled={!policy.data?.enabled || Boolean(policy.error) || changePolicy.isPending} onClick={() => setCreateOpen(true)}>{t('agents.createToken')}</Button>}>

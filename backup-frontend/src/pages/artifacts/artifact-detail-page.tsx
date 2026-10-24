@@ -6,7 +6,7 @@ import { QueryState } from '@/components/data/query-state'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
 import { Tabs } from '@/components/ui/tabs'
@@ -16,12 +16,13 @@ import { ArtifactDownload } from '@/features/artifacts/artifact-download'
 import { ArtifactVerificationSection } from '@/features/restores/verification'
 import { ArtifactRestoreAction } from '@/features/artifacts/artifact-restore-action'
 import { restoreIneligibility } from '@/features/artifacts/restore-eligibility'
-import { artifactDate, artifactState, canCancelDeletion, deletionInProgress } from '@/features/artifacts/format'
+import { artifactState, canCancelDeletion, deletionInProgress } from '@/features/artifacts/format'
 import { ReplicationSection } from '@/features/backups/replication'
 import type { ReplicationDestination } from '@/features/artifacts/types'
 import { useArtifact, useArtifactActions, useReplicaRepair, useRepairStatus, useArtifactRepairs } from '@/features/artifacts/hooks'
 import { useTenant } from '@/features/tenancy/use-tenant'
-import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
+import { type ErrorDescription, describeError, describeFailure, errorMessage } from '@/lib/api/failure-messages'
+import { formatDateTime } from '@/lib/format'
 
 type ArtifactTab = 'summary' | 'replicas' | 'download' | 'retention' | 'metadata'
 const tabs: { value: ArtifactTab; label: string }[] = [
@@ -39,7 +40,7 @@ function DeleteCountdown({ deleteAfter }: { deleteAfter: string }) {
   const seconds = Math.max(0, Math.ceil((new Date(deleteAfter).getTime() - now) / 1000))
   const hours = Math.floor(seconds / 3600)
   const minutes = Math.floor((seconds % 3600) / 60)
-  return <p className="text-sm text-text">{seconds > 0 ? tx("Fiziksel silmeye kalan süre: {0} sa {1} dk {2} sn", { "0": hours, "1": minutes, "2": seconds % 60 }) : tx('Bekleme süresi doldu. Fiziksel silme işleminin başlaması bekleniyor.')} <span>{tx("En erken:")}{' '}{artifactDate(deleteAfter)}</span></p>
+  return <p className="text-sm text-text">{seconds > 0 ? tx("Fiziksel silmeye kalan süre: {0} sa {1} dk {2} sn", { "0": hours, "1": minutes, "2": seconds % 60 }) : tx('Bekleme süresi doldu. Fiziksel silme işleminin başlaması bekleniyor.')} <span>{tx("En erken:")}{' '}{formatDateTime(deleteAfter)}</span></p>
 }
 
 export function ArtifactDetailPage() {
@@ -60,7 +61,7 @@ function ArtifactDetail({ id }: { id: string }) {
   const [tab, setTab] = useState<ArtifactTab>('summary')
   const [activeRepairId, setActiveRepairId] = useState<string | null>(null)
   const [repairingDestId, setRepairingDestId] = useState<string | null>(null)
-  const [repairError, setRepairError] = useState<string | null>(null)
+  const [repairError, setRepairError] = useState<ErrorDescription | null>(null)
   const [repairDestination, setRepairDestination] = useState<ReplicationDestination | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const { startRepair, cancelRepair } = useReplicaRepair(tenantId, id)
@@ -70,7 +71,7 @@ function ArtifactDetail({ id }: { id: string }) {
   const repairStatus = activeRepairId ? repairQuery.data?.status : undefined
   const repairFinished = repairStatus === 'Succeeded' || repairStatus === 'Failed' || repairStatus === 'Cancelled'
   const visibleNotice = repairStatus === 'Succeeded' ? tx('Replika başarıyla onarıldı ve doğrulandı.') : repairStatus === 'Cancelled' ? tx('Onarım işlemi iptal edildi.') : notice
-  const visibleRepairError = repairError ?? (repairStatus === 'Failed' ? failureMessage(repairQuery.data?.failureCode) : null)
+  const visibleRepairError = repairError ?? (repairStatus === 'Failed' ? describeFailure(repairQuery.data?.failureCode) : null)
   const refetchArtifact = query.refetch
   useEffect(() => {
     if (repairStatus === 'Succeeded') void refetchArtifact()
@@ -109,7 +110,7 @@ function ArtifactDetail({ id }: { id: string }) {
         },
         onError: (err) => {
           setRepairingDestId(null)
-          setRepairError(errorMessage(err))
+          setRepairError(describeError(err))
         },
       }
     )
@@ -119,7 +120,7 @@ function ArtifactDetail({ id }: { id: string }) {
     if (!canOperate || !activeRepairId || cancelRepair.isPending) return
     cancelRepair.mutate(activeRepairId, {
       onSuccess: () => setNotice(tx('Onarım iptal isteği gönderildi.')),
-      onError: (err) => setRepairError(errorMessage(err)),
+      onError: (err) => setRepairError(describeError(err)),
     })
   }
   const busy = requestDelete.isPending || cancelDelete.isPending
@@ -170,8 +171,8 @@ function ArtifactDetail({ id }: { id: string }) {
           </Section>}
           {!canAdmin && artifact.state !== 'Deleted' && <Notice tone="info">{tx("Silme ve silmeyi iptal etme işlemleri yalnızca yöneticilere açıktır.")}</Notice>}
           {visibleNotice && <Notice tone="success">{visibleNotice}</Notice>}
-          {mutationError && !dialogOpen && <Notice tone="error">{errorMessage(mutationError)}</Notice>}
-          {visibleRepairError && <Notice tone="error">{visibleRepairError}</Notice>}
+          {mutationError && !dialogOpen && <ErrorNotice error={mutationError} />}
+          {visibleRepairError && <ErrorNotice title={tx("Onarım başarısız")} {...visibleRepairError} />}
           {activeRepairId && repairQuery.data && !repairFinished && <Notice tone="info" title={tx("Onarım işlemi devam ediyor")}
             action={canOperate && <Button variant="outline" size="sm" disabled={cancelRepair.isPending} onClick={handleCancelRepair}>{cancelRepair.isPending ? tx('İptal ediliyor…') : tx('Onarımı iptal et')}</Button>}>{tx("Durum:")}{' '}{repairQuery.data.status === 'InProgress' ? tx('Aktarılıyor ve doğrulanıyor') : tx('Sırada')}
             {repairQuery.data.transferredBytes > 0 && tx(" · {0} MB aktarıldı", { "0": Math.round(repairQuery.data.transferredBytes / (1024 * 1024)) })}
@@ -201,7 +202,7 @@ function ArtifactDetail({ id }: { id: string }) {
         pending={requestDelete.isPending} error={requestDelete.error ? errorMessage(requestDelete.error) : undefined} confirmLabel="Bekleme süresini başlat" onConfirm={startDelete} />
       <ConfirmDialog open={Boolean(repairDestination) && canRepair} onClose={() => setRepairDestination(null)} title={tx("Replika onarılsın mı?")}
         description={<>{tx("Doğrulanmış bir Replica'dan")}{' '}<strong>{repairDestination?.storageProvider}</strong>{' '}{tx("hedefine yeni bir kopya aktarılır ve checksum doğrulanır. Depolama alanı ve aktarım kotası kullanılır. Kaynak Replica korunur.")}</>}
-        pending={startRepair.isPending} error={visibleRepairError ?? undefined} confirmLabel="Onarımı başlat" onConfirm={() => { if (repairDestination) handleRepair(repairDestination) }} />
+        pending={startRepair.isPending} error={visibleRepairError?.what} confirmLabel="Onarımı başlat" onConfirm={() => { if (repairDestination) handleRepair(repairDestination) }} />
     </div>
   )
 }

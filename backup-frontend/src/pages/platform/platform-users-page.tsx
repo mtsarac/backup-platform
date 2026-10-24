@@ -61,7 +61,7 @@ export function PlatformUsersPage() {
     <Filters label={tx("Kullanıcı filtreleri")} onClear={search ? () => update({ search: '' }) : undefined}><SearchForm className="sm:col-span-2" label={tx("Kullanıcı ara")} value={search} onSearch={(value) => update({ search: value })} placeholder={tx("Ad veya kullanıcı adı")} /></Filters>
     <PlatformQueryState isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">
-        {data.totalCount === 0 && !search ? <ListEmpty icon={Users} title={tx("Henüz kullanıcı yok.")} action={<Button onClick={() => setCreating(true)}>{tx("Yeni kullanıcı")}</Button>}>{tx("Bir kullanıcı hesabı oluşturun, sonra tenant üyeliğini ekleyin.")}</ListEmpty>
+        {data.totalCount === 0 && !search ? <ListEmpty icon={Users} message={tx("Henüz kullanıcı yok.")} action={<Button onClick={() => setCreating(true)}>{tx("Yeni kullanıcı")}</Button>} />
           : <DataTable rows={data.items} columns={columns} keyExtractor={(user) => user.userId} emptyMessage={tx("Aramaya uygun kullanıcı bulunamadı.")} />}
         {data.totalCount > 0 && <Pagination label={tx("Kullanıcı sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
       </div>}

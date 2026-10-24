@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { LoginPage } from '@/pages/login/login-page'
 import { TenantSelectPage } from '@/pages/tenancy/tenant-select-page'
 import { formatGb, toGbInput, parseGb } from '@/features/platform/plans/storage'
-import { artifactDate } from '@/features/artifacts/format'
+import { formatDateTime } from '@/lib/format'
 
 vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({
   login: vi.fn(), logout: vi.fn(), isAuthenticated: false, sessionExpired: false,
@@ -30,7 +30,7 @@ describe('Language consumers', () => {
     expect(formatGb(2_500_000_000)).toBe('2.5 GB')
     expect(parseGb(toGbInput(2_500_000_000))).toEqual({ bytes: 2_500_000_000 })
     const date = '2026-10-16T12:15:00Z'
-    expect(artifactDate(date)).toBe(new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(date)))
+    expect(formatDateTime(date)).toBe(new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(date)))
   })
 
   it('localizes workspace roles while preserving customer names and restores the saved preference', () => {

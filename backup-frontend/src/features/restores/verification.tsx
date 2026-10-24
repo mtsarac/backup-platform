@@ -1,30 +1,20 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { StatusPill } from '@/components/data/status-pill'
 import { restoreIneligibility } from '@/features/artifacts/restore-eligibility'
 import type { BackupArtifact } from '@/features/artifacts/types'
-import { formatDuration, formatTimestamp } from '@/features/backups/presentation'
 import { inputClass, selectClass } from '@/features/platform/styles'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { StoredLoginPanel } from './stored-login-panel'
 import { useRestores, useRestoreTargets, useStartRestoreVerification } from './hooks'
-import { restoreErrorMessage, verificationCleanupText, verificationOutcomeLabels } from './presentation'
-import type { RestoreTarget, RestoreView, StartRestoreVerificationVariables } from './types'
-
-const outcomeTone = { Restored: 'success', Failed: 'error', NotRun: 'neutral' } as const
-
-/** Outcome of a verification; an unfinished one shows its operation status instead. */
-export function VerificationOutcomeBadge({ restore }: { restore: Pick<RestoreView, 'status' | 'verificationOutcome'> }) {
-  useLanguage()
-  return restore.verificationOutcome
-    ? <Badge tone={outcomeTone[restore.verificationOutcome]} dot>{verificationOutcomeLabels[restore.verificationOutcome]}</Badge>
-    : <StatusPill status={restore.status} />
-}
+import { verificationCleanupText } from './presentation'
+import type { RestoreTarget, StartRestoreVerificationVariables } from './types'
+import { formatDateTime, formatDuration } from '@/lib/format'
+import { errorMessage } from '@/lib/api/failure-messages'
 
 export function ArtifactVerificationSection({ tenantId, artifact }: { tenantId: string; artifact: BackupArtifact }) {
   useLanguage()
@@ -37,16 +27,16 @@ export function ArtifactVerificationSection({ tenantId, artifact }: { tenantId: 
   return <Section title={tx("Restore doğrulaması")} description={tx("Backup'ın gerçekten geri yüklenebildiğini geçici, izole bir Database üzerinde kanıtlayın.")}
     actions={canOperate && !formOpen && <Button variant="outline" onClick={() => setFormOpen(true)}>{tx("Restore testi başlat")}</Button>}>
     <div className="space-y-4">
-      {history.error ? <Notice tone="error">{tx("Restore testleri yüklenemedi:")}{' '}{restoreErrorMessage(history.error)}</Notice>
-        : latest ? <p className="flex flex-wrap items-center gap-2 text-sm"><VerificationOutcomeBadge restore={latest} /><span>{formatTimestamp(latest.startedAt ?? latest.createdAt)}</span>{latest.completedAt && <span className="text-text-muted">{tx("· Süre:")}{' '}{formatDuration(latest.startedAt, latest.completedAt)}</span>}</p>
+      {history.error ? <ErrorNotice title={tx("Restore testleri yüklenemedi")} error={history.error} scope="restore" />
+        : latest ? <p className="flex flex-wrap items-center gap-2 text-sm">{latest.verificationOutcome ? <StatusPill domain="verification" status={latest.verificationOutcome} /> : <StatusPill status={latest.status} />}<span>{formatDateTime(latest.startedAt ?? latest.createdAt)}</span>{latest.completedAt && <span className="text-text-muted">{tx("· Süre:")}{' '}{formatDuration(latest.startedAt, latest.completedAt)}</span>}</p>
           : !history.isPending && <p className="text-sm text-text-muted">{tx("Henüz test edilmedi.")}</p>}
       {formOpen && canOperate && <VerificationForm tenantId={tenantId} artifactId={artifact.id} onClose={() => setFormOpen(false)} />}
       {rows.length > 0 && <div className="overflow-x-auto"><table className="w-full text-left text-sm">
         <caption className="sr-only">{tx("Son restore testleri")}</caption>
         <thead><tr className="text-text-muted"><th className="py-2 pr-4 font-medium">{tx("Sonuç")}</th><th className="py-2 pr-4 font-medium">{tx("Başlangıç")}</th><th className="py-2 pr-4 font-medium">{tx("Süre")}</th><th className="py-2 pr-4 font-medium">{tx("Agent")}</th><th className="py-2 font-medium">{tx("Ayrıntı")}</th></tr></thead>
         <tbody className="divide-y divide-border">{rows.map((row) => <tr key={row.id}>
-          <td className="py-2 pr-4"><VerificationOutcomeBadge restore={row} />{row.cleanup && row.cleanup.state !== 'Completed' && <p className="mt-1 text-xs text-text-muted">{verificationCleanupText(row.cleanup)}</p>}</td>
-          <td className="py-2 pr-4">{formatTimestamp(row.startedAt ?? row.createdAt)}</td>
+          <td className="py-2 pr-4">{row.verificationOutcome ? <StatusPill domain="verification" status={row.verificationOutcome} /> : <StatusPill status={row.status} />}{row.cleanup && row.cleanup.state !== 'Completed' && <p className="mt-1 text-xs text-text-muted">{verificationCleanupText(row.cleanup)}</p>}</td>
+          <td className="py-2 pr-4">{formatDateTime(row.startedAt ?? row.createdAt)}</td>
           <td className="py-2 pr-4">{row.completedAt ? formatDuration(row.startedAt, row.completedAt) : '—'}</td>
           <td className="py-2 pr-4 break-all font-mono text-xs">{row.agentId}</td>
           <td className="py-2"><Link className="text-primary hover:underline" to={`/tenants/${tenantId}/restores/${row.id}`}>{tx("Aç")}</Link></td>
@@ -67,7 +57,7 @@ function VerificationForm({ tenantId, artifactId, onClose }: { tenantId: string;
   const [custom, setCustom] = useState<RestoreTarget>({ host: '', port: null, integratedSecurity: true, databaseCredentialReference: null, encrypt: true, trustServerCertificate: false })
   const [error, setError] = useState<unknown>(null)
   if (targets.isPending) return <p className="text-sm text-text-muted">{tx("Hedefler yükleniyor…")}</p>
-  if (targets.error || !targets.data) return <Notice tone="error">{tx("Hedefler yüklenemedi:")}{' '}{restoreErrorMessage(targets.error)}</Notice>
+  if (targets.error || !targets.data) return <ErrorNotice title={tx("Hedefler yüklenemedi")} error={targets.error} scope="restore" />
   const agents = targets.data.agents.filter((agent) => agent.canVerify && agent.sourceEligible)
   const configured = targets.data.targets
   const useConfigured = targetIndex >= 0 && configured[targetIndex] !== undefined
@@ -111,7 +101,7 @@ function VerificationForm({ tenantId, artifactId, onClose }: { tenantId: string;
         </div>
       </div>}
     </>}
-    {error != null && <p role="alert" className="text-sm text-error">{restoreErrorMessage(error)}</p>}
+    {error != null && <p role="alert" className="text-sm text-error">{errorMessage(error, 'restore')}</p>}
     <div className="flex justify-end gap-2">
       <Button type="button" variant="outline" disabled={start.isPending} onClick={onClose}>{tx("Vazgeç")}</Button>
       <Button type="submit" disabled={!valid || start.isPending}>{start.isPending ? tx('Başlatılıyor…') : tx('Testi başlat')}</Button>

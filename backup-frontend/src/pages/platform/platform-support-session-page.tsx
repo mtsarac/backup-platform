@@ -10,7 +10,6 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { Tabs } from '@/components/ui/tabs'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
-import { artifactDate } from '@/features/artifacts/format'
 import { platformPaths } from '@/features/platform/paths'
 import { FormDialog } from '@/features/platform/plans/form-dialog'
 import { inputClass } from '@/features/platform/styles'
@@ -21,12 +20,14 @@ import { SupportDownloadsTab } from '@/features/platform/support/downloads-tab'
 import { removeSupportData, supportKeys, useEndSupportSession, useSupportSession } from '@/features/platform/support/hooks'
 import { endedMessages, supportAccess } from '@/features/platform/support/presentation'
 import { SupportRestoresTab } from '@/features/platform/support/restores-tab'
-import { PermissionBadges, SupportStatusPill } from '@/features/platform/support/session-table'
+import { PermissionBadges } from '@/features/platform/support/session-table'
 import { SupportQueryState } from '@/features/platform/support/support-query-state'
 import { useSupportCountdown } from '@/features/platform/support/use-support-countdown'
 import type { SupportSession } from '@/features/platform/support/types'
 import { ApiError } from '@/lib/api/client'
 import { errorMessage } from '@/lib/api/failure-messages'
+import { formatDateTime } from '@/lib/format'
+import { StatusPill } from '@/components/data/status-pill'
 
 const crumbs = [{ label: 'Platform', to: platformPaths.root }, { get label() { return tx("Support Sessions") }, to: platformPaths.supportSessions }]
 
@@ -77,7 +78,7 @@ function SessionView({ session, receivedAt }: { session: SupportSession; receive
   const active = effective.status === 'Active'
   return <div className="space-y-6">
     <PageHeader crumbs={crumbs} title={tx("{0} · Support Session", { "0": effective.tenantName })} description={tx("Oturumu açan: {0}", { "0": effective.actorDisplayName ?? effective.platformAdminId })}
-      meta={<><SupportStatusPill status={effective.status} /><span aria-label={tx("Oturum süresi")} className="text-sm text-text-muted">{active ? tx("Kalan süre: {0}", { "0": countdown.label }) : tx('Erişim sona erdi.')}{' '}{tx("· Süre sonu:")}{' '}{artifactDate(effective.expiresAt)}</span></>}
+      meta={<><StatusPill domain="supportSession" status={effective.status} /><span aria-label={tx("Oturum süresi")} className="text-sm text-text-muted">{active ? tx("Kalan süre: {0}", { "0": countdown.label }) : tx('Erişim sona erdi.')}{' '}{tx("· Süre sonu:")}{' '}{formatDateTime(effective.expiresAt)}</span></>}
       actions={<SessionActions session={effective} />} />
     {effective.status !== 'Active' ? <Notice tone="warning">{endedMessages[effective.status]}{' '}{tx("Yalnızca oturum özeti ve audit okunabilir.")}</Notice>
       : !effective.isOwner && <Notice tone="warning">{tx("Bu oturumun sahibi değilsiniz. Müşteri verileri yalnızca oturumu açan PlatformAdmin'e açıktır. Özeti ve audit kayıtlarını görebilir veya gerekçeyle erişimi geri alabilirsiniz.")}</Notice>}
@@ -104,9 +105,9 @@ function SessionOverview({ session }: { session: SupportSession }) {
           <Fact label={tx("İzinler")}><PermissionBadges permissions={session.permissions} /></Fact>
         </Facts>
         <Facts>
-          <Fact label={tx("Başlangıç")}>{artifactDate(session.startedAt)}</Fact>
-          <Fact label={tx("Süre sonu")}>{artifactDate(session.expiresAt)}</Fact>
-          <Fact label={tx("Kapanış")}>{artifactDate(session.closedAt)}</Fact>
+          <Fact label={tx("Başlangıç")}>{formatDateTime(session.startedAt)}</Fact>
+          <Fact label={tx("Süre sonu")}>{formatDateTime(session.expiresAt)}</Fact>
+          <Fact label={tx("Kapanış")}>{formatDateTime(session.closedAt)}</Fact>
           <Fact label={tx("Kapatan / erişimi geri alan")}>{session.closedByDisplayName ?? session.closedBy ?? '—'}</Fact>
           <Fact label={tx("Kapanış gerekçesi")}>{session.closeReason ?? '—'}</Fact>
         </Facts>

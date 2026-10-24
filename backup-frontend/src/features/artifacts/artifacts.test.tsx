@@ -179,7 +179,7 @@ describe('Backup dosyaları', () => {
     cleanup()
     request.mockResolvedValue({ items: [], totalCount: 0, page: 1, pageSize: 25 })
     mount('list')
-    await screen.findByText('Kayıt bulunamadı.')
+    await screen.findByText(/Bu filtrelere uygun yedekleme dosyası yok/)
     cleanup()
     request.mockRejectedValue(new Error('private server detail'))
     mount('list')

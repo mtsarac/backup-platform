@@ -43,11 +43,11 @@ beforeEach(() => {
 
 describe('run detail controls and attention', () => {
   it('shows a yellow advisory and historical comparison without treating a successful backup as failed', () => {
-    state.query.data = makeRun({ status: 'Succeeded', isSizeAnomaly: true, sizeAnomalyStatus: 'SizeAnomalyWarning', sizeAnomalyBaselineBytes: 1000, sizeAnomalyDeviationRatio: -0.5 })
+    state.query.data = makeRun({ status: 'Succeeded', isSizeAnomaly: true, sizeAnomalyStatus: 'SizeAnomalyWarning', sizeAnomalyBaselineBytes: 5_000_000_000, sizeAnomalyDeviationRatio: -0.5 })
     renderDetail()
     expect(screen.getByText('Boyut Anomalisi')).toBeInTheDocument()
     expect(screen.getByText('Boyut Anomalisi')).toHaveClass('bg-warning-subtle')
-    expect(screen.getByText(/Geçmiş ortalama: 1000 B/)).toHaveTextContent('-%50')
+    expect(screen.getByText(/Geçmiş ortalama: 5 GB/)).toHaveTextContent('-%50')
     expect(screen.getByText('Yedek başarıyla tamamlandı. Boyut uyarısı yedeği geçersiz kılmaz; beklenmeyen veri değişikliklerini inceleyin.')).toBeInTheDocument()
     expect(screen.getByText('Başarılı')).toBeInTheDocument()
     expect(screen.queryByText('Çalıştırma başarısız oldu')).not.toBeInTheDocument()

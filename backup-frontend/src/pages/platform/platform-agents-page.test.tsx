@@ -1,3 +1,4 @@
+import { formatDateTime } from '@/lib/format'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import * as api from '@/features/platform/api'
@@ -27,7 +28,7 @@ describe('platform global agents list', () => {
     expect(within(first).getByText('1.4.0')).toBeInTheDocument()
     expect(within(first).getByText('Protokol: 1.0')).toBeInTheDocument()
     expect(within(first).getByText('3 yetenek')).toBeInTheDocument()
-    expect(within(first).getByText(new Date('2026-10-06T12:00:00Z').toLocaleString('tr-TR'))).toBeInTheDocument()
+    expect(within(first).getByText(formatDateTime('2026-10-06T12:00:00Z'))).toBeInTheDocument()
     expect(within(first).queryByText('Henüz bildirilmedi')).not.toBeInTheDocument()
 
     const second = screen.getByRole('link', { name: 'SQL-02' }).closest('tr')!

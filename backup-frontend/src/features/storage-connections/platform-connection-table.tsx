@@ -5,9 +5,10 @@ import { Badge } from '@/components/ui/badge'
 import { platformPaths } from '@/features/platform/paths'
 import { linkClass } from '@/features/platform/styles'
 import { ConnectionActions } from './connection-actions'
-import { ConnectionState, Footprint, LastTest, OwnershipBadge, SecretStatus } from './connection-parts'
+import { ConnectionState, Footprint, LastTest, SecretStatus } from './connection-parts'
 import type { ConnectionOps } from './hooks'
 import type { ConnectionView, ProviderDescriptor } from './types'
+import { StatusPill } from '@/components/data/status-pill'
 
 /** One table for the platform list and the tenant-detail section; the tenant column is dropped where the tenant is the page. */
 export function PlatformConnectionTable({ rows, providers, ops, showTenant, emptyMessage }: {
@@ -19,7 +20,7 @@ export function PlatformConnectionTable({ rows, providers, ops, showTenant, empt
     { key: 'name', header: tx('Bağlantı'), wrap: true, render: (row) => <div className="space-y-1">
       <div className="flex flex-wrap items-center gap-1.5"><span className="font-medium text-text-heading">{row.name}</span>{row.isDefault && <Badge tone="accent">{tx("Varsayılan")}</Badge>}</div>
       <p className="text-sm text-text-muted">{row.providerDisplayName}</p>
-      <OwnershipBadge ownership={row.ownership} />
+      <StatusPill domain="ownership" status={row.ownership} />
       <details className="text-xs text-text-muted"><summary className="cursor-pointer">{tx("Bağlantı kimliği")}</summary><code className="break-all">{row.id}</code></details>
     </div> },
     { key: 'enabled', header: tx('Durum'), wrap: true, render: (row) => <div className="space-y-2"><ConnectionState connection={row} /><LastTest test={row.lastTest} /></div> },

@@ -2,7 +2,7 @@ import { tx } from '@/lib/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { getAgent, getEnrollmentTokenStatus } from './api'
 import type { AgentDetail } from './types'
-import { errorMessage } from '@/lib/api/failure-messages'
+import { type ErrorDescription, describeError } from '@/lib/api/failure-messages'
 
 type Ticket = { tokenId: string; expiresAt: string }
 type Phase = 'Waiting' | 'Checking' | 'Enrolled' | 'Connecting' | 'Online' | 'Expired' | 'Revoked' | 'Consumed'
@@ -11,7 +11,7 @@ type Phase = 'Waiting' | 'Checking' | 'Enrolled' | 'Connecting' | 'Online' | 'Ex
 export function useEnrollmentMonitor(tenantId: string, ticket: Ticket | null, clearSecret: () => void) {
   const [phase, setPhase] = useState<Phase>('Waiting')
   const [agent, setAgent] = useState<AgentDetail | null>(null)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<ErrorDescription | null>(null)
   const [paused, setPaused] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const clear = useRef(clearSecret)
@@ -20,7 +20,7 @@ export function useEnrollmentMonitor(tenantId: string, ticket: Ticket | null, cl
   const [scope, setScope] = useState({ tenantId, tokenId: ticket?.tokenId, attempt })
   if (scope.tenantId !== tenantId || scope.tokenId !== ticket?.tokenId || scope.attempt !== attempt) {
     setScope({ tenantId, tokenId: ticket?.tokenId, attempt })
-    setPhase('Waiting'); setAgent(null); setError(''); setPaused(false)
+    setPhase('Waiting'); setAgent(null); setError(null); setPaused(false)
   }
   useEffect(() => {
     if (!ticket) return
@@ -71,16 +71,16 @@ export function useEnrollmentMonitor(tenantId: string, ticket: Ticket | null, cl
             } else { setPhase(status.state); finished = true; clearTimeout(expiryTimer) }
           }
         }
-        failures = 0; setError('')
+        failures = 0; setError(null)
       } catch (cause) {
         if (signal.aborted || stopped) return
-        failures++; setError(errorMessage(cause))
+        failures++; setError(describeError(cause))
       }
       finally { if (controller?.signal === signal) controller = undefined }
       if (stopped || finished || signal.aborted) return
       if (failures >= 3 || polls >= 120) {
         setPaused(true)
-        if (polls >= 120) setError(tx('Otomatik takip durduruldu. Agent hizmetini ve backend bağlantısını kontrol edip tekrar deneyin.'))
+        if (polls >= 120) setError({ what: tx('Otomatik takip durduruldu. Agent hizmetini ve backend bağlantısını kontrol edip tekrar deneyin.'), dataImpact: tx("Kayıt token'ınız etkilenmedi; süresi dolana kadar kullanılabilir."), action: tx('Takibi tekrar deneyin.'), technical: [] })
         return
       }
       timer = window.setTimeout(() => { void poll() }, failures ? Math.min(30_000, 5_000 * 2 ** failures) : 5_000)

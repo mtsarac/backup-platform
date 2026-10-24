@@ -1,15 +1,15 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { selectClass } from '@/features/platform/styles'
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { nativeDownloadUrl } from './native-download-url'
-import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
+import { failureMessage } from '@/lib/api/failure-messages'
 import { getDownloadAvailability, getDownloadStatus, prepareDownload } from './api'
-import { artifactSize } from './format'
 import { DirectDownloadButton } from './direct-download-button'
+import { formatBytes } from '@/lib/format'
 
 export function ArtifactDownload({ tenantId, artifactId, canAdmin, eligible }: { tenantId: string; artifactId: string; canAdmin: boolean; eligible: boolean }) {
   useLanguage()
@@ -65,11 +65,11 @@ function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tena
   return <Section title={tx("Download Backup")} description={tx("Harici depolama indirmeleri yetkili Agent üzerinden doğrudan diske aktarılır; platform depolaması tarayıcının indirme yöneticisini kullanır.")} className="max-w-3xl">
     <div className="space-y-4">
       {availability.isPending && <p role="status" className="text-sm text-text-muted">{tx("İndirme kullanılabilirliği kontrol ediliyor…")}</p>}
-      {failure && <Notice tone="error">{errorMessage(failure)}</Notice>}
-      {navigationError && <Notice tone="error">{tx("İndirme bağlantısı güvenli değil. Yeni bir indirme başlatın.")}</Notice>}
+      {failure && <ErrorNotice error={failure} />}
+      {navigationError && <ErrorNotice what={tx("İndirme bağlantısı güvenli değil.")} dataImpact={tx("Dosya indirilmedi; yedeğiniz değişmedi.")} action={tx("Yeni bir indirme başlatın.")} />}
       {availability.data && <>
         <Facts columns={1}>
-          <Fact label={tx("Boyut")}>{artifactSize(availability.data.sizeBytes)}</Fact>
+          <Fact label={tx("Boyut")}>{formatBytes(availability.data.sizeBytes)}</Fact>
           <Fact label={availability.data.format === 'v2-bpe' ? tx("Şifreli dosyanın SHA256 checksum değeri") : tx("SHA256 checksum")}>
             <code className="block break-all font-mono text-sm">{availability.data.checksum}</code>
             <Button className="mt-2" variant="outline" size="sm" onClick={copyChecksum}>{tx("Checksum kopyala")}</Button>
@@ -95,9 +95,10 @@ function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tena
       </>}
       {session?.direct && <DirectDownloadButton key={session.sessionId} session={session} />}
       {session && !status.data && !status.error && <p role="status" className="text-sm text-text-muted">{tx("İndirme hazırlanıyor…")}</p>}
-      {status.data && <Notice tone={finalState === 'Failed' ? 'error' : finalState === 'Completed' ? 'success' : 'info'}>
-        {finalState === 'Preparing' ? tx('İndirme hazırlanıyor…') : finalState === 'Ready' || finalState === 'Streaming' ? tx('İndirme başlatıldı. Dosya tarayıcınız tarafından kaydediliyor.') : finalState === 'Completed' ? tx('Dosya aktarımı tamamlandı.') : finalState === 'Cancelled' ? tx('İndirme iptal edildi.') : tx("İndirme başarısız: {0}", { "0": failureMessage(status.data.failureCode) })}
-        {status.data.transferredBytes > 0 && tx(" · {0} aktarıldı", { "0": artifactSize(status.data.transferredBytes) })}
+      {status.data && finalState === 'Failed' && <ErrorNotice title={tx("İndirme başarısız")} failureCode={status.data.failureCode} />}
+      {status.data && finalState !== 'Failed' && <Notice tone={finalState === 'Completed' ? 'success' : 'info'}>
+        {finalState === 'Preparing' ? tx('İndirme hazırlanıyor…') : finalState === 'Ready' || finalState === 'Streaming' ? tx('İndirme başlatıldı. Dosya tarayıcınız tarafından kaydediliyor.') : finalState === 'Completed' ? tx('Dosya aktarımı tamamlandı.') : tx('İndirme iptal edildi.')}
+        {status.data.transferredBytes > 0 && tx(" · {0} aktarıldı", { "0": formatBytes(status.data.transferredBytes) })}
       </Notice>}
     </div>
   </Section>

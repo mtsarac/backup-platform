@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowRight, ExternalLink, RefreshCw } from 'lucide-react'
 import { QueryState } from '@/components/data/query-state'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { Stepper } from '@/components/ui/stepper'
@@ -17,10 +17,11 @@ import { openGoogleOAuthPopup } from './google-oauth'
 import { useCreateTenantConnection, useGoogleDriveConnect, useTenantConnectionOps, useTenantConnections, useTenantProviders } from './hooks'
 import { CapabilityChips } from './connection-parts'
 import { connectionPath } from '@/lib/routes'
-import { connectionErrorMessage, errorField, executionLocationLabel, tenantCreateState, testMessage, testModeLabel, topologyLabel, configurationSummary } from './labels'
+import { errorField, executionLocationLabel, tenantCreateState, testMessage, testModeLabel, topologyLabel, configurationSummary } from './labels'
 import { ProviderIcon } from './provider-icon'
 import { ProviderFields } from './provider-form'
 import type { ConnectionView, ProviderDescriptor } from './types'
+import { describeError } from '@/lib/api/failure-messages'
 
 type StepKey = 'provider' | 'connection' | 'credentials' | 'review'
 const stepLabels: Record<StepKey, string> = { get provider() { return tx("Sağlayıcı") }, get connection() { return tx("Bağlantı") }, get credentials() { return tx("Kimlik bilgisi") }, get review() { return tx("Özet ve test") } }
@@ -142,11 +143,11 @@ function ConnectionWizardForm() {
       <Section title={tx("Bağlantı testi")}>
         <div className="space-y-4">
           {google && !test && !testing && <Notice tone="info" title={tx("Google hesabını yetkilendirin")}>{tx("Hesap izni verilmeden bağlantı kullanılamaz. Düğmeye bastığınızda Google penceresi açılır; izin verdikten sonra bağlantı otomatik test edilir.")}</Notice>}
-          {Boolean(googleConnect.error) && <Notice tone="error" title={tx("Google yetkilendirmesi başlatılamadı")}>{connectionErrorMessage(googleConnect.error)}</Notice>}
+          {Boolean(googleConnect.error) && <ErrorNotice title={tx("Google yetkilendirmesi başlatılamadı")} error={googleConnect.error} scope="storageConnection" />}
           {testing && <Notice tone="info" title={tx("Bağlantı test ediliyor…")}>{tx("Hedefe yazılıyor, okunuyor ve silinerek doğrulanıyor.")}</Notice>}
-          {Boolean(ops.test.error) && !testing && <Notice tone="error" title={tx("Test tamamlanamadı")}>{connectionErrorMessage(ops.test.error)}</Notice>}
+          {Boolean(ops.test.error) && !testing && <ErrorNotice title={tx("Test tamamlanamadı")} error={ops.test.error} scope="storageConnection" />}
           {test?.status === 'Succeeded' && <Notice tone="success" title={tx("Bağlantı çalışıyor")}>{testMessage(test)}</Notice>}
-          {test?.status === 'Failed' && <Notice tone="error" title={tx("Test başarısız")}>{testMessage(test)}{' '}{tx("Bağlantı kaydedildi; ayarları düzeltip yeniden test edebilirsiniz.")}</Notice>}
+          {test?.status === 'Failed' && <ErrorNotice title={tx("Test başarısız")} what={testMessage(test)} dataImpact={tx("Bağlantı kaydedildi ama henüz doğrulanmadı; yedekler bu depolamaya yazılamayabilir.")} action={tx("Ayarları düzeltip yeniden test edin.")} />}
           {test?.status === 'NotTestable' && <Notice tone="info" title={tx("Bu hedef Agent tarafında denetlenir")}>{testMessage(test)}</Notice>}
           <div className="flex flex-wrap gap-2">
             {google && !testing && test?.status !== 'Succeeded' && <Button disabled={googleConnect.isPending} onClick={() => authorizeGoogle(created)}><ExternalLink aria-hidden="true" className="size-4" />{googleConnect.isPending ? tx('Yönlendiriliyor…') : tx('Google Hesabını Bağla')}</Button>}
@@ -188,7 +189,7 @@ function ConnectionWizardForm() {
                 <Fact label="Test">{testModeLabel(provider.testMode)}</Fact>
               </Facts>
               <CapabilityChips capabilities={provider.capabilities} label={tx("{0} yetenekleri", { "0": tx(provider.displayName) })} />
-              {Boolean(createError) && <Notice tone="error" title={tx("Bağlantı oluşturulamadı")}>{connectionErrorMessage(createError)}{needsCredentials ? tx(' Güvenlik nedeniyle kimlik bilgisi alanları temizlendi; Kimlik bilgisi adımında yeniden girin.') : ''}</Notice>}
+              {Boolean(createError) && <ErrorNotice title={tx("Bağlantı oluşturulamadı")} {...describeError(createError, 'storageConnection')} {...(needsCredentials ? { action: tx('Güvenlik nedeniyle kimlik bilgisi alanları temizlendi; Kimlik bilgisi adımında yeniden girin.') } : {})} />}
             </div>}
           </QueryState>
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">

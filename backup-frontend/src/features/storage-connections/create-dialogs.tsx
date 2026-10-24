@@ -8,8 +8,9 @@ import { QUOTA_SCOPE_PATTERN } from '@/features/storage/scope-input'
 import { activeSecretFields, configurationComplete, initialFieldValues, providerPayload, secretsComplete } from './descriptor-values'
 import type { FieldValues } from './descriptor-values'
 import { useCreatePlatformConnection, usePlatformProviders } from './hooks'
-import { connectionErrorMessage, errorField, isPlatformCreatable } from './labels'
+import { errorField, isPlatformCreatable } from './labels'
 import { ProviderFields } from './provider-form'
+import { errorMessage } from '@/lib/api/failure-messages'
 
 interface PickedTenant { tenantId: string; name: string }
 
@@ -70,7 +71,7 @@ export function CreateManagedTargetDialog({ tenant, onClose }: { tenant?: Picked
     description={tx("Seçilen tenant için platform tarafından işletilen (PlatformManaged) bir depolama hedefi oluşturur.")}
     submitLabel={tx("Managed target ekle")} pendingLabel={tx("Ekleniyor…")} pending={create.isPending}
     disabled={!tenantId || !provider || !name.trim() || quotaScopeInvalid || !configurationComplete(provider.configFields, config) || !secretsComplete(activeSecretFields(provider.providerType, config, provider.secretFields), secret)}
-    error={create.error ? connectionErrorMessage(create.error) : providers.error ? connectionErrorMessage(providers.error) : undefined} onSubmit={submit} onClose={onClose}>
+    error={create.error ? errorMessage(create.error, 'storageConnection') : providers.error ? errorMessage(providers.error, 'storageConnection') : undefined} onSubmit={submit} onClose={onClose}>
     {tenant ? <p className="text-sm text-text-muted">{tx("Tenant:")}{' '}<span className="font-medium text-text">{tenant.name}</span></p> : <TenantPicker value={tenantId} onChange={setTenantId} />}
     <label className="block text-sm text-text-muted">{tx("Storage Provider")}<select className={`${selectClass} w-full`} value={providerType} onChange={(event) => chooseProvider(event.target.value)} disabled={providers.isPending}>
         <option value="">{providers.isPending ? tx('Sağlayıcılar yükleniyor…') : creatable.length === 0 ? tx('Oluşturulabilir sağlayıcı yok') : tx('Sağlayıcı seçin')}</option>

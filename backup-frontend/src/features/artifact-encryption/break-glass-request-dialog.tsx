@@ -2,8 +2,7 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Field } from '@/components/ui/field'
-import { Notice } from '@/components/ui/notice'
-import { errorMessage } from '@/lib/api/failure-messages'
+import { ErrorNotice } from '@/components/ui/notice'
 import { platformPaths } from '@/features/platform/paths'
 import { FormDialog } from '@/features/platform/plans/form-dialog'
 import { inputClass } from '@/features/platform/styles'
@@ -53,6 +52,6 @@ export function BreakGlassRequestDialog({ initialTenantId = '', initialArtifactI
         {control => <input {...control} type="number" step={1} className={inputClass} value={ttl} onChange={event => setTtl(event.target.value)} />}
       </Field>
     </fieldset>
-    {create.error && <Notice tone="error">{errorMessage(create.error)}</Notice>}
+    {create.error && <ErrorNotice error={create.error} />}
   </FormDialog>
 }

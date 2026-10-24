@@ -6,7 +6,7 @@ import { Pagination } from '@/components/data/pagination'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
 import { errorMessage } from '@/lib/api/failure-messages'
@@ -72,10 +72,10 @@ export function MembershipsSection({ tenantId, tenantName }: { tenantId: string;
   return <div className="space-y-6">
     <AddMemberForm tenantId={tenantId} />
     <Section title={tx("Üyelikler")} description={tx("Rol değişikliği hemen uygulanır; üyeliği kaldırmak kullanıcı hesabını silmez.")} flush className="overflow-hidden">
-      {changeRole.error && <div className="p-4"><Notice tone="error">{errorMessage(changeRole.error)}</Notice></div>}
+      {changeRole.error && <div className="p-4"><ErrorNotice error={changeRole.error} /></div>}
       <PlatformQueryState isPending={query.isPending} error={query.error}>
         {data && (data.totalCount === 0
-          ? <EmptyState icon={Users} title={tx("Bu tenant'ın henüz üyesi yok.")}>{tx("Yukarıdan bir kullanıcı ekleyin.")}</EmptyState>
+          ? <EmptyState icon={Users} message={tx("Bu tenant'ın henüz üyesi yok; yukarıdan bir kullanıcı ekleyin.")} />
           : <DataTable className={bareTableClass} rows={data.items} columns={columns} keyExtractor={(member) => member.userId} emptyMessage={tx("Bu tenant'ın henüz üyesi yok.")} />)}
       </PlatformQueryState>
     </Section>

@@ -6,15 +6,16 @@ import { Button } from '@/components/ui/button'
 import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
-import { artifactDate } from '@/features/artifacts/format'
 import { bareTableClass } from '@/features/platform/list-empty'
 import { platformPaths } from '@/features/platform/paths'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { linkClass } from '@/features/platform/styles'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { useWrapKeyActions, useWrapKeys } from './hooks'
-import { KeyId, WrapKeyStateBadge } from './presentation'
+import { KeyId } from './presentation'
 import type { WrapKey } from './types'
+import { formatDateTime } from '@/lib/format'
+import { StatusPill } from '@/components/data/status-pill'
 
 /** TWK lifecycle of one tenant: versions, state and how many artifacts each version still protects. No key material is ever shown. */
 export function WrapKeysSection({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
@@ -26,8 +27,8 @@ export function WrapKeysSection({ tenantId, tenantName }: { tenantId: string; te
   const columns: Column<WrapKey>[] = [
     { key: 'version', header: tx('Sürüm'), render: key => <span className="font-medium tabular-nums">v{key.version}</span> },
     { key: 'keyId', header: tx('Anahtar kimliği'), render: key => <KeyId value={key.keyId} /> },
-    { key: 'state', header: tx('Durum'), render: key => <WrapKeyStateBadge state={key.state} /> },
-    { key: 'created', header: tx('Oluşturulma'), render: key => artifactDate(key.createdAt) },
+    { key: 'state', header: tx('Durum'), render: key => <StatusPill domain="wrapKey" status={key.state} /> },
+    { key: 'created', header: tx('Oluşturulma'), render: key => formatDateTime(key.createdAt) },
     { key: 'artifacts', header: tx('Bu anahtarla şifreli Backup'), render: key => <span className="tabular-nums">{key.artifactCount}</span> },
     { key: 'actions', header: tx('İşlemler'), render: key => key.state === 'Retired' ? <span className="text-text-muted">—</span>
       : <Button size="sm" variant="outline" disabled={key.state === 'Active'} title={key.state === 'Active' ? tx('Etkin anahtar önce döndürülmelidir.') : undefined} onClick={() => { retire.reset(); setRetiring(key) }}>{tx("Emekli et")}</Button> },

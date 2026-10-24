@@ -11,13 +11,13 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
 import { Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
-import { artifactDate, artifactSize, artifactState } from '@/features/artifacts/format'
+import { artifactState } from '@/features/artifacts/format'
 import { useArtifacts } from '@/features/artifacts/hooks'
 import type { ArtifactFilters, ArtifactState, BackupArtifact } from '@/features/artifacts/types'
 import { ReplicationSummary } from '@/features/backups/replication'
 import { linkClass } from '@/features/platform/styles'
-import { Badge } from '@/components/ui/badge'
 import { useTenant } from '@/features/tenancy/use-tenant'
+import { formatBytes, formatDateTime } from '@/lib/format'
 
 const stateOptions: { value: ArtifactState | ''; label: string }[] = [
   { value: '', get label() { return tx("Tüm durumlar") } },
@@ -40,9 +40,9 @@ export function ArtifactsPage() {
       <p className="text-sm text-text-muted">{artifact.jobId ? <Link className="hover:underline" to={`/tenants/${tenantId}/backup-jobs`}>{artifact.jobName || tx('Backup Job listesi')}</Link> : tx('Backup Job yok')}{artifact.runId && <> · <Link className="hover:underline" to={`/tenants/${tenantId}/backup-runs/${artifact.runId}`}>{tx("Çalıştırmayı aç")}</Link></>}</p>
     </div> },
     { key: 'state', header: tx('Durum'), render: (artifact) => <StatusPill status={artifactState(artifact)} /> },
-    { key: 'size', header: tx('Boyut'), render: (artifact) => artifactSize(artifact.sizeBytes) },
-    { key: 'encryption', header: tx('Şifreleme'), render: (artifact) => artifact.encryption ? <Badge tone="success">{tx("Şifreli · v2-bpe")}</Badge> : <span className="text-text-muted">{tx("Şifresiz · v1")}</span> },
-    { key: 'created', header: tx('Oluşturulma'), render: (artifact) => <div><p>{artifactDate(artifact.createdAt)}</p><p className="text-sm text-text-muted">{artifact.retentionExpiresAt ? tx("Saklama sonu: {0}", { "0": artifactDate(artifact.retentionExpiresAt) }) : tx('Süre sınırı yok')}</p></div> },
+    { key: 'size', header: tx('Boyut'), render: (artifact) => formatBytes(artifact.sizeBytes) },
+    { key: 'encryption', header: tx('Şifreleme'), render: (artifact) => artifact.encryption ? <StatusPill level="safe">{tx("Şifreli · v2-bpe")}</StatusPill> : <span className="text-text-muted">{tx("Şifresiz · v1")}</span> },
+    { key: 'created', header: tx('Oluşturulma'), render: (artifact) => <div><p>{formatDateTime(artifact.createdAt)}</p><p className="text-sm text-text-muted">{artifact.retentionExpiresAt ? tx("Saklama sonu: {0}", { "0": formatDateTime(artifact.retentionExpiresAt) }) : tx('Süre sınırı yok')}</p></div> },
     { key: 'replicas', header: tx('Replika'), wrap: true, render: (artifact) => <div className="space-y-1"><ReplicationSummary replication={artifact.replication} /><div className="flex flex-wrap gap-1">{artifact.replicas.map((replica, index) => <span key={replica.id} className="flex items-center gap-1"><span className="text-sm text-text-muted">{index + 1}.</span><StatusPill status={replica.status} /></span>)}</div></div> },
   ]
   function setFilters(next: Partial<ArtifactFilters>) {
@@ -56,10 +56,10 @@ export function ArtifactsPage() {
         <FilterField label={tx("Başlangıç tarihi")}><input type="date" className={filterControlClass} value={filter.from} onChange={(event) => setFilters({ from: event.target.value })} /></FilterField>
         <FilterField label={tx("Bitiş tarihi")}><input type="date" className={filterControlClass} value={filter.to} min={filter.from || undefined} onChange={(event) => setFilters({ to: event.target.value })} /></FilterField>
       </Filters>
-      {invalidDates && <Notice tone="error">{tx("Bitiş tarihi başlangıç tarihinden önce olamaz.")}</Notice>}
+      {invalidDates && <Notice tone="warning">{tx("Bitiş tarihi başlangıç tarihinden önce olamaz.")}</Notice>}
       {!invalidDates && <QueryState isPending={query.isPending} error={query.error}>
         {query.data?.items.length === 0
-          ? <div className="rounded-xl border border-border bg-surface"><EmptyState icon={Archive} title={tx("Kayıt bulunamadı.")}>{tx("Bu filtrelerde Backup dosyası yok. Filtreleri temizleyin veya bir Backup Job çalıştırın; tamamlanan Backup Run burada görünür.")}</EmptyState></div>
+          ? <div className="rounded-xl border border-border bg-surface"><EmptyState icon={Archive} message={tx("Bu filtrelerde Backup dosyası yok; filtreleri temizleyin veya bir Backup Job çalıştırın.")} /></div>
           : <DataTable rows={query.data?.items ?? []} columns={columns} keyExtractor={(artifact) => artifact.id} />}
       </QueryState>}
       {query.data && !invalidDates && query.data.totalCount > 0 && <Pagination label={tx("Backup sayfalama")} page={filter.page} pageSize={filter.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={(page) => setFilter((current) => ({ ...current, page }))} />}

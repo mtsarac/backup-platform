@@ -2,15 +2,16 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/features/agents/confirm-dialog'
-import { artifactDate } from '@/features/artifacts/format'
 import { inputClass } from '@/features/platform/styles'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { useTenantRecoveryKeyActions } from './hooks'
-import { KeyId, WrapKeyStateBadge } from './presentation'
+import { KeyId } from './presentation'
 import type { TenantEncryption } from './types'
+import { formatDateTime } from '@/lib/format'
+import { StatusPill } from '@/components/data/status-pill'
 
 /** Overview of the keys that open this tenant's encrypted Backups, plus registration of the optional tenant recovery public key. */
 export function TenantKeysSection({ tenantId, encryption }: { tenantId: string; encryption: TenantEncryption }) {
@@ -32,9 +33,9 @@ export function TenantKeysSection({ tenantId, encryption }: { tenantId: string; 
   return <>
     <Section title={tx("Anahtarlar")} description={tx("Şifreli Backup'ları açabilen anahtarlar. Yalnızca kimlikler gösterilir; anahtar içeriği hiçbir zaman gösterilmez.")}>
       <Facts>
-        <Fact label={tx("Tenant anahtarı (backend)")}>{wrapKey ? <>v{wrapKey.version} · <KeyId value={wrapKey.keyId} />{' '}<WrapKeyStateBadge state={wrapKey.state} /></> : tx('Henüz oluşturulmadı; ilk şifreli yedekte oluşur.')}</Fact>
+        <Fact label={tx("Tenant anahtarı (backend)")}>{wrapKey ? <>v{wrapKey.version} · <KeyId value={wrapKey.keyId} />{' '}<StatusPill domain="wrapKey" status={wrapKey.state} /></> : tx('Henüz oluşturulmadı; ilk şifreli yedekte oluşur.')}</Fact>
         <Fact label={tx("Platform kurtarma anahtarı")}>{platformRecovery.configured && platformRecovery.keyId ? <>v{platformRecovery.keyVersion} · <KeyId value={platformRecovery.keyId} /></> : tx('Yapılandırılmamış')}</Fact>
-        <Fact label={tx("Tenant kurtarma anahtarı")}>{tenantRecovery ? <>v{tenantRecovery.keyVersion} · <KeyId value={tenantRecovery.keyId} /> · {artifactDate(tenantRecovery.createdAt)}</> : tx('Tanımlı değil')}</Fact>
+        <Fact label={tx("Tenant kurtarma anahtarı")}>{tenantRecovery ? <>v{tenantRecovery.keyVersion} · <KeyId value={tenantRecovery.keyId} /> · {formatDateTime(tenantRecovery.createdAt)}</> : tx('Tanımlı değil')}</Fact>
       </Facts>
       {!platformRecovery.configured && <div className="pt-4"><Notice tone="warning">{tx("Platform kurtarma anahtarı yapılandırılmamış: yeni şifreli Backup'lar yalnızca tenant anahtarıyla (ve tanımlıysa tenant kurtarma anahtarıyla) açılabilir. Backend kaybolursa bu dosyalar çözülemeyebilir.")}</Notice></div>}
     </Section>
@@ -45,7 +46,7 @@ export function TenantKeysSection({ tenantId, encryption }: { tenantId: string; 
         <Field label={tx("Genel anahtar (PEM)")} hint={tx("“-----BEGIN PUBLIC KEY-----” ile başlayan RSA genel anahtarı, en az 4096 bit. Özel anahtar girmeyin.")} error={pemError}>
           {control => <textarea {...control} className={`${inputClass} font-mono text-sm`} rows={6} required spellCheck={false} autoComplete="off" value={pem} onChange={event => { setSaved(false); setPemError(''); setPem(event.target.value) }} />}
         </Field>
-        {set.error && <Notice tone="error">{errorMessage(set.error)}</Notice>}
+        {set.error && <ErrorNotice error={set.error} />}
         {saved && <Notice tone="success">{tx("Tenant kurtarma anahtarı kaydedildi. Sonraki şifreli Backup'lara eklenir.")}</Notice>}
         <Button type="submit" disabled={set.isPending || !pem.trim()}>{set.isPending ? tx('Kaydediliyor…') : tenantRecovery ? tx('Anahtarı değiştir') : tx('Anahtarı kaydet')}</Button>
       </form>

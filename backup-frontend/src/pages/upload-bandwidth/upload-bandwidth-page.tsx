@@ -49,7 +49,7 @@ function SearchableTable<T>({ rows, columns, keyExtractor, text, searchLabel, em
     <Filters label={tx("{0} filtreleri", { "0": searchLabel })}>
       <FilterField label={searchLabel}><input type="search" aria-label={searchLabel} placeholder={searchLabel} className={filterControlClass} value={query} onChange={event => { setQuery(event.target.value); setPage(1) }} /></FilterField>
     </Filters>
-    {matches.length === 0 ? <div className="rounded-xl border border-border bg-surface"><EmptyState title={needle ? tx('Aramayla eşleşen kayıt yok.') : emptyMessage} /></div>
+    {matches.length === 0 ? <div className="rounded-xl border border-border bg-surface"><EmptyState message={needle ? tx('Aramayla eşleşen kayıt yok.') : emptyMessage} /></div>
       : <DataTable rows={matches.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE)} columns={columns} keyExtractor={keyExtractor} />}
     {matches.length > PAGE_SIZE && <Pagination label={tx("{0} sayfaları", { "0": searchLabel })} page={current} pageSize={PAGE_SIZE} totalCount={matches.length} onPageChange={setPage} />}
   </div>
@@ -131,7 +131,7 @@ export function UploadBandwidthPage() {
             <h2 className="text-base font-semibold text-text-heading">{tx("Bant Genişliği Profilleri")}</h2>
             {canAdmin && <Button size="sm" onClick={() => setEditingProfile('new')}>{tx("Yeni Profil")}</Button>}
           </div>
-          {profileList.length === 0 ? <div className="rounded-xl border border-border bg-surface"><EmptyState title={tx("Henüz tanımlı profil yok.")} /></div> : (
+          {profileList.length === 0 ? <div className="rounded-xl border border-border bg-surface"><EmptyState message={tx("Henüz tanımlı profil yok.")} /></div> : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {profileList.map(p => (
                 <div key={p.id} className="rounded-xl border border-border bg-surface p-4 space-y-3">

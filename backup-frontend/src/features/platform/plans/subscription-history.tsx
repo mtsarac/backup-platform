@@ -2,23 +2,23 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { DataTable, type Column } from '@/components/data/data-table'
 import { Pagination } from '@/components/data/pagination'
 import { Section } from '@/components/ui/section'
-import { agentDate } from '@/features/agents/format'
 import { bareTableClass } from '../list-empty'
 import { PlatformQueryState } from '../platform-query-state'
 import { useListParams } from '../use-list-params'
 import { useSubscriptionHistory } from './hooks'
 import { StorageLimitText } from './storage-limit-text'
 import { assignedByLabel, overrideLabel, sourceLabel } from './subscription-labels'
-import { SubscriptionStatusPill } from './subscription-presentation'
 import type { Subscription } from './types'
+import { formatDateTime } from '@/lib/format'
+import { StatusPill } from '@/components/data/status-pill'
 
 const HISTORY_PAGE_SIZE = 10
 
 const columns: Column<Subscription>[] = [
   { key: 'plan', header: 'Plan', wrap: true, render: (row) => <span className="font-medium">{row.planName}</span> },
-  { key: 'status', get header() { return tx("Durum") }, render: (row) => <SubscriptionStatusPill status={row.status} /> },
-  { key: 'starts', get header() { return tx("Başlangıç") }, render: (row) => agentDate(row.startsAt) },
-  { key: 'ends', get header() { return tx("Bitiş") }, render: (row) => row.endsAt ? agentDate(row.endsAt) : tx('Süresiz') },
+  { key: 'status', get header() { return tx("Durum") }, render: (row) => <StatusPill domain="subscription" status={row.status} /> },
+  { key: 'starts', get header() { return tx("Başlangıç") }, render: (row) => formatDateTime(row.startsAt, tx('Henüz bildirilmedi')) },
+  { key: 'ends', get header() { return tx("Bitiş") }, render: (row) => row.endsAt ? formatDateTime(row.endsAt, tx('Henüz bildirilmedi')) : tx('Süresiz') },
   { key: 'limit', get header() { return tx("Etkin limit") }, render: (row) => <div><StorageLimitText bytes={row.effectiveStorageLimit.unlimited ? null : row.effectiveStorageLimit.bytes} /><div className="text-xs text-text-muted">{tx("Kaynak:")}{' '}{sourceLabel(row.effectiveStorageLimit.source)}</div></div> },
   { key: 'override', get header() { return tx("Override") }, render: (row) => overrideLabel(row.storageLimitOverride) },
   { key: 'assignedBy', get header() { return tx("Atayan") }, wrap: true, render: assignedByLabel },

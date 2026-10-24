@@ -1,40 +1,23 @@
 import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 import { Badge } from '@/components/ui/badge'
-import { agentDate } from '@/features/agents/format'
-import { formatCapacity, formatExactBytes } from '@/features/storage/format'
-import { ownershipLabel } from '@/features/storage/labels'
-import { capabilityLabel, availabilityMeta, connectionHealth, ownershipTone, secretStatusLabel, testMessage, testStatusMeta } from './labels'
-import type { ConnectionOwnership, ConnectionTest, ConnectionView, ProviderAvailability } from './types'
-
-export function OwnershipBadge({ ownership }: { ownership: ConnectionOwnership }) {
-  useLanguage()
-  return <Badge tone={ownershipTone[ownership]}>{ownershipLabel(ownership)}</Badge>
-}
-
-export function EnabledBadge({ enabled }: { enabled: boolean }) {
-  useLanguage()
-  return <Badge tone={enabled ? 'success' : 'warning'}>{enabled ? tx('Etkin') : tx('Devre dışı')}</Badge>
-}
+import { StatusPill } from '@/components/data/status-pill'
+import { capabilityLabel, connectionHealth, secretStatusLabel, testMessage } from './labels'
+import type { ConnectionTest, ConnectionView } from './types'
+import { formatBytes, formatDateTime } from '@/lib/format'
 
 export function HealthBadge({ connection }: { connection: Parameters<typeof connectionHealth>[0] }) {
   useLanguage()
   const health = connectionHealth(connection)
-  return <Badge tone={health.tone} dot>{tx(health.label)}</Badge>
+  return <StatusPill level={health.level}>{health.label}</StatusPill>
 }
 
 export function ConnectionState({ connection }: { connection: Pick<ConnectionView, 'enabled' | 'effectiveEnabled' | 'administrativelyDisabled'> }) {
   useLanguage()
   return <div className="space-y-1">
-    <EnabledBadge enabled={connection.effectiveEnabled} />
+    <StatusPill status={connection.effectiveEnabled ? 'Active' : 'Disabled'} />
     <span className="block text-xs text-text-muted">{tx("Sahip tercihi:")}{' '}{connection.enabled ? tx('Etkin') : tx('Devre dışı')}</span>
-    {connection.administrativelyDisabled && <Badge tone="warning">{tx("Platform kilidi")}</Badge>}
+    {connection.administrativelyDisabled && <StatusPill level="attention">{tx("Platform kilidi")}</StatusPill>}
   </div>
-}
-
-export function AvailabilityBadge({ availability }: { availability: ProviderAvailability }) {
-  useLanguage()
-  const meta = availabilityMeta[availability]
-  return <Badge tone={meta.tone}>{tx(meta.label)}</Badge>
 }
 
 export function CapabilityChips({ capabilities, label = tx('Yetenekler') }: { capabilities: readonly string[]; label?: string }) {
@@ -49,9 +32,8 @@ export function CapabilityChips({ capabilities, label = tx('Yetenekler') }: { ca
 export function LastTest({ test }: { test: ConnectionTest | null }) {
   useLanguage()
   if (!test) return <span className="text-text-muted">{tx("Henüz test edilmedi")}</span>
-  const meta = Object.hasOwn(testStatusMeta, test.status) ? testStatusMeta[test.status] : { label: String(test.status), tone: 'neutral' as const }
   return <div className="space-y-0.5">
-    <div className="flex flex-wrap items-center gap-1.5"><Badge tone={meta.tone}>{tx(meta.label)}</Badge><span className="text-xs text-text-muted">{agentDate(test.testedAt)}</span></div>
+    <div className="flex flex-wrap items-center gap-1.5"><StatusPill domain="connectionTest" status={String(test.status)} /><span className="text-xs text-text-muted">{formatDateTime(test.testedAt, tx('Henüz bildirilmedi'))}</span></div>
     {(test.code || test.message) && <p className="whitespace-normal break-words text-xs text-text-muted">{testMessage(test)}</p>}
   </div>
 }
@@ -61,13 +43,13 @@ export function SecretStatus({ connection }: { connection: Pick<ConnectionView, 
   if (connection.providerType === 'google-drive') {
     const reauth = connection.configuration?.reauthorizationRequired === 'true' || !connection.hasSecret
     return <span className="inline-flex flex-wrap items-center gap-1.5">
-      <Badge tone={reauth ? 'warning' : 'success'}>{reauth ? tx('Yeniden yetkilendirme gerekli') : tx('Bağlı')}</Badge>
+      <StatusPill level={reauth ? 'attention' : 'safe'}>{reauth ? tx('Yeniden yetkilendirme gerekli') : tx('Bağlı')}</StatusPill>
       {connection.configuration?.accountEmail && <span className="text-xs text-text-muted">{String(connection.configuration.accountEmail)}</span>}
     </span>
   }
   return <span className="inline-flex flex-wrap items-center gap-1.5">
-    <Badge tone={connection.hasSecret ? 'success' : 'neutral'}>{secretStatusLabel(connection)}</Badge>
-    {connection.hasSecret && connection.secretUpdatedAt && <span className="text-xs text-text-muted">{agentDate(connection.secretUpdatedAt)}</span>}
+    <StatusPill level={connection.hasSecret ? 'safe' : 'neutral'}>{secretStatusLabel(connection)}</StatusPill>
+    {connection.hasSecret && connection.secretUpdatedAt && <span className="text-xs text-text-muted">{formatDateTime(connection.secretUpdatedAt, tx('Henüz bildirilmedi'))}</span>}
   </span>
 }
 
@@ -75,6 +57,6 @@ export function Footprint({ connection }: { connection: Pick<ConnectionView, 're
   useLanguage()
   return <span className="inline-flex flex-col">
     <span>{connection.replicaCount.toLocaleString(currentLocale())}{' '}{tx("Replica")}</span>
-    <span className="text-xs text-text-muted" title={formatExactBytes(connection.storedBytes)}>{formatCapacity(connection.storedBytes)}</span>
+    <span className="text-xs text-text-muted" title={formatBytes(connection.storedBytes)}>{formatBytes(connection.storedBytes)}</span>
   </span>
 }
