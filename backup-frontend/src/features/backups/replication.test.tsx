@@ -104,11 +104,11 @@ describe('replication compliance rendering', () => {
     expect(screen.getByRole('region', { name: "Çoğaltma" })).toBeInTheDocument()
   })
 
-  it('the run list shows the replication verdict beside the run status', () => {
+  it('the run list leaves the replication verdict to the run page', () => {
     state.page = { items: [makeRun({ status: 'Succeeded', replication: healthOf('InsufficientReplicas', 1) })], totalCount: 1, page: 1, pageSize: 25 }
     render(<MemoryRouter><BackupsPage /></MemoryRouter>)
     expect(screen.getAllByText('Başarılı').length).toBeGreaterThan(0)
-    expect(screen.getByText("Doğrulanmış kopya sayısı yetersiz")).toBeInTheDocument()
+    expect(screen.queryByText("Doğrulanmış kopya sayısı yetersiz")).not.toBeInTheDocument()
   })
 
   it('a pre-existing run without the field renders exactly as before', () => {
