@@ -11,12 +11,14 @@ import { getDiscoveryInstance } from '@/features/discovery/api'
 import { discoveredConfiguration } from '@/features/discovery/job-prefill'
 import type { DiscoveryInstanceDetail } from '@/features/discovery/types'
 import { useJobOccurrences, useSaveBackupJob } from '@/features/backup-jobs/hooks'
-import { jobSteps, stepOfField, summaryStep, validateStep } from '@/features/backup-jobs/job-wizard-model'
-import { GeneralStep } from '@/features/backup-jobs/steps/general-step'
+import { agentStep, jobSteps, nameStep, protectionStep, retentionStep, scheduleStep, sourceStep, stepOfField, storageStep, summaryStep, validateStep } from '@/features/backup-jobs/job-wizard-model'
+import { NameStep } from '@/features/backup-jobs/steps/name-step'
+import { AgentStep } from '@/features/backup-jobs/steps/agent-step'
 import { SourceStep } from '@/features/backup-jobs/steps/source-step'
 import { StorageStep } from '@/features/backup-jobs/steps/storage-step'
 import { ScheduleStep } from '@/features/backup-jobs/steps/schedule-step'
-import { OptionsStep } from '@/features/backup-jobs/steps/options-step'
+import { RetentionStep } from '@/features/backup-jobs/steps/retention-step'
+import { ProtectionStep } from '@/features/backup-jobs/steps/protection-step'
 import { SummaryStep } from '@/features/backup-jobs/steps/summary-step'
 import { useTenantConnections, useTenantProviders } from '@/features/storage-connections/hooks'
 import { connectionUnavailableReason, primaryDestination, resolveDestinationConnection } from '@/features/storage-connections/job-connection-picker-utils'
@@ -156,18 +158,20 @@ export function JobForm({ job, prefill }: { job?: BackupJob; prefill?: { instanc
   }}>
     <Stepper steps={jobSteps.map(step => tx(step))} current={step} />
     <h2 ref={headingRef} tabIndex={-1} className="sr-only">{tx("Adım")}{' '}{step + 1} / {tx(jobSteps.length)}: {tx(jobSteps[step])}</h2>
-    {step === 0 && <GeneralStep name={name} onName={setName} agentId={agentId} onAgentId={setAgentId} enabled={enabled} onEnabled={setEnabled} agents={agents} errors={errors} />}
-    {step === 1 && <SourceStep key={configuration.engine} configuration={configuration} errors={errors} discovery={job ? undefined : { agents: agents.data ?? [], agentId, selected, onApply: applyDiscovery, onClear: clearDiscovery }}
+    {step === nameStep && <NameStep name={name} onName={setName} enabled={enabled} onEnabled={setEnabled} errors={errors} />}
+    {step === agentStep && <AgentStep agentId={agentId} onAgentId={setAgentId} agents={agents} errors={errors} />}
+    {step === sourceStep && <SourceStep key={configuration.engine} configuration={configuration} errors={errors} discovery={job ? undefined : { agents: agents.data ?? [], agentId, selected, onApply: applyDiscovery, onClear: clearDiscovery }}
       onChange={next => { if (next.engine !== configuration.engine) { setSelected([]); setResults({}) } setConfiguration(next) }} />}
-    {step === 2 && <StorageStep configuration={configuration} errors={errors} onChange={setConfiguration} picker={{ connections: connectionItems, providers: providerItems, pending: pickerPending, error: pickerError, existingTarget, onRefresh: refreshConnections }} />}
-    {step === 3 && <ScheduleStep errors={errors} scheduled={scheduled} onScheduled={setScheduled} schedule={schedule} onSchedule={setSchedule} nextRun={nextRun} overlap={overlap} onOverlap={setOverlap} retry={retry} onRetry={setRetry} />}
-    {step === 4 && <OptionsStep configuration={configuration} errors={errors} onChange={setConfiguration} retention={retention} onRetention={setRetention} canAdmin={canAdmin} existing={Boolean(job)} />}
-    {last && <SummaryStep selected={selected} results={results} occurrences={job ? occurrences : undefined} cannotSave={cannotSave} onFix={() => go(2)}
-      summary={{ name, agentLabel: agent ? `${agent.hostName ?? tx('Adsız Agent')} · ${agent.operationalStatus}` : agentId ? tx('Agent bulunamadı') : tx('Seçilmedi'), enabled, configuration, scheduled, schedule, overlap, retry, retention, canAdmin, connections: connectionItems, nextRun, onGo: go }} />}
+    {step === storageStep && <StorageStep configuration={configuration} errors={errors} onChange={setConfiguration} picker={{ connections: connectionItems, providers: providerItems, pending: pickerPending, error: pickerError, existingTarget, onRefresh: refreshConnections }} />}
+    {step === scheduleStep && <ScheduleStep errors={errors} scheduled={scheduled} onScheduled={setScheduled} schedule={schedule} onSchedule={setSchedule} nextRun={nextRun} overlap={overlap} onOverlap={setOverlap} retry={retry} onRetry={setRetry} />}
+    {step === retentionStep && <RetentionStep errors={errors} retention={retention} onRetention={setRetention} canAdmin={canAdmin} existing={Boolean(job)} />}
+    {step === protectionStep && <ProtectionStep configuration={configuration} errors={errors} onChange={setConfiguration} />}
+    {last && <SummaryStep selected={selected} results={results} occurrences={job ? occurrences : undefined} cannotSave={cannotSave} onFix={() => go(storageStep)}
+      summary={{ name, agentLabel: agent ? `${agent.hostName ?? tx('Adsız bilgisayar')} · ${tx(agent.operationalStatus)}` : agentId ? tx('Bilgisayar bulunamadı') : tx('Seçilmedi'), enabled, configuration, scheduled, schedule, overlap, retry, retention, canAdmin, connections: connectionItems, nextRun, existing: Boolean(job), onGo: go }} />}
     {saveError && <ErrorNotice title={tx("İş kaydedilemedi")} error={saveError}
-      control={errorSteps.length > 0 ? <div className="flex flex-wrap gap-2">{errorSteps.map(item => <Button key={item} type="button" variant="outline" size="sm" aria-label={tx("Hatalı alana git: {0}", { "0": jobSteps[item] })} onClick={() => go(item)}>{tx("Adıma git")}</Button>)}</div> : undefined} />}
+      control={errorSteps.length > 0 ? <div className="flex flex-wrap gap-2">{errorSteps.map(item => <Button key={item} type="button" variant="outline" size="sm" aria-label={tx("Hatalı alana git: {0}", { "0": tx(jobSteps[item]) })} onClick={() => go(item)}>{tx("Adıma git")}</Button>)}</div> : undefined} />}
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <Button type="button" variant="outline" disabled={step === 0 || save.isPending} onClick={() => go(step - 1)}>{tx("Geri")}</Button>
+      <Button type="button" variant="outline" disabled={step === nameStep || save.isPending} onClick={() => go(step - 1)}>{tx("Geri")}</Button>
       <div className="flex flex-wrap items-center gap-3">
         <Link className="text-sm text-primary underline-offset-4 hover:underline" to={`/tenants/${tenantId}/backup-jobs`}>{tx("Vazgeç")}</Link>
         {job && !last && <Button type="button" variant="outline" onClick={() => advance(summaryStep)}>{tx("Özete dön")}</Button>}
