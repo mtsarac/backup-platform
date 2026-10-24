@@ -6966,4 +6966,5 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Son test {0} başarılı oldu.": {"tr":"Son test {0} başarılı oldu.","en":"The last test succeeded {0}."},
   "Sahip tercihi: {0}": {"tr":"Sahip tercihi: {0}","en":"Owner preference: {0}"},
   "Bu hedefi kullanan yeni yedeklemeler (elle başlatılan ve zamanlanmış) başlatılamaz.": {"tr":"Bu hedefi kullanan yeni yedeklemeler (elle başlatılan ve zamanlanmış) başlatılamaz.","en":"New backups that use this destination, manual and scheduled, cannot start."},
+  "Ölçüm": {"tr":"Ölçüm","en":"Measurement"},
 }

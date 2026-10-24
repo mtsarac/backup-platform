@@ -137,6 +137,12 @@ describe('Storage connections list and detail', () => {
     await userEvent.click(screen.getByText('Teknik ayrıntılar'))
     expect(history).toBeVisible()
     expect(screen.getByRole('button', { name: 'Kopyala: Toplam Alan' })).toBeInTheDocument()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    await userEvent.click(within(history).getByRole('button', { name: 'Kopyala: Ölçüm' }))
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"totalBytes":500000000000'))
+    await userEvent.click(screen.getByRole('button', { name: 'Kopyala: Yetenekler' }))
+    expect(writeText).toHaveBeenCalledWith('storage.read\nstorage.delete')
 
     const probeBtn = screen.getByRole('button', { name: 'Kapasiteyi Sorgula' })
     await userEvent.click(probeBtn)

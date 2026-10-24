@@ -11,6 +11,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { Tabs } from '@/components/ui/tabs'
 import { TechnicalDetails } from '@/components/ui/technical-details'
+import { CopyButton } from '@/components/ui/copy-button'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { ConnectionActions } from './connection-actions'
 import { CapabilityChips, CapacityPill, HealthBadge, SecretStatus } from './connection-parts'
@@ -144,7 +145,7 @@ function OverviewTechnical({ connection, descriptor, total }: { connection: Conn
     { label: tx("Bağlantı kimliği"), value: connection.id },
   ]
   return <TechnicalDetails items={items}>
-    <div className="space-y-2"><p className="text-sm font-medium text-text-heading">{tx("Yetenekler")}</p><CapabilityChips capabilities={connection.capabilities} label={tx("{0} yetenekleri", { "0": connection.name })} /></div>
+    <div className="space-y-2"><p className="text-sm font-medium text-text-heading">{tx("Yetenekler")}</p><CapabilityChips capabilities={connection.capabilities} label={tx("{0} yetenekleri", { "0": connection.name })} /><CopyButton label={tx("Kopyala: {0}", { "0": tx("Yetenekler") })} value={connection.capabilities.join('\n')} /></div>
     {history.length > 0 && <div className="space-y-2">
       <p aria-hidden="true" className="text-sm font-medium text-text-heading">{tx("Kapasite geçmişi — en son {0} ölçüm", { "0": capacity?.historyLimit ?? 30 })}</p>
       <DataList caption={tx("Kapasite geçmişi — en son {0} ölçüm", { "0": capacity?.historyLimit ?? 30 })} rows={history} keyExtractor={measurement => `${measurement.reportedAt}-${history.indexOf(measurement)}`} columns={[
@@ -153,6 +154,7 @@ function OverviewTechnical({ connection, descriptor, total }: { connection: Conn
         { key: 'used', header: tx('Kullanılan Alan'), render: measurement => measurement.usedBytes == null ? '—' : formatBytes(measurement.usedBytes) },
         { key: 'free', header: tx('Boş Alan'), render: measurement => measurement.freeBytes == null ? '—' : formatBytes(measurement.freeBytes) },
         { key: 'state', header: tx('Durum'), card: 'status', render: measurement => measurement.status === 'Critical' ? tx("Kritik") : measurement.status === 'Warning' ? tx("Uyarı") : measurement.status === 'Available' ? tx("Kullanılabilir") : tx("Kapasite bilgisi alınamadı") },
+        { key: 'copy', header: tx('Ölçüm'), card: 'actions', render: measurement => <CopyButton label={tx("Kopyala: {0}", { "0": tx("Ölçüm") })} value={JSON.stringify(measurement)} /> },
       ]} />
     </div>}
   </TechnicalDetails>
