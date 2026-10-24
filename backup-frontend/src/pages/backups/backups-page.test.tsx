@@ -2,6 +2,7 @@ import { fireEvent, screen, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { setViewport } from '@/test/viewport'
 import { makeRun } from '@/features/backups/test-data'
 import { dateFilterInstant } from '@/features/backups/presentation'
 import type { BackupRunFilters, BackupRunPage } from '@/features/backups/types'
@@ -41,7 +42,7 @@ describe('run history filters and pagination', () => {
     expect(state.filters.at(-1)?.page).toBe(2)
     fireEvent.change(screen.getByRole('combobox', { name: 'Durum' }), { target: { value: 'Failed' } })
     fireEvent.change(screen.getByRole('combobox', { name: 'İş' }), { target: { value: 'job-id' } })
-    fireEvent.change(screen.getByRole('combobox', { name: 'Ajan' }), { target: { value: 'agent-id' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Yedekleme bilgisayarı' }), { target: { value: 'agent-id' } })
     fireEvent.change(screen.getByRole('combobox', { name: 'Tetikleyici' }), { target: { value: 'Retry' } })
     fireEvent.change(screen.getByLabelText('Oluşturulma başlangıcı'), { target: { value: '2026-10-01' } })
     fireEvent.change(screen.getByLabelText('Oluşturulma sonu'), { target: { value: '2026-10-06' } })
@@ -51,17 +52,48 @@ describe('run history filters and pagination', () => {
     expect(screen.getByLabelText('Oluşturulma başlangıcı')).toHaveValue('')
   })
 
-  it('shows required run columns, tenant detail links, and no raw ids', () => {
+  it('shows job, result, start time and duration, with the job linking to the run and no raw ids', () => {
     render(<MemoryRouter><BackupsPage /></MemoryRouter>)
-    for (const name of ['İş', 'Tetikleyici', 'Başlangıç', 'Süre', 'Durum']) {
+    for (const name of ['İş', 'Durum', 'Başlangıç', 'Süre']) {
       expect(screen.getByRole('columnheader', { name })).toBeInTheDocument()
     }
-    expect(screen.getByText('Uygulama · SQL ajanı')).toBeInTheDocument()
-    expect(screen.getByText('Planlanan: —')).toBeInTheDocument()
-    expect(screen.getByText('Deneme 1 / 3')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Günlük SQL yedeği' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-id')
+    expect(screen.getAllByRole('columnheader')).toHaveLength(4)
+    const row = within(screen.getAllByRole('row')[1])
+    expect(row.getByRole('link', { name: 'Günlük SQL yedeği' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-id')
+    expect(row.getByText('Çalışıyor')).toBeInTheDocument()
+    expect(row.getByText(/önce/)).toBeInTheDocument()
     expect(screen.queryByText('job-id')).not.toBeInTheDocument()
     expect(screen.queryByText('agent-id')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Önceki' })).toBeDisabled()
+  })
+
+  it('keeps trigger, planned time, attempt counts and replication out of the list', () => {
+    state.page = { items: [makeRun({ status: 'Succeeded', scheduledFor: '2026-10-06T09:59:00Z', replication: { requiredVerifiedReplicas: 2, verifiedReplicas: 1, destinationCount: 3, status: 'InsufficientReplicas', policySatisfied: false, destinations: [] } })], totalCount: 1, page: 1, pageSize: 25 }
+    render(<MemoryRouter><BackupsPage /></MemoryRouter>)
+    expect(screen.queryByRole('columnheader', { name: 'Tetikleyici' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('cell', { name: /Elle başlatıldı/ })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Planlanan/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Deneme 1 \/ 3/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Doğrulanmış kopya sayısı yetersiz')).not.toBeInTheDocument()
+    expect(screen.queryByText('Uygulama · SQL ajanı')).not.toBeInTheDocument()
+  })
+
+  it('on a phone shows each run as a card with the job, result, start time and duration', () => {
+    setViewport(false)
+    render(<MemoryRouter><BackupsPage /></MemoryRouter>)
+    const card = within(screen.getByRole('listitem'))
+    expect(card.getByRole('link', { name: 'Günlük SQL yedeği' })).toBeInTheDocument()
+    expect(card.getByText('Çalışıyor')).toBeInTheDocument()
+    expect(card.getAllByRole('term').map((term) => term.textContent)).toEqual(['Başlangıç', 'Süre'])
+  })
+
+  it('with no runs and no filters, points to the backup jobs; with filters, offers to clear them', () => {
+    state.page = { items: [], totalCount: 0, page: 1, pageSize: 25 }
+    render(<MemoryRouter><BackupsPage /></MemoryRouter>)
+    expect(screen.getByRole('link', { name: /yedekleme işlerine/i })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs')
+    expect(screen.queryByRole('button', { name: 'Filtreleri temizle' })).not.toBeInTheDocument()
+    fireEvent.change(screen.getByRole('combobox', { name: 'Durum' }), { target: { value: 'Failed' } })
+    expect(screen.getAllByRole('button', { name: 'Filtreleri temizle' }).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('link', { name: /yedekleme işlerine/i })).not.toBeInTheDocument()
   })
 })
