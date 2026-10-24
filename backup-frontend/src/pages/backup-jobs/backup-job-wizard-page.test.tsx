@@ -154,6 +154,25 @@ describe('iş formu', () => {
     expect(within(region).getByText('Sağlıklı')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Kaydet' })).not.toBeInTheDocument()
   })
+  it('shows the schedule and encryption under collapsed technical details on the job page', async () => {
+    vi.mocked(getBackupJob).mockResolvedValue({ ...makeJob(), schedule: { enabled: true, cronExpression: '17 3 * * 2', timeZone: 'Europe/Istanbul', missedRunGraceSeconds: 600, overlapPolicy: 'Skip' }, configuration: { ...makeJob().configuration, encryptionPolicy: 'Required' } })
+    renderPage('/tenants/tenant-a/backup-jobs/job-a/edit')
+    const details = await screen.findByRole('region', { name: 'İş ayrıntıları' })
+    const cron = within(details).getByText('17 3 * * 2')
+    expect(cron).not.toBeVisible()
+    expect(within(details).getByText('Europe/Istanbul')).toBeInTheDocument()
+    expect(within(details).getByText(/Zorunlu/)).toBeInTheDocument()
+    await userEvent.click(within(details).getByText('Teknik ayrıntılar'))
+    expect(cron).toBeVisible()
+    expect(within(details).getByRole('button', { name: 'Kopyala: Cron ifadesi' })).toBeInTheDocument()
+  })
+  it('lets a read-only user see the same technical details', async () => {
+    access.canOperate = false
+    vi.mocked(getBackupJob).mockResolvedValue({ ...makeJob(), schedule: { enabled: true, cronExpression: '17 3 * * 2', timeZone: 'Europe/Istanbul', missedRunGraceSeconds: 600, overlapPolicy: 'Skip' } })
+    renderPage('/tenants/tenant-a/backup-jobs/job-a/edit')
+    const details = await screen.findByRole('region', { name: 'İş ayrıntıları' })
+    expect(within(details).getByText('17 3 * * 2')).not.toBeVisible()
+  })
   it('cron alanını yerel olarak yeniden doğrulamaz ve sunucu alan hatasını gösterir', async () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400, { field: 'cronExpression', code: 'invalid_cron' }))
     renderPage()

@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -94,13 +94,19 @@ describe('encryption policy in the job wizard', () => {
   })
 })
 
-describe('encryption policy in the job list', () => {
-  it('shows each job policy', async () => {
+describe('encryption policy on the job page and the job list', () => {
+  it('shows the policy under the job page technical details, not in the list', async () => {
+    vi.mocked(getBackupJob).mockResolvedValue(withPolicy('Required'))
+    renderWizard('/tenants/tenant-a/backup-jobs/job-a/edit')
+    const details = await screen.findByRole('region', { name: 'İş ayrıntıları' })
+    expect(within(details).getByText('Zorunlu · şifrelenemezse başarısız')).not.toBeVisible()
+  })
+
+  it('leaves the policy off the list', async () => {
     vi.mocked(getBackupJobs).mockResolvedValue([job, { ...withPolicy('Required'), id: 'job-b', name: 'Billing backup' }])
     const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(<QueryClientProvider client={cache}><MemoryRouter><BackupJobsPage /></MemoryRouter></QueryClientProvider>)
-    const rows = await screen.findAllByRole('row')
-    expect(rows[1]).toHaveTextContent('Kapalı')
-    expect(rows[2]).toHaveTextContent('Zorunlu')
+    expect(await screen.findByText('Billing backup')).toBeInTheDocument()
+    expect(screen.queryByText(/Zorunlu/)).not.toBeInTheDocument()
   })
 })
