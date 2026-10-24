@@ -25,3 +25,8 @@ export function deletionReason(reason: string | null): string {
   if (reason === 'RetentionExpired') return tx('Saklama süresi doldu')
   return '—'
 }
+
+/** What the typed deletion confirmation asks for: the database name, else the job name, else the file id. */
+export function artifactName(artifact: { id: string; databaseName?: string | null; jobName?: string | null }): string {
+  return artifact.databaseName || artifact.jobName || artifact.id
+}
