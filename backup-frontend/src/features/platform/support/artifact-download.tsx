@@ -1,13 +1,11 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { selectClass } from '@/components/ui/form-styles'
 import { DownloadFlowStatus } from '@/features/artifacts/download-flow-status'
-import { useDownloadFlow } from '@/features/artifacts/use-download-flow'
+import { useArtifactDownload } from '@/features/artifacts/use-artifact-download'
 import { failureMessage } from '@/lib/api/failure-messages'
 import { useVisibleTab } from '@/hooks/use-visible-tab'
 import { getSupportDownloadAvailability, getSupportDownloadStatus, prepareSupportDownload } from './api'
@@ -23,17 +21,17 @@ export function SupportArtifactDownload({ scope, artifactId, eligible }: { scope
 }
 function DownloadController({ scope, artifactId, eligible }: { scope: SupportScope; artifactId: string; eligible: boolean }) {
   useLanguage()
-  const [replicaId, setReplicaId] = useState('')
   const enabled = scope.enabled && eligible
   const visible = useVisibleTab()
-  const availability = useQuery({ queryKey: supportKeys.data(scope, 'downloads', 'availability', artifactId), queryFn: ({ signal }) => getSupportDownloadAvailability(scope.sessionId, artifactId, signal), enabled, refetchInterval: visible ? 10_000 : false })
-  const flow = useDownloadFlow({
-    active: enabled,
-    prepare: () => prepareSupportDownload(scope.sessionId, artifactId, replicaId || undefined),
+  const { availability, flow, replicaId, setReplicaId, selected } = useArtifactDownload({
+    enabled,
+    availabilityKey: supportKeys.data(scope, 'downloads', 'availability', artifactId),
+    fetchAvailability: signal => getSupportDownloadAvailability(scope.sessionId, artifactId, signal),
+    refetchInterval: visible ? 10_000 : false,
+    prepare: replica => prepareSupportDownload(scope.sessionId, artifactId, replica),
     fetchStatus: (sessionId, signal) => getSupportDownloadStatus(scope.sessionId, artifactId, sessionId, signal),
     statusKey: sessionId => supportKeys.data(scope, 'downloads', 'status', artifactId, sessionId),
   })
-  const selected = availability.data?.replicas.find(replica => replica.replicaId === replicaId)
   const busy = flow.busy
   const error = availability.error || flow.error
   return <Section title={tx("Download Backup")} description={tx("Dosya tarayıcınız tarafından indirilir; içerik bu arayüzde tutulmaz.")}>

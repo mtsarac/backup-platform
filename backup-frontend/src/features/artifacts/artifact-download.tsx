@@ -3,12 +3,11 @@ import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { selectClass } from '@/components/ui/form-styles'
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { failureMessage } from '@/lib/api/failure-messages'
 import { getDownloadAvailability, getDownloadStatus, prepareDownload } from './api'
 import { DownloadFlowStatus } from './download-flow-status'
-import { useDownloadFlow } from './use-download-flow'
+import { useArtifactDownload } from './use-artifact-download'
 import { formatBytes } from '@/lib/format'
 
 export function ArtifactDownload({ tenantId, artifactId, canAdmin, eligible }: { tenantId: string; artifactId: string; canAdmin: boolean; eligible: boolean }) {
@@ -18,26 +17,22 @@ export function ArtifactDownload({ tenantId, artifactId, canAdmin, eligible }: {
 }
 function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tenantId: string; artifactId: string; canAdmin: boolean; eligible: boolean }) {
   useLanguage()
-  const [replicaId, setReplicaId] = useState('')
   const [decrypt, setDecrypt] = useState(false)
   const [copyNotice, setCopyNotice] = useState('')
-  const availability = useQuery({
-    queryKey: ['tenant', tenantId, 'backup-artifacts', 'download-availability', artifactId, canAdmin],
-    queryFn: ({ signal }) => getDownloadAvailability(tenantId, artifactId, signal), enabled: canAdmin && eligible,
-    refetchInterval: 10_000,
-  })
   // The decrypt flag is only sent when chosen: the default request stays exactly the stored-file download.
-  // Remounting on scope/permission changes (the key above) plus `active` keeps a pending request from starting a download in a new scope.
-  const flow = useDownloadFlow({
-    active: canAdmin && eligible,
-    prepare: () => decrypt ? prepareDownload(tenantId, artifactId, replicaId || undefined, true) : prepareDownload(tenantId, artifactId, replicaId || undefined),
+  // Remounting on scope/permission changes (the key above) plus `enabled` keeps a pending request from starting a download in a new scope.
+  const { availability, flow, replicaId, setReplicaId, selected } = useArtifactDownload({
+    enabled: canAdmin && eligible,
+    availabilityKey: ['tenant', tenantId, 'backup-artifacts', 'download-availability', artifactId, canAdmin],
+    fetchAvailability: signal => getDownloadAvailability(tenantId, artifactId, signal),
+    refetchInterval: 10_000,
+    prepare: replica => decrypt ? prepareDownload(tenantId, artifactId, replica, true) : prepareDownload(tenantId, artifactId, replica),
     fetchStatus: (sessionId, signal) => getDownloadStatus(tenantId, artifactId, sessionId, signal),
     statusKey: sessionId => ['tenant', tenantId, 'backup-artifacts', 'download-status', artifactId, sessionId],
   })
   const { session } = flow
   if (!canAdmin) return <Notice tone="info">{tx("Download Backup yalnızca Owner / Admin için açıktır.")}</Notice>
   if (!eligible) return <Notice tone="info">{tx("Bu Backup silme sürecinde veya silinmiş; indirme kullanılamıyor.")}</Notice>
-  const selected = availability.data?.replicas.find(replica => replica.replicaId === replicaId)
   const busy = flow.busy
   async function copyChecksum() {
     try { await navigator.clipboard.writeText(availability.data!.checksum); setCopyNotice(tx('Checksum kopyalandı.')) }
