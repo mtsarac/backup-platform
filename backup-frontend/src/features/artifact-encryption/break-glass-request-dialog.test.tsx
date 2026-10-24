@@ -40,7 +40,7 @@ describe('break-glass request dialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'İstek aç' }))
     expect(await screen.findByText(tx('Tenant seçin'))).toBeInTheDocument()
     expect(screen.getByText(tx('Yedek dosyası seçin'))).toBeInTheDocument()
-    expect(screen.getByText('Break-glass için gerekçe girin.')).toBeInTheDocument()
+    expect(screen.getByText('Acil destek erişimi için gerekçe girin.')).toBeInTheDocument()
     expect(screen.getByText('Süre 1 ile 240 dakika arasında tam sayı olmalıdır.')).toBeInTheDocument()
     expect(api.createBreakGlassRequest).not.toHaveBeenCalled()
   })
@@ -71,7 +71,7 @@ describe('break-glass request dialog', () => {
     mount({ initialTenantId: tenantId, initialArtifactId: artifactId })
     fireEvent.change(await screen.findByLabelText('Gerekçe'), { target: { value: 'because' } })
     fireEvent.click(screen.getByRole('button', { name: 'İstek aç' }))
-    expect(await screen.findByText('Bu Backup şifreli değil; şifre çözme veya break-glass uygulanamaz.')).toBeInTheDocument()
+    expect(await screen.findByText('Bu yedek dosyası şifreli değil; şifre çözme veya acil destek erişimi uygulanamaz.')).toBeInTheDocument()
   })
 
   it('searches names through an authorized support session and sends the unchanged IDs', async () => {

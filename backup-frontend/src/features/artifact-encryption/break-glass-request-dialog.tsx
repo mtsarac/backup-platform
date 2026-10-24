@@ -34,7 +34,7 @@ export function BreakGlassRequestDialog({ initialTenantId = '', initialArtifactI
     const found: Record<string, string> = {}
     if (!tenantId) found.tenantId = tx('Tenant seçin')
     if (!artifactId) found.artifactId = tx('Yedek dosyası seçin')
-    if (!reason.trim()) found.reason = tx('Break-glass için gerekçe girin.')
+    if (!reason.trim()) found.reason = tx('Acil destek erişimi için gerekçe girin.')
     else if (reason.trim().length > 500) found.reason = tx('Gerekçe en fazla 500 karakter olabilir.')
     if (!Number.isInteger(minutes) || minutes < 1 || minutes > 240) found.ttl = tx('Süre 1 ile 240 dakika arasında tam sayı olmalıdır.')
     setErrors(found)
@@ -46,7 +46,7 @@ export function BreakGlassRequestDialog({ initialTenantId = '', initialArtifactI
     })
   }
 
-  return <FormDialog title={tx("Break-glass isteği aç")} description={tx("Şifreli bir Backup'ın tenant anahtarıyla çözülmesini ister. Farklı bir PlatformAdmin onaylamadan hiçbir şey çözülmez; onay süreli ve tek kullanımlıktır. Her adım audit kaydına yazılır ve tenant sahiplerine bildirilir.")}
+  return <FormDialog title={tx("Acil destek erişimi iste")} description={tx("Şifreli bir yedek dosyasının tenant anahtarıyla çözülmesini ister. Farklı bir PlatformAdmin onaylamadan hiçbir şey çözülmez; onay süreli ve tek kullanımlıdır. Her adım denetim kaydına yazılır ve tenant sahiplerine bildirilir.")}
     submitLabel={tx("İstek aç")} pendingLabel={tx("İstek açılıyor…")} pending={create.isPending} onSubmit={submit} onClose={onClose}>
     <fieldset disabled={create.isPending} className="space-y-4">
       <TenantPicker value={tenantId} onChange={id => { setTenantId(id); setArtifactId('') }} />

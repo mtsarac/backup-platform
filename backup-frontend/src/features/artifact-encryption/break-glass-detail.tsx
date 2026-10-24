@@ -5,7 +5,7 @@ import { Field } from '@/components/ui/field'
 import { Button } from '@/components/ui/button'
 import { Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
-import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { TypedConfirmDialog } from '@/components/ui/confirm-dialog'
 import { FormDialog } from '@/components/ui/form-dialog'
 import { inputClass } from '@/components/ui/form-styles'
 import { useSupportCountdown } from '@/features/platform/support/use-support-countdown'
@@ -14,6 +14,8 @@ import { encryptionKeys, useBreakGlassDecision } from './hooks'
 import type { BreakGlassRequest } from './types'
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
+import { RelativeTime } from '@/components/data/relative-time'
+import { TechnicalDetails } from '@/components/ui/technical-details'
 
 /** `receivedAt` is when the view was fetched: the countdown follows the server clock, not a possibly skewed browser clock. */
 export function BreakGlassDetail({ request, receivedAt }: { request: BreakGlassRequest; receivedAt: number }) {
@@ -37,26 +39,39 @@ export function BreakGlassDetail({ request, receivedAt }: { request: BreakGlassR
     deny.mutate(trimmed, { onSuccess: () => setDenying(false) })
   }
 
+  const tenantName = request.tenantName ?? request.tenantId
+  // The requester can never decide their own request, whatever the cached flag says.
+  const canDecide = request.canApprove && !request.isRequester
+
   return <div className="space-y-6">
-    <Section title={tx("İstek")} description={tx("Tek bir şifreli Backup için süreli, gerekçeli ve çift onaylı çözme isteği.")}>
-      <Facts>
-        <Fact label={tx("Durum")}><StatusPill domain="breakGlass" status={request.status} /></Fact>
-        {open && <Fact label={tx("Kalan süre")}><span className="tabular-nums">{countdown.label}</span></Fact>}
-        <Fact label={tx("Tenant")}>{request.tenantName ?? request.tenantId}</Fact>
-        <Fact label={tx("Backup")}><code className="break-all font-mono text-sm">{request.artifactId}</code></Fact>
-        <Fact label={tx("Gerekçe")}>{request.reason}</Fact>
-        <Fact label={tx("İsteyen")}>{request.requestedByName ?? request.requestedBy}{request.isRequester && <span className="text-text-muted">{' '}{tx("(siz)")}</span>}</Fact>
-        <Fact label={tx("Açılış")}>{formatDateTime(request.createdAt)}</Fact>
-        <Fact label={tx("Süre sonu")}>{formatDateTime(request.expiresAt)}</Fact>
-        {request.decidedAt && <Fact label={request.status === 'Denied' ? tx("Reddeden") : tx("Onaylayan")}>{request.decidedByName ?? request.decidedBy} · {formatDateTime(request.decidedAt)}</Fact>}
-        {request.decisionReason && <Fact label={tx("Ret gerekçesi")}>{request.decisionReason}</Fact>}
-        {request.consumedAt && <Fact label={tx("Kullanıldı")}>{formatDateTime(request.consumedAt)}</Fact>}
-      </Facts>
+    <Section title={tx("İstek")} description={tx("Tek bir şifreli yedek dosyası için süreli, gerekçeli ve iki kişi onaylı çözme isteği.")}>
+      <div className="space-y-4">
+        <Facts>
+          <Fact label={tx("Durum")}><StatusPill domain="breakGlass" status={request.status} /></Fact>
+          {open && <Fact label={tx("Kalan süre")}><span className="tabular-nums">{countdown.label}</span></Fact>}
+          <Fact label={tx("Tenant")}>{tenantName}</Fact>
+          <Fact label={tx("İsteyen")}>{request.requestedByName ?? request.requestedBy}{request.isRequester && <span className="text-text-muted">{' '}{tx("(siz)")}</span>}</Fact>
+          <Fact label={tx("Gerekçe")}>{request.reason}</Fact>
+          {request.decidedAt && <Fact label={request.status === 'Denied' ? tx("Reddeden") : tx("Onaylayan")}>{request.decidedByName ?? request.decidedBy} · <RelativeTime value={request.decidedAt} /></Fact>}
+          {request.decisionReason && <Fact label={tx("Ret gerekçesi")}>{request.decisionReason}</Fact>}
+          {request.consumedAt && <Fact label={tx("Kullanıldı")}><RelativeTime value={request.consumedAt} /></Fact>}
+        </Facts>
+        <TechnicalDetails items={[
+          { label: tx("İstek kimliği"), value: request.id },
+          { label: tx("Tenant kimliği"), value: request.tenantId },
+          { label: tx("Yedek dosyası kimliği"), value: request.artifactId },
+          { label: tx("Ham durum"), value: request.status },
+          { label: tx("Açılış"), value: formatDateTime(request.createdAt) },
+          { label: tx("Süre sonu"), value: formatDateTime(request.expiresAt) },
+          ...(request.decidedAt ? [{ label: tx("Karar zamanı"), value: formatDateTime(request.decidedAt) }] : []),
+          ...(request.consumedAt ? [{ label: tx("Kullanılma zamanı"), value: formatDateTime(request.consumedAt) }] : []),
+        ]} />
+      </div>
     </Section>
 
-    {request.status === 'Pending' && !expiredLocally && <Section title={tx("Onay")}>
-      {request.canApprove ? <div className="space-y-3">
-        <p className="text-sm text-text-muted">{tx("Onay, isteği açan yöneticinin bu Backup'ı tenant anahtarıyla çözerek tek seferlik indirmesine izin verir. Gerekçeyi ve tenant'ı doğrulamadan onaylamayın.")}</p>
+    {request.status === 'Pending' && !expiredLocally && <Section title={tx("Sıradaki adım")}>
+      {canDecide ? <div className="space-y-3">
+        <p className="text-sm text-text-muted">{tx("Onay, isteği açan yöneticinin bu yedek dosyasını tenant anahtarıyla çözerek tek seferlik indirmesine izin verir. Gerekçeyi ve tenant'ı doğrulamadan onaylamayın.")}</p>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => { approve.reset(); setApproving(true) }}>{tx("Onayla")}</Button>
           <Button variant="destructive" onClick={() => { deny.reset(); setDenyReason(''); setDenyError(''); setDenying(true) }}>{tx("Reddet")}</Button>
@@ -74,9 +89,9 @@ export function BreakGlassDetail({ request, receivedAt }: { request: BreakGlassR
     {request.status === 'Denied' && <Notice tone="warning">{tx("Bu istek reddedildi; hiçbir veri çözülmedi.")}</Notice>}
     {request.status === 'Expired' && <Notice tone="warning">{tx("İsteğin süresi doldu; hiçbir veri çözülmedi.")}</Notice>}
 
-    <ConfirmDialog open={approving} onClose={() => setApproving(false)} title={tx("İstek onaylansın mı?")}
+    <TypedConfirmDialog open={approving} onClose={() => setApproving(false)} name={tenantName} title={tx("İstek onaylansın mı?")}
       consequence={{
-        what: tx("“{0}” çalışma alanındaki yedek, isteği açan yönetici tarafından çözülerek bir kez indirilebilecek.", { "0": request.tenantName ?? request.tenantId }),
+        what: tx("“{0}” çalışma alanındaki yedek, isteği açan yönetici tarafından çözülerek bir kez indirilebilecek.", { "0": tenantName }),
         who: tx("Bu çalışma alanının sahipleri bilgilendirilir; işlem denetim kaydına yazılır."),
         reversible: tx("Hayır. Onay verildikten sonra süre dolana kadar tek seferlik indirme açık kalır."),
       }}

@@ -21,7 +21,7 @@ export function BreakGlassDownload({ requestId, canStart }: { requestId: string;
   })
   if (!flow.session && !canStart && !flow.pending) return null
   return <div className="space-y-3">
-    {!flow.session && <Notice tone="warning" title={tx("Tek kullanımlık çözülmüş indirme")}>{tx("İndirme başladığında istek tüketilir; aktarım başarısız olsa bile aynı istek tekrar kullanılamaz. Dosyanın tamamı güvenli geçici alanda çözülür; şifreli ve düz veri checksum doğrulanmadan hiçbir düz veri gönderilmez. İndirilen dosya şifresizdir.")}</Notice>}
+    {!flow.session && <Notice tone="warning" title={tx("Tek kullanımlık çözülmüş indirme")}>{tx("İndirme başladığı anda bu hak kullanılmış sayılır; aktarım başarısız olsa bile aynı istek yeniden kullanılamaz. Dosya önce güvenli geçici alanda çözülür ve doğrulanır; doğrulama bitmeden hiçbir veri gönderilmez. İndirilen dosya şifresizdir, güvenli bir yerde saklayın.")}</Notice>}
     {!flow.session && <Button disabled={flow.busy} onClick={() => void flow.start()}>{flow.pending ? tx('İndirme hazırlanıyor…') : tx('Çözülmüş dosyayı indir')}</Button>}
     <DownloadFlowStatus flow={flow} unsafeAction={tx("Yeni bir istek açın.")} />
   </div>

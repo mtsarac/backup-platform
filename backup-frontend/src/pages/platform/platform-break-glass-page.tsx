@@ -8,6 +8,7 @@ import { BreakGlassRequestDialog } from '@/features/artifact-encryption/break-gl
 import { BreakGlassTable } from '@/features/artifact-encryption/break-glass-table'
 import { useBreakGlassRequests } from '@/features/artifact-encryption/hooks'
 import { breakGlassStatuses, type BreakGlassStatus } from '@/features/artifact-encryption/types'
+import { TenantPicker } from '@/features/platform/tenant-picker'
 import { platformCrumb } from '@/features/platform/crumbs'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
@@ -30,12 +31,10 @@ export function PlatformBreakGlassPage() {
     update({ requestTenantId: '', requestArtifactId: '' })
   }
   return <div className="space-y-6">
-    <PageHeader crumbs={[platformCrumb]} title={tx("Break-glass")} description={tx("Şifreli Backup'ları tenant anahtarıyla çözme istekleri. Çift onay, süre sınırı ve tek kullanım zorunludur; platform kurtarma anahtarı çevrimiçi kullanılmaz.")}
+    <PageHeader crumbs={[platformCrumb]} title={tx("Acil destek erişimi")} description={tx("Şifreli yedek dosyalarını tenant anahtarıyla çözme istekleri. İki kişi onayı, süre sınırı ve tek kullanım zorunludur; platform kurtarma anahtarı çevrimiçi kullanılmaz.")}
       actions={<Button onClick={() => setDialogOpen(true)}>{tx("Yeni istek")}</Button>} />
-    <Filters label={tx("Break-glass filtreleri")} footer={tenantId ? <>
-      <span className="text-sm text-text-muted">{tx("Tenant filtresi:")}{' '}<code className="break-all rounded bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-text">{tenantId}</code></span>
-      <Button size="sm" variant="outline" onClick={() => update({ tenantId: '' })}>{tx("Tenant filtresini kaldır")}</Button>
-    </> : undefined}>
+    <Filters label={tx("Acil destek erişimi filtreleri")} footer={tenantId ? <div className="flex flex-wrap items-center gap-2 text-sm"><span>{tx("Tek bir tenant'a göre filtreleniyor.")}</span><Button size="sm" variant="outline" onClick={() => update({ tenantId: '' })}>{tx("Tenant filtresini kaldır")}</Button></div> : undefined}>
+      <TenantPicker value={tenantId} onChange={value => update({ tenantId: value })} />
       <FilterField label={tx("Durum")}><select aria-label={tx("Durum")} className={filterControlClass} value={status} onChange={event => update({ status: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{breakGlassStatuses.map(value => <option key={value} value={value}>{statusLabel('breakGlass', value)}</option>)}</select></FilterField>
       <label className="flex min-h-10 items-center gap-2 self-end text-sm font-medium text-text-heading"><input type="checkbox" className="size-4 accent-primary" checked={mine} onChange={event => update({ mine: event.target.checked ? 'true' : 'false' })} />{tx("Yalnızca benim isteklerim")}</label>
     </Filters>
