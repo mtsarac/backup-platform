@@ -10,7 +10,7 @@ import { usePlatformSummary } from '@/features/platform/hooks'
 import { platformPaths } from '@/features/platform/paths'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { DashboardStorage } from '@/features/platform/storage/dashboard-storage'
-import { linkClass } from '@/features/platform/styles'
+import { linkClass } from '@/components/ui/form-styles'
 import type { PlatformSummary } from '@/features/platform/types'
 
 interface Attention { key: string; text: string; to: string; action: string }

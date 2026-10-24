@@ -1,7 +1,7 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useId } from 'react'
 import { SecretField as SecretInput } from '@/components/ui/secret-field'
-import { inputClass, selectClass } from '@/features/platform/styles'
+import { inputClass, selectClass } from '@/components/ui/form-styles'
 import type { FieldValues } from './descriptor-values'
 import type { ConfigField, SecretField } from './types'
 

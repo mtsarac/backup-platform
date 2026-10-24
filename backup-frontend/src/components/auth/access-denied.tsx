@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ErrorNotice } from '@/components/ui/notice'
 import { accessDenied } from '@/lib/api/failure-messages'
-import { linkClass } from '@/features/platform/styles'
+import { linkClass } from '@/components/ui/form-styles'
 
 export const platformOnlyMessage = () => tx('Platform Administration yalnızca PlatformAdmin yetkisi olan kullanıcılar içindir. Tenant Owner / Admin rolü platform erişimi vermez.')
 

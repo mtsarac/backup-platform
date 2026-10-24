@@ -7,7 +7,7 @@ import { Section } from '@/components/ui/section'
 import { AuditTable } from '@/features/platform/audit-table'
 import { platformCrumb } from '@/features/platform/crumbs'
 import { usePlatformAudit } from '@/features/platform/hooks'
-import { bareTableClass } from '@/features/platform/list-empty'
+import { bareListClass } from '@/features/platform/list-empty'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { SearchForm } from '@/features/platform/search-form'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
@@ -25,7 +25,7 @@ export function PlatformAuditPage() {
     </Filters>
     <PlatformQueryState isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">
-        <Section title={tx("Denetim geçmişi")} description={tx("İşlemi yapan, hedef ve güvenli olay ayrıntıları.")} flush className="overflow-hidden"><AuditTable className={bareTableClass} rows={data.items} emptyMessage={tenantId ? tx('Bu tenant için audit kaydı yok.') : tx('Henüz audit kaydı yok.')} /></Section>
+        <Section title={tx("Denetim geçmişi")} description={tx("İşlemi yapan, hedef ve güvenli olay ayrıntıları.")} flush className="overflow-hidden"><AuditTable className={bareListClass} rows={data.items} emptyMessage={tenantId ? tx('Bu tenant için audit kaydı yok.') : tx('Henüz audit kaydı yok.')} /></Section>
         {data.totalCount > 0 && <Pagination label={tx("Audit sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
       </div>}
     </PlatformQueryState>

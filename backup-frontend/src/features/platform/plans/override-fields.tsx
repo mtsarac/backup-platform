@@ -1,6 +1,6 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { Field } from '@/components/ui/field'
-import { selectClass, inputClass } from '../styles'
+import { selectClass, inputClass } from '@/components/ui/form-styles'
 import { isOverrideKind, type OverrideDraft } from './override-draft'
 import { overrideKinds, type OverrideKind } from './types'
 

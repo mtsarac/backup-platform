@@ -1,7 +1,7 @@
 import { tx } from '@/lib/i18n'
 import { Field } from '@/components/ui/field'
 import { SecretField } from '@/components/ui/secret-field'
-import { inputClass } from '@/features/platform/styles'
+import { inputClass } from '@/components/ui/form-styles'
 import type { DatabaseLogin } from '@/features/backup-jobs/types'
 
 interface Props {

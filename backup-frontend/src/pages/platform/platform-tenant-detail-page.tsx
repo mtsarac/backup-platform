@@ -14,11 +14,11 @@ import { AgentBreakdown } from '@/features/platform/agent-breakdown'
 import { AuditTable } from '@/features/platform/audit-table'
 import { platformCrumb } from '@/features/platform/crumbs'
 import { usePlatformAudit, usePlatformTenant, useRenameTenant, useSetTenantEnrollment } from '@/features/platform/hooks'
-import { bareTableClass } from '@/features/platform/list-empty'
+import { bareListClass } from '@/features/platform/list-empty'
 import { platformPaths } from '@/features/platform/paths'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { TenantStorageSection } from '@/features/platform/storage/tenant-storage-section'
-import { inputClass, linkClass } from '@/features/platform/styles'
+import { inputClass, linkClass } from '@/components/ui/form-styles'
 import { SupportAccessSection } from '@/features/platform/support/support-access-section'
 import { MembershipsSection } from '@/features/platform/tenant-members'
 import type { PlatformTenantDetail } from '@/features/platform/types'
@@ -83,7 +83,7 @@ function RecentAudit({ tenantId }: { tenantId: string }) {
   const query = usePlatformAudit({ tenantId, page: 1, pageSize: 10 })
   return <Section title={tx("Son audit kayıtları")} flush className="overflow-hidden" actions={<Link className={`${linkClass} text-sm`} to={platformPaths.audit(tenantId)}>{tx("Tüm audit kayıtları")}</Link>}>
     <PlatformQueryState isPending={query.isPending} error={query.error}>
-      {query.data && <AuditTable className={bareTableClass} rows={query.data.items} showTenant={false} emptyMessage={tx("Bu tenant için audit kaydı yok.")} />}
+      {query.data && <AuditTable className={bareListClass} rows={query.data.items} showTenant={false} emptyMessage={tx("Bu tenant için audit kaydı yok.")} />}
     </PlatformQueryState>
   </Section>
 }

@@ -1,16 +1,12 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { ProgressBar } from '@/components/data/progress-bar'
+import { progressFill } from '@/components/data/progress-tone'
 import { cn } from '@/lib/utils'
 import { allocatedPercent } from './format'
 import type { QuotaState } from './types'
 import { formatBytes } from '@/lib/format'
 
-const fillByState: Record<QuotaState, string> = {
-  Normal: 'bg-success',
-  Warning: 'bg-warning',
-  Critical: 'bg-error',
-  OverQuota: 'bg-error',
-  Unlimited: 'bg-primary',
-}
+const toneByState = { Normal: 'success', Warning: 'warning', Critical: 'error', OverQuota: 'error', Unlimited: 'primary' } as const satisfies Record<QuotaState, string>
 
 /**
  * Real used + reserved bytes against the limit, as two segments. The colour is the backend's `state`; nothing here decides what is
@@ -29,14 +25,10 @@ export function QuotaMeter({ usedBytes, reservedBytes, limitBytes, state, label 
   const scale = Math.max(limitBytes, committed)
   const usedWidth = (Math.max(0, usedBytes) / scale) * 100
   const reservedWidth = (Math.max(0, reservedBytes) / scale) * 100
-  const fill = fillByState[state]
+  const fill = progressFill[toneByState[state]]
   return <div className="space-y-1.5">
-    <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}
-      aria-valuetext={tx("{0} / {1} ayrılmış (%{2})", { "0": formatBytes(committed), "1": formatBytes(limitBytes), "2": percent })}
-      className="flex h-3 w-full overflow-hidden rounded-full bg-surface-2">
-      <div className={cn('h-full transition-all', fill)} style={{ width: `${usedWidth}%` }} />
-      <div className={cn('h-full opacity-45 transition-all', fill)} style={{ width: `${reservedWidth}%` }} />
-    </div>
+    <ProgressBar label={label} value={usedWidth} reserved={reservedWidth} now={percent} tone={toneByState[state]} className="h-3"
+      valueText={tx("{0} / {1} ayrılmış (%{2})", { "0": formatBytes(committed), "1": formatBytes(limitBytes), "2": percent })} />
     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
       <span className="inline-flex items-center gap-1.5"><span className={cn('size-2 rounded-full', fill)} aria-hidden="true" />{tx("Kullanılan")}</span>
       <span className="inline-flex items-center gap-1.5"><span className={cn('size-2 rounded-full opacity-45', fill)} aria-hidden="true" />{tx("Rezerve")}</span>

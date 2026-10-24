@@ -1,7 +1,7 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import type { ReactNode } from 'react'
 import { AccessDenied } from '@/components/auth/access-denied'
-import { DataTable } from '@/components/data/data-table'
+import { DataList } from '@/components/data/data-list'
 import { Pagination } from '@/components/data/pagination'
 import { QueryState } from '@/components/data/query-state'
 import { Button } from '@/components/ui/button'
@@ -52,14 +52,14 @@ function SupportAccessContent({ tenantId }: { tenantId: string }) {
     <PageHeader title={tx("Destek erişimi")} description={tx("PlatformAdmin destek oturumları ve gerçekleştirilen işlemler. Bu alan salt okunurdur.")} />
     <AccessQueryState isPending={query.isPending} error={query.error}>
       {query.data && <div className="space-y-4">
-        <DataTable rows={query.data.items} keyExtractor={(row) => row.id} emptyMessage={tx("Henüz destek erişimi kaydı yok.")} columns={[
+        <DataList rows={query.data.items} keyExtractor={(row) => row.id} emptyMessage={tx("Henüz destek erişimi kaydı yok.")} columns={[
           { key: 'actor', header: tx('İşlemi yapan'), render: (row) => row.actorDisplayName ?? tx('Bilinmiyor'), wrap: true },
           { key: 'when', header: tx('Zaman'), render: (row) => <div>{tx("Başlangıç:")}{' '}{formatDateTime(row.startedAt)}<br />{tx("Bitiş:")}{' '}{formatDateTime(row.expiresAt)}</div> },
           { key: 'reason', header: tx('Gerekçe'), render: (row) => row.reason, wrap: true },
-          { key: 'permissions', header: tx('İzinler'), render: (row) => <PermissionBadges permissions={row.permissions} />, wrap: true },
-          { key: 'status', header: tx('Durum'), render: (row) => <StatusPill domain="supportSession" status={row.status} /> },
+          { key: 'permissions', card: 'hidden', header: tx('İzinler'), render: (row) => <PermissionBadges permissions={row.permissions} />, wrap: true },
+          { key: 'status', card: 'status', header: tx('Durum'), render: (row) => <StatusPill domain="supportSession" status={row.status} /> },
           { key: 'summary', header: tx('İşlem özeti'), render: (row) => <Summary summary={row.summary} />, wrap: true },
-          { key: 'detail', header: tx('Etkinlik'), render: (row) => <Button variant="outline" size="sm" onClick={() => update({ sessionId: row.id, activityPage: '', page })}>{tx("Etkinliği görüntüle")}</Button> },
+          { key: 'detail', card: 'actions', header: tx('Etkinlik'), render: (row) => <Button variant="outline" size="sm" onClick={() => update({ sessionId: row.id, activityPage: '', page })}>{tx("Etkinliği görüntüle")}</Button> },
         ]} />
         {query.data.totalCount > 0 && <Pagination label={tx("Destek oturumu sayfaları")} page={page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
       </div>}
@@ -95,10 +95,10 @@ function SessionActivity({ tenantId, sessionId }: { tenantId: string; sessionId:
   const query = useSupportAccessActivity(tenantId, sessionId, { page, pageSize: PLATFORM_PAGE_SIZE })
   return <div className="space-y-3"><h3 className="font-semibold">{tx("Etkinlik geçmişi")}</h3>
     <AccessQueryState isPending={query.isPending} error={query.error}>{query.data && <>
-      <DataTable rows={query.data.items} keyExtractor={(row) => row.id} emptyMessage={tx("Bu oturum için etkinlik kaydı yok.")} columns={[
+      <DataList rows={query.data.items} keyExtractor={(row) => row.id} emptyMessage={tx("Bu oturum için etkinlik kaydı yok.")} columns={[
         { key: 'at', header: tx('Zaman'), render: (row) => formatDateTime(row.at) },
         { key: 'action', header: tx('İşlem'), render: (row) => row.action, wrap: true },
-        { key: 'target', header: tx('Hedef'), render: (row) => <div>{row.targetType}<p className="break-all font-mono text-xs text-text-muted">{row.targetId}</p></div>, wrap: true },
+        { key: 'target', card: 'hidden', header: tx('Hedef'), render: (row) => <div>{row.targetType}<p className="break-all font-mono text-xs text-text-muted">{row.targetId}</p></div>, wrap: true },
         { key: 'result', header: tx('Sonuç'), render: (row) => row.result ?? '—', wrap: true },
       ]} />
       {query.data.totalCount > 0 && <Pagination label={tx("Destek etkinliği sayfaları")} page={page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ activityPage: next })} />}

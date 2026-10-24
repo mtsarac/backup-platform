@@ -1,6 +1,7 @@
 import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 import { useEffect } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { DataList } from '@/components/data/data-list'
 import { QueryState } from '@/components/data/query-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -13,9 +14,10 @@ import { useTenant } from '@/features/tenancy/use-tenant'
 import { ConnectionActions } from './connection-actions'
 import { CapabilityChips, HealthBadge, SecretStatus } from './connection-parts'
 import { useTenantConnectionCapacity, useProbeTenantConnectionCapacity, useTenantConnectionOps, useTenantConnections, useTenantProviders } from './hooks'
-import { configurationSummary, connectionHealth, disableEffects, enableEffect, executionLocationLabel, testMessage, testModeLabel, topologyLabel } from './labels'
+import { configurationSummary, connectionHealth, disableEffects, enableEffect, platformLockState, executionLocationLabel, testMessage, testModeLabel, topologyLabel } from './labels'
 import type { ConnectionView, ProviderDescriptor } from './types'
 import { formatBytes, formatDateTime } from '@/lib/format'
+import { ProgressBar } from '@/components/data/progress-bar'
 import { StatusPill } from '@/components/data/status-pill'
 
 const tabs = [
@@ -114,12 +116,7 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
               <span>{tx("Doluluk Oranı")}</span>
               <span>{percentUsed}%</span>
             </div>
-            <div aria-hidden="true" className="h-2 overflow-hidden rounded-full bg-surface-3">
-              <div
-                className={`h-full rounded-full ${isCritical ? 'bg-error' : isWarning ? 'bg-warning' : 'bg-primary'}`}
-                style={{ width: `${percentUsed}%` }}
-              />
-            </div>
+            <ProgressBar label={tx("Doluluk Oranı")} value={percentUsed} tone={isCritical ? 'error' : isWarning ? 'warning' : 'primary'} />
           </div>
 
           <p className="text-xs text-text-muted">
@@ -133,24 +130,15 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
       ) : null}
 
       {capacity?.history && capacity.history.length > 0 && (
-        <div className="mt-5 overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <caption className="mb-2 text-left text-text-muted">{tx("Kapasite geçmişi — en son {0} ölçüm", { "0": capacity.historyLimit ?? 30 })}</caption>
-            <thead><tr>
-              <th scope="col" className="p-2">{tx("Tarih")}</th>
-              <th scope="col" className="p-2">{tx("Toplam Alan")}</th>
-              <th scope="col" className="p-2">{tx("Kullanılan Alan")}</th>
-              <th scope="col" className="p-2">{tx("Boş Alan")}</th>
-              <th scope="col" className="p-2">{tx("Durum")}</th>
-            </tr></thead>
-            <tbody>{capacity.history.map((measurement, index) => <tr key={`${measurement.reportedAt}-${index}`} className="border-t border-border">
-              <td className="p-2">{formatDateTime(measurement.reportedAt, tx('Henüz bildirilmedi'))}</td>
-              <td className="p-2">{measurement.totalBytes == null ? '—' : formatBytes(measurement.totalBytes)}</td>
-              <td className="p-2">{measurement.usedBytes == null ? '—' : formatBytes(measurement.usedBytes)}</td>
-              <td className="p-2">{measurement.freeBytes == null ? '—' : formatBytes(measurement.freeBytes)}</td>
-              <td className="p-2">{measurement.status === 'Critical' ? tx("Kritik") : measurement.status === 'Warning' ? tx("Uyarı") : measurement.status === 'Available' ? tx("Kullanılabilir") : tx("Kapasite bilgisi alınamadı")}</td>
-            </tr>)}</tbody>
-          </table>
+        <div className="mt-5 space-y-2">
+          <p aria-hidden="true" className="text-text-muted">{tx("Kapasite geçmişi — en son {0} ölçüm", { "0": capacity.historyLimit ?? 30 })}</p>
+          <DataList caption={tx("Kapasite geçmişi — en son {0} ölçüm", { "0": capacity.historyLimit ?? 30 })} rows={capacity.history} keyExtractor={measurement => `${measurement.reportedAt}-${capacity.history!.indexOf(measurement)}`} columns={[
+            { key: 'at', header: tx('Tarih'), render: measurement => formatDateTime(measurement.reportedAt, tx('Henüz bildirilmedi')) },
+            { key: 'total', header: tx('Toplam Alan'), card: 'hidden', render: measurement => measurement.totalBytes == null ? '—' : formatBytes(measurement.totalBytes) },
+            { key: 'used', header: tx('Kullanılan Alan'), render: measurement => measurement.usedBytes == null ? '—' : formatBytes(measurement.usedBytes) },
+            { key: 'free', header: tx('Boş Alan'), render: measurement => measurement.freeBytes == null ? '—' : formatBytes(measurement.freeBytes) },
+            { key: 'state', header: tx('Durum'), card: 'status', render: measurement => measurement.status === 'Critical' ? tx("Kritik") : measurement.status === 'Warning' ? tx("Uyarı") : measurement.status === 'Available' ? tx("Kullanılabilir") : tx("Kapasite bilgisi alınamadı") },
+          ]} />
         </div>
       )}
 
@@ -215,7 +203,7 @@ function Manage({ connection, descriptor, ops }: { connection: ConnectionView; d
     <Section title={tx("Kullanılabilirlik")} description={connection.effectiveEnabled ? tx('Bu hedef yeni backup\'lar için kullanılabilir.') : tx('Bu hedef şu an devre dışı.')}>
       <div className="space-y-4">
         <p className="text-sm text-text-muted">{tx("Sahip tercihi:")}{' '}{on ? tx('Etkin') : tx('Devre dışı')}</p>
-        {connection.administrativelyDisabled && <Notice tone="warning" title={tx("Platform kilidi")}>{tx("Platform kilidi kaldırılmadan bu hedef yeni backup'lar için kullanılamaz.")}</Notice>}
+        {connection.administrativelyDisabled && <Notice tone="warning" title={tx("Platform kilidi")}>{tx(platformLockState)}</Notice>}
         {on ? <ul className="list-inside list-disc space-y-1 text-sm text-text-muted">{disableEffects.map((effect) => <li key={effect}>{tx(effect)}</li>)}</ul> : <p className="text-sm text-text-muted">{tx(enableEffect)}</p>}
         <ConnectionActions connection={connection} descriptor={descriptor} ops={ops} show={['toggle']} />
       </div>

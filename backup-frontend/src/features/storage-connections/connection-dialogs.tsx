@@ -1,7 +1,7 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useEffect, useState } from 'react'
 import { FormDialog } from '@/components/ui/form-dialog'
-import { inputClass } from '@/features/platform/styles'
+import { inputClass } from '@/components/ui/form-styles'
 import { QUOTA_SCOPE_PATTERN } from '@/features/storage/scope-input'
 import { ConfigFieldInputs, SecretFieldInputs } from './descriptor-fields'
 import { activeSecretFields, buildConfiguration, buildSecretValues, configurationComplete, hasSecretInput, initialFieldValues, secretsComplete } from './descriptor-values'

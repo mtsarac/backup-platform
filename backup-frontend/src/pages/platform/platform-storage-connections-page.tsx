@@ -6,11 +6,11 @@ import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/ui/page-header'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
 import { SearchForm } from '@/features/platform/search-form'
-import { selectClass } from '@/features/platform/styles'
+import { selectClass } from '@/components/ui/form-styles'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { CreateManagedTargetDialog } from '@/features/storage-connections/create-dialogs'
 import { usePlatformConnectionOps, usePlatformConnections, usePlatformProviders } from '@/features/storage-connections/hooks'
-import { disableEffects } from '@/features/storage-connections/labels'
+import { platformLockMeaning } from '@/features/storage-connections/labels'
 import { PlatformConnectionTable } from '@/features/storage-connections/platform-connection-table'
 import { connectionOwnerships, type ConnectionOwnership, type PlatformConnectionFilters } from '@/features/storage-connections/types'
 
@@ -51,11 +51,7 @@ export function PlatformStorageConnectionsPage() {
         <Button onClick={() => setAdding(true)}><Plus className="size-4" aria-hidden="true" />{tx("Managed target ekle")}</Button>
       </>} />
 
-    <details className="rounded-xl border border-border bg-surface p-4 text-sm text-text-muted shadow-card">
-      <summary className="cursor-pointer font-medium text-text-heading">{tx("Platform kilidi ne yapar?")}</summary>
-      <p className="mt-2">{tx("Platform yalnızca yönetim kilidini koyar veya kaldırır; tenant'ın etkin / devre dışı tercihini değiştirmez. Durum filtresi bu iki kontrolün birleşimi olan etkin kullanılabilirliğe göre çalışır.")}</p>
-      <ul className="mt-2 list-inside list-disc space-y-1">{disableEffects.map((effect) => <li key={effect}>{tx(effect)}</li>)}</ul>
-    </details>
+    <p className="rounded-xl border border-border bg-surface p-4 text-sm text-text-muted shadow-card">{tx(platformLockMeaning)}</p>
 
     <section aria-label={tx("Depolama hedefi filtreleri")} className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-surface p-4 shadow-card">
       <SearchForm label={tx("Tenant ara")} value={search} onSearch={(value) => update({ search: value })} placeholder={tx("Tenant adı…")} className="min-w-full sm:min-w-60" />

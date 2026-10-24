@@ -1,7 +1,7 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState, type FormEvent } from 'react'
 import { Users } from 'lucide-react'
-import { DataTable, type Column } from '@/components/data/data-table'
+import { DataList, type Column } from '@/components/data/data-list'
 import { Pagination } from '@/components/data/pagination'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -11,10 +11,10 @@ import { Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { useAddMembership, useChangeMembershipRole, usePlatformMemberships, usePlatformUsers, useRemoveMembership } from './hooks'
-import { bareTableClass } from './list-empty'
+import { bareListClass } from './list-empty'
 import { PlatformQueryState } from './platform-query-state'
 import { SearchForm } from './search-form'
-import { inlineSelectClass, selectClass } from './styles'
+import { inlineSelectClass, selectClass } from '@/components/ui/form-styles'
 import { membershipRoles, type MembershipRole, type PlatformMembership } from './types'
 import { PLATFORM_PAGE_SIZE, useListParams } from './use-list-params'
 
@@ -67,7 +67,7 @@ export function MembershipsSection({ tenantId, tenantName }: { tenantId: string;
     { key: 'name', header: tx('Ad'), wrap: true, render: (member) => <span className="font-medium">{member.displayName}</span> },
     { key: 'login', header: tx('Kullanıcı adı'), wrap: true, render: (member) => member.loginIdentifier ?? '—' },
     { key: 'role', header: tx('Rol'), render: (member) => <select aria-label={tx("{0} rolü", { "0": member.displayName })} className={inlineSelectClass} value={member.role} disabled={changeRole.isPending} onChange={(event) => { if (isRole(event.target.value)) changeRole.mutate({ userId: member.userId, role: event.target.value }) }}>{membershipRoles.map((role) => <option key={role} value={role}>{role}</option>)}</select> },
-    { key: 'actions', header: tx('İşlemler'), render: (member) => <Button variant="destructive" size="sm" aria-label={tx("{0} üyeliğini kaldır", { "0": member.displayName })} onClick={() => { remove.reset(); setSelected(member) }}>{tx("Kaldır")}</Button> },
+    { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (member) => <Button variant="destructive" size="sm" aria-label={tx("{0} üyeliğini kaldır", { "0": member.displayName })} onClick={() => { remove.reset(); setSelected(member) }}>{tx("Kaldır")}</Button> },
   ]
   return <div className="space-y-6">
     <AddMemberForm tenantId={tenantId} />
@@ -76,7 +76,7 @@ export function MembershipsSection({ tenantId, tenantName }: { tenantId: string;
       <PlatformQueryState isPending={query.isPending} error={query.error}>
         {data && (data.totalCount === 0
           ? <EmptyState icon={Users} message={tx("Bu tenant'ın henüz üyesi yok; yukarıdan bir kullanıcı ekleyin.")} />
-          : <DataTable className={bareTableClass} rows={data.items} columns={columns} keyExtractor={(member) => member.userId} emptyMessage={tx("Bu tenant'ın henüz üyesi yok.")} />)}
+          : <DataList className={bareListClass} rows={data.items} columns={columns} keyExtractor={(member) => member.userId} emptyMessage={tx("Bu tenant'ın henüz üyesi yok.")} />)}
       </PlatformQueryState>
     </Section>
     {data && data.totalCount > 0 && <Pagination label={tx("Üyelik sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ memberPage: next })} />}

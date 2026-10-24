@@ -2,8 +2,8 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Activity } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { DataTable } from '@/components/data/data-table'
-import type { Column } from '@/components/data/data-table'
+import { DataList } from '@/components/data/data-list'
+import type { Column } from '@/components/data/data-list'
 import { Pagination } from '@/components/data/pagination'
 import { QueryState } from '@/components/data/query-state'
 import { StatusPill } from '@/components/data/status-pill'
@@ -19,7 +19,7 @@ import { dateFilterInstant, runStatuses, triggerLabel } from '@/features/backups
 import { ReplicationBadge } from '@/features/backups/replication'
 import { SizeAnomalyBadge, SizeAnomalyComparison } from '@/features/backups/size-anomaly'
 import type { BackupRun, BackupRunFilters, BackupRunStatus, BackupTrigger } from '@/features/backups/types'
-import { linkClass } from '@/features/platform/styles'
+import { linkClass } from '@/components/ui/form-styles'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { formatDateTime, formatDuration } from '@/lib/format'
 import { statusLabel } from '@/lib/status'
@@ -43,12 +43,12 @@ export function BackupsPage() {
       <Link className={linkClass} to={`/tenants/${tenantId}/backup-runs/${run.id}`}>{run.jobName ?? jobs.data?.find((job) => job.id === run.jobId)?.name ?? tx('Backup Job')}</Link>
       <p className="text-sm text-text-muted">{run.configuration.database} · {run.agentName ?? agents.data?.find((agent) => agent.agentId === run.agentId)?.hostName ?? 'Agent'}</p>
     </div> },
-    { key: 'status', header: tx('Durum'), render: (run) => <div className="flex flex-col items-start gap-1">
+    { key: 'status', card: 'status', header: tx('Durum'), render: (run) => <div className="flex flex-col items-start gap-1">
       <StatusPill status={run.status} /><ReplicationBadge replication={run.replication} />
       <SizeAnomalyBadge run={run} /><SizeAnomalyComparison run={run} />
       <span className="text-sm text-text-muted">{tx("Deneme")}{' '}{run.currentAttemptNumber} / {run.retry.maxAttempts}</span>
     </div> },
-    { key: 'trigger', header: tx('Tetikleyici'), wrap: true, render: (run) => <div>{triggerLabel(run.triggerType)}<p className="text-sm text-text-muted">{tx("Planlanan:")}{' '}{formatDateTime(run.scheduledFor)}</p></div> },
+    { key: 'trigger', card: 'hidden', header: tx('Tetikleyici'), wrap: true, render: (run) => <div>{triggerLabel(run.triggerType)}<p className="text-sm text-text-muted">{tx("Planlanan:")}{' '}{formatDateTime(run.scheduledFor)}</p></div> },
     { key: 'started', header: tx('Başlangıç'), render: (run) => formatDateTime(run.startedAt) },
     { key: 'duration', header: tx('Süre'), render: (run) => formatDuration(run.startedAt, run.completedAt) },
   ]
@@ -95,7 +95,7 @@ export function BackupsPage() {
         {backups.data && (backups.data.totalCount === 0
           ? <div className="rounded-xl border border-border bg-surface"><EmptyState icon={Activity} message={tx("Bu filtrelerde Backup Run bulunamadı.")} action={<Button variant="outline" onClick={clearFilters}>{tx("Filtreleri temizle")}</Button>} /></div>
           : <>
-            <DataTable rows={backups.data.items} columns={columns} keyExtractor={(run) => run.id} />
+            <DataList rows={backups.data.items} columns={columns} keyExtractor={(run) => run.id} />
             <Pagination label={tx("Yedekleme sayfaları")} page={page} pageSize={pageSize} totalCount={backups.data.totalCount} disabled={backups.isFetching} onPageChange={(next) => setFilters((current) => ({ ...current, page: next }))} />
           </>)}
       </QueryState>

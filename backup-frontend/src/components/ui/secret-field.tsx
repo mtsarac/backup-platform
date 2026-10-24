@@ -2,7 +2,7 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { Check } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Field } from '@/components/ui/field'
-import { inputClass } from '@/features/platform/styles'
+import { inputClass } from '@/components/ui/form-styles'
 
 /**
  * The one control for a write-only secret. It is a password input (a multi-line one only for PEM keys), has no reveal button, and

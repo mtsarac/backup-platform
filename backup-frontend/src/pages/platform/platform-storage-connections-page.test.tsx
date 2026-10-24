@@ -52,6 +52,14 @@ describe('platform storage targets list', () => {
     expect(row.getByText('123 MB')).toBeInTheDocument()
   })
 
+  it('explains the platform lock in one always-visible sentence instead of a collapsed section', async () => {
+    mount()
+    await screen.findByText('Managed Storage')
+    const explanation = screen.getByText(/^Platform kilidi, .*[.]$/)
+    expect(explanation.closest('details')).toBeNull()
+    expect(explanation.textContent?.match(/[.]/g)).toHaveLength(1)
+  })
+
   it('wires ownership, provider, enabled and tenant search into the URL and the request, resetting the page', async () => {
     const user = userEvent.setup()
     mount('/platform/storage-connections?page=3')
@@ -156,6 +164,7 @@ describe('platform storage targets list', () => {
     await screen.findByText('Local')
     expect(rowOf('Local').getByText('Sahip tercihi: Devre dışı')).toBeInTheDocument()
     expect(rowOf('Local').getByText('Platform kilidi')).toBeInTheDocument()
+    expect(rowOf('Local').getByText(/kilit kalkana kadar yeni yedeklemeler için kullanılamaz/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Local bağlantısı: platform kilidini kaldır' }))
     const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveTextContent(/(?:Kilit kalksa da sahip tercihi|Kilit kaldırılsa da sahibin tercihi)/)

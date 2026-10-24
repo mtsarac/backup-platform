@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { tx } from '@/lib/i18n'
 import { Field } from '@/components/ui/field'
-import { inputClass } from '@/features/platform/styles'
+import { inputClass } from '@/components/ui/form-styles'
 
 export function validFilePath(path: string, allowRoot = true) {
   return (allowRoot && path === '.') || (path.trim().length > 0 && path.length <= 1024 && !path.startsWith('/') && !/[\\:\u0000-\u001f\u007f-\u009f]/.test(path) && path.split('/').every(part => part !== '' && part !== '.' && part !== '..'))

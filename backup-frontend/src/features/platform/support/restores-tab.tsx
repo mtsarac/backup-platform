@@ -1,7 +1,8 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
-import { DataTable, type Column } from '@/components/data/data-table'
+import { DataList, type Column } from '@/components/data/data-list'
 import { Pagination } from '@/components/data/pagination'
+import { ProgressBar } from '@/components/data/progress-bar'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
 import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
@@ -29,16 +30,16 @@ export function SupportRestoresTab({ session }: { session: SupportSession }) {
     { key: 'database', header: tx('Yeni Database'), wrap: true, render: item => <button className="font-medium text-primary hover:underline" onClick={() => update({ restoreId: item.id, restoreArtifact: '' })}>{item.databaseName}</button> },
     { key: 'source', header: tx('Kaynak Artifact'), wrap: true, render: item => item.sourceDatabaseName ?? item.artifactId },
     { key: 'target', header: tx('Hedef'), wrap: true, render: item => `${item.target.host}${item.target.port ? `:${item.target.port}` : ''}` },
-    { key: 'status', header: tx('Durum'), render: item => <StatusPill status={item.status} /> },
+    { key: 'status', card: 'status', header: tx('Durum'), render: item => <StatusPill status={item.status} /> },
     { key: 'progress', header: tx('İlerleme'), render: item => `${restoreStageLabel(item.progress.stage)} · ${restoreProgressPercent(item.progress.percent) ?? '—'}%` },
-    { key: 'targetState', header: tx('Hedef durumu'), wrap: true, render: item => targetStateLabel(item.targetState) },
-    { key: 'created', header: tx('Oluşturulma'), render: item => formatDateTime(item.createdAt) },
+    { key: 'targetState', card: 'hidden', header: tx('Hedef durumu'), wrap: true, render: item => targetStateLabel(item.targetState) },
+    { key: 'created', card: 'hidden', header: tx('Oluşturulma'), render: item => formatDateTime(item.createdAt) },
   ]
   if (!scope.enabled) return <Notice>{tx("Restore Operations için etkin oturum sahipliği ve ViewBackupMetadata veya RestoreBackup izni gerekir.")}</Notice>
   return <div className="space-y-6">
     <Filters label={tx("Restore filtreleri")}><FilterField label={tx("Restore durumu")}><select className={filterControlClass} value={get('restoreStatus')} onChange={event => update({ restoreStatus: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{restoreStatuses.map(status => <option key={status} value={status}>{statusLabel('general', status)}</option>)}</select></FilterField></Filters>
     <SupportQueryState isPending={query.isPending} error={query.error}>{query.data && <div className="space-y-4">
-      <DataTable rows={query.data.items} columns={columns} keyExtractor={item => item.id} />
+      <DataList rows={query.data.items} columns={columns} keyExtractor={item => item.id} />
       <Pagination page={page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={next => update({ restorePage: next })} />
     </div>}</SupportQueryState>
     {get('restoreArtifact') && <SupportRestoreForm key={`${session.id}:${get('restoreArtifact')}`} session={session} artifactId={get('restoreArtifact')} onStarted={id => update({ restoreId: id, restoreArtifact: '' })} />}
@@ -60,7 +61,7 @@ function SupportRestoreDetail({ session, id }: { session: SupportSession; id: st
     <SupportQueryState isPending={query.isPending} error={query.error || (!confirm && cancel.error)}>{restore && <>
       <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-medium">{restore.databaseName}{' '}{tx("· NewDatabase")}</h3><StatusPill status={restore.status} /><Button variant="destructive" disabled={!mayCancel || cancel.isPending} onClick={() => { cancel.reset(); setConfirm(true) }}>{tx("Restore iptal et")}</Button></div>
       <p className="break-words text-sm">{restore.target.host}{restore.target.port ? `:${restore.target.port}` : ''}{' '}{tx("· Agent")}{' '}<code className="break-all text-xs">{restore.agentId}</code></p>
-      <div role="progressbar" aria-label={tx("Restore ilerlemesi")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} className="h-2 overflow-hidden rounded-full bg-surface-2">{percent !== undefined && <div className="h-full bg-primary" style={{ width: `${percent}%` }} />}</div>
+      <ProgressBar label={tx("Restore ilerlemesi")} value={percent} />
       <p className="text-sm">{restoreStageLabel(restore.progress.stage)} · {percent === undefined ? tx('Yüzde bildirilmedi') : tx('%{0}', { '0': percent })} · {formatDateTime(restore.progress.at)}</p>
       <Notice tone="warning" title={tx("Hedef Database durumu")}><p>{targetStateLabel(restore.targetState)}</p><p>{targetStateDescription(restore.targetState)}</p>{restore.result && <p>{tx("Database durumu:")}{' '}{databaseStateLabel(restore.result.databaseState)}</p>}{['Failed', 'Cancelled', 'AgentLost'].includes(restore.status) && <p className="font-medium">{tx("Bu işlem durumu Database'in sağlıklı olduğunu göstermez. Elle kontrol ve müdahale gerekebilir.")}</p>}</Notice>
       {restore.failureCode && <ErrorNotice failureCode={restore.failureCode} scope="restore" />}

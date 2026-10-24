@@ -2,6 +2,7 @@ import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { QueryState } from '@/components/data/query-state'
+import { ProgressBar } from '@/components/data/progress-bar'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -23,7 +24,7 @@ function RestoreProgress({ stage, percent: rawPercent, at, label }: { stage: str
   const percent = restoreProgressPercent(rawPercent)
   return <div className="space-y-2">
     <p className="text-sm">{restoreStageLabel(stage)} · {percent == null ? tx('Yüzde bildirilmedi') : tx('%{0}', { '0': percent.toLocaleString(currentLocale(), { maximumFractionDigits: 1 }) })}</p>
-    <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} className="h-2 overflow-hidden rounded-full bg-surface-2">{percent != null && <div className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />}</div>
+    <ProgressBar label={label} value={percent} />
     <p className="text-xs text-text-muted">{tx("Son bildirim:")}{' '}{formatDateTime(at)}</p>
   </div>
 }

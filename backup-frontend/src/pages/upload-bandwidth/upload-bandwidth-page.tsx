@@ -1,12 +1,10 @@
-import { currentLocale, tx, useLanguage } from '@/lib/i18n'
+import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
-import { DataTable } from '@/components/data/data-table'
-import type { Column } from '@/components/data/data-table'
+import { DataList } from '@/components/data/data-list'
+import type { Column } from '@/components/data/data-list'
 import { QueryState } from '@/components/data/query-state'
-import { Pagination } from '@/components/data/pagination'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
-import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
 import { Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
@@ -24,7 +22,6 @@ import type { BandwidthProfile, BandwidthTarget } from '@/features/upload-bandwi
 import { formatBandwidth, formatExactRate } from '@/features/upload-bandwidth/units'
 
 type Tab = 'tenant' | 'agents' | 'jobs' | 'profiles'
-const PAGE_SIZE = 25
 
 interface Editing { target: BandwidthTarget; name: string; current: number | null }
 
@@ -32,27 +29,6 @@ function Limit({ value }: { value: number | null | undefined }) {
   useLanguage()
   if (value == null) return <span className="text-text-muted">{tx("Limitsiz")}</span>
   return <span>{formatBandwidth(value)} <span className="text-xs text-text-muted">({formatExactRate(value)})</span></span>
-}
-
-/** Client-side search and paging: both lists come complete from their own endpoints. */
-function SearchableTable<T>({ rows, columns, keyExtractor, text, searchLabel, emptyMessage }: {
-  rows: readonly T[]; columns: Column<T>[]; keyExtractor: (row: T) => string; text: (row: T) => string; searchLabel: string; emptyMessage: string
-}) {
-  useLanguage()
-  const [query, setQuery] = useState('')
-  const [page, setPage] = useState(1)
-  const needle = query.trim().toLocaleLowerCase(currentLocale())
-  const matches = needle ? rows.filter(row => text(row).toLocaleLowerCase(currentLocale()).includes(needle)) : rows
-  const lastPage = Math.max(1, Math.ceil(matches.length / PAGE_SIZE))
-  const current = Math.min(page, lastPage)
-  return <div className="space-y-4">
-    <Filters label={tx("{0} filtreleri", { "0": searchLabel })}>
-      <FilterField label={searchLabel}><input type="search" aria-label={searchLabel} placeholder={searchLabel} className={filterControlClass} value={query} onChange={event => { setQuery(event.target.value); setPage(1) }} /></FilterField>
-    </Filters>
-    {matches.length === 0 ? <div className="rounded-xl border border-border bg-surface"><EmptyState message={needle ? tx('Aramayla eşleşen kayıt yok.') : emptyMessage} /></div>
-      : <DataTable rows={matches.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE)} columns={columns} keyExtractor={keyExtractor} />}
-    {matches.length > PAGE_SIZE && <Pagination label={tx("{0} sayfaları", { "0": searchLabel })} page={current} pageSize={PAGE_SIZE} totalCount={matches.length} onPageChange={setPage} />}
-  </div>
 }
 
 export function UploadBandwidthPage() {
@@ -81,7 +57,7 @@ export function UploadBandwidthPage() {
     { key: 'name', header: tx('Agent'), wrap: true, render: agent => agent.hostName || agent.agentId },
     { key: 'limit', header: tx('Hız sınırı'), wrap: true, render: agent => <Limit value={agentLimits.get(agent.agentId)} /> },
     { key: 'profile', header: tx('Bant Genişliği Profili'), wrap: true, render: agent => agentProfiles.get(agent.agentId) ? profileMap.get(agentProfiles.get(agent.agentId)!) ?? tx('Atandı') : <span className="text-text-muted">—</span> },
-    ...(canAdmin ? [{ key: 'actions', header: tx('İşlemler'), render: (agent: Agent) => (
+    ...(canAdmin ? [{ key: 'actions', card: 'actions' as const, header: tx('İşlemler'), render: (agent: Agent) => (
       <div className="flex gap-2">
         {edit({ scope: 'agent', id: agent.agentId }, agent.hostName || agent.agentId, agentLimits.get(agent.agentId))}
         <Button variant="outline" size="sm" onClick={() => setAssigning({ target: { scope: 'agent', id: agent.agentId }, name: agent.hostName || agent.agentId, currentProfileId: agentProfiles.get(agent.agentId) })}>{tx("Profil Ata")}</Button>
@@ -93,7 +69,7 @@ export function UploadBandwidthPage() {
     { key: 'agent', header: tx('Agent'), wrap: true, render: job => job.agentName || '—' },
     { key: 'limit', header: tx('Hız sınırı'), wrap: true, render: job => <Limit value={jobLimits.get(job.id)} /> },
     { key: 'profile', header: tx('Bant Genişliği Profili'), wrap: true, render: job => jobProfiles.get(job.id) ? profileMap.get(jobProfiles.get(job.id)!) ?? tx('Atandı') : <span className="text-text-muted">—</span> },
-    ...(canAdmin ? [{ key: 'actions', header: tx('İşlemler'), render: (job: BackupJob) => (
+    ...(canAdmin ? [{ key: 'actions', card: 'actions' as const, header: tx('İşlemler'), render: (job: BackupJob) => (
       <div className="flex gap-2">
         {edit({ scope: 'job', id: job.id }, job.name, jobLimits.get(job.id))}
         <Button variant="outline" size="sm" onClick={() => setAssigning({ target: { scope: 'job', id: job.id }, name: job.name, currentProfileId: jobProfiles.get(job.id) })}>{tx("Profil Ata")}</Button>
@@ -120,11 +96,11 @@ export function UploadBandwidthPage() {
         </Section>}
         {tab === 'agents' && <QueryState isPending={agents.isPending} error={agents.error}>
           <h2 className="mb-4 text-base font-semibold text-text-heading">{tx("Agent sınırları")}</h2>
-          <SearchableTable rows={agents.data ?? []} columns={agentColumns} keyExtractor={agent => agent.agentId} text={agent => agent.hostName || agent.agentId} searchLabel="Agent ara" emptyMessage={tx("Agent bulunamadı.")} />
+          <DataList rows={agents.data ?? []} columns={agentColumns} keyExtractor={agent => agent.agentId} search={{ label: tx("Agent ara"), text: agent => agent.hostName || agent.agentId }} emptyMessage={tx("Agent bulunamadı.")} />
         </QueryState>}
         {tab === 'jobs' && <QueryState isPending={jobs.isPending} error={jobs.error}>
           <h2 className="mb-4 text-base font-semibold text-text-heading">{tx("Backup Job sınırları")}</h2>
-          <SearchableTable rows={jobs.data ?? []} columns={jobColumns} keyExtractor={job => job.id} text={job => `${job.name} ${job.agentName ?? ''}`} searchLabel="Backup Job ara" emptyMessage={tx("Backup Job bulunamadı.")} />
+          <DataList rows={jobs.data ?? []} columns={jobColumns} keyExtractor={job => job.id} search={{ label: tx("Backup Job ara"), text: job => `${job.name} ${job.agentName ?? ''}` }} emptyMessage={tx("Backup Job bulunamadı.")} />
         </QueryState>}
         {tab === 'profiles' && <QueryState isPending={profiles.isPending} error={profiles.error}>
           <div className="flex items-center justify-between mb-4">

@@ -1,13 +1,13 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Plus, RefreshCw } from 'lucide-react'
-import { DataTable, type Column } from '@/components/data/data-table'
+import { DataList, type Column } from '@/components/data/data-list'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
 import { platformCrumb } from '@/features/platform/crumbs'
-import { bareTableClass, ListEmpty } from '@/features/platform/list-empty'
+import { bareListClass, ListEmpty } from '@/features/platform/list-empty'
 import { accountingModeLabels, enforcementModeLabels, scopeLabels } from '@/features/storage/labels'
 import type { QuotaPolicy } from '@/features/storage/types'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
@@ -27,9 +27,9 @@ export function PlatformQuotaPoliciesPage() {
     { key: 'accounting', header: tx('Hesaplama modu'), wrap: true, render: (policy) => accountingModeLabels[policy.accountingMode] },
     { key: 'enforcement', header: tx('Uygulama modu'), wrap: true, render: (policy) => enforcementModeLabels[policy.enforcementMode] },
     { key: 'thresholds', header: tx('Eşikler'), render: (policy) => <div className="text-sm tabular-nums"><div>{tx("Warning: %")}{policy.warningThresholdPercent}</div><div>{tx("Critical: %")}{policy.criticalThresholdPercent}</div></div> },
-    { key: 'scope', header: tx('Kapsam'), wrap: true, render: (policy) => <span className="text-sm text-text-muted">{scopeLabels(policy.includedStorageScopes).join('; ')}</span> },
-    { key: 'updatedAt', header: tx('Güncellendi'), render: (policy) => formatDateTime(policy.updatedAt, tx('Henüz bildirilmedi')) },
-    { key: 'actions', header: tx('İşlemler'), render: (policy) => <Button variant="outline" size="sm" onClick={() => setEditingPolicy(policy)}>{tx("Düzenle")}</Button> },
+    { key: 'scope', card: 'hidden', header: tx('Kapsam'), wrap: true, render: (policy) => <span className="text-sm text-text-muted">{scopeLabels(policy.includedStorageScopes).join('; ')}</span> },
+    { key: 'updatedAt', card: 'hidden', header: tx('Güncellendi'), render: (policy) => formatDateTime(policy.updatedAt, tx('Henüz bildirilmedi')) },
+    { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (policy) => <Button variant="outline" size="sm" onClick={() => setEditingPolicy(policy)}>{tx("Düzenle")}</Button> },
   ]
   return <div className="space-y-6">
     <PageHeader crumbs={[platformCrumb]} title={tx("Kota Politikaları")} description={tx("Tenant'ların depolama hesaplama yöntemlerini, eşiklerini ve engelleme kurallarını yönetin.")} actions={<>
@@ -39,7 +39,7 @@ export function PlatformQuotaPoliciesPage() {
     <PlatformQueryState isPending={query.isPending} error={query.error}>
       {query.data && (policies.length === 0
         ? <ListEmpty message={tx("Tanımlı kota politikası bulunamadı.")} action={<Button onClick={() => setIsCreating(true)}>{tx("Yeni Politika")}</Button>} />
-        : <Section title={tx("Kota politikaları")} description={tx("{0} politika · Değişiklikler mevcut kullanım hesaplamalarını etkileyebilir.", { "0": policies.length })} flush className="overflow-hidden"><DataTable className={bareTableClass} rows={policies} columns={columns} keyExtractor={(policy) => policy.policyId} /></Section>)}
+        : <Section title={tx("Kota politikaları")} description={tx("{0} politika · Değişiklikler mevcut kullanım hesaplamalarını etkileyebilir.", { "0": policies.length })} flush className="overflow-hidden"><DataList className={bareListClass} rows={policies} columns={columns} keyExtractor={(policy) => policy.policyId} /></Section>)}
     </PlatformQueryState>
     {isCreating && <QuotaPolicyDialog onClose={() => setIsCreating(false)} />}
     {editingPolicy && <QuotaPolicyDialog policy={editingPolicy} onClose={() => setEditingPolicy(null)} />}

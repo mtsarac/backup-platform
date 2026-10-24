@@ -94,6 +94,10 @@ export const disableEffects: readonly string[] = [
   'Mevcut Replica\'lar silinmez ve kullanılabilir kalır: indirme, geri yükleme, saklama süresine göre silme ve kota hesabı değişmeden devam eder.',
 ]
 
+/** Plain-language meaning of the platform lock, shown wherever the lock is applied or displayed. */
+export const platformLockMeaning = 'Platform kilidi, platform yöneticisinin bir depolama alanını yeni yedeklemelere kapatmasıdır; sahibin etkin / devre dışı tercihi değişmez.'
+export const platformLockState = 'Platform yöneticisi bu depolama alanını kilitledi; kilit kalkana kadar yeni yedeklemeler için kullanılamaz.'
+
 export const enableEffect = 'Etkinleştirilince bu hedefe yeni backup\'lar yeniden başlatılabilir.'
 
 export const SECRET_PRESENT_LABEL = 'Kimlik bilgisi kayıtlı'

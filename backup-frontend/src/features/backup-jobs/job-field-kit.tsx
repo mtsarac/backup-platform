@@ -1,6 +1,6 @@
 import { tx } from '@/lib/i18n'
 import { Field } from '@/components/ui/field'
-import { inputClass, selectClass } from '@/features/platform/styles'
+import { inputClass, selectClass } from '@/components/ui/form-styles'
 
 export type FieldErrors = Record<string, string>
 

@@ -2,7 +2,7 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { DataTable, type Column } from '@/components/data/data-table'
+import { DataList, type Column } from '@/components/data/data-list'
 import { QueryState } from '@/components/data/query-state'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
@@ -113,13 +113,13 @@ function AgentJobs({ agentId }: { agentId: string }) {
   const rows = (jobs.data ?? []).filter((job) => job.agentId === agentId)
   const columns: Column<BackupJob>[] = [
     { key: 'name', header: tx('Backup Job'), wrap: true, render: (job) => <span className="font-medium text-text-heading">{job.name}</span> },
-    { key: 'enabled', header: tx('Durum'), render: (job) => <StatusPill status={job.enabled ? 'Active' : 'Disabled'} /> },
+    { key: 'enabled', card: 'status', header: tx('Durum'), render: (job) => <StatusPill status={job.enabled ? 'Active' : 'Disabled'} /> },
     { key: 'lastRun', header: tx('Son çalıştırma'), render: (job) => job.lastRun ? <div className="flex flex-wrap items-center gap-2"><StatusPill status={job.lastRun.status} /><span className="text-sm text-text-muted">{formatDateTime(job.lastRun.createdAt, tx('Henüz bildirilmedi'))}</span></div> : tx('Henüz çalışmadı') },
     { key: 'next', header: tx('Sonraki çalışma'), render: (job) => job.nextOccurrenceAt ? formatDateTime(job.nextOccurrenceAt, tx('Henüz bildirilmedi')) : tx('Zamanlanmadı') },
   ]
   return <Section title={tx("Bu Agent'ın Backup Job'ları")} flush>
     <QueryState isPending={jobs.isPending} error={jobs.error}>
-      <DataTable rows={rows} columns={columns} keyExtractor={(job) => job.id} emptyMessage={tx("Bu Agent için tanımlı Backup Job yok.")} className="rounded-none border-0 shadow-none" />
+      <DataList rows={rows} columns={columns} keyExtractor={(job) => job.id} emptyMessage={tx("Bu Agent için tanımlı Backup Job yok.")} className="rounded-none border-0 shadow-none" />
     </QueryState>
   </Section>
 }

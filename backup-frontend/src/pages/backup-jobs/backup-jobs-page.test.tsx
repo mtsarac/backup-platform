@@ -1,5 +1,6 @@
-import { fireEvent, screen } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { render } from '@/test/render'
+import { setViewport } from '@/test/viewport'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, expect, it, vi } from 'vitest'
@@ -62,5 +63,18 @@ it('sayfalar 25 iş gösterir; durum ve arama değişiklikleri ilk sayfaya döne
   fireEvent.change(screen.getByLabelText("İş, ajan veya veritabanı ara"), { target: { value: 'İş 2' } })
   expect(screen.getByText('İş 2')).toBeInTheDocument()
   expect(screen.queryByText('İş 0')).not.toBeInTheDocument()
+  cache.clear()
+})
+
+it('shows each job as a card with its name, status, key fields and actions on a phone', async () => {
+  setViewport(false)
+  const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(<QueryClientProvider client={cache}><MemoryRouter><BackupJobsPage /></MemoryRouter></QueryClientProvider>)
+  const card = within(await screen.findByRole('listitem'))
+  expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  expect(card.getByRole('heading', { name: /Queue job/ })).toBeInTheDocument()
+  expect(card.getByText('ERP')).toBeInTheDocument()
+  expect(card.getAllByRole('term').length).toBeLessThanOrEqual(3)
+  expect(card.getByRole('button', { name: 'Şimdi çalıştır' })).toBeInTheDocument()
   cache.clear()
 })

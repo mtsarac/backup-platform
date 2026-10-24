@@ -1,6 +1,6 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { Link, useSearchParams } from 'react-router-dom'
-import { DataTable, type Column } from '@/components/data/data-table'
+import { DataList, type Column } from '@/components/data/data-list'
 import { Pagination } from '@/components/data/pagination'
 import { QueryState } from '@/components/data/query-state'
 import { StatusPill } from '@/components/data/status-pill'
@@ -40,7 +40,7 @@ export function RestoresPage() {
   }
   const testColumns: Column<RestoreView>[] = [
     { key: 'source', header: tx('Kaynak Artifact'), wrap: true, render: (restore) => <div className="space-y-1"><Link className="font-medium text-primary hover:underline" to={`/tenants/${tenantId}/restores/${restore.id}`}>{restore.sourceDatabaseName ?? tx('Restore testi')}</Link>{restore.sourceJobName && <p className="text-xs text-text-muted">{restore.sourceJobName}</p>}<p className="break-all font-mono text-xs text-text-muted">{restore.artifactId}</p></div> },
-    { key: 'outcome', header: tx('Sonuç'), wrap: true, render: (restore) => <div className="space-y-1">{restore.verificationOutcome ? <StatusPill domain="verification" status={restore.verificationOutcome} /> : <StatusPill status={restore.status} />}{restore.cleanup && restore.cleanup.state !== 'Completed' && <p className="text-xs text-text-muted">{verificationCleanupText(restore.cleanup)}</p>}</div> },
+    { key: 'outcome', card: 'status', header: tx('Sonuç'), wrap: true, render: (restore) => <div className="space-y-1">{restore.verificationOutcome ? <StatusPill domain="verification" status={restore.verificationOutcome} /> : <StatusPill status={restore.status} />}{restore.cleanup && restore.cleanup.state !== 'Completed' && <p className="text-xs text-text-muted">{verificationCleanupText(restore.cleanup)}</p>}</div> },
     { key: 'agent', header: tx('Agent'), wrap: true, render: (restore) => agents.data?.find((agent) => agent.agentId === restore.agentId)?.hostName ?? tx('Agent adı bulunamadı') },
     { key: 'created', header: tx('Oluşturulma'), wrap: true, render: (restore) => formatDateTime(restore.createdAt) },
     { key: 'duration', header: tx('Süre'), wrap: true, render: (restore) => restore.completedAt ? formatDuration(restore.startedAt, restore.completedAt) : '—' },
@@ -48,8 +48,8 @@ export function RestoresPage() {
   const columns: Column<RestoreView>[] = [
     { key: 'database', header: tx('Hedef'), wrap: true, render: (restore) => <div className="space-y-1"><Link className="font-medium text-primary hover:underline" to={`/tenants/${tenantId}/restores/${restore.id}`}>{restore.databaseName}</Link><p className="text-sm">{restore.options.files ? tx('Dosya / klasör geri yükleme') : restoreModeLabel(restore.mode)}</p>{restore.options.files && <p className="break-all text-xs">{restore.options.files.relativeDirectory || '.'}</p>}<p className="text-xs text-text-muted">{agents.data?.find((agent) => agent.agentId === restore.agentId)?.hostName ?? tx('Agent adı bulunamadı')}</p></div> },
     { key: 'source', header: tx('Kaynak Artifact'), wrap: true, render: (restore) => <div className="space-y-1"><Link className="text-primary hover:underline" to={`/tenants/${tenantId}/artifacts/${restore.artifactId}`}>{restore.sourceDatabaseName ?? restore.result?.sourceBackup?.databaseName ?? tx('Artifact ayrıntıları')}</Link>{restore.sourceJobName && <p className="text-xs text-text-muted">{restore.sourceJobName}</p>}<p className="break-all font-mono text-xs text-text-muted">{restore.artifactId}</p></div> },
-    { key: 'status', header: tx('Durum'), wrap: true, render: (restore) => <div className="space-y-1"><StatusPill status={restore.status} /><p className="text-xs text-text-muted">{targetStateLabel(restore.targetState)}</p></div> },
-    { key: 'created', header: tx('Oluşturulma'), wrap: true, render: (restore) => formatDateTime(restore.createdAt) },
+    { key: 'status', card: 'status', header: tx('Durum'), wrap: true, render: (restore) => <div className="space-y-1"><StatusPill status={restore.status} /><p className="text-xs text-text-muted">{targetStateLabel(restore.targetState)}</p></div> },
+    { key: 'created', card: 'hidden', header: tx('Oluşturulma'), wrap: true, render: (restore) => formatDateTime(restore.createdAt) },
     { key: 'times', header: tx('Çalışma zamanı'), wrap: true, render: (restore) => <div className="space-y-1 text-sm"><p>{tx("Başlangıç:")}{' '}{formatDateTime(restore.startedAt)}</p><p className="text-text-muted">{tx("Bitiş:")}{' '}{formatDateTime(restore.completedAt)}</p></div> },
   ]
   return <div className="space-y-6">
@@ -62,7 +62,7 @@ export function RestoresPage() {
     </Filters>
     {agents.error && <ErrorNotice title={tx("Agent seçenekleri yüklenemedi")} error={agents.error} />}
     <QueryState isPending={query.isPending} error={query.error}>
-      {query.data?.items.length === 0 ? <EmptyState message={tx("Bu filtrelerde geri yükleme kaydı bulunamadı.")} action={<Link className="font-medium text-primary hover:underline" to={`/tenants/${tenantId}/artifacts`}>{tx("Artifact'ları aç")}</Link>} /> : <DataTable rows={query.data?.items ?? []} columns={verification ? testColumns : columns} keyExtractor={(restore) => restore.id} emptyMessage={tx("Bu filtrelerde geri yükleme kaydı bulunamadı.")} />}
+      {query.data?.items.length === 0 ? <EmptyState message={tx("Bu filtrelerde geri yükleme kaydı bulunamadı.")} action={<Link className="font-medium text-primary hover:underline" to={`/tenants/${tenantId}/artifacts`}>{tx("Artifact'ları aç")}</Link>} /> : <DataList rows={query.data?.items ?? []} columns={verification ? testColumns : columns} keyExtractor={(restore) => restore.id} emptyMessage={tx("Bu filtrelerde geri yükleme kaydı bulunamadı.")} />}
       {query.data && query.data.totalCount > 0 && <Pagination label={tx("Geri yükleme sayfaları")} page={query.data.page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={(next) => updateFilters({ page: String(next) })} />}
     </QueryState>
     {query.error && <Button variant="outline" onClick={() => void query.refetch()}>{tx("Tekrar dene")}</Button>}

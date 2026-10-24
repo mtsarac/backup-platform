@@ -7,4 +7,7 @@ beforeEach(() => {
   localStorage.removeItem('bp_language')
   syncLanguagePreference()
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  Reflect.deleteProperty(window, 'matchMedia')
+})

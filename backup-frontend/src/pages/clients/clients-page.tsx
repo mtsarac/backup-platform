@@ -2,7 +2,7 @@ import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Server } from 'lucide-react'
-import { DataTable, type Column } from '@/components/data/data-table'
+import { DataList, type Column } from '@/components/data/data-list'
 import { QueryState } from '@/components/data/query-state'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
@@ -15,7 +15,7 @@ import type { Agent } from '@/features/agents/types'
 import { CapabilitySummary } from '@/features/agents/capabilities'
 import { AgentsTabs } from '@/features/agents/agents-tabs'
 import { AddAgentDialog } from '@/features/agents/add-agent-dialog'
-import { linkClass } from '@/features/platform/styles'
+import { linkClass } from '@/components/ui/form-styles'
 import { formatDateTime } from '@/lib/format'
 
 export function ClientsPage() {
@@ -33,7 +33,7 @@ export function ClientsPage() {
   const columns: Column<Agent>[] = [
     { key: 'hostName', header: tx('Agent'), wrap: true, render: (agent) => <div><Link className={linkClass} to={`/tenants/${tenantId}/agents/${agent.agentId}`}>{agent.hostName ?? tx('Adsız agent')}</Link><div className="break-all font-mono text-xs text-text-muted">{agent.agentId}</div></div> },
     { key: 'platform', header: 'Platform', wrap: true, render: (agent) => <div><div>{agent.platform}</div><div className="text-sm text-text-muted">{tx("Sürüm")}{' '}{agent.agentVersion ?? tx('bildirilmedi')}</div></div> },
-    { key: 'connectivity', header: tx('Durum'), render: (agent) => <div className="flex flex-wrap items-center gap-1.5"><StatusPill status={agent.connectivity} />{agent.status !== 'Active' && <StatusPill domain="agent" status={agent.status} />}{agent.operationalStatus.toLowerCase() !== agent.connectivity.toLowerCase() && <StatusPill domain="agent" status={agent.operationalStatus} />}</div> },
+    { key: 'connectivity', card: 'status', header: tx('Durum'), render: (agent) => <div className="flex flex-wrap items-center gap-1.5"><StatusPill status={agent.connectivity} />{agent.status !== 'Active' && <StatusPill domain="agent" status={agent.status} />}{agent.operationalStatus.toLowerCase() !== agent.connectivity.toLowerCase() && <StatusPill domain="agent" status={agent.operationalStatus} />}</div> },
     { key: 'lastSeenAt', header: tx('Son görülme'), render: (agent) => formatDateTime(agent.lastSeenAt, tx('Henüz bildirilmedi')) },
     { key: 'capabilities', header: tx('Yetenekler'), render: (agent) => <CapabilitySummary capabilities={agent.capabilities} /> },
   ]
@@ -47,7 +47,7 @@ export function ClientsPage() {
     </Filters>
     <QueryState isPending={query.isPending} error={query.error}>
       {query.data?.length === 0 ? <div className="rounded-xl border border-border bg-surface"><EmptyState icon={Server} message={tx("Henüz kayıtlı Agent yok.")} canAct={canAdmin} action={addButton} /></div>
-        : <DataTable rows={rows} columns={columns} keyExtractor={(agent) => agent.agentId} emptyMessage={filtered ? tx('Filtrelere uygun agent bulunamadı.') : tx('Henüz kayıtlı agent yok.')} />}
+        : <DataList rows={rows} columns={columns} keyExtractor={(agent) => agent.agentId} emptyMessage={filtered ? tx('Filtrelere uygun agent bulunamadı.') : tx('Henüz kayıtlı agent yok.')} />}
     </QueryState>
     {canAdmin && addingTenant === tenantId && <AddAgentDialog key={tenantId} tenantId={tenantId} onClose={() => setAddingTenant(null)} />}
   </div>

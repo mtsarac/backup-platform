@@ -1,6 +1,6 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
-import { DataTable, type Column } from '@/components/data/data-table'
+import { DataList, type Column } from '@/components/data/data-list'
 import { Pagination } from '@/components/data/pagination'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -37,12 +37,12 @@ export function PlatformPlansPage() {
   const filtered = Boolean(search || enabled)
   const columns: Column<Plan>[] = [
     { key: 'name', header: 'Plan', wrap: true, render: (plan) => <div><span className="font-medium">{plan.name}</span>{plan.quotaPolicyReference && <div className="text-xs text-text-muted">{tx("Politika referansı:")}{' '}{plan.quotaPolicyReference}</div>}</div> },
-    { key: 'enabled', header: tx('Durum'), render: (plan) => <StatusPill level={plan.enabled ? 'safe' : 'neutral'}>{plan.enabled ? tx('Etkin') : tx('Devre dışı')}</StatusPill> },
+    { key: 'enabled', card: 'status', header: tx('Durum'), render: (plan) => <StatusPill level={plan.enabled ? 'safe' : 'neutral'}>{plan.enabled ? tx('Etkin') : tx('Devre dışı')}</StatusPill> },
     { key: 'limit', header: tx('Depolama limiti'), render: (plan) => <StorageLimitText bytes={plan.storageLimitBytes} /> },
-    { key: 'system', header: tx('Tür'), render: (plan) => plan.isSystem ? <Badge tone="warning">{tx("Sistem / Legacy")}</Badge> : <span className="text-text-muted">{tx("Özel")}</span> },
+    { key: 'system', card: 'hidden', header: tx('Tür'), render: (plan) => plan.isSystem ? <Badge tone="warning">{tx("Sistem / Legacy")}</Badge> : <span className="text-text-muted">{tx("Özel")}</span> },
     { key: 'tenants', header: tx('Tenant sayısı'), render: (plan) => plan.tenantCount },
-    { key: 'updated', header: tx('Güncellendi'), render: (plan) => formatDateTime(plan.updatedAt, tx('Henüz bildirilmedi')) },
-    { key: 'actions', header: tx('İşlemler'), wrap: true, render: (plan) => plan.isSystem
+    { key: 'updated', card: 'hidden', header: tx('Güncellendi'), render: (plan) => formatDateTime(plan.updatedAt, tx('Henüz bildirilmedi')) },
+    { key: 'actions', card: 'actions', header: tx('İşlemler'), wrap: true, render: (plan) => plan.isSystem
       ? <span className="text-xs text-text-muted">{tx("Sistem planı; salt okunur.")}</span>
       : <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" aria-label={tx("{0} planını düzenle", { "0": plan.name })} onClick={() => setEditing(plan)}>{tx("Düzenle")}</Button>
@@ -60,7 +60,7 @@ export function PlatformPlansPage() {
     <PlatformQueryState isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">
         {!filtered && data.totalCount === 0 ? <ListEmpty message={tx("Henüz plan yok.")} action={<Button onClick={() => setCreating(true)}>{tx("Yeni plan")}</Button>} />
-          : <DataTable rows={data.items} columns={columns} keyExtractor={(plan) => plan.planId} emptyMessage={filtered ? tx('Filtreye uygun plan bulunamadı.') : tx('Henüz plan yok.')} />}
+          : <DataList rows={data.items} columns={columns} keyExtractor={(plan) => plan.planId} emptyMessage={filtered ? tx('Filtreye uygun plan bulunamadı.') : tx('Henüz plan yok.')} />}
         {data.totalCount > 0 && <Pagination label={tx("Plan sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
       </div>}
     </PlatformQueryState>
