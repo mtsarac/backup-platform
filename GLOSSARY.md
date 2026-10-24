@@ -77,3 +77,11 @@ _Avoid_: Keşif in user-facing text
 **Break-glass access** (shown as "Acil destek erişimi"):
 Time-limited access a platform operator is granted to a tenant's data to resolve an urgent support case.
 _Avoid_: Break-glass in user-facing text
+
+**Tenant recovery key** (shown as "Kendi kurtarma anahtarınız"):
+An optional public key added to future encrypted backups. The tenant keeps the private key; removing the public key does not change existing backups or platform emergency support access.
+_Avoid_: Tenant anahtarı in user-facing recovery settings
+
+**Wrap key** (shown as "Şifreleme anahtarı"):
+The application's key for opening encrypted backups. Rotation protects future backups with a new key; retiring an older key removes online decryption for its backups and requires offline recovery.
+_Avoid_: TWK in default user-facing text

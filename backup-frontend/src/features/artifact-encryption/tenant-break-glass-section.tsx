@@ -1,36 +1,49 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { Link } from 'react-router-dom'
-import { DataList, type Column } from '@/components/data/data-list'
 import { Pagination } from '@/components/data/pagination'
 import { QueryState } from '@/components/data/query-state'
-import { Section } from '@/components/ui/section'
+import { RelativeTime } from '@/components/data/relative-time'
+import { StatusPill } from '@/components/data/status-pill'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Fact, Facts, Section } from '@/components/ui/section'
+import { TechnicalDetails } from '@/components/ui/technical-details'
 import { linkClass } from '@/components/ui/form-styles'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
-import { useTenantBreakGlass } from './hooks'
-import type { TenantBreakGlassEvent } from './types'
 import { formatDateTime } from '@/lib/format'
-import { StatusPill } from '@/components/data/status-pill'
+import { useTenantBreakGlass } from './hooks'
 
-/** What the tenant is owed under break-glass transparency: who asked for which Backup, why, who approved, and whether it was used. */
 export function TenantBreakGlassSection({ tenantId }: { tenantId: string }) {
   useLanguage()
   const { page, update } = useListParams('breakGlassPage')
   const query = useTenantBreakGlass(tenantId, { page, pageSize: PLATFORM_PAGE_SIZE })
-  const columns: Column<TenantBreakGlassEvent>[] = [
-    { key: 'status', card: 'status', header: tx('Durum'), render: event => <StatusPill domain="breakGlass" status={event.status} /> },
-    { key: 'artifact', header: tx('Backup'), render: event => <Link className={linkClass} to={`/tenants/${tenantId}/artifacts/${event.artifactId}`}>{event.artifactId.slice(0, 8)}…</Link> },
-    { key: 'reason', header: tx('Gerekçe'), wrap: true, render: event => event.reason },
-    { key: 'requester', header: tx('İsteyen'), wrap: true, render: event => event.requestedByName ?? tx('Bilinmiyor') },
-    { key: 'approver', card: 'hidden', header: tx('Karar veren'), wrap: true, render: event => event.decidedByName ? <>{event.decidedByName}<span className="block text-sm text-text-muted">{formatDateTime(event.decidedAt)}</span></> : '—' },
-    { key: 'used', card: 'hidden', header: tx('Kullanıldı'), render: event => event.consumedAt ? formatDateTime(event.consumedAt) : tx('Hayır') },
-    { key: 'created', card: 'hidden', header: tx('Açılış'), render: event => formatDateTime(event.createdAt) },
-    { key: 'expires', header: tx('Süre sonu'), render: event => formatDateTime(event.expiresAt) },
-  ]
-  return <Section title={tx("Break-glass erişimleri")} description={tx("Platform yöneticilerinin bu tenant'ın şifreli Backup'larını çözme istekleri. Her istek gerekçeli, çift onaylı, süreli ve tek kullanımlıktır. Bu liste salt okunurdur.")}>
+  return <Section title={tx('Acil destek erişimi')} description={tx('Platform çalışanlarının şifreli yedeklerinizi açma istekleri. Her istek gerekçeli, iki kişi tarafından onaylanan, süreli ve tek kullanımlıktır.')}>
     <QueryState isPending={query.isPending} error={query.error}>
       {query.data && <div className="space-y-4">
-        <DataList rows={query.data.items} columns={columns} keyExtractor={event => event.id} emptyMessage={tx("Bu tenant için break-glass isteği yok.")} />
-        {query.data.totalCount > 0 && <Pagination label={tx("Break-glass sayfaları")} page={page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={next => update({ breakGlassPage: next })} />}
+        {query.data.items.length === 0 ? <EmptyState message={tx('Henüz acil destek erişimi isteği yok.')} /> : <ul aria-label={tx('Acil destek erişimi geçmişi')} className="space-y-3">
+          {query.data.items.map(event => <li key={event.id} className="space-y-4 rounded-xl border border-border p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="break-words font-semibold">{event.requestedByName ?? tx('Bilinmiyor')}</h3>
+              <StatusPill domain="breakGlass" status={event.status} />
+            </div>
+            <p className="break-words">{event.reason}</p>
+            <Facts>
+              <Fact label={tx('İstek zamanı')}><RelativeTime value={event.createdAt} /></Fact>
+              <Fact label={tx('Karar veren')}>{event.decidedByName ?? tx('Henüz karar verilmedi')}</Fact>
+              <Fact label={tx('Kullanıldı')}>{event.consumedAt ? <RelativeTime value={event.consumedAt} /> : tx('Hayır')}</Fact>
+            </Facts>
+            <Link className={`${linkClass} inline-flex min-h-11 items-center`} to={`/tenants/${tenantId}/artifacts/${event.artifactId}`}>{tx('Yedek dosyasını görüntüle')}</Link>
+            <TechnicalDetails items={[
+              { label: tx('İstek kimliği'), value: event.id },
+              { label: tx('Yedek dosyası kimliği'), value: event.artifactId },
+              { label: tx('Ham durum'), value: event.status },
+              { label: tx('Açılış'), value: formatDateTime(event.createdAt) },
+              { label: tx('Süre sonu'), value: formatDateTime(event.expiresAt) },
+              { label: tx('Karar zamanı'), value: formatDateTime(event.decidedAt) },
+              { label: tx('Kullanılma zamanı'), value: formatDateTime(event.consumedAt) },
+            ]} />
+          </li>)}
+        </ul>}
+        {query.data.totalCount > 0 && <Pagination label={tx('Acil destek erişimi sayfaları')} page={page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={next => update({ breakGlassPage: next })} />}
       </div>}
     </QueryState>
   </Section>
