@@ -64,6 +64,7 @@ describe('Google Drive storage destination', () => {
     const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveTextContent(/Google bağlantısı kesilsin mi/i)
     expect(dialog).toHaveTextContent(/aynı Google hesabını ve uygulamayı kullanan diğer bağlantıların da erişimi iptal olabilir/i)
+    expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument()
     expect(api.disconnectGoogleDrive).not.toHaveBeenCalled()
     await userEvent.click(within(dialog).getByRole('button', { name: 'Bağlantıyı kes' }))
     await waitFor(() => expect(api.disconnectGoogleDrive).toHaveBeenCalledWith('tenant-a', 'drive'))

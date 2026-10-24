@@ -148,6 +148,7 @@ describe('platform storage targets list', () => {
     mount()
     await user.click(await screen.findByRole('button', { name: 'Managed Storage bağlantısı: platform kilidi koy' }))
     const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument()
     expect(dialog).toHaveTextContent(/(?:yeni backup'lar \(manuel ve zamanlanmış\) başlatılamaz|yeni yedeklemeler \(elle başlatılan ve zamanlanmış\) başlatılamaz)/)
     expect(dialog).toHaveTextContent(/(?:Mevcut Replica'lar silinmez|Mevcut kopyalar silinmez)/)
     expect(dialog).toHaveTextContent('sahibin etkin / devre dışı tercihi korunur')

@@ -1,4 +1,4 @@
-import { currentLocale, tx, useLanguage } from '@/lib/i18n'
+import { tx, useLanguage } from '@/lib/i18n'
 import { useEffect } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { DataList } from '@/components/data/data-list'
@@ -10,13 +10,15 @@ import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { Tabs } from '@/components/ui/tabs'
+import { TechnicalDetails } from '@/components/ui/technical-details'
+import { CopyButton } from '@/components/ui/copy-button'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { ConnectionActions } from './connection-actions'
-import { CapabilityChips, HealthBadge, SecretStatus } from './connection-parts'
+import { CapabilityChips, CapacityPill, HealthBadge, SecretStatus } from './connection-parts'
 import { useTenantConnectionCapacity, useProbeTenantConnectionCapacity, useTenantConnectionOps, useTenantConnections, useTenantProviders } from './hooks'
-import { configurationSummary, connectionHealth, disableEffects, enableEffect, platformLockState, executionLocationLabel, testMessage, testModeLabel, topologyLabel } from './labels'
+import { configurationSummary, connectionHealth, disableEffects, enableEffect, footprintItems, platformLockState, executionLocationLabel, testMessage, testModeLabel, topologyLabel } from './labels'
 import type { ConnectionView, ProviderDescriptor } from './types'
-import { formatBytes, formatDateTime } from '@/lib/format'
+import { formatBytes, formatDateTime, formatRelativeTime } from '@/lib/format'
 import { ProgressBar } from '@/components/data/progress-bar'
 import { StatusPill } from '@/components/data/status-pill'
 
@@ -38,10 +40,11 @@ function HealthNotice({ connection }: { connection: ConnectionView }) {
   if (health.key === 'failed' && test) return <ErrorNotice title={tx("Son test başarısız")} what={testMessage(test)} dataImpact={tx("Yeni yedekler bu depolamaya yazılamayabilir; mevcut yedekleriniz silinmedi.")} action={tx("Ayarları düzeltip bağlantıyı yeniden test edin.")} technical={[{ label: tx("Test zamanı"), value: formatDateTime(test.testedAt, tx('Henüz bildirilmedi')) }]} />
   if (health.key === 'untested') return <Notice tone="info" title={tx("Bağlantı henüz test edilmedi")}>{tx("Çalıştığından emin olmak için “Test et” düğmesini kullanın.")}</Notice>
   if (health.key === 'agent-side' && test) return <Notice tone="info" title={tx("Bu hedef Agent tarafında denetlenir")}>{testMessage(test)}</Notice>
-  if (test) return <Notice tone="success" title={tx("Bağlantı sağlıklı")}>{tx("Son test")}{' '}{formatDateTime(test.testedAt, tx('Henüz bildirilmedi'))}{' '}{tx("tarihinde başarılı oldu.")}</Notice>
+  if (test) return <Notice tone="success" title={tx("Bağlantı sağlıklı")}>{tx("Son test {0} başarılı oldu.", { "0": formatRelativeTime(test.testedAt) })}</Notice>
   return null
 }
 
+/** Is space running out? One sentence for the person, then the numbers that matter. */
 function CapacitySection({ connection }: { connection: ConnectionView }) {
   useLanguage()
   const { data: capacity, isPending } = useTenantConnectionCapacity(connection.id)
@@ -55,17 +58,14 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
     : 0
   const isCritical = capacity?.status === 'Critical'
   const isWarning = capacity?.status === 'Warning'
+  const verdict = isCritical ? tx("Depolama alanı dolmak üzere. Yeni yedekler yazılamayabilir; yer açın veya başka bir depolama ekleyin.")
+    : isWarning ? tx("Depolama alanı azalıyor. Yakında dolabilir; şimdiden yer açmayı veya ek depolama eklemeyi düşünün.")
+      : tx("Yeterli boş alan var.")
 
   return (
     <Section
-      title={
-        <span className="flex items-center gap-2">
-          <span>{tx("Depolama Kapasitesi")}</span>
-          {isCritical && <StatusPill level="urgent">{tx("Kritik")}</StatusPill>}
-          {isWarning && <StatusPill level="attention">{tx("Uyarı")}</StatusPill>}
-        </span>
-      }
-      description={tx("Fiziksel disk ve kota durumu.")}
+      title={<span className="flex flex-wrap items-center gap-2"><span>{tx("Depolama alanı")}</span><CapacityPill status={capacity?.status} /></span>}
+      description={tx("Depolamada ne kadar boş yer kaldığı.")}
       actions={
         <Button
           variant="outline"
@@ -93,21 +93,10 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
 
       {hasMetrics ? (
         <div className="space-y-4">
+          <p className="text-sm text-text-heading">{verdict}</p>
           <Facts columns={3}>
-            <Fact label={tx("Toplam Alan")}>
-              <span className="text-lg font-semibold text-text-heading" title={formatBytes(capacity.totalBytes!)}>
-                {formatBytes(capacity.totalBytes!)}
-              </span>
-            </Fact>
-            <Fact label={tx("Kullanılan Alan")}>
-              <span className="text-lg font-semibold text-text-heading" title={capacity.usedBytes != null ? formatBytes(capacity.usedBytes) : undefined}>
-                {capacity.usedBytes != null ? formatBytes(capacity.usedBytes) : '—'}
-              </span>
-            </Fact>
             <Fact label={tx("Boş Alan")}>
-              <span className="text-lg font-semibold text-text-heading" title={capacity.freeBytes != null ? formatBytes(capacity.freeBytes) : undefined}>
-                {capacity.freeBytes != null ? formatBytes(capacity.freeBytes) : '—'}
-              </span>
+              <span className="text-lg font-semibold text-text-heading">{capacity.freeBytes != null ? formatBytes(capacity.freeBytes) : '—'}</span>
             </Fact>
           </Facts>
 
@@ -120,7 +109,7 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
           </div>
 
           <p className="text-xs text-text-muted">
-            {tx("Son sorgulama: {0}", { "0": formatDateTime(capacity.reportedAt, tx('Henüz bildirilmedi')) })}
+            {tx("Son sorgulama: {0}", { "0": formatRelativeTime(capacity.reportedAt) })}
           </p>
         </div>
       ) : !awaitingAgent && !notMeasurable && capacity?.status !== 'CapacityUnavailable' ? (
@@ -128,19 +117,6 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
           {isPending ? tx("Kapasite bilgisi yükleniyor…") : tx("Kapasite bilgisi henüz sorgulanmadı. “Kapasiteyi Sorgula” düğmesini kullanarak güncel durumu alabilirsiniz.")}
         </p>
       ) : null}
-
-      {capacity?.history && capacity.history.length > 0 && (
-        <div className="mt-5 space-y-2">
-          <p aria-hidden="true" className="text-text-muted">{tx("Kapasite geçmişi — en son {0} ölçüm", { "0": capacity.historyLimit ?? 30 })}</p>
-          <DataList caption={tx("Kapasite geçmişi — en son {0} ölçüm", { "0": capacity.historyLimit ?? 30 })} rows={capacity.history} keyExtractor={measurement => `${measurement.reportedAt}-${capacity.history!.indexOf(measurement)}`} columns={[
-            { key: 'at', header: tx('Tarih'), render: measurement => formatDateTime(measurement.reportedAt, tx('Henüz bildirilmedi')) },
-            { key: 'total', header: tx('Toplam Alan'), card: 'hidden', render: measurement => measurement.totalBytes == null ? '—' : formatBytes(measurement.totalBytes) },
-            { key: 'used', header: tx('Kullanılan Alan'), render: measurement => measurement.usedBytes == null ? '—' : formatBytes(measurement.usedBytes) },
-            { key: 'free', header: tx('Boş Alan'), render: measurement => measurement.freeBytes == null ? '—' : formatBytes(measurement.freeBytes) },
-            { key: 'state', header: tx('Durum'), card: 'status', render: measurement => measurement.status === 'Critical' ? tx("Kritik") : measurement.status === 'Warning' ? tx("Uyarı") : measurement.status === 'Available' ? tx("Kullanılabilir") : tx("Kapasite bilgisi alınamadı") },
-          ]} />
-        </div>
-      )}
 
       {probe.isError && (
         <p role="alert" className="mt-2 text-sm text-error">
@@ -151,30 +127,45 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
   )
 }
 
+/** Capacity numbers and history, quota scope, dates, provider internals and identifiers: everything the person does not need to read first. */
+function OverviewTechnical({ connection, descriptor, total }: { connection: ConnectionView; descriptor?: ProviderDescriptor; total: number }) {
+  useLanguage()
+  const { data: capacity } = useTenantConnectionCapacity(connection.id)
+  const measured = capacity && capacity.status !== 'Pending' && capacity.totalBytes != null
+  const history = capacity?.history ?? []
+  const items = [
+    ...(measured ? [{ label: tx("Toplam Alan"), value: formatBytes(capacity.totalBytes!) }, ...(capacity.usedBytes != null ? [{ label: tx("Kullanılan Alan"), value: formatBytes(capacity.usedBytes) }] : [])] : []),
+    ...footprintItems(connection, total),
+    { label: tx("Kota kapsamı"), value: connection.quotaScope },
+    { label: tx("Oluşturulma"), value: formatDateTime(connection.createdAt, tx('Henüz bildirilmedi')) },
+    { label: tx("Son güncelleme"), value: formatDateTime(connection.updatedAt, tx('Henüz bildirilmedi')) },
+    { label: tx("Topoloji"), value: topologyLabel(descriptor?.topology ?? null) },
+    { label: tx("Yürütme konumu"), value: executionLocationLabel(descriptor?.executionLocation ?? null) },
+    { label: tx("Test yöntemi"), value: descriptor ? testModeLabel(descriptor.testMode) : '—' },
+    { label: tx("Bağlantı kimliği"), value: connection.id },
+  ]
+  return <TechnicalDetails items={items}>
+    <div className="space-y-2"><p className="text-sm font-medium text-text-heading">{tx("Yetenekler")}</p><CapabilityChips capabilities={connection.capabilities} label={tx("{0} yetenekleri", { "0": connection.name })} /><CopyButton label={tx("Kopyala: {0}", { "0": tx("Yetenekler") })} value={connection.capabilities.join('\n')} /></div>
+    {history.length > 0 && <div className="space-y-2">
+      <p aria-hidden="true" className="text-sm font-medium text-text-heading">{tx("Kapasite geçmişi — en son {0} ölçüm", { "0": capacity?.historyLimit ?? 30 })}</p>
+      <DataList caption={tx("Kapasite geçmişi — en son {0} ölçüm", { "0": capacity?.historyLimit ?? 30 })} rows={history} keyExtractor={measurement => `${measurement.reportedAt}-${history.indexOf(measurement)}`} columns={[
+        { key: 'at', header: tx('Tarih'), render: measurement => formatDateTime(measurement.reportedAt, tx('Henüz bildirilmedi')) },
+        { key: 'total', header: tx('Toplam Alan'), card: 'hidden', render: measurement => measurement.totalBytes == null ? '—' : formatBytes(measurement.totalBytes) },
+        { key: 'used', header: tx('Kullanılan Alan'), render: measurement => measurement.usedBytes == null ? '—' : formatBytes(measurement.usedBytes) },
+        { key: 'free', header: tx('Boş Alan'), render: measurement => measurement.freeBytes == null ? '—' : formatBytes(measurement.freeBytes) },
+        { key: 'state', header: tx('Durum'), card: 'status', render: measurement => measurement.status === 'Critical' ? tx("Kritik") : measurement.status === 'Warning' ? tx("Uyarı") : measurement.status === 'Available' ? tx("Kullanılabilir") : tx("Kapasite bilgisi alınamadı") },
+        { key: 'copy', header: tx('Ölçüm'), card: 'actions', render: measurement => <CopyButton label={tx("Kopyala: {0}", { "0": tx("Ölçüm") })} value={JSON.stringify(measurement)} /> },
+      ]} />
+    </div>}
+  </TechnicalDetails>
+}
+
 function Overview({ connection, descriptor, total }: { connection: ConnectionView; descriptor?: ProviderDescriptor; total: number }) {
   useLanguage()
-  const share = total > 0 ? Math.round((connection.storedBytes / total) * 100) : 0
   return <div className="space-y-5">
     <HealthNotice connection={connection} />
-    <Section title={tx("Depolama ve kullanım")}>
-      <Facts columns={3}>
-        <Fact label={tx("Saklanan veri")}><span title={formatBytes(connection.storedBytes)} className="text-lg font-semibold text-text-heading">{formatBytes(connection.storedBytes)}</span></Fact>
-        <Fact label={tx("Replica")}><span className="text-lg font-semibold text-text-heading">{connection.replicaCount.toLocaleString(currentLocale())}</span></Fact>
-        <Fact label={tx("Tenant'taki payı")}>{tx('%{0}', { '0': share.toLocaleString(currentLocale()) })}</Fact>
-        <Fact label={tx("Kota kapsamı")}><code>{connection.quotaScope}</code></Fact>
-        <Fact label={tx("Oluşturulma")}>{formatDateTime(connection.createdAt, tx('Henüz bildirilmedi'))}</Fact>
-        <Fact label={tx("Son güncelleme")}>{formatDateTime(connection.updatedAt, tx('Henüz bildirilmedi'))}</Fact>
-      </Facts>
-    </Section>
     <CapacitySection connection={connection} />
-    <Section title={tx("Sağlayıcı")} description={connection.providerDisplayName}>
-      <Facts columns={3}>
-        <Fact label={tx("Topoloji")}>{topologyLabel(descriptor?.topology ?? null)}</Fact>
-        <Fact label={tx("Yürütme konumu")}>{executionLocationLabel(descriptor?.executionLocation ?? null)}</Fact>
-        <Fact label={tx("Test yöntemi")}>{descriptor ? testModeLabel(descriptor.testMode) : '—'}</Fact>
-      </Facts>
-      <div className="mt-4"><CapabilityChips capabilities={connection.capabilities} label={tx("{0} yetenekleri", { "0": connection.name })} /></div>
-    </Section>
+    <OverviewTechnical connection={connection} descriptor={descriptor} total={total} />
   </div>
 }
 
@@ -202,7 +193,7 @@ function Manage({ connection, descriptor, ops }: { connection: ConnectionView; d
   return <div className="space-y-5">
     <Section title={tx("Kullanılabilirlik")} description={connection.effectiveEnabled ? tx('Bu hedef yeni backup\'lar için kullanılabilir.') : tx('Bu hedef şu an devre dışı.')}>
       <div className="space-y-4">
-        <p className="text-sm text-text-muted">{tx("Sahip tercihi:")}{' '}{on ? tx('Etkin') : tx('Devre dışı')}</p>
+        <p className="text-sm text-text-muted">{tx("Sahip tercihi: {0}", { "0": on ? tx('Etkin') : tx('Devre dışı') })}</p>
         {connection.administrativelyDisabled && <Notice tone="warning" title={tx("Platform kilidi")}>{tx(platformLockState)}</Notice>}
         {on ? <ul className="list-inside list-disc space-y-1 text-sm text-text-muted">{disableEffects.map((effect) => <li key={effect}>{tx(effect)}</li>)}</ul> : <p className="text-sm text-text-muted">{tx(enableEffect)}</p>}
         <ConnectionActions connection={connection} descriptor={descriptor} ops={ops} show={['toggle']} />

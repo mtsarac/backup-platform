@@ -48,20 +48,60 @@ beforeEach(() => {
 })
 
 describe('Storage connections list and detail', () => {
-  it('lists destination ownership and footprint without exposing credentials or configuration', async () => {
+  it('lists each destination as a card with name, health, last test and provider; statistics stay collapsed', async () => {
+    serve([
+      makeConnection({ lastTest: { status: 'Succeeded', code: 'ok', message: '', testedAt: new Date(Date.now() - 3 * 3_600_000).toISOString() }, permissions: { ...tenantAdminPermissions } }),
+      makeManaged(),
+    ])
     mount()
     await screen.findByRole('article', { name: "Local" })
-    expect(article('Local').getByText("Çalışma alanı yönetimli")).toBeInTheDocument()
-    expect(article('Local').getByText('Varsayılan')).toBeInTheDocument()
-    expect(article('Local').getByText(/2 Kopya/)).toBeInTheDocument()
-    expect(article('Local').getByText('6,2 GB')).toBeInTheDocument()
-    expect(article('Local').getByText('Henüz test edilmedi')).toBeInTheDocument()
+    const local = article('Local')
+    expect(local.getByText('Local (Agent diski)')).toBeInTheDocument()
+    expect(local.getByText('Varsayılan')).toBeInTheDocument()
+    expect(local.getByText('Sağlıklı')).toBeInTheDocument()
+    expect(local.getByText('3 saat önce')).toBeInTheDocument()
+    expect(local.getByText("Çalışma alanı yönetimli")).toBeInTheDocument()
     expect(article('Managed Storage').getByText('Platform yönetimli')).toBeInTheDocument()
-    expect(article('Managed Storage').getByText(/3 Kopya/)).toBeInTheDocument()
-    expect(article('Managed Storage').getByText('123 MB')).toBeInTheDocument()
+    expect(article('Managed Storage').getByText('Henüz test edilmedi')).toBeInTheDocument()
+    // The footprint is a statistic: collapsed until the card's technical details are opened.
+    expect(local.getByText('6,2 GB')).not.toBeVisible()
+    expect(article('Managed Storage').getByText('123 MB')).not.toBeVisible()
+    await userEvent.click(local.getByText('Teknik ayrıntılar'))
+    expect(local.getByText('6,2 GB')).toBeVisible()
+    expect(local.getByText(/2 Kopya/)).toBeVisible()
+    expect(local.getByRole('button', { name: 'Kopyala: Saklanan veri' })).toBeInTheDocument()
+  })
+
+  it('keeps the tenant-wide statistics under a collapsed Ayrıntılar section', async () => {
+    mount()
+    await screen.findByRole('article', { name: "Local" })
+    expect(screen.getByText('Dikkat gerektiren')).not.toBeVisible()
+    await userEvent.click(screen.getByText('Ayrıntılar'))
+    expect(screen.getByText('Dikkat gerektiren')).toBeVisible()
+  })
+
+  it('gives an empty list one sentence and one primary action, or asks to consult the administrator', async () => {
+    serve([])
+    const { unmount } = mount()
+    expect(await screen.findByRole('link', { name: 'İlk bağlantıyı ekle' })).toBeInTheDocument()
+    unmount()
+    access.canAdmin = false
+    mount()
+    expect(await screen.findByText('Yöneticinize danışın')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'İlk bağlantıyı ekle' })).not.toBeInTheDocument()
+  })
+
+  it('opens a destination from its card without exposing credentials or configuration; quota scope and capabilities are technical', async () => {
+    mount()
+    await screen.findByRole('article', { name: "Local" })
     await userEvent.click(article('Local').getByRole('link', { name: 'Local bağlantısını yönet' }))
-    expect(await screen.findByRole('list', { name: 'Local yetenekleri' })).toHaveTextContent('OkumaSilme')
-    expect(screen.getByText('tenant')).toBeInTheDocument()
+    await screen.findByRole('heading', { level: 1, name: 'Local' })
+    expect(screen.getByRole('list', { name: 'Local yetenekleri' })).not.toBeVisible()
+    expect(screen.getByText('tenant')).not.toBeVisible()
+    await userEvent.click(screen.getByText('Teknik ayrıntılar'))
+    expect(screen.getByRole('list', { name: 'Local yetenekleri' })).toHaveTextContent('OkumaSilme')
+    expect(screen.getByText('tenant')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Kopyala: Kota kapsamı' })).toBeInTheDocument()
   })
 
   it('displays storage capacity metrics and triggers capacity probe', async () => {
@@ -88,11 +128,21 @@ describe('Storage connections list and detail', () => {
     })
 
     mount(detail('conn-local'))
-    expect(await screen.findByText('Depolama Kapasitesi')).toBeInTheDocument()
-    expect(await screen.findByRole('table', { name: 'Kapasite geçmişi — en son 30 ölçüm' })).toBeInTheDocument()
-    expect(screen.getAllByText('500 GB')).toHaveLength(2)
-    expect(screen.getAllByText('300 GB')).toHaveLength(2)
-    expect(screen.getAllByText('200 GB')).toHaveLength(2)
+    expect(await screen.findByRole('heading', { name: 'Depolama alanı' })).toBeInTheDocument()
+    expect(await screen.findByText('Yeterli boş alan var.')).toBeVisible()
+    expect(screen.getAllByText('200 GB')[0]).toBeVisible()
+    // History and the exact totals are technical: collapsed until opened.
+    const history = await screen.findByRole('table', { name: 'Kapasite geçmişi — en son 30 ölçüm' })
+    expect(history).not.toBeVisible()
+    await userEvent.click(screen.getByText('Teknik ayrıntılar'))
+    expect(history).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Kopyala: Toplam Alan' })).toBeInTheDocument()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    await userEvent.click(within(history).getByRole('button', { name: 'Kopyala: Ölçüm' }))
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"totalBytes":500000000000'))
+    await userEvent.click(screen.getByRole('button', { name: 'Kopyala: Yetenekler' }))
+    expect(writeText).toHaveBeenCalledWith('storage.read\nstorage.delete')
 
     const probeBtn = screen.getByRole('button', { name: 'Kapasiteyi Sorgula' })
     await userEvent.click(probeBtn)
@@ -116,7 +166,7 @@ describe('Storage connections list and detail', () => {
     expect(await screen.findByText(/Agent yanıtı bekleniyor/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Sorgulanıyor…' })).toBeDisabled()
     expect(screen.queryByText('100 kB')).not.toBeInTheDocument()
-    expect(await screen.findByText('Kritik', {}, { timeout: 4_000 })).toBeInTheDocument()
+    expect(await screen.findByText('Alan dolmak üzere', {}, { timeout: 4_000 })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Kapasiteyi Sorgula' })).toBeEnabled()
   })
 
@@ -147,45 +197,32 @@ describe('Storage connections list and detail', () => {
     expect(label.parentElement?.nextElementSibling?.firstElementChild).toHaveClass(tone)
   })
 
-  it('displays Warning badge at 80% and Critical badge at 90% capacity on detail and list', async () => {
-    // 1. Detail page with 85% usage shows Warning badge
+  it('says in plain words whether space is running out, on the detail page and the list card', async () => {
     vi.mocked(api.getTenantConnectionCapacity).mockResolvedValueOnce({
-      connectionId: 'conn-local',
-      totalBytes: 100_000_000_000,
-      usedBytes: 85_000_000_000,
-      freeBytes: 15_000_000_000,
-      status: 'Warning',
-      reportedAt: '2026-10-21T10:00:00Z',
+      connectionId: 'conn-local', totalBytes: 100_000_000_000, usedBytes: 85_000_000_000, freeBytes: 15_000_000_000,
+      status: 'Warning', reportedAt: '2026-10-21T10:00:00Z',
     })
+    const first = mount(detail('conn-local'))
+    expect(await screen.findByText('Alan azalıyor')).toBeInTheDocument()
+    expect(screen.getByText(/Depolama alanı azalıyor/)).toBeVisible()
+    first.unmount()
 
-    mount(detail('conn-local'))
-    expect(await screen.findByText('Uyarı')).toBeInTheDocument()
-
-    // 2. Detail page with 95% usage shows Critical badge
     vi.mocked(api.getTenantConnectionCapacity).mockResolvedValueOnce({
-      connectionId: 'conn-local',
-      totalBytes: 100_000_000_000,
-      usedBytes: 95_000_000_000,
-      freeBytes: 5_000_000_000,
-      status: 'Critical',
-      reportedAt: '2026-10-21T10:00:00Z',
+      connectionId: 'conn-local', totalBytes: 100_000_000_000, usedBytes: 95_000_000_000, freeBytes: 5_000_000_000,
+      status: 'Critical', reportedAt: '2026-10-21T10:00:00Z',
     })
+    const second = mount(detail('conn-local'))
+    expect(await screen.findByText('Alan dolmak üzere')).toBeInTheDocument()
+    expect(screen.getByText(/Depolama alanı dolmak üzere/)).toBeVisible()
+    second.unmount()
 
-    mount(detail('conn-local'))
-    expect(await screen.findByText('Kritik')).toBeInTheDocument()
-
-    // 3. List page shows Warning / Critical badge for connection rows
     vi.mocked(api.getTenantConnectionCapacity).mockResolvedValue({
-      connectionId: 'conn-local',
-      totalBytes: 100_000_000_000,
-      usedBytes: 92_000_000_000,
-      freeBytes: 8_000_000_000,
-      status: 'Critical',
-      reportedAt: '2026-10-21T10:00:00Z',
+      connectionId: 'conn-local', totalBytes: 100_000_000_000, usedBytes: 92_000_000_000, freeBytes: 8_000_000_000,
+      status: 'Critical', reportedAt: '2026-10-21T10:00:00Z',
     })
     serve([makeConnection()])
     mount(base)
-    expect(await screen.findByText('Kritik')).toBeInTheDocument()
+    expect(await within(await screen.findByRole('article', { name: 'Local' })).findByText('Alan dolmak üzere')).toBeInTheDocument()
   })
 
   it('shows secret presence, never its value, on the credential tab', async () => {
@@ -381,7 +418,9 @@ describe('Credential replacement', () => {
     mount(detail('conn-s3', 'credentials'))
     await userEvent.click(await screen.findByRole('button', { name: 'S3 Arşiv bağlantısı: kimlik bilgisini temizle' }))
     expect(api.clearTenantConnectionSecret).not.toHaveBeenCalled()
-    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Kimlik bilgisini temizle' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Kimlik bilgisini temizle' }))
     await waitFor(() => expect(api.clearTenantConnectionSecret).toHaveBeenCalledWith('tenant-a', 'conn-s3'))
   })
 })
@@ -392,6 +431,7 @@ describe('Enablement, test, deletion and editing', () => {
     mount(detail('conn-local', 'manage'))
     await userEvent.click(await screen.findByRole('button', { name: 'Local bağlantısı: devre dışı bırak' }))
     const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument()
     expect(dialog).toHaveTextContent(/(?:yeni backup'lar \(manuel ve zamanlanmış\) başlatılamaz|yeni yedeklemeler \(elle başlatılan ve zamanlanmış\) başlatılamaz)/)
     expect(dialog).toHaveTextContent(/(?:Mevcut Replica'lar silinmez ve kullanılabilir kalır|Mevcut kopyalar silinmez ve kullanılabilir kalır)/)
     expect(dialog).toHaveTextContent(/(?:indirme, geri yükleme|indirme, restore)/)
@@ -418,11 +458,13 @@ describe('Enablement, test, deletion and editing', () => {
     })
     mount(detail('conn-local', 'manage'))
     expect(await screen.findByText('Platform kilidi')).toBeInTheDocument()
-    expect(screen.getByText(/kilit kalkana kadar yeni yedeklemeler için kullanılamaz/)).toBeInTheDocument()
+    expect(screen.getAllByText(/kilit kalkana kadar yeni yedeklemeler için kullanılamaz/)).toHaveLength(1)
     expect(screen.getByText('Sahip tercihi: Etkin')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Local bağlantısı: sil' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Local bağlantısı: devre dışı bırak' }))
-    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Devre dışı bırak' }))
+    const lockDialog = await screen.findByRole('dialog')
+    expect(within(lockDialog).queryByRole('textbox')).not.toBeInTheDocument()
+    await userEvent.click(within(lockDialog).getByRole('button', { name: 'Devre dışı bırak' }))
     await waitFor(() => expect(api.setTenantConnectionEnabled).toHaveBeenCalledWith('tenant-a', 'conn-local', false))
     expect(await screen.findByRole('button', { name: 'Local bağlantısı: etkinleştir' })).toBeDisabled()
   })
@@ -437,13 +479,35 @@ describe('Enablement, test, deletion and editing', () => {
     expect(api.testTenantConnection).toHaveBeenCalledWith('tenant-a', 'conn-local')
   })
 
-  it('does not hide a connection-in-use delete rejection', async () => {
+  it('blocks deletion until the exact name is typed, then deletes', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.deleteTenantConnection).mockResolvedValue(undefined)
+    mount(detail('conn-local', 'manage'))
+    await user.click(await screen.findByRole('button', { name: 'Local bağlantısı: sil' }))
+    const dialog = await screen.findByRole('dialog')
+    const confirm = within(dialog).getByRole('button', { name: 'Bağlantıyı sil' })
+    expect(confirm).toBeDisabled()
+    await user.type(within(dialog).getByRole('textbox'), 'Loca')
+    expect(confirm).toBeDisabled()
+    await user.type(within(dialog).getByRole('textbox'), 'l')
+    expect(confirm).toBeEnabled()
+    expect(api.deleteTenantConnection).not.toHaveBeenCalled()
+    await user.click(confirm)
+    await waitFor(() => expect(api.deleteTenantConnection).toHaveBeenCalledWith('tenant-a', 'conn-local'))
+  })
+
+  it('explains a connection-in-use rejection in three parts and keeps the connection', async () => {
+    const user = userEvent.setup()
     vi.mocked(api.deleteTenantConnection).mockRejectedValue(new ApiError(409, { error: 'connection_in_use' }))
     mount(detail('conn-local', 'manage'))
-    await userEvent.click(await screen.findByRole('button', { name: 'Local bağlantısı: sil' }))
+    await user.click(await screen.findByRole('button', { name: 'Local bağlantısı: sil' }))
     const dialog = await screen.findByRole('dialog')
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Bağlantıyı sil' }))
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent("Bağlantı hâlâ bir kopya veya yedekleme işi tarafından kullanılıyor; silinemez.")
+    await user.type(within(dialog).getByRole('textbox'), 'Local')
+    await user.click(within(dialog).getByRole('button', { name: 'Bağlantıyı sil' }))
+    const alert = await within(dialog).findByRole('alert')
+    expect(alert).toHaveTextContent("Bağlantı hâlâ bir kopya veya yedekleme işi tarafından kullanılıyor; silinemez.")
+    expect(alert).toHaveTextContent('Bağlantı silinmedi')
+    expect(alert).toHaveTextContent('Ne yapmalı')
     expect(api.deleteTenantConnection).toHaveBeenCalledWith('tenant-a', 'conn-local')
   })
 
