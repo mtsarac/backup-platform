@@ -5,18 +5,9 @@ import { FormDialog } from '@/components/ui/form-dialog'
 import { inputClass, selectClass } from '@/components/ui/form-styles'
 import { useSaveBandwidthProfile } from './hooks'
 import type { BandwidthProfile, TransferScheduleWindowDto } from './types'
-import { bandwidthUnits, formatBandwidth, parseBandwidth } from './units'
+import { DAYS } from './schedule'
+import { bandwidthUnits, formatBandwidth, parseBandwidth, unitLabel } from './units'
 import type { BandwidthUnitId } from './units'
-
-const DAYS = [
-  { value: 1, label: 'Pazartesi' },
-  { value: 2, label: 'Salı' },
-  { value: 3, label: 'Çarşamba' },
-  { value: 4, label: 'Perşembe' },
-  { value: 5, label: 'Cuma' },
-  { value: 6, label: 'Cumartesi' },
-  { value: 0, label: 'Pazar' },
-]
 
 export function ProfileDialog({ profile, minimum, maximum, onClose }: {
   profile?: BandwidthProfile | null; minimum: number; maximum: number; onClose: () => void
@@ -90,7 +81,7 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
             <Field label={tx("Gün")}>
               {control => (
                 <select {...control} className={selectClass} value={day} onChange={e => setDay(Number(e.target.value))}>
-                  {DAYS.map(d => <option key={d.value} value={d.value}>{tx(d.label)}</option>)}
+                  {DAYS.map(d => <option key={d.value} value={d.value}>{d.label()}</option>)}
                 </select>
               )}
             </Field>
@@ -105,7 +96,7 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
                 <div className="flex gap-1">
                   <input {...control} className={inputClass} value={rateText} disabled={pause} onChange={e => setRateText(e.target.value)} />
                   <select aria-label={tx("Hız Birimi")} className={selectClass} value={rateUnit} disabled={pause} onChange={e => setRateUnit(e.target.value as BandwidthUnitId)}>
-                    {bandwidthUnits.map(u => <option key={u.id} value={u.id}>{u.id}</option>)}
+                    {bandwidthUnits.map(u => <option key={u.id} value={u.id}>{unitLabel(u.id)}</option>)}
                   </select>
                 </div>
               )}
@@ -123,7 +114,7 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
               {windows.map((w, idx) => (
                 <div key={idx} className="flex items-center justify-between rounded border border-border px-3 py-1.5 text-xs">
                   <span>
-                    <strong>{tx(DAYS.find(d => d.value === w.dayOfWeek)?.label ?? '')}</strong>: {w.startTime.slice(0, 5)} - {w.endTime.slice(0, 5)} &rarr; {w.bytesPerSecond === 0 ? tx("Aktarımı Duraklat") : formatBandwidth(w.bytesPerSecond)}
+                    <strong>{DAYS.find(d => d.value === w.dayOfWeek)?.label()}</strong>: {w.startTime.slice(0, 5)} - {w.endTime.slice(0, 5)} &rarr; {w.bytesPerSecond === 0 ? tx("Aktarımı Duraklat") : formatBandwidth(w.bytesPerSecond)}
                   </span>
                   <button type="button" onClick={() => removeWindow(idx)} className="text-error hover:underline">{tx("Kaldır")}</button>
                 </div>

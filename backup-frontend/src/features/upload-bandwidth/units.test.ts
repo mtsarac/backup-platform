@@ -39,13 +39,13 @@ describe('upload bandwidth units (bits and bytes are never mixed)', () => {
   })
 
   it('shows 1,250,000 B/s as 10 Mbit/s and keeps byte units explicit', () => {
-    expect(formatBandwidth(1_250_000)).toBe('10 Mbit/s')
-    expect(formatBandwidth(1_000_000)).toBe('8 Mbit/s')
-    expect(formatBandwidth(10_000_000)).toBe('80 Mbit/s')
-    expect(formatBandwidth(16_000)).toBe('16 KB/s')
-    expect(formatBandwidth(16_001)).toBe('16.001 B/s')
-    expect(formatBandwidth(100_000_000_000)).toBe('800.000 Mbit/s')
-    expect(formatExactRate(1_250_000)).toBe('1.250.000 B/s')
+    expect(formatBandwidth(1_250_000)).toBe('10 Mbit/sn')
+    expect(formatBandwidth(1_000_000)).toBe('8 Mbit/sn')
+    expect(formatBandwidth(10_000_000)).toBe('80 Mbit/sn')
+    expect(formatBandwidth(16_000)).toBe('16 KB/sn')
+    expect(formatBandwidth(16_001)).toBe('16.001 B/sn')
+    expect(formatBandwidth(100_000_000_000)).toBe('800.000 Mbit/sn')
+    expect(formatExactRate(1_250_000)).toBe('1.250.000 B/sn')
   })
 
   it('round-trips representative values, including non-round ones', () => {

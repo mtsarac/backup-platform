@@ -23,6 +23,8 @@ function mount() {
 }
 const openTab = async (name: RegExp) => fireEvent.click(await screen.findByRole('tab', { name }))
 const row = (name: string) => screen.getByRole('row', { name: new RegExp(`^${name}`) })
+const technicalDetails = () => screen.getByText('Teknik ayrıntılar').closest('details')!
+const rawRate = /\d B\/sn/
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -34,20 +36,59 @@ beforeEach(() => {
 })
 
 describe('upload bandwidth page', () => {
-  it('shows tenant, agent and job limits with Unlimited for missing ones', async () => {
+  it('shows tenant, agent and job limits in a friendly unit, Unlimited for missing ones, and never a raw bytes-per-second value', async () => {
     mount()
-    expect(await screen.findByTestId('tenant-limit')).toHaveTextContent('100 Mbit/s (12.500.000 B/s)')
-    await openTab(/^(?:Agent|Ajan)/)
+    expect(await screen.findByTestId('tenant-limit')).toHaveTextContent('100 Mbit/sn')
+    expect(screen.getByTestId('tenant-limit')).not.toHaveTextContent(rawRate)
+    await openTab(/^Yedekleme bilgisayarları$/)
     expect(await screen.findByRole('row', { name: /^SQL-01/ })).toBeInTheDocument()
-    expect(row('SQL-01')).toHaveTextContent('10 Mbit/s (1.250.000 B/s)')
+    expect(row('SQL-01')).toHaveTextContent('10 Mbit/sn')
+    expect(row('SQL-01')).not.toHaveTextContent(rawRate)
     expect(row('SQL-02')).toHaveTextContent('Sınırsız')
-    await openTab(/^(?:Backup Job|Yedekleme İş)/)
-    expect(await screen.findByRole('row', { name: /^Günlük ERP/ })).toHaveTextContent('16 KB/s (16.000 B/s)')
+    await openTab(/^Yedekleme işleri$/)
+    expect(await screen.findByRole('row', { name: /^Günlük ERP/ })).toHaveTextContent('16 KB/sn')
+    expect(row('Günlük ERP')).not.toHaveTextContent(rawRate)
+  })
+
+  it('keeps the exact bytes per second under collapsed technical details on every tab', async () => {
+    mount()
+    await screen.findByTestId('tenant-limit')
+    expect(technicalDetails()).not.toHaveAttribute('open')
+    expect(within(technicalDetails()).getByText('12.500.000 B/sn')).toBeInTheDocument()
+    await openTab(/^Yedekleme bilgisayarları$/)
+    await screen.findByRole('row', { name: /^SQL-01/ })
+    expect(technicalDetails()).not.toHaveAttribute('open')
+    expect(within(technicalDetails()).getByText('1.250.000 B/sn')).toBeInTheDocument()
+    await openTab(/^Yedekleme işleri$/)
+    await screen.findByRole('row', { name: /^Günlük ERP/ })
+    expect(within(technicalDetails()).getByText('16.000 B/sn')).toBeInTheDocument()
+  })
+
+  it('explains in plain words, outside the technical details, which limit wins and what is never limited', async () => {
+    mount()
+    const help = await screen.findByRole('region', { name: 'Hangi sınır geçerli?' })
+    expect(help.closest('details')).toBeNull()
+    expect(help).toHaveTextContent(/geri yükleme/i)
+    expect(help).not.toHaveTextContent(rawRate)
+  })
+
+  it('shows what will be saved in the limit dialog only as an exact value under technical details', async () => {
+    mount()
+    await openTab(/^Yedekleme bilgisayarları$/)
+    fireEvent.click(await screen.findByRole('button', { name: 'SQL-01 yükleme hız sınırını düzenle' }))
+    const dialog = await screen.findByRole('dialog')
+    const details = within(dialog).getByText('Teknik ayrıntılar').closest('details')!
+    expect(details).not.toHaveAttribute('open')
+    expect(within(details).getByText('1.250.000 B/sn')).toBeInTheDocument()
+    fireEvent.change(within(dialog).getByLabelText('Hız sınırı'), { target: { value: '2,5' } })
+    fireEvent.change(within(dialog).getByLabelText('Birim'), { target: { value: 'MB/s' } })
+    expect(within(details).getByText('2.500.000 B/sn')).toBeInTheDocument()
+    expect(within(dialog).queryByText(rawRate, { ignore: 'details *' })).not.toBeInTheDocument()
   })
 
   it('saves an agent limit in bytes per second after unit conversion', async () => {
     mount()
-    await openTab(/^(?:Agent|Ajan)/)
+    await openTab(/^Yedekleme bilgisayarları$/)
     fireEvent.click(await screen.findByRole('button', { name: 'SQL-02 yükleme hız sınırını düzenle' }))
     const dialog = await screen.findByRole('dialog')
     fireEvent.click(within(dialog).getByLabelText("Sınırsız (sınır yok)"))
@@ -60,7 +101,7 @@ describe('upload bandwidth page', () => {
 
   it('opens an existing limit in its clean unit and removes it with Unlimited (null)', async () => {
     mount()
-    await openTab(/^(?:Agent|Ajan)/)
+    await openTab(/^Yedekleme bilgisayarları$/)
     fireEvent.click(await screen.findByRole('button', { name: 'SQL-01 yükleme hız sınırını düzenle' }))
     const dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByLabelText('Hız sınırı')).toHaveValue('10')
@@ -73,7 +114,7 @@ describe('upload bandwidth page', () => {
 
   it('blocks out-of-range values client-side', async () => {
     mount()
-    await openTab(/^(?:Backup Job|Yedekleme İş)/)
+    await openTab(/^Yedekleme işleri$/)
     fireEvent.click(await screen.findByRole('button', { name: 'Günlük ERP yükleme hız sınırını düzenle' }))
     const dialog = await screen.findByRole('dialog')
     fireEvent.change(within(dialog).getByLabelText('Hız sınırı'), { target: { value: '0,1' } })
@@ -93,14 +134,14 @@ describe('upload bandwidth page', () => {
   it('searches Backup Jobs and pages locally in groups of 25', async () => {
     jobs.mockResolvedValue(Array.from({ length: 26 }, (_, index) => ({ id: `job-${index + 1}`, name: `Backup ${String(index + 1).padStart(2, '0')}`, agentName: 'SQL-01' })))
     mount()
-    await openTab(/^(?:Backup Job|Yedekleme İş)/)
+    await openTab(/^Yedekleme işleri$/)
     await screen.findByRole('row', { name: /^Backup 01/ })
     expect(screen.getAllByRole('row')).toHaveLength(26)
     expect(screen.queryByRole('row', { name: /^Backup 26/ })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Sonraki' }))
     expect(screen.getByRole('row', { name: /^Backup 26/ })).toBeInTheDocument()
     expect(screen.queryByRole('row', { name: /^Backup 01/ })).not.toBeInTheDocument()
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Yedekleme İşi ara' }), { target: { value: 'Backup 01' } })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Yedekleme işi ara' }), { target: { value: 'Backup 01' } })
     expect(screen.getByRole('row', { name: /^Backup 01/ })).toBeInTheDocument()
     expect(screen.queryByRole('row', { name: /^Backup 26/ })).not.toBeInTheDocument()
     expect(screen.getAllByRole('row')).toHaveLength(2)
@@ -124,7 +165,7 @@ describe('upload bandwidth page', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }))
     await waitFor(() => expect(saveBandwidthProfile).toHaveBeenCalledWith('tenant-a', { id: undefined, name: profile.name, timeZoneId: 'UTC', windows: profile.windows }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(await screen.findByText('09:00 - 18:00: Aktarımı Duraklat')).toBeInTheDocument()
+    expect(await screen.findByText('Pazartesi 09:00–18:00: Aktarımı Duraklat')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Düzenle' }))
     dialog = await screen.findByRole('dialog')
     expect(within(dialog).getByText(/09:00 - 18:00 → Aktarımı Duraklat/)).toBeInTheDocument()
@@ -143,12 +184,41 @@ describe('upload bandwidth page', () => {
     expect(within(dialog).getByRole('button', { name: /Pencereyi Listeye Ekle/ })).toBeEnabled()
   })
 
+  it('reads each profile as a plain schedule, with the exact rates, time zone and ID under technical details', async () => {
+    const profile = {
+      id: 'profile-1', name: 'Mesai', timeZoneId: 'Europe/Istanbul',
+      windows: [1, 2, 3, 4, 5].map(dayOfWeek => ({ dayOfWeek, startTime: '09:00:00', endTime: '18:00:00', bytesPerSecond: 1_250_000 }))
+        .concat([6, 0].map(dayOfWeek => ({ dayOfWeek, startTime: '09:00:00', endTime: '18:00:00', bytesPerSecond: 0 }))),
+    }
+    vi.mocked(getBandwidthProfiles).mockResolvedValue([profile])
+    mount()
+    await openTab(/^Profiller$/)
+    expect(await screen.findByText('Hafta içi 09:00–18:00: 10 Mbit/sn')).toBeInTheDocument()
+    expect(screen.getByText('Hafta sonu 09:00–18:00: Aktarımı Duraklat')).toBeInTheDocument()
+    expect(screen.getByText('Diğer saatlerde sınırsız.')).toBeInTheDocument()
+    expect(screen.queryByText(rawRate, { ignore: 'details *' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Europe/Istanbul', { ignore: 'details *' })).not.toBeInTheDocument()
+    expect(technicalDetails()).not.toHaveAttribute('open')
+    expect(within(technicalDetails()).getByText('profile-1')).toBeInTheDocument()
+    expect(within(technicalDetails()).getByText('Europe/Istanbul')).toBeInTheDocument()
+    expect(within(technicalDetails()).getAllByText('1.250.000 B/sn')).toHaveLength(5)
+  })
 
-  it('is read-only without administrator rights', async () => {
+  it('guides to the one primary action when no profile exists, or to the administrator without permission', async () => {
+    mount()
+    await openTab(/^Profiller$/)
+    expect(await screen.findByRole('button', { name: 'Yeni Profil' })).toBeInTheDocument()
+    expect(screen.queryByText('Yöneticinize danışın')).not.toBeInTheDocument()
+  })
+
+  it('is read-only without administrator rights and says whom to ask', async () => {
     access.canAdmin = false
     mount()
     expect(await screen.findByTestId('tenant-limit')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /düzenle/ })).not.toBeInTheDocument()
-    expect(screen.getByText(/yalnızca (?:Owner \/ Admin|Sahip \/ Yönetici) değiştirebilir/)).toBeInTheDocument()
+    expect(screen.getByText(/Yöneticinize danışın/)).toBeInTheDocument()
+    await openTab(/^Profiller$/)
+    expect(await screen.findByText('Yöneticinize danışın')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Yeni Profil' })).not.toBeInTheDocument()
   })
 })

@@ -34,7 +34,7 @@ export function AssignProfileDialog({ target, name, currentProfileId, onClose }:
           <select {...control} className={selectClass} value={selectedProfileId} onChange={e => setSelectedProfileId(e.target.value)}>
             <option value="">{tx("Profil Yok (Yalnızca Statik Limit / Limitsiz)")}</option>
             {(profiles.data ?? []).map(p => (
-              <option key={p.id} value={p.id}>{p.name} ({p.timeZoneId})</option>
+              <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
         )}
