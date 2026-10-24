@@ -1,16 +1,16 @@
+import { useState } from 'react'
 import { tx, useLanguage } from '@/lib/i18n'
-import { QueryState } from '@/components/data/query-state'
 import { Button } from '@/components/ui/button'
+import { TypedConfirmDialog } from '@/components/ui/confirm-dialog'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
-import { PrecheckResults } from './precheck-results'
+import { TechnicalDetails } from '@/components/ui/technical-details'
 import { restoreModeLabel } from './presentation'
 import type { BackupArtifact } from '@/features/artifacts/types'
-import type { RestoreMode, RestoreTarget, RestoreTargetAgent, RestoreView } from './types'
+import type { RestoreMode, RestoreTarget, RestoreTargetAgent } from './types'
 import { ApiError } from '@/lib/api/client'
 
 interface RestoreConfirmStepProps {
-  engineName: string
   isPg: boolean
   artifact: BackupArtifact
   mode: RestoreMode
@@ -18,69 +18,91 @@ interface RestoreConfirmStepProps {
   activeAgent: RestoreTargetAgent | undefined
   selectedAgentId: string
   effectiveTarget: RestoreTarget
-  confirmOverwriteInput: string
-  precheckData: RestoreView | undefined
-  precheckLoading: boolean
-  precheckDisplayError: unknown
-  precheckError: unknown
-  precheckRetryable: boolean
-  precheckFailed: boolean
   precheckPassed: boolean
   precheckStarting: boolean
   restoreStarting: boolean
   executionError: unknown
   executionRetryable: boolean
   eligibleForRestore: boolean
-  replaceConfirmed: boolean
-  onRunPrecheck: (fresh?: boolean) => void
   onBack: () => void
   onStart: () => void
 }
 
-export function RestoreConfirmStep({ engineName, isPg, artifact, mode, targetDatabaseName, activeAgent, selectedAgentId, effectiveTarget, confirmOverwriteInput, precheckData, precheckLoading, precheckDisplayError, precheckError, precheckRetryable, precheckFailed, precheckPassed, precheckStarting, restoreStarting, executionError, executionRetryable, eligibleForRestore, replaceConfirmed, onRunPrecheck, onBack, onStart }: RestoreConfirmStepProps) {
+export function RestoreConfirmStep({ isPg, artifact, mode, targetDatabaseName, activeAgent, selectedAgentId, effectiveTarget, precheckPassed, precheckStarting, restoreStarting, executionError, executionRetryable, eligibleForRestore, onBack, onStart }: RestoreConfirmStepProps) {
   useLanguage()
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const replacing = mode === 'ReplaceExistingDatabase'
+  const databaseName = targetDatabaseName.trim()
+  const retryLabel = executionRetryable ? tx('Tekrar dene') : undefined
+  // A failure that is not an API answer leaves it unknown whether the restore began; retrying is safe because the same request key is reused.
+  const failure = executionError == null ? undefined : executionError instanceof ApiError ? executionError : {
+    what: tx('Geri yükleme başlatılamadı.'),
+    dataImpact: tx('Geri yüklemenin başlayıp başlamadığını geri yükleme listesinden kontrol edin.'),
+    action: tx('Aynı işlemi tekrar deneyin; yeniden denemeler ikinci bir geri yükleme oluşturmaz.'),
+  }
+
+  function start() {
+    if (replacing) setConfirmOpen(true)
+    else onStart()
+  }
+
   return (
     <div className="space-y-5">
-      <Section title={tx("Ön Kontrol (Precheck) Sonuçları")} description={tx("Hedef {0} üzerinde hiçbir değişiklik yapılmadan çalıştırılan uyumluluk ve güvenlik kontrolleri.", { "0": engineName })}>
-        <QueryState isPending={precheckLoading && !precheckData} error={precheckDisplayError}>
-          {precheckData && <PrecheckResults data={precheckData} failed={precheckFailed} passed={precheckPassed}
-            onRecheck={() => onRunPrecheck(true)} recheckDisabled={precheckStarting || restoreStarting} />}
-        </QueryState>
-        {precheckError != null && (
-          <Button variant="outline" size="sm" onClick={() => onRunPrecheck()} disabled={precheckStarting || restoreStarting}>
-            {precheckRetryable ? tx('Tekrar Dene') : tx('Yeniden Kontrol Et')}
-          </Button>
-        )}
-      </Section>
-
-      <Section title={tx("Başlatmadan önce")} description={tx("Onayınızdan sonra Agent hedef {0} üzerinde Restore çalıştırır.", { "0": engineName })}>
+      <Section title={tx("Onay")} description={tx("Bilgileri kontrol edin. Onayınızdan sonra seçtiğiniz yedekleme bilgisayarı geri yüklemeyi başlatır.")}>
         <div className="space-y-4">
           <Facts>
-            <Fact label={tx("Kaynak Database")}>{artifact.databaseName ?? tx('Bilinmeyen Database')}</Fact>
-            <Fact label={tx("Hedef Database")}>{targetDatabaseName}</Fact>
-            <Fact label={tx("Agent")}>{activeAgent?.hostName ?? selectedAgentId}</Fact>
-            <Fact label={tx("Hedef {0}", { "0": engineName })}>{effectiveTarget.host}{effectiveTarget.port ? `:${effectiveTarget.port}` : ''}</Fact>
-            <Fact label={tx("Restore modu")}>{restoreModeLabel(mode)}</Fact>
+            <Fact label={tx("Yedeklenen veritabanı")}>{artifact.databaseName ?? tx('Bilinmeyen veritabanı')}</Fact>
+            <Fact label={tx("Geri yüklenecek veritabanı")}>{databaseName}</Fact>
+            <Fact label={tx("Yedekleme bilgisayarı")}>{activeAgent?.hostName ?? selectedAgentId}</Fact>
+            <Fact label={tx("Yöntem")}>{restoreModeLabel(mode)}</Fact>
             <Fact label={tx("Ön kontrol")}>{precheckPassed ? tx('Geçti') : tx('Başarılı ön kontrol bekleniyor')}</Fact>
           </Facts>
-          {mode === 'ReplaceExistingDatabase' && <Notice tone="warning" title={tx("Mevcut Database'in üzerine yazılacak")}>
-            <p>{isPg ? tx('Mevcut Database bp_old_* adıyla korunur ve doğrulanmış geçici Database hedef adını alır. Eski Database otomatik silinmez; operatör kurtarma ve temizlikten sorumludur.') : <><strong className="break-all">{targetDatabaseName}</strong>{' '}{tx("içindeki eski veriler kalıcı olarak kaybolur. İşlem geri alınamaz; iptal etmek eski içeriği geri getirmez.")}</>}</p>
-            <p className="mt-1">{tx("Database adı ile verdiğiniz onay:")}{' '}<code className="break-all">{confirmOverwriteInput}</code></p>
+          {replacing && <Notice tone="warning" title={tx("Mevcut veritabanının yerine geçilecek")}>
+            <p>{isPg
+              ? tx('Mevcut veritabanı silinmez; yedek olarak kenara alınır ve yerine doğrulanmış kopya konur. Eski veritabanını temizlemek sizin sorumluluğunuzdadır.')
+              : tx('Seçtiğiniz veritabanındaki güncel veriler kalıcı olarak kaybolur. İşlem geri alınamaz; iptal etmek eski içeriği geri getirmez.')}</p>
+            <p className="mt-1">{tx("Başlatmadan önce veritabanı adını yazarak onaylamanız istenecek.")}</p>
           </Notice>}
+          <TechnicalDetails items={[
+            { label: tx('Hedef sunucu'), value: `${effectiveTarget.host}${effectiveTarget.port ? `:${effectiveTarget.port}` : ''}` },
+            { label: tx('Yedekleme bilgisayarı kimliği'), value: selectedAgentId },
+            { label: tx('Yedek dosyası kimliği'), value: artifact.id },
+          ]} />
         </div>
       </Section>
-      {executionError != null && (executionError instanceof ApiError ? <ErrorNotice error={executionError} scope="restore" /> : <ErrorNotice what={tx('Geri yükleme başlatılamadı.')} dataImpact={tx('Geri yüklemenin başlayıp başlamadığını geri yükleme listesinden kontrol edin.')} action={tx('Aynı işlemi tekrar deneyin; yeniden denemeler ikinci bir geri yükleme oluşturmaz.')} />)}
+      {failure && !confirmOpen && (failure instanceof ApiError ? <ErrorNotice error={failure} scope="restore" /> : <ErrorNotice {...failure} />)}
 
       <div className="flex flex-wrap justify-between gap-3">
-        <Button variant="outline" onClick={() => onBack()}>{tx("← Mod Ayarlarına Dön")}</Button>
+        <Button variant="outline" onClick={() => onBack()}>{tx("← Geri")}</Button>
         <Button
-          variant={mode === 'ReplaceExistingDatabase' ? 'destructive' : 'default'}
-          disabled={!eligibleForRestore || !precheckPassed || precheckFailed || !replaceConfirmed || precheckStarting || restoreStarting}
-          onClick={() => onStart()}
+          variant={replacing ? 'destructive' : 'default'}
+          disabled={!eligibleForRestore || !precheckPassed || precheckStarting || restoreStarting}
+          onClick={start}
         >
-          {restoreStarting ? tx('Geri Yükleme Başlatılıyor…') : executionRetryable ? tx('Tekrar Dene') : tx("{0} Olarak Restore Başlat", { "0": restoreModeLabel(mode) })}
+          {restoreStarting ? tx('Geri yükleme başlatılıyor…') : retryLabel ?? tx("Geri yüklemeyi başlat")}
         </Button>
       </div>
+
+      {replacing && <TypedConfirmDialog
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        title={tx("Mevcut veritabanı değiştirilsin mi?")}
+        consequence={{
+          what: isPg
+            ? tx('{0} veritabanı yedekteki verilerle değiştirilir; eski veritabanı silinmeden kenara alınır.', { "0": databaseName })
+            : tx('{0} veritabanındaki güncel veriler silinir ve yedekteki verilerle değiştirilir.', { "0": databaseName }),
+          who: tx('Bu veritabanını kullanan herkes ve uygulama etkilenir.'),
+          reversible: isPg
+            ? tx('Kısmen: eski veritabanı kenarda kalır, ancak geri almak elle yapılır.')
+            : tx('Hayır. Eski veriler geri getirilemez.'),
+        }}
+        name={databaseName}
+        pending={restoreStarting}
+        error={failure}
+        errorScope="restore"
+        onConfirm={onStart}
+        confirmLabel={retryLabel ?? tx("Üzerine yaz ve geri yükle")}
+      />}
     </div>
   )
 }

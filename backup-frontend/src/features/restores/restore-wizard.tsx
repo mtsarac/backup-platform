@@ -9,6 +9,7 @@ import { ApiError } from '@/lib/api/client'
 import { RestoreSourceSummary } from './restore-source-summary'
 import { RestoreTargetStep } from './restore-target-step'
 import { RestoreModeStep } from './restore-mode-step'
+import { RestoreCheckStep } from './restore-check-step'
 import { RestoreConfirmStep } from './restore-confirm-step'
 
 export interface RestoreWizardProps {
@@ -49,7 +50,6 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
     const name = artifact.databaseName ? `${artifact.databaseName}_restored` : 'RestoredDB'
     return isPg && new TextEncoder().encode(name).length > 63 ? 'restored_db' : name
   })
-  const [confirmOverwriteInput, setConfirmOverwriteInput] = useState<string>('')
   const [options, setOptions] = useState<RestoreOptions>({
     terminateActiveConnections: false,
     verifyChecksum: true,
@@ -108,7 +108,6 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
   const precheckItems = precheckData?.result?.preCheck ?? []
   const precheckFailed = precheckData?.status === 'Failed' || precheckItems.some((item) => item.status === 'Failed')
   const precheckPassed = precheckData?.status === 'Succeeded' && !precheckFailed
-  const replaceConfirmed = mode !== 'ReplaceExistingDatabase' || (confirmOverwriteInput.trim() === targetDatabaseName.trim() && targetDatabaseName.trim().length > 0)
 
   function invalidateExecution() {
     restoreAttemptRef.current = null
@@ -128,19 +127,15 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
     setDiscoveryOperation(null)
     setDiscoveryError(null)
     invalidatePrecheck()
-    setConfirmOverwriteInput('')
-
   }
 
   function changeDatabaseName(value: string) {
     invalidatePrecheck()
-    setConfirmOverwriteInput('')
     setTargetDatabaseName(value)
   }
 
   function changeOptions(value: RestoreOptions) {
     invalidatePrecheck()
-    setConfirmOverwriteInput('')
     setOptions(value)
   }
 
@@ -163,8 +158,6 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
           },
         }
     invalidatePrecheck()
-    setConfirmOverwriteInput('')
-
     setDiscoveryOperation(null)
     setDiscoveryError(null)
     discoveryAttemptRef.current = attempt
@@ -182,7 +175,7 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
   }
 
   async function triggerPrecheck(fresh = false) {
-    if (!eligibleForRestore || !targetValid || !databaseNameValid || !replaceConfirmed || pendingRef.current.precheck || pendingRef.current.execution) return
+    if (!eligibleForRestore || !targetValid || !databaseNameValid || pendingRef.current.precheck || pendingRef.current.execution) return
     const previous = precheckAttemptRef.current
     const attempt: RequestAttempt<StartRestorePrecheckVariables> = !fresh && previous && precheckRetryable && previous.fingerprint === precheckFingerprint
       ? previous
@@ -211,7 +204,7 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
       if (precheckAttemptRef.current !== attempt) return
       setPrecheckDataState(result)
       setPrecheckOperation({ fingerprint: attempt.fingerprint, id: result.id })
-      setStep(4)
+      setStep(3)
     } catch (error) {
       if (precheckAttemptRef.current !== attempt) return
       setPrecheckError(error)
@@ -221,8 +214,8 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
   }
 
   async function triggerExecution() {
-    if (!eligibleForRestore || !precheckPassed || !replaceConfirmed || !currentPrecheck || !precheckOperationId || pendingRef.current.precheck || pendingRef.current.execution) return
-    const fingerprint = JSON.stringify([precheckFingerprint, precheckOperationId, confirmOverwriteInput.trim()])
+    if (!eligibleForRestore || !precheckPassed || !currentPrecheck || !precheckOperationId || pendingRef.current.precheck || pendingRef.current.execution) return
+    const fingerprint = JSON.stringify([precheckFingerprint, precheckOperationId])
     const previous = restoreAttemptRef.current
     const attempt: RequestAttempt<StartRestoreVariables> = previous && executionRetryable && previous.fingerprint === fingerprint
       ? previous
@@ -236,7 +229,7 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
               target: { ...effectiveTarget },
               databaseName: targetDatabaseName.trim(),
               mode,
-              confirmOverwrite: mode === 'ReplaceExistingDatabase' ? confirmOverwriteInput.trim() : undefined,
+              confirmOverwrite: mode === 'ReplaceExistingDatabase' ? targetDatabaseName.trim() : undefined,
               options: { ...options },
               precheckId: precheckOperationId,
             },
@@ -272,17 +265,15 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
     void triggerDiscovery()
   }
 
-  function changeConfirmOverwrite(value: string) {
-    invalidateExecution()
-    setConfirmOverwriteInput(value)
-  }
+  // Only a passed check that matches the current settings opens the confirmation step.
+  const shownStep = step === 4 && !precheckPassed ? 3 : step
 
   return (
     <div className="space-y-6">
-      <Stepper steps={[tx('Hedef ve Instance'), tx('Restore modu'), tx('Ön kontrol (Precheck)'), tx('Onay ve başlat')]} current={step - 1} />
+      <Stepper steps={[tx('Nereye'), tx('Nasıl'), tx('Kontrol'), tx('Onay')]} current={shownStep - 1} />
       <RestoreSourceSummary artifact={artifact} isPg={isPg} />
 
-      {step === 1 && (
+      {shownStep === 1 && (
         <RestoreTargetStep
           tenantId={tenantId}
           instancePrefix={instancePrefix}
@@ -305,15 +296,13 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
         />
       )}
 
-      {step === 2 && (
+      {shownStep === 2 && (
         <RestoreModeStep
           instancePrefix={instancePrefix}
           isPg={isPg}
-          engineName={engineName}
           mode={mode}
           targetDatabaseName={targetDatabaseName}
           databaseNameValid={databaseNameValid}
-          confirmOverwriteInput={confirmOverwriteInput}
           options={options}
           discoveryData={discoveryData}
           discoveryError={discoveryError}
@@ -328,29 +317,19 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
           restoreStarting={startRestore.isPending}
           eligibleForRestore={Boolean(eligibleForRestore)}
           targetValid={targetValid}
-          replaceConfirmed={replaceConfirmed}
           onSelectNewDatabase={selectNewDatabase}
           onSelectReplaceExisting={selectReplaceExisting}
           onRefreshDiscovery={() => void triggerDiscovery()}
           changeDatabaseName={changeDatabaseName}
-          changeConfirmOverwrite={changeConfirmOverwrite}
           changeOptions={changeOptions}
           onBack={() => setStep(1)}
           onRunPrecheck={() => void triggerPrecheck()}
         />
       )}
 
-      {step >= 3 && (
-        <RestoreConfirmStep
+      {shownStep === 3 && (
+        <RestoreCheckStep
           engineName={engineName}
-          isPg={isPg}
-          artifact={artifact}
-          mode={mode}
-          targetDatabaseName={targetDatabaseName}
-          activeAgent={activeAgent}
-          selectedAgentId={selectedAgentId}
-          effectiveTarget={effectiveTarget}
-          confirmOverwriteInput={confirmOverwriteInput}
           precheckData={precheckData}
           precheckLoading={startPrecheck.isPending || (!!precheckOperationId && precheckQuery.isPending)}
           precheckDisplayError={precheckError || (currentPrecheck && precheckQuery.error)}
@@ -360,12 +339,28 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
           precheckPassed={precheckPassed}
           precheckStarting={startPrecheck.isPending}
           restoreStarting={startRestore.isPending}
+          onRunPrecheck={(fresh) => void triggerPrecheck(fresh)}
+          onBack={() => setStep(2)}
+          onContinue={() => setStep(4)}
+        />
+      )}
+
+      {shownStep === 4 && (
+        <RestoreConfirmStep
+          isPg={isPg}
+          artifact={artifact}
+          mode={mode}
+          targetDatabaseName={targetDatabaseName}
+          activeAgent={activeAgent}
+          selectedAgentId={selectedAgentId}
+          effectiveTarget={effectiveTarget}
+          precheckPassed={precheckPassed}
+          precheckStarting={startPrecheck.isPending}
+          restoreStarting={startRestore.isPending}
           executionError={executionError}
           executionRetryable={executionRetryable}
           eligibleForRestore={Boolean(eligibleForRestore)}
-          replaceConfirmed={replaceConfirmed}
-          onRunPrecheck={(fresh) => void triggerPrecheck(fresh)}
-          onBack={() => setStep(2)}
+          onBack={() => setStep(3)}
           onStart={() => void triggerExecution()}
         />
       )}

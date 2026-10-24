@@ -2,6 +2,7 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { CheckCircle2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Section } from '@/components/ui/section'
+import { TechnicalDetails } from '@/components/ui/technical-details'
 import { inputClass, selectClass } from '@/components/ui/form-styles'
 import { StoredLoginPanel } from './stored-login-panel'
 import type { RestoreTargetAgent, RestoreTarget, RestoreTargetsResponse } from './types'
@@ -32,9 +33,9 @@ export function RestoreTargetStep({ tenantId, instancePrefix, isPg, engineName, 
   useLanguage()
   return (
     <div className="space-y-5">
-      <Section title={tx("1. Hedef Agent Seçimi")} description={tx("Backup dosyasını alıp {0} sunucusuna aktaracak Agent'ı seçin.", { "0": engineName })}>
+      <Section title={tx("Hangi yedekleme bilgisayarı geri yüklesin?")} description={tx("Neden soruluyor? Yedek dosyasını alıp {0} sunucusuna aktaracak yedekleme bilgisayarını seçmeniz gerekir.", { "0": engineName })}>
         <div className="space-y-3">
-          <label htmlFor={`${instancePrefix}-agent`} className="block text-sm font-medium">{tx("Agent")}</label>
+          <label htmlFor={`${instancePrefix}-agent`} className="block text-sm font-medium">{tx("Yedekleme bilgisayarı")}</label>
           <select
             id={`${instancePrefix}-agent`}
             className={`${selectClass} w-full`}
@@ -43,7 +44,7 @@ export function RestoreTargetStep({ tenantId, instancePrefix, isPg, engineName, 
           >
             {targets.agents.map((ag) => (
               <option key={ag.agentId} value={ag.agentId}>
-                {ag.hostName ?? ag.agentId} ({tx(ag.connectivity)}) — {ag.canRestore ? tx('Restore destekliyor') : tx('Restore desteği yok')}
+                {ag.hostName ?? ag.agentId} ({tx(ag.connectivity)}) — {ag.canRestore ? tx('Geri yüklemeyi destekliyor') : tx('Geri yükleme desteği yok')}
               </option>
             ))}
           </select>
@@ -53,28 +54,32 @@ export function RestoreTargetStep({ tenantId, instancePrefix, isPg, engineName, 
               {activeAgent.sourceEligible && activeAgent.canRestore ? (
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="size-4 shrink-0" />
-                    <span>{tx("Bu Agent bu backup için uygun (")}{activeAgent.sourceAccess === 'AgentLocal' ? tx('Yerel Replika') : activeAgent.sourceAccess === 'BackendRelayed' ? tx('Uzak Depolama (SFTP / Google Drive Relay)') : tx('Merkezi Depolama')}).</span>
+                    <CheckCircle2 aria-hidden="true" className="size-4 shrink-0" />
+                    <span>{tx("Bu bilgisayar bu yedek dosyasına ulaşabilir.")}</span>
                   </div>
                   <p className="ml-6 text-xs text-text-muted">{activeAgent.sourceAccess === 'AgentLocal'
-                    ? tx('Yerel replika yalnızca onu barındıran hedef Agent tarafından okunabilir; backend yerel dosyayı kontrol edemez.')
-                    : tx("Kaynak erişimi kontrol edilirken, Agent'a devredilmeden önce backend'in okuyabildiği alternatif doğrulanmış replika seçilebilir.")}{' '}{tx("Agent'a devir, staging veya hedef değişikliği sonrasında Restore otomatik yeniden başlatılmaz.")}</p>
+                    ? tx('Yedek yalnızca bu bilgisayarın kendi diskinde olduğu için geri yüklemeyi başka bir bilgisayar yapamaz.')
+                    : tx('Bilgisayar veya hedef değişirse geri yükleme kendiliğinden yeniden başlamaz.')}</p>
                 </div>
               ) : (
                 <div className="flex items-start gap-2">
-                  <XCircle className="size-4 shrink-0 mt-0.5" />
+                  <XCircle aria-hidden="true" className="size-4 shrink-0 mt-0.5" />
                   <div>
-                    <p className="font-medium">{tx("Bu Agent seçilemez veya backup'a erişemez:")}</p>
+                    <p className="font-medium">{tx("Bu bilgisayar seçilemez veya yedek dosyasına ulaşamaz:")}</p>
                     <p className="mt-1 text-sm">{failureMessage(activeAgent.rejectionCode, 'restore')}</p>
                   </div>
                 </div>
               )}
             </div>
           )}
+          {activeAgent && <TechnicalDetails items={[
+            { label: tx('Yedekleme bilgisayarı kimliği'), value: activeAgent.agentId },
+            ...(activeAgent.sourceAccess ? [{ label: tx('Yedek erişim yolu'), value: activeAgent.sourceAccess }] : []),
+          ]} />}
         </div>
       </Section>
 
-      <Section title={tx("2. Hedef {0}", { "0": engineName })} description={tx("Geri yüklemenin yapılacağı {0} bağlantı referansı.", { "0": engineName })}>
+      <Section title={tx("Hangi {0} sunucusuna geri yüklensin?", { "0": engineName })} description={tx("Neden soruluyor? Geri yüklemenin yapılacağı {0} sunucusunun bağlantı bilgisi gerekir.", { "0": engineName })}>
         <div className="space-y-4">
           <div className="flex flex-wrap gap-4 text-sm">
             <label className="flex items-center gap-2">
@@ -85,7 +90,7 @@ export function RestoreTargetStep({ tenantId, instancePrefix, isPg, engineName, 
                 onChange={() => { invalidateDiscovery(); setTargetType('configured') }}
                 disabled={targets.targets.length === 0}
               />
-              <span>{tx("Kayıtlı İş Bağlantısı (")}{targets.targets.length})</span>
+              <span>{tx("Yedekleme işlerinde kayıtlı bağlantı ({0})", { "0": targets.targets.length })}</span>
             </label>
             <label className="flex items-center gap-2">
               <input
@@ -94,7 +99,7 @@ export function RestoreTargetStep({ tenantId, instancePrefix, isPg, engineName, 
                 checked={targetType === 'custom'}
                 onChange={() => { invalidateDiscovery(); setTargetType('custom') }}
               />
-              <span>{tx("Özel Bağlantı")}</span>
+              <span>{tx("Başka bir sunucu")}</span>
             </label>
           </div>
 
@@ -140,28 +145,31 @@ export function RestoreTargetStep({ tenantId, instancePrefix, isPg, engineName, 
                 />
               </div>
               {!customTarget.integratedSecurity && <StoredLoginPanel tenantId={tenantId} agentId={selectedAgentId} idPrefix={`${instancePrefix}-login`} reference={customTarget.databaseCredentialReference} onStored={(reference) => changeCustomTarget({ ...customTarget, databaseCredentialReference: reference })} />}
-              <div className="flex flex-wrap items-center gap-4 text-sm sm:col-span-2">
-                                    <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={customTarget.integratedSecurity} onChange={(e) => changeCustomTarget({ ...customTarget, integratedSecurity: e.target.checked, databaseCredentialReference: null })} />
-                  <span>{tx("Windows kimlik doğrulaması")}</span>
-                </label>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={customTarget.encrypt}
-                    onChange={(e) => changeCustomTarget({ ...customTarget, encrypt: e.target.checked })}
-                  />
-                  <span>{tx("Bağlantıyı Şifrele")}</span>
-                </label>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={customTarget.trustServerCertificate}
-                    onChange={(e) => changeCustomTarget({ ...customTarget, trustServerCertificate: e.target.checked })}
-                  />
-                  <span>{tx("Sunucu Sertifikasına Güven")}</span>
-                </label>
-              </div>
+              <label className="flex items-center gap-2 text-sm sm:col-span-2">
+                <input type="checkbox" checked={customTarget.integratedSecurity} onChange={(e) => changeCustomTarget({ ...customTarget, integratedSecurity: e.target.checked, databaseCredentialReference: null })} />
+                <span>{tx("Windows kimlik doğrulaması")}</span>
+              </label>
+              <details className="rounded-lg border border-border bg-surface-2 text-sm sm:col-span-2">
+                <summary className="cursor-pointer select-none rounded-lg px-3 py-2 font-medium text-text-heading">{tx("Gelişmiş bağlantı ayarları")}</summary>
+                <div className="flex flex-wrap items-center gap-4 border-t border-border px-3 py-2">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={customTarget.encrypt}
+                      onChange={(e) => changeCustomTarget({ ...customTarget, encrypt: e.target.checked })}
+                    />
+                    <span>{tx("Bağlantıyı Şifrele")}</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={customTarget.trustServerCertificate}
+                      onChange={(e) => changeCustomTarget({ ...customTarget, trustServerCertificate: e.target.checked })}
+                    />
+                    <span>{tx("Sunucu Sertifikasına Güven")}</span>
+                  </label>
+                </div>
+              </details>
             </div>
           )}
         </div>
@@ -171,7 +179,7 @@ export function RestoreTargetStep({ tenantId, instancePrefix, isPg, engineName, 
         <Button
           disabled={!eligibleForRestore || !targetValid}
           onClick={() => onContinue()}
-        >{tx("Devam et: Restore Modu →")}</Button>
+        >{tx("Devam et →")}</Button>
       </div>
     </div>
   )
