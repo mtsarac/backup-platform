@@ -6769,7 +6769,6 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Etkinleştir: zamanlanmış yedekleme yeniden başlar.": {"tr":"Etkinleştir: zamanlanmış yedekleme yeniden başlar.","en":"Enable: scheduled backups start again."},
   "İş, yedekleme bilgisayarı veya veritabanı ara": {"tr":"İş, yedekleme bilgisayarı veya veritabanı ara","en":"Search by job, backup computer or database"},
   "Eşleşen sonuç yok": {"tr":"Eşleşen sonuç yok","en":"No matches"},
-  "Yedek dosyası": {"tr":"Yedek dosyası","en":"Backup file"},
   "Tüm yedek dosyaları": {"tr":"Tüm yedek dosyaları","en":"All backup files"},
   "Yedek dosyaları yüklenemedi": {"tr":"Yedek dosyaları yüklenemedi","en":"Backup files could not be loaded"},
   "Hedef veritabanı değiştirilmedi. Bu, veritabanının sağlığının kontrol edildiği anlamına gelmez.": {"tr":"Hedef veritabanı değiştirilmedi. Bu, veritabanının sağlığının kontrol edildiği anlamına gelmez.","en":"The target database was not changed. This does not mean its health was checked."},
