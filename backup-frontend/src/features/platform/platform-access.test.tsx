@@ -64,8 +64,8 @@ describe('PlatformAdminRoute guard', () => {
     renderPlatform(null, { routes: tree, user: platformAdmin })
     expect(await screen.findByRole('heading', { name: "Platform Gösterge Paneli" })).toBeInTheDocument()
     const nav = screen.getAllByRole('navigation', { name: "Platform gezinme menüsü" })[0]
-    for (const name of ['Gösterge Paneli', 'Çalışma Alanları', 'Kullanıcılar', 'Ajanlar', 'Denetim']) expect(within(nav).getByRole('link', { name })).toBeInTheDocument()
-    expect(within(nav).getByRole('link', { name: "Depolama Hedefleri" })).toHaveAttribute('href', '/platform/storage-connections')
+    for (const name of ['Platform özeti', 'Çalışma alanları', 'Kullanıcılar', 'Yedekleme bilgisayarları', 'Denetim kaydı']) expect(within(nav).getByRole('link', { name })).toBeInTheDocument()
+    expect(within(nav).getByRole('link', { name: "Depolama hedefleri" })).toHaveAttribute('href', '/platform/storage-connections')
     expect(within(nav).getByRole('link', { name: "Çalışma alanı arayüzüne dön" })).toHaveAttribute('href', '/')
     expect(screen.getAllByText("Platform Yönetimi").length).toBeGreaterThan(0)
     expect(screen.getByText("Platform Yöneticisi")).toBeInTheDocument()

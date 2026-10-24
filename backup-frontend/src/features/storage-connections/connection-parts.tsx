@@ -1,7 +1,7 @@
 import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 import { Badge } from '@/components/ui/badge'
 import { StatusPill } from '@/components/data/status-pill'
-import { capabilityLabel, connectionHealth, secretStatusLabel, testMessage } from './labels'
+import { capabilityLabel, connectionHealth, secretStatusLabel, platformLockState, testMessage } from './labels'
 import type { ConnectionTest, ConnectionView } from './types'
 import { formatBytes, formatDateTime } from '@/lib/format'
 
@@ -16,7 +16,10 @@ export function ConnectionState({ connection }: { connection: Pick<ConnectionVie
   return <div className="space-y-1">
     <StatusPill status={connection.effectiveEnabled ? 'Active' : 'Disabled'} />
     <span className="block text-xs text-text-muted">{tx("Sahip tercihi:")}{' '}{connection.enabled ? tx('Etkin') : tx('Devre dışı')}</span>
-    {connection.administrativelyDisabled && <StatusPill level="attention">{tx("Platform kilidi")}</StatusPill>}
+    {connection.administrativelyDisabled && <>
+      <StatusPill level="attention">{tx("Platform kilidi")}</StatusPill>
+      <span className="block text-xs text-text-muted">{tx(platformLockState)}</span>
+    </>}
   </div>
 }
 

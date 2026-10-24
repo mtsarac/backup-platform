@@ -6492,4 +6492,13 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Veritabanı bulma": {"tr":"Veritabanı bulma","en":"Database discovery"},
   "Depolama alanları": {"tr":"Depolama alanları","en":"Storage locations"},
   "Yükleme bant genişliği": {"tr":"Yükleme bant genişliği","en":"Upload bandwidth"},
+  "Platform özeti": {"tr":"Platform özeti","en":"Platform overview"},
+  "Çalışma alanları": {"tr":"Çalışma alanları","en":"Workspaces"},
+  "Kota ilkeleri": {"tr":"Kota ilkeleri","en":"Quota policies"},
+  "Güvenlik ve destek": {"tr":"Güvenlik ve destek","en":"Security and support"},
+  "Destek oturumları": {"tr":"Destek oturumları","en":"Support sessions"},
+  "Acil destek erişimi": {"tr":"Acil destek erişimi","en":"Emergency support access"},
+  "Denetim kaydı": {"tr":"Denetim kaydı","en":"Audit log"},
+  "Platform kilidi, platform yöneticisinin bir depolama alanını yeni yedeklemelere kapatmasıdır; sahibin etkin / devre dışı tercihi değişmez.": {"tr":"Platform kilidi, platform yöneticisinin bir depolama alanını yeni yedeklemelere kapatmasıdır; sahibin etkin / devre dışı tercihi değişmez.","en":"A platform lock is when a platform administrator closes a storage location to new backups; the owner's enabled / disabled choice does not change."},
+  "Platform yöneticisi bu depolama alanını kilitledi; kilit kalkana kadar yeni yedeklemeler için kullanılamaz.": {"tr":"Platform yöneticisi bu depolama alanını kilitledi; kilit kalkana kadar yeni yedeklemeler için kullanılamaz.","en":"A platform administrator locked this storage location; it cannot be used for new backups until the lock is removed."},
 }

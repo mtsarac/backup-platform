@@ -14,7 +14,7 @@ import { useTenant } from '@/features/tenancy/use-tenant'
 import { ConnectionActions } from './connection-actions'
 import { CapabilityChips, HealthBadge, SecretStatus } from './connection-parts'
 import { useTenantConnectionCapacity, useProbeTenantConnectionCapacity, useTenantConnectionOps, useTenantConnections, useTenantProviders } from './hooks'
-import { configurationSummary, connectionHealth, disableEffects, enableEffect, executionLocationLabel, testMessage, testModeLabel, topologyLabel } from './labels'
+import { configurationSummary, connectionHealth, disableEffects, enableEffect, platformLockState, executionLocationLabel, testMessage, testModeLabel, topologyLabel } from './labels'
 import type { ConnectionView, ProviderDescriptor } from './types'
 import { formatBytes, formatDateTime } from '@/lib/format'
 import { ProgressBar } from '@/components/data/progress-bar'
@@ -203,7 +203,7 @@ function Manage({ connection, descriptor, ops }: { connection: ConnectionView; d
     <Section title={tx("Kullanılabilirlik")} description={connection.effectiveEnabled ? tx('Bu hedef yeni backup\'lar için kullanılabilir.') : tx('Bu hedef şu an devre dışı.')}>
       <div className="space-y-4">
         <p className="text-sm text-text-muted">{tx("Sahip tercihi:")}{' '}{on ? tx('Etkin') : tx('Devre dışı')}</p>
-        {connection.administrativelyDisabled && <Notice tone="warning" title={tx("Platform kilidi")}>{tx("Platform kilidi kaldırılmadan bu hedef yeni backup'lar için kullanılamaz.")}</Notice>}
+        {connection.administrativelyDisabled && <Notice tone="warning" title={tx("Platform kilidi")}>{tx(platformLockState)}</Notice>}
         {on ? <ul className="list-inside list-disc space-y-1 text-sm text-text-muted">{disableEffects.map((effect) => <li key={effect}>{tx(effect)}</li>)}</ul> : <p className="text-sm text-text-muted">{tx(enableEffect)}</p>}
         <ConnectionActions connection={connection} descriptor={descriptor} ops={ops} show={['toggle']} />
       </div>

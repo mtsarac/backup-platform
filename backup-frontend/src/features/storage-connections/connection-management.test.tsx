@@ -418,6 +418,7 @@ describe('Enablement, test, deletion and editing', () => {
     })
     mount(detail('conn-local', 'manage'))
     expect(await screen.findByText('Platform kilidi')).toBeInTheDocument()
+    expect(screen.getByText(/kilit kalkana kadar yeni yedeklemeler için kullanılamaz/)).toBeInTheDocument()
     expect(screen.getByText('Sahip tercihi: Etkin')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Local bağlantısı: sil' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Local bağlantısı: devre dışı bırak' }))
