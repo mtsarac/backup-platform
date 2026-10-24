@@ -1,9 +1,9 @@
 using System.Security.Cryptography;
 
-namespace BackupPlatform.Agent.Core.Tasks;
+namespace BackupPlatform.StorageProviders.Abstractions;
 
 /// <summary>Hashes exactly the bytes a provider reads; <see cref="Position"/> stays zero when the provider never read the stream.</summary>
-internal sealed class Sha256VerifyingStream(Stream inner) : Stream
+public sealed class Sha256VerifyingStream(Stream inner) : Stream
 {
     private readonly IncrementalHash _hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
     private long _position;

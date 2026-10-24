@@ -21,7 +21,7 @@ public sealed partial class ReplicaRepairService(
     TimeProvider time,
     ILogger<ReplicaRepairService> logger)
 {
-    private static readonly TimeSpan DefaultLeaseDuration = TimeSpan.FromMinutes(10);
+    public static readonly TimeSpan DefaultLeaseDuration = TimeSpan.FromMinutes(10);
     private static readonly ConcurrentDictionary<Guid, CancellationTokenSource> _activeLocalCts = new();
 
     public async Task<ReplicaRepairStartResult> StartRepairAsync(
@@ -575,81 +575,6 @@ public sealed partial class ReplicaRepairService(
                 artifact.ArtifactChecksum,
                 time.GetUtcNow(),
                 CancellationToken.None);
-        }
-    }
-
-    private sealed class Sha256VerifyingStream : Stream
-    {
-        private readonly Stream _inner;
-        private readonly IncrementalHash _hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        private long _position;
-
-        public Sha256VerifyingStream(Stream inner)
-        {
-            _inner = inner;
-        }
-
-        public string GetHashHex()
-        {
-            var hash = _hasher.GetHashAndReset();
-            return Convert.ToHexString(hash).ToLowerInvariant();
-        }
-
-        public override bool CanRead => _inner.CanRead;
-        public override bool CanSeek => false;
-        public override bool CanWrite => false;
-        public override long Length => _inner.Length;
-        public override long Position
-        {
-            get => _position;
-            set => throw new NotSupportedException();
-        }
-
-        public override int Read(byte[] buffer, int offset, int count)
-        {
-            var read = _inner.Read(buffer, offset, count);
-            if (read > 0)
-            {
-                _hasher.AppendData(buffer, offset, read);
-                _position += read;
-            }
-            return read;
-        }
-
-        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
-        {
-            var read = await _inner.ReadAsync(buffer, cancellationToken);
-            if (read > 0)
-            {
-                _hasher.AppendData(buffer.Span[..read]);
-                _position += read;
-            }
-            return read;
-        }
-
-        public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
-        {
-            var read = await _inner.ReadAsync(buffer, offset, count, cancellationToken);
-            if (read > 0)
-            {
-                _hasher.AppendData(buffer, offset, read);
-                _position += read;
-            }
-            return read;
-        }
-
-        public override void Flush() => _inner.Flush();
-        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-        public override void SetLength(long value) => throw new NotSupportedException();
-        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                _hasher.Dispose();
-            }
-            base.Dispose(disposing);
         }
     }
 }
