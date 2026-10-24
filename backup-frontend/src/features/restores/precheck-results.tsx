@@ -7,8 +7,7 @@ import { Button } from '@/components/ui/button'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
-import type { TechnicalItem } from '@/components/ui/technical-details'
-import { precheckLabel, safeRestoreCode } from './presentation'
+import { precheckLabel, technicalChecks } from './presentation'
 import type { RestoreResult, RestoreView } from './types'
 import { describeFailure, failureMessage } from '@/lib/api/failure-messages'
 
@@ -20,16 +19,6 @@ const checkStatus = {
   Failed: { get label() { return tx("Başarısız") }, icon: XCircle, className: 'text-error' },
   Skipped: { get label() { return tx("Atlandı") }, icon: MinusCircle, className: 'text-text-muted' },
 } as const
-
-/** The engines' own wording and codes for each check; the table above says the same thing in everyday words. */
-function technicalChecks(items: PrecheckItem[]): TechnicalItem[] {
-  const seen = new Map<string, number>()
-  return items.map((item) => {
-    const count = (seen.get(item.checkId) ?? 0) + 1
-    seen.set(item.checkId, count)
-    return { label: count > 1 ? `${item.checkId} (${count})` : item.checkId, value: [item.status, safeRestoreCode(item.reasonCode), item.message].filter(Boolean).join(' · ') }
-  })
-}
 
 const columns: Column<PrecheckItem>[] = [
   { key: 'check', get header() { return tx("Kontrol") }, wrap: true, render: (item) => <span className="text-text-heading">{precheckLabel(item.checkId)}</span> },
