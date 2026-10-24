@@ -1,32 +1,49 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import type { ChangeEvent } from 'react'
-import { DataList } from '@/components/data/data-list'
-import type { Column } from '@/components/data/data-list'
 import { Pagination } from '@/components/data/pagination'
 import { Send } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
+import { Button } from '@/components/ui/button'
 import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
 import { Section } from '@/components/ui/section'
 import { QueryState } from '@/components/data/query-state'
+import { TechnicalDetails } from '@/components/ui/technical-details'
 import { useNotificationDeliveries } from './hooks'
 import { eventTypeLabels, kindLabels, phaseLabels, severityLabels } from './labels'
 import { channelKinds, deliveryStatuses, eventTypes } from './types'
 import type { ChannelKind, DeliveryFilters, DeliveryStatus, EventType, MandatoryEventType, NotificationDelivery } from './types'
-import { formatDateTime } from '@/lib/format'
+import { formatDateTime, formatRelativeTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { statusLabel } from '@/lib/status'
 
 const PAGE_SIZE = 25
 
-const columns: Column<NotificationDelivery>[] = [
-  { key: 'createdAt', get header() { return tx("Oluşturma") }, render: (row) => formatDateTime(row.createdAt, tx('Henüz bildirilmedi')) },
-  { key: 'event', card: 'title', get header() { return tx("Olay") }, wrap: true, render: (row) => <div>{eventTypeLabels[row.eventType]} · {phaseLabels[row.phase]}<div className="text-xs text-text-muted">{severityLabels[row.severity]} · {row.subjectName}</div></div> },
-  { key: 'channel', get header() { return tx("Kanal") }, wrap: true, render: (row) => <div>{row.channelName}<div className="text-xs text-text-muted">{kindLabels[row.channelKind]} · {row.targetDisplay}</div></div> },
-  { key: 'status', card: 'status', get header() { return tx("Durum") }, render: (row) => { return <div className="flex flex-col items-start gap-1"><StatusPill domain="delivery" status={row.status} />{row.errorCode && <code className="break-all text-sm text-text-muted">{row.errorCode}</code>}</div> } },
-  { key: 'attempts', card: 'hidden', get header() { return tx("Deneme") }, render: (row) => row.attempts },
-  { key: 'next', card: 'hidden', get header() { return tx("Sonraki deneme") }, render: (row) => row.nextAttemptAt ? formatDateTime(row.nextAttemptAt, tx('Henüz bildirilmedi')) : '—' },
-]
+function DeliveryCard({ delivery }: { delivery: NotificationDelivery }) {
+  const event = eventTypeLabels[delivery.eventType]
+  return <li><article aria-label={tx('{0} · {1}', { '0': event, '1': delivery.subjectName })} className="space-y-3 rounded-xl border border-border bg-surface p-4">
+    <div className="flex flex-wrap items-start justify-between gap-2">
+      <h3 className="min-w-0 break-words font-medium text-text-heading">{event} · {delivery.subjectName}</h3>
+      <StatusPill domain="delivery" status={delivery.status} />
+    </div>
+    <dl className="grid gap-2 text-sm sm:grid-cols-2">
+      <div><dt className="text-text-muted">{tx('Zaman')}</dt><dd><time dateTime={delivery.createdAt} title={formatDateTime(delivery.createdAt)}>{formatRelativeTime(delivery.createdAt)}</time></dd></div>
+      <div><dt className="text-text-muted">{tx('Kanal')}</dt><dd className="break-words">{delivery.channelName}</dd><dd className="break-all text-text-muted">{kindLabels[delivery.channelKind]} · {delivery.targetDisplay}</dd></div>
+    </dl>
+    <TechnicalDetails items={[
+      { label: tx('Gönderim kimliği'), value: delivery.id },
+      { label: tx('Olay kimliği'), value: delivery.eventId },
+      { label: tx('Olay türü'), value: delivery.eventType },
+      { label: tx('Aşama'), value: phaseLabels[delivery.phase] },
+      { label: tx('Önem düzeyi'), value: severityLabels[delivery.severity] },
+      { label: tx('Deneme'), value: String(delivery.attempts) },
+      { label: tx('Oluşturma'), value: formatDateTime(delivery.createdAt) },
+      ...(delivery.errorCode ? [{ label: tx('Hata kodu'), value: delivery.errorCode }] : []),
+      ...(delivery.nextAttemptAt ? [{ label: tx('Sonraki deneme'), value: formatDateTime(delivery.nextAttemptAt) }] : []),
+      ...(delivery.sentAt ? [{ label: tx('Gönderilme zamanı'), value: formatDateTime(delivery.sentAt) }] : []),
+    ]} />
+  </article></li>
+}
 
 export function DeliveriesSection() {
   useLanguage()
@@ -42,15 +59,15 @@ export function DeliveriesSection() {
   return <Section title={tx("Gönderim geçmişi")} description={tx("En yeni bildirim gönderimleri; silinen kanalların kayıtları korunur.")}>
     <div className="space-y-4">
       <Filters label={tx("Gönderim filtreleri")}>
-        <FilterField label={tx("Durum")}><select aria-label={tx("Durum")} className={filterControlClass} value={status} onChange={filter(setStatus)}><option value="">{tx("Tümü")}</option>{deliveryStatuses.map((item) => <option key={item} value={item}>{statusLabel('delivery', item)}</option>)}</select></FilterField>
-        <FilterField label={tx("Kanal türü")}><select aria-label={tx("Kanal türü")} className={filterControlClass} value={kind} onChange={filter(setKind)}><option value="">{tx("Tümü")}</option>{channelKinds.map((item) => <option key={item} value={item}>{kindLabels[item]}</option>)}</select></FilterField>
-        <FilterField label={tx("Olay türü")}><select aria-label={tx("Olay türü")} className={filterControlClass} value={eventType} onChange={filter(setEventType)}><option value="">{tx("Tümü")}</option>{[...eventTypes, 'break_glass_access' as const, 'test' as const].map((item) => <option key={item} value={item}>{eventTypeLabels[item]}</option>)}</select></FilterField>
+        <FilterField label={tx("Durum")}><select aria-label={tx("Durum")} className={`${filterControlClass} min-h-11`} value={status} onChange={filter(setStatus)}><option value="">{tx("Tümü")}</option>{deliveryStatuses.map((item) => <option key={item} value={item}>{statusLabel('delivery', item)}</option>)}</select></FilterField>
+        <FilterField label={tx("Kanal türü")}><select aria-label={tx("Kanal türü")} className={`${filterControlClass} min-h-11`} value={kind} onChange={filter(setKind)}><option value="">{tx("Tümü")}</option>{channelKinds.map((item) => <option key={item} value={item}>{kindLabels[item]}</option>)}</select></FilterField>
+        <FilterField label={tx("Olay türü")}><select aria-label={tx("Olay türü")} className={`${filterControlClass} min-h-11`} value={eventType} onChange={filter(setEventType)}><option value="">{tx("Tümü")}</option>{[...eventTypes, 'break_glass_access' as const, 'test' as const].map((item) => <option key={item} value={item}>{eventTypeLabels[item]}</option>)}</select></FilterField>
       </Filters>
       <QueryState isPending={deliveries.isPending} error={deliveries.error}>
         {data && (data.totalCount === 0
-          ? <div className="rounded-xl border border-border bg-surface"><EmptyState icon={Send} message={tx("Gönderim kaydı bulunamadı.")} /></div>
+          ? <EmptyState icon={Send} message={tx("Gönderim kaydı bulunamadı.")} action={<Button disabled={deliveries.isFetching} onClick={() => void deliveries.refetch()}>{tx('Yenile')}</Button>} />
           : <>
-            <DataList rows={data.items} columns={columns} keyExtractor={(row) => row.id} />
+            <ul className="space-y-3">{data.items.map(delivery => <DeliveryCard key={delivery.id} delivery={delivery} />)}</ul>
             <Pagination page={data.page} pageSize={data.pageSize} totalCount={data.totalCount} onPageChange={setPage} disabled={deliveries.isFetching} />
           </>)}
       </QueryState>
