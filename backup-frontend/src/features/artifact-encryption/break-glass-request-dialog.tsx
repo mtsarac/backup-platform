@@ -1,14 +1,20 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { Field } from '@/components/ui/field'
 import { ErrorNotice } from '@/components/ui/notice'
 import { platformPaths } from '@/features/platform/paths'
 import { FormDialog } from '@/components/ui/form-dialog'
 import { inputClass } from '@/components/ui/form-styles'
+import { TenantPicker } from '@/features/platform/tenant-picker'
+import { BackupPicker } from '@/features/artifacts/backup-picker'
+import { removeSupportData, useSupportSession, useSupportSessions } from '@/features/platform/support/hooks'
+import { supportAccess } from '@/features/platform/support/presentation'
+import { SupportQueryState } from '@/features/platform/support/support-query-state'
+import { useSupportCountdown } from '@/features/platform/support/use-support-countdown'
 import { useCreateBreakGlass } from './hooks'
 
-const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** Mounted only while open, so every opening starts clean. */
 export function BreakGlassRequestDialog({ initialTenantId = '', initialArtifactId = '', onClose }: { initialTenantId?: string; initialArtifactId?: string; onClose: () => void }) {
@@ -26,15 +32,15 @@ export function BreakGlassRequestDialog({ initialTenantId = '', initialArtifactI
     if (submitting.current) return
     const minutes = Number(ttl)
     const found: Record<string, string> = {}
-    if (!guid.test(tenantId.trim())) found.tenantId = tx('Geçerli bir tenant kimliği (GUID) girin.')
-    if (!guid.test(artifactId.trim())) found.artifactId = tx('Geçerli bir Backup kimliği (GUID) girin.')
+    if (!tenantId) found.tenantId = tx('Tenant seçin')
+    if (!artifactId) found.artifactId = tx('Yedek dosyası seçin')
     if (!reason.trim()) found.reason = tx('Break-glass için gerekçe girin.')
     else if (reason.trim().length > 500) found.reason = tx('Gerekçe en fazla 500 karakter olabilir.')
     if (!Number.isInteger(minutes) || minutes < 1 || minutes > 240) found.ttl = tx('Süre 1 ile 240 dakika arasında tam sayı olmalıdır.')
     setErrors(found)
     if (Object.keys(found).length) return
     submitting.current = true
-    create.mutate({ tenantId: tenantId.trim(), artifactId: artifactId.trim(), reason: reason.trim(), ttlMinutes: minutes }, {
+    create.mutate({ tenantId, artifactId, reason: reason.trim(), ttlMinutes: minutes }, {
       onSuccess: request => { onClose(); navigate(platformPaths.breakGlassDetail(request.id)) },
       onSettled: () => { submitting.current = false },
     })
@@ -43,8 +49,10 @@ export function BreakGlassRequestDialog({ initialTenantId = '', initialArtifactI
   return <FormDialog title={tx("Break-glass isteği aç")} description={tx("Şifreli bir Backup'ın tenant anahtarıyla çözülmesini ister. Farklı bir PlatformAdmin onaylamadan hiçbir şey çözülmez; onay süreli ve tek kullanımlıktır. Her adım audit kaydına yazılır ve tenant sahiplerine bildirilir.")}
     submitLabel={tx("İstek aç")} pendingLabel={tx("İstek açılıyor…")} pending={create.isPending} onSubmit={submit} onClose={onClose}>
     <fieldset disabled={create.isPending} className="space-y-4">
-      <Field label={tx("Tenant kimliği")} error={errors.tenantId}>{control => <input {...control} className={inputClass} value={tenantId} spellCheck={false} onChange={event => setTenantId(event.target.value)} />}</Field>
-      <Field label={tx("Backup kimliği")} error={errors.artifactId}>{control => <input {...control} className={inputClass} value={artifactId} spellCheck={false} onChange={event => setArtifactId(event.target.value)} />}</Field>
+      <TenantPicker value={tenantId} onChange={id => { setTenantId(id); setArtifactId('') }} />
+      {errors.tenantId && <p role="alert" className="text-sm text-error">{errors.tenantId}</p>}
+      {tenantId && <EmergencyBackupPicker key={tenantId} tenantId={tenantId} value={artifactId} onChange={setArtifactId} />}
+      {errors.artifactId && <p role="alert" className="text-sm text-error">{errors.artifactId}</p>}
       <Field label={tx("Gerekçe")} hint={tx("Zorunludur; en fazla 500 karakter. Tenant sahipleri bu gerekçeyi görür.")} error={errors.reason}>
         {control => <textarea {...control} className={inputClass} rows={3} maxLength={500} value={reason} onChange={event => setReason(event.target.value)} />}
       </Field>
@@ -54,4 +62,25 @@ export function BreakGlassRequestDialog({ initialTenantId = '', initialArtifactI
     </fieldset>
     {create.error && <ErrorNotice error={create.error} />}
   </FormDialog>
+}
+
+/** Platform authority alone cannot read customer metadata; use an already-authorized support session. */
+function EmergencyBackupPicker({ tenantId, value, onChange }: { tenantId: string; value: string; onChange: (id: string) => void }) {
+  const client = useQueryClient()
+  const sessions = useSupportSessions({ tenantId, status: 'Active', mine: true, page: 1, pageSize: 100 })
+  const found = sessions.data?.items.find(session => session.tenantId === tenantId && supportAccess(session).view && Date.parse(session.expiresAt) > Date.parse(session.serverNow))
+  const detail = useSupportSession(found?.id ?? '')
+  const session = detail.data ?? found
+  const countdown = useSupportCountdown(session?.expiresAt ?? '', session?.serverNow ?? '', detail.dataUpdatedAt || sessions.dataUpdatedAt)
+  const enabled = Boolean(!sessions.error && !detail.error && session && session.tenantId === tenantId && supportAccess(session).view && countdown.seconds > 0)
+  useEffect(() => {
+    if (session && !enabled) removeSupportData(client, session.id)
+  }, [client, enabled, session])
+  return <div className="space-y-2">
+    <BackupPicker tenantId={tenantId} value={value} onChange={onChange} supportScope={{ tenantId, sessionId: session?.id ?? '', enabled }} />
+    {(sessions.error || detail.error) && <SupportQueryState isPending={false} error={sessions.error ?? detail.error} />}
+    {!sessions.isPending && !enabled && <p className="text-sm text-text-muted">{tx("Yedek dosyalarını adla seçmek için bu müşteri üzerinde yedek bilgilerini görüntüleme izinli bir destek oturumu açın.")}{' '}
+      <Link className="text-primary underline" to={`${platformPaths.supportSessions}?tenantId=${encodeURIComponent(tenantId)}`}>{tx("Destek erişimi")}</Link>
+    </p>}
+  </div>
 }

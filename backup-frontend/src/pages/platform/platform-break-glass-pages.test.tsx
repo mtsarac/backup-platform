@@ -7,11 +7,23 @@ import { paged, renderPlatform } from '@/features/platform/test-utils'
 import { ApiError } from '@/lib/api/client'
 import { PlatformBreakGlassDetailPage } from './platform-break-glass-detail-page'
 import { PlatformBreakGlassPage } from './platform-break-glass-page'
+import { tx } from '@/lib/i18n'
+import * as platformApi from '@/features/platform/api'
+import * as supportApi from '@/features/platform/support/api'
+import { makeArtifact, makeSession } from '@/features/platform/support/test-fixtures'
 
 vi.mock('@/features/artifact-encryption/api')
+vi.mock('@/features/platform/api')
+vi.mock('@/features/platform/support/api')
 beforeEach(() => {
   vi.resetAllMocks()
   vi.mocked(api.getBreakGlassRequests).mockResolvedValue(paged([makeBreakGlass(), makeBreakGlass({ id: 'request-b', tenantName: 'Beta', status: 'Consumed', canApprove: false })]))
+  const tenantId = '22222222-2222-2222-2222-222222222222'
+  vi.mocked(platformApi.getTenants).mockResolvedValue(paged([{ tenantId, name: 'Acme', memberCount: 1, agentCount: 1, enrollmentEnabled: true }]))
+  vi.mocked(platformApi.getTenant).mockResolvedValue({ tenantId, name: 'Acme', memberCount: 1, enabledBackupJobs: 1, agents: { total: 1, online: 1, offline: 0, unknown: 0, disabled: 0, revoked: 0 }, enrollment: { enabled: true, changedAt: null } })
+  vi.mocked(supportApi.getSessions).mockResolvedValue(paged([makeSession({ tenantId })]))
+  vi.mocked(supportApi.getSession).mockResolvedValue(makeSession({ tenantId }))
+  vi.mocked(supportApi.getSupportArtifacts).mockResolvedValue(paged([makeArtifact({ id: '11111111-1111-1111-1111-111111111111', databaseName: 'Accounts' })]))
 })
 const list = (search = '') => renderPlatform(<PlatformBreakGlassPage />, { path: `/platform/break-glass${search}`, route: '/platform/break-glass' })
 
@@ -28,8 +40,8 @@ describe('break-glass list', () => {
   it('opens the request dialog prefilled from a deep link and clears the link when closed', async () => {
     list('?requestTenantId=22222222-2222-2222-2222-222222222222&requestArtifactId=11111111-1111-1111-1111-111111111111')
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByLabelText('Tenant kimliği')).toHaveValue('22222222-2222-2222-2222-222222222222')
-    expect(within(dialog).getByLabelText('Backup kimliği')).toHaveValue('11111111-1111-1111-1111-111111111111')
+    await waitFor(() => expect(within(dialog).getByRole('combobox', { name: tx('Tenant') })).toHaveValue('Acme'))
+    await waitFor(() => expect(within(dialog).getByRole('combobox', { name: tx('Yedek dosyası') })).toHaveDisplayValue(/Accounts/))
     fireEvent.click(within(dialog).getByRole('button', { name: 'Vazgeç' }))
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/platform/break-glass'))
     expect(screen.getByTestId('location').textContent).not.toContain('requestTenantId')

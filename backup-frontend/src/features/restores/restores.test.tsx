@@ -273,6 +273,14 @@ describe('RestoresPage', () => {
     expect(screen.getByRole('combobox', { name: 'Yedek dosyası' })).toHaveDisplayValue(/HRDB/)
   })
 
+  it('filters by computer name while preserving the selected backup and status', async () => {
+    renderWithClient(<RestoresPage />, '/?artifactId=artifact-2&status=Failed&page=3')
+    await screen.findByText('RestoredSalesDB')
+    await userEvent.type(screen.getByRole('combobox', { name: 'Yedekleme bilgisayarı' }), 'SQL')
+    await userEvent.click(await screen.findByRole('option', { name: 'SQL Server Agent 1' }))
+    await waitFor(() => expect(RestoreApi.getRestores).toHaveBeenLastCalledWith('tenant-a', expect.objectContaining({ agentId: 'agent-1', artifactId: 'artifact-2', status: 'Failed', page: 1 }), expect.anything()))
+  })
+
   it('names the filtered backup even when it is older than the ones the picker loaded', async () => {
     vi.mocked(ArtifactApi.getArtifact).mockResolvedValue({ ...sampleArtifact, id: 'artifact-9', databaseName: 'OldDB' })
     renderWithClient(<RestoresPage />, '/?artifactId=artifact-9')

@@ -9,7 +9,7 @@ import { platformCrumb } from '@/features/platform/crumbs'
 import { usePlatformAudit } from '@/features/platform/hooks'
 import { bareListClass } from '@/features/platform/list-empty'
 import { PlatformQueryState } from '@/features/platform/platform-query-state'
-import { SearchForm } from '@/features/platform/search-form'
+import { TenantPicker } from '@/features/platform/tenant-picker'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 
 export function PlatformAuditPage() {
@@ -21,7 +21,7 @@ export function PlatformAuditPage() {
   return <div className="space-y-6">
     <PageHeader crumbs={[platformCrumb]} title={tx("Audit")} description={tx("Kullanıcı, Agent ve sistem işlemlerinin denetim kayıtları.")} />
     <Filters label={tx("Audit filtreleri")} footer={tenantId && <div className="flex flex-wrap items-center gap-2 text-sm"><span>{tx("Tek bir tenant'a göre filtreleniyor.")}</span><Button variant="outline" size="sm" onClick={() => update({ tenantId: '' })}>{tx("Tenant filtresini kaldır")}</Button></div>}>
-      <SearchForm className="sm:col-span-2" label={tx("Tenant kimliğiyle filtrele")} value={tenantId} onSearch={(value) => update({ tenantId: value })} placeholder={tx("Tenant kimliği (isteğe bağlı)")} />
+      <TenantPicker value={tenantId} onChange={(value) => update({ tenantId: value })} />
     </Filters>
     <PlatformQueryState isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">
