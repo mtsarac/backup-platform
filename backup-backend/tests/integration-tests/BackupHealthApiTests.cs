@@ -171,6 +171,7 @@ public sealed class BackupHealthApiTests(PostgreSqlFixture fixture) : IClassFixt
         var summary = AgentWorld.ReadJson(empty);
         Assert.Equal(0, summary.GetProperty("totalJobs").GetInt32());
         Assert.Equal(JsonValueKind.Null, summary.GetProperty("averageScore").ValueKind);
+        Assert.Equal(JsonValueKind.Null, summary.GetProperty("state").ValueKind);
         Assert.Empty(summary.GetProperty("jobs").EnumerateArray());
         await scenario.StartRunAsync(job);
         await scenario.SucceedNextAsync();
@@ -273,6 +274,53 @@ public sealed class BackupHealthApiTests(PostgreSqlFixture fixture) : IClassFixt
         await using var unchanged = fixture.CreatePlatformContext();
         Assert.Equal(2, await unchanged.StorageCapacitySnapshots.CountAsync(s => s.TenantId == scenario.Setup.Tenant.Id && s.ConnectionId == connection));
         if (reason == "expired") Assert.Null((await unchanged.StorageCapacityTasks.SingleAsync(t => t.TenantId == scenario.Setup.Tenant.Id && t.ConnectionId == connection)).CompletedAt);
+    }
+
+    [Fact]
+    public async Task TenantStateIsCriticalWhenOneJobIsCriticalAmongHealthyJobsAndAverageIsStillReported()
+    {
+        await using var scenario = await CreateScenarioAsync();
+        for (var i = 0; i < 9; i++) await CreateJobWithStateAsync(scenario, "Healthy");
+        await CreateJobWithStateAsync(scenario, "Critical");
+        var summary = await SummaryAsync(scenario);
+        Assert.Equal("Critical", summary.GetProperty("state").GetString());
+        Assert.Equal(9, summary.GetProperty("healthy").GetInt32());
+        Assert.Equal(1, summary.GetProperty("critical").GetInt32());
+        // The old rule classified this average as Healthy; it stays informational.
+        Assert.InRange(summary.GetProperty("averageScore").GetDouble(), 80, 99);
+    }
+
+    [Fact]
+    public async Task TenantStateIsTheWorstJobStateWithCriticalBeatingDegradedBeatingHealthy()
+    {
+        await using var scenario = await CreateScenarioAsync();
+        await CreateJobWithStateAsync(scenario, "Healthy");
+        Assert.Equal("Healthy", (await SummaryAsync(scenario)).GetProperty("state").GetString());
+        await CreateJobWithStateAsync(scenario, "Degraded");
+        Assert.Equal("Degraded", (await SummaryAsync(scenario)).GetProperty("state").GetString());
+        await CreateJobWithStateAsync(scenario, "Critical");
+        Assert.Equal("Critical", (await SummaryAsync(scenario)).GetProperty("state").GetString());
+    }
+
+    private async Task<Guid> CreateJobWithStateAsync(BackupApiScenario scenario, string state)
+    {
+        var job = await scenario.CreateJobAsync();
+        if (state == "Critical") return job;
+        // Degraded: an hourly job with a stale backup scoring 79; Healthy: a daily job with full evidence.
+        await ConfigureScheduleAsync(scenario, job, state == "Degraded" ? "0 * * * *" : "0 0 * * *");
+        await scenario.StartRunAsync(job);
+        await scenario.SucceedNextAsync();
+        if (state == "Healthy") await AddEvidenceAsync(scenario, job, restorePassed: true);
+        else scenario.Clock.Advance(TimeSpan.FromMinutes(61.5));
+        Assert.Equal(state, (await HealthAsync(scenario, job)).GetProperty("state").GetString());
+        return job;
+    }
+
+    private static async Task<JsonElement> SummaryAsync(BackupApiScenario scenario)
+    {
+        using var response = await scenario.Admin.GetAsync(scenario.Root + "/observability/health-summary");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return AgentWorld.ReadJson(response);
     }
 
     private async Task<BackupApiScenario> CreateScenarioAsync()

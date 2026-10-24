@@ -6,11 +6,12 @@ import { QueryState } from '@/components/data/query-state'
 import { apiRequest, tenantPath } from '@/lib/api/client'
 import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 import { formatCapacity } from '@/features/storage/format'
-import type { BackupJobHealth } from '@/features/backup-jobs/health'
+import type { BackupHealthState, BackupJobHealth } from '@/features/backup-jobs/health'
 
 interface HealthSummary {
   totalJobs: number
   averageScore: number | null
+  state: BackupHealthState | null
   healthy: number
   degraded: number
   critical: number

@@ -22,8 +22,11 @@ public sealed class BackupHealthEvaluator(IBackupHealthStore store, TimeProvider
         var jobs = evidence.Select(item => Evaluate(item, now)).ToArray();
         double? average = jobs.Length == 0 ? null : Math.Round(jobs.Average(job => job.Score), 2);
         var anomalies = await store.ReadRecentSizeAnomaliesAsync(tenantId, now, cancellationToken);
-        return new(now, jobs.Length, average, average is null ? null : Classify(average.Value), jobs.Count(job => job.State == "Healthy"),
-            jobs.Count(job => job.State == "Degraded"), jobs.Count(job => job.State == "Critical"), jobs,
+        var critical = jobs.Count(job => job.State == "Critical");
+        var degraded = jobs.Count(job => job.State == "Degraded");
+        // TenantHealthState is the worst job state, not the average, so one broken job is never hidden behind healthy ones.
+        string? state = jobs.Length == 0 ? null : critical > 0 ? "Critical" : degraded > 0 ? "Degraded" : "Healthy";
+        return new(now, jobs.Length, average, state, jobs.Count(job => job.State == "Healthy"), degraded, critical, jobs,
             await store.ReadCapacityRisksAsync(tenantId, now, cancellationToken), anomalies.Items, anomalies.Total);
     }
 
