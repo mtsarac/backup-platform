@@ -16,6 +16,7 @@ import type { AgentConnectivity, AgentLifecycle, PlatformAgent } from '@/feature
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
+import { TenantPicker } from '@/features/platform/tenant-picker'
 
 const connectivityValues: AgentConnectivity[] = ['online', 'offline', 'unknown']
 const lifecycleValues: AgentLifecycle[] = ['PendingEnrollment', 'Active', 'Disabled', 'Revoked']
@@ -49,6 +50,7 @@ export function PlatformAgentsPage() {
     <Filters label={tx("Agent filtreleri")} onClear={filtered ? () => update({ search: '', connectivity: '', status: '', tenantId: '' }) : undefined}
       footer={tenantId && <div className="flex flex-wrap items-center gap-2 text-sm"><span>{tx("Tek bir tenant'a göre filtreleniyor.")}</span><Button variant="outline" size="sm" onClick={() => update({ tenantId: '' })}>{tx("Tenant filtresini kaldır")}</Button></div>}>
       <SearchForm className="sm:col-span-2" label={tx("Agent ara")} value={search} onSearch={(value) => update({ search: value })} placeholder={tx("Makine adı, platform veya sürüm")} />
+      <TenantPicker value={tenantId} onChange={(value) => update({ tenantId: value })} />
       <FilterField label={tx("Bağlantı")}><select className={filterControlClass} value={connectivity ?? ''} onChange={(event) => update({ connectivity: event.target.value })}><option value="">{tx("Tümü")}</option><option value="online">{tx("Çevrimiçi")}</option><option value="offline">{tx("Çevrimdışı")}</option><option value="unknown">{tx("Bilinmiyor")}</option></select></FilterField>
       <FilterField label={tx("Yaşam döngüsü")}><select className={filterControlClass} value={status ?? ''} onChange={(event) => update({ status: event.target.value })}><option value="">{tx("Tümü")}</option><option value="PendingEnrollment">{tx("Kayıt bekliyor")}</option><option value="Active">{tx("Etkin")}</option><option value="Disabled">{tx("Devre dışı")}</option><option value="Revoked">{tx("İptal edildi")}</option></select></FilterField>
     </Filters>

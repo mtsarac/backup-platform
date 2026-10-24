@@ -84,4 +84,15 @@ describe('SearchablePicker', () => {
     render(<SearchablePicker label="Yedek dosyası" options={options} value="old" selectedLabel="Eski yedek" onChange={() => undefined} />)
     expect(screen.getByRole('combobox', { name: 'Yedek dosyası' })).toHaveValue('Eski yedek')
   })
+
+  it('stops offering choices when access is disabled while the list is open', async () => {
+    const props = { label: 'Yedek dosyası', options, value: '', onChange: () => undefined }
+    const { rerender } = render(<SearchablePicker {...props} />)
+    await userEvent.click(screen.getByRole('combobox'))
+    expect(shown()).toHaveLength(3)
+    rerender(<SearchablePicker {...props} disabled />)
+    expect(screen.getByRole('combobox')).toBeDisabled()
+    expect(screen.getByRole('combobox')).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+  })
 })

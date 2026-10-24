@@ -1,8 +1,7 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useEffect, useState } from 'react'
-import { Button } from '@/components/ui/button'
 import { FormDialog } from '@/components/ui/form-dialog'
-import { usePlatformTenants } from '@/features/platform/hooks'
+import { TenantPicker } from '@/features/platform/tenant-picker'
 import { inputClass, selectClass } from '@/components/ui/form-styles'
 import { QUOTA_SCOPE_PATTERN } from '@/features/storage/scope-input'
 import { activeSecretFields, configurationComplete, initialFieldValues, providerPayload, secretsComplete } from './descriptor-values'
@@ -13,27 +12,6 @@ import { ProviderFields } from './provider-form'
 
 interface PickedTenant { tenantId: string; name: string }
 
-/** Search + select, like the member picker: a plain button, not a nested form, because this lives inside the dialog's form. */
-function TenantPicker({ value, onChange }: { value: string; onChange: (tenantId: string) => void }) {
-  useLanguage()
-  const [draft, setDraft] = useState('')
-  const [search, setSearch] = useState('')
-  const tenants = usePlatformTenants({ search, page: 1, pageSize: 20 })
-  return <div className="space-y-2">
-    <div className="flex items-end gap-2">
-      <label className="min-w-0 flex-1 text-sm text-text-muted">{tx("Tenant ara")}<input className={inputClass} value={draft} placeholder={tx("Tenant adı")} onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); setSearch(draft.trim()); onChange('') } }} />
-      </label>
-      <Button type="button" variant="outline" className="h-9" onClick={() => { setSearch(draft.trim()); onChange('') }}>{tx("Ara")}</Button>
-    </div>
-    <label className="block text-sm text-text-muted">{tx("Tenant")}<select className={`${selectClass} w-full`} value={value} onChange={(event) => onChange(event.target.value)} disabled={tenants.isPending}>
-        <option value="">{tenants.isPending ? tx('Tenant\'lar yükleniyor…') : tenants.error ? tx('Tenant\'lar alınamadı') : tx('Tenant seçin')}</option>
-        {tenants.data?.items.map((tenant) => <option key={tenant.tenantId} value={tenant.tenantId}>{tenant.name}</option>)}
-      </select>
-    </label>
-    {tenants.data && tenants.data.totalCount > tenants.data.items.length && <p className="text-xs text-text-muted">{tx("İlk")}{' '}{tenants.data.items.length}{' '}{tx("tenant gösteriliyor; daraltmak için arayın.")}</p>}
-  </div>
-}
 
 /** PlatformAdmin 'Managed target ekle': a PlatformManaged connection for a chosen tenant (fixed when opened from the tenant's own page). */
 export function CreateManagedTargetDialog({ tenant, onClose }: { tenant?: PickedTenant; onClose: () => void }) {

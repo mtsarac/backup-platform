@@ -14,6 +14,7 @@ import { linkClass } from '@/components/ui/form-styles'
 import { Tabs } from '@/components/ui/tabs'
 import { ErrorNotice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
+import { SearchablePicker } from '@/components/ui/searchable-picker'
 import { useAgents } from '@/features/agents/hooks'
 import { BackupPicker } from '@/features/artifacts/backup-picker'
 import { useRestores } from '@/features/restores/hooks'
@@ -73,7 +74,9 @@ export function RestoresPage() {
     <Filters label={tx("Geri yükleme filtreleri")} onClear={emptyFiltered ? undefined : clearFilters}>
       <FilterField label={tx("Durum")}><select aria-label={tx("Durum")} className={filterControlClass} value={status} onChange={(event) => updateFilters({ status: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{restoreStatuses.map((value) => <option key={value} value={value}>{statusLabel('general', value)}</option>)}</select></FilterField>
       <BackupPicker tenantId={tenantId} value={filters.artifactId ?? ''} onChange={(artifactId) => updateFilters({ artifactId })} />
-      <FilterField label={tx("Yedekleme bilgisayarı")}><select aria-label={tx("Yedekleme bilgisayarı")} className={filterControlClass} value={filters.agentId} onChange={(event) => updateFilters({ agentId: event.target.value })} disabled={agents.isPending || Boolean(agents.error)}><option value="">{tx("Tüm yedekleme bilgisayarları")}</option>{filters.agentId && !agents.data?.some((agent) => agent.agentId === filters.agentId) && <option value={filters.agentId}>{tx("Yedekleme bilgisayarı bulunamadı")}</option>}{agents.data?.map((agent) => <option key={agent.agentId} value={agent.agentId}>{agent.hostName ?? tx("Adsız yedekleme bilgisayarı")}</option>)}</select></FilterField>
+      <SearchablePicker label={tx("Yedekleme bilgisayarı")} placeholder={tx("Tüm yedekleme bilgisayarları")} value={filters.agentId ?? ''} onChange={agentId => updateFilters({ agentId })}
+        options={(agents.data ?? []).map(agent => ({ value: agent.agentId, label: agent.hostName ?? tx("Adsız yedekleme bilgisayarı") }))}
+        selectedLabel={filters.agentId ? tx("Yedekleme bilgisayarı bulunamadı") : undefined} disabled={agents.isPending || Boolean(agents.error)} />
     </Filters>
     {agents.error && <ErrorNotice title={tx("Yedekleme bilgisayarları yüklenemedi")} error={agents.error} onRetry={() => void agents.refetch()} />}
     <QueryState isPending={query.isPending} error={query.error} onRetry={() => void query.refetch()}>

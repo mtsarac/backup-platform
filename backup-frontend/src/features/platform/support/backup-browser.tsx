@@ -7,6 +7,7 @@ import { FilterField, Filters, filterControlClass } from '@/components/ui/filter
 import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { Tabs } from '@/components/ui/tabs'
+import { SearchablePicker } from '@/components/ui/searchable-picker'
 import { ArtifactDetails } from '@/features/artifacts/artifact-details'
 import { artifactState } from '@/features/artifacts/format'
 import { runStatuses } from '@/features/backups/presentation'
@@ -69,7 +70,8 @@ export function SupportBackupBrowser({ session }: { session: SupportSession }) {
     <Tabs label={tx("Backup Browser görünümleri")} idPrefix="support-browser" value={view} onChange={(value) => update({ view: value })} items={[{ value: 'jobs', label: tx('Backup Jobs') }, { value: 'runs', label: tx('Backup Runs') }, { value: 'artifacts', label: tx('Artifacts') }]} />
     <div role="tabpanel" id={`support-browser-panel-${view}`} aria-labelledby={`support-browser-tab-${view}`} className="space-y-4">
     {view !== 'jobs' && <Filters label={tx("Backup filtreleri")}>
-      <FilterField label={tx("Backup Job")}><select className={filterControlClass} value={jobId} onChange={event => update({ jobId: event.target.value })}><option value="">{tx("Tüm Backup Jobs")}</option>{jobs.data?.map(job => <option key={job.id} value={job.id}>{job.name}</option>)}</select></FilterField>
+      <SearchablePicker label={tx("Yedekleme işi")} placeholder={tx("Tüm Backup Jobs")} value={jobId} onChange={value => update({ jobId: value })}
+        options={(jobs.data ?? []).map(job => ({ value: job.id, label: job.name, description: job.database }))} disabled={jobs.isPending || Boolean(jobs.error)} />
       {view === 'runs' ? <FilterField label={tx("Run durumu")}><select className={filterControlClass} value={get('runStatus')} onChange={event => update({ runStatus: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{runStatuses.map(status => <option key={status} value={status}>{statusLabel('general', status)}</option>)}</select></FilterField> : <>
         <FilterField label={tx("Artifact durumu")}><select className={filterControlClass} value={get('state')} onChange={event => update({ state: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{['Available', 'DeletePending', 'DeleteFailed', 'Deleted'].map(state => <option key={state}>{state}</option>)}</select></FilterField>
         <FilterField label={tx("Başlangıç tarihi")}><input className={filterControlClass} type="date" value={from} onChange={event => update({ from: event.target.value })} /></FilterField>

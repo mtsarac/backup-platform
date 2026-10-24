@@ -10,6 +10,8 @@ vi.mock('@/features/platform/api')
 
 beforeEach(() => {
   vi.resetAllMocks()
+  vi.mocked(api.getTenants).mockResolvedValue(paged([{ tenantId: 'tenant-a', name: 'Acme A.Ş.', memberCount: 1, agentCount: 1, enrollmentEnabled: true }]))
+  vi.mocked(api.getTenant).mockResolvedValue({ tenantId: 'tenant-a', name: 'Acme A.Ş.', memberCount: 1, enabledBackupJobs: 1, agents: { total: 1, online: 1, offline: 0, unknown: 0, disabled: 0, revoked: 0 }, enrollment: { enabled: true, changedAt: null } })
   vi.mocked(api.getPlatformAgents).mockResolvedValue(paged([
     makePlatformAgent(),
     makePlatformAgent({ tenantId: 'tenant-b', tenantName: 'Globex', agentId: 'agent-b', hostName: 'SQL-02', status: 'Revoked', connectivity: 'offline', platform: 'Linux', osDescription: null, agentVersion: null, protocolVersion: null, capabilityCount: 0, capabilitiesReportedAt: null, lastSeenAt: null }),
