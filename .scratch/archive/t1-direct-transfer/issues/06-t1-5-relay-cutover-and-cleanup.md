@@ -4,7 +4,7 @@
 
 **Blocked by:** 03: T1.2 Doğrudan Backup, 04: T1.3 Doğrudan Restore, 05: T1.4 Doğrudan Panel İndirmesi
 
-**Status:** done
+**Status:** code-complete (live acceptance NOT RUN, see review-followups ticket 13)
 
 - [x] Backend'deki harici storage relay endpoint'lerinin ve geçici transfer tamponlarının kaldırılması (Central/Platform Managed hariç)
 - [x] Önceden alınmış mevcut replikaların ve artifact'lerin doğrudan restore ve indirme ile geriye uyumlu çalıştığının doğrulanması

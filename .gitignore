@@ -75,3 +75,6 @@ AGENTS*.md
 .aider*
 .copilot/
 .github/copilot-*.md
+
+# Agent direct-download companion build output
+backup-backend/src/hosts/agent/direct/

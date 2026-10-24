@@ -4,9 +4,9 @@
 
 **Blocked by:** 03: T1.2 Doğrudan Backup (Google Drive + SFTP Upload ve ReadBack)
 
-**Status:** done
+**Status:** code-complete (live acceptance NOT RUN, see review-followups ticket 13)
 
 - [x] Hedef Agent'ın harici depolamadan (Drive/SFTP) doğrudan okuyarak restore yapması (MSSQL NewDatabase/Replace ve PostgreSQL NewDatabase)
 - [x] R1 izole restore doğrulaması senaryolarının doğrudan depolama okumasıyla çalışması
-- [ ] Harici→harici replica repair işleminin yetkili bir Agent üzerinde, ciphertext bozulmadan ve backend'e payload uğramadan yürütülmesi
-- [ ] Retention ve orphan cleanup işlemlerinde Agent'ın provider üzerinde silme yapıp yokluğu (absence) doğrulaması; backend'in atomik audit ve kota düşümü yapması
+- [x] Harici→harici replica repair işleminin yetkili bir Agent üzerinde, ciphertext bozulmadan ve backend'e payload uğramadan yürütülmesi
+- [x] Retention ve orphan cleanup işlemlerinde Agent'ın provider üzerinde silme yapıp yokluğu (absence) doğrulaması; backend'in atomik audit ve kota düşümü yapması

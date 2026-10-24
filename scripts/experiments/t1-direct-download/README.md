@@ -155,6 +155,6 @@ the project's existing Hosting/WindowsServices versions. None of these lab
 dependencies are added to the production Agent or frontend. Neither transport,
 native binding nor a Node runtime is selected for production by this experiment.
 
-Results and remaining acceptance gates: `docs/plan/Proje_Durumu.md`, T1.0 entry.
+Results and remaining acceptance gates: roadmap section 35 (`docs/plan`), T1 row.
 Design and full lifecycle/cutover constraints:
 `docs/plan/T1_0_Dogrudan_Transfer_ADR.md`. Both are intentionally local/ignored.
