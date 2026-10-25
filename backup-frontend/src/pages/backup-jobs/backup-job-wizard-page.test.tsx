@@ -84,7 +84,7 @@ describe('iş formu', () => {
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(1))
     expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration).toMatchObject({
       engine: 'file-system', host: 'localhost', port: null, database: 'documents', integratedSecurity: true,
-      databaseCredentialReference: null, databaseLogin: null, copyOnly: false,
+      databaseCredentialReference: null, databaseLogin: null, copyOnly: true,
       files: { paths: ['reports', 'notes.txt'], includes: ['**/*.txt', 'reports/**'], excludes: ['**/temp/**'], symlinkPolicy: 'Preserve' },
     })
   })
