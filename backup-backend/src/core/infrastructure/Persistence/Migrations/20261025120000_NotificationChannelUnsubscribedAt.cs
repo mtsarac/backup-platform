@@ -1,5 +1,4 @@
 using System;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -7,8 +6,6 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace BackupPlatform.Infrastructure.Persistence.Migrations;
 
 /// <summary>An unsubscribed address keeps that refusal: a confirmation link mailed earlier can no longer verify it again.</summary>
-[DbContext(typeof(PlatformDbContext))]
-[Migration("20261025120000_NotificationChannelUnsubscribedAt")]
 public partial class NotificationChannelUnsubscribedAt : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)

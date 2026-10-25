@@ -1,13 +1,10 @@
 using System;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace BackupPlatform.Infrastructure.Persistence.Migrations;
 
-[DbContext(typeof(PlatformDbContext))]
-[Migration("20261024130000_AgentReplicaLifecycle")]
 public partial class AgentReplicaLifecycle : Migration
 {
     private const string LocalExecutor = "\"ExecutionLocation\" = 'Agent'";

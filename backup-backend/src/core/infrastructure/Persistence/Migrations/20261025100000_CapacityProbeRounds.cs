@@ -1,5 +1,4 @@
 using System;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -10,8 +9,6 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations;
 /// A connection that jobs of several agents write to is probed once per online agent, so a probe round holds one pending task per agent
 /// (at most one per agent and connection) and its results are reduced to the lowest free space.
 /// </summary>
-[DbContext(typeof(PlatformDbContext))]
-[Migration("20261025100000_CapacityProbeRounds")]
 public partial class CapacityProbeRounds : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)

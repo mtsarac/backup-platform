@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace BackupPlatform.Infrastructure.Persistence.Migrations;
@@ -7,9 +6,7 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations;
 /// A download of a Backend-located replica on an agent-executed provider (sftp, google-drive) is served by an agent the backend selects, so
 /// the session names that agent. The guard demanded a NULL agent for every non-agent-located replica and rejected all of them.
 /// </summary>
-[DbContext(typeof(PlatformDbContext))]
-[Migration("20261025090000_ExternalAgentDownloadGuard")]
-public sealed class ExternalAgentDownloadGuard : Migration
+public sealed partial class ExternalAgentDownloadGuard : Migration
 {
     private const string Body = """
         CREATE OR REPLACE FUNCTION download_replica_guard() RETURNS trigger LANGUAGE plpgsql AS $$

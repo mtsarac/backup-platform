@@ -1,5 +1,4 @@
 using System;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -7,8 +6,6 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace BackupPlatform.Infrastructure.Persistence.Migrations;
 
 /// <summary>Failed-login counters move from each API process's memory into the database, so every API instance enforces one shared limit.</summary>
-[DbContext(typeof(PlatformDbContext))]
-[Migration("20261025110000_LoginThrottleCounters")]
 public partial class LoginThrottleCounters : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
