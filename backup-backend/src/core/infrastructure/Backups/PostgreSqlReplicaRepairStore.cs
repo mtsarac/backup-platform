@@ -254,7 +254,7 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
             """).ToListAsync(cancellationToken);
         if (sources.Count == 0) return false;
         var source = await context.BackupReplicas.AsNoTracking().SingleAsync(entity => entity.TenantId == tenantId && entity.Id == sourceReplicaId, cancellationToken);
-        if (!ReplicaRepairSourceEvaluator.IsEligibleSource(source, now) || source.ExecutionLocation != BackupStorageExecutionLocation.Backend) return false;
+        if (!ReplicaRepairSourceEvaluator.IsEligibleSource(source, now)) return false;
         operation.SetTargetIntent(source.Id, targetKey);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);

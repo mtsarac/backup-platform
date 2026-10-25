@@ -341,7 +341,7 @@ def login_hardening():
         t0 = time.perf_counter(); r = anon.post(BASE + "/api/auth/login", json={"loginIdentifier": l, "password": p}, headers=h); return r, time.perf_counter() - t0
     known, unknown = [], []
     ref = None
-    for i in range(6):
+    for i in range(4):
         r1, d1 = attempt(login, "Wrong-" + secrets.token_urlsafe(8) + "1!"); r2, d2 = attempt(f"e2e-nouser-{uuid.uuid4().hex[:8]}", "Wrong-" + secrets.token_urlsafe(8) + "1!")
         known.append(d1); unknown.append(d2)
         sig1 = (r1.status_code, r1.text, r1.headers.get("content-type")); sig2 = (r2.status_code, r2.text, r2.headers.get("content-type"))
@@ -351,11 +351,16 @@ def login_hardening():
     notes["median_ms_known_user"] = round(statistics.median(known) * 1000); notes["median_ms_unknown_user"] = round(statistics.median(unknown) * 1000)
     statuses = []
     t0 = time.time()
-    for i in range(40):
+    for i in range(10):
         r, _ = attempt(login, "Wrong-" + secrets.token_urlsafe(8) + "1!"); statuses.append(r.status_code)
-    notes["40_more_failures"] = {str(c): statuses.count(c) for c in set(statuses)}; notes["seconds"] = round(time.time() - t0, 1)
-    ok, _ = attempt(login, pw)
-    notes["correct_password_after_46_failures"] = ok.status_code
+    notes["10_more_failures"] = {str(c): statuses.count(c) for c in set(statuses)}; notes["seconds"] = round(time.time() - t0, 1)
+    check(statuses.count(401) == 1 and statuses.count(429) == 9, f"throttle: {notes['10_more_failures']}")
+    check("Retry-After" in r.headers, "429 without Retry-After")
+    locked, _ = attempt(login, pw)
+    check(locked.status_code == 429, f"correct password accepted while locked: {locked.status_code}")
+    login2, pw2, _ = make_user("cookie")
+    ok, _ = attempt(login2, pw2); check(ok.status_code in (200, 204), f"login of a healthy account: {ok.status_code}")
+    notes["correct_password_status"] = ok.status_code
     cookie = ok.headers.get("set-cookie", "")
     notes["cookie_flags"] = {k: (k.lower() in cookie.lower()) for k in ("HttpOnly", "Secure", "SameSite=", "__Host-")}
     notes["auth_cookie_samesite"] = (re.search(r"samesite=(\w+)", cookie, re.I) or [None, None])[1]

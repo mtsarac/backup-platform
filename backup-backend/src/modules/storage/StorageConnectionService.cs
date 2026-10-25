@@ -177,7 +177,7 @@ public sealed class StorageConnectionService(
             && newConfiguration["hostKeyFingerprint"] != expectedConfiguration.GetValueOrDefault("hostKeyFingerprint"))
         {
             updateTest = await RunTesterAsync(SftpConnectionRules.Candidate(record.Connection, newConfiguration), descriptor, cancellationToken);
-            if (updateTest.Status != StorageTestStatus.Succeeded)
+            if (!CanProceed(updateTest))
                 return new(StorageConnectionOutcome.Rejected, Code: updateTest.Code ?? "rotation_test_failed");
         }
 
@@ -252,7 +252,7 @@ public sealed class StorageConnectionService(
             try
             {
                 rotationTest = await RunTesterAsync(SftpConnectionRules.Candidate(record.Connection, expectedConfiguration, reference, secret.FieldNames), descriptor, cancellationToken);
-                if (rotationTest.Status != StorageTestStatus.Succeeded)
+                if (!CanProceed(rotationTest))
                 {
                     await DiscardAsync(reference);
                     return new(StorageConnectionOutcome.Rejected, Code: rotationTest.Code ?? "rotation_test_failed");
@@ -491,6 +491,10 @@ public sealed class StorageConnectionService(
 
     private StorageResult<StorageConnectionView> Map(StorageScope scope, StorageConnectionResult result) =>
         new(result.Outcome, result.Record is null ? null : ToView(scope, result.Record), result.Code);
+
+    /// <summary>A private-network SFTP server cannot be tried from the platform; the agent that reaches it checks the new credentials on the next backup.</summary>
+    private static bool CanProceed(StorageTestResult test) =>
+        test.Status == StorageTestStatus.Succeeded || test is { Status: StorageTestStatus.NotTestable, Code: StorageTestCodes.AgentSideStorage };
 
     private static string Refusal(StorageScope scope) => scope.IsPlatform ? StorageRejections.TenantManaged : StorageRejections.PlatformManaged;
 

@@ -19,7 +19,7 @@ public sealed class BackupJob : ITenantOwned
         TenantId = tenantId;
         AgentId = agentId;
         Name = name.Trim();
-        Configuration = configuration.Validate() with { };
+        Configuration = configuration.ValidateForSave() with { };
         RetryPolicy = (retryPolicy ?? BackupRetryPolicy.Default).Validate();
         RetentionPolicy = (retentionPolicy ?? BackupRetentionPolicy.Default).Validate();
         OverlapPolicy = overlapPolicy;
@@ -58,7 +58,7 @@ public sealed class BackupJob : ITenantOwned
         Enabled = true;
     }
 
-    public void Reconfigure(BackupConfiguration configuration) => Configuration = configuration.Validate() with { };
+    public void Reconfigure(BackupConfiguration configuration) => Configuration = configuration.ValidateForSave() with { };
 
     /// <summary>Changes future executions only; existing runs retain their configuration and policy snapshots.</summary>
     public void Update(string name, AgentId agentId, BackupConfiguration configuration, BackupRetryPolicy retryPolicy, BackupOverlapPolicy overlapPolicy)
@@ -66,7 +66,7 @@ public sealed class BackupJob : ITenantOwned
         BackupGuard.Text(name, 200);
         ArgumentNullException.ThrowIfNull(agentId);
         if (!Enum.IsDefined(overlapPolicy)) throw new ArgumentException("Unknown overlap policy.");
-        var validatedConfiguration = configuration.Validate();
+        var validatedConfiguration = configuration.ValidateForSave();
         var validatedRetry = retryPolicy.Validate();
         Name = name.Trim();
         AgentId = agentId;

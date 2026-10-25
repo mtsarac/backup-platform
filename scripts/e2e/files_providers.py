@@ -480,7 +480,83 @@ def connection_lifecycle(t, agent, provider):
     try:
         assert conn["hasSecret"] and conn["enabled"]; assert_no_secret(conn, "create response")
         if provider != "smb":
-            tr = t.call("POST", f"/storage-connections/{cid}/test", {})["test"]; out["test"] = tr["status"]; assert tr["status"] == "Succeeded", tr
+            tr = t.call("POST", f"/storage-connections/{cid}/test", {})["test"]; out["test"] = tr["status"]
+            assert tr["status"] == "Succeeded" or (provider == "sftp" and tr["status"] == "NotTestable" and tr["code"] == "agent_side_storage"), tr
+        u = t.call("PUT", f"/storage-connections/{cid}", {"name": conn["name"] + " renamed"}); assert u["name"].endswith("renamed") and u["hasSecret"], u
+        assert_no_secret(u, "update response")
+        d = t.call("POST", f"/storage-connections/{cid}/disable", {}); assert d["enabled"] is False and not d["effectiveEnabled"], d
+        job = t.call("POST", "/backup-jobs", {"name": f"fp life {provider} {uuid.uuid4().hex[:4]}", "agentId": agent["agentId"], "overlapPolicy": "Skip",
+                                            "configuration": fcfg([dest(provider, conn=cid)], paths=["nested"])})
+        r = t.raw("POST", f"/backup-jobs/{job['id']}/runs", {}); out["runOnDisabled"] = (r.status_code, (r.json() or {}).get("code") or (r.json() or {}).get("error"))
+        assert r.status_code == 409, f"run admitted on a disabled connection: {r.status_code} {r.text[:150]}"
+        e = t.call("POST", f"/storage-connections/{cid}/enable", {}); assert e["effectiveEnabled"]
+        jj, rid, det = run_job(t, agent, f"life-{provider}", fcfg([dest(provider, conn=cid)], paths=["nested"]))
+        r = t.raw("DELETE", f"/storage-connections/{cid}"); out["deleteInUse"] = r.status_code
+        assert r.status_code == 409, f"connection holding replicas was deletable: {r.status_code} {r.text[:150]}"
+        spare = new_conn(t, provider, "spare"); r = t.raw("DELETE", f"/storage-connections/{spare['id']}"); out["deleteUnused"] = r.status_code
+        assert r.status_code in (200, 204), f"unused connection delete: {r.status_code} {r.text[:150]}"
+        assert t.raw("GET", f"/storage-connections/{spare['id']}").status_code == 404
+        return out
+    finally:
+        pass
+
+
+def mc(cmd):
+    r = subprocess.run(["docker", "exec", "bpe2e-minio", "sh", "-c", 'mc --insecure alias set l https://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null 2>&1; ' + cmd.replace("mc ", "mc --insecure ")], capture_output=True, text=True)
+    return r.returncode, (r.stdout + r.stderr).strip()
+
+
+def s3_object_lock(t, ag, fed):
+    fa = ag["fedora-e2e"]; out = {}
+    for label, cfg in {"unknown mode": {"objectLockMode": "BOGUS", "retentionDays": "1"}, "mode without days": {"objectLockMode": "GOVERNANCE"},
+                       "days without mode": {"retentionDays": "5"}, "days zero": {"objectLockMode": "GOVERNANCE", "retentionDays": "0"}, "days too large": {"objectLockMode": "COMPLIANCE", "retentionDays": "99999"}}.items():
+        good = base_conn(t, "s3")["configuration"]
+        r = t.raw("POST", "/storage-connections", {"providerType": "s3", "name": f"FP lockbad {uuid.uuid4().hex[:4]}", "configuration": {**good, **cfg},
+                                                    "secret": {"accessKey": api.env["E2E_MINIO_USER"], "secretKey": api.env["E2E_MINIO_PASSWORD"]}})
+        out[label] = r.status_code
+        if r.status_code in (200, 201): del_conn(t, r.json()["id"])
+        assert r.status_code == 400, f"invalid object-lock settings accepted ({label}): {r.status_code}"
+    # lock requested on a bucket that has no Object Lock: must be detected, never silently written unprotected
+    c1 = new_conn(t, "s3", "lock-nolock", cfg={"objectLockMode": "GOVERNANCE", "retentionDays": "1"})
+    try:
+        tr = t.call("POST", f"/storage-connections/{c1['id']}/test", {})["test"]; out["testOnUnlockedBucket"] = (tr["status"], tr["code"], tr["message"][:80])
+        assert tr["status"] == "Failed", f"object lock requested but bucket has none: test {tr}"
+    finally:
+        del_conn(t, c1["id"])
+    rc, o = mc("mc mb --with-lock l/bpe2elock 2>&1 || mc ls l/bpe2elock 2>&1 | head -1"); assert rc == 0 or "already" in o.lower(), o
+    c2 = new_conn(t, "s3", "lock", cfg={"bucket": "bpe2elock", "objectLockMode": "GOVERNANCE", "retentionDays": "1"})
+    tr = t.call("POST", f"/storage-connections/{c2['id']}/test", {})["test"]; out["testOnLockedBucket"] = (tr["status"], tr["code"])
+    assert tr["status"] == "Succeeded", f"locked-bucket connection test: {tr}"
+    job, rid, d = run_job(t, fa, "s3-lock", fcfg([dest("s3", conn=c2["id"])], paths=["docs", "nested"]))
+    art = artifact(t, artifacts_of(d)[0]["id"]); rep = art["replicas"][0]
+    rc, found = mc(f"mc find l/bpe2elock --name '{fname(rep)}' 2>&1"); obj = found.splitlines()[-1].strip(); out["object"] = obj[-60:]
+    rc, o = mc(f"mc retention info '{obj}' 2>&1"); out["retentionInfo"] = o[:160]
+    assert "GOVERNANCE" in o.upper(), f"stored object carries no retention: {o}"
+    rc, vj = mc(f"mc ls --versions --json '{obj}' 2>&1"); vid = next(json.loads(l)["versionId"] for l in vj.splitlines() if l.startswith("{") and not json.loads(l).get("isDeleteMarker"))
+    rc, o2 = mc(f"mc rm --version-id '{vid}' '{obj}' 2>&1"); out["deleteLockedVersion"] = o2[:140]
+    assert rc != 0 and ("lock" in o2.lower() or "retention" in o2.lower() or "access" in o2.lower()), f"locked object version could be deleted: {o2}"
+    out["restore"] = restore_and_compare(t, fed, fa, art["id"], "lock", ["docs", "nested"])
+    return out
+
+
+def copyonly_false(t, agent, field):
+    """Options a file backup can never honor are refused when the job is saved (finding FP-1), not left to hang a run."""
+    kw = {"copyOnly": False} if field == "copyOnly" else {"checksumPolicy": "Disabled"}
+    cfg = fcfg([dest("local")], paths=["nested"]); cfg.update(kw)
+    r = t.raw("POST", "/backup-jobs", {"name": f"fp {field}-off {uuid.uuid4().hex[:5]}", "agentId": agent["agentId"], "overlapPolicy": "Skip", "configuration": cfg})
+    assert r.status_code == 400, f"{field} job accepted: {r.status_code} {r.text[:150]}"
+    return {"http": r.status_code}
+
+
+def connection_lifecycle(t, agent, provider):
+    """create -> test -> update -> disable (admission refused) -> enable -> used by a job (delete refused) -> unused delete."""
+    conn = new_conn(t, provider, "life"); out = {}
+    cid = conn["id"]
+    try:
+        assert conn["hasSecret"] and conn["enabled"]; assert_no_secret(conn, "create response")
+        if provider != "smb":
+            tr = t.call("POST", f"/storage-connections/{cid}/test", {})["test"]; out["test"] = tr["status"]
+            assert tr["status"] == "Succeeded" or (provider == "sftp" and tr["status"] == "NotTestable" and tr["code"] == "agent_side_storage"), tr
         u = t.call("PUT", f"/storage-connections/{cid}", {"name": conn["name"] + " renamed"}); assert u["name"].endswith("renamed") and u["hasSecret"], u
         assert_no_secret(u, "update response")
         d = t.call("POST", f"/storage-connections/{cid}/disable", {}); assert d["enabled"] is False and not d["effectiveEnabled"], d
@@ -676,6 +752,10 @@ def required_replicas(t, host, agent, required, expect):
             assert d["replication"]["verifiedReplicas"] == 1 and d["replication"]["policySatisfied"], out
             art = artifacts_of(d)[0]; out["restoredFiles"] = restore_and_compare(t, host, agent, art["id"], "req", ["nested"])
             out["artifactId"] = art["id"]; out["degradedStatus"] = artifact(t, art["id"])["replication"]["status"]
+        elif expect == "Insufficient":
+            # RequiredVerifiedReplicaCount is replication compliance (FP-5): the run stays usable and reports InsufficientReplicas
+            assert d["status"] == "Succeeded" and d["replication"]["status"] == "InsufficientReplicas" and not d["replication"]["policySatisfied"], out
+            out["artifactId"] = artifacts_of(d)[0]["id"]
         else:
             ra = [a for a in d["attempts"] if a["status"] == "Failed"]
             assert ra, f"required={required}: no failed attempt, run {d['status']} {out}"
@@ -736,7 +816,7 @@ def group_multi(c, only):
         ("multi/fedora/3-dest-local+sftp+s3", lambda: multi_dest(t, fed, fa, "m3", [dest("local"), dest("sftp", primary=False), dest("s3", primary=False)])),
         ("multi/win/4-dest-local+sftp+s3+smb", lambda: multi_dest(t, win, wa, "m4", [dest("local"), dest("sftp", primary=False), dest("s3", primary=False), dest("smb", primary=False)])),
         ("multi/required-replicas-1-with-broken-destination", lambda: required_replicas(t, fed, fa, 1, "Succeeded")),
-        ("multi/required-replicas-2-with-broken-destination", lambda: required_replicas(t, fed, fa, 2, "Failed")),
+        ("multi/required-replicas-2-with-broken-destination", lambda: required_replicas(t, fed, fa, 2, "Insufficient")),
         ("multi/3-2-1/invalid-required-2", lambda: three_two_one(t, fed, fa, "invalid-required-2")),
         ("multi/3-2-1/satisfied", lambda: three_two_one(t, fed, fa, "satisfied")),
         ("multi/3-2-1/no-offsite-site", lambda: three_two_one(t, fed, fa, "no-offsite-site")),
