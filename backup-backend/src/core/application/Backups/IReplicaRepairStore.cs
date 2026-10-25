@@ -117,7 +117,8 @@ public interface IReplicaRepairStore
         bool backendExecutedOnly = false);
 
     /// <summary>
-    /// Leases one due external-to-external repair of the agent's own tenant with an SFTP or Google Drive target, under the same global and tenant caps
+    /// Leases one due repair of the agent's own tenant: an external-to-external repair with an SFTP or Google Drive target, or one whose source is a replica on this
+    /// agent's local store (any external target), under the same global and tenant caps
     /// as <see cref="ClaimDueRepairAsync"/>. Null when the agent lacks the lifecycle capability, already holds a live repair, or nothing is due.
     /// </summary>
     Task<ReplicaRepairOperation?> ClaimAgentRepairAsync(

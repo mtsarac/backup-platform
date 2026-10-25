@@ -1,8 +1,9 @@
 namespace BackupPlatform.Contracts.Backups;
 
 /// <summary>
-/// Agent-executed replica lifecycle for SFTP and Google Drive: repair between external replicas and physical deletion. An agent without
-/// this capability is never handed such work. The backend only authorizes access and records its outcome.
+/// Agent-executed replica lifecycle: physical deletion of SFTP and Google Drive replicas, and repair of an SFTP or Google Drive target (from external replicas)
+/// or of any external target from a replica on the claiming agent's own local store. An agent without this capability is never handed such work.
+/// The backend only authorizes access and records its outcome.
 /// </summary>
 public static class ReplicaLifecycleProtocol
 {
@@ -15,6 +16,9 @@ public sealed record ReplicaRepairSourceContract
 {
     public Guid ReplicaId { get; init; }
     public string StorageProvider { get; init; } = string.Empty;
+    /// <summary>Empty for a provider-addressed (external) source; the agent's local volume ("local" for the default store) for a source on the agent's own disk.</summary>
+    public string StorageTarget { get; init; } = string.Empty;
+    /// <summary>Empty for a source on the agent's local store, which has no connection.</summary>
     public Guid StorageConnectionId { get; init; }
     public string StorageKey { get; init; } = string.Empty;
 }

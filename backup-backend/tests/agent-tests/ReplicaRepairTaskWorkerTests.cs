@@ -38,6 +38,26 @@ public sealed class ReplicaRepairTaskWorkerTests
         Assert.Empty(harness.Client.CleanupChecks);
     }
 
+    [Theory]
+    [InlineData("sftp")]
+    [InlineData("s3")]
+    public async Task A_replica_on_the_agents_own_local_store_is_copied_without_any_source_access_request(string targetProvider)
+    {
+        await using var harness = new ReplicaRepairHarness(targetProvider);
+        var local = new ReplicaRepairSourceContract { ReplicaId = Guid.NewGuid(), StorageProvider = "local", StorageTarget = "local", StorageKey = ReplicaRepairHarness.Source1Key };
+        var task = harness.Snapshot(targetProvider) with { Sources = [local] };
+        var targetKey = ReplicaRepairHarness.ExpectedTargetKey(task, local);
+        harness.Start();
+        Assert.True(harness.Worker.TryPublish(ReplicaRepairHarness.Wrap(task)));
+        await Wait.UntilAsync(() => harness.Client.Completions.Count == 1, "repair completion");
+
+        Assert.Equal(["renew", "pin", "read:local", "put:target", "complete"], harness.Events.ToArray());
+        Assert.Equal(local.ReplicaId, Assert.Single(harness.Client.Pins).SourceReplicaId);
+        Assert.Equal(ReplicaRepairOutcomes.Succeeded, Assert.Single(harness.Client.Completions).Outcome);
+        Assert.Equal(ReplicaRepairHarness.Content, harness.Target.Get(targetKey));
+        Assert.Equal(harness.TargetConnection, Assert.Single(harness.Storage.Scopes).ConnectionId);
+    }
+
     [Fact]
     public async Task Storage_access_is_requested_only_through_the_lease_scoped_repair_routes()
     {
@@ -417,7 +437,7 @@ public sealed class ReplicaRepairTaskWorkerTests
             "source-connection" => envelope with { ReplicaRepair = task with { Sources = [source with { StorageConnectionId = Guid.Empty }] } },
             "source-replica" => envelope with { ReplicaRepair = task with { Sources = [source with { ReplicaId = Guid.Empty }] } },
             "source-key" => envelope with { ReplicaRepair = task with { Sources = [source with { StorageKey = "../escape" }] } },
-            "target-provider" => envelope with { ReplicaRepair = task with { Target = task.Target with { StorageProvider = "s3" } } },
+            "target-provider" => envelope with { ReplicaRepair = task with { Target = task.Target with { StorageProvider = "central" } } },
             "target-connection" => envelope with { ReplicaRepair = task with { Target = task.Target with { StorageConnectionId = Guid.Empty } } },
             _ => throw new InvalidOperationException()
         };

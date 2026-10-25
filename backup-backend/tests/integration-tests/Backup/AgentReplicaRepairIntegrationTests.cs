@@ -149,6 +149,57 @@ public sealed class AgentReplicaRepairIntegrationTests
         Assert.NotNull(await store.ClaimDueRepairAsync("backend", T0, RepairLease, default, agent.TenantId, backendExecutedOnly: true));
     });
 
+    private static async Task UseLocalSourceAsync(BackupStoreHarness kit, StoreAgent owner, ReplicaRepairOperation[] operations, bool dropOtherCopies)
+    {
+        await using var context = kit.Database.CreatePlatformContext();
+        var artifact = await context.BackupArtifacts.SingleAsync(a => a.Id == operations[0].ArtifactId);
+        var connectionId = Guid.NewGuid();
+        context.StorageConnections.Add(new StorageConnection(connectionId, owner.TenantId, "Repair local source", "local",
+            StorageOwnership.PlatformManaged, StorageQuotaScopes.Managed, new Dictionary<string, string>(), false, T0));
+        var local = new BackupReplica(Guid.NewGuid(), owner.TenantId, artifact.Id, "local", "local", "scope/local.bak", artifact.SizeBytes, artifact.ArtifactChecksum,
+            artifact.ChecksumAlgorithm, "Verified", "ReadBack", T0, T0, BackupStorageExecutionLocation.Agent, owningAgentId: owner.AgentId.Value, storageConnectionId: connectionId);
+        context.BackupReplicas.Add(local);
+        await context.SaveChangesAsync();
+        foreach (var operation in operations)
+            (await context.ReplicaRepairOperations.SingleAsync(op => op.Id == operation.Id)).SetSourceReplica(local.Id);
+        await context.SaveChangesAsync();
+        if (!dropOtherCopies) return;
+        context.BackupReplicas.RemoveRange(await context.BackupReplicas.Where(r => r.ArtifactId == artifact.Id && r.ExecutionLocation == BackupStorageExecutionLocation.Backend).ToListAsync());
+        await context.SaveChangesAsync();
+    }
+
+    [Fact]
+    public Task LocalSourceRepairIsClaimedOnlyByTheOwningAgent_AndByTheBackendOnlyWhenItCanReadAnotherCopy() => WithIsolatedDatabaseAsync(async kit =>
+    {
+        var (owner, operations) = await SeedAsync(kit, "sftp", "s3");
+        var other = new StoreAgent(owner.TenantId, await kit.AddAgentToAsync(owner.TenantId));
+        await CapabilityAsync(kit, owner, CapabilitySupport.Supported);
+        await CapabilityAsync(kit, other, CapabilitySupport.Supported);
+        await UseLocalSourceAsync(kit, owner, operations, dropOtherCopies: false);
+        var store = Store(kit);
+
+        Assert.Null(await store.ClaimAgentRepairAsync(Identity(other), T0, RepairLease, default));
+        // The seeded S3 copy lets the backend repair the S3 target itself; the SFTP target can only be written by an agent.
+        Assert.Equal(operations[1].Id, (await store.ClaimDueRepairAsync("backend", T0, RepairLease, default, owner.TenantId, backendExecutedOnly: true))!.Id);
+        Assert.Null(await store.ClaimDueRepairAsync("backend", T0, RepairLease, default, owner.TenantId, backendExecutedOnly: true));
+        Assert.Equal(operations[0].Id, (await store.ClaimAgentRepairAsync(Identity(owner), T0, RepairLease, default))!.Id);
+    });
+
+    [Fact]
+    public Task LocalOnlyS3TargetRepairIsLeftToTheOwningAgent() => WithIsolatedDatabaseAsync(async kit =>
+    {
+        var (owner, operations) = await SeedAsync(kit, "s3");
+        var other = new StoreAgent(owner.TenantId, await kit.AddAgentToAsync(owner.TenantId));
+        await CapabilityAsync(kit, owner, CapabilitySupport.Supported);
+        await CapabilityAsync(kit, other, CapabilitySupport.Supported);
+        await UseLocalSourceAsync(kit, owner, operations, dropOtherCopies: true);
+        var store = Store(kit);
+
+        Assert.Null(await store.ClaimDueRepairAsync("backend", T0, RepairLease, default, owner.TenantId, backendExecutedOnly: true));
+        Assert.Null(await store.ClaimAgentRepairAsync(Identity(other), T0, RepairLease, default));
+        Assert.Equal(operations[0].Id, (await store.ClaimAgentRepairAsync(Identity(owner), T0, RepairLease, default))!.Id);
+    });
+
     [Fact]
     public Task AgentClaimsShareTenantAndGlobalCapacityWithBackendClaims() => WithIsolatedDatabaseAsync(async kit =>
     {

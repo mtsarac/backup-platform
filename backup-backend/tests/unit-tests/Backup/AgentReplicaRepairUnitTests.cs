@@ -113,6 +113,56 @@ public sealed class AgentReplicaRepairUnitTests
         Assert.Equal(("fail", ReplicaRepairFailureCodes.UnsupportedSource), (h.Store.Terminal!.Kind, h.Store.Terminal.Code));
     }
 
+    private static BackupReplica OwnLocal(BackupArtifact artifact, Guid owner, string name = "own.bak") =>
+        new(Guid.NewGuid(), Tenant, artifact.Id, "local", "local", $"{Tenant.Value:N}/job/run/attempt/{name}", Size, Checksum, "sha256", "Verified", "ReadBack", T0, T0,
+            BackupStorageExecutionLocation.Agent, owningAgentId: owner, storageConnectionId: Guid.NewGuid());
+
+    [Theory]
+    [InlineData("sftp")]
+    [InlineData("s3")]
+    public async Task Claim_HandsTheClaimingAgentItsOwnLocalReplicaAsASource(string targetProvider)
+    {
+        var h = new Harness(targetProvider);
+        var own = OwnLocal(h.Artifact, Agent.AgentId.Value);
+        var foreign = NewReplica(h.Artifact, "local", "foreign.bak", BackupStorageExecutionLocation.Agent);
+        h.Store.ClaimResult = h.Operation;
+        h.Store.Admission = Admit(h, [foreign, own]);
+
+        var snapshot = await h.Service.ClaimForAgentAsync(Agent, default);
+
+        var source = Assert.Single(snapshot!.Sources);
+        Assert.Equal((own.Id, "local", "local", Guid.Empty, own.Key), (source.ReplicaId, source.StorageProvider, source.StorageTarget, source.StorageConnectionId, source.StorageKey));
+        Assert.Null(h.Store.Terminal);
+    }
+
+    [Fact]
+    public async Task Pin_AcceptsTheAgentsOwnLocalReplicaButNotAnotherAgents()
+    {
+        var h = new Harness("s3", pinned: false);
+        var own = OwnLocal(h.Artifact, Agent.AgentId.Value);
+        var foreign = OwnLocal(h.Artifact, Guid.NewGuid(), "foreign.bak");
+        h.Artifact.AddReplica(own);
+        h.Artifact.AddReplica(foreign);
+
+        Assert.Equal(BackupMutationResult.Conflict, await h.Service.PinForAgentAsync(Agent, h.Operation.Id,
+            new() { LeaseToken = h.LeaseToken, SourceReplicaId = foreign.Id, TargetKey = h.TargetKeyFor(foreign) }, default));
+        Assert.Equal(BackupMutationResult.Accepted, await h.Service.PinForAgentAsync(Agent, h.Operation.Id,
+            new() { LeaseToken = h.LeaseToken, SourceReplicaId = own.Id, TargetKey = h.TargetKeyFor(own) }, default));
+        Assert.Equal(h.TargetKeyFor(own), h.Store.PinnedKey);
+    }
+
+    [Fact]
+    public async Task Access_ForAnS3TargetIsTheOperationConnection_AndALocalSourceNeedsNone()
+    {
+        var h = new Harness("s3", pinned: false);
+        var own = OwnLocal(h.Artifact, Agent.AgentId.Value);
+        h.Artifact.AddReplica(own);
+        h.Operation.SetTargetIntent(own.Id, h.TargetKeyFor(own));
+
+        Assert.Equal(new ReplicaRepairAccessTarget(h.TargetConnection, "s3"), await h.Service.ResolveAccessAsync(Agent, h.Operation.Id, h.LeaseToken, source: false, default));
+        Assert.Null(await h.Service.ResolveAccessAsync(Agent, h.Operation.Id, h.LeaseToken, source: true, default));
+    }
+
     [Fact]
     public async Task Claim_WhenNoCandidateSourceExists_FailsAsNoVerifiedSource()
     {

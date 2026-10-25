@@ -12,8 +12,8 @@ namespace BackupPlatform.Application.Backups;
 public readonly record struct ReplicaRepairAccessTarget(Guid ConnectionId, string StorageProvider);
 
 /// <summary>
-/// Repair of an SFTP or Google Drive target runs on an agent. The backend keeps every decision (admission, quota reservation, source pin, orphan ledger, the
-/// replica itself); the agent only moves bytes, and each of its calls is fenced by the operation's lease token and the lease owner recorded at claim.
+/// Repair of an SFTP or Google Drive target, and of any external target whose source is an agent's local replica, runs on an agent. The backend keeps every decision (admission, quota reservation, source pin, orphan ledger,
+/// the replica itself); the agent only moves bytes, and each of its calls is fenced by the operation's lease token and the lease owner recorded at claim.
 /// </summary>
 public sealed partial class ReplicaRepairService
 {
@@ -49,14 +49,14 @@ public sealed partial class ReplicaRepairService
                 return null;
             }
 
-            // The agent reads a source straight from its provider: a central or agent-local replica has no such path, and nothing is relayed or copied through the backend.
+            // The agent reads a source straight from its provider or from its own local store: a central replica, or another agent's local replica, has no such path,
+            // and nothing is relayed or copied through the backend.
             var candidates = admission.CandidateSources ?? [];
             var sources = candidates
-                .Where(c => c.ExecutionLocation == BackupStorageExecutionLocation.Backend && c.StorageConnectionId != Guid.Empty && StorageProviderTypes.External(c.StorageProvider))
-                .Select(c => new ReplicaRepairSourceContract
-                {
-                    ReplicaId = c.Id, StorageProvider = c.StorageProvider, StorageConnectionId = c.StorageConnectionId, StorageKey = c.Key
-                })
+                .Where(c => IsExternalSource(c) || IsLocalSourceOf(c, identity.AgentId.Value))
+                .Select(c => IsExternalSource(c)
+                    ? new ReplicaRepairSourceContract { ReplicaId = c.Id, StorageProvider = c.StorageProvider, StorageConnectionId = c.StorageConnectionId, StorageKey = c.Key }
+                    : new ReplicaRepairSourceContract { ReplicaId = c.Id, StorageProvider = c.StorageProvider, StorageTarget = c.StorageTarget, StorageKey = c.Key })
                 .ToList();
             if (sources.Count == 0)
             {
@@ -110,8 +110,7 @@ public sealed partial class ReplicaRepairService
         if (operation is null) return BackupMutationResult.Conflict;
         var source = (await store.FindArtifactAsync(operation.TenantId, operation.ArtifactId, cancellationToken))?.Replicas
             .FirstOrDefault(replica => replica.Id == request.SourceReplicaId);
-        if (source is null || source.ExecutionLocation != BackupStorageExecutionLocation.Backend
-            || source.StorageConnectionId == Guid.Empty || !StorageProviderTypes.External(source.StorageProvider))
+        if (source is null || !IsExternalSource(source) && !IsLocalSourceOf(source, identity.AgentId.Value))
             return BackupMutationResult.Conflict;
 
         var expectedKey = AgentTargetKey(source.Key, operationId, request.LeaseToken);
@@ -193,7 +192,7 @@ public sealed partial class ReplicaRepairService
         var operation = await LiveOperationAsync(identity, operationId, leaseToken, time.GetUtcNow(), cancellationToken);
         if (operation is null) return null;
         if (!source)
-            return StorageProviderTypes.AgentExecuted(operation.StorageProvider) && operation.StorageConnectionId != Guid.Empty
+            return StorageProviderTypes.External(operation.StorageProvider) && operation.StorageConnectionId != Guid.Empty
                 ? new ReplicaRepairAccessTarget(operation.StorageConnectionId, operation.StorageProvider)
                 : null;
 
@@ -283,6 +282,13 @@ public sealed partial class ReplicaRepairService
                 ? operation
                 : null;
     }
+
+    private static bool IsExternalSource(BackupReplica replica) =>
+        replica.ExecutionLocation == BackupStorageExecutionLocation.Backend && replica.StorageConnectionId != Guid.Empty && StorageProviderTypes.External(replica.StorageProvider);
+
+    /// <summary>A replica on the local store of this very agent: only it can read the bytes.</summary>
+    private static bool IsLocalSourceOf(BackupReplica replica, Guid agentId) =>
+        replica.ExecutionLocation == BackupStorageExecutionLocation.Agent && replica.OwningAgentId == agentId;
 
     private static string AgentTargetKey(string sourceKey, Guid operationId, Guid leaseToken)
     {

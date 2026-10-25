@@ -28,6 +28,7 @@ internal sealed class ReplicaRepairHarness : IAsyncDisposable
     public MemoryRepairProvider Source1 { get; }
     public MemoryRepairProvider Source2 { get; }
     public MemoryRepairProvider Target { get; }
+    public MemoryRepairProvider LocalSource { get; }
     public Guid Source1Connection { get; } = Guid.NewGuid();
     public Guid Source2Connection { get; } = Guid.NewGuid();
     public Guid TargetConnection { get; } = Guid.NewGuid();
@@ -39,12 +40,15 @@ internal sealed class ReplicaRepairHarness : IAsyncDisposable
         Source1 = new MemoryRepairProvider("sftp", "source1", Events);
         Source2 = new MemoryRepairProvider("sftp", "source2", Events);
         Target = new MemoryRepairProvider(targetProvider, "target", Events);
+        LocalSource = new MemoryRepairProvider("local", "local", Events);
         Source1.Seed(Source1Key, Content);
         Source2.Seed(Source2Key, Content);
+        LocalSource.Seed(Source1Key, Content);
         Storage.Register(Source1Connection, Source1);
         Storage.Register(Source2Connection, Source2);
         Storage.Register(TargetConnection, Target);
-        Worker = new ReplicaRepairTaskWorker(Client, Store, Storage, Time, NullLogger<ReplicaRepairTaskWorker>.Instance);
+        Worker = new ReplicaRepairTaskWorker(Client, Store, Storage, Time, NullLogger<ReplicaRepairTaskWorker>.Instance,
+            new LocalVolumes(LocalSource, new Dictionary<string, IStorageProvider>()));
     }
 
     public AgentTaskEnvelope Envelope(string targetProvider = "sftp") => Wrap(Snapshot(targetProvider));

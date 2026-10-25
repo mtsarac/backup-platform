@@ -623,6 +623,7 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
             IReplicaRepairStore.MaxGlobalConcurrentRepairs)
             return null;
 
+        // The backend cannot read an agent's local replica: such an operation is left to that agent, unless the backend can copy another verified replica to its S3/SMB target.
         var dueId = await context.Database.SqlQuery<Guid>($"""
             SELECT pending."Id" AS "Value" FROM replica_repair_operations pending
             WHERE pending."Status" = 'Pending' AND (pending."NextRetryAt" IS NULL OR pending."NextRetryAt" <= {now})
@@ -631,6 +632,15 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
                   SELECT 1 FROM backup_replicas source
                   WHERE source."TenantId" = pending."TenantId" AND source."ArtifactId" = pending."ArtifactId" AND source."Id" = pending."SourceReplicaId"
                     AND source."StorageProvider" IN ('sftp', 'google-drive', 's3', 'smb')))
+              AND (NOT {backendExecutedOnly} OR pending."StorageProvider" NOT IN ('sftp', 'google-drive', 's3', 'smb') OR NOT EXISTS (
+                  SELECT 1 FROM backup_replicas source
+                  WHERE source."TenantId" = pending."TenantId" AND source."ArtifactId" = pending."ArtifactId" AND source."Id" = pending."SourceReplicaId"
+                    AND source."ExecutionLocation" = 'Agent')
+                  OR (pending."StorageProvider" IN ('s3', 'smb') AND EXISTS (
+                      SELECT 1 FROM backup_replicas other
+                      WHERE other."TenantId" = pending."TenantId" AND other."ArtifactId" = pending."ArtifactId" AND other."ExecutionLocation" = 'Backend'
+                        AND other."Status" = 'Available' AND other."VerificationState" = 'Verified'
+                        AND other."StorageProvider" IN ('central', 'sftp', 's3', 'smb'))))
               AND (SELECT COUNT(*) FROM replica_repair_operations active
                    WHERE active."Status" = 'InProgress' AND active."TenantId" = pending."TenantId") < {IReplicaRepairStore.MaxTenantConcurrentRepairs}
             ORDER BY COALESCE(pending."NextRetryAt", pending."CreatedAt") ASC, pending."Id"
@@ -670,8 +680,12 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
 
         // Every poll of every agent comes here and most find nothing: refuse without the cluster-wide claim lock first, and decide under it only when work exists.
+        var agentId = identity.AgentId.Value;
         if (!await context.ReplicaRepairOperations.AnyAsync(r => r.TenantId == identity.TenantId && r.Status == ReplicaRepairStatus.Pending
-                && (r.StorageProvider == StorageProviderTypes.Sftp || r.StorageProvider == StorageProviderTypes.GoogleDrive) && (r.NextRetryAt == null || r.NextRetryAt <= now), cancellationToken)
+                && (r.StorageProvider == StorageProviderTypes.Sftp || r.StorageProvider == StorageProviderTypes.GoogleDrive
+                    || context.BackupReplicas.Any(source => source.TenantId == r.TenantId && source.Id == r.SourceReplicaId
+                        && source.ExecutionLocation == BackupStorageExecutionLocation.Agent && source.OwningAgentId == agentId))
+                && (r.NextRetryAt == null || r.NextRetryAt <= now), cancellationToken)
             || !await context.AgentCapabilities.AsNoTracking().AnyAsync(record => record.TenantId == identity.TenantId && record.AgentId == identity.AgentId
                 && record.Identifier == ReplicaLifecycleProtocol.Capability
                 && record.Support == BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, cancellationToken))
@@ -692,10 +706,13 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
             SELECT pending."Id" AS "Value" FROM replica_repair_operations pending
             WHERE pending."Status" = 'Pending' AND (pending."NextRetryAt" IS NULL OR pending."NextRetryAt" <= {now})
               AND pending."TenantId" = {identity.TenantId.Value}
-              AND pending."StorageProvider" IN ('sftp', 'google-drive')
-              AND EXISTS (SELECT 1 FROM backup_replicas source
-                  WHERE source."TenantId" = pending."TenantId" AND source."ArtifactId" = pending."ArtifactId" AND source."Id" = pending."SourceReplicaId"
-                    AND source."StorageProvider" IN ('sftp', 'google-drive', 's3', 'smb'))
+              AND (
+                  (pending."StorageProvider" IN ('sftp', 'google-drive') AND EXISTS (SELECT 1 FROM backup_replicas source
+                      WHERE source."TenantId" = pending."TenantId" AND source."ArtifactId" = pending."ArtifactId" AND source."Id" = pending."SourceReplicaId"
+                        AND source."StorageProvider" IN ('sftp', 'google-drive', 's3', 'smb')))
+                  OR (pending."StorageProvider" IN ('sftp', 'google-drive', 's3', 'smb') AND EXISTS (SELECT 1 FROM backup_replicas source
+                      WHERE source."TenantId" = pending."TenantId" AND source."ArtifactId" = pending."ArtifactId" AND source."Id" = pending."SourceReplicaId"
+                        AND source."ExecutionLocation" = 'Agent' AND source."OwningAgentId" = {agentId})))
               AND (SELECT COUNT(*) FROM replica_repair_operations active
                    WHERE active."Status" = 'InProgress' AND active."TenantId" = pending."TenantId") < {IReplicaRepairStore.MaxTenantConcurrentRepairs}
             ORDER BY COALESCE(pending."NextRetryAt", pending."CreatedAt") ASC, pending."Id"

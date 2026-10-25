@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 namespace BackupPlatform.Agent.Core.Tasks;
 
 /// <summary>
-/// Copies a verified SFTP/Google Drive replica to an external target on behalf of the backend. The backend holds no credential and relays no byte:
+/// Copies a verified replica (external, or on this agent's own local store) to an external target on behalf of the backend. The backend holds no credential and relays no byte:
 /// it only fences every step by the lease and keeps quota, source pin, orphan ledger and audit. One repair at a time.
 /// </summary>
 public sealed partial class ReplicaRepairTaskWorker : IAgentTaskSink
@@ -26,14 +26,16 @@ public sealed partial class ReplicaRepairTaskWorker : IAgentTaskSink
     private readonly IReplicaRepairTaskClient _client;
     private readonly IAgentCredentialStore _identities;
     private readonly ITaskStorageProviderFactory _providers;
+    private readonly LocalVolumes? _volumes;
     private readonly TimeProvider _time;
     private readonly ILogger<ReplicaRepairTaskWorker> _logger;
     private Guid? _active;
     private int _started;
 
     public ReplicaRepairTaskWorker(IReplicaRepairTaskClient client, IAgentCredentialStore identities,
-        ITaskStorageProviderFactory providers, TimeProvider timeProvider, ILogger<ReplicaRepairTaskWorker> logger)
+        ITaskStorageProviderFactory providers, TimeProvider timeProvider, ILogger<ReplicaRepairTaskWorker> logger, LocalVolumes? volumes = null)
     {
+        _volumes = volumes;
         _client = client;
         _identities = identities;
         _providers = providers;
@@ -71,10 +73,12 @@ public sealed partial class ReplicaRepairTaskWorker : IAgentTaskSink
         task.OperationId != Guid.Empty && task.TenantId != Guid.Empty && task.AgentId != Guid.Empty
         && task.ArtifactId != Guid.Empty && task.LeaseToken != Guid.Empty && task.LeaseExpiresAt > now
         && task.SizeBytes > 0 && task.Checksum.Length == ContentChecksum.Sha256HexLength && task.Checksum.All(Uri.IsHexDigit)
-        && task.Target.StorageConnectionId != Guid.Empty && AgentStorageProviders.AgentExecuted(task.Target.StorageProvider)
+        && task.Target.StorageConnectionId != Guid.Empty && AgentStorageProviders.External(task.Target.StorageProvider)
         && task.Sources is { Count: > 0 }
-        && task.Sources.All(source => source.ReplicaId != Guid.Empty && source.StorageConnectionId != Guid.Empty
-            && AgentStorageProviders.External(source.StorageProvider) && StorageObjectKey.TryCreate(source.StorageKey, out _));
+        && task.Sources.All(source => source.ReplicaId != Guid.Empty && StorageObjectKey.TryCreate(source.StorageKey, out _)
+            && (source.StorageProvider == AgentStorageProviders.Local
+                ? source.StorageConnectionId == Guid.Empty && (source.StorageTarget == LocalVolumes.DefaultName || LocalVolumes.IsValidName(source.StorageTarget))
+                : source.StorageConnectionId != Guid.Empty && AgentStorageProviders.External(source.StorageProvider)));
 
     public async Task RunAsync(CancellationToken stoppingToken)
     {
@@ -268,7 +272,10 @@ public sealed partial class ReplicaRepairTaskWorker : IAgentTaskSink
             }
             try
             {
-                var provider = _providers.CreateScoped(Scope(task, "source", candidate.StorageConnectionId, candidate.StorageProvider));
+                var provider = candidate.StorageProvider == AgentStorageProviders.Local
+                    ? _volumes?.Resolve(candidate.StorageTarget)
+                    : _providers.CreateScoped(Scope(task, "source", candidate.StorageConnectionId, candidate.StorageProvider));
+                if (provider is null || !provider.Capabilities.Supports(StorageCapabilityIds.Read)) continue;
                 return (candidate, await provider.OpenReadAsync(new StorageObjectKey(candidate.StorageKey), transfer).ConfigureAwait(false));
             }
             catch (StorageException exception)
