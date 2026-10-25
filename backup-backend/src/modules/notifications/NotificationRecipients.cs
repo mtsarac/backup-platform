@@ -84,6 +84,12 @@ public sealed class NotificationRecipientService(INotificationStore store, IReci
                 stale = true;
                 return null;
             }
+            // Whoever unsubscribed is not verified again by a confirmation link mailed before; only a new invitation (the channel switched back on) can ask again.
+            if (claim.Action == RecipientAction.Confirm && channel.UnsubscribedAt is not null)
+            {
+                stale = true;
+                return null;
+            }
             return claim.Action == RecipientAction.Confirm
                 ? channel.ConfirmRecipient(now) ? new ChannelChange(NotificationAuditActions.ChannelRecipientConfirmed) : null
                 : channel.Unsubscribe(now) ? new ChannelChange(NotificationAuditActions.ChannelRecipientUnsubscribed) : null;

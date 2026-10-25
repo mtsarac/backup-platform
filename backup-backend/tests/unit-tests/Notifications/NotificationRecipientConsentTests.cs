@@ -49,6 +49,31 @@ public sealed class NotificationRecipientConsentTests
     }
 
     [Fact]
+    public void An_unsubscribed_address_is_not_verified_again_by_a_confirmation_link_until_the_channel_is_switched_back_on()
+    {
+        var email = Email();
+        email.Unsubscribe(Start);
+
+        Assert.Equal(Start, email.UnsubscribedAt);
+        Assert.False(email.ConfirmRecipient(Start.AddMinutes(1)));
+        Assert.True(email.AwaitsConfirmation);
+
+        Assert.True(email.SetEnabled(true, Start.AddMinutes(2)));
+        Assert.Null(email.UnsubscribedAt);
+        Assert.True(email.ConfirmRecipient(Start.AddMinutes(3)));
+        Assert.True(email.IsDeliverable);
+    }
+
+    [Fact]
+    public void An_address_that_never_confirmed_can_still_unsubscribe_and_keeps_that_refusal()
+    {
+        var email = Email(confirmed: false);
+
+        Assert.True(email.Unsubscribe(Start));
+        Assert.False(email.ConfirmRecipient(Start.AddMinutes(1)));
+    }
+
+    [Fact]
     public void Re_pointing_an_email_channel_needs_the_new_address_to_confirm()
     {
         var email = Email();
@@ -56,6 +81,7 @@ public sealed class NotificationRecipientConsentTests
         Assert.True(email.Retarget("someone-else@example.com", Start));
 
         Assert.False(email.IsDeliverable);
+        Assert.Null(email.UnsubscribedAt);
     }
 
     [Fact]

@@ -62,6 +62,11 @@ public sealed class NotificationChannel : ITenantOwned
 
     /// <summary>Email only: when the owner of the address confirmed it wants this tenant's alerts. Null until then; webhook and SMS channels never have one.</summary>
     public DateTimeOffset? RecipientVerifiedAt { get; private set; }
+    /// <summary>
+    /// Email only: when the owner of the address refused further mail. While set, no earlier confirmation link can verify the address again; turning the channel back on
+    /// (which sends a new invitation) or pointing it at another address clears it.
+    /// </summary>
+    public DateTimeOffset? UnsubscribedAt { get; private set; }
     /// <summary>An Owner explicitly designated this confirmed email for mandatory tenant security notices; never inferred from a general recipient.</summary>
     public UserId? SecurityOwnerUserId { get; private set; }
 
@@ -120,15 +125,16 @@ public sealed class NotificationChannel : ITenantOwned
         (Target, NormalizedTarget) = (value, normalized);
         // A new address has not agreed to receive anything yet.
         RecipientVerifiedAt = null;
+        UnsubscribedAt = null;
         SecurityOwnerUserId = null;
         Touch(now);
         return true;
     }
 
-    /// <summary>The address's owner followed the confirmation link. Only email recipients are confirmed; false when nothing changed.</summary>
+    /// <summary>The address's owner followed the confirmation link. Only email recipients are confirmed, and not after they unsubscribed; false when nothing changed.</summary>
     public bool ConfirmRecipient(DateTimeOffset now)
     {
-        if (Kind != NotificationChannelKind.Email || RecipientVerifiedAt is not null) return false;
+        if (Kind != NotificationChannelKind.Email || RecipientVerifiedAt is not null || UnsubscribedAt is not null) return false;
         RecipientVerifiedAt = BackupGuard.Timestamp(now);
         Touch(now);
         return true;
@@ -137,8 +143,9 @@ public sealed class NotificationChannel : ITenantOwned
     /// <summary>The address's owner refused further mail: the channel stops and must be confirmed again before it can send. False when nothing changed.</summary>
     public bool Unsubscribe(DateTimeOffset now)
     {
-        if (Kind != NotificationChannelKind.Email || (!Enabled && RecipientVerifiedAt is null)) return false;
+        if (Kind != NotificationChannelKind.Email || UnsubscribedAt is not null) return false;
         Enabled = false;
+        UnsubscribedAt = BackupGuard.Timestamp(now);
         RecipientVerifiedAt = null;
         SecurityOwnerUserId = null;
         Touch(now);
@@ -166,6 +173,7 @@ public sealed class NotificationChannel : ITenantOwned
     {
         if (Enabled == enabled) return false;
         Enabled = enabled;
+        if (enabled) UnsubscribedAt = null;
         Touch(now);
         return true;
     }

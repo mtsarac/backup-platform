@@ -56,6 +56,7 @@ internal sealed class NotificationChannelConfiguration : IEntityTypeConfiguratio
         builder.Property(channel => channel.CreatedAt).HasColumnType("timestamp with time zone").IsRequired();
         builder.Property(channel => channel.UpdatedAt).HasColumnType("timestamp with time zone").IsRequired();
         builder.Property(channel => channel.RecipientVerifiedAt).HasColumnType("timestamp with time zone");
+        builder.Property(channel => channel.UnsubscribedAt).HasColumnType("timestamp with time zone");
         builder.Property(channel => channel.SecurityOwnerUserId).HasConversion<UserIdConverter>().HasColumnType("uuid");
         builder.HasOne<User>().WithMany().HasForeignKey(channel => channel.SecurityOwnerUserId).OnDelete(DeleteBehavior.Restrict);
         builder.Ignore(channel => channel.HasSecret);
