@@ -22,7 +22,8 @@ def db_job_config(engine, cfg, destinations, **extra):
 
 def file_job_config(source, destinations, paths=None, **extra):
     base = {"engine": "file-system", "database": source, "host": "localhost", "port": None, "integratedSecurity": True, "databaseCredentialReference": None,
-            "encrypt": False, "trustServerCertificate": False, "stagingReference": "default", "storageTarget": "default", "storagePrefix": "", "copyOnly": False,
+            "encrypt": False, "trustServerCertificate": False, "stagingReference": "default", "storageTarget": "default", "storagePrefix": "", "copyOnly": True,  # copyOnly=False never completes for file jobs (finding FP-1)
+           
             "checksumPolicy": "Required", "compressionPolicy": "Preferred", "requiredVerifiedReplicaCount": 1, "encryptionPolicy": "Off",
             "files": {"paths": paths or ["."], "includes": ["**"], "excludes": [], "symlinkPolicy": "Skip"}, "destinations": destinations}
     base.update(extra); return base
