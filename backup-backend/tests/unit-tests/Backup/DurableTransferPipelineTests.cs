@@ -202,4 +202,16 @@ public sealed class DurableTransferPipelineTests
         }
         else Assert.Equal(PipelineHarness.BackupBytes, received.ToArray());
     }
+
+    [Fact]
+    public async Task ResumingAnAttemptWhoseRetainedTransferIsGoneFailsWithAReadableReasonInsteadOfAnUnexpectedError()
+    {
+        using var harness = new PipelineHarness();
+
+        var result = await harness.RunAsync(harness.Request() with { AttemptId = Guid.NewGuid(), ResumeTransfer = true });
+
+        Assert.Equal(DatabaseBackupStatus.Failed, result.Status);
+        Assert.Equal(BackupPipelineReasons.StagedFileMissing, result.Failure!.ReasonCode);
+        Assert.Empty(harness.Storage.Objects);
+    }
 }

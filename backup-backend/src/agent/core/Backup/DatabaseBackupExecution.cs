@@ -127,7 +127,13 @@ internal sealed class DatabaseBackupExecution
 
         if (_request.ResumeTransfer)
         {
-            _retained = RetainedTransfer.Load(_staging, _request.AttemptId);
+            try { _retained = RetainedTransfer.Load(_staging, _request.AttemptId); }
+            catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+            {
+                // The transfer already finished, was cleaned up or never existed on this agent: there is nothing to continue, and saying so beats an "unexpected" failure.
+                throw Fail(BackupExecutionStage.Preparing, BackupPipelineReasons.StagedFileMissing,
+                    "The retained transfer of this attempt is no longer on this agent, so it cannot be resumed.", exception, BackupFailureKind.PreCheckFailed);
+            }
             _artifact = _retained.Artifact;
             _sourceFile = _retained.SourceFile;
             _startedAt = _retained.StartedAt;
