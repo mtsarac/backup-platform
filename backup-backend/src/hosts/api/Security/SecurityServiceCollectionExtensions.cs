@@ -410,7 +410,7 @@ public static class SecurityServiceCollectionExtensions
             options.Cookie.Name = BrowserAuthentication.CookieName;
             options.Cookie.HttpOnly = true;
             options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-            options.Cookie.SameSite = SameSiteMode.Lax;
+            options.Cookie.SameSite = SameSiteMode.Strict;
             options.Cookie.Path = "/";
             options.Cookie.Domain = null;
             options.ExpireTimeSpan = TimeSpan.FromHours(8);

@@ -30,7 +30,7 @@ public sealed class AuthIntegrationTests(PostgreSqlFixture fixture) : IClassFixt
         var cookie = GetAuthenticationCookie(response);
         Assert.True(cookie.Secure);
         Assert.True(cookie.HttpOnly);
-        Assert.Equal("Lax", cookie.SameSite.ToString());
+        Assert.Equal("Strict", cookie.SameSite.ToString());
         Assert.Equal("/", cookie.Path.ToString());
         Assert.False(cookie.Domain.HasValue);
         Assert.Null(cookie.Expires);
