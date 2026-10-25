@@ -31,12 +31,26 @@ def capacity(t):
 
 
 def download(t, art_id):
+    """Drive replicas are served by the agent directly (WebRTC), so the platform returns a session, not bytes."""
     a = artifact(t, art_id); rep = next(r for r in a["replicas"] if r["storageProvider"] == "google-drive")
     p = t.call("POST", f"/backup-artifacts/{art_id}/downloads", {"replicaId": rep["id"], "decrypt": False})
-    r = t.s.get(api.BASE + p["downloadUrl"], stream=True); h = hashlib.sha256(); n = 0
-    for ch in r.iter_content(1 << 20): h.update(ch); n += len(ch)
-    assert r.status_code == 200 and h.hexdigest() == a["artifactChecksum"] == p["checksum"], f"download {r.status_code} {h.hexdigest()[:12]}"
-    return {"bytes": n}
+    assert p["direct"] and p["checksum"] == a["artifactChecksum"] and p["sizeBytes"] == a["sizeBytes"], p
+    return {"direct": True, "sizeBytes": p["sizeBytes"]}
+
+
+def delete_removes_copy(t, ag, host, agent):
+    job, rid, art, d = run_ok(t, agent, f"{host.name}-gdrive-del", fcfg([drive_dest(t)], paths=["docs"]))
+    t.call("PUT", f"/backup-jobs/{job['id']}/retention", {"enabled": True, "keepForSeconds": 30, "deleteGracePeriodSeconds": 10})
+    run = t.call("POST", f"/backup-jobs/{job['id']}/runs", {}); rid = run.get("id", run.get("run", {}).get("id"))  # expiry is fixed when the artifact is created
+    d = t.wait(f"/backup-runs/{rid}", timeout=600, stop_on=lib.TERMINAL); assert d["status"] == "Succeeded", d["status"]
+    art = fp.artifacts_of(d)[0]
+    end = time.time() + 420; a = None
+    while time.time() < end:
+        a = artifact(t, art["id"])
+        if a.get("state") == "Deleted" or all(r["status"] == "Deleted" for r in a["replicas"]): break
+        time.sleep(5)
+    assert all(r["status"] == "Deleted" for r in a["replicas"]), [(r["storageProvider"], r["status"]) for r in a["replicas"]]
+    return {"artifactId": art["id"], "replicas": [(r["storageProvider"], r["status"]) for r in a["replicas"]]}
 
 
 def files_roundtrip(t, ag, host, agent):
@@ -59,7 +73,8 @@ def main(only=None):
     items = [("gdrive/connection-test", lambda: test_ok(t)), ("gdrive/capacity", lambda: capacity(t)),
              ("gdrive/files/fedora/roundtrip-and-download", lambda: files_roundtrip(t, ag, fed, ag["fedora-e2e"])),
              ("gdrive/files/win/roundtrip-and-download", lambda: files_roundtrip(t, ag, win, ag["win11-e2e"])),
-             ("gdrive/multi/fedora/drive+s3", lambda: multi(t, ag, fed, ag["fedora-e2e"]))]
+             ("gdrive/multi/fedora/drive+s3", lambda: multi(t, ag, fed, ag["fedora-e2e"])),
+             ("gdrive/retention-delete/fedora/removes-copy", lambda: delete_removes_copy(t, ag, fed, ag["fedora-e2e"]))]
     fp.run_all(only, items)
 
 
