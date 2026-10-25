@@ -32,7 +32,7 @@ public static class AuthenticationEndpoints
 
     private static async Task<IResult> LoginAsync(LoginRequest request, HttpContext context, AuthenticationService authenticationService, LoginThrottle throttle)
     {
-        if (throttle.RetryAfter(request.LoginIdentifier) is { } wait)
+        if (await throttle.RetryAfterAsync(request.LoginIdentifier, context.RequestAborted) is { } wait)
         {
             context.Response.Headers.RetryAfter = ((int)Math.Ceiling(wait.TotalSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture);
             return Results.Json(new { error = "Too many failed login attempts. Try again later." }, statusCode: StatusCodes.Status429TooManyRequests);
@@ -40,10 +40,10 @@ public static class AuthenticationEndpoints
         var session = await authenticationService.LoginAsync(request.LoginIdentifier, request.Password, context.RequestAborted);
         if (session is null)
         {
-            throttle.Failed(request.LoginIdentifier);
+            await throttle.FailedAsync(request.LoginIdentifier, context.RequestAborted);
             return Results.Json(new { error = "Invalid login identifier or password." }, statusCode: StatusCodes.Status401Unauthorized);
         }
-        throttle.Succeeded(request.LoginIdentifier);
+        await throttle.SucceededAsync(request.LoginIdentifier, context.RequestAborted);
         var identity = new ClaimsIdentity(
         [
             new Claim(ClaimTypes.NameIdentifier, session.UserId.Value.ToString("D")),

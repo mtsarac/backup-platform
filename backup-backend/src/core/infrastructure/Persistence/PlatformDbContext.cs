@@ -70,6 +70,7 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<AgentCapabilityRecord> AgentCapabilities => Set<AgentCapabilityRecord>();
     public DbSet<PasswordCredential> PasswordCredentials => Set<PasswordCredential>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
+    public DbSet<LoginThrottleEntry> LoginThrottleEntries => Set<LoginThrottleEntry>();
     public DbSet<BackupJob> BackupJobs => Set<BackupJob>();
     public DbSet<BackupRun> BackupRuns => Set<BackupRun>();
     public DbSet<BackupRunAttempt> BackupRunAttempts => Set<BackupRunAttempt>();

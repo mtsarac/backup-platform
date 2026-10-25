@@ -4076,6 +4076,25 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BackupPlatform.Identity.LoginThrottleEntry", b =>
+                {
+                    b.Property<string>("Identifier")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("Failures")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("WindowStart")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Identifier");
+
+                    b.HasIndex("WindowStart");
+
+                    b.ToTable("login_throttle_entries", (string)null);
+                });
+
             modelBuilder.Entity("BackupPlatform.Identity.PasswordCredential", b =>
                 {
                     b.Property<Guid>("UserId")
