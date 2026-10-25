@@ -68,7 +68,7 @@ function RestoreDetail({ id }: { id: string }) {
   const { tenantId, canOperate } = useTenant()
   const query = useRestore(id)
   const cancel = useCancelRestore(id)
-  const agents = useAgents(tenantId)
+  const agents = useAgents(tenantId, true)
   const restore = query.data
   const fileRestore = restore?.options.files
   const artifact = useArtifact(tenantId, restore?.artifactId ?? '')

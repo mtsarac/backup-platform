@@ -33,7 +33,7 @@ export function BackupsPage() {
   const [toDay, setToDay] = useState('')
   const backups = useBackups(filters)
   const jobs = useBackupJobs()
-  const agents = useAgents(tenantId)
+  const agents = useAgents(tenantId, true)
   const page = filters.page ?? 1
   const pageSize = filters.pageSize ?? 25
   const filtering = Boolean(filters.status || filters.jobId || filters.agentId || filters.trigger || filters.from || filters.to)

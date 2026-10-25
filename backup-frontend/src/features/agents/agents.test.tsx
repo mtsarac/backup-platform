@@ -63,7 +63,19 @@ describe('Backup computers list', () => {
     expect(within(row).getByText('Çevrimiçi')).toBeInTheDocument()
     expect(within(row).getByText('3 saat önce')).toHaveAttribute('title', expect.stringContaining('2026'))
     for (const hidden of ['Windows', '1.2.0', 'agent-a', /yetenek/]) expect(within(row).queryByText(hidden)).not.toBeInTheDocument()
-    expect(api.getAgents).toHaveBeenCalledWith('tenant-a', expect.any(AbortSignal))
+    expect(api.getAgents).toHaveBeenCalledWith('tenant-a', expect.any(AbortSignal), false)
+  })
+
+  it('hides revoked computers by default and asks the API for them only when the toggle is on', async () => {
+    vi.mocked(api.getAgents).mockImplementation(async (_tenant, _signal, includeRevoked) => includeRevoked
+      ? [agent, { ...agent, agentId: 'agent-r', hostName: 'Revoked host', status: 'Revoked', operationalStatus: 'Revoked' }]
+      : [agent])
+    mount(<ClientsPage />)
+    await screen.findByRole('link', { name: 'SQL-01' })
+    expect(screen.queryByRole('link', { name: 'Revoked host' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'İptal edilenleri göster' }))
+    expect(await screen.findByRole('link', { name: 'Revoked host' })).toBeInTheDocument()
+    expect(api.getAgents).toHaveBeenLastCalledWith('tenant-a', expect.any(AbortSignal), true)
   })
 
   it('keeps revoked and disabled lifecycle separate from offline connectivity', async () => {

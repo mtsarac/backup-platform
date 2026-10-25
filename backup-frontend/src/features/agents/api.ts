@@ -2,8 +2,8 @@ import { apiRequest, tenantPath } from '@/lib/api/client'
 import type { Agent, AgentDetail, CreatedEnrollmentToken, EnrollmentPolicy, EnrollmentToken, EnrollmentTokenStatus } from './types'
 export type { Agent } from './types'
 
-export function getAgents(tenantId: string, signal?: AbortSignal) {
-  return apiRequest<Agent[]>(tenantPath(tenantId, 'agents'), { signal })
+export function getAgents(tenantId: string, signal?: AbortSignal, includeRevoked = false) {
+  return apiRequest<Agent[]>(tenantPath(tenantId, includeRevoked ? 'agents?includeRevoked=true' : 'agents'), { signal })
 }
 
 export function getAgent(tenantId: string, agentId: string, signal?: AbortSignal) {

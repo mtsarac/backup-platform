@@ -35,7 +35,7 @@ export function RestoresPage() {
   const verification = search.get('view') === 'tests'
   const filters: RestoreFilters = { page, pageSize: 25, purpose: verification ? 'Verification' : undefined, status, artifactId: search.get('artifactId') ?? '', agentId: search.get('agentId') ?? '' }
   const query = useRestores(filters)
-  const agents = useAgents(tenantId)
+  const agents = useAgents(tenantId, true)
   const base = `/tenants/${tenantId}`
   const filtering = Boolean(status || filters.artifactId || filters.agentId)
   const emptyFiltered = filtering && query.data?.items.length === 0

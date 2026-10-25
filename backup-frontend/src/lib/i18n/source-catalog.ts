@@ -7334,4 +7334,5 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "{0} yedek dosyası silinemedi.": {"tr":"{0} yedek dosyası silinemedi.","en":"{0} backup file(s) could not be deleted."},
   "Son 24 saatte {0} yedeklemede depolamaya yazma veya kopya doğrulama hatası oluştu.": {"tr":"Son 24 saatte {0} yedeklemede depolamaya yazma veya kopya doğrulama hatası oluştu.","en":"Storage write or replica verification failed for {0} backup(s) in the last 24 hours."},
   "Son 24 saatte {0} yedekleme kullanılabilir yedek oluşturdu, ancak gereken doğrulanmış kopya sayısına ulaşamadı.": {"tr":"Son 24 saatte {0} yedekleme kullanılabilir yedek oluşturdu, ancak gereken doğrulanmış kopya sayısına ulaşamadı.","en":"{0} backup(s) in the last 24 hours produced a usable backup but did not reach the required number of verified copies."},
+  "İptal edilenleri göster": {"tr":"İptal edilenleri göster","en":"Show revoked"},
 }

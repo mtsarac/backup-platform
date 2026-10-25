@@ -8,8 +8,9 @@ export const agentQueryKeys = {
   tokens: (tenantId: string) => ['tenant', tenantId, 'agent-enrollment-tokens'] as const,
 }
 
-export function useAgents(tenantId: string) {
-  return useQuery({ queryKey: agentQueryKeys.all(tenantId), queryFn: ({ signal }) => getAgents(tenantId, signal) })
+/** Revoked agents are hidden unless asked for; screens that resolve the agent of a past run or restore need `includeRevoked`. */
+export function useAgents(tenantId: string, includeRevoked = false) {
+  return useQuery({ queryKey: includeRevoked ? [...agentQueryKeys.all(tenantId), { includeRevoked }] : agentQueryKeys.all(tenantId), queryFn: ({ signal }) => getAgents(tenantId, signal, includeRevoked) })
 }
 
 export function useAgent(tenantId: string, id: string) {
