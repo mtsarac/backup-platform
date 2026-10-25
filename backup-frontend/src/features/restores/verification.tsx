@@ -54,6 +54,7 @@ function VerificationForm({ tenantId, artifactId, onClose }: { tenantId: string;
   const [targetIndex, setTargetIndex] = useState(0)
   const [custom, setCustom] = useState<RestoreTarget>({ host: '', port: null, integratedSecurity: true, databaseCredentialReference: null, encrypt: true, trustServerCertificate: false })
   const [error, setError] = useState<unknown>(null)
+  const [loginPending, setLoginPending] = useState(false)
   if (targets.isPending) return <p className="text-sm text-text-muted">{tx("Hedefler yükleniyor…")}</p>
   if (targets.error || !targets.data) return <ErrorNotice title={tx("Hedefler yüklenemedi")} error={targets.error} scope="restore" />
   const agents = targets.data.agents.filter((agent) => agent.canVerify && agent.sourceEligible)
@@ -87,7 +88,7 @@ function VerificationForm({ tenantId, artifactId, onClose }: { tenantId: string;
       {!useConfigured && <div className="grid gap-3 sm:grid-cols-2">
         <div><label htmlFor="verify-host" className="block text-sm font-medium">{tx("Host / Instance")}</label><input id="verify-host" className={inputClass} value={custom.host} onChange={(event) => setCustom({ ...custom, host: event.target.value })} placeholder={tx("localhost veya SQLSERVER")} /></div>
         <div><label htmlFor="verify-port" className="block text-sm font-medium">{tx("Port (İsteğe bağlı)")}</label><input id="verify-port" type="number" className={inputClass} value={custom.port ?? ''} onChange={(event) => setCustom({ ...custom, port: event.target.value ? Number(event.target.value) : null })} placeholder="1433" /></div>
-        {!custom.integratedSecurity && <StoredLoginPanel tenantId={tenantId} agentId={selectedAgent} idPrefix="verify-login" reference={custom.databaseCredentialReference} onStored={(reference) => setCustom({ ...custom, databaseCredentialReference: reference })} />}
+        {!custom.integratedSecurity && <StoredLoginPanel tenantId={tenantId} agentId={selectedAgent} idPrefix="verify-login" reference={custom.databaseCredentialReference} onPendingChange={setLoginPending} onStored={(reference) => setCustom({ ...custom, databaseCredentialReference: reference })} />}
         <div className="flex flex-wrap items-center gap-4 text-sm sm:col-span-2">
           <label className="flex items-center gap-2"><input type="checkbox" checked={custom.integratedSecurity} onChange={(event) => setCustom({ ...custom, integratedSecurity: event.target.checked, databaseCredentialReference: null })} /><span>{tx("Windows kimlik doğrulaması")}</span></label>
           <label className="flex items-center gap-2"><input type="checkbox" checked={custom.encrypt} onChange={(event) => setCustom({ ...custom, encrypt: event.target.checked })} /><span>{tx("Bağlantıyı Şifrele")}</span></label>
@@ -98,7 +99,7 @@ function VerificationForm({ tenantId, artifactId, onClose }: { tenantId: string;
     {error != null && <p role="alert" className="text-sm text-error">{errorMessage(error, 'restore')}</p>}
     <div className="flex justify-end gap-2">
       <Button type="button" variant="outline" disabled={start.isPending} onClick={onClose}>{tx("Vazgeç")}</Button>
-      <Button type="submit" disabled={!valid || start.isPending}>{start.isPending ? tx('Başlatılıyor…') : tx('Testi başlat')}</Button>
+      <Button type="submit" disabled={!valid || loginPending || start.isPending}>{start.isPending ? tx('Başlatılıyor…') : tx('Testi başlat')}</Button>
     </div>
   </form>
 }

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { tx, useLanguage } from '@/lib/i18n'
 import { CheckCircle2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -31,6 +32,7 @@ interface RestoreTargetStepProps {
 
 export function RestoreTargetStep({ tenantId, instancePrefix, isPg, engineName, targets, activeAgent, selectedAgentId, targetType, selectedTargetIndex, customTarget, eligibleForRestore, targetValid, invalidateDiscovery, setSelectedAgentId, setTargetType, setSelectedTargetIndex, changeCustomTarget, onContinue }: RestoreTargetStepProps) {
   useLanguage()
+  const [loginPending, setLoginPending] = useState(false)
   return (
     <div className="space-y-5">
       <Section title={tx("Hangi yedekleme bilgisayarı geri yüklesin?")} description={tx("Neden soruluyor? Yedek dosyasını alıp {0} sunucusuna aktaracak yedekleme bilgisayarını seçmeniz gerekir.", { "0": engineName })}>
@@ -144,7 +146,7 @@ export function RestoreTargetStep({ tenantId, instancePrefix, isPg, engineName, 
                   placeholder={isPg ? '5432' : '1433'}
                 />
               </div>
-              {!customTarget.integratedSecurity && <StoredLoginPanel tenantId={tenantId} agentId={selectedAgentId} idPrefix={`${instancePrefix}-login`} reference={customTarget.databaseCredentialReference} onStored={(reference) => changeCustomTarget({ ...customTarget, databaseCredentialReference: reference })} />}
+              {!customTarget.integratedSecurity && <StoredLoginPanel tenantId={tenantId} agentId={selectedAgentId} idPrefix={`${instancePrefix}-login`} reference={customTarget.databaseCredentialReference} onPendingChange={setLoginPending} onStored={(reference) => changeCustomTarget({ ...customTarget, databaseCredentialReference: reference })} />}
               <label className="flex items-center gap-2 text-sm sm:col-span-2">
                 <input type="checkbox" checked={customTarget.integratedSecurity} onChange={(e) => changeCustomTarget({ ...customTarget, integratedSecurity: e.target.checked, databaseCredentialReference: null })} />
                 <span>{tx("Windows kimlik doğrulaması")}</span>
@@ -177,7 +179,7 @@ export function RestoreTargetStep({ tenantId, instancePrefix, isPg, engineName, 
 
       <div className="flex justify-end gap-3">
         <Button
-          disabled={!eligibleForRestore || !targetValid}
+          disabled={!eligibleForRestore || !targetValid || loginPending}
           onClick={() => onContinue()}
         >{tx("Devam et →")}</Button>
       </div>
