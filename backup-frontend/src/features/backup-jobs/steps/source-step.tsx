@@ -25,7 +25,7 @@ export function EngineGroup({ configuration, onChange }: Pick<GroupProps, 'confi
       PostgreSQL
     </label>
     <label className="flex items-center gap-2 cursor-pointer font-medium text-sm text-text-heading">
-      <input type="radio" name="engine" value="file-system" checked={isFiles} onChange={() => onChange({ ...configuration, engine: 'file-system', database: '', host: 'localhost', port: null, integratedSecurity: true, databaseCredentialReference: null, databaseLogin: null, files, copyOnly: false, checksumPolicy: 'Required' })} className="size-4 accent-primary" />
+      <input type="radio" name="engine" value="file-system" checked={isFiles} onChange={() => onChange({ ...configuration, engine: 'file-system', database: '', host: 'localhost', port: null, integratedSecurity: true, databaseCredentialReference: null, databaseLogin: null, files, copyOnly: true, checksumPolicy: 'Required' })} className="size-4 accent-primary" />
       {tx('Dosya / Klasör')}
     </label>
   </div>

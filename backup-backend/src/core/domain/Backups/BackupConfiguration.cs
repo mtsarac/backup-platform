@@ -38,6 +38,9 @@ public sealed record BackupConfiguration(
             BackupGuard.Reference(Database);
             if (Host != "localhost" || Port is not null || !IntegratedSecurity || DatabaseCredentialReference is not null || Files is null)
                 throw new ArgumentException("File backups require a local source reference and explicit file selection.");
+            // The archive is always a copy-only, SHA-256-verified manifest; the agent reports exactly that, so any other request could never complete.
+            if (!CopyOnly || ChecksumPolicy == "Disabled")
+                throw new ArgumentException("File backups are always copy-only and checksummed; CopyOnly must be true and the checksum policy cannot be Disabled.");
             Files.Validate();
         }
         else if (Files is not null) throw new ArgumentException("File selection only applies to file backups.");
