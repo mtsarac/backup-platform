@@ -417,6 +417,7 @@ public sealed class HttpTaskStorageProviderFactory(
     {
         public async Task<GoogleDriveStagedFile> StageAsync(Stream content, long expectedLength, ContentChecksum checksum, CancellationToken token)
         {
+            Directory.CreateDirectory(stagingDirectory);
             var path = Path.Combine(stagingDirectory, $"gdrive_{Guid.NewGuid():N}.staging");
             try
             {
