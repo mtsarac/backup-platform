@@ -19,6 +19,7 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
         AllowSynchronousContinuations = false
     });
     private readonly object _gate = new();
+    // Keyed by lease token: a resumed attempt keeps its id but is claimed again under a new token and must not be mistaken for a redelivery.
     private readonly Dictionary<Guid, DateTimeOffset> _seen = [];
     private readonly IBackupTaskClient _client;
     private readonly IAgentCredentialStore _identities;
@@ -27,7 +28,7 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
     private readonly AgentSoftwareInfo _software;
     private readonly TimeProvider _time;
     private readonly ILogger<BackupTaskWorker> _logger;
-    private Guid? _activeAttempt;
+    private Guid? _activeLease;
     private int _started;
     private readonly AgentUpdateGate? _updates;
 
@@ -59,16 +60,16 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
         {
             foreach (var pair in _seen)
             {
-                if (pair.Value <= now && pair.Key != _activeAttempt)
+                if (pair.Value <= now && pair.Key != _activeLease)
                 {
                     _seen.Remove(pair.Key);
                 }
             }
-            if (_seen.ContainsKey(id) || !TryEnqueue(task))
+            if (_seen.ContainsKey(backup.LeaseToken) || !TryEnqueue(task))
             {
                 return false;
             }
-            _seen.Add(id, backup.LeaseExpiresAt);
+            _seen.Add(backup.LeaseToken, backup.LeaseExpiresAt);
             return true;
         }
     }
@@ -101,7 +102,7 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
                 var task = envelope.Backup!;
                 lock (_gate)
                 {
-                    _activeAttempt = task.AttemptId;
+                    _activeLease = task.LeaseToken;
                 }
                 try
                 {
@@ -120,7 +121,7 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
                 {
                     lock (_gate)
                     {
-                        _activeAttempt = null;
+                        _activeLease = null;
                     }
                     _updates?.Complete();
                 }
@@ -186,7 +187,7 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
             await Task.WhenAll(renewal, reporting).ConfigureAwait(false);
             lock (_gate)
             {
-                _seen[task.AttemptId] = lease.ExpiresAt;
+                _seen[task.LeaseToken] = lease.ExpiresAt;
             }
         }
     }

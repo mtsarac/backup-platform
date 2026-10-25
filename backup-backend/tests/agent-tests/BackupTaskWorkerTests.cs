@@ -61,6 +61,21 @@ public sealed class BackupTaskWorkerTests
     }
 
     [Fact]
+    public async Task A_resumed_attempt_is_accepted_under_its_new_lease_while_the_paused_lease_is_still_unexpired()
+    {
+        await using var harness = new BackupTaskHarness();
+        var envelope = harness.Envelope();
+        harness.Start();
+        Assert.True(harness.Worker.TryPublish(envelope));
+        await Wait.UntilAsync(() => harness.Client.Completions.Count == 1, "first lease result");
+        var resumed = envelope with { Backup = envelope.Backup! with { LeaseToken = Guid.NewGuid(), ResumeTransfer = true } };
+        Assert.False(harness.Worker.TryPublish(envelope));
+        Assert.True(harness.Worker.TryPublish(resumed));
+        await Wait.UntilAsync(() => harness.Client.Completions.Count == 2, "resumed lease result");
+        Assert.Equal(resumed.Backup!.LeaseToken, harness.Client.Completions.Last().LeaseToken);
+    }
+
+    [Fact]
     public async Task A_queued_claim_reaches_completion_without_advancing_the_clock()
     {
         await using var harness = new BackupTaskHarness();
