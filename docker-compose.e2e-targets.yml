@@ -1,0 +1,29 @@
+# Extra storage targets for the e2e environment (S3 and SMB). Reachable from the VMs through the libvirt bridge address.
+services:
+  minio:
+    image: bitnamilegacy/minio:latest
+    container_name: bpe2e-minio
+    environment:
+      MINIO_ROOT_USER: ${E2E_MINIO_USER:-bpe2e}
+      MINIO_ROOT_PASSWORD: ${E2E_MINIO_PASSWORD:?set E2E_MINIO_PASSWORD}
+      MINIO_DEFAULT_BUCKETS: bpe2e
+    ports:
+      - "${PUBLIC_HOST:-192.168.122.1}:9000:9000"
+      - "${PUBLIC_HOST:-192.168.122.1}:9001:9001"
+    volumes:
+      - minio_data:/bitnami/minio/data
+
+  samba:
+    image: dockurr/samba:latest
+    container_name: bpe2e-samba
+    environment:
+      USER: ${E2E_SMB_USER:-bpe2e}
+      PASS: ${E2E_SMB_PASSWORD:?set E2E_SMB_PASSWORD}
+    ports:
+      - "${PUBLIC_HOST:-192.168.122.1}:445:445"
+    volumes:
+      - samba_data:/storage
+
+volumes:
+  minio_data:
+  samba_data:
