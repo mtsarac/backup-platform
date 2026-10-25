@@ -56,7 +56,7 @@ describe('Storage connections list and detail', () => {
     mount()
     await screen.findByRole('article', { name: "Local" })
     const local = article('Local')
-    expect(local.getByText('Local (Agent diski)')).toBeInTheDocument()
+    expect(local.getByText('Yerel yedekleme bilgisayarı diski')).toBeInTheDocument()
     expect(local.getByText('Varsayılan')).toBeInTheDocument()
     expect(local.getByText('Sağlıklı')).toBeInTheDocument()
     expect(local.getByText('3 saat önce')).toBeInTheDocument()

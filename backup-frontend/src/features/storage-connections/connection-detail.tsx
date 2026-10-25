@@ -232,7 +232,7 @@ export function ConnectionDetail() {
   if (!connection) return <><PageHeader title={tx("Bağlantı bulunamadı")} crumbs={crumbs} /><Notice tone="warning" title={tx("Bu bağlantı yok veya bu tenant altında erişilemiyor")} action={<Link to={storage} className={buttonVariants({ variant: 'outline', size: 'sm' })}>{tx("Bağlantılara dön")}</Link>} /></>
 
   return <>
-    <PageHeader crumbs={crumbs} title={connection.name} description={connection.providerDisplayName}
+    <PageHeader crumbs={crumbs} title={connection.name} description={tx(connection.providerDisplayName)}
       meta={<><HealthBadge connection={connection} /><StatusPill domain="ownership" status={connection.ownership} />{connection.isDefault && <Badge tone="accent">{tx("Varsayılan")}</Badge>}</>}
       actions={<ConnectionActions connection={connection} descriptor={descriptor} ops={ops} show={['test']} />} />
     <Tabs idPrefix="connection" label={tx("Bağlantı bölümleri")} value={active} items={visibleTabs} onChange={(value) => setParams(value === 'overview' ? {} : { tab: value }, { replace: true })} />

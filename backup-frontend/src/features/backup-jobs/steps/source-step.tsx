@@ -61,7 +61,7 @@ export function DatabaseSourceGroup({ configuration, errors, onChange, discovery
       errors={{ userName: errors['configuration.databaseLogin.userName'], password: errors['configuration.databaseLogin.password'] }}
       onChange={databaseLogin => onChange({ ...configuration, databaseLogin })} />}
     {!isPg && check(tx('Windows kimlik doğrulaması (integrated security)'), configuration.integratedSecurity, integratedSecurity => onChange({ ...configuration, integratedSecurity, databaseLogin: null, databaseCredentialReference: integratedSecurity ? null : configuration.databaseCredentialReference }))}
-    <p className="text-sm text-text-muted md:col-span-2">{tx("Parola şifrelenerek saklanır ve bir daha gösterilmez. Bu iş yalnızca burada girilen kullanıcıyla bağlanır; aynı makinedeki diğer SQL Server sürümlerinin ve kullanıcıların girişleri birbirine karışmaz.")}</p>
+    <p className="text-sm text-text-muted md:col-span-2">{isPg ? tx("Parola şifrelenerek saklanır ve bir daha gösterilmez. Bu iş yalnızca burada girilen kullanıcıyla bağlanır.") : tx("Parola şifrelenerek saklanır ve bir daha gösterilmez. Bu iş yalnızca burada girilen kullanıcıyla bağlanır; aynı makinedeki diğer SQL Server sürümlerinin ve kullanıcıların girişleri birbirine karışmaz.")}</p>
     {isPg && <p className="text-sm text-text-muted md:col-span-2">{tx("Full Backup, pg_dump custom-format mantıksal arşividir; WAL/PITR veya fiziksel küme yedeği değildir. Database adı en fazla 63 UTF-8 byte olabilir. PostgreSQL kullanıcı adı ve parolası gerekir.")}</p>}
     </FormGrid>
     <Advanced open={withErrors('configuration.port')}>

@@ -321,13 +321,18 @@ describe('iş formu', () => {
     await reach(3)
     const select = screen.getByLabelText('Depolama bağlantısı')
     await waitFor(() => expect(select).toBeEnabled())
-    expect(within(select).getByRole('option', { name: /Local · Local \((?:Agent|Ajan) diski\) · (?:Çalışma Alanı|Çalışma alanı) yönetimli · Kullanılabilir/ })).toBeEnabled()
-    expect(within(select).getByRole('option', { name: /(?:Managed Depolama|Managed Storage) · (?:Managed Depolama|Managed Storage) \(Central\) · Platform yönetimli · Kullanılabilir/ })).toBeEnabled()
-    for (const name of [/Kilitli.*Platform kilidi/, /Kapalı.*Devre dışı/, /Planlanan.*kullanılamıyor/, /Bilinmeyen.*Desteklenmeyen/, /Uyumsuz sahiplik.*Desteklenmeyen/]) {
+    expect(within(select).getByRole('option', { name: /Local · Yerel yedekleme bilgisayarı diski · (?:Çalışma Alanı|Çalışma alanı) yönetimli · Kullanılabilir/ })).toBeEnabled()
+    for (const name of [/Kilitli.*Platform kilidi/, /Kapalı.*Devre dışı/]) {
       expect(within(select).getByRole('option', { name })).toBeDisabled()
     }
     fireEvent.change(select, { target: { value: 'locked' } })
     expect(select).toHaveValue('')
+    // Only the connections of the selected provider are listed.
+    expect(within(select).queryByRole('option', { name: /Planlanan|Bilinmeyen|Uyumsuz sahiplik|Managed/ })).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText("Depolama Sağlayıcısı"), { target: { value: 'central' } })
+    expect(within(select).getByRole('option', { name: /Managed Storage · Merkezi yönetilen depolama · Platform yönetimli · Kullanılabilir/ })).toBeEnabled()
+    expect(within(select).getByRole('option', { name: /Uyumsuz sahiplik.*Desteklenmeyen/ })).toBeDisabled()
+    expect(within(select).queryByRole('option', { name: /Kilitli|Kapalı/ })).not.toBeInTheDocument()
   })
   it('seçilen gerçek kimliği, sağlayıcıyı ve uyumlu yürütme konumunu gönderir', async () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
@@ -335,6 +340,7 @@ describe('iş formu', () => {
     await reach(3)
     const select = screen.getByLabelText('Depolama bağlantısı')
     await waitFor(() => expect(select).toBeEnabled())
+    fireEvent.change(screen.getByLabelText("Depolama Sağlayıcısı"), { target: { value: 'central' } })
     fireEvent.change(select, { target: { value: 'conn-central' } })
     expect(screen.getByLabelText("Depolama Sağlayıcısı")).toHaveValue('central')
     next(4)
@@ -380,6 +386,7 @@ describe('iş formu', () => {
     await reach(3)
     const first = screen.getByLabelText('Depolama bağlantısı')
     await waitFor(() => expect(first).toBeEnabled())
+    fireEvent.change(screen.getByLabelText("Depolama Sağlayıcısı"), { target: { value: 'central' } })
     fireEvent.change(first, { target: { value: 'conn-central' } })
     next(4)
     await submit()
@@ -482,6 +489,7 @@ describe('adım adım sihirbaz', () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
     renderPage()
     await reach(4)
+    fireEvent.click(screen.getByRole('button', { name: 'Her gün 02:00' }))
     for (const label of ['Cron ifadesi', 'Saat dilimi (IANA / sistem adı)', 'Rastgele gecikme oranı', 'Önceki çalıştırma sürerken yeni zamanlama']) {
       const details = screen.getByLabelText(label).closest('details')
       expect(details).not.toBeNull()
@@ -489,7 +497,6 @@ describe('adım adım sihirbaz', () => {
       expect(within(details!).getByText('Teknik ayrıntılar')).toBeInTheDocument()
     }
     fireEvent.change(screen.getByLabelText('Cron ifadesi'), { target: { value: '0 3 * * 1-5' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Her gün 02:00' }))
     fireEvent.change(screen.getByLabelText('İlk gecikme (saniye)'), { target: { value: '45' } })
     expect(screen.getByRole('button', { name: 'Her gün 02:00' })).toHaveAttribute('aria-pressed', 'false')
     next(3)
@@ -532,7 +539,9 @@ describe('adım adım sihirbaz', () => {
   })
   it('the last step summarises the job in plain words before anything is created; technical values are copyable under "Teknik ayrıntılar"', async () => {
     renderPage()
-    await reach(7)
+    await reach(4)
+    fireEvent.click(screen.getByRole('button', { name: 'Her gün 02:00' }))
+    next(3)
     expect(saveBackupJob).not.toHaveBeenCalled()
     expect(screen.getByText('ERP backup')).toBeInTheDocument()
     expect(screen.getByText('Her gün 02:00')).toBeInTheDocument()
@@ -545,9 +554,7 @@ describe('adım adım sihirbaz', () => {
   })
   it('each summary row leads back to the step that owns it', async () => {
     renderPage()
-    await reach(4)
-    fireEvent.click(screen.getByRole('button', { name: 'Her gün 02:00' }))
-    next(3)
+    await reach(7)
     fireEvent.click(screen.getByRole('button', { name: 'Değiştir: Zamanlama' }))
     expect(screen.getByRole('button', { name: 'Her gün 02:00' })).toBeInTheDocument()
   })

@@ -43,7 +43,7 @@ function ConnectionCard({ connection, total, tenantId, onTest, testing, testErro
       </div>
     </div>
     <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-      <div className="min-w-0"><dt className="text-sm text-text-muted">{tx("Sağlayıcı")}</dt><dd className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[0.9375rem] text-text">{connection.providerDisplayName}<StatusPill domain="ownership" status={connection.ownership} /></dd></div>
+      <div className="min-w-0"><dt className="text-sm text-text-muted">{tx("Sağlayıcı")}</dt><dd className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[0.9375rem] text-text">{tx(connection.providerDisplayName)}<StatusPill domain="ownership" status={connection.ownership} /></dd></div>
       <div className="min-w-0"><dt className="text-sm text-text-muted">{tx("Son test")}</dt><dd className="mt-0.5 text-[0.9375rem] text-text">{connection.lastTest ? <RelativeTime value={connection.lastTest.testedAt} /> : tx('Henüz test edilmedi')}</dd></div>
     </dl>
     {connection.administrativelyDisabled && <p className="text-sm text-text-muted">{tx(platformLockState)}</p>}

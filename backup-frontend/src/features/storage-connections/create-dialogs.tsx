@@ -52,7 +52,7 @@ export function CreateManagedTargetDialog({ tenant, onClose }: { tenant?: Picked
     {tenant ? <p className="text-sm text-text-muted">{tx("Çalışma alanı:")}{' '}<span className="font-medium text-text">{tenant.name}</span></p> : <TenantPicker value={tenantId} onChange={setTenantId} />}
     <label className="block text-sm text-text-muted">{tx("Depolama sağlayıcısı")}<select className={`${selectClass} w-full`} value={providerType} onChange={(event) => chooseProvider(event.target.value)} disabled={providers.isPending}>
         <option value="">{providers.isPending ? tx('Sağlayıcılar yükleniyor…') : creatable.length === 0 ? tx('Oluşturulabilir sağlayıcı yok') : tx('Sağlayıcı seçin')}</option>
-        {creatable.map((item) => <option key={item.providerType} value={item.providerType}>{item.displayName}</option>)}
+        {creatable.map((item) => <option key={item.providerType} value={item.providerType}>{tx(item.displayName)}</option>)}
       </select>
     </label>
     <label className="block text-sm text-text-muted">{tx("Hedef adı")}<input className={inputClass} value={name} required aria-invalid={errorField(create.error) === 'name'} onChange={(event) => setName(event.target.value)} />

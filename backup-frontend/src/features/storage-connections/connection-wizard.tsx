@@ -161,7 +161,7 @@ function ConnectionWizardForm() {
     const test = ops.test.data?.test
     const testing = ops.test.isPending
     return <>
-      <PageHeader title={tx("Bağlantı oluşturuldu")} description={`${created.name} · ${created.providerDisplayName}`} crumbs={crumbs} />
+      <PageHeader title={tx("Bağlantı oluşturuldu")} description={`${created.name} · ${tx(created.providerDisplayName)}`} crumbs={crumbs} />
       <Section title={tx("Bağlantı testi")}>
         {created.hasSecret && <p className="mb-4 text-sm text-text-muted">{tx("Kimlik bilgisi kayıtlı")}</p>}
         <div className="space-y-4">

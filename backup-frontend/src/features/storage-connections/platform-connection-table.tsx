@@ -23,7 +23,7 @@ export function PlatformConnectionTable({ rows, providers, ops, showTenant, empt
   const columns: Column<ConnectionView>[] = [
     { key: 'name', card: 'title', header: tx('Bağlantı'), wrap: true, render: (row) => <div className="space-y-1">
       <div className="flex flex-wrap items-center gap-1.5"><span className="font-medium text-text-heading">{row.name}</span>{row.isDefault && <Badge tone="accent">{tx("Varsayılan")}</Badge>}</div>
-      <p className="text-sm font-normal text-text-muted">{row.providerDisplayName}</p>
+      <p className="text-sm font-normal text-text-muted">{tx(row.providerDisplayName)}</p>
       <StatusPill domain="ownership" status={row.ownership} />
     </div> },
     { key: 'enabled', card: 'status', header: tx('Durum'), wrap: true, render: (row) => <ConnectionState connection={row} /> },

@@ -208,7 +208,7 @@ describe('Managed target ekle', () => {
     const dialog = await screen.findByRole('dialog')
     const providerSelect = within(dialog).getByLabelText("Depolama sağlayıcısı")
     const options = within(providerSelect).getAllByRole('option').map((option) => option.textContent)
-    expect(options).toEqual(['Sağlayıcı seçin', 'Managed Storage (Central)', 'Fake S3'])
+    expect(options).toEqual(['Sağlayıcı seçin', 'Merkezi yönetilen depolama', 'Sahte S3'])
     const submit = within(dialog).getByRole('button', { name: "Yönetilen hedef ekle" })
     expect(submit).toBeDisabled()
     await user.type(within(dialog).getByRole('combobox', { name: "Çalışma Alanı" }), 'Acme')
