@@ -18,11 +18,12 @@ class Tenant:
         return self.s.request(method, self.base + path, json=body, headers={"Idempotency-Key": uuid.uuid4().hex})
     def agents(self):
         return {a["hostName"]: a for a in self.call("GET", "/agents")}
-    def wait(self, path, ok=("Succeeded",), timeout=600, interval=2):
+    def wait(self, path, timeout=600, interval=2, stop_on=TERMINAL + ("Paused",)):
+        """Polls until the status is one of stop_on; Paused counts as stopped so a pause cannot hang a scenario."""
         end = time.time() + timeout
         while time.time() < end:
             d = self.call("GET", path)
-            if d["status"] in TERMINAL:
+            if d["status"] in stop_on:
                 return d
             time.sleep(interval)
         raise TimeoutError(path)
@@ -33,7 +34,8 @@ def ssh(host, cmd, inp=None, timeout=600):
     return r.returncode, out
 
 def fedora(cmd, inp=None):
-    return ssh("virtual-fedora", "bash -c " + json.dumps(cmd), inp)
+    """Runs a script on the Fedora VM (login shell there is fish, so always feed bash through stdin)."""
+    return ssh("virtual-fedora", "bash -s", cmd if inp is None else inp + "\n" + cmd)
 
 def win(ps, timeout=600):
     return ssh("virtual-win11", "powershell -NoProfile -EncodedCommand " + base64.b64encode(ps.encode("utf-16le")).decode(), timeout=timeout)
