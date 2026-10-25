@@ -7,11 +7,13 @@ services:
       MINIO_ROOT_USER: ${E2E_MINIO_USER:-bpe2e}
       MINIO_ROOT_PASSWORD: ${E2E_MINIO_PASSWORD:?set E2E_MINIO_PASSWORD}
       MINIO_DEFAULT_BUCKETS: bpe2e
+      MINIO_SCHEME: https
     ports:
       - "${PUBLIC_HOST:-192.168.122.1}:9000:9000"
       - "${PUBLIC_HOST:-192.168.122.1}:9001:9001"
     volumes:
       - minio_data:/bitnami/minio/data
+      - ./docs/test-environment/certs/minio:/certs:ro
 
   samba:
     image: dockurr/samba:latest

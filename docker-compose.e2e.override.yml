@@ -1,0 +1,8 @@
+# e2e-only: let the api container trust the self-signed MinIO certificate (S3 connections must be https) and allow the VM network for SFTP.
+services:
+  api:
+    environment:
+      SSL_CERT_FILE: /etc/ssl/e2e-ca-bundle.pem
+      Backups__Sftp__AllowedPrivateNetworks__0: 192.168.122.0/24
+    volumes:
+      - ./docs/test-environment/certs/ca-bundle.pem:/etc/ssl/e2e-ca-bundle.pem:ro
