@@ -15,7 +15,8 @@ public sealed record BackupConfiguration(
     public IReadOnlyList<BackupDestination> Destinations { get; init; } = [];
 
     /// <summary>
-    /// Minimum number of verified replicas required for a run attempt to be deemed successful.
+    /// Number of verified replicas the policy requires. It is replication compliance, not run success: a run that stores fewer verified copies stays
+    /// Succeeded (the artifact is restorable) and is reported as InsufficientReplicas; the agent only refuses before the backup when too few destinations can be reached.
     /// Defaults to 1. Must be between 1 and the total number of destinations.
     /// </summary>
     public int RequiredVerifiedReplicaCount { get; init; } = 1;
