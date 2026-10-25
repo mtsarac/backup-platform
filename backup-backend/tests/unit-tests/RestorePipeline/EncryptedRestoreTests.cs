@@ -149,7 +149,7 @@ public sealed class EncryptedRestoreTests : IDisposable
         var result = await _h.RunAsync(request);
 
         AssertFailedBeforeTheEngineSawAnything(result);
-        Assert.Equal(RestoreAgentFailureCodes.ArtifactTransferFailed, result.Failure!.Code);
+        Assert.Equal(RestoreAgentFailureCodes.ArtifactKeyUnavailable, result.Failure!.Code);
         Assert.Equal(RestorePipelineReasons.ArtifactKeyUnavailable, result.Failure.ReasonCode);
         Assert.DoesNotContain("refused", result.Failure.Message);
     }

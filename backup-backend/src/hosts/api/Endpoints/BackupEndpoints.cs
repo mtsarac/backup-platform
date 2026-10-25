@@ -194,7 +194,8 @@ public static class BackupEndpoints
         BackupAdmissionDenialCodes.MultiDestinationExecutionNotSupported => "This occurrence was recorded while multi-destination backup execution was not available; no run was started.",
         BackupAdmissionDenialCodes.AgentMultiDestinationUnsupported => "The job's agent has not reported support for multi-destination backups: it is outdated, or it has not finished connecting yet (a new agent reports within seconds of its first heartbeat). Retry shortly or update the agent. No run was started.",
         BackupAdmissionDenialCodes.AgentEngineUnsupported => "The job's agent has not reported support for the selected backup engine; no run was started.",
-        BackupAdmissionDenialCodes.DestinationCombinationUnsupported => "The job's storage destinations resolve to the same connection more than once; no run was started.",
+        BackupAdmissionDenialCodes.DestinationCombinationUnsupported => "The job's storage destinations cannot run together as configured: the same connection is used more than once, or the job's agent does not support one of the destination types or the 3-2-1 check; no run was started.",
+        BackupAdmissionDenialCodes.ThreeTwoOneUnsatisfied => "The job enforces 3-2-1, but its destinations do not span at least two media classes with one off-site copy; set the media class and site of the storage connections and the job's source site, then retry. No run was started.",
         _ => "The tenant's storage quota is used up; no run was started."
     };
 

@@ -284,8 +284,7 @@ public sealed class S3ConnectionTester(Func<StorageConnection, ISecretProvider, 
             if (factory(connection, secrets) is not IS3AccessChecker checker)
                 return new(StorageTestStatus.Failed, StorageTestCodes.IoError, "The S3 provider cannot verify bucket access.");
             await checker.CheckAccessAsync(cancellationToken);
-            return new(StorageTestStatus.Succeeded, StorageTestCodes.AccessVerified,
-                "Authenticated bucket access and configured Object Lock were checked. Each backup independently verifies uploaded bytes and WORM retention.");
+            return new(StorageTestStatus.Succeeded, StorageTestCodes.AccessVerified, StorageTestMessages.For(StorageTestCodes.AccessVerified));
         }
         catch (StorageException error)
         {

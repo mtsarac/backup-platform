@@ -651,6 +651,7 @@ public static class StorageTestMessages
     public static string For(string? code) => code switch
     {
         StorageTestCodes.Ok => "Wrote, verified and deleted a probe object.",
+        StorageTestCodes.AccessVerified => "Authenticated bucket access and configured Object Lock were checked. Each backup independently verifies uploaded bytes and WORM retention.",
         StorageTestCodes.AgentSideStorage => "This storage is reached by the agent, not by the platform; it is checked by the agent when a backup runs.",
         StorageTestCodes.StorageNotConfigured => "The platform has no central storage configured for this tenant.",
         StorageTestCodes.ProviderNotImplemented => "This provider type is not implemented yet, so the connection cannot be tested or used.",

@@ -11,7 +11,7 @@ public sealed class RestoreCompletionTests
 {
     private static readonly string[] ReportableCodes =
     [
-        "ReplicaUnavailable", "ArtifactTransferFailed", "ChecksumMismatch", "StorageUnavailable",
+        "ReplicaUnavailable", "ArtifactTransferFailed", "ArtifactKeyUnavailable", "ChecksumMismatch", "StorageUnavailable",
         "BackupInvalid", "BackupTypeUnsupported", "IncompatibleVersion", "FileMappingFailed",
         "PreCheckFailed", "TargetDatabaseExists", "TargetDatabaseNotFound", "TargetInUse", "TargetProtected", "InsufficientDiskSpace",
         "SqlRestoreFailed", "DatabaseUnavailable", "OperationTimedOut", "AuthenticationFailed", "PermissionDenied",

@@ -301,6 +301,7 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         null => null,
         RestoreFailureCodes.ReplicaUnavailable => "The backup file could not be found or read in storage.",
         RestoreFailureCodes.ArtifactTransferFailed => "The backup file could not be copied to the agent's staging directory.",
+        RestoreFailureCodes.ArtifactKeyUnavailable => "The encryption key of this backup is not available (its wrap key may have been retired), so the backup cannot be decrypted.",
         RestoreFailureCodes.ChecksumMismatch => "The backup file does not match its recorded checksum; nothing was restored.",
         RestoreFailureCodes.StorageUnavailable => "The backup storage was temporarily unavailable.",
         RestoreFailureCodes.BackupInvalid => "The database engine reported the backup as unreadable or invalid.",

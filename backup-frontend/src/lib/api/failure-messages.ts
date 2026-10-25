@@ -50,7 +50,8 @@ const messages: Record<string, string> = {
   get agent_multi_destination_unsupported() { return tx("İşin Agent'ı çoklu hedefli yedekleme desteği bildirmedi: Agent eski olabilir veya bağlantısını henüz tamamlamamış olabilir (yeni Agent ilk heartbeat'inden birkaç saniye sonra bildirir). Kısa süre sonra yeniden deneyin ya da Agent'ı güncelleyin. Yeni backup başlatılamadı.") },
   get agent_direct_storage_unsupported() { return tx("Bu SFTP/Google Drive hedefi eski relay modunda yapılandırılmış veya Agent doğrudan depolama desteği bildirmedi. Relay kapatıldı: Agent'ı güncelleyin ve hedefi doğrudan aktarım için yeniden kaydedin. Mevcut yedekler etkilenmedi; yeni backup başlatılamadı.") },
   get agent_engine_unsupported() { return tx('Agent seçilen yedekleme motorunu desteklemiyor. Agent yeteneklerini kontrol edin veya Agent’ı güncelleyin.') },
-  get destination_combination_unsupported() { return tx("İşin hedefleri aynı depolama bağlantısına çözülüyor; her hedef ayrı bir bağlantı olmalı. Yeni backup başlatılamadı.") },
+  get destination_combination_unsupported() { return tx("İşin hedefleri birlikte çalıştırılamıyor: aynı depolama bağlantısı birden fazla kez kullanılıyor ya da İşin Agent'ı bir hedef türünü veya 3-2-1 denetimini desteklemiyor. Yeni backup başlatılamadı.") },
+  get three_two_one_unsatisfied() { return tx("İş 3-2-1 kuralını zorunlu kılıyor ancak hedefleri iki farklı ortam türünü ve uzak konumdaki bir kopyayı kapsamıyor. Depolama bağlantılarının ortam ve konum ayarlarını ile işin kaynak konumunu kontrol edin. Yeni backup başlatılamadı.") },
   get storage_connection_not_found() { return tx("Depolama bağlantısı bulunamadı. Liste güncel olmayabilir.") },
   get storage_connection_name_taken() { return tx("Bu ada sahip bir depolama bağlantısı zaten var.") },
   get administratively_disabled() { return tx("Bağlantı platform tarafından kilitlendi. Tenant tercihi bu kilidi kaldıramaz; platform yöneticisine başvurun.") },
@@ -172,6 +173,7 @@ export type ErrorScope = 'restore' | 'storageConnection'
 const scopedMessages: Record<ErrorScope, Record<string, string>> = {
   restore: {
   get ReplicaUnavailable() { return tx("Replica geri yükleme için kullanılamıyor.") }, get ArtifactTransferFailed() { return tx("Artifact aktarımı tamamlanamadı.") },
+  get ArtifactKeyUnavailable() { return tx("Yedek şifreli ve şifreleme anahtarı kullanılamıyor (anahtar emekli edilmiş olabilir); yedek çözülemedi, geri yükleme başlatılmadı.") },
   get ChecksumMismatch() { return tx("Artifact checksum değeri eşleşmedi.") }, get BackupInvalid() { return tx("Backup doğrulaması başarısız oldu.") },
   get BackupTypeUnsupported() { return tx("Bu backup türü geri yükleme için desteklenmiyor.") }, get IncompatibleVersion() { return tx("Kaynak ve hedef Database motoru sürümleri uyumlu değil.") },
   get FileMappingFailed() { return tx("Database dosya eşlemesi oluşturulamadı.") }, get PreCheckFailed() { return tx("Geri yükleme ön kontrolleri başarısız oldu.") },

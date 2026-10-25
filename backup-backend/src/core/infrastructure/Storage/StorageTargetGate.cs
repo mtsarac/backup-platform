@@ -158,7 +158,7 @@ internal static class StorageTargetGate
         }
         if (configuration.EnforceThreeTwoOne && (resolvedDestinations.Select(d => d.MediaClass).Distinct().Count() < 2
             || !resolvedDestinations.Any(d => d.OffsiteVerified)))
-            return new(null, BackupAdmissionDenialCodes.DestinationCombinationUnsupported);
+            return new(null, BackupAdmissionDenialCodes.ThreeTwoOneUnsatisfied);
 
         return new(configuration with { Destinations = resolvedDestinations }, null);
     }

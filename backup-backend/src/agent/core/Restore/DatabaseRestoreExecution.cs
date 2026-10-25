@@ -513,7 +513,7 @@ internal sealed class DatabaseRestoreExecution
         }
         catch (ArtifactKeyUnavailableException exception)
         {
-            throw Fail(stage, RestoreAgentFailureCodes.ArtifactTransferFailed, RestorePipelineReasons.ArtifactKeyUnavailable,
+            throw Fail(stage, RestoreAgentFailureCodes.ArtifactKeyUnavailable, RestorePipelineReasons.ArtifactKeyUnavailable,
                 "The key of the encrypted backup could not be obtained, so the backup was not decrypted.", exception);
         }
         catch (BpeFormatException exception)
