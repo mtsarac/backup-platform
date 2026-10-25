@@ -25,15 +25,16 @@ internal sealed class SmbUserSpaceStore(SmbStorageOptions options, StorageProvid
 
     public async Task<StorageObjectMetadata> PutAsync(StorageObjectKey key, Stream content, StoragePutOptions put, IProgress<long>? progress, SmbCredential credential, CancellationToken token)
     {
-        if (put.RecordCheckpointAsync is not null || put.Checkpoint is not null)
-            throw new StorageException(StorageFailureKind.NotSupported, "SMB storage does not support resumable uploads.");
         using var session = await SmbSession.OpenAsync(options, credential, token).ConfigureAwait(false);
         var segments = Segments(key);
         var directory = segments[..^1];
         EnsureDirectories(session.Store, directory, create: true);
         var finalPath = Join(segments);
         if (Probe(session.Store, finalPath) is not null) { if (put.Overwrite == StorageOverwritePolicy.Fail || IsDirectory(session.Store, finalPath)) throw AlreadyExists(); }
-        var temporaryPath = Join([.. directory, $".{key.FileName}.{Guid.NewGuid():N}.partial"]);
+        // No resume: a retained prefix from an earlier attempt is ignored and the upload starts over under a fresh name.
+        var temporaryName = $".{key.FileName}.{Guid.NewGuid():N}.partial";
+        var temporaryPath = Join([.. directory, temporaryName]);
+        if (put.RecordCheckpointAsync is { } record) await record(new(0, temporaryName), token).ConfigureAwait(false);
         var status = session.Store.CreateFile(out var handle, out _, temporaryPath, AccessMask.GENERIC_WRITE | AccessMask.DELETE | AccessMask.SYNCHRONIZE, SmbAttributes.Normal,
             ShareAccess.None, CreateDisposition.FILE_CREATE, CreateOptions.FILE_NON_DIRECTORY_FILE | CreateOptions.FILE_SEQUENTIAL_ONLY | CreateOptions.FILE_OPEN_REPARSE_POINT, null);
         Check(status);
