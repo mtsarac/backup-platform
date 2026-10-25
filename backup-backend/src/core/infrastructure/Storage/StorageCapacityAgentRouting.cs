@@ -14,35 +14,36 @@ internal static class StorageCapacityAgentRouting
     {
         if (!connection.EffectiveEnabled) return false;
         if (connection.ProviderType is not (StorageProviderTypes.Local or StorageProviderTypes.Sftp)) return true;
-        var agent = await ResolveAsync(db, connection, now, connectivity, cancellationToken);
-        if (agent is null) return false;
+        var agents = await ResolveAsync(db, connection, now, connectivity, cancellationToken);
+        if (agents.Count == 0) return false;
         var pending = await db.StorageCapacityTasks.AsNoTracking()
-            .SingleOrDefaultAsync(task => task.TenantId == connection.TenantId && task.ConnectionId == connection.Id && task.CompletedAt == null, cancellationToken);
-        return pending is null || pending.AgentId == agent && pending.ExpiresAt > now && (pending.Attempts < 3 || pending.LeaseExpiresAt > now);
+            .Where(task => task.TenantId == connection.TenantId && task.ConnectionId == connection.Id && task.CompletedAt == null).ToListAsync(cancellationToken);
+        return pending.All(task => agents.Contains(task.AgentId) && task.ExpiresAt > now && (task.Attempts < 3 || task.LeaseExpiresAt > now));
     }
 
-    public static async Task<Guid?> ResolveAsync(PlatformDbContext db, StorageConnection connection, DateTimeOffset now,
+    /// <summary>
+    /// The online, probe-capable agents whose view of the connection counts. A local connection is the disk of every agent whose jobs write to it, so each of those that is
+    /// online is probed (the lowest free space is reported); one nobody writes to yet belongs to the only agent there is. Any other provider is probed by one agent.
+    /// </summary>
+    public static async Task<IReadOnlyList<Guid>> ResolveAsync(PlatformDbContext db, StorageConnection connection, DateTimeOffset now,
         AgentConnectivityOptions connectivity, CancellationToken cancellationToken)
     {
-        if (!connection.EffectiveEnabled) return null;
+        if (!connection.EffectiveEnabled) return [];
         var local = connection.ProviderType == StorageProviderTypes.Local;
-        Guid writer = Guid.Empty;
+        var writers = Array.Empty<Guid>();
         if (local)
         {
             var jobs = await db.BackupJobs.AsNoTracking().Where(job => job.TenantId == connection.TenantId)
                 .Select(job => new { job.AgentId, job.Configuration }).ToListAsync(cancellationToken);
-            foreach (var job in jobs)
-            {
-                if (!job.Configuration.Destinations.Any(destination => destination.StorageProvider == StorageProviderTypes.Local
-                    && (destination.StorageConnectionId == connection.Id || destination.StorageConnectionId is null && connection.IsDefault))) continue;
-                if (writer != Guid.Empty && writer != job.AgentId.Value) return null;
-                writer = job.AgentId.Value;
-            }
+            writers = [.. jobs.Where(job => job.Configuration.Destinations.Any(destination => destination.StorageProvider == StorageProviderTypes.Local
+                    && (destination.StorageConnectionId == connection.Id || destination.StorageConnectionId is null && connection.IsDefault)))
+                .Select(job => job.AgentId.Value).Distinct()];
         }
         var cutoff = now - connectivity.OfflineTimeout;
         var minimum = AgentProtocol.Current.SupportedVersions.Minimum;
         var maximum = AgentProtocol.Current.SupportedVersions.Maximum;
-        var limit = local && writer == Guid.Empty ? 2 : 1;
+        var anyWriter = writers.Length == 0;
+        var limit = local && anyWriter ? 2 : local ? writers.Length : 1;
         var agents = await db.Database.SqlQuery<Guid>($"""
             SELECT a."Id" AS "Value" FROM agents a
             JOIN agent_connectivity live ON live."AgentId" = a."Id" AND live."TenantId" = a."TenantId"
@@ -52,9 +53,10 @@ internal static class StorageCapacityAgentRouting
               AND cap."Revision" = live."CapabilityRevision"
               AND ROW(live."ReportedProtocolMajor", live."ReportedProtocolMinor") >= ROW({minimum.Major}, {minimum.Minor})
               AND ROW(live."ReportedProtocolMajor", live."ReportedProtocolMinor") <= ROW({maximum.Major}, {maximum.Minor})
-              AND ({writer} = {Guid.Empty} OR a."Id" = {writer})
+              AND ({anyWriter} OR a."Id" = ANY({writers}))
             ORDER BY a."Id" LIMIT {limit}
             """).ToListAsync(cancellationToken);
-        return agents.Count == 1 ? agents[0] : null;
+        // Nobody writes yet and several agents could: the connection has no single disk to measure.
+        return local && anyWriter && agents.Count != 1 ? [] : agents;
     }
 }

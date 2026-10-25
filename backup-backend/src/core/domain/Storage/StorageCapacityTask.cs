@@ -7,9 +7,11 @@ public sealed class StorageCapacityTask : ITenantOwned
 {
     private StorageCapacityTask() { TenantId = null!; }
 
-    public StorageCapacityTask(TenantId tenantId, Guid connectionId, Guid agentId, DateTimeOffset now)
+    /// <summary>One probe of a connection that several agents use is one task per online agent; <paramref name="roundId"/> ties them so the lowest free space of the round is reported.</summary>
+    public StorageCapacityTask(TenantId tenantId, Guid connectionId, Guid agentId, DateTimeOffset now, Guid? roundId = null)
     {
         Id = Guid.NewGuid();
+        RoundId = roundId ?? Guid.NewGuid();
         TenantId = tenantId;
         ConnectionId = connectionId;
         AgentId = agentId;
@@ -18,6 +20,7 @@ public sealed class StorageCapacityTask : ITenantOwned
     }
 
     public Guid Id { get; private set; }
+    public Guid RoundId { get; private set; }
     public TenantId TenantId { get; private set; }
     public Guid ConnectionId { get; private set; }
     public Guid AgentId { get; private set; }

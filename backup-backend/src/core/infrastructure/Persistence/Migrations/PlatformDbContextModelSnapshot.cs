@@ -3713,6 +3713,9 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("LeaseToken")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid>("RoundId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("TenantId")
                         .IsConcurrencyToken()
                         .HasColumnType("uuid");
@@ -3731,7 +3734,7 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ConnectionId", "TenantId");
 
-                    b.HasIndex("TenantId", "ConnectionId")
+                    b.HasIndex("TenantId", "ConnectionId", "AgentId")
                         .IsUnique()
                         .HasDatabaseName("ux_storage_capacity_tasks_pending")
                         .HasFilter("\"CompletedAt\" IS NULL");

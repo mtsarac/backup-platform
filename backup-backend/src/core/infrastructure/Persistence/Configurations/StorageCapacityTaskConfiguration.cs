@@ -11,7 +11,7 @@ internal sealed class StorageCapacityTaskConfiguration : IEntityTypeConfiguratio
     {
         BackupMapping.Base(builder, "storage_capacity_tasks");
         builder.Property(task => task.CompletionJson).HasColumnType("jsonb");
-        builder.HasIndex(task => new { task.TenantId, task.ConnectionId }).IsUnique()
+        builder.HasIndex(task => new { task.TenantId, task.ConnectionId, task.AgentId }).IsUnique()
             .HasFilter("\"CompletedAt\" IS NULL").HasDatabaseName("ux_storage_capacity_tasks_pending");
         builder.HasIndex(task => new { task.TenantId, task.AgentId, task.CreatedAt });
         builder.HasOne<StorageConnection>().WithMany().HasForeignKey(task => new { task.ConnectionId, task.TenantId })

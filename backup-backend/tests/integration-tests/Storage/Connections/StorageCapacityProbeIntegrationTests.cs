@@ -587,9 +587,48 @@ public sealed class StorageCapacityProbeIntegrationTests(PostgreSqlFixture fixtu
             await DeclareCapacityAsync(world, writer);
             await AddWriterAsync(world, setup, other, defaultConnection ? null : connection);
             using var multipleWriters = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/v1/storage/connections/{connection}/probe");
-            Assert.Equal("CapacityUnavailable", AgentWorld.ReadJson(multipleWriters).GetProperty("status").GetString());
+            Assert.Equal("Pending", AgentWorld.ReadJson(multipleWriters).GetProperty("status").GetString());
+            Assert.Equal(writer.AgentId, (await ClaimAsync(world, writer)).AgentId);
+            Assert.Equal(other.AgentId, (await ClaimAsync(world, other)).AgentId);
         }
         finally { Directory.Delete(root, recursive: true); Directory.Delete(otherRoot, recursive: true); }
+    }
+
+    [Fact]
+    public async Task LocalProbeOfSeveralWriters_ReportsTheLowestFreeSpaceOfTheOnlineOnes()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var setup = await world.CreateTenantAsync();
+        var first = await ReadyAgentAsync(world, setup);
+        var second = await world.EnrollAsync(setup, installationId: Guid.NewGuid());
+        await DeclareCapacityAsync(world, second);
+        var connection = await AddConnectionAsync(world, setup, "local", new() { ["volume"] = "local" }, isDefault: true);
+        await AddWriterAsync(world, setup, first, null);
+        await AddWriterAsync(world, setup, second, null);
+
+        using (var queued = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/v1/storage/connections/{connection}/probe"))
+            Assert.Equal("Pending", AgentWorld.ReadJson(queued).GetProperty("status").GetString());
+        var firstTask = await ClaimAsync(world, first);
+        var secondTask = await ClaimAsync(world, second);
+        using (await CompleteAsync(world, second, secondTask, free: 30)) { }
+        using (var waiting = await setup.Admin.GetAsync($"/api/v1/storage/connections/{connection}/capacity"))
+            Assert.Equal("Pending", AgentWorld.ReadJson(waiting).GetProperty("status").GetString());
+        using (await CompleteAsync(world, first, firstTask, free: 80)) { }
+        using (var done = await setup.Admin.GetAsync($"/api/v1/storage/connections/{connection}/capacity"))
+        {
+            var capacity = AgentWorld.ReadJson(done);
+            Assert.Equal("Available", capacity.GetProperty("status").GetString());
+            Assert.Equal(30, capacity.GetProperty("freeBytes").GetInt64());
+        }
+
+        // A writer that is offline is not asked: the online one alone decides.
+        world.Clock.Advance(TimeSpan.FromSeconds(121));
+        await DeclareCapacityAsync(world, first);
+        using (var queued = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/v1/storage/connections/{connection}/probe"))
+            Assert.Equal("Pending", AgentWorld.ReadJson(queued).GetProperty("status").GetString());
+        using (await CompleteAsync(world, first, await ClaimAsync(world, first), free: 80)) { }
+        using var final = await setup.Admin.GetAsync($"/api/v1/storage/connections/{connection}/capacity");
+        Assert.Equal(80, AgentWorld.ReadJson(final).GetProperty("freeBytes").GetInt64());
     }
 
     [Fact]
@@ -615,6 +654,8 @@ public sealed class StorageCapacityProbeIntegrationTests(PostgreSqlFixture fixtu
         }
         await using var preserved = fixture.CreatePlatformContext();
         Assert.Contains("20261021110000_StorageCapacityTaskTransport", await preserved.Database.GetAppliedMigrationsAsync());
+        // The newer migrations were reverted on the way down to the refusing one; bring them back before reading through the current model.
+        await preserved.Database.MigrateAsync();
         Assert.NotNull(await preserved.StorageCapacityTasks.SingleOrDefaultAsync(t => t.Id == pending.Id));
         var statuses = await preserved.StorageCapacitySnapshots.Where(s => s.TenantId == setup.Tenant.Id && s.ConnectionId == connection).Select(s => s.Status).ToListAsync();
         Assert.Equal(2, statuses.Count);
@@ -697,12 +738,12 @@ public sealed class StorageCapacityProbeIntegrationTests(PostgreSqlFixture fixtu
         return envelope.GetProperty("capacityProbe").Deserialize<CapacityProbeTaskRequest>(JsonSerializerOptions.Web)!;
     }
 
-    private static Task<HttpResponseMessage> CompleteAsync(AgentWorld world, EnrolledAgent agent, CapacityProbeTaskRequest task) =>
+    private static Task<HttpResponseMessage> CompleteAsync(AgentWorld world, EnrolledAgent agent, CapacityProbeTaskRequest task, long free = 80) =>
         world.SendAgentAsync(HttpMethod.Post, $"/api/agent/capacity-probes/{task.TaskId}/complete",
             agent.CredentialId, agent.Secret, body: new CapacityProbeCompletionRequest
             {
                 LeaseToken = task.LeaseToken,
-                Result = CapacityProbeTaskResult.Success(task.TaskId, task.ConnectionId, 100, 20, 80)
+                Result = CapacityProbeTaskResult.Success(task.TaskId, task.ConnectionId, 100, 100 - free, free)
             });
 
     private static async Task<JsonElement> ExecuteWorkerAsync(AgentWorld world, TenantSetup setup, EnrolledAgent agent,
