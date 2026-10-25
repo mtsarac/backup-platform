@@ -181,6 +181,12 @@ public sealed class SftpConnectionTester(Func<StorageConnection, ISecretProvider
             }
             return new StorageTestResult(StorageTestStatus.Succeeded, StorageTestCodes.Ok, "Wrote, verified and deleted a probe object.");
         }
+        catch (StorageException ex) when (ex.Kind == StorageFailureKind.NetworkDenied)
+        {
+            // A private address is the customer's own device: the server may not reach it, the agent on that network does.
+            return new StorageTestResult(StorageTestStatus.NotTestable, StorageTestCodes.AgentSideStorage,
+                "This storage is on a private network; it is reached by the agent and checked by the agent when a backup runs.");
+        }
         catch (StorageException ex)
         {
             return new StorageTestResult(StorageTestStatus.Failed, CodeFor(ex.Kind), ex.Message);

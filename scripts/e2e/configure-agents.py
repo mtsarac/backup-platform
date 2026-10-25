@@ -10,7 +10,6 @@ linux = {
     "Agent__Backup__LocalStorage__RootDirectory": "/var/lib/backup-agent/local-store",
     "Agent__Backup__LocalStorage__Volumes__vol2": "/srv/e2e/volume2",
     "Agent__Backup__FileSources__e2efiles__RootDirectory": "/srv/e2e/files",
-    "Agent__Backup__Sftp__AllowedPrivateNetworks__0": "192.168.122.0/24",
 }
 unit = "[Service]\n" + "".join(f'Environment="{k}={v}"\n' for k, v in linux.items())
 ssh("virtual-fedora", "sudo bash -s", f"""set -e
@@ -28,7 +27,6 @@ win = {
     "Agent__Backup__LocalStorage__RootDirectory": r"C:\e2e\local-store",
     "Agent__Backup__LocalStorage__Volumes__vol2": r"C:\e2e\volume2",
     "Agent__Backup__FileSources__e2efiles__RootDirectory": r"C:\e2e\files",
-    "Agent__Backup__Sftp__AllowedPrivateNetworks__0": "192.168.122.0/24",
     "Agent__Backup__PostgreSql__ClientToolsDirectory": r"C:\Program Files\PostgreSQL\18\bin",
 }
 items = ",".join("'%s=%s'" % (k, v) for k, v in win.items())

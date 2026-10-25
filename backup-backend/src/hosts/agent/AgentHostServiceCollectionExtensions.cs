@@ -68,8 +68,15 @@ public static class AgentHostServiceCollectionExtensions
         services.AddSingleton<DeleteReplicaTaskWorker>();
         services.AddSingleton<ReplicaRepairTaskWorker>();
         services.AddSingleton<DownloadTaskWorker>();
-        services.AddSingleton(provider => configuration.GetSection("Agent:Backup:Sftp")
-            .Get<BackupPlatform.StorageProviders.Sftp.SftpNetworkOptions>() ?? new BackupPlatform.StorageProviders.Sftp.SftpNetworkOptions());
+        services.AddSingleton(provider =>
+        {
+            var section = configuration.GetSection("Agent:Backup:Sftp");
+            var bound = section.Get<BackupPlatform.StorageProviders.Sftp.SftpNetworkOptions>() ?? new BackupPlatform.StorageProviders.Sftp.SftpNetworkOptions();
+            // An explicit AllowedPrivateNetworks (even empty) is the operator's choice; otherwise the customer's LAN is reachable.
+            return section.GetSection("AllowedPrivateNetworks").Exists() ? bound
+                : new BackupPlatform.StorageProviders.Sftp.SftpNetworkOptions([.. BackupPlatform.StorageProviders.Sftp.SftpNetworkOptions.AgentDefaultPrivateNetworks],
+                    bound.ConnectionTimeout, bound.OperationTimeout, bound.TransferTimeout);
+        });
         services.AddSingleton<BackupPlatform.Contracts.Storage.ISftpCapacityProbeExecutor, Storage.SftpCapacityProbeExecutor>();
         services.AddSingleton<CapacityProbeTaskWorker>();
         services.AddHostedService<AgentCapacityTaskHostedService>();
