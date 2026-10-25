@@ -485,11 +485,12 @@ public sealed partial class ReplicaRepairService(
         CancellationToken cancellationToken) =>
         store.GetOperationAsync(tenantId, artifactId, operationId, cancellationToken);
 
-    public Task<IReadOnlyList<ReplicaRepairOperationView>> ListRepairsAsync(
+    /// <summary>Null when the artifact is not this tenant's.</summary>
+    public async Task<IReadOnlyList<ReplicaRepairOperationView>?> ListRepairsAsync(
         TenantId tenantId,
         Guid artifactId,
         CancellationToken cancellationToken) =>
-        store.ListOperationsAsync(tenantId, artifactId, cancellationToken);
+        await store.FindArtifactAsync(tenantId, artifactId, cancellationToken) is null ? null : await store.ListOperationsAsync(tenantId, artifactId, cancellationToken);
 
     private async Task<bool> FailOrRetryAsync(
         ReplicaRepairOperation claimed,

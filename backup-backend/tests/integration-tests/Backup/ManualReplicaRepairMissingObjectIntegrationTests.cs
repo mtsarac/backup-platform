@@ -1,5 +1,6 @@
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Domain.Backups;
+using BackupPlatform.Domain.Identity;
 using BackupPlatform.Infrastructure.Backups;
 using BackupPlatform.Infrastructure.Restores;
 using Microsoft.EntityFrameworkCore;
@@ -40,6 +41,16 @@ public sealed partial class ManualReplicaRepairIntegrationTests
         var artifact = await verify.BackupArtifacts.Include(a => a.Replicas).SingleAsync(a => a.Id == setup.Artifact.Id);
         Assert.Equal(BackupReplicationStatuses.Degraded, BackupReplicationEvaluator.ForArtifact(2, 3, artifact.Replicas).Status);
         Assert.Equal(1, artifact.Replicas.Count(r => r.StorageProvider == "central" && r.VerificationState == "Verified"));
+    }
+
+    [Fact]
+    public async Task Listing_the_repairs_of_an_artifact_that_is_not_the_tenants_has_no_answer_instead_of_an_empty_list()
+    {
+        var setup = await SetupAsync(verified: new HashSet<string> { "central" });
+
+        Assert.NotNull(await setup.RepairService.ListRepairsAsync(setup.Agent.TenantId, setup.Artifact.Id, default));
+        Assert.Null(await setup.RepairService.ListRepairsAsync(setup.Agent.TenantId, Guid.NewGuid(), default));
+        Assert.Null(await setup.RepairService.ListRepairsAsync(TenantId.New(), setup.Artifact.Id, default));
     }
 
     [Fact]

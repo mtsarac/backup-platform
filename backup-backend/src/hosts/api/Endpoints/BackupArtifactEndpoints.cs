@@ -135,6 +135,6 @@ public static class BackupArtifactEndpoints
         CancellationToken cancellationToken)
     {
         var list = await service.ListRepairsAsync(tenant.TenantId!, artifactId, cancellationToken);
-        return Results.Ok(list);
+        return list is null ? Results.NotFound() : Results.Ok(list);
     }
 }

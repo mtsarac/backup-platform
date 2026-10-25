@@ -28,7 +28,7 @@ public static class BackupEndpoints
         tenant.MapPost("/backup-jobs/{jobId:guid}/disable", DisableAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
         tenant.MapPost("/backup-jobs/{jobId:guid}/runs", StartRunAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
         tenant.MapGet("/backup-runs", ListRunsAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapGet("/backup-jobs/{jobId:guid}/runs", ListRunsAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
+        tenant.MapGet("/backup-jobs/{jobId:guid}/runs", ListJobRunsAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
         tenant.MapGet("/backup-runs/{runId:guid}", GetRunAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
         tenant.MapPost("/backup-runs/{runId:guid}/cancel", CancelAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
         tenant.MapPost("/backup-runs/{runId:guid}/retry", RetryAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
@@ -210,6 +210,14 @@ public static class BackupEndpoints
             return Results.BadRequest(new { error = "invalid_request", field = "trigger", code = "invalid_value" });
         return Results.Ok(await views.ListRunsAsync(tenant.TenantId!, new(page ?? 1, pageSize ?? 25, jobId, agentId, status, from?.ToUniversalTime(), to?.ToUniversalTime(), trigger), cancellationToken));
     }
+
+    /// <summary>The runs of one job; a job that is not this tenant's is a 404, not an empty list.</summary>
+    private static async Task<IResult> ListJobRunsAsync(Guid jobId, Guid? agentId, string? status, string? trigger,
+        DateTimeOffset? from, DateTimeOffset? to, int? page, int? pageSize,
+        ITenantContext tenant, IBackupUiStore views, TimeProvider time, CancellationToken cancellationToken) =>
+        await views.GetJobAsync(tenant.TenantId!, jobId, time.GetUtcNow(), cancellationToken) is null
+            ? Results.NotFound()
+            : await ListRunsAsync(jobId, agentId, status, trigger, from, to, page, pageSize, tenant, views, cancellationToken);
 
     private static async Task<IResult> GetRunAsync(Guid runId, ITenantContext tenant, IBackupUiStore store, CancellationToken cancellationToken)
     {
