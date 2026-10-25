@@ -139,11 +139,12 @@ public sealed class BackupRun : ITenantOwned
 
     /// <summary>
     /// Ends a scheduled run whose first attempt was never claimed before its deadline, so stale scheduled work cannot start after the grace
-    /// period. False (and no change) for any other run or state, so it is safe to call from any number of workers.
+    /// period. An attempt that was leased once (a paused transfer that was resumed) already started and is never dropped here. False (and no change)
+    /// for any other run or state, so it is safe to call from any number of workers.
     /// </summary>
     public bool ExpireUnclaimed(DateTimeOffset now)
     {
-        if (Status != BackupStatus.Pending || CurrentAttemptNumber != 1 || ClaimDeadline is not { } deadline || deadline >= now) return false;
+        if (Status != BackupStatus.Pending || CurrentAttemptNumber != 1 || CurrentAttempt.LeasedAt.HasValue || ClaimDeadline is not { } deadline || deadline >= now) return false;
         CurrentAttempt.CancelPending(now);
         EndTerminal(BackupStatus.Cancelled, BackupFailureCodes.ScheduleGraceExpired, BackupRetryState.None, now, "BackupScheduledRunExpired");
         return true;
@@ -214,6 +215,25 @@ public sealed class BackupRun : ITenantOwned
         CurrentAttempt.Resume();
         Status = BackupStatus.Pending;
         Fact("BackupRunResumed", CurrentAttempt.Id, now);
+    }
+
+    /// <summary>Automatic resumes of one attempt after PausedByNetworkError; an outage longer than the backoff covers leaves a Paused run for an operator.</summary>
+    public const int MaxNetworkResumes = BackupRetryPolicy.MaximumAttemptsLimit;
+
+    /// <summary>
+    /// Resumes the current attempt once the retry policy's backoff since a PausedByNetworkError pause has elapsed. The pause says the storage was unreachable, which is
+    /// the only pause that ends by itself: Operator and TimeRule pauses and cancelled runs are never resumed here, and a policy of one attempt means "no retries".
+    /// False (and no change) otherwise, so it is safe to call from any number of workers.
+    /// </summary>
+    public bool ResumeAfterNetworkPause(DateTimeOffset now)
+    {
+        if (Status != BackupStatus.Paused || CancellationRequestedAt.HasValue || RetryPolicy.MaxAttempts == 1
+            || CurrentAttempt is not { PauseReason: TransferPauseReason.PausedByNetworkError, ProgressAt: { } pausedAt } attempt) return false;
+        var resumed = _facts.Count(fact => fact.AttemptId == attempt.Id && fact.Kind == "BackupNetworkResumeStarted");
+        if (resumed >= MaxNetworkResumes || pausedAt + RetryPolicy.DelayAfter(resumed + 1, 0) > now) return false;
+        Resume(now);
+        Fact("BackupNetworkResumeStarted", attempt.Id, now);
+        return true;
     }
 
     /// <param name="jitter">A sample in [0,1) used to shorten a retry delay; the caller owns randomness so the domain stays deterministic.</param>

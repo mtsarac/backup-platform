@@ -59,7 +59,7 @@ public enum BackupRetryOutcome
 }
 public sealed record BackupRetryResult(BackupRetryOutcome Outcome, BackupRun? Run);
 
-/// <summary>A scheduled retry that became a Pending attempt; the owning agent can be hinted.</summary>
+/// <summary>A scheduled retry or an automatic network resume that became a Pending attempt; the owning agent can be hinted.</summary>
 public sealed record BackupRetryStarted(Guid RunId, AgentId AgentId);
 
 /// <summary>
@@ -106,4 +106,6 @@ public interface IBackupRunStore
     Task<int> ExpireStaleAsync(DateTimeOffset now, CancellationToken cancellationToken);
     /// <summary>Creates the next attempt of every RetryPending run whose NextAttemptAt has passed. Safe to run from any number of workers or instances.</summary>
     Task<IReadOnlyList<BackupRetryStarted>> StartDueRetriesAsync(DateTimeOffset now, int limit, CancellationToken cancellationToken);
+    /// <summary>Resumes every PausedByNetworkError run whose backoff has elapsed (see <see cref="BackupRun.ResumeAfterNetworkPause"/>). Safe to run from any number of workers or instances.</summary>
+    Task<IReadOnlyList<BackupRetryStarted>> ResumeDueNetworkPausesAsync(DateTimeOffset now, int limit, CancellationToken cancellationToken);
 }

@@ -303,7 +303,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
                                   join run in context.BackupRuns on new { attempt.RunId, attempt.TenantId } equals new { RunId = run.Id, run.TenantId }
                                   where attempt.TenantId == tenantId && attempt.AgentId == agentId && attempt.Status == BackupStatus.Pending && run.Status == BackupStatus.Pending
                                      // A scheduled run's first attempt that missed its grace period never starts; the unclaimed-run sweep ends it.
-                                     && (run.ClaimDeadline == null || run.ClaimDeadline >= now || attempt.Number > 1)
+                                     && (run.ClaimDeadline == null || run.ClaimDeadline >= now || attempt.Number > 1 || attempt.LeasedAt != null)
                                   orderby attempt.EligibleAt, run.CreatedAt, run.Id
                                   select run.Id).Take(16).ToListAsync(cancellationToken);
         BackupRun? next = null;
@@ -491,6 +491,35 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
             started.Add(new BackupRetryStarted(run.Id, run.AgentId));
         }
         return started;
+    }
+    public async Task<IReadOnlyList<BackupRetryStarted>> ResumeDueNetworkPausesAsync(DateTimeOffset now, int limit, CancellationToken cancellationToken)
+    {
+        await using var scan = PlatformDbContext.CreateForPlatformOperations(options);
+        var paused = await (from attempt in scan.BackupRunAttempts.AsNoTracking()
+                            join run in scan.BackupRuns.AsNoTracking() on new { attempt.RunId, attempt.TenantId } equals new { RunId = run.Id, run.TenantId }
+                            where run.Status == BackupStatus.Paused && run.CancellationRequestedAt == null && run.CurrentAttemptNumber == attempt.Number
+                               && attempt.Status == BackupStatus.Paused && attempt.PauseReason == TransferPauseReason.PausedByNetworkError
+                            orderby attempt.ProgressAt, run.Id
+                            select new { run.TenantId, run.AgentId, run.Id }).Take(Math.Clamp(limit, 1, 500)).ToListAsync(cancellationToken);
+        var resumed = new List<BackupRetryStarted>();
+        foreach (var candidate in paused)
+        {
+            await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+            if (!await LockAgentAsync(context, candidate.TenantId, candidate.AgentId, cancellationToken)) continue;
+            // Re-read under the lock: an operator's resume or cancel, or another instance, may already have moved the run on.
+            var run = await Runs(context).SingleOrDefaultAsync(run => run.TenantId == candidate.TenantId && run.Id == candidate.Id && run.AgentId == candidate.AgentId, cancellationToken);
+            if (run is null || !run.ResumeAfterNetworkPause(now)) continue;
+            context.AuditEvents.Add(AuditEvent.Record(
+                now, UserId.System, AuditActorKind.System, AuditActions.BackupRunResumed, run.TenantId,
+                "backup_run", run.Id.ToString("D"),
+                new Dictionary<string, object?> { ["jobId"] = run.JobId.ToString("D"), ["runId"] = run.Id.ToString("D"), ["attemptId"] = run.CurrentAttempt.Id.ToString("D"), ["result"] = "resumed", ["resume"] = "Automatic" }));
+            try { await context.SaveChangesAsync(cancellationToken); }
+            catch (DbUpdateException) { continue; } // lost a race the lock did not cover (another instance); the winner's resume stands
+            await transaction.CommitAsync(cancellationToken);
+            resumed.Add(new BackupRetryStarted(run.Id, run.AgentId));
+        }
+        return resumed;
     }
     private async Task<BackupMutationResult> MutateAsync(BackupLeaseCommand command, Action<BackupRun> mutate, CancellationToken cancellationToken, Func<PlatformDbContext, BackupRun, Task>? prepare = null)
     {

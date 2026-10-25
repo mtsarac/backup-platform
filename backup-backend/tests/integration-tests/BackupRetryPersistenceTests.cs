@@ -382,6 +382,43 @@ public sealed class BackupRetryPersistenceTests(PostgreSqlFixture fixture) : ICl
     }
 
     [Fact]
+    public async Task NetworkPauseResumesTheSameAttemptOnceDueWhileOperatorAndTimeRulePausesWaitForAPerson()
+    {
+        await using var env = await Env.IsolatedAsync();
+        var store = env.Store();
+        var pausedAt = Now.AddSeconds(5);
+        var network = await env.SeedAsync();
+        var run = await StartAsync(store, network);
+        var claim = await ClaimAsync(store, network, Now);
+        await StartAttemptAsync(store, claim, Now);
+        Assert.Equal(BackupMutationResult.Accepted, await store.CompleteAttemptAsync(Command(claim, pausedAt), new Completion("Paused", "PausedByNetworkError", null), default));
+        var others = new List<(World World, Guid RunId)>();
+        foreach (var reason in new[] { "Operator", "TimeRule" })
+        {
+            var world = await env.SeedAsync();
+            others.Add((world, (await StartAsync(store, world, reason)).Id));
+            var other = await ClaimAsync(store, world, Now);
+            await StartAttemptAsync(store, other, Now);
+            Assert.Equal(BackupMutationResult.Accepted, await store.CompleteAttemptAsync(Command(other, pausedAt), new Completion("Paused", reason, null), default));
+        }
+
+        var due = pausedAt + Delay;
+        Assert.Empty(await store.ResumeDueNetworkPausesAsync(due.AddMilliseconds(-1), 500, default));
+        var resumed = Assert.Single(await store.ResumeDueNetworkPausesAsync(due, 500, default));
+        Assert.Equal(run.Id, resumed.RunId);
+        Assert.Equal(network.AgentId, resumed.AgentId);
+        Assert.Empty(await store.ResumeDueNetworkPausesAsync(due.AddDays(30), 500, default));
+
+        var persisted = await env.LoadAsync(network, run.Id);
+        Assert.Equal(BackupStatus.Pending, persisted.Status);
+        Assert.Single(persisted.Facts, fact => fact.Kind == "BackupNetworkResumeStarted");
+        var again = await ClaimAsync(store, network, due);
+        Assert.Equal(claim.Attempt.Id, again.Attempt.Id);
+        Assert.NotEqual(claim.Attempt.LeaseToken, again.Attempt.LeaseToken);
+        foreach (var (world, id) in others) Assert.Equal(BackupStatus.Paused, (await env.LoadAsync(world, id)).Status);
+    }
+
+    [Fact]
     public async Task StaleLeaseOfACancellingRunWithARetainedCheckpointEndsCancelledAndReleasesTheCheckpoint()
     {
         await using var env = await Env.IsolatedAsync();

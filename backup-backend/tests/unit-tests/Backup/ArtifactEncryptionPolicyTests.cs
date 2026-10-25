@@ -366,5 +366,6 @@ public sealed class ArtifactEncryptionPolicyTests
         public Task<BackupMutationResult> ReportProgressAsync(BackupLeaseCommand command, BackupProgress progress, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> ExpireStaleAsync(DateTimeOffset now, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<BackupRetryStarted>> StartDueRetriesAsync(DateTimeOffset now, int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<BackupRetryStarted>> ResumeDueNetworkPausesAsync(DateTimeOffset now, int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }
