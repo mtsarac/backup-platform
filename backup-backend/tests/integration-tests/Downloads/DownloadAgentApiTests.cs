@@ -1,6 +1,9 @@
+using BackupPlatform.Domain.Storage;
+using Microsoft.EntityFrameworkCore;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Contracts.Downloads;
 using BackupPlatform.Domain.Downloads;
 
@@ -31,6 +34,31 @@ public sealed class DownloadAgentApiTests(PostgreSqlFixture fixture) : IClassFix
     {
         var agent = caller ?? scenario.Backup.Agent;
         return scenario.World.SendAgentAsync(HttpMethod.Post, $"/api/agent/downloads/{sessionId}/{operation}", agent.CredentialId, agent.Secret, body: body);
+    }
+
+    [Fact]
+    public async Task SftpReplicaDownloadIsServedDirectlyByAnOnlineAgent()
+    {
+        await using var scenario = await DownloadApiScenario.CreateAsync(fixture);
+        var connectionId = Guid.NewGuid();
+        await using (var context = scenario.World.Database.CreatePlatformContext())
+        {
+            context.StorageConnections.Add(new StorageConnection(connectionId, scenario.Backup.Backup.Setup.Tenant.Id, "Download sftp", StorageProviderTypes.Sftp,
+                StorageOwnership.TenantManaged, StorageQuotaScopes.Tenant, new Dictionary<string, string>(), false, scenario.Backup.Clock.GetUtcNow()));
+            await context.SaveChangesAsync();
+            await context.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE backup_replicas SET "StorageProvider" = 'sftp', "StorageTarget" = {connectionId.ToString("D")}, "StorageConnectionId" = {connectionId} WHERE "Id" = {scenario.ReplicaId}
+                """);
+        }
+        using var heartbeat = await scenario.World.HeartbeatAsync(scenario.Backup.Agent);
+        Assert.Equal(HttpStatusCode.OK, heartbeat.StatusCode);
+        using var capability = await scenario.World.SyncCapabilitiesAsync(scenario.Backup.Agent, AgentWorld.CapabilitySnapshot(
+            AgentWorld.CapabilityReport(DownloadTaskTypes.Capability), AgentWorld.CapabilityReport(TaskStorageProtocol.DirectCapability)));
+        Assert.Equal(HttpStatusCode.OK, capability.StatusCode);
+        var created = await scenario.CreateSessionAsync();
+        Assert.True(created.GetProperty("direct").GetBoolean());
+        var session = await scenario.Store().GetAsync(scenario.Backup.Backup.Setup.Tenant.Id, created.GetProperty("sessionId").GetGuid(), default);
+        Assert.Equal(scenario.Backup.Agent.AgentId, session!.AgentId);
     }
 
     [Fact]
