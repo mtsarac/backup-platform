@@ -18,6 +18,7 @@ public static class BackupPipelineReasons
     public const string StorageIntegrityMismatch = "storage-integrity-mismatch";
     public const string StorageInsufficientSpace = "storage-insufficient-space";
     public const string StorageAccessDenied = "storage-access-denied";
+    public const string StorageAuthenticationFailed = "storage-authentication-failed";
     public const string StorageNotSupported = "storage-not-supported";
     public const string StorageInvalidConfiguration = "storage-invalid-configuration";
     public const string StorageIoError = "storage-io-error";
