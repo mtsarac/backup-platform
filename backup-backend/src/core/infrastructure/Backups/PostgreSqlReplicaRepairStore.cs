@@ -628,19 +628,15 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
             SELECT pending."Id" AS "Value" FROM replica_repair_operations pending
             WHERE pending."Status" = 'Pending' AND (pending."NextRetryAt" IS NULL OR pending."NextRetryAt" <= {now})
               AND ({tenantId == null} OR pending."TenantId" = {(tenantId == null ? Guid.Empty : tenantId.Value)})
-              AND (NOT {backendExecutedOnly} OR pending."StorageProvider" NOT IN ('sftp', 'google-drive') OR NOT EXISTS (
-                  SELECT 1 FROM backup_replicas source
-                  WHERE source."TenantId" = pending."TenantId" AND source."ArtifactId" = pending."ArtifactId" AND source."Id" = pending."SourceReplicaId"
-                    AND source."StorageProvider" IN ('sftp', 'google-drive', 's3', 'smb')))
-              AND (NOT {backendExecutedOnly} OR pending."StorageProvider" NOT IN ('sftp', 'google-drive', 's3', 'smb') OR NOT EXISTS (
-                  SELECT 1 FROM backup_replicas source
-                  WHERE source."TenantId" = pending."TenantId" AND source."ArtifactId" = pending."ArtifactId" AND source."Id" = pending."SourceReplicaId"
-                    AND source."ExecutionLocation" = 'Agent')
+              AND (NOT {backendExecutedOnly} OR pending."StorageProvider" NOT IN ('sftp', 'google-drive', 's3', 'smb')
+                  OR EXISTS (
+                      SELECT 1 FROM backup_replicas source
+                      WHERE source."TenantId" = pending."TenantId" AND source."ArtifactId" = pending."ArtifactId" AND source."Id" = pending."SourceReplicaId"
+                        AND source."StorageProvider" = 'central')
                   OR (pending."StorageProvider" IN ('s3', 'smb') AND EXISTS (
                       SELECT 1 FROM backup_replicas other
                       WHERE other."TenantId" = pending."TenantId" AND other."ArtifactId" = pending."ArtifactId" AND other."ExecutionLocation" = 'Backend'
-                        AND other."Status" = 'Available' AND other."VerificationState" = 'Verified'
-                        AND other."StorageProvider" = 'central')))
+                        AND other."Status" = 'Available' AND other."VerificationState" = 'Verified' AND other."StorageProvider" = 'central')))
               AND (SELECT COUNT(*) FROM replica_repair_operations active
                    WHERE active."Status" = 'InProgress' AND active."TenantId" = pending."TenantId") < {IReplicaRepairStore.MaxTenantConcurrentRepairs}
             ORDER BY COALESCE(pending."NextRetryAt", pending."CreatedAt") ASC, pending."Id"

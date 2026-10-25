@@ -169,7 +169,7 @@ public sealed class AgentReplicaRepairIntegrationTests
     }
 
     [Fact]
-    public Task LocalSourceRepairIsClaimedOnlyByTheOwningAgent_AndByTheBackendOnlyWhenItCanReadAnotherCopy() => WithIsolatedDatabaseAsync(async kit =>
+    public Task LocalSourceRepairIsClaimedOnlyByTheOwningAgent() => WithIsolatedDatabaseAsync(async kit =>
     {
         var (owner, operations) = await SeedAsync(kit, "sftp", "s3");
         var other = new StoreAgent(owner.TenantId, await kit.AddAgentToAsync(owner.TenantId));
@@ -179,10 +179,9 @@ public sealed class AgentReplicaRepairIntegrationTests
         var store = Store(kit);
 
         Assert.Null(await store.ClaimAgentRepairAsync(Identity(other), T0, RepairLease, default));
-        // The seeded S3 copy lets the backend repair the S3 target itself; the SFTP target can only be written by an agent.
-        Assert.Equal(operations[1].Id, (await store.ClaimDueRepairAsync("backend", T0, RepairLease, default, owner.TenantId, backendExecutedOnly: true))!.Id);
+        // Another external copy (the seeded S3 one) may sit on the customer's private network, which only the agent reaches: the backend takes neither target.
         Assert.Null(await store.ClaimDueRepairAsync("backend", T0, RepairLease, default, owner.TenantId, backendExecutedOnly: true));
-        Assert.Equal(operations[0].Id, (await store.ClaimAgentRepairAsync(Identity(owner), T0, RepairLease, default))!.Id);
+        Assert.Contains((await store.ClaimAgentRepairAsync(Identity(owner), T0, RepairLease, default))!.Id, operations.Select(op => op.Id));
     });
 
     [Fact]
