@@ -11,6 +11,7 @@ import { ROUTES } from '@/lib/routes'
 import { ApiError } from '@/lib/api/client'
 import { type ErrorDescription, describeError } from '@/lib/api/failure-messages'
 import { LanguageSwitcher } from '@/components/layout/language-switcher'
+import { usePageTitle } from '@/hooks/use-page-title'
 
 const promises = [
   { icon: ShieldCheck, get text() { return tx("Her yedek doğrulanır ve checksum ile kayıt altına alınır.") } },
@@ -20,6 +21,7 @@ const promises = [
 
 export function LoginPage() {
   useLanguage()
+  usePageTitle(tx('Giriş yapın'))
   const { login, isAuthenticated, sessionExpired } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
