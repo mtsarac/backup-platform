@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
-import { precheckLabel, technicalChecks } from './presentation'
+import { precheckLabel, precheckWarningText, technicalChecks } from './presentation'
 import type { RestoreResult, RestoreView } from './types'
 import { describeFailure, failureMessage } from '@/lib/api/failure-messages'
 
@@ -26,7 +26,7 @@ const columns: Column<PrecheckItem>[] = [
     const { label, icon: Icon, className } = checkStatus[item.status]
     return <span className={`inline-flex items-center gap-1.5 font-medium ${className}`}><Icon aria-hidden="true" className="size-4" />{tx(label)}</span>
   } },
-  { key: 'message', get header() { return tx("Açıklama") }, wrap: true, render: (item) => <span className="text-text-muted">{item.status === 'Failed' ? failureMessage(item.reasonCode, 'restore') : item.status === 'Warning' ? item.message : ''}</span> },
+  { key: 'message', get header() { return tx("Açıklama") }, wrap: true, render: (item) => <span className="text-text-muted">{item.status === 'Failed' ? failureMessage(item.reasonCode, 'restore') : item.status === 'Warning' ? precheckWarningText(item) : ''}</span> },
 ]
 
 /** The precheck verdict first, the individual checks second: what happened, and what the user may do next. */
