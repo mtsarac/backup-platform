@@ -52,9 +52,9 @@ public sealed class LoginThrottle(DbContextOptions<PlatformDbContext> options, T
     }
 
     // Trimmed and upper-cased like the login itself, so padding or case cannot dodge the counter.
-    private static string Key(string identifier)
+    private static string Key(string? identifier)
     {
-        var key = identifier.Trim().ToUpperInvariant();
+        var key = (identifier ?? string.Empty).Trim().ToUpperInvariant();
         return key.Length > MaxIdentifierLength ? key[..MaxIdentifierLength] : key;
     }
 }

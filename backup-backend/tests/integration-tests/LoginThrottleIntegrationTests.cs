@@ -36,6 +36,16 @@ public sealed class LoginThrottleIntegrationTests(PostgreSqlFixture fixture) : I
     }
 
     [Fact]
+    public async Task A_missing_identifier_is_counted_like_an_empty_one_and_never_throws()
+    {
+        var throttle = Instance(new MutableClock());
+
+        await throttle.FailedAsync(null!, default);
+
+        Assert.Null(await throttle.RetryAfterAsync(null!, default));
+    }
+
+    [Fact]
     public async Task Several_instances_share_one_counter_even_when_failures_arrive_together()
     {
         var clock = new MutableClock();
