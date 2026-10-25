@@ -679,6 +679,7 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         var agentId = identity.AgentId.Value;
         if (!await context.ReplicaRepairOperations.AnyAsync(r => r.TenantId == identity.TenantId && r.Status == ReplicaRepairStatus.Pending
                 && (r.StorageProvider == StorageProviderTypes.Sftp || r.StorageProvider == StorageProviderTypes.GoogleDrive
+                    || r.StorageProvider == StorageProviderTypes.S3 || r.StorageProvider == StorageProviderTypes.Smb
                     || context.BackupReplicas.Any(source => source.TenantId == r.TenantId && source.Id == r.SourceReplicaId
                         && source.ExecutionLocation == BackupStorageExecutionLocation.Agent && source.OwningAgentId == agentId))
                 && (r.NextRetryAt == null || r.NextRetryAt <= now), cancellationToken)
@@ -703,7 +704,7 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
             WHERE pending."Status" = 'Pending' AND (pending."NextRetryAt" IS NULL OR pending."NextRetryAt" <= {now})
               AND pending."TenantId" = {identity.TenantId.Value}
               AND (
-                  (pending."StorageProvider" IN ('sftp', 'google-drive') AND EXISTS (SELECT 1 FROM backup_replicas source
+                  (pending."StorageProvider" IN ('sftp', 'google-drive', 's3', 'smb') AND EXISTS (SELECT 1 FROM backup_replicas source
                       WHERE source."TenantId" = pending."TenantId" AND source."ArtifactId" = pending."ArtifactId" AND source."Id" = pending."SourceReplicaId"
                         AND source."StorageProvider" IN ('sftp', 'google-drive', 's3', 'smb')))
                   OR (pending."StorageProvider" IN ('sftp', 'google-drive', 's3', 'smb') AND EXISTS (SELECT 1 FROM backup_replicas source

@@ -56,7 +56,7 @@ public sealed class AgentReplicaRepairIntegrationTests
         Assert.Equal(second.TenantId, claim.TenantId);
         Assert.Equal(ReplicaRepairStatus.Pending, (await store.FindOperationAsync(first.TenantId, firstOperations[0].Id, default))!.Status);
 
-        var (backend, _) = await SeedAsync(kit, "central", "s3", "smb");
+        var (backend, _) = await SeedAsync(kit, "central");
         await CapabilityAsync(kit, backend, CapabilitySupport.Supported);
         Assert.Null(await store.ClaimAgentRepairAsync(Identity(backend), T0, RepairLease, default));
     });
