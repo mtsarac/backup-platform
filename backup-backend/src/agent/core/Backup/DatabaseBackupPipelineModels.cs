@@ -109,6 +109,15 @@ public sealed record DatabaseBackupPipelineRequest
 
     public static readonly TimeSpan DefaultDestinationTimeout = TimeSpan.FromHours(6);
 
+    /// <summary>
+    /// How long one upload attempt may move no bytes before the storage is treated as unreachable and the transfer pauses as PausedByNetworkError.
+    /// A storage that accepts connections but never answers raises no error of its own, so without this a hang lasts until <see cref="DestinationTimeout"/>.
+    /// It must exceed the time the slowest link needs for one storage chunk. Use <see cref="Timeout.InfiniteTimeSpan"/> to disable.
+    /// </summary>
+    public TimeSpan UploadStallTimeout { get; init; } = DefaultUploadStallTimeout;
+
+    public static readonly TimeSpan DefaultUploadStallTimeout = TimeSpan.FromMinutes(2);
+
     /// <summary>Paces the upload bytes of every destination to the backend's limits; null uploads at full speed. The timeout of a paced destination is widened by <see cref="IUploadBandwidthSession.DeadlineAllowance"/>.</summary>
     public IUploadBandwidth? UploadBandwidth { get; init; }
 

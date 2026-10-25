@@ -516,10 +516,19 @@ internal sealed class DatabaseBackupExecution
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     stream.Position = 0;
+                    // A storage that accepts connections and never answers raises no error: every byte read or reported re-arms this timer, and it firing ends the attempt.
+                    using var stall = new CancellationTokenSource(_request.UploadStallTimeout, _time);
+                    using var guarded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, stall.Token);
+                    void Touch() => stall.CancelAfter(_request.UploadStallTimeout);
                     try
                     {
-                        stored = await storage.PutAsync(transfer.Key, pacing?.Wrap(stream) ?? stream, options with { Checkpoint = checkpoint }, progress, cancellationToken).ConfigureAwait(false);
+                        stored = await storage.PutAsync(transfer.Key, new ReadObservedStream(pacing?.Wrap(stream) ?? stream, Touch), options with { Checkpoint = checkpoint },
+                            new CallbackProgress<long>(bytes => { Touch(); progress.Report(bytes); }), guarded.Token).ConfigureAwait(false);
                         break;
+                    }
+                    catch (Exception error) when (error is OperationCanceledException or StorageException && stall.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+                    {
+                        throw new TransferPausedException("PausedByNetworkError");
                     }
                     catch (StorageException error) when (error.Kind is StorageFailureKind.NetworkUnavailable or StorageFailureKind.Timeout)
                     {

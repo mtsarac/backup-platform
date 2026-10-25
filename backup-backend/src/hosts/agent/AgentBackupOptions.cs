@@ -23,6 +23,9 @@ public sealed class AgentBackupOptions
     /// <summary>Optional directory containing pg_dump and pg_restore; absent uses the process PATH.</summary>
     public AgentPostgreSqlOptions? PostgreSql { get; set; }
     public Dictionary<string, BackupPlatform.BackupProviders.FileSystem.FileSystemRoot>? FileSources { get; set; }
+
+    /// <summary>How long an upload may move no bytes before the storage counts as unreachable and the transfer pauses (default 2 minutes).</summary>
+    public TimeSpan? UploadStallTimeout { get; set; }
 }
 
 public sealed class AgentPostgreSqlOptions

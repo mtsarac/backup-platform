@@ -54,7 +54,8 @@ public static class AgentHostServiceCollectionExtensions
             provider.GetServices<StagingArea>(),
             provider.GetService<ITaskStorageProviderFactory>(),
             PacedUploads(provider),
-            provider.GetService<LocalVolumes>()));
+            provider.GetService<LocalVolumes>(),
+            UploadStallTimeout(provider)));
         services.AddSingleton<BackupTaskWorker>();
         services.AddSingleton(provider => new RestoreTaskRequestFactory(
             provider.GetRequiredService<IBackupTaskCredentialResolver>(),
@@ -101,5 +102,13 @@ public static class AgentHostServiceCollectionExtensions
         var identities = provider.GetRequiredService<IAgentCredentialStore>();
         var time = provider.GetRequiredService<TimeProvider>();
         return task => new UploadBandwidthGovernor(client, identities, task.AttemptId, task.LeaseToken, time);
+    }
+
+    private static TimeSpan? UploadStallTimeout(IServiceProvider provider)
+    {
+        var configured = provider.GetRequiredService<IOptions<AgentHostOptions>>().Value.Backup?.UploadStallTimeout;
+        if (configured is { } value && value <= TimeSpan.Zero && value != Timeout.InfiniteTimeSpan)
+            throw new InvalidOperationException("Agent:Backup:UploadStallTimeout must be positive.");
+        return configured;
     }
 }

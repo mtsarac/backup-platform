@@ -299,6 +299,16 @@ response-body disconnects enter the same checkpoint-based network recovery
 path as connection failures; checksum mismatches remain terminal integrity
 errors rather than being retried as network faults.
 
+## Upload stall detection
+
+A storage that accepts connections but never answers raises no error of its own.
+Every upload attempt therefore has a no-progress timer: bytes read from the
+artifact or reported by the provider re-arm it, and when it fires the transfer
+pauses as `PausedByNetworkError` (resumable, checkpoint kept). The default is two
+minutes; set `Agent__Backup__UploadStallTimeout` (for example `00:05:00`) to
+allow links that need longer for one storage chunk (one S3 part of at least
+8 MiB). The run's own destination timeout (6 hours) still bounds the whole copy.
+
 File backup admission and task claiming both require the agent to advertise
 `file-system.backup.full`; unsupported agents cannot receive a file-system job.
 S3 connection tests fail closed if the provider cannot authenticate bucket access;

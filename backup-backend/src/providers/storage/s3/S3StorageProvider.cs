@@ -167,7 +167,8 @@ public sealed class S3StorageProvider(HttpClient http, S3StorageOptions configur
                         remaining -= read;
                     }
                     part.Position = 0;
-                    using var body = new StreamContent(part);
+                    // The part body reports as the HTTP client drains it, so a stalled connection is told apart from a slow one.
+                    using var body = new StreamContent(new BackupPlatform.StorageProviders.Abstractions.Transfer.ReadObservedStream(part, () => progress?.Report(total - part.Length + part.Position)));
                     body.Headers.ContentLength = part.Length;
                     body.Headers.ContentMD5 = md5.GetHashAndReset();
                     using var response = await SendAsync(HttpMethod.Put, key, $"partNumber={number}&uploadId={Escape(uploadId)}", body, null, cancellationToken);
