@@ -42,6 +42,13 @@ public sealed class StorageRelayHardeningTests(PostgreSqlFixture fixture) : ICla
         Assert.Equal("agent_direct_required", AgentWorld.ReadJson(response).GetProperty("error").GetString());
     }
 
+    /// <summary>The fixture agent declares direct storage; an agent that never did is the one the backend must not relay for.</summary>
+    private async Task RemoveDirectCapabilityAsync(BackupApiScenario scenario)
+    {
+        await using var db = fixture.CreatePlatformContext();
+        await db.AgentCapabilities.Where(row => row.AgentId == new AgentId(scenario.Agent.AgentId) && row.Identifier == TaskStorageProtocol.DirectCapability).ExecuteDeleteAsync();
+    }
+
     [Fact]
     public async Task RetiredRestoreRelayEndpointsFailClosed()
     {
@@ -59,6 +66,7 @@ public sealed class StorageRelayHardeningTests(PostgreSqlFixture fixture) : ICla
     public async Task AccessEndpoint_RejectsWhenDestinationIsRelayedExecutionLocation()
     {
         await using var scenario = await BackupApiScenario.CreateAsync(fixture);
+        await RemoveDirectCapabilityAsync(scenario);
         var connectionId = Guid.NewGuid();
         await using (var db = fixture.CreatePlatformContext())
         {
@@ -81,7 +89,9 @@ public sealed class StorageRelayHardeningTests(PostgreSqlFixture fixture) : ICla
         var jobId = AgentWorld.ReadJson(created).GetProperty("id").GetGuid();
         using var response = await scenario.StartRawAsync(jobId, "key");
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        Assert.Equal("admission_denied", AgentWorld.ReadJson(response).GetProperty("error").GetString());
+        var denial = AgentWorld.ReadJson(response);
+        Assert.Equal("admission_denied", denial.GetProperty("error").GetString());
+        Assert.Equal("agent_direct_storage_unsupported", denial.GetProperty("code").GetString());
     }
     [Fact]
     public async Task AccessEndpoint_RejectsWhenMissingHeaders()
@@ -115,6 +125,7 @@ public sealed class StorageRelayHardeningTests(PostgreSqlFixture fixture) : ICla
     public async Task AccessEndpoint_RejectsDirectWhenJobConfigurationRequestsDirectWithoutBackendAdmission()
     {
         await using var scenario = await BackupApiScenario.CreateAsync(fixture);
+        await RemoveDirectCapabilityAsync(scenario);
         var connectionId = Guid.NewGuid();
         await using (var db = fixture.CreatePlatformContext())
         {
@@ -137,7 +148,9 @@ public sealed class StorageRelayHardeningTests(PostgreSqlFixture fixture) : ICla
         var jobId = AgentWorld.ReadJson(created).GetProperty("id").GetGuid();
         using var response = await scenario.StartRawAsync(jobId, "key");
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        Assert.Equal("admission_denied", AgentWorld.ReadJson(response).GetProperty("error").GetString());
+        var denial = AgentWorld.ReadJson(response);
+        Assert.Equal("admission_denied", denial.GetProperty("error").GetString());
+        Assert.Equal("agent_direct_storage_unsupported", denial.GetProperty("code").GetString());
     }
     [Fact]
     public async Task AccessEndpoint_SucceedsForAdmittedDirectDestination_WhenAgentSupportsDirectStorage()
@@ -158,15 +171,6 @@ public sealed class StorageRelayHardeningTests(PostgreSqlFixture fixture) : ICla
                 }, false, DateTimeOffset.UtcNow);
             connection.AttachSecret($"sc-{connectionId:N}-sftp", ["password"], DateTimeOffset.UtcNow);
             db.StorageConnections.Add(connection);
-
-            db.AgentCapabilities.Add(new AgentCapabilityRecord(
-                new AgentId(scenario.Agent.AgentId),
-                scenario.Setup.Tenant.Id,
-                TaskStorageProtocol.DirectCapability,
-                BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported,
-                null,
-                "rev-1",
-                DateTimeOffset.UtcNow));
 
             await db.SaveChangesAsync();
         }
@@ -226,15 +230,6 @@ public sealed class StorageRelayHardeningTests(PostgreSqlFixture fixture) : ICla
             connection.AttachSecret($"sc-{connectionId:N}-sftp", ["privateKey"], DateTimeOffset.UtcNow);
             db.StorageConnections.Add(connection);
 
-            db.AgentCapabilities.Add(new AgentCapabilityRecord(
-                new AgentId(scenario.Agent.AgentId),
-                scenario.Setup.Tenant.Id,
-                TaskStorageProtocol.DirectCapability,
-                BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported,
-                null,
-                "rev-1",
-                DateTimeOffset.UtcNow));
-
             await db.SaveChangesAsync();
         }
 
@@ -288,15 +283,6 @@ public sealed class StorageRelayHardeningTests(PostgreSqlFixture fixture) : ICla
                 }, false, DateTimeOffset.UtcNow);
             connection.AttachSecret($"sc-{connectionId:N}-drive", ["refreshToken"], DateTimeOffset.UtcNow);
             db.StorageConnections.Add(connection);
-
-            db.AgentCapabilities.Add(new AgentCapabilityRecord(
-                new AgentId(scenario.Agent.AgentId),
-                scenario.Setup.Tenant.Id,
-                TaskStorageProtocol.DirectCapability,
-                BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported,
-                null,
-                "rev-1",
-                DateTimeOffset.UtcNow));
 
             await db.SaveChangesAsync();
         }

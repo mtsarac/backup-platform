@@ -1,5 +1,5 @@
 using System.Net;
-using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using BackupPlatform.Contracts.Agents;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Identity;
@@ -11,9 +11,9 @@ using System.Text.Json;
 namespace BackupPlatform.IntegrationTests.Storage;
 
 /// <summary>
-/// The destination of every backend-relayed transfer is authorized on the SERVER against the run's snapshot, lease and the connection as it is now.
-/// Driven through HTTP exactly as the agent calls it; a request that passes the fence fails afterwards on its (deliberately invalid) checksum with 400,
-/// which is how these tests tell "authorized" from "refused" without touching a real SFTP or Google Drive.
+/// The destination of every direct external transfer is authorized on the SERVER against the run's snapshot, lease and the connection as it is now.
+/// Driven through HTTP exactly as the agent calls it: the backend relays no payload, so the call that carries the destination, lease and key is the upload
+/// intent the agent records before it writes. A refused destination answers 409; an authorized one records the intent (200) without touching a real SFTP or Google Drive.
 /// </summary>
 public sealed class MultiDestinationRelayAuthorizationTests(PostgreSqlFixture fixture) : IClassFixture<PostgreSqlFixture>
 {
@@ -69,17 +69,16 @@ public sealed class MultiDestinationRelayAuthorizationTests(PostgreSqlFixture fi
     private static async Task<HttpResponseMessage> UploadAsync(Arrangement a, Guid? destination, string? key = null, Guid? lease = null, EnrolledAgent? agent = null, string? destinationHeader = null, Guid? attempt = null)
     {
         var caller = agent ?? a.Scenario.Agent;
-        using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/agent/tasks/{attempt ?? a.Claim.AttemptId}/storage/content");
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/agent/tasks/{attempt ?? a.Claim.AttemptId}/storage/intent")
+        {
+            Content = JsonContent.Create(new TaskStorageVerifyRequest(3, new string('a', 64)))
+        };
         request.Headers.TryAddWithoutValidation("Authorization", AgentAuthorizationScheme.FormatHeaderValue(caller.CredentialId, caller.Secret));
         request.Headers.Add("X-Backup-Agent-Protocol", "1.0");
         request.Headers.Add(TaskStorageProtocol.LeaseHeader, (lease ?? a.Claim.LeaseToken).ToString("D"));
         request.Headers.Add(TaskStorageProtocol.KeyHeader, key ?? KeyOf(a));
         if (destinationHeader is not null) request.Headers.Add(TaskStorageProtocol.DestinationHeader, destinationHeader);
         else if (destination is { } id) request.Headers.Add(TaskStorageProtocol.DestinationHeader, id.ToString("D"));
-        // The checksum is invalid on purpose: a request that gets this far was authorized.
-        request.Headers.Add(TaskStorageProtocol.ChecksumHeader, new string('z', 64));
-        request.Content = new ByteArrayContent([1, 2, 3]);
-        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
         return await a.Scenario.World.Anonymous.SendAsync(request);
     }
 
@@ -94,12 +93,11 @@ public sealed class MultiDestinationRelayAuthorizationTests(PostgreSqlFixture fi
     private static void AssertAuthorized(HttpResponseMessage response)
     {
         using var _ = response;
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Equal("invalid_request", AgentWorld.ReadJson(response).GetProperty("error").GetString());
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Fact]
-    public async Task Hard_quota_relay_refuses_missing_reservations_and_oversized_artifacts_before_provider_upload()
+    public async Task Hard_quota_intent_refuses_missing_reservations_and_oversized_artifacts_before_any_upload()
     {
         await using var scenario = await BackupApiScenario.CreateAsync(fixture);
         var arrangement = await ArrangeAsync(scenario, multi: false);
@@ -113,12 +111,12 @@ public sealed class MultiDestinationRelayAuthorizationTests(PostgreSqlFixture fi
         {
             await context.Database.ExecuteSqlInterpolatedAsync($"UPDATE quota_reservations SET \"Bytes\" = 3 WHERE \"RunId\" = {arrangement.RunId}");
         }
-        // At the exact bound it reaches normal request validation, still without contacting a provider.
+        // At the exact bound the intent is recorded, still without contacting a provider.
         AssertAuthorized(await UploadAsync(arrangement, arrangement.Sftp));
     }
 
     [Fact]
-    public async Task Every_relayed_snapshot_destination_is_authorized_for_its_own_connection_and_only_that()
+    public async Task Every_direct_snapshot_destination_is_authorized_for_its_own_connection_and_only_that()
     {
         await using var scenario = await BackupApiScenario.CreateAsync(fixture);
         var a = await ArrangeAsync(scenario);
@@ -150,7 +148,7 @@ public sealed class MultiDestinationRelayAuthorizationTests(PostgreSqlFixture fi
     }
 
     [Fact]
-    public async Task A_destination_the_agent_writes_itself_cannot_be_used_through_the_relay()
+    public async Task A_destination_the_agent_writes_itself_cannot_be_used_for_a_direct_intent()
     {
         await using var scenario = await BackupApiScenario.CreateAsync(fixture);
         var a = await ArrangeAsync(scenario);
@@ -218,8 +216,12 @@ public sealed class MultiDestinationRelayAuthorizationTests(PostgreSqlFixture fi
         await using var scenario = await BackupApiScenario.CreateAsync(fixture);
         var a = await ArrangeAsync(scenario);
 
-        await AssertRefusedAsync(await UploadAsync(a, a.Sftp, key: KeyOf(a, runId: Guid.NewGuid())), "invalid_key");
-        await AssertRefusedAsync(await UploadAsync(a, a.Sftp, key: KeyOf(a, attemptId: Guid.NewGuid())), "invalid_key");
+        foreach (var key in new[] { KeyOf(a, runId: Guid.NewGuid()), KeyOf(a, attemptId: Guid.NewGuid()), "not-a-managed-key" })
+        {
+            using var response = await UploadAsync(a, a.Sftp, key: key);
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            Assert.Equal("invalid_request", AgentWorld.ReadJson(response).GetProperty("error").GetString());
+        }
     }
 
     [Fact]

@@ -13,7 +13,7 @@ namespace BackupPlatform.IntegrationTests;
 
 /// <summary>
 /// An SFTP or Google Drive replica is restored by the agent itself (also the R1 verification restore) when the target agent advertises direct
-/// storage access; otherwise the backend relay stays. The backend never opens the replica to decide, because it holds no session for it.
+/// storage access; an agent without it is refused, because the backend relays nothing. The backend never opens the replica to decide, because it holds no session for it.
 /// </summary>
 public sealed class RestoreDirectSourceTests(PostgreSqlFixture fixture) : IClassFixture<PostgreSqlFixture>
 {
@@ -37,8 +37,6 @@ public sealed class RestoreDirectSourceTests(PostgreSqlFixture fixture) : IClass
         await using (var context = fixture.CreatePlatformContext())
         {
             context.AgentCapabilities.Add(new AgentCapabilityRecord(agent.AgentId, agent.TenantId, RestoreTaskTypes.MssqlVerificationCapability, CapabilitySupport.Supported, null, "revision-2", Accepted));
-            if (direct)
-                context.AgentCapabilities.Add(new AgentCapabilityRecord(agent.AgentId, agent.TenantId, TaskStorageProtocol.DirectCapability, CapabilitySupport.Supported, null, "revision-3", Accepted));
             await context.SaveChangesAsync();
         }
         var job = await RetentionKit.AddJobAsync(_world.Harness, agent, null);
@@ -46,6 +44,9 @@ public sealed class RestoreDirectSourceTests(PostgreSqlFixture fixture) : IClass
         // The replica is addressed by its storage connection, which is what an external backup publishes.
         var connectionId = (await _world.ReplicaAsync(backup.ReplicaId)).StorageConnectionId;
         await _world.ExecuteAsync("UPDATE backup_replicas SET \"StorageTarget\" = @target WHERE \"Id\" = @id", ("target", connectionId.ToString("D")), ("id", backup.ReplicaId));
+        // The backup was written by a direct-capable agent (the harness declares that on every agent); a later restore on an agent that no longer declares it must be refused.
+        if (!direct)
+            await _world.ExecuteAsync("DELETE FROM agent_capabilities WHERE \"AgentId\" = @agent AND \"Identifier\" = @identifier", ("agent", agent.AgentId.Value), ("identifier", TaskStorageProtocol.DirectCapability));
         return new RestoreSeed(agent, backup);
     }
 

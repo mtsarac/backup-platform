@@ -84,32 +84,24 @@ public sealed class RestoreTaskApiTests(PostgreSqlFixture fixture) : IClassFixtu
         Assert.Equal("Running", StatusOf(await scenario.RestoreAsync(restoreId)));
     }
 
-    [Theory]
-    [InlineData("content")]
-    [InlineData("metadata")]
-    [InlineData("verify")]
-    public async Task StorageRelay_RejectsAnotherAgentEvenWithTheCorrectRestoreLease(string endpoint)
+    [Fact]
+    public async Task StorageAccess_RejectsAnotherAgentEvenWithTheCorrectRestoreLease()
     {
         var (scenario, _, task) = await ClaimedAsync(fixture, started: true);
         await using var _ = scenario;
         var sibling = await scenario.AddAgentAsync();
-        var source = task.Snapshot.GetProperty("source");
         foreach (var caller in new[] { scenario.Agent, sibling })
         {
-            using var request = new HttpRequestMessage(endpoint == "verify" ? HttpMethod.Post : HttpMethod.Get,
-                $"/api/agent/restore-tasks/{task.AttemptId}/storage/{endpoint}");
+            using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/agent/restore-tasks/{task.AttemptId}/storage/access");
             request.Headers.TryAddWithoutValidation("Authorization", AgentAuthorizationScheme.FormatHeaderValue(caller.CredentialId, caller.Secret));
             request.Headers.Add("X-Backup-Agent-Protocol", "1.0");
             request.Headers.Add(TaskStorageProtocol.LeaseHeader, task.LeaseToken.ToString("D"));
             request.Headers.Add(TaskStorageProtocol.RestoreHeader, task.OperationId.ToString("D"));
-            request.Headers.Add(TaskStorageProtocol.KeyHeader, source.GetProperty("storageKey").GetString());
-            if (endpoint == "verify")
-                request.Content = JsonContent.Create(new TaskStorageVerifyRequest(source.GetProperty("sizeBytes").GetInt64(), source.GetProperty("checksum").GetString()!));
 
             using var response = await scenario.World.Anonymous.SendAsync(request);
 
             Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-            // The owner passes the lease fence; this fixture's central replica is intentionally not a relay source.
+            // The owner passes the lease fence; this fixture's central replica is intentionally not a direct external source.
             Assert.Equal(caller == scenario.Agent ? "source_inaccessible" : "lease_conflict", Error(response));
         }
     }
