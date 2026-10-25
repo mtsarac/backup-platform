@@ -23,7 +23,7 @@ public sealed class HttpTaskStorageProviderFactory(
     HttpClient http,
     AgentBackendEndpoint endpoint,
     IAgentCredentialStore identities,
-    string? stagingDirectory = null, IWindowsNetworkSession? windowsSession = null) : ITaskStorageProviderFactory
+    string? stagingDirectory = null, IWindowsNetworkSession? windowsSession = null, SftpNetworkOptions? sftpNetwork = null) : ITaskStorageProviderFactory
 {
     private readonly string? _stagingDirectory = stagingDirectory ?? Path.Combine(Path.GetTempPath(), "backup-platform-staging");
     private static readonly HttpClient DirectHttp = new(new SocketsHttpHandler { AllowAutoRedirect = false,
@@ -34,7 +34,7 @@ public sealed class HttpTaskStorageProviderFactory(
         if (destination.Direct && AgentStorageProviders.External(destination.StorageProvider) && destination.StorageConnectionId is { } connectionId)
         {
             return new DirectTaskStorageProvider(http, endpoint, identities, task.AttemptId, task.LeaseToken,
-                connectionId, task.TenantId, destination.StorageProvider, _stagingDirectory, null, windowsSession);
+                connectionId, task.TenantId, destination.StorageProvider, _stagingDirectory, null, windowsSession, sftpNetwork: sftpNetwork);
         }
         return new Provider(http, endpoint, identities,
             $"api/agent/tasks/{task.AttemptId:D}/storage", task.LeaseToken, null, destination.StorageProvider, destination.StorageConnectionId);
@@ -45,7 +45,7 @@ public sealed class HttpTaskStorageProviderFactory(
         if (task.Source.Access == "AgentDirect" && AgentStorageProviders.External(task.Source.StorageProvider) && Guid.TryParse(task.Source.StorageTarget, out var connectionId))
         {
             return new DirectTaskStorageProvider(http, endpoint, identities, task.AttemptId, task.LeaseToken,
-                connectionId, task.TenantId, task.Source.StorageProvider, _stagingDirectory, task.OperationId, windowsSession);
+                connectionId, task.TenantId, task.Source.StorageProvider, _stagingDirectory, task.OperationId, windowsSession, sftpNetwork: sftpNetwork);
         }
         return new Provider(http, endpoint, identities,
             $"api/agent/restore-tasks/{task.AttemptId:D}/storage", task.LeaseToken, task.OperationId, task.Source.StorageProvider, null);
@@ -53,7 +53,7 @@ public sealed class HttpTaskStorageProviderFactory(
 
     public IStorageProvider CreateScoped(DirectStorageScope scope) =>
         new DirectTaskStorageProvider(http, endpoint, identities, Guid.Empty, scope.LeaseToken, scope.ConnectionId, scope.TenantId,
-            scope.ProviderType, _stagingDirectory, null, windowsSession, scope.AccessPath);
+            scope.ProviderType, _stagingDirectory, null, windowsSession, scope.AccessPath, sftpNetwork);
 
     private sealed class Provider(HttpClient http, AgentBackendEndpoint endpoint, IAgentCredentialStore identities,
         string path, Guid lease, Guid? restore, string providerType, Guid? destination) : IStorageProvider
@@ -196,7 +196,7 @@ public sealed class HttpTaskStorageProviderFactory(
     private sealed class DirectTaskStorageProvider(
         HttpClient http, AgentBackendEndpoint endpoint, IAgentCredentialStore identities,
         Guid attemptId, Guid lease, Guid connectionId, Guid tenantId, string providerType,
-        string? stagingDirectory, Guid? restoreOperationId, IWindowsNetworkSession? windowsSession, string? scopedAccessPath = null) : IStorageProvider, IScopedDriveRecordSource
+        string? stagingDirectory, Guid? restoreOperationId, IWindowsNetworkSession? windowsSession, string? scopedAccessPath = null, SftpNetworkOptions? sftpNetwork = null) : IStorageProvider, IScopedDriveRecordSource
     {
         private readonly SemaphoreSlim _initLock = new(1, 1);
         private IStorageProvider? _targetProvider;
@@ -315,7 +315,7 @@ public sealed class HttpTaskStorageProviderFactory(
                         tenantId,
                         connectionId);
                     var credential = new SftpCredential(access.Password, access.PrivateKey, access.Passphrase);
-                    _targetProvider = new SftpStorageProvider(options, _ => ValueTask.FromResult(credential));
+                    _targetProvider = new SftpStorageProvider(options, _ => ValueTask.FromResult(credential), sftpNetwork);
                     return _targetProvider;
                 }
                 if (access.ProviderType == AgentStorageProviders.GoogleDrive)
