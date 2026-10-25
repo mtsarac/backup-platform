@@ -49,7 +49,7 @@ export function JobForm({ job, prefill }: { job?: BackupJob; prefill?: { instanc
   const [retry, setRetry] = useState(job?.retryPolicy ?? initialRetry)
   const [retention, setRetention] = useState(job?.retention ?? initialRetention)
   const [schedule, setSchedule] = useState(job?.schedule ?? initialSchedule)
-  const [scheduled, setScheduled] = useState(job ? Boolean(job.schedule) : true)
+  const [scheduled, setScheduled] = useState(Boolean(job?.schedule))
   const [enabled, setEnabled] = useState(job?.enabled ?? true)
   const [overlap, setOverlap] = useState<'Skip' | 'Queue'>(job?.overlapPolicy ?? 'Skip')
   const [step, setStep] = useState(job ? summaryStep : 0)

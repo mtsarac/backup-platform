@@ -177,6 +177,7 @@ describe('iş formu', () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400, { field: 'cronExpression', code: 'invalid_cron' }))
     renderPage()
     await reach(4)
+    fireEvent.click(screen.getByRole('button', { name: 'Her gün 02:00' }))
     fireEvent.change(screen.getByLabelText('Cron ifadesi'), { target: { value: 'invalid cron' } })
     next(3)
     await submit()
@@ -211,6 +212,7 @@ describe('iş formu', () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400, { error: 'invalid_schedule', field: 'cronExpression', code: 'invalid_cron' }))
     renderPage()
     await reach(4)
+    fireEvent.click(screen.getByRole('button', { name: 'Her gün 02:00' }))
     fireEvent.change(screen.getByLabelText('Cron ifadesi'), { target: { value: 'x' } })
     next(3)
     await submit()
@@ -441,7 +443,7 @@ describe('adım adım sihirbaz', () => {
     expect(screen.getByLabelText('Yedekleme bilgisayarı')).toBeInTheDocument()
     expect(screen.queryByLabelText('İş adı')).not.toBeInTheDocument()
   })
-  it('creates a job with only the defaults and the preset schedule, without opening any technical details', async () => {
+  it('creates a job with only the defaults as a manual job (no schedule), without opening any technical details', async () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
     renderPage()
     await reach(7)
@@ -450,7 +452,7 @@ describe('adım adım sihirbaz', () => {
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(1))
     expect(vi.mocked(saveBackupJob).mock.calls[0][1]).toMatchObject({
       name: 'ERP backup', agentId: 'agent-a', enabled: true, overlapPolicy: 'Skip',
-      schedule: { enabled: true, cronExpression: '0 2 * * *', timeZone: 'Europe/Istanbul', missedRunGraceSeconds: 3600, overlapPolicy: 'Skip' },
+      schedule: null,
       retryPolicy: { maxAttempts: 3, initialDelaySeconds: 30, maxDelaySeconds: 300, backoff: 'Exponential', jitter: 0.2 },
       retention: { enabled: true, keepForSeconds: 1209600, deleteGracePeriodSeconds: 86400 },
       configuration: { stagingReference: 'default', storagePrefix: '', copyOnly: true, checksumPolicy: 'Required', compressionPolicy: 'Preferred', encryptionPolicy: 'Off' },
@@ -460,7 +462,8 @@ describe('adım adım sihirbaz', () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
     renderPage()
     await reach(4)
-    expect(screen.getByRole('button', { name: 'Her gün 02:00' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Elle çalıştır' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Her gün 02:00' })).toHaveAttribute('aria-pressed', 'false')
     fireEvent.click(screen.getByRole('button', { name: 'Her gün 08:00' }))
     expect(screen.getByRole('button', { name: 'Her gün 08:00' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: 'Her gün 02:00' })).toHaveAttribute('aria-pressed', 'false')
@@ -486,6 +489,7 @@ describe('adım adım sihirbaz', () => {
       expect(within(details!).getByText('Teknik ayrıntılar')).toBeInTheDocument()
     }
     fireEvent.change(screen.getByLabelText('Cron ifadesi'), { target: { value: '0 3 * * 1-5' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Her gün 02:00' }))
     fireEvent.change(screen.getByLabelText('İlk gecikme (saniye)'), { target: { value: '45' } })
     expect(screen.getByRole('button', { name: 'Her gün 02:00' })).toHaveAttribute('aria-pressed', 'false')
     next(3)
@@ -541,7 +545,9 @@ describe('adım adım sihirbaz', () => {
   })
   it('each summary row leads back to the step that owns it', async () => {
     renderPage()
-    await reach(7)
+    await reach(4)
+    fireEvent.click(screen.getByRole('button', { name: 'Her gün 02:00' }))
+    next(3)
     fireEvent.click(screen.getByRole('button', { name: 'Değiştir: Zamanlama' }))
     expect(screen.getByRole('button', { name: 'Her gün 02:00' })).toBeInTheDocument()
   })
