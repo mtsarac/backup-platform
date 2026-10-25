@@ -313,7 +313,7 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         RestoreFailureCodes.TargetInUse => "The target database has active connections.",
         RestoreFailureCodes.TargetProtected => "The target database is protected and cannot be restored over.",
         RestoreFailureCodes.InsufficientDiskSpace => "There is not enough disk space for the restore, on the agent's staging volume or on the target server.",
-        RestoreFailureCodes.SqlRestoreFailed => "The database engine could not complete the restore.",
+        RestoreFailureCodes.SqlRestoreFailed => "The restore could not be completed.",
         RestoreFailureCodes.DatabaseUnavailable => "The database server could not be reached.",
         RestoreFailureCodes.OperationTimedOut => "A restore operation timed out.",
         RestoreFailureCodes.AuthenticationFailed => "The database credentials were rejected.",

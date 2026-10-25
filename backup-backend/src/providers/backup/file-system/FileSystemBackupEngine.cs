@@ -71,13 +71,14 @@ public sealed class FileSystemBackupEngine(IReadOnlyDictionary<string, FileSyste
                 new(BackupVerificationStatus.Passed, "manifest-sha256-readback", backedUp, finished),
                 root.SnapshotKind is null ? [new("file-system.live-source", "Live files are checked for changes; select a configured snapshot source for a point-in-time view.")] : [], StagingCleanup.NotNeeded);
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or OperationCanceledException or System.Text.Json.JsonException)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or OperationCanceledException or System.Text.Json.JsonException or System.IO.InvalidDataException)
         {
             var cancelled = error is OperationCanceledException && cancellationToken.IsCancellationRequested;
             var cleanup = Cleanup(archivePath, cancelled || request.OnFailure == StagingFailurePolicy.Delete);
             var failure = new BackupFailure(cancelled ? BackupFailureKind.Cancelled : BackupFailureKind.VerificationFailed,
                 BackupExecutionStage.BackingUp, cancelled ? "cancelled" : "file-backup-failed", "The file backup did not complete; original source files were not changed.",
-                error is ArgumentException ? BackupFailureCause.InvalidConfiguration : error is OperationCanceledException ? BackupFailureCause.Timeout : BackupFailureCause.StagingInvalid);
+                error is ArgumentException or FileNotFoundException or DirectoryNotFoundException or System.IO.InvalidDataException ? BackupFailureCause.InvalidConfiguration
+                : error is OperationCanceledException ? BackupFailureCause.Timeout : BackupFailureCause.StagingInvalid);
             return new(cancelled ? FullBackupStatus.Cancelled : FullBackupStatus.Failed, failure, null, null, started, time.GetUtcNow(), started, null, null, BackupVerification.NotRun, [], cleanup);
         }
     }

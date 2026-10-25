@@ -421,7 +421,7 @@ public sealed class BackupOrchestrator(IBackupRunStore store, TimeProvider time,
     {
         null => null,
         BackupFailureCodes.PreCheckFailed => "The database backup pre-check failed.",
-        BackupFailureCodes.SqlBackupFailed => "SQL Server could not complete the full backup.",
+        BackupFailureCodes.SqlBackupFailed => "The backup could not be completed.",
         BackupFailureCodes.VerificationFailed => "The database backup did not pass verification.",
         BackupFailureCodes.HashFailed => "The backup checksum could not be computed.",
         BackupFailureCodes.QuotaExceeded => "The actual backup size exceeds the space available under the hard storage quota; the destination upload was refused.",
