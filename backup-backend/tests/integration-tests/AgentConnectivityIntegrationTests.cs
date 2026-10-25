@@ -91,6 +91,30 @@ public sealed class AgentConnectivityIntegrationTests(PostgreSqlFixture fixture)
     }
 
     [Fact]
+    public async Task RevokedAgentsAreListedOnlyWhenAskedForAndStayReadableById()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var setup = await world.CreateTenantAsync();
+        var revoked = await world.EnrollAsync(setup);
+        var healthy = await world.EnrollAsync(setup);
+        using var revoke = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/tenants/{setup.Tenant.Id.Value}/agents/{revoked.AgentId}/revoke");
+        Assert.Equal(HttpStatusCode.NoContent, revoke.StatusCode);
+        var root = $"/api/tenants/{setup.Tenant.Id.Value}/agents";
+
+        async Task<Guid[]> ListedAsync(string query)
+        {
+            using var response = await setup.Admin.GetAsync(root + query);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            return [.. AgentWorld.ReadJson(response).EnumerateArray().Select(agent => agent.GetProperty("agentId").GetGuid())];
+        }
+
+        Assert.Equal([healthy.AgentId], await ListedAsync(""));
+        Assert.Equal([healthy.AgentId], await ListedAsync("?includeRevoked=false"));
+        Assert.Equal(new[] { revoked.AgentId, healthy.AgentId }.Order(), (await ListedAsync("?includeRevoked=true")).Order());
+        Assert.Equal("Revoked", (await world.AgentViewAsync(setup, revoked.AgentId)).GetProperty("operationalStatus").GetString());
+    }
+
+    [Fact]
     public async Task SummaryAndFiltersCountOnlineOfflineUnknownAndLifecycleBucketsPerTenant()
     {
         var clock = new MutableClock();
@@ -116,7 +140,7 @@ public sealed class AgentConnectivityIntegrationTests(PostgreSqlFixture fixture)
 
         async Task<Guid[]> Ids(string filter)
         {
-            using var response = await setup.Admin.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/agents?connectivity={filter}");
+            using var response = await setup.Admin.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/agents?includeRevoked=true&connectivity={filter}");
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             return AgentWorld.ReadJson(response).EnumerateArray().Select(entry => entry.GetProperty("agentId").GetGuid()).Order().ToArray();
         }

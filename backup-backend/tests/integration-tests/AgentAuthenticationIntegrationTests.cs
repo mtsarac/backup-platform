@@ -118,7 +118,7 @@ public sealed class AgentAuthenticationIntegrationTests(PostgreSqlFixture fixtur
 
         using var repeated = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/tenants/{setup.Tenant.Id.Value}/agents/{agent.AgentId}/revoke");
         Assert.Equal(HttpStatusCode.NoContent, repeated.StatusCode);
-        using var list = await setup.Admin.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/agents");
+        using var list = await setup.Admin.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/agents?includeRevoked=true");
         Assert.Equal("Revoked", Assert.Single(AgentWorld.ReadJson(list).EnumerateArray()).GetProperty("status").GetString());
     }
 

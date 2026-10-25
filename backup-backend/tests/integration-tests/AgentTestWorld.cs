@@ -194,7 +194,7 @@ internal sealed class AgentWorld : IAsyncDisposable
 
     public async Task<JsonElement> AgentViewAsync(TenantSetup setup, Guid agentId)
     {
-        using var list = await setup.Admin.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/agents");
+        using var list = await setup.Admin.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/agents?includeRevoked=true");
         Assert.Equal(HttpStatusCode.OK, list.StatusCode);
         return ReadJson(list).EnumerateArray().Single(entry => entry.GetProperty("agentId").GetGuid() == agentId);
     }
