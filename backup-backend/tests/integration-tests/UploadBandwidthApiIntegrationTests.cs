@@ -2,7 +2,6 @@ extern alias AgentCore;
 extern alias AgentTransport;
 
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using BackupPlatform.Agents;
@@ -15,7 +14,6 @@ using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.StorageProviders.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Security.Cryptography;
 using BackupPlatform.BackupProviders.Abstractions.Database;
 using BackupPlatform.Agents.Capabilities;
@@ -32,7 +30,7 @@ using AgentTransport::BackupPlatform.Agent.Transport;
 
 namespace BackupPlatform.IntegrationTests;
 
-/// <summary>The management API (tenant administrators), the policy call (the running attempt's agent) and the relay's deadline allowance, through real HTTP.</summary>
+/// <summary>The management API (tenant administrators) and the policy call (the running attempt's agent), through real HTTP. The agent paces its own upload; the backend relays no body.</summary>
 public sealed class UploadBandwidthApiIntegrationTests(PostgreSqlFixture fixture) : IClassFixture<PostgreSqlFixture>
 {
     private static async Task<JsonElement> GetAsync(BackupApiScenario scenario, BrowserSession? session = null)
@@ -593,222 +591,5 @@ public sealed class UploadBandwidthApiIntegrationTests(PostgreSqlFixture fixture
 
         using (await PolicyAsync(scenario, first, release: true)) { }
         Assert.Equal(1_000_000, await ShareAsync(other, second));
-    }
-
-    [Fact]
-    public async Task The_relay_itself_paces_the_body_and_widens_the_provider_deadline_by_the_throttled_time()
-    {
-        var provider = new CapturingProvider();
-        await using var world = await RelayWorldAsync(provider, kestrel: false);
-        var run = await StartRelayRunAsync(world);
-        var body = new byte[200_000];
-
-        using (var unlimited = await world.Anonymous.SendAsync(UploadRequest(run, new ByteArrayContent(body)))) Assert.Equal(HttpStatusCode.OK, unlimited.StatusCode);
-        Assert.Equal(TimeSpan.Zero, provider.Options.Single().TransferAllowance);
-
-        using (await run.Setup.Admin.SendAsync(HttpMethod.Put, run.Root + $"/upload-bandwidth/jobs/{run.JobId}", new { bytesPerSecond = 100_000 })) { }
-        var watch = System.Diagnostics.Stopwatch.StartNew();
-        // The client sends at full speed and does no pacing of its own: whatever the agent does, the relay holds the upload to the limit.
-        using (var limited = await world.Anonymous.SendAsync(UploadRequest(run, new ByteArrayContent(body)))) Assert.Equal(HttpStatusCode.OK, limited.StatusCode);
-        watch.Stop();
-
-        Assert.Equal(TimeSpan.FromSeconds(2), provider.Options[^1].TransferAllowance);
-        Assert.Equal(200_000, provider.Received[^1]);
-        var floor = (body.Length - StorageProviders.Abstractions.Transfer.TransferRateLimiter.Capacity(100_000)) / 100_000;
-        Assert.True(watch.Elapsed.TotalSeconds >= floor - 0.1, $"{body.Length} bytes were relayed in {watch.Elapsed}, faster than the limit allows ({floor:F2} s)");
-        // Paced once, not twice: nothing else slows it down.
-        Assert.True(watch.Elapsed.TotalSeconds < floor * 2 + 1, $"{watch.Elapsed} is far slower than one pacing");
-    }
-
-    // Real sockets and real Kestrel: the RELAY reads a body at the lowest allowed limit for longer than Kestrel's 5 s minimum-data-rate grace period. The client is
-    // unpaced (as a modified agent would be); the request must neither be rejected as too slow nor lose a byte.
-    [Fact]
-    public async Task A_body_the_relay_reads_at_the_lowest_limit_crosses_real_kestrel_with_the_bytes_intact_and_at_the_limit()
-    {
-        const long rate = 16_000;
-        var provider = new CapturingProvider();
-        await using var world = await RelayWorldAsync(provider, kestrel: true);
-        var run = await StartRelayRunAsync(world);
-        using (var set = await run.Setup.Admin.SendAsync(HttpMethod.Put, run.Root + $"/upload-bandwidth/jobs/{run.JobId}", new { bytesPerSecond = rate }))
-            Assert.Equal(HttpStatusCode.OK, set.StatusCode);
-        var body = Enumerable.Range(0, 96_000).Select(i => (byte)(i * 31 % 251)).ToArray();
-
-        var watch = System.Diagnostics.Stopwatch.StartNew();
-        using var response = await world.Anonymous.SendAsync(UploadRequest(run, new ByteArrayContent(body)));
-        watch.Stop();
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(body.LongLength, provider.Received.Single());
-        Assert.Equal(System.Security.Cryptography.SHA256.HashData(body), provider.Hashes.Single());
-        var floor = (body.Length - StorageProviders.Abstractions.Transfer.TransferRateLimiter.Capacity(rate)) / rate;
-        Assert.True(watch.Elapsed.TotalSeconds >= floor - 0.1, $"{body.Length} bytes crossed in {watch.Elapsed}, faster than the {rate} B/s ceiling allows ({floor:F1} s)");
-        Assert.True(watch.Elapsed.TotalSeconds < floor * 3, $"{watch.Elapsed} is far slower than the ceiling");
-        Assert.True(watch.Elapsed > TimeSpan.FromSeconds(5), "the transfer must outlast Kestrel's minimum-data-rate grace period to prove anything");
-    }
-
-    // A relayed upload under a tenant limit starts only when a slice is free: it neither runs beside an upload that still holds the whole limit nor sits open
-    // without a byte flowing.
-    [Fact]
-    public async Task A_relayed_upload_under_a_tenant_limit_waits_for_a_free_slice_before_it_reads_a_byte()
-    {
-        var provider = new CapturingProvider();
-        await using var world = await RelayWorldAsync(provider, kestrel: false);
-        var run = await StartRelayRunAsync(world);
-        using (await run.Setup.Admin.SendAsync(HttpMethod.Put, run.Root + "/upload-bandwidth/tenant", new { bytesPerSecond = 150_000 })) { }
-        // Another running attempt of the tenant already holds the whole limit.
-        var other = await world.DeclareBackupCapabilityAsync(await world.EnrollAsync(run.Setup));
-        var otherRun = await StartRunOnAsync(world, run, other);
-        async Task<long> RenewOtherAsync()
-        {
-            using var response = await world.SendAgentAsync(HttpMethod.Post, $"/api/agent/tasks/{otherRun.AttemptId}/upload-policy", other.CredentialId, other.Secret,
-                body: new UploadPolicyRequest { LeaseToken = otherRun.Lease });
-            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-            return AgentWorld.ReadJson(response).GetProperty("tenantShareBytesPerSecond").GetInt64();
-        }
-        Assert.Equal(150_000, await RenewOtherAsync());
-
-        var upload = world.Anonymous.SendAsync(UploadRequest(run, new ByteArrayContent(new byte[60_000])));
-        await Task.Delay(1500);
-        Assert.False(upload.IsCompleted);
-        Assert.Empty(provider.Received);
-
-        Assert.Equal(75_000, await RenewOtherAsync());
-        using var response = await upload.WaitAsync(TimeSpan.FromSeconds(20));
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(60_000, provider.Received.Single());
-    }
-
-    [Fact]
-    public async Task A_relayed_upload_whose_lease_is_gone_is_refused_before_any_byte_is_read()
-    {
-        var provider = new CapturingProvider();
-        await using var world = await RelayWorldAsync(provider, kestrel: false);
-        var run = await StartRelayRunAsync(world);
-        await using (var db = fixture.CreatePlatformContext())
-            await db.BackupRunAttempts.Where(attempt => attempt.Id == run.AttemptId).ExecuteUpdateAsync(set => set.SetProperty(attempt => attempt.LeaseToken, Guid.NewGuid()));
-
-        using var response = await world.Anonymous.SendAsync(UploadRequest(run, new ByteArrayContent(new byte[1_000])));
-
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        Assert.Empty(provider.Received);
-    }
-
-    private sealed record RelayRun(TenantSetup Setup, EnrolledAgent Agent, Guid ConnectionId, Guid JobId, Guid AttemptId, Guid Lease, string Key, string Root);
-
-    private Task<AgentWorld> RelayWorldAsync(IStorageProvider provider, bool kestrel) =>
-        AgentWorld.CreateAsync(fixture, kestrel: kestrel, limits: new AgentRateLimitOptions { PollPerAgent = 1000 }, configureServices: services =>
-        {
-            services.RemoveAll<IBackupStorageResolver>();
-            services.AddSingleton<IBackupStorageResolver>(new FixedResolver(provider));
-        });
-
-    /// <summary>A tenant with a running attempt whose only destination is a backend-relayed storage connection.</summary>
-    private async Task<RelayRun> StartRelayRunAsync(AgentWorld world)
-    {
-        var setup = await world.CreateTenantAsync();
-        await world.EntitleAsync(setup.Tenant);
-        var agent = await world.DeclareBackupCapabilityAsync(await world.EnrollAsync(setup));
-        var connectionId = Guid.NewGuid();
-        await using (var db = fixture.CreatePlatformContext())
-        {
-            var connection = new StorageConnection(connectionId, setup.Tenant.Id, "Relay allowance", "google-drive", StorageOwnership.TenantManaged,
-                "tenant", new Dictionary<string, string>(), false, DateTimeOffset.UtcNow);
-            connection.AttachSecret($"sc-{connectionId:N}-allowance", ["refreshToken"], DateTimeOffset.UtcNow);
-            db.StorageConnections.Add(connection);
-            await db.SaveChangesAsync();
-        }
-        var root = BackupApiScenario.RootOf(setup);
-        using var created = await setup.Admin.SendAsync(HttpMethod.Post, root + "/backup-jobs", new
-        {
-            name = "Relay allowance", agentId = agent.AgentId,
-            configuration = new BackupExecutionConfiguration
-            {
-                Database = "master", Host = "sql-server", IntegratedSecurity = true,
-                Destinations = [BackupTestDestinations.Relayed("google-drive", connectionId, primary: true)]
-            }
-        });
-        var jobId = AgentWorld.ReadJson(created).GetProperty("id").GetGuid();
-        using var csrf = await setup.Admin.Client.GetAsync("/api/auth/antiforgery");
-        using var start = new HttpRequestMessage(HttpMethod.Post, root + $"/backup-jobs/{jobId}/runs");
-        start.Headers.Add("X-CSRF-TOKEN", AgentWorld.ReadJson(csrf).GetProperty("requestToken").GetString());
-        start.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
-        using var started = await setup.Admin.Client.SendAsync(start);
-        var runId = AgentWorld.ReadJson(started).GetProperty("id").GetGuid();
-        using var polled = await world.PollAsync(agent);
-        var task = Assert.Single(AgentWorld.ReadJson(polled).GetProperty("tasks").EnumerateArray()).GetProperty("backup");
-        var attemptId = task.GetProperty("attemptId").GetGuid();
-        var lease = task.GetProperty("leaseToken").GetGuid();
-        using var running = await world.SendAgentAsync(HttpMethod.Post, $"/api/agent/tasks/{attemptId}/start", agent.CredentialId, agent.Secret,
-            body: new BackupTaskStartRequest { LeaseToken = lease, SoftwareVersion = "1.2.3", ProtocolVersion = "1.0", Platform = "linux" });
-        Assert.Equal(HttpStatusCode.OK, running.StatusCode);
-        var key = ManagedBackupLayout.AttemptScope(setup.Tenant.Id.Value, jobId, runId, attemptId) + "/" + ManagedBackupLayout.StagedFileName("master", DateTimeOffset.UtcNow, Guid.NewGuid());
-        return new RelayRun(setup, agent, connectionId, jobId, attemptId, lease, key, root);
-    }
-
-    /// <summary>A second running attempt of the same tenant, on another agent.</summary>
-    private static async Task<(Guid AttemptId, Guid Lease)> StartRunOnAsync(AgentWorld world, RelayRun run, EnrolledAgent agent)
-    {
-        using var created = await run.Setup.Admin.SendAsync(HttpMethod.Post, run.Root + "/backup-jobs", BackupApiScenario.JobBody(agent.AgentId));
-        var jobId = AgentWorld.ReadJson(created).GetProperty("id").GetGuid();
-        using var csrf = await run.Setup.Admin.Client.GetAsync("/api/auth/antiforgery");
-        using var start = new HttpRequestMessage(HttpMethod.Post, run.Root + $"/backup-jobs/{jobId}/runs");
-        start.Headers.Add("X-CSRF-TOKEN", AgentWorld.ReadJson(csrf).GetProperty("requestToken").GetString());
-        start.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
-        using var started = await run.Setup.Admin.Client.SendAsync(start);
-        Assert.Equal(HttpStatusCode.OK, started.StatusCode);
-        using var polled = await world.PollAsync(agent);
-        var task = Assert.Single(AgentWorld.ReadJson(polled).GetProperty("tasks").EnumerateArray()).GetProperty("backup");
-        var attemptId = task.GetProperty("attemptId").GetGuid();
-        var lease = task.GetProperty("leaseToken").GetGuid();
-        using var running = await world.SendAgentAsync(HttpMethod.Post, $"/api/agent/tasks/{attemptId}/start", agent.CredentialId, agent.Secret,
-            body: new BackupTaskStartRequest { LeaseToken = lease, SoftwareVersion = "1.2.3", ProtocolVersion = "1.0", Platform = "linux" });
-        Assert.Equal(HttpStatusCode.OK, running.StatusCode);
-        return (attemptId, lease);
-    }
-
-    private static HttpRequestMessage UploadRequest(RelayRun run, HttpContent content)
-    {
-        var request = new HttpRequestMessage(HttpMethod.Put, $"/api/agent/tasks/{run.AttemptId}/storage/content");
-        request.Headers.TryAddWithoutValidation("Authorization", AgentAuthorizationScheme.FormatHeaderValue(run.Agent.CredentialId, run.Agent.Secret));
-        request.Headers.Add(AgentProtocolHeader.Name, "1.0");
-        request.Headers.Add(TaskStorageProtocol.LeaseHeader, run.Lease.ToString("D"));
-        request.Headers.Add(TaskStorageProtocol.KeyHeader, run.Key);
-        request.Headers.Add(TaskStorageProtocol.DestinationHeader, run.ConnectionId.ToString("D"));
-        request.Headers.Add(TaskStorageProtocol.ChecksumHeader, new string('a', 64));
-        request.Content = content;
-        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-        return request;
-    }
-
-    private sealed class CapturingProvider : IStorageProvider
-    {
-        public List<StoragePutOptions> Options { get; } = [];
-        public List<long> Received { get; } = [];
-        public List<byte[]> Hashes { get; } = [];
-        public StorageProviderId Id => new("google-drive");
-        public StorageTopology Topology => StorageTopology.BackendRelayed;
-        public StorageCapabilities Capabilities => StorageCapabilities.None;
-
-        public async Task<StorageObjectMetadata> PutAsync(StorageObjectKey key, Stream content, StoragePutOptions options, IProgress<long>? progress, CancellationToken cancellationToken)
-        {
-            Options.Add(options);
-            using var sink = new MemoryStream();
-            await content.CopyToAsync(sink, cancellationToken);
-            Received.Add(sink.Length);
-            Hashes.Add(System.Security.Cryptography.SHA256.HashData(sink.ToArray()));
-            return new StorageObjectMetadata(new StorageLocation(Id, key), sink.Length, null, DateTimeOffset.UtcNow);
-        }
-
-        public Task<bool> ExistsAsync(StorageObjectKey key, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<StorageObjectMetadata?> GetMetadataAsync(StorageObjectKey key, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<StorageVerificationResult> VerifyAsync(StorageObjectKey key, StorageVerificationExpectation expected, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<bool> DeleteAsync(StorageObjectKey key, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public IAsyncEnumerable<StorageEntry> EnumerateAsync(StorageObjectKey? prefix, DateTimeOffset modifiedBefore, CancellationToken cancellationToken) => throw new NotSupportedException();
-    }
-
-    private sealed class FixedResolver(IStorageProvider provider) : IBackupStorageResolver
-    {
-        public IReadOnlyList<BackupManagedStorage> ManagedStorages => [];
-        public IStorageProvider? Resolve(BackupPlatform.Domain.Identity.TenantId tenantId, string storageProvider, string storageTarget) => provider;
     }
 }

@@ -66,7 +66,6 @@ public static class SecurityServiceCollectionExtensions
         services.AddSingleton<AuditSealKeys>();
         services.AddSingleton<LoginThrottle>();
         services.AddSingleton<DbContextOptions<PlatformDbContext>>(CreateDatabaseOptions);
-        services.AddSingleton<AgentTransferAdmission>();
         services.AddSingleton<BackupPlatform.Infrastructure.Backups.BackupTransferLeaseService>();
         services.AddScoped<ITenantContext>(ResolveTenantContext);
         services.AddScoped<PlatformDbContext>();
