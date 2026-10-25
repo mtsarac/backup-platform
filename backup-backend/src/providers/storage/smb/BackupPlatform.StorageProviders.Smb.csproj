@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\abstractions\BackupPlatform.StorageProviders.Abstractions.csproj" />
+    <PackageReference Include="SMBLibrary" />
   </ItemGroup>
 
   <ItemGroup>

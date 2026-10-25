@@ -62,6 +62,7 @@
   <ItemGroup>
     <Content Include="$(DirectDownloadOutput)" Link="$(DirectDownloadName)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../../agent/direct-download/THIRD-PARTY-NOTICES.txt" Link="THIRD-PARTY-DIRECT-DOWNLOAD.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../providers/storage/smb/THIRD-PARTY-NOTICES.txt" Link="THIRD-PARTY-SMBLIBRARY.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="BuildDirectDownloadTransport" BeforeTargets="PrepareForBuild">
     <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(DirectDownloadOutput)'))" />

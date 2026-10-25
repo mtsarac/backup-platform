@@ -1,0 +1,7 @@
+SMBLibrary 1.5.8.1 - https://github.com/TalAloni/SMBLibrary
+Copyright (c) Tal Aloni
+Licensed under the GNU Lesser General Public License v3.0 or later (LGPL-3.0-or-later).
+
+The Linux agent links this library dynamically (the unmodified NuGet assembly SMBLibrary.dll ships next to the agent
+binaries) to reach SMB shares without a mount privilege. It may be replaced by a compatible build of the library.
+License text: https://www.gnu.org/licenses/lgpl-3.0.txt and https://www.gnu.org/licenses/gpl-3.0.txt

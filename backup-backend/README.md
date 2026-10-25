@@ -206,13 +206,17 @@ Configure the bucket's incomplete-multipart lifecycle rule as crash cleanup.
 SMB configuration is `host` and `share`; `username`, `password`, and optional
 `domain` are secret fields. Windows uses an isolated outbound logon session,
 never global `net use` credentials; apply SMB signing/encryption policy on the
-Windows client and NAS. Linux requires `cifs-utils`, `mount.cifs`/`umount` in
-PATH and mount privileges. It mounts a private temporary directory with SMB
-3.1.1 encryption, disables client metadata/data caching, and removes its
-mode-0600 credential file after mounting. Mount failure never falls back to a
-local directory. The authenticated mount stays alive until streaming readers
-close. Writes reuse the checked atomic filesystem provider and read-back
-integrity verification. SMB tests from the backend are explicitly NotTestable;
+Windows client and NAS. Linux needs no mount privilege or `cifs-utils`: the agent
+uses a managed SMB client (SMBLibrary, LGPL-3.0, linked dynamically; see
+`THIRD-PARTY-SMBLIBRARY.txt`) over TCP 445 with NTLMv2 and SMB 2.1 to 3.1.1. SMB 3
+encryption (AES-128-CCM) is used whenever the server offers or requires it; a
+server without encryption is accepted. Not supported on Linux: Kerberos-only
+servers and servers that allow only AES-GCM. Content is written to a hidden
+`.partial` file, validated and renamed (atomic publish); reparse points are
+never followed; each operation opens its own session and a read stream keeps
+its session until closed. Failures are distinguishable: rejected credentials,
+missing share, access refused, unreachable server. Writes are verified by
+read-back. SMB tests from the backend are explicitly NotTestable;
 the agent authenticates the share when executing the backup.
 
 ## Agent Auto-Update and Deployment

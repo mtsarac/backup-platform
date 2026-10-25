@@ -1,5 +1,6 @@
 using BackupPlatform.StorageProviders.Abstractions;
 using BackupPlatform.StorageProviders.Smb;
+using SMBLibrary;
 using Xunit;
 
 namespace BackupPlatform.UnitTests.Storage;
@@ -18,7 +19,7 @@ public sealed class SmbStorageProviderTests
     }
 
     [Fact]
-    public async Task Credential_file_injection_is_rejected_before_mounting()
+    public async Task Credential_injection_is_rejected_before_connecting()
     {
         var provider = new SmbStorageProvider(new("nas.example", "backups", Guid.NewGuid(), Guid.NewGuid()),
             _ => ValueTask.FromResult(new SmbCredential("user", "secret\nusername=admin")), null);
@@ -27,31 +28,14 @@ public sealed class SmbStorageProviderTests
         Assert.DoesNotContain("secret", error.ToString());
     }
 
-    [Fact]
-    public async Task Failed_unmount_after_successful_put_reports_the_written_object_as_remaining()
-    {
-        if (!OperatingSystem.IsLinux()) return;
-        string? root = null;
-        var provider = new SmbStorageProvider(new("nas.example", "backups", Guid.NewGuid(), Guid.NewGuid()),
-            _ => ValueTask.FromResult(new SmbCredential("user", "secret")), null,
-            (executable, arguments, _) =>
-            {
-                if (executable != "umount") return Task.CompletedTask;
-                root = arguments[0];
-                throw new StorageException(StorageFailureKind.AccessDenied, "umount failed");
-            });
-        var key = new StorageObjectKey("backup.bak");
-        try
-        {
-            var error = await Assert.ThrowsAsync<StorageException>(() =>
-                provider.PutAsync(key, new MemoryStream([1, 2, 3]), new(StorageOverwritePolicy.Fail), null, default));
-            Assert.True(error.ObjectMayRemain);
-            Assert.Equal(key, error.RemainingObjectKey);
-            Assert.IsType<StorageException>(error.InnerException);
-        }
-        finally
-        {
-            if (root is not null) Directory.Delete(root, recursive: true);
-        }
-    }
+    [Theory]
+    [InlineData(NTStatus.STATUS_LOGON_FAILURE, StorageFailureKind.AuthenticationFailed)]
+    [InlineData(NTStatus.STATUS_ACCOUNT_DISABLED, StorageFailureKind.AuthenticationFailed)]
+    [InlineData(NTStatus.STATUS_BAD_NETWORK_NAME, StorageFailureKind.InvalidConfiguration)]
+    [InlineData(NTStatus.STATUS_ACCESS_DENIED, StorageFailureKind.AccessDenied)]
+    [InlineData(NTStatus.STATUS_OBJECT_NAME_NOT_FOUND, StorageFailureKind.NotFound)]
+    [InlineData(NTStatus.STATUS_OBJECT_NAME_COLLISION, StorageFailureKind.AlreadyExists)]
+    [InlineData(NTStatus.STATUS_DISK_FULL, StorageFailureKind.InsufficientSpace)]
+    public void Server_status_maps_to_a_distinguishable_failure(NTStatus status, StorageFailureKind expected) =>
+        Assert.Equal(expected, SmbUserSpaceStore.Map(status).Kind);
 }
