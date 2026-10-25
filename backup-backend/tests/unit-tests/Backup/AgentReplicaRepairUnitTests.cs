@@ -206,6 +206,36 @@ public sealed class AgentReplicaRepairUnitTests
         Assert.Null(replica.OwningAgentId);
     }
 
+    [Fact]
+    public async Task Claim_ForALocalTarget_NamesTheVolume_AndHandsOverOnlyExternalSources()
+    {
+        var h = new Harness("local");
+        var own = OwnLocal(h.Artifact, Agent.AgentId.Value);
+        h.Store.ClaimResult = h.Operation;
+        h.Store.Admission = new ReplicaRepairAdmissionResult(true, null, null, h.Artifact,
+            new BackupDestination("local", h.TargetConnection) { StorageTarget = "usb-disk" }, h.Source, [own, NewReplica(h.Artifact, "central", "c.bak"), h.Source]);
+
+        var snapshot = await h.Service.ClaimForAgentAsync(Agent, default);
+
+        Assert.Equal(("local", h.TargetConnection, "usb-disk"), (snapshot!.Target.StorageProvider, snapshot.Target.StorageConnectionId, snapshot.Target.StorageTarget));
+        Assert.Equal(h.Source.Id, Assert.Single(snapshot.Sources).ReplicaId);
+    }
+
+    [Fact]
+    public async Task Complete_Success_OnALocalTarget_PublishesAnAgentReplicaOnTheVolumeOfTheRunSnapshot()
+    {
+        var h = new Harness("local");
+        h.Store.RunDestination = new BackupDestination("local", h.TargetConnection) { StorageTarget = "usb-disk" };
+
+        var result = await h.CompleteAsync(new() { Outcome = ReplicaRepairOutcomes.Succeeded, VerificationMethod = "ReadBack" });
+
+        Assert.Equal(BackupMutationResult.Accepted, result);
+        var replica = Assert.IsType<BackupReplica>(h.Store.CompletedReplica);
+        Assert.Equal(("local", "usb-disk", h.TargetConnection), (replica.StorageProvider, replica.StorageTarget, replica.StorageConnectionId));
+        Assert.Equal(BackupStorageExecutionLocation.Agent, replica.ExecutionLocation);
+        Assert.Equal(Agent.AgentId.Value, replica.OwningAgentId);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
@@ -493,6 +523,11 @@ public sealed class AgentReplicaRepairUnitTests
 
         public Task<BackupArtifact?> FindArtifactAsync(TenantId tenantId, Guid artifactId, CancellationToken cancellationToken) =>
             Task.FromResult(Artifact is not null && Artifact.TenantId == tenantId && Artifact.Id == artifactId ? Artifact : null);
+
+        public BackupDestination? RunDestination;
+
+        public Task<BackupDestination?> FindRunDestinationAsync(TenantId tenantId, Guid artifactId, Guid storageConnectionId, CancellationToken cancellationToken) =>
+            Task.FromResult(RunDestination);
 
         public Task<bool> PinSourceAsync(TenantId tenantId, Guid operationId, Guid leaseToken, Guid sourceReplicaId, string targetKey, DateTimeOffset now, CancellationToken cancellationToken)
         {

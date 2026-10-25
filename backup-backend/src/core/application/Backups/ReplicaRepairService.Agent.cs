@@ -12,7 +12,7 @@ namespace BackupPlatform.Application.Backups;
 public readonly record struct ReplicaRepairAccessTarget(Guid ConnectionId, string StorageProvider);
 
 /// <summary>
-/// Repair of an SFTP or Google Drive target, and of any external target whose source is an agent's local replica, runs on an agent. The backend keeps every decision (admission, quota reservation, source pin, orphan ledger,
+/// Repair of an SFTP or Google Drive target, of any external target whose source is an agent's local replica, and of a missing copy on an agent's own local volume (from an external copy), runs on an agent. The backend keeps every decision (admission, quota reservation, source pin, orphan ledger,
 /// the replica itself); the agent only moves bytes, and each of its calls is fenced by the operation's lease token and the lease owner recorded at claim.
 /// </summary>
 public sealed partial class ReplicaRepairService
@@ -52,8 +52,9 @@ public sealed partial class ReplicaRepairService
             // The agent reads a source straight from its provider or from its own local store: a central replica, or another agent's local replica, has no such path,
             // and nothing is relayed or copied through the backend.
             var candidates = admission.CandidateSources ?? [];
+            var localTarget = claimed.StorageProvider == StorageProviderTypes.Local;
             var sources = candidates
-                .Where(c => IsExternalSource(c) || IsLocalSourceOf(c, identity.AgentId.Value))
+                .Where(c => IsExternalSource(c) || !localTarget && IsLocalSourceOf(c, identity.AgentId.Value))
                 .Select(c => IsExternalSource(c)
                     ? new ReplicaRepairSourceContract { ReplicaId = c.Id, StorageProvider = c.StorageProvider, StorageConnectionId = c.StorageConnectionId, StorageKey = c.Key }
                     : new ReplicaRepairSourceContract { ReplicaId = c.Id, StorageProvider = c.StorageProvider, StorageTarget = c.StorageTarget, StorageKey = c.Key })
@@ -79,7 +80,8 @@ public sealed partial class ReplicaRepairService
                 Target = new ReplicaRepairTargetContract
                 {
                     StorageProvider = admission.TargetDestination.StorageProvider,
-                    StorageConnectionId = admission.TargetDestination.StorageConnectionId ?? claimed.StorageConnectionId
+                    StorageConnectionId = admission.TargetDestination.StorageConnectionId ?? claimed.StorageConnectionId,
+                    StorageTarget = localTarget ? admission.TargetDestination.StorageTarget ?? StorageProviderTypes.Local : string.Empty
                 },
                 Sources = sources
             };
@@ -161,7 +163,7 @@ public sealed partial class ReplicaRepairService
         switch (request.Outcome)
         {
             case ReplicaRepairOutcomes.Succeeded:
-                return await SucceedForAgentAsync(operation, request, saveDriveRecord, now, cancellationToken);
+                return await SucceedForAgentAsync(identity, operation, request, saveDriveRecord, now, cancellationToken);
 
             case ReplicaRepairOutcomes.Failed:
                 var code = request.FailureCode is { } reported && KnownFailureCodes.Contains(reported) ? reported : ReplicaRepairFailureCodes.InternalError;
@@ -207,6 +209,7 @@ public sealed partial class ReplicaRepairService
     }
 
     private async Task<BackupMutationResult> SucceedForAgentAsync(
+        AgentIdentity identity,
         ReplicaRepairOperation operation,
         ReplicaRepairCompletionRequest request,
         Func<Guid, string, TaskStorageCatalogRecord, CancellationToken, Task> saveDriveRecord,
@@ -225,6 +228,9 @@ public sealed partial class ReplicaRepairService
         if (source is null || operation.TargetKey != AgentTargetKey(source.Key, operation.Id, request.LeaseToken))
             return BackupMutationResult.Conflict;
 
+        var isLocal = operation.StorageProvider == StorageProviderTypes.Local;
+        var volume = await ReplicaTargetAsync(operation, cancellationToken);
+
         if (isDrive) await saveDriveRecord(operation.StorageConnectionId, operation.TargetKey, request.DriveRecord!, cancellationToken);
 
         var newReplica = new BackupReplica(
@@ -232,7 +238,7 @@ public sealed partial class ReplicaRepairService
             operation.TenantId,
             artifact.Id,
             operation.StorageProvider,
-            operation.StorageConnectionId.ToString("D"),
+            volume,
             operation.TargetKey,
             artifact.SizeBytes,
             artifact.ArtifactChecksum,
@@ -241,8 +247,8 @@ public sealed partial class ReplicaRepairService
             method.ToString(),
             now,
             now,
-            BackupStorageExecutionLocation.Backend,
-            owningAgentId: null,
+            isLocal ? BackupStorageExecutionLocation.Agent : BackupStorageExecutionLocation.Backend,
+            owningAgentId: isLocal ? identity.AgentId.Value : null,
             storageConnectionId: operation.StorageConnectionId);
         try
         {
@@ -268,7 +274,7 @@ public sealed partial class ReplicaRepairService
         var artifact = await store.FindArtifactAsync(operation.TenantId, operation.ArtifactId, cancellationToken);
         if (artifact is null) return false;
         await store.RecordRepairOrphanAsync(operation.TenantId, artifact.Id, operation.StorageConnectionId, operation.StorageProvider,
-            operation.StorageConnectionId.ToString("D"), orphanKey, artifact.SizeBytes, artifact.ArtifactChecksum, now, cancellationToken,
+            await ReplicaTargetAsync(operation, cancellationToken), orphanKey, artifact.SizeBytes, artifact.ArtifactChecksum, now, cancellationToken,
             quarantine: request.OrphanQuarantine);
         return true;
     }
@@ -282,6 +288,12 @@ public sealed partial class ReplicaRepairService
                 ? operation
                 : null;
     }
+
+    /// <summary>The replica's storage target: a connection id, or for a local copy the agent volume, which the run snapshot (not the agent) names.</summary>
+    private async Task<string> ReplicaTargetAsync(ReplicaRepairOperation operation, CancellationToken cancellationToken) =>
+        operation.StorageProvider == StorageProviderTypes.Local
+            ? (await store.FindRunDestinationAsync(operation.TenantId, operation.ArtifactId, operation.StorageConnectionId, cancellationToken))?.StorageTarget ?? StorageProviderTypes.Local
+            : operation.StorageConnectionId.ToString("D");
 
     private static bool IsExternalSource(BackupReplica replica) =>
         replica.ExecutionLocation == BackupStorageExecutionLocation.Backend && replica.StorageConnectionId != Guid.Empty && StorageProviderTypes.External(replica.StorageProvider);

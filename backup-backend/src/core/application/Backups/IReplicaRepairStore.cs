@@ -132,6 +132,9 @@ public interface IReplicaRepairStore
     /// <summary>The artifact with its replicas, read-only; null when it does not exist in this tenant.</summary>
     Task<BackupArtifact?> FindArtifactAsync(TenantId tenantId, Guid artifactId, CancellationToken cancellationToken);
 
+    /// <summary>The destination of the artifact's run snapshot that uses this connection; null when the snapshot has none.</summary>
+    Task<BackupDestination?> FindRunDestinationAsync(TenantId tenantId, Guid artifactId, Guid storageConnectionId, CancellationToken cancellationToken);
+
     Task<int> RecoverStaleRepairsAsync(
         DateTimeOffset now,
         TimeSpan initialRetryDelay,

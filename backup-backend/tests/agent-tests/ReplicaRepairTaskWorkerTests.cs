@@ -59,6 +59,44 @@ public sealed class ReplicaRepairTaskWorkerTests
     }
 
     [Fact]
+    public async Task A_missing_copy_on_the_agents_own_volume_is_rebuilt_from_an_external_replica_without_target_access_request()
+    {
+        await using var harness = new ReplicaRepairHarness();
+        var task = harness.Snapshot() with
+        {
+            Target = new ReplicaRepairTargetContract { StorageProvider = "local", StorageConnectionId = harness.TargetConnection, StorageTarget = "local" }
+        };
+        var targetKey = ReplicaRepairHarness.ExpectedTargetKey(task, task.Sources[0]);
+        harness.Start();
+        Assert.True(harness.Worker.TryPublish(ReplicaRepairHarness.Wrap(task)));
+        await Wait.UntilAsync(() => harness.Client.Completions.Count == 1, "repair completion");
+
+        Assert.Equal(["renew", "pin", "read:source1", "put:local", "complete"], harness.Events.ToArray());
+        Assert.Equal(ReplicaRepairOutcomes.Succeeded, Assert.Single(harness.Client.Completions).Outcome);
+        Assert.Equal(ReplicaRepairHarness.Content, harness.LocalSource.Get(targetKey));
+        Assert.Equal(harness.Source1Connection, Assert.Single(harness.Storage.Scopes).ConnectionId);
+    }
+
+    [Fact]
+    public async Task A_local_target_on_a_volume_this_agent_does_not_declare_fails_before_any_source_is_read()
+    {
+        await using var harness = new ReplicaRepairHarness();
+        var task = harness.Snapshot() with
+        {
+            Target = new ReplicaRepairTargetContract { StorageProvider = "local", StorageConnectionId = harness.TargetConnection, StorageTarget = "usb-disk" }
+        };
+        harness.Start();
+        Assert.True(harness.Worker.TryPublish(ReplicaRepairHarness.Wrap(task)));
+        await Wait.UntilAsync(() => harness.Client.Completions.Count == 1, "repair completion");
+
+        var completion = Assert.Single(harness.Client.Completions);
+        Assert.Equal(ReplicaRepairOutcomes.Failed, completion.Outcome);
+        Assert.Equal("DestinationNotConfigured", completion.FailureCode);
+        Assert.Empty(harness.Client.Pins);
+    }
+
+
+    [Fact]
     public async Task Storage_access_is_requested_only_through_the_lease_scoped_repair_routes()
     {
         await using var harness = new ReplicaRepairHarness();

@@ -200,6 +200,44 @@ public sealed class AgentReplicaRepairIntegrationTests
     });
 
     [Fact]
+    public Task LocalTargetRepairFromAnExternalCopyIsClaimedOnlyByTheAgentThatRanTheBackup() => WithIsolatedDatabaseAsync(async kit =>
+    {
+        var (owner, operations) = await SeedAsync(kit, "local");
+        var other = new StoreAgent(owner.TenantId, await kit.AddAgentToAsync(owner.TenantId));
+        await CapabilityAsync(kit, owner, CapabilitySupport.Supported);
+        await CapabilityAsync(kit, other, CapabilitySupport.Supported);
+        var store = Store(kit);
+
+        Assert.Null(await store.ClaimDueRepairAsync("backend", T0, RepairLease, default, owner.TenantId, backendExecutedOnly: true));
+        Assert.Null(await store.ClaimAgentRepairAsync(Identity(other), T0, RepairLease, default));
+        Assert.Equal(operations[0].Id, (await store.ClaimAgentRepairAsync(Identity(owner), T0, RepairLease, default))!.Id);
+    });
+
+    [Fact]
+    public Task LocalTargetRepairFromACentralCopyIsClaimedByNobody() => WithIsolatedDatabaseAsync(async kit =>
+    {
+        var (owner, operations) = await SeedAsync(kit, "local");
+        await CapabilityAsync(kit, owner, CapabilitySupport.Supported);
+        await using (var context = kit.Database.CreatePlatformContext())
+        {
+            var operation = await context.ReplicaRepairOperations.SingleAsync(op => op.Id == operations[0].Id);
+            var centralConnectionId = Guid.NewGuid();
+            context.StorageConnections.Add(new StorageConnection(centralConnectionId, owner.TenantId, "Repair central source", "central",
+                StorageOwnership.PlatformManaged, StorageQuotaScopes.Managed, new Dictionary<string, string>(), false, T0));
+            var central = new BackupReplica(Guid.NewGuid(), owner.TenantId, operation.ArtifactId, "central", "central", "scope/central.bak",
+                100, ArtifactHash, "sha256", "Verified", "ReadBack", T0, T0,
+                BackupStorageExecutionLocation.Backend, storageConnectionId: centralConnectionId);
+            context.BackupReplicas.Add(central);
+            operation.SetSourceReplica(central.Id);
+            await context.SaveChangesAsync();
+        }
+        var store = Store(kit);
+
+        Assert.Null(await store.ClaimDueRepairAsync("backend", T0, RepairLease, default, owner.TenantId, backendExecutedOnly: true));
+        Assert.Null(await store.ClaimAgentRepairAsync(Identity(owner), T0, RepairLease, default));
+    });
+
+    [Fact]
     public Task AgentClaimsShareTenantAndGlobalCapacityWithBackendClaims() => WithIsolatedDatabaseAsync(async kit =>
     {
         var store = Store(kit);

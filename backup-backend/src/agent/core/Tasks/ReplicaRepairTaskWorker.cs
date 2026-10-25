@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 namespace BackupPlatform.Agent.Core.Tasks;
 
 /// <summary>
-/// Copies a verified replica (external, or on this agent's own local store) to an external target on behalf of the backend. The backend holds no credential and relays no byte:
+/// Copies a verified replica (external, or on this agent's own local store) to an external target, or an external replica to a missing copy on this agent's own local volume, on behalf of the backend. The backend holds no credential and relays no byte:
 /// it only fences every step by the lease and keeps quota, source pin, orphan ledger and audit. One repair at a time.
 /// </summary>
 public sealed partial class ReplicaRepairTaskWorker : IAgentTaskSink
@@ -73,7 +73,10 @@ public sealed partial class ReplicaRepairTaskWorker : IAgentTaskSink
         task.OperationId != Guid.Empty && task.TenantId != Guid.Empty && task.AgentId != Guid.Empty
         && task.ArtifactId != Guid.Empty && task.LeaseToken != Guid.Empty && task.LeaseExpiresAt > now
         && task.SizeBytes > 0 && task.Checksum.Length == ContentChecksum.Sha256HexLength && task.Checksum.All(Uri.IsHexDigit)
-        && task.Target.StorageConnectionId != Guid.Empty && AgentStorageProviders.External(task.Target.StorageProvider)
+        && task.Target.StorageConnectionId != Guid.Empty
+        && (task.Target.StorageProvider == AgentStorageProviders.Local
+            ? task.Target.StorageTarget == LocalVolumes.DefaultName || LocalVolumes.IsValidName(task.Target.StorageTarget)
+            : AgentStorageProviders.External(task.Target.StorageProvider))
         && task.Sources is { Count: > 0 }
         && task.Sources.All(source => source.ReplicaId != Guid.Empty && StorageObjectKey.TryCreate(source.StorageKey, out _)
             && (source.StorageProvider == AgentStorageProviders.Local
@@ -161,7 +164,13 @@ public sealed partial class ReplicaRepairTaskWorker : IAgentTaskSink
         var putCompleted = false;
         try
         {
-            target = _providers.CreateScoped(Scope(task, "target", task.Target.StorageConnectionId, task.Target.StorageProvider));
+            target = task.Target.StorageProvider == AgentStorageProviders.Local
+                ? _volumes?.Resolve(task.Target.StorageTarget)
+                : _providers.CreateScoped(Scope(task, "target", task.Target.StorageConnectionId, task.Target.StorageProvider));
+            if (target is null)
+            {
+                return Failed(task, RepairFailure.DestinationNotConfigured, "The target volume is not declared on this agent.");
+            }
             var (source, stream) = await OpenSourceAsync(run, transfer).ConfigureAwait(false);
             if (stream is null || source is null)
             {
@@ -347,6 +356,7 @@ public sealed partial class ReplicaRepairTaskWorker : IAgentTaskSink
         public const string SourceInaccessible = "SourceInaccessible";
         public const string SourceChecksumMismatch = "SourceChecksumMismatch";
         public const string DestinationReadbackFailed = "DestinationReadbackFailed";
+        public const string DestinationNotConfigured = "DestinationNotConfigured";
         public const string StorageWriteFailed = "StorageWriteFailed";
         public const string StorageUnavailable = "StorageUnavailable";
         public const string QuotaExceeded = "QuotaExceeded";
