@@ -623,7 +623,7 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
             IReplicaRepairStore.MaxGlobalConcurrentRepairs)
             return null;
 
-        // The backend cannot read an agent's local replica: such an operation is left to that agent, unless the backend can copy another verified replica to its S3/SMB target.
+        // The backend cannot read an agent's local replica: such an operation is left to that agent, unless the backend can copy a verified central replica to its S3/SMB target (customer-reachable copies on a private network are read by the agent, not the backend).
         var dueId = await context.Database.SqlQuery<Guid>($"""
             SELECT pending."Id" AS "Value" FROM replica_repair_operations pending
             WHERE pending."Status" = 'Pending' AND (pending."NextRetryAt" IS NULL OR pending."NextRetryAt" <= {now})
@@ -640,7 +640,7 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
                       SELECT 1 FROM backup_replicas other
                       WHERE other."TenantId" = pending."TenantId" AND other."ArtifactId" = pending."ArtifactId" AND other."ExecutionLocation" = 'Backend'
                         AND other."Status" = 'Available' AND other."VerificationState" = 'Verified'
-                        AND other."StorageProvider" IN ('central', 'sftp', 's3', 'smb'))))
+                        AND other."StorageProvider" = 'central')))
               AND (SELECT COUNT(*) FROM replica_repair_operations active
                    WHERE active."Status" = 'InProgress' AND active."TenantId" = pending."TenantId") < {IReplicaRepairStore.MaxTenantConcurrentRepairs}
             ORDER BY COALESCE(pending."NextRetryAt", pending."CreatedAt") ASC, pending."Id"
