@@ -158,6 +158,10 @@ To enroll an agent, see "Connecting an agent" in the [root README](../README.md)
 
 The `Dockerfile` builds the API image. `docker-compose.yml` in the repository root starts it with PostgreSQL, SQL Server, and the frontend.
 
+### Email notifications
+
+Email notifications stay off until three things are set. `Notifications:PublicBaseUrl` (environment `Notifications__PublicBaseUrl`) is the absolute http(s) URL recipients reach the API at; confirmation and unsubscribe links are built from it, and without it the policy reports `transports.email.available=false`, channel tests answer `409 transport_not_configured` and deliveries fail with `public_url_not_configured`. The platform email transport (SMTP host, port, security, sender and optional login) must be saved by a PlatformAdmin under `/platform/notification-transports`; credentials require TLS (plain SMTP is accepted only without them). `Notifications:AllowedPrivateNetworks` (array of CIDR ranges, for example `Notifications__AllowedPrivateNetworks__0=192.168.0.0/16`) is needed whenever the SMTP relay or a webhook/SMS target sits on a private, loopback or link-local address: such addresses are refused with `network_denied` before any connection, and the list is empty by default.
+
 ## 3-2-1 and protected external storage
 
 The existing tenant storage-connection APIs and connection wizard support `s3`
