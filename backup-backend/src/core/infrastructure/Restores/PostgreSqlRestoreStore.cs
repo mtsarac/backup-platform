@@ -453,6 +453,11 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
             await using var source = await provider.OpenReadAsync(new StorageObjectKey(replica.Key), cancellationToken);
             return source.CanRead;
         }
+        catch (StorageException exception) when (exception.Kind == StorageFailureKind.NotFound)
+        {
+            await new PostgreSqlReplicaMissingReporter(options).ReportMissingAsync(replica.TenantId, replica.Id, CancellationToken.None);
+            return false;
+        }
         catch (Exception exception) when (exception is StorageException or IOException or UnauthorizedAccessException) { return false; }
     }
 
@@ -500,8 +505,10 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
                                   select artifact.SourceMetadataJson).SingleOrDefaultAsync(cancellationToken);
             if (metadata is not null) engine = BackupArtifactEngine.Read(metadata);
         }
-        return await MutateAttemptAsync(command, operation =>
+        var replicaId = Guid.Empty;
+        var outcome = await MutateAttemptAsync(command, operation =>
         {
+            replicaId = operation.ReplicaId;
             if (operation.Purpose != RestorePurpose.Execution && completion.Status == RestoreStatus.Succeeded)
             {
                 var result = RestoreInputValidation.ReadResult(completion.ResultJson);
@@ -515,7 +522,16 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
             if (operation.IsTerminal && SameJson(operation.ResultJson, completion.ResultJson)) completion = completion with { ResultJson = operation.ResultJson };
             operation.Complete(command.LeaseToken, command.Now, completion);
         }, cancellationToken);
+        // The agent read the replica's own storage and found no object: the check it reports names that, unlike the coarse ReplicaUnavailable code.
+        if (outcome == BackupMutationResult.Accepted && completion.Status == RestoreStatus.Failed && replicaId != Guid.Empty
+            && RestoreInputValidation.ReadResult(completion.ResultJson)?.PreCheck.Any(item => item.CheckId == AgentSourceReplicaCheck && item.ReasonCode == AgentReplicaMissingReason) == true)
+            await new PostgreSqlReplicaMissingReporter(options).ReportMissingAsync(command.TenantId, replicaId, CancellationToken.None);
+        return outcome;
     }
+
+    // Mirror the agent's RestorePipelineReasons.Checks.SourceReplica and .ReplicaMissing.
+    private const string AgentSourceReplicaCheck = "source.replica";
+    private const string AgentReplicaMissingReason = "replica-missing";
 
     /// <summary>A verification only succeeds with the engine's own checks in the report and every one of them passed.</summary>
     private static bool SuccessfulVerification(BackupPlatform.Contracts.Restores.RestoreTaskResult? result) =>

@@ -141,6 +141,22 @@ public sealed class BackupReplica : ITenantOwned
     public bool IsRestorable(DateTimeOffset now) => VerificationState == "Verified" &&
         (Status == BackupReplicaStatus.Available || (Status == BackupReplicaStatus.DeletePending && DeleteAfter > now));
 
+    public const string MissingVerificationMethod = "ObjectMissing";
+
+    /// <summary>
+    /// A read found the stored object gone. The copy stops being a verified one, so it no longer counts toward replication or serves a restore, download or repair
+    /// source, and a repair may rebuild its destination. The row stays (the object may still occupy quota or be reported by the orphan sweep) until retention removes it.
+    /// False, with no change, when the replica was not verified or is already past the point where its bytes are used.
+    /// </summary>
+    public bool MarkMissing()
+    {
+        if (VerificationState != "Verified" || Status is not (BackupReplicaStatus.Available or BackupReplicaStatus.DeletePending)) return false;
+        VerificationState = "Failed";
+        VerificationMethod = MissingVerificationMethod;
+        VerifiedAt = null;
+        return true;
+    }
+
     /// <summary>Preserves a conflicting object without authorizing deletion of bytes whose ownership is unknown.</summary>
     public void Quarantine()
     {

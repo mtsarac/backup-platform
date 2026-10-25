@@ -332,6 +332,7 @@ public static class SecurityServiceCollectionExtensions
         services.AddScoped<BackupStorageSweeper>();
         services.AddScoped<BackupArtifactService>();
         services.AddScoped<IReplicaRepairStore, PostgreSqlReplicaRepairStore>();
+        services.AddScoped<IReplicaMissingReporter, PostgreSqlReplicaMissingReporter>();
         services.AddScoped<ReplicaRepairService>();
         services.AddSingleton<BackupPlatform.Api.Backups.AutomaticReplicaRepairWorker>();
         services.AddHostedService(provider => provider.GetRequiredService<BackupPlatform.Api.Backups.AutomaticReplicaRepairWorker>());

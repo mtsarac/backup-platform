@@ -1,6 +1,7 @@
 using BackupPlatform.Domain.Storage;
 using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Application.Agents;
+using BackupPlatform.Application.Backups;
 using BackupPlatform.Application.Downloads;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Contracts.Downloads;
@@ -11,7 +12,7 @@ using BackupPlatform.Domain.Identity;
 
 namespace BackupPlatform.Api.Downloads;
 
-public sealed class AgentDownloadSource(IDownloadStore store, AgentConnectivityQueryService agents, DirectDownloadSignals signals, TimeProvider time) : IAgentDownloadSource
+public sealed class AgentDownloadSource(IDownloadStore store, AgentConnectivityQueryService agents, DirectDownloadSignals signals, IReplicaMissingReporter missing, TimeProvider time) : IAgentDownloadSource
 {
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(60);
 
@@ -98,8 +99,12 @@ public sealed class AgentDownloadSource(IDownloadStore store, AgentConnectivityQ
         var completed = await store.TransitionAsync(sessionId, new DownloadTransition(session.State, state,
             session.LeaseOwner, null, time.GetUtcNow(), Bytes: state == DownloadState.Completed ? session.SizeBytes : session.TransferredBytes,
             FailureCode: state == DownloadState.Completed ? null : SafeFailure(request.FailureCode)), cancellationToken);
-        if (completed is not null) signals.Release(sessionId);
-        return completed is not null;
+        if (completed is null) return false;
+        signals.Release(sessionId);
+        // The agent read the stored object and it was not there: the replica is no longer a verified copy.
+        if (state == DownloadState.Failed && request.FailureCode == DownloadAgentFailureCodes.SourceMissing)
+            await missing.ReportMissingAsync(session.TenantId, session.ReplicaId, cancellationToken);
+        return true;
     }
 
     public async Task<DownloadSession?> GetFencedAsync(AgentIdentity agent, Guid sessionId, Guid leaseToken, CancellationToken cancellationToken)

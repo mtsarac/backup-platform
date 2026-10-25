@@ -21,19 +21,20 @@ public sealed record DownloadStatus(Guid SessionId, string State, string? Failur
 public sealed class DownloadUnavailableException(string code) : Exception("The backup cannot be downloaded.") { public string Code { get; } = code; }
 
 public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver storage, IAgentDownloadSource agentSource,
-    TimeProvider time, ILogger<DownloadService> logger, ITenantWrapKeyStore? wrapKeys = null)
+    TimeProvider time, ILogger<DownloadService> logger, ITenantWrapKeyStore? wrapKeys = null, IReplicaMissingReporter? missing = null)
 {
     public static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(60);
     public static readonly TimeSpan SessionLifetime = TimeSpan.FromMinutes(15);
 
-    public async Task<DownloadAvailability?> GetAvailabilityAsync(TenantId tenantId, Guid artifactId, CancellationToken cancellationToken)
+    /// <param name="reportMissing">Whether a stored object found gone is recorded on its replica; true when the caller is about to download, so a read endpoint never changes state.</param>
+    public async Task<DownloadAvailability?> GetAvailabilityAsync(TenantId tenantId, Guid artifactId, CancellationToken cancellationToken, bool reportMissing = false)
     {
         var artifact = await store.GetArtifactAsync(tenantId, artifactId, cancellationToken);
         if (artifact is null) return null;
         var replicas = new List<ReplicaDownloadAvailability>(artifact.Replicas.Count);
         foreach (var replica in artifact.Replicas)
         {
-            var reason = await GetReasonAsync(artifact, replica, cancellationToken);
+            var reason = await GetReasonAsync(artifact, replica, reportMissing, cancellationToken);
             replicas.Add(new ReplicaDownloadAvailability(replica.Id, replica.StorageProvider, replica.StorageTarget, reason is null, reason));
         }
         var available = replicas.Any(replica => replica.Available);
@@ -51,7 +52,7 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
     {
         var decrypt = request.Decrypt || breakGlassRequestId is not null;
         if (decrypt && supportSessionId is not null) throw new DownloadUnavailableException("decrypt_not_permitted");
-        var availability = await GetAvailabilityAsync(tenantId, artifactId, cancellationToken);
+        var availability = await GetAvailabilityAsync(tenantId, artifactId, cancellationToken, reportMissing: true);
         if (availability is null) return null;
         BackupArtifact? artifact = null;
         if (decrypt)
@@ -154,6 +155,7 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
             catch (Exception exception) when (exception is StorageException or IOException or UnauthorizedAccessException)
             {
                 if (exception is StorageException { Kind: StorageFailureKind.IntegrityMismatch } mismatch) integrityFailure = mismatch;
+                if (exception is StorageException { Kind: StorageFailureKind.NotFound } && missing is not null) await missing.ReportMissingAsync(session.TenantId, candidate.Id, CancellationToken.None);
                 logger.LogWarning("Download read failed for replica {ReplicaId} with {ExceptionType}.", candidate.Id, exception.GetType().Name);
             }
             catch
@@ -194,7 +196,7 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
     public Task ReleaseAsync(DownloadSession session, CancellationToken cancellationToken) => session.AgentId is null
         ? Task.CompletedTask : agentSource.ReleaseAsync(session.Id, cancellationToken);
 
-    private async Task<string?> GetReasonAsync(BackupArtifact artifact, BackupReplica replica, CancellationToken cancellationToken)
+    private async Task<string?> GetReasonAsync(BackupArtifact artifact, BackupReplica replica, bool reportMissing, CancellationToken cancellationToken)
     {
         if (replica.TenantId != artifact.TenantId || replica.ArtifactId != artifact.Id || replica.Status != BackupReplicaStatus.Available ||
             replica.VerificationState != "Verified" || replica.Checksum != artifact.ArtifactChecksum || replica.SizeBytes != artifact.SizeBytes ||
@@ -204,7 +206,12 @@ public sealed class DownloadService(IDownloadStore store, IBackupStorageResolver
         var provider = storage.Resolve(artifact.TenantId, replica.StorageProvider, replica.StorageTarget);
         if (provider is null) return "storage_not_configured";
         if (!provider.Capabilities.Supports(StorageCapabilityIds.Read)) return "storage_read_not_supported";
-        try { return await provider.ExistsAsync(new StorageObjectKey(replica.Key), cancellationToken) ? null : "replica_unavailable"; }
+        try
+        {
+            if (await provider.ExistsAsync(new StorageObjectKey(replica.Key), cancellationToken)) return null;
+            if (reportMissing && missing is not null) await missing.ReportMissingAsync(artifact.TenantId, replica.Id, cancellationToken);
+            return "replica_unavailable";
+        }
         catch (StorageException exception)
         {
             logger.LogWarning("Download availability failed with {FailureKind} for artifact {ArtifactId}, replica {ReplicaId}", exception.Kind, artifact.Id, replica.Id);

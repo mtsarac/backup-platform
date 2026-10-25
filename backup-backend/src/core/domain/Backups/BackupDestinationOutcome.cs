@@ -114,7 +114,7 @@ public static class BackupReplicationStatuses
     public const string Unavailable = "Unavailable";
 }
 
-/// <summary>One snapshot destination as the replication projection shows it. <see cref="State"/>: Verified, Failed, Cancelled, NotAttempted, Deleted (a verified copy that has since been deleted) or Pending.</summary>
+/// <summary>One snapshot destination as the replication projection shows it. <see cref="State"/>: Verified, Failed, Cancelled, NotAttempted, Deleted (a verified copy that has since been deleted or found missing in storage) or Pending.</summary>
 public sealed record BackupDestinationHealth(
     string StorageProvider, Guid? StorageConnectionId, bool IsPrimary, string State, string? FailureCode, bool ObjectMayRemain, Guid? ReplicaId, string? ReplicaStatus);
 
@@ -180,7 +180,7 @@ public static class BackupReplicationEvaluator
         {
             bool Matches(string provider, Guid? connection) =>
                 provider == destination.StorageProvider && (destination.StorageConnectionId is null || connection == destination.StorageConnectionId);
-            var verifiedReplica = replicas.FirstOrDefault(replica => replica.VerificationState == "Verified" && Matches(replica.StorageProvider, replica.StorageConnectionId));
+            var verifiedReplica = replicas.FirstOrDefault(replica => (replica.VerificationState == "Verified" || replica.VerificationMethod == BackupReplica.MissingVerificationMethod) && Matches(replica.StorageProvider, replica.StorageConnectionId));
             var outcome = attempt.DestinationOutcomes.FirstOrDefault(candidate => Matches(candidate.StorageProvider, candidate.StorageConnectionId));
             string state;
             if (verifiedReplica is not null) state = IsUsableVerified(verifiedReplica) ? BackupDestinationStates.Verified : "Deleted";

@@ -19,7 +19,8 @@ public sealed partial class ReplicaRepairService(
     IReplicaRepairStore store,
     IBackupStorageResolver storageResolver,
     TimeProvider time,
-    ILogger<ReplicaRepairService> logger)
+    ILogger<ReplicaRepairService> logger,
+    IReplicaMissingReporter? missing = null)
 {
     public static readonly TimeSpan DefaultLeaseDuration = TimeSpan.FromMinutes(10);
     private static readonly ConcurrentDictionary<Guid, CancellationTokenSource> _activeLocalCts = new();
@@ -197,6 +198,7 @@ public sealed partial class ReplicaRepairService(
                 {
                     logger.LogWarning(ex, "Failed to open candidate source {ReplicaId} ({Provider}): {Message}",
                         candidate.Id, candidate.StorageProvider, ex.Message);
+                    if (ex.Kind == StorageFailureKind.NotFound && missing is not null) await missing.ReportMissingAsync(tenantId, candidate.Id, CancellationToken.None);
                 }
             }
 
