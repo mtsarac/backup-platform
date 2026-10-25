@@ -26,7 +26,7 @@ public sealed class StorageCapacityAgentHostSmokeTests(PostgreSqlFixture fixture
         output.WriteLine("Actual Agent.Host capacity: total={0}, free={1}; production poll/lease/completion, no dispatcher substitution.", measured, capacity.GetProperty("freeBytes").GetInt64());
     }
 
-    [Fact]
+    [SftpServerFact]
     public async Task PublishedAgent_ProbesRealSftpStatvfs_WithPinnedHostAndOperatorNetworkPolicy()
     {
         var hostName = AgentHostSmokeProcess.Required("BACKUP_PLATFORM_TEST_SFTP_HOST");

@@ -11,8 +11,6 @@ namespace BackupPlatform.IntegrationTests.Storage;
 /// </summary>
 public sealed class SftpResumeIntegrationTests
 {
-    private static readonly bool Enabled =
-        string.Equals(Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_SFTP_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
     private static readonly string[] AllowedNetworks = ["127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"];
     private static readonly string Host = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_SFTP_HOST") ?? "127.0.0.1";
     private static readonly int Port = int.TryParse(Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_SFTP_PORT"), out var p) ? p : 2222;
@@ -36,8 +34,6 @@ public sealed class SftpResumeIntegrationTests
         _provider = new(options, _ => ValueTask.FromResult(credential), new SftpNetworkOptions(allowedPrivateNetworks: AllowedNetworks));
     }
 
-    private static bool Skip => !Enabled || string.IsNullOrWhiteSpace(Fingerprint);
-
     private async Task SeedPartial(byte[] prefix) =>
         await _provider.PutAsync(_partial, new MemoryStream(prefix), new(StorageOverwritePolicy.Fail), null, CancellationToken.None);
 
@@ -50,10 +46,9 @@ public sealed class SftpResumeIntegrationTests
             },
             progress is null ? null : new Progress<long>(progress.Add), CancellationToken.None);
 
-    [Fact]
+    [SftpServerFact]
     public async Task Put_VerifiesRetainedPrefixThenContinuesFromItsEnd_WhenConfigured()
     {
-        if (Skip) return;
         var content = RandomNumberGenerator.GetBytes(300_000);
         const int retained = 100_000;
         await SeedPartial(content[..retained]);
@@ -76,10 +71,9 @@ public sealed class SftpResumeIntegrationTests
         await _provider.DeleteAsync(_key, CancellationToken.None);
     }
 
-    [Fact]
+    [SftpServerFact]
     public async Task Put_RejectsCorruptedRetainedPrefix_AndKeepsPartial_WhenConfigured()
     {
-        if (Skip) return;
         var content = RandomNumberGenerator.GetBytes(300_000);
         var corrupted = content[..100_000];
         corrupted[50_000] ^= 1;
@@ -93,10 +87,9 @@ public sealed class SftpResumeIntegrationTests
         await _provider.DeleteAsync(_partial, CancellationToken.None);
     }
 
-    [Fact]
+    [SftpServerFact]
     public async Task Put_RejectsRetainedPrefixLongerThanTheArtifact_WhenConfigured()
     {
-        if (Skip) return;
         var content = RandomNumberGenerator.GetBytes(1_000);
         await SeedPartial(RandomNumberGenerator.GetBytes(2_000));
 
@@ -107,10 +100,9 @@ public sealed class SftpResumeIntegrationTests
         await _provider.DeleteAsync(_partial, CancellationToken.None);
     }
 
-    [Fact]
+    [SftpServerFact]
     public async Task Put_OfAnAlreadyVerifiedObjectReturnsItWithoutWritingAgain_WhenConfigured()
     {
-        if (Skip) return;
         var content = RandomNumberGenerator.GetBytes(200_000);
         await Resume(content, [], 0);
         var progress = new List<long>();
@@ -124,10 +116,9 @@ public sealed class SftpResumeIntegrationTests
         await _provider.DeleteAsync(_key, CancellationToken.None);
     }
 
-    [Fact]
+    [SftpServerFact]
     public async Task Put_CheckpointsPerInterval_NotPerBuffer_WhenConfigured()
     {
-        if (Skip) return;
         var content = RandomNumberGenerator.GetBytes(20 * 1024 * 1024);
         var checkpoints = new List<long>();
 
