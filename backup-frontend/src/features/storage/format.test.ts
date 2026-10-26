@@ -1,21 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { allocatedPercent, formatCapacity, formatExactBytes } from './format'
+import { allocatedPercent } from './format'
+import { formatBytes } from '@/lib/format'
 
 describe('storage formatting rules', () => {
   it('converts bytes to decimal GB and MB, with MB as smallest unit', () => {
-    expect(formatCapacity(1_000_000_000)).toBe('1 GB')
-    expect(formatCapacity(5_500_000_000)).toBe('5,5 GB')
-    expect(formatCapacity(10_000_000_000)).toBe('10 GB')
-    expect(formatCapacity(500_000_000)).toBe('500 MB')
-    expect(formatCapacity(250_000)).toBe('0,25 MB')
-    expect(formatCapacity(500)).toBe('0 MB')
-    expect(formatCapacity(0)).toBe('0 MB')
+    expect(formatBytes(1_000_000_000)).toBe('1 GB')
+    expect(formatBytes(5_500_000_000)).toBe('5,5 GB')
+    expect(formatBytes(10_000_000_000)).toBe('10 GB')
+    expect(formatBytes(500_000_000)).toBe('500 MB')
+    expect(formatBytes(250_000)).toBe('0,25 MB')
+    expect(formatBytes(500)).toBe('0 MB')
+    expect(formatBytes(0)).toBe('0 MB')
   })
 
   it('formats capacity with MB as smallest unit', () => {
-    expect(formatExactBytes(1_000_000_000)).toBe('1 GB')
-    expect(formatExactBytes(500_000_000)).toBe('500 MB')
-    expect(formatExactBytes(0)).toBe('0 MB')
+    expect(formatBytes(1_000_000_000)).toBe('1 GB')
+    expect(formatBytes(500_000_000)).toBe('500 MB')
+    expect(formatBytes(0)).toBe('0 MB')
   })
 
   it('calculates allocated percent accurately against limits', () => {

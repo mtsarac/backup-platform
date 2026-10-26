@@ -1,19 +1,14 @@
-import { currentLocale, tx } from '@/lib/i18n'
+import { tx } from '@/lib/i18n'
 import type { BackupRunStatus, BackupTrigger } from './types'
 
-export const runStatuses: readonly BackupRunStatus[] = ['Pending', 'Leased', 'Running', 'RetryPending', 'CancellationRequested', 'Succeeded', 'Failed', 'Cancelled', 'AgentLost']
-export const runStatusLabels: Record<BackupRunStatus, string> = {
-  get Pending() { return tx("Bekliyor") }, get Leased() { return tx("Ajan tarafından alındı") }, get Running() { return tx("Çalışıyor") },
-  get RetryPending() { return tx("Yeniden deneme bekliyor") }, get CancellationRequested() { return tx("İptal istendi") },
-  get Succeeded() { return tx("Başarılı") }, get Failed() { return tx("Başarısız") }, get Cancelled() { return tx("İptal edildi") }, get AgentLost() { return tx("Ajan bağlantısı kayboldu") },
-}
+export const runStatuses: readonly BackupRunStatus[] = ['Pending', 'Leased', 'Running', 'Paused', 'RetryPending', 'CancellationRequested', 'Succeeded', 'Failed', 'Cancelled', 'AgentLost']
 
 export function isActiveRun(status: string): boolean {
-  return ['Pending', 'Leased', 'Running', 'RetryPending', 'CancellationRequested'].includes(status)
+  return ['Pending', 'Leased', 'Running', 'Paused', 'RetryPending', 'CancellationRequested'].includes(status)
 }
 
 export function canCancelRun(status: string): boolean {
-  return ['Pending', 'Leased', 'Running', 'RetryPending'].includes(status)
+  return ['Pending', 'Leased', 'Running', 'Paused', 'RetryPending'].includes(status)
 }
 
 export function canRetryRun(status: string): boolean {
@@ -26,24 +21,6 @@ export function triggerLabel(trigger?: BackupTrigger | null): string {
     ManualRetry: tx('Elle yeniden deneme'), AutomaticRetry: tx('Otomatik yeniden deneme'),
   }
   return trigger ? labels[trigger] : '—'
-}
-
-export function formatTimestamp(value?: string | null): string {
-  if (!value) return '—'
-  return new Intl.DateTimeFormat(currentLocale(), { dateStyle: 'short', timeStyle: 'medium' }).format(new Date(value))
-}
-
-export function formatDuration(start?: string | null, end?: string | null): string {
-  if (!start) return '—'
-  if (!end) return tx("{0} (devam ediyor)", { "0": formatSeconds(Math.max(0, (Date.now() - Date.parse(start)) / 1000)) })
-  return formatSeconds(Math.max(0, (Date.parse(end) - Date.parse(start)) / 1000))
-}
-
-export function formatSeconds(seconds: number): string {
-  const total = Math.round(seconds)
-  const hours = Math.floor(total / 3600)
-  const minutes = Math.floor((total % 3600) / 60)
-  return tx("{0}{1} dk {2} sn", { "0": hours ? tx("{0} sa ", { "0": hours }) : '', "1": minutes, "2": total % 60 })
 }
 
 /** Date controls use the user's local day; the API filters inclusive UTC instants. */

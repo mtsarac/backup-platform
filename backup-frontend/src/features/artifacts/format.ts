@@ -1,23 +1,5 @@
-import { currentLocale, tx } from '@/lib/i18n'
+import { tx } from '@/lib/i18n'
 import type { BackupArtifact } from './types'
-
-const dateFormats = {
-  'tr-TR': new Intl.DateTimeFormat('tr-TR', { dateStyle: 'medium', timeStyle: 'short' }),
-  'en-US': new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
-}
-
-export function artifactDate(value: string | null | undefined): string {
-  if (!value) return '—'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '—' : dateFormats[currentLocale()].format(date)
-}
-
-export function artifactSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  const units = ['KB', 'MB', 'GB', 'TB']
-  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length)
-  return `${(bytes / 1024 ** exponent).toLocaleString(currentLocale(), { maximumFractionDigits: 2 })} ${units[exponent - 1]}`
-}
 
 export function artifactState(artifact: { state: string; replicas: { status: string }[] }): string {
   if (artifact.state === 'Deleted') return 'Deleted'
@@ -42,4 +24,9 @@ export function deletionReason(reason: string | null): string {
   if (reason === 'Manual') return tx('Yönetici tarafından istendi')
   if (reason === 'RetentionExpired') return tx('Saklama süresi doldu')
   return '—'
+}
+
+/** What the typed deletion confirmation asks for: the database name, else the job name, else the file id. */
+export function artifactName(artifact: { id: string; databaseName?: string | null; jobName?: string | null }): string {
+  return artifact.databaseName || artifact.jobName || artifact.id
 }

@@ -8,7 +8,7 @@ namespace BackupPlatform.AgentTests;
 public sealed class DownloadTaskWorkerTests
 {
     [Fact]
-    public async Task Claimed_local_object_is_verified_and_uploaded_exactly_once_without_agent_reported_success()
+    public async Task Claimed_local_object_is_verified_once_and_unavailable_peer_never_uses_a_payload_upload()
     {
         await using var harness = new DownloadTaskHarness();
         byte[] bytes = Enumerable.Range(0, 131073).Select(value => (byte)value).ToArray();
@@ -17,10 +17,10 @@ public sealed class DownloadTaskWorkerTests
         Assert.True(harness.Worker.TryPublish(envelope));
         Assert.False(harness.Worker.TryPublish(envelope));
         harness.Start();
-        await Wait.UntilAsync(() => !harness.Client.Uploads.IsEmpty, "verified outbound bytes");
-        Assert.Equal(bytes, Assert.Single(harness.Client.Uploads));
+        await Wait.UntilAsync(() => !harness.Client.Completions.IsEmpty, "explicit direct-path refusal");
+        Assert.Single(harness.Client.Signals);
         Assert.Equal(envelope.Download!.LeaseToken, Assert.Single(harness.Client.Starts).LeaseToken);
-        Assert.Empty(harness.Client.Completions);
+        Assert.Equal(DownloadAgentFailureCodes.DirectPathUnavailable, Assert.Single(harness.Client.Completions).FailureCode);
         Assert.False(harness.Worker.TryPublish(envelope));
     }
 
@@ -42,7 +42,7 @@ public sealed class DownloadTaskWorkerTests
         Assert.True(harness.Worker.TryPublish(envelope));
         await Wait.UntilAsync(() => !harness.Client.Completions.IsEmpty, "integrity refusal");
         Assert.Equal(DownloadAgentFailureCodes.IntegrityMismatch, Assert.Single(harness.Client.Completions).FailureCode);
-        Assert.Empty(harness.Client.Uploads);
+        Assert.Empty(harness.Client.Signals);
     }
 
     [Theory]
@@ -61,7 +61,7 @@ public sealed class DownloadTaskWorkerTests
         Assert.True(harness.Worker.TryPublish(envelope));
         await Wait.UntilAsync(() => !harness.Client.Completions.IsEmpty, "source validation refusal");
         Assert.Equal(DownloadAgentFailureCodes.InvalidConfiguration, Assert.Single(harness.Client.Completions).FailureCode);
-        Assert.Empty(harness.Client.Uploads);
+        Assert.Empty(harness.Client.Signals);
     }
 
     [Fact]
@@ -74,7 +74,7 @@ public sealed class DownloadTaskWorkerTests
         Assert.True(harness.Worker.TryPublish(envelope));
         await Wait.UntilAsync(() => !harness.Client.Completions.IsEmpty, "unknown volume refusal");
         Assert.Equal(DownloadAgentFailureCodes.SourceInaccessible, Assert.Single(harness.Client.Completions).FailureCode);
-        Assert.Empty(harness.Client.Uploads);
+        Assert.Empty(harness.Client.Signals);
     }
 
     [Fact]
@@ -85,7 +85,7 @@ public sealed class DownloadTaskWorkerTests
         Assert.True(harness.Worker.TryPublish(harness.Envelope([1, 2, 3])));
         await Wait.UntilAsync(() => !harness.Client.Completions.IsEmpty, "missing source refusal");
         Assert.Equal(DownloadAgentFailureCodes.SourceMissing, Assert.Single(harness.Client.Completions).FailureCode);
-        Assert.Empty(harness.Client.Uploads);
+        Assert.Empty(harness.Client.Signals);
     }
 
     [Fact]
@@ -103,7 +103,7 @@ public sealed class DownloadTaskWorkerTests
             Assert.True(harness.Worker.TryPublish(envelope));
             await Wait.UntilAsync(() => !harness.Client.Completions.IsEmpty, "link refusal");
             Assert.Equal(DownloadAgentFailureCodes.SourceInaccessible, Assert.Single(harness.Client.Completions).FailureCode);
-            Assert.Empty(harness.Client.Uploads);
+            Assert.Empty(harness.Client.Signals);
         }
         finally
         {
@@ -112,15 +112,15 @@ public sealed class DownloadTaskWorkerTests
     }
 
     [Fact]
-    public async Task Renewed_cancellation_stops_outbound_transfer_disposes_source_and_reports_cancelled()
+    public async Task Renewed_cancellation_stops_peer_negotiation_and_reports_cancelled()
     {
         await using var harness = new DownloadTaskHarness();
-        var entered = new TaskCompletionSource<Stream>(TaskCreationOptions.RunContinuationsAsynchronously);
-        harness.Client.OnUpload = async (content, token) =>
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        harness.Client.OnSignal = async token =>
         {
-            entered.SetResult(content);
+            entered.SetResult();
             await Task.Delay(Timeout.InfiniteTimeSpan, token);
-            return AgentBackendResult<bool>.Success(true);
+            return AgentBackendResult<DownloadSignal>.Success(new DownloadSignal(null));
         };
         harness.Client.OnRenew = () => AgentBackendResult<BackupTaskLeaseResponse>.Success(new BackupTaskLeaseResponse
         {
@@ -130,37 +130,35 @@ public sealed class DownloadTaskWorkerTests
         await harness.PutAsync(envelope, [1, 2, 3]);
         harness.Start();
         Assert.True(harness.Worker.TryPublish(envelope));
-        var stream = await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         harness.Time.Advance(TimeSpan.FromSeconds(10));
         await Wait.UntilAsync(() => !harness.Client.Completions.IsEmpty, "cancelled completion");
         var completion = Assert.Single(harness.Client.Completions);
         Assert.Equal("Cancelled", completion.Status);
         Assert.Equal(DownloadAgentFailureCodes.Cancelled, completion.FailureCode);
-        Assert.False(stream.CanRead);
     }
 
     [Fact]
     public async Task Lost_lease_cancels_transfer_without_stale_completion()
     {
         await using var harness = new DownloadTaskHarness();
-        var entered = new TaskCompletionSource<Stream>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        harness.Client.OnUpload = async (content, token) =>
+        harness.Client.OnSignal = async token =>
         {
-            entered.SetResult(content);
+            entered.SetResult();
             try { await Task.Delay(Timeout.InfiniteTimeSpan, token); }
             finally { stopped.SetResult(); }
-            return AgentBackendResult<bool>.Success(true);
+            return AgentBackendResult<DownloadSignal>.Success(new DownloadSignal(null));
         };
         harness.Client.OnRenew = () => Failures.Fail<BackupTaskLeaseResponse>(AgentBackendFailureKind.Rejected);
         var envelope = harness.Envelope([1, 2, 3]);
         await harness.PutAsync(envelope, [1, 2, 3]);
         harness.Start();
         Assert.True(harness.Worker.TryPublish(envelope));
-        var stream = await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
         harness.Time.Advance(TimeSpan.FromSeconds(10));
         await stopped.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        await Wait.UntilAsync(() => !stream.CanRead, "source disposal after lease loss");
         Assert.Empty(harness.Client.Completions);
     }
 
@@ -172,7 +170,7 @@ public sealed class DownloadTaskWorkerTests
         harness.Start();
         Assert.True(harness.Worker.TryPublish(harness.Envelope([1, 2, 3])));
         await Wait.UntilAsync(() => !harness.Client.Starts.IsEmpty, "start rejection");
-        Assert.Empty(harness.Client.Uploads);
+        Assert.Empty(harness.Client.Signals);
         Assert.Empty(harness.Client.Completions);
     }
 }

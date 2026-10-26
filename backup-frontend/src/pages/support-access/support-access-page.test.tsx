@@ -35,20 +35,20 @@ beforeEach(() => {
 describe('tenant support transparency', () => {
   it.each(['Owner', 'Admin'] as const)('shows the tenant support navigation for %s', (role) => {
     renderAccess(role, '/tenants/tenant-a/support-access', <Sidebar />)
-    const links = screen.getAllByRole('link', { name: /Support Access|Destek Erişimi/, hidden: true })
+    const links = screen.getAllByRole('link', { name: /Support access|Destek erişimi/, hidden: true })
     expect(links.length).toBeGreaterThan(0)
     for (const link of links) expect(link).toHaveAttribute('href', '/tenants/tenant-a/support-access')
   })
 
   it.each(['Operator', 'Viewer'] as const)('hides the tenant support navigation for %s', (role) => {
     renderAccess(role, '/tenants/tenant-a/support-access', <Sidebar />)
-    expect(screen.queryByRole('link', { name: /Support Access|Destek Erişimi/, hidden: true })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Support access|Destek erişimi/, hidden: true })).not.toBeInTheDocument()
   })
 
   it.each(['Owner', 'Admin'] as const)('renders history, all six counters and read-only activity for %s', async (role) => {
     renderAccess(role)
     expect(await screen.findByText('Destek Uzmanı')).toBeInTheDocument()
-    for (const [label, count] of [['Görüntülenen Yedek Dosyası', 2], ['Başlatılan indirme', 3], ['Tamamlanan indirme', 4], ['Başarısız indirme', 5], ['İstenen Geri Yükleme', 6], ['İptal edilen Geri Yükleme', 7]] as const) {
+    for (const [label, count] of [['Görüntülenen yedek dosyası', 2], ['Başlatılan indirme', 3], ['Tamamlanan indirme', 4], ['Başarısız indirme', 5], ['İstenen geri yükleme', 6], ['İptal edilen geri yükleme', 7]] as const) {
       expect(screen.getByText(label).parentElement).toHaveTextContent(String(count))
     }
     fireEvent.click(screen.getByRole('button', { name: 'Etkinliği görüntüle' }))
@@ -56,14 +56,30 @@ describe('tenant support transparency', () => {
     const detail = screen.getByRole('region', { name: 'Destek oturumu ayrıntısı' })
     expect(within(detail).getByText('İnceleme tamamlandı')).toBeInTheDocument()
     expect(within(detail).getByText('artifact-a')).toBeInTheDocument()
-    expect(within(detail).queryByRole('button', { name: /Geri Yükleme başlat|indir|iptal et/i })).not.toBeInTheDocument()
+    const actionButtons = within(detail).getAllByRole('button').filter(button => !button.getAttribute('aria-label')?.startsWith('Kopyala:'))
+    expect(actionButtons.some(button => /Geri Yükleme başlat|indir|iptal et/i.test(button.textContent ?? ''))).toBe(false)
     fireEvent.click(within(detail).getByRole('button', { name: 'Sonraki' }))
     await waitFor(() => expect(api.getSupportAccessActivity).toHaveBeenLastCalledWith('tenant-a', 'session-a', { page: 2, pageSize: 25 }, expect.any(AbortSignal)))
+  })
+
+  it('keeps staff, reason and readable activity on cards and raw targets in copyable collapsed details', async () => {
+    renderAccess()
+    const history = await screen.findByRole('list', { name: 'Destek erişimi geçmişi' })
+    expect(within(history).getByText(session.actorDisplayName!)).toBeInTheDocument()
+    expect(within(history).getByText(session.reason)).toBeInTheDocument()
+    fireEvent.click(within(history).getByRole('button', { name: 'Etkinliği görüntüle' }))
+    const activity = await screen.findByRole('list', { name: 'Etkinlik geçmişi' })
+    expect(within(activity).getByText('Yedek dosyası görüntülendi')).toBeInTheDocument()
+    const details = within(activity).getByText('artifact-a').closest('details')!
+    expect(details).not.toHaveAttribute('open')
+    expect(within(details).getByRole('button', { name: 'Kopyala: Hedef kimliği', hidden: true })).toBeInTheDocument()
+    expect(within(details).getByText('support.artifact.viewed')).toBeInTheDocument()
   })
 
   it.each(['Operator', 'Viewer'] as const)('blocks %s before any query mounts', (role) => {
     renderAccess(role, '/tenants/tenant-a/support-access?sessionId=session-a')
     expect(screen.getByRole('alert')).toHaveTextContent(/(?:Owner \/ Admin|Sahibi \/ Yöneticisi)/)
+    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument()
     expect(api.getSupportAccessSessions).not.toHaveBeenCalled()
     expect(api.getSupportAccessSession).not.toHaveBeenCalled()
     expect(api.getSupportAccessActivity).not.toHaveBeenCalled()

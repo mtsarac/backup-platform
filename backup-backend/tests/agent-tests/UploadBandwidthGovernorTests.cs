@@ -81,6 +81,33 @@ public sealed class UploadBandwidthGovernorTests
     }
 
     [Fact]
+    public async Task Entering_a_pause_window_signals_cancellation_instead_of_only_waiting_at_zero_rate()
+    {
+        _client.OnUploadPolicy = _ => Policy(share: 500_000);
+        var session = await _governor.BeginAsync(StorageTopology.AgentDirect, default);
+        var paused = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = session.TimeRulePauseToken.Register(() => paused.TrySetResult());
+        _client.OnUploadPolicy = request => request.Release ? Policy() :
+            AgentBackendResult<UploadPolicyResponse>.Success(new UploadPolicyResponse { JobBytesPerSecond = 0, PauseRequested = true });
+        await SettleAsync(TimeSpan.FromSeconds(3));
+        await paused.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await session.DisposeAsync();
+        Assert.Single(_client.UploadPolicies, request => request.Release);
+    }
+
+    [Theory]
+    [InlineData(StorageTopology.AgentDirect)]
+    [InlineData(StorageTopology.BackendRelayed)]
+    public async Task Starting_inside_a_pause_window_stops_without_uploading_or_waiting_for_the_window_to_end(StorageTopology topology)
+    {
+        _client.OnUploadPolicy = _ => AgentBackendResult<UploadPolicyResponse>.Success(
+            new UploadPolicyResponse { JobBytesPerSecond = 0, PauseRequested = true });
+        var error = await Assert.ThrowsAnyAsync<Exception>(() => _governor.BeginAsync(topology, default).WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal("TransferPausedException", error.GetType().Name);
+        Assert.Single(_client.UploadPolicies);
+    }
+
+    [Fact]
     public async Task The_start_fails_closed_when_the_policy_is_refused_and_does_not_retry_a_refusal()
     {
         _client.OnUploadPolicy = _ => Failure(AgentBackendFailureKind.Rejected);
@@ -111,18 +138,23 @@ public sealed class UploadBandwidthGovernorTests
     [Fact]
     public async Task The_upload_does_not_begin_until_a_slice_is_free()
     {
+        var time = new ScheduledTimeProvider(_time);
+        var governor = new UploadBandwidthGovernor(_client, new FakeCredentialStore(TestIdentity.Create()), Guid.NewGuid(), _lease, time);
         _client.OnUploadPolicy = _ => Policy(share: 0);
-        var start = _governor.BeginAsync(StorageTopology.AgentDirect, default);
-        await SettleAsync(TimeSpan.FromSeconds(3));
-        await SettleAsync(TimeSpan.FromSeconds(3));
+        var start = governor.BeginAsync(StorageTopology.AgentDirect, default);
+        await time.WaitForTimerAsync();
+        _time.Advance(TimeSpan.FromSeconds(3));
+        await time.WaitForTimerAsync();
+        _time.Advance(TimeSpan.FromSeconds(3));
+        await time.WaitForTimerAsync();
         Assert.False(start.IsCompleted, "with no slice the request would sit open without a byte flowing");
         Assert.All(_client.UploadPolicies, request => Assert.False(request.Release));
         Assert.True(_client.UploadPolicies.Count >= 3, "the waiting upload keeps renewing its place in the queue");
 
         _client.OnUploadPolicy = _ => Policy(share: 500_000);
-        await SettleAsync(TimeSpan.FromSeconds(3));
+        _time.Advance(TimeSpan.FromSeconds(3));
 
-        await using var session = await start;
+        await using var session = await start.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal(TransferRateLimiter.Chunk(500_000), await ReadAsync(session));
     }
 
@@ -229,5 +261,19 @@ public sealed class UploadBandwidthGovernorTests
 
         _client.OnUploadPolicy = _ => Failure(AgentBackendFailureKind.Rejected);
         await Assert.ThrowsAsync<UploadPolicyException>(() => _governor.BeginAsync(StorageTopology.BackendRelayed, default));
+    }
+    private sealed class ScheduledTimeProvider(FakeTimeProvider inner) : TimeProvider
+    {
+        private readonly global::System.Threading.Channels.Channel<bool> _scheduled = global::System.Threading.Channels.Channel.CreateUnbounded<bool>();
+        public override DateTimeOffset GetUtcNow() => inner.GetUtcNow();
+        public override long GetTimestamp() => inner.GetTimestamp();
+        public override long TimestampFrequency => inner.TimestampFrequency;
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            var timer = inner.CreateTimer(callback, state, dueTime, period);
+            _scheduled.Writer.TryWrite(true);
+            return timer;
+        }
+        public Task WaitForTimerAsync() => _scheduled.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
     }
 }

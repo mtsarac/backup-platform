@@ -1,28 +1,42 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { DataTable, type Column } from '@/components/data/data-table'
 import { Pagination } from '@/components/data/pagination'
+import { StatusPill } from '@/components/data/status-pill'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Section } from '@/components/ui/section'
-import { agentDate } from '@/features/agents/format'
-import { bareTableClass } from '../list-empty'
-import { PlatformQueryState } from '../platform-query-state'
+import { TechnicalDetails } from '@/components/ui/technical-details'
+import { formatDateTime } from '@/lib/format'
 import { useListParams } from '../use-list-params'
 import { useSubscriptionHistory } from './hooks'
-import { StorageLimitText } from './storage-limit-text'
+import { formatBytes, formatGb } from './storage'
 import { assignedByLabel, overrideLabel, sourceLabel } from './subscription-labels'
-import { SubscriptionStatusPill } from './subscription-presentation'
 import type { Subscription } from './types'
+import { QueryState } from '@/components/data/query-state'
+import { platformOnlyMessage } from '@/components/auth/access-denied'
 
 const HISTORY_PAGE_SIZE = 10
 
-const columns: Column<Subscription>[] = [
-  { key: 'plan', header: 'Plan', wrap: true, render: (row) => <span className="font-medium">{row.planName}</span> },
-  { key: 'status', get header() { return tx("Durum") }, render: (row) => <SubscriptionStatusPill status={row.status} /> },
-  { key: 'starts', get header() { return tx("Başlangıç") }, render: (row) => agentDate(row.startsAt) },
-  { key: 'ends', get header() { return tx("Bitiş") }, render: (row) => row.endsAt ? agentDate(row.endsAt) : tx('Süresiz') },
-  { key: 'limit', get header() { return tx("Etkin limit") }, render: (row) => <div><StorageLimitText bytes={row.effectiveStorageLimit.unlimited ? null : row.effectiveStorageLimit.bytes} /><div className="text-xs text-text-muted">{tx("Kaynak:")}{' '}{sourceLabel(row.effectiveStorageLimit.source)}</div></div> },
-  { key: 'override', get header() { return tx("Override") }, render: (row) => overrideLabel(row.storageLimitOverride) },
-  { key: 'assignedBy', get header() { return tx("Atayan") }, wrap: true, render: assignedByLabel },
-]
+function HistoryCard({ row }: { row: Subscription }) {
+  const limit = row.effectiveStorageLimit
+  const unknown = tx('Henüz bildirilmedi')
+  return <li className="space-y-3 rounded-xl border border-border bg-surface-2 p-4">
+    <div className="flex flex-wrap items-start justify-between gap-2">
+      <h3 className="min-w-0 break-words text-base font-semibold text-text-heading">{row.planName}</h3>
+      <StatusPill domain="subscription" status={row.status} />
+    </div>
+    <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+      <div><dt className="text-sm text-text-muted">{tx("Başlangıç")}</dt><dd className="text-[0.9375rem] text-text">{formatDateTime(row.startsAt, unknown)}</dd></div>
+      <div><dt className="text-sm text-text-muted">{tx("Bitiş")}</dt><dd className="text-[0.9375rem] text-text">{row.endsAt ? formatDateTime(row.endsAt, unknown) : tx('Süresiz')}</dd></div>
+    </dl>
+    <TechnicalDetails items={[
+      { label: tx("Etkin limit"), value: formatGb(limit.unlimited ? null : limit.bytes) },
+      ...(!limit.unlimited && limit.bytes !== null ? [{ label: tx("Etkin limit (bayt)"), value: formatBytes(limit.bytes) }] : []),
+      { label: tx("Limit kaynağı"), value: sourceLabel(limit.source) },
+      { label: tx("Override"), value: overrideLabel(row.storageLimitOverride) },
+      { label: tx("Atayan"), value: assignedByLabel(row) },
+      { label: tx("Abonelik kimliği"), value: row.subscriptionId },
+    ]} />
+  </li>
+}
 
 export function SubscriptionHistory({ tenantId }: { tenantId: string }) {
   useLanguage()
@@ -30,10 +44,12 @@ export function SubscriptionHistory({ tenantId }: { tenantId: string }) {
   const query = useSubscriptionHistory(tenantId, { page, pageSize: HISTORY_PAGE_SIZE }, true)
   const data = query.data
   return <div className="space-y-3">
-    <Section title={tx("Abonelik geçmişi")} description={tx("Değiştirilen ve süresi dolan abonelikler korunur.")} flush className="overflow-hidden">
-      <PlatformQueryState isPending={query.isPending} error={query.error}>
-        {data && <DataTable className={bareTableClass} rows={data.items} columns={columns} keyExtractor={(row) => row.subscriptionId} emptyMessage={tx("Abonelik geçmişi yok.")} />}
-      </PlatformQueryState>
+    <Section title={tx("Abonelik geçmişi")} description={tx("Değiştirilen ve süresi dolan abonelikler korunur.")}>
+      <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
+        {data && (data.items.length === 0
+          ? <EmptyState message={tx("Abonelik geçmişi yok.")} />
+          : <ul aria-label={tx("Abonelik geçmişi")} className="space-y-3">{data.items.map((row) => <HistoryCard key={row.subscriptionId} row={row} />)}</ul>)}
+      </QueryState>
     </Section>
     {data && data.totalCount > 0 && <Pagination label={tx("Abonelik geçmişi sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ subPage: next })} />}
   </div>

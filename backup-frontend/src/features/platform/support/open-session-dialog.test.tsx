@@ -285,6 +285,6 @@ describe('tenant support access section', () => {
     await waitFor(() => expect(api.getSessions).toHaveBeenCalledOnce())
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument())
     expect(screen.getByRole('link', { name: 'Tüm destek oturumları' })).toBeInTheDocument()
-    expect(screen.getByText('Destek oturumu bulunamadı.')).toBeInTheDocument()
+    expect(screen.getByText(/Destek oturumu bulunamadı/)).toBeInTheDocument()
   })
 })

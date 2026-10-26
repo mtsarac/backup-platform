@@ -17,10 +17,14 @@ public sealed class PostgreSqlUploadBandwidthStore(DbContextOptions<PlatformDbCo
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         var rows = await context.UploadBandwidthLimits.AsNoTracking().Where(limit => limit.TenantId == tenantId).ToListAsync(cancellationToken);
+        var assignments = await context.BandwidthProfileAssignments.AsNoTracking().Where(a => a.TenantId == tenantId).ToListAsync(cancellationToken);
         return new UploadBandwidthSettings(
             rows.SingleOrDefault(limit => limit.Scope == UploadBandwidthScope.Tenant)?.BytesPerSecond,
             rows.Where(limit => limit.Scope == UploadBandwidthScope.Agent).ToDictionary(limit => limit.ScopeId, limit => limit.BytesPerSecond),
-            rows.Where(limit => limit.Scope == UploadBandwidthScope.Job).ToDictionary(limit => limit.ScopeId, limit => limit.BytesPerSecond));
+            rows.Where(limit => limit.Scope == UploadBandwidthScope.Job).ToDictionary(limit => limit.ScopeId, limit => limit.BytesPerSecond),
+            assignments.SingleOrDefault(a => a.Scope == UploadBandwidthScope.Tenant)?.ProfileId,
+            assignments.Where(a => a.Scope == UploadBandwidthScope.Agent).ToDictionary(a => a.ScopeId, a => a.ProfileId),
+            assignments.Where(a => a.Scope == UploadBandwidthScope.Job).ToDictionary(a => a.ScopeId, a => a.ProfileId));
     }
 
     public async Task<bool> SetAsync(TenantId tenantId, UploadBandwidthScope scope, Guid scopeId, long? bytesPerSecond, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
@@ -69,9 +73,9 @@ public sealed class PostgreSqlUploadBandwidthStore(DbContextOptions<PlatformDbCo
         var uploadId = lease.UploadId ?? lease.AttemptId;
         var jobId = await RunningJobAsync(context, lease.TenantId, lease.AgentId, lease.AttemptId, lease.LeaseToken, now, cancellationToken);
         if (jobId is null) return null;
-        var limits = await LimitsAsync(context, lease.TenantId, lease.AgentId, jobId.Value, cancellationToken);
+        var limits = await LimitsAsync(context, lease.TenantId, lease.AgentId, jobId.Value, now, cancellationToken);
         if (action == UploadSliceAction.Observe) return limits;
-        if (action == UploadSliceAction.Release || limits.Tenant is null)
+        if (action == UploadSliceAction.Release || limits.Tenant is null || limits.PauseRequested)
         {
             // Nothing to divide: no lock either. A slice left over from before the tenant limit was removed is simply dropped.
             await context.UploadBandwidthGrants.Where(grant => grant.TenantId == lease.TenantId && grant.UploadId == uploadId).ExecuteDeleteAsync(cancellationToken);
@@ -103,11 +107,18 @@ public sealed class PostgreSqlUploadBandwidthStore(DbContextOptions<PlatformDbCo
     }
 
     /// <summary>Whether any ceiling applies to a run of this job on this agent; an agent that cannot throttle must not start such a run.</summary>
-    internal static Task<bool> AnyAsync(PlatformDbContext context, TenantId tenantId, AgentId agentId, Guid jobId, CancellationToken cancellationToken) =>
-        context.UploadBandwidthLimits.AsNoTracking().AnyAsync(limit => limit.TenantId == tenantId && (
+    internal static async Task<bool> AnyAsync(PlatformDbContext context, TenantId tenantId, AgentId agentId, Guid jobId, CancellationToken cancellationToken)
+    {
+        var hasStatic = await context.UploadBandwidthLimits.AsNoTracking().AnyAsync(limit => limit.TenantId == tenantId && (
             limit.Scope == UploadBandwidthScope.Tenant && limit.ScopeId == tenantId.Value
             || limit.Scope == UploadBandwidthScope.Agent && limit.ScopeId == agentId.Value
             || limit.Scope == UploadBandwidthScope.Job && limit.ScopeId == jobId), cancellationToken);
+        if (hasStatic) return true;
+        return await context.BandwidthProfileAssignments.AsNoTracking().AnyAsync(assignment => assignment.TenantId == tenantId && (
+            assignment.Scope == UploadBandwidthScope.Tenant && assignment.ScopeId == tenantId.Value
+            || assignment.Scope == UploadBandwidthScope.Agent && assignment.ScopeId == agentId.Value
+            || assignment.Scope == UploadBandwidthScope.Job && assignment.ScopeId == jobId), cancellationToken);
+    }
 
     internal static Task<bool> SupportsAsync(PlatformDbContext context, TenantId tenantId, AgentId agentId, CancellationToken cancellationToken) =>
         context.AgentCapabilities.AsNoTracking().AnyAsync(record => record.TenantId == tenantId && record.AgentId == agentId
@@ -121,15 +132,160 @@ public sealed class PostgreSqlUploadBandwidthStore(DbContextOptions<PlatformDbCo
                                                      && attempt.Status == BackupStatus.Running && attempt.LeaseToken == leaseToken && attempt.LeaseExpiresAt > now
                                                  select (Guid?)run.JobId).SingleOrDefaultAsync(cancellationToken);
 
-    private static async Task<AttemptUploadLimits> LimitsAsync(PlatformDbContext context, TenantId tenantId, AgentId agentId, Guid jobId, CancellationToken cancellationToken)
+    private static async Task<AttemptUploadLimits> LimitsAsync(PlatformDbContext context, TenantId tenantId, AgentId agentId, Guid jobId, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var rows = await context.UploadBandwidthLimits.AsNoTracking().Where(limit => limit.TenantId == tenantId && (
             limit.Scope == UploadBandwidthScope.Tenant && limit.ScopeId == tenantId.Value
             || limit.Scope == UploadBandwidthScope.Agent && limit.ScopeId == agentId.Value
             || limit.Scope == UploadBandwidthScope.Job && limit.ScopeId == jobId)).ToListAsync(cancellationToken);
-        return new AttemptUploadLimits(
-            rows.SingleOrDefault(limit => limit.Scope == UploadBandwidthScope.Job)?.BytesPerSecond,
-            rows.SingleOrDefault(limit => limit.Scope == UploadBandwidthScope.Agent)?.BytesPerSecond,
-            rows.SingleOrDefault(limit => limit.Scope == UploadBandwidthScope.Tenant)?.BytesPerSecond);
+
+        var staticJob = rows.SingleOrDefault(limit => limit.Scope == UploadBandwidthScope.Job)?.BytesPerSecond;
+        var staticAgent = rows.SingleOrDefault(limit => limit.Scope == UploadBandwidthScope.Agent)?.BytesPerSecond;
+        var staticTenant = rows.SingleOrDefault(limit => limit.Scope == UploadBandwidthScope.Tenant)?.BytesPerSecond;
+
+        // Profile resolution: Job > Agent > Tenant
+        var assignments = await context.BandwidthProfileAssignments.AsNoTracking().Where(a => a.TenantId == tenantId && (
+            a.Scope == UploadBandwidthScope.Job && a.ScopeId == jobId
+            || a.Scope == UploadBandwidthScope.Agent && a.ScopeId == agentId.Value
+            || a.Scope == UploadBandwidthScope.Tenant && a.ScopeId == tenantId.Value)).ToListAsync(cancellationToken);
+
+        var assignment = assignments.SingleOrDefault(a => a.Scope == UploadBandwidthScope.Job)
+            ?? assignments.SingleOrDefault(a => a.Scope == UploadBandwidthScope.Agent)
+            ?? assignments.SingleOrDefault(a => a.Scope == UploadBandwidthScope.Tenant);
+
+        TimeSpan? nextTransition = null;
+        if (assignment is not null)
+        {
+            var profile = await context.BandwidthProfiles.Include(p => p.Windows).AsNoTracking().SingleOrDefaultAsync(p => p.TenantId == tenantId && p.Id == assignment.ProfileId, cancellationToken);
+            if (profile != null)
+            {
+                var (profileLimit, transitionInstant) = profile.Evaluate(now);
+                if (transitionInstant != null)
+                {
+                    var remaining = transitionInstant.Value - now;
+                    if (remaining > TimeSpan.Zero) nextTransition = remaining;
+                }
+                return new AttemptUploadLimits(
+                    assignment.Scope == UploadBandwidthScope.Job ? profileLimit : null,
+                    assignment.Scope == UploadBandwidthScope.Agent ? profileLimit : null,
+                    assignment.Scope == UploadBandwidthScope.Tenant ? profileLimit : null,
+                    NextTransition: nextTransition);
+            }
+        }
+
+        return new AttemptUploadLimits(staticJob, staticAgent, staticTenant, NextTransition: nextTransition);
     }
+
+    public async Task<IReadOnlyList<BandwidthProfileView>> ListProfilesAsync(TenantId tenantId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var profiles = await context.BandwidthProfiles.Include(p => p.Windows).AsNoTracking()
+            .Where(p => p.TenantId == tenantId).OrderBy(p => p.Name).ToListAsync(cancellationToken);
+        return profiles.Select(ToView).ToList();
+    }
+
+    public async Task<BandwidthProfileView?> GetProfileAsync(TenantId tenantId, Guid profileId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var profile = await context.BandwidthProfiles.Include(p => p.Windows).AsNoTracking()
+            .SingleOrDefaultAsync(p => p.TenantId == tenantId && p.Id == profileId, cancellationToken);
+        return profile == null ? null : ToView(profile);
+    }
+
+    public async Task<BandwidthProfileView> SaveProfileAsync(TenantId tenantId, Guid? profileId, string name, string timeZoneId,
+        IEnumerable<TransferScheduleWindowDto> windows, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        BandwidthProfile profile;
+        var isNew = false;
+        if (profileId is null || profileId == Guid.Empty)
+        {
+            profile = new BandwidthProfile(Guid.NewGuid(), tenantId, name, timeZoneId, now);
+            isNew = true;
+            context.BandwidthProfiles.Add(profile);
+        }
+        else
+        {
+            profile = await context.BandwidthProfiles.Include(p => p.Windows)
+                .SingleOrDefaultAsync(p => p.TenantId == tenantId && p.Id == profileId.Value, cancellationToken)
+                ?? throw new KeyNotFoundException($"Bandwidth profile '{profileId}' not found.");
+            profile.Update(name, timeZoneId, now);
+        }
+
+        var domainWindows = windows.Select(w => new TransferScheduleWindow(Guid.NewGuid(), profile.Id, w.DayOfWeek, w.StartTime, w.EndTime, w.BytesPerSecond)).ToList();
+        profile.SetWindows(domainWindows);
+
+        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.TenantAdministrator,
+            isNew ? AuditActions.BandwidthProfileCreated : AuditActions.BandwidthProfileUpdated, tenantId,
+            "bandwidth_profile", profile.Id.ToString("D"),
+            new Dictionary<string, object?> { ["name"] = profile.Name, ["timeZoneId"] = profile.TimeZoneId, ["windowCount"] = domainWindows.Count }));
+
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return ToView(profile);
+    }
+
+    public async Task<bool> DeleteProfileAsync(TenantId tenantId, Guid profileId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var profile = await context.BandwidthProfiles.SingleOrDefaultAsync(p => p.TenantId == tenantId && p.Id == profileId, cancellationToken);
+        if (profile is null) return false;
+
+        await context.BandwidthProfileAssignments.Where(a => a.TenantId == tenantId && a.ProfileId == profileId).ExecuteDeleteAsync(cancellationToken);
+        context.BandwidthProfiles.Remove(profile);
+
+        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.TenantAdministrator,
+            AuditActions.BandwidthProfileDeleted, tenantId, "bandwidth_profile", profile.Id.ToString("D"),
+            new Dictionary<string, object?> { ["name"] = profile.Name }));
+
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> AssignProfileAsync(TenantId tenantId, UploadBandwidthScope scope, Guid scopeId, Guid? profileId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var owned = scope switch
+        {
+            UploadBandwidthScope.Tenant => scopeId == tenantId.Value && await context.Tenants.AnyAsync(tenant => tenant.Id == tenantId, cancellationToken),
+            UploadBandwidthScope.Agent => await context.Agents.AnyAsync(agent => agent.TenantId == tenantId && agent.Id == new AgentId(scopeId), cancellationToken),
+            UploadBandwidthScope.Job => await context.BackupJobs.AnyAsync(job => job.TenantId == tenantId && job.Id == scopeId, cancellationToken),
+            _ => false
+        };
+        if (!owned) return false;
+
+        if (profileId != null && !await context.BandwidthProfiles.AnyAsync(p => p.TenantId == tenantId && p.Id == profileId.Value, cancellationToken))
+            return false;
+
+        var existing = await context.BandwidthProfileAssignments.SingleOrDefaultAsync(a => a.TenantId == tenantId && a.Scope == scope && a.ScopeId == scopeId, cancellationToken);
+        if (profileId is null)
+        {
+            if (existing != null) context.BandwidthProfileAssignments.Remove(existing);
+        }
+        else if (existing is null)
+        {
+            context.BandwidthProfileAssignments.Add(new BandwidthProfileAssignment(tenantId, scope, scopeId, profileId.Value, now));
+        }
+        else
+        {
+            existing.ChangeProfile(profileId.Value, now);
+        }
+
+        context.AuditEvents.Add(AuditEvent.Record(now, actor, AuditActorKind.TenantAdministrator,
+            AuditActions.BandwidthProfileAssigned, tenantId,
+            scope switch { UploadBandwidthScope.Tenant => "tenant", UploadBandwidthScope.Agent => "agent", _ => "backup_job" }, scopeId.ToString("D"),
+            new Dictionary<string, object?> { ["scope"] = scope.ToString(), ["profileId"] = profileId }));
+
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
+    private static BandwidthProfileView ToView(BandwidthProfile profile) =>
+        new(profile.Id, profile.Name, profile.TimeZoneId,
+            profile.Windows.Select(w => new TransferScheduleWindowDto(w.DayOfWeek, w.StartTime, w.EndTime, w.BytesPerSecond)).ToList());
 }

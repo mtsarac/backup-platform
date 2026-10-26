@@ -8,7 +8,7 @@ namespace BackupPlatform.UnitTests.Backup;
 public sealed class EncryptingArtifactPreparerTests : IDisposable
 {
     private readonly string _root = Directory.CreateTempSubdirectory("bp-enc-").FullName;
-    private readonly RSA _key = RSA.Create(3072);
+    private readonly RSA _key = RSA.Create(4096);
 
     public void Dispose()
     {
@@ -55,6 +55,30 @@ public sealed class EncryptingArtifactPreparerTests : IDisposable
     }
 
     private int DekOf(ArtifactSeal seal) => _key.Decrypt(seal.WrappedDek, RSAEncryptionPadding.OaepSHA256).Length;
+
+    [Fact]
+    public async Task PlatformAndTenantRecoveryRecipientsEachOpenTheArtifactAloneAndTheSealIndexesAllOfThem()
+    {
+        using var platform = RSA.Create(4096);
+        using var tenant = RSA.Create(4096);
+        var data = RandomNumberGenerator.GetBytes(70_000);
+        var input = Input(data, new ArtifactEncryption(true,
+            [new BpeRecipient(BpeRecipientType.TenantWrap, 1, _key), new BpeRecipient(BpeRecipientType.PlatformRecovery, 2, platform), new BpeRecipient(BpeRecipientType.TenantRecovery, 5, tenant)]));
+
+        var prepared = await new EncryptingArtifactPreparer().PrepareAsync(input, CancellationToken.None);
+
+        foreach (var key in new[] { _key, platform, tenant })
+        {
+            using var plain = new MemoryStream();
+            await BpeDecryptor.DecryptAsync(File.OpenRead(input.Staging.FilePath(prepared.FileName)), plain, key);
+            Assert.Equal(data, plain.ToArray());
+        }
+
+        string Id(RSA key) => Convert.ToHexStringLower(SHA256.HashData(key.ExportSubjectPublicKeyInfo())[..16]);
+        var seal = prepared.Seal!;
+        Assert.Equal([("tenant-wrap", Id(_key), 1), ("platform-recovery", Id(platform), 2), ("tenant-recovery", Id(tenant), 5)], seal.Recipients.Select(r => (r.Type, r.KeyId, r.KeyVersion)));
+        Assert.Equal(Id(_key), seal.KeyId);
+    }
 
     [Theory]
     [InlineData(false)] // no encryption instruction at all

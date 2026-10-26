@@ -71,7 +71,7 @@ public sealed class TenantWrapKeyStoreIntegrationTests(PostgreSqlFixture fixture
         var key = await store.EnsureActiveAsync(tenant, default);
         var dek = RandomNumberGenerator.GetBytes(32);
         var attempt = Guid.NewGuid();
-        Assert.Equal(dek, await store.UnwrapDekAsync(tenant, attempt, key.KeyId, Wrap(key.PublicKeySpki, dek), default));
+        Assert.Equal(dek, await store.UnwrapDekAsync(tenant, "restore_attempt", attempt, key.KeyId, Wrap(key.PublicKeySpki, dek), default));
 
         await using var context = fixture.CreatePlatformContext();
         var events = await context.AuditEvents.AsNoTracking().Where(e => e.TenantId == tenant).ToListAsync();
@@ -95,7 +95,7 @@ public sealed class TenantWrapKeyStoreIntegrationTests(PostgreSqlFixture fixture
         var keyA = await store.EnsureActiveAsync(a, default);
         await store.EnsureActiveAsync(b, default);
         var wrapped = Wrap(keyA.PublicKeySpki, RandomNumberGenerator.GetBytes(32));
-        await Assert.ThrowsAsync<TenantWrapKeyUnavailableException>(() => store.UnwrapDekAsync(b, Guid.NewGuid(), keyA.KeyId, wrapped, default));
+        await Assert.ThrowsAsync<TenantWrapKeyUnavailableException>(() => store.UnwrapDekAsync(b, "restore_attempt", Guid.NewGuid(), keyA.KeyId, wrapped, default));
         Assert.False(await store.OwnsKeyAsync(b, keyA.KeyId, 1, default));
     }
 
@@ -108,10 +108,10 @@ public sealed class TenantWrapKeyStoreIntegrationTests(PostgreSqlFixture fixture
         var wrapped = Wrap(key.PublicKeySpki, RandomNumberGenerator.GetBytes(32));
 
         await SetStateAsync(tenant, "DecryptOnly");
-        await store.UnwrapDekAsync(tenant, Guid.NewGuid(), key.KeyId, wrapped, default);
+        await store.UnwrapDekAsync(tenant, "restore_attempt", Guid.NewGuid(), key.KeyId, wrapped, default);
 
         await SetStateAsync(tenant, "Retired");
-        await Assert.ThrowsAsync<TenantWrapKeyUnavailableException>(() => store.UnwrapDekAsync(tenant, Guid.NewGuid(), key.KeyId, wrapped, default));
+        await Assert.ThrowsAsync<TenantWrapKeyUnavailableException>(() => store.UnwrapDekAsync(tenant, "restore_attempt", Guid.NewGuid(), key.KeyId, wrapped, default));
     }
 
     [Fact]
@@ -122,7 +122,7 @@ public sealed class TenantWrapKeyStoreIntegrationTests(PostgreSqlFixture fixture
         var key = await store.EnsureActiveAsync(tenant, default);
         using var stranger = RSA.Create(2048);
         var wrapped = stranger.Encrypt(RandomNumberGenerator.GetBytes(32), RSAEncryptionPadding.OaepSHA256);
-        var exception = await Assert.ThrowsAsync<TenantWrapKeyUnavailableException>(() => store.UnwrapDekAsync(tenant, Guid.NewGuid(), key.KeyId, wrapped, default));
+        var exception = await Assert.ThrowsAsync<TenantWrapKeyUnavailableException>(() => store.UnwrapDekAsync(tenant, "restore_attempt", Guid.NewGuid(), key.KeyId, wrapped, default));
         Assert.Null(exception.InnerException);
     }
 

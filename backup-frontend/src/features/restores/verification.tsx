@@ -1,30 +1,22 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
+import { DataList } from '@/components/data/data-list'
 import { StatusPill } from '@/components/data/status-pill'
 import { restoreIneligibility } from '@/features/artifacts/restore-eligibility'
 import type { BackupArtifact } from '@/features/artifacts/types'
-import { formatDuration, formatTimestamp } from '@/features/backups/presentation'
-import { inputClass, selectClass } from '@/features/platform/styles'
+import { inputClass, selectClass } from '@/components/ui/form-styles'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { StoredLoginPanel } from './stored-login-panel'
 import { useRestores, useRestoreTargets, useStartRestoreVerification } from './hooks'
-import { restoreErrorMessage, verificationCleanupText, verificationOutcomeLabels } from './presentation'
-import type { RestoreTarget, RestoreView, StartRestoreVerificationVariables } from './types'
-
-const outcomeTone = { Restored: 'success', Failed: 'error', NotRun: 'neutral' } as const
-
-/** Outcome of a verification; an unfinished one shows its operation status instead. */
-export function VerificationOutcomeBadge({ restore }: { restore: Pick<RestoreView, 'status' | 'verificationOutcome'> }) {
-  useLanguage()
-  return restore.verificationOutcome
-    ? <Badge tone={outcomeTone[restore.verificationOutcome]} dot>{verificationOutcomeLabels[restore.verificationOutcome]}</Badge>
-    : <StatusPill status={restore.status} />
-}
+import { verificationCleanupText } from './presentation'
+import type { RestoreTarget } from './types'
+import { formatDateTime, formatDuration } from '@/lib/format'
+import { useIdempotencyKey } from '@/lib/idempotency-key'
+import { errorMessage } from '@/lib/api/failure-messages'
 
 export function ArtifactVerificationSection({ tenantId, artifact }: { tenantId: string; artifact: BackupArtifact }) {
   useLanguage()
@@ -37,21 +29,17 @@ export function ArtifactVerificationSection({ tenantId, artifact }: { tenantId: 
   return <Section title={tx("Restore doğrulaması")} description={tx("Backup'ın gerçekten geri yüklenebildiğini geçici, izole bir Database üzerinde kanıtlayın.")}
     actions={canOperate && !formOpen && <Button variant="outline" onClick={() => setFormOpen(true)}>{tx("Restore testi başlat")}</Button>}>
     <div className="space-y-4">
-      {history.error ? <Notice tone="error">{tx("Restore testleri yüklenemedi:")}{' '}{restoreErrorMessage(history.error)}</Notice>
-        : latest ? <p className="flex flex-wrap items-center gap-2 text-sm"><VerificationOutcomeBadge restore={latest} /><span>{formatTimestamp(latest.startedAt ?? latest.createdAt)}</span>{latest.completedAt && <span className="text-text-muted">{tx("· Süre:")}{' '}{formatDuration(latest.startedAt, latest.completedAt)}</span>}</p>
+      {history.error ? <ErrorNotice title={tx("Restore testleri yüklenemedi")} error={history.error} scope="restore" />
+        : latest ? <p className="flex flex-wrap items-center gap-2 text-sm">{latest.verificationOutcome ? <StatusPill domain="verification" status={latest.verificationOutcome} /> : <StatusPill status={latest.status} />}<span>{formatDateTime(latest.startedAt ?? latest.createdAt)}</span>{latest.completedAt && <span className="text-text-muted">{tx("· Süre:")}{' '}{formatDuration(latest.startedAt, latest.completedAt)}</span>}</p>
           : !history.isPending && <p className="text-sm text-text-muted">{tx("Henüz test edilmedi.")}</p>}
       {formOpen && canOperate && <VerificationForm tenantId={tenantId} artifactId={artifact.id} onClose={() => setFormOpen(false)} />}
-      {rows.length > 0 && <div className="overflow-x-auto"><table className="w-full text-left text-sm">
-        <caption className="sr-only">{tx("Son restore testleri")}</caption>
-        <thead><tr className="text-text-muted"><th className="py-2 pr-4 font-medium">{tx("Sonuç")}</th><th className="py-2 pr-4 font-medium">{tx("Başlangıç")}</th><th className="py-2 pr-4 font-medium">{tx("Süre")}</th><th className="py-2 pr-4 font-medium">{tx("Agent")}</th><th className="py-2 font-medium">{tx("Ayrıntı")}</th></tr></thead>
-        <tbody className="divide-y divide-border">{rows.map((row) => <tr key={row.id}>
-          <td className="py-2 pr-4"><VerificationOutcomeBadge restore={row} />{row.cleanup && row.cleanup.state !== 'Completed' && <p className="mt-1 text-xs text-text-muted">{verificationCleanupText(row.cleanup)}</p>}</td>
-          <td className="py-2 pr-4">{formatTimestamp(row.startedAt ?? row.createdAt)}</td>
-          <td className="py-2 pr-4">{row.completedAt ? formatDuration(row.startedAt, row.completedAt) : '—'}</td>
-          <td className="py-2 pr-4 break-all font-mono text-xs">{row.agentId}</td>
-          <td className="py-2"><Link className="text-primary hover:underline" to={`/tenants/${tenantId}/restores/${row.id}`}>{tx("Aç")}</Link></td>
-        </tr>)}</tbody>
-      </table></div>}
+      {rows.length > 0 && <DataList caption={tx("Son restore testleri")} rows={rows} keyExtractor={row => row.id} columns={[
+        { key: 'outcome', header: tx('Sonuç'), card: 'status', render: row => <>{row.verificationOutcome ? <StatusPill domain="verification" status={row.verificationOutcome} /> : <StatusPill status={row.status} />}{row.cleanup && row.cleanup.state !== 'Completed' && <p className="mt-1 text-xs text-text-muted">{verificationCleanupText(row.cleanup)}</p>}</> },
+        { key: 'started', header: tx('Başlangıç'), render: row => formatDateTime(row.startedAt ?? row.createdAt) },
+        { key: 'duration', header: tx('Süre'), render: row => row.completedAt ? formatDuration(row.startedAt, row.completedAt) : '—' },
+        { key: 'agent', header: tx('Agent'), card: 'hidden', render: row => <span className="break-all font-mono text-xs">{row.agentId}</span> },
+        { key: 'open', header: tx('Ayrıntı'), card: 'actions', render: row => <Link className="text-primary hover:underline" to={`/tenants/${tenantId}/restores/${row.id}`}>{tx("Aç")}</Link> },
+      ]} />}
     </div>
   </Section>
 }
@@ -61,13 +49,14 @@ function VerificationForm({ tenantId, artifactId, onClose }: { tenantId: string;
   const navigate = useNavigate()
   const targets = useRestoreTargets(artifactId)
   const start = useStartRestoreVerification()
-  const attempt = useRef<{ fingerprint: string; variables: StartRestoreVerificationVariables } | null>(null)
+  const idempotencyKey = useIdempotencyKey()
   const [agentId, setAgentId] = useState('')
   const [targetIndex, setTargetIndex] = useState(0)
   const [custom, setCustom] = useState<RestoreTarget>({ host: '', port: null, integratedSecurity: true, databaseCredentialReference: null, encrypt: true, trustServerCertificate: false })
   const [error, setError] = useState<unknown>(null)
+  const [loginPending, setLoginPending] = useState(false)
   if (targets.isPending) return <p className="text-sm text-text-muted">{tx("Hedefler yükleniyor…")}</p>
-  if (targets.error || !targets.data) return <Notice tone="error">{tx("Hedefler yüklenemedi:")}{' '}{restoreErrorMessage(targets.error)}</Notice>
+  if (targets.error || !targets.data) return <ErrorNotice title={tx("Hedefler yüklenemedi")} error={targets.error} scope="restore" />
   const agents = targets.data.agents.filter((agent) => agent.canVerify && agent.sourceEligible)
   const configured = targets.data.targets
   const useConfigured = targetIndex >= 0 && configured[targetIndex] !== undefined
@@ -76,18 +65,14 @@ function VerificationForm({ tenantId, artifactId, onClose }: { tenantId: string;
   const valid = Boolean(selectedAgent) && Boolean(target.host)
   async function submit() {
     if (!valid || start.isPending) return
-    const fingerprint = JSON.stringify([selectedAgent, target])
-    // A retry after a transport/5xx failure keeps its Idempotency-Key; any edit gets a new one.
-    const next = attempt.current?.fingerprint === fingerprint && error != null ? attempt.current : {
-      fingerprint,
-      variables: { artifactId, idempotencyKey: crypto.randomUUID(), request: { agentId: selectedAgent, target: { ...target }, options: { verifyChecksum: true, verifyBackup: true } } },
-    }
-    attempt.current = next
+    const request = { agentId: selectedAgent, target: { ...target }, options: { verifyChecksum: true, verifyBackup: true } }
     setError(null)
     try {
-      const restore = await start.mutateAsync(next.variables)
+      const restore = await start.mutateAsync({ artifactId, idempotencyKey: idempotencyKey.keyFor(request), request })
+      idempotencyKey.settle()
       navigate(`/tenants/${tenantId}/restores/${restore.id}`)
     } catch (caught) {
+      idempotencyKey.settle(caught)
       setError(caught)
     }
   }
@@ -103,7 +88,7 @@ function VerificationForm({ tenantId, artifactId, onClose }: { tenantId: string;
       {!useConfigured && <div className="grid gap-3 sm:grid-cols-2">
         <div><label htmlFor="verify-host" className="block text-sm font-medium">{tx("Host / Instance")}</label><input id="verify-host" className={inputClass} value={custom.host} onChange={(event) => setCustom({ ...custom, host: event.target.value })} placeholder={tx("localhost veya SQLSERVER")} /></div>
         <div><label htmlFor="verify-port" className="block text-sm font-medium">{tx("Port (İsteğe bağlı)")}</label><input id="verify-port" type="number" className={inputClass} value={custom.port ?? ''} onChange={(event) => setCustom({ ...custom, port: event.target.value ? Number(event.target.value) : null })} placeholder="1433" /></div>
-        {!custom.integratedSecurity && <StoredLoginPanel tenantId={tenantId} agentId={selectedAgent} idPrefix="verify-login" reference={custom.databaseCredentialReference} onStored={(reference) => setCustom({ ...custom, databaseCredentialReference: reference })} />}
+        {!custom.integratedSecurity && <StoredLoginPanel tenantId={tenantId} agentId={selectedAgent} idPrefix="verify-login" reference={custom.databaseCredentialReference} onPendingChange={setLoginPending} onStored={(reference) => setCustom({ ...custom, databaseCredentialReference: reference })} />}
         <div className="flex flex-wrap items-center gap-4 text-sm sm:col-span-2">
           <label className="flex items-center gap-2"><input type="checkbox" checked={custom.integratedSecurity} onChange={(event) => setCustom({ ...custom, integratedSecurity: event.target.checked, databaseCredentialReference: null })} /><span>{tx("Windows kimlik doğrulaması")}</span></label>
           <label className="flex items-center gap-2"><input type="checkbox" checked={custom.encrypt} onChange={(event) => setCustom({ ...custom, encrypt: event.target.checked })} /><span>{tx("Bağlantıyı Şifrele")}</span></label>
@@ -111,10 +96,10 @@ function VerificationForm({ tenantId, artifactId, onClose }: { tenantId: string;
         </div>
       </div>}
     </>}
-    {error != null && <p role="alert" className="text-sm text-error">{restoreErrorMessage(error)}</p>}
+    {error != null && <p role="alert" className="text-sm text-error">{errorMessage(error, 'restore')}</p>}
     <div className="flex justify-end gap-2">
       <Button type="button" variant="outline" disabled={start.isPending} onClick={onClose}>{tx("Vazgeç")}</Button>
-      <Button type="submit" disabled={!valid || start.isPending}>{start.isPending ? tx('Başlatılıyor…') : tx('Testi başlat')}</Button>
+      <Button type="submit" disabled={!valid || loginPending || start.isPending}>{start.isPending ? tx('Başlatılıyor…') : tx('Testi başlat')}</Button>
     </div>
   </form>
 }

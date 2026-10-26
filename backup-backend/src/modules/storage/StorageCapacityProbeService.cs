@@ -1,0 +1,141 @@
+using BackupPlatform.Application.Storage;
+using BackupPlatform.Contracts.Storage;
+using BackupPlatform.Domain.Identity;
+using BackupPlatform.Domain.Storage;
+using Microsoft.Extensions.Logging;
+
+namespace BackupPlatform.Storage;
+
+public sealed class StorageCapacityProbeService(
+    IStorageConnectionStore connectionStore,
+    IStorageCapacitySnapshotStore snapshotStore,
+    IStorageCapacityTaskQueue taskQueue,
+    IGoogleDriveCapacityClient? googleDriveClient = null,
+    TimeProvider? timeProvider = null,
+    ILogger<StorageCapacityProbeService>? logger = null,
+    IPlatformStorageCapacityClient? platformStorage = null)
+{
+    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
+
+    public async Task<StorageCapacityResponse?> GetCapacityAsync(TenantId tenantId, Guid connectionId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(tenantId);
+        var connection = await connectionStore.FindAsync(connectionId, tenantId, cancellationToken).ConfigureAwait(false);
+        if (connection is not null && IsNotMeasurable(connection.Connection.ProviderType)) return NotMeasurable(connectionId);
+        var pending = await taskQueue.GetPendingAsync(tenantId, connectionId, _time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+        var snapshots = await snapshotStore.GetHistoryAsync(tenantId, connectionId, StorageCapacityResponse.MaximumHistory, cancellationToken).ConfigureAwait(false);
+        var response = pending ?? (snapshots.Count == 0 ? null : StorageCapacityResponse.From(snapshots[0]));
+        if (connection is not null && pending is null && snapshots.Count > 0
+            && snapshots[0].Status != StorageCapacityStatus.CapacityUnavailable
+            && !await taskQueue.CanUseSnapshotAsync(tenantId, connectionId, _time.GetUtcNow(), cancellationToken).ConfigureAwait(false))
+            response = new StorageCapacityResponse
+            {
+                ConnectionId = connectionId, Status = StorageCapacityStatus.CapacityUnavailable,
+                ReportedAt = _time.GetUtcNow(), ErrorMessage = "No authorized compatible online agent is available."
+            };
+        return response is null ? null : response with
+        {
+            History = snapshots.Select(s => new StorageCapacityHistoryEntry(s.ReportedAt, s.TotalBytes, s.UsedBytes, s.FreeBytes,
+                s.Status == StorageCapacityStatus.CapacityUnavailable ? s.Status : StorageCapacityStatus.Evaluate(s.TotalBytes, s.UsedBytes, s.FreeBytes))).ToArray()
+        };
+    }
+
+    public async Task<StorageCapacityResponse?> ProbeAsync(TenantId tenantId, Guid connectionId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(tenantId);
+
+        var record = await connectionStore.FindAsync(connectionId, tenantId, cancellationToken).ConfigureAwait(false);
+        if (record is null)
+        {
+            return null;
+        }
+
+        var connection = record.Connection;
+        var now = _time.GetUtcNow();
+        if (IsNotMeasurable(connection.ProviderType)) return NotMeasurable(connectionId);
+        if (!connection.EffectiveEnabled)
+        {
+            var unavailable = StorageCapacitySnapshot.UnavailableResult(tenantId, connectionId, now, "Storage connection is disabled.");
+            await snapshotStore.SaveAsync(unavailable, cancellationToken).ConfigureAwait(false);
+            return StorageCapacityResponse.From(unavailable);
+        }
+
+        if (string.Equals(connection.ProviderType, StorageProviderTypes.GoogleDrive, StringComparison.OrdinalIgnoreCase))
+        {
+            return await ProbeGoogleDriveAsync(tenantId, connection, now, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (string.Equals(connection.ProviderType, StorageProviderTypes.Central, StringComparison.OrdinalIgnoreCase))
+        {
+            StorageCapacitySnapshot snapshot;
+            try
+            {
+                if (platformStorage is null) throw new InvalidOperationException("Platform storage capacity is not configured.");
+                var (total, used, free) = await platformStorage.QueryCapacityAsync(connection, cancellationToken).ConfigureAwait(false);
+                snapshot = StorageCapacitySnapshot.AvailableResult(tenantId, connection.Id, total, used, free, now);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch (Exception ex)
+            {
+                logger?.LogWarning("Central capacity query failed for connection {ConnectionId} ({ExceptionType}).", connection.Id, ex.GetType().Name);
+                snapshot = StorageCapacitySnapshot.UnavailableResult(tenantId, connection.Id, now, "Platform storage capacity is unavailable.");
+            }
+            await snapshotStore.SaveAsync(snapshot, cancellationToken).ConfigureAwait(false);
+            return StorageCapacityResponse.From(snapshot);
+        }
+
+        if (string.Equals(connection.ProviderType, StorageProviderTypes.Local, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(connection.ProviderType, StorageProviderTypes.Sftp, StringComparison.OrdinalIgnoreCase))
+        {
+            return await ProbeAgentSideAsync(tenantId, connection, now, cancellationToken).ConfigureAwait(false);
+        }
+
+        var unsupportedSnapshot = StorageCapacitySnapshot.UnavailableResult(tenantId, connectionId, now, $"Unsupported provider type: {connection.ProviderType}");
+        await snapshotStore.SaveAsync(unsupportedSnapshot, cancellationToken).ConfigureAwait(false);
+        return StorageCapacityResponse.From(unsupportedSnapshot);
+    }
+
+    // An S3 bucket has no quota and an SMB share's free space is not exposed to the platform, so there is nothing to measure or to store.
+    private static bool IsNotMeasurable(string providerType) =>
+        string.Equals(providerType, StorageProviderTypes.S3, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(providerType, StorageProviderTypes.Smb, StringComparison.OrdinalIgnoreCase);
+
+    private StorageCapacityResponse NotMeasurable(Guid connectionId) => new()
+    {
+        ConnectionId = connectionId, Status = StorageCapacityStatus.NotMeasurable, ReportedAt = _time.GetUtcNow(),
+        ErrorMessage = "This storage type does not report capacity, so it cannot be measured."
+    };
+
+    private async Task<StorageCapacityResponse> ProbeGoogleDriveAsync(
+        TenantId tenantId, StorageConnection connection, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (googleDriveClient is null)
+        {
+            logger?.LogWarning("Google Drive capacity client is not configured.");
+            var unavailable = StorageCapacitySnapshot.UnavailableResult(tenantId, connection.Id, now, "Google Drive capacity query is not configured on this host.");
+            await snapshotStore.SaveAsync(unavailable, cancellationToken).ConfigureAwait(false);
+            return StorageCapacityResponse.From(unavailable);
+        }
+
+        StorageCapacitySnapshot snapshot;
+        try
+        {
+            var (total, used, free) = await googleDriveClient.QueryCapacityAsync(connection, cancellationToken).ConfigureAwait(false);
+            snapshot = StorageCapacitySnapshot.AvailableResult(tenantId, connection.Id, total, used, free, now);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            logger?.LogWarning("Google Drive capacity query failed for connection {ConnectionId} ({ExceptionType}).", connection.Id, ex.GetType().Name);
+            snapshot = StorageCapacitySnapshot.UnavailableResult(tenantId, connection.Id, now, "Google Drive capacity is unavailable.");
+        }
+        await snapshotStore.SaveAsync(snapshot, cancellationToken).ConfigureAwait(false);
+        return StorageCapacityResponse.From(snapshot);
+    }
+
+    private Task<StorageCapacityResponse> ProbeAgentSideAsync(
+        TenantId tenantId, StorageConnection connection, DateTimeOffset now, CancellationToken cancellationToken) =>
+        taskQueue.EnqueueAsync(tenantId, connection.Id, now, cancellationToken);
+
+
+}

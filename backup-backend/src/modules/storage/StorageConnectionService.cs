@@ -5,6 +5,7 @@ using BackupPlatform.Application.Platform;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Storage;
 using BackupPlatform.SecretProviders.Abstractions;
+using BackupPlatform.StorageProviders.Abstractions;
 using Microsoft.Extensions.Logging;
 
 namespace BackupPlatform.Storage;
@@ -176,7 +177,7 @@ public sealed class StorageConnectionService(
             && newConfiguration["hostKeyFingerprint"] != expectedConfiguration.GetValueOrDefault("hostKeyFingerprint"))
         {
             updateTest = await RunTesterAsync(SftpConnectionRules.Candidate(record.Connection, newConfiguration), descriptor, cancellationToken);
-            if (updateTest.Status != StorageTestStatus.Succeeded)
+            if (!CanProceed(updateTest))
                 return new(StorageConnectionOutcome.Rejected, Code: updateTest.Code ?? "rotation_test_failed");
         }
 
@@ -251,7 +252,7 @@ public sealed class StorageConnectionService(
             try
             {
                 rotationTest = await RunTesterAsync(SftpConnectionRules.Candidate(record.Connection, expectedConfiguration, reference, secret.FieldNames), descriptor, cancellationToken);
-                if (rotationTest.Status != StorageTestStatus.Succeeded)
+                if (!CanProceed(rotationTest))
                 {
                     await DiscardAsync(reference);
                     return new(StorageConnectionOutcome.Rejected, Code: rotationTest.Code ?? "rotation_test_failed");
@@ -475,13 +476,25 @@ public sealed class StorageConnectionService(
         return new StorageConnectionView(
             connection.Id, connection.TenantId.Value, scope.IsPlatform ? record.TenantName : null, connection.Name, connection.ProviderType,
             descriptor?.DisplayName ?? connection.ProviderType, descriptor?.Availability ?? StorageProviderAvailability.Planned, connection.Ownership,
-            connection.QuotaScope, connection.Enabled, connection.IsDefault, descriptor?.Capabilities ?? [], connection.Configuration, connection.HasSecret,
+            connection.QuotaScope, connection.Enabled, connection.IsDefault, EffectiveCapabilities(connection, descriptor), connection.Configuration, connection.HasSecret,
             connection.SecretFieldNames, connection.SecretUpdatedAt, lastTest, record.ReplicaCount, record.StoredBytes, connection.CreatedAt, connection.UpdatedAt,
             connection.StateChangedAt, PermissionsFor(scope, connection, descriptor), connection.AdministrativelyDisabled, connection.EffectiveEnabled);
+    }
+    private static IReadOnlyList<string> EffectiveCapabilities(StorageConnection connection, StorageProviderDescriptor? descriptor)
+    {
+        var capabilities = descriptor?.Capabilities?.ToList() ?? [];
+        if (connection.ProviderType == StorageProviderTypes.S3 && connection.Configuration.TryGetValue("objectLockMode", out var mode)
+            && !string.IsNullOrWhiteSpace(mode) && !capabilities.Contains(StorageCapabilityIds.ImmutableStorage.Value))
+            capabilities.Add(StorageCapabilityIds.ImmutableStorage.Value);
+        return capabilities.Order(StringComparer.Ordinal).ToList();
     }
 
     private StorageResult<StorageConnectionView> Map(StorageScope scope, StorageConnectionResult result) =>
         new(result.Outcome, result.Record is null ? null : ToView(scope, result.Record), result.Code);
+
+    /// <summary>A private-network SFTP server cannot be tried from the platform; the agent that reaches it checks the new credentials on the next backup.</summary>
+    private static bool CanProceed(StorageTestResult test) =>
+        test.Status == StorageTestStatus.Succeeded || test is { Status: StorageTestStatus.NotTestable, Code: StorageTestCodes.AgentSideStorage };
 
     private static string Refusal(StorageScope scope) => scope.IsPlatform ? StorageRejections.TenantManaged : StorageRejections.PlatformManaged;
 
@@ -570,6 +583,7 @@ public sealed class StorageConnectionService(
             result[field.Name] = value;
         }
         if (descriptor.ProviderType == StorageProviderTypes.Sftp) SftpConnectionRules.ValidateConfiguration(result);
+        NetworkStorageConnectionRules.Validate(result, descriptor.ProviderType);
         if (descriptor.ProviderType == StorageProviderTypes.Local && !StorageProviderTypes.IsValid(result.GetValueOrDefault("volume")))
             throw new InvalidStorageConnectionException("configuration.volume", "invalid_value");
         return result;
@@ -637,6 +651,7 @@ public static class StorageTestMessages
     public static string For(string? code) => code switch
     {
         StorageTestCodes.Ok => "Wrote, verified and deleted a probe object.",
+        StorageTestCodes.AccessVerified => "Authenticated bucket access and configured Object Lock were checked. Each backup independently verifies uploaded bytes and WORM retention.",
         StorageTestCodes.AgentSideStorage => "This storage is reached by the agent, not by the platform; it is checked by the agent when a backup runs.",
         StorageTestCodes.StorageNotConfigured => "The platform has no central storage configured for this tenant.",
         StorageTestCodes.ProviderNotImplemented => "This provider type is not implemented yet, so the connection cannot be tested or used.",

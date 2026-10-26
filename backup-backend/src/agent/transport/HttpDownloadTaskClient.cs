@@ -1,4 +1,3 @@
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using BackupPlatform.Agent.Core.Connectivity;
@@ -19,17 +18,11 @@ public sealed class HttpDownloadTaskClient(HttpClient http, AgentBackendEndpoint
     public Task<AgentBackendResult<BackupTaskLeaseResponse>> RenewAsync(AgentLocalIdentity identity, Guid sessionId, BackupTaskLeaseRequest request, CancellationToken cancellationToken) =>
         _client.SendAsync<BackupTaskLeaseResponse>(identity, HttpMethod.Post, Path(sessionId, "lease"), Content(request), cancellationToken);
 
-    public Task<AgentBackendResult<bool>> UploadAsync(AgentLocalIdentity identity, DownloadTaskSnapshot task, Stream content, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(task);
-        ArgumentNullException.ThrowIfNull(content);
-        if (task.LeaseToken == Guid.Empty || task.SizeBytes <= 0) throw new ArgumentException("A fenced download source is required.", nameof(task));
-        var body = new StreamContent(content, 64 * 1024);
-        body.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-        body.Headers.ContentLength = task.SizeBytes;
-        body.Headers.Add(DownloadTaskTypes.LeaseHeader, task.LeaseToken.ToString("D"));
-        return _client.SendEmptyAsync(identity, Path(task.SessionId, "content"), body, cancellationToken);
-    }
+    public Task<AgentBackendResult<DownloadSignal>> SignalAsync(AgentLocalIdentity identity, Guid sessionId, DownloadSignalRequest request, CancellationToken cancellationToken) =>
+        _client.SendAsync<DownloadSignal>(identity, HttpMethod.Post, Path(sessionId, "signal"), Content(request), cancellationToken);
+
+    public Task<AgentBackendResult<BackupPlatform.Contracts.Restores.ArtifactKeyUnwrapResponse>> KeyAsync(AgentLocalIdentity identity, Guid sessionId, DownloadSignalRequest request, CancellationToken cancellationToken) =>
+        _client.SendAsync<BackupPlatform.Contracts.Restores.ArtifactKeyUnwrapResponse>(identity, HttpMethod.Post, Path(sessionId, "artifact-key"), Content(request), cancellationToken);
 
     public Task<AgentBackendResult<bool>> CompleteAsync(AgentLocalIdentity identity, Guid sessionId, DownloadTaskCompletionRequest request, CancellationToken cancellationToken) =>
         _client.SendEmptyAsync(identity, Path(sessionId, "complete"), Content(request), cancellationToken);

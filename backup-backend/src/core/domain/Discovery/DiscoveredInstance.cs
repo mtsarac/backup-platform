@@ -151,7 +151,7 @@ public sealed class DiscoveredInstance : ITenantOwned
         {
             BackupGuard.Reference(credentialReference);
         }
-        if (integratedSecurity && (Engine != "mssql" || credentialReference is not null))
+        if (integratedSecurity && (Engine != DatabaseEngines.MsSql || credentialReference is not null))
         {
             throw new ArgumentException("Integrated security applies to SQL Server without a credential reference.");
         }

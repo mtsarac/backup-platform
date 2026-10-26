@@ -8,7 +8,10 @@ public sealed record RestoreTargetRequest(string Host, int? Port = null, bool In
     bool Encrypt = true, bool TrustServerCertificate = false);
 
 /// <summary>Omitted members take the careful default: verify the bytes, verify the backup, never kill sessions on an existing target.</summary>
-public sealed record RestoreOptionsRequest(bool? TerminateActiveConnections = null, bool? VerifyChecksum = null, bool? VerifyBackup = null);
+public sealed record RestoreOptionsRequest(bool? TerminateActiveConnections = null, bool? VerifyChecksum = null, bool? VerifyBackup = null)
+{
+    public BackupPlatform.Contracts.Restores.RestoreFileSelection? Files { get; init; }
+}
 
 /// <summary>
 /// Restores one backup artifact. <paramref name="ReplicaId"/> null lets the platform choose the best eligible replica for <paramref name="AgentId"/>.

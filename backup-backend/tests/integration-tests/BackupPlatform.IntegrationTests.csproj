@@ -27,6 +27,7 @@
     <ProjectReference Include="../../src/core/infrastructure/BackupPlatform.Infrastructure.csproj" />
     <!-- Aliased: the Agent.Core namespace would otherwise shadow the Agent domain entity in this project. -->
     <ProjectReference Include="../../src/agent/core/BackupPlatform.Agent.Core.csproj" Aliases="AgentCore" />
+    <ProjectReference Include="../../src/agent/transport/BackupPlatform.Agent.Transport.csproj" Aliases="AgentTransport" />
     <ProjectReference Include="../../src/hosts/api/BackupPlatform.Api.csproj" />
     <ProjectReference Include="../../src/providers/backup/abstractions/BackupPlatform.BackupProviders.Abstractions.csproj" />
     <ProjectReference Include="../../src/providers/backup/mssql/BackupPlatform.BackupProviders.MSSQL.csproj" />
@@ -36,6 +37,8 @@
     <ProjectReference Include="../../src/providers/storage/central/BackupPlatform.StorageProviders.Central.csproj" />
     <ProjectReference Include="../../src/providers/storage/sftp/BackupPlatform.StorageProviders.Sftp.csproj" />
     <ProjectReference Include="../../src/providers/storage/google-drive/BackupPlatform.StorageProviders.GoogleDrive.csproj" />
+    <ProjectReference Include="../../src/providers/storage/s3/BackupPlatform.StorageProviders.S3.csproj" />
+    <ProjectReference Include="../../src/providers/storage/smb/BackupPlatform.StorageProviders.Smb.csproj" />
   </ItemGroup>
 
 </Project>

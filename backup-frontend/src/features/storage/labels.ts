@@ -1,23 +1,6 @@
 import { tx } from '@/lib/i18n'
-import type { AccountingMode, EnforcementMode, EntitlementStatus, PlanSummary, QuotaState, ScopeSelector } from './types'
+import type { AccountingMode, EnforcementMode, EntitlementStatus, PlanSummary, ScopeSelector } from './types'
 import { LEGACY_UNLIMITED_KEY } from './types'
-
-type Tone = 'neutral' | 'success' | 'warning' | 'error' | 'info'
-
-export const quotaStateMeta: Record<QuotaState, { label: string; tone: Tone }> = {
-  Normal: { label: 'Normal', tone: 'success' },
-  Warning: { get label() { return tx("Warning") }, tone: 'warning' },
-  Critical: { get label() { return tx("Critical") }, tone: 'error' },
-  OverQuota: { get label() { return tx("OverQuota") }, tone: 'error' },
-  Unlimited: { get label() { return tx("Unlimited") }, tone: 'info' },
-}
-
-export const subscriptionStatusMeta: Record<EntitlementStatus, { label: string; tone: Tone }> = {
-  Active: { get label() { return tx("Etkin") }, tone: 'success' },
-  Suspended: { get label() { return tx("Askıda") }, tone: 'warning' },
-  Expired: { get label() { return tx("Süresi doldu") }, tone: 'error' },
-  NoSubscription: { get label() { return tx("Abonelik yok") }, tone: 'neutral' },
-}
 
 export const accountingModeLabels: Record<AccountingMode, string> = {
   get LogicalArtifactBytes() { return tx("Logical") },

@@ -494,9 +494,14 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
         foreach (var (configuration, graph) in fixture.Graphs)
         {
             foreach (var node in graph.Values.Where(node =>
-                !node.RelativePath.StartsWith("src/hosts/", StringComparison.Ordinal) && !IsProviderImplementation(node)))
+                !node.RelativePath.StartsWith("src/hosts/", StringComparison.Ordinal)
+                && !IsProviderImplementation(node)))
             {
-                AssertForbiddenDependencies(configuration, graph, node.Name, IsProviderImplementation);
+                // Direct external transfers (T1) allow Agent.Transport to compose Sftp and GoogleDrive direct providers.
+                AssertForbiddenDependencies(configuration, graph, node.Name, dep =>
+                    IsProviderImplementation(dep)
+                    && !(node.Name == "BackupPlatform.Agent.Transport"
+                        && dep.Name is "BackupPlatform.StorageProviders.Sftp" or "BackupPlatform.StorageProviders.GoogleDrive" or "BackupPlatform.StorageProviders.S3" or "BackupPlatform.StorageProviders.Smb"));
             }
         }
     }
@@ -533,6 +538,8 @@ public sealed class DependencyRulesTests(DependencyGraphFixture fixture) : IClas
     [InlineData("BackupPlatform.Agent.Core")]
     [InlineData("BackupPlatform.Agent.Transport")]
     [InlineData("BackupPlatform.Agent.Platform.Linux")]
+    [InlineData("BackupPlatform.BackupProviders.Abstractions")]
+    [InlineData("BackupPlatform.BackupProviders.FileSystem")]
     public void PlatformNeutralAndLinuxAgentProjectsMustNotUseWindowsApis(string project) =>
         AssertForbiddenExternalDependencies(project, IsDpapiApi, IsWindowsServiceApi, IsWindowsAccessControlApi);
 

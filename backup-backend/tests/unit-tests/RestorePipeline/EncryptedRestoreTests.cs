@@ -8,7 +8,7 @@ namespace BackupPlatform.UnitTests.RestorePipeline;
 
 public sealed class EncryptedRestoreTests : IDisposable
 {
-    private static readonly RSA TenantKey = RSA.Create(3072);
+    private static readonly RSA TenantKey = RSA.Create(4096);
 
     private readonly RestorePipelineHarness _h = new();
     private readonly byte[] _dek = RandomNumberGenerator.GetBytes(32);
@@ -149,7 +149,7 @@ public sealed class EncryptedRestoreTests : IDisposable
         var result = await _h.RunAsync(request);
 
         AssertFailedBeforeTheEngineSawAnything(result);
-        Assert.Equal(RestoreAgentFailureCodes.ArtifactTransferFailed, result.Failure!.Code);
+        Assert.Equal(RestoreAgentFailureCodes.ArtifactKeyUnavailable, result.Failure!.Code);
         Assert.Equal(RestorePipelineReasons.ArtifactKeyUnavailable, result.Failure.ReasonCode);
         Assert.DoesNotContain("refused", result.Failure.Message);
     }

@@ -10,6 +10,8 @@ public static class RestoreFailureCodes
     // Source side.
     public const string ReplicaUnavailable = "ReplicaUnavailable";
     public const string ArtifactTransferFailed = "ArtifactTransferFailed";
+    /// <summary>The backup is encrypted and the backend did not release its key (the wrap key was retired, or the key service refused), so it cannot be decrypted.</summary>
+    public const string ArtifactKeyUnavailable = "ArtifactKeyUnavailable";
     public const string ChecksumMismatch = "ChecksumMismatch";
     public const string StorageUnavailable = "StorageUnavailable";
 
@@ -46,7 +48,7 @@ public static class RestoreFailureCodes
 
     private static readonly HashSet<string> AgentReported = new(StringComparer.Ordinal)
     {
-        ReplicaUnavailable, ArtifactTransferFailed, ChecksumMismatch, StorageUnavailable,
+        ReplicaUnavailable, ArtifactTransferFailed, ArtifactKeyUnavailable, ChecksumMismatch, StorageUnavailable,
         BackupInvalid, BackupTypeUnsupported, IncompatibleVersion, FileMappingFailed,
         PreCheckFailed, TargetDatabaseExists, TargetDatabaseNotFound, TargetInUse, TargetProtected, InsufficientDiskSpace,
         SqlRestoreFailed, DatabaseUnavailable, OperationTimedOut, AuthenticationFailed, PermissionDenied,

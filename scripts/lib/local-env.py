@@ -2,9 +2,9 @@
 """Parse private local credentials as data, never as executable shell input."""
 import json
 import os
-from pathlib import Path
 import re
 import sys
+from pathlib import Path
 
 import yaml
 
@@ -84,9 +84,9 @@ def configuration(sections):
 
 def redact(sections):
     secrets = {value for section in sections.values() for key, value in section.items()
-               if re.search(r"password|secret|token", key, re.I) and value}
+               if re.search(r"password|secret|token", key, re.IGNORECASE) and value}
     secrets.update(value for key, value in os.environ.items()
-                   if re.search(r"password|secret|token|connection_string", key, re.I) and value)
+                   if re.search(r"password|secret|token|connection_string", key, re.IGNORECASE) and value)
     # Also cover escaped secrets in JSON and connection strings.
     secrets.update(json.dumps(value)[1:-1] for value in list(secrets))
     secrets.update(value.replace('"', '""') for value in list(secrets))

@@ -28,10 +28,14 @@ public static class BackupEndpoints
         tenant.MapPost("/backup-jobs/{jobId:guid}/disable", DisableAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
         tenant.MapPost("/backup-jobs/{jobId:guid}/runs", StartRunAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
         tenant.MapGet("/backup-runs", ListRunsAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapGet("/backup-jobs/{jobId:guid}/runs", ListRunsAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
+        tenant.MapGet("/backup-jobs/{jobId:guid}/runs", ListJobRunsAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
         tenant.MapGet("/backup-runs/{runId:guid}", GetRunAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
         tenant.MapPost("/backup-runs/{runId:guid}/cancel", CancelAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
         tenant.MapPost("/backup-runs/{runId:guid}/retry", RetryAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
+        tenant.MapPost("/backup-runs/{runId:guid}/pause", PauseAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
+        tenant.MapPost("/backup-runs/{runId:guid}/resume", ResumeAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
+        endpoints.MapPost("/api/backups/runs/{runId:guid}/pause", PauseBrowserAsync).RequireAuthorization();
+        endpoints.MapPost("/api/backups/runs/{runId:guid}/resume", ResumeBrowserAsync).RequireAuthorization();
         return endpoints;
     }
 
@@ -189,7 +193,9 @@ public static class BackupEndpoints
         BackupAdmissionDenialCodes.StorageConnectionUnavailable => "The job's storage connection does not exist for this tenant and provider; no run was started.",
         BackupAdmissionDenialCodes.MultiDestinationExecutionNotSupported => "This occurrence was recorded while multi-destination backup execution was not available; no run was started.",
         BackupAdmissionDenialCodes.AgentMultiDestinationUnsupported => "The job's agent has not reported support for multi-destination backups: it is outdated, or it has not finished connecting yet (a new agent reports within seconds of its first heartbeat). Retry shortly or update the agent. No run was started.",
-        BackupAdmissionDenialCodes.DestinationCombinationUnsupported => "The job's storage destinations resolve to the same connection more than once; no run was started.",
+        BackupAdmissionDenialCodes.AgentEngineUnsupported => "The job's agent has not reported support for the selected backup engine; no run was started.",
+        BackupAdmissionDenialCodes.DestinationCombinationUnsupported => "The job's storage destinations cannot run together as configured: the same connection is used more than once, or the job's agent does not support one of the destination types or the 3-2-1 check; no run was started.",
+        BackupAdmissionDenialCodes.ThreeTwoOneUnsatisfied => "The job enforces 3-2-1, but its destinations do not span at least two media classes with one off-site copy; set the media class and site of the storage connections and the job's source site, then retry. No run was started.",
         _ => "The tenant's storage quota is used up; no run was started."
     };
 
@@ -206,10 +212,49 @@ public static class BackupEndpoints
         return Results.Ok(await views.ListRunsAsync(tenant.TenantId!, new(page ?? 1, pageSize ?? 25, jobId, agentId, status, from?.ToUniversalTime(), to?.ToUniversalTime(), trigger), cancellationToken));
     }
 
+    /// <summary>The runs of one job; a job that is not this tenant's is a 404, not an empty list.</summary>
+    private static async Task<IResult> ListJobRunsAsync(Guid jobId, Guid? agentId, string? status, string? trigger,
+        DateTimeOffset? from, DateTimeOffset? to, int? page, int? pageSize,
+        ITenantContext tenant, IBackupUiStore views, TimeProvider time, CancellationToken cancellationToken) =>
+        await views.GetJobAsync(tenant.TenantId!, jobId, time.GetUtcNow(), cancellationToken) is null
+            ? Results.NotFound()
+            : await ListRunsAsync(jobId, agentId, status, trigger, from, to, page, pageSize, tenant, views, cancellationToken);
+
     private static async Task<IResult> GetRunAsync(Guid runId, ITenantContext tenant, IBackupUiStore store, CancellationToken cancellationToken)
     {
         var run = await store.GetRunAsync(tenant.TenantId!, runId, cancellationToken);
         return run is null ? Results.NotFound() : Results.Ok(run);
+    }
+
+    private static Task<IResult> PauseAsync(Guid runId, ITenantContext tenant, IBackupRunStore store, TimeProvider time, ICurrentUser user, CancellationToken cancellationToken) =>
+        SetPauseAsync(runId, tenant, store, time, user, false, cancellationToken);
+    private static Task<IResult> ResumeAsync(Guid runId, ITenantContext tenant, IBackupRunStore store, TimeProvider time, ICurrentUser user, CancellationToken cancellationToken) =>
+        SetPauseAsync(runId, tenant, store, time, user, true, cancellationToken);
+    private static async Task<IResult> SetPauseAsync(Guid runId, ITenantContext tenant, IBackupRunStore store, TimeProvider time, ICurrentUser user, bool resume, CancellationToken cancellationToken) =>
+        await store.SetPauseAsync(tenant.TenantId!, runId, resume, time.GetUtcNow(), cancellationToken, user.UserId) switch
+        {
+            BackupMutationResult.Accepted => Results.Ok(),
+            BackupMutationResult.NotFound => Results.NotFound(),
+            _ => Results.Conflict(new { error = "invalid_run_state" })
+        };
+
+    private static Task<IResult> PauseBrowserAsync(Guid runId, IBackupRunStore store, BackupPlatform.Tenancy.TenantResolutionService resolution,
+        TimeProvider time, ICurrentUser user, CancellationToken cancellationToken) => SetBrowserPauseAsync(runId, store, resolution, time, user, false, cancellationToken);
+    private static Task<IResult> ResumeBrowserAsync(Guid runId, IBackupRunStore store, BackupPlatform.Tenancy.TenantResolutionService resolution,
+        TimeProvider time, ICurrentUser user, CancellationToken cancellationToken) => SetBrowserPauseAsync(runId, store, resolution, time, user, true, cancellationToken);
+    private static async Task<IResult> SetBrowserPauseAsync(Guid runId, IBackupRunStore store, BackupPlatform.Tenancy.TenantResolutionService resolution,
+        TimeProvider time, ICurrentUser user, bool resume, CancellationToken cancellationToken)
+    {
+        var tenantId = await store.FindRunTenantAsync(runId, cancellationToken);
+        if (tenantId is null || await resolution.ResolveAsync(tenantId, cancellationToken) is not { } membership ||
+            membership.Role is not (BackupPlatform.Domain.Tenancy.TenantRole.Owner or BackupPlatform.Domain.Tenancy.TenantRole.Admin or BackupPlatform.Domain.Tenancy.TenantRole.Operator))
+            return Results.NotFound();
+        return await store.SetPauseAsync(tenantId, runId, resume, time.GetUtcNow(), cancellationToken, user.UserId) switch
+        {
+            BackupMutationResult.Accepted => Results.Ok(),
+            BackupMutationResult.NotFound => Results.NotFound(),
+            _ => Results.Conflict(new { error = "invalid_run_state" })
+        };
     }
 
     private static async Task<IResult> CancelAsync(Guid runId, ITenantContext tenant, BackupOrchestrator service,

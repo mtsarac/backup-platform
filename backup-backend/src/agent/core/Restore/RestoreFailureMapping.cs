@@ -11,6 +11,7 @@ public static class RestoreAgentFailureCodes
 {
     public const string ReplicaUnavailable = "ReplicaUnavailable";
     public const string ArtifactTransferFailed = "ArtifactTransferFailed";
+    public const string ArtifactKeyUnavailable = "ArtifactKeyUnavailable";
     public const string ChecksumMismatch = "ChecksumMismatch";
     public const string StorageUnavailable = "StorageUnavailable";
     public const string BackupInvalid = "BackupInvalid";
@@ -40,7 +41,7 @@ public static class RestoreAgentFailureCodes
     /// <summary>Every code an agent may report with a Failed outcome.</summary>
     public static IReadOnlyList<string> Reportable { get; } =
     [
-        ReplicaUnavailable, ArtifactTransferFailed, ChecksumMismatch, StorageUnavailable,
+        ReplicaUnavailable, ArtifactTransferFailed, ArtifactKeyUnavailable, ChecksumMismatch, StorageUnavailable,
         BackupInvalid, BackupTypeUnsupported, IncompatibleVersion, FileMappingFailed,
         PreCheckFailed, TargetDatabaseExists, TargetDatabaseNotFound, TargetInUse, TargetProtected, InsufficientDiskSpace,
         SqlRestoreFailed, DatabaseUnavailable, OperationTimedOut, AuthenticationFailed, PermissionDenied,

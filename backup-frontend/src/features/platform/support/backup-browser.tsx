@@ -1,22 +1,28 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { DataTable, type Column } from '@/components/data/data-table'
+import { DataList, type Column } from '@/components/data/data-list'
 import { Pagination } from '@/components/data/pagination'
+import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
 import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
 import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
+import { TechnicalDetails } from '@/components/ui/technical-details'
 import { Tabs } from '@/components/ui/tabs'
+import { SearchablePicker } from '@/components/ui/searchable-picker'
 import { ArtifactDetails } from '@/features/artifacts/artifact-details'
-import { artifactDate, artifactSize, artifactState } from '@/features/artifacts/format'
-import { runStatuses, runStatusLabels } from '@/features/backups/presentation'
+import { artifactState } from '@/features/artifacts/format'
+import { runStatuses } from '@/features/backups/presentation'
 import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { failureMessage } from '@/lib/api/failure-messages'
 import { SupportArtifactDownload } from './artifact-download'
 import { useSupportArtifact, useSupportArtifacts, useSupportJobs, useSupportRuns } from './hooks'
 import { supportAccess, supportScope } from './presentation'
-import { SupportQueryState } from './support-query-state'
 import type { SupportArtifact, SupportJob, SupportRun, SupportSession } from './types'
+import { formatBytes, formatDateTime, formatSeconds } from '@/lib/format'
+import { statusLabel } from '@/lib/status'
+import { QueryState } from '@/components/data/query-state'
+import { errorMessage } from '@/lib/api/failure-messages'
 
 export function SupportBackupBrowser({ session }: { session: SupportSession }) {
   useLanguage()
@@ -30,55 +36,75 @@ export function SupportBackupBrowser({ session }: { session: SupportSession }) {
   const invalidDates = Boolean((from && !/^\d{4}-\d{2}-\d{2}$/.test(from)) || (to && !/^\d{4}-\d{2}-\d{2}$/.test(to)) || (from && to && from > to))
   const runs = useSupportRuns({ ...scope, enabled: scope.enabled && view === 'runs' }, { page, pageSize: PLATFORM_PAGE_SIZE, jobId, status: get('runStatus') })
   const artifacts = useSupportArtifacts({ ...scope, enabled: scope.enabled && view === 'artifacts' && !invalidDates }, { page, pageSize: PLATFORM_PAGE_SIZE, jobId, state: get('state'), from: from && !invalidDates ? `${from}T00:00:00.000Z` : '', to: to && !invalidDates ? `${to}T23:59:59.999Z` : '' })
+  // Visible: names, result, size and everyday times. Collapsed and copyable: ids, raw states, trigger, schedule internals.
   const columns: Column<SupportArtifact>[] = [
-    { key: 'database', header: tx('Database'), wrap: true, render: artifact => <button className="font-medium text-primary hover:underline" onClick={() => update({ artifact: artifact.id })}>{artifact.databaseName ?? tx('Database bildirilmedi')}</button> },
-    { key: 'job', header: tx('Backup Job'), wrap: true, render: artifact => artifact.jobName ?? '—' },
-    { key: 'agent', header: tx('Agent'), wrap: true, render: artifact => artifact.agentName ?? '—' },
-    { key: 'size', header: tx('Boyut'), render: artifact => artifactSize(artifact.sizeBytes) },
-    { key: 'created', header: tx('Oluşturulma'), render: artifact => artifactDate(artifact.createdAt) },
-    { key: 'retention', header: tx('Saklama sonu'), render: artifact => artifact.retentionExpiresAt ? artifactDate(artifact.retentionExpiresAt) : tx('Süre sınırı yok') },
-    { key: 'state', header: tx('Durum'), render: artifact => <StatusPill status={artifactState(artifact)} /> },
-    { key: 'replicas', header: tx('Replikalar'), render: artifact => <div className="flex flex-wrap gap-1">{artifact.replicas.map(replica => <StatusPill key={replica.id} status={replica.verificationState} />)}</div> },
+    { key: 'database', card: 'title', header: tx('Veritabanı'), wrap: true, render: artifact => <button className="font-medium text-primary hover:underline" onClick={() => update({ artifact: artifact.id })}>{artifact.databaseName ?? tx('Veritabanı bildirilmedi')}</button> },
+    { key: 'job', header: tx('Yedekleme işi'), wrap: true, render: artifact => artifact.jobName ?? '—' },
+    { key: 'size', header: tx('Boyut'), render: artifact => formatBytes(artifact.sizeBytes) },
+    { key: 'created', header: tx('Oluşturulma'), render: artifact => <RelativeTime value={artifact.createdAt} /> },
+    { key: 'state', card: 'status', header: tx('Durum'), render: artifact => <StatusPill status={artifactState(artifact)} /> },
+    { key: 'details', card: 'actions', header: tx('Ayrıntılar'), wrap: true, render: artifact => <TechnicalDetails items={[
+      { label: tx('Yedek dosyası kimliği'), value: artifact.id },
+      { label: tx('Ham durum'), value: artifact.state },
+      { label: tx('Yedekleme bilgisayarı'), value: artifact.agentName ?? '—' },
+      { label: tx('Saklama sonu'), value: artifact.retentionExpiresAt ? formatDateTime(artifact.retentionExpiresAt) : tx('Süre sınırı yok') },
+      ...artifact.replicas.map((replica, index) => ({ label: tx('Kopya {0}', { '0': index + 1 }), value: `${replica.storageProvider} · ${replica.verificationState}` })),
+    ]} /> },
   ]
   const jobColumns: Column<SupportJob>[] = [
-    { key: 'name', header: tx('Backup Job'), wrap: true, render: job => <button className="text-primary hover:underline" onClick={() => update({ view: 'runs', jobId: job.id })}>{job.name}</button> },
-    { key: 'agent', header: tx('Agent'), wrap: true, render: job => job.agentName },
-    { key: 'database', header: tx('Database'), wrap: true, render: job => job.database },
-    { key: 'type', header: tx('Tür'), render: job => `${job.engine} · ${job.backupType}` },
-    { key: 'storage', header: tx('Storage Provider'), render: job => job.storageProvider },
+    { key: 'name', card: 'title', header: tx('Yedekleme işi'), wrap: true, render: job => <button className="font-medium text-primary hover:underline" onClick={() => update({ view: 'runs', jobId: job.id })}>{job.name}</button> },
+    { key: 'agent', header: tx('Yedekleme bilgisayarı'), wrap: true, render: job => job.agentName },
+    { key: 'database', header: tx('Veritabanı'), wrap: true, render: job => job.database },
     { key: 'enabled', header: tx('Etkin'), render: job => job.enabled ? tx('Evet') : tx('Hayır') },
-    { key: 'schedule', header: tx('Zamanlama'), wrap: true, render: job => job.schedule?.enabled ? `${job.schedule.cronExpression} · ${job.schedule.timeZone}` : tx('Kapalı') },
-    { key: 'retention', header: tx('Saklama'), render: job => job.retention?.enabled ? tx("{0} sn", { "0": job.retention.keepForSeconds }) : tx('Süre sınırı yok') },
-    { key: 'last', header: tx('Son Run'), render: job => job.lastRun ? <StatusPill status={job.lastRun.status} /> : '—' },
+    { key: 'last', card: 'status', header: tx('Son sonuç'), render: job => job.lastRun ? <StatusPill status={job.lastRun.status} /> : '—' },
+    { key: 'details', card: 'actions', header: tx('Ayrıntılar'), wrap: true, render: job => <TechnicalDetails items={[
+      { label: tx('İş kimliği'), value: job.id },
+      { label: tx('Veritabanı motoru ve yedek türü'), value: `${job.engine} · ${job.backupType}` },
+      { label: tx('Depolama sağlayıcısı'), value: job.storageProvider },
+      ...(job.schedule?.enabled ? [
+        { label: tx('Zamanlama ifadesi (cron)'), value: job.schedule.cronExpression },
+        { label: tx('Saat dilimi'), value: job.schedule.timeZone },
+      ] : [{ label: tx('Zamanlama'), value: tx('Kapalı') }]),
+      { label: tx('Saklama'), value: job.retention?.enabled ? formatSeconds(job.retention.keepForSeconds) : tx('Süre sınırı yok') },
+    ]} /> },
   ]
   const runColumns: Column<SupportRun>[] = [
-    { key: 'job', header: tx('Backup Job'), wrap: true, render: run => run.jobName },
-    { key: 'agent', header: tx('Agent'), wrap: true, render: run => run.agentName },
-    { key: 'status', header: tx('Durum'), render: run => <StatusPill status={run.status} /> },
-    { key: 'trigger', header: tx('Tetikleyici'), render: run => run.triggerType },
-    { key: 'times', header: tx('Başlangıç / Bitiş'), render: run => <div>{artifactDate(run.startedAt)}<br />{artifactDate(run.completedAt)}</div> },
+    { key: 'job', card: 'title', header: tx('Yedekleme işi'), wrap: true, render: run => run.jobName },
+    { key: 'agent', header: tx('Yedekleme bilgisayarı'), wrap: true, render: run => run.agentName },
+    { key: 'status', card: 'status', header: tx('Durum'), render: run => <StatusPill status={run.status} /> },
+    { key: 'started', header: tx('Başladı'), render: run => <RelativeTime value={run.startedAt} /> },
     { key: 'reason', header: tx('Sonuç'), wrap: true, render: run => run.reasonCode ? failureMessage(run.reasonCode) : '—' },
-    { key: 'attempts', header: tx('Denemeler'), wrap: true, render: run => <details><summary>{run.currentAttemptNumber}{tx(". attempt ·")}{' '}{run.attempts.length}{' '}{tx("kayıt")}</summary>{run.attempts.map(attempt => <p key={attempt.number}>{attempt.number} · {tx(attempt.status)} · {artifactDate(attempt.startedAt)} · {artifactDate(attempt.completedAt)}{attempt.reasonCode ? ` · ${failureMessage(attempt.reasonCode)}` : ''}</p>)}</details> },
-    { key: 'artifacts', header: tx('Artifact'), wrap: true, render: run => <div className="grid gap-2">{run.artifactIds.map((id, index) => <div key={id}><button className="text-primary hover:underline" onClick={() => update({ view: 'artifacts', artifact: id })}>{tx("Artifact")}{' '}{index + 1}{' '}{tx("ayrıntıları")}</button><p className="break-all font-mono text-xs text-text-muted">{id}</p></div>)}</div> },
+    { key: 'details', card: 'actions', header: tx('Ayrıntılar'), wrap: true, render: run => <div className="space-y-2">
+      {run.artifactIds.map((id, index) => <div key={id}><button className="text-primary hover:underline" onClick={() => update({ view: 'artifacts', artifact: id })}>{tx("Yedek dosyası {0} ayrıntıları", { '0': index + 1 })}</button></div>)}
+      <TechnicalDetails items={[
+        { label: tx('Deneme kimliği'), value: run.id },
+        { label: tx('Tetikleyici'), value: run.triggerType },
+        { label: tx('Bitiş'), value: formatDateTime(run.completedAt) },
+        ...(run.reasonCode ? [{ label: tx('Hata kodu'), value: run.reasonCode }] : []),
+        ...run.attempts.map(attempt => ({ label: tx('{0}. girişim', { '0': attempt.number }), value: [statusLabel('general', attempt.status), formatDateTime(attempt.startedAt), formatDateTime(attempt.completedAt), attempt.reasonCode ? failureMessage(attempt.reasonCode) : ''].filter(Boolean).join(' · ') })),
+        ...run.artifactIds.map((id, index) => ({ label: tx('Yedek dosyası {0} kimliği', { '0': index + 1 }), value: id })),
+      ]} />
+    </div> },
   ]
   if (!access.view) return <Notice>{tx("Backup Browser için etkin oturum sahipliği ve ViewBackupMetadata izni gerekir.")}</Notice>
   const listing = view === 'runs' ? runs : artifacts
   return <div className="space-y-6">
-    <Tabs label={tx("Backup Browser görünümleri")} idPrefix="support-browser" value={view} onChange={(value) => update({ view: value })} items={[{ value: 'jobs', label: tx('Backup Jobs') }, { value: 'runs', label: tx('Backup Runs') }, { value: 'artifacts', label: tx('Artifacts') }]} />
+    <Tabs label={tx("Yedek tarayıcısı görünümleri")} idPrefix="support-browser" value={view} onChange={(value) => update({ view: value })} items={[{ value: 'jobs', label: tx('Yedekleme işleri') }, { value: 'runs', label: tx('Yedekleme denemeleri') }, { value: 'artifacts', label: tx('Yedek dosyaları') }]} />
     <div role="tabpanel" id={`support-browser-panel-${view}`} aria-labelledby={`support-browser-tab-${view}`} className="space-y-4">
-    {view !== 'jobs' && <Filters label={tx("Backup filtreleri")}>
-      <FilterField label={tx("Backup Job")}><select className={filterControlClass} value={jobId} onChange={event => update({ jobId: event.target.value })}><option value="">{tx("Tüm Backup Jobs")}</option>{jobs.data?.map(job => <option key={job.id} value={job.id}>{job.name}</option>)}</select></FilterField>
-      {view === 'runs' ? <FilterField label={tx("Run durumu")}><select className={filterControlClass} value={get('runStatus')} onChange={event => update({ runStatus: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{runStatuses.map(status => <option key={status} value={status}>{tx(runStatusLabels[status])}</option>)}</select></FilterField> : <>
-        <FilterField label={tx("Artifact durumu")}><select className={filterControlClass} value={get('state')} onChange={event => update({ state: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{['Available', 'DeletePending', 'DeleteFailed', 'Deleted'].map(state => <option key={state}>{state}</option>)}</select></FilterField>
+    {view !== 'jobs' && <Filters label={tx("Yedek filtreleri")}>
+      <SearchablePicker label={tx("Yedekleme işi")} placeholder={tx("Tüm yedekleme işleri")} value={jobId} onChange={value => update({ jobId: value })}
+        options={(jobs.data ?? []).map(job => ({ value: job.id, label: job.name, description: job.database }))} disabled={jobs.isPending || Boolean(jobs.error)} />
+      {view === 'runs' ? <FilterField label={tx("Deneme durumu")}><select className={filterControlClass} value={get('runStatus')} onChange={event => update({ runStatus: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{runStatuses.map(status => <option key={status} value={status}>{statusLabel('general', status)}</option>)}</select></FilterField> : <>
+        <FilterField label={tx("Yedek dosyası durumu")}><select className={filterControlClass} value={get('state')} onChange={event => update({ state: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{['Available', 'DeletePending', 'DeleteFailed', 'Deleted'].map(state => <option key={state} value={state}>{statusLabel('general', state)}</option>)}</select></FilterField>
         <FilterField label={tx("Başlangıç tarihi")}><input className={filterControlClass} type="date" value={from} onChange={event => update({ from: event.target.value })} /></FilterField>
         <FilterField label={tx("Bitiş tarihi")}><input className={filterControlClass} type="date" value={to} onChange={event => update({ to: event.target.value })} /></FilterField>
       </>}
     </Filters>}
-    {jobs.error && <SupportQueryState isPending={false} error={jobs.error} />}
-    {view === 'jobs' ? <SupportQueryState isPending={jobs.isPending} error={jobs.error}><DataTable rows={jobs.data ?? []} columns={jobColumns} keyExtractor={job => job.id} /></SupportQueryState> : invalidDates && view === 'artifacts' ? <Notice tone="error">{tx("Tarih aralığı geçersiz. Bitiş başlangıçtan önce olamaz.")}</Notice> : <SupportQueryState isPending={listing.isPending} error={listing.error}>
-      {view === 'runs' ? <DataTable rows={runs.data?.items ?? []} columns={runColumns} keyExtractor={run => run.id} /> : <DataTable rows={artifacts.data?.items ?? []} columns={columns} keyExtractor={artifact => artifact.id} />}
+    {jobs.error && <QueryState forbiddenMessage={errorMessage} isPending={false} error={jobs.error} />}
+    {view === 'jobs' ? <QueryState forbiddenMessage={errorMessage} isPending={jobs.isPending} error={jobs.error}><DataList rows={jobs.data ?? []} columns={jobColumns} keyExtractor={job => job.id} /></QueryState> : invalidDates && view === 'artifacts' ? <Notice tone="warning">{tx("Tarih aralığı geçersiz. Bitiş başlangıçtan önce olamaz.")}</Notice> : <QueryState forbiddenMessage={errorMessage} isPending={listing.isPending} error={listing.error}>
+      {view === 'runs' ? <DataList rows={runs.data?.items ?? []} columns={runColumns} keyExtractor={run => run.id} /> : <DataList rows={artifacts.data?.items ?? []} columns={columns} keyExtractor={artifact => artifact.id} />}
       {listing.data && <Pagination page={page} pageSize={listing.data.pageSize} totalCount={listing.data.totalCount} disabled={listing.isFetching} onPageChange={next => update({ browserPage: next })} />}
-    </SupportQueryState>}
+    </QueryState>}
     </div>
     {get('artifact') && <SupportArtifactPanel key={get('artifact')} session={session} artifactId={get('artifact')} />}
   </div>
@@ -88,13 +114,13 @@ function SupportArtifactPanel({ session, artifactId }: { session: SupportSession
   const { update } = useListParams('browserPage')
   const artifact = useSupportArtifact(supportScope(session, 'view'), artifactId)
   const access = supportAccess(session)
-  return <Section title={tx("Artifact detayları")} actions={<Button variant="outline" onClick={() => update({ artifact: '' })}>{tx("Detayları gizle")}</Button>}>
+  return <Section title={tx("Yedek dosyası ayrıntıları")} actions={<Button variant="outline" onClick={() => update({ artifact: '' })}>{tx("Detayları gizle")}</Button>}>
     <div className="space-y-4">
-    <SupportQueryState isPending={artifact.isPending} error={artifact.error}>{artifact.data && <>
+    <QueryState forbiddenMessage={errorMessage} isPending={artifact.isPending} error={artifact.error}>{artifact.data && <>
       <div className="flex flex-wrap gap-3"><Button disabled={!access.restore || artifact.data.state !== 'Available' || artifact.data.backupType !== 'Full'} onClick={() => update({ tab: 'restores', restoreArtifact: artifactId, restoreId: '' })}>{tx("Restore…")}</Button>{!access.restore && <p className="text-sm text-text-muted">{tx("RestoreBackup izni gerekir.")}</p>}</div>
       <SupportArtifactDownload scope={supportScope(session, 'download')} artifactId={artifactId} eligible={artifact.data.state === 'Available'} />
       <ArtifactDetails artifact={artifact.data} />
-    </>}</SupportQueryState>
+    </>}</QueryState>
     </div>
   </Section>
 }

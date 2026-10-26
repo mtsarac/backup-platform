@@ -8,6 +8,9 @@ namespace BackupPlatform.IntegrationTests;
 
 public sealed class PostgreSqlFixture : IAsyncLifetime
 {
+    // CREATE/DROP DATABASE wait for a checkpoint; on a shared server under a parallel suite that outlasts Npgsql's 30 s default and fails an otherwise passing test in teardown.
+    internal const int DatabaseDdlTimeoutSeconds = 300;
+
     private static readonly Lazy<PostgreSqlTemplateDatabase> Template = new(() => new(GetAdministrativeConnectionString()));
     private readonly PostgreSqlTemplateDatabase? _template;
 
@@ -46,7 +49,7 @@ public sealed class PostgreSqlFixture : IAsyncLifetime
         {
             await using var connection = new NpgsqlConnection(_administrativeConnectionString);
             await connection.OpenAsync();
-            await using var command = new NpgsqlCommand($"CREATE DATABASE \"{_databaseName}\" TEMPLATE \"{templateName}\"", connection);
+            await using var command = new NpgsqlCommand($"CREATE DATABASE \"{_databaseName}\" TEMPLATE \"{templateName}\"", connection) { CommandTimeout = DatabaseDdlTimeoutSeconds };
             await command.ExecuteNonQueryAsync();
             _databaseCreated = true;
             _connectionString = builder.ConnectionString;
@@ -81,7 +84,7 @@ public sealed class PostgreSqlFixture : IAsyncLifetime
         }
         await using var connection = new NpgsqlConnection(_administrativeConnectionString);
         await connection.OpenAsync();
-        await using var command = new NpgsqlCommand($"DROP DATABASE \"{_databaseName}\" WITH (FORCE)", connection);
+        await using var command = new NpgsqlCommand($"DROP DATABASE \"{_databaseName}\" WITH (FORCE)", connection) { CommandTimeout = DatabaseDdlTimeoutSeconds };
         await command.ExecuteNonQueryAsync();
         _databaseCreated = false;
     }
@@ -170,7 +173,7 @@ internal sealed class PostgreSqlTemplateDatabase : IDisposable
             // ProcessExit cannot await; synchronous cleanup also handles a partially migrated source.
             using var connection = new NpgsqlConnection(AdministrativeConnectionString);
             connection.Open();
-            using var command = new NpgsqlCommand($"DROP DATABASE \"{_databaseName}\" WITH (FORCE)", connection);
+            using var command = new NpgsqlCommand($"DROP DATABASE \"{_databaseName}\" WITH (FORCE)", connection) { CommandTimeout = PostgreSqlFixture.DatabaseDdlTimeoutSeconds };
             command.ExecuteNonQuery();
             _databaseCreated = false;
             _disposed = true;

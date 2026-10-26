@@ -1,9 +1,8 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { Badge } from '@/components/ui/badge'
-import { capabilityLabels, capabilitySupportLabels } from './format'
+import { capabilityLabels } from './format'
 import type { AgentCapability } from './types'
+import { StatusPill } from '@/components/data/status-pill'
 
-const supportTones: Record<string, 'success' | 'neutral' | 'warning'> = { Supported: 'success', Unsupported: 'neutral', Unknown: 'warning' }
 const supportOrder: Record<string, number> = { Supported: 0, Unknown: 1, Unsupported: 2 }
 const groups = [
   { support: 'Supported', get title() { return tx("Desteklenenler") } },
@@ -13,19 +12,6 @@ const groups = [
 
 function sortCapabilities(capabilities: AgentCapability[]) {
   return [...capabilities].sort((a, b) => (supportOrder[a.support] ?? 1) - (supportOrder[b.support] ?? 1) || a.identifier.localeCompare(b.identifier))
-}
-
-export function SupportBadge({ support }: { support: string }) {
-  useLanguage()
-  return <Badge tone={supportTones[support] ?? 'warning'}>{capabilitySupportLabels[support] ?? support}</Badge>
-}
-
-/** Table summary: a count only; the full list lives on the Agent detail page. Never claims support for something not reported. */
-export function CapabilitySummary({ capabilities }: { capabilities: AgentCapability[] }) {
-  useLanguage()
-  if (capabilities.length === 0) return <span className="text-text-muted">{tx("Henüz bildirilmedi")}</span>
-  const supported = capabilities.filter((item) => item.support === 'Supported').length
-  return <div><div>{capabilities.length}{' '}{tx("yetenek")}</div><div className="text-sm text-text-muted">{supported}{' '}{tx("destekleniyor")}</div></div>
 }
 
 /** Full list grouped by support state; unknown support values land with the unknown ones. */
@@ -41,7 +27,7 @@ export function CapabilityList({ capabilities }: { capabilities: AgentCapability
         <ul className="divide-y divide-border rounded-lg border border-border">
           {items.map((capability) => <li key={capability.identifier} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
             <span className="min-w-0 break-words font-medium">{capabilityLabels[capability.identifier] ?? capability.identifier}</span>
-            <SupportBadge support={capability.support} />
+            <StatusPill domain="capability" status={capability.support} />
             {capabilityLabels[capability.identifier] && <code className="break-all text-xs text-text-muted">{capability.identifier}</code>}
             {capability.version && <span className="text-xs text-text-muted">{capability.version}</span>}
           </li>)}

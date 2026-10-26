@@ -4,6 +4,7 @@ using BackupPlatform.Agent.Core.Connectivity;
 using BackupPlatform.Agent.Core.Identity;
 using BackupPlatform.Contracts.Agents;
 using BackupPlatform.Contracts.Backups;
+using BackupPlatform.Agent.Core.Updates;
 using Microsoft.Extensions.Logging;
 
 namespace BackupPlatform.Agent.Core.Tasks;
@@ -18,6 +19,7 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
         AllowSynchronousContinuations = false
     });
     private readonly object _gate = new();
+    // Keyed by lease token: a resumed attempt keeps its id but is claimed again under a new token and must not be mistaken for a redelivery.
     private readonly Dictionary<Guid, DateTimeOffset> _seen = [];
     private readonly IBackupTaskClient _client;
     private readonly IAgentCredentialStore _identities;
@@ -26,11 +28,12 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
     private readonly AgentSoftwareInfo _software;
     private readonly TimeProvider _time;
     private readonly ILogger<BackupTaskWorker> _logger;
-    private Guid? _activeAttempt;
+    private Guid? _activeLease;
     private int _started;
+    private readonly AgentUpdateGate? _updates;
 
     public BackupTaskWorker(IBackupTaskClient client, IAgentCredentialStore identities, IDatabaseBackupPipeline pipeline,
-        BackupTaskRequestFactory requests, AgentSoftwareInfo software, TimeProvider timeProvider, ILogger<BackupTaskWorker> logger)
+        BackupTaskRequestFactory requests, AgentSoftwareInfo software, TimeProvider timeProvider, ILogger<BackupTaskWorker> logger, AgentUpdateGate? updates = null)
     {
         _client = client;
         _identities = identities;
@@ -39,6 +42,7 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
         _software = software;
         _time = timeProvider;
         _logger = logger;
+        _updates = updates;
     }
 
     public bool TryPublish(AgentTaskEnvelope task)
@@ -56,21 +60,24 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
         {
             foreach (var pair in _seen)
             {
-                if (pair.Value <= now && pair.Key != _activeAttempt)
+                if (pair.Value <= now && pair.Key != _activeLease)
                 {
                     _seen.Remove(pair.Key);
                 }
             }
-            if (_seen.ContainsKey(id) || !TryEnqueue(task))
+            if (_seen.ContainsKey(backup.LeaseToken) || !TryEnqueue(task))
             {
                 return false;
             }
-            _seen.Add(id, backup.LeaseExpiresAt);
+            _seen.Add(backup.LeaseToken, backup.LeaseExpiresAt);
             return true;
         }
     }
 
     private bool TryEnqueue(AgentTaskEnvelope task) =>
+        _updates?.TryQueue(() => Enqueue(task)) ?? Enqueue(task);
+
+    private bool Enqueue(AgentTaskEnvelope task) =>
         _time is IAgentLoopObserver observer ? ObserveEnqueue(observer, task) : _queue.Writer.TryWrite(task);
 
     private bool ObserveEnqueue(IAgentLoopObserver observer, AgentTaskEnvelope task) =>
@@ -95,7 +102,7 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
                 var task = envelope.Backup!;
                 lock (_gate)
                 {
-                    _activeAttempt = task.AttemptId;
+                    _activeLease = task.LeaseToken;
                 }
                 try
                 {
@@ -114,8 +121,9 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
                 {
                     lock (_gate)
                     {
-                        _activeAttempt = null;
+                        _activeLease = null;
                     }
+                    _updates?.Complete();
                 }
             }
         }
@@ -136,7 +144,7 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
         }
         using var lease = new BackupTaskLease(task.LeaseExpiresAt, _time);
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, lease.Token);
-        var started = await CallAsync(identity => _client.StartAsync(identity, task.AttemptId, new BackupTaskStartRequest
+        var started = await BackupTaskLease.CallAsync(_identities, null, identity => _client.StartAsync(identity, task.AttemptId, new BackupTaskStartRequest
         {
             LeaseToken = task.LeaseToken,
             SoftwareVersion = _software.Version,
@@ -148,6 +156,10 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
             return;
         }
         using var requestedCancel = new CancellationTokenSource();
+        using var requestedPause = new CancellationTokenSource();
+        using var timeRulePause = new CancellationTokenSource();
+        if (started.Value.TimeRulePauseRequested) timeRulePause.Cancel();
+        if (started.Value.PauseRequested) requestedPause.Cancel();
         if (task.CancellationRequested || started.Value.CancellationRequested)
         {
             requestedCancel.Cancel();
@@ -156,11 +168,11 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
         using var maintenance = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
         using var progressLifetime = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
         var progress = new TaskProgress();
-        var renewal = RenewLoopAsync(task, lease, requestedCancel, maintenance.Token);
+        var renewal = RenewLoopAsync(task, lease, requestedCancel, requestedPause, timeRulePause, maintenance.Token);
         var reporting = ReportLoopAsync(task, progress, progressLifetime.Token);
         try
         {
-            var completion = await ExecutePipelineAsync(task, progress, provider.Token).ConfigureAwait(false);
+            var completion = await ExecutePipelineAsync(task, progress, requestedPause.Token, timeRulePause.Token, stoppingToken, lifetime.Token, provider.Token).ConfigureAwait(false);
             await progressLifetime.CancelAsync().ConfigureAwait(false);
             await reporting.ConfigureAwait(false);
             if (!lifetime.IsCancellationRequested)
@@ -175,17 +187,27 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
             await Task.WhenAll(renewal, reporting).ConfigureAwait(false);
             lock (_gate)
             {
-                _seen[task.AttemptId] = lease.ExpiresAt;
+                _seen[task.LeaseToken] = lease.ExpiresAt;
             }
         }
     }
 
-    private async Task<BackupTaskCompletionRequest> ExecutePipelineAsync(BackupTaskSnapshot task, TaskProgress progress, CancellationToken cancellationToken)
+    private async Task<BackupTaskCompletionRequest> ExecutePipelineAsync(BackupTaskSnapshot task, TaskProgress progress, CancellationToken pauseToken, CancellationToken timeRulePauseToken, CancellationToken shutdownToken, CancellationToken leaseToken, CancellationToken cancellationToken)
     {
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var request = await _requests.CreateAsync(task, cancellationToken).ConfigureAwait(false);
+            var request = (await _requests.CreateAsync(task, cancellationToken).ConfigureAwait(false)) with
+            {
+                AttemptId = task.AttemptId, ResumeTransfer = task.ResumeTransfer, Checkpoints = task.Checkpoints, PauseToken = pauseToken,
+                TimeRulePauseToken = timeRulePauseToken, ShutdownToken = shutdownToken,
+                RecordCheckpointAsync = async (checkpoint, _) =>
+                {
+                    var response = await BackupTaskLease.CallAsync(_identities, null, identity => _client.ReportProgressAsync(identity, task.AttemptId,
+                        new BackupTaskProgressRequest { LeaseToken = task.LeaseToken, Stage = "Uploading", Checkpoint = checkpoint }, leaseToken), leaseToken).ConfigureAwait(false);
+                    if (!response.IsSuccess) throw new IOException("The transfer checkpoint could not be committed.");
+                }
+            };
             var result = await _pipeline.RunFullBackupAsync(request, progress, cancellationToken).ConfigureAwait(false);
             return BackupTaskResultMapper.Map(task, result);
         }

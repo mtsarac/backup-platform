@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Storage;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Tenancy;
@@ -10,15 +11,21 @@ public enum DownloadState { Preparing, Ready, Streaming, Completed, Failed, Canc
 public sealed class DownloadSession : ITenantOwned
 {
     private DownloadSession() { TenantId = null!; StorageProvider = null!; StorageTarget = null!; Key = null!; Checksum = null!; Filename = null!; }
-    public DownloadSession(Guid id, BackupArtifact artifact, BackupReplica replica, Guid userId, string filename, DateTimeOffset now, TimeSpan lifetime, Guid? supportSessionId = null)
+    public DownloadSession(Guid id, BackupArtifact artifact, BackupReplica replica, Guid userId, string filename, DateTimeOffset now, TimeSpan lifetime, Guid? supportSessionId = null,
+        bool decrypted = false, Guid? breakGlassRequestId = null, Guid? directAgentId = null)
     {
-        if (supportSessionId == Guid.Empty) throw new ArgumentException("A support session id must not be empty.", nameof(supportSessionId));
+        if (supportSessionId == Guid.Empty || breakGlassRequestId == Guid.Empty) throw new ArgumentException("A support session or break-glass id must not be empty.", nameof(supportSessionId));
+        if (decrypted && (artifact.Format != BackupArtifact.BpeFormat || supportSessionId is not null) || breakGlassRequestId is not null && !decrypted)
+            throw new ArgumentException("Only an encrypted artifact can be downloaded decrypted, never through a support session, and a break-glass download is always decrypted.");
         if (id == Guid.Empty || userId == Guid.Empty || lifetime <= TimeSpan.Zero) throw new ArgumentException("Invalid download identity or lifetime.");
         if (replica.TenantId != artifact.TenantId || replica.ArtifactId != artifact.Id || replica.Status != BackupReplicaStatus.Available ||
             replica.VerificationState != "Verified" || replica.Checksum != artifact.ArtifactChecksum || replica.SizeBytes != artifact.SizeBytes ||
             artifact.ChecksumAlgorithm != "sha256") throw new ArgumentException("The replica cannot be downloaded.");
         Id = id; TenantId = artifact.TenantId; ArtifactId = artifact.Id; ReplicaId = replica.Id; UserId = userId; SupportSessionId = supportSessionId;
-        AgentId = replica.ExecutionLocation == BackupStorageExecutionLocation.Agent ? replica.OwningAgentId : null;
+        Decrypted = decrypted; BreakGlassRequestId = breakGlassRequestId;
+        if (directAgentId == Guid.Empty || directAgentId is not null && !StorageProviderTypes.AgentExecuted(replica.StorageProvider))
+            throw new ArgumentException("A direct executor is only valid for external storage.");
+        AgentId = replica.ExecutionLocation == BackupStorageExecutionLocation.Agent ? replica.OwningAgentId : directAgentId;
         StorageProvider = replica.StorageProvider; StorageTarget = replica.StorageTarget; Key = replica.Key;
         Checksum = artifact.ArtifactChecksum; SizeBytes = artifact.SizeBytes; Filename = filename;
         CreatedAt = now.ToUniversalTime(); ExpiresAt = CreatedAt + lifetime;
@@ -31,6 +38,10 @@ public sealed class DownloadSession : ITenantOwned
     public Guid UserId { get; private set; }
     /// <summary>The support access session this download was authorized through; null for an ordinary tenant download. Fixed at creation.</summary>
     public Guid? SupportSessionId { get; private set; }
+    /// <summary>The serving host verifies private ciphertext and plaintext staging before streaming; metadata still describes stored ciphertext.</summary>
+    public bool Decrypted { get; private set; }
+    /// <summary>The break-glass request this download spent; null otherwise. A download belongs to the channel it was created through. Fixed at creation.</summary>
+    public Guid? BreakGlassRequestId { get; private set; }
     public Guid? AgentId { get; private set; }
     public string StorageProvider { get; private set; }
     public string StorageTarget { get; private set; }
@@ -63,8 +74,9 @@ public sealed class DownloadSession : ITenantOwned
         State = state; TransferredBytes = bytes; FailureCode = failureCode;
         LeaseOwner = state == DownloadState.Ready || IsTerminal ? null : owner;
         LeaseExpiresAt = LeaseOwner is null ? null : now + leaseDuration!.Value;
-        if (LeaseExpiresAt is { } renewed && renewed > ExpiresAt) ExpiresAt = renewed;
-        if (state == DownloadState.Ready && leaseDuration is { } idleLifetime && idleLifetime > TimeSpan.Zero && now + idleLifetime > ExpiresAt)
+        if (BreakGlassRequestId is not null && LeaseExpiresAt > ExpiresAt) LeaseExpiresAt = ExpiresAt;
+        if (BreakGlassRequestId is null && LeaseExpiresAt is { } renewed && renewed > ExpiresAt) ExpiresAt = renewed;
+        if (BreakGlassRequestId is null && state == DownloadState.Ready && leaseDuration is { } idleLifetime && idleLifetime > TimeSpan.Zero && now + idleLifetime > ExpiresAt)
             ExpiresAt = now + idleLifetime;
         if (IsTerminal) ReleasedAt = now;
         return true;

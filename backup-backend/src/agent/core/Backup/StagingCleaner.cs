@@ -17,8 +17,11 @@ public sealed partial class StagingCleaner
     private readonly StagingUsageRegistry _registry;
     private readonly TimeProvider _time;
     private readonly ILogger<StagingCleaner> _logger;
+    private readonly Func<Guid, CancellationToken, Task<bool>>? _canReleaseTransfer;
+    private readonly IRetainedUploadAborter? _uploads;
 
-    public StagingCleaner(AgentStagingDirectory directory, StagingUsageRegistry registry, TimeProvider time, ILogger<StagingCleaner> logger)
+    public StagingCleaner(AgentStagingDirectory directory, StagingUsageRegistry registry, TimeProvider time, ILogger<StagingCleaner> logger,
+        Func<Guid, CancellationToken, Task<bool>>? canReleaseTransfer = null, IRetainedUploadAborter? uploads = null)
     {
         ArgumentNullException.ThrowIfNull(directory);
         ArgumentNullException.ThrowIfNull(registry);
@@ -28,22 +31,75 @@ public sealed partial class StagingCleaner
         _registry = registry;
         _time = time;
         _logger = logger;
+        _canReleaseTransfer = canReleaseTransfer;
+        _uploads = uploads;
     }
 
     /// <summary>
     /// Runs one sweep. Failures to list or delete are reported, never thrown. Cancellation is observed between files and surfaces as
     /// <see cref="OperationCanceledException"/>; files already deleted stay deleted. A disabled sweep does not touch the directory.
     /// </summary>
-    public Task<StagingCleanupReport> RunAsync(StagingCleanupOptions options, CancellationToken cancellationToken)
+    public async Task<StagingCleanupReport> RunAsync(StagingCleanupOptions options, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(options);
         if (!options.Enabled)
         {
-            return Task.FromResult(StagingCleanupReport.Empty);
+            return StagingCleanupReport.Empty;
         }
 
-        // File system calls block; keep them off the caller's thread.
-        return Task.Run(() => Sweep(options, cancellationToken), CancellationToken.None);
+        if (_canReleaseTransfer is not null)
+        {
+            IReadOnlyList<StagingFileEntry> journals;
+            try { journals = _directory.ListFiles(); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                LogFailed(_logger, StagingCleanupReasons.ListFailed, 1);
+                return StagingCleanupReport.Empty;
+            }
+            foreach (var file in journals)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!file.Name.StartsWith("transfer-", StringComparison.Ordinal) || !file.Name.EndsWith(".json", StringComparison.Ordinal) ||
+                    !Guid.TryParseExact(file.Name[9..^5], "N", out var attemptId)) continue;
+                try
+                {
+                    var retained = RetainedTransfer.Load(_directory, attemptId);
+                    if (!ManagedBackupLayout.IsManagedArtifactName(retained.Artifact.FileName) ||
+                        !ManagedBackupLayout.IsManagedArtifactName(retained.SourceFile.FileName) ||
+                        _registry.IsHeld(retained.Artifact.FileName) || _registry.IsHeld(retained.SourceFile.FileName)) continue;
+                    // The durable local journal remains pinned until the owning backend confirms the attempt is terminal and the remote parts of its uploads are aborted.
+                    if (await _canReleaseTransfer(attemptId, cancellationToken).ConfigureAwait(false) &&
+                        await AbortUploadsAsync(attemptId, retained, cancellationToken).ConfigureAwait(false))
+                        retained.Release(_directory, attemptId);
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+                {
+                    LogFailed(_logger, StagingCleanupReasons.DeleteFailed, 1);
+                }
+            }
+        }
+        return await Task.Run(() => Sweep(options, cancellationToken), CancellationToken.None).ConfigureAwait(false);
+    }
+
+    /// <summary>True when nothing remote is left to abort. A failed abort keeps the journal, so the next sweep retries it; without an aborter an upload is never forgotten.</summary>
+    private async Task<bool> AbortUploadsAsync(Guid attemptId, RetainedTransfer retained, CancellationToken cancellationToken)
+    {
+        foreach (var upload in retained.Uploads ?? [])
+        {
+            try
+            {
+                if (_uploads is null) return false;
+                using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                bounded.CancelAfter(TimeSpan.FromMinutes(2));
+                await _uploads.AbortAsync(attemptId, upload, bounded.Token).ConfigureAwait(false);
+            }
+            catch (Exception error) when (error is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            {
+                LogFailed(_logger, StagingCleanupReasons.AbortFailed, 1);
+                return false;
+            }
+        }
+        return true;
     }
 
     private StagingCleanupReport Sweep(StagingCleanupOptions options, CancellationToken cancellationToken)
@@ -86,7 +142,7 @@ public sealed partial class StagingCleaner
             }
 
             // Checked right before the delete, after everything above: the shorter the gap, the smaller the window for a new attempt to claim the name.
-            if (_registry.IsHeld(file.Name))
+            if (_registry.IsHeld(file.Name) || RetainedTransfer.IsPinned(_directory, file.Name))
             {
                 tally.KeptInUse++;
                 continue;

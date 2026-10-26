@@ -5,6 +5,7 @@ import { useTenant } from '@/features/tenancy/use-tenant'
 import {
   clearPlatformConnectionSecret, clearTenantConnectionSecret, createPlatformConnection, createTenantConnection, deletePlatformConnection,
   deleteTenantConnection, getPlatformConnections, getPlatformProviders, getPlatformTenantConnections, getTenantConnections, getTenantProviders,
+  getTenantConnectionCapacity, probeTenantConnectionCapacity,
   setPlatformConnectionEnabled, setPlatformConnectionSecret, setTenantConnectionEnabled, setTenantConnectionSecret, testPlatformConnection,
   testTenantConnection, updatePlatformConnection, updateTenantConnection,
 } from './api'
@@ -19,6 +20,7 @@ export const storageConnectionKeys = {
   tenantAll: (tenantId: string) => ['tenant', tenantId, 'storage-connections'] as const,
   tenantList: (tenantId: string) => ['tenant', tenantId, 'storage-connections', 'list'] as const,
   tenantProviders: (tenantId: string) => ['tenant', tenantId, 'storage-connections', 'providers'] as const,
+  tenantCapacity: (tenantId: string, id: string) => ['tenant', tenantId, 'storage-connections', id, 'capacity'] as const,
   platformAll: ['platform', 'storage-connections'] as const,
   platformList: (filters: PlatformConnectionFilters) => ['platform', 'storage-connections', 'list', filters] as const,
   platformLists: ['platform', 'storage-connections', 'list'] as const,
@@ -54,6 +56,27 @@ export function useTenantProviders() {
 export function useTenantConnections() {
   const { tenantId } = useTenant()
   return useQuery({ queryKey: storageConnectionKeys.tenantList(tenantId), queryFn: ({ signal }) => getTenantConnections(tenantId, signal) })
+}
+
+export function useTenantConnectionCapacity(connectionId: string) {
+  const { tenantId } = useTenant()
+  return useQuery({
+    queryKey: storageConnectionKeys.tenantCapacity(tenantId, connectionId),
+    queryFn: ({ signal }) => getTenantConnectionCapacity(tenantId, connectionId, signal),
+    enabled: Boolean(tenantId && connectionId),
+    refetchInterval: (query) => query.state.data?.status === 'Pending' ? 2_000 : false,
+  })
+}
+
+export function useProbeTenantConnectionCapacity(connectionId: string) {
+  const { tenantId } = useTenant()
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: () => probeTenantConnectionCapacity(tenantId, connectionId),
+    onSuccess: (data) => {
+      client.setQueryData(storageConnectionKeys.tenantCapacity(tenantId, connectionId), data)
+    },
+  })
 }
 
 export function usePlatformProviders() {

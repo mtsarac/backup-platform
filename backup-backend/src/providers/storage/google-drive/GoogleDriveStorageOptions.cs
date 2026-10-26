@@ -21,9 +21,51 @@ public sealed class GoogleDriveStorageOptions
         TimeSpan? maxRetryDelay = null,
         TimeSpan? uploadTimeout = null,
         int maxSessionRestarts = 2)
+        : this(clientId, clientSecret, tenantId, connectionId, folderId, stagingDirectory, chunkSizeBytes, minStagingFreeBytes, maxRetryAttempts, maxRetryElapsed, requestTimeout, retryBaseDelay, maxRetryDelay, uploadTimeout, maxSessionRestarts, requireClientSecrets: true)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(clientSecret);
+    }
+
+    public GoogleDriveStorageOptions(
+        Guid tenantId,
+        Guid connectionId,
+        string? folderId = null,
+        string? stagingDirectory = null,
+        int chunkSizeBytes = DefaultChunkSize,
+        long minStagingFreeBytes = DefaultMinStagingFreeBytes,
+        int maxRetryAttempts = 5,
+        TimeSpan? maxRetryElapsed = null,
+        TimeSpan? requestTimeout = null,
+        TimeSpan? retryBaseDelay = null,
+        TimeSpan? maxRetryDelay = null,
+        TimeSpan? uploadTimeout = null,
+        int maxSessionRestarts = 2)
+        : this(string.Empty, string.Empty, tenantId, connectionId, folderId, stagingDirectory, chunkSizeBytes, minStagingFreeBytes, maxRetryAttempts, maxRetryElapsed, requestTimeout, retryBaseDelay, maxRetryDelay, uploadTimeout, maxSessionRestarts, requireClientSecrets: false)
+    {
+    }
+
+    private GoogleDriveStorageOptions(
+        string? clientId,
+        string? clientSecret,
+        Guid tenantId,
+        Guid connectionId,
+        string? folderId,
+        string? stagingDirectory,
+        int chunkSizeBytes,
+        long minStagingFreeBytes,
+        int maxRetryAttempts,
+        TimeSpan? maxRetryElapsed,
+        TimeSpan? requestTimeout,
+        TimeSpan? retryBaseDelay,
+        TimeSpan? maxRetryDelay,
+        TimeSpan? uploadTimeout,
+        int maxSessionRestarts,
+        bool requireClientSecrets)
+    {
+        if (requireClientSecrets)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
+            ArgumentException.ThrowIfNullOrWhiteSpace(clientSecret);
+        }
         if (tenantId == Guid.Empty) throw new ArgumentException("Tenant ID must not be empty.", nameof(tenantId));
         if (connectionId == Guid.Empty) throw new ArgumentException("Connection ID must not be empty.", nameof(connectionId));
         if (chunkSizeBytes <= 0 || chunkSizeBytes % (256 * 1024) != 0)
@@ -42,8 +84,8 @@ public sealed class GoogleDriveStorageOptions
             || UploadTimeout <= TimeSpan.Zero || MaxSessionRestarts < 0)
             throw new ArgumentOutOfRangeException(nameof(maxRetryElapsed), "Retry and timeout limits must be positive and ordered.");
 
-        ClientId = clientId;
-        ClientSecret = clientSecret;
+        ClientId = clientId ?? string.Empty;
+        ClientSecret = clientSecret ?? string.Empty;
         TenantId = tenantId;
         ConnectionId = connectionId;
         FolderId = folderId;

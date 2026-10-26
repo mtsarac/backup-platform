@@ -18,89 +18,10 @@ internal static class DiscoveryParsers
     public const int MssqlDefaultPort = 1433;
     public const int PostgreSqlDefaultPort = 5432;
 
-    /// <summary>The <c>docker ps --format</c> template matching <see cref="ParseDockerLine"/>.</summary>
-    public const string DockerFormat = "{{.Names}}|{{.Image}}|{{.Ports}}";
-
-    private const int MaximumExpandedPortRange = 64;
-
     public static int? ParsePort(string? text) =>
         int.TryParse(text?.Trim().Trim('\'', '"'), NumberStyles.None, CultureInfo.InvariantCulture, out var port) && port is >= 1 and <= 65535 ? port : null;
 
     // ---- docker -------------------------------------------------------------------------------------------------
-
-    public static DockerContainer? ParseDockerLine(string line)
-    {
-        var columns = line.Split('|', 3);
-        if (columns.Length != 3 || columns[0].Trim() is not { Length: > 0 } name || columns[1].Trim() is not { Length: > 0 } image)
-        {
-            return null;
-        }
-        return new DockerContainer(name, image, ParseDockerPorts(columns[2]));
-    }
-
-    /// <summary>
-    /// Parses a <c>Ports</c> column such as <c>0.0.0.0:14333-&gt;1433/tcp, :::14333-&gt;1433/tcp, 5432/tcp</c>. Only tcp mappings reachable through
-    /// the loopback address are published ports; a mapping bound to another interface address cannot be reached as <c>localhost</c>
-    /// and is ignored. Exposed-only ports (<c>5432/tcp</c>) carry no host port. IPv4 and IPv6 duplicates collapse.
-    /// </summary>
-    public static IReadOnlyList<DockerPortMapping> ParseDockerPorts(string ports)
-    {
-        var mappings = new List<DockerPortMapping>();
-        foreach (var entry in ports.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
-        {
-            var protocolAt = entry.LastIndexOf('/');
-            if (protocolAt >= 0 && !entry[(protocolAt + 1)..].Equals("tcp", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-            var mapping = protocolAt >= 0 ? entry[..protocolAt] : entry;
-            var arrow = mapping.IndexOf("->", StringComparison.Ordinal);
-            if (arrow < 0)
-            {
-                AddRange(mappings, null, mapping);
-                continue;
-            }
-            var published = mapping[..arrow];
-            var portAt = published.LastIndexOf(':');
-            var address = portAt >= 0 ? published[..portAt] : string.Empty;
-            if (address is not ("" or "0.0.0.0" or "::" or ":::" or "[::]" or "127.0.0.1" or "::1" or "[::1]"))
-            {
-                continue;
-            }
-            AddRange(mappings, portAt >= 0 ? published[(portAt + 1)..] : published, mapping[(arrow + 2)..]);
-        }
-        return mappings.Distinct().ToList();
-    }
-
-    private static void AddRange(List<DockerPortMapping> mappings, string? host, string container)
-    {
-        var containerPorts = ExpandPorts(container);
-        var hostPorts = host is null ? null : ExpandPorts(host);
-        if (hostPorts is not null && hostPorts.Count != containerPorts.Count)
-        {
-            return;
-        }
-        for (var i = 0; i < containerPorts.Count; i++)
-        {
-            mappings.Add(new DockerPortMapping(hostPorts?[i], containerPorts[i]));
-        }
-    }
-
-    /// <summary>One port or an <c>a-b</c> range (bounded); anything else is no port.</summary>
-    private static List<int> ExpandPorts(string text)
-    {
-        var dash = text.IndexOf('-');
-        if (dash < 0)
-        {
-            return ParsePort(text) is { } single ? [single] : [];
-        }
-        if (ParsePort(text[..dash]) is not { } first || ParsePort(text[(dash + 1)..]) is not { } last
-            || last < first || last - first >= MaximumExpandedPortRange)
-        {
-            return [];
-        }
-        return [.. Enumerable.Range(first, last - first + 1)];
-    }
 
     /// <summary>
     /// The engine a container runs, from its image repository and the container port: an image name alone is not enough (a

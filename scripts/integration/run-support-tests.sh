@@ -2,7 +2,7 @@
 # M6-only verification (support access); never runs the full backend/Agent/PostgreSQL suites.
 set +x
 set -euo pipefail
-# shellcheck source=../lib/common.sh
+# shellcheck source=scripts/lib/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 unit=false postgres=false selected=false
 build_args=()

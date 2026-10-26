@@ -1,0 +1,10 @@
+# Nonsecret service configuration. Protect this file as root:backup-agent 0640.
+Agent__CredentialStoreDirectory=/var/lib/backup-platform-agent/identity
+Agent__Backup__Staging__AgentDirectory=/var/lib/backup-platform-agent/staging
+Agent__Backup__Staging__Mapping=SameHost
+# Optional PostgreSQL physical backup: Logical (default), Physical (WAL fetch), Streaming.
+Agent__Backup__PostgreSql__BackupMode=Logical
+# PostgreSQL tools must be installed separately and match the server major for physical backups.
+# Agent__Backup__PostgreSql__ClientToolsDirectory=/usr/lib/postgresql/18/bin
+# After certificate enrollment, enable both and set a protected PFX password via your secret deployment tooling.
+# AGENT_MTLS_CERTIFICATE_PATH=/var/lib/backup-platform-agent/identity/client-certificate.pfx

@@ -234,7 +234,8 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
             Options = new RestoreTaskOptions
             {
                 TerminateActiveConnections = operation.Options.TerminateActiveConnections, VerifyChecksum = operation.Options.VerifyChecksum,
-                VerifyBackup = operation.Options.VerifyBackup
+                VerifyBackup = operation.Options.VerifyBackup,
+                Files = operation.Options.Files is { } files ? new RestoreFileSelection(files.Paths, files.RelativeDirectory) : null
             },
             StagingReference = StagingReference,
             CancellationRequested = operation.CancellationRequestedAt is not null
@@ -251,7 +252,8 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         return new RestoreView(operation.Id, operation.ArtifactId, operation.ReplicaId, operation.AgentId.Value, operation.Status.ToString(), operation.Mode.ToString(),
             operation.OverwritePolicy.ToString(), operation.SourceAccess.ToString(), operation.DatabaseName,
             new RestoreTargetView(target.Host, target.Port, target.IntegratedSecurity, target.DatabaseCredentialReference, target.Encrypt, target.TrustServerCertificate),
-            new RestoreOptionsView(options.TerminateActiveConnections, options.VerifyChecksum, options.VerifyBackup),
+            new RestoreOptionsView(options.TerminateActiveConnections, options.VerifyChecksum, options.VerifyBackup,
+                options.Files is { } files ? new RestoreFileSelection(files.Paths, files.RelativeDirectory) : null),
             operation.CreatedAt, operation.StartedAt, operation.CompletedAt, operation.CancellationRequestedAt,
             operation.FailureCode, Reason(operation.FailureCode), operation.TargetState?.ToString(), TargetStateSummary(operation.TargetState),
             new RestoreProgressView(current?.ProgressStage, current?.ProgressPercent, current?.ProgressAt),
@@ -299,6 +301,7 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         null => null,
         RestoreFailureCodes.ReplicaUnavailable => "The backup file could not be found or read in storage.",
         RestoreFailureCodes.ArtifactTransferFailed => "The backup file could not be copied to the agent's staging directory.",
+        RestoreFailureCodes.ArtifactKeyUnavailable => "The encryption key of this backup is not available (its wrap key may have been retired), so the backup cannot be decrypted.",
         RestoreFailureCodes.ChecksumMismatch => "The backup file does not match its recorded checksum; nothing was restored.",
         RestoreFailureCodes.StorageUnavailable => "The backup storage was temporarily unavailable.",
         RestoreFailureCodes.BackupInvalid => "The database engine reported the backup as unreadable or invalid.",
@@ -311,7 +314,7 @@ public sealed class RestoreService(IRestoreStore store, RestoreExecutionOptions 
         RestoreFailureCodes.TargetInUse => "The target database has active connections.",
         RestoreFailureCodes.TargetProtected => "The target database is protected and cannot be restored over.",
         RestoreFailureCodes.InsufficientDiskSpace => "There is not enough disk space for the restore, on the agent's staging volume or on the target server.",
-        RestoreFailureCodes.SqlRestoreFailed => "The database engine could not complete the restore.",
+        RestoreFailureCodes.SqlRestoreFailed => "The restore could not be completed.",
         RestoreFailureCodes.DatabaseUnavailable => "The database server could not be reached.",
         RestoreFailureCodes.OperationTimedOut => "A restore operation timed out.",
         RestoreFailureCodes.AuthenticationFailed => "The database credentials were rejected.",

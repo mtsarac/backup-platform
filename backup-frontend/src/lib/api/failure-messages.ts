@@ -1,7 +1,9 @@
 import { tx } from '@/lib/i18n'
 import { ApiError } from './client'
+import type { TechnicalItem } from '@/components/ui/technical-details'
 
 const messages: Record<string, string> = {
+  get DirectPathUnavailable() { return tx('DirectPathUnavailable: Doğrudan Agent bağlantısı veya güvenli diske yazma desteği kullanılamıyor. Backend aktarımına geçilmez.') },
   get replica_unavailable() { return tx("Replica şu anda indirme için kullanılamıyor.") },
   get replica_not_found() { return tx("Replica bulunamadı veya bu Backup altında erişilemiyor.") },
   get storage_read_not_supported() { return tx("Storage Provider güvenli indirmeyi desteklemiyor.") },
@@ -46,7 +48,10 @@ const messages: Record<string, string> = {
   get storage_connection_unavailable() { return tx("Hedef depolama bağlantısı bulunamadı veya bu Job'un Storage Provider'ına ait değil; yeni backup başlatılamaz.") },
   get multi_destination_execution_not_supported() { return tx("Bu zamanlanmış çalışma, çoklu hedefli yedekleme desteklenmeden önce kaydedilmişti; çalıştırma başlatılmadı ve otomatik olarak yeniden denenmez.") },
   get agent_multi_destination_unsupported() { return tx("İşin Agent'ı çoklu hedefli yedekleme desteği bildirmedi: Agent eski olabilir veya bağlantısını henüz tamamlamamış olabilir (yeni Agent ilk heartbeat'inden birkaç saniye sonra bildirir). Kısa süre sonra yeniden deneyin ya da Agent'ı güncelleyin. Yeni backup başlatılamadı.") },
-  get destination_combination_unsupported() { return tx("İşin hedefleri aynı depolama bağlantısına çözülüyor; her hedef ayrı bir bağlantı olmalı. Yeni backup başlatılamadı.") },
+  get agent_direct_storage_unsupported() { return tx("Bu SFTP/Google Drive hedefi eski relay modunda yapılandırılmış veya Agent doğrudan depolama desteği bildirmedi. Relay kapatıldı: Agent'ı güncelleyin ve hedefi doğrudan aktarım için yeniden kaydedin. Mevcut yedekler etkilenmedi; yeni backup başlatılamadı.") },
+  get agent_engine_unsupported() { return tx('Agent seçilen yedekleme motorunu desteklemiyor. Agent yeteneklerini kontrol edin veya Agent’ı güncelleyin.') },
+  get destination_combination_unsupported() { return tx("İşin hedefleri birlikte çalıştırılamıyor: aynı depolama bağlantısı birden fazla kez kullanılıyor ya da İşin Agent'ı bir hedef türünü veya 3-2-1 denetimini desteklemiyor. Yeni backup başlatılamadı.") },
+  get three_two_one_unsatisfied() { return tx("İş 3-2-1 kuralını zorunlu kılıyor ancak hedefleri iki farklı ortam türünü ve uzak konumdaki bir kopyayı kapsamıyor. Depolama bağlantılarının ortam ve konum ayarlarını ile işin kaynak konumunu kontrol edin. Yeni backup başlatılamadı.") },
   get storage_connection_not_found() { return tx("Depolama bağlantısı bulunamadı. Liste güncel olmayabilir.") },
   get storage_connection_name_taken() { return tx("Bu ada sahip bir depolama bağlantısı zaten var.") },
   get administratively_disabled() { return tx("Bağlantı platform tarafından kilitlendi. Tenant tercihi bu kilidi kaldıramaz; platform yöneticisine başvurun.") },
@@ -144,17 +149,71 @@ const messages: Record<string, string> = {
   get credentials_required() { return tx("Önce bu Instance için bir kimlik bilgisi referansı kaydedin.") },
   get scan_superseded() { return tx("Tarama sonucu daha yeni bir tarama tarafından değiştirildi. Sayfayı yenileyin.") },
   get transport_not_configured() { return tx("Bu kanal türü için platform aktarımı yapılandırılmamış. Platform yöneticisine başvurun.") },
+  get EncryptionRequired() { return tx("İş şifreleme gerektiriyor ama yedek dosyası şifrelenmeden geldi; dosya yayımlanmadı.") },
+  get artifact_not_encrypted() { return tx("Bu yedek dosyası şifreli değil; şifre çözme veya acil destek erişimi uygulanamaz.") },
+  get key_unavailable() { return tx("Şifreleme anahtarı kullanılamıyor (emekli veya eksik). Dosya yalnızca Platform kurtarma anahtarı ile çevrimdışı çözülebilir.") },
+  get decrypt_not_permitted() { return tx("Destek oturumu üzerinden şifre çözülemez. Gerekirse acil destek erişimi isteği açın.") },
+  get artifact_not_found() { return tx("Backup bulunamadı veya bu tenant'a ait değil.") },
+  get key_not_found() { return tx("Anahtar sürümü bulunamadı.") },
+  get cannot_retire_active_key() { return tx("Etkin anahtar emekli edilemez. Önce anahtarı döndürün.") },
+  get already_retired() { return tx("Anahtar zaten emekli edilmiş.") },
+  get self_approval_forbidden() { return tx("İsteği açan yönetici kendi isteğini onaylayamaz veya reddedemez; farklı bir PlatformAdmin gerekir.") },
+  get request_not_pending() { return tx("İstek artık onay beklemiyor; zaten karara bağlanmış veya kullanılmış.") },
+  get request_expired() { return tx("İsteğin süresi doldu. Yeni bir istek açın.") },
+  get request_not_approved() { return tx("İstek onaylanmadığı için indirilemez.") },
+  get request_consumed() { return tx("Onaylanan istek zaten kullanıldı. Tek kullanımlıktır; yeni bir istek açın.") },
+  get not_requester() { return tx("Yalnızca isteği açan yönetici indirebilir.") },
+  get not_a_public_key() { return tx("Geçerli bir genel anahtar (PUBLIC KEY, SubjectPublicKeyInfo PEM) girin.") },
+  get private_key_rejected() { return tx("Özel anahtar kabul edilmez. Yalnızca genel anahtarı girin; özel anahtar sizde kalmalıdır.") },
+  get not_rsa() { return tx("Yalnızca RSA genel anahtarları desteklenir.") },
+  get too_weak() { return tx("RSA anahtarı en az 4096 bit olmalıdır.") },
+}
+// Wording that differs from the shared table where the failure happens (restore) or where a shared code means something else (connections).
+export type ErrorScope = 'restore' | 'storageConnection'
+const scopedMessages: Record<ErrorScope, Record<string, string>> = {
+  restore: {
+  get ReplicaUnavailable() { return tx("Replica geri yükleme için kullanılamıyor.") }, get ArtifactTransferFailed() { return tx("Artifact aktarımı tamamlanamadı.") },
+  get ArtifactKeyUnavailable() { return tx("Yedek şifreli ve şifreleme anahtarı kullanılamıyor (anahtar emekli edilmiş olabilir); yedek çözülemedi, geri yükleme başlatılmadı.") },
+  get ChecksumMismatch() { return tx("Artifact checksum değeri eşleşmedi.") }, get BackupInvalid() { return tx("Backup doğrulaması başarısız oldu.") },
+  get BackupTypeUnsupported() { return tx("Bu backup türü geri yükleme için desteklenmiyor.") }, get IncompatibleVersion() { return tx("Kaynak ve hedef Database motoru sürümleri uyumlu değil.") },
+  get FileMappingFailed() { return tx("Database dosya eşlemesi oluşturulamadı.") }, get PreCheckFailed() { return tx("Geri yükleme ön kontrolleri başarısız oldu.") },
+  get TargetDatabaseExists() { return tx("Hedef Database zaten var. Yeni Database modu üzerine yazmaz.") }, get TargetDatabaseNotFound() { return tx("Üzerine yazılacak hedef Database bulunamadı.") },
+  get TargetInUse() { return tx("Hedef Database kullanımda.") }, get TargetProtected() { return tx("Korunan hedef Database değiştirilemez.") },
+  get InsufficientDiskSpace() { return tx("Hedefte yeterli disk alanı yok.") }, get SqlRestoreFailed() { return tx("Database geri yükleme işlemi tamamlanamadı.") },
+  get VerificationFailed() { return tx("Backup geri yüklendi ancak geri yüklenen Database bütünlük veya veri okuma kontrollerinden geçemedi.") },
+  get confirmation_mismatch() { return tx("Yazdığınız Database adı eşleşmiyor.") }, get retention_not_elapsed() { return tx("Rollback kopyasının koruma süresi henüz dolmadı.") },
+  get cleanup_not_applicable() { return tx("Bu işlem için temizlik şu anda uygulanamaz.") },
+  get NotClaimed() { return tx("Restore süresi içinde Agent tarafından alınmadı. Hedef değiştirilmedi.") },
+  get precheck_rejected() { return tx("Ön kontrol bu geri yükleme ile eşleşmiyor veya başarılı değil. Ön kontrolü yeniden çalıştırın.") },
+  get agent_transfer_required() { return tx("Replica başka bir Agent üzerinde. Agentlar arası aktarım desteklenmiyor.") },
+  get no_accessible_replica() { return tx("Bu Agent tarafından erişilebilen Replica yok.") }, get replica_not_restorable() { return tx("Replica geri yüklemeye uygun değil.") },
+  get replica_not_verified() { return tx("Replica doğrulanmadı.") }, get checksum_unavailable() { return tx("Artifact checksum bilgisi yok.") }, get backup_type_unsupported() { return tx("Backup türü desteklenmiyor.") },
+  get overwrite_confirmation_required() { return tx("Üzerine yazmayı hedef Database adıyla onaylayın.") },
+  },
+  storageConnection: {
+    get concurrent_update() { return tx('Bağlantı başka bir işlemle aynı anda değiştirildi. Sayfayı yenileyip tekrar deneyin.') },
+    get rotation_test_failed() { return tx('Yeni kimlik bilgisi veya sunucu parmak izi doğrulanamadı. Mevcut bağlantı ve kimlik bilgisi korunuyor.') },
+  },
 }
 // Codes whose text must win over the generic 403/404 wording.
-const statusSpecificCodes: Record<string, true> = { tenant_not_found: true, user_not_found: true, membership_not_found: true, agent_not_found: true, plan_not_found: true, quota_policy_not_found: true, subscription_not_found: true, platform_admin_required: true, enrollment_disabled: true, storage_connection_not_found: true, platform_managed_provider: true, notification_channel_not_found: true }
-export function failureMessage(code?: string | null): string {
+const statusSpecificCodes: Record<string, true> = { tenant_not_found: true, user_not_found: true, membership_not_found: true, agent_not_found: true, plan_not_found: true, quota_policy_not_found: true, subscription_not_found: true, platform_admin_required: true, enrollment_disabled: true, storage_connection_not_found: true, platform_managed_provider: true, notification_channel_not_found: true, self_approval_forbidden: true, not_requester: true, decrypt_not_permitted: true, key_not_found: true, artifact_not_found: true }
+const lookup = (table: Record<string, string>, code: string) => Object.hasOwn(table, code) ? table[code] : undefined
+
+export function failureMessage(code?: string | null, scope?: ErrorScope): string {
   if (!code) return tx('İşlem başarısız oldu.')
-  return messages[code] ?? (/^[A-Za-z0-9_.-]{1,80}$/.test(code) ? tx("İşlem başarısız oldu ({0}).", { "0": code }) : tx('İşlem başarısız oldu.'))
+  const known = (scope && lookup(scopedMessages[scope], code)) ?? lookup(messages, code)
+  return known ?? (/^[A-Za-z0-9_.-]{1,80}$/.test(code) ? tx("İşlem başarısız oldu ({0}).", { "0": code }) : tx('İşlem başarısız oldu.'))
 }
-export function errorMessage(error: unknown): string {
+
+/** Failures that carry a request body the user can fix: the scoped wording applies only there, never to auth, missing-resource or server failures. */
+const isRequestFailure = (error: ApiError) => error.status !== 401 && error.status !== 403 && error.status !== 404 && error.status < 500
+
+/** What happened, in plain words. A single sentence, used wherever a full notice does not fit (dialogs, inline hints). */
+export function errorMessage(error: unknown, scope?: ErrorScope): string {
   if (error instanceof ApiError) {
     if (error.status === 401) return tx('Oturumunuz sona erdi. Yeniden giriş yapın.')
     const code = error.reason ?? error.code
+    if (scope && isRequestFailure(error)) return failureMessage(code, scope)
     if (error.code === 'support_access_denied') return failureMessage(code)
     if (error.code === 'support_session_not_found' || error.code === 'not_session_owner' || error.code === 'replace_forbidden' || error.code === 'support_unavailable') return failureMessage(code)
     if ((error.status === 403 || error.status === 404) && code && Object.hasOwn(statusSpecificCodes, code)) return messages[code]
@@ -164,4 +223,81 @@ export function errorMessage(error: unknown): string {
     return failureMessage(code)
   }
   return tx('Sunucuya ulaşılamadı. Bağlantınızı kontrol edip tekrar deneyin.')
+}
+
+export interface ErrorDescription {
+  /** What happened. */
+  what: string
+  /** What it means for the user's data. */
+  dataImpact: string
+  /** The one thing to do next. */
+  action: string
+  /** Raw code, status and field: for the collapsed technical details only. */
+  technical: TechnicalItem[]
+}
+
+const subscriptionUnchanged = () => tx("Abonelik ve depolama limiti değişmedi; yedekleriniz etkilenmedi.")
+
+// Codes whose consequence for the data is specific; every other failure gets the honest generic line for its kind.
+const guidance: Record<string, { dataImpact: () => string; action: () => string }> = {
+  quota_exceeded: { dataImpact: () => tx("Mevcut yedekleriniz silinmedi ve geri yüklenebilir."), action: () => tx("Depolama alanı açmak için yöneticinize danışın.") },
+  quota_size_unknown: { dataImpact: () => tx("Mevcut yedekleriniz silinmedi ve geri yüklenebilir."), action: () => tx("Yöneticinize danışın.") },
+  QuotaExceeded: { dataImpact: () => tx("Mevcut yedekleriniz silinmedi ve geri yüklenebilir."), action: () => tx("Depolama alanı açmak için yöneticinize danışın.") },
+  integrity_mismatch: { dataImpact: () => tx("Dosya doğrulanamadığı için kullanılmadı; yedeğiniz değişmedi."), action: () => tx("Yeni bir indirme başlatın.") },
+  AgentLost: { dataImpact: () => tx("Bu deneme tamamlanmadı; önceki başarılı yedekleriniz korunur."), action: () => tx("Yedekleme bilgisayarının açık ve bağlı olduğunu kontrol edip yeniden deneyin.") },
+  connection_in_use: { dataImpact: () => tx("Bağlantı silinmedi; yedeklemeler kullanmaya devam ediyor."), action: () => tx("Önce bu bağlantıyı kullanan işleri başka bir depolamaya taşıyın.") },
+  private_key_rejected: { dataImpact: () => tx("Özel anahtar gönderilmedi ve kaydedilmedi."), action: () => tx("Yalnızca genel anahtarı girin.") },
+  plan_already_assigned: { dataImpact: () => subscriptionUnchanged(), action: () => tx("Farklı bir plan seçin.") },
+  plan_disabled: { dataImpact: () => subscriptionUnchanged(), action: () => tx("Etkin bir plan seçin.") },
+  subscription_not_active: { dataImpact: () => subscriptionUnchanged(), action: () => tx("Abonelik durumu yenilendi; geçerli işlemlerden birini seçin.") },
+  subscription_not_suspended: { dataImpact: () => subscriptionUnchanged(), action: () => tx("Abonelik durumu yenilendi; geçerli işlemlerden birini seçin.") },
+  subscription_not_open: { dataImpact: () => subscriptionUnchanged(), action: () => tx("Yeni bir plan atayın.") },
+  subscription_expired: { dataImpact: () => subscriptionUnchanged(), action: () => tx("Yeni bir plan atayın.") },
+  subscription_not_found: { dataImpact: () => subscriptionUnchanged(), action: () => tx("Önce bir plan atayın.") },
+}
+
+function technicalItems(error: unknown): TechnicalItem[] {
+  if (!(error instanceof ApiError)) return []
+  const code = error.reason ?? error.code
+  const items: TechnicalItem[] = []
+  if (code && /^[A-Za-z0-9_.-]{1,80}$/.test(code)) items.push({ label: tx("Hata kodu"), value: code })
+  items.push({ label: tx("HTTP durumu"), value: String(error.status) })
+  if (error.field && /^[A-Za-z0-9_.-]{1,80}$/.test(error.field)) items.push({ label: tx("Alan"), value: error.field })
+  return items
+}
+
+/** A failure reported as a bare code (a run, a replica, a restore), not as a failed request. */
+export function describeFailure(code: string | null | undefined, scope?: ErrorScope): ErrorDescription {
+  const what = failureMessage(code, scope)
+  const technical = code && /^[A-Za-z0-9_.-]{1,80}$/.test(code) ? [{ label: tx("Hata kodu"), value: code }] : []
+  const key = code ?? ''
+  if (Object.hasOwn(guidance, key)) return { what, dataImpact: guidance[key].dataImpact(), action: guidance[key].action(), technical }
+  if (scope === 'restore') return { what, dataImpact: tx("Yedeğiniz değişmedi; hedef veritabanının durumunu kontrol edin."), action: tx("Ayrıntıları kontrol edip geri yüklemeyi yeniden deneyin."), technical }
+  return { what, dataImpact: tx("Mevcut yedekleriniz etkilenmedi."), action: tx("Ayrıntıları kontrol edip yeniden deneyin."), technical }
+}
+
+/** A permission wall is a failure too: nothing was changed, and the way forward is a person who can grant access. */
+export function accessDenied(what: string): ErrorDescription {
+  return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Yöneticinize danışın."), technical: [] }
+}
+
+/** A record that is gone or not theirs: nothing changed, and the way forward is to pick again from the list. */
+export function notFound(what: string): ErrorDescription {
+  return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Sayfayı yenileyip kaydı listeden yeniden seçin."), technical: [] }
+}
+
+/** Every failure the user sees says what happened, what it means for the data and what to do next. */
+export function describeError(error: unknown, scope?: ErrorScope): ErrorDescription {
+  const what = errorMessage(error, scope)
+  const technical = technicalItems(error)
+  const key = error instanceof ApiError ? error.reason ?? error.code ?? '' : ''
+  const known = Object.hasOwn(guidance, key) ? guidance[key] : undefined
+  if (known) return { what, dataImpact: known.dataImpact(), action: known.action(), technical }
+  const uncertain = tx("Mevcut yedekleriniz etkilenmedi; işlemin tamamlanıp tamamlanmadığını listeden kontrol edin.")
+  if (!(error instanceof ApiError)) return { what, dataImpact: uncertain, action: tx("İnternet bağlantınız düzeldiğinde işlemi tekrarlayın."), technical }
+  if (error.status === 401) return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Giriş yaptıktan sonra işlemi tekrarlayın."), technical }
+  if (error.status === 403) return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Yöneticinize danışın."), technical }
+  if (error.status === 404) return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Sayfayı yenileyip kaydı listeden yeniden seçin."), technical }
+  if (error.status >= 500) return { what, dataImpact: uncertain, action: tx("Sorun sürerse teknik ayrıntıları destek ekibine iletin."), technical }
+  return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Bilgileri kontrol edip tekrar deneyin."), technical }
 }

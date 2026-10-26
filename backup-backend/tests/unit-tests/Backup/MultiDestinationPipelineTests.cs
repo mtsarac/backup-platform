@@ -1,6 +1,8 @@
 using BackupPlatform.Agent.Core.Backup;
 using BackupPlatform.BackupProviders.Abstractions.Database;
 using BackupPlatform.StorageProviders.Abstractions;
+using System.Security.Cryptography;
+using BackupPlatform.Encryption;
 
 namespace BackupPlatform.UnitTests.Backup;
 
@@ -52,6 +54,38 @@ public sealed class MultiDestinationPipelineTests : IDisposable
     }
 
     [Fact]
+    public async Task Resume_after_a_pause_verifies_the_destination_that_finished_instead_of_failing_or_re_uploading_it()
+    {
+        using var pause = new CancellationTokenSource();
+        var stores = new[] { NewStorage(), NewStorage() };
+        stores[1].OnPut = (_, _, _, token) =>
+        {
+            pause.Cancel();
+            token.ThrowIfCancellationRequested();
+            throw new InvalidOperationException("The pause signal must cancel the open transfer.");
+        };
+        var request = Request([Destination("central", stores[0], true), Destination("sftp", stores[1])], required: 2) with
+        {
+            AttemptId = Guid.NewGuid(), PauseToken = pause.Token, RecordCheckpointAsync = (_, _) => Task.CompletedTask
+        };
+
+        var paused = await _h.RunAsync(request);
+
+        Assert.Equal(DatabaseBackupStatus.Paused, paused.Status);
+        Assert.Equal(PipelineHarness.BackupBytes, Assert.Single(stores[0].Objects).Value);
+        Assert.Empty(stores[1].Objects);
+
+        // Storage refuses to overwrite: the first destination's object from before the pause is verified, never rewritten.
+        stores[1].OnPut = null;
+        var resumed = await _h.RunAsync(request with { ResumeTransfer = true, PauseToken = default });
+
+        Assert.Equal(DatabaseBackupStatus.Succeeded, resumed.Status);
+        Assert.All(resumed.Destinations, destination => Assert.Equal(BackupDestinationState.Verified, destination.State));
+        Assert.Equal(2, resumed.Destinations.Count);
+        Assert.All(stores, store => Assert.Equal(PipelineHarness.BackupBytes, Assert.Single(store.Objects).Value));
+    }
+
+    [Fact]
     public async Task One_engine_backup_becomes_three_verified_replicas_of_one_artifact()
     {
         var stores = new[] { NewStorage(), NewStorage(), NewStorage() };
@@ -74,6 +108,51 @@ public sealed class MultiDestinationPipelineTests : IDisposable
         Assert.Equal(destinations.Select(d => d.ConnectionId), result.Destinations.Select(d => d.Destination.ConnectionId));
         Assert.Empty(_h.StagedFiles);
     }
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    public async Task EngineAndProviderMatrixKeepsOneVerifiedArtifactAndChargesItsStoredSize(bool useSecondEngine, bool encrypted)
+    {
+        using var key = RSA.Create(4096);
+        _h.Provider.Engine = useSecondEngine ? DatabaseEngineId.PostgreSql : DatabaseEngineId.MsSql;
+        var stores = Enumerable.Range(0, 4).Select(_ => NewStorage()).ToArray();
+        var destinations = new[] { Destination("local", stores[0], true), Destination("sftp", stores[1]), Destination("google-drive", stores[2]), Destination("central", stores[3]) };
+        var original = Request(destinations, required: 4);
+        var request = new DatabaseBackupPipelineRequest(_h.Provider.Engine, original.Connection, original.Credential, original.DatabaseName, original.Staging,
+            original.Storage, original.StoragePrefix, original.Options, original.Overwrite)
+        {
+            Destinations = destinations, RequiredVerifiedReplicas = 4,
+            Encryption = encrypted ? new ArtifactEncryption(true, [new BpeRecipient(BpeRecipientType.TenantWrap, 1, key)]) : null
+        };
+        var pipeline = new DatabaseBackupPipeline([_h.Provider], [_h.Storage], new EncryptingArtifactPreparer(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<DatabaseBackupPipeline>.Instance);
+        var result = await pipeline.RunFullBackupAsync(request, null, default);
+        Assert.Equal(DatabaseBackupStatus.Succeeded, result.Status);
+        Assert.Equal(_h.Provider.Engine, result.Source!.Instance.Engine);
+        Assert.Single(_h.Provider.Requests);
+        var copies = stores.Select(store => Assert.Single(store.Objects).Value).ToArray();
+        Assert.All(copies, copy => Assert.Equal(copies[0], copy));
+        Assert.All(result.Destinations, destination =>
+        {
+            Assert.Equal(BackupDestinationState.Verified, destination.State);
+            Assert.Equal(copies[0].LongLength, destination.Replica!.SizeBytes);
+            Assert.Equal(result.Artifact!.Checksum, destination.Replica.Checksum);
+        });
+        Assert.Equal(InMemoryStorage.Checksum(PipelineHarness.BackupBytes), result.SourceFile!.Checksum);
+        if (encrypted)
+        {
+            Assert.NotEqual(result.SourceFile.Checksum, result.Artifact!.Checksum);
+            Assert.EndsWith(".bpe", result.Artifact.FileName);
+            using var plain = new MemoryStream();
+            await BpeDecryptor.DecryptAsync(new MemoryStream(copies[0]), plain, key);
+            Assert.Equal(PipelineHarness.BackupBytes, plain.ToArray());
+        }
+        else Assert.Equal(PipelineHarness.BackupBytes, copies[0]);
+        Assert.Empty(_h.StagedFiles);
+    }
+
 
     [Fact]
     public async Task The_staged_artifact_is_still_there_for_every_destination_and_removed_only_afterwards()

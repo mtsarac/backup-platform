@@ -4,7 +4,7 @@ export type ProviderTopology = 'AgentDirect' | 'BackendRelayed'
 export type ExecutionLocation = 'Agent' | 'Backend'
 export type ConnectionOwnership = 'PlatformManaged' | 'TenantManaged'
 export type ConfigFieldKind = 'Text' | 'Number' | 'Boolean'
-export type TestMode = 'BackendRoundTrip' | 'AgentSide' | 'None'
+export type TestMode = 'BackendRoundTrip' | 'BackendReadAccess' | 'AgentSide' | 'None'
 export type TestStatus = 'Succeeded' | 'Failed' | 'NotTestable'
 
 export const connectionOwnerships: readonly ConnectionOwnership[] = ['PlatformManaged', 'TenantManaged']
@@ -126,4 +126,25 @@ export interface PlatformConnectionFilters {
   search?: string
   page?: number
   pageSize?: number
+}
+
+export type StorageCapacityStatus = 'Available' | 'Warning' | 'Critical' | 'CapacityUnavailable' | 'NotMeasurable' | 'Pending'
+
+export interface StorageCapacitySnapshot {
+  connectionId: string
+  taskId?: string | null
+  historyLimit?: number
+  history?: Array<{
+    reportedAt: string
+    totalBytes: number | null
+    usedBytes: number | null
+    freeBytes: number | null
+    status: Exclude<StorageCapacityStatus, 'Pending'>
+  }>
+  totalBytes: number | null
+  usedBytes: number | null
+  freeBytes: number | null
+  status: StorageCapacityStatus
+  reportedAt: string
+  errorMessage?: string | null
 }

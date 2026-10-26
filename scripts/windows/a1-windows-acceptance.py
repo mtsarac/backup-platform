@@ -13,11 +13,11 @@ import importlib.util
 import json
 import os
 import re
-from pathlib import Path
 import subprocess
 import sys
 import time
 import uuid
+from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
@@ -38,7 +38,7 @@ def record(name, ok, **detail):
 
 
 def powershell(command):
-    done = subprocess.run([str(HERE / 'run-powershell.sh'), '--command', command], capture_output=True, text=True, timeout=300)
+    done = subprocess.run([str(HERE / 'run-powershell.sh'), '--command', command], capture_output=True, text=True, timeout=300, check=False)
     if done.returncode:
         raise FixtureFailure('VM command failed: ' + done.stderr.replace('\n', ' ')[-300:])
     return [line.strip() for line in done.stdout.splitlines() if line.strip() and not line.startswith(('**', '#<', '<Objs'))]
@@ -49,7 +49,7 @@ def sql(script, timeout=900):
     target = os.environ['BACKUP_PLATFORM_TEST_MSSQL_HOST'] + ',' + os.environ.get('BACKUP_PLATFORM_TEST_MSSQL_PORT', '1433')
     done = subprocess.run(['docker', 'exec', '-i', '-e', 'SQLCMDPASSWORD', 'bp-dev-mssql', '/opt/mssql-tools18/bin/sqlcmd', '-S', target, '-U',
                            os.environ['BACKUP_PLATFORM_TEST_MSSQL_USER'], '-C', '-b', '-h', '-1', '-W', '-t', str(timeout)],
-                          input=script, text=True, capture_output=True, env=environment, timeout=timeout + 30)
+                          input=script, text=True, capture_output=True, env=environment, timeout=timeout + 30, check=False)
     if done.returncode:
         raise FixtureFailure('SQL failed: ' + (done.stdout + done.stderr).replace('\n', ' ')[-300:])
     return [line.strip() for line in done.stdout.splitlines() if line.strip()]
@@ -176,7 +176,6 @@ def scenario_service(stack):
 def scenario_heartbeat(stack):
     agent = stack.agent()
     names = sorted(c['identifier'] if isinstance(c, dict) else c for c in agent['capabilities'])
-    heartbeat_age = None
     first = agent['lastHeartbeatAt']
     stack.wait_agent(lambda a: a['lastHeartbeatAt'] != first, 60, 'a new heartbeat')
     ok = (agent['platform'] == 'Windows' and agent['status'] == 'Active' and agent['connectivity'] == 'online' and agent['operationalStatus'] == 'Online'
@@ -197,7 +196,7 @@ def create_big(name, rows):
 
 def scenario_backup_discovery_restore(stack, small):
     job_id = stack.job(small, 'A1 Windows Full Backup')
-    run_id, artifact = stack.backup(job_id)
+    _run_id, artifact = stack.backup(job_id)
     hashes = stack.vm_hashes()
     on_disk = hashes.get(artifact['artifactChecksum'].lower())
     record('windows-full-backup-checksum', on_disk == artifact['sizeBytes'], sizeBytes=artifact['sizeBytes'], sha256=artifact['artifactChecksum'],
@@ -246,7 +245,7 @@ def scenario_restart(stack, big):
 
 def link(state):
     """Flip the Windows VM's virtual NIC (libvirt); the only way to cut established agent connections without root on the host."""
-    done = subprocess.run(['virsh', '-c', 'qemu:///system', 'domif-setlink', VM_DOMAIN, VM_INTERFACE, state], capture_output=True, text=True, timeout=30)
+    done = subprocess.run(['virsh', '-c', 'qemu:///system', 'domif-setlink', VM_DOMAIN, VM_INTERFACE, state], capture_output=True, text=True, timeout=30, check=False)
     if done.returncode:
         raise FixtureFailure('virsh domif-setlink failed.')
 

@@ -290,11 +290,12 @@ public sealed class MsSqlRetryAgentSmokeTests(PostgreSqlFixture database, ITestO
         while (DateTimeOffset.UtcNow < until);
     }
 
+    // A capacity probe of the agent's local storage connection is not backup work; the background probe scan may hand one out at any time.
     private static async Task AssertNoTaskAsync(AgentWorld world, EnrolledAgent agent)
     {
         using var poll = await world.PollAsync(agent);
         Assert.Equal(HttpStatusCode.OK, poll.StatusCode);
-        Assert.Empty(AgentWorld.ReadJson(poll).GetProperty("tasks").EnumerateArray());
+        Assert.All(AgentWorld.ReadJson(poll).GetProperty("tasks").EnumerateArray(), task => Assert.Equal("capacity-probe", task.GetProperty("type").GetString()));
     }
 
     /// <summary>Distinct consecutive run statuses observed while polling, for diagnostics ("Pending -> Running -> RetryPending -> ...").</summary>

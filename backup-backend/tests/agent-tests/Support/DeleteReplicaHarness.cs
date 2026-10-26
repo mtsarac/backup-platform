@@ -23,14 +23,25 @@ internal sealed class DeleteReplicaHarness : IAsyncDisposable
     public LocalStorageProvider Local { get; }
     public RecordingDeletionProvider Storage { get; }
     public DeleteReplicaTaskWorker Worker { get; }
+    public DeletionScopedStorageFactory External { get; }
 
-    public DeleteReplicaHarness()
+    public DeleteReplicaHarness(bool externalFactory = true)
     {
         Directory.CreateDirectory(Root);
         Local = new LocalStorageProvider(new LocalStorageOptions(Root));
         Storage = new RecordingDeletionProvider(Local);
         Client = new DeletionClient(Time);
-        Worker = new DeleteReplicaTaskWorker(Client, Store, new RecordingDeletionResolver(Local, Storage), Time, NullLogger<DeleteReplicaTaskWorker>.Instance);
+        External = new DeletionScopedStorageFactory(Storage);
+        Worker = new DeleteReplicaTaskWorker(Client, Store, new RecordingDeletionResolver(Local, Storage), Time, NullLogger<DeleteReplicaTaskWorker>.Instance,
+            externalFactory ? External : null);
+    }
+
+    /// <summary>A delete of an external (SFTP or Drive) replica: the same managed key, addressed by its storage connection.</summary>
+    public AgentTaskEnvelope ExternalEnvelope(string provider, string? target = null)
+    {
+        var envelope = Envelope();
+        var task = envelope.DeleteReplica! with { StorageProvider = provider, StorageTarget = target ?? Guid.NewGuid().ToString("D") };
+        return envelope with { DeleteReplica = task };
     }
 
     public AgentTaskEnvelope Envelope(string prefix = "backups")
@@ -89,6 +100,20 @@ internal sealed class DeletionTestClock : FakeTimeProvider
     }
 }
 
+
+/// <summary>Hands out the instrumented filesystem provider for any external scope and records what was asked for.</summary>
+internal sealed class DeletionScopedStorageFactory(IStorageProvider provider) : ITaskStorageProviderFactory
+{
+    public ConcurrentQueue<DirectStorageScope> Scopes { get; } = new();
+    public IStorageProvider CreateBackup(BackupTaskSnapshot task, BackupDestinationContract destination) => throw new NotSupportedException();
+    public IStorageProvider CreateRestore(BackupPlatform.Contracts.Restores.RestoreTaskSnapshot task) => throw new NotSupportedException();
+
+    public IStorageProvider CreateScoped(DirectStorageScope scope)
+    {
+        Scopes.Enqueue(scope);
+        return provider;
+    }
+}
 
 internal sealed class DeletionClient(TimeProvider time) : IDeleteReplicaTaskClient
 {

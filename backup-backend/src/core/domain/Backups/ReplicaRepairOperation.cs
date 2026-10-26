@@ -77,6 +77,9 @@ public sealed class ReplicaRepairOperation : ITenantOwned
     /// </summary>
     public long ReservedQuotaBytes { get; private set; }
 
+    /// <summary>The lease owner recorded for a repair an agent executes; the only identity its lease-fenced calls are accepted from.</summary>
+    public static string AgentLeaseOwner(Guid agentId) => $"agent:{agentId:N}";
+
     public bool IsTerminal => Status is ReplicaRepairStatus.Succeeded or ReplicaRepairStatus.Failed or ReplicaRepairStatus.Cancelled;
     public bool IsExhausted => AttemptCount >= MaxAttempts && Status == ReplicaRepairStatus.Failed;
     public bool HasLease(Guid token, DateTimeOffset now) => token != Guid.Empty && LeaseToken == token && LeaseExpiresAt > now && !IsTerminal;

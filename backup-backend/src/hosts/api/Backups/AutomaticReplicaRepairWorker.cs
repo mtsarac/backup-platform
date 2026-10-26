@@ -154,9 +154,11 @@ public sealed class AutomaticReplicaRepairWorker(
             var claimed = await store.ClaimDueRepairAsync(
                 $"auto-repair-{Environment.ProcessId}",
                 time.GetUtcNow(),
-                TimeSpan.FromMinutes(10),
+                ReplicaRepairService.DefaultLeaseDuration,
                 cancellationToken,
-                tenantId);
+                tenantId,
+                // External-to-external repair is pulled by agents; central-involving repair keeps its backend path.
+                backendExecutedOnly: true);
             if (claimed is null)
             {
                 break;

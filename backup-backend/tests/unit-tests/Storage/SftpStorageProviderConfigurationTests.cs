@@ -92,6 +92,26 @@ public sealed class SftpStorageProviderConfigurationTests
         SftpNetworkValidator.AssertIpPermitted(ip, [cidr]);
     }
 
+    [Theory]
+    [InlineData("192.168.1.20")]
+    [InlineData("10.4.5.6")]
+    [InlineData("172.20.0.9")]
+    [InlineData("100.80.80.81")]
+    [InlineData("fd12:3456::1")]
+    public void AgentDefaultPrivateNetworks_PermitCustomerLan(string address) =>
+        SftpNetworkValidator.AssertIpPermitted(IPAddress.Parse(address), [.. SftpNetworkOptions.AgentDefaultPrivateNetworks]);
+
+    [Theory]
+    [InlineData("169.254.169.254")]
+    [InlineData("224.0.0.1")]
+    [InlineData("fe80::1")]
+    public void AgentDefaultPrivateNetworks_StillDenyMetadataAndMulticast(string address)
+    {
+        var ex = Assert.Throws<StorageException>(() =>
+            SftpNetworkValidator.AssertIpPermitted(IPAddress.Parse(address), [.. SftpNetworkOptions.AgentDefaultPrivateNetworks]));
+        Assert.Equal(StorageFailureKind.NetworkDenied, ex.Kind);
+    }
+
     [Fact]
     public async Task ResolveAndPinAsync_NormalizesAndPins_DirectAndMappedHosts()
     {

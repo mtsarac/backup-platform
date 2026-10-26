@@ -27,7 +27,7 @@ namespace BackupPlatform.StorageProviders.Abstractions.FileSystem;
 /// Advertised capabilities are exactly <see cref="StorageCapabilityIds.Read"/>, <see cref="StorageCapabilityIds.Delete"/>, <see cref="StorageCapabilityIds.AtomicPublish"/>,
 /// <see cref="StorageCapabilityIds.Enumerate"/> and <see cref="StorageCapabilityIds.VerifyAbsence"/>. The last one is honest because a local or
 /// mounted file system reports the truth at once: after <see cref="File.Delete(string)"/> returns, <see cref="File.Exists"/> is false (no eventual
-/// consistency). Checksums are verified by reading back; resume, multipart, immutability and capacity queries are not implemented.
+/// consistency). Checksums and retained upload prefixes are verified by reading back; multipart, immutability and capacity queries are not implemented.
 /// </summary>
 public abstract class FileSystemStorageProvider : IStorageProvider
 {
@@ -42,6 +42,7 @@ public abstract class FileSystemStorageProvider : IStorageProvider
         StorageCapabilityIds.AtomicPublish,
         StorageCapabilityIds.Enumerate,
         StorageCapabilityIds.VerifyAbsence,
+        StorageCapabilityIds.Resume,
         StorageCapabilityIds.Read
     ]);
 
@@ -119,11 +120,22 @@ public abstract class FileSystemStorageProvider : IStorageProvider
         try
         {
             var finalPath = ResolveCheckedPath(key);
+            if (options.RecordCheckpointAsync is not null && File.Exists(finalPath) && options.ExpectedChecksum is { } expectedChecksum && options.ExpectedLength is { } expectedLength &&
+                (await VerifyAsync(key, new(expectedLength, expectedChecksum), cancellationToken).ConfigureAwait(false)).Status == StorageVerificationStatus.Verified)
+                return new(new(Id, key), expectedLength, expectedChecksum, new(File.GetLastWriteTimeUtc(finalPath), TimeSpan.Zero));
             EnsureKeyIsFree(finalPath, options.Overwrite);
 
             var directory = Path.GetDirectoryName(finalPath)!;
             Directory.CreateDirectory(directory);
-            temporaryPath = Path.Combine(directory, TemporaryName(key.FileName));
+            var temporaryName = options.Checkpoint?.ProviderState ?? TemporaryName(key.FileName);
+            if (!IsTemporaryName(temporaryName) || !temporaryName.StartsWith("." + key.FileName + ".", StringComparison.Ordinal))
+                throw new StorageException(StorageFailureKind.InvalidConfiguration, "Invalid retained upload identity.");
+            temporaryPath = Path.Combine(directory, temporaryName);
+            if (TryGetAttributes(temporaryPath, out var attributes) && (attributes & (FileAttributes.ReparsePoint | FileAttributes.Directory)) != 0)
+                throw new StorageException(StorageFailureKind.AccessDenied, "The retained upload is not a regular file.");
+            if (options.RecordCheckpointAsync is { } record)
+                await record(new(options.Checkpoint?.VerifiedByteOffset ?? 0, temporaryName), cancellationToken).ConfigureAwait(false);
+            options = options with { Checkpoint = new(options.Checkpoint?.VerifiedByteOffset ?? 0, temporaryName) };
 
             var (length, checksum) = await WriteTemporaryAsync(temporaryPath, content, options, progress, cancellationToken).ConfigureAwait(false);
 
@@ -137,7 +149,7 @@ public abstract class FileSystemStorageProvider : IStorageProvider
         }
         finally
         {
-            if (!published && temporaryPath is not null)
+            if (!published && temporaryPath is not null && options.RecordCheckpointAsync is null)
             {
                 DeleteQuietly(temporaryPath);
             }
@@ -551,8 +563,8 @@ public abstract class FileSystemStorageProvider : IStorageProvider
         long total = 0;
         await using (var destination = new FileStream(temporaryPath, new FileStreamOptions
         {
-            Mode = FileMode.CreateNew,
-            Access = FileAccess.Write,
+            Mode = options.RecordCheckpointAsync is null ? FileMode.CreateNew : FileMode.OpenOrCreate,
+            Access = FileAccess.ReadWrite,
             Share = FileShare.None,
             Options = FileOptions.Asynchronous | FileOptions.SequentialScan,
             BufferSize = 0
@@ -561,6 +573,26 @@ public abstract class FileSystemStorageProvider : IStorageProvider
             var buffer = ArrayPool<byte>.Shared.Rent(BlockSize);
             try
             {
+                var prefixLength = destination.Length;
+                if (options.ExpectedLength is { } bound && prefixLength > bound) throw LengthMismatch();
+                if (prefixLength > 0)
+                {
+                    var remote = ArrayPool<byte>.Shared.Rent(BlockSize);
+                    try
+                    {
+                        while (total < prefixLength)
+                        {
+                            var count = (int)Math.Min(BlockSize, prefixLength - total);
+                            await content.ReadExactlyAsync(buffer.AsMemory(0, count), cancellationToken).ConfigureAwait(false);
+                            await destination.ReadExactlyAsync(remote.AsMemory(0, count), cancellationToken).ConfigureAwait(false);
+                            if (!CryptographicOperations.FixedTimeEquals(buffer.AsSpan(0, count), remote.AsSpan(0, count)))
+                                throw new StorageException(StorageFailureKind.IntegrityMismatch, "The retained upload prefix does not match the artifact.");
+                            hash.AppendData(buffer, 0, count);
+                            total += count;
+                        }
+                    }
+                    finally { ArrayPool<byte>.Shared.Return(remote); }
+                }
                 while (true)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -587,6 +619,11 @@ public abstract class FileSystemStorageProvider : IStorageProvider
 
                     hash.AppendData(buffer, 0, read);
                     await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                    if (options.RecordCheckpointAsync is { } checkpoint)
+                    {
+                        destination.Flush(flushToDisk: true);
+                        await checkpoint(new(total, options.Checkpoint!.ProviderState), cancellationToken).ConfigureAwait(false);
+                    }
                     progress?.Report(total);
                 }
             }

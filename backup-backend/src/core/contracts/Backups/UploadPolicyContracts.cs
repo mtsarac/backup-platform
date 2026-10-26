@@ -26,6 +26,9 @@ public sealed record UploadPolicyResponse
     public long? AgentBytesPerSecond { get; init; }
     public long? TenantShareBytesPerSecond { get; init; }
 
+    /// <summary>The selected schedule window pauses transfers durably; zero tenant share alone only waits for capacity.</summary>
+    public bool PauseRequested { get; init; }
+
     /// <summary>The lowest rate the transfer can legitimately be held to while this policy exists, so deadlines can be widened by size / rate. Null when unlimited.</summary>
     public long? MinimumBytesPerSecond { get; init; }
 

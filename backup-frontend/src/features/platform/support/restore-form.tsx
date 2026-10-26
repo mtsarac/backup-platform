@@ -1,18 +1,21 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useEffect, useRef, useState } from 'react'
+import { useIdempotencyKey } from '@/lib/idempotency-key'
 import { Button } from '@/components/ui/button'
 import { StatusPill } from '@/components/data/status-pill'
 import { Field } from '@/components/ui/field'
 import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { Stepper } from '@/components/ui/stepper'
-import { artifactSize } from '@/features/artifacts/format'
-import { inputClass, selectClass } from '@/features/platform/styles'
-import { isActiveRestore, restoreFailureMessage, safeRestoreCode } from '@/features/restores/presentation'
+import { inputClass, selectClass } from '@/components/ui/form-styles'
+import { isActiveRestore, safeRestoreCode } from '@/features/restores/presentation'
 import type { SupportRestoreTargets, SupportSession } from './types'
 import { useSupportRestore, useSupportRestoreActions, useSupportRestoreTargets } from './hooks'
 import { supportScope } from './presentation'
-import { SupportQueryState } from './support-query-state'
+import { formatBytes } from '@/lib/format'
+import { failureMessage } from '@/lib/api/failure-messages'
+import { QueryState } from '@/components/data/query-state'
+import { errorMessage } from '@/lib/api/failure-messages'
 
 const customerWarning = 'Bu hedef müşterinin canlı (production) ortamı olabilir; izole bir Support Restore Environment değildir.'
 export function SupportRestoreForm({ session, artifactId, onStarted }: { session: SupportSession; artifactId: string; onStarted: (id: string) => void }) {
@@ -20,7 +23,7 @@ export function SupportRestoreForm({ session, artifactId, onStarted }: { session
   const scope = supportScope(session, 'restore')
   const targets = useSupportRestoreTargets(scope, artifactId)
   if (!scope.enabled) return <section><p role="status">{tx("Etkin oturum sahipliği ve RestoreBackup izni gerekir.")}</p><Button disabled>{tx("Precheck")}</Button><Button disabled>{tx("Restore başlat")}</Button></section>
-  return <SupportQueryState isPending={targets.isPending} error={targets.error}>{targets.data && <RestoreForm key={`${session.id}:${session.tenantId}:${artifactId}:${session.status}`} session={session} artifactId={artifactId} targets={targets.data} onStarted={onStarted} />}</SupportQueryState>
+  return <QueryState forbiddenMessage={errorMessage} isPending={targets.isPending} error={targets.error}>{targets.data && <RestoreForm key={`${session.id}:${session.tenantId}:${artifactId}:${session.status}`} session={session} artifactId={artifactId} targets={targets.data} onStarted={onStarted} />}</QueryState>
 }
 function RestoreForm({ session, artifactId, targets, onStarted }: { session: SupportSession; artifactId: string; targets: SupportRestoreTargets; onStarted: (id: string) => void }) {
   useLanguage()
@@ -36,8 +39,8 @@ function RestoreForm({ session, artifactId, targets, onStarted }: { session: Sup
   const [acknowledged, setAcknowledged] = useState(false)
   const [checked, setChecked] = useState<{ id: string; fingerprint: string } | null>(null)
   const [validation, setValidation] = useState('')
-  const precheckKey = useRef({ body: '', key: crypto.randomUUID() })
-  const restoreKey = useRef({ body: '', key: crypto.randomUUID() })
+  const precheckKey = useIdempotencyKey()
+  const restoreKey = useIdempotencyKey()
   const submitting = useRef(false)
   const mounted = useRef(true)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
@@ -56,23 +59,19 @@ function RestoreForm({ session, artifactId, targets, onStarted }: { session: Sup
     if (isPg && new TextEncoder().encode(databaseName.trim()).length > 63) { setValidation(tx('PostgreSQL Database adı en fazla 63 UTF-8 byte olabilir.')); return }
     setValidation('')
     submitting.current = true
-    // Same request retains its key across failed transport retries. A completed check is a new operation.
-    if (precheckKey.current.body !== fingerprint || (operation.data && !isActiveRestore(operation.data.status))) precheckKey.current = { body: fingerprint, key: crypto.randomUUID() }
-    precheck.mutate({ input, idempotencyKey: precheckKey.current.key }, {
+    precheck.mutate({ input, idempotencyKey: precheckKey.keyFor(input) }, {
       onSuccess: result => { if (mounted.current) { setChecked({ id: result.id, fingerprint }); setAcknowledged(false) } },
-      onSettled: () => { submitting.current = false },
+      onSettled: (_result, error) => { precheckKey.settle(error); submitting.current = false },
     })
   }
   function startRestore() {
     if (!scope.enabled || !eligible || !passed || !acknowledged || !checked || submitting.current || busy || operation.error) return
     submitting.current = true
     const request = { ...input, precheckId: checked.id }
-    const body = JSON.stringify(request)
-    if (restoreKey.current.body !== body) restoreKey.current = { body, key: crypto.randomUUID() }
-    start.mutate({ input: request, idempotencyKey: restoreKey.current.key }, { onSuccess: result => { if (mounted.current) onStarted(result.id) }, onSettled: () => { submitting.current = false } })
+    start.mutate({ input: request, idempotencyKey: restoreKey.keyFor(request) }, { onSuccess: result => { if (mounted.current) onStarted(result.id) }, onSettled: (_result, error) => { restoreKey.settle(error); submitting.current = false } })
   }
   return <section aria-label={tx("Support Restore")}>
-    <Section title={tx("Yeni Database geri yükleme")} description={<>{tx("Kaynak:")}{' '}{targets.sourceDatabase} · {artifactSize(targets.sizeBytes)}{' '}{tx("· NewDatabase")}</>}>
+    <Section title={tx("Yeni Database geri yükleme")} description={<>{tx("Kaynak:")}{' '}{targets.sourceDatabase} · {formatBytes(targets.sizeBytes)}{' '}{tx("· NewDatabase")}</>}>
     <div className="space-y-5">
     <Stepper steps={[tx('Hedef ve Ön Kontrol'), tx('Sonucu onayla'), tx('Geri Yüklemeyi başlat')]} current={passed ? acknowledged ? 2 : 1 : 0} />
     <Notice tone="warning" title={tx(customerWarning)}>{targets.environment.warning && targets.environment.warning !== tx(customerWarning) && <p>{targets.environment.warning}</p>}<p>{tx("Hedef tenant'ın gerçek")}{' '}{engineName}{' '}{tx("bağlantısıdır. Mevcut Database'ler değiştirilmez; yalnızca yeni Database oluşturulur.")}</p>{isPg && <p>{tx("Yalnızca güvenilir platform arşivlerini kullanın: pg_restore arşiv SQL ve fonksiyonlarını hedefte superuser olarak çalıştırabilir. SHA-256 byte bütünlüğünü doğrular, SQL güvenliğini doğrulamaz. pg_dump cluster rollerini yedeklemez; kaynak sahiplikleri/ACL için gereken roller ve extension paketleri hazır olmalı; hedef sürümü hem kaynak hem pg_dump sürümünden eski olmamalıdır.")}</p>}</Notice>
@@ -85,9 +84,9 @@ function RestoreForm({ session, artifactId, targets, onStarted }: { session: Sup
     </fieldset>
     {!eligible && <p role="status" className="text-sm">{tx("Uygun, çevrimiçi ve restore/precheck destekleyen bir Agent ve ona ait hedef gerekir. Yalnızca Full backup geri yüklenebilir.")}</p>}
     {validation && <p role="alert" className="text-sm text-error">{validation}</p>}
-    <SupportQueryState isPending={false} error={precheck.error || start.error || operation.error} />
+    <QueryState forbiddenMessage={errorMessage} isPending={false} error={precheck.error || start.error || operation.error} />
     <Button variant="outline" disabled={!eligible || busy || !scope.enabled || !databaseName.trim()} onClick={runPrecheck}>{busy && !start.isPending ? tx('Ön Kontrol çalışıyor…') : checked ? tx('Ön Kontrolü tekrar çalıştır') : tx('Ön Kontrol')}</Button>
-    {checked && operation.data && <section aria-label={tx("Precheck sonucu")} className="space-y-2 rounded-lg border border-border bg-surface-2 p-4"><StatusPill status={operation.data.status} />{!matching && <p role="status">{tx("Ayarlar değişti. Start için yeniden başarılı Precheck gerekir.")}</p>}<ul className="space-y-1 text-sm">{operation.data.result?.preCheck.map((check, index) => <li key={`${check.checkId}:${index}`}>{safeRestoreCode(check.checkId)} · {tx(check.status)} · {check.status === 'Failed' ? restoreFailureMessage(check.reasonCode) : check.message || safeRestoreCode(check.reasonCode)}</li>)}</ul>{operation.data.failureCode && <p className="text-sm text-error">{restoreFailureMessage(operation.data.failureCode)}</p>}{passed && <p className="text-sm text-success">{tx("Precheck başarılı. Canlı ortam uyarısını onaylayarak başlatabilirsiniz.")}</p>}</section>}
+    {checked && operation.data && <section aria-label={tx("Precheck sonucu")} className="space-y-2 rounded-lg border border-border bg-surface-2 p-4"><StatusPill status={operation.data.status} />{!matching && <p role="status">{tx("Ayarlar değişti. Start için yeniden başarılı Precheck gerekir.")}</p>}<ul className="space-y-1 text-sm">{operation.data.result?.preCheck.map((check, index) => <li key={`${check.checkId}:${index}`}>{safeRestoreCode(check.checkId)} · {tx(check.status)} · {check.status === 'Failed' ? failureMessage(check.reasonCode, 'restore') : check.message || safeRestoreCode(check.reasonCode)}</li>)}</ul>{operation.data.failureCode && <p className="text-sm text-error">{failureMessage(operation.data.failureCode, 'restore')}</p>}{passed && <p className="text-sm text-success">{tx("Precheck başarılı. Canlı ortam uyarısını onaylayarak başlatabilirsiniz.")}</p>}</section>}
     <label className="flex items-start gap-2 rounded-lg border border-warning/30 p-4 text-sm"><input type="checkbox" className="mt-0.5" checked={acknowledged} disabled={!scope.enabled || start.isPending} onChange={event => setAcknowledged(event.target.checked)} />{tx("Bu işlemin müşterinin canlı ortamında çalışabileceğini anladım ve yeni Database geri yüklemesini onaylıyorum.")}</label>
     <Button disabled={!scope.enabled || !eligible || !passed || !acknowledged || busy || Boolean(operation.error)} onClick={startRestore}>{start.isPending ? tx('Geri yükleme başlatılıyor…') : tx('Geri Yüklemeyi başlat')}</Button>
     </div>

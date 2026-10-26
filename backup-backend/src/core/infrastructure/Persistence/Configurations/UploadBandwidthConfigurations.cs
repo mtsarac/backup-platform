@@ -28,3 +28,43 @@ internal sealed class UploadBandwidthGrantConfiguration : IEntityTypeConfigurati
         builder.HasIndex(grant => new { grant.TenantId, grant.ExpiresAt });
     }
 }
+
+internal sealed class BandwidthProfileConfiguration : IEntityTypeConfiguration<BandwidthProfile>
+{
+    public void Configure(EntityTypeBuilder<BandwidthProfile> builder)
+    {
+        builder.ToTable("bandwidth_profiles");
+        builder.HasKey(profile => profile.Id);
+        builder.Property(profile => profile.TenantId).HasConversion<TenantIdConverter>().IsRequired();
+        builder.Property(profile => profile.Name).HasMaxLength(200).IsRequired();
+        builder.Property(profile => profile.TimeZoneId).HasMaxLength(64).IsRequired();
+        builder.HasIndex(profile => new { profile.TenantId, profile.Name }).IsUnique();
+        builder.HasMany(profile => profile.Windows).WithOne().HasForeignKey(window => window.ProfileId).OnDelete(DeleteBehavior.Cascade);
+    }
+}
+
+internal sealed class TransferScheduleWindowConfiguration : IEntityTypeConfiguration<TransferScheduleWindow>
+{
+    public void Configure(EntityTypeBuilder<TransferScheduleWindow> builder)
+    {
+        builder.ToTable("transfer_schedule_windows", table => table.HasCheckConstraint("ck_transfer_schedule_windows_rate",
+            $"\"BytesPerSecond\" = 0 OR \"BytesPerSecond\" BETWEEN {UploadBandwidth.MinimumBytesPerSecond} AND {UploadBandwidth.MaximumBytesPerSecond}"));
+        builder.HasKey(window => window.Id);
+        builder.Property(window => window.DayOfWeek).HasConversion<int>().IsRequired();
+        builder.Property(window => window.StartTime).IsRequired();
+        builder.Property(window => window.EndTime).IsRequired();
+        builder.HasIndex(window => window.ProfileId);
+    }
+}
+
+internal sealed class BandwidthProfileAssignmentConfiguration : IEntityTypeConfiguration<BandwidthProfileAssignment>
+{
+    public void Configure(EntityTypeBuilder<BandwidthProfileAssignment> builder)
+    {
+        builder.ToTable("bandwidth_profile_assignments");
+        builder.Property(assignment => assignment.TenantId).HasConversion<TenantIdConverter>().IsRequired();
+        builder.Property(assignment => assignment.Scope).HasConversion<string>().HasMaxLength(16).IsRequired();
+        builder.HasKey(assignment => new { assignment.TenantId, assignment.Scope, assignment.ScopeId });
+        builder.HasIndex(assignment => assignment.ProfileId);
+    }
+}

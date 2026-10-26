@@ -5,7 +5,7 @@ namespace BackupPlatform.Application.Restores;
 /// <summary>The target as the API shows it: references only. The credential is a name an agent resolves locally, never a secret.</summary>
 public sealed record RestoreTargetView(string Host, int? Port, bool IntegratedSecurity, string? DatabaseCredentialReference, bool Encrypt, bool TrustServerCertificate);
 
-public sealed record RestoreOptionsView(bool TerminateActiveConnections, bool VerifyChecksum, bool VerifyBackup);
+public sealed record RestoreOptionsView(bool TerminateActiveConnections, bool VerifyChecksum, bool VerifyBackup, RestoreFileSelection? Files = null);
 
 public sealed record RestoreProgressView(string? Stage, double? Percent, DateTimeOffset? At);
 

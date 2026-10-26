@@ -3,6 +3,7 @@
 # Keeps the owned browser stack alive for native browser download verification.
 set +x
 set -euo pipefail
+# shellcheck source=scripts/lib/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 if [[ ${1:-} != --configured ]]; then
     exec "$REPO_ROOT/scripts/database/with-disposable-databases.sh" -- "$0" --configured
@@ -35,6 +36,7 @@ cleanup_smoke() {
     done
     return "$result"
 }
+rc=0
 trap 'rc=$?; if ! cleanup_smoke "$rc"; then if (( rc == 0 )); then rc=1; fi; fi; cleanup_runtime "$rc"' EXIT
 export BP_SMOKE_PUBLIC_HOST=${BP_SMOKE_PUBLIC_HOST:-192.168.122.1}
 export BP_SMOKE_POSTGRES_CONTAINER=${POSTGRES_CONTAINER:-postgres}

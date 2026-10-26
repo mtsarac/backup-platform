@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set +x
 set -euo pipefail
-# shellcheck source=../lib/common.sh
+# shellcheck source=scripts/lib/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
 arguments=(check)
@@ -19,6 +19,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 load_local_env
+# shellcheck disable=SC2016
 run_redacted "$REPO_ROOT/scripts/windows/run-powershell.sh" --command '
 Write-Output "SSH reachable; Windows PowerShell version: $($PSVersionTable.PSVersion)"
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) { throw "dotnet is not available in the SSH session PATH." }

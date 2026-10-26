@@ -16,6 +16,7 @@ public sealed class UploadBandwidthServiceTests
     private BackupLeaseCommand Lease() => new(_tenant, _agent, Guid.NewGuid(), Guid.NewGuid(), DateTimeOffset.UtcNow);
 
     [Theory]
+    [InlineData(0)]
     [InlineData(UploadBandwidth.MinimumBytesPerSecond - 1)]
     [InlineData(UploadBandwidth.MaximumBytesPerSecond + 1)]
     public async Task A_limit_outside_the_range_is_refused_before_it_reaches_the_store(long bytesPerSecond)
@@ -56,8 +57,21 @@ public sealed class UploadBandwidthServiceTests
 
         Assert.Equal(0, policy!.TenantShareBytesPerSecond);
         Assert.Equal(0, policy.EffectiveBytesPerSecond);
+        Assert.False(policy.PauseRequested);
         Assert.Equal((int)UploadBandwidthService.RenewalInterval.TotalSeconds, policy.RefreshAfterSeconds);
         Assert.Equal((int)UploadBandwidthService.GrantTtl.TotalSeconds, policy.ValidForSeconds);
+    }
+
+    [Theory]
+    [InlineData(0L, null, null)]
+    [InlineData(null, 0L, null)]
+    [InlineData(null, null, 0L)]
+    public async Task A_zero_profile_window_requests_a_durable_pause_at_any_scope(long? job, long? agent, long? tenant)
+    {
+        _store.Limits = new AttemptUploadLimits(job, agent, tenant);
+        var policy = await Service().PolicyAsync(Lease(), UploadSliceAction.Renew, default);
+        Assert.True(policy!.PauseRequested);
+        Assert.Equal(0, policy.EffectiveBytesPerSecond);
     }
 
     [Fact]
@@ -72,6 +86,17 @@ public sealed class UploadBandwidthServiceTests
 
         _store.Limits = new AttemptUploadLimits(null, null, 16_000, 16_000);
         Assert.Equal(UploadBandwidth.MinimumShareBytesPerSecond, (await Service(100).PolicyAsync(Lease(), UploadSliceAction.Renew, default))!.MinimumBytesPerSecond);
+    }
+
+    [Fact]
+    public async Task Dynamic_refresh_after_is_shortened_when_window_transition_is_imminent()
+    {
+        _store.Limits = new AttemptUploadLimits(Job: 500_000, Agent: null, Tenant: null, NextTransition: TimeSpan.FromSeconds(4));
+
+        var policy = await Service().PolicyAsync(Lease(), UploadSliceAction.Renew, default);
+
+        Assert.NotNull(policy);
+        Assert.Equal(4, policy.RefreshAfterSeconds);
     }
 
     [Fact]
@@ -99,5 +124,20 @@ public sealed class UploadBandwidthServiceTests
         }
 
         public Task<AttemptUploadLimits?> GrantAsync(BackupLeaseCommand lease, UploadSliceAction action, TimeSpan grantTtl, CancellationToken cancellationToken) => Task.FromResult(Limits);
+
+        public Task<IReadOnlyList<BandwidthProfileView>> ListProfilesAsync(TenantId tenantId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<BandwidthProfileView>>([]);
+
+        public Task<BandwidthProfileView?> GetProfileAsync(TenantId tenantId, Guid profileId, CancellationToken cancellationToken) =>
+            Task.FromResult<BandwidthProfileView?>(null);
+
+        public Task<BandwidthProfileView> SaveProfileAsync(TenantId tenantId, Guid? profileId, string name, string timeZoneId, IEnumerable<TransferScheduleWindowDto> windows, UserId actor, DateTimeOffset now, CancellationToken cancellationToken) =>
+            Task.FromResult(new BandwidthProfileView(profileId ?? Guid.NewGuid(), name, timeZoneId, windows.ToList()));
+
+        public Task<bool> DeleteProfileAsync(TenantId tenantId, Guid profileId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken) =>
+            Task.FromResult(true);
+
+        public Task<bool> AssignProfileAsync(TenantId tenantId, UploadBandwidthScope scope, Guid scopeId, Guid? profileId, UserId actor, DateTimeOffset now, CancellationToken cancellationToken) =>
+            Task.FromResult(true);
     }
 }

@@ -731,7 +731,8 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         var service = new DownloadService(store, setup.Resolver, new NoAgentDownloadSource(), clock, NullLogger<DownloadService>.Instance);
         var http = new DefaultHttpContext();
         http.Response.Body = new MemoryStream();
-        await new DownloadStreamer(store, service, clock, NullLogger<DownloadStreamer>.Instance).StreamAsync(http, session);
+        using var spool = new AgentDownloadSpool(clock, NullLogger<AgentDownloadSpool>.Instance);
+        await new DownloadStreamer(store, service, clock, NullLogger<DownloadStreamer>.Instance, spool).StreamAsync(http, session);
         Assert.Equal(Content, ((MemoryStream)http.Response.Body).ToArray());
         var completed = (await store.GetAsync(session.TenantId, session.Id, default))!;
         Assert.Equal((DownloadState.Completed, fallback.Id, (long)Content.Length), (completed.State, completed.ReplicaId, completed.TransferredBytes));
@@ -792,7 +793,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         var fallback = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "sftp");
         ((InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, primary.StorageProvider, primary.StorageTarget)!).ShouldFailRead = true;
         var claim = (await store.ClaimNextAsync(setup.Agent.TenantId, setup.Agent.AgentId, now, RestoreWorld.Lease, RestoreWorld.Unclaimed, default))!;
-        Assert.Equal((fallback.Id, RestoreSourceAccess.BackendRelayed, RestoreStatus.Leased), (claim.Replica.Id, claim.Operation.SourceAccess, claim.Operation.Status));
+        Assert.Equal((fallback.Id, RestoreSourceAccess.AgentDirect, RestoreStatus.Leased), (claim.Replica.Id, claim.Operation.SourceAccess, claim.Operation.Status));
         Assert.Equal(fallback.Id, (await world.OperationAsync(operation.Id)).Pin.ReplicaId);
         Assert.Equal(0, await world.ActivePinsAsync(primary.Id));
         Assert.Equal(1, await world.ActivePinsAsync(fallback.Id));
@@ -850,31 +851,28 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
     [Fact]
     public async Task RestoreClaimNetworkProbeDoesNotHoldDatabaseLocksAcrossProbe()
     {
-        var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp" });
+        var setup = await SetupAsync(verified: new HashSet<string> { "central" });
         var world = new RestoreWorld(fixture);
         await world.EnableRestoreAsync(setup.Agent);
         var now = DateTimeOffset.UtcNow;
         var store = new PostgreSqlRestoreStore(World.Options(), setup.Resolver);
         var operation = (await store.CreateAsync(RestoreWorld.Command(setup.Agent.TenantId, setup.Artifact.Id, setup.Agent.AgentId, now: now), default)).Operation!;
         var primary = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "central");
-        var fallback = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "sftp");
 
-        var probeStarted = new TaskCompletionSource<bool>();
-        var probeRelease = new TaskCompletionSource<bool>();
+        var probeStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var probeRelease = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var canReadProbeFinished = false;
 
-        ((InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, fallback.StorageProvider, fallback.StorageTarget)!).BeforeRead = async () =>
+        // Central is the only replica the backend itself probes (SFTP/Drive/S3/SMB replicas are read by the agent), so the probe under test is the primary's.
+        ((InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, primary.StorageProvider, primary.StorageTarget)!).BeforeRead = async () =>
         {
             probeStarted.TrySetResult(true);
             await probeRelease.Task;
             canReadProbeFinished = true;
         };
 
-        // Primary fails read so it probes fallback (sftp), triggering BeforeRead
-        ((InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, primary.StorageProvider, primary.StorageTarget)!).ShouldFailRead = true;
-
         var claimTask = Task.Run(() => store.ClaimNextAsync(setup.Agent.TenantId, setup.Agent.AgentId, now, RestoreWorld.Lease, RestoreWorld.Unclaimed, default));
-        await probeStarted.Task;
+        await probeStarted.Task.WaitAsync(TimeSpan.FromSeconds(30));
 
         // While BeforeRead is blocked, an independent DB transaction must be able to acquire agent and replica row locks immediately without waiting for probe
         await using (var context = fixture.CreatePlatformContext())
@@ -885,42 +883,40 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
                 $"SELECT \"Id\" AS \"Value\" FROM agents WHERE \"Id\" = {setup.Agent.AgentId.Value} AND \"TenantId\" = {setup.Agent.TenantId.Value} FOR UPDATE").ToListAsync(timeoutCts.Token);
             Assert.Single(agentRows);
             var lockedReplicas = await context.Database.SqlQuery<Guid>(
-                $"SELECT \"Id\" AS \"Value\" FROM backup_replicas WHERE \"Id\" = {fallback.Id} FOR UPDATE").ToListAsync(timeoutCts.Token);
+                $"SELECT \"Id\" AS \"Value\" FROM backup_replicas WHERE \"Id\" = {primary.Id} FOR UPDATE").ToListAsync(timeoutCts.Token);
             Assert.Single(lockedReplicas);
             await tx.RollbackAsync(timeoutCts.Token);
         }
 
         Assert.False(canReadProbeFinished);
         probeRelease.TrySetResult(true);
-        var claim = await claimTask;
+        var claim = await claimTask.WaitAsync(TimeSpan.FromSeconds(30));
         Assert.NotNull(claim);
-        Assert.Equal(fallback.Id, claim.Replica.Id);
+        Assert.Equal(primary.Id, claim.Replica.Id);
     }
 
     [Fact]
     public async Task RestoreCancelledDuringRemoteProbeIsSafelyRefusedAndNotHandedOut()
     {
-        var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp" });
+        var setup = await SetupAsync(verified: new HashSet<string> { "central" });
         var world = new RestoreWorld(fixture);
         await world.EnableRestoreAsync(setup.Agent);
         var now = DateTimeOffset.UtcNow;
         var store = new PostgreSqlRestoreStore(World.Options(), setup.Resolver);
         var operation = (await store.CreateAsync(RestoreWorld.Command(setup.Agent.TenantId, setup.Artifact.Id, setup.Agent.AgentId, now: now), default)).Operation!;
         var primary = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "central");
-        var fallback = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "sftp");
 
-        var probeStarted = new TaskCompletionSource<bool>();
-        var probeRelease = new TaskCompletionSource<bool>();
+        var probeStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var probeRelease = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        ((InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, fallback.StorageProvider, fallback.StorageTarget)!).BeforeRead = async () =>
+        ((InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, primary.StorageProvider, primary.StorageTarget)!).BeforeRead = async () =>
         {
             probeStarted.TrySetResult(true);
             await probeRelease.Task;
         };
-        ((InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, primary.StorageProvider, primary.StorageTarget)!).ShouldFailRead = true;
 
         var claimTask = Task.Run(() => store.ClaimNextAsync(setup.Agent.TenantId, setup.Agent.AgentId, now, RestoreWorld.Lease, RestoreWorld.Unclaimed, default));
-        await probeStarted.Task;
+        await probeStarted.Task.WaitAsync(TimeSpan.FromSeconds(30));
 
         // User cancels the restore while probe is running
         var cancelled = await store.RequestCancellationAsync(setup.Agent.TenantId, operation.Id, now.AddSeconds(1), default);
@@ -928,7 +924,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         Assert.Equal(RestoreStatus.Cancelled, cancelled.Status);
 
         probeRelease.TrySetResult(true);
-        var claim = await claimTask;
+        var claim = await claimTask.WaitAsync(TimeSpan.FromSeconds(30));
         Assert.Null(claim);
 
         var stored = await world.OperationAsync(operation.Id);
@@ -950,7 +946,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         var store = new PostgreSqlRestoreStore(World.Options(), setup.Resolver);
         var result = await store.CreateAsync(RestoreWorld.Command(setup.Agent.TenantId, setup.Artifact.Id, setup.Agent.AgentId, now: DateTimeOffset.UtcNow), default);
         Assert.Equal(RestoreCreateOutcome.Created, result.Outcome);
-        Assert.Equal(RestoreSourceAccess.BackendRelayed, result.Operation!.SourceAccess);
+        Assert.Equal(RestoreSourceAccess.AgentDirect, result.Operation!.SourceAccess);
     }
 
     [Fact]
@@ -1302,7 +1298,8 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         var service = new DownloadService(store, setup.Resolver, new NoAgentDownloadSource(), clock, NullLogger<DownloadService>.Instance);
         var http = new DefaultHttpContext();
         http.Response.Body = new MemoryStream();
-        await new DownloadStreamer(store, service, clock, NullLogger<DownloadStreamer>.Instance).StreamAsync(http, session);
+        using var spool = new AgentDownloadSpool(clock, NullLogger<AgentDownloadSpool>.Instance);
+        await new DownloadStreamer(store, service, clock, NullLogger<DownloadStreamer>.Instance, spool).StreamAsync(http, session);
         var failed = (await store.GetAsync(session.TenantId, session.Id, default))!;
         Assert.False(alternateOpened);
         Assert.Equal((DownloadState.Failed, primary.Id, 0L), (failed.State, failed.ReplicaId, failed.TransferredBytes));
@@ -1313,7 +1310,8 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
     [Fact]
     public async Task RestoreWithNoReadableCopyFailsWithoutHandoffAndReleasesPin()
     {
-        var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp" });
+        // SFTP replicas are read by the agent, not probed by the backend, so central is the only copy the backend can find unreadable.
+        var setup = await SetupAsync(verified: new HashSet<string> { "central" });
         var world = new RestoreWorld(fixture);
         await world.EnableRestoreAsync(setup.Agent);
         var now = DateTimeOffset.UtcNow;
@@ -1355,7 +1353,8 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
             return Task.CompletedTask;
         };
         var service = new DownloadService(store, setup.Resolver, new NoAgentDownloadSource(), clock, NullLogger<DownloadService>.Instance);
-        var streamer = new DownloadStreamer(store, service, clock, NullLogger<DownloadStreamer>.Instance);
+        using var spool = new AgentDownloadSpool(clock, NullLogger<AgentDownloadSpool>.Instance);
+        var streamer = new DownloadStreamer(store, service, clock, NullLogger<DownloadStreamer>.Instance, spool);
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");
         await using var app = builder.Build();
@@ -1442,7 +1441,8 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
             return Task.CompletedTask;
         };
         var service = new DownloadService(store, setup.Resolver, new NoAgentDownloadSource(), clock, NullLogger<DownloadService>.Instance);
-        var streamer = new DownloadStreamer(store, service, clock, NullLogger<DownloadStreamer>.Instance);
+        using var spool = new AgentDownloadSpool(clock, NullLogger<AgentDownloadSpool>.Instance);
+        var streamer = new DownloadStreamer(store, service, clock, NullLogger<DownloadStreamer>.Instance, spool);
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseKestrel().UseUrls("http://127.0.0.1:0");
         await using var app = builder.Build();

@@ -5,6 +5,61 @@ Repository root: `/home/msarac/Projects/internship/internship-2/Projects/backup-
 Reusable local/test automation lives under `scripts/`. This is the canonical
 location. Do not keep permanent reusable helpers under `/tmp`.
 
+## Linux agent packages and platform providers
+
+Publish the Linux agent before packaging (the package builder does not download tools or credentials):
+
+```bash
+dotnet publish backup-backend/src/hosts/agent/BackupPlatform.Agent.Host.csproj -c Release -r linux-x64 --self-contained true -p:AgentPlatform=Linux -o /tmp/backup-agent-publish
+bash backup-backend/deploy/linux/package-agent.sh deb /tmp/backup-agent-publish 1.0.0 x64 /tmp/backup-agent-packages
+# Or use rpm (requires rpmbuild); arm64 is also supported.
+sudo dpkg -i /tmp/backup-agent-packages/backup-platform-agent_1.0.0_amd64.deb
+sudo runuser -u backup-agent -- /opt/backup-platform-agent/current/BackupPlatform.Agent.Host enroll --server https://backup.example/ --store-directory /var/lib/backup-platform-agent/identity
+sudo systemctl start backup-platform-agent.service
+```
+
+Enrollment prompts for the token without echoing it. Do not pass tokens on the command line. A package does not enroll automatically. The equivalent direct installer is `sudo bash backup-backend/deploy/linux/install-agent.sh /absolute/publish 1.0.0`; its payload must be readable by the service account.
+
+The unprivileged `backup-agent` account owns `/opt/backup-platform-agent/releases` and the atomic `current` symlink, allowing signed self-update without root. Package installation never overwrites an existing release; upgrades preserve state and earlier releases. Configuration is root-owned `/etc/backup-platform-agent/agent.env` (0640, group `backup-agent`); identity, staging and update directories are owner-only under `/var/lib/backup-platform-agent`. Removing a package stops/disables the service but intentionally retains identity, artifacts and releases. The systemd sandbox only permits writes to the install and state trees; grant additional backup-source/storage paths explicitly with a service override.
+
+On a **fresh disposable systemd VM only**, exercise the real installer with `sudo BACKUP_AGENT_DISPOSABLE_HOST=1 bash backup-backend/deploy/linux/test-installer.sh /absolute/publish`. It verifies service identity, secure permissions, no automatic enrollment, state preservation and the release switch.
+
+### Docker and snapshots
+
+Docker discovery uses `GET /containers/json?all=false` over `/var/run/docker.sock` (Windows: `docker_engine` named pipe), never container environment/secret inspection. Published loopback/wildcard TCP ports become existing PostgreSQL/MSSQL network endpoints; the normal credentialed database backup pipeline is used, not `docker exec`. Unpublished ports remain visible but cannot be used as localhost endpoints. Socket access is **root-equivalent** on ordinary Docker; do not add the service account to the Docker group without accepting that trust boundary. A read-only socket API proxy restricted to container-list access is preferable where supported.
+
+Native snapshot providers expose a disposable read-only view and perform cleanup on cancellation/failure: Windows VSS uses persistent writer-enabled shadow copies (`Win32_ShadowContext` where `Persistent`, `NoAutoRelease` and `-not NoWriters`); Linux supports LVM (`lvcreate`/read-only mount/`lvremove`), Btrfs read-only subvolume snapshots and ZFS dataset snapshots. Install the corresponding OS tools and grant only the privileges/source access your chosen snapshot operation needs. The default package grants no administrative snapshot capability. Snapshot roots/datasets are agent-local configuration, never arbitrary tenant-supplied command arguments. Size LVM COW storage for the maximum write churn during backup; exhausted snapshots must not be treated as valid copies.
+
+Snapshot constraints per kind (`FileSources:<name>:SnapshotKind`, `SnapshotSource`, `SnapshotRelativePath`, `LvmSize`):
+
+- **Btrfs:** `SnapshotSource` must be a subvolume, and the snapshot is created inside the agent staging directory, so staging MUST be on the same Btrfs filesystem as the source (`btrfs subvolume snapshot` cannot cross filesystems) and outside the source tree. The agent needs privilege for `btrfs subvolume snapshot -r` and `subvolume delete`. Without a same-filesystem staging directory the snapshot fails and no backup runs.
+- **ZFS:** `SnapshotSource` is a dataset name (for example `tank/data`), not a path. The dataset must be mounted (the agent reads `<mountpoint>/.zfs/snapshot/<name>`, so `snapdir` access must not be disabled); `SnapshotRelativePath` is relative to the dataset mount. Staging is not used for the snapshot and may be on any filesystem. The agent needs `zfs snapshot`, `zfs get`, `zfs list` and `zfs destroy`.
+- **LVM:** `SnapshotSource` is `/dev/<vg>/<lv>` and `LvmSize` (`<n>M|G|T`) is mandatory; the snapshot is mounted read-only under the staging directory.
+
+Every snapshot the agent creates is named `bp_<32 hex>`. At start and then hourly the agent removes such snapshots that no running backup owns (a crash or a failed rollback leaves them behind): Btrfs subvolumes `bp_*` in the staging directory, ZFS snapshots `<dataset>@bp_*`, LVM volumes `bp_*` (unmounting `<staging>/bp_*` first). Only kinds configured in `FileSources` are swept; VSS shadow copies are not swept. Do not name your own snapshots `bp_<32 hex>`.
+
+### PostgreSQL physical and streaming copies
+
+Set `Agent__Backup__PostgreSql__BackupMode=Physical` (WAL fetch) or `Streaming` (concurrent WAL streaming) in the service environment. The default `Logical` retains `pg_dump`/`pg_restore`. Physical modes require PostgreSQL 13+ and matching-major `pg_basebackup`, `pg_verifybackup` and `pg_waldump` in `Agent__Backup__PostgreSql__ClientToolsDirectory` or `PATH`, a replication-enabled login, replication access in `pg_hba.conf` and available WAL senders (two for streaming). Streaming uses PostgreSQL's temporary slot lifecycle, not a persistent replication slot. WAL fetch requires enough WAL retention through the end of the copy.
+
+Physical mode captures **the whole cluster**, including other databases and roles, even though a job names one database for ownership/reporting. Only enable it where the tenant owns the cluster. All external tablespaces are remapped into the owned staging workspace; `pg_verifybackup` validates the SHA-256 backup manifest and required WAL before tar/gzip packaging. The existing pipeline hashes, encrypts and verifies stored replicas. Allow staging space for both the unpacked cluster and final archive.
+
+Artifacts explicitly report `backup-scope=cluster`, `archive-format=physical-tar` or `physical-tar-gzip`, and `restore-method=offline-cluster`. They are **not logical restore inputs**: the logical restore provider rejects non-`PGDMP` files before invoking `pg_restore`. Recover on an offline, matching-major PostgreSQL installation: safely extract the archive to a private directory, inspect `backup-platform.json`, place `data/` as the new data directory, preserve the sibling `tablespaces/` layout (relative `pg_tblspc` links), set PostgreSQL account ownership, and start only after verifying configuration, ports and the intended recovery target. Never extract over a running cluster.
+
+### Agent mTLS enrollment and rotation
+
+Backend configuration: `AgentSecurity:Mtls:Enabled=true`, absolute `IssuerPfxPath`, and `LifetimeDays` (1–90, default 30). Provision a CA PFX through your approved secret deployment process; supply its password at runtime via `AGENT_MTLS_ISSUER_PASSWORD`. The server signs CSRs only for the authenticated caller's agent/tenant/credential generation, with client-auth-only usage. Private agent keys never leave the agent. TLS client certificate headers from proxies are not trusted.
+
+After normal agent enrollment, stop the service and run `certificate enroll /var/lib/backup-platform-agent/identity` as `backup-agent`, supplying a protected `AGENT_MTLS_CERTIFICATE_PASSWORD` of at least 12 characters. The command acquires the existing exclusive enrollment lock and atomically writes an encrypted owner-only `client-certificate.pfx`. Set `AGENT_MTLS_CERTIFICATE_PATH` to that absolute path and the same password in the service's protected environment, then restart.
+
+For rotation, stop the service and run `certificate rotate /var/lib/backup-platform-agent/identity`. This durably saves a pending credential, requests a fresh certificate, saves the new encrypted PFX, proves possession through `/api/agent/credential/confirm`, and promotes the credential. An interrupted rotation is resumable by rerunning the command; do not restart until it succeeds. The old certificate stops authenticating when its credential generation is revoked. Every certificate request also rechecks live agent activity, tenant ownership and credential state; disabling/revoking an agent takes effect immediately. Certificates expire, so rotate before expiry and renew the issuer before its validity would truncate a new client certificate.
+
+### External secret storage
+
+Backend `Secrets:Provider` selects `Database` (default), `Vault` or `AwsSecretsManager`. Vault uses KV v2 with `Secrets:Vault:Endpoint` (HTTPS), `Mount` (default `secret`) and `Prefix` (default `backup-platform`); supply `VAULT_TOKEN` at runtime. AWS uses `Secrets:Aws:Region` and `Prefix` (default `backup-platform/`) with runtime `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and optional `AWS_SESSION_TOKEN`. Environment credentials are resolved for every operation, so a deployment can rotate them without reusing a cached token; restart a process when its inherited environment changes.
+
+External stores receive **Data Protection ciphertext**, not plaintext credentials. Preserve the backend Data Protection key ring and keep its access separate from Vault/AWS access. Existing tenant/agent-bound reference authorization remains unchanged. Switching providers does not migrate existing ciphertext automatically: migrate it through approved deployment tooling before switching a populated system. Vault deletion soft-deletes the current KV version; AWS uses a seven-day recovery window. Grant only the configured prefix's read/write/delete operations and avoid logging provider request bodies. Never check provider tokens, PFX passwords or AWS credentials into configuration.
+
 ## `/tmp` policy
 
 `/tmp` is only for disposable runtime output:
@@ -16,6 +71,13 @@ location. Do not keep permanent reusable helpers under `/tmp`.
 - disposable container data.
 
 A script needed more than once belongs in `scripts/`.
+
+## T1.0 direct-download feasibility
+
+[Isolated native-to-browser experiment](experiments/t1-direct-download/README.md):
+synthetic data, bounded DataChannel-to-disk transfer, independent SHA-256 readback,
+corruption/cancellation/no-path checks. Loopback-only, no application credentials
+or deployment. This is not a product download implementation or a closed T1 gate.
 
 ## Session continuity
 

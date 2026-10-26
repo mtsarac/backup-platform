@@ -1,3 +1,4 @@
+using BackupPlatform.Application.Agents;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 
@@ -112,7 +113,27 @@ public interface IReplicaRepairStore
         DateTimeOffset now,
         TimeSpan leaseDuration,
         CancellationToken cancellationToken,
-        TenantId? tenantId = null);
+        TenantId? tenantId = null,
+        bool backendExecutedOnly = false);
+
+    /// <summary>
+    /// Leases one due repair of the agent's own tenant: an external-to-external repair with an SFTP or Google Drive target, or one whose source is a replica on this
+    /// agent's local store (any external target), under the same global and tenant caps
+    /// as <see cref="ClaimDueRepairAsync"/>. Null when the agent lacks the lifecycle capability, already holds a live repair, or nothing is due.
+    /// </summary>
+    Task<ReplicaRepairOperation?> ClaimAgentRepairAsync(
+        AgentIdentity identity,
+        DateTimeOffset now,
+        TimeSpan leaseDuration,
+        CancellationToken cancellationToken);
+
+    Task<ReplicaRepairOperation?> FindOperationAsync(TenantId tenantId, Guid operationId, CancellationToken cancellationToken);
+
+    /// <summary>The artifact with its replicas, read-only; null when it does not exist in this tenant.</summary>
+    Task<BackupArtifact?> FindArtifactAsync(TenantId tenantId, Guid artifactId, CancellationToken cancellationToken);
+
+    /// <summary>The destination of the artifact's run snapshot that uses this connection; null when the snapshot has none.</summary>
+    Task<BackupDestination?> FindRunDestinationAsync(TenantId tenantId, Guid artifactId, Guid storageConnectionId, CancellationToken cancellationToken);
 
     Task<int> RecoverStaleRepairsAsync(
         DateTimeOffset now,

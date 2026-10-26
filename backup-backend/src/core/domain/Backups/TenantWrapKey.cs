@@ -48,4 +48,18 @@ public sealed class TenantWrapKey : ITenantOwned
     public DateTimeOffset CreatedAt { get; private set; }
 
     public bool CanDecrypt => State != TenantWrapKeyState.Retired;
+
+    /// <summary>Rotation: the key stops sealing new artifacts but keeps opening existing ones. Only an Active key can be demoted.</summary>
+    public void DemoteToDecryptOnly()
+    {
+        if (State != TenantWrapKeyState.Active) throw new InvalidOperationException("Only an active wrap key can be demoted.");
+        State = TenantWrapKeyState.DecryptOnly;
+    }
+
+    /// <summary>Terminal. An Active key is never retired directly: the tenant would be left with no key to seal new artifacts, so it must be rotated away first.</summary>
+    public void Retire()
+    {
+        if (State != TenantWrapKeyState.DecryptOnly) throw new InvalidOperationException("Only a decrypt-only wrap key can be retired.");
+        State = TenantWrapKeyState.Retired;
+    }
 }

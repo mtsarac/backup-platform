@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Storage;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 
@@ -17,7 +18,8 @@ public sealed record RestoreSourceDecision(RestoreSourceRejection? Rejection, Re
 /// </summary>
 public static class RestoreSourceEvaluator
 {
-    public static RestoreSourceDecision Evaluate(BackupArtifact artifact, BackupReplica replica, AgentId targetAgent, DateTimeOffset now)
+    /// <param name="directStorage">Whether the target agent advertises direct storage access: only then are SFTP and Google Drive replicas read by the agent itself instead of relayed by the backend.</param>
+    public static RestoreSourceDecision Evaluate(BackupArtifact artifact, BackupReplica replica, AgentId targetAgent, DateTimeOffset now, bool directStorage = false)
     {
         ArgumentNullException.ThrowIfNull(artifact);
         ArgumentNullException.ThrowIfNull(replica);
@@ -39,11 +41,13 @@ public static class RestoreSourceEvaluator
         }
         if (replica.ExecutionLocation != BackupStorageExecutionLocation.Backend)
             return RestoreSourceDecision.Reject(RestoreSourceRejection.NoAccessibleReplica);
-        if (replica.StorageProvider == "central")
+        if (replica.StorageProvider == StorageProviderTypes.Central)
             return RestoreSourceDecision.Accept(RestoreSourceAccess.CentralStorage);
-        return (replica.StorageProvider is "sftp" or "google-drive") && replica.StorageConnectionId != Guid.Empty
+        return (StorageProviderTypes.External(replica.StorageProvider)) && replica.StorageConnectionId != Guid.Empty
             && Guid.TryParse(replica.StorageTarget, out var connectionId) && connectionId == replica.StorageConnectionId
-            ? RestoreSourceDecision.Accept(RestoreSourceAccess.BackendRelayed)
+            ? replica.StorageProvider is StorageProviderTypes.S3 or StorageProviderTypes.Smb || directStorage
+                ? RestoreSourceDecision.Accept(RestoreSourceAccess.AgentDirect)
+                : RestoreSourceDecision.Reject(RestoreSourceRejection.NoAccessibleReplica)
             : RestoreSourceDecision.Reject(RestoreSourceRejection.NoAccessibleReplica);
     }
 
@@ -52,9 +56,9 @@ public static class RestoreSourceEvaluator
     /// resort), the target agent's own copy before a shared one (no network), then the newest. Null when none qualifies; the caller reports the
     /// most informative rejection with <see cref="Explain"/>.
     /// </summary>
-    public static IReadOnlyList<BackupReplica> SelectCandidateReplicas(BackupArtifact artifact, AgentId targetAgent, DateTimeOffset now) =>
+    public static IReadOnlyList<BackupReplica> SelectCandidateReplicas(BackupArtifact artifact, AgentId targetAgent, DateTimeOffset now, bool directStorage = false) =>
         artifact.Replicas
-            .Select(replica => (Replica: replica, Decision: Evaluate(artifact, replica, targetAgent, now)))
+            .Select(replica => (Replica: replica, Decision: Evaluate(artifact, replica, targetAgent, now, directStorage)))
             .Where(candidate => candidate.Decision.Eligible)
             .OrderBy(candidate => candidate.Replica.Status == BackupReplicaStatus.Available ? 0 : 1)
             .ThenBy(candidate => candidate.Decision.Access == RestoreSourceAccess.AgentLocal ? 0 : 1)
@@ -63,13 +67,13 @@ public static class RestoreSourceEvaluator
             .Select(candidate => candidate.Replica)
             .ToList();
 
-    public static BackupReplica? SelectReplica(BackupArtifact artifact, AgentId targetAgent, DateTimeOffset now) =>
-        SelectCandidateReplicas(artifact, targetAgent, now).FirstOrDefault();
+    public static BackupReplica? SelectReplica(BackupArtifact artifact, AgentId targetAgent, DateTimeOffset now, bool directStorage = false) =>
+        SelectCandidateReplicas(artifact, targetAgent, now, directStorage).FirstOrDefault();
 
     /// <summary>Why no replica qualified: the rejection of the "closest" candidate (an agent-transfer problem outranks a plain unavailability).</summary>
-    public static RestoreSourceRejection Explain(BackupArtifact artifact, AgentId targetAgent, DateTimeOffset now)
+    public static RestoreSourceRejection Explain(BackupArtifact artifact, AgentId targetAgent, DateTimeOffset now, bool directStorage = false)
     {
-        var rejections = artifact.Replicas.Select(replica => Evaluate(artifact, replica, targetAgent, now).Rejection).Where(r => r is not null).Select(r => r!.Value).ToArray();
+        var rejections = artifact.Replicas.Select(replica => Evaluate(artifact, replica, targetAgent, now, directStorage).Rejection).Where(r => r is not null).Select(r => r!.Value).ToArray();
         if (rejections.Length == 0) return RestoreSourceRejection.NoAccessibleReplica;
         if (rejections.Contains(RestoreSourceRejection.AgentTransferRequired)) return RestoreSourceRejection.AgentTransferRequired;
         return rejections.Min();

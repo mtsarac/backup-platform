@@ -4,8 +4,11 @@ using Microsoft.Extensions.Logging;
 
 namespace BackupPlatform.BackupProviders.PostgreSql.Tools;
 
-/// <summary>Where the PostgreSQL client tools (pg_dump, pg_restore) live. Null searches the agent's PATH.</summary>
-public sealed record PostgreSqlProviderOptions(string? ClientToolsDirectory = null);
+/// <summary>Logical database dump, physical cluster copy with WAL fetch, or physical cluster copy with concurrent WAL streaming.</summary>
+public enum PostgreSqlBackupMode { Logical, Physical, Streaming }
+
+/// <summary>Agent-local native PostgreSQL tool configuration; null directory searches PATH.</summary>
+public sealed record PostgreSqlProviderOptions(string? ClientToolsDirectory = null, PostgreSqlBackupMode BackupMode = PostgreSqlBackupMode.Logical);
 
 internal enum PostgreSqlToolStatus
 {
@@ -33,6 +36,8 @@ internal sealed partial class PostgreSqlClientTools(PostgreSqlProviderOptions op
 {
     public const string PgDump = "pg_dump";
     public const string PgRestore = "pg_restore";
+    public const string PgBaseBackup = "pg_basebackup";
+    public const string PgVerifyBackup = "pg_verifybackup";
 
     private static readonly TimeSpan VersionTimeout = TimeSpan.FromSeconds(15);
     private readonly ConcurrentDictionary<string, PostgreSqlToolInfo> _resolved = new(StringComparer.Ordinal);

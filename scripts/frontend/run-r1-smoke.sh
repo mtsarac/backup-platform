@@ -4,6 +4,7 @@
 # Only containers and databases created by this run are touched. Agent processes run under a supervisor so a SIGKILL is a real crash.
 set +x
 set -euo pipefail
+# shellcheck source=scripts/lib/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 if [[ ${1:-} != --configured ]]; then
     exec "$REPO_ROOT/scripts/database/with-disposable-databases.sh" -- "$0" --configured "$@"
@@ -34,15 +35,30 @@ pg_tools=${BACKUP_PLATFORM_TEST_POSTGRES_TOOLS_DIRECTORY:-$HOME/.local/pg18/bin}
 pg_libs=${BACKUP_PLATFORM_TEST_POSTGRES_LIBRARY_DIRECTORY:-$HOME/.local/pg18/lib}
 [[ -x $pg_tools/pg_dump && -x $pg_tools/pg_restore ]] || fail 'PostgreSQL client tools are required (BACKUP_PLATFORM_TEST_POSTGRES_TOOLS_DIRECTORY).'
 stack_pid='' windows_root='' windows_prepared=false 
+# shellcheck disable=SC2329
 cleanup_smoke() {
-    local windows_result=0
+    local exit_code=${1:-0} windows_result=0 log
+    if (( exit_code != 0 )) && [[ -n ${BP_R1_LOG_DIR:-} ]]; then
+        mkdir -p "$BP_R1_LOG_DIR"
+        for log in "$work"/agents/*/agent.log; do
+            cp "$log" "$BP_R1_LOG_DIR/$(basename "$(dirname "$log")").log" 2>/dev/null || true
+        done
+    fi
+    if (( exit_code != 0 )); then
+        for log in "$work"/agents/*/agent.log; do
+            [[ -f $log ]] && {
+                printf "Agent diagnostic %s (redacted):\n" "$log" >&2
+                run_redacted tail -n 40 "$log" >&2
+            }
+        done
+    fi
     : > "$work/agents/stop" 2>/dev/null || true
     for name in mssql pg pg-small; do
         [[ -f $work/agents/$name/pid ]] && kill -9 "$(<"$work/agents/$name/pid")" 2>/dev/null || true
         [[ -f $work/agents/$name/supervisor.pid ]] && kill "$(<"$work/agents/$name/supervisor.pid")" 2>/dev/null || true
     done
     if [[ $windows_prepared == true ]]; then
-        if (( rc != 0 )); then
+        if (( exit_code != 0 )); then
             printf "Windows Agent diagnostic:\n" >&2
             "$REPO_ROOT/scripts/windows/run-powershell.sh" --command "if (Test-Path '$windows_root\\agent.log') { Get-Content '$windows_root\\agent.log' -Tail 60 } if (Test-Path '$windows_root\\agent-err.log') { Get-Content '$windows_root\\agent-err.log' -Tail 60 }" >&2 || true
         fi
@@ -54,7 +70,7 @@ cleanup_smoke() {
     return "$windows_result"
 }
 rc=0
-trap 'rc=$?; cleanup_rc=0; if (( rc != 0 )) && [[ -n ${BP_R1_LOG_DIR:-} ]]; then mkdir -p "$BP_R1_LOG_DIR"; for log in "$work"/agents/*/agent.log; do cp "$log" "$BP_R1_LOG_DIR/$(basename "$(dirname "$log")").log" 2>/dev/null || true; done; fi; if (( rc != 0 )); then for log in "$work"/agents/*/agent.log; do [[ -f $log ]] && { printf "Agent diagnostic %s (redacted):\n" "$log" >&2; run_redacted tail -n 40 "$log" >&2; }; done; fi; cleanup_smoke || cleanup_rc=1; if (( rc == 0 && cleanup_rc != 0 )); then rc=1; fi; cleanup_runtime "$rc"' EXIT
+trap 'rc=$?; cleanup_rc=0; cleanup_smoke "$rc" || cleanup_rc=1; if (( rc == 0 && cleanup_rc != 0 )); then rc=1; fi; cleanup_runtime "$rc"' EXIT
 export BP_SMOKE_POSTGRES_CONTAINER=$POSTGRES_CONTAINER
 # The VM must reach the API: opt in to the libvirt host address (adds it to the disposable certificate and binds the listener to all interfaces).
 $windows && export BP_SMOKE_PUBLIC_HOST=${BP_SMOKE_PUBLIC_HOST:-192.168.122.1}
@@ -102,15 +118,20 @@ print(match.group(1))
 PY
 )
 
-# start_agent NAME STAGING_AGENT_DIR [tmpfs-size]: enrolls once, then runs under a supervisor that restarts it after a crash unless a hold file exists.
+# start_agent NAME STAGING_AGENT_DIR [MAPPING] [STAGING_SERVER_DIR] [tmpfs-size]: enrolls once, then runs under a supervisor that restarts it after a crash unless a hold file exists.
 start_agent() {
-    local name=$1 staging=$2 tmpfs=${3:-} dir="$work/agents/$1"
+    local name=$1 staging=$2 mapping=${3:-SameHost} server_staging=${4:-} tmpfs=${5:-}
+    local dir="$work/agents/$name"
     mkdir -p "$dir/identity" "$staging"
     "$REPO_ROOT/scripts/integration/enroll-agent.sh" --host "$work/agent-bin/BackupPlatform.Agent.Host" --server "$server" --token-file "$work/$name-token.json" \
         --store-directory "$dir/identity" --name "R1 $name $suffix" --certificate "$certificate" >/dev/null
     cat > "$dir/supervise.sh" <<EOF
 #!/usr/bin/env bash
 set +x
+export Agent__CredentialStoreDirectory="$dir/identity"
+export Agent__Backup__Staging__Mapping="$mapping"
+export Agent__Backup__Staging__AgentDirectory="$staging"
+$([[ -n $server_staging ]] && printf 'export Agent__Backup__Staging__ServerDirectory="%s"\n' "$server_staging")
 cd "$work/agent-bin"
 $( [[ -n $tmpfs ]] && printf 'mount -t tmpfs -o size=%s tmpfs "%s"\n' "$tmpfs" "$staging" )
 while [[ ! -e "$work/agents/stop" ]]; do
@@ -144,25 +165,19 @@ done
 export Agent__Backup__PostgreSql__ClientToolsDirectory=$work/pg-tools
 sql_secret() { python3 -c 'import json, sys; print(json.dumps({"userName": sys.argv[1], "password": sys.argv[2]}))' "$1" "$2"; }
 # Logins the acceptance driver stores through the API (BACKUP_SMOKE_LOGIN_<alias>); agents never receive them from the environment.
-export BACKUP_SMOKE_LOGIN_sql_smoke="$(sql_secret "$BACKUP_PLATFORM_TEST_MSSQL_USER" "$BACKUP_PLATFORM_TEST_MSSQL_PASSWORD")"
-export BACKUP_SMOKE_LOGIN_sql_bad="$(sql_secret "$BACKUP_PLATFORM_TEST_MSSQL_USER" "wrong-$verifier_password")"
-export BACKUP_SMOKE_LOGIN_pg_smoke="$(sql_secret postgres "$BACKUP_PLATFORM_TEST_POSTGRES_PASSWORD")"
-export BACKUP_SMOKE_LOGIN_pg_verify="$(sql_secret bp_r1_verifier "$verifier_password")"
-export BACKUP_SMOKE_LOGIN_pg_bad="$(sql_secret bp_r1_verifier "wrong-$verifier_password")"
+export BACKUP_SMOKE_LOGIN_sql_smoke BACKUP_SMOKE_LOGIN_sql_bad BACKUP_SMOKE_LOGIN_pg_smoke BACKUP_SMOKE_LOGIN_pg_verify BACKUP_SMOKE_LOGIN_pg_bad
+BACKUP_SMOKE_LOGIN_sql_smoke="$(sql_secret "$BACKUP_PLATFORM_TEST_MSSQL_USER" "$BACKUP_PLATFORM_TEST_MSSQL_PASSWORD")"
+BACKUP_SMOKE_LOGIN_sql_bad="$(sql_secret "$BACKUP_PLATFORM_TEST_MSSQL_USER" "wrong-$verifier_password")"
+BACKUP_SMOKE_LOGIN_pg_smoke="$(sql_secret postgres "$BACKUP_PLATFORM_TEST_POSTGRES_PASSWORD")"
+BACKUP_SMOKE_LOGIN_pg_verify="$(sql_secret bp_r1_verifier "$verifier_password")"
+BACKUP_SMOKE_LOGIN_pg_bad="$(sql_secret bp_r1_verifier "wrong-$verifier_password")"
 
-( # MSSQL agent: mapped staging shared with the disposable container; a good and a bad credential.
-  export Agent__CredentialStoreDirectory="$work/agents/mssql/identity"
-  export Agent__Backup__Staging__Mapping=Mapped Agent__Backup__Staging__ServerDirectory=$BACKUP_PLATFORM_TEST_MSSQL_STAGING_SERVER_DIR Agent__Backup__Staging__AgentDirectory=$BACKUP_PLATFORM_TEST_MSSQL_STAGING_AGENT_DIR
-  start_agent mssql "$BACKUP_PLATFORM_TEST_MSSQL_STAGING_AGENT_DIR" )
-mssql_agent_dir=$work/agents/mssql
-( # PostgreSQL agent: SameHost staging; superuser for backups, the CREATEDB-only role for verification, and a wrong password.
-  export Agent__CredentialStoreDirectory="$work/agents/pg/identity"
-  export Agent__Backup__Staging__Mapping=SameHost Agent__Backup__Staging__AgentDirectory="$work/pg-staging"
-  start_agent pg "$work/pg-staging" )
-( # The same PostgreSQL credentials, but a 6 MB staging volume: a real insufficient-capacity agent.
-  export Agent__CredentialStoreDirectory="$work/agents/pg-small/identity"
-  export Agent__Backup__Staging__Mapping=SameHost Agent__Backup__Staging__AgentDirectory="$work/pg-small-staging"
-  start_agent pg-small "$work/pg-small-staging" 6m )
+# MSSQL agent: mapped staging shared with the disposable container; a good and a bad credential.
+start_agent mssql "$BACKUP_PLATFORM_TEST_MSSQL_STAGING_AGENT_DIR" Mapped "$BACKUP_PLATFORM_TEST_MSSQL_STAGING_SERVER_DIR"
+# PostgreSQL agent: SameHost staging; superuser for backups, the CREATEDB-only role for verification, and a wrong password.
+start_agent pg "$work/pg-staging" SameHost
+# The same PostgreSQL credentials, but a 6 MB staging volume: a real insufficient-capacity agent.
+start_agent pg-small "$work/pg-small-staging" SameHost "" 6m
 
 win_args=()
 if $windows; then

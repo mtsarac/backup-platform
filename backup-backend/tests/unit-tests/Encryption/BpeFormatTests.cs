@@ -5,8 +5,8 @@ namespace BackupPlatform.UnitTests.Encryption;
 
 public sealed class BpeFormatTests
 {
-    private static readonly RSA TenantKey = RSA.Create(3072);
-    private static readonly RSA RecoveryKey = RSA.Create(3072);
+    private static readonly RSA TenantKey = RSA.Create(4096);
+    private static readonly RSA RecoveryKey = RSA.Create(4096);
 
     private static BpeRecipient[] Recipients() =>
     [
@@ -47,7 +47,7 @@ public sealed class BpeFormatTests
     public async Task UnrelatedKeyCannotDecrypt()
     {
         var artifact = await EncryptAsync(RandomNumberGenerator.GetBytes(100));
-        using var other = RSA.Create(3072);
+        using var other = RSA.Create(4096);
 
         await Assert.ThrowsAsync<BpeFormatException>(() => DecryptAsync(artifact, other));
     }
@@ -106,6 +106,18 @@ public sealed class BpeFormatTests
     {
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             BpeEncryptor.EncryptAsync(new MemoryStream(new byte[10]), new MemoryStream(), 11, Recipients()));
+    }
+
+    [Fact]
+    public async Task RecipientKeysBelow4096BitsAreRejectedBeforeOutput()
+    {
+        using var weakKey = RSA.Create(3072);
+        using var output = new MemoryStream();
+
+        await Assert.ThrowsAsync<ArgumentException>(() => BpeEncryptor.EncryptAsync(
+            new MemoryStream(new byte[10]), output, 10, [new(BpeRecipientType.TenantWrap, 1, weakKey)]));
+
+        Assert.Equal(0, output.Length);
     }
 
     private static int RecipientsLength(byte[] artifact) =>

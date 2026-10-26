@@ -16,7 +16,7 @@ vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('@/features/agents/api', () => ({ getAgents: vi.fn().mockResolvedValue([{ agentId: 'agent-a', hostName: 'SQL Agent', operationalStatus: 'Online', capabilities: [{ identifier: 'discovery.database-inventory', support: 'Supported' }] }]) }))
 vi.mock('@/features/storage-connections/api')
 vi.mock('@/features/discovery/api')
-vi.mock('@/features/backup-jobs/api', () => ({ saveBackupJob: vi.fn(), getBackupJob: vi.fn(), getBackupJobs: vi.fn(), getOccurrences: vi.fn(), startJobRun: vi.fn(), setJobEnabled: vi.fn() }))
+vi.mock('@/features/backup-jobs/api', () => ({ saveBackupJob: vi.fn(), getBackupJob: vi.fn(), getBackupJobHealth: vi.fn(), getBackupJobs: vi.fn(), getOccurrences: vi.fn(), startJobRun: vi.fn(), setJobEnabled: vi.fn() }))
 
 function mount(route = '/tenants/tenant-a/backup-jobs/new') {
   render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter initialEntries={[route]}><Routes>
@@ -26,7 +26,7 @@ function mount(route = '/tenants/tenant-a/backup-jobs/new') {
 const next = (times = 1) => { for (let i = 0; i < times; i++) fireEvent.click(screen.getByRole('button', { name: 'İleri' })) }
 async function toSummary() {
   fireEvent.change(await screen.findByLabelText('İş adı'), { target: { value: 'ERP' } })
-  next(5)
+  next(7)
 }
 beforeEach(() => {
   vi.clearAllMocks()
@@ -83,12 +83,13 @@ describe('wizard with discovered databases', () => {
   it('keeps manual entry working and makes no discovery request until the picker is opened', async () => {
     mount()
     fireEvent.change(await screen.findByLabelText('İş adı'), { target: { value: 'ERP' } })
+    next()
     await screen.findByRole('option', { name: /(?:SQL Agent|SQL Ajanı)/ })
-    fireEvent.change(screen.getByLabelText("Ajan"), { target: { value: 'agent-a' } })
+    fireEvent.change(screen.getByLabelText("Yedekleme bilgisayarı"), { target: { value: 'agent-a' } })
     next()
     expect(screen.getByLabelText("Veritabanı")).toBeEnabled()
     expect(getDiscoveryInstances).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Keşfedilen veritabanlarından seç' }))
-    expect(screen.getByLabelText("Keşif Ajanı")).toBeInTheDocument()
+    expect(screen.getByLabelText("Veritabanı bulma bilgisayarı")).toBeInTheDocument()
   })
 })

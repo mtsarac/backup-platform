@@ -38,6 +38,8 @@
     <ProjectReference Include="../../providers/backup/file-system/BackupPlatform.BackupProviders.FileSystem.csproj" />
     <ProjectReference Include="../../providers/storage/local/BackupPlatform.StorageProviders.Local.csproj" />
     <ProjectReference Include="../../providers/storage/central/BackupPlatform.StorageProviders.Central.csproj" />
+    <ProjectReference Include="../../providers/storage/sftp/BackupPlatform.StorageProviders.Sftp.csproj" />
+    <ProjectReference Include="../../providers/storage/google-drive/BackupPlatform.StorageProviders.GoogleDrive.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -46,5 +48,24 @@
 
   <Target Name="ValidateAgentPlatform" BeforeTargets="PrepareForBuild">
     <Error Condition="'$(AgentPlatform)' != 'Windows' and '$(AgentPlatform)' != 'Linux'" Text="AgentPlatform must be Windows or Linux. Set -p:AgentPlatform explicitly when cross-building." />
+  </Target>
+
+  <PropertyGroup>
+    <DirectDownloadOs Condition="'$(AgentPlatform)' == 'Windows'">windows</DirectDownloadOs>
+    <DirectDownloadOs Condition="'$(AgentPlatform)' == 'Linux'">linux</DirectDownloadOs>
+    <DirectDownloadArch Condition="$(RuntimeIdentifier.EndsWith('-arm64'))">arm64</DirectDownloadArch>
+    <DirectDownloadArch Condition="'$(DirectDownloadArch)' == ''">amd64</DirectDownloadArch>
+    <DirectDownloadName>backup-direct-download</DirectDownloadName>
+    <DirectDownloadName Condition="'$(AgentPlatform)' == 'Windows'">backup-direct-download.exe</DirectDownloadName>
+    <DirectDownloadOutput>$(MSBuildProjectDirectory)/$(IntermediateOutputPath)direct/$(DirectDownloadName)</DirectDownloadOutput>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="$(DirectDownloadOutput)" Link="$(DirectDownloadName)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../agent/direct-download/THIRD-PARTY-NOTICES.txt" Link="THIRD-PARTY-DIRECT-DOWNLOAD.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../providers/storage/smb/THIRD-PARTY-NOTICES.txt" Link="THIRD-PARTY-SMBLIBRARY.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="BuildDirectDownloadTransport" BeforeTargets="PrepareForBuild">
+    <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(DirectDownloadOutput)'))" />
+    <Exec WorkingDirectory="$(MSBuildProjectDirectory)/../../agent/direct-download" Command="go build -mod=readonly -trimpath -o &quot;$(DirectDownloadOutput)&quot; ." EnvironmentVariables="GOOS=$(DirectDownloadOs);GOARCH=$(DirectDownloadArch);CGO_ENABLED=0" />
   </Target>
 </Project>

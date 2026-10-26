@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Storage;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using BackupPlatform.Contracts.Backups;
@@ -14,13 +15,14 @@ public sealed record ReplicaRepairStartResult(
     string? Code = null,
     string? Message = null);
 
-public sealed class ReplicaRepairService(
+public sealed partial class ReplicaRepairService(
     IReplicaRepairStore store,
     IBackupStorageResolver storageResolver,
     TimeProvider time,
-    ILogger<ReplicaRepairService> logger)
+    ILogger<ReplicaRepairService> logger,
+    IReplicaMissingReporter? missing = null)
 {
-    private static readonly TimeSpan DefaultLeaseDuration = TimeSpan.FromMinutes(10);
+    public static readonly TimeSpan DefaultLeaseDuration = TimeSpan.FromMinutes(10);
     private static readonly ConcurrentDictionary<Guid, CancellationTokenSource> _activeLocalCts = new();
 
     public async Task<ReplicaRepairStartResult> StartRepairAsync(
@@ -134,7 +136,7 @@ public sealed class ReplicaRepairService(
             var targetDestination = admission.TargetDestination;
             var candidateSources = admission.CandidateSources ?? [];
 
-            var destinationTarget = targetDestination.StorageProvider is "sftp" or "google-drive" && targetDestination.StorageConnectionId is { } connId && connId != Guid.Empty
+            var destinationTarget = StorageProviderTypes.External(targetDestination.StorageProvider) && targetDestination.StorageConnectionId is { } connId && connId != Guid.Empty
                 ? connId.ToString("D")
                 : targetDestination.StorageProvider;
 
@@ -160,8 +162,13 @@ public sealed class ReplicaRepairService(
                     logger.LogInformation("AgentLocal source {ReplicaId} cannot be read via backend relay without agent transport.", candidate.Id);
                     continue;
                 }
+                // Central-involving repairs still run here; never fall back to relaying an external-to-external copy when the central source cannot be opened.
+                if (StorageProviderTypes.AgentExecuted(targetDestination.StorageProvider)
+                    && claimed.LeaseOwner?.StartsWith("agent:", StringComparison.Ordinal) != true
+                    && StorageProviderTypes.External(candidate.StorageProvider))
+                    continue;
 
-                var sourceTarget = candidate.StorageProvider is "sftp" or "google-drive" && candidate.StorageConnectionId != Guid.Empty
+                var sourceTarget = StorageProviderTypes.External(candidate.StorageProvider) && candidate.StorageConnectionId != Guid.Empty
                     ? candidate.StorageConnectionId.ToString("D")
                     : candidate.StorageTarget;
 
@@ -191,6 +198,7 @@ public sealed class ReplicaRepairService(
                 {
                     logger.LogWarning(ex, "Failed to open candidate source {ReplicaId} ({Provider}): {Message}",
                         candidate.Id, candidate.StorageProvider, ex.Message);
+                    if (ex.Kind == StorageFailureKind.NotFound && missing is not null) await missing.ReportMissingAsync(tenantId, candidate.Id, CancellationToken.None);
                 }
             }
 
@@ -477,13 +485,14 @@ public sealed class ReplicaRepairService(
         CancellationToken cancellationToken) =>
         store.GetOperationAsync(tenantId, artifactId, operationId, cancellationToken);
 
-    public Task<IReadOnlyList<ReplicaRepairOperationView>> ListRepairsAsync(
+    /// <summary>Null when the artifact is not this tenant's.</summary>
+    public async Task<IReadOnlyList<ReplicaRepairOperationView>?> ListRepairsAsync(
         TenantId tenantId,
         Guid artifactId,
         CancellationToken cancellationToken) =>
-        store.ListOperationsAsync(tenantId, artifactId, cancellationToken);
+        await store.FindArtifactAsync(tenantId, artifactId, cancellationToken) is null ? null : await store.ListOperationsAsync(tenantId, artifactId, cancellationToken);
 
-    private async Task FailOrRetryAsync(
+    private async Task<bool> FailOrRetryAsync(
         ReplicaRepairOperation claimed,
         Guid leaseToken,
         string failureCode,
@@ -497,13 +506,13 @@ public sealed class ReplicaRepairService(
             var nextRetryAt = now + delay;
             logger.LogInformation("Repair operation {OperationId} failed with transient code {Code}. Scheduling retry {Attempt}/{Max} at {NextRetryAt}.",
                 claimed.Id, failureCode, claimed.AttemptCount + 1, claimed.MaxAttempts, nextRetryAt);
-            await store.ScheduleRetryAsync(claimed.TenantId, claimed.Id, leaseToken, failureCode, reason, nextRetryAt, now, cancellationToken);
+            return await store.ScheduleRetryAsync(claimed.TenantId, claimed.Id, leaseToken, failureCode, reason, nextRetryAt, now, cancellationToken);
         }
         else
         {
             logger.LogWarning("Repair operation {OperationId} failed permanently or exhausted retries: {Code} - {Reason}.",
                 claimed.Id, failureCode, reason);
-            await store.FailOperationAsync(claimed.TenantId, claimed.Id, leaseToken, failureCode, reason, now, cancellationToken);
+            return await store.FailOperationAsync(claimed.TenantId, claimed.Id, leaseToken, failureCode, reason, now, cancellationToken);
         }
     }
 
@@ -569,81 +578,6 @@ public sealed class ReplicaRepairService(
                 artifact.ArtifactChecksum,
                 time.GetUtcNow(),
                 CancellationToken.None);
-        }
-    }
-
-    private sealed class Sha256VerifyingStream : Stream
-    {
-        private readonly Stream _inner;
-        private readonly IncrementalHash _hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        private long _position;
-
-        public Sha256VerifyingStream(Stream inner)
-        {
-            _inner = inner;
-        }
-
-        public string GetHashHex()
-        {
-            var hash = _hasher.GetHashAndReset();
-            return Convert.ToHexString(hash).ToLowerInvariant();
-        }
-
-        public override bool CanRead => _inner.CanRead;
-        public override bool CanSeek => false;
-        public override bool CanWrite => false;
-        public override long Length => _inner.Length;
-        public override long Position
-        {
-            get => _position;
-            set => throw new NotSupportedException();
-        }
-
-        public override int Read(byte[] buffer, int offset, int count)
-        {
-            var read = _inner.Read(buffer, offset, count);
-            if (read > 0)
-            {
-                _hasher.AppendData(buffer, offset, read);
-                _position += read;
-            }
-            return read;
-        }
-
-        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
-        {
-            var read = await _inner.ReadAsync(buffer, cancellationToken);
-            if (read > 0)
-            {
-                _hasher.AppendData(buffer.Span[..read]);
-                _position += read;
-            }
-            return read;
-        }
-
-        public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
-        {
-            var read = await _inner.ReadAsync(buffer, offset, count, cancellationToken);
-            if (read > 0)
-            {
-                _hasher.AppendData(buffer, offset, read);
-                _position += read;
-            }
-            return read;
-        }
-
-        public override void Flush() => _inner.Flush();
-        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-        public override void SetLength(long value) => throw new NotSupportedException();
-        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                _hasher.Dispose();
-            }
-            base.Dispose(disposing);
         }
     }
 }

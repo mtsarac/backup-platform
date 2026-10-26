@@ -51,11 +51,15 @@ public static class BackupAdmissionDenialCodes
     public const string MultiDestinationExecutionNotSupported = "multi_destination_execution_not_supported";
     /// <summary>The job has several destinations and its agent does not advertise multi-destination execution. Fail-closed for manual and scheduled runs alike.</summary>
     public const string AgentMultiDestinationUnsupported = "agent_multi_destination_unsupported";
-    /// <summary>The job's destinations cannot all be executed as configured (the same connection twice after resolution).</summary>
+    public const string AgentDirectStorageUnsupported = "agent_direct_storage_unsupported";
+    /// <summary>The job's destinations cannot all be executed as configured: the same connection twice after resolution, or a destination type or the 3-2-1 check its agent does not support.</summary>
     public const string DestinationCombinationUnsupported = "destination_combination_unsupported";
+    /// <summary>The job enforces 3-2-1, but its resolved destinations do not span two media classes with one verified off-site copy.</summary>
+    public const string ThreeTwoOneUnsatisfied = "three_two_one_unsatisfied";
+    public const string AgentEngineUnsupported = "agent_engine_unsupported";
 
     public static bool IsKnown(string? code) => code is SubscriptionRequired or QuotaExceeded or QuotaSizeUnknown or StorageConnectionDisabled or StorageConnectionUnavailable
-        or MultiDestinationExecutionNotSupported or AgentMultiDestinationUnsupported or DestinationCombinationUnsupported or QuotaBoundedUploadUnsupported;
+        or MultiDestinationExecutionNotSupported or AgentMultiDestinationUnsupported or AgentEngineUnsupported or DestinationCombinationUnsupported or ThreeTwoOneUnsatisfied or QuotaBoundedUploadUnsupported;
 }
 
 public static class BackupTriggerTypes

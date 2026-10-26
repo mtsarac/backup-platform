@@ -1,3 +1,4 @@
+import type { ArtifactEncryption } from '@/features/artifact-encryption/types'
 import type { BackupMetadata } from './backup-metadata'
 
 export type ReplicationStatus = 'Healthy' | 'Degraded' | 'InsufficientReplicas' | 'Unavailable'
@@ -114,6 +115,8 @@ export interface BackupArtifact {
   backupType?: string
   backupMetadata?: BackupMetadata | null
   replication?: ReplicationHealth | null
+  /** `null` for plain (v1-plain) artifacts. */
+  encryption?: ArtifactEncryption | null
 }
 
 export interface ArtifactList {

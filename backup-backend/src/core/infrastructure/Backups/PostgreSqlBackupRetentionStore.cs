@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Storage;
 using System.Security.Cryptography;
 using System.Text;
 using BackupPlatform.Contracts.Backups;
@@ -80,7 +81,8 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
         return new BackupRetentionApplication(candidates.Count, moved);
     }
 
-    public async Task<IReadOnlyList<ClaimedReplicaDeletion>> ClaimDueDeletionsAsync(string owner, DateTimeOffset now, TimeSpan lease, int limit, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ClaimedReplicaDeletion>> ClaimDueDeletionsAsync(string owner, DateTimeOffset now, TimeSpan lease, int limit, CancellationToken cancellationToken,
+        bool dispatchExternalToAgents = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(owner);
         now = now.ToUniversalTime();
@@ -94,12 +96,13 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
             WHERE (("Status" = 'DeletePending' AND "DeleteAfter" <= {now})
                OR ("Status" = 'DeleteFailed' AND "DeleteNextAttemptAt" <= {now})
                OR ("Status" = 'Deleting' AND ("DeleteLeaseExpiresAt" <= {now}
-                   OR ("ExecutionLocation" = 'Agent' AND "DeleteLeaseToken" IS NULL AND "DeleteNextAttemptAt" <= {now}))))
+                   OR ("DeleteLeaseToken" IS NULL AND "DeleteNextAttemptAt" <= {now}
+                       AND ("ExecutionLocation" = 'Agent' OR ({dispatchExternalToAgents} AND "StorageProvider" IN ('sftp', 'google-drive')))))))
               AND NOT EXISTS (SELECT 1 FROM restore_replica_pins pin WHERE pin."ReplicaId" = backup_replicas."Id" AND pin."ReleasedAt" IS NULL)
               AND NOT EXISTS (SELECT 1 FROM replica_repair_operations repair WHERE repair."SourceReplicaId" = backup_replicas."Id" AND repair."TenantId" = backup_replicas."TenantId" AND repair."Status" IN ('Pending', 'InProgress'))
               AND NOT EXISTS (SELECT 1 FROM backup_artifacts artifact JOIN backup_run_attempts attempt
                   ON attempt."Id" = artifact."AttemptId" AND attempt."TenantId" = artifact."TenantId"
-                  WHERE artifact."Id" = backup_replicas."ArtifactId" AND artifact."TenantId" = backup_replicas."TenantId" AND attempt."Status" IN (2, 3))
+                  WHERE artifact."Id" = backup_replicas."ArtifactId" AND artifact."TenantId" = backup_replicas."TenantId" AND attempt."Status" IN (1, 2, 3, 9))
               AND NOT EXISTS (SELECT 1 FROM download_sessions hold WHERE hold."ReplicaId" = backup_replicas."Id" AND hold."TenantId" = backup_replicas."TenantId"
                   AND hold."ReleasedAt" IS NULL AND hold."ExpiresAt" > {now} AND (hold."LeaseExpiresAt" IS NULL OR hold."LeaseExpiresAt" > {now}))
             ORDER BY CASE "Status" WHEN 'DeletePending' THEN "DeleteAfter" WHEN 'DeleteFailed' THEN "DeleteNextAttemptAt" ELSE COALESCE("DeleteLeaseExpiresAt", "DeleteNextAttemptAt") END, "Id"
@@ -126,18 +129,18 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
         var changed = false;
         foreach (var replica in replicas.OrderBy(replica => position[replica.Id]))
         {
-            if (replica.ExecutionLocation == BackupStorageExecutionLocation.Agent)
-            {
-                changed |= replica.DispatchAgentDeletion(replica.DeleteOperationId ?? Guid.NewGuid(), now,
-                    now + retentionOptions.DeleteRetryDelay(Math.Max(1, replica.DeleteAttempts)));
-                continue;
-            }
-            if (replica.StorageProvider is "sftp" or "google-drive")
+            if (replica.ExecutionLocation == BackupStorageExecutionLocation.Backend && StorageProviderTypes.External(replica.StorageProvider))
             {
                 // A timed-out attempt can still have a remote PUT in flight; do not publish absence ahead of that writer.
                 // Taken for this transaction only (the row stays locked until commit, so a writer waits for it): a live writer lease means skip.
                 var transferLock = BackupTransferLock.Id(replica.StorageConnectionId, replica.Key);
                 if (!await BackupTransferLeases.TryTakeAsync(context, transferLock, Guid.NewGuid(), TimeSpan.Zero, cancellationToken)) continue;
+            }
+            if (replica.ExecutionLocation == BackupStorageExecutionLocation.Agent || dispatchExternalToAgents && replica.AgentExecuted)
+            {
+                changed |= replica.DispatchAgentDeletion(replica.DeleteOperationId ?? Guid.NewGuid(), now,
+                    now + retentionOptions.DeleteRetryDelay(Math.Max(1, replica.DeleteAttempts)));
+                continue;
             }
             // The domain re-validates due-ness on the locked, freshly read row.
             if (!replica.BeginDelete(Guid.NewGuid(), owner, now, lease)) continue;
@@ -157,7 +160,7 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         var replica = await context.BackupReplicas.SingleOrDefaultAsync(entity => entity.Id == replicaId, cancellationToken);
         if (replica is null || !replica.CompleteDelete(leaseToken, now)) return false;
-        if (replica.StorageProvider == "google-drive")
+        if (replica.StorageProvider == StorageProviderTypes.GoogleDrive)
         {
             await context.GoogleDriveFileMetadata.Where(m =>
                 m.TenantId == replica.TenantId && m.ConnectionId == replica.StorageConnectionId && m.StorageKey == replica.Key)
@@ -426,7 +429,7 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
         }
     }
 
-    private static string SafeStorageProvider(string provider) => provider is "local" or "central" or "sftp" or "google-drive" ? provider : "other";
+    private static string SafeStorageProvider(string provider) => provider is StorageProviderTypes.Local or StorageProviderTypes.Central || StorageProviderTypes.External(provider) ? provider : "other";
 
     public async Task<ClaimedStorageCleanup?> BeginSweptDeletionAsync(
         string storageProvider, string storageName, TenantId? storageScope, ManagedStorageKey key, string objectKey,

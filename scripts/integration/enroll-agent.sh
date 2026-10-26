@@ -2,7 +2,7 @@
 # Calls the real CLI, loading a one-time token from a protected disposable JSON file.
 set +x
 set -euo pipefail
-# shellcheck source=../lib/common.sh
+# shellcheck source=scripts/lib/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 usage() {
     printf '%s\n' 'Usage: enroll-agent.sh --host EXECUTABLE --server HTTPS_ORIGIN --token-file JSON --store-directory DIRECTORY [--name NAME] [--certificate PEM]' \

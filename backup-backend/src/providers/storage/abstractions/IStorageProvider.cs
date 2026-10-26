@@ -118,7 +118,13 @@ public sealed record StoragePutOptions(
     StorageOverwritePolicy Overwrite,
     ContentChecksum? ExpectedChecksum = null,
     long? ExpectedLength = null,
-    TimeSpan TransferAllowance = default);
+    TimeSpan TransferAllowance = default)
+{
+    public StorageTransferCheckpoint? Checkpoint { get; init; }
+    public Func<StorageTransferCheckpoint, CancellationToken, Task>? RecordCheckpointAsync { get; init; }
+}
+
+public sealed record StorageTransferCheckpoint(long VerifiedByteOffset, string? ProviderState);
 
 /// <summary>A stored object as the provider knows it. <see cref="Checksum"/> is null when the provider cannot state it without reading the content again.</summary>
 public sealed record StorageObjectMetadata(
@@ -251,6 +257,13 @@ public interface IStorageProvider
 
     /// <summary>Deletes the object; true if it existed. Providers without <see cref="StorageCapabilityIds.Delete"/> throw <see cref="StorageException"/> with <see cref="StorageFailureKind.NotSupported"/>.</summary>
     Task<bool> DeleteAsync(StorageObjectKey key, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Aborts the resumable upload that <paramref name="providerState"/> (a checkpoint recorded by <see cref="PutAsync"/>) describes, so an
+    /// abandoned transfer leaves no uncounted remote data. A provider whose checkpoints hold no remote state has nothing to abort (the default).
+    /// An already-gone upload is success; any other failure is a <see cref="StorageException"/> the caller must surface.
+    /// </summary>
+    Task AbortTransferAsync(StorageObjectKey key, string providerState, CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <summary>
     /// Lists the entries stored below <paramref name="prefix"/> (the whole provider scope when null), recursively, that were last

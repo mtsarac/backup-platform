@@ -44,7 +44,7 @@ const base: RestoreView = {
   verificationOutcome: 'Restored',
 }
 const cleanupOf = (patch: Partial<RestoreCleanup>): RestoreCleanup => ({ kind: 'VerificationDatabase', state: 'Completed', databaseName: 'bp_verify_ab12', attempts: 1, nextAttemptAt: null, lastFailureCode: null, reason: null, needsAttention: false, canRequest: false, retainedUntil: null, ...patch })
-const withResult = (restore: RestoreView, passed = true): RestoreView => ({ ...restore, result: { verification: {
+const withResult = (restore: RestoreView, passed = true): RestoreView => ({ ...restore, result: { preCheck: [], warnings: [], verification: {
   checks: [{ checkId: 'database-online', status: 'Passed', reasonCode: 'ok', message: 'Online.' }, { checkId: 'integrity', status: passed ? 'Passed' : 'Failed', reasonCode: 'x', message: 'Integrity message.' }],
   userTableCount: 4, readableTableCount: 4, cleanup: 'Dropped', cleanupReasonCode: null,
 }, retainedDatabaseName: null } as unknown as RestoreView['result'] })
@@ -77,7 +77,7 @@ describe('artifact restore verification', () => {
     expect(RestoreApi.getRestores).toHaveBeenCalledWith('tenant-a', { purpose: 'Verification', artifactId: 'artifact-1', pageSize: 10 }, expect.anything())
     fireEvent.click(screen.getByRole('button', { name: "Geri yükleme testi başlat" }))
     expect(await screen.findByText(/(?:Production Veritabanı değiştirilmez|Canlı veritabanı değiştirilmez)/)).toBeInTheDocument()
-    const agentOptions = within(screen.getByLabelText("Ajan")).getAllByRole('option')
+    const agentOptions = within(screen.getByLabelText("Yedekleme bilgisayarı")).getAllByRole('option')
     expect(agentOptions).toHaveLength(1)
     expect(agentOptions[0]).toHaveTextContent('Verifier')
     fireEvent.click(screen.getByRole('button', { name: 'Testi başlat' }))
@@ -156,9 +156,9 @@ describe('rollback copy removal', () => {
     fireEvent.click(screen.getByRole('button', { name: "Geri alma kopyasını kaldır" }))
     const confirm = await screen.findByRole('button', { name: 'Kalıcı olarak kaldır' })
     expect(confirm).toBeDisabled()
-    fireEvent.change(screen.getByLabelText("Veritabanı adı onayı"), { target: { value: 'bp_old_SalesDB' } })
+    fireEvent.change(screen.getByRole("textbox", { name: /bp_old_SalesDB_1/ }), { target: { value: 'bp_old_SalesDB' } })
     expect(confirm).toBeDisabled()
-    fireEvent.change(screen.getByLabelText("Veritabanı adı onayı"), { target: { value: 'bp_old_SalesDB_1' } })
+    fireEvent.change(screen.getByRole("textbox", { name: /bp_old_SalesDB_1/ }), { target: { value: 'bp_old_SalesDB_1' } })
     fireEvent.click(confirm)
     await waitFor(() => expect(RestoreApi.removeRollbackCopy).toHaveBeenCalledWith('tenant-a', 'ver-1', 'bp_old_SalesDB_1'))
   })

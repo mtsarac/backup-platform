@@ -76,11 +76,11 @@ internal sealed class PipelineHarness : IDisposable
         FullBackupRequest request,
         long size,
         AppliedFullBackupOptions? applied = null,
-        IEnumerable<BackupWarning>? warnings = null) =>
+        IEnumerable<BackupWarning>? warnings = null, DatabaseEngineId? engine = null) =>
         new(
             FullBackupStatus.Succeeded,
             failure: null,
-            Source(),
+            Source(engine),
             new BackupOptionsOutcome(request.Options, applied ?? new AppliedFullBackupOptions(false, false, false)),
             DateTimeOffset.UtcNow.AddSeconds(-5),
             DateTimeOffset.UtcNow,
@@ -109,9 +109,9 @@ internal sealed class PipelineHarness : IDisposable
             [],
             cleanup ?? StagingCleanup.NotNeeded);
 
-    public static DatabaseBackupSource Source() =>
+    public static DatabaseBackupSource Source(DatabaseEngineId? engine = null) =>
         new(
-            new DatabaseInstanceInfo(DatabaseEngineId.MsSql, "SRV", null, "17.0.5005.3", "Enterprise Developer Edition", "Linux"),
+            new DatabaseInstanceInfo(engine ?? DatabaseEngineId.MsSql, "SRV", null, "17.0.5005.3", "Enterprise Developer Edition", "Linux"),
             Database,
             new Dictionary<string, string> { ["recovery-model"] = "Full" });
 
@@ -129,7 +129,7 @@ internal sealed class PipelineHarness : IDisposable
 
 internal sealed class FakeBackupProvider(PipelineHarness harness) : IDatabaseBackupProvider
 {
-    public DatabaseEngineId Engine => DatabaseEngineId.MsSql;
+    public DatabaseEngineId Engine { get; set; } = DatabaseEngineId.MsSql;
 
     public BackupPreCheckReport PreCheck { get; set; } = new([new BackupPreCheckItem("database.exists", BackupPreCheckStatus.Passed, "ok", "The database exists.")]);
 
@@ -176,7 +176,7 @@ internal sealed class FakeBackupProvider(PipelineHarness harness) : IDatabaseBac
         progress?.Report(new BackupProgress(BackupExecutionStage.BackingUp, 50, null, null, DateTimeOffset.UtcNow));
         File.WriteAllBytes(Path.Combine(harness.StagingDirectory, request.StagedFileName), bytes);
         progress?.Report(new BackupProgress(BackupExecutionStage.Verifying, null, null, null, DateTimeOffset.UtcNow));
-        return PipelineHarness.SucceededResult(request, bytes.Length);
+        return PipelineHarness.SucceededResult(request, bytes.Length, engine: Engine);
     }
 }
 
@@ -191,6 +191,14 @@ internal sealed class InMemoryStorage(PipelineHarness harness) : IStorageProvide
     public Func<StorageObjectKey, Stream, StoragePutOptions, CancellationToken, Task<StorageObjectMetadata>>? OnPut { get; set; }
     public Func<StorageObjectKey, StorageVerificationExpectation, StorageVerificationResult?>? OnVerify { get; set; }
     public Func<StorageObjectKey, Task>? OnDelete { get; set; }
+    public List<(StorageObjectKey Key, string State)> Aborted { get; } = [];
+    public Func<Exception?>? AbortFailure { get; set; }
+
+    public Task AbortTransferAsync(StorageObjectKey key, string providerState, CancellationToken cancellationToken)
+    {
+        Aborted.Add((key, providerState));
+        return AbortFailure?.Invoke() is { } failure ? Task.FromException(failure) : Task.CompletedTask;
+    }
 
     /// <summary>The staged files that existed at the moment the replica was verified.</summary>
     public string[]? StagedFilesDuringVerify { get; private set; }

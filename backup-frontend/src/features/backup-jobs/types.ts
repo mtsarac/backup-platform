@@ -1,3 +1,4 @@
+import type { EncryptionPolicy } from '@/features/artifact-encryption/types'
 export type OptionPolicy = 'Disabled' | 'Preferred' | 'Required'
 export interface BackupDestination {
   storageProvider: string
@@ -7,8 +8,9 @@ export interface BackupDestination {
   isPrimary: boolean
 }
 export interface DatabaseLogin { userName: string; password: string }
+export interface FileBackupPolicy { paths: string[]; includes: string[]; excludes: string[]; symlinkPolicy: 'Skip' | 'Preserve' }
 export interface BackupConfiguration {
-  engine: 'mssql' | 'postgres'; database: string; host: string; port: number | null
+  engine: 'mssql' | 'postgres' | 'file-system'; database: string; host: string; port: number | null
   integratedSecurity: boolean; databaseCredentialReference: string | null
   /** Write-only: sent once, exchanged by the API for a reference, never returned. */
   databaseLogin?: DatabaseLogin | null
@@ -17,7 +19,12 @@ export interface BackupConfiguration {
   /** At least one; exactly one `isPrimary`. This list is the only source of storage targets. */
   destinations: BackupDestination[]
   requiredVerifiedReplicaCount: number
+  enforceThreeTwoOne?: boolean
+  sourceSite?: string | null
+  files?: FileBackupPolicy | null
   copyOnly: boolean; checksumPolicy: OptionPolicy; compressionPolicy: OptionPolicy
+  /** Defaults to `Off` on the server; `Required` fails a run whose artifact comes back unencrypted. */
+  encryptionPolicy: EncryptionPolicy
 }
 export interface RetryPolicy { maxAttempts: number; initialDelaySeconds: number; maxDelaySeconds: number; backoff: string; jitter: number }
 export interface RetentionPolicy { enabled: boolean; keepForSeconds: number; deleteGracePeriodSeconds: number }

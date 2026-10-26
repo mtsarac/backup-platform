@@ -1,14 +1,14 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
-import { selectClass } from '@/features/platform/styles'
-import { useEffect, useRef, useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { selectClass } from '@/components/ui/form-styles'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { nativeDownloadUrl } from './native-download-url'
-import { errorMessage, failureMessage } from '@/lib/api/failure-messages'
+import { failureMessage } from '@/lib/api/failure-messages'
 import { getDownloadAvailability, getDownloadStatus, prepareDownload } from './api'
-import { artifactSize } from './format'
+import { DownloadFlowStatus } from './download-flow-status'
+import { useArtifactDownload } from './use-artifact-download'
+import { formatBytes } from '@/lib/format'
 
 export function ArtifactDownload({ tenantId, artifactId, canAdmin, eligible }: { tenantId: string; artifactId: string; canAdmin: boolean; eligible: boolean }) {
   useLanguage()
@@ -17,78 +17,58 @@ export function ArtifactDownload({ tenantId, artifactId, canAdmin, eligible }: {
 }
 function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tenantId: string; artifactId: string; canAdmin: boolean; eligible: boolean }) {
   useLanguage()
-  const active = useRef(true)
-  const started = useRef(false)
-  const [replicaId, setReplicaId] = useState('')
+  const [decrypt, setDecrypt] = useState(false)
   const [copyNotice, setCopyNotice] = useState('')
-  useEffect(() => { active.current = true; return () => { active.current = false } }, [])
-  const availability = useQuery({
-    queryKey: ['tenant', tenantId, 'backup-artifacts', 'download-availability', artifactId, canAdmin],
-    queryFn: ({ signal }) => getDownloadAvailability(tenantId, artifactId, signal), enabled: canAdmin && eligible,
+  // The decrypt flag is only sent when chosen: the default request stays exactly the stored-file download.
+  // Remounting on scope/permission changes (the key above) plus `enabled` keeps a pending request from starting a download in a new scope.
+  const { availability, flow, replicaId, setReplicaId, selected } = useArtifactDownload({
+    enabled: canAdmin && eligible,
+    availabilityKey: ['tenant', tenantId, 'backup-artifacts', 'download-availability', artifactId, canAdmin],
+    fetchAvailability: signal => getDownloadAvailability(tenantId, artifactId, signal),
     refetchInterval: 10_000,
+    prepare: replica => decrypt ? prepareDownload(tenantId, artifactId, replica, true) : prepareDownload(tenantId, artifactId, replica),
+    fetchStatus: (sessionId, signal) => getDownloadStatus(tenantId, artifactId, sessionId, signal),
+    statusKey: sessionId => ['tenant', tenantId, 'backup-artifacts', 'download-status', artifactId, sessionId],
   })
-  const prepare = useMutation({ mutationFn: () => prepareDownload(tenantId, artifactId, replicaId || undefined) })
-  const session = prepare.data
-  const downloadUrl = nativeDownloadUrl(session?.downloadUrl)
-  const navigationError = Boolean(session && !downloadUrl)
-  const status = useQuery({
-    queryKey: ['tenant', tenantId, 'backup-artifacts', 'download-status', artifactId, session?.sessionId],
-    queryFn: ({ signal }) => getDownloadStatus(tenantId, artifactId, session!.sessionId, signal),
-    enabled: canAdmin && eligible && Boolean(session),
-    refetchInterval: (query) => query.state.data && ['Completed', 'Failed', 'Cancelled'].includes(query.state.data.state) ? false : 1000,
-    retry: false,
-  })
-  useEffect(() => {
-    if (!active.current || !canAdmin || !eligible || !session || !downloadUrl || status.data?.state !== 'Ready' || started.current) return
-    // Use the browser's cookie-authenticated navigation; file bytes never enter JavaScript memory.
-    started.current = true
-    const anchor = document.createElement('a')
-    anchor.href = downloadUrl
-    anchor.download = session.filename
-    document.body.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
-  }, [canAdmin, eligible, session, status.data?.state, downloadUrl])
+  const { session } = flow
   if (!canAdmin) return <Notice tone="info">{tx("Download Backup yalnızca Owner / Admin için açıktır.")}</Notice>
   if (!eligible) return <Notice tone="info">{tx("Bu Backup silme sürecinde veya silinmiş; indirme kullanılamıyor.")}</Notice>
-  const selected = availability.data?.replicas.find(replica => replica.replicaId === replicaId)
-  const busy = prepare.isPending || Boolean(session && !status.error && !navigationError && (!status.data || ['Preparing', 'Ready', 'Streaming'].includes(status.data.state)))
-  const failure = prepare.error || status.error || availability.error
+  const busy = flow.busy
   async function copyChecksum() {
     try { await navigator.clipboard.writeText(availability.data!.checksum); setCopyNotice(tx('Checksum kopyalandı.')) }
     catch { setCopyNotice(tx('Checksum kopyalanamadı. Değeri seçerek kopyalayabilirsiniz.')) }
   }
-  const finalState = status.data?.state
-  return <Section title={tx("Download Backup")} description={tx("Dosya tarayıcınızdan doğrudan indirilir; içeriği uygulama belleğine alınmaz.")} className="max-w-3xl">
+  return <Section title={tx("Download Backup")} description={tx("Harici depolama indirmeleri yetkili Agent üzerinden doğrudan diske aktarılır; platform depolaması tarayıcının indirme yöneticisini kullanır.")} className="max-w-3xl">
     <div className="space-y-4">
       {availability.isPending && <p role="status" className="text-sm text-text-muted">{tx("İndirme kullanılabilirliği kontrol ediliyor…")}</p>}
-      {failure && <Notice tone="error">{errorMessage(failure)}</Notice>}
-      {navigationError && <Notice tone="error">{tx("İndirme bağlantısı güvenli değil. Yeni bir indirme başlatın.")}</Notice>}
+      {availability.error ? <ErrorNotice error={availability.error} /> : null}
       {availability.data && <>
         <Facts columns={1}>
-          <Fact label={tx("Boyut")}>{artifactSize(availability.data.sizeBytes)}</Fact>
-          <Fact label={tx("SHA256 checksum")}>
+          <Fact label={tx("Boyut")}>{formatBytes(availability.data.sizeBytes)}</Fact>
+          <Fact label={availability.data.format === 'v2-bpe' ? tx("Şifreli dosyanın SHA256 checksum değeri") : tx("SHA256 checksum")}>
             <code className="block break-all font-mono text-sm">{availability.data.checksum}</code>
             <Button className="mt-2" variant="outline" size="sm" onClick={copyChecksum}>{tx("Checksum kopyala")}</Button>
             {copyNotice && <p role="status" className="mt-1 text-sm text-text-muted">{copyNotice}</p>}
           </Fact>
+          {session?.decrypted && <Fact label={tx("Çözülmüş dosyanın SHA256 checksum değeri")}><code className="block break-all font-mono text-sm">{session.checksum}</code></Fact>}
         </Facts>
         <label className="block text-sm font-medium text-text-heading">{tx("İndirme hedefi")}<select aria-label={tx("İndirme hedefi")} className={`${selectClass} w-full`} value={replicaId} disabled={busy} onChange={event => setReplicaId(event.target.value)}>
-            <option value="">{tx("Otomatik · en uygun replika (Fallback destekli)")}</option>
+            <option value="">{tx("Otomatik · en uygun doğrulanmış replika")}</option>
             {availability.data.replicas.map(replica => <option key={replica.replicaId} value={replica.replicaId} disabled={!replica.available}>{replica.storageProvider} · {replica.storageTarget}{!replica.available ? ` · ${failureMessage(replica.reason)}` : ''}</option>)}
           </select>
         </label>
         {!replicaId && availability.data.replicas.filter(r => r.available).length > 1 && (
-          <p className="text-sm text-text-muted">{tx("Otomatik seçimde, aktarım başlamadan önce backend'in okuyabildiği alternatif doğrulanmış replika denenebilir. Aktarım başladıktan sonra hata oluşursa indirme durur; otomatik yeniden başlatılmaz.")}</p>
+          <p className="text-sm text-text-muted">{tx("Harici depolamada backend veya TURN aktarımı kullanılmaz. Doğrudan yol kurulamazsa açık hata verilir.")}</p>
         )}
+        {availability.data.format === 'v2-bpe' && <fieldset className="space-y-2" disabled={busy}>
+          <legend className="text-sm font-medium text-text-heading">{tx("İndirilecek dosya")}</legend>
+          <label className="flex min-h-11 items-start gap-3 rounded-lg bg-surface-2 p-3 text-sm"><input type="radio" name="download-form" className="mt-1 size-4 accent-primary" checked={!decrypt} onChange={() => setDecrypt(false)} /><span><span className="block font-medium">{tx("Şifreli dosya (.bpe) · varsayılan")}</span><span className="block text-text-muted">{tx("Depolanan dosya olduğu gibi iner ve anahtar olmadan okunamaz. Çevrimdışı çözmek için bp-decrypt kullanılır.")}</span></span></label>
+          <label className="flex min-h-11 items-start gap-3 rounded-lg bg-surface-2 p-3 text-sm"><input type="radio" name="download-form" className="mt-1 size-4 accent-primary" checked={decrypt} onChange={() => setDecrypt(true)} /><span><span className="block font-medium">{tx("Çözülmüş dosya")}</span><span className="block text-text-muted">{tx("Harici depolamada Agent dosyanın tamamını özel geçici alanda çözer; şifreli ve düz veri checksum doğrulanmadan düz veri gönderilmez. Yetkili anahtar erişimi audit kaydına yazılır. İndirilen dosya şifresizdir, güvenle saklayın.")}</span></span></label>
+        </fieldset>}
         {!availability.data.available && <Notice tone="warning">{tx("İndirme kullanılamıyor: Hiçbir doğrulanmış kopya erişilebilir değil (")}{failureMessage(availability.data.reason)}).</Notice>}
-        <Button disabled={busy || !availability.data.available || Boolean(selected && !selected.available)} onClick={() => { started.current = false; prepare.mutate() }}>{prepare.isPending || finalState === 'Preparing' ? tx('İndirme hazırlanıyor…') : tx('Download Backup')}</Button>
+        <Button disabled={busy || !availability.data.available || Boolean(selected && !selected.available)} onClick={() => void flow.start()}>{flow.pending || flow.state === 'Preparing' ? tx('İndirme hazırlanıyor…') : availability.data.format === 'v2-bpe' && decrypt ? tx('Çözülmüş dosyayı indir') : tx('Download Backup')}</Button>
       </>}
-      {session && !status.data && !status.error && <p role="status" className="text-sm text-text-muted">{tx("İndirme hazırlanıyor…")}</p>}
-      {status.data && <Notice tone={finalState === 'Failed' ? 'error' : finalState === 'Completed' ? 'success' : 'info'}>
-        {finalState === 'Preparing' ? tx('İndirme hazırlanıyor…') : finalState === 'Ready' || finalState === 'Streaming' ? tx('İndirme başlatıldı. Dosya tarayıcınız tarafından kaydediliyor.') : finalState === 'Completed' ? tx('Dosya aktarımı tamamlandı.') : finalState === 'Cancelled' ? tx('İndirme iptal edildi.') : tx("İndirme başarısız: {0}", { "0": failureMessage(status.data.failureCode) })}
-        {status.data.transferredBytes > 0 && tx(" · {0} aktarıldı", { "0": artifactSize(status.data.transferredBytes) })}
-      </Notice>}
+      <DownloadFlowStatus flow={flow} />
     </div>
   </Section>
 }

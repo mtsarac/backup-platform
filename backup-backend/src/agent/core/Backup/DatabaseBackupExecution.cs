@@ -36,6 +36,7 @@ internal sealed class DatabaseBackupExecution
     private readonly List<BackupDestinationResult> _destinations = [];
     private bool _transferCancelled;
     private StagingCleanup _stagingCleanup = StagingCleanup.NotNeeded;
+    private RetainedTransfer? _retained;
 
     public DatabaseBackupExecution(
         DatabaseBackupPipelineRequest request,
@@ -79,6 +80,14 @@ internal sealed class DatabaseBackupExecution
         {
             await RunStagesAsync(cancellationToken).ConfigureAwait(false);
         }
+        catch (TransferPausedException paused)
+        {
+            return Build(DatabaseBackupStatus.Paused, BackupExecutionStage.Uploading, null) with { PauseReason = paused.Reason };
+        }
+        catch (OperationCanceledException) when (_request.ShutdownToken.IsCancellationRequested && _artifact is not null)
+        {
+            return Build(DatabaseBackupStatus.Paused, BackupExecutionStage.Uploading, null) with { PauseReason = "PausedByNetworkError" };
+        }
         catch (StageFailedException exception)
         {
             failure = exception.Failure;
@@ -116,11 +125,36 @@ internal sealed class DatabaseBackupExecution
         _tracker.Enter(BackupExecutionStage.Preparing);
         var (provider, targets) = ResolveProviders();
 
-        await PreCheckAsync(provider, cancellationToken).ConfigureAwait(false);
-        await BackUpAsync(provider, cancellationToken).ConfigureAwait(false);
-        await HashSourceAsync(cancellationToken).ConfigureAwait(false);
-        await PrepareArtifactAsync(cancellationToken).ConfigureAwait(false);
-        await HashArtifactAsync(cancellationToken).ConfigureAwait(false);
+        if (_request.ResumeTransfer)
+        {
+            try { _retained = RetainedTransfer.Load(_staging, _request.AttemptId); }
+            catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
+            {
+                // The transfer already finished, was cleaned up or never existed on this agent: there is nothing to continue, and saying so beats an "unexpected" failure.
+                throw Fail(BackupExecutionStage.Preparing, BackupPipelineReasons.StagedFileMissing,
+                    "The retained transfer of this attempt is no longer on this agent, so it cannot be resumed.", exception, BackupFailureKind.PreCheckFailed);
+            }
+            _artifact = _retained.Artifact;
+            _sourceFile = _retained.SourceFile;
+            _startedAt = _retained.StartedAt;
+            Hold(_artifact.FileName);
+            Hold(_sourceFile.FileName);
+            await using var retainedStream = OpenForRead(_artifact.FileName);
+            if (retainedStream.Length != _artifact.SizeBytes ||
+                await ContentHasher.ComputeSha256Async(retainedStream, null, cancellationToken) != _artifact.Checksum)
+                throw Fail(BackupExecutionStage.HashingArtifact, BackupPipelineReasons.StagedFileChanged, "The retained artifact no longer matches its checkpoint.");
+        }
+        else
+        {
+            await PreCheckAsync(provider, cancellationToken).ConfigureAwait(false);
+            await BackUpAsync(provider, cancellationToken).ConfigureAwait(false);
+            await HashSourceAsync(cancellationToken).ConfigureAwait(false);
+            await PrepareArtifactAsync(cancellationToken).ConfigureAwait(false);
+            await HashArtifactAsync(cancellationToken).ConfigureAwait(false);
+            _retained = new RetainedTransfer(_artifact!, _sourceFile!, _providerResult?.Source, _providerResult?.Options,
+                _providerResult?.Verification ?? BackupVerification.NotRun, _startedAt, _providerResult?.BackupStartedAt, _providerResult?.BackupFinishedAt);
+            _retained.Save(_staging, _request.AttemptId);
+        }
         if (_request.MaxArtifactBytes is { } maximum && _artifact!.SizeBytes > maximum)
             throw Fail(BackupExecutionStage.HashingArtifact, BackupPipelineReasons.QuotaExceeded,
                 "The backup artifact exceeds its hard-quota reservation; no destination was written.", kind: BackupFailureKind.PreCheckFailed);
@@ -279,6 +313,10 @@ internal sealed class DatabaseBackupExecution
     {
         foreach (var (destination, storage) in targets)
         {
+            if (_request.PauseToken.IsCancellationRequested) throw new TransferPausedException("Operator");
+            if (!_request.ResumeTransfer && _request.RecordCheckpointAsync is { } record && destination.ConnectionId is { } destinationId)
+                await record(new TransferCheckpointContract { StorageProvider = destination.Storage.Value, DestinationId = destinationId }, cancellationToken).ConfigureAwait(false);
+            if (_request.TimeRulePauseToken.IsCancellationRequested) throw new TransferPausedException("TimeRule");
             if (_transferCancelled || cancellationToken.IsCancellationRequested)
             {
                 _transferCancelled = true;
@@ -294,6 +332,10 @@ internal sealed class DatabaseBackupExecution
 
         if (_destinations.Any(result => result.State == BackupDestinationState.Verified))
         {
+            if (_request.ReplicationPolicySatisfied is { } policy && !policy(_destinations))
+                throw Fail(BackupExecutionStage.VerifyingReplica, BackupPipelineReasons.StorageNotAvailable,
+                    "The verified replicas do not satisfy the admitted 3-2-1 policy.", kind: BackupFailureKind.StorageWriteFailed,
+                    cause: BackupFailureCause.StorageUnavailable);
             // At least one verified copy exists: the artifact is real and is published with whatever else happened. Cancellation does not unmake it.
             return;
         }
@@ -309,7 +351,7 @@ internal sealed class DatabaseBackupExecution
         BackupFailure? failure = null;
         BackupReplicaInfo? replica = null;
         var cancelled = false;
-        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        using var bounded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _request.PauseToken, _request.TimeRulePauseToken);
         bounded.CancelAfter(_request.DestinationTimeout ?? DatabaseBackupPipelineRequest.DefaultDestinationTimeout);
         try
         {
@@ -319,8 +361,17 @@ internal sealed class DatabaseBackupExecution
                     "The requested storage provider is not available on this agent.", kind: BackupFailureKind.StorageWriteFailed, cause: BackupFailureCause.Unsupported);
             }
 
-            await UploadAsync(storage, transfer, bounded, bounded.Token).ConfigureAwait(false);
+            await UploadAsync(destination, storage, transfer, bounded, bounded.Token).ConfigureAwait(false);
             replica = await VerifyReplicaAsync(storage, transfer, bounded.Token).ConfigureAwait(false);
+        }
+        catch (TransferPausedException) { throw; }
+        catch (OperationCanceledException) when (_request.PauseToken.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            throw new TransferPausedException("Operator");
+        }
+        catch (OperationCanceledException) when (_request.TimeRulePauseToken.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            throw new TransferPausedException("TimeRule");
         }
         catch (StageFailedException exception)
         {
@@ -348,6 +399,10 @@ internal sealed class DatabaseBackupExecution
         {
             objectMayRemain = !await RemoveUnverifiedReplicaAsync(storage, transfer.Key).ConfigureAwait(false);
         }
+        // A verified or aborted upload no longer needs the journal; one whose abort failed stays journaled so a later sweep aborts it.
+        if (replica is not null || storage is null || transfer.Key is null || transfer.ProviderState is not { } abandoned
+            || await AbortAbandonedUploadAsync(storage, transfer.Key, abandoned).ConfigureAwait(false))
+            ForgetUpload(destination);
 
         return new BackupDestinationResult(
             destination,
@@ -355,7 +410,41 @@ internal sealed class DatabaseBackupExecution
             replica, failure, transfer.Stored, transfer.Key, objectMayRemain, startedAt, _time.GetUtcNow());
     }
 
-    private async Task UploadAsync(IStorageProvider storage, Transfer transfer, CancellationTokenSource destinationDeadline, CancellationToken cancellationToken)
+    /// <summary>A failed or cancelled destination never resumes, so the remote parts of its checkpointed upload are aborted. False when it could not be proven aborted; that is reported, not swallowed.</summary>
+    private async Task<bool> AbortAbandonedUploadAsync(IStorageProvider storage, StorageObjectKey key, string providerState)
+    {
+        try
+        {
+            using var bounded = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+            await storage.AbortTransferAsync(key, providerState, bounded.Token).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            RecordCleanupFailure(BackupExecutionStage.Uploading, BackupPipelineReasons.ReplicaCleanupFailed,
+                "An abandoned upload could not be aborted and its uploaded parts may still be present in the storage.", exception);
+            return false;
+        }
+    }
+
+    /// <summary>Journals the newest checkpoint of a destination's upload BEFORE the server hears of it, so no remote upload id exists that the agent cannot abort later.</summary>
+    private void JournalUpload(BackupPipelineDestination destination, StorageObjectKey? key, string providerState)
+    {
+        if (_retained is null || destination.ConnectionId is not { } destinationId || key is null) return;
+        _retained = _retained.With(new RetainedUpload(destination.Storage.Value, destinationId, key.Value, providerState));
+        _retained.Save(_staging, _request.AttemptId);
+    }
+
+    private void ForgetUpload(BackupPipelineDestination destination)
+    {
+        if (_retained is null || destination.ConnectionId is not { } destinationId) return;
+        _retained = _retained.Without(destination.Storage.Value, destinationId);
+        // A journal that cannot be rewritten keeps a stale entry; aborting a finished upload later is harmless.
+        try { _retained.Save(_staging, _request.AttemptId); }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
+    }
+
+    private async Task UploadAsync(BackupPipelineDestination destination, IStorageProvider storage, Transfer transfer, CancellationTokenSource destinationDeadline, CancellationToken cancellationToken)
     {
         const BackupExecutionStage stage = BackupExecutionStage.Uploading;
         _tracker.Enter(stage);
@@ -402,8 +491,9 @@ internal sealed class DatabaseBackupExecution
                     exception, BackupFailureKind.StorageWriteFailed, BackupFailureCause.StorageUnavailable);
             }
 
-            StorageObjectMetadata stored;
+            StorageObjectMetadata? stored = null;
             await using var pacingScope = pacing;
+            using var pauseRegistration = pacing?.TimeRulePauseToken.Register(() => destinationDeadline.Cancel());
             try
             {
                 if (pacing is not null)
@@ -413,12 +503,54 @@ internal sealed class DatabaseBackupExecution
                 }
                 var progress = new CallbackProgress<long>(bytes => _tracker.Report(
                     stage, artifact.SizeBytes > 0 ? bytes * 100.0 / artifact.SizeBytes : 100, bytes, artifact.SizeBytes));
-                stored = await storage.PutAsync(
-                    transfer.Key,
-                    pacing?.Wrap(stream) ?? stream,
-                    new StoragePutOptions(_request.Overwrite, artifact.Checksum, artifact.SizeBytes),
-                    progress,
-                    cancellationToken).ConfigureAwait(false);
+                var prior = _request.Checkpoints.SingleOrDefault(x => x.StorageProvider == destination.Storage.Value && x.DestinationId == destination.ConnectionId);
+                var checkpoint = prior is null ? null : new StorageTransferCheckpoint(prior.VerifiedByteOffset, prior.ProviderState);
+                transfer.ProviderState = prior?.ProviderState;
+                var options = new StoragePutOptions(_request.Overwrite, artifact.Checksum, artifact.SizeBytes)
+                {
+                    RecordCheckpointAsync = async (next, token) =>
+                    {
+                        transfer.ProviderState = next.ProviderState;
+                        if (next.ProviderState is { } state) JournalUpload(destination, transfer.Key, state);
+                        if (_request.RecordCheckpointAsync is { } record && destination.ConnectionId is { } destinationId)
+                            await record(new TransferCheckpointContract { StorageProvider = destination.Storage.Value, DestinationId = destinationId,
+                                VerifiedByteOffset = next.VerifiedByteOffset, ProviderState = next.ProviderState }, token).ConfigureAwait(false);
+                        checkpoint = next;
+                    }
+                };
+                for (var retry = 0; ; retry++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    stream.Position = 0;
+                    // A storage that accepts connections and never answers raises no error: every byte read or reported re-arms this timer, and it firing ends the attempt.
+                    using var stall = new CancellationTokenSource(_request.UploadStallTimeout, _time);
+                    using var guarded = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, stall.Token);
+                    void Touch() => stall.CancelAfter(_request.UploadStallTimeout);
+                    try
+                    {
+                        stored = await storage.PutAsync(transfer.Key, new ReadObservedStream(pacing?.Wrap(stream) ?? stream, Touch), options with { Checkpoint = checkpoint },
+                            new CallbackProgress<long>(bytes => { Touch(); progress.Report(bytes); }), guarded.Token).ConfigureAwait(false);
+                        break;
+                    }
+                    catch (Exception error) when (error is OperationCanceledException or StorageException && stall.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+                    {
+                        throw new TransferPausedException("PausedByNetworkError");
+                    }
+                    catch (StorageException error) when (error.Kind is StorageFailureKind.NetworkUnavailable or StorageFailureKind.Timeout)
+                    {
+                        if (retry == 3) throw new TransferPausedException("PausedByNetworkError");
+                        await Task.Delay(TimeSpan.FromSeconds(1 << retry), _time, cancellationToken).ConfigureAwait(false);
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (pacing?.TimeRulePauseToken.IsCancellationRequested == true
+                && !_request.PauseToken.IsCancellationRequested && !_request.TimeRulePauseToken.IsCancellationRequested)
+            {
+                throw new TransferPausedException("TimeRule");
+            }
+            catch (StorageException exception) when (exception.Kind == StorageFailureKind.AlreadyExists && _request.ResumeTransfer)
+            {
+                // A destination that finished before the pause still holds this attempt's object under its deterministic key: it is verified, not re-uploaded.
             }
             catch (StorageException exception)
             {
@@ -435,7 +567,7 @@ internal sealed class DatabaseBackupExecution
                 transfer.Key = ((StorageException)exception.Data[nameof(StorageException)]!).RemainingObjectKey;
                 throw;
             }
-            catch (Exception exception) when (exception is not OperationCanceledException and not StageFailedException)
+            catch (Exception exception) when (exception is not OperationCanceledException and not StageFailedException and not TransferPausedException)
             {
                 throw Fail(stage, BackupPipelineReasons.StorageUnexpected,
                     "The storage provider failed unexpectedly. Details are in the agent log.", exception, BackupFailureKind.StorageWriteFailed,
@@ -444,7 +576,7 @@ internal sealed class DatabaseBackupExecution
 
             // From here on an object exists under the final key; if anything below fails it must not be left behind unverified.
             transfer.Stored = true;
-            if (stored.SizeBytes != artifact.SizeBytes || (stored.Checksum is { } checksum && checksum != artifact.Checksum))
+            if (stored is not null && (stored.SizeBytes != artifact.SizeBytes || (stored.Checksum is { } checksum && checksum != artifact.Checksum)))
             {
                 throw Fail(stage, BackupPipelineReasons.StorageIntegrityMismatch,
                     "The storage reported a different size or checksum than the artifact that was sent.", kind: BackupFailureKind.StorageWriteFailed,
@@ -461,10 +593,21 @@ internal sealed class DatabaseBackupExecution
         StorageVerificationResult verification;
         try
         {
-            verification = await storage.VerifyAsync(
-                transfer.Key!, new StorageVerificationExpectation(artifact.SizeBytes, artifact.Checksum), cancellationToken).ConfigureAwait(false);
+            for (var retry = 0; ; retry++)
+            {
+                try
+                {
+                    verification = await storage.VerifyAsync(transfer.Key!, new StorageVerificationExpectation(artifact.SizeBytes, artifact.Checksum), cancellationToken).ConfigureAwait(false);
+                    break;
+                }
+                catch (StorageException error) when (error.Kind is StorageFailureKind.NetworkUnavailable or StorageFailureKind.Timeout)
+                {
+                    if (retry == 3) throw new TransferPausedException("PausedByNetworkError");
+                    await Task.Delay(TimeSpan.FromSeconds(1 << retry), _time, cancellationToken).ConfigureAwait(false);
+                }
+            }
         }
-        catch (Exception exception) when (exception is not OperationCanceledException and not StageFailedException)
+        catch (Exception exception) when (exception is not OperationCanceledException and not StageFailedException and not TransferPausedException)
         {
             var message = exception is StorageException storageException
                 ? storageException.Message
@@ -500,6 +643,8 @@ internal sealed class DatabaseBackupExecution
     {
         public StorageObjectKey? Key { get; set; }
         public bool Stored { get; set; }
+        /// <summary>The newest resumable-upload state; remote parts exist for it until the upload is published or aborted.</summary>
+        public string? ProviderState { get; set; }
     }
 
     private async Task<(ContentChecksum Checksum, long Size)> HashFileAsync(
@@ -574,9 +719,16 @@ internal sealed class DatabaseBackupExecution
         _holds.Clear();
     }
 
+    /// <summary>The journal pins the staged files; it stays while a remote upload could not be aborted, so the cleaner can abort it once the attempt is terminal.</summary>
+    private void ReleaseJournal()
+    {
+        if (_retained is { HasUploads: false }) _retained.Release(_staging, _request.AttemptId);
+    }
+
     private void CleanupAfterSuccess()
     {
         // Reached only after the replica was verified: this is the earliest point at which staging may be released.
+        ReleaseJournal();
         var failed = DeleteStaged(StagedNames());
         if (failed)
         {
@@ -593,6 +745,7 @@ internal sealed class DatabaseBackupExecution
     private async Task CleanupAfterFailureAsync(bool cancelled)
     {
         // Destinations clean up their own unverified objects as they fail (TransferOneAsync); only staging is left.
+        ReleaseJournal();
 
         // A file handed over by the provider is ours to remove; a file the provider failed on was dealt with by the provider.
         if (_stagedFile is null)
@@ -661,6 +814,12 @@ internal sealed class DatabaseBackupExecution
 
     private IEnumerable<string> StagedNames()
     {
+        if (_request.ResumeTransfer && _retained is { } retained)
+        {
+            yield return retained.SourceFile.FileName;
+            if (retained.Artifact.FileName != retained.SourceFile.FileName) yield return retained.Artifact.FileName;
+            yield break;
+        }
         if (_stagedFile is { } staged)
         {
             yield return staged.FileName;
@@ -687,14 +846,14 @@ internal sealed class DatabaseBackupExecution
             Status = status,
             FinalStage = finalStage,
             Failure = failure,
-            Source = provider?.Source,
+            Source = provider?.Source ?? _retained?.Source,
             StartedAt = _startedAt,
             FinishedAt = _time.GetUtcNow(),
-            BackupStartedAt = provider?.BackupStartedAt,
-            BackupFinishedAt = provider?.BackupFinishedAt,
-            Options = provider?.Options,
+            BackupStartedAt = provider?.BackupStartedAt ?? _retained?.BackupStartedAt,
+            BackupFinishedAt = provider?.BackupFinishedAt ?? _retained?.BackupFinishedAt,
+            Options = provider?.Options ?? _retained?.Options,
             PreCheck = _preCheck,
-            Verification = provider?.Verification ?? BackupVerification.NotRun,
+            Verification = provider?.Verification ?? _retained?.Verification ?? BackupVerification.NotRun,
             SourceFile = _sourceFile,
             Artifact = _artifact,
             Destinations = _destinations.ToArray(),
@@ -740,7 +899,7 @@ internal sealed class DatabaseBackupExecution
 
     private static BackupFailureCause StorageCause(StorageFailureKind kind) => kind switch
     {
-        StorageFailureKind.AccessDenied => BackupFailureCause.PermissionDenied,
+        StorageFailureKind.AccessDenied or StorageFailureKind.AuthenticationFailed or StorageFailureKind.HostKeyMismatch => BackupFailureCause.PermissionDenied,
         StorageFailureKind.InvalidConfiguration => BackupFailureCause.InvalidConfiguration,
         StorageFailureKind.NotSupported => BackupFailureCause.Unsupported,
         StorageFailureKind.InsufficientSpace or StorageFailureKind.AlreadyExists => BackupFailureCause.Unclassified,
@@ -753,6 +912,7 @@ internal sealed class DatabaseBackupExecution
         StorageFailureKind.IntegrityMismatch => BackupPipelineReasons.StorageIntegrityMismatch,
         StorageFailureKind.InsufficientSpace => BackupPipelineReasons.StorageInsufficientSpace,
         StorageFailureKind.AccessDenied => BackupPipelineReasons.StorageAccessDenied,
+        StorageFailureKind.AuthenticationFailed or StorageFailureKind.HostKeyMismatch => BackupPipelineReasons.StorageAuthenticationFailed,
         StorageFailureKind.NotSupported => BackupPipelineReasons.StorageNotSupported,
         StorageFailureKind.InvalidConfiguration => BackupPipelineReasons.StorageInvalidConfiguration,
         StorageFailureKind.Io => BackupPipelineReasons.StorageIoError,

@@ -130,15 +130,16 @@ public static class AgentAdministrationEndpoints
         return revoked is null ? Results.NotFound() : Results.NoContent();
     }
 
+    /// <summary>Revoked agents are history, not choices: they are listed only when <paramref name="includeRevoked"/> is set. Every other reader keeps resolving them by id.</summary>
     private static async Task<IResult> ListAgentsAsync(
-        string? connectivity, ITenantContext tenantContext, AgentConnectivityQueryService service, CancellationToken cancellationToken)
+        string? connectivity, bool? includeRevoked, ITenantContext tenantContext, AgentConnectivityQueryService service, CancellationToken cancellationToken)
     {
         if (!TryParseFilter(connectivity, out var filter))
         {
             return Results.Json(new { error = "connectivity must be online, offline or unknown." }, statusCode: StatusCodes.Status400BadRequest);
         }
         var agents = await service.ListAsync(tenantContext.TenantId!, filter, cancellationToken);
-        return Results.Ok(agents.Select(ToAgentResponse));
+        return Results.Ok(agents.Where(agent => includeRevoked == true || agent.Agent.Status != AgentStatus.Revoked).Select(ToAgentResponse));
     }
 
     private static async Task<IResult> GetAgentAsync(

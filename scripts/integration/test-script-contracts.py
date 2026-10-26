@@ -4,11 +4,11 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
 import subprocess
 import tempfile
 import unittest
 import uuid
+from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 CHECKER = REPO / 'scripts/lib/assert-test-results.py'
@@ -21,7 +21,7 @@ class TestEvidence(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='bp-script-evidence-') as directory:
             path = Path(directory) / 'results.trx'
             path.write_text(content)
-            result = subprocess.run(['python3', str(CHECKER), str(path)], capture_output=True, text=True, timeout=10)
+            result = subprocess.run(['python3', str(CHECKER), str(path)], capture_output=True, text=True, timeout=10, check=False)
         self.assertEqual(result.returncode == 0, expected_success, result.stdout + result.stderr)
 
     def test_executed_passing_selection_is_accepted(self):
@@ -44,7 +44,7 @@ class TestEvidence(unittest.TestCase):
 
     def test_missing_evidence_is_rejected(self):
         with tempfile.TemporaryDirectory(prefix='bp-script-evidence-') as directory:
-            result = subprocess.run(['python3', str(CHECKER), str(Path(directory) / 'absent.trx')], capture_output=True, timeout=10)
+            result = subprocess.run(['python3', str(CHECKER), str(Path(directory) / 'absent.trx')], capture_output=True, timeout=10, check=False)
         self.assertNotEqual(result.returncode, 0)
 
 
@@ -58,7 +58,7 @@ class RuntimeCleanup(unittest.TestCase):
                 'bash', '-c',
                 'source "$1"; register_cleanup_dir "$2"; true; cleanup_runtime 7',
                 'cleanup-contract', str(REPO / 'scripts/lib/common.sh'), str(owned),
-            ], capture_output=True, text=True, timeout=10)
+            ], capture_output=True, text=True, timeout=10, check=False)
             self.assertEqual(result.returncode, 7)
             self.assertFalse(owned.exists())
 
@@ -108,7 +108,7 @@ rows = '' if outcome == 'Empty' else f'<UnitTestResult outcome=\"{outcome}\" />'
     def invoke(self, runner, *arguments, **overrides):
         return subprocess.run(
             [str(REPO / 'scripts/integration' / runner), *arguments],
-            env={**self.environment, **overrides}, capture_output=True, text=True, timeout=10)
+            env={**self.environment, **overrides}, capture_output=True, text=True, timeout=10, check=False)
 
     def calls(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
@@ -213,7 +213,7 @@ rows = '' if outcome == 'Empty' else f'<UnitTestResult outcome=\"{outcome}\" />'
 
 class WindowsTransport(unittest.TestCase):
     def invoke(self, *arguments):
-        return subprocess.run([str(REPO / 'scripts/windows/run-powershell.sh'), *arguments], capture_output=True, text=True, timeout=30)
+        return subprocess.run([str(REPO / 'scripts/windows/run-powershell.sh'), *arguments], capture_output=True, text=True, timeout=30, check=False)
 
     def test_remote_command_failures_propagate(self):
         result = self.invoke('--command', "throw 'Expected transport contract failure.'")
@@ -249,18 +249,18 @@ class WindowsTransport(unittest.TestCase):
                 original = os.urandom(2 * 1024 * 1024) + bytes([0, 255, 13, 10])
                 path.write_bytes(original)
                 wrapper = str(REPO / 'scripts/windows/copy-to-vm.sh')
-                copied = subprocess.run([wrapper, str(path), destination], capture_output=True, text=True, timeout=30)
+                copied = subprocess.run([wrapper, str(path), destination], capture_output=True, text=True, timeout=30, check=False)
                 self.assertEqual(copied.returncode, 0, copied.stdout + copied.stderr)
                 original_hash = hashlib.sha256(original).hexdigest().upper()
                 observed = self.invoke('--command', f"(Get-FileHash -LiteralPath '{destination}' -Algorithm SHA256).Hash")
                 self.assertIn(original_hash, observed.stdout)
                 replacement = b'explicit replacement only' + bytes([0])
                 path.write_bytes(replacement)
-                refused = subprocess.run([wrapper, str(path), destination], capture_output=True, text=True, timeout=30)
+                refused = subprocess.run([wrapper, str(path), destination], capture_output=True, text=True, timeout=30, check=False)
                 self.assertNotEqual(refused.returncode, 0)
                 observed = self.invoke('--command', f"(Get-FileHash -LiteralPath '{destination}' -Algorithm SHA256).Hash")
                 self.assertIn(original_hash, observed.stdout)
-                replaced = subprocess.run([wrapper, '--force', str(path), destination], capture_output=True, text=True, timeout=30)
+                replaced = subprocess.run([wrapper, '--force', str(path), destination], capture_output=True, text=True, timeout=30, check=False)
                 self.assertEqual(replaced.returncode, 0, replaced.stdout + replaced.stderr)
                 observed = self.invoke('--command', f"(Get-FileHash -LiteralPath '{destination}' -Algorithm SHA256).Hash")
                 self.assertIn(hashlib.sha256(replacement).hexdigest().upper(), observed.stdout)

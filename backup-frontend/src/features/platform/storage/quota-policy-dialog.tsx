@@ -2,12 +2,13 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Field } from '@/components/ui/field'
 import { ApiError } from '@/lib/api/client'
-import { errorMessage } from '@/lib/api/failure-messages'
-import { FormDialog } from '@/features/platform/plans/form-dialog'
-import { inputClass, selectClass } from '@/features/platform/styles'
+import { FormDialog } from '@/components/ui/form-dialog'
+import { inputClass, selectClass } from '@/components/ui/form-styles'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { accountingModeLabels, enforcementModeLabels, scopeLabels } from '@/features/storage/labels'
 import { parseQuotaScopeLabels, parseStorageConnectionIds, type ScopeValuesResult } from '@/features/storage/scope-input'
 import { QuotaConnectionPicker } from '@/features/storage-connections/quota-connection-picker'
-import type { AccountingMode, EnforcementMode, QuotaPolicy, ScopeKind, ScopeSelector } from '@/features/storage/types'
+import type { AccountingMode, EnforcementMode, QuotaPolicy, QuotaPolicyInput, ScopeKind, ScopeSelector } from '@/features/storage/types'
 import { useCreateQuotaPolicy, useUpdateQuotaPolicy } from './hooks'
 
 interface Props {
@@ -35,6 +36,7 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
   const [quotaScopes, setQuotaScopes] = useState<string>((initialScope?.kind === 'quotaScope' ? initialScope.values ?? [] : ['managed']).join(', '))
   const [connectionIds, setConnectionIds] = useState<string>((initialScope?.kind === 'storageConnection' ? initialScope.values ?? [] : []).join('\n'))
   const [scopeError, setScopeError] = useState<string | null>(null)
+  const [confirmation, setConfirmation] = useState<QuotaPolicyInput | null>(null)
 
   const create = useCreateQuotaPolicy()
   const update = useUpdateQuotaPolicy(policy?.policyId ?? '')
@@ -83,18 +85,12 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
     includedStorageScopes.push(...(policy?.includedStorageScopes?.slice(1) ?? []))
 
     if (isEditing) {
-      update.mutate(
-        {
-          name: name.trim(),
-          accountingMode,
-          enforcementMode,
-          warningThresholdPercent: Number(warningThreshold),
-          criticalThresholdPercent: Number(criticalThreshold),
-          enabled,
-          includedStorageScopes,
-        },
-        { onSuccess: onClose },
-      )
+      setConfirmation({
+        name: name.trim(), accountingMode, enforcementMode,
+        warningThresholdPercent: Number(warningThreshold),
+        criticalThresholdPercent: Number(criticalThreshold),
+        enabled, includedStorageScopes,
+      })
     } else {
       create.mutate(
         {
@@ -113,6 +109,21 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
   }
 
   const errField = mutation.error instanceof ApiError ? mutation.error.field : undefined
+  if (confirmation && policy) return <ConfirmDialog open title={tx("Kota politikası değiştirilsin mi?")}
+    consequence={{
+      what: <div className="space-y-2">
+        <p>{tx("“{0}” için uyarı eşiği %{1} → %{2}, kritik eşik %{3} → %{4} olur.", { "0": policy.name, "1": policy.warningThresholdPercent, "2": confirmation.warningThresholdPercent, "3": policy.criticalThresholdPercent, "4": confirmation.criticalThresholdPercent })}</p>
+        <p>{tx("Hesaplama: {0}. Sınırda yapılacak işlem: {1}. Kapsam: {2}.", { "0": accountingModeLabels[confirmation.accountingMode], "1": enforcementModeLabels[confirmation.enforcementMode], "2": scopeLabels(confirmation.includedStorageScopes).join('; ') })}</p>
+        {!confirmation.enabled && <p>{tx("Politika devre dışı kalır; bu politikaya bağlı çalışma alanları varsayılan politikaya geçer.")}</p>}
+      </div>,
+      who: policy.isDefault
+        ? tx("Varsayılan “{0}” politikasını kullanan tüm çalışma alanları etkilenir: aboneliği olmayanlar ve planında etkin bir özel politika bulunmayanlar dahil. Kullanım hesapları ve yeni yedek başlatma kararları değişebilir.", { "0": policy.name })
+        : tx("Planında “{0}” politikası seçili olan çalışma alanları ve kullanım kaydı bu politikayla hesaplanan çalışma alanları etkilenir. Kullanım hesapları ve yeni yedek başlatma kararları değişebilir.", { "0": policy.name }),
+      reversible: tx("Politikayı tekrar düzenleyebilirsiniz. Kullanım yeniden hesaplanabilir; mevcut yedek dosyaları silinmez."),
+    }}
+    confirmLabel={tx("Kaydet")} pending={update.isPending} error={update.error}
+    onClose={() => setConfirmation(null)}
+    onConfirm={() => update.mutate(confirmation, { onSuccess: onClose })} />
 
   return (
     <FormDialog
@@ -122,17 +133,18 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
       pendingLabel={isEditing ? tx('Kaydediliyor…') : tx('Oluşturuluyor…')}
       pending={mutation.isPending}
       disabled={!name.trim() || (!isEditing && !key.trim())}
-      error={scopeError || (mutation.error ? errorMessage(mutation.error) : undefined)}
+      error={mutation.error}
       onSubmit={handleSubmit}
       onClose={onClose}
     >
+      {scopeError && <p role="alert" className="text-sm text-error">{scopeError}</p>}
       <fieldset className="space-y-4">
         <legend className="mb-3 text-sm font-semibold text-text-heading">{tx("Kimlik ve durum")}</legend>
         {!isEditing && <Field label={tx("Politika Anahtarı (Key)")} hint={tx("Benzersiz kimlik. Oluşturulduktan sonra değiştirilemez.")}>
           {(control) => <input {...control} className={inputClass} value={key} maxLength={64} required aria-invalid={errField === 'key'} onChange={(event) => setKey(event.target.value)} placeholder="ornek-politika-key" />}
         </Field>}
         <Field label={tx("Politika Adı")}>{(control) => <input {...control} className={inputClass} value={name} maxLength={100} required aria-invalid={errField === 'name'} onChange={(event) => setName(event.target.value)} />}</Field>
-        <label className="flex min-h-8 items-center gap-2 text-sm text-text"><input className="size-4" type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />{tx("Etkin politika (planlarda seçilebilir)")}</label>
+        <label className="flex min-h-11 items-center gap-2 text-sm text-text"><input className="size-4" type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />{tx("Etkin politika (planlarda seçilebilir)")}</label>
       </fieldset>
       <fieldset className="space-y-4 border-t border-border pt-4">
         <legend className="pt-4 text-sm font-semibold text-text-heading">{tx("Hesaplama ve eşikler")}</legend>
@@ -157,8 +169,8 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
           {(control) => <input {...control} className={inputClass} value={providerTypes} onChange={(event) => setProviderTypes(event.target.value)} placeholder="central, local" />}
         </Field>}
         {scopeKind === 'ownershipType' && <div className="space-y-2 text-sm"><p className="text-text-muted">{tx("Dahil edilecek sahiplik türleri:")}</p><div className="space-y-2">
-          <label className="flex min-h-8 items-center gap-2"><input className="size-4" type="checkbox" checked={ownershipTypes.includes('PlatformManaged')} onChange={() => toggleOwnership('PlatformManaged')} />{tx("PlatformManaged (Platform yönetimli / central)")}</label>
-          <label className="flex min-h-8 items-center gap-2"><input className="size-4" type="checkbox" checked={ownershipTypes.includes('TenantManaged')} onChange={() => toggleOwnership('TenantManaged')} />{tx("TenantManaged (Tenant yönetimli / local)")}</label>
+          <label className="flex min-h-11 items-center gap-2"><input className="size-4" type="checkbox" checked={ownershipTypes.includes('PlatformManaged')} onChange={() => toggleOwnership('PlatformManaged')} />{tx("PlatformManaged (Platform yönetimli / central)")}</label>
+          <label className="flex min-h-11 items-center gap-2"><input className="size-4" type="checkbox" checked={ownershipTypes.includes('TenantManaged')} onChange={() => toggleOwnership('TenantManaged')} />{tx("TenantManaged (Tenant yönetimli / local)")}</label>
         </div></div>}
         {scopeKind === 'quotaScope' && <Field label={tx("Kota kapsamı etiketleri (virgülle ayırın):")} hint={tx("Bir depolama bağlantısının kota kapsamı etiketiyle eşleşir. Küçük harf, rakam ve “-”; her etiket 1-64 karakter.")}>
           {(control) => <input {...control} className={inputClass} value={quotaScopes} onChange={(event) => setQuotaScopes(event.target.value)} placeholder="managed, tenant" aria-invalid={scopeError !== null} />}

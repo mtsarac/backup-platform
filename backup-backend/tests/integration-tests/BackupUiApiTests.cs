@@ -33,6 +33,26 @@ public sealed class BackupUiApiTests(PostgreSqlFixture fixture) : IClassFixture<
     }
 
     [Fact]
+    public async Task ListsOfAParentThatIsNotThisTenantsAreNotFoundInsteadOfEmpty()
+    {
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture);
+        var job = await scenario.CreateJobAsync();
+        using var own = await scenario.Admin.GetAsync(scenario.Root + $"/backup-jobs/{job}/runs");
+        Assert.Equal(HttpStatusCode.OK, own.StatusCode);
+        var other = await scenario.World.CreateTenantAsync();
+
+        foreach (var path in new[] { $"/backup-jobs/{job}/runs", $"/backup-jobs/{Guid.NewGuid()}/runs", $"/backup-artifacts/{Guid.NewGuid()}/repairs" })
+        {
+            using var foreign = await other.Admin.GetAsync(BackupApiScenario.RootOf(other) + path);
+            using var missing = await other.Admin.GetAsync(BackupApiScenario.RootOf(other) + path.Replace(job.ToString(), Guid.NewGuid().ToString()));
+            Assert.Equal(HttpStatusCode.NotFound, foreign.StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+        }
+        using var filtered = await scenario.Admin.GetAsync(scenario.Root + $"/backup-runs?jobId={Guid.NewGuid()}");
+        Assert.Equal(HttpStatusCode.OK, filtered.StatusCode);
+    }
+
+    [Fact]
     public async Task ViewerReadsAreSafeAndEditsRequireTenantOperatorAndAntiforgery()
     {
         await using var scenario = await BackupApiScenario.CreateAsync(fixture);

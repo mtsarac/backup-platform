@@ -1,36 +1,19 @@
-import { currentLocale, tx, useLanguage } from '@/lib/i18n'
-import { Badge } from '@/components/ui/badge'
+import { tx, useLanguage } from '@/lib/i18n'
+import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
-import { Notice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
-import type { ReplicaRepairOperation, ReplicationDestination, ReplicationHealth, ReplicationStatus } from '@/features/artifacts/types'
+import type { ReplicaRepairOperation, ReplicationDestination, ReplicationHealth } from '@/features/artifacts/types'
 import { failureMessage } from '@/lib/api/failure-messages'
+import { formatDateTime } from '@/lib/format'
 
-type Tone = 'success' | 'warning' | 'error'
-
-const statusMeta: Record<ReplicationStatus, { label: string; tone: Tone }> = {
-  Healthy: { get label() { return tx("Replikasyon sağlıklı") }, tone: 'success' },
-  Degraded: { get label() { return tx("Kısmi replikasyon · politika karşılandı") }, tone: 'warning' },
-  InsufficientReplicas: { get label() { return tx("Yetersiz doğrulanmış replika") }, tone: 'error' },
-  Unavailable: { get label() { return tx("Doğrulanmış replika yok") }, tone: 'error' },
-}
-
-const destinationStates: Record<string, { label: string; tone: Tone | 'neutral' }> = {
-  Verified: { get label() { return tx("Doğrulandı") }, tone: 'success' },
-  Failed: { get label() { return tx("Başarısız") }, tone: 'error' },
-  Cancelled: { get label() { return tx("İptal edildi") }, tone: 'neutral' },
-  NotAttempted: { get label() { return tx("Denenmedi") }, tone: 'neutral' },
-  Deleted: { get label() { return tx("Silindi") }, tone: 'neutral' },
-}
-
-const providerLabels: Record<string, string> = { get local() { return tx("Agent yerel") }, get central() { return tx("Merkezi depolama") }, sftp: 'SFTP', 'google-drive': 'Google Drive' }
+const providerLabels: Record<string, string> = { get local() { return tx("Agent yerel") }, get central() { return tx("Merkezi depolama") }, sftp: 'SFTP', 'google-drive': 'Google Drive', s3: 'S3', smb: 'SMB / NAS' }
 
 /** The status is always the backend's verdict; nothing here recomputes it from the counts. */
 export function ReplicationBadge({ replication }: { replication?: ReplicationHealth | null }) {
   useLanguage()
   if (!replication) return null
-  const meta = statusMeta[replication.status] ?? { label: replication.status, tone: 'neutral' as const }
-  return <Badge tone={meta.tone}>{tx(meta.label)}</Badge>
+  return <StatusPill domain="replication" status={replication.status} />
 }
 
 /** "2 / 2 doğrulanmış replika gerekli · 3 hedef": verified copies against the policy's requirement, plus how many destinations the job has. */
@@ -58,7 +41,6 @@ function DestinationRow({
   repairOperation?: ReplicaRepairOperation | null
 }) {
   useLanguage()
-  const meta = destinationStates[destination.state] ?? { label: destination.state, tone: 'neutral' as const }
   const isAutoPending = repairOperation?.status === 'Pending' && Boolean(repairOperation?.nextRetryAt)
   const isExhausted = Boolean(repairOperation?.isExhausted)
   const repairEligible = Boolean(canRepair && destination.state !== 'Verified' && onRepair)
@@ -71,7 +53,7 @@ function DestinationRow({
         {destination.replicaStatus === 'Quarantined' && <p className="text-warning">{tx("Bu replika karantinaya alınmıştır; sahipliği doğrulanmadan otomatik veya manuel olarak silinmez.")}</p>}
         {isAutoPending && (
           <p className="text-sm font-medium text-warning">{tx("Otomatik yeniden deneme bekleniyor (Deneme")}{' '}{repairOperation?.attemptCount ?? 0} / {repairOperation?.maxAttempts ?? 5})
-            {repairOperation?.nextRetryAt && tx(" · Sonraki: {0}", { "0": new Date(repairOperation.nextRetryAt).toLocaleTimeString(currentLocale()) })}
+            {repairOperation?.nextRetryAt && tx(" · Sonraki: {0}", { "0": formatDateTime(repairOperation.nextRetryAt) })}
             {repairOperation?.lastFailureCode && ` (${repairOperation.lastFailureCode})`}
           </p>
         )}
@@ -82,7 +64,7 @@ function DestinationRow({
         )}
       </div>
       <div className="flex items-center gap-2">
-        <Badge tone={meta.tone}>{tx(meta.label)}</Badge>
+        <StatusPill domain="destination" status={destination.state} />
         {repairEligible && (
           <Button
             size="sm"
@@ -118,8 +100,8 @@ export function ReplicationSection({
     <Section title={tx("Replikasyon")} description={replicationCounts(replication)} actions={<ReplicationBadge replication={replication} />}>
       <div className="space-y-3">
       {replication.status === 'Degraded' && <Notice tone="warning">{tx("Yedek kullanılabilir ve politika karşılanıyor; mevcut doğrulanmış replikalardan indirme ve geri yükleme yapılabilir.")}</Notice>}
-      {replication.status === 'InsufficientReplicas' && <Notice tone="error">{tx("Politikanın gerektirdiği replika sayısına ulaşılamadı; ancak mevcut doğrulanmış replikalardan indirme ve geri yükleme mümkündür.")}</Notice>}
-      {replication.status === 'Unavailable' && <Notice tone="error">{tx("Hiçbir hedefte doğrulanmış kopya yok; indirme ve geri yükleme kullanılamaz.")}</Notice>}
+      {replication.status === 'InsufficientReplicas' && <Notice tone="warning">{tx("Politikanın gerektirdiği replika sayısına ulaşılamadı; ancak mevcut doğrulanmış replikalardan indirme ve geri yükleme mümkündür.")}</Notice>}
+      {replication.status === 'Unavailable' && <ErrorNotice what={tx("Hiçbir hedefte doğrulanmış kopya yok; indirme ve geri yükleme kullanılamaz.")} dataImpact={tx("Bu yedekten şu anda veri kurtarılamaz.")} action={tx("Replikasyon hedeflerini kontrol edip onarmayı deneyin.")} />}
       {replication.destinations.length > 0 && (
         <ul className="space-y-2" aria-label={tx("Hedef sonuçları")}>
           {replication.destinations.map((destination) => {

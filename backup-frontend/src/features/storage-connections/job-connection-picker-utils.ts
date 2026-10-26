@@ -30,7 +30,7 @@ export function connectionOptions(connections: readonly ConnectionView[], provid
     return {
       id: connection.id,
       unavailable,
-      label: [includeTenant ? connection.tenantName ?? tx('Tenant adı kullanılamıyor') : null, connection.name, connection.providerDisplayName, ownershipLabel(connection.ownership), unavailable ?? tx('Kullanılabilir')].filter(Boolean).join(' · '),
+      label: [includeTenant ? connection.tenantName ?? tx('Tenant adı kullanılamıyor') : null, connection.name, tx(connection.providerDisplayName), ownershipLabel(connection.ownership), unavailable ?? tx('Kullanılabilir')].filter(Boolean).join(' · '),
     }
   })
 }

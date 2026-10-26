@@ -115,9 +115,13 @@ internal sealed class FakeRetentionStore(CallJournal? journal = null) : IBackupR
         return Task.FromResult(Applications.Count > 0 ? Applications.Dequeue() : new BackupRetentionApplication(0, 0));
     }
 
-    public Task<IReadOnlyList<ClaimedReplicaDeletion>> ClaimDueDeletionsAsync(string owner, DateTimeOffset now, TimeSpan lease, int limit, CancellationToken cancellationToken)
+    public List<bool> DispatchedExternal { get; } = [];
+
+    public Task<IReadOnlyList<ClaimedReplicaDeletion>> ClaimDueDeletionsAsync(string owner, DateTimeOffset now, TimeSpan lease, int limit, CancellationToken cancellationToken,
+        bool dispatchExternalToAgents = false)
     {
         ClaimCalls.Add((owner, now, lease, limit));
+        DispatchedExternal.Add(dispatchExternalToAgents);
         _journal.Add("claim");
         return Task.FromResult(ClaimBatches.Count > 0 ? ClaimBatches.Dequeue() : Array.Empty<ClaimedReplicaDeletion>());
     }

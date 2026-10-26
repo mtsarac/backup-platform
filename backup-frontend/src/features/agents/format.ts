@@ -1,4 +1,4 @@
-import { currentLocale, tx } from '@/lib/i18n'
+import { tx } from '@/lib/i18n'
 /** Known identifiers reported by the agent; anything else is shown by its raw identifier so nothing is hidden. */
 export const capabilityLabels: Record<string, string> = {
   get 'mssql.backup.full'() { return tx("MSSQL Full Backup") },
@@ -24,12 +24,3 @@ export const capabilityLabels: Record<string, string> = {
   'postgres.backup.wal': 'PostgreSQL WAL / PITR',
 }
 
-export const capabilitySupportLabels: Record<string, string> = {
-  get Supported() { return tx("Destekleniyor") },
-  get Unsupported() { return tx("Desteklenmiyor") },
-  get Unknown() { return tx("Bilinmiyor") },
-}
-
-export function agentDate(value: string | null | undefined) {
-  return value ? new Date(value).toLocaleString(currentLocale()) : tx('Henüz bildirilmedi')
-}

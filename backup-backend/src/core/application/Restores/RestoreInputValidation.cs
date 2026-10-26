@@ -62,7 +62,12 @@ public static class RestoreInputValidation
         catch (ArgumentException) { throw new InvalidRestoreRequestException("target"); }
         var verification = purpose == RestorePurpose.Verification;
         // A verification creates its own database: there is never an existing one whose sessions could be terminated.
-        var options = new RestoreOptions(!verification && (request.Options?.TerminateActiveConnections ?? false), request.Options?.VerifyChecksum ?? true, request.Options?.VerifyBackup ?? true);
+        var options = new RestoreOptions(!verification && (request.Options?.TerminateActiveConnections ?? false), request.Options?.VerifyChecksum ?? true, request.Options?.VerifyBackup ?? true)
+        {
+            Files = request.Options?.Files is { } files ? new FileRestorePolicy { Paths = files.Paths, RelativeDirectory = files.RelativeDirectory } : null
+        };
+        try { options.Files?.Validate(); }
+        catch (ArgumentException) { throw new InvalidRestoreRequestException("options.files"); }
         var confirmed = purpose == RestorePurpose.Execution && mode == RestoreMode.ReplaceExistingDatabase;
         var fingerprint = Fingerprint(artifactId, request.AgentId, request.ReplicaId, domainTarget, request.DatabaseName, mode, options);
         if (request.PrecheckId is { } precheckId)
@@ -77,12 +82,13 @@ public static class RestoreInputValidation
     private static string Fingerprint(Guid artifactId, Guid agentId, Guid? replicaId, RestoreTarget target, string databaseName, RestoreMode mode, RestoreOptions options)
     {
         var canonical = JsonSerializer.Serialize(new CanonicalRequest(artifactId, agentId, replicaId, target.Host, target.Port, target.IntegratedSecurity, target.DatabaseCredentialReference,
-            target.Encrypt, target.TrustServerCertificate, databaseName, mode.ToString(), options.TerminateActiveConnections, options.VerifyChecksum, options.VerifyBackup));
+            target.Encrypt, target.TrustServerCertificate, databaseName, mode.ToString(), options.TerminateActiveConnections, options.VerifyChecksum, options.VerifyBackup, options.Files));
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes("restore-request-v1:" + canonical)));
     }
 
     private sealed record CanonicalRequest(Guid ArtifactId, Guid AgentId, Guid? ReplicaId, string Host, int? Port, bool IntegratedSecurity, string? CredentialReference,
-        bool Encrypt, bool TrustServerCertificate, string DatabaseName, string Mode, bool TerminateActiveConnections, bool VerifyChecksum, bool VerifyBackup);
+        bool Encrypt, bool TrustServerCertificate, string DatabaseName, string Mode, bool TerminateActiveConnections, bool VerifyChecksum, bool VerifyBackup,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] FileRestorePolicy? Files);
 
     /// <summary>Names only: <see cref="Enum.TryParse{TEnum}(string?, bool, out TEnum)"/> would also accept numeric text such as "1".</summary>
     private static RestoreMode ParseMode(string? value)

@@ -18,7 +18,7 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
     public static StorageProviderId ProviderId { get; } = new("google-drive");
     public static StorageCapabilities GoogleDriveCapabilities { get; } = new([
         StorageCapabilityIds.Read, StorageCapabilityIds.Delete,
-        StorageCapabilityIds.AtomicPublish, StorageCapabilityIds.VerifyAbsence]);
+        StorageCapabilityIds.AtomicPublish, StorageCapabilityIds.VerifyAbsence, StorageCapabilityIds.Resume]);
     private const string ApiBase = "https://www.googleapis.com/drive/v3/files";
     private const string UploadBase = "https://www.googleapis.com/upload/drive/v3/files";
     private const string Fields = "id,name,size,md5Checksum,modifiedTime,trashed,appProperties,parents";
@@ -27,7 +27,7 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
     private static readonly Counter<long> Retries = Meter.CreateCounter<long>("google_drive_retries");
     private readonly HttpClient _http;
     private readonly GoogleDriveStorageOptions _options;
-    private readonly GoogleDriveTokenManager _tokenManager;
+    private readonly Func<CancellationToken, ValueTask<string>> _accessTokenSource;
     private readonly IGoogleDriveFileCatalog _catalog;
     private readonly IGoogleDriveStagingStore? _stagingStore;
     private readonly Action<GoogleDriveReconciliationFinding>? _observer;
@@ -42,11 +42,30 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
         Func<CancellationToken, Task>? onReauthorizationRequired = null,
         Action<GoogleDriveReconciliationFinding>? reconciliationObserver = null,
         IGoogleDriveStagingStore? stagingStore = null)
+        : this(http, options,
+            new GoogleDriveTokenManager(http, options, credentials ?? throw new ArgumentNullException(nameof(credentials)), onTokenRotated, refreshCoordinator, onReauthorizationRequired).GetAccessTokenAsync,
+            catalog, reconciliationObserver, stagingStore)
+    {
+    }
+
+    public static GoogleDriveStorageProvider CreateDirect(
+        HttpClient http,
+        GoogleDriveStorageOptions options,
+        Func<CancellationToken, ValueTask<string>> accessTokenSource,
+        IGoogleDriveFileCatalog? catalog = null,
+        Action<GoogleDriveReconciliationFinding>? reconciliationObserver = null,
+        IGoogleDriveStagingStore? stagingStore = null) =>
+        new(http, options, accessTokenSource, catalog, reconciliationObserver, stagingStore);
+
+    private GoogleDriveStorageProvider(HttpClient http, GoogleDriveStorageOptions options,
+        Func<CancellationToken, ValueTask<string>> accessTokenSource,
+        IGoogleDriveFileCatalog? catalog,
+        Action<GoogleDriveReconciliationFinding>? reconciliationObserver,
+        IGoogleDriveStagingStore? stagingStore)
     {
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _options = options ?? throw new ArgumentNullException(nameof(options));
-        ArgumentNullException.ThrowIfNull(credentials);
-        _tokenManager = new GoogleDriveTokenManager(http, options, credentials, onTokenRotated, refreshCoordinator, onReauthorizationRequired);
+        _accessTokenSource = accessTokenSource ?? throw new ArgumentNullException(nameof(accessTokenSource));
         _catalog = catalog ?? new InMemoryGoogleDriveFileCatalog();
         _stagingStore = stagingStore;
         _observer = reconciliationObserver;
@@ -117,9 +136,10 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
         token = staged.CancellationToken;
         token.ThrowIfCancellationRequested();
         var folderId = await EnsureTargetFolderAsync(token).ConfigureAwait(false);
+        var resumed = options.Checkpoint?.ProviderState is { } state ? JsonSerializer.Deserialize<DriveTransferState>(state) : null;
         var retainUploaded = published is null;
-        var fileId = cached is { Checksum: null } && published is null ? cached.FileId
-            : await GenerateIdAsync(token).ConfigureAwait(false);
+        var fileId = resumed?.FileId ?? (cached is { Checksum: null } && published is null ? cached.FileId
+            : await GenerateIdAsync(token).ConfigureAwait(false));
         if (retainUploaded)
         {
             // Persist the locator before Drive can create bytes; retain an old replacement until readback succeeds.
@@ -132,7 +152,7 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
             DriveFileInfo uploaded;
             try
             {
-                uploaded = await UploadAsync(staged.Path, folderId, fileId, key, expected, progress, token).ConfigureAwait(false);
+                uploaded = await UploadAsync(staged.Path, folderId, fileId, key, expected, options, progress, token).ConfigureAwait(false);
             }
             catch (StorageException exception) when (exception.Kind == StorageFailureKind.AlreadyExists)
             {
@@ -393,14 +413,21 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
     }
 
     private async Task<DriveFileInfo> UploadAsync(string path, string folder, string fileId, StorageObjectKey key,
-        StorageVerificationExpectation expected, IProgress<long>? progress, CancellationToken token)
+        StorageVerificationExpectation expected, StoragePutOptions options, IProgress<long>? progress, CancellationToken token)
     {
-        var session = await InitiateAsync(folder, fileId, key, expected, token).ConfigureAwait(false);
+        var retained = options.Checkpoint?.ProviderState is { } state ? JsonSerializer.Deserialize<DriveTransferState>(state) : null;
+        if (retained is not null && (!Uri.TryCreate(retained.Session, UriKind.Absolute, out var uri) || uri.Scheme != "https" ||
+            uri.Port != 443 || uri.UserInfo.Length != 0 || uri.Fragment.Length != 0 ||
+            !(uri.Host == "googleapis.com" || uri.Host.EndsWith(".googleapis.com", StringComparison.OrdinalIgnoreCase))))
+            throw new StorageException(StorageFailureKind.InvalidConfiguration, "Invalid retained Drive upload session.");
+        var session = retained?.Session ?? await InitiateAsync(folder, fileId, key, expected, token).ConfigureAwait(false);
+        if (options.RecordCheckpointAsync is { } initial)
+            await initial(new(options.Checkpoint?.VerifiedByteOffset ?? 0, JsonSerializer.Serialize(new DriveTransferState(session, fileId))), token).ConfigureAwait(false);
         var failures = 0;
         var restarts = 0;
         Stopwatch? retryClock = null;
         long offset = 0;
-        var query = false;
+        var query = retained is not null;
         await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 64 * 1024, true);
         while (true)
         {
@@ -431,6 +458,8 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
                     if (!string.Equals(file.Id, fileId, StringComparison.Ordinal))
                         throw new StorageException(StorageFailureKind.IntegrityMismatch, "Google Drive upload returned an unexpected object identity.");
                     progress?.Report(expected.SizeBytes);
+                    if (options.RecordCheckpointAsync is { } complete)
+                        await complete(new(expected.SizeBytes, JsonSerializer.Serialize(new DriveTransferState(session, fileId))), token).ConfigureAwait(false);
                     return file;
                 }
                 if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone)
@@ -442,6 +471,8 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
                     retryClock ??= Stopwatch.StartNew();
                     await DelayRetryAsync(response, ++failures, retryClock, token).ConfigureAwait(false);
                     session = await InitiateAsync(folder, fileId, key, expected, token).ConfigureAwait(false);
+                    if (options.RecordCheckpointAsync is { } restarted)
+                        await restarted(new(0, JsonSerializer.Serialize(new DriveTransferState(session, fileId))), token).ConfigureAwait(false);
                     offset = 0;
                     query = false;
                     continue;
@@ -451,23 +482,27 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
                     var next = ParseOffset(response.Headers, expected.SizeBytes);
                     if (next > offset + count && !querying)
                         throw new StorageException(StorageFailureKind.Io, "Google Drive returned an invalid resumable offset.");
-                    if (next <= offset || next == expected.SizeBytes)
+                    if ((next <= offset && !querying) || next == expected.SizeBytes)
                     {
+                        if (options.RecordCheckpointAsync is not null) throw Failure(StorageFailureKind.NetworkUnavailable);
                         retryClock ??= Stopwatch.StartNew();
                         await DelayRetryAsync(response, ++failures, retryClock, token).ConfigureAwait(false);
                     }
                     offset = next;
+                    if (options.RecordCheckpointAsync is { } checkpoint)
+                        await checkpoint(new(offset, JsonSerializer.Serialize(new DriveTransferState(session, fileId))), token).ConfigureAwait(false);
                     query = next == expected.SizeBytes;
                     progress?.Report(offset);
                     continue;
                 }
                 var kind = await ClassifyAsync(response, token).ConfigureAwait(false);
                 if (!IsTransient(kind)) throw Failure(kind);
+                if (options.RecordCheckpointAsync is not null) throw Failure(kind);
                 retryClock ??= Stopwatch.StartNew();
                 await DelayRetryAsync(response, ++failures, retryClock, token).ConfigureAwait(false);
                 query = true;
             }
-            catch (StorageException ex) when (IsTransient(ex.Kind) && response is null)
+            catch (StorageException ex) when (IsTransient(ex.Kind) && response is null && options.RecordCheckpointAsync is null)
             {
                 retryClock ??= Stopwatch.StartNew();
                 await DelayRetryAsync(null, ++failures, retryClock, token).ConfigureAwait(false);
@@ -480,6 +515,8 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
             }
         }
     }
+
+    private sealed record DriveTransferState(string Session, string FileId);
 
     private async Task<string> GenerateIdAsync(CancellationToken token)
     {
@@ -567,7 +604,7 @@ public sealed class GoogleDriveStorageProvider : IStorageProvider
         {
             token.ThrowIfCancellationRequested();
             using var request = create();
-            if (authorize) request.Headers.Authorization = new("Bearer", await _tokenManager.GetAccessTokenAsync(token).ConfigureAwait(false));
+            if (authorize) request.Headers.Authorization = new("Bearer", await _accessTokenSource(token).ConfigureAwait(false));
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
             var remaining = _options.MaxRetryElapsed - clock.Elapsed;
             if (retry && remaining <= TimeSpan.Zero) throw Failure(StorageFailureKind.Timeout);

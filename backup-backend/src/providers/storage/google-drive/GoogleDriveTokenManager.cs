@@ -33,6 +33,8 @@ public sealed class GoogleDriveTokenManager
     {
         _http = http ?? throw new ArgumentNullException(nameof(http));
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        if (string.IsNullOrWhiteSpace(options.ClientId) || string.IsNullOrWhiteSpace(options.ClientSecret))
+            throw new ArgumentException("Client ID and secret are required for token management.", nameof(options));
         _credentialFactory = credentialFactory ?? throw new ArgumentNullException(nameof(credentialFactory));
         _onTokenRotated = onTokenRotated;
         _refreshCoordinator = refreshCoordinator;
@@ -65,6 +67,12 @@ public sealed class GoogleDriveTokenManager
         {
             _refreshLock.Release();
         }
+    }
+
+    public async ValueTask<(string AccessToken, DateTimeOffset ExpiresAt)> GetAccessTokenWithExpiryAsync(CancellationToken cancellationToken)
+    {
+        var token = await GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
+        return (token, _accessTokenExpiresAt);
     }
 
     private async ValueTask<string> RefreshAsync(CancellationToken cancellationToken)

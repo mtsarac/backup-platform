@@ -1,7 +1,7 @@
 import type { BackupDestination } from '@/features/backup-jobs/types'
 import type { BackupArtifact, ReplicationHealth } from '@/features/artifacts/types'
 
-export type BackupRunStatus = 'Pending' | 'Leased' | 'Running' | 'RetryPending' | 'CancellationRequested' | 'Succeeded' | 'Failed' | 'Cancelled' | 'AgentLost'
+export type BackupRunStatus = 'Pending' | 'Leased' | 'Running' | 'Paused' | 'RetryPending' | 'CancellationRequested' | 'Succeeded' | 'Failed' | 'Cancelled' | 'AgentLost'
 export type BackupTrigger = 'Manual' | 'Scheduled' | 'Retry' | 'ManualRetry' | 'AutomaticRetry'
 
 export interface BackupRetryPolicy {
@@ -59,8 +59,14 @@ export interface BackupRun {
   startedAt: string | null
   completedAt: string | null
   cancellationRequestedAt: string | null
+  pauseReason?: 'Operator' | 'TimeRule' | 'PausedByNetworkError' | null
+  pauseRequested?: boolean
   reasonCode: string | null
   reason: string | null
+  isSizeAnomaly: boolean
+  sizeAnomalyStatus: 'BaselinePending' | 'Normal' | 'SizeAnomalyWarning' | null
+  sizeAnomalyDeviationRatio: number | null
+  sizeAnomalyBaselineBytes: number | null
   scheduledFor: string | null
   scheduleDelaySeconds: number | null
   claimDeadline: string | null

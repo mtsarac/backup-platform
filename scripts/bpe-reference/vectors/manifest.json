@@ -1,0 +1,80 @@
+{
+  "format": "bpe-v2",
+  "keys": {
+    "tenant-wrap": {
+      "private_pem": "keys/tenant-wrap.private.pem",
+      "public_pem": "keys/tenant-wrap.public.pem",
+      "key_id": "0813dc5fbb3df902cb235c100e729e51"
+    },
+    "platform-recovery": {
+      "private_pem": "keys/platform-recovery.private.pem",
+      "public_pem": "keys/platform-recovery.public.pem",
+      "key_id": "8cd33139ac006477f6d71bd33e20971b"
+    }
+  },
+  "recovery_shares": {
+    "key": "platform-recovery",
+    "threshold": 3,
+    "total": 5,
+    "dir": "shares"
+  },
+  "cases": [
+    {
+      "name": "empty",
+      "artifact": "empty.bpe",
+      "plaintext": "empty.bin",
+      "plaintext_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "dek": "9b8a395427f25c4f7c3ccbee71d381b698d5d97ded9585d81b57b9a7dc7d1092",
+      "artifact_id": "076f4c3474d63b1286fa98fcab0da7a1",
+      "nonce_prefix": "2944473b",
+      "chunk_size": 64,
+      "source_size": 0,
+      "recipients": [
+        "tenant-wrap"
+      ]
+    },
+    {
+      "name": "exact-boundary",
+      "artifact": "exact-boundary.bpe",
+      "plaintext": "exact-boundary.bin",
+      "plaintext_sha256": "cc548ca2dec1f6fe4f58b2e27aa9c7521607df1130d140b55a4dad0665302356",
+      "dek": "1067566f4d0b8fa81de700984dcd7cd08ccb95e159a3f34164774ca6491f370c",
+      "artifact_id": "4e600c48ff8fcf16e28b83e97843f23c",
+      "nonce_prefix": "e60a33bb",
+      "chunk_size": 64,
+      "source_size": 128,
+      "recipients": [
+        "tenant-wrap"
+      ]
+    },
+    {
+      "name": "multi-chunk",
+      "artifact": "multi-chunk.bpe",
+      "plaintext": "multi-chunk.bin",
+      "plaintext_sha256": "44cae5223d431caed4a9e32271d6abf17c3f2f4abac45fcdb48a99fcc6072a09",
+      "dek": "ec0ac744ad67f7954e21f0529082e8e96b10fca1f598abda0f900c422c0d6b87",
+      "artifact_id": "ba5950ac6e4b97e312134d25dc9b7853",
+      "nonce_prefix": "c690f643",
+      "chunk_size": 64,
+      "source_size": 200,
+      "recipients": [
+        "tenant-wrap"
+      ]
+    },
+    {
+      "name": "two-recipients",
+      "artifact": "two-recipients.bpe",
+      "plaintext": "two-recipients.bin",
+      "plaintext_sha256": "44cae5223d431caed4a9e32271d6abf17c3f2f4abac45fcdb48a99fcc6072a09",
+      "dek": "4ffded9397fe0f6335efb211ba0c9c8a19bc27fde7e210ecead48980426eca27",
+      "artifact_id": "ed95a388705d7ad4ba497bc30dcc8d56",
+      "nonce_prefix": "08375f61",
+      "chunk_size": 64,
+      "source_size": 200,
+      "recipients": [
+        "tenant-wrap",
+        "platform-recovery"
+      ]
+    }
+  ]
+}

@@ -52,8 +52,11 @@ public static class AuditActions
     public const string BackupRunTriggered = "backup_run.triggered";
     public const string BackupRunRetryRequested = "backup_run.retry_requested";
     public const string BackupRunCancelRequested = "backup_run.cancel_requested";
+    public const string BackupRunPauseRequested = "backup_run.pause_requested";
+    public const string BackupRunResumed = "backup_run.resumed";
     public const string BackupRunCompleted = "backup_run.completed";
     public const string BackupRunAttemptCompleted = "backup_run.attempt_completed";
+    public const string BackupRunSizeAnomaly = "backup_run.size_anomaly";
     public const string BackupScheduleOccurrenceDecided = "backup_schedule.occurrence_decided";
 
     // Retention / replica deletion events
@@ -68,6 +71,10 @@ public static class AuditActions
 
     // Transfer policy events
     public const string UploadBandwidthLimitChanged = "upload_bandwidth.limit_changed";
+    public const string BandwidthProfileCreated = "bandwidth_profile.created";
+    public const string BandwidthProfileUpdated = "bandwidth_profile.updated";
+    public const string BandwidthProfileDeleted = "bandwidth_profile.deleted";
+    public const string BandwidthProfileAssigned = "bandwidth_profile.assigned";
 
     // Database discovery events
     public const string DiscoverySettingsChanged = "discovery.settings_changed";
@@ -77,6 +84,24 @@ public static class AuditActions
     // Artifact encryption events (ids only, never key material)
     public const string TenantWrapKeyCreated = "tenant_wrap_key.created";
     public const string BackupArtifactKeyUnwrapped = "backup_artifact.key_unwrapped";
+    public const string TenantWrapKeyRotated = "tenant_wrap_key.rotated";
+    public const string TenantWrapKeyRetired = "tenant_wrap_key.retired";
+    public const string TenantRecoveryKeySet = "tenant_recovery_key.set";
+    public const string TenantRecoveryKeyRemoved = "tenant_recovery_key.removed";
+
+    // Break-glass decrypt of one tenant artifact by a PlatformAdmin (dual control). Ids and reasons only, never key material.
+    public const string BreakGlassRequested = "break_glass.requested";
+    public const string BreakGlassApproved = "break_glass.approved";
+    public const string BreakGlassDenied = "break_glass.denied";
+    public const string BreakGlassConsumed = "break_glass.consumed";
+    public const string BreakGlassExpired = "break_glass.expired";
+    public const string BreakGlassDownloadStarted = "break_glass.download_started";
+    public const string BreakGlassDownloadCompleted = "break_glass.download_completed";
+    public const string BreakGlassDownloadFailed = "break_glass.download_failed";
+    /// <summary>An approve, deny or use was refused (self-approval, already decided, expired, not the requester); the attempt stays on record.</summary>
+    public const string BreakGlassRefused = "break_glass.refused";
+    public const string BreakGlassOwnerNotificationQueued = "break_glass.owner_notification_queued";
+    public const string BreakGlassOwnerNotificationUnavailable = "break_glass.owner_notification_unavailable";
 }
 
 /// <summary>

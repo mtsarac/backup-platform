@@ -9,6 +9,10 @@ export const platformPaths = {
   quotaPolicies: '/platform/quota-policies',
   supportSessions: '/platform/support-sessions',
   supportSession: (sessionId: string) => `/platform/support-sessions/${encodeURIComponent(sessionId)}`,
+  breakGlass: '/platform/break-glass',
+  /** Prefilled with a tenant and an artifact: opens the request dialog. */
+  breakGlassRequest: (tenantId: string, artifactId: string) => `/platform/break-glass?requestTenantId=${encodeURIComponent(tenantId)}&requestArtifactId=${encodeURIComponent(artifactId)}`,
+  breakGlassDetail: (id: string) => `/platform/break-glass/${encodeURIComponent(id)}`,
   users: '/platform/users',
   agents: (tenantId?: string) => tenantId ? `/platform/agents?tenantId=${encodeURIComponent(tenantId)}` : '/platform/agents',
   agent: (tenantId: string, agentId: string) => `/platform/tenants/${encodeURIComponent(tenantId)}/agents/${encodeURIComponent(agentId)}`,

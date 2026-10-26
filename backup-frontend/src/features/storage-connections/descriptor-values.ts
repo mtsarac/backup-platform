@@ -3,6 +3,10 @@ import type { ConfigField, ConnectionConfiguration, ProviderDescriptor, SecretFi
 /** Text and Number stay as typed strings; Boolean is held as a checkbox value until submission. */
 export type FieldValues = Record<string, string | boolean>
 
+export function editableConfigFields(providerType: string | undefined, fields: readonly ConfigField[]): readonly ConfigField[] {
+  return providerType === 'google-drive' ? fields.filter((field) => !['accountEmail', 'accountName', 'folderId', 'reauthorizationRequired'].includes(field.name)) : fields
+}
+
 export function initialFieldValues(fields: readonly ConfigField[], configuration: ConnectionConfiguration = {}, providerType?: string): FieldValues {
   return Object.fromEntries(fields.map((field) => {
     const current = configuration[field.name] ?? (providerType === 'sftp' ? ({ port: '22', authenticationType: 'password' } as ConnectionConfiguration)[field.name] : undefined)

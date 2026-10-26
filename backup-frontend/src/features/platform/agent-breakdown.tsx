@@ -10,7 +10,7 @@ const labels: [keyof AgentCounts, string, string][] = [
 export function AgentBreakdown({ counts }: { counts: AgentCounts }) {
   useLanguage()
   return <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-    <div className="rounded-lg bg-surface-2 p-3"><dt className="text-sm text-text-muted">{tx("Toplam Agent")}</dt><dd className="text-xl font-semibold text-text-heading">{counts.total}</dd></div>
+    <div className="rounded-lg bg-surface-2 p-3"><dt className="text-sm text-text-muted">{tx("Toplam")}</dt><dd className="text-xl font-semibold text-text-heading">{counts.total}</dd></div>
     {labels.map(([key, label, tone]) => <div key={key} className="rounded-lg bg-surface-2 p-3"><dt className="text-sm text-text-muted">{tx(label)}</dt><dd className={`text-xl font-semibold ${tone}`}>{counts[key]}</dd></div>)}
   </dl>
 }

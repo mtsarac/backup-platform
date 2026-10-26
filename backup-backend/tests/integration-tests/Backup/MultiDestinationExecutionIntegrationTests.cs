@@ -58,7 +58,10 @@ public sealed class MultiDestinationExecutionIntegrationTests(PostgreSqlFixture 
         await using var context = fixture.CreatePlatformContext();
         await context.AgentCapabilities.Where(row => row.AgentId == agent.AgentId).ExecuteDeleteAsync();
         if (support is { } declared)
+        {
             context.AgentCapabilities.Add(new AgentCapabilityRecord(agent.AgentId, agent.TenantId, BackupTaskProtocol.MultiDestinationCapability, declared, null, "revision-1", T0));
+            context.AgentCapabilities.Add(new AgentCapabilityRecord(agent.AgentId, agent.TenantId, TaskStorageProtocol.DirectCapability, declared, null, "revision-1", T0));
+        }
         await context.SaveChangesAsync();
     }
 
@@ -159,6 +162,24 @@ public sealed class MultiDestinationExecutionIntegrationTests(PostgreSqlFixture 
         var occurrence = Assert.Single(await _kit.OccurrencesAsync(multi.Job));
         Assert.Equal(BackupOccurrenceOutcome.AdmissionDenied, occurrence.Outcome);
         Assert.Equal(0, await World.Harness.CountRunsAsync(multi.Job.Id));
+    }
+
+    [Fact]
+    public async Task A_three_two_one_job_without_two_media_classes_and_an_offsite_copy_is_denied_with_its_own_reason()
+    {
+        var multi = await SetupAsync(required: 3);
+        await using (var context = fixture.CreatePlatformContext())
+        {
+            context.AgentCapabilities.Add(new AgentCapabilityRecord(multi.Agent.AgentId, multi.Agent.TenantId, "backup.three-two-one", CapabilitySupport.Supported, null, "revision-2", T0));
+            var job = await context.BackupJobs.SingleAsync(j => j.Id == multi.Job.Id);
+            job.Reconfigure(job.Configuration with { EnforceThreeTwoOne = true, SourceSite = "office" });
+            await context.SaveChangesAsync();
+        }
+
+        var manual = await World.RunStore().StartRunAsync(multi.Agent.TenantId, multi.Job.Id, "manual-1", T0, default);
+
+        Assert.Equal(BackupStartOutcome.AdmissionDenied, manual.Outcome);
+        Assert.Equal(BackupAdmissionDenialCodes.ThreeTwoOneUnsatisfied, manual.DenialCode);
     }
 
     [Fact]

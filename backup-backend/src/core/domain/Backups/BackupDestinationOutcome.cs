@@ -114,13 +114,13 @@ public static class BackupReplicationStatuses
     public const string Unavailable = "Unavailable";
 }
 
-/// <summary>One snapshot destination as the replication projection shows it. <see cref="State"/>: Verified, Failed, Cancelled, NotAttempted, Deleted (a verified copy that has since been deleted) or Pending.</summary>
+/// <summary>One snapshot destination as the replication projection shows it. <see cref="State"/>: Verified, Failed, Cancelled, NotAttempted, Deleted (a verified copy that has since been deleted or found missing in storage) or Pending.</summary>
 public sealed record BackupDestinationHealth(
     string StorageProvider, Guid? StorageConnectionId, bool IsPrimary, string State, string? FailureCode, bool ObjectMayRemain, Guid? ReplicaId, string? ReplicaStatus);
 
 /// <summary>
 /// Replication compliance of one artifact (or of the attempt that tried to create it), independent of the engine's outcome and of the run's status:
-/// <see cref="Status"/> says whether the verified copies meet the policy, <see cref="PolicySatisfied"/> is exactly <c>VerifiedReplicas &gt;= RequiredVerifiedReplicas</c>.
+/// <see cref="Status"/> says whether verified copies meet the admitted count, media diversity and off-site policy.
 /// <see cref="Destinations"/> is empty when only the replicas are known (an artifact listing).
 /// </summary>
 public sealed record BackupReplicationHealth(
@@ -129,6 +129,12 @@ public sealed record BackupReplicationHealth(
 /// <summary>THE definition of replication health. A pure projection of stored facts, so it can never drift from them.</summary>
 public static class BackupReplicationEvaluator
 {
+    public static bool MeetsThreeTwoOne(IEnumerable<(string? MediaClass, string? Site, bool OffsiteVerified)> verifiedCopies, string? sourceSite)
+    {
+        var copies = verifiedCopies.ToArray();
+        return copies.Length >= 3 && copies.Where(d => d.MediaClass is not null).Select(d => d.MediaClass).Distinct().Count() >= 2
+            && sourceSite is not null && copies.Any(d => d.OffsiteVerified && d.Site is not null && d.Site != sourceSite);
+    }
     public static string StatusOf(int required, int verified, int total) =>
         verified <= 0 ? BackupReplicationStatuses.Unavailable
         : verified < required ? BackupReplicationStatuses.InsufficientReplicas
@@ -144,6 +150,23 @@ public static class BackupReplicationEvaluator
         return new(required1, verified, total1, StatusOf(required1, verified, total1), verified >= required1, []);
     }
 
+    public static BackupReplicationHealth ForArtifact(BackupConfiguration snapshot, IEnumerable<BackupReplica> replicas)
+    {
+        var usable = replicas.Where(IsUsableVerified).ToArray();
+        var health = ForArtifact(snapshot.RequiredVerifiedReplicaCount, snapshot.Destinations.Count, usable);
+        return ApplyPolicy(snapshot, health, destination => usable.Any(replica => replica.StorageProvider == destination.StorageProvider
+            && replica.StorageConnectionId == destination.StorageConnectionId));
+    }
+
+    private static BackupReplicationHealth ApplyPolicy(BackupConfiguration snapshot, BackupReplicationHealth health, Func<BackupDestination, bool> verified)
+    {
+        if (!snapshot.EnforceThreeTwoOne) return health;
+        var copies = snapshot.Destinations.Where(verified).ToArray();
+        var satisfied = health.PolicySatisfied && MeetsThreeTwoOne(copies.Select(d => (d.MediaClass, d.Site, d.OffsiteVerified)), snapshot.SourceSite);
+        return health with { PolicySatisfied = satisfied,
+            Status = !satisfied && health.Status == BackupReplicationStatuses.Healthy ? BackupReplicationStatuses.Degraded : health.Status };
+    }
+
     /// <summary>
     /// The compliance of one terminal attempt against its run's snapshot: every snapshot destination appears exactly once, with the replica that
     /// holds it and the outcome that was recorded for it. Null while the attempt has not ended (nothing has been decided yet).
@@ -157,7 +180,7 @@ public static class BackupReplicationEvaluator
         {
             bool Matches(string provider, Guid? connection) =>
                 provider == destination.StorageProvider && (destination.StorageConnectionId is null || connection == destination.StorageConnectionId);
-            var verifiedReplica = replicas.FirstOrDefault(replica => replica.VerificationState == "Verified" && Matches(replica.StorageProvider, replica.StorageConnectionId));
+            var verifiedReplica = replicas.FirstOrDefault(replica => (replica.VerificationState == "Verified" || replica.VerificationMethod == BackupReplica.MissingVerificationMethod) && Matches(replica.StorageProvider, replica.StorageConnectionId));
             var outcome = attempt.DestinationOutcomes.FirstOrDefault(candidate => Matches(candidate.StorageProvider, candidate.StorageConnectionId));
             string state;
             if (verifiedReplica is not null) state = IsUsableVerified(verifiedReplica) ? BackupDestinationStates.Verified : "Deleted";
@@ -170,7 +193,9 @@ public static class BackupReplicationEvaluator
         }).ToArray();
         var required = Math.Max(1, snapshot.RequiredVerifiedReplicaCount);
         var verified = destinations.Count(destination => destination.State == BackupDestinationStates.Verified);
-        return new(required, verified, destinations.Length, StatusOf(required, verified, destinations.Length), verified >= required, destinations);
+        var health = new BackupReplicationHealth(required, verified, destinations.Length, StatusOf(required, verified, destinations.Length), verified >= required, destinations);
+        return ApplyPolicy(snapshot, health, destination => destinations.Any(copy => copy.StorageProvider == destination.StorageProvider
+            && copy.StorageConnectionId == destination.StorageConnectionId && copy.State == BackupDestinationStates.Verified));
     }
 
     private static bool IsUsableVerified(BackupReplica replica) => replica.VerificationState == "Verified" && replica.IsUsable;

@@ -4,7 +4,7 @@ using BackupPlatform.Application.Backups;
 namespace BackupPlatform.Api.Backups;
 
 /// <summary>
-/// Turns due retries into queued attempts. The schedule is durable (a RetryPending row with NextAttemptAt); this loop only
+/// Turns due retries into queued attempts and ends network pauses that are due to resume. The schedule is durable (a RetryPending row with NextAttemptAt); this loop only
 /// notices it, so a restart loses nothing and a late scan merely starts a retry late. Any number of workers or backend instances may run
 /// it: the store serialises per agent and the unique attempt number rejects a duplicate.
 /// </summary>
@@ -30,8 +30,11 @@ public sealed class BackupRetryWorker(IServiceScopeFactory scopes, BackupExecuti
     public async Task<int> ScanAsync(CancellationToken cancellationToken)
     {
         await using var scope = scopes.CreateAsyncScope();
-        var started = await scope.ServiceProvider.GetRequiredService<IBackupRunStore>()
-            .StartDueRetriesAsync(time.GetUtcNow(), options.RetryScanBatchSize, cancellationToken);
+        var store = scope.ServiceProvider.GetRequiredService<IBackupRunStore>();
+        var now = time.GetUtcNow();
+        // A run paused by an unreachable storage ends its pause by itself (bounded, with backoff); every other pause waits for an operator or the time rule.
+        var started = (await store.StartDueRetriesAsync(now, options.RetryScanBatchSize, cancellationToken))
+            .Concat(await store.ResumeDueNetworkPausesAsync(now, options.RetryScanBatchSize, cancellationToken)).ToList();
         var push = scope.ServiceProvider.GetRequiredService<IAgentPushDispatcher>();
         foreach (var retry in started)
         {

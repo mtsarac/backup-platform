@@ -43,6 +43,9 @@ public static class AgentHostServiceCollectionExtensions
         services.AddSingleton(static _ => AgentCapabilityCatalog.CreateDefault());
         services.AddSingleton<ICapabilityRevisionSource, CatalogCapabilityRevisionSource>();
 
+#if AGENT_PLATFORM_WINDOWS
+        services.AddSingleton<BackupPlatform.StorageProviders.Abstractions.IWindowsNetworkSession, BackupPlatform.Agent.Platform.Windows.WindowsNetworkSession>();
+#endif
         services.AddAgentTransport();
         services.AddAgentBackupExecution(configuration);
         services.TryAddSingleton<IBackupTaskCredentialResolver, BackupTaskCredentialResolver>();
@@ -51,7 +54,8 @@ public static class AgentHostServiceCollectionExtensions
             provider.GetServices<StagingArea>(),
             provider.GetService<ITaskStorageProviderFactory>(),
             PacedUploads(provider),
-            provider.GetService<LocalVolumes>()));
+            provider.GetService<LocalVolumes>(),
+            UploadStallTimeout(provider)));
         services.AddSingleton<BackupTaskWorker>();
         services.AddSingleton(provider => new RestoreTaskRequestFactory(
             provider.GetRequiredService<IBackupTaskCredentialResolver>(),
@@ -63,9 +67,23 @@ public static class AgentHostServiceCollectionExtensions
         services.AddSingleton<RestoreCleanupWorker>();
         services.TryAddSingleton<IDeleteReplicaProviderResolver, DeleteReplicaProviderResolver>();
         services.AddSingleton<DeleteReplicaTaskWorker>();
+        services.AddSingleton<ReplicaRepairTaskWorker>();
         services.AddSingleton<DownloadTaskWorker>();
+        services.AddSingleton(provider =>
+        {
+            var section = configuration.GetSection("Agent:Backup:Sftp");
+            var bound = section.Get<BackupPlatform.StorageProviders.Sftp.SftpNetworkOptions>() ?? new BackupPlatform.StorageProviders.Sftp.SftpNetworkOptions();
+            // An explicit AllowedPrivateNetworks (even empty) is the operator's choice; otherwise the customer's LAN is reachable.
+            return section.GetSection("AllowedPrivateNetworks").Exists() ? bound
+                : new BackupPlatform.StorageProviders.Sftp.SftpNetworkOptions([.. BackupPlatform.StorageProviders.Sftp.SftpNetworkOptions.AgentDefaultPrivateNetworks],
+                    bound.ConnectionTimeout, bound.OperationTimeout, bound.TransferTimeout);
+        });
+        services.AddSingleton<BackupPlatform.Contracts.Storage.ISftpCapacityProbeExecutor, Storage.SftpCapacityProbeExecutor>();
+        services.AddSingleton<CapacityProbeTaskWorker>();
+        services.AddHostedService<AgentCapacityTaskHostedService>();
         services.AddSingleton<IAgentTaskSink, AgentTaskDispatcher>();
         services.AddHostedService<AgentDeletionTaskHostedService>();
+        services.AddHostedService<AgentRepairTaskHostedService>();
         services.AddHostedService<AgentBackupTaskHostedService>();
         services.AddHostedService<AgentRestoreTaskHostedService>();
         services.AddHostedService<AgentRestoreCleanupHostedService>();
@@ -74,6 +92,7 @@ public static class AgentHostServiceCollectionExtensions
         services.AddSingleton<AgentConnectivityService>();
         services.AddSingleton<IAgentConnectivityStatus>(static provider => provider.GetRequiredService<AgentConnectivityService>());
         services.AddHostedService<AgentConnectivityWorker>();
+        services.AddAgentAutoUpdates(configuration);
         return services;
     }
 
@@ -83,5 +102,13 @@ public static class AgentHostServiceCollectionExtensions
         var identities = provider.GetRequiredService<IAgentCredentialStore>();
         var time = provider.GetRequiredService<TimeProvider>();
         return task => new UploadBandwidthGovernor(client, identities, task.AttemptId, task.LeaseToken, time);
+    }
+
+    private static TimeSpan? UploadStallTimeout(IServiceProvider provider)
+    {
+        var configured = provider.GetRequiredService<IOptions<AgentHostOptions>>().Value.Backup?.UploadStallTimeout;
+        if (configured is { } value && value <= TimeSpan.Zero && value != Timeout.InfiniteTimeSpan)
+            throw new InvalidOperationException("Agent:Backup:UploadStallTimeout must be positive.");
+        return configured;
     }
 }

@@ -41,8 +41,10 @@ public sealed class EncryptingArtifactPreparer : IArtifactPreparer
 
             await using var written = new FileStream(outputPath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
             var recipients = await BpeDecryptor.ReadRecipientsAsync(written, cancellationToken).ConfigureAwait(false);
-            seal = recipients.Where(recipient => recipient.Type == BpeRecipientType.TenantWrap)
-                .Select(recipient => new ArtifactSeal(recipient.KeyId, recipient.KeyVersion, recipient.WrappedDek)).FirstOrDefault();
+            var wrap = recipients.FirstOrDefault(recipient => recipient.Type == BpeRecipientType.TenantWrap)
+                ?? throw new InvalidOperationException("The encrypted artifact has no tenant wrap recipient.");
+            seal = new ArtifactSeal(wrap.KeyId, wrap.KeyVersion, wrap.WrappedDek,
+                [.. recipients.Select(recipient => new ArtifactRecipientRef(recipient.Type.WireName(), recipient.KeyId, recipient.KeyVersion))]);
         }
         catch
         {

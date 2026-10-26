@@ -44,6 +44,9 @@ internal sealed class RestoreWorld(PostgreSqlFixture database)
     /// <summary>A store with its own options and pool: what another backend node would hold.</summary>
     public PostgreSqlRestoreStore Store() => new(Options());
 
+    /// <summary>A store that probes backend-readable replicas through <paramref name="storage"/> before it hands out a restore.</summary>
+    public PostgreSqlRestoreStore Store(IBackupStorageResolver storage) => new(Options(), storage);
+
     public PostgreSqlBackupRunStore BackupStore() => Harness.Store(BackupStoreHarness.Limits());
 
     public PostgreSqlAgentReplicaDeletionStore AgentDeletionStore() => new(Options(), new BackupRetentionOptions());

@@ -15,7 +15,7 @@ public static class DiscoveryJobMatcher
         configuration.Engine == instance.Engine
         && (configuration.Port ?? DefaultPort(configuration.Engine)) == instance.Port
         && LoopbackHosts.Contains(configuration.Host) && LoopbackHosts.Contains(instance.Host)
-        && string.Equals(configuration.Database, databaseName, instance.Engine == "mssql" ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        && string.Equals(configuration.Database, databaseName, instance.Engine == DatabaseEngines.MsSql ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
-    private static int DefaultPort(string engine) => engine == "mssql" ? 1433 : 5432;
+    private static int DefaultPort(string engine) => engine == DatabaseEngines.MsSql ? 1433 : 5432;
 }

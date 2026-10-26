@@ -16,12 +16,12 @@ import hashlib
 import importlib.util
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
-import tempfile
+from pathlib import Path
 
 HERE = Path(__file__).parent
 spec = importlib.util.spec_from_file_location('bootstrap', HERE / 'bootstrap.py')

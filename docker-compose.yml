@@ -17,19 +17,6 @@ services:
       timeout: 5s
       retries: 5
 
-  mssql:
-    image: mcr.microsoft.com/mssql/server:2025-latest
-    container_name: bp-mssql
-    restart: unless-stopped
-    environment:
-      ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-Password123!}
-      MSSQL_PID: "Developer"
-    ports:
-      - "${MSSQL_PORT:-1433}:1433"
-    volumes:
-      - mssql_data:/var/opt/mssql
-
   api:
     build:
       context: ./backup-backend
@@ -44,7 +31,7 @@ services:
       BACKUP_PLATFORM_BOOTSTRAP_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-PlatformAdmin123!}
       BACKUP_PLATFORM_BOOTSTRAP_DISPLAY_NAME: ${BOOTSTRAP_ADMIN_NAME:-Platform Admin}
       AgentDistribution__PackagesDirectory: /app/agent-dist
-      AgentDistribution__PublicBaseUrl: https://${PUBLIC_HOST:-192.168.1.177}:${API_PORT:-5252}
+      AgentDistribution__PublicBaseUrl: https://${PUBLIC_HOST:-192.168.122.1}:${API_PORT:-5252}
       Secrets__DataProtection__KeysDirectory: /app/dp-keys
       GoogleDrive__ClientId: ${GOOGLE_CLIENT_ID:-}
       GoogleDrive__ClientSecret: ${GOOGLE_CLIENT_SECRET:-}
@@ -65,8 +52,8 @@ services:
     container_name: bp-frontend
     restart: unless-stopped
     environment:
-      PUBLIC_HOST: ${PUBLIC_HOST:-192.168.1.177}
-      EXTRA_SANS: "IP:192.168.122.1,IP:100.80.80.81"
+      PUBLIC_HOST: ${PUBLIC_HOST:-192.168.122.1}
+      EXTRA_SANS: "IP:100.80.80.81"
     ports:
       - "${FRONTEND_PORT:-5173}:443"
       - "${FRONTEND_HTTP_PORT:-5174}:80"
@@ -78,7 +65,6 @@ services:
 
 volumes:
   postgres_data:
-  mssql_data:
   api_dp_keys:
   api_gdrive_staging:
   frontend_certs:

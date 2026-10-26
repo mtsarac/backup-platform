@@ -54,14 +54,27 @@ public static class NotificationEventTypes
     public const string AgentOffline = "agent_offline";
     public const string QuotaCritical = "quota_critical";
     public const string ReplicaDegraded = "replica_degraded";
+    public const string StorageCapacityCritical = "storage_capacity_critical";
+    public const string BackupSizeAnomaly = "backup_size_anomaly";
     /// <summary>Not selectable in a policy; used only by the channel test.</summary>
     public const string Test = "test";
     /// <summary>Not selectable in a policy; the one message an unconfirmed email recipient may receive (a confirmation request with a link, nothing else).</summary>
     public const string RecipientVerification = "recipient_verification";
 
-    public static IReadOnlyList<string> Selectable { get; } = [BackupFailed, BackupStale, AgentOffline, QuotaCritical, ReplicaDegraded];
+    public static IReadOnlyList<string> Selectable { get; } = [BackupFailed, BackupStale, AgentOffline, QuotaCritical, ReplicaDegraded, StorageCapacityCritical, BackupSizeAnomaly];
+
+    /// <summary>
+    /// A PlatformAdmin was granted decrypted access to one of the tenant's artifacts (break-glass). Queued atomically at approval to explicitly designated Owner
+    /// recipients independently of general notification policies; missing recipients are recorded in the audit, never replaced with arbitrary tenant channels.
+    /// </summary>
+    public const string BreakGlassAccess = "break_glass_access";
+
+    public static IReadOnlyList<string> Mandatory { get; } = [BreakGlassAccess];
 
     public static bool IsSelectable(string? value) => value is not null && Selectable.Contains(value);
+
+    /// <summary>Selectable or mandatory: a type a detector may raise and the delivery history may be filtered by.</summary>
+    public static bool IsDetectable(string? value) => IsSelectable(value) || value is not null && Mandatory.Contains(value);
 }
 
 /// <summary>Delivery suppression/cancellation codes that are decided by the platform, not by a provider.</summary>
@@ -73,4 +86,5 @@ public static class NotificationDeliveryCodes
     public const string PolicyDisabled = "policy_disabled";
     public const string AttemptsExhausted = "attempts_exhausted";
     public const string RecipientUnverified = "recipient_unverified";
+    public const string OwnerRecipientUnavailable = "owner_recipient_unavailable";
 }

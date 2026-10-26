@@ -1,10 +1,11 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as api from '@/features/platform/notifications/api'
 import type { EmailTransport, NotificationTransports, SmsTransport } from '@/features/platform/notifications/types'
 import { renderPlatform } from '@/features/platform/test-utils'
 import { PlatformNotificationTransportsPage } from './platform-notification-transports-page'
+import { tx } from '@/lib/i18n'
 
 vi.mock('@/features/platform/notifications/api')
 
@@ -18,11 +19,31 @@ const serve = (value: EmailTransport) => vi.mocked(api.getTransports).mockResolv
 beforeEach(() => { vi.resetAllMocks(); serve(email()) })
 
 describe('platform notification transports page', () => {
-  it('shows configured/enabled state and that SMS is implemented but not verified', async () => {
-    serve(email({ enabled: true, configured: true, host: 'smtp.example.com', port: 465, security: 'implicit', fromAddress: 'noreply@example.com' }))
+  it.each([
+    ['enabled and complete', { enabled: true, configured: true, host: 'smtp.example.com', port: 465 }, 'Çalışıyor'],
+    ['complete but switched off', { enabled: false, configured: true, host: 'smtp.example.com', port: 465 }, 'Kapalı'],
+    ['switched on with settings missing', { enabled: true, configured: false }, 'Ayarlar eksik'],
+    ['never set up', {}, 'Kurulmadı'],
+  ])('tells at a glance whether email delivery works when it is %s', async (_state, transport, verdict) => {
+    serve(email(transport))
     renderPlatform(<PlatformNotificationTransportsPage />)
-    expect(await screen.findByDisplayValue('smtp.example.com')).toBeInTheDocument()
-    expect(screen.getByText('Yapılandırıldı')).toBeInTheDocument()
+    const card = within(await screen.findByRole('region', { name: tx('E-posta (SMTP)') }))
+    expect(card.getByText(verdict)).toBeVisible()
+  })
+
+  it('keeps host, port and secret dates under collapsed copyable technical details and still says SMS is unverified', async () => {
+    serve(email({ enabled: true, configured: true, host: 'smtp.example.com', port: 465, security: 'implicit', fromAddress: 'noreply@example.com', hasSecret: true, secretUpdatedAt: '2026-10-14T10:00:00Z' }))
+    const user = userEvent.setup()
+    renderPlatform(<PlatformNotificationTransportsPage />)
+    const card = within(await screen.findByRole('region', { name: tx('E-posta (SMTP)') }))
+    expect(await card.findByDisplayValue('smtp.example.com')).not.toBeVisible()
+    expect(card.getByDisplayValue('465')).not.toBeVisible()
+    expect(card.getByRole('button', { name: /Gizli değerin ayarlandığı zaman/ })).not.toBeVisible()
+    expect(card.getByDisplayValue('noreply@example.com')).toBeVisible()
+    await user.click(card.getByText('Teknik ayrıntılar'))
+    expect(card.getByDisplayValue('smtp.example.com')).toBeVisible()
+    expect(card.getByRole('button', { name: /Kayıtlı sunucu/ })).toBeVisible()
+    expect(card.getByRole('button', { name: /Gizli değerin ayarlandığı zaman/ })).toBeVisible()
     expect(screen.getByText('UYGULANDI — DOĞRULANMADI')).toBeInTheDocument()
     expect(screen.getByText(/genel bir HTTP JSON bağdaştırıcısı/)).toBeInTheDocument()
   })
@@ -31,6 +52,7 @@ describe('platform notification transports page', () => {
     vi.mocked(api.updateEmailTransport).mockResolvedValue(email())
     const user = userEvent.setup()
     renderPlatform(<PlatformNotificationTransportsPage />)
+    await user.click((await screen.findAllByText('Teknik ayrıntılar'))[0])
     await user.type(await screen.findByLabelText('Sunucu'), 'smtp.example.com')
     await user.type(screen.getByLabelText('Gönderen adresi'), 'noreply@example.com')
     await user.clear(screen.getByLabelText("Bağlantı noktası"))
@@ -63,7 +85,8 @@ describe('platform notification transports page', () => {
     renderPlatform(<PlatformNotificationTransportsPage />)
     await user.click(await screen.findByRole('button', { name: 'Temizle' }))
     expect(api.clearEmailSecret).not.toHaveBeenCalled()
-    expect(await screen.findByRole('dialog')).toHaveTextContent('Kimlik doğrulaması kullanan bildirim gönderimleri')
+    const dialog = await screen.findByRole('dialog')
+    for (const part of ['Ne olacak?', 'Kimleri etkiler?', 'Geri alınabilir mi?']) expect(dialog).toHaveTextContent(part)
     await user.click(screen.getByRole('button', { name: "Gizli değeri temizle" }))
     await waitFor(() => expect(api.clearEmailSecret).toHaveBeenCalled())
   })

@@ -9,7 +9,7 @@ namespace BackupPlatform.Agent.Core.Tasks;
 
 /// <summary>Resolves only host-registered staging and local credential names; task input can never choose a staging path.</summary>
 public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver credentials, IEnumerable<StagingArea> stagingAreas,
-    ITaskStorageProviderFactory? storageFactory = null, Func<BackupTaskSnapshot, IUploadBandwidth>? uploadBandwidth = null, LocalVolumes? volumes = null)
+    ITaskStorageProviderFactory? storageFactory = null, Func<BackupTaskSnapshot, IUploadBandwidth>? uploadBandwidth = null, LocalVolumes? volumes = null, TimeSpan? uploadStallTimeout = null)
 {
     private readonly StagingArea? _staging = stagingAreas.SingleOrDefault();
 
@@ -25,16 +25,19 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
         var scope = ManagedBackupLayout.AttemptScope(task.TenantId, task.JobId, task.RunId, task.AttemptId);
         var prefix = new StorageObjectKey(configuration.StoragePrefix.Length == 0 ? scope : $"{configuration.StoragePrefix}/{scope}");
         var options = new FullBackupOptions(configuration.CopyOnly ? BackupOptionMode.Required : BackupOptionMode.Off,
-            ParsePolicy(configuration.ChecksumPolicy), ParsePolicy(configuration.CompressionPolicy));
+            ParsePolicy(configuration.ChecksumPolicy), ParsePolicy(configuration.CompressionPolicy))
+        {
+            Files = configuration.Files is { } files ? new FileBackupSelection(files.Paths, files.Includes, files.Excludes, files.SymlinkPolicy) : null
+        };
         var credential = configuration.IntegratedSecurity
             ? IntegratedDatabaseCredential.Instance
             : await ResolveCredentialAsync(configuration.DatabaseCredentialReference!, cancellationToken).ConfigureAwait(false);
         if (configuration.Engine == "postgres" && credential is not PasswordDatabaseCredential) throw new BackupTaskCredentialException();
         var targets = configuration.Destinations.Select(destination => new BackupPipelineDestination(
             new StorageProviderId(destination.StorageProvider),
-            destination.StorageProvider is "sftp" or "google-drive"
+            AgentStorageProviders.External(destination.StorageProvider)
                 ? (storageFactory ?? throw new ArgumentException("Backend-relayed storage is not configured.")).CreateBackup(task, destination)
-                : destination.StorageProvider == "local" && destination.StorageTarget is { } volume
+                : destination.StorageProvider == AgentStorageProviders.Local && destination.StorageTarget is { } volume
                     ? volumes?.Resolve(volume) ?? throw new ArgumentException("The local storage volume is not configured on this agent.")
                     : null,
             destination.StorageConnectionId,
@@ -45,41 +48,68 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
             staging, primary.Storage, prefix, options)
         {
             StorageOverride = primary.StorageOverride,
+            UploadStallTimeout = uploadStallTimeout ?? DatabaseBackupPipelineRequest.DefaultUploadStallTimeout,
             MaxArtifactBytes = task.MaxArtifactBytes,
             Destinations = targets,
             UploadBandwidth = uploadBandwidth?.Invoke(task),
             RequiredVerifiedReplicas = Math.Max(1, configuration.RequiredVerifiedReplicaCount),
+            ReplicationPolicySatisfied = !configuration.EnforceThreeTwoOne ? null : results =>
+            {
+                var copies = configuration.Destinations.Where(destination => results.Any(result => result.State == BackupDestinationState.Verified
+                    && result.Destination.ConnectionId == destination.StorageConnectionId && result.Destination.Storage.Value == destination.StorageProvider)).ToArray();
+                return copies.Length >= 3 && copies.Where(d => d.MediaClass is not null).Select(d => d.MediaClass).Distinct().Count() >= 2
+                    && configuration.SourceSite is not null && copies.Any(d => d.OffsiteVerified && d.Site is not null && d.Site != configuration.SourceSite)
+                    && results.Count(result => result.State == BackupDestinationState.Verified) >= configuration.RequiredVerifiedReplicaCount;
+            },
             Encryption = task.Encryption is { } encryption ? ToArtifactEncryption(encryption) : null
         };
     }
 
-    private const int MinWrapKeyBits = 3072;
+    private const int MinWrapKeyBits = 4096;
 
+    /// <summary>
+    /// Builds the recipients of an encrypted job. The task arrives over the enrollment-bound authenticated channel, and each key is still re-checked here: its id must be
+    /// SHA-256(SPKI)[..16] of the key as received, so a task whose key and id disagree (or one carrying a private key blob, which does not parse as SPKI) never wraps a DEK.
+    /// Exactly one tenant-wrap recipient is required; platform and tenant recovery recipients are optional, one of each at most.
+    /// </summary>
     private static ArtifactEncryption ToArtifactEncryption(BackupEncryptionInstruction instruction)
     {
-        if (instruction.KeyVersion < 1)
-        {
-            throw new BackupTaskEncryptionException();
-        }
-
-        var key = RSA.Create();
+        var recipients = new List<BpeRecipient>();
         try
         {
-            key.ImportSubjectPublicKeyInfo(Convert.FromBase64String(instruction.PublicKeySpkiBase64), out _);
+            foreach (var recipient in instruction.Recipients)
+            {
+                var type = recipient.Type switch
+                {
+                    BackupRecipientTypes.TenantWrap => BpeRecipientType.TenantWrap,
+                    BackupRecipientTypes.PlatformRecovery => BpeRecipientType.PlatformRecovery,
+                    BackupRecipientTypes.TenantRecovery => BpeRecipientType.TenantRecovery,
+                    _ => throw new BackupTaskEncryptionException()
+                };
+                if (recipient.KeyVersion < 1 || recipients.Any(existing => existing.Type == type)) throw new BackupTaskEncryptionException();
+                var key = RSA.Create();
+                recipients.Add(new BpeRecipient(type, recipient.KeyVersion, key));
+                try
+                {
+                    key.ImportSubjectPublicKeyInfo(Convert.FromBase64String(recipient.PublicKeySpkiBase64), out _);
+                }
+                catch (Exception exception) when (exception is FormatException or CryptographicException or ArgumentException)
+                {
+                    throw new BackupTaskEncryptionException();
+                }
+
+                if (key.KeySize < MinWrapKeyBits || BpeKeyId.FromSpki(key.ExportSubjectPublicKeyInfo()) != recipient.KeyId) throw new BackupTaskEncryptionException();
+            }
+
+            if (recipients.Count(recipient => recipient.Type == BpeRecipientType.TenantWrap) != 1) throw new BackupTaskEncryptionException();
         }
-        catch (Exception exception) when (exception is FormatException or CryptographicException or ArgumentException)
+        catch
         {
-            key.Dispose();
-            throw new BackupTaskEncryptionException();
+            foreach (var recipient in recipients) recipient.PublicKey.Dispose();
+            throw;
         }
 
-        if (key.KeySize < MinWrapKeyBits)
-        {
-            key.Dispose();
-            throw new BackupTaskEncryptionException();
-        }
-
-        return new ArtifactEncryption(instruction.Required, [new BpeRecipient(BpeRecipientType.TenantWrap, instruction.KeyVersion, key)]);
+        return new ArtifactEncryption(instruction.Required, recipients);
     }
 
     private async ValueTask<DatabaseCredential> ResolveCredentialAsync(string reference, CancellationToken cancellationToken)
@@ -103,13 +133,25 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
     private static void ValidateConfiguration(BackupExecutionConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
-        if (configuration.Engine is not ("mssql" or "postgres") || configuration.StagingReference != "default"
+        if (!DatabaseEngineKeys.IsValid(configuration.Engine) || configuration.StagingReference != "default"
             || string.IsNullOrWhiteSpace(configuration.Database) || configuration.Database.Length > 128
             || configuration.Database.Any(char.IsControl) || configuration.Host is null || configuration.Host.Length > 253
             || configuration.Engine == "postgres" && (configuration.Database != configuration.Database.Trim() || System.Text.Encoding.UTF8.GetByteCount(configuration.Database) > 63 || configuration.IntegratedSecurity))
         {
             throw new ArgumentException("The backup configuration is unsupported.");
         }
+        if (configuration.Engine == DatabaseEngineKeys.FileSystem)
+        {
+            if (configuration.Host != "localhost" || configuration.Port is not null || !configuration.IntegratedSecurity || configuration.DatabaseCredentialReference is not null || configuration.Files is null)
+                throw new ArgumentException("File sources must be local configured references.");
+            var files = configuration.Files;
+            if (files.Paths is null || files.Paths.Count is < 1 or > 256 || files.Includes is null || files.Excludes is null || files.Includes.Count > 256 || files.Excludes.Count > 256
+                || files.SymlinkPolicy is not ("Skip" or "Preserve")) throw new ArgumentException("Invalid file selection.");
+            foreach (var path in files.Paths) ValidateRelativePath(path, allowRoot: true);
+            foreach (var pattern in files.Includes.Concat(files.Excludes)) ValidateRelativePath(pattern, allowRoot: false);
+        }
+        else if (configuration.Files is not null) throw new ArgumentException("File selection is not valid for a database backup.");
+
         var destinations = configuration.Destinations ?? throw new ArgumentException("The destination set is invalid.");
         if (destinations.Count(destination => destination.IsPrimary) != 1
             || configuration.RequiredVerifiedReplicaCount < 1 || configuration.RequiredVerifiedReplicaCount > destinations.Count
@@ -120,11 +162,11 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
         // An unsupported provider/location combination is refused here, explicitly: no destination is ever skipped silently.
         foreach (var destination in destinations)
         {
-            if (destination.StorageProvider is not ("local" or "central" or "sftp" or "google-drive"))
+            if (destination.StorageProvider is not (AgentStorageProviders.Local or AgentStorageProviders.Central) && !AgentStorageProviders.External(destination.StorageProvider))
             {
                 throw new ArgumentException("The destination storage provider is unsupported.");
             }
-            if (destination.StorageTarget is not null && (destination.StorageProvider != "local" || !LocalVolumes.IsValidName(destination.StorageTarget)))
+            if (destination.StorageTarget is not null && (destination.StorageProvider != AgentStorageProviders.Local || !LocalVolumes.IsValidName(destination.StorageTarget)))
             {
                 throw new ArgumentException("The destination storage target is invalid.");
             }
@@ -132,16 +174,28 @@ public sealed class BackupTaskRequestFactory(IBackupTaskCredentialResolver crede
             {
                 throw new ArgumentException("The destination storage execution location is unsupported.");
             }
-            if ((destination.StorageProvider is "sftp" or "google-drive") && (destination.StorageExecutionLocation != "Backend"
-                || destination.StorageConnectionId is null || destination.StorageConnectionId == Guid.Empty || configuration.StoragePrefix != string.Empty))
+            if (AgentStorageProviders.External(destination.StorageProvider))
             {
-                throw new ArgumentException("The backend-relayed storage configuration is invalid.");
+                if (destination.StorageConnectionId is null || destination.StorageConnectionId == Guid.Empty || configuration.StoragePrefix != string.Empty)
+                {
+                    throw new ArgumentException("The external storage configuration is invalid.");
+                }
+                if (!destination.Direct && destination.StorageExecutionLocation != "Backend")
+                {
+                    throw new ArgumentException("The backend-relayed storage configuration is invalid.");
+                }
             }
         }
         if (!HasValidAuthentication(configuration.IntegratedSecurity, configuration.DatabaseCredentialReference))
         {
             throw new ArgumentException("Authentication requires either integrated security or a named local credential.");
         }
+    }
+    private static void ValidateRelativePath(string path, bool allowRoot)
+    {
+        if (allowRoot && path == ".") return;
+        if (string.IsNullOrWhiteSpace(path) || path.Length > 1024 || path.StartsWith('/') || path.Contains('\\') || path.Contains(':') || path.Any(char.IsControl)
+            || path.Split('/').Any(part => part is "" or "." or "..")) throw new ArgumentException("File paths and filters must be confined relative forward-slash paths.");
     }
 
     /// <summary>

@@ -18,14 +18,14 @@ import hashlib
 import http.cookiejar
 import json
 import os
-from pathlib import Path
 import ssl
 import stat
 import sys
 import urllib.error
 import urllib.request
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 PROTOCOL_HEADER = 'X-Backup-Agent-Protocol'
 
@@ -80,7 +80,7 @@ class Api:
             status, body = error.code, error.read()
         document = json.loads(body) if body else None
         if status not in expect:
-            code = document.get('error') if isinstance(document, dict) else None
+            code = f"{document.get('error')}: {document.get('code')}" if isinstance(document, dict) else None
             raise FixtureFailure(f'{method} {path.split("?")[0]} failed with HTTP {status}' + (f' ({code})' if code else ''))
         return status, document
 
@@ -100,7 +100,7 @@ def agent_headers(agent):
 
 
 def now_iso(delta=timedelta()):
-    return (datetime.now(timezone.utc) + delta).strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+    return (datetime.now(UTC) + delta).strftime('%Y-%m-%dT%H:%M:%S.%fZ')
 
 
 def setup(options):

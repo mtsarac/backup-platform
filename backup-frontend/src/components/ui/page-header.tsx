@@ -2,6 +2,7 @@ import { tx, useLanguage } from '@/lib/i18n'
 import type { ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { usePageTitle } from '@/hooks/use-page-title'
 
 export interface Crumb { label: string; to?: string }
 
@@ -10,6 +11,7 @@ export function PageHeader({ title, description, crumbs, actions, meta }: {
   title: ReactNode; description?: ReactNode; crumbs?: readonly Crumb[]; actions?: ReactNode; meta?: ReactNode
 }) {
   useLanguage()
+  usePageTitle(typeof title === 'string' ? title : undefined)
   return <header className="space-y-2 pb-1">
     {crumbs && crumbs.length > 0 && <nav aria-label={tx("Sayfa yolu")}><ol className="flex flex-wrap items-center gap-1 text-sm text-text-muted">
       {crumbs.map((crumb, index) => <li key={`${crumb.label}-${index}`} className="inline-flex min-w-0 max-w-full items-center gap-1">

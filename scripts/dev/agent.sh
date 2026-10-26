@@ -3,7 +3,7 @@
 # Usage: scripts/dev/agent.sh start|stop|status [--no-build]
 set +x
 set -euo pipefail
-# shellcheck source=common.sh
+# shellcheck source=scripts/dev/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 action=${1:-status}; shift || true

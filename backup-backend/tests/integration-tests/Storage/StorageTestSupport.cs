@@ -124,3 +124,19 @@ public sealed class SymlinkFactAttribute : FactAttribute
         }
     }
 }
+
+/// <summary>Runs only against a real SFTP server named by the BACKUP_PLATFORM_TEST_SFTP_* settings; the skip reason names what is missing.</summary>
+public sealed class SftpServerFactAttribute : FactAttribute
+{
+    public SftpServerFactAttribute()
+    {
+        if (!string.Equals(Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_SFTP_ENABLED"), "true", StringComparison.OrdinalIgnoreCase))
+        {
+            Skip = "Set BACKUP_PLATFORM_TEST_SFTP_ENABLED=true (and BACKUP_PLATFORM_TEST_SFTP_FINGERPRINT) to run against a real SFTP server.";
+        }
+        else if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_SFTP_FINGERPRINT")))
+        {
+            Skip = "Set BACKUP_PLATFORM_TEST_SFTP_FINGERPRINT to the host key fingerprint of the test SFTP server.";
+        }
+    }
+}

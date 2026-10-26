@@ -2,6 +2,7 @@ using BackupPlatform.Agents.Capabilities;
 using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Application.Restores;
+using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Capabilities;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
@@ -15,7 +16,7 @@ public sealed record RestoreTargetAgent(Guid AgentId, string? HostName, string S
 public sealed record RestoreTargetJob(Guid JobId, string JobName, Guid AgentId, string Database, RestoreTargetView Target);
 
 public sealed record RestoreTargets(Guid ArtifactId, string SourceDatabase, string BackupType, long SizeBytes, IReadOnlyList<RestoreTargetAgent> Agents, IReadOnlyList<RestoreTargetJob> Targets,
-    string Engine = "mssql");
+    string Engine = DatabaseEngines.MsSql);
 
 /// <summary>
 /// What a restore of one artifact can be aimed at: the tenant's agents (with what each can do and whether it can read the backup) and the SQL Servers its
@@ -37,9 +38,10 @@ public sealed class RestoreTargetsReader(IBackupRetentionStore retentionStore, I
         {
             var targetAgentId = new AgentId(view.Agent.Id.Value);
             bool Supports(string identifier) => view.Capabilities?.Capabilities.Any(c => c.Identifier == identifier && c.Support == CapabilitySupport.Supported) == true;
-            var selectedReplica = RestoreSourceEvaluator.SelectReplica(artifact, targetAgentId, now);
-            RestoreSourceRejection? rejection = selectedReplica is null ? RestoreSourceEvaluator.Explain(artifact, targetAgentId, now) : null;
-            var sourceAccess = selectedReplica is not null ? RestoreSourceEvaluator.Evaluate(artifact, selectedReplica, targetAgentId, now).Access?.ToString() : null;
+            var direct = Supports(TaskStorageProtocol.DirectCapability);
+            var selectedReplica = RestoreSourceEvaluator.SelectReplica(artifact, targetAgentId, now, direct);
+            RestoreSourceRejection? rejection = selectedReplica is null ? RestoreSourceEvaluator.Explain(artifact, targetAgentId, now, direct) : null;
+            var sourceAccess = selectedReplica is not null ? RestoreSourceEvaluator.Evaluate(artifact, selectedReplica, targetAgentId, now, direct).Access?.ToString() : null;
             return new RestoreTargetAgent(view.Agent.Id.Value, view.Agent.HostName, view.Agent.Status.ToString(), view.Connectivity.ToString().ToLowerInvariant(),
                 engine is not null && Supports(RestoreAgentCapability.ForPurpose(RestorePurpose.Execution, engine)),
                 engine is not null && Supports(RestoreAgentCapability.ForPurpose(RestorePurpose.Precheck, engine)),

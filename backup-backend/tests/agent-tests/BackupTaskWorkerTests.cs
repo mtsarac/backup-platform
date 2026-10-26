@@ -61,6 +61,21 @@ public sealed class BackupTaskWorkerTests
     }
 
     [Fact]
+    public async Task A_resumed_attempt_is_accepted_under_its_new_lease_while_the_paused_lease_is_still_unexpired()
+    {
+        await using var harness = new BackupTaskHarness();
+        var envelope = harness.Envelope();
+        harness.Start();
+        Assert.True(harness.Worker.TryPublish(envelope));
+        await Wait.UntilAsync(() => harness.Client.Completions.Count == 1, "first lease result");
+        var resumed = envelope with { Backup = envelope.Backup! with { LeaseToken = Guid.NewGuid(), ResumeTransfer = true } };
+        Assert.False(harness.Worker.TryPublish(envelope));
+        Assert.True(harness.Worker.TryPublish(resumed));
+        await Wait.UntilAsync(() => harness.Client.Completions.Count == 2, "resumed lease result");
+        Assert.Equal(resumed.Backup!.LeaseToken, harness.Client.Completions.Last().LeaseToken);
+    }
+
+    [Fact]
     public async Task A_queued_claim_reaches_completion_without_advancing_the_clock()
     {
         await using var harness = new BackupTaskHarness();
@@ -125,6 +140,45 @@ public sealed class BackupTaskWorkerTests
         Assert.Equal("Cancelled", completion.FailureCode);
         Assert.Null(completion.Artifact);
     }
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Schedule_pause_on_start_or_renewal_reaches_the_pipeline_as_TimeRule_not_operator_or_cancellation(bool onStart)
+    {
+        await using var harness = new BackupTaskHarness();
+        harness.Client.OnStart = () => AgentBackendResult<BackupTaskLeaseResponse>.Success(new BackupTaskLeaseResponse
+        {
+            LeaseExpiresAt = harness.Time.GetUtcNow().AddSeconds(120), TimeRulePauseRequested = onStart
+        });
+        harness.Client.OnRenew = () => AgentBackendResult<BackupTaskLeaseResponse>.Success(new BackupTaskLeaseResponse
+        {
+            LeaseExpiresAt = harness.Time.GetUtcNow().AddSeconds(120), TimeRulePauseRequested = true
+        });
+        harness.Pipeline.Execute = async (request, _, token) =>
+        {
+            try
+            {
+                await harness.Time.ObserveAsync("backup worker", Task.Delay(Timeout.InfiniteTimeSpan, request.TimeRulePauseToken));
+            }
+            catch (OperationCanceledException) when (request.TimeRulePauseToken.IsCancellationRequested)
+            {
+                Assert.False(token.IsCancellationRequested);
+                Assert.False(request.PauseToken.IsCancellationRequested);
+                return harness.Success(request) with { Status = DatabaseBackupStatus.Paused, PauseReason = "TimeRule" };
+            }
+            throw new InvalidOperationException("The schedule must pause the transfer.");
+        };
+        harness.Start();
+        Assert.True(harness.Worker.TryPublish(harness.Envelope()));
+        await Wait.UntilAsync(() => harness.Pipeline.Calls.Count == 1, "transfer start");
+        if (!onStart) await harness.Time.AdvanceAsync(TimeSpan.FromSeconds(10));
+        await Wait.UntilAsync(() => harness.Client.Completions.Count == 1, "paused completion");
+        var completion = Assert.Single(harness.Client.Completions);
+        Assert.Equal("Paused", completion.Status);
+        Assert.Equal("TimeRule", completion.FailureCode);
+        Assert.Null(completion.Artifact);
+    }
+
 
     [Theory]
     [InlineData(AgentBackendFailureKind.Rejected, 10)]

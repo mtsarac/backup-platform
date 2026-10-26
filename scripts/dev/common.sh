@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Shared by scripts/dev/*.sh (sourced). Persistent local development stack: nothing here is disposable.
 # All mutable state lives outside the repository in $BP_DEV_HOME; secrets stay in owner-only (0600) files.
-# shellcheck source=../lib/common.sh
+# shellcheck source=scripts/lib/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
 BP_DEV_HOME=${BP_DEV_HOME:-$HOME/.local/share/backup-platform-dev}
@@ -10,14 +10,14 @@ BP_DEV_API_HTTP_PORT=5252     # must equal the redirect URI registered with Goog
 BP_DEV_API_HTTPS_PORT=7179    # Agent and the Vite proxy (the Agent protocol requires HTTPS)
 BP_DEV_WEB_PORT=5173
 BP_DEV_MSSQL_CONTAINER=${BP_DEV_MSSQL_CONTAINER:-bp-dev-mssql}
-BP_DEV_MSSQL_PORT=14331
-BP_DEV_SQL_CREDENTIAL_REFERENCE=sql_dev
+export BP_DEV_MSSQL_PORT=14331
+export BP_DEV_SQL_CREDENTIAL_REFERENCE=sql_dev
 BP_DEV_ACCOUNTS_FILE="${BP_DEV_ACCOUNTS_FILE:-$REPO_ROOT/docs/local-development-accounts.yaml}"
 export BP_DEV_ACCOUNTS_FILE
-BP_DEV_FRONTEND_URL="http://localhost:$BP_DEV_WEB_PORT"
-BP_DEV_API_URL="http://localhost:$BP_DEV_API_HTTP_PORT"
-BP_DEV_API_TLS_URL="https://localhost:$BP_DEV_API_HTTPS_PORT"
-BP_DEV_API_DLL="$REPO_ROOT/backup-backend/src/hosts/api/bin/Release/net10.0/BackupPlatform.Api.dll"
+export BP_DEV_FRONTEND_URL="http://localhost:$BP_DEV_WEB_PORT"
+export BP_DEV_API_URL="http://localhost:$BP_DEV_API_HTTP_PORT"
+export BP_DEV_API_TLS_URL="https://localhost:$BP_DEV_API_HTTPS_PORT"
+export BP_DEV_API_DLL="$REPO_ROOT/backup-backend/src/hosts/api/bin/Release/net10.0/BackupPlatform.Api.dll"
 
 dev_prepare_state() {
     mkdir -p "$BP_DEV_HOME"/{run,log,dp-keys,mssql/staging,mssql/data,agent-identity,agent-bin}

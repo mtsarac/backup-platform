@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Stage the official release layout under the fixed installer download names.
 set -euo pipefail
-# shellcheck source=common.sh
+# shellcheck source=scripts/dev/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 dev_prepare_state
 dist_dir="$BP_DEV_HOME/agent-dist"

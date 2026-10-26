@@ -34,6 +34,82 @@ public sealed class DeleteReplicaTaskWorkerTests
         Assert.Single(harness.Client.Renewals);
     }
 
+    [Theory]
+    [InlineData("sftp")]
+    [InlineData("google-drive")]
+    public async Task External_replica_is_removed_through_a_scope_bound_to_its_lease_and_absence_is_verified(string provider)
+    {
+        await using var harness = new DeleteReplicaHarness();
+        var envelope = harness.ExternalEnvelope(provider);
+        var task = envelope.DeleteReplica!;
+        await harness.PutAsync(task);
+        harness.Start();
+        Assert.True(harness.Worker.TryPublish(envelope));
+        await Wait.UntilAsync(() => harness.Client.Completions.Count == 1, "external absence completion");
+        var completion = Assert.Single(harness.Client.Completions);
+        Assert.True(completion.AbsenceVerified);
+        Assert.Null(completion.FailureCode);
+        Assert.Equal(task.LeaseToken, completion.LeaseToken);
+        Assert.Equal(["delete", "exists"], harness.Storage.Calls.ToArray());
+        Assert.False(File.Exists(harness.ObjectPath(task)));
+        var scope = Assert.Single(harness.External.Scopes);
+        Assert.Equal(new DirectStorageScope($"api/agent/replica-deletions/{task.ReplicaId:D}/storage/access", task.LeaseToken, task.TenantId, Guid.Parse(task.StorageTarget), provider), scope);
+    }
+
+    [Fact]
+    public async Task AnExternalOrphanLedgerEntryMayNameAnUnpublishedManagedPartial()
+    {
+        await using var harness = new DeleteReplicaHarness();
+        var envelope = harness.ExternalEnvelope("sftp");
+        var task = envelope.DeleteReplica!;
+        var slash = task.StorageKey.LastIndexOf('/');
+        task = task with { StorageKey = task.StorageKey[..(slash + 1)] + "." + task.StorageKey[(slash + 1)..] + ".partial" };
+        envelope = envelope with { DeleteReplica = task };
+        await harness.PutAsync(task);
+        harness.Start();
+        Assert.True(harness.Worker.TryPublish(envelope));
+        await Wait.UntilAsync(() => harness.Client.Completions.Count == 1, "partial orphan absence completion");
+        Assert.True(Assert.Single(harness.Client.Completions).AbsenceVerified);
+        Assert.Equal(["delete", "exists"], harness.Storage.Calls.ToArray());
+        Assert.False(File.Exists(harness.ObjectPath(task)));
+    }
+
+    [Fact]
+    public async Task External_replica_is_never_deleted_when_the_lease_is_refused_before_any_provider_is_opened()
+    {
+        await using var harness = new DeleteReplicaHarness();
+        var envelope = harness.ExternalEnvelope("sftp");
+        await harness.PutAsync(envelope.DeleteReplica!);
+        harness.Client.OnRenew = (_, _) => Task.FromResult(Fail<DeleteReplicaLeaseResponse>(AgentBackendFailureKind.Rejected));
+        harness.Start();
+        Assert.True(harness.Worker.TryPublish(envelope));
+        await Wait.UntilAsync(() => harness.Client.Renewals.Count == 1, "authority request");
+        await Task.Delay(50);
+        Assert.Empty(harness.Client.Completions);
+        Assert.Empty(harness.External.Scopes);
+        Assert.Empty(harness.Storage.Calls);
+        Assert.True(File.Exists(harness.ObjectPath(envelope.DeleteReplica!)));
+    }
+
+    [Theory]
+    [InlineData(true, "not-a-guid")]
+    [InlineData(true, "00000000-0000-0000-0000-000000000000")]
+    [InlineData(false, null)]
+    public async Task External_replica_without_a_usable_connection_or_provider_factory_reports_invalid_configuration(bool factory, string? target)
+    {
+        await using var harness = new DeleteReplicaHarness(factory);
+        var envelope = harness.ExternalEnvelope("google-drive", target);
+        await harness.PutAsync(envelope.DeleteReplica!);
+        harness.Start();
+        Assert.True(harness.Worker.TryPublish(envelope));
+        await Wait.UntilAsync(() => harness.Client.Completions.Count == 1, "failure completion");
+        var completion = Assert.Single(harness.Client.Completions);
+        Assert.False(completion.AbsenceVerified);
+        Assert.Equal(DeleteReplicaFailureCodes.InvalidConfiguration, completion.FailureCode);
+        Assert.Empty(harness.External.Scopes);
+        Assert.True(File.Exists(harness.ObjectPath(envelope.DeleteReplica!)));
+    }
+
     [Fact]
     public async Task Authority_is_confirmed_before_any_filesystem_operation_and_refusal_preserves_object()
     {

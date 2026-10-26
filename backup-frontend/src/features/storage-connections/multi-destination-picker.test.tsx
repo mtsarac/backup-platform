@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { screen, fireEvent } from '@testing-library/react'
+import { screen, fireEvent, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import { MultiDestinationPicker } from './multi-destination-picker'
 import type { BackupConfiguration } from '@/features/backup-jobs/types'
@@ -127,10 +127,26 @@ describe('MultiDestinationPicker', () => {
     render(<MultiDestinationPicker configuration={configuration} connections={dummyConnections} providers={dummyProviders} pending={false} error={null} existingTarget={true} onChange={onChange} onRefresh={() => {}} />)
     expect(screen.getByLabelText("Depolama Sağlayıcısı")).toHaveValue('sftp')
     expect(screen.getByLabelText('Depolama bağlantısı')).toHaveValue('conn-sftp-1')
-    fireEvent.change(screen.getByLabelText('Depolama bağlantısı'), { target: { value: 'conn-local' } })
+    fireEvent.change(screen.getByLabelText("Depolama Sağlayıcısı"), { target: { value: 'local' } })
     expect(onChange.mock.calls[0][0].destinations[0]).toEqual(configuration.destinations![0])
-    expect(onChange.mock.calls[0][0].destinations[1]).toMatchObject({ storageConnectionId: 'conn-local', isPrimary: true })
+    expect(onChange.mock.calls[0][0].destinations[1]).toMatchObject({ storageProvider: 'local', storageConnectionId: null, isPrimary: true })
     expect(onChange.mock.calls[0][0]).not.toHaveProperty('storageProvider')
+  })
+
+  it('lists only the connections of the selected provider and shows translated provider names', () => {
+    const configuration = {
+      engine: 'mssql', database: 'TestDB', host: 'localhost', port: null,
+      integratedSecurity: true, databaseCredentialReference: null,
+      encrypt: true, trustServerCertificate: false, stagingReference: 'default',
+      storagePrefix: '', copyOnly: true, checksumPolicy: 'Required', compressionPolicy: 'Preferred',
+      destinations: [{ storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true }],
+      requiredVerifiedReplicaCount: 1,
+    } as BackupConfiguration
+    render(<MultiDestinationPicker configuration={configuration} connections={dummyConnections} providers={dummyProviders} pending={false} error={null} existingTarget={true} onChange={() => {}} onRefresh={() => {}} />)
+    const connection = screen.getByLabelText('Depolama bağlantısı')
+    expect(within(connection).getAllByRole('option').map(option => option.getAttribute('value'))).toEqual(['', 'conn-local'])
+    expect(within(screen.getByLabelText('Depolama Sağlayıcısı')).getByRole('option', { name: 'Yerel yedekleme bilgisayarı diski' })).toBeInTheDocument()
+    expect(within(connection).getByRole('option', { name: /Default Local · Yerel yedekleme bilgisayarı diski/ })).toBeInTheDocument()
   })
 
   it('renders primary destination and allows adding a second destination', () => {
@@ -139,7 +155,7 @@ describe('MultiDestinationPicker', () => {
       integratedSecurity: true, databaseCredentialReference: null,
       encrypt: true, trustServerCertificate: false, stagingReference: 'default',
       storagePrefix: '', copyOnly: true,
-      checksumPolicy: 'Required', compressionPolicy: 'Preferred',
+      checksumPolicy: 'Required', compressionPolicy: 'Preferred', encryptionPolicy: 'Off',
       destinations: [
         { storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true }
       ],
@@ -184,7 +200,7 @@ describe('MultiDestinationPicker', () => {
       integratedSecurity: true, databaseCredentialReference: null,
       encrypt: true, trustServerCertificate: false, stagingReference: 'default',
       storagePrefix: '', copyOnly: true,
-      checksumPolicy: 'Required', compressionPolicy: 'Preferred',
+      checksumPolicy: 'Required', compressionPolicy: 'Preferred', encryptionPolicy: 'Off',
       destinations: [
         { storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true },
         { storageProvider: 'sftp', storageConnectionId: 'conn-sftp-1', storageExecutionLocation: 'Backend', isPrimary: false }
@@ -233,7 +249,7 @@ describe('MultiDestinationPicker', () => {
       integratedSecurity: true, databaseCredentialReference: null,
       encrypt: true, trustServerCertificate: false, stagingReference: 'default',
       storagePrefix: '', copyOnly: true,
-      checksumPolicy: 'Required', compressionPolicy: 'Preferred',
+      checksumPolicy: 'Required', compressionPolicy: 'Preferred', encryptionPolicy: 'Off',
       destinations: [
         { storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: false },
         { storageProvider: 'sftp', storageConnectionId: 'conn-sftp-1', storageExecutionLocation: 'Backend', isPrimary: true }
@@ -259,7 +275,7 @@ describe('MultiDestinationPicker', () => {
       integratedSecurity: true, databaseCredentialReference: null,
       encrypt: true, trustServerCertificate: false, stagingReference: 'default',
       storagePrefix: '', copyOnly: true,
-      checksumPolicy: 'Required', compressionPolicy: 'Preferred',
+      checksumPolicy: 'Required', compressionPolicy: 'Preferred', encryptionPolicy: 'Off',
       destinations: [
         { storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true },
         { storageProvider: 'sftp', storageConnectionId: 'conn-sftp-1', storageExecutionLocation: 'Backend', isPrimary: false }
@@ -280,6 +296,6 @@ describe('MultiDestinationPicker', () => {
       />
     )
 
-    expect(screen.getByText(/(?:Multi-destination backup execution is not yet available|Birden fazla hedefe yedekleme henüz kullanılamıyor)/i)).toBeInTheDocument()
+    expect(screen.getByText(/(?:Each destination is written and verified independently|Her hedefe ayrı yazılır ve bağımsız olarak doğrulanır)/i)).toBeInTheDocument()
   })
 })

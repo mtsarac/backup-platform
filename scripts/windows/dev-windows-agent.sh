@@ -5,7 +5,7 @@
 #   dev-windows-agent.sh uninstall   remove the owned service, identity, trusted dev certificate and files
 set +x
 set -euo pipefail
-# shellcheck source=../dev/common.sh
+# shellcheck source=scripts/dev/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../dev" && pwd)/common.sh"
 action=${1:-}
 [[ $action == install || $action == uninstall ]] || fail 'Usage: dev-windows-agent.sh install|uninstall'

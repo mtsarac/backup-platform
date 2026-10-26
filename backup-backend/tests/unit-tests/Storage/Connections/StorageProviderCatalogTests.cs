@@ -30,8 +30,8 @@ public sealed class StorageProviderCatalogTests
         Assert.Equal(StorageProviderAvailability.Available, descriptor.Availability);
         Assert.True(descriptor.IsAvailable);
         Assert.Empty(descriptor.SecretFields);
-        // Local names the agent-declared disk it writes to; Central has nothing to configure.
-        Assert.Equal(providerType == "local" ? ["volume"] : [], descriptor.ConfigFields.Select(field => field.Name));
+        // Site and media are optional policy facts; only Local requires a volume.
+        Assert.Equal(providerType == "local" ? ["volume", "site", "mediaClass"] : ["site", "mediaClass"], descriptor.ConfigFields.Select(field => field.Name));
     }
 
     [Fact]
@@ -51,7 +51,7 @@ public sealed class StorageProviderCatalogTests
     }
 
     [Fact]
-    public void GoogleDriveIsAvailableTenantCreatableWithBackendRoundTrip()
+    public void GoogleDriveIsAvailableTenantCreatableWithAgentSideTest()
     {
         var googleDrive = BuiltInStorageProviders.GoogleDrive;
 
@@ -60,7 +60,8 @@ public sealed class StorageProviderCatalogTests
         Assert.True(googleDrive.TenantCreatable);
         Assert.False(googleDrive.PlatformCreatable);
         Assert.Equal([StorageOwnership.TenantManaged], googleDrive.SupportedOwnerships);
-        Assert.Equal(StorageTestMode.BackendRoundTrip, googleDrive.TestMode);
+        Assert.Equal(StorageTestMode.AgentSide, googleDrive.TestMode);
+        Assert.Equal(StorageTopology.AgentDirect, googleDrive.Topology);
         Assert.Contains(googleDrive.ConfigFields, f => f.Name == "accountEmail");
         Assert.Contains(googleDrive.SecretFields, f => f.Name == "refreshToken");
     }

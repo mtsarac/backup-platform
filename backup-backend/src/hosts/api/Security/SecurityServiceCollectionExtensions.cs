@@ -63,8 +63,9 @@ public static class SecurityServiceCollectionExtensions
     {
         services.AddHttpContextAccessor();
         services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<AuditSealKeys>();
+        services.AddSingleton<LoginThrottle>();
         services.AddSingleton<DbContextOptions<PlatformDbContext>>(CreateDatabaseOptions);
-        services.AddSingleton<AgentTransferAdmission>();
         services.AddSingleton<BackupPlatform.Infrastructure.Backups.BackupTransferLeaseService>();
         services.AddScoped<ITenantContext>(ResolveTenantContext);
         services.AddScoped<PlatformDbContext>();
@@ -98,7 +99,14 @@ public static class SecurityServiceCollectionExtensions
         });
         services.AddScoped<IBackupRunStore, PostgreSqlBackupRunStore>();
         services.AddScoped<IBackupUiStore, PostgreSqlBackupUiStore>();
+        services.AddScoped<IBackupHealthStore, PostgreSqlBackupHealthStore>();
+        services.AddScoped<BackupHealthEvaluator>();
         services.AddScoped<ITenantWrapKeyStore, PostgreSqlTenantWrapKeyStore>();
+        services.AddScoped<ITenantRecoveryKeyStore, PostgreSqlTenantRecoveryKeyStore>();
+        services.TryAddSingleton(provider => BackupPlatform.Api.Backups.ArtifactRecoveryConfiguration.Load(provider.GetRequiredService<IConfiguration>()));
+        services.AddScoped<IArtifactBreakGlassStore, PostgreSqlArtifactBreakGlassStore>();
+        services.AddScoped<ArtifactBreakGlassService>();
+        services.AddHostedService<BackupPlatform.Api.Backups.BreakGlassExpiryWorker>();
         services.AddScoped<BackupOrchestrator>();
         services.AddScoped<IUploadBandwidthStore, PostgreSqlUploadBandwidthStore>();
         services.AddScoped<UploadBandwidthService>();
@@ -176,6 +184,14 @@ public static class SecurityServiceCollectionExtensions
             var factory = provider.GetRequiredService<BackupPlatform.Api.Backups.SftpConnectionProviderFactory>();
             return new SftpConnectionTester((connection, secrets) => factory.Create(connection, secrets));
         });
+        services.AddSingleton<BackupPlatform.Api.Backups.NetworkStorageConnectionProviderFactory>();
+        services.AddHttpClient("network-storage", client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
+            .RemoveAllLoggers();
+        services.AddScoped<IStorageConnectionTester>(_ => new AgentSideConnectionTester(StorageProviderTypes.Smb));
+        services.AddScoped<IStorageConnectionTester>(provider =>
+            new S3ConnectionTester((connection, secrets) =>
+                provider.GetRequiredService<BackupPlatform.Api.Backups.NetworkStorageConnectionProviderFactory>().Create(connection, secrets)));
         services.AddHttpClient();
         services.AddHttpClient("google-drive", client => client.Timeout = Timeout.InfiniteTimeSpan)
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
@@ -220,6 +236,21 @@ public static class SecurityServiceCollectionExtensions
             return new GoogleDriveConnectionTester((connection, secrets) => factory.Create(connection, secrets));
         });
         services.AddScoped<StorageConnectionService>();
+        services.AddScoped<BackupPlatform.Storage.IStorageCapacitySnapshotStore, BackupPlatform.Infrastructure.Storage.PostgreSqlStorageCapacitySnapshotStore>();
+        services.AddScoped<BackupPlatform.Storage.IStorageCapacityTaskQueue, BackupPlatform.Infrastructure.Storage.PostgreSqlStorageCapacityTaskQueue>();
+        services.AddScoped<BackupPlatform.Api.Backups.AgentCapacityProbeService>();
+        services.AddScoped<BackupPlatform.Storage.IPlatformStorageCapacityClient, BackupPlatform.Api.Backups.CentralStorageCapacityClient>();
+        services.AddScoped<BackupPlatform.Storage.IGoogleDriveCapacityClient>(provider =>
+        {
+            var http = provider.GetService<HttpClient>() ?? provider.GetRequiredService<IHttpClientFactory>().CreateClient("google-drive");
+            var factory = provider.GetRequiredService<BackupPlatform.Api.Backups.GoogleDriveConnectionProviderFactory>();
+            var secrets = provider.GetRequiredService<ISecretProvider>();
+            return new BackupPlatform.Api.Backups.GoogleDriveCapacityClient(http, factory, secrets);
+        });
+        services.AddScoped<BackupPlatform.Storage.StorageCapacityProbeService>();
+        services.AddSingleton<BackupPlatform.Api.Storage.StorageCapacityPeriodicProbeWorker>();
+        services.AddHostedService(provider => provider.GetRequiredService<BackupPlatform.Api.Storage.StorageCapacityPeriodicProbeWorker>());
+        services.AddSingleton<BackupPlatform.Application.Storage.IStorageCapacityProbeTrigger>(provider => provider.GetRequiredService<BackupPlatform.Api.Storage.StorageCapacityPeriodicProbeWorker>());
     }
 
     /// <summary>
@@ -267,7 +298,9 @@ public static class SecurityServiceCollectionExtensions
         {
             throw new InvalidOperationException("Configure BACKUP_PLATFORM_CONNECTION_STRING or ConnectionStrings:Platform.");
         }
-        return new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(connectionString).Options;
+        var builder = new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(connectionString);
+        if (services.GetRequiredService<AuditSealKeys>().Interceptor is { } signing) builder.AddInterceptors(signing);
+        return builder.Options;
     }
 
     /// <summary>
@@ -298,6 +331,7 @@ public static class SecurityServiceCollectionExtensions
         services.AddScoped<BackupStorageSweeper>();
         services.AddScoped<BackupArtifactService>();
         services.AddScoped<IReplicaRepairStore, PostgreSqlReplicaRepairStore>();
+        services.AddScoped<IReplicaMissingReporter, PostgreSqlReplicaMissingReporter>();
         services.AddScoped<ReplicaRepairService>();
         services.AddSingleton<BackupPlatform.Api.Backups.AutomaticReplicaRepairWorker>();
         services.AddHostedService(provider => provider.GetRequiredService<BackupPlatform.Api.Backups.AutomaticReplicaRepairWorker>());
@@ -375,7 +409,7 @@ public static class SecurityServiceCollectionExtensions
             options.Cookie.Name = BrowserAuthentication.CookieName;
             options.Cookie.HttpOnly = true;
             options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-            options.Cookie.SameSite = SameSiteMode.Lax;
+            options.Cookie.SameSite = SameSiteMode.Strict;
             options.Cookie.Path = "/";
             options.Cookie.Domain = null;
             options.ExpireTimeSpan = TimeSpan.FromHours(8);
@@ -428,6 +462,8 @@ public static class SecurityServiceCollectionExtensions
             options.MaximumReceiveMessageSize = 4 * 1024;
             options.EnableDetailedErrors = false;
         });
+        services.AddSingleton<IAgentUpdateManifestStore>(provider => new FileAgentUpdateManifestStore(
+            provider.GetRequiredService<IConfiguration>()["AgentUpdates:PackagesDirectory"] ?? Path.Combine(AppContext.BaseDirectory, "agent-updates")));
     }
 
     private static void AddPolicies(IServiceCollection services)

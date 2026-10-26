@@ -30,13 +30,20 @@ public static class AuthenticationEndpoints
         return Results.Ok(new { requestToken = tokens.RequestToken, headerName = "X-CSRF-TOKEN" });
     }
 
-    private static async Task<IResult> LoginAsync(LoginRequest request, HttpContext context, AuthenticationService authenticationService)
+    private static async Task<IResult> LoginAsync(LoginRequest request, HttpContext context, AuthenticationService authenticationService, LoginThrottle throttle)
     {
+        if (await throttle.RetryAfterAsync(request.LoginIdentifier, context.RequestAborted) is { } wait)
+        {
+            context.Response.Headers.RetryAfter = ((int)Math.Ceiling(wait.TotalSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return Results.Json(new { error = "Too many failed login attempts. Try again later." }, statusCode: StatusCodes.Status429TooManyRequests);
+        }
         var session = await authenticationService.LoginAsync(request.LoginIdentifier, request.Password, context.RequestAborted);
         if (session is null)
         {
+            await throttle.FailedAsync(request.LoginIdentifier, context.RequestAborted);
             return Results.Json(new { error = "Invalid login identifier or password." }, statusCode: StatusCodes.Status401Unauthorized);
         }
+        await throttle.SucceededAsync(request.LoginIdentifier, context.RequestAborted);
         var identity = new ClaimsIdentity(
         [
             new Claim(ClaimTypes.NameIdentifier, session.UserId.Value.ToString("D")),

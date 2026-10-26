@@ -5,7 +5,7 @@
 # State and secrets live in $BP_DISC_HOME (default /tmp/bp-discovery-acceptance, 0700); secrets are never printed.
 set +x
 set -euo pipefail
-# shellcheck source=../lib/common.sh
+# shellcheck source=scripts/lib/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
 H=${BP_DISC_HOME:-/tmp/bp-discovery-acceptance}

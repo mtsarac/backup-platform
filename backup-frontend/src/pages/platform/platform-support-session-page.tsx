@@ -1,31 +1,32 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Lock } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Fact, Facts, Section } from '@/components/ui/section'
+import { TechnicalDetails } from '@/components/ui/technical-details'
 import { Tabs } from '@/components/ui/tabs'
-import { ConfirmDialog } from '@/features/agents/confirm-dialog'
-import { artifactDate } from '@/features/artifacts/format'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { platformPaths } from '@/features/platform/paths'
-import { FormDialog } from '@/features/platform/plans/form-dialog'
-import { inputClass } from '@/features/platform/styles'
+import { FormDialog } from '@/components/ui/form-dialog'
+import { inputClass } from '@/components/ui/form-styles'
 import { useListParams } from '@/features/platform/use-list-params'
 import { SupportAuditTab } from '@/features/platform/support/audit-tab'
 import { SupportBackupBrowser } from '@/features/platform/support/backup-browser'
 import { SupportDownloadsTab } from '@/features/platform/support/downloads-tab'
 import { removeSupportData, supportKeys, useEndSupportSession, useSupportSession } from '@/features/platform/support/hooks'
-import { endedMessages, supportAccess } from '@/features/platform/support/presentation'
+import { endedMessages, supportAccess, supportSessionDetails } from '@/features/platform/support/presentation'
 import { SupportRestoresTab } from '@/features/platform/support/restores-tab'
-import { PermissionBadges, SupportStatusPill } from '@/features/platform/support/session-table'
-import { SupportQueryState } from '@/features/platform/support/support-query-state'
+import { PermissionBadges } from '@/features/platform/support/session-table'
 import { useSupportCountdown } from '@/features/platform/support/use-support-countdown'
 import type { SupportSession } from '@/features/platform/support/types'
-import { ApiError } from '@/lib/api/client'
+import { isForbidden, type ApiError } from '@/lib/api/client'
+import { RelativeTime } from '@/components/data/relative-time'
+import { StatusPill } from '@/components/data/status-pill'
+import { QueryState } from '@/components/data/query-state'
 import { errorMessage } from '@/lib/api/failure-messages'
 
 const crumbs = [{ label: 'Platform', to: platformPaths.root }, { get label() { return tx("Support Sessions") }, to: platformPaths.supportSessions }]
@@ -43,7 +44,7 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
   useEffect(() => { if (mutationDenied) removeSupportData(client, sessionId) }, [client, mutationDenied, sessionId])
   useEffect(() => {
     function denied(error: unknown, mutation = false) {
-      if (error instanceof ApiError && error.status === 403 && error.code === 'support_access_denied') {
+      if (isForbidden(error) && error.code === 'support_access_denied') {
         if (mutation) setMutationDenied(error)
         void client.invalidateQueries({ queryKey: supportKeys.session(sessionId), exact: true })
       }
@@ -54,7 +55,7 @@ function SessionDetail({ sessionId }: { sessionId: string }) {
   }, [client, sessionId])
   const error = mutationDenied ?? query.error
   if (query.data && !error) return <SessionView session={query.data} receivedAt={query.dataUpdatedAt} />
-  return <div className="space-y-6"><PageHeader crumbs={crumbs} title={tx("Support Session")} /><SupportQueryState isPending={query.isPending} error={error} /></div>
+  return <div className="space-y-6"><PageHeader crumbs={crumbs} title={tx("Support Session")} /><QueryState forbiddenMessage={errorMessage} isPending={query.isPending} error={error} /></div>
 }
 function SessionView({ session, receivedAt }: { session: SupportSession; receivedAt: number }) {
   useLanguage()
@@ -65,27 +66,26 @@ function SessionView({ session, receivedAt }: { session: SupportSession; receive
   const access = supportAccess(effective)
   const expired = session.status === 'Active' && countdown.seconds === 0
   useEffect(() => { if (expired) { removeSupportData(client, session.id); void client.invalidateQueries({ queryKey: supportKeys.session(session.id), exact: true }) } }, [client, expired, session.id])
+  // Only tabs the session's permissions open are offered; an unheld one in the URL falls back to the overview.
   const tabs = [
     { value: 'overview', label: tx('Overview'), enabled: true },
     { value: 'browser', label: tx('Backup Browser'), enabled: access.view },
     { value: 'downloads', label: tx('Downloads'), enabled: access.downloads },
     { value: 'restores', label: tx('Restore Operations'), enabled: access.restores },
     { value: 'audit', label: tx('Audit'), enabled: true },
-  ]
+  ].filter(item => item.enabled)
   const tab = tabs.some(item => item.value === get('tab')) ? get('tab') : 'overview'
-  const selected = tabs.find(item => item.value === tab)!
   const active = effective.status === 'Active'
   return <div className="space-y-6">
     <PageHeader crumbs={crumbs} title={tx("{0} · Support Session", { "0": effective.tenantName })} description={tx("Oturumu açan: {0}", { "0": effective.actorDisplayName ?? effective.platformAdminId })}
-      meta={<><SupportStatusPill status={effective.status} /><span aria-label={tx("Oturum süresi")} className="text-sm text-text-muted">{active ? tx("Kalan süre: {0}", { "0": countdown.label }) : tx('Erişim sona erdi.')}{' '}{tx("· Süre sonu:")}{' '}{artifactDate(effective.expiresAt)}</span></>}
+      meta={<><StatusPill domain="supportSession" status={effective.status} /><span aria-label={tx("Oturum süresi")} className="text-sm text-text-muted">{active ? tx("Kalan süre: {0}", { "0": countdown.label }) : tx('Erişim sona erdi.')}{' '}{tx("· Süre sonu:")}{' '}<RelativeTime value={effective.expiresAt} /></span></>}
       actions={<SessionActions session={effective} />} />
     {effective.status !== 'Active' ? <Notice tone="warning">{endedMessages[effective.status]}{' '}{tx("Yalnızca oturum özeti ve audit okunabilir.")}</Notice>
       : !effective.isOwner && <Notice tone="warning">{tx("Bu oturumun sahibi değilsiniz. Müşteri verileri yalnızca oturumu açan PlatformAdmin'e açıktır. Özeti ve audit kayıtlarını görebilir veya gerekçeyle erişimi geri alabilirsiniz.")}</Notice>}
     <div>
-      <Tabs label={tx("Destek oturumu sekmeleri")} idPrefix="support" value={tab} onChange={value => update({ tab: value })}
-        items={tabs.map(item => ({ value: item.value, disabled: !item.enabled, label: item.enabled ? tx(item.label) : <span className="inline-flex items-center gap-1.5">{tx(item.label)}<Lock aria-hidden="true" className="size-3.5" /></span> }))} />
+      <Tabs label={tx("Destek oturumu sekmeleri")} idPrefix="support" value={tab} onChange={value => update({ tab: value })} items={tabs} />
       <div role="tabpanel" id={`support-panel-${tab}`} aria-labelledby={`support-tab-${tab}`} className="pt-6">
-        {tab === 'overview' ? <SessionOverview session={effective} /> : tab === 'audit' ? <SupportAuditTab session={effective} /> : !selected.enabled ? <Notice>{tx("Bu sekme için etkin oturum sahipliği ve uygun izin gerekir. Müşteri verileri yüklenmedi.")}</Notice> : tab === 'browser' ? <SupportBackupBrowser key={`${effective.id}:${effective.tenantId}:${effective.status}`} session={effective} /> : tab === 'downloads' ? <SupportDownloadsTab session={effective} /> : <SupportRestoresTab key={`${effective.id}:${effective.tenantId}:${effective.status}`} session={effective} />}
+        {tab === 'overview' ? <SessionOverview session={effective} /> : tab === 'audit' ? <SupportAuditTab session={effective} /> : tab === 'browser' ? <SupportBackupBrowser key={`${effective.id}:${effective.tenantId}:${effective.status}`} session={effective} /> : tab === 'downloads' ? <SupportDownloadsTab session={effective} /> : <SupportRestoresTab key={`${effective.id}:${effective.tenantId}:${effective.status}`} session={effective} />}
       </div>
     </div>
   </div>
@@ -103,13 +103,11 @@ function SessionOverview({ session }: { session: SupportSession }) {
           <Fact label={tx("Gerekçe")}><span className="whitespace-pre-wrap">{session.reason}</span></Fact>
           <Fact label={tx("İzinler")}><PermissionBadges permissions={session.permissions} /></Fact>
         </Facts>
-        <Facts>
-          <Fact label={tx("Başlangıç")}>{artifactDate(session.startedAt)}</Fact>
-          <Fact label={tx("Süre sonu")}>{artifactDate(session.expiresAt)}</Fact>
-          <Fact label={tx("Kapanış")}>{artifactDate(session.closedAt)}</Fact>
+        {session.closedAt && <Facts>
           <Fact label={tx("Kapatan / erişimi geri alan")}>{session.closedByDisplayName ?? session.closedBy ?? '—'}</Fact>
           <Fact label={tx("Kapanış gerekçesi")}>{session.closeReason ?? '—'}</Fact>
-        </Facts>
+        </Facts>}
+        <TechnicalDetails items={supportSessionDetails(session, { plainView: true })} />
       </div>
     </Section>
   </div>
@@ -134,9 +132,15 @@ function SessionActions({ session }: { session: SupportSession }) {
   }
   return <>
     {session.isOwner ? <Button variant="outline" disabled={!active || busy} onClick={() => { close.reset(); setCloseOpen(true) }}>{tx("Close session")}</Button> : <Button variant="destructive" disabled={!active || busy} onClick={() => { revoke.reset(); setReason(''); setInvalid(false); setRevokeOpen(true) }}>{tx("Revoke")}</Button>}
-    <ConfirmDialog open={closeOpen && active} onClose={() => setCloseOpen(false)} title={tx("Destek oturumu kapatılsın mı?")} description={tx("Müşteri metadata önbelleği kaldırılır; yeni download, precheck veya restore başlatılamaz. Geçmiş ve audit kayıtları korunur.")} confirmLabel="Oturumu kapat" pending={busy} error={close.error ? errorMessage(close.error) : undefined} onConfirm={end} />
-    {revokeOpen && active && <FormDialog title={tx("Destek erişimini geri al")} description={tx("Oturumun erişimi hemen sona erer. Gerekçe audit kaydına eklenir.")} submitLabel="Erişimi geri al" pendingLabel="Erişim geri alınıyor…" pending={busy}
-      error={revoke.error ? errorMessage(revoke.error) : undefined} onSubmit={revokeAccess} onClose={() => setRevokeOpen(false)}>
+    <ConfirmDialog open={closeOpen && active} onClose={() => setCloseOpen(false)} title={tx("Destek oturumu kapatılsın mı?")}
+      consequence={{
+        what: tx("Müşteri üst veri önbelleği kaldırılır; yeni indirme, ön kontrol veya geri yükleme başlatılamaz."),
+        who: tx("Yalnızca bu destek oturumu kapanır; geçmiş ve denetim kayıtları korunur."),
+        reversible: tx("Hayır. Gerekirse yeni bir destek oturumu açmanız gerekir."),
+      }}
+      confirmLabel={tx("Oturumu kapat")} pending={busy} error={close.error} onConfirm={end} />
+    {revokeOpen && active && <FormDialog title={tx("Destek erişimini geri al")} description={tx("Oturumun erişimi hemen sona erer. Gerekçe audit kaydına eklenir.")} submitLabel={tx("Erişimi geri al")} pendingLabel={tx("Erişim geri alınıyor…")} pending={busy}
+      error={revoke.error} onSubmit={revokeAccess} onClose={() => setRevokeOpen(false)}>
       <Field label={tx("Gerekçe")} hint={tx("Zorunlu; en fazla 500 karakter.")} error={invalid ? tx('Gerekçe zorunludur ve en fazla 500 karakter olabilir.') : undefined}>
         {control => <textarea {...control} className={inputClass} rows={3} value={reason} maxLength={500} disabled={busy} onChange={event => setReason(event.target.value)} />}
       </Field>

@@ -28,6 +28,10 @@ public static class AgentEndpoints
     {
         var agent = endpoints.MapGroup("/api/agent").WithMetadata(new AgentApiEndpoint());
         agent.MapPost("/enroll", EnrollAsync).AllowAnonymous().RequireRateLimiting(AgentRateLimitOptions.Policies.Enrollment);
+        agent.MapPost("/certificate/enroll", EnrollCertificateAsync)
+            .WithMetadata(new AllowPendingAgentCredential(), new RequestSizeLimitAttribute(20 * 1024))
+            .RequireAuthorization(AuthorizationPolicies.Agent)
+            .RequireRateLimiting(AgentRateLimitOptions.Policies.Enrollment);
         agent.MapPost("/heartbeat", HeartbeatAsync)
             .RequireAuthorization(AuthorizationPolicies.Agent)
             .RequireRateLimiting(AgentRateLimitOptions.Policies.Heartbeat)
@@ -40,6 +44,12 @@ public static class AgentEndpoints
             .RequireAuthorization(AuthorizationPolicies.Agent)
             .RequireRateLimiting(AgentRateLimitOptions.Policies.Poll)
             .WithMetadata(new RequiresAgentProtocol());
+        agent.MapPost("/capacity-probes/{taskId:guid}/complete", CompleteCapacityAsync)
+            .RequireAuthorization(AuthorizationPolicies.Agent).RequireRateLimiting(AgentRateLimitOptions.Policies.Poll)
+            .WithMetadata(new RequiresAgentProtocol(), new RequestSizeLimitAttribute(4096));
+        agent.MapPost("/capacity-probes/{taskId:guid}/lease", AuthorizeCapacityAsync)
+            .RequireAuthorization(AuthorizationPolicies.Agent).RequireRateLimiting(AgentRateLimitOptions.Policies.Poll)
+            .WithMetadata(new RequiresAgentProtocol(), new RequestSizeLimitAttribute(4096));
         agent.MapGet("/me", GetIdentity).RequireAuthorization(AuthorizationPolicies.Agent);
         agent.MapPost("/credential/rotate", BeginRotationAsync).RequireAuthorization(AuthorizationPolicies.Agent);
         agent.MapPost("/credential/confirm", ConfirmRotationAsync)
@@ -47,6 +57,24 @@ public static class AgentEndpoints
             .RequireAuthorization(AuthorizationPolicies.Agent);
         return endpoints;
     }
+    public sealed record CertificateEnrollmentRequest(string SigningRequestPem);
+
+    private static IResult EnrollCertificateAsync(CertificateEnrollmentRequest request, ICurrentAgent agent, HttpContext context)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        var authority = context.RequestServices.GetService<AgentCertificateAuthority>();
+        if (authority is null) return Error(StatusCodes.Status503ServiceUnavailable, "mtls_not_configured", null);
+        try
+        {
+            if (request.SigningRequestPem is null) return Error(StatusCodes.Status400BadRequest, "invalid_signing_request", null);
+            return Results.Ok(new { certificatePem = authority.Issue(request.SigningRequestPem, agent.Identity!) });
+        }
+        catch (Exception exception) when (exception is ArgumentException or System.Security.Cryptography.CryptographicException)
+        {
+            return Error(StatusCodes.Status400BadRequest, "invalid_signing_request", null);
+        }
+    }
+
 
     private const long MaximumHeartbeatBytes = 8 * 1024;
     private const long MaximumCapabilitySyncBytes = 32 * 1024;
@@ -139,7 +167,8 @@ public static class AgentEndpoints
 
     private static async Task<IResult> PollAsync(
         string? cursor, ICurrentAgent currentAgent, AgentConnectivityService service, BackupOrchestrator backups,
-        AgentReplicaDeletionService deletions, RestoreService restores, AgentDownloadSource downloads, ILogger<AgentDownloadSource> logger,
+        AgentReplicaDeletionService deletions, ReplicaRepairService repairs, RestoreService restores, AgentDownloadSource downloads, ILogger<AgentDownloadSource> logger,
+        BackupPlatform.Api.Backups.AgentCapacityProbeService capacity,
         CancellationToken cancellationToken)
     {
         var poll = await service.PollAsync(currentAgent.Identity!, cursor, cancellationToken);
@@ -148,6 +177,7 @@ public static class AgentEndpoints
             return Error(StatusCodes.Status400BadRequest, AgentErrorCodes.InvalidRequest, "Invalid field: cursor.");
         }
         var deletion = await deletions.ClaimAsync(currentAgent.Identity!, cancellationToken);
+        var repair = await repairs.ClaimForAgentAsync(currentAgent.Identity!, cancellationToken);
         // A restore is explicit user work on a target and never runs beside a backup of the same agent: it is claimed first, and when one was claimed the backup claim is
         // skipped (the store would refuse it anyway while the restore holds the agent).
         var restore = await restores.ClaimAsync(currentAgent.Identity!, cancellationToken);
@@ -164,6 +194,7 @@ public static class AgentEndpoints
         }
         var tasks = new List<AgentTaskEnvelope>(3);
         if (deletion is not null) tasks.Add(new AgentTaskEnvelope { Id = deletion.ReplicaId.ToString(), Type = "delete-replica", DeleteReplica = deletion });
+        if (repair is not null) tasks.Add(new AgentTaskEnvelope { Id = repair.OperationId.ToString(), Type = BackupPlatform.Contracts.Backups.ReplicaLifecycleProtocol.RepairTaskType, ReplicaRepair = repair });
         if (restore is not null)
         {
             var taskType = restore.Purpose switch
@@ -178,6 +209,8 @@ public static class AgentEndpoints
         if (cleanup is not null) tasks.Add(new AgentTaskEnvelope { Id = cleanup.LeaseToken.ToString(), Type = RestoreTaskTypes.DatabaseRestoreCleanup, RestoreCleanup = cleanup });
         if (backup is not null) tasks.Add(new AgentTaskEnvelope { Id = backup.AttemptId.ToString(), Type = "database-backup", Backup = backup });
         if (download is not null) tasks.Add(new AgentTaskEnvelope { Id = download.SessionId.ToString(), Type = DownloadTaskTypes.BackupDownload, Download = download });
+        var capacityTask = await capacity.ClaimAsync(currentAgent.Identity!, cancellationToken);
+        if (capacityTask is not null) tasks.Add(new AgentTaskEnvelope { Id = capacityTask.TaskId.ToString(), Type = BackupPlatform.Contracts.Storage.CapacityProbeProtocol.TaskType, CapacityProbe = capacityTask });
         return Results.Ok(new AgentPollResponse
         {
             Cursor = poll.Cursor,
@@ -185,6 +218,22 @@ public static class AgentEndpoints
             NextPollAfterSeconds = (int)poll.NextPollAfter.TotalSeconds
         });
     }
+
+    private static async Task<IResult> CompleteCapacityAsync(Guid taskId, BackupPlatform.Contracts.Storage.CapacityProbeCompletionRequest request,
+        ICurrentAgent currentAgent, BackupPlatform.Storage.IStorageCapacityTaskQueue queue, TimeProvider time, CancellationToken cancellationToken)
+    {
+        var result = await queue.CompleteAsync(currentAgent.Identity!, taskId, request, time.GetUtcNow(), cancellationToken);
+        return result switch
+        {
+            BackupMutationResult.Accepted => Results.Ok(),
+            BackupMutationResult.NotFound => Results.NotFound(),
+            _ => Results.Conflict()
+        };
+    }
+
+    private static async Task<IResult> AuthorizeCapacityAsync(Guid taskId, BackupPlatform.Contracts.Storage.CapacityProbeCompletionRequest request,
+        ICurrentAgent currentAgent, BackupPlatform.Storage.IStorageCapacityTaskQueue queue, TimeProvider time, CancellationToken cancellationToken) =>
+        await queue.IsLiveAsync(currentAgent.Identity!, taskId, request.LeaseToken, time.GetUtcNow(), cancellationToken) ? Results.Ok() : Results.Conflict();
 
     private static IResult GetIdentity(ICurrentAgent currentAgent)
     {

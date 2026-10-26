@@ -1,18 +1,20 @@
+using System.Text.Json;
 using System.Globalization;
 using BackupPlatform.Contracts.Discovery;
 
 namespace BackupPlatform.Agent.Core.Discovery;
 
 /// <summary>
-/// Finds MSSQL and PostgreSQL containers through the <c>docker</c> CLI (<c>docker ps</c>, read-only). The agent asks for no extra
-/// privilege: a missing CLI or a denied socket only changes this source's status.
+/// Finds database containers through Docker's read-only local Engine API. Only published loopback-reachable TCP ports
+/// become backup endpoints; container environment variables and credentials are never requested.
 /// </summary>
 public sealed class DockerContainerDetector : IInstanceDetector
 {
     private const int MaximumOutputCharacters = 256 * 1024;
-    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
-    private static readonly string[] Arguments = ["ps", "--no-trunc", "--format", DiscoveryParsers.DockerFormat];
+    private readonly IDockerEngineTransport transport;
 
+    public DockerContainerDetector(IDockerEngineTransport transport) =>
+        this.transport = transport ?? throw new ArgumentNullException(nameof(transport));
     public string Source => DiscoverySources.Docker;
 
     public async Task<DetectionResult> DetectAsync(DiscoveryDetectionContext context, CancellationToken cancellationToken)
@@ -22,32 +24,47 @@ public sealed class DockerContainerDetector : IInstanceDetector
         {
             return DetectionResult.Disabled("disabled_by_settings");
         }
-        return Interpret(await DiscoveryTool.RunAsync("docker", Arguments, Timeout, MaximumOutputCharacters, cancellationToken).ConfigureAwait(false));
-    }
-
-    internal static DetectionResult Interpret(ToolResult result)
-    {
-        switch (result.Outcome)
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(5));
+        try
         {
-            case ToolOutcome.NotFound:
-                return DetectionResult.Unavailable("docker_not_found");
-            case ToolOutcome.AccessDenied:
-                return DetectionResult.Unavailable("docker_access_denied");
-            case ToolOutcome.TimedOut:
-                return DetectionResult.Failed("docker_timeout");
+            var payload = await transport.QueryContainersAsync(timeout.Token).ConfigureAwait(false);
+            if (payload is null) return DetectionResult.Unavailable("docker_unavailable");
+            using var document = JsonDocument.Parse(payload);
+            var instances = new List<DetectedInstance>();
+            foreach (var container in document.RootElement.EnumerateArray())
+            {
+                var name = container.GetProperty("Names").EnumerateArray().FirstOrDefault().GetString()?.TrimStart('/');
+                var image = container.GetProperty("Image").GetString();
+                if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(image)) continue;
+                var mappings = new List<DockerPortMapping>();
+                foreach (var port in container.GetProperty("Ports").EnumerateArray())
+                {
+                    if (port.GetProperty("Type").GetString() != "tcp") continue;
+                    var address = port.TryGetProperty("IP", out var ip) ? ip.GetString() : null;
+                    int? host = (address is null or "" or "0.0.0.0" or "::" or "127.0.0.1" or "::1")
+                        && port.TryGetProperty("PublicPort", out var published) ? published.GetInt32() : null;
+                    var privatePort = port.GetProperty("PrivatePort").GetInt32();
+                    if (host is < 1 or > 65535 || privatePort is < 1 or > 65535) return DetectionResult.Failed("docker_invalid_response");
+                    mappings.Add(new DockerPortMapping(host, privatePort));
+                }
+                instances.AddRange(ToInstances(new DockerContainer(name, image, mappings)));
+            }
+            return DetectionResult.Scanned(instances);
         }
-        if (!result.Succeeded)
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { return DetectionResult.Failed("docker_timeout"); }
+        catch (UnauthorizedAccessException)
         {
-            return result.StdErr.Contains("permission denied", StringComparison.OrdinalIgnoreCase)
-                ? DetectionResult.Unavailable("docker_access_denied")
-                : DetectionResult.Failed("docker_failed");
+            return DetectionResult.Unavailable("docker_access_denied");
         }
-        var instances = result.StdOut.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-            .Select(DiscoveryParsers.ParseDockerLine)
-            .OfType<DockerContainer>()
-            .SelectMany(ToInstances)
-            .ToList();
-        return DetectionResult.Scanned(instances);
+        catch (IOException)
+        {
+            return DetectionResult.Unavailable("docker_socket_unavailable");
+        }
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException or KeyNotFoundException or FormatException or OverflowException)
+        {
+            return DetectionResult.Failed("docker_invalid_response");
+        }
     }
 
     private static IEnumerable<DetectedInstance> ToInstances(DockerContainer container)

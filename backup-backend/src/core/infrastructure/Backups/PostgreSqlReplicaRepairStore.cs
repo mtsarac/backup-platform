@@ -1,10 +1,11 @@
+using BackupPlatform.Domain.Storage;
 using System.Collections.Concurrent;
+using BackupPlatform.Application.Agents;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
-using BackupPlatform.Domain.Storage;
 using BackupPlatform.Domain.Tenancy;
 using BackupPlatform.Infrastructure.ManagedService;
 using BackupPlatform.Infrastructure.Persistence;
@@ -130,7 +131,10 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         var candidateSources = allCandidateSources.Where(source =>
             !((targetDestination.StorageConnectionId != null && targetDestination.StorageConnectionId != Guid.Empty)
                 ? source.StorageConnectionId == targetDestination.StorageConnectionId
-                : string.Equals(source.StorageProvider, targetDestination.StorageProvider, StringComparison.OrdinalIgnoreCase))).ToList();
+                : string.Equals(source.StorageProvider, targetDestination.StorageProvider, StringComparison.OrdinalIgnoreCase))
+            // Only the owning agent can write its disk, and it can read only a copy reachable from it: never a central copy, never another disk.
+            && (targetDestination.StorageProvider != StorageProviderTypes.Local
+                || source.ExecutionLocation == BackupStorageExecutionLocation.Backend && StorageProviderTypes.External(source.StorageProvider))).ToList();
 
         if (candidateSources.Count == 0)
             return new(false, ReplicaRepairFailureCodes.NoVerifiedSourceAvailable, "No healthy, verified source replica is available for repair.");
@@ -253,7 +257,7 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
             """).ToListAsync(cancellationToken);
         if (sources.Count == 0) return false;
         var source = await context.BackupReplicas.AsNoTracking().SingleAsync(entity => entity.TenantId == tenantId && entity.Id == sourceReplicaId, cancellationToken);
-        if (!ReplicaRepairSourceEvaluator.IsEligibleSource(source, now) || source.ExecutionLocation != BackupStorageExecutionLocation.Backend) return false;
+        if (!ReplicaRepairSourceEvaluator.IsEligibleSource(source, now)) return false;
         operation.SetTargetIntent(source.Id, targetKey);
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -505,7 +509,7 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         if (!operation.HasLease(leaseToken, now) || string.IsNullOrEmpty(operation.TargetKey)) return false;
         var artifact = await context.BackupArtifacts.Include(a => a.Replicas)
             .SingleAsync(a => a.TenantId == tenantId && a.Id == artifactId, cancellationToken);
-        var target = operation.StorageProvider is "sftp" or "google-drive" && operation.StorageConnectionId != Guid.Empty
+        var target = StorageProviderTypes.External(operation.StorageProvider) && operation.StorageConnectionId != Guid.Empty
             ? operation.StorageConnectionId.ToString("D") : operation.StorageProvider;
         if (!artifact.Replicas.Any(r => r.StorageConnectionId == operation.StorageConnectionId && r.Key == operation.TargetKey))
         {
@@ -573,6 +577,11 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
             return;
         }
 
+        // A leftover on an agent's own volume belongs to the agent that ran the backup, like the copy it would have been.
+        var local = storageProvider == StorageProviderTypes.Local;
+        var owner = local
+            ? (await context.BackupRunAttempts.AsNoTracking().SingleAsync(a => a.TenantId == tenantId && a.Id == artifact.AttemptId, cancellationToken)).AgentId.Value
+            : (Guid?)null;
         var orphan = new BackupReplica(
             Guid.NewGuid(),
             tenantId,
@@ -587,8 +596,8 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
             quarantine ? "RepairTargetConflict" : "RepairCleanupFailed",
             now,
             verifiedAt: null,
-            BackupStorageExecutionLocation.Backend,
-            owningAgentId: null,
+            local ? BackupStorageExecutionLocation.Agent : BackupStorageExecutionLocation.Backend,
+            owningAgentId: owner,
             storageConnectionId: storageConnectionId);
 
         if (quarantine)
@@ -610,7 +619,8 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         DateTimeOffset now,
         TimeSpan leaseDuration,
         CancellationToken cancellationToken,
-        TenantId? tenantId = null)
+        TenantId? tenantId = null,
+        bool backendExecutedOnly = false)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         await using var tx = await context.Database.BeginTransactionAsync(cancellationToken);
@@ -621,10 +631,21 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
             IReplicaRepairStore.MaxGlobalConcurrentRepairs)
             return null;
 
+        // The backend cannot read an agent's local replica: such an operation is left to that agent, unless the backend can copy a verified central replica to its S3/SMB target (customer-reachable copies on a private network are read by the agent, not the backend).
+        // A local target is a disk only its owning agent can write, so the backend never claims it.
         var dueId = await context.Database.SqlQuery<Guid>($"""
             SELECT pending."Id" AS "Value" FROM replica_repair_operations pending
             WHERE pending."Status" = 'Pending' AND (pending."NextRetryAt" IS NULL OR pending."NextRetryAt" <= {now})
               AND ({tenantId == null} OR pending."TenantId" = {(tenantId == null ? Guid.Empty : tenantId.Value)})
+              AND (NOT {backendExecutedOnly} OR (pending."StorageProvider" <> 'local' AND (pending."StorageProvider" NOT IN ('sftp', 'google-drive', 's3', 'smb')
+                  OR EXISTS (
+                      SELECT 1 FROM backup_replicas source
+                      WHERE source."TenantId" = pending."TenantId" AND source."ArtifactId" = pending."ArtifactId" AND source."Id" = pending."SourceReplicaId"
+                        AND source."StorageProvider" = 'central')
+                  OR (pending."StorageProvider" IN ('s3', 'smb') AND EXISTS (
+                      SELECT 1 FROM backup_replicas other
+                      WHERE other."TenantId" = pending."TenantId" AND other."ArtifactId" = pending."ArtifactId" AND other."ExecutionLocation" = 'Backend'
+                        AND other."Status" = 'Available' AND other."VerificationState" = 'Verified' AND other."StorageProvider" = 'central')))))
               AND (SELECT COUNT(*) FROM replica_repair_operations active
                    WHERE active."Status" = 'InProgress' AND active."TenantId" = pending."TenantId") < {IReplicaRepairStore.MaxTenantConcurrentRepairs}
             ORDER BY COALESCE(pending."NextRetryAt", pending."CreatedAt") ASC, pending."Id"
@@ -652,6 +673,107 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
         await context.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
         return operation;
+    }
+
+    public async Task<ReplicaRepairOperation?> ClaimAgentRepairAsync(
+        AgentIdentity identity,
+        DateTimeOffset now,
+        TimeSpan leaseDuration,
+        CancellationToken cancellationToken)
+    {
+        var leaseOwner = ReplicaRepairOperation.AgentLeaseOwner(identity.AgentId.Value);
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+
+        // Every poll of every agent comes here and most find nothing: refuse without the cluster-wide claim lock first, and decide under it only when work exists.
+        var agentId = identity.AgentId.Value;
+        if (!await context.ReplicaRepairOperations.AnyAsync(r => r.TenantId == identity.TenantId && r.Status == ReplicaRepairStatus.Pending
+                && (r.StorageProvider == StorageProviderTypes.Sftp || r.StorageProvider == StorageProviderTypes.GoogleDrive
+                    || r.StorageProvider == StorageProviderTypes.S3 || r.StorageProvider == StorageProviderTypes.Smb
+                    || r.StorageProvider == StorageProviderTypes.Local && context.BackupArtifacts.Any(artifact => artifact.TenantId == r.TenantId && artifact.Id == r.ArtifactId
+                        && context.BackupRunAttempts.Any(attempt => attempt.TenantId == artifact.TenantId && attempt.Id == artifact.AttemptId && attempt.AgentId == identity.AgentId))
+                    || context.BackupReplicas.Any(source => source.TenantId == r.TenantId && source.Id == r.SourceReplicaId
+                        && source.ExecutionLocation == BackupStorageExecutionLocation.Agent && source.OwningAgentId == agentId))
+                && (r.NextRetryAt == null || r.NextRetryAt <= now), cancellationToken)
+            || !await context.AgentCapabilities.AsNoTracking().AnyAsync(record => record.TenantId == identity.TenantId && record.AgentId == identity.AgentId
+                && record.Identifier == ReplicaLifecycleProtocol.Capability
+                && record.Support == BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, cancellationToken))
+            return null;
+
+        await using var tx = await context.Database.BeginTransactionAsync(cancellationToken);
+        await context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({ClaimLockKey})", cancellationToken);
+
+        if (await context.ReplicaRepairOperations.AnyAsync(r => r.Status == ReplicaRepairStatus.InProgress && r.LeaseOwner == leaseOwner
+                && r.LeaseExpiresAt > now, cancellationToken))
+            return null;
+        // Expired leases still occupy capacity until recovery fences the old transfer.
+        if (await context.ReplicaRepairOperations.CountAsync(r => r.Status == ReplicaRepairStatus.InProgress, cancellationToken) >=
+            IReplicaRepairStore.MaxGlobalConcurrentRepairs)
+            return null;
+
+        var dueId = await context.Database.SqlQuery<Guid>($"""
+            SELECT pending."Id" AS "Value" FROM replica_repair_operations pending
+            WHERE pending."Status" = 'Pending' AND (pending."NextRetryAt" IS NULL OR pending."NextRetryAt" <= {now})
+              AND pending."TenantId" = {identity.TenantId.Value}
+              AND (
+                  (pending."StorageProvider" IN ('sftp', 'google-drive', 's3', 'smb') AND EXISTS (SELECT 1 FROM backup_replicas source
+                      WHERE source."TenantId" = pending."TenantId" AND source."ArtifactId" = pending."ArtifactId" AND source."Id" = pending."SourceReplicaId"
+                        AND source."StorageProvider" IN ('sftp', 'google-drive', 's3', 'smb')))
+                  OR (pending."StorageProvider" IN ('sftp', 'google-drive', 's3', 'smb') AND EXISTS (SELECT 1 FROM backup_replicas source
+                      WHERE source."TenantId" = pending."TenantId" AND source."ArtifactId" = pending."ArtifactId" AND source."Id" = pending."SourceReplicaId"
+                        AND source."ExecutionLocation" = 'Agent' AND source."OwningAgentId" = {agentId}))
+                  OR (pending."StorageProvider" = 'local'
+                      AND EXISTS (SELECT 1 FROM backup_replicas source
+                          WHERE source."TenantId" = pending."TenantId" AND source."ArtifactId" = pending."ArtifactId" AND source."Id" = pending."SourceReplicaId"
+                            AND source."StorageProvider" IN ('sftp', 'google-drive', 's3', 'smb'))
+                      AND EXISTS (SELECT 1 FROM backup_artifacts artifact
+                          JOIN backup_run_attempts attempt ON attempt."TenantId" = artifact."TenantId" AND attempt."Id" = artifact."AttemptId"
+                          WHERE artifact."TenantId" = pending."TenantId" AND artifact."Id" = pending."ArtifactId" AND attempt."AgentId" = {agentId})))
+              AND (SELECT COUNT(*) FROM replica_repair_operations active
+                   WHERE active."Status" = 'InProgress' AND active."TenantId" = pending."TenantId") < {IReplicaRepairStore.MaxTenantConcurrentRepairs}
+            ORDER BY COALESCE(pending."NextRetryAt", pending."CreatedAt") ASC, pending."Id"
+            LIMIT 1
+            FOR UPDATE OF pending SKIP LOCKED
+            """).SingleOrDefaultAsync(cancellationToken);
+        if (dueId == Guid.Empty) return null;
+
+        var operation = await context.ReplicaRepairOperations.SingleAsync(r => r.Id == dueId, cancellationToken);
+        if (operation.Status != ReplicaRepairStatus.Pending) return null;
+        if (operation.CancellationRequestedAt != null)
+        {
+            operation.CancelPending(now);
+            await context.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+            return null;
+        }
+
+        operation.Claim(Guid.NewGuid(), leaseOwner, now, leaseDuration);
+        await context.SaveChangesAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+        return operation;
+    }
+
+    public async Task<ReplicaRepairOperation?> FindOperationAsync(TenantId tenantId, Guid operationId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        return await context.ReplicaRepairOperations.AsNoTracking()
+            .SingleOrDefaultAsync(r => r.TenantId == tenantId && r.Id == operationId, cancellationToken);
+    }
+
+    public async Task<BackupArtifact?> FindArtifactAsync(TenantId tenantId, Guid artifactId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        return await context.BackupArtifacts.AsNoTracking().Include(a => a.Replicas)
+            .SingleOrDefaultAsync(a => a.TenantId == tenantId && a.Id == artifactId, cancellationToken);
+    }
+
+    public async Task<BackupDestination?> FindRunDestinationAsync(TenantId tenantId, Guid artifactId, Guid storageConnectionId, CancellationToken cancellationToken)
+    {
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        var artifact = await context.BackupArtifacts.AsNoTracking().SingleOrDefaultAsync(a => a.TenantId == tenantId && a.Id == artifactId, cancellationToken);
+        var attempt = artifact is null ? null : await context.BackupRunAttempts.AsNoTracking()
+            .SingleOrDefaultAsync(a => a.TenantId == tenantId && a.Id == artifact.AttemptId, cancellationToken);
+        var run = attempt is null ? null : await context.BackupRuns.AsNoTracking().SingleOrDefaultAsync(r => r.TenantId == tenantId && r.Id == attempt.RunId, cancellationToken);
+        return run?.Configuration.Destinations.FirstOrDefault(d => d.StorageConnectionId == storageConnectionId);
     }
 
     public async Task<int> RecoverStaleRepairsAsync(
@@ -688,7 +810,7 @@ public sealed class PostgreSqlReplicaRepairStore(DbContextOptions<PlatformDbCont
                 if (!artifact.Replicas.Any(r => r.StorageConnectionId == op.StorageConnectionId && r.Key == op.TargetKey))
                 {
                     var orphan = new BackupReplica(Guid.NewGuid(), op.TenantId, op.ArtifactId, op.StorageProvider,
-                        op.StorageProvider is "sftp" or "google-drive" && op.StorageConnectionId != Guid.Empty
+                        StorageProviderTypes.External(op.StorageProvider) && op.StorageConnectionId != Guid.Empty
                             ? op.StorageConnectionId.ToString("D") : op.StorageProvider,
                         op.TargetKey, Math.Max(1, op.TotalBytes), artifact.ArtifactChecksum, artifact.ChecksumAlgorithm,
                         "Failed", "RepairCrashRecovery", now, null, BackupStorageExecutionLocation.Backend, null,

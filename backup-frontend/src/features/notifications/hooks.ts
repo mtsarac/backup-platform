@@ -2,7 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { useTenant } from '@/features/tenancy/use-tenant'
 import {
   clearChannelSecret, createChannel, deleteChannel, getChannels, getDeliveries, getPolicy, setChannelEnabled, setChannelSecret, testChannel,
-  updateChannel, updatePolicy,
+  updateChannel, updatePolicy, setOwnerSecurityRecipient,
 } from './api'
 import type { CreateChannelInput, DeliveryFilters, PolicyInput, UpdateChannelInput } from './types'
 
@@ -58,5 +58,6 @@ export const useUpdateChannel = () => useChannelMutation((tenantId, v: { id: str
 export const useSetChannelSecret = () => useChannelMutation((tenantId, v: { id: string; value: string }) => setChannelSecret(tenantId, v.id, v.value), { secret: true })
 export const useClearChannelSecret = () => useChannelMutation((tenantId, id: string) => clearChannelSecret(tenantId, id))
 export const useSetChannelEnabled = () => useChannelMutation((tenantId, v: { id: string; enabled: boolean }) => setChannelEnabled(tenantId, v.id, v.enabled))
+export const useSetOwnerSecurityRecipient = () => useChannelMutation((tenantId, v: { id: string; enabled: boolean }) => setOwnerSecurityRecipient(tenantId, v.id, v.enabled))
 export const useDeleteChannel = () => useChannelMutation((tenantId, id: string) => deleteChannel(tenantId, id), { deliveries: true })
 export const useTestChannel = () => useChannelMutation((tenantId, id: string) => testChannel(tenantId, id), { deliveries: true })

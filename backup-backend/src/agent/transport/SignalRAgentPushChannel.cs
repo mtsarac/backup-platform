@@ -1,3 +1,4 @@
+using System.Security.Cryptography.X509Certificates;
 using BackupPlatform.Agent.Core.Connectivity;
 using BackupPlatform.Agent.Core.Identity;
 using BackupPlatform.Contracts.Agents;
@@ -120,6 +121,7 @@ public sealed class SignalRAgentPushChannel : IAgentPushChannel
         private readonly Guid _expectedAgentId;
         private readonly IAgentPushChannelListener _listener;
         private readonly HubConnection _connection;
+        private readonly X509Certificate2? _clientCertificate;
         private volatile TaskCompletionSource<AgentBackendFailure?> _hello = NewHelloSignal();
         private volatile bool _stopping;
         private volatile bool _established;
@@ -131,6 +133,7 @@ public sealed class SignalRAgentPushChannel : IAgentPushChannel
             _owner = owner;
             _expectedAgentId = identity.AgentId;
             _listener = listener;
+            _clientCertificate = AgentMtlsTransport.LoadCertificate();
 
             var url = new Uri(owner._endpoint.BaseUri, AgentPushChannelContract.HubPath.TrimStart('/'));
             var authorization = identity.Current.ToAuthorizationHeaderValue();
@@ -140,6 +143,7 @@ public sealed class SignalRAgentPushChannel : IAgentPushChannel
                     options.Transports = HttpTransportType.WebSockets;
                     options.Headers["Authorization"] = authorization;
                     options.Headers[AgentProtocolHeader.Name] = ProtocolHeaderValue;
+                    if (_clientCertificate is not null) options.ClientCertificates?.Add(_clientCertificate);
                     options.HttpMessageHandlerFactory = handler =>
                     {
                         if (handler is HttpClientHandler client)
@@ -232,7 +236,8 @@ public sealed class SignalRAgentPushChannel : IAgentPushChannel
             }
             finally
             {
-                await _connection.DisposeAsync().ConfigureAwait(false);
+                try { await _connection.DisposeAsync().ConfigureAwait(false); }
+                finally { _clientCertificate?.Dispose(); }
             }
         }
 

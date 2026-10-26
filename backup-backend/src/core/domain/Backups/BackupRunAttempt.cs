@@ -43,11 +43,36 @@ public sealed class BackupRunAttempt : ITenantOwned
     public double? ProgressPercent { get; private set; }
     public DateTimeOffset? ProgressAt { get; private set; }
     public string? TerminalReason { get; private set; }
+    public bool PauseRequested { get; private set; }
+    public TransferPauseReason? PauseReason { get; private set; }
     public IReadOnlyList<BackupArtifact> Artifacts => _artifactView ??= _artifacts.AsReadOnly();
     /// <summary>How each snapshot destination ended in this attempt. Empty for attempts that never reached a transfer, and for attempts that predate multi-destination runs.</summary>
     public IReadOnlyList<BackupDestinationOutcome> DestinationOutcomes => _outcomeView ??= _outcomes.AsReadOnly();
     public bool IsTerminal => Status is BackupStatus.Succeeded or BackupStatus.Failed or BackupStatus.Cancelled or BackupStatus.AgentLost;
     public bool HasLease(Guid token, DateTimeOffset now) => token != Guid.Empty && LeaseToken == token && LeaseExpiresAt > now && !IsTerminal;
+    internal void RequestPause()
+    {
+        if (Status is not (BackupStatus.Running or BackupStatus.Leased)) throw new InvalidOperationException("Only an active transfer can pause.");
+        PauseRequested = true;
+    }
+    internal void Pause(Guid token, DateTimeOffset now, TransferPauseReason reason)
+    {
+        RequireLease(token, now);
+        if (!Enum.IsDefined(reason)) throw new ArgumentException("Invalid pause reason.");
+        Status = BackupStatus.Paused;
+        PauseReason = reason;
+        PauseRequested = false;
+        LeaseToken = null;
+        LeaseExpiresAt = null;
+        ProgressStage = "Paused";
+        ProgressAt = now;
+    }
+    internal void Resume()
+    {
+        if (Status != BackupStatus.Paused) throw new InvalidOperationException("Only a paused attempt can resume.");
+        Status = BackupStatus.Pending;
+        PauseReason = null;
+    }
     internal void Claim(Guid token, DateTimeOffset now, TimeSpan duration)
     {
         if (Status != BackupStatus.Pending || duration <= TimeSpan.Zero) throw new InvalidOperationException("Attempt cannot be claimed.");
@@ -144,7 +169,7 @@ public sealed class BackupRunAttempt : ITenantOwned
         {
             if (artifact.AttemptId != Id || artifact.TenantId != TenantId)
                 throw new ArgumentException("Artifact ownership mismatch.");
-            if (completion.Status == BackupStatus.Succeeded) artifact.Seal(now, retention);
+            if (completion.Status == BackupStatus.Succeeded || artifact.Replicas.Any(replica => replica.VerificationState == "Verified")) artifact.Seal(now, retention);
             else artifact.SealOrphans(now);
             _artifacts.Add(artifact);
         }
@@ -163,9 +188,20 @@ public sealed class BackupRunAttempt : ITenantOwned
         if (Status != BackupStatus.Pending) throw new InvalidOperationException("Attempt is not pending.");
         Finish(BackupStatus.Cancelled, "Cancelled", now);
     }
-    internal bool Expire(DateTimeOffset now)
+    internal bool Expire(DateTimeOffset now, bool retainTransfer = false)
     {
         if (Status is not (BackupStatus.Leased or BackupStatus.Running) || LeaseExpiresAt > now) return false;
+        if (retainTransfer)
+        {
+            Status = BackupStatus.Paused;
+            PauseReason = TransferPauseReason.PausedByNetworkError;
+            PauseRequested = false;
+            LeaseToken = null;
+            LeaseExpiresAt = null;
+            ProgressStage = "Paused";
+            ProgressAt = now;
+            return true;
+        }
         Finish(BackupStatus.AgentLost, "AgentLost", now);
         return true;
     }

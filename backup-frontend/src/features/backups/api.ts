@@ -27,3 +27,13 @@ export function retryBackup(tenantId: string, id: string): Promise<BackupRun> {
 export function cancelBackup(tenantId: string, id: string): Promise<BackupRun> {
   return apiRequest(tenantPath(tenantId, `backup-runs/${encodeURIComponent(id)}/cancel`), { method: 'POST' })
 }
+
+export async function pauseBackup(tenantId: string, id: string): Promise<BackupRun> {
+  await apiRequest(tenantPath(tenantId, `backup-runs/${encodeURIComponent(id)}/pause`), { method: 'POST' })
+  return getBackup(tenantId, id)
+}
+
+export async function resumeBackup(tenantId: string, id: string): Promise<BackupRun> {
+  await apiRequest(tenantPath(tenantId, `backup-runs/${encodeURIComponent(id)}/resume`), { method: 'POST' })
+  return getBackup(tenantId, id)
+}

@@ -7,10 +7,10 @@ credentials or physical paths: only fixed, safe evidence goes to stdout.
 import argparse
 import importlib.util
 import json
-from pathlib import Path
 import sys
 import time
 import uuid
+from pathlib import Path
 
 spec = importlib.util.spec_from_file_location('download_fixture', Path(__file__).with_name('download-smoke-fixture.py'))
 shared = importlib.util.module_from_spec(spec)
@@ -133,7 +133,7 @@ def toggle(options):
 
 
 def disabled_semantics(options):
-    state, owner, platform = clients(options)
+    state, owner, _ = clients(options)
     tenant = f'/api/tenants/{state["tenantId"]}'
     artifact = state['artifacts']['central']
     status, body = owner.call('POST', tenant + f'/backup-jobs/{artifact["jobId"]}/runs', {}, headers={'Idempotency-Key': 'm7a-denied-' + uuid.uuid4().hex}, expect=(409,))

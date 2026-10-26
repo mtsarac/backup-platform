@@ -6,7 +6,7 @@
 #   drop-restored DATABASE   drops a restored copy (bp_google_drive_acceptance_<suffix>); the source database is refused
 set +x
 set -euo pipefail
-# shellcheck source=common.sh
+# shellcheck source=scripts/dev/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 dev_prepare_state
 source_db=bp_google_drive_acceptance

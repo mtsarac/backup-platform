@@ -7,7 +7,7 @@
 # Credentials come from docs/test-cred.yaml at runtime and are handed to the client containers by environment, never printed.
 set +x
 set -euo pipefail
-# shellcheck source=../lib/common.sh
+# shellcheck source=scripts/lib/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../lib" && pwd)/common.sh"
 
 action=${1:-}; shift || true
@@ -54,7 +54,7 @@ vm_psql() { # user password [psql args]; SQL on stdin
     script="$RUNTIME_DIR/vm-psql.ps1"
     printf '%s\n' "\$env:PGPASSWORD = $(ps_quote "$password")" "\$sql = @'" "$sql" "'@" \
         "\$sql | & 'C:\\Program Files\\PostgreSQL\\18\\bin\\psql.exe' -h localhost -U $(ps_quote "$user") -v ON_ERROR_STOP=1 -q -At$args" \
-        'if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }' > "$script"
+        "if (\$LASTEXITCODE -ne 0) { exit \$LASTEXITCODE }" > "$script"
     local status=0
     "$REPO_ROOT/scripts/windows/run-powershell.sh" --file "$script" 2>&1 | { grep -vE '^\*\*|^#< CLIXML|^<Objs|^$' || true; } || status=${PIPESTATUS[0]}
     rm -f -- "$script"

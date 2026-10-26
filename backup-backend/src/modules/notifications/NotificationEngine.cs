@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Notifications;
 using Microsoft.Extensions.Logging;
 
@@ -36,6 +37,13 @@ public sealed class NotificationEngine(
         return events;
     }
 
+    public async Task<int> SweepTenantAsync(TenantId tenantId, CancellationToken cancellationToken)
+    {
+        var policy = await store.GetPolicyAsync(tenantId, cancellationToken);
+        if (policy is not { Enabled: true }) return 0;
+        return await SweepTenantAsync(policy, cancellationToken);
+    }
+
     public async Task<int> SweepTenantAsync(NotificationPolicy policy, CancellationToken cancellationToken)
     {
         var now = time.GetUtcNow();
@@ -62,10 +70,7 @@ public sealed class NotificationEngine(
             if (!set.IsCondition)
             {
                 foreach (var observation in set.Observations)
-                {
-                    if (!emitter.Admits(observation.Type, observation.Severity) || observation.OccurredAt < policy.ActiveSince || await session.EventExistsAsync(observation.Key)) continue;
-                    await emitter.EmitAsync(NotificationPhase.Raised, observation.Type, observation.Severity, observation.Subject, observation.Facts, observation.Key, observation.OccurredAt);
-                }
+                    await ApplyOccurrenceAsync(session, policy, emitter, observation);
                 continue;
             }
             var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -94,6 +99,23 @@ public sealed class NotificationEngine(
             }
         }
         return emitter.Written;
+    }
+
+    /// <summary>Queues a one-shot observation in the caller's existing tenant-locked transaction; performs no transport I/O.</summary>
+    public static async Task<int> ApplyOccurrenceAsync(INotificationSession session, NotificationObservation observation, NotificationOptions options, DateTimeOffset now)
+    {
+        var policy = await session.GetPolicyAsync();
+        if (policy is not { Enabled: true }) return 0;
+        var channels = (await session.ListChannelsAsync()).Where(channel => channel.IsDeliverable && policy.ChannelKinds.Contains(channel.Kind)).ToList();
+        var emitter = new Emitter(session, policy, channels, options, now);
+        await ApplyOccurrenceAsync(session, policy, emitter, observation);
+        return emitter.Written;
+    }
+
+    private static async Task ApplyOccurrenceAsync(INotificationSession session, NotificationPolicy policy, Emitter emitter, NotificationObservation observation)
+    {
+        if (!emitter.Admits(observation.Type, observation.Severity) || observation.OccurredAt < policy.ActiveSince || await session.EventExistsAsync(observation.Key)) return;
+        await emitter.EmitAsync(NotificationPhase.Raised, observation.Type, observation.Severity, observation.Subject, observation.Facts, observation.Key, observation.OccurredAt);
     }
 
     private sealed class Emitter(INotificationSession session, NotificationPolicy policy, IReadOnlyList<NotificationChannel> channels, NotificationOptions options, DateTimeOffset now)

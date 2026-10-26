@@ -1,26 +1,12 @@
-import { tx } from '@/lib/i18n'
+import { currentLocale, tx } from '@/lib/i18n'
+import type { StatusLevel } from '@/lib/status'
 import { ApiError } from '@/lib/api/client'
-import { errorMessage } from '@/lib/api/failure-messages'
+import type { TechnicalItem } from '@/components/ui/technical-details'
+import { formatBytes } from '@/lib/format'
 import type {
-  ConfigurationValue, ConnectionOwnership, ConnectionTest, ConnectionView, ExecutionLocation, ProviderAvailability, ProviderDescriptor, ProviderTopology, TestMode,
-  TestStatus,
+  ConfigurationValue, ConnectionTest, ConnectionView, ExecutionLocation, ProviderDescriptor, ProviderTopology, TestMode,
+  
 } from './types'
-
-type Tone = 'neutral' | 'success' | 'warning' | 'error' | 'info'
-
-export const ownershipTone: Record<ConnectionOwnership, Tone> = { PlatformManaged: 'info', TenantManaged: 'neutral' }
-
-/** NotTestable is never green: the backend could not check the destination, which says nothing about whether it works. */
-export const testStatusMeta: Record<TestStatus, { label: string; tone: Tone }> = {
-  Succeeded: { get label() { return tx("Başarılı") }, tone: 'success' },
-  Failed: { get label() { return tx("Başarısız") }, tone: 'error' },
-  NotTestable: { get label() { return tx("Test edilemez") }, tone: 'neutral' },
-}
-
-export const availabilityMeta: Record<ProviderAvailability, { label: string; tone: Tone }> = {
-  Available: { get label() { return tx("Kullanılabilir") }, tone: 'success' },
-  Planned: { get label() { return tx("Yakında") }, tone: 'neutral' },
-}
 
 const capabilityLabels: Record<string, string> = {
   get 'storage.read'() { return tx("Okuma") },
@@ -37,6 +23,7 @@ const capabilityLabels: Record<string, string> = {
 
 const testMessages: Record<string, string> = {
   get ok() { return tx("Yazma, doğrulama ve silme sınaması başarılı.") },
+  get access_verified() { return tx("Bucket erişimi ve Object Lock ayarları doğrulandı. Yazılan her yedek ayrıca okunarak doğrulanır.") },
   get agent_side_storage() { return tx("Backend Agent diskine erişemez; bu hedef backup çalışırken Agent tarafından denetlenir.") },
   get storage_not_configured() { return tx("Depolama yapılandırılmamış.") },
   get provider_not_implemented() { return tx("Bu Storage Provider henüz uygulanmadı; test edilemez.") },
@@ -65,26 +52,27 @@ export function capabilityLabel(capability: string): string {
   return Object.hasOwn(capabilityLabels, capability) ? capabilityLabels[capability] : capability
 }
 
-export type Health = { key: 'disabled' | 'reauthorize' | 'failed' | 'untested' | 'agent-side' | 'healthy'; label: string; tone: Tone }
+export type Health = { key: 'disabled' | 'reauthorize' | 'failed' | 'untested' | 'agent-side' | 'healthy'; label: string; level: StatusLevel }
 
 /**
  * One at-a-glance state for a destination, strongest problem first. It only restates what the API reported (enablement, the last test,
  * the Google re-authorization flag): a destination is never called healthy without a successful test.
  */
 export function connectionHealth(connection: Pick<ConnectionView, 'effectiveEnabled' | 'lastTest' | 'providerType' | 'hasSecret' | 'configuration'>): Health {
-  if (!connection.effectiveEnabled) return { key: 'disabled', label: tx('Devre dışı'), tone: 'warning' }
-  if (connection.providerType === 'google-drive' && (!connection.hasSecret || connection.configuration?.reauthorizationRequired === 'true')) return { key: 'reauthorize', label: tx('Yeniden yetkilendirme gerekli'), tone: 'warning' }
+  if (!connection.effectiveEnabled) return { key: 'disabled', label: tx('Devre dışı'), level: 'attention' }
+  if (connection.providerType === 'google-drive' && (!connection.hasSecret || connection.configuration?.reauthorizationRequired === 'true')) return { key: 'reauthorize', label: tx('Yeniden yetkilendirme gerekli'), level: 'attention' }
   const test = connection.lastTest
-  if (!test) return { key: 'untested', label: tx('Test edilmedi'), tone: 'neutral' }
-  if (test.status === 'Failed') return { key: 'failed', label: tx('Bağlantı sorunu'), tone: 'error' }
-  if (test.status === 'NotTestable') return { key: 'agent-side', label: tx('Agent tarafında denetlenir'), tone: 'neutral' }
-  return { key: 'healthy', label: tx('Sağlıklı'), tone: 'success' }
+  if (!test) return { key: 'untested', label: tx('Test edilmedi'), level: 'neutral' }
+  if (test.status === 'Failed') return { key: 'failed', label: tx('Bağlantı sorunu'), level: 'urgent' }
+  if (test.status === 'NotTestable') return { key: 'agent-side', label: tx('Agent tarafında denetlenir'), level: 'neutral' }
+  return { key: 'healthy', label: tx('Sağlıklı'), level: 'safe' }
 }
 
 const topologyLabels: Record<ProviderTopology, string> = { get AgentDirect() { return tx("Agent doğrudan yazar") }, get BackendRelayed() { return tx("Backend üzerinden aktarılır") } }
 const executionLocationLabels: Record<ExecutionLocation, string> = { get Agent() { return tx("Agent") }, get Backend() { return tx("Backend") } }
 const testModeLabels: Record<TestMode, string> = {
   get BackendRoundTrip() { return tx("Backend yazma / doğrulama / silme sınaması") },
+  get BackendReadAccess() { return tx("Bucket erişimi ve koruma ayarları; WORM sınama nesnesi oluşturulmaz") },
   get AgentSide() { return tx("Agent tarafında; backend erişemez, sonuç Test edilemez olur") },
   get None() { return tx("Test desteklenmiyor") },
 }
@@ -103,10 +91,14 @@ export function testModeLabel(mode: TestMode) {
 
 /** The semantics of disabling, straight from the API contract: the confirm dialog and the platform page both state them. */
 export const disableEffects: readonly string[] = [
-  'Bu hedefi kullanan yeni backup\'lar (manuel ve zamanlanmış) başlatılamaz; zamanlanmış çalışmalar "AdmissionDenied" olarak kaydedilir.',
+  'Bu hedefi kullanan yeni yedeklemeler (elle başlatılan ve zamanlanmış) başlatılamaz.',
   'Zaten başlamış çalışmalar sürer ve Replica\'larını yayımlar.',
   'Mevcut Replica\'lar silinmez ve kullanılabilir kalır: indirme, geri yükleme, saklama süresine göre silme ve kota hesabı değişmeden devam eder.',
 ]
+
+/** Plain-language meaning of the platform lock, shown wherever the lock is applied or displayed. */
+export const platformLockMeaning = 'Platform kilidi, platform yöneticisinin bir depolama alanını yeni yedeklemelere kapatmasıdır; sahibin etkin / devre dışı tercihi değişmez.'
+export const platformLockState = 'Platform yöneticisi bu depolama alanını kilitledi; kilit kalkana kadar yeni yedeklemeler için kullanılamaz.'
 
 export const enableEffect = 'Etkinleştirilince bu hedefe yeni backup\'lar yeniden başlatılabilir.'
 
@@ -149,13 +141,6 @@ export function isPlatformCreatable(provider: ProviderDescriptor) {
   return provider.availability === 'Available' && provider.platformCreatable
 }
 
-/** The connection routes reuse `concurrent_update`, which the shared mapper words for plans. */
-export function connectionErrorMessage(error: unknown): string {
-  if (error instanceof ApiError && (error.reason ?? error.code) === 'concurrent_update') return tx('Bağlantı başka bir işlemle aynı anda değiştirildi. Sayfayı yenileyip tekrar deneyin.')
-  if (error instanceof ApiError && (error.reason ?? error.code) === 'rotation_test_failed') return tx('Yeni kimlik bilgisi veya sunucu parmak izi doğrulanamadı. Mevcut bağlantı ve kimlik bilgisi korunuyor.')
-  return errorMessage(error)
-}
-
 /** The request field the backend rejected (`name`, `configuration.<field>`, `secret.<field>`, `quotaScope`...), when it named one. */
 export function errorField(error: unknown): string | undefined {
   return error instanceof ApiError ? error.field : undefined
@@ -165,4 +150,15 @@ export function errorField(error: unknown): string | undefined {
 export function invalidFieldName(error: unknown, prefix: 'configuration' | 'secret'): string | undefined {
   const field = errorField(error)
   return field?.startsWith(`${prefix}.`) ? field.slice(prefix.length + 1) : undefined
+}
+
+/** What a destination holds, for the collapsed technical details: the friendly size and share first, then the exact byte count. */
+export function footprintItems(connection: Pick<ConnectionView, 'storedBytes' | 'replicaCount'>, total: number): TechnicalItem[] {
+  const share = total > 0 ? Math.round((connection.storedBytes / total) * 100) : 0
+  return [
+    { label: tx("Saklanan veri"), value: formatBytes(connection.storedBytes) },
+    { label: tx("Replica"), value: `${connection.replicaCount.toLocaleString(currentLocale())} ${tx("Replica")}` },
+    { label: tx("Tenant'taki payı"), value: tx('%{0}', { '0': share.toLocaleString(currentLocale()) }) },
+    { label: tx("Tam boyut (bayt)"), value: connection.storedBytes.toLocaleString(currentLocale()) },
+  ]
 }

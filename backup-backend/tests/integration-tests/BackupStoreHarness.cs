@@ -81,6 +81,8 @@ internal sealed class BackupStoreHarness(PostgreSqlFixture database)
         // Every run is a destination-list snapshot, so admission and claim need an agent that declares it; tests about the missing capability remove the row.
         context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(agentId, tenantId,
             BackupPlatform.Contracts.Backups.BackupTaskProtocol.MultiDestinationCapability, BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, null, "fixture", T0));
+        context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(agentId, tenantId,
+            BackupPlatform.Contracts.Backups.TaskStorageProtocol.DirectCapability, BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, null, "fixture", T0));
         await context.SaveChangesAsync();
         return agentId;
     }
@@ -122,6 +124,8 @@ internal sealed class BackupStoreHarness(PostgreSqlFixture database)
 
     public static Completion Cancelled() => new("Cancelled", null, null);
 
+    public static Completion Paused() => new("Paused", "Operator", null);
+
     public static Completion Success(DateTimeOffset createdAt) => new("Succeeded", null, new BackupArtifactResult(100, SourceHash, ArtifactHash,
         "sha256", createdAt, "{\"DatabaseName\":\"Database\"}", "{\"CopyOnly\":true}",
         [new BackupReplicaResult("local", "default", "tenant/job/run/attempt/backup.bak", 100, ArtifactHash, "sha256", "Verified", "ReadBack", createdAt, createdAt)]));
@@ -145,6 +149,7 @@ internal sealed class BackupStoreHarness(PostgreSqlFixture database)
         await context.Database.ExecuteSqlInterpolatedAsync($$"""
             UPDATE backup_runs SET "Configuration" = jsonb_set("Configuration", ARRAY['Destinations'], (
                 SELECT jsonb_agg(jsonb_build_object('IsPrimary', named.position = 1, 'StorageProvider', named.provider, 'StorageConnectionId', 'null'::jsonb,
+                    'Direct', named.provider IN ('sftp', 'google-drive', 's3', 'smb'),
                     'StorageExecutionLocation', CASE WHEN named.provider = 'local' THEN "Configuration" #> ARRAY['Destinations', '0', 'StorageExecutionLocation'] ELSE '1'::jsonb END)
                     ORDER BY named.position)
                 FROM unnest({{providers.ToArray()}}::text[]) WITH ORDINALITY AS named(provider, position)))

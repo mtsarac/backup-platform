@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Backups;
 namespace BackupPlatform.Domain.Backups;
 
 /// <summary>Execution input contains references, never credentials or host-local paths.</summary>
@@ -14,20 +15,45 @@ public sealed record BackupConfiguration(
     public IReadOnlyList<BackupDestination> Destinations { get; init; } = [];
 
     /// <summary>
-    /// Minimum number of verified replicas required for a run attempt to be deemed successful.
+    /// Number of verified replicas the policy requires. It is replication compliance, not run success: a run that stores fewer verified copies stays
+    /// Succeeded (the artifact is restorable) and is reported as InsufficientReplicas; the agent only refuses before the backup when too few destinations can be reached.
     /// Defaults to 1. Must be between 1 and the total number of destinations.
     /// </summary>
     public int RequiredVerifiedReplicaCount { get; init; } = 1;
 
+    public bool EnforceThreeTwoOne { get; init; }
+    public string? SourceSite { get; init; }
+    public FileBackupPolicy? Files { get; init; }
+
     /// <summary>"Off" (default; also what a configuration saved before encryption existed deserializes to), "Optional" or "Required".</summary>
     public string EncryptionPolicy { get; init; } = "Off";
 
+    /// <summary>
+    /// <see cref="Validate"/> plus the rules that apply only to new or changed jobs: they are not checked on load, so a job saved before a rule existed still opens.
+    /// </summary>
+    public BackupConfiguration ValidateForSave()
+    {
+        Validate();
+        // The file archive is always a copy-only, SHA-256-verified manifest; the agent reports exactly that, so any other request could never complete.
+        if (Engine == DatabaseEngines.FileSystem && (!CopyOnly || ChecksumPolicy == "Disabled"))
+            throw new ArgumentException("File backups are always copy-only and checksummed; CopyOnly must be true and the checksum policy cannot be Disabled.");
+        return this;
+    }
+
     public BackupConfiguration Validate()
     {
-        if (Engine is not ("mssql" or "postgres")) throw new ArgumentException("Unsupported database engine.");
+        if (!DatabaseEngines.IsValid(Engine)) throw new ArgumentException("Unsupported backup engine.");
         BackupGuard.Text(Database, 128);
         if (Engine == "postgres" && (Database != Database.Trim() || System.Text.Encoding.UTF8.GetByteCount(Database) > 63 || IntegratedSecurity))
             throw new ArgumentException("PostgreSQL requires a database name of at most 63 UTF-8 bytes and password authentication.");
+        if (Engine == DatabaseEngines.FileSystem)
+        {
+            BackupGuard.Reference(Database);
+            if (Host != "localhost" || Port is not null || !IntegratedSecurity || DatabaseCredentialReference is not null || Files is null)
+                throw new ArgumentException("File backups require a local source reference and explicit file selection.");
+            Files.Validate();
+        }
+        else if (Files is not null) throw new ArgumentException("File selection only applies to file backups.");
         BackupGuard.Text(Host, 255);
         if (Port is < 1 or > 65535) throw new ArgumentException("Invalid database port.");
         if (!IntegratedSecurity) BackupGuard.Text(DatabaseCredentialReference, 128);
@@ -61,6 +87,10 @@ public sealed record BackupConfiguration(
 
         if (RequiredVerifiedReplicaCount < 1 || RequiredVerifiedReplicaCount > effectiveDestinations.Count)
             throw new ArgumentException("RequiredVerifiedReplicaCount must be between 1 and the number of destinations.");
+        if (EnforceThreeTwoOne && (RequiredVerifiedReplicaCount < 3 || effectiveDestinations.Count < 3
+            || string.IsNullOrWhiteSpace(SourceSite) || SourceSite.Length > 64
+            || SourceSite.Any(c => !(char.IsAsciiLetterOrDigit(c) || c is '-' or '_'))))
+            throw new ArgumentException("3-2-1 requires three verified copies and a source site identifier.");
 
         return this;
     }
@@ -70,12 +100,14 @@ public sealed record BackupConfiguration(
         IntegratedSecurity == other.IntegratedSecurity && DatabaseCredentialReference == other.DatabaseCredentialReference && Encrypt == other.Encrypt &&
         TrustServerCertificate == other.TrustServerCertificate && StagingReference == other.StagingReference &&
         StoragePrefix == other.StoragePrefix && CopyOnly == other.CopyOnly && ChecksumPolicy == other.ChecksumPolicy && CompressionPolicy == other.CompressionPolicy &&
-        RequiredVerifiedReplicaCount == other.RequiredVerifiedReplicaCount && EncryptionPolicy == other.EncryptionPolicy && Destinations.SequenceEqual(other.Destinations);
+        RequiredVerifiedReplicaCount == other.RequiredVerifiedReplicaCount && EncryptionPolicy == other.EncryptionPolicy
+        && EnforceThreeTwoOne == other.EnforceThreeTwoOne && SourceSite == other.SourceSite && Equals(Files, other.Files) && Destinations.SequenceEqual(other.Destinations);
 
     public override int GetHashCode()
     {
         var hash = new HashCode();
         hash.Add(Engine); hash.Add(Database); hash.Add(Host); hash.Add(Port); hash.Add(RequiredVerifiedReplicaCount);
+        hash.Add(Files);
         foreach (var destination in Destinations) hash.Add(destination);
         return hash.ToHashCode();
     }
@@ -120,7 +152,7 @@ internal static class BackupGuard
 /// </summary>
 public enum BackupStatus
 {
-    Pending = 1, Leased = 2, Running = 3, Succeeded = 4, Failed = 5, Cancelled = 6, AgentLost = 7, RetryPending = 8
+    Pending = 1, Leased = 2, Running = 3, Succeeded = 4, Failed = 5, Cancelled = 6, AgentLost = 7, RetryPending = 8, Paused = 9
 }
 
 public sealed record BackupCompletion(BackupStatus Status, string? FailureCode, BackupArtifact? Artifact, IReadOnlyList<BackupDestinationOutcome>? Outcomes = null);

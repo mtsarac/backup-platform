@@ -45,6 +45,7 @@ public sealed class MultiDestinationTaskTests
             return new NullStorage(destination.StorageProvider);
         }
         public IStorageProvider CreateRestore(RestoreTaskSnapshot task) => throw new NotSupportedException();
+        public IStorageProvider CreateScoped(DirectStorageScope scope) => throw new NotSupportedException();
     }
 
     private sealed class NullStorage(string id) : IStorageProvider
@@ -109,7 +110,7 @@ public sealed class MultiDestinationTaskTests
     {
         var destinations = kind switch
         {
-            "unknown-provider" => [ThreeDestinations[0], new BackupDestinationContract { StorageProvider = "s3", StorageConnectionId = Guid.NewGuid(), StorageExecutionLocation = "Backend" }],
+            "unknown-provider" => [ThreeDestinations[0], new BackupDestinationContract { StorageProvider = "unknown-custom-storage", StorageConnectionId = Guid.NewGuid(), StorageExecutionLocation = "Backend" }],
             "relayed-on-agent" => [ThreeDestinations[0], ThreeDestinations[1] with { StorageExecutionLocation = "Agent" }],
             "relayed-without-connection" => [ThreeDestinations[0], ThreeDestinations[1] with { StorageConnectionId = null }],
             "missing-location" => [ThreeDestinations[0], ThreeDestinations[1] with { StorageExecutionLocation = null }],
@@ -294,5 +295,154 @@ public sealed class MultiDestinationTaskTests
         var failure = await Assert.ThrowsAsync<StorageException>(() => provider.GetMetadataAsync(new StorageObjectKey("a/b"), default));
 
         Assert.Equal(StorageFailureKind.AccessDenied, failure.Kind);
+    }
+
+    [Fact]
+    public async Task Direct_destination_creates_agent_direct_provider_and_fails_closed_if_remote_base_directory_missing()
+    {
+        using var handler = new FakeHttpHandler();
+        handler.Respond = (_, _) => Task.FromResult(FakeHttpHandler.Json(HttpStatusCode.OK, """
+            {
+                "providerType": "sftp",
+                "host": "sftp.test",
+                "port": 22,
+                "username": "user",
+                "authenticationType": "password",
+                "hostKeyFingerprint": "SHA256:abc",
+                "password": "pass"
+            }
+            """));
+        using var http = new HttpClient(handler);
+        var factory = new HttpTaskStorageProviderFactory(http, new AgentBackendEndpoint(new Uri("https://backup.example.test/")), new FakeCredentialStore(TestIdentity.Create()));
+        var directDestination = new BackupDestinationContract
+        {
+            StorageProvider = "sftp",
+            StorageConnectionId = Sftp,
+            Direct = true,
+            StorageExecutionLocation = "Agent"
+        };
+        var provider = factory.CreateBackup(Snapshot([directDestination]), directDestination);
+
+        Assert.Equal(StorageTopology.AgentDirect, provider.Topology);
+        var failure = await Assert.ThrowsAsync<StorageException>(() => provider.GetMetadataAsync(new StorageObjectKey("a/b"), default));
+        Assert.Equal(StorageFailureKind.InvalidConfiguration, failure.Kind);
+        Assert.Contains("remote base directory", failure.Message);
+    }
+
+    [Fact]
+    public async Task Direct_google_drive_caches_token_across_operations()
+    {
+        var fetchCount = 0;
+        using var handler = new FakeHttpHandler();
+        handler.Respond = (req, _) =>
+        {
+            if (req.RequestUri?.AbsolutePath.EndsWith("/storage/access", StringComparison.Ordinal) == true)
+            {
+                Interlocked.Increment(ref fetchCount);
+                return Task.FromResult(FakeHttpHandler.Json(HttpStatusCode.OK, $$"""
+                    {
+                        "providerType": "google-drive",
+                        "accessToken": "cached-token-123",
+                        "expiresAt": "{{DateTimeOffset.UtcNow.AddMinutes(50):O}}",
+                        "folderId": "root-folder-id"
+                    }
+                    """));
+            }
+            if (req.RequestUri?.AbsolutePath.EndsWith("/storage/catalog", StringComparison.Ordinal) == true)
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+            }
+            return Task.FromResult(FakeHttpHandler.Json(HttpStatusCode.OK, """{"files":[]}"""));
+        };
+        using var http = new HttpClient(handler);
+        var factory = new HttpTaskStorageProviderFactory(http, new AgentBackendEndpoint(new Uri("https://backup.example.test/")), new FakeCredentialStore(TestIdentity.Create()));
+        var directDestination = new BackupDestinationContract
+        {
+            StorageProvider = "google-drive",
+            StorageConnectionId = Drive,
+            Direct = true,
+            StorageExecutionLocation = "Agent"
+        };
+        var provider = factory.CreateBackup(Snapshot([directDestination]), directDestination);
+
+        Assert.Equal(StorageTopology.AgentDirect, provider.Topology);
+        var exists1 = await provider.ExistsAsync(new StorageObjectKey("a/b"), default);
+        var exists2 = await provider.ExistsAsync(new StorageObjectKey("a/b"), default);
+
+        Assert.Equal(1, fetchCount);
+        Assert.False(exists1);
+        Assert.False(exists2);
+    }
+
+    [Fact]
+    public async Task Direct_google_drive_refetches_token_when_expired()
+    {
+        var fetchCount = 0;
+        using var handler = new FakeHttpHandler();
+        handler.Respond = (req, _) =>
+        {
+            if (req.RequestUri?.AbsolutePath.EndsWith("/storage/access", StringComparison.Ordinal) == true)
+            {
+                Interlocked.Increment(ref fetchCount);
+                return Task.FromResult(FakeHttpHandler.Json(HttpStatusCode.OK, $$"""
+                    {
+                        "providerType": "google-drive",
+                        "accessToken": "expired-token-123",
+                        "expiresAt": "{{DateTimeOffset.UtcNow.AddMinutes(-5):O}}",
+                        "folderId": "root-folder-id"
+                    }
+                    """));
+            }
+            if (req.RequestUri?.AbsolutePath.EndsWith("/storage/catalog", StringComparison.Ordinal) == true)
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+            }
+            return Task.FromResult(FakeHttpHandler.Json(HttpStatusCode.OK, """{"files":[]}"""));
+        };
+        using var http = new HttpClient(handler);
+        var factory = new HttpTaskStorageProviderFactory(http, new AgentBackendEndpoint(new Uri("https://backup.example.test/")), new FakeCredentialStore(TestIdentity.Create()));
+        var directDestination = new BackupDestinationContract
+        {
+            StorageProvider = "google-drive",
+            StorageConnectionId = Drive,
+            Direct = true,
+            StorageExecutionLocation = "Agent"
+        };
+        var provider = factory.CreateBackup(Snapshot([directDestination]), directDestination);
+
+        await provider.ExistsAsync(new StorageObjectKey("a/b"), default);
+        await provider.ExistsAsync(new StorageObjectKey("a/b"), default);
+
+        Assert.True(fetchCount >= 2, $"Expected at least 2 fetches due to expiry, but got {fetchCount}");
+    }
+
+    [Fact]
+    public async Task Direct_sftp_supports_private_key_authentication()
+    {
+        using var handler = new FakeHttpHandler();
+        handler.Respond = (_, _) => Task.FromResult(FakeHttpHandler.Json(HttpStatusCode.OK, """
+            {
+                "providerType": "sftp",
+                "host": "sftp.test",
+                "port": 22,
+                "username": "user",
+                "authenticationType": "private-key",
+                "remoteBaseDirectory": "/upload",
+                "hostKeyFingerprint": "SHA256:abc",
+                "privateKey": "-----BEGIN OPENSSH PRIVATE KEY-----\nMIIB...-----END OPENSSH PRIVATE KEY-----"
+            }
+            """));
+        using var http = new HttpClient(handler);
+        var factory = new HttpTaskStorageProviderFactory(http, new AgentBackendEndpoint(new Uri("https://backup.example.test/")), new FakeCredentialStore(TestIdentity.Create()));
+        var directDestination = new BackupDestinationContract
+        {
+            StorageProvider = "sftp",
+            StorageConnectionId = Sftp,
+            Direct = true,
+            StorageExecutionLocation = "Agent"
+        };
+        var provider = factory.CreateBackup(Snapshot([directDestination]), directDestination);
+
+        Assert.Equal(StorageTopology.AgentDirect, provider.Topology);
     }
 }

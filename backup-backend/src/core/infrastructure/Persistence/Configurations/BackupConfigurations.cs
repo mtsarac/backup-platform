@@ -109,7 +109,7 @@ internal sealed class BackupRunConfiguration : IEntityTypeConfiguration<BackupRu
         BackupMapping.Base(builder, "backup_runs");
         BackupMapping.Agent(builder);
         BackupMapping.Configuration(builder);
-        BackupMapping.Status(builder, "backup_runs", 8);
+        BackupMapping.Status(builder, "backup_runs", 9);
         BackupMapping.RetryPolicy(builder, run => run.RetryPolicy);
         BackupMapping.RetentionPolicy(builder, run => run.RetentionPolicy);
         builder.ToTable("backup_runs", table =>
@@ -129,6 +129,10 @@ internal sealed class BackupRunConfiguration : IEntityTypeConfiguration<BackupRu
         builder.Property(run => run.TerminalReason).HasMaxLength(128);
         builder.Property(run => run.OverlapPolicy).HasConversion<string>().HasMaxLength(16).IsRequired();
         builder.Property(run => run.RetryState).HasConversion<int>();
+        builder.Ignore(run => run.IsSizeAnomaly);
+        builder.Property(run => run.SizeAnomalyStatus).HasMaxLength(32);
+        builder.Property(run => run.SizeAnomalyDeviationRatio);
+        builder.Property(run => run.SizeAnomalyBaselineBytes);
         builder.Ignore(run => run.CurrentAttempt);
         builder.Ignore(run => run.IsTerminal);
         builder.Ignore(run => run.IsActive);
@@ -148,13 +152,14 @@ internal sealed class BackupRunConfiguration : IEntityTypeConfiguration<BackupRu
         builder.HasIndex(run => new { run.TenantId, run.Status, run.CreatedAt });
         builder.HasIndex(run => new { run.TenantId, run.JobId, run.CreatedAt });
         // Backstop for the Skip overlap policy: at most one active run per job whatever the application does.
-        builder.HasIndex(run => new { run.TenantId, run.JobId }).IsUnique().HasFilter("\"OverlapPolicy\" = 'Skip' AND \"Status\" IN (1,2,3,8)");
+        builder.HasIndex(run => new { run.TenantId, run.JobId }).IsUnique().HasFilter("\"OverlapPolicy\" = 'Skip' AND \"Status\" IN (1,2,3,8,9)");
         // The retry worker's only scan: due RetryPending runs, oldest due first.
         builder.HasIndex(run => new { run.NextAttemptAt, run.Id }).HasFilter("\"Status\" = 8");
         // One run per scheduled instant of a job, whichever node, wake-up refire or reconciliation tries to create it.
         builder.HasIndex(run => new { run.TenantId, run.JobId, run.ScheduledOccurrence }).IsUnique().HasFilter("\"ScheduledOccurrence\" IS NOT NULL");
         // The unclaimed-run sweep: pending scheduled runs, earliest deadline first.
         builder.HasIndex(run => new { run.ClaimDeadline, run.Id }).HasFilter("\"Status\" = 1 AND \"ClaimDeadline\" IS NOT NULL");
+        builder.HasIndex(run => new { run.TenantId, run.SizeAnomalyStatus, run.CompletedAt });
     }
 }
 
@@ -164,9 +169,10 @@ internal sealed class BackupAttemptConfiguration : IEntityTypeConfiguration<Back
     {
         BackupMapping.Base(builder, "backup_run_attempts");
         BackupMapping.Agent(builder);
-        BackupMapping.Status(builder, "backup_run_attempts", 7);
+        builder.Property<BackupStatus>("Status").HasConversion<int>();
         builder.ToTable("backup_run_attempts", table =>
         {
+            table.HasCheckConstraint("ck_backup_run_attempts_status", "(\"Status\" BETWEEN 1 AND 7) OR \"Status\" = 9");
             table.HasCheckConstraint("ck_backup_attempt_number", "\"Number\" >= 1");
             table.HasCheckConstraint("ck_backup_attempt_lease", "\"Status\" NOT IN (2,3) OR (\"LeaseToken\" IS NOT NULL AND \"LeaseToken\" <> '00000000-0000-0000-0000-000000000000'::uuid AND \"LeaseExpiresAt\" IS NOT NULL)");
             table.HasCheckConstraint("ck_backup_attempt_progress", "\"ProgressPercent\" IS NULL OR (\"ProgressPercent\" >= 0 AND \"ProgressPercent\" <= 100)");
@@ -209,7 +215,7 @@ internal sealed class BackupArtifactConfiguration : IEntityTypeConfiguration<Bac
             // Retention is fixed when the artifact is accepted: an expiration needs the acceptance it was counted from, and the grace period is bounded.
             table.HasCheckConstraint("ck_backup_artifact_retention", "\"RetentionGracePeriod\" BETWEEN interval '1 second' AND interval '365 days' " +
                 "AND (\"RetentionExpiresAt\" IS NULL OR (\"AcceptedAt\" IS NOT NULL AND \"RetentionExpiresAt\" > \"AcceptedAt\"))");
-            table.HasCheckConstraint("ck_backup_artifact_encryption", "(\"Format\" = 'v1-plain' AND \"EncryptionKeyId\" IS NULL AND \"EncryptionKeyVersion\" IS NULL AND \"EncryptionWrappedDekBase64\" IS NULL) OR " +
+            table.HasCheckConstraint("ck_backup_artifact_encryption", "(\"Format\" = 'v1-plain' AND \"EncryptionKeyId\" IS NULL AND \"EncryptionKeyVersion\" IS NULL AND \"EncryptionWrappedDekBase64\" IS NULL AND \"EncryptionRecipientsJson\" IS NULL) OR " +
                 "(\"Format\" = 'v2-bpe' AND \"EncryptionKeyId\" IS NOT NULL AND \"EncryptionKeyVersion\" >= 1 AND \"EncryptionWrappedDekBase64\" IS NOT NULL)");
         });
         builder.Property(artifact => artifact.SourceChecksum).HasMaxLength(64).IsRequired();
@@ -220,6 +226,7 @@ internal sealed class BackupArtifactConfiguration : IEntityTypeConfiguration<Bac
         builder.Property(artifact => artifact.Format).HasMaxLength(16).HasDefaultValue(BackupArtifact.PlainFormat).IsRequired();
         builder.Property(artifact => artifact.EncryptionKeyId).HasMaxLength(32);
         builder.Property(artifact => artifact.EncryptionWrappedDekBase64).HasMaxLength(4096);
+        builder.Property(artifact => artifact.EncryptionRecipientsJson).HasMaxLength(2048);
         builder.Property<bool>("_sealed").HasColumnName("Sealed");
         builder.Property(artifact => artifact.RetentionGracePeriod).HasDefaultValue(TimeSpan.FromHours(24));
         builder.Ignore(artifact => artifact.State);
@@ -250,6 +257,8 @@ internal sealed class TenantWrapKeyConfiguration : IEntityTypeConfiguration<Tena
         builder.Property(key => key.PublicKeySpki).IsRequired();
         builder.Property(key => key.State).HasConversion<string>().HasMaxLength(16).IsRequired();
         builder.HasIndex(key => new { key.TenantId, key.Version }).IsUnique();
+        // At most one key seals new artifacts per tenant, whichever node rotates.
+        builder.HasIndex(key => key.TenantId).IsUnique().HasDatabaseName("ux_tenant_wrap_keys_active").HasFilter("\"State\" = 'Active'");
         builder.HasIndex(key => key.KeyId).IsUnique();
     }
 }
@@ -264,11 +273,12 @@ internal sealed class BackupReplicaConfiguration : IEntityTypeConfiguration<Back
             table.HasCheckConstraint("ck_backup_replica_size", "\"SizeBytes\" > 0");
             table.HasCheckConstraint("ck_backup_replica_status", "\"Status\" IN ('Available','DeletePending','Deleting','DeleteFailed','Deleted','Quarantined')");
             table.HasCheckConstraint("ck_backup_replica_executor",
-                "(\"ExecutionLocation\" = 'Backend' AND \"OwningAgentId\" IS NULL AND \"DeleteOperationId\" IS NULL AND \"DeleteCompletionToken\" IS NULL) OR " +
-                "(\"ExecutionLocation\" = 'Agent' AND \"StorageProvider\" = 'local' AND \"OwningAgentId\" IS NOT NULL AND \"OwningAgentId\" <> '00000000-0000-0000-0000-000000000000'::uuid)");
+                "(\"DeleteAgentId\" IS NULL OR \"DeleteAgentId\" <> '00000000-0000-0000-0000-000000000000'::uuid) AND (" +
+                "(\"ExecutionLocation\" = 'Backend' AND \"OwningAgentId\" IS NULL AND (\"StorageProvider\" IN ('sftp','google-drive') OR (\"DeleteOperationId\" IS NULL AND \"DeleteCompletionToken\" IS NULL AND \"DeleteAgentId\" IS NULL))) OR " +
+                "(\"ExecutionLocation\" = 'Agent' AND \"StorageProvider\" = 'local' AND \"OwningAgentId\" IS NOT NULL AND \"OwningAgentId\" <> '00000000-0000-0000-0000-000000000000'::uuid))");
             table.HasCheckConstraint("ck_backup_replica_completion",
                 "(\"DeleteCompletionToken\" IS NULL AND \"DeleteCompletionAbsenceVerified\" IS NULL AND \"DeleteCompletionFailureCode\" IS NULL) OR " +
-                "(\"ExecutionLocation\" = 'Agent' AND \"DeleteOperationId\" IS NOT NULL AND \"DeleteCompletionToken\" IS NOT NULL AND \"DeleteCompletionAbsenceVerified\" IS NOT NULL AND " +
+                "((\"ExecutionLocation\" = 'Agent' OR (\"ExecutionLocation\" = 'Backend' AND \"StorageProvider\" IN ('sftp','google-drive') AND \"DeleteAgentId\" IS NOT NULL)) AND \"DeleteOperationId\" IS NOT NULL AND \"DeleteCompletionToken\" IS NOT NULL AND \"DeleteCompletionAbsenceVerified\" IS NOT NULL AND " +
                 "((\"Status\" = 'Deleted' AND \"DeleteCompletionAbsenceVerified\" AND \"DeleteCompletionFailureCode\" IS NULL) OR " +
                 "(\"Status\" = 'DeleteFailed' AND NOT \"DeleteCompletionAbsenceVerified\" AND \"DeleteCompletionFailureCode\" = \"DeleteFailureCode\")))");
             table.HasCheckConstraint("ck_backup_replica_lifecycle",
@@ -280,10 +290,10 @@ internal sealed class BackupReplicaConfiguration : IEntityTypeConfiguration<Back
                 "OR (\"Status\" = 'Deleting' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeleteAfter\" IS NOT NULL AND \"DeletedAt\" IS NULL AND (" +
                 "(\"DeleteLeaseToken\" IS NOT NULL AND \"DeleteLeaseOwner\" IS NOT NULL AND \"DeleteLeaseExpiresAt\" IS NOT NULL AND \"DeleteNextAttemptAt\" IS NULL AND \"DeleteAttempts\" >= 1 " +
                 "AND (\"ExecutionLocation\" = 'Backend' OR (\"DeleteOperationId\" IS NOT NULL AND \"DeleteFailureCode\" IS NULL))) OR " +
-                "(\"ExecutionLocation\" = 'Agent' AND \"DeleteOperationId\" IS NOT NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL AND \"DeleteLeaseExpiresAt\" IS NULL " +
+                "((\"ExecutionLocation\" = 'Agent' OR (\"ExecutionLocation\" = 'Backend' AND \"StorageProvider\" IN ('sftp','google-drive'))) AND \"DeleteOperationId\" IS NOT NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL AND \"DeleteLeaseExpiresAt\" IS NULL " +
                 "AND \"DeleteNextAttemptAt\" IS NOT NULL AND \"DeleteFailureCode\" = 'agent_unavailable' AND \"DeleteAttempts\" >= 0))) " +
                 "OR (\"Status\" = 'DeleteFailed' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeleteAfter\" IS NOT NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL " +
-                "AND \"DeleteLeaseExpiresAt\" IS NULL AND (\"ExecutionLocation\" = 'Agent' OR \"DeleteNextAttemptAt\" IS NOT NULL) AND \"DeleteFailureCode\" IS NOT NULL AND \"DeletedAt\" IS NULL AND \"DeleteAttempts\" >= 1) " +
+                "AND \"DeleteLeaseExpiresAt\" IS NULL AND (\"ExecutionLocation\" = 'Agent' OR (\"ExecutionLocation\" = 'Backend' AND \"StorageProvider\" IN ('sftp','google-drive')) OR \"DeleteNextAttemptAt\" IS NOT NULL) AND \"DeleteFailureCode\" IS NOT NULL AND \"DeletedAt\" IS NULL AND \"DeleteAttempts\" >= 1) " +
                 "OR (\"Status\" = 'Deleted' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeletedAt\" IS NOT NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL " +
                 "AND \"DeleteLeaseExpiresAt\" IS NULL AND \"DeleteNextAttemptAt\" IS NULL AND \"DeleteFailureCode\" IS NULL AND \"DeleteAttempts\" >= 1))");
             table.HasCheckConstraint("ck_backup_replica_checksum", "\"ChecksumAlgorithm\" = 'sha256' AND \"Checksum\" ~ '^[0-9a-f]{64}$'");
@@ -307,12 +317,17 @@ internal sealed class BackupReplicaConfiguration : IEntityTypeConfiguration<Back
         builder.Property(replica => replica.Status).HasConversion<string>().HasMaxLength(16).IsRequired();
         builder.Property(replica => replica.DeleteReason).HasConversion<string>().HasMaxLength(16);
         builder.Property(replica => replica.DeleteLeaseOwner).HasMaxLength(128);
+        builder.Property(replica => replica.DeleteAgentId).HasColumnType("uuid");
         builder.Property(replica => replica.DeleteFailureCode).HasMaxLength(128);
         builder.Property(replica => replica.DeleteCompletionFailureCode).HasMaxLength(128);
         builder.Ignore(replica => replica.IsUsable);
         builder.Ignore(replica => replica.WaitingForAgent);
+        builder.Ignore(replica => replica.AgentExecuted);
         builder.HasIndex(replica => new { replica.TenantId, replica.OwningAgentId, replica.DeleteAfter })
             .HasDatabaseName("ix_backup_replicas_agent_deletions").HasFilter("\"ExecutionLocation\" = 'Agent' AND \"Status\" = 'Deleting'");
+        builder.HasIndex(replica => new { replica.TenantId, replica.DeleteAfter })
+            .HasDatabaseName("ix_backup_replicas_external_agent_deletions")
+            .HasFilter("\"ExecutionLocation\" = 'Backend' AND \"StorageProvider\" IN ('sftp','google-drive') AND \"Status\" = 'Deleting'");
         // The delete workers' claim query is the union of these three: grace period over, failed delete due again, lease of a crashed owner expired.
         builder.HasIndex(replica => replica.DeleteAfter).HasDatabaseName("ix_backup_replicas_delete_pending").HasFilter("\"Status\" = 'DeletePending'");
         builder.HasIndex(replica => replica.DeleteNextAttemptAt).HasDatabaseName("ix_backup_replicas_delete_failed").HasFilter("\"Status\" = 'DeleteFailed'");

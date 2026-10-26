@@ -18,7 +18,8 @@ param(
     [string] $BackendUri,
     [string] $EnrollmentToken,
     [string] $AgentName,
-    [string] $StoreDirectory = (Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'BackupAgent')
+    [string] $StoreDirectory = (Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'BackupAgent'),
+    [hashtable] $TrustedUpdateKeys = @{}
 )
 
 $ErrorActionPreference = 'Stop'
@@ -56,15 +57,24 @@ function New-ProtectedDirectory([string] $Path, [Security.Principal.SecurityIden
     $null = [IO.Directory]::CreateDirectory($Path)
     Set-Acl -Path $Path -AclObject $security
 }
+function Assert-OutsideBinaries([string] $Path) {
+    if ($Path.Equals($binary, [StringComparison]::OrdinalIgnoreCase) -or
+        $Path.StartsWith("$binary\", [StringComparison]::OrdinalIgnoreCase) -or
+        $binary.StartsWith("$Path\", [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Mutable identity/update staging paths must be separate from the protected binary tree.'
+    }
+}
 
 $binary = Assert-SafePath ([IO.Path]::GetFullPath($BinaryDirectory))
 $store = Assert-SafePath $StoreDirectory
+Assert-OutsideBinaries $store
 $executable = Join-Path $binary 'BackupPlatform.Agent.Host.exe'
 if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) { throw 'BackupPlatform.Agent.Host.exe was not found in BinaryDirectory.' }
 $null = Assert-SafePath $executable
 # Refuse executable replacement by an ordinary account rather than quietly installing a privileged service over it.
 $installerSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $trustedBinaryOwners = @('S-1-5-18', 'S-1-5-32-544', $installerSid)
+$trustedBinaryOwners += (New-Object Security.Principal.NTAccount 'NT SERVICE\TrustedInstaller').Translate([Security.Principal.SecurityIdentifier]).Value
 $writeRights = [Security.AccessControl.FileSystemRights]::Write -bor [Security.AccessControl.FileSystemRights]::Delete -bor [Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor [Security.AccessControl.FileSystemRights]::ChangePermissions -bor [Security.AccessControl.FileSystemRights]::TakeOwnership
 foreach ($item in @((Get-Item -LiteralPath $binary)) + @(Get-ChildItem -LiteralPath $binary -Recurse -Force)) {
     if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'The published binary tree must not contain reparse points.' }
@@ -73,6 +83,17 @@ foreach ($item in @((Get-Item -LiteralPath $binary)) + @(Get-ChildItem -LiteralP
     foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
         if ($rule.AccessControlType -eq 'Allow' -and ($rule.FileSystemRights -band $writeRights) -and $trustedBinaryOwners -notcontains $rule.IdentityReference.Value) {
             throw 'The published binary tree is writable by an untrusted account. Publish under an administrator-controlled directory.'
+        }
+    }
+}
+$replacementRights = [Security.AccessControl.FileSystemRights]::Delete -bor [Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor [Security.AccessControl.FileSystemRights]::ChangePermissions -bor [Security.AccessControl.FileSystemRights]::TakeOwnership
+for ($ancestor = [IO.Path]::GetDirectoryName($binary); $ancestor; $ancestor = [IO.Path]::GetDirectoryName($ancestor)) {
+    $acl = Get-Acl -LiteralPath $ancestor
+    if ($trustedBinaryOwners -notcontains $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value) { throw 'The protected updater requires administrator-controlled ancestor directories.' }
+    foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
+        if ($rule.AccessControlType -eq 'Allow' -and -not ($rule.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) -and
+            ($rule.FileSystemRights -band $replacementRights) -and $trustedBinaryOwners -notcontains $rule.IdentityReference.Value) {
+            throw 'An untrusted account can replace an ancestor of the privileged updater. Install under Program Files.'
         }
     }
 }
@@ -117,6 +138,36 @@ try {
     # Grant only read/execute on published binaries; do not grant the service write access to its executable.
     & icacls.exe $binary /grant "${account}:(OI)(CI)RX" /T /Q | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'The service could not be granted read/execute access to the published binaries.' }
+    $updateStage = Assert-SafePath "$store.updates"
+    Assert-OutsideBinaries $updateStage
+    New-ProtectedDirectory $updateStage $serviceSid
+    $control = Join-Path $binary 'update-control'
+    $releases = Join-Path $binary 'releases'
+    $null = Assert-SafePath $control
+    $null = Assert-SafePath $releases
+    $null = New-Item -ItemType Directory -Path $control -Force
+    $null = New-Item -ItemType Directory -Path $releases -Force
+    # These inherit only the binary tree's administrator/SYSTEM writes and the service's RX.
+    $settingsPath = Join-Path $control 'update-settings.json'
+    if ((Test-Path -LiteralPath $settingsPath) -and $TrustedUpdateKeys.Count -eq 0) {
+        $saved = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
+        foreach ($key in $saved.TrustedKeys.PSObject.Properties) { $TrustedUpdateKeys[$key.Name] = $key.Value }
+    }
+    $settings = @{ Root = $binary; Staging = $updateStage; Store = $store; RuntimeConfiguration = (Join-Path $binary 'appsettings.json'); TrustedKeys = $TrustedUpdateKeys }
+    [IO.File]::WriteAllText($settingsPath, ($settings | ConvertTo-Json -Depth 5), (New-Object Text.UTF8Encoding $false))
+    $releaseVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($executable).ProductVersion.Split('+')[0]
+    $parsedVersion = $null
+    if (-not [Version]::TryParse($releaseVersion, [ref]$parsedVersion) -or $parsedVersion.ToString() -ne $releaseVersion) { throw 'Publish a canonical numeric agent version before installing.' }
+    $active = @{ Version = $releaseVersion; Executable = $executable } | ConvertTo-Json
+    [IO.File]::WriteAllText((Join-Path $control 'active.json'), $active, (New-Object Text.UTF8Encoding $false))
+    $action = New-ScheduledTaskAction -Execute $executable -Argument "--apply-update `"$settingsPath`"" -WorkingDirectory $binary
+    $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+    $taskSettings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 10) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+    $null = Register-ScheduledTask -TaskName 'BackupAgentUpdate' -Action $action -Principal $principal -Settings $taskSettings -Trigger (New-ScheduledTaskTrigger -AtStartup) -Force
+    $scheduler = New-Object -ComObject 'Schedule.Service'
+    $scheduler.Connect()
+    $task = $scheduler.GetFolder('\').GetTask('BackupAgentUpdate')
+    $task.SetSecurityDescriptor("D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GRGX;;;$($serviceSid.Value))", 0)
     Add-Type -AssemblyName System.Security
     $request = @{ server = $BackendUri; token = $EnrollmentToken; name = $AgentName } | ConvertTo-Json -Compress
     $plain = [Text.Encoding]::UTF8.GetBytes($request)
@@ -125,7 +176,7 @@ try {
     finally { [Array]::Clear($plain, 0, $plain.Length); $request = $null; $EnrollmentToken = $null }
     $requestPath = Join-Path $stage 'request.bin'
     [IO.File]::WriteAllBytes($requestPath, $encrypted)
-    $environment = @("Agent__CredentialStoreDirectory=$store")
+    $environment = @("Agent__CredentialStoreDirectory=$store", "Agent__Updates__SettingsFile=$settingsPath")
     if ($BackendUri -and -not $hasIdentity) { $environment += "Agent__Backend__BaseUri=$BackendUri" }
     Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName" -Name Environment -Type MultiString -Value $environment
     Set-ServiceExecutable "`"$executable`" --service-enroll `"$requestPath`" `"$store`""

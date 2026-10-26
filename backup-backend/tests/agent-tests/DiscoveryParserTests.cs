@@ -1,57 +1,12 @@
 using BackupPlatform.Agent.Core.Discovery;
 using BackupPlatform.Contracts.Discovery;
+using BackupPlatform.Agent.Transport;
 
 namespace BackupPlatform.AgentTests;
 
 public sealed class DiscoveryParserTests
 {
     // ---- docker -------------------------------------------------------------------------------------------------
-
-    [Fact]
-    public void Dual_stack_published_ports_collapse_to_one_mapping()
-    {
-        var mappings = DiscoveryParsers.ParseDockerPorts("0.0.0.0:14333->1433/tcp, :::14333->1433/tcp");
-
-        Assert.Equal([new DockerPortMapping(14333, 1433)], mappings);
-    }
-
-    [Theory]
-    [InlineData("127.0.0.1:5433->5432/tcp", 5433, 5432)]
-    [InlineData("[::1]:5433->5432/tcp", 5433, 5432)]
-    [InlineData("0.0.0.0:5432->5432/tcp", 5432, 5432)]
-    public void Loopback_reachable_bindings_are_published_ports(string ports, int host, int container)
-    {
-        Assert.Equal([new DockerPortMapping(host, container)], DiscoveryParsers.ParseDockerPorts(ports));
-    }
-
-    [Fact]
-    public void Exposed_only_ports_have_no_host_port_and_other_interfaces_and_protocols_are_ignored()
-    {
-        Assert.Equal([new DockerPortMapping(null, 5432)], DiscoveryParsers.ParseDockerPorts("5432/tcp"));
-        Assert.Empty(DiscoveryParsers.ParseDockerPorts("192.168.1.5:5433->5432/tcp"));
-        Assert.Empty(DiscoveryParsers.ParseDockerPorts("0.0.0.0:5432->5432/udp"));
-        Assert.Empty(DiscoveryParsers.ParseDockerPorts(""));
-    }
-
-    [Fact]
-    public void Port_ranges_map_pairwise_and_unbalanced_ranges_are_dropped()
-    {
-        Assert.Equal([new DockerPortMapping(8000, 9000), new DockerPortMapping(8001, 9001)], DiscoveryParsers.ParseDockerPorts("0.0.0.0:8000-8001->9000-9001/tcp"));
-        Assert.Empty(DiscoveryParsers.ParseDockerPorts("0.0.0.0:8000-8002->9000-9001/tcp"));
-    }
-
-    [Fact]
-    public void A_docker_line_has_name_image_and_ports()
-    {
-        var container = DiscoveryParsers.ParseDockerLine("sql1|mcr.microsoft.com/mssql/server:2022-latest|0.0.0.0:14333->1433/tcp, :::14333->1433/tcp");
-
-        Assert.NotNull(container);
-        Assert.Equal("sql1", container.Name);
-        Assert.Equal("mcr.microsoft.com/mssql/server:2022-latest", container.Image);
-        Assert.Equal([new DockerPortMapping(14333, 1433)], container.Ports);
-        Assert.Null(DiscoveryParsers.ParseDockerLine("garbage"));
-        Assert.Null(DiscoveryParsers.ParseDockerLine("|image|"));
-    }
 
     [Theory]
     [InlineData("mcr.microsoft.com/mssql/server:2022-latest", 1433, DiscoveryEngines.MsSql)]
@@ -68,49 +23,9 @@ public sealed class DiscoveryParserTests
     }
 
     [Fact]
-    public void The_docker_detector_turns_output_into_instances_with_the_documented_keys()
-    {
-        var output = string.Join('\n',
-            "sql1|mcr.microsoft.com/mssql/server:2022-latest|0.0.0.0:14333->1433/tcp, :::14333->1433/tcp",
-            "pg|postgres:16|5432/tcp",
-            "web|nginx|0.0.0.0:80->80/tcp");
-
-        var result = DockerContainerDetector.Interpret(new ToolResult(ToolOutcome.Completed, 0, output, string.Empty));
-
-        Assert.Equal(DiscoverySourceStates.Scanned, result.Status);
-        var sql = Assert.Single(result.Instances, instance => instance.Engine == DiscoveryEngines.MsSql);
-        Assert.Equal("mssql|docker|sql1|1433", sql.Key);
-        Assert.Equal("localhost", sql.Host);
-        Assert.Equal(14333, sql.Port);
-        Assert.Equal("sql1", sql.ContainerName);
-        Assert.Null(sql.ReasonCode);
-        var postgres = Assert.Single(result.Instances, instance => instance.Engine == DiscoveryEngines.PostgreSql);
-        Assert.Equal("postgres|docker|pg|5432", postgres.Key);
-        Assert.Null(postgres.Port);
-        Assert.Equal("no_published_port", postgres.ReasonCode);
-        Assert.Equal(2, result.Instances.Count);
-    }
-
-    [Theory]
-    [InlineData("NotFound", 0, "", DiscoverySourceStates.Unavailable, "docker_not_found")]
-    [InlineData("AccessDenied", 0, "", DiscoverySourceStates.Unavailable, "docker_access_denied")]
-    [InlineData("Completed", 1, "permission denied while trying to connect to the Docker daemon socket", DiscoverySourceStates.Unavailable, "docker_access_denied")]
-    [InlineData("TimedOut", 0, "", DiscoverySourceStates.Failed, "docker_timeout")]
-    [InlineData("Completed", 1, "something else", DiscoverySourceStates.Failed, "docker_failed")]
-    [InlineData("Failed", -1, "", DiscoverySourceStates.Failed, "docker_failed")]
-    public void The_docker_tool_outcome_becomes_an_honest_source_status(string outcome, int exitCode, string stderr, string status, string reason)
-    {
-        var result = DockerContainerDetector.Interpret(new ToolResult(Enum.Parse<ToolOutcome>(outcome), exitCode, string.Empty, stderr));
-
-        Assert.Equal(status, result.Status);
-        Assert.Equal(reason, result.ReasonCode);
-        Assert.Empty(result.Instances);
-    }
-
-    [Fact]
     public async Task Docker_is_disabled_when_the_plan_excludes_it()
     {
-        var result = await new DockerContainerDetector().DetectAsync(new DiscoveryDetectionContext(IncludeDocker: false), default);
+        var result = await new DockerContainerDetector(new DockerEngineHttpTransport()).DetectAsync(new DiscoveryDetectionContext(IncludeDocker: false), default);
 
         Assert.Equal(DiscoverySourceStates.Disabled, result.Status);
     }

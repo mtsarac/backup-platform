@@ -1,10 +1,12 @@
+using BackupPlatform.Domain.Storage;
+using BackupPlatform.Domain.Backups;
 using System.Linq.Expressions;
 using System.Text.Json.Nodes;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Application.Restores;
+using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Audit;
-using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Capabilities;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Restores;
@@ -88,6 +90,8 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         var capable = await context.AgentCapabilities.AsNoTracking().AnyAsync(capability => capability.TenantId == tenantId && capability.AgentId == agentId &&
             capability.Identifier == capabilityIdentifier && capability.Support == CapabilitySupport.Supported, cancellationToken);
         if (!capable) return new RestoreCreateResult(RestoreCreateOutcome.AgentCannotRestore);
+        var direct = await context.AgentCapabilities.AsNoTracking().AnyAsync(capability => capability.TenantId == tenantId && capability.AgentId == agentId &&
+            capability.Identifier == TaskStorageProtocol.DirectCapability && capability.Support == CapabilitySupport.Supported, cancellationToken);
         if (command.PrecheckId is { } precheckId)
         {
             var precheck = await context.RestoreOperations.AsNoTracking()
@@ -98,7 +102,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         // Lock order: agent (held), artifact, replica. Artifact-level mutators (manual delete, cancel) take the artifact first and then write replicas; taking the replica
         // first here would let a restore and a delete wait for each other's row.
         if (!await LockArtifactAsync(context, tenantId, artifactId, cancellationToken)) return new RestoreCreateResult(RestoreCreateOutcome.ArtifactNotFound);
-        var selection = await SelectReplicaAsync(context, command, cancellationToken);
+        var selection = await SelectReplicaAsync(context, command, direct, cancellationToken);
         if (selection.Rejection is { } rejection) return new RestoreCreateResult(RestoreCreateOutcome.SourceRejected, Rejection: rejection);
 
         var operation = new RestoreOperation(Guid.NewGuid(), tenantId, artifactId, selection.Replica!.Id, selection.Access, agentId, command.Target, command.DatabaseName, command.Mode,
@@ -126,7 +130,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
     /// what is pinned is exactly what was checked. A replica that stopped being eligible between the first read and the lock is dropped and, when the
     /// caller did not name one, the next best is tried.
     /// </summary>
-    private static async Task<Selection> SelectReplicaAsync(PlatformDbContext context, RestoreCommand command, CancellationToken cancellationToken)
+    private static async Task<Selection> SelectReplicaAsync(PlatformDbContext context, RestoreCommand command, bool direct, CancellationToken cancellationToken)
     {
         var artifact = await LoadArtifactAsync(context, command, cancellationToken);
         for (var round = 0; round < SelectionRounds; round++)
@@ -139,20 +143,20 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
             }
             else
             {
-                candidate = RestoreSourceEvaluator.SelectReplica(artifact, command.AgentId, command.Now);
-                if (candidate is null) return Rejected(RestoreSourceEvaluator.Explain(artifact, command.AgentId, command.Now));
+                candidate = RestoreSourceEvaluator.SelectReplica(artifact, command.AgentId, command.Now, direct);
+                if (candidate is null) return Rejected(RestoreSourceEvaluator.Explain(artifact, command.AgentId, command.Now, direct));
             }
-            var early = RestoreSourceEvaluator.Evaluate(artifact, candidate, command.AgentId, command.Now);
+            var early = RestoreSourceEvaluator.Evaluate(artifact, candidate, command.AgentId, command.Now, direct);
             if (!early.Eligible) return Rejected(early.Rejection!.Value);
             if (!await LockReplicaAsync(context, command.TenantId, command.ArtifactId, candidate.Id, cancellationToken)) return Rejected(RestoreSourceRejection.ReplicaNotFound);
             // A new statement under the lock: nothing can change this row until the transaction ends.
             artifact = await LoadArtifactAsync(context, command, cancellationToken);
             var locked = artifact.Replicas.SingleOrDefault(replica => replica.Id == candidate.Id);
-            var decision = locked is null ? RestoreSourceDecision.Reject(RestoreSourceRejection.ReplicaNotFound) : RestoreSourceEvaluator.Evaluate(artifact, locked, command.AgentId, command.Now);
+            var decision = locked is null ? RestoreSourceDecision.Reject(RestoreSourceRejection.ReplicaNotFound) : RestoreSourceEvaluator.Evaluate(artifact, locked, command.AgentId, command.Now, direct);
             if (decision.Eligible) return new Selection(locked, decision.Access!.Value, null);
             if (command.ReplicaId is not null) return Rejected(decision.Rejection!.Value);
         }
-        return Rejected(RestoreSourceEvaluator.Explain(artifact, command.AgentId, command.Now));
+        return Rejected(RestoreSourceEvaluator.Explain(artifact, command.AgentId, command.Now, direct));
     }
 
     private static Selection Rejected(RestoreSourceRejection rejection) => new(null, default, rejection);
@@ -269,6 +273,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         var supported = await context.AgentCapabilities.AsNoTracking()
             .Where(capability => capability.TenantId == tenantId && capability.AgentId == agentId && capability.Support == CapabilitySupport.Supported)
             .Select(capability => capability.Identifier).ToListAsync(cancellationToken);
+        var direct = supported.Contains(TaskStorageProtocol.DirectCapability, StringComparer.Ordinal);
 
         foreach (var next in pending.Where(operation => operation.Status == RestoreStatus.Pending))
         {
@@ -281,7 +286,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
             var candidates = artifact.Replicas
                 .Where(candidate => !unreadableReplicas.Contains(candidate.Id) &&
                     (candidate.Id == next.ReplicaId && candidate.Status is BackupReplicaStatus.Available or BackupReplicaStatus.DeletePending ||
-                     RestoreSourceEvaluator.Evaluate(artifact, candidate, agentId, now).Eligible))
+                     RestoreSourceEvaluator.Evaluate(artifact, candidate, agentId, now, direct).Eligible))
                 .OrderBy(candidate => candidate.Id == next.ReplicaId ? 0 : 1)
                 .ThenBy(candidate => candidate.ExecutionLocation == BackupStorageExecutionLocation.Agent ? 0 : 1)
                 .ThenBy(candidate => ReplicaRepairSourceEvaluator.GetProviderPriority(candidate.StorageProvider))
@@ -293,7 +298,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
                 if (!await LockReplicaAsync(context, tenantId, next.ArtifactId, candidate.Id, cancellationToken)) continue;
                 var locked = await context.BackupReplicas.AsNoTracking()
                     .SingleAsync(entity => entity.TenantId == tenantId && entity.ArtifactId == next.ArtifactId && entity.Id == candidate.Id, cancellationToken);
-                var decision = RestoreSourceEvaluator.Evaluate(artifact, locked, agentId, now);
+                var decision = RestoreSourceEvaluator.Evaluate(artifact, locked, agentId, now, direct);
                 var alreadyPinned = locked.Id == next.ReplicaId &&
                     locked.Status is BackupReplicaStatus.Available or BackupReplicaStatus.DeletePending &&
                     locked.VerificationState == "Verified" && locked.VerifiedAt is not null;
@@ -305,12 +310,14 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
 
             if (chosenCandidate is not null)
             {
-                if (chosenCandidate.ExecutionLocation == BackupStorageExecutionLocation.Agent || storage is null)
+                // The agent reads an AgentDirect replica itself with credentials the backend releases to its lease: the backend has nothing to probe it with.
+                var access = chosenCandidate.Id == next.ReplicaId ? next.SourceAccess : RestoreSourceEvaluator.Evaluate(artifact, chosenCandidate, agentId, now, direct).Access;
+                if (chosenCandidate.ExecutionLocation == BackupStorageExecutionLocation.Agent || storage is null || access == RestoreSourceAccess.AgentDirect)
                 {
                     var token = Guid.NewGuid();
                     if (chosenCandidate.Id != next.ReplicaId)
                     {
-                        var decision = RestoreSourceEvaluator.Evaluate(artifact, chosenCandidate, agentId, now);
+                        var decision = RestoreSourceEvaluator.Evaluate(artifact, chosenCandidate, agentId, now, direct);
                         if (next.SwitchReplica(chosenCandidate, decision.Access!.Value))
                             AddAudit(context, next, now, null, "restore.replica_fallback", next.SupportSessionId);
                     }
@@ -371,6 +378,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         var supported = await context.AgentCapabilities.AsNoTracking()
             .Where(capability => capability.TenantId == tenantId && capability.AgentId == agentId && capability.Support == CapabilitySupport.Supported)
             .Select(capability => capability.Identifier).ToListAsync(cancellationToken);
+        var direct = supported.Contains(TaskStorageProtocol.DirectCapability, StringComparer.Ordinal);
 
         if (!await LockArtifactAsync(context, tenantId, op.ArtifactId, cancellationToken) ||
             !await LockReplicaAsync(context, tenantId, op.ArtifactId, candidateReplicaId, cancellationToken))
@@ -395,7 +403,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
             return new(ClaimFinalizeOutcome.Retry);
         }
 
-        var decision = RestoreSourceEvaluator.Evaluate(artifact, lockedReplica, agentId, now);
+        var decision = RestoreSourceEvaluator.Evaluate(artifact, lockedReplica, agentId, now, direct);
         var alreadyPinned = lockedReplica.Id == op.ReplicaId &&
             lockedReplica.Status is BackupReplicaStatus.Available or BackupReplicaStatus.DeletePending &&
             lockedReplica.VerificationState == "Verified" && lockedReplica.VerifiedAt is not null;
@@ -440,10 +448,15 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
         {
             var provider = storage.Resolve(replica.TenantId, replica.StorageProvider, replica.StorageTarget);
             // Central storage can be mounted only on the agent; absence of a backend mount is not evidence of source failure.
-            if (provider is null) return replica.StorageProvider == "central";
+            if (provider is null) return replica.StorageProvider == StorageProviderTypes.Central;
             if (!provider.Capabilities.Supports(StorageCapabilityIds.Read)) return false;
             await using var source = await provider.OpenReadAsync(new StorageObjectKey(replica.Key), cancellationToken);
             return source.CanRead;
+        }
+        catch (StorageException exception) when (exception.Kind == StorageFailureKind.NotFound)
+        {
+            await new PostgreSqlReplicaMissingReporter(options).ReportMissingAsync(replica.TenantId, replica.Id, CancellationToken.None);
+            return false;
         }
         catch (Exception exception) when (exception is StorageException or IOException or UnauthorizedAccessException) { return false; }
     }
@@ -481,7 +494,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
 
     public async Task<BackupMutationResult> CompleteAsync(RestoreLeaseCommand command, RestoreCompletion completion, CancellationToken cancellationToken)
     {
-        string? engine = "mssql";
+        string? engine = DatabaseEngines.MsSql;
         if (completion.Status == RestoreStatus.Succeeded && completion.TargetState == RestoreTargetState.NotModified)
         {
             await using var context = PlatformDbContext.CreateForPlatformOperations(options);
@@ -492,8 +505,10 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
                                   select artifact.SourceMetadataJson).SingleOrDefaultAsync(cancellationToken);
             if (metadata is not null) engine = BackupArtifactEngine.Read(metadata);
         }
-        return await MutateAttemptAsync(command, operation =>
+        var replicaId = Guid.Empty;
+        var outcome = await MutateAttemptAsync(command, operation =>
         {
+            replicaId = operation.ReplicaId;
             if (operation.Purpose != RestorePurpose.Execution && completion.Status == RestoreStatus.Succeeded)
             {
                 var result = RestoreInputValidation.ReadResult(completion.ResultJson);
@@ -507,7 +522,16 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
             if (operation.IsTerminal && SameJson(operation.ResultJson, completion.ResultJson)) completion = completion with { ResultJson = operation.ResultJson };
             operation.Complete(command.LeaseToken, command.Now, completion);
         }, cancellationToken);
+        // The agent read the replica's own storage and found no object: the check it reports names that, unlike the coarse ReplicaUnavailable code.
+        if (outcome == BackupMutationResult.Accepted && completion.Status == RestoreStatus.Failed && replicaId != Guid.Empty
+            && RestoreInputValidation.ReadResult(completion.ResultJson)?.PreCheck.Any(item => item.CheckId == AgentSourceReplicaCheck && item.ReasonCode == AgentReplicaMissingReason) == true)
+            await new PostgreSqlReplicaMissingReporter(options).ReportMissingAsync(command.TenantId, replicaId, CancellationToken.None);
+        return outcome;
     }
+
+    // Mirror the agent's RestorePipelineReasons.Checks.SourceReplica and .ReplicaMissing.
+    private const string AgentSourceReplicaCheck = "source.replica";
+    private const string AgentReplicaMissingReason = "replica-missing";
 
     /// <summary>A verification only succeeds with the engine's own checks in the report and every one of them passed.</summary>
     private static bool SuccessfulVerification(BackupPlatform.Contracts.Restores.RestoreTaskResult? result) =>
@@ -665,7 +689,7 @@ public sealed class PostgreSqlRestoreStore(DbContextOptions<PlatformDbContext> o
     }
 
     private static bool SuccessfulPrecheck(BackupPlatform.Contracts.Restores.RestoreTaskResult? result, RestoreOptions options, string? engine) =>
-        engine is ("mssql" or "postgres") && result is { PreCheck.Count: > 0, SourceBackup: not null, FileMappings: not null } && (engine == "postgres" || result.FileMappings.Count > 0) &&
+        DatabaseEngines.IsValid(engine) && result is { PreCheck.Count: > 0, SourceBackup: not null, FileMappings: not null } && (engine != DatabaseEngines.MsSql || result.FileMappings.Count > 0) &&
         result.PreCheck.All(item => item.Status is "Passed" or "Warning" or "Skipped") &&
         (!options.VerifyChecksum || result.ChecksumVerified) && (!options.VerifyBackup || result.BackupVerified);
 

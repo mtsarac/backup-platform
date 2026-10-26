@@ -1,9 +1,9 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Link } from 'react-router-dom'
 import * as api from '@/features/platform/support/api'
 import { removeSupportData, supportKeys } from '@/features/platform/support/hooks'
-import { makeArtifact, makeRestore, makeSession } from '@/features/platform/support/test-fixtures'
+import { makeArtifact, makeJob, makeRestore, makeRun, makeSession } from '@/features/platform/support/test-fixtures'
 import type { SupportSession } from '@/features/platform/support/types'
 import { paged, renderPlatform } from '@/features/platform/test-utils'
 import { ApiError } from '@/lib/api/client'
@@ -42,6 +42,76 @@ describe('support session detail', () => {
     expect(await screen.findByText("Kaynak sağlama toplamı")).toBeInTheDocument()
     expect(screen.queryByText('Depolama hedefi')).not.toBeInTheDocument()
   })
+  it.each([
+    [['DownloadBackup'], ['İndirmeler']],
+    [['RestoreBackup'], ['Geri Yükleme İşlemleri']],
+    [['ViewBackupMetadata'], ['Yedekleme Gezgini', 'İndirmeler', 'Geri Yükleme İşlemleri']],
+  ] as const)('shows data tabs only for held permissions %j', async (permissions, shown) => {
+    vi.mocked(api.getSession).mockResolvedValue(makeSession({ permissions: [...permissions] }))
+    mount('?tab=browser')
+    await screen.findByRole('tab', { name: 'Genel Bakış' })
+    for (const name of ['Yedekleme Gezgini', 'İndirmeler', 'Geri Yükleme İşlemleri']) {
+      if ((shown as readonly string[]).includes(name)) expect(screen.getByRole('tab', { name })).toBeEnabled()
+      else expect(screen.queryByRole('tab', { name })).not.toBeInTheDocument()
+    }
+    expect(screen.getByRole('tab', { name: 'Denetim' })).toBeEnabled()
+    if (!shown.includes('Yedekleme Gezgini' as never)) {
+      expect(screen.getByRole('tab', { name: 'Genel Bakış' })).toHaveAttribute('aria-selected', 'true')
+      expect(api.getSupportArtifacts).not.toHaveBeenCalled()
+    }
+  })
+  it('counts the remaining time down live while the session is active', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true, toFake: ['setInterval', 'clearInterval', 'Date'] })
+    try {
+      const now = Date.now()
+      vi.mocked(api.getSession).mockResolvedValue(makeSession({ serverNow: new Date(now).toISOString(), expiresAt: new Date(now + 3_725_000).toISOString() }))
+      mount()
+      expect(await screen.findByLabelText('Oturum süresi')).toHaveTextContent('Kalan süre: 1 sa 2 dk 5 sn')
+      await act(async () => { vi.advanceTimersByTime(5_000) })
+      expect(screen.getByLabelText('Oturum süresi')).toHaveTextContent(/Kalan süre: 1 sa 2 dk 0 sn/)
+    } finally { vi.useRealTimers() }
+  })
+  it('overview keeps the customer-environment warning and puts identifiers and exact times under collapsed technical details', async () => {
+    mount()
+    expect(await screen.findByText('Müşteri ortamındasınız')).toBeVisible()
+    expect(screen.getByText('Müşteri talebi: backup doğrulama')).toBeVisible()
+    expect(screen.getByText('Oturum kimliği')).not.toBeVisible()
+    expect(screen.getByText('support-a')).not.toBeVisible()
+    fireEvent.click(screen.getByText('Teknik ayrıntılar'))
+    expect(screen.getByText('support-a')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Kopyala: Oturum kimliği' })).toBeVisible()
+  })
+  it('backup browser jobs list names the job, computer, database and last result; cron, timezone and engine wait under details', async () => {
+    vi.mocked(api.getSupportJobs).mockResolvedValue([makeJob()])
+    mount('?tab=browser&view=jobs')
+    const row = (await screen.findByText('Daily Backup')).closest('tr')!
+    expect(within(row).getByText('SQL-01')).toBeVisible()
+    expect(within(row).getByText('CustomerDB')).toBeVisible()
+    expect(within(row).getByText('Başarılı')).toBeVisible()
+    for (const technical of ['0 2 * * *', 'Europe/Istanbul', 'mssql · Full', 'Central', 'job-a']) expect(within(row).getByText(technical)).not.toBeVisible()
+    fireEvent.click(within(row).getByText('Teknik ayrıntılar'))
+    expect(within(row).getByText('0 2 * * *')).toBeVisible()
+    expect(within(row).getByText('Europe/Istanbul')).toBeVisible()
+    expect(within(row).getByRole('button', { name: 'Kopyala: Zamanlama ifadesi (cron)' })).toBeVisible()
+  })
+  it('backup browser runs list shows the job, result and start in plain terms; trigger, attempts and file ids wait under details', async () => {
+    vi.mocked(api.getSupportRuns).mockResolvedValue(paged([makeRun({ status: 'Failed', reasonCode: 'agent_lost', triggerType: 'Scheduled' })]))
+    mount('?tab=browser&view=runs')
+    const row = (await screen.findByText('Daily Backup')).closest('tr')!
+    expect(within(row).getByText('Başarısız')).toBeVisible()
+    expect(within(row).getByRole('button', { name: 'Yedek dosyası 1 ayrıntıları' })).toBeVisible()
+    expect(within(row).getByText('Scheduled')).not.toBeVisible()
+    expect(within(row).getByText('artifact-a')).not.toBeVisible()
+    fireEvent.click(within(row).getByRole('button', { name: 'Yedek dosyası 1 ayrıntıları' }))
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('artifact=artifact-a'))
+  })
+  it('backup browser files list shows database, job, size and state; the file id and replicas wait under details', async () => {
+    mount('?tab=browser')
+    const row = (await screen.findByRole('button', { name: 'CustomerDB' })).closest('tr')!
+    expect(within(row).getByText('Daily Backup')).toBeVisible()
+    expect(within(row).getByText('Kullanılabilir')).toBeVisible()
+    expect(within(row).getByText('artifact-a')).not.toBeVisible()
+  })
   it('DownloadBackup enables download but not restore; RestoreBackup enables restore but not download', async () => {
     vi.mocked(api.getSession).mockResolvedValue(makeSession({ permissions: ['ViewBackupMetadata', 'DownloadBackup'] }))
     const view = mount('?tab=browser&artifact=artifact-a')
@@ -55,15 +125,14 @@ describe('support session detail', () => {
     expect(screen.getByRole('button', { name: "İndir" })).toBeDisabled()
     expect(api.getSupportDownloadAvailability).not.toHaveBeenCalled()
   })
-  it.each(['Expired', 'Closed', 'Revoked'] as const)('%s sessions disable all data tabs and Close and never query customer resources', async status => {
+  it.each(['Expired', 'Closed', 'Revoked'] as const)('%s sessions hide all data tabs, disable Close and never query customer resources', async status => {
     vi.mocked(api.getSession).mockResolvedValue(makeSession({ status }))
     mount('?tab=browser&artifact=artifact-a&restoreArtifact=artifact-a&restoreId=restore-a')
     await screen.findByRole('heading', { name: /Acme A.Ş. · (?:Support Session|Destek Oturumu)/ })
     expect(screen.getByRole('button', { name: "Oturumu kapat" })).toBeDisabled()
-    for (const name of ['Backup Browser', 'Downloads', 'Restore Operations', 'Yedekleme Gezgini', 'İndirmeler', 'Geri Yükleme İşlemleri']) {
-      const tab = screen.queryByRole('tab', { name })
-      if (tab) expect(tab).toBeDisabled()
-    }
+    for (const name of ['Yedekleme Gezgini', 'İndirmeler', 'Geri Yükleme İşlemleri']) expect(screen.queryByRole('tab', { name })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Genel Bakış' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Denetim' })).toBeInTheDocument()
     expect(screen.getByText(/Müşteri verilerine erişim ve tüm işlemler kapalıdır/)).toBeInTheDocument()
     for (const fn of dataFunctions()) expect(fn).not.toHaveBeenCalled()
     expect(api.closeSession).not.toHaveBeenCalled()
@@ -75,6 +144,8 @@ describe('support session detail', () => {
     expect(screen.queryByRole('button', { name: "Oturumu kapat" })).not.toBeInTheDocument()
     for (const fn of dataFunctions()) expect(fn).not.toHaveBeenCalled()
     expect(screen.getByText(/Bu oturumun sahibi değilsiniz/)).toBeInTheDocument()
+    for (const name of ['Yedekleme Gezgini', 'İndirmeler', 'Geri Yükleme İşlemleri']) expect(screen.queryByRole('tab', { name })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Genel Bakış' })).toHaveAttribute('aria-selected', 'true')
   })
   it('requires confirmation before close, POSTs once, and removes all customer caches while retaining view and audit', async () => {
     const session = makeSession()
@@ -130,7 +201,7 @@ describe('support session detail', () => {
     mount('?tab=browser')
     await screen.findByRole('heading', { name: /Acme A.Ş. · (?:Support Session|Destek Oturumu)/ })
     expect(screen.getByRole('button', { name: "Oturumu kapat" })).toBeDisabled()
-    expect(screen.getByRole('tab', { name: "Yedekleme Gezgini" })).toBeDisabled()
+    expect(screen.queryByRole('tab', { name: "Yedekleme Gezgini" })).not.toBeInTheDocument()
     expect(screen.getByText(/Destek oturumunun süresi doldu/)).toBeInTheDocument()
     for (const fn of dataFunctions()) expect(fn).not.toHaveBeenCalled()
   })
@@ -160,15 +231,50 @@ describe('support session detail', () => {
     vi.mocked(api.getSupportRestore).mockResolvedValue(makeRestore({ id: 'execution-a', purpose: 'Execution', status: 'Running', targetState: 'Unknown' }))
     mount('?tab=restores&restoreId=execution-a')
     expect(await screen.findByRole('button', { name: "Geri yüklemeyi iptal et" })).toBeDisabled()
-    expect(screen.getByText(/Ajan hedef veritabanının durumunu belirleyemedi|Ajan hedef Veritabanı durumunu belirleyemedi/)).toBeInTheDocument()
+    expect(screen.getByText(/Yedekleme bilgisayarı veritabanının durumunu belirleyemedi/)).toBeInTheDocument()
     expect(api.cancelSupportRestore).not.toHaveBeenCalled()
+  })
+  it('cancelling a restore needs the typed database name and warns that a partial database may remain', async () => {
+    const execution = makeRestore({ id: 'execution-a', purpose: 'Execution', status: 'Running' })
+    vi.mocked(api.getSupportRestore).mockResolvedValue(execution)
+    vi.mocked(api.cancelSupportRestore).mockResolvedValue({ ...execution, cancellationRequestedAt: '2026-10-09T10:00:03Z' })
+    mount('?tab=restores&restoreId=execution-a')
+    fireEvent.click(await screen.findByRole('button', { name: "Geri yüklemeyi iptal et" }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/kısmen geri yüklenmiş/)).toBeVisible()
+    const confirm = within(dialog).getByRole('button', { name: 'İptali onayla' })
+    expect(confirm).toBeDisabled()
+    fireEvent.change(within(dialog).getByLabelText(/Onaylamak için adı yazın/), { target: { value: 'customerdb_support' } })
+    expect(confirm).toBeDisabled()
+    fireEvent.change(within(dialog).getByLabelText(/Onaylamak için adı yazın/), { target: { value: 'CustomerDB_support' } })
+    expect(confirm).toBeEnabled()
+    expect(api.cancelSupportRestore).not.toHaveBeenCalled()
+    fireEvent.click(confirm)
+    await waitFor(() => expect(api.cancelSupportRestore).toHaveBeenCalledOnce())
+  })
+  it('restore detail keeps the database, target and state in view and the computer, backup file and restore ids under details', async () => {
+    vi.mocked(api.getSupportRestore).mockResolvedValue(makeRestore({ id: 'execution-a', purpose: 'Execution', status: 'Running' }))
+    mount('?tab=restores&restoreId=execution-a')
+    await screen.findByRole('button', { name: "Geri yüklemeyi iptal et" })
+    expect(screen.getByText('customer-sql:1433')).toBeVisible()
+    expect(screen.getByText('agent-a')).not.toBeVisible()
+    expect(screen.getByText('execution-a')).not.toBeVisible()
+  })
+  it('downloads show the backup file link while its id waits under details', async () => {
+    vi.mocked(api.getSupportDownloads).mockResolvedValue(paged([{ downloadId: 'dl-a', artifactId: 'artifact-a', replicaId: 'replica-a', state: 'Succeeded', failureCode: null, transferredBytes: 4096, sizeBytes: 4096, filename: 'customer.bak', createdAt: '2026-10-09T10:00:00Z', releasedAt: null }]))
+    mount('?tab=downloads')
+    const row = (await screen.findByText('customer.bak')).closest('tr')!
+    expect(within(row).getByRole('button', { name: 'Yedek dosyası ayrıntıları' })).toBeVisible()
+    expect(within(row).getByText('artifact-a')).not.toBeVisible()
   })
   it('a denied cancel renders the authorization state and refreshes the session rather than trusting stale permissions', async () => {
     vi.mocked(api.getSupportRestore).mockResolvedValue(makeRestore({ id: 'execution-a', purpose: 'Execution', status: 'Running' }))
     vi.mocked(api.cancelSupportRestore).mockRejectedValue(new ApiError(403, { error: 'support_access_denied', reason: 'session_revoked' }))
     mount('?tab=restores&restoreId=execution-a')
     fireEvent.click(await screen.findByRole('button', { name: "Geri yüklemeyi iptal et" }))
-    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'İptali onayla' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByLabelText(/Onaylamak için adı yazın/), { target: { value: 'CustomerDB_support' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'İptali onayla' }))
     expect(await screen.findByRole('heading', { name: 'Bu alan için yetkiniz yok' })).toBeInTheDocument()
     expect(screen.getAllByText('Destek erişimi geri alındı.').length).toBeGreaterThan(0)
     await waitFor(() => expect(vi.mocked(api.getSession).mock.calls.length).toBeGreaterThanOrEqual(2))

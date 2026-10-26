@@ -22,13 +22,13 @@ import contextlib
 import importlib.util
 import json
 import os
-from pathlib import Path
 import re
 import subprocess
 import sys
 import threading
 import time
 import uuid
+from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SCENARIOS = ('baseline', 'low', 'medium', 'tenant', 'cancel', 'retry')
@@ -101,7 +101,7 @@ def parse():
 def pg(query):
     """Read-only SELECT through the postgres container (the session is forced read-only)."""
     done = subprocess.run(['docker', 'exec', '-e', 'PGOPTIONS=-c default_transaction_read_only=on', os.environ.get('POSTGRES_CONTAINER', 'postgres'), 'psql', '-U', 'postgres',
-                           '-d', os.environ.get('BP_DEV_DATABASE', 'backup_platform_dev'), '-AtX', '-F', '|', '-c', query], capture_output=True, text=True, timeout=30)
+                           '-d', os.environ.get('BP_DEV_DATABASE', 'backup_platform_dev'), '-AtX', '-F', '|', '-c', query], check=False, capture_output=True, text=True, timeout=30)
     if done.returncode:
         raise FixtureFailure('psql failed: ' + done.stderr.replace('\n', ' ')[-200:])
     return [line.split('|') for line in done.stdout.splitlines() if line]
@@ -116,7 +116,7 @@ def sa_password():
 
 def linux_sql(script, timeout=900):
     done = subprocess.run(['docker', 'exec', '-i', '-e', 'SQLCMDPASSWORD', 'bp-dev-mssql', '/opt/mssql-tools18/bin/sqlcmd', '-S', 'localhost', '-U', 'sa', '-C', '-b', '-h', '-1', '-W', '-t', str(timeout)],
-                          input=script, text=True, capture_output=True, env=dict(os.environ, SQLCMDPASSWORD=sa_password()), timeout=timeout + 30)
+                          check=False, input=script, text=True, capture_output=True, env=dict(os.environ, SQLCMDPASSWORD=sa_password()), timeout=timeout + 30)
     if done.returncode:
         raise FixtureFailure('Linux SQL failed: ' + (done.stdout + done.stderr).replace('\n', ' ')[-300:])
     return [line.strip() for line in done.stdout.splitlines() if line.strip()]
@@ -475,7 +475,7 @@ def preflight():
         return {'tenant': state['tenant']}
 
     def vm():
-        done = subprocess.run([str(HERE / 'check-vm.sh'), '--require-agent'], capture_output=True, text=True, timeout=240)
+        done = subprocess.run([str(HERE / 'check-vm.sh'), '--require-agent'], check=False, capture_output=True, text=True, timeout=240)
         need(done.returncode == 0, f'check-vm.sh --require-agent failed (exit {done.returncode}): ' + ' '.join((done.stdout + done.stderr).split())[-250:])
         return {'checkVm': 'ok'}
 

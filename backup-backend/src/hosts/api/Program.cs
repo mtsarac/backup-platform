@@ -11,15 +11,27 @@ var builder = WebApplication.CreateBuilder(isBootstrap ? args.Where(argument => 
 // Hosting's request-start messages include the query string: OAuth callback credentials and the one-click unsubscribe token (NotificationRecipientApiIntegrationTests pins this).
 builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
 builder.Services.AddPlatformSecurity();
+builder.Services.AddExternalSecrets(builder.Configuration);
+builder.Services.AddAgentCertificates(builder.Configuration);
+if (builder.Configuration.GetValue<bool>("AgentSecurity:Mtls:Enabled"))
+{
+    builder.WebHost.ConfigureKestrel(server => server.ConfigureHttpsDefaults(https =>
+    {
+        https.ClientCertificateMode = Microsoft.AspNetCore.Server.Kestrel.Https.ClientCertificateMode.AllowCertificate;
+        // AgentAuthentication validates the private CA and live credential generation, not the host trust store.
+        https.ClientCertificateValidation = (_, _, _) => true;
+    }));
+}
 
 var app = builder.Build();
 _ = app.Services.GetRequiredService<DbContextOptions<PlatformDbContext>>();
-_ = app.Services.GetRequiredService<AgentTransferAdmission>();
 _ = app.Services.GetRequiredService<BackupPlatform.Notifications.NotificationOptions>();
 _ = app.Services.GetRequiredService<BackupPlatform.Agents.Connectivity.AgentConnectivityOptions>();
 _ = app.Services.GetRequiredService<BackupPlatform.Application.Backups.BackupExecutionOptions>();
 _ = app.Services.GetRequiredService<BackupPlatform.Application.Backups.BackupSchedulingOptions>();
 _ = app.Services.GetRequiredService<BackupPlatform.Application.Restores.RestoreExecutionOptions>();
+if (app.Services.GetRequiredService<BackupPlatform.Application.Backups.ArtifactRecoveryOptions>().PlatformRecovery is null)
+    app.Logger.LogWarning("platform_recovery_missing: Encryption:PlatformRecoveryPublicKeyPem is not configured, so newly encrypted artifacts have no platform recovery recipient.");
 
 if (isBootstrap)
 {
@@ -32,6 +44,8 @@ app.UsePlatformSecurity();
 app.MapAuthenticationEndpoints();
 app.MapUserEndpoints();
 app.MapAgentEndpoints();
+app.MapAgentUpdateEndpoints();
+app.MapAuditReportingEndpoints();
 app.MapAgentAdministrationEndpoints();
 app.MapDiscoveryEndpoints();
 app.MapDatabaseCredentialEndpoints();
@@ -42,12 +56,16 @@ app.MapStorageConnectionEndpoints();
 app.MapNotificationEndpoints();
 app.MapNotificationRecipientEndpoints();
 app.MapBackupEndpoints();
+app.MapBackupHealthEndpoints();
 app.MapBackupArtifactEndpoints();
 app.MapBackupTaskEndpoints();
+app.MapReplicaRepairTaskEndpoints();
 app.MapUploadBandwidthEndpoints();
 app.MapRestoreEndpoints();
 app.MapRestoreTaskEndpoints();
 app.MapDownloadEndpoints();
+app.MapArtifactEncryptionEndpoints();
+app.MapArtifactBreakGlassEndpoints();
 app.MapSupportEndpoints();
 app.MapSupportTransparencyEndpoints();
 app.MapAgentDownloadEndpoints();

@@ -383,6 +383,7 @@ public sealed record DatabaseRestoreRequest
     public RestoreBackupInspection Inspection { get; }
     public RestorePlan Plan { get; }
     public TimeSpan RestoreTimeout { get; }
+    public FileRestoreSelection? Files { get; init; }
 }
 
 /// <summary>

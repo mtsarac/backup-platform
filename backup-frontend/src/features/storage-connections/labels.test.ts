@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@/lib/api/client'
-import { capabilityLabel, testMessage, configurationSummary, connectionErrorMessage, invalidFieldName, isPlatformCreatable, secretStatusLabel, tenantCreateState, testStatusMeta } from './labels'
+import { capabilityLabel, testMessage, configurationSummary, invalidFieldName, isPlatformCreatable, secretStatusLabel, tenantCreateState } from './labels'
+import { statusMeta } from '@/lib/status'
 import { catalog, fakeProvider, makeConnection } from './test-fixtures'
+import { errorMessage } from '@/lib/api/failure-messages'
 
 describe('tenantCreateState', () => {
   const [local, central, sftp, drive] = catalog
@@ -24,9 +26,9 @@ describe('tenantCreateState', () => {
 
 describe('presentation helpers', () => {
   it('never maps NotTestable to a success tone', () => {
-    expect(testStatusMeta.Succeeded.tone).toBe('success')
-    expect(testStatusMeta.NotTestable.tone).toBe('neutral')
-    expect(testStatusMeta.Failed.tone).toBe('error')
+    expect(statusMeta('connectionTest', 'Succeeded').level).toBe('safe')
+    expect(statusMeta('connectionTest', 'NotTestable').level).toBe('neutral')
+    expect(statusMeta('connectionTest', 'Failed').level).toBe('urgent')
   })
 
   it('labels known capabilities and shows unknown ones verbatim', () => {
@@ -63,8 +65,8 @@ describe('presentation helpers', () => {
   })
 
   it('words concurrent_update for connections, not plans', () => {
-    expect(connectionErrorMessage(new ApiError(409, { error: 'concurrent_update' }))).toMatch(/^Bağlantı başka bir işlemle/)
-    expect(connectionErrorMessage(new ApiError(409, { error: 'connection_in_use' }))).toMatch(/kullanılıyor/)
+    expect(errorMessage(new ApiError(409, { error: 'concurrent_update' }), 'storageConnection')).toMatch(/^Bağlantı başka bir işlemle/)
+    expect(errorMessage(new ApiError(409, { error: 'connection_in_use' }), 'storageConnection')).toMatch(/kullanılıyor/)
   })
 
   it('extracts the invalid configuration or secret field name', () => {

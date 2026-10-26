@@ -371,7 +371,7 @@ public sealed class RestoreSourceEvaluatorTests
     }
 
     [Fact]
-    public void AnAvailableVerifiedBackendSftpReplicaWithMatchingConnectionTargetIsReadViaBackendRelayed()
+    public void AnAvailableVerifiedBackendSftpReplicaWithoutDirectStorageIsRefusedAsNoAccessibleReplica()
     {
         var artifact = Artifact();
         var connectionId = Guid.NewGuid();
@@ -380,11 +380,43 @@ public sealed class RestoreSourceEvaluatorTests
             BackupStorageExecutionLocation.Backend, null, connectionId);
         AddTo(artifact, replica);
 
-        var decision = RestoreSourceEvaluator.Evaluate(artifact, replica, Agent, Now);
+        var decision = RestoreSourceEvaluator.Evaluate(artifact, replica, Agent, Now, directStorage: false);
 
-        Assert.True(decision.Eligible);
-        Assert.Equal(RestoreSourceAccess.BackendRelayed, decision.Access);
-        Assert.Null(decision.Rejection);
+        Assert.False(decision.Eligible);
+        Assert.Null(decision.Access);
+        Assert.Equal(RestoreSourceRejection.NoAccessibleReplica, decision.Rejection);
+    }
+
+    [Theory]
+    [InlineData("sftp")]
+    [InlineData("google-drive")]
+    public void AnExternalReplicaIsReadDirectlyByAnAgentThatSupportsDirectStorage(string provider)
+    {
+        var artifact = Artifact();
+        var connectionId = Guid.NewGuid();
+        var replica = new BackupReplica(Guid.NewGuid(), artifact.TenantId, artifact.Id, provider, connectionId.ToString("D"),
+            "tenant/sales.bak", artifact.SizeBytes, Hash, "sha256", "Verified", "ReadBack", Now.AddDays(-1), Now.AddDays(-1),
+            BackupStorageExecutionLocation.Backend, null, connectionId);
+        AddTo(artifact, replica);
+
+        Assert.Equal(RestoreSourceAccess.AgentDirect, RestoreSourceEvaluator.Evaluate(artifact, replica, Agent, Now, directStorage: true).Access);
+        Assert.Same(replica, RestoreSourceEvaluator.SelectReplica(artifact, Agent, Now, directStorage: true));
+        // An agent without the capability is refused: relay is retired, direct access is never assumed.
+        Assert.Null(RestoreSourceEvaluator.Evaluate(artifact, replica, Agent, Now, directStorage: false).Access);
+    }
+
+    [Fact]
+    public void DirectStorageDoesNotMakeAnUnverifiedExternalReplicaEligible()
+    {
+        var artifact = Artifact();
+        var connectionId = Guid.NewGuid();
+        var unverified = new BackupReplica(Guid.NewGuid(), artifact.TenantId, artifact.Id, "sftp", connectionId.ToString("D"),
+            "tenant/sales.bak", artifact.SizeBytes, Hash, "sha256", "Unverified", "ReadBack", Now.AddDays(-1), null,
+            BackupStorageExecutionLocation.Backend, null, connectionId);
+        AddTo(artifact, unverified);
+
+        Assert.Null(RestoreSourceEvaluator.SelectReplica(artifact, Agent, Now, directStorage: true));
+        Assert.Equal(RestoreSourceRejection.ReplicaNotVerified, RestoreSourceEvaluator.Explain(artifact, Agent, Now, directStorage: true));
     }
 
     [Theory]
@@ -417,7 +449,7 @@ public sealed class RestoreSourceEvaluatorTests
         AddTo(artifact, replica);
 
         var anotherAgent = AgentId.New();
-        var selected = RestoreSourceEvaluator.SelectReplica(artifact, anotherAgent, Now);
+        var selected = RestoreSourceEvaluator.SelectReplica(artifact, anotherAgent, Now, directStorage: true);
 
         Assert.Same(replica, selected);
     }

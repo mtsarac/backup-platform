@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { StorageProvidersTab } from '@/pages/storage/storage-providers-tab'
 import { ApiError } from '@/lib/api/client'
 import * as api from './api'
-import { catalog, fakeProvider, makeConnection, makeManaged, tenantAdminPermissions } from './test-fixtures'
+import { catalog, fakeProvider, makeConnection, makeManaged, makeProvider, tenantAdminPermissions } from './test-fixtures'
 import { ConnectionList } from './connection-list'
 import { ConnectionDetail } from './connection-detail'
 import { ConnectionWizard } from './connection-wizard'
@@ -48,20 +48,181 @@ beforeEach(() => {
 })
 
 describe('Storage connections list and detail', () => {
-  it('lists destination ownership and footprint without exposing credentials or configuration', async () => {
+  it('lists each destination as a card with name, health, last test and provider; statistics stay collapsed', async () => {
+    serve([
+      makeConnection({ lastTest: { status: 'Succeeded', code: 'ok', message: '', testedAt: new Date(Date.now() - 3 * 3_600_000).toISOString() }, permissions: { ...tenantAdminPermissions } }),
+      makeManaged(),
+    ])
     mount()
     await screen.findByRole('article', { name: "Local" })
-    expect(article('Local').getByText("Çalışma alanı yönetimli")).toBeInTheDocument()
-    expect(article('Local').getByText('Varsayılan')).toBeInTheDocument()
-    expect(article('Local').getByText(/2 Kopya/)).toBeInTheDocument()
-    expect(article('Local').getByText('6,2 GB')).toBeInTheDocument()
-    expect(article('Local').getByText('Henüz test edilmedi')).toBeInTheDocument()
+    const local = article('Local')
+    expect(local.getByText('Yerel yedekleme bilgisayarı diski')).toBeInTheDocument()
+    expect(local.getByText('Varsayılan')).toBeInTheDocument()
+    expect(local.getByText('Sağlıklı')).toBeInTheDocument()
+    expect(local.getByText('3 saat önce')).toBeInTheDocument()
+    expect(local.getByText("Çalışma alanı yönetimli")).toBeInTheDocument()
     expect(article('Managed Storage').getByText('Platform yönetimli')).toBeInTheDocument()
-    expect(article('Managed Storage').getByText(/3 Kopya/)).toBeInTheDocument()
-    expect(article('Managed Storage').getByText('123 MB')).toBeInTheDocument()
+    expect(article('Managed Storage').getByText('Henüz test edilmedi')).toBeInTheDocument()
+    // The footprint is a statistic: collapsed until the card's technical details are opened.
+    expect(local.getByText('6,2 GB')).not.toBeVisible()
+    expect(article('Managed Storage').getByText('123 MB')).not.toBeVisible()
+    await userEvent.click(local.getByText('Teknik ayrıntılar'))
+    expect(local.getByText('6,2 GB')).toBeVisible()
+    expect(local.getByText(/2 Kopya/)).toBeVisible()
+    expect(local.getByRole('button', { name: 'Kopyala: Saklanan veri' })).toBeInTheDocument()
+  })
+
+  it('keeps the tenant-wide statistics under a collapsed Ayrıntılar section', async () => {
+    mount()
+    await screen.findByRole('article', { name: "Local" })
+    expect(screen.getByText('Dikkat gerektiren')).not.toBeVisible()
+    await userEvent.click(screen.getByText('Ayrıntılar'))
+    expect(screen.getByText('Dikkat gerektiren')).toBeVisible()
+  })
+
+  it('gives an empty list one sentence and one primary action, or asks to consult the administrator', async () => {
+    serve([])
+    const { unmount } = mount()
+    expect(await screen.findByRole('link', { name: 'İlk bağlantıyı ekle' })).toBeInTheDocument()
+    unmount()
+    access.canAdmin = false
+    mount()
+    expect(await screen.findByText('Yöneticinize danışın')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'İlk bağlantıyı ekle' })).not.toBeInTheDocument()
+  })
+
+  it('opens a destination from its card without exposing credentials or configuration; quota scope and capabilities are technical', async () => {
+    mount()
+    await screen.findByRole('article', { name: "Local" })
     await userEvent.click(article('Local').getByRole('link', { name: 'Local bağlantısını yönet' }))
-    expect(await screen.findByRole('list', { name: 'Local yetenekleri' })).toHaveTextContent('OkumaSilme')
-    expect(screen.getByText('tenant')).toBeInTheDocument()
+    await screen.findByRole('heading', { level: 1, name: 'Local' })
+    expect(screen.getByRole('list', { name: 'Local yetenekleri' })).not.toBeVisible()
+    expect(screen.getByText('tenant')).not.toBeVisible()
+    await userEvent.click(screen.getByText('Teknik ayrıntılar'))
+    expect(screen.getByRole('list', { name: 'Local yetenekleri' })).toHaveTextContent('OkumaSilme')
+    expect(screen.getByText('tenant')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Kopyala: Kota kapsamı' })).toBeInTheDocument()
+  })
+
+  it('displays storage capacity metrics and triggers capacity probe', async () => {
+    vi.mocked(api.getTenantConnectionCapacity).mockResolvedValue({
+      connectionId: 'conn-local',
+      totalBytes: 500_000_000_000,
+      usedBytes: 300_000_000_000,
+      freeBytes: 200_000_000_000,
+      status: 'Available',
+      reportedAt: '2026-10-21T10:00:00Z',
+      historyLimit: 30,
+      history: [{
+        reportedAt: '2026-10-21T10:00:00Z', totalBytes: 500_000_000_000,
+        usedBytes: 300_000_000_000, freeBytes: 200_000_000_000, status: 'Available',
+      }],
+    })
+    vi.mocked(api.probeTenantConnectionCapacity).mockResolvedValue({
+      connectionId: 'conn-local',
+      totalBytes: 500_000_000_000,
+      usedBytes: 400_000_000_000,
+      freeBytes: 100_000_000_000,
+      status: 'Available',
+      reportedAt: '2026-10-21T10:05:00Z',
+    })
+
+    mount(detail('conn-local'))
+    expect(await screen.findByRole('heading', { name: 'Depolama alanı' })).toBeInTheDocument()
+    expect(await screen.findByText('Yeterli boş alan var.')).toBeVisible()
+    expect(screen.getAllByText('200 GB')[0]).toBeVisible()
+    // History and the exact totals are technical: collapsed until opened.
+    const history = await screen.findByRole('table', { name: 'Kapasite geçmişi — en son 30 ölçüm' })
+    expect(history).not.toBeVisible()
+    await userEvent.click(screen.getByText('Teknik ayrıntılar'))
+    expect(history).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Kopyala: Toplam Alan' })).toBeInTheDocument()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    await userEvent.click(within(history).getByRole('button', { name: 'Kopyala: Ölçüm' }))
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"totalBytes":500000000000'))
+    await userEvent.click(screen.getByRole('button', { name: 'Kopyala: Yetenekler' }))
+    expect(writeText).toHaveBeenCalledWith('storage.read\nstorage.delete')
+
+    const probeBtn = screen.getByRole('button', { name: 'Kapasiteyi Sorgula' })
+    await userEvent.click(probeBtn)
+    expect(api.probeTenantConnectionCapacity).toHaveBeenCalledWith('tenant-a', 'conn-local')
+  })
+
+  it('shows queued capacity without fake metrics and refetches the Agent result', async () => {
+    vi.mocked(api.getTenantConnectionCapacity).mockResolvedValueOnce({
+      connectionId: 'conn-local', totalBytes: 100_000, usedBytes: 20_000, freeBytes: 80_000,
+      status: 'Available', reportedAt: '2026-10-21T10:00:00Z',
+    }).mockResolvedValue({
+      connectionId: 'conn-local', totalBytes: 100_000, usedBytes: 92_000, freeBytes: 8_000,
+      status: 'Critical', reportedAt: '2026-10-21T10:05:00Z',
+    })
+    vi.mocked(api.probeTenantConnectionCapacity).mockResolvedValue({
+      connectionId: 'conn-local', taskId: 'task-1', totalBytes: null, usedBytes: null, freeBytes: null,
+      status: 'Pending', reportedAt: '2026-10-21T10:04:00Z',
+    })
+    mount(detail('conn-local'))
+    await userEvent.click(await screen.findByRole('button', { name: 'Kapasiteyi Sorgula' }))
+    expect(await screen.findByText(/Agent yanıtı bekleniyor/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sorgulanıyor…' })).toBeDisabled()
+    expect(screen.queryByText('100 kB')).not.toBeInTheDocument()
+    expect(await screen.findByText('Alan dolmak üzere', {}, { timeout: 4_000 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Kapasiteyi Sorgula' })).toBeEnabled()
+  })
+
+  it('explains that S3 and SMB capacity cannot be measured instead of asking for an Agent', async () => {
+    vi.mocked(api.getTenantConnectionCapacity).mockResolvedValue({
+      connectionId: 'conn-local', totalBytes: null, usedBytes: null, freeBytes: null,
+      status: 'NotMeasurable', reportedAt: '2026-10-21T10:00:00Z',
+    })
+    mount(detail('conn-local'))
+    expect(await screen.findByText('Kapasite ölçülemiyor')).toBeInTheDocument()
+    expect(screen.queryByText('Kapasite bilgisi alınamadı')).not.toBeInTheDocument()
+    expect(screen.queryByText('Doluluk Oranı')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Kapasiteyi Sorgula' })).toBeDisabled()
+  })
+
+  it.each([
+    { used: 79_900, status: 'Available' as const, tone: 'bg-primary' },
+    { used: 80_000, status: 'Warning' as const, tone: 'bg-warning' },
+    { used: 89_900, status: 'Warning' as const, tone: 'bg-warning' },
+    { used: 90_000, status: 'Critical' as const, tone: 'bg-error' },
+  ])('uses backend $status color at $used bytes without rounded threshold drift', async ({ used, status, tone }) => {
+    vi.mocked(api.getTenantConnectionCapacity).mockResolvedValue({
+      connectionId: 'conn-local', totalBytes: 100_000, usedBytes: used, freeBytes: 100_000 - used,
+      status, reportedAt: '2026-10-21T10:00:00Z',
+    })
+    mount(detail('conn-local'))
+    const label = await screen.findByText('Doluluk Oranı')
+    expect(label.parentElement?.nextElementSibling?.firstElementChild).toHaveClass(tone)
+  })
+
+  it('says in plain words whether space is running out, on the detail page and the list card', async () => {
+    vi.mocked(api.getTenantConnectionCapacity).mockResolvedValueOnce({
+      connectionId: 'conn-local', totalBytes: 100_000_000_000, usedBytes: 85_000_000_000, freeBytes: 15_000_000_000,
+      status: 'Warning', reportedAt: '2026-10-21T10:00:00Z',
+    })
+    const first = mount(detail('conn-local'))
+    expect(await screen.findByText('Alan azalıyor')).toBeInTheDocument()
+    expect(screen.getByText(/Depolama alanı azalıyor/)).toBeVisible()
+    first.unmount()
+
+    vi.mocked(api.getTenantConnectionCapacity).mockResolvedValueOnce({
+      connectionId: 'conn-local', totalBytes: 100_000_000_000, usedBytes: 95_000_000_000, freeBytes: 5_000_000_000,
+      status: 'Critical', reportedAt: '2026-10-21T10:00:00Z',
+    })
+    const second = mount(detail('conn-local'))
+    expect(await screen.findByText('Alan dolmak üzere')).toBeInTheDocument()
+    expect(screen.getByText(/Depolama alanı dolmak üzere/)).toBeVisible()
+    second.unmount()
+
+    vi.mocked(api.getTenantConnectionCapacity).mockResolvedValue({
+      connectionId: 'conn-local', totalBytes: 100_000_000_000, usedBytes: 92_000_000_000, freeBytes: 8_000_000_000,
+      status: 'Critical', reportedAt: '2026-10-21T10:00:00Z',
+    })
+    serve([makeConnection()])
+    mount(base)
+    expect(await within(await screen.findByRole('article', { name: 'Local' })).findByText('Alan dolmak üzere')).toBeInTheDocument()
   })
 
   it('shows secret presence, never its value, on the credential tab', async () => {
@@ -89,12 +250,12 @@ describe('Storage connections list and detail', () => {
     ])
     mount()
     await screen.findByRole('article', { name: "Local" })
-    expect(article('Local').getByText("Ajan tarafında denetlenir")).toBeInTheDocument()
+    expect(article('Local').getByText("Yedekleme bilgisayarı tarafında denetlenir")).toBeInTheDocument()
     expect(article('Local').queryByText('Sağlıklı')).not.toBeInTheDocument()
     expect(article('Managed Storage').getByText('Sağlıklı')).toBeInTheDocument()
     expect(article('S3 Arşiv').getByText('Bağlantı sorunu')).toBeInTheDocument()
     await userEvent.click(article('Local').getByRole('link', { name: /bağlantısını yönet/ }))
-    expect(await screen.findByText(/(?:Backend Agent diskine erişemez|Ajan diskine erişemez)/)).toBeInTheDocument()
+    expect(await screen.findByText(/(?:Backend Agent diskine erişemez|yedekleme bilgisayarı diskine erişemez)/)).toBeInTheDocument()
     expect(screen.queryByText(/cannot reach/)).not.toBeInTheDocument()
   })
 
@@ -141,7 +302,7 @@ describe('Provider catalog', () => {
   it('does not allow the non-admin role to create, including a direct wizard URL', async () => {
     access.canAdmin = false
     mount(`${base}/connections/new`)
-    expect(screen.getByText("Bağlantı eklemek için Sahip / Yönetici rolü gerekir")).toBeInTheDocument()
+    expect(screen.getByText("Yöneticinize danışın")).toBeInTheDocument()
     expect(api.getTenantConnections).not.toHaveBeenCalled()
     expect(api.createTenantConnection).not.toHaveBeenCalled()
   })
@@ -160,6 +321,9 @@ async function fillWizard() {
   await user.click(screen.getByRole('button', { name: 'İleri' }))
   expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
   await user.type(screen.getByRole('textbox', { name: 'Ad' }), ' Arşiv ')
+  expect(screen.queryByLabelText("Kova")).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'İleri' }))
+  expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
   await user.type(screen.getByLabelText("Kova"), 'archive')
   await user.type(screen.getByLabelText("Bağlantı noktası"), '9000')
   await user.click(screen.getByLabelText('TLS kullan'))
@@ -174,14 +338,24 @@ async function fillWizard() {
 
 describe('Connection wizard', () => {
   it('validates each step, creates typed settings once, tests, and forgets submitted credentials', async () => {
-    const connection = s3({ id: 'new', name: 'Arşiv' })
-    vi.mocked(api.createTenantConnection).mockResolvedValue(connection)
+    const connection = s3({ id: 'new', name: 'Arşiv', hasSecret: true })
+    const { promise, resolve: finishCreate } = Promise.withResolvers<ConnectionView>()
+    vi.mocked(api.createTenantConnection).mockReturnValue(promise)
     vi.mocked(api.testTenantConnection).mockResolvedValue({ connection, test: { status: 'Succeeded', code: 'ok', message: '', testedAt: '2026-10-06T10:00:00Z', durationMs: 12 } })
     const { client } = mount(`${base}/connections/new`)
     const user = await fillWizard()
+    expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent(/Özet/)
+    const technical = screen.getByText('Teknik ayrıntılar').closest('details')!
+    expect(technical).not.toHaveAttribute('open')
+    expect(within(technical).getByRole('button', { name: /Kopyala: Kova/ })).toBeInTheDocument()
     expect(document.body.textContent).not.toContain(SECRET_A)
     await user.click(screen.getByRole('button', { name: 'Bağlantıyı oluştur ve test et' }))
+    expect(screen.getByRole('button', { name: 'Oluşturuluyor…' })).toBeDisabled()
+    expect(api.testTenantConnection).not.toHaveBeenCalled()
+    expect(document.body.textContent).not.toContain(SECRET_B)
+    finishCreate(connection)
     expect(await screen.findByText('Bağlantı çalışıyor')).toBeInTheDocument()
+    expect(screen.getByText('Kimlik bilgisi kayıtlı')).toBeInTheDocument()
     expect(api.createTenantConnection).toHaveBeenCalledExactlyOnceWith('tenant-a', { providerType: 'fake-s3', name: 'Arşiv', configuration: { bucket: 'archive', port: '9000', useTls: 'true' }, secret: { accessKey: SECRET_A, secretKey: SECRET_B } })
     expect(api.testTenantConnection).toHaveBeenCalledWith('tenant-a', 'new')
     expect(JSON.stringify(client.getQueryCache().getAll().map(entry => entry.queryKey))).not.toContain(SECRET_A)
@@ -200,6 +374,71 @@ describe('Connection wizard', () => {
     expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: 'Geri' }))
     expect(screen.getByLabelText("Kova")).toHaveValue('archive')
+  })
+
+  it('keeps an available provider preselected after loading its catalog', async () => {
+    mount(`${base}/connections/new?provider=fake-s3`)
+    expect(await screen.findByRole('radio', { name: /Sahte S3/ })).toBeChecked()
+    await userEvent.click(screen.getByRole('button', { name: 'İleri' }))
+    expect(screen.getByRole('textbox', { name: 'Ad' })).toBeInTheDocument()
+    expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Ad')
+    expect(screen.getAllByText(/Neden soruluyor/)).toHaveLength(1)
+  })
+
+  it('does not accept provider preselection for a provider that cannot be created', async () => {
+    mount(`${base}/connections/new?provider=local`)
+    expect(await screen.findByRole('radio', { name: /Yerel/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
+    expect(api.createTenantConnection).not.toHaveBeenCalled()
+  })
+
+  it('uses the selected SFTP sign-in method, never renders a pasted key, and wipes it after rejection', async () => {
+    const user = userEvent.setup()
+    const key = ['test-private-key-header', 'private-key-content', 'test-private-key-footer', ''].join('\n')
+    serve([], [makeProvider({
+      providerType: 'sftp', displayName: 'SFTP', tenantCreatable: true, maxConnectionsPerTenant: null,
+      configFields: [
+        { name: 'host', label: 'Host', kind: 'Text', required: true },
+        { name: 'port', label: 'Port', kind: 'Number', required: true },
+        { name: 'username', label: 'Username', kind: 'Text', required: true },
+        { name: 'authenticationType', label: 'Authentication type', kind: 'Text', required: true },
+        { name: 'remoteBaseDirectory', label: 'Remote base directory', kind: 'Text', required: true },
+        { name: 'hostKeyFingerprint', label: 'SSH host key fingerprint (SHA256)', kind: 'Text', required: true },
+      ],
+      secretFields: [{ name: 'password', label: 'Password', required: true }, { name: 'privateKey', label: 'SSH private key', required: false }, { name: 'passphrase', label: 'Key passphrase (optional)', required: false }],
+    })])
+    vi.mocked(api.createTenantConnection).mockRejectedValue(new ApiError(400, { error: 'invalid_request' }))
+    mount(`${base}/connections/new?provider=sftp`)
+    await user.click(await screen.findByRole('button', { name: 'İleri' }))
+    await user.type(screen.getByRole('textbox', { name: 'Ad' }), 'Sunucu arşivi')
+    await user.click(screen.getByRole('button', { name: 'İleri' }))
+    await user.type(screen.getByLabelText('Sunucu'), 'backup.internal')
+    expect(screen.getByLabelText('Bağlantı noktası')).toHaveValue(22)
+    await user.type(screen.getByLabelText('Kullanıcı adı'), 'backup-user')
+    await user.type(screen.getByLabelText('Yedeklerin saklanacağı klasör'), '/backups')
+    await user.type(screen.getByLabelText('Sunucunun güvenlik parmak izi (SHA256)'), 'SHA256:trusted')
+    await user.selectOptions(screen.getByRole('combobox'), 'private-key')
+    await user.click(screen.getByRole('button', { name: 'İleri' }))
+    const input = screen.getByLabelText('SSH özel anahtarı')
+    expect(input).toHaveAttribute('type', 'password')
+    expect(screen.queryByLabelText('Parola')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
+    await user.click(input)
+    await user.paste(key)
+    expect(document.body.textContent).not.toContain('private-key-content')
+    await user.click(screen.getByRole('button', { name: 'İleri' }))
+    expect(document.body.textContent).not.toContain('private-key-content')
+    await user.click(screen.getByRole('button', { name: 'Bağlantıyı oluştur ve test et' }))
+    await screen.findByRole('alert')
+    expect(api.createTenantConnection).toHaveBeenCalledExactlyOnceWith('tenant-a', {
+      providerType: 'sftp', name: 'Sunucu arşivi',
+      configuration: { host: 'backup.internal', port: '22', username: 'backup-user', authenticationType: 'private-key', remoteBaseDirectory: '/backups', hostKeyFingerprint: 'SHA256:trusted' },
+      secret: { privateKey: key },
+    })
+    expect(api.testTenantConnection).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Geri' }))
+    expect(screen.getByLabelText('SSH özel anahtarı')).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
   })
 })
 
@@ -257,7 +496,9 @@ describe('Credential replacement', () => {
     mount(detail('conn-s3', 'credentials'))
     await userEvent.click(await screen.findByRole('button', { name: 'S3 Arşiv bağlantısı: kimlik bilgisini temizle' }))
     expect(api.clearTenantConnectionSecret).not.toHaveBeenCalled()
-    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Kimlik bilgisini temizle' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Kimlik bilgisini temizle' }))
     await waitFor(() => expect(api.clearTenantConnectionSecret).toHaveBeenCalledWith('tenant-a', 'conn-s3'))
   })
 })
@@ -268,6 +509,7 @@ describe('Enablement, test, deletion and editing', () => {
     mount(detail('conn-local', 'manage'))
     await userEvent.click(await screen.findByRole('button', { name: 'Local bağlantısı: devre dışı bırak' }))
     const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument()
     expect(dialog).toHaveTextContent(/(?:yeni backup'lar \(manuel ve zamanlanmış\) başlatılamaz|yeni yedeklemeler \(elle başlatılan ve zamanlanmış\) başlatılamaz)/)
     expect(dialog).toHaveTextContent(/(?:Mevcut Replica'lar silinmez ve kullanılabilir kalır|Mevcut kopyalar silinmez ve kullanılabilir kalır)/)
     expect(dialog).toHaveTextContent(/(?:indirme, geri yükleme|indirme, restore)/)
@@ -294,10 +536,13 @@ describe('Enablement, test, deletion and editing', () => {
     })
     mount(detail('conn-local', 'manage'))
     expect(await screen.findByText('Platform kilidi')).toBeInTheDocument()
+    expect(screen.getAllByText(/kilit kalkana kadar yeni yedeklemeler için kullanılamaz/)).toHaveLength(1)
     expect(screen.getByText('Sahip tercihi: Etkin')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Local bağlantısı: sil' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Local bağlantısı: devre dışı bırak' }))
-    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Devre dışı bırak' }))
+    const lockDialog = await screen.findByRole('dialog')
+    expect(within(lockDialog).queryByRole('textbox')).not.toBeInTheDocument()
+    await userEvent.click(within(lockDialog).getByRole('button', { name: 'Devre dışı bırak' }))
     await waitFor(() => expect(api.setTenantConnectionEnabled).toHaveBeenCalledWith('tenant-a', 'conn-local', false))
     expect(await screen.findByRole('button', { name: 'Local bağlantısı: etkinleştir' })).toBeDisabled()
   })
@@ -312,13 +557,35 @@ describe('Enablement, test, deletion and editing', () => {
     expect(api.testTenantConnection).toHaveBeenCalledWith('tenant-a', 'conn-local')
   })
 
-  it('does not hide a connection-in-use delete rejection', async () => {
+  it('blocks deletion until the exact name is typed, then deletes', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.deleteTenantConnection).mockResolvedValue(undefined)
+    mount(detail('conn-local', 'manage'))
+    await user.click(await screen.findByRole('button', { name: 'Local bağlantısı: sil' }))
+    const dialog = await screen.findByRole('dialog')
+    const confirm = within(dialog).getByRole('button', { name: 'Bağlantıyı sil' })
+    expect(confirm).toBeDisabled()
+    await user.type(within(dialog).getByRole('textbox'), 'Loca')
+    expect(confirm).toBeDisabled()
+    await user.type(within(dialog).getByRole('textbox'), 'l')
+    expect(confirm).toBeEnabled()
+    expect(api.deleteTenantConnection).not.toHaveBeenCalled()
+    await user.click(confirm)
+    await waitFor(() => expect(api.deleteTenantConnection).toHaveBeenCalledWith('tenant-a', 'conn-local'))
+  })
+
+  it('explains a connection-in-use rejection in three parts and keeps the connection', async () => {
+    const user = userEvent.setup()
     vi.mocked(api.deleteTenantConnection).mockRejectedValue(new ApiError(409, { error: 'connection_in_use' }))
     mount(detail('conn-local', 'manage'))
-    await userEvent.click(await screen.findByRole('button', { name: 'Local bağlantısı: sil' }))
+    await user.click(await screen.findByRole('button', { name: 'Local bağlantısı: sil' }))
     const dialog = await screen.findByRole('dialog')
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Bağlantıyı sil' }))
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent("Bağlantı hâlâ bir kopya veya yedekleme işi tarafından kullanılıyor; silinemez.")
+    await user.type(within(dialog).getByRole('textbox'), 'Local')
+    await user.click(within(dialog).getByRole('button', { name: 'Bağlantıyı sil' }))
+    const alert = await within(dialog).findByRole('alert')
+    expect(alert).toHaveTextContent("Bağlantı hâlâ bir kopya veya yedekleme işi tarafından kullanılıyor; silinemez.")
+    expect(alert).toHaveTextContent('Bağlantı silinmedi')
+    expect(alert).toHaveTextContent('Ne yapmalı')
     expect(api.deleteTenantConnection).toHaveBeenCalledWith('tenant-a', 'conn-local')
   })
 

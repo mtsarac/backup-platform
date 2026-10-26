@@ -30,7 +30,7 @@ public sealed class AuthIntegrationTests(PostgreSqlFixture fixture) : IClassFixt
         var cookie = GetAuthenticationCookie(response);
         Assert.True(cookie.Secure);
         Assert.True(cookie.HttpOnly);
-        Assert.Equal("Lax", cookie.SameSite.ToString());
+        Assert.Equal("Strict", cookie.SameSite.ToString());
         Assert.Equal("/", cookie.Path.ToString());
         Assert.False(cookie.Domain.HasValue);
         Assert.Null(cookie.Expires);
@@ -45,6 +45,39 @@ public sealed class AuthIntegrationTests(PostgreSqlFixture fixture) : IClassFixt
         var profile = await ReadJsonAsync(profileResponse);
         Assert.Equal(seed.UserId.Value, profile.GetProperty("userId").GetGuid());
         Assert.Equal(seed.DisplayName, profile.GetProperty("displayName").GetString());
+    }
+
+    [Fact]
+    public async Task RepeatedWrongPasswordsAreAnswered429WithRetryAfterUntilTheWindowEndsAndASuccessClearsTheCount()
+    {
+        var seed = await SeedUserAsync();
+        var clock = new MutableClock();
+        await using var factory = new AuthApiFactory(fixture.ConnectionString, clock);
+        using var browser = factory.CreateBrowser();
+        var token = await FetchTokenAsync(browser);
+        for (var attempt = 0; attempt < LoginThrottle.MaxFailures - 1; attempt++)
+        {
+            using var wrong = await LoginAsync(browser, token, seed.Identifier, "Wrong-local-password!");
+            Assert.Equal(HttpStatusCode.Unauthorized, wrong.StatusCode);
+        }
+        using (var cleared = await LoginAsync(browser, token, seed.Identifier, seed.Password))
+            Assert.Equal(HttpStatusCode.NoContent, cleared.StatusCode);
+        // The antiforgery token of the first browser is bound to its now signed-in session.
+        using var second = factory.CreateBrowser();
+        var secondToken = await FetchTokenAsync(second);
+        for (var attempt = 0; attempt < LoginThrottle.MaxFailures; attempt++)
+        {
+            using var wrong = await LoginAsync(second, secondToken, seed.Identifier, "Wrong-local-password!");
+            Assert.Equal(HttpStatusCode.Unauthorized, wrong.StatusCode);
+        }
+
+        using var locked = await LoginAsync(second, secondToken, seed.Identifier.ToUpperInvariant(), seed.Password);
+        Assert.Equal(HttpStatusCode.TooManyRequests, locked.StatusCode);
+        Assert.Equal(((int)LoginThrottle.Window.TotalSeconds).ToString(), Assert.Single(locked.Headers.GetValues("Retry-After")));
+
+        clock.Advance(LoginThrottle.Window);
+        using var allowed = await LoginAsync(second, secondToken, seed.Identifier, seed.Password);
+        Assert.Equal(HttpStatusCode.NoContent, allowed.StatusCode);
     }
 
     [Fact]

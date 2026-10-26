@@ -34,7 +34,7 @@ public sealed class RestoreOperation : ITenantOwned
     public RestoreOperation(Guid id, TenantId tenantId, Guid artifactId, Guid replicaId, RestoreSourceAccess sourceAccess, AgentId agentId,
         RestoreTarget target, string databaseName, RestoreMode mode, bool overwriteConfirmed, RestoreOptions? options, string idempotencyKey,
         string requestFingerprint, Guid? requestedByUserId, DateTimeOffset createdAt, RestorePurpose purpose = RestorePurpose.Execution, Guid? precheckId = null,
-        Guid? supportSessionId = null, string engine = "mssql")
+        Guid? supportSessionId = null, string engine = DatabaseEngines.MsSql)
     {
         BackupGuard.Id(id);
         BackupGuard.Id(artifactId);
@@ -84,6 +84,13 @@ public sealed class RestoreOperation : ITenantOwned
         Mode = mode;
         OverwritePolicy = mode == RestoreMode.ReplaceExistingDatabase ? RestoreOverwritePolicy.ReplaceExisting : RestoreOverwritePolicy.Forbidden;
         Options = options ?? RestoreOptions.Default;
+        if (engine == DatabaseEngines.FileSystem)
+        {
+            if (Target.Host != "localhost" || Target.Port is not null || !Target.IntegratedSecurity || Target.DatabaseCredentialReference is not null || Options.TerminateActiveConnections)
+                throw new ArgumentException("File restores require a local source reference without database session options.");
+            Options.Files?.Validate();
+        }
+        else if (Options.Files is not null) throw new ArgumentException("File restore options do not apply to database restores.");
         IdempotencyKey = idempotencyKey;
         RequestFingerprint = requestFingerprint;
         RequestedByUserId = requestedByUserId;
@@ -134,17 +141,23 @@ public sealed class RestoreOperation : ITenantOwned
     public bool IsTerminal => Status is RestoreStatus.Succeeded or RestoreStatus.Failed or RestoreStatus.Cancelled or RestoreStatus.AgentLost;
     public bool IsActive => !IsTerminal;
 
-    public static void ValidateDatabaseName(string? name, string engine = "mssql", bool verification = false)
+    public static void ValidateDatabaseName(string? name, string engine = DatabaseEngines.MsSql, bool verification = false)
     {
         ValidateDatabaseNameSyntax(name);
+        if (engine == DatabaseEngines.FileSystem)
+        {
+            if (verification) throw new ArgumentException("Database verification is not supported for file sources.");
+            BackupGuard.Reference(name!);
+            return;
+        }
         // The platform's own prefixes are reserved: a user restore can never name a database the cleanup would later treat as disposable or as a rollback copy.
         if (verification ? !PlatformDatabaseNames.IsVerification(name) : PlatformDatabaseNames.IsReserved(name))
             throw new ArgumentException("This database name is reserved for the platform.");
-        if (engine == "mssql" && SystemDatabases.Contains(name!)) throw new ArgumentException("A system database cannot be a restore target.");
+        if (engine == DatabaseEngines.MsSql && SystemDatabases.Contains(name!)) throw new ArgumentException("A system database cannot be a restore target.");
         if (engine == "postgres" && (System.Text.Encoding.UTF8.GetByteCount(name!) > 63 ||
             name!.Equals("postgres", StringComparison.OrdinalIgnoreCase) || name.Equals("template0", StringComparison.OrdinalIgnoreCase) ||
             name.Equals("template1", StringComparison.OrdinalIgnoreCase))) throw new ArgumentException("Invalid PostgreSQL target database name.");
-        if (engine is not ("mssql" or "postgres")) throw new ArgumentException("Unknown database engine.");
+        if (engine is not (DatabaseEngines.MsSql or DatabaseEngines.PostgreSql)) throw new ArgumentException("Unknown database engine.");
     }
 
     public static void ValidateDatabaseNameSyntax(string? name)

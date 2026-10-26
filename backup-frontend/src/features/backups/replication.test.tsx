@@ -14,10 +14,16 @@ const state = vi.hoisted(() => ({
   run: undefined as BackupRun | undefined,
   page: undefined as BackupRunPage | undefined,
 }))
+vi.mock('@tanstack/react-query', async importOriginal => ({ ...await importOriginal<typeof import('@tanstack/react-query')>(), useQueryClient: () => ({ refetchQueries: vi.fn() }) }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canOperate: true }) }))
 vi.mock('@/features/backups/hooks', () => ({
   useBackup: () => ({ data: state.run, isPending: false, error: null }),
-  useBackupActions: () => ({ retry: { isPending: false, error: null, mutateAsync: vi.fn(), reset: vi.fn() }, cancel: { isPending: false, error: null, mutateAsync: vi.fn(), reset: vi.fn() } }),
+  useBackupActions: () => ({
+    retry: { isPending: false, error: null, mutateAsync: vi.fn(), reset: vi.fn() },
+    cancel: { isPending: false, error: null, mutateAsync: vi.fn(), reset: vi.fn() },
+    pause: { isPending: false, error: null, mutateAsync: vi.fn(), reset: vi.fn() },
+    resume: { isPending: false, error: null, mutateAsync: vi.fn(), reset: vi.fn() },
+  }),
   useBackups: () => ({ data: state.page, isPending: false, isFetching: false, error: null }),
 }))
 vi.mock('@/features/backup-jobs/hooks', () => ({ useBackupJobs: () => ({ data: [], isPending: false, error: null }) }))
@@ -99,11 +105,11 @@ describe('replication compliance rendering', () => {
     expect(screen.getByRole('region', { name: "Çoğaltma" })).toBeInTheDocument()
   })
 
-  it('the run list shows the replication verdict beside the run status', () => {
+  it('the run list leaves the replication verdict to the run page', () => {
     state.page = { items: [makeRun({ status: 'Succeeded', replication: healthOf('InsufficientReplicas', 1) })], totalCount: 1, page: 1, pageSize: 25 }
     render(<MemoryRouter><BackupsPage /></MemoryRouter>)
     expect(screen.getAllByText('Başarılı').length).toBeGreaterThan(0)
-    expect(screen.getByText("Doğrulanmış kopya sayısı yetersiz")).toBeInTheDocument()
+    expect(screen.queryByText("Doğrulanmış kopya sayısı yetersiz")).not.toBeInTheDocument()
   })
 
   it('a pre-existing run without the field renders exactly as before', () => {

@@ -29,6 +29,7 @@ public static class StagingCleanupReasons
     public const string ListFailed = "list-failed";
     public const string DeleteAccessDenied = "delete-access-denied";
     public const string DeleteFailed = "delete-failed";
+    public const string AbortFailed = "abort-failed";
 }
 
 /// <summary>How many times a failure of one kind happened during a sweep.</summary>

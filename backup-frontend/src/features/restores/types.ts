@@ -13,6 +13,7 @@ export interface RestoreOptions {
   terminateActiveConnections?: boolean
   verifyChecksum?: boolean
   verifyBackup?: boolean
+  files?: { paths: string[] | null; relativeDirectory: string } | null
 }
 export interface StartRestoreRequest {
   agentId: string
@@ -154,7 +155,7 @@ export interface RestoreConfiguredTarget {
   target: RestoreTarget
 }
 export interface RestoreTargetsResponse {
-  engine?: 'mssql' | 'postgres' | 'unsupported'
+  engine?: 'mssql' | 'postgres' | 'file-system' | 'unsupported'
   artifactId: string
   sourceDatabase: string
   backupType: string

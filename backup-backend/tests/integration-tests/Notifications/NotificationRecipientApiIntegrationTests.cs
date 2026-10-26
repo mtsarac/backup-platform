@@ -115,6 +115,25 @@ public sealed class NotificationRecipientApiIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_confirmation_link_mailed_before_the_recipient_unsubscribed_does_not_verify_the_address_again_but_a_new_invitation_does()
+    {
+        var scene = await CreateAsync(perToken: 10);
+        await using var _ = scene.World;
+        var oldConfirm = scene.Token(RecipientAction.Confirm);
+        using (var confirmed = await scene.FormAsync(Confirm, oldConfirm)) Assert.Equal(HttpStatusCode.OK, confirmed.StatusCode);
+        using (var unsubscribed = await scene.OneClickAsync(Unsubscribe, scene.Token(RecipientAction.Unsubscribe))) Assert.Equal(HttpStatusCode.OK, unsubscribed.StatusCode);
+        Assert.Equal((false, (bool?)false), await scene.StateAsync());
+
+        using (var replayed = await scene.FormAsync(Confirm, oldConfirm)) Assert.Equal(HttpStatusCode.NotFound, replayed.StatusCode);
+        Assert.Equal((false, (bool?)false), await scene.StateAsync());
+
+        using (var enabled = await scene.Setup.Admin.SendAsync(HttpMethod.Post, $"/api/tenants/{scene.Setup.Tenant.Id.Value}/notifications/channels/{scene.ChannelId}/enable"))
+            Assert.Equal(HttpStatusCode.OK, enabled.StatusCode);
+        using (var invited = await scene.FormAsync(Confirm, scene.Token(RecipientAction.Confirm))) Assert.Equal(HttpStatusCode.OK, invited.StatusCode);
+        Assert.Equal((true, (bool?)true), await scene.StateAsync());
+    }
+
+    [Fact]
     public async Task A_valid_token_cannot_be_replayed_beyond_its_share_of_the_window_while_other_tokens_are_unaffected()
     {
         var scene = await CreateAsync(perToken: 3);

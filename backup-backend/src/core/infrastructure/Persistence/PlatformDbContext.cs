@@ -70,6 +70,7 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<AgentCapabilityRecord> AgentCapabilities => Set<AgentCapabilityRecord>();
     public DbSet<PasswordCredential> PasswordCredentials => Set<PasswordCredential>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
+    public DbSet<LoginThrottleEntry> LoginThrottleEntries => Set<LoginThrottleEntry>();
     public DbSet<BackupJob> BackupJobs => Set<BackupJob>();
     public DbSet<BackupRun> BackupRuns => Set<BackupRun>();
     public DbSet<BackupRunAttempt> BackupRunAttempts => Set<BackupRunAttempt>();
@@ -78,6 +79,8 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<BackupDestinationOutcome> BackupDestinationOutcomes => Set<BackupDestinationOutcome>();
     public DbSet<ReplicaRepairOperation> ReplicaRepairOperations => Set<ReplicaRepairOperation>();
     public DbSet<TenantWrapKey> TenantWrapKeys => Set<TenantWrapKey>();
+    public DbSet<TenantRecoveryKey> TenantRecoveryKeys => Set<TenantRecoveryKey>();
+    public DbSet<ArtifactBreakGlassRequest> ArtifactBreakGlassRequests => Set<ArtifactBreakGlassRequest>();
     public DbSet<BackupLifecycleFact> BackupLifecycleFacts => Set<BackupLifecycleFact>();
     public DbSet<BackupScheduleOccurrence> BackupScheduleOccurrences => Set<BackupScheduleOccurrence>();
     public DbSet<RestoreOperation> RestoreOperations => Set<RestoreOperation>();
@@ -92,12 +95,17 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<TenantStorageUsage> TenantStorageUsages => Set<TenantStorageUsage>();
     public DbSet<QuotaReservation> QuotaReservations => Set<QuotaReservation>();
     public DbSet<StorageConnection> StorageConnections => Set<StorageConnection>();
+    public DbSet<StorageCapacitySnapshot> StorageCapacitySnapshots => Set<StorageCapacitySnapshot>();
+    public DbSet<StorageCapacityTask> StorageCapacityTasks => Set<StorageCapacityTask>();
     public DbSet<GoogleDriveOAuthState> GoogleDriveOAuthStates => Set<GoogleDriveOAuthState>();
     public DbSet<GoogleDriveFileMetadata> GoogleDriveFileMetadata => Set<GoogleDriveFileMetadata>();
     public DbSet<GoogleDriveStagingReservation> GoogleDriveStagingReservations => Set<GoogleDriveStagingReservation>();
     public DbSet<BackupStorageCleanup> BackupStorageCleanups => Set<BackupStorageCleanup>();
     public DbSet<UploadBandwidthLimit> UploadBandwidthLimits => Set<UploadBandwidthLimit>();
     public DbSet<UploadBandwidthGrant> UploadBandwidthGrants => Set<UploadBandwidthGrant>();
+    public DbSet<BandwidthProfile> BandwidthProfiles => Set<BandwidthProfile>();
+    public DbSet<TransferScheduleWindow> TransferScheduleWindows => Set<TransferScheduleWindow>();
+    public DbSet<BandwidthProfileAssignment> BandwidthProfileAssignments => Set<BandwidthProfileAssignment>();
     public DbSet<BackupTransferLease> BackupTransferLeases => Set<BackupTransferLease>();
     public DbSet<NotificationChannel> NotificationChannels => Set<NotificationChannel>();
     public DbSet<NotificationPolicy> NotificationPolicies => Set<NotificationPolicy>();

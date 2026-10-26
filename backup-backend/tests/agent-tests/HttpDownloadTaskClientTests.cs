@@ -13,29 +13,27 @@ namespace BackupPlatform.AgentTests;
 public sealed class HttpDownloadTaskClientTests
 {
     [Fact]
-    public async Task Upload_streams_outbound_to_same_backend_with_authenticated_protocol_and_header_fence_not_browser_credentials_or_query_token()
+    public async Task Peer_signaling_is_authenticated_fenced_JSON_and_never_artifact_content()
     {
-        byte[] bytes = [0, 255, 3, 8, 1];
         var session = Guid.NewGuid();
         var lease = Guid.NewGuid();
         using var handler = new InspectingHandler(async (request, cancellationToken) =>
         {
-            Assert.Equal($"https://backup.example.test/root/api/agent/downloads/{session:D}/content", request.RequestUri!.ToString());
+            Assert.Equal($"https://backup.example.test/root/api/agent/downloads/{session:D}/signal", request.RequestUri!.ToString());
             Assert.Equal(string.Empty, request.RequestUri.Query);
             Assert.Equal(HttpMethod.Post, request.Method);
             Assert.Equal($"BackupAgent {TestIdentity.CredentialId:N}.{TestIdentity.Secret}", request.Headers.GetValues("Authorization").Single());
             Assert.Equal(AgentProtocol.Current.Version.ToString(), request.Headers.GetValues(AgentProtocolHeader.Name).Single());
-            Assert.IsType<StreamContent>(request.Content);
-            Assert.Equal(lease.ToString("D"), request.Content!.Headers.GetValues(DownloadTaskTypes.LeaseHeader).Single());
-            Assert.Equal(bytes.LongLength, request.Content.Headers.ContentLength);
-            Assert.Equal("application/octet-stream", request.Content.Headers.ContentType!.MediaType);
-            Assert.Equal(bytes, await request.Content.ReadAsByteArrayAsync(cancellationToken));
-            return new HttpResponseMessage(HttpStatusCode.NoContent);
+            Assert.Equal("application/json", request.Content!.Headers.ContentType!.MediaType);
+            using var json = JsonDocument.Parse(await request.Content.ReadAsStringAsync(cancellationToken));
+            Assert.Equal(lease, json.RootElement.GetProperty("leaseToken").GetGuid());
+            Assert.Equal("peer-sdp", json.RootElement.GetProperty("sdp").GetString());
+            Assert.False(json.RootElement.TryGetProperty("content", out _));
+            return FakeHttpHandler.Json(HttpStatusCode.OK, """{"sdp":null}""");
         });
         using var http = new HttpClient(handler);
         var client = new HttpDownloadTaskClient(http, new AgentBackendEndpoint(new Uri("https://backup.example.test/root")), new FakeTimeProvider());
-        await using var content = new MemoryStream(bytes, writable: false);
-        var response = await client.UploadAsync(TestIdentity.Create(), new DownloadTaskSnapshot { SessionId = session, LeaseToken = lease, SizeBytes = bytes.Length }, content, default);
+        var response = await client.SignalAsync(TestIdentity.Create(), session, new DownloadSignalRequest { LeaseToken = lease, Sdp = "peer-sdp" }, default);
         Assert.True(response.IsSuccess);
     }
 
@@ -73,16 +71,13 @@ public sealed class HttpDownloadTaskClientTests
     [InlineData(HttpStatusCode.Conflict, AgentBackendFailureKind.Rejected)]
     [InlineData(HttpStatusCode.Unauthorized, AgentBackendFailureKind.Unauthorized)]
     [InlineData(HttpStatusCode.ServiceUnavailable, AgentBackendFailureKind.Transient)]
-    public async Task Upload_failure_preserves_existing_transport_classification(HttpStatusCode status, AgentBackendFailureKind expected)
+    public async Task Signaling_failure_preserves_transport_classification(HttpStatusCode status, AgentBackendFailureKind expected)
     {
         using var handler = new InspectingHandler((_, _) => Task.FromResult(new HttpResponseMessage(status)));
         using var http = new HttpClient(handler);
         var client = new HttpDownloadTaskClient(http, new AgentBackendEndpoint(new Uri("https://backup.example.test/")), new FakeTimeProvider());
-        await using var content = new MemoryStream([1]);
-        var response = await client.UploadAsync(TestIdentity.Create(), new DownloadTaskSnapshot
-        {
-            SessionId = Guid.NewGuid(), LeaseToken = Guid.NewGuid(), SizeBytes = 1
-        }, content, default);
+        var response = await client.SignalAsync(TestIdentity.Create(), Guid.NewGuid(),
+            new DownloadSignalRequest { LeaseToken = Guid.NewGuid() }, default);
         Assert.NotNull(response.Failure);
         Assert.Equal(expected, response.Failure.Kind);
     }

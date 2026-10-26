@@ -1,0 +1,11 @@
+# e2e-only: let the api container trust the self-signed MinIO certificate (S3 connections must be https).
+services:
+  api:
+    environment:
+      SSL_CERT_FILE: /etc/ssl/e2e-ca-bundle.pem
+      Backups__Retention__MinimumKeepFor: "00:00:30"
+      Backups__Retention__MinimumDeleteGracePeriod: "00:00:10"
+      Notifications__PublicBaseUrl: https://192.168.122.1:5173
+      Notifications__AllowedPrivateNetworks__0: 192.168.122.0/24
+    volumes:
+      - ./docs/test-environment/certs/ca-bundle.pem:/etc/ssl/e2e-ca-bundle.pem:ro

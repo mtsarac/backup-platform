@@ -111,6 +111,18 @@ public sealed class BackupRun : ITenantOwned
     public DateTimeOffset? CompletedAt { get; private set; }
     public DateTimeOffset? CancellationRequestedAt { get; private set; }
     public string? TerminalReason { get; private set; }
+    public bool IsSizeAnomaly => SizeAnomalyStatus == BackupSizeAnomalyStatuses.SizeAnomalyWarning;
+    public string? SizeAnomalyStatus { get; private set; }
+    public double? SizeAnomalyDeviationRatio { get; private set; }
+    public long? SizeAnomalyBaselineBytes { get; private set; }
+
+    public void RecordSizeAnomaly(BackupSizeAnomalyResult result)
+    {
+        if (Status != BackupStatus.Succeeded || SizeAnomalyStatus is not null) throw new InvalidOperationException("Only a newly succeeded run can be evaluated.");
+        SizeAnomalyStatus = result.Status;
+        SizeAnomalyDeviationRatio = result.DeviationRatio;
+        SizeAnomalyBaselineBytes = result.BaselineMeanBytes;
+    }
     public IReadOnlyList<BackupRunAttempt> Attempts => _attemptView ??= _attempts.AsReadOnly();
     public IReadOnlyList<BackupLifecycleFact> Facts => _factView ??= _facts.AsReadOnly();
     public BackupRunAttempt CurrentAttempt => _attempts.Single(attempt => attempt.Number == CurrentAttemptNumber);
@@ -127,11 +139,12 @@ public sealed class BackupRun : ITenantOwned
 
     /// <summary>
     /// Ends a scheduled run whose first attempt was never claimed before its deadline, so stale scheduled work cannot start after the grace
-    /// period. False (and no change) for any other run or state, so it is safe to call from any number of workers.
+    /// period. An attempt that was leased once (a paused transfer that was resumed) already started and is never dropped here. False (and no change)
+    /// for any other run or state, so it is safe to call from any number of workers.
     /// </summary>
     public bool ExpireUnclaimed(DateTimeOffset now)
     {
-        if (Status != BackupStatus.Pending || CurrentAttemptNumber != 1 || ClaimDeadline is not { } deadline || deadline >= now) return false;
+        if (Status != BackupStatus.Pending || CurrentAttemptNumber != 1 || CurrentAttempt.LeasedAt.HasValue || ClaimDeadline is not { } deadline || deadline >= now) return false;
         CurrentAttempt.CancelPending(now);
         EndTerminal(BackupStatus.Cancelled, BackupFailureCodes.ScheduleGraceExpired, BackupRetryState.None, now, "BackupScheduledRunExpired");
         return true;
@@ -159,7 +172,7 @@ public sealed class BackupRun : ITenantOwned
         {
             case BackupStatus.Succeeded: return BackupManualRetryResult.Succeeded;
             case BackupStatus.Cancelled: return BackupManualRetryResult.Cancelled;
-            case BackupStatus.Pending or BackupStatus.Leased or BackupStatus.Running: return BackupManualRetryResult.InProgress;
+            case BackupStatus.Pending or BackupStatus.Leased or BackupStatus.Running or BackupStatus.Paused: return BackupManualRetryResult.InProgress;
         }
         if (!RetryPolicy.HasAttemptsRemaining(CurrentAttemptNumber)) return BackupManualRetryResult.AttemptsExhausted;
         AddAttempt(attemptId, now, now, "BackupRetryStarted");
@@ -184,10 +197,54 @@ public sealed class BackupRun : ITenantOwned
     }
     public void Renew(Guid token, DateTimeOffset now, TimeSpan duration) => CurrentAttempt.Renew(token, now, duration);
     public void Progress(Guid token, DateTimeOffset now, string stage, double? percent) => CurrentAttempt.Progress(token, now, stage, percent);
+    public void RequestPause()
+    {
+        if (CancellationRequestedAt.HasValue) throw new InvalidOperationException("Cancellation is already requested.");
+        CurrentAttempt.RequestPause();
+    }
+    public void Pause(Guid token, DateTimeOffset now, TransferPauseReason reason)
+    {
+        if (CancellationRequestedAt.HasValue) throw new InvalidOperationException("Cancellation is already requested.");
+        CurrentAttempt.Pause(token, now, reason);
+        Status = BackupStatus.Paused;
+        Fact("BackupRunPaused", CurrentAttempt.Id, now);
+    }
+    public void Resume(DateTimeOffset now)
+    {
+        if (CancellationRequestedAt.HasValue) throw new InvalidOperationException("Cancellation is already requested.");
+        CurrentAttempt.Resume();
+        Status = BackupStatus.Pending;
+        Fact("BackupRunResumed", CurrentAttempt.Id, now);
+    }
+
+    /// <summary>Automatic resumes of one attempt after PausedByNetworkError; an outage longer than the backoff covers leaves a Paused run for an operator.</summary>
+    public const int MaxNetworkResumes = BackupRetryPolicy.MaximumAttemptsLimit;
+
+    /// <summary>
+    /// Resumes the current attempt once the retry policy's backoff since a PausedByNetworkError pause has elapsed. The pause says the storage was unreachable, which is
+    /// the only pause that ends by itself: Operator and TimeRule pauses and cancelled runs are never resumed here, and a policy of one attempt means "no retries".
+    /// False (and no change) otherwise, so it is safe to call from any number of workers.
+    /// </summary>
+    public bool ResumeAfterNetworkPause(DateTimeOffset now)
+    {
+        if (Status != BackupStatus.Paused || CancellationRequestedAt.HasValue || RetryPolicy.MaxAttempts == 1
+            || CurrentAttempt is not { PauseReason: TransferPauseReason.PausedByNetworkError, ProgressAt: { } pausedAt } attempt) return false;
+        var resumed = _facts.Count(fact => fact.AttemptId == attempt.Id && fact.Kind == "BackupNetworkResumeStarted");
+        if (resumed >= MaxNetworkResumes || pausedAt + RetryPolicy.DelayAfter(resumed + 1, 0) > now) return false;
+        Resume(now);
+        Fact("BackupNetworkResumeStarted", attempt.Id, now);
+        return true;
+    }
 
     /// <param name="jitter">A sample in [0,1) used to shorten a retry delay; the caller owns randomness so the domain stays deterministic.</param>
     public void Complete(Guid token, DateTimeOffset now, BackupCompletion completion, double jitter = 0)
     {
+        if (completion.Status != BackupStatus.Succeeded && completion.Artifact is { } artifact &&
+            artifact.Replicas.Any(replica => replica.VerificationState == "Verified") &&
+            !(Configuration.EnforceThreeTwoOne && completion.Status == BackupStatus.Failed &&
+              completion.FailureCode == BackupFailureCodes.StorageUnavailable &&
+              !BackupReplicationEvaluator.ForArtifact(Configuration, artifact.Replicas).PolicySatisfied))
+            throw new ArgumentException("Only a replication policy failure may retain verified copies from an unsuccessful attempt.");
         if (!CurrentAttempt.Complete(token, now, completion, RetentionPolicy)) return;
         AfterAttemptEnded(now, jitter);
     }
@@ -199,6 +256,9 @@ public sealed class BackupRun : ITenantOwned
         Fact("BackupCancellationRequested", CurrentAttempt.Id, now);
         switch (Status)
         {
+            case BackupStatus.Paused:
+                CurrentAttempt.Resume();
+                goto case BackupStatus.Pending;
             case BackupStatus.Pending:
                 CurrentAttempt.CancelPending(now);
                 EndCancelled(now);
@@ -210,9 +270,15 @@ public sealed class BackupRun : ITenantOwned
         }
     }
 
-    public bool Expire(DateTimeOffset now, double jitter = 0)
+    public bool Expire(DateTimeOffset now, double jitter = 0, bool retainTransfer = false)
     {
-        if (!CurrentAttempt.Expire(now)) return false;
+        if (!CurrentAttempt.Expire(now, retainTransfer && !CancellationRequestedAt.HasValue)) return false;
+        if (CurrentAttempt.Status == BackupStatus.Paused)
+        {
+            Status = BackupStatus.Paused;
+            Fact("BackupRunPaused", CurrentAttempt.Id, now);
+            return true;
+        }
         AfterAttemptEnded(now, jitter);
         return true;
     }

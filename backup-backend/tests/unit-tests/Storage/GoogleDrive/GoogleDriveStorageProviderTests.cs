@@ -177,6 +177,92 @@ public sealed class GoogleDriveStorageProviderTests : IDisposable
         Assert.Equal(bytes, Assert.Single(server.Files).Value.Bytes);
     }
 
+    private Task<StorageObjectMetadata> PutCheckpointed(GoogleDriveStorageProvider provider, byte[] bytes, List<StorageTransferCheckpoint> recorded,
+        StorageTransferCheckpoint? retained = null) =>
+        provider.PutAsync(_key, new MemoryStream(bytes), new(StorageOverwritePolicy.Fail, Digest(bytes), bytes.Length)
+        {
+            Checkpoint = retained,
+            RecordCheckpointAsync = (checkpoint, _) => { recorded.Add(checkpoint); return Task.CompletedTask; }
+        }, null, default);
+
+    [Fact]
+    public async Task Resume_ContinuesRetainedSessionFromTheServerReportedOffset()
+    {
+        var server = new FakeDrive { LoseChunkReply = true };
+        var bytes = RandomNumberGenerator.GetBytes(512 * 1024);
+        var recorded = new List<StorageTransferCheckpoint>();
+        var dropped = await Assert.ThrowsAsync<StorageException>(() => PutCheckpointed(Provider(server), bytes, recorded));
+        Assert.Equal(StorageFailureKind.NetworkUnavailable, dropped.Kind);
+        Assert.Equal(1, server.ChunkRequests);
+
+        await PutCheckpointed(Provider(server), bytes, recorded, recorded[^1]);
+
+        Assert.Equal(1, server.SessionsCreated);
+        Assert.Equal(1, server.IdsGenerated);
+        Assert.Equal(1, server.OffsetQueries);
+        // One chunk was lost with its reply and one remained: nothing already stored was sent again.
+        Assert.Equal(2, server.ChunkRequests);
+        Assert.Equal(bytes, Assert.Single(server.Files).Value.Bytes);
+        Assert.Equal(bytes.Length, recorded[^1].VerifiedByteOffset);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    [InlineData((HttpStatusCode)429)]
+    public async Task CheckpointedPut_LeavesRetryingAndPausingToTheCaller(HttpStatusCode status)
+    {
+        var server = new FakeDrive { ChunkStatus = status };
+        var failure = await Assert.ThrowsAsync<StorageException>(() => PutCheckpointed(Provider(server), Bytes, []));
+        Assert.Equal(StorageFailureKind.NetworkUnavailable, failure.Kind);
+        Assert.Equal(1, server.ChunkRequests);
+    }
+
+    [Fact]
+    public async Task Resume_AfterSessionExpiryStartsAFreshSessionAndCheckpointsIt()
+    {
+        var server = new FakeDrive { LoseChunkReply = true };
+        var bytes = RandomNumberGenerator.GetBytes(512 * 1024);
+        var recorded = new List<StorageTransferCheckpoint>();
+        await Assert.ThrowsAsync<StorageException>(() => PutCheckpointed(Provider(server), bytes, recorded));
+        server.Expirations = 1;
+
+        await PutCheckpointed(Provider(server), bytes, recorded, recorded[^1]);
+
+        Assert.Equal(2, server.SessionsCreated);
+        Assert.Equal(1, server.IdsGenerated);
+        Assert.Contains(recorded, checkpoint => checkpoint.VerifiedByteOffset == 0 && checkpoint.ProviderState!.Contains("session-2"));
+        Assert.Equal(bytes, Assert.Single(server.Files).Value.Bytes);
+    }
+
+    [Theory]
+    [InlineData("https://evil.example/upload/session-1")]
+    [InlineData("http://upload.googleapis.com/session-1")]
+    [InlineData("https://user@upload.googleapis.com/session-1")]
+    public async Task Resume_RejectsARetainedSessionThatIsNotAGoogleUploadUri(string session)
+    {
+        var server = new FakeDrive();
+        var state = JsonSerializer.Serialize(new { Session = session, FileId = "generated-1" });
+        var failure = await Assert.ThrowsAsync<StorageException>(() =>
+            PutCheckpointed(Provider(server), Bytes, [], new StorageTransferCheckpoint(0, state)));
+        Assert.Equal(StorageFailureKind.InvalidConfiguration, failure.Kind);
+        Assert.Equal(0, server.ChunkRequests);
+        Assert.Equal(0, server.OffsetQueries);
+    }
+
+    [Fact]
+    public async Task Resume_DetectsPrefixThatDoesNotMatchTheArtifactBeforePublishing()
+    {
+        var server = new FakeDrive { LoseChunkReply = true };
+        var bytes = RandomNumberGenerator.GetBytes(512 * 1024);
+        var recorded = new List<StorageTransferCheckpoint>();
+        await Assert.ThrowsAsync<StorageException>(() => PutCheckpointed(Provider(server), bytes, recorded));
+        server.CorruptNextUpload = true;
+
+        var failure = await Assert.ThrowsAsync<StorageException>(() => PutCheckpointed(Provider(server), bytes, recorded, recorded[^1]));
+
+        Assert.Equal(StorageFailureKind.IntegrityMismatch, failure.Kind);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -541,6 +627,38 @@ public sealed class GoogleDriveStorageProviderTests : IDisposable
         Assert.Empty(server.Files);
         Assert.Empty(Directory.EnumerateFiles(_directory));
     }
+    [Fact]
+    public async Task Put_DirectAccessTokenSource_SucceedsWithoutClientSecret()
+    {
+        var server = new FakeDrive();
+        var options = new GoogleDriveStorageOptions(_tenant, _connection, stagingDirectory: _directory, uploadTimeout: TimeSpan.FromSeconds(5));
+        var tokenSourceCalled = false;
+        var provider = GoogleDriveStorageProvider.CreateDirect(
+            new HttpClient(server),
+            options,
+            _ => { tokenSourceCalled = true; return ValueTask.FromResult("direct-token-xyz"); },
+            stagingStore: new TestStagingStore(_directory));
+
+        var meta = await Put(provider);
+        Assert.True(tokenSourceCalled);
+        Assert.Single(server.Files);
+        Assert.Equal(Bytes.Length, meta.SizeBytes);
+    }
+    [Fact]
+    public void GoogleDriveStorageOptions_ThrowsWhenTenantIdEmpty()
+    {
+        Assert.Throws<ArgumentException>(() => new GoogleDriveStorageOptions(Guid.Empty, _connection));
+        Assert.Throws<ArgumentException>(() => new GoogleDriveStorageOptions("client", "secret", Guid.Empty, _connection));
+    }
+
+    [Fact]
+    public void GoogleDriveTokenManager_ThrowsWhenClientSecretsMissing()
+    {
+        var options = new GoogleDriveStorageOptions(_tenant, _connection);
+        Assert.Throws<ArgumentException>(() => new GoogleDriveTokenManager(new HttpClient(), options, _ => ValueTask.FromResult(new GoogleDriveCredential("refresh"))));
+    }
+
+
 
     private sealed class FailingCatalog : IGoogleDriveFileCatalog
     {

@@ -73,6 +73,7 @@ public static class SupportEndpoints
         group.MapPost("/{sessionId:guid}/artifacts/{artifactId:guid}/downloads", PrepareDownloadAsync);
         group.MapGet("/{sessionId:guid}/artifacts/{artifactId:guid}/downloads/{downloadId:guid}", DownloadStatusAsync);
         group.MapGet("/{sessionId:guid}/artifacts/{artifactId:guid}/downloads/{downloadId:guid}/content", DownloadContentAsync);
+        group.MapPost("/{sessionId:guid}/artifacts/{artifactId:guid}/downloads/{downloadId:guid}/content", DownloadContentAsync).WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(64 * 1024));
         group.MapGet("/{sessionId:guid}/downloads", DownloadsAsync);
 
         group.MapGet("/{sessionId:guid}/artifacts/{artifactId:guid}/restore-targets", RestoreTargetsAsync);
@@ -295,7 +296,12 @@ public static class SupportEndpoints
         }
         catch (DownloadUnavailableException exception)
         {
-            return exception.Code == "replica_not_found" ? Results.NotFound(new { error = exception.Code }) : Results.Conflict(new { error = exception.Code });
+            return exception.Code switch
+            {
+                "replica_not_found" => Results.NotFound(new { error = exception.Code }),
+                "decrypt_not_permitted" => Results.Json(new { error = exception.Code }, statusCode: StatusCodes.Status403Forbidden),
+                _ => Results.Conflict(new { error = exception.Code })
+            };
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -322,7 +328,7 @@ public static class SupportEndpoints
     }
 
     private static async Task<IResult> DownloadContentAsync(Guid sessionId, Guid artifactId, Guid downloadId, SupportRequestGate gate, DownloadService downloads, DownloadStreamer streamer,
-        ILogger<DownloadService> logger, CancellationToken cancellationToken)
+        DirectDownloadSignals signals, HttpContext http, ILogger<DownloadService> logger, CancellationToken cancellationToken)
     {
         // The claim is bound to the real admin and to this support session: another admin, or a download of another session or of the tenant's own users, is not found.
         // Streaming start re-judges the session in the database under its lock and audits "download started" in the same transaction (fail-closed).
@@ -332,6 +338,8 @@ public static class SupportEndpoints
         {
             var session = await downloads.GetOwnedAsync(context.TenantId, artifactId, downloadId, context.ActorId.Value, cancellationToken, context.SessionId);
             if (session is null) return Results.NotFound();
+            if (session.AgentId is not null) return await signals.BrowserAsync(http, session);
+            if (!HttpMethods.IsGet(http.Request.Method)) return Results.BadRequest();
             if (session.State != DownloadState.Ready) return Results.Conflict(new { error = session.FailureCode ?? "download_not_ready" });
             return new StreamResult(session, streamer);
         }

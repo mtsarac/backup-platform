@@ -102,17 +102,34 @@ public sealed record DatabaseBackupPipelineRequest
     /// destinations can even be reached; what a run with fewer verified copies than required MEANS is the backend's replication compliance, not the engine's success.
     /// </summary>
     public int RequiredVerifiedReplicas { get; init; } = 1;
+    public Func<IReadOnlyList<BackupDestinationResult>, bool>? ReplicationPolicySatisfied { get; init; }
 
     /// <summary>Upper bound for the upload and verification of ONE destination; null selects <see cref="DefaultDestinationTimeout"/>. A destination that exceeds it fails alone.</summary>
     public TimeSpan? DestinationTimeout { get; init; }
 
     public static readonly TimeSpan DefaultDestinationTimeout = TimeSpan.FromHours(6);
 
+    /// <summary>
+    /// How long one upload attempt may move no bytes before the storage is treated as unreachable and the transfer pauses as PausedByNetworkError.
+    /// A storage that accepts connections but never answers raises no error of its own, so without this a hang lasts until <see cref="DestinationTimeout"/>.
+    /// It must exceed the time the slowest link needs for one storage chunk. Use <see cref="Timeout.InfiniteTimeSpan"/> to disable.
+    /// </summary>
+    public TimeSpan UploadStallTimeout { get; init; } = DefaultUploadStallTimeout;
+
+    public static readonly TimeSpan DefaultUploadStallTimeout = TimeSpan.FromMinutes(2);
+
     /// <summary>Paces the upload bytes of every destination to the backend's limits; null uploads at full speed. The timeout of a paced destination is widened by <see cref="IUploadBandwidthSession.DeadlineAllowance"/>.</summary>
     public IUploadBandwidth? UploadBandwidth { get; init; }
 
     /// <summary>Null means the job does not encrypt; otherwise handed to the artifact preparer unchanged.</summary>
     public ArtifactEncryption? Encryption { get; init; }
+    public Guid AttemptId { get; init; }
+    public bool ResumeTransfer { get; init; }
+    public CancellationToken PauseToken { get; init; }
+    public CancellationToken TimeRulePauseToken { get; init; }
+    public CancellationToken ShutdownToken { get; init; }
+    public IReadOnlyList<BackupPlatform.Contracts.Backups.TransferCheckpointContract> Checkpoints { get; init; } = [];
+    public Func<BackupPlatform.Contracts.Backups.TransferCheckpointContract, CancellationToken, Task>? RecordCheckpointAsync { get; init; }
 }
 
 /// <summary>One copy target of an execution. <see cref="StorageOverride"/> is a task-scoped (lease-bound, relayed) provider; <see cref="ConnectionId"/> is the snapshot destination it belongs to.</summary>
@@ -124,8 +141,14 @@ public enum ArtifactTransformKind
     Encryption
 }
 
-/// <summary>The tenant-wrap recipient of an encrypted artifact, read back from its header. <see cref="WrappedDek"/> is ciphertext only the backend's private wrap key opens.</summary>
-public sealed record ArtifactSeal(string KeyId, int KeyVersion, byte[] WrappedDek);
+/// <summary>
+/// What the header of an encrypted artifact says, read back after writing it: the tenant-wrap recipient (<see cref="WrappedDek"/> is ciphertext only the backend's private wrap key
+/// opens) and the index of every recipient, which the backend checks against the keys it issued.
+/// </summary>
+public sealed record ArtifactSeal(string KeyId, int KeyVersion, byte[] WrappedDek, IReadOnlyList<ArtifactRecipientRef> Recipients);
+
+/// <summary>One recipient of an encrypted artifact as its header names it: wire type name, key id, key version. No wrapped key.</summary>
+public sealed record ArtifactRecipientRef(string Type, string KeyId, int KeyVersion);
 
 /// <summary>One transformation applied between the engine's backup file and the stored artifact (none exist yet; the list is how they will be recorded).</summary>
 public sealed record ArtifactTransform(ArtifactTransformKind Kind, string Algorithm);
@@ -166,7 +189,8 @@ public enum DatabaseBackupStatus
 {
     Succeeded = 1,
     Failed,
-    Cancelled
+    Cancelled,
+    Paused
 }
 
 public enum BackupDestinationState
@@ -207,6 +231,7 @@ public sealed record DatabaseBackupPipelineResult
 
     /// <summary>Why the execution did not succeed; always set unless <see cref="Status"/> is Succeeded, and then Kind is Cancelled for cancellation.</summary>
     public BackupFailure? Failure { get; init; }
+    public string? PauseReason { get; init; }
 
     public DatabaseBackupType BackupType { get; init; } = DatabaseBackupType.Full;
 

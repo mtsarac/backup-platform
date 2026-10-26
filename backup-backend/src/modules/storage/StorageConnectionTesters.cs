@@ -10,6 +10,7 @@ namespace BackupPlatform.Storage;
 public static class StorageTestCodes
 {
     public const string Ok = "ok";
+    public const string AccessVerified = "access_verified";
     public const string StorageNotConfigured = "storage_not_configured";
     public const string AgentSideStorage = "agent_side_storage";
     public const string ProviderNotImplemented = "provider_not_implemented";
@@ -180,6 +181,12 @@ public sealed class SftpConnectionTester(Func<StorageConnection, ISecretProvider
             }
             return new StorageTestResult(StorageTestStatus.Succeeded, StorageTestCodes.Ok, "Wrote, verified and deleted a probe object.");
         }
+        catch (StorageException ex) when (ex.Kind == StorageFailureKind.NetworkDenied)
+        {
+            // A private address is the customer's own device: the server may not reach it, the agent on that network does.
+            return new StorageTestResult(StorageTestStatus.NotTestable, StorageTestCodes.AgentSideStorage,
+                "This storage is on a private network; it is reached by the agent and checked by the agent when a backup runs.");
+        }
         catch (StorageException ex)
         {
             return new StorageTestResult(StorageTestStatus.Failed, CodeFor(ex.Kind), ex.Message);
@@ -265,4 +272,23 @@ public sealed class GoogleDriveConnectionTester(Func<StorageConnection, ISecretP
     }
 
     private static string CodeFor(StorageFailureKind kind) => CentralConnectionTester.CodeFor(kind);
+}
+
+public sealed class S3ConnectionTester(Func<StorageConnection, ISecretProvider, IStorageProvider> factory) : IStorageConnectionTester
+{
+    public string ProviderType => StorageProviderTypes.S3;
+    public async Task<StorageTestResult> TestAsync(StorageConnection connection, ISecretProvider secrets, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (factory(connection, secrets) is not IS3AccessChecker checker)
+                return new(StorageTestStatus.Failed, StorageTestCodes.IoError, "The S3 provider cannot verify bucket access.");
+            await checker.CheckAccessAsync(cancellationToken);
+            return new(StorageTestStatus.Succeeded, StorageTestCodes.AccessVerified, StorageTestMessages.For(StorageTestCodes.AccessVerified));
+        }
+        catch (StorageException error)
+        {
+            return new(StorageTestStatus.Failed, CentralConnectionTester.CodeFor(error.Kind), error.Message);
+        }
+    }
 }

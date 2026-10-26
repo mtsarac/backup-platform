@@ -32,6 +32,8 @@ internal static class BackupTaskResultMapper
 {
     public static BackupTaskCompletionRequest Map(BackupTaskSnapshot task, DatabaseBackupPipelineResult result)
     {
+        if (result.Status == DatabaseBackupStatus.Paused)
+            return new BackupTaskCompletionRequest { LeaseToken = task.LeaseToken, Status = "Paused", FailureCode = result.PauseReason };
         var artifact = MapArtifact(task, result);
         if (result.Status == DatabaseBackupStatus.Succeeded && (artifact is null || artifact.Replicas.Count == 0))
         {
@@ -134,6 +136,7 @@ internal static class BackupTaskResultMapper
             EncryptionKeyId = artifact.Seal?.KeyId,
             EncryptionKeyVersion = artifact.Seal?.KeyVersion,
             EncryptionWrappedDekBase64 = artifact.Seal is { } seal ? Convert.ToBase64String(seal.WrappedDek) : null,
+            EncryptionRecipients = artifact.Seal?.Recipients.Select(recipient => new BackupTaskArtifactRecipient { Type = recipient.Type, KeyId = recipient.KeyId, KeyVersion = recipient.KeyVersion }).ToArray() ?? [],
             CreatedAt = result.BackupFinishedAt ?? result.FinishedAt,
             SourceMetadataJson = JsonSerializer.Serialize(new
             {
@@ -164,9 +167,9 @@ internal static class BackupTaskResultMapper
             Replicas = [.. copies.Select(copy => new BackupTaskReplica
             {
                 StorageProvider = copy.Replica!.Location.Provider.Value,
-                StorageTarget = copy.Destination.Storage.Value is "sftp" or "google-drive" && copy.Destination.ConnectionId is { } connection
+                StorageTarget = AgentStorageProviders.External(copy.Destination.Storage.Value) && copy.Destination.ConnectionId is { } connection
                     ? connection.ToString("D")
-                    : task.Configuration.Destinations.FirstOrDefault(d => d.StorageConnectionId == copy.Destination.ConnectionId && d.StorageProvider == "local")?.StorageTarget
+                    : task.Configuration.Destinations.FirstOrDefault(d => d.StorageConnectionId == copy.Destination.ConnectionId && d.StorageProvider == AgentStorageProviders.Local)?.StorageTarget
                         ?? copy.Replica.Location.Provider.Value,
                 StorageConnectionId = copy.Destination.ConnectionId,
                 Key = copy.Replica.Location.Key.Value,

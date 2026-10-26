@@ -1,6 +1,9 @@
+import { formatDateTime } from '@/lib/format'
 import { screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
+import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
+import type { UserEvent } from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as api from '@/features/notifications/api'
@@ -8,8 +11,9 @@ import type { NotificationChannel, NotificationDelivery, NotificationPolicy } fr
 import { ApiError } from '@/lib/api/client'
 import { NotificationsPage } from './notifications-page'
 
-const access = vi.hoisted(() => ({ tenantId: 'tenant-a', tenant: { name: 'Acme' }, canAdmin: true, canOperate: true }))
+const access = vi.hoisted(() => ({ tenantId: 'tenant-a', tenant: { name: 'Acme', role: 'Owner' }, canAdmin: true, canOperate: true }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
+vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({ user: { userId: 'owner-a' } }) }))
 vi.mock('@/features/notifications/api')
 
 const SECRET = 'whsec-very-secret-123'
@@ -21,6 +25,7 @@ const policy = (overrides: Partial<NotificationPolicy> = {}): NotificationPolicy
 })
 const channel = (overrides: Partial<NotificationChannel> = {}): NotificationChannel => ({
   id: 'c-mail', kind: 'email', name: 'Ops mailbox', targetDisplay: 'ops@example.com', enabled: true, recipientVerified: true, authentication: 'none', hasSecret: false, secretUpdatedAt: null,
+  securityOwnerUserId: null,
   createdAt: '2026-10-01T08:00:00Z', updatedAt: '2026-10-01T08:00:00Z', lastDelivery: null, ...overrides,
 })
 const delivery = (overrides: Partial<NotificationDelivery> = {}): NotificationDelivery => ({
@@ -32,15 +37,22 @@ const delivery = (overrides: Partial<NotificationDelivery> = {}): NotificationDe
 let client: QueryClient
 function mount() {
   client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-  return render(<QueryClientProvider client={client}><NotificationsPage /></QueryClientProvider>)
+  return render(<MemoryRouter><QueryClientProvider client={client}><NotificationsPage /></QueryClientProvider></MemoryRouter>)
 }
 
-const openTab = async (user: ReturnType<typeof userEvent.setup>, name: string) => user.click(await screen.findByRole('tab', { name }))
+const openTab = async (user: UserEvent, name: string) => user.click(await screen.findByRole('tab', { name }))
+const openChannelDetails = async (user: UserEvent, name: string) => {
+  const card = within(await screen.findByRole('article', { name }))
+  const summary = card.getByText('Teknik ayrıntılar')
+  if (!summary.closest('details')?.open) await user.click(summary)
+}
 
 beforeEach(() => {
   vi.resetAllMocks()
   access.canAdmin = true
+  access.tenant.role = 'Owner'
   vi.mocked(api.getPolicy).mockResolvedValue(policy())
+  vi.mocked(api.setOwnerSecurityRecipient).mockResolvedValue(channel({ securityOwnerUserId: 'owner-a' }))
   vi.mocked(api.getChannels).mockResolvedValue({ items: [channel(), channel({ id: 'c-hook', kind: 'webhook', name: 'Pager', recipientVerified: null, targetDisplay: 'https://hooks.example.com/…', authentication: 'bearer', hasSecret: true })] })
   vi.mocked(api.getDeliveries).mockResolvedValue({ items: [delivery()], totalCount: 1, page: 1, pageSize: 25 })
 })
@@ -60,10 +72,16 @@ describe('role gating', () => {
     const user = userEvent.setup()
     mount()
     expect(await screen.findByRole('heading', { name: 'Bildirim politikası' })).toBeInTheDocument()
+    await screen.findByLabelText('Bildirimler etkin')
+    expect(api.getChannels).not.toHaveBeenCalled()
+    expect(api.getDeliveries).not.toHaveBeenCalled()
     await openTab(user, 'Kanallar')
     expect(await screen.findByRole('heading', { name: 'Kanallar' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Bildirimler etkin')).not.toBeInTheDocument()
+    expect(api.getDeliveries).not.toHaveBeenCalled()
     await openTab(user, 'Gönderim geçmişi')
     expect(await screen.findByRole('heading', { name: 'Gönderim geçmişi' })).toBeInTheDocument()
+    expect(screen.queryByRole('article', { name: 'Ops mailbox' })).not.toBeInTheDocument()
   })
 })
 
@@ -77,14 +95,27 @@ describe('policy', () => {
     expect(screen.getByText(/SMS aktarımı platform tarafından yapılandırılmamış/)).toBeInTheDocument()
   })
 
+  it('keeps numeric thresholds in collapsed copyable technical details', async () => {
+    const user = userEvent.setup()
+    mount()
+    await screen.findByLabelText('Bildirimler etkin')
+    const details = screen.getByText('Teknik ayrıntılar').closest('details')!
+    expect(details).not.toHaveAttribute('open')
+    await user.click(screen.getByText('Teknik ayrıntılar'))
+    expect(within(details).getByRole('textbox', { name: /Hatırlatma aralığı/ })).toHaveValue('24')
+    expect(within(details).getByRole('button', { name: /Kopyala:.*Hatırlatma/ })).toBeInTheDocument()
+  })
+
   it('blocks out-of-range thresholds with a field error and no request', async () => {
     const user = userEvent.setup()
     mount()
-    const stale = await screen.findByLabelText(/(?:güncel değil|güncelliğini yitirme) eşiği/i)
+    await user.click(await screen.findByText('Teknik ayrıntılar'))
+    const stale = screen.getByRole('textbox', { name: /(?:güncel değil|güncelliğini yitirme) eşiği/i })
     await user.clear(stale)
     await user.type(stale, '721')
+    await user.click(screen.getByText('Teknik ayrıntılar'))
     await user.click(screen.getByRole('button', { name: 'Politikayı kaydet' }))
-    expect(screen.getByText('1 ile 720 arasında bir tam sayı girin.')).toBeInTheDocument()
+    expect(screen.getByText('1 ile 720 arasında bir tam sayı girin.')).toBeVisible()
     expect(api.updatePolicy).not.toHaveBeenCalled()
   })
 
@@ -93,7 +124,8 @@ describe('policy', () => {
     const user = userEvent.setup()
     mount()
     await user.click(await screen.findByLabelText('Bildirimler etkin'))
-    const reminder = screen.getByLabelText(/Hatırlatma aralığı/)
+    await user.click(screen.getByText('Teknik ayrıntılar'))
+    const reminder = screen.getByRole('textbox', { name: /Hatırlatma aralığı/ })
     await user.clear(reminder)
     await user.type(reminder, '0')
     await user.click(screen.getByRole('button', { name: 'Politikayı kaydet' }))
@@ -108,11 +140,14 @@ describe('policy', () => {
 describe('channels', () => {
   const card = (name: string) => within(screen.getByRole('article', { name }))
 
-  it('shows targetDisplay and secret status only', async () => {
+  it('shows confirmation and delivery result, with technical codes collapsed', async () => {
     const user = userEvent.setup()
     mount()
     await openTab(user, 'Kanallar')
     await screen.findByRole('article', { name: 'Pager' })
+    expect(card('Ops mailbox').getByText('Adres onaylandı')).toBeInTheDocument()
+    expect(card('Pager').getByText('Teknik ayrıntılar').closest('details')).not.toHaveAttribute('open')
+    await openChannelDetails(user, 'Pager')
     expect(card('Ops mailbox').getByText(/ops@example.com/)).toBeInTheDocument()
     expect(card('Pager').getByText(/https:\/\/hooks.example.com\/…/)).toBeInTheDocument()
     expect(card('Pager').getByText(/Gizli anahtar kayıtlı/)).toBeInTheDocument()
@@ -162,7 +197,10 @@ describe('channels', () => {
     await openTab(user, 'Kanallar')
     await user.click(await screen.findByRole('button', { name: 'Kanal ekle' }))
     const dialog = within(await screen.findByRole('dialog'))
+    expect(dialog.getByText(/onay e-postası gönderilir/)).toBeInTheDocument()
+    expect(dialog.getByText(/Olay ve önem bilgileri/)).toBeInTheDocument()
     await user.selectOptions(dialog.getByLabelText('Tür'), 'webhook')
+    expect(dialog.getByText(/JSON/)).toBeInTheDocument()
     await user.type(dialog.getByLabelText('Ad'), 'Yeni')
     await user.type(dialog.getByLabelText("Web kancası adresi"), 'https://hooks.example.com/abc')
     await user.selectOptions(dialog.getByLabelText('Kimlik doğrulama'), 'hmac')
@@ -182,6 +220,7 @@ describe('channels', () => {
     const user = userEvent.setup()
     mount()
     await openTab(user, 'Kanallar')
+    await openChannelDetails(user, 'Pager')
     await user.click(await screen.findByRole('button', { name: /Pager kanalı: (?:secret|gizli anahtar) ayarla/ }))
     const dialog = within(await screen.findByRole('dialog'))
     const input = dialog.getByLabelText("Yeni gizli anahtar") as HTMLInputElement
@@ -193,19 +232,86 @@ describe('channels', () => {
     expect(document.body.innerHTML).not.toContain(SECRET)
   })
 
+  it('clears a submitted secret after failure and requires fresh entry before retry', async () => {
+    vi.mocked(api.setChannelSecret).mockRejectedValue(new ApiError(503, { error: 'service_unavailable' }))
+    const user = userEvent.setup()
+    mount()
+    await openTab(user, 'Kanallar')
+    await openChannelDetails(user, 'Pager')
+    await user.click(screen.getByRole('button', { name: /Pager kanalı: gizli anahtar ayarla/ }))
+    const dialog = within(await screen.findByRole('dialog'))
+    const input = dialog.getByLabelText('Yeni gizli anahtar')
+    await user.type(input, SECRET)
+    await user.click(dialog.getByRole('button', { name: 'Gizli anahtarı kaydet' }))
+    expect(await dialog.findByRole('alert')).toBeInTheDocument()
+    expect(input).toHaveValue('')
+    expect(dialog.getByRole('button', { name: 'Gizli anahtarı kaydet' })).toBeDisabled()
+    expect(document.body.innerHTML).not.toContain(SECRET)
+    await waitFor(() => expect(JSON.stringify(client.getMutationCache().getAll().map(mutation => mutation.state.variables))).not.toContain(SECRET))
+  })
+
+  it('does not retain a new channel secret after a failed creation', async () => {
+    vi.mocked(api.createChannel).mockRejectedValue(new ApiError(503, { error: 'service_unavailable' }))
+    const user = userEvent.setup()
+    mount()
+    await openTab(user, 'Kanallar')
+    await user.click(await screen.findByRole('button', { name: 'Kanal ekle' }))
+    const dialog = within(await screen.findByRole('dialog'))
+    await user.selectOptions(dialog.getByLabelText('Tür'), 'webhook')
+    await user.type(dialog.getByLabelText('Ad'), 'Yeni')
+    await user.type(dialog.getByLabelText('Web kancası adresi'), 'https://hooks.example.com/abc')
+    await user.selectOptions(dialog.getByLabelText('Kimlik doğrulama'), 'hmac')
+    const input = dialog.getByLabelText(/HMAC imza anahtarı/)
+    await user.type(input, SECRET)
+    await user.click(dialog.getByRole('button', { name: 'Kanal ekle' }))
+    expect(await dialog.findByRole('alert')).toBeInTheDocument()
+    expect(input).toHaveValue('')
+    expect(document.body.innerHTML).not.toContain(SECRET)
+    await waitFor(() => expect(JSON.stringify(client.getMutationCache().getAll().map(mutation => mutation.state.variables))).not.toContain(SECRET))
+  })
+
   it('clears a secret after confirmation and deletes a channel', async () => {
     vi.mocked(api.clearChannelSecret).mockResolvedValue(channel({ id: 'c-hook' }))
     vi.mocked(api.deleteChannel).mockResolvedValue(undefined)
     const user = userEvent.setup()
     mount()
     await openTab(user, 'Kanallar')
+    await openChannelDetails(user, 'Pager')
     await user.click(await screen.findByRole('button', { name: /Pager kanalı: (?:secret|gizli anahtarı) temizle/ }))
     await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: "Gizli anahtarı temizle" }))
     await waitFor(() => expect(api.clearChannelSecret).toHaveBeenCalledWith('tenant-a', 'c-hook'))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await openChannelDetails(user, 'Ops mailbox')
     await user.click(screen.getByRole('button', { name: 'Ops mailbox kanalı: sil' }))
-    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Kanalı sil' }))
+    const deletion = within(await screen.findByRole('dialog'))
+    const confirm = deletion.getByRole('button', { name: 'Kanalı sil' })
+    expect(confirm).toBeDisabled()
+    expect(deletion.getByText(/Gönderim geçmişi korunur/)).toBeInTheDocument()
+    await user.type(deletion.getByRole('textbox'), 'ops mailbox')
+    expect(confirm).toBeDisabled()
+    expect(api.deleteChannel).not.toHaveBeenCalled()
+    await user.clear(deletion.getByRole('textbox'))
+    await user.type(deletion.getByRole('textbox'), 'Ops mailbox')
+    await user.click(confirm)
     await waitFor(() => expect(api.deleteChannel).toHaveBeenCalledWith('tenant-a', 'c-mail'))
+  })
+
+  it('requires a consequence confirmation before saving webhook authentication off', async () => {
+    vi.mocked(api.updateChannel).mockResolvedValue(channel({ id: 'c-hook', kind: 'webhook', authentication: 'none', hasSecret: false }))
+    const user = userEvent.setup()
+    mount()
+    await openTab(user, 'Kanallar')
+    await user.click(await screen.findByRole('button', { name: 'Pager kanalı: düzenle' }))
+    await user.selectOptions(screen.getByLabelText('Kimlik doğrulama'), 'none')
+    await user.click(screen.getByRole('button', { name: 'Kaydet' }))
+    const confirmation = within(await screen.findByRole('dialog', { name: /Kimlik doğrulama kapatılsın mı/ }))
+    expect(confirmation.getByText(/kayıtlı gizli anahtarı siler/)).toBeInTheDocument()
+    expect(api.updateChannel).not.toHaveBeenCalled()
+    await user.click(confirmation.getByRole('button', { name: 'Vazgeç' }))
+    expect(api.updateChannel).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Kaydet' }))
+    await user.click(within(await screen.findByRole('dialog', { name: /Kimlik doğrulama kapatılsın mı/ })).getByRole('button', { name: 'Kimlik doğrulamayı kapat' }))
+    await waitFor(() => expect(api.updateChannel).toHaveBeenCalledWith('tenant-a', 'c-hook', { authentication: 'none' }))
   })
 
   it('toggles enablement', async () => {
@@ -213,21 +319,27 @@ describe('channels', () => {
     const user = userEvent.setup()
     mount()
     await openTab(user, 'Kanallar')
+    await openChannelDetails(user, 'Ops mailbox')
     await user.click(await screen.findByRole('button', { name: 'Ops mailbox kanalı: devre dışı bırak' }))
     await waitFor(() => expect(api.setChannelEnabled).toHaveBeenCalledWith('tenant-a', 'c-mail', false))
   })
 })
 
 describe('delivery history', () => {
-  it('renders status, error code, attempts and next attempt', async () => {
+  it('shows delivery cards with copyable error and attempt data collapsed', async () => {
     const user = userEvent.setup()
     mount()
     await openTab(user, 'Gönderim geçmişi')
-    const row = within((await screen.findByText(/build-01/)).closest('tr')!)
-    expect(row.getByText('Başarısız')).toBeInTheDocument()
-    expect(row.getByText('smtp_unavailable')).toBeInTheDocument()
-    expect(row.getByText('4')).toBeInTheDocument()
-    expect(row.getByText(new Date('2026-10-14T12:00:00Z').toLocaleString('tr-TR'))).toBeInTheDocument()
+    const card = within(await screen.findByRole('article', { name: /build-01/ }))
+    expect(card.getByText('Başarısız')).toBeInTheDocument()
+    expect(card.getByText('Ops mailbox')).toBeInTheDocument()
+    const details = card.getByText('Teknik ayrıntılar').closest('details')!
+    expect(details).not.toHaveAttribute('open')
+    await user.click(card.getByText('Teknik ayrıntılar'))
+    expect(within(details).getByText('smtp_unavailable')).toBeVisible()
+    expect(within(details).getByText('4')).toBeVisible()
+    expect(within(details).getByText(formatDateTime('2026-10-14T12:00:00Z'))).toBeVisible()
+    expect(within(details).getByRole('button', { name: /Kopyala:.*Hata/ })).toBeInTheDocument()
   })
 
   it('sends status, kind and eventType filters and resets to page 1', async () => {
@@ -250,5 +362,48 @@ describe('delivery history', () => {
     await screen.findByText(/build-01/)
     await user.click(screen.getByRole('button', { name: 'Sonraki' }))
     await waitFor(() => expect(api.getDeliveries).toHaveBeenLastCalledWith('tenant-a', expect.objectContaining({ page: 2 }), expect.anything()))
+  })
+})
+
+describe('mandatory Owner security recipient', () => {
+  it('requires Owner confirmation and refreshes the designated channel independently of disabled general policy', async () => {
+    const user = userEvent.setup()
+    mount()
+    await openTab(user, 'Kanallar')
+    await openChannelDetails(user, 'Ops mailbox')
+    await user.click(await screen.findByRole('button', { name: 'Güvenlik alıcım olarak kaydet' }))
+    expect(api.setOwnerSecurityRecipient).not.toHaveBeenCalled()
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Kaydet' }))
+    await waitFor(() => expect(api.setOwnerSecurityRecipient).toHaveBeenCalledWith('tenant-a', 'c-mail', true))
+    await waitFor(() => expect(api.getChannels).toHaveBeenCalledTimes(2))
+  })
+
+  it('offers no designation to a tenant Admin and disables unconfirmed email designation', async () => {
+    const user = userEvent.setup()
+    access.tenant.role = 'Admin'
+    const first = mount()
+    await openTab(user, 'Kanallar')
+    await screen.findByRole('heading', { name: 'Ops mailbox' })
+    await openChannelDetails(user, 'Ops mailbox')
+    expect(screen.queryByRole('button', { name: 'Güvenlik alıcım olarak kaydet' })).not.toBeInTheDocument()
+    first.unmount()
+    access.tenant.role = 'Owner'
+    vi.mocked(api.getChannels).mockResolvedValue({ items: [channel({ recipientVerified: false })] })
+    mount()
+    await openTab(user, 'Kanallar')
+    await openChannelDetails(user, 'Ops mailbox')
+    expect(await screen.findByRole('button', { name: 'Güvenlik alıcım olarak kaydet' })).toBeDisabled()
+  })
+
+  it('lets the designated Owner remove the binding after confirmation', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.getChannels).mockResolvedValue({ items: [channel({ securityOwnerUserId: 'owner-a' })] })
+    mount()
+    await openTab(user, 'Kanallar')
+    await openChannelDetails(user, 'Ops mailbox')
+    await user.click(await screen.findByRole('button', { name: 'Güvenlik alıcımı kaldır' }))
+    expect(api.setOwnerSecurityRecipient).not.toHaveBeenCalled()
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Kaldır' }))
+    await waitFor(() => expect(api.setOwnerSecurityRecipient).toHaveBeenCalledWith('tenant-a', 'c-mail', false))
   })
 })

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { Route } from 'react-router-dom'
 import { PlatformAdminRoute } from '@/components/auth/platform-admin-route'
 import { PlatformShell } from '@/components/layout/platform-shell'
@@ -35,7 +36,7 @@ describe('Platform Administration entry points', () => {
   it('tenant sidebar hides it from a user who is only a tenant Owner', () => {
     renderPlatform(<Sidebar />, { user: tenantOwner })
     expect(screen.queryByText(/Platform Administration|Platform Yönetimi/)).not.toBeInTheDocument()
-    expect(screen.getAllByText(/Yedekleme İşleri|Yedekleme İşleri/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Yedekleme işleri/).length).toBeGreaterThan(0)
   })
 
   it('tenant picker links PlatformAdmin users and hides it for others', () => {
@@ -55,21 +56,23 @@ describe('PlatformAdminRoute guard', () => {
     expect(alert).toHaveTextContent('Bu alan için yetkiniz yok')
     expect(within(alert).getByRole('link', { name: 'Ana sayfaya dön' })).toHaveAttribute('href', '/')
     expect(screen.queryByRole('navigation', { name: "Platform gezinme menüsü" })).not.toBeInTheDocument()
-    expect(screen.queryByText("Platform Gösterge Paneli")).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Platform özeti' })).not.toBeInTheDocument()
     for (const fn of Object.values(api)) if (typeof fn === 'function') expect(fn).not.toHaveBeenCalled()
     expect(storageApi.getStorageUsage).not.toHaveBeenCalled()
   })
 
   it('renders the platform shell and dashboard for a PlatformAdmin without tenant selector', async () => {
     renderPlatform(null, { routes: tree, user: platformAdmin })
-    expect(await screen.findByRole('heading', { name: "Platform Gösterge Paneli" })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Platform özeti' })).toBeInTheDocument()
     const nav = screen.getAllByRole('navigation', { name: "Platform gezinme menüsü" })[0]
-    for (const name of ['Gösterge Paneli', 'Çalışma Alanları', 'Kullanıcılar', 'Ajanlar', 'Denetim']) expect(within(nav).getByRole('link', { name })).toBeInTheDocument()
-    expect(within(nav).getByRole('link', { name: "Depolama Hedefleri" })).toHaveAttribute('href', '/platform/storage-connections')
+    for (const name of ['Platform özeti', 'Çalışma alanları', 'Kullanıcılar', 'Yedekleme bilgisayarları', 'Denetim kaydı']) expect(within(nav).getByRole('link', { name })).toBeInTheDocument()
+    expect(within(nav).getByRole('link', { name: "Depolama hedefleri" })).toHaveAttribute('href', '/platform/storage-connections')
     expect(within(nav).getByRole('link', { name: "Çalışma alanı arayüzüne dön" })).toHaveAttribute('href', '/')
     expect(screen.getAllByText("Platform Yönetimi").length).toBeGreaterThan(0)
     expect(screen.getByText("Platform Yöneticisi")).toBeInTheDocument()
     expect(screen.getByText('Platform Operatörü')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: "Temayı değiştir" })).not.toBeInTheDocument()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Görünüm' }))
     expect(screen.getByRole('button', { name: "Temayı değiştir" })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Çıkış' })).toBeInTheDocument()
     expect(screen.queryByLabelText("Çalışma Alanı")).not.toBeInTheDocument()
@@ -78,19 +81,28 @@ describe('PlatformAdminRoute guard', () => {
 })
 
 describe('platform dashboard', () => {
-  it('shows KPI totals and the agent breakdown', async () => {
+  it('keeps KPI totals, agent breakdown and bounded storage preview in collapsed details', async () => {
     renderPlatform(<PlatformDashboardPage />)
     const card = (label: string | RegExp) => screen.getByText(label).parentElement!.parentElement!
-    await screen.findByText("Çalışma Alanları")
-    expect(card('Çalışma Alanları')).toHaveTextContent('3')
+    const details = (await screen.findByText('Ayrıntılar')).closest('details')!
+    expect(details).not.toHaveAttribute('open')
+    expect(screen.getByText('Çalışma alanları')).not.toBeVisible()
+    expect(screen.getByText('Çevrimiçi')).not.toBeVisible()
+    expect(await screen.findByText('Henüz depolama kullanım kaydı yok.')).not.toBeVisible()
+    await userEvent.setup().click(within(details).getByText('Ayrıntılar'))
+    expect(details).toHaveAttribute('open')
+    expect(screen.getByText('Çalışma alanları')).toBeVisible()
+    expect(screen.getByText('Çevrimiçi')).toBeVisible()
+    expect(card('Çalışma alanları')).toHaveTextContent('3')
     expect(card('Kullanıcılar')).toHaveTextContent('7')
-    expect(card('Etkin Yedekleme İşleri')).toHaveTextContent('9')
-    expect(card(/Başarısız Yedekleme Çalıştırmaları/)).toHaveTextContent('2')
+    expect(card('Etkin yedekleme işleri')).toHaveTextContent('9')
+    expect(card('Başarısız yedeklemeler · son 24 saat')).toHaveTextContent('2')
     expect(screen.getByText('Çevrimiçi').nextSibling).toHaveTextContent('6')
     expect(screen.getByText('Çevrimdışı').nextSibling).toHaveTextContent('2')
     expect(screen.getByText('Devre dışı').nextSibling).toHaveTextContent('1')
     expect(screen.getByText('İptal edilmiş').nextSibling).toHaveTextContent('0')
-    expect(screen.getByRole('link', { name: "Çevrimdışı Ajanları listele" })).toHaveAttribute('href', '/platform/agents?connectivity=offline')
+    const attention = screen.getByRole('list', { name: 'Dikkat gerektirenler' })
+    expect(within(attention).getAllByRole('link')[1]).toHaveAttribute('href', '/platform/agents?connectivity=offline')
     expect(await screen.findByText('Henüz depolama kullanım kaydı yok.')).toBeInTheDocument()
     expect(storageApi.getStorageUsage).toHaveBeenCalledWith({ page: 1, pageSize: 5 }, expect.any(AbortSignal))
     expect(screen.getByRole('link', { name: 'Tüm depolama kullanımı' })).toHaveAttribute('href', '/platform/storage')

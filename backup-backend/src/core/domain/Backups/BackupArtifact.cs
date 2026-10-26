@@ -1,3 +1,4 @@
+using BackupPlatform.Domain.Backups;
 using System.Text.Json;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Tenancy;
@@ -14,7 +15,7 @@ public sealed class BackupArtifact : ITenantOwned
     private BackupArtifact() { TenantId = null!; SourceChecksum = null!; ArtifactChecksum = null!; ChecksumAlgorithm = null!; SourceMetadataJson = null!; AppliedOptionsJson = null!; Format = null!; }
     public BackupArtifact(Guid id, TenantId tenantId, Guid attemptId, long sizeBytes, string sourceChecksum,
         string artifactChecksum, string checksumAlgorithm, DateTimeOffset createdAt, string sourceMetadataJson, string appliedOptionsJson,
-        string format = PlainFormat, string? encryptionKeyId = null, int? encryptionKeyVersion = null, string? encryptionWrappedDekBase64 = null)
+        string format = PlainFormat, string? encryptionKeyId = null, int? encryptionKeyVersion = null, string? encryptionWrappedDekBase64 = null, string? encryptionRecipientsJson = null)
     {
         BackupGuard.Id(id);
         BackupGuard.Id(attemptId);
@@ -24,7 +25,7 @@ public sealed class BackupArtifact : ITenantOwned
         BackupGuard.Checksum(artifactChecksum, checksumAlgorithm);
         ValidateMetadata(sourceMetadataJson);
         ValidateMetadata(appliedOptionsJson);
-        ValidateEncryption(format, encryptionKeyId, encryptionKeyVersion, encryptionWrappedDekBase64);
+        ValidateEncryption(format, encryptionKeyId, encryptionKeyVersion, encryptionWrappedDekBase64, encryptionRecipientsJson);
         Id = id;
         TenantId = tenantId;
         AttemptId = attemptId;
@@ -39,6 +40,7 @@ public sealed class BackupArtifact : ITenantOwned
         EncryptionKeyId = encryptionKeyId;
         EncryptionKeyVersion = encryptionKeyVersion;
         EncryptionWrappedDekBase64 = encryptionWrappedDekBase64;
+        EncryptionRecipientsJson = encryptionRecipientsJson;
     }
     public Guid Id { get; private set; }
     public TenantId TenantId { get; private set; }
@@ -57,6 +59,8 @@ public sealed class BackupArtifact : ITenantOwned
     public int? EncryptionKeyVersion { get; private set; }
     /// <summary>The DEK wrapped to the tenant wrap key, as the agent copied it from the .bpe header. Useless without the tenant private key; never returned by an API.</summary>
     public string? EncryptionWrappedDekBase64 { get; private set; }
+    /// <summary>JSON array of <c>{type,keyId,keyVersion}</c> for every recipient the agent reported from the .bpe header (tenant-wrap, platform-recovery, tenant-recovery); no wrapped keys. The header stays the source of truth, this is its index.</summary>
+    public string? EncryptionRecipientsJson { get; private set; }
     public IReadOnlyList<BackupReplica> Replicas => _replicaView ??= _replicas.AsReadOnly();
     public void AddReplica(BackupReplica replica)
     {
@@ -229,16 +233,17 @@ public sealed class BackupArtifact : ITenantOwned
     internal bool SameResult(BackupArtifact other) => SizeBytes == other.SizeBytes && SourceChecksum == other.SourceChecksum &&
         ArtifactChecksum == other.ArtifactChecksum && ChecksumAlgorithm == other.ChecksumAlgorithm && CreatedAt == other.CreatedAt &&
         Format == other.Format && EncryptionKeyId == other.EncryptionKeyId && EncryptionKeyVersion == other.EncryptionKeyVersion &&
-        EncryptionWrappedDekBase64 == other.EncryptionWrappedDekBase64 &&
+        EncryptionWrappedDekBase64 == other.EncryptionWrappedDekBase64 && EncryptionRecipientsJson == other.EncryptionRecipientsJson &&
         SameMetadata(SourceMetadataJson, other.SourceMetadataJson) && SameMetadata(AppliedOptionsJson, other.AppliedOptionsJson) &&
         _replicas.Count == other._replicas.Count && _replicas.All(replica => other._replicas.Any(replica.SameResult));
-    private static void ValidateEncryption(string format, string? keyId, int? version, string? wrappedDek)
+    private static void ValidateEncryption(string format, string? keyId, int? version, string? wrappedDek, string? recipientsJson)
     {
         if (format == PlainFormat)
         {
-            if (keyId is not null || version is not null || wrappedDek is not null) throw new ArgumentException("A plain artifact has no encryption key.");
+            if (keyId is not null || version is not null || wrappedDek is not null || recipientsJson is not null) throw new ArgumentException("A plain artifact has no encryption key.");
             return;
         }
+        if (recipientsJson is { Length: > 2048 }) throw new ArgumentException("The recipient index is too large.");
         if (format != BpeFormat || keyId is not { Length: 32 } || !keyId.All(c => char.IsAsciiHexDigitLower(c)) || version is not >= 1 ||
             wrappedDek is not { Length: > 0 and <= 4096 } || !Convert.TryFromBase64String(wrappedDek, new byte[3072], out _))
             throw new ArgumentException("An encrypted artifact requires a key id, version and wrapped DEK.");
@@ -264,7 +269,7 @@ public static class BackupArtifactEngine
     public static string? Read(string metadata)
     {
         using var document = JsonDocument.Parse(metadata);
-        string? engine = "mssql";
+        string? engine = DatabaseEngines.MsSql;
         var found = false;
         foreach (var property in document.RootElement.EnumerateObject())
         {
@@ -273,7 +278,7 @@ public static class BackupArtifactEngine
             found = true;
             engine = property.Value.GetString();
         }
-        return engine is "mssql" or "postgres" ? engine : null;
+        return DatabaseEngines.IsValid(engine) ? engine : null;
     }
 }
 

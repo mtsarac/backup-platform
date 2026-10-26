@@ -29,17 +29,22 @@
     <ProjectReference Include="../../src/providers/backup/abstractions/BackupPlatform.BackupProviders.Abstractions.csproj" />
     <ProjectReference Include="../../src/providers/backup/mssql/BackupPlatform.BackupProviders.MSSQL.csproj" />
     <ProjectReference Include="../../src/providers/backup/postgresql/BackupPlatform.BackupProviders.PostgreSql.csproj" />
+    <ProjectReference Include="../../src/providers/backup/file-system/BackupPlatform.BackupProviders.FileSystem.csproj" />
     <ProjectReference Include="../../src/providers/storage/abstractions/BackupPlatform.StorageProviders.Abstractions.csproj" />
     <ProjectReference Include="../../src/providers/storage/local/BackupPlatform.StorageProviders.Local.csproj" />
     <ProjectReference Include="../../src/providers/storage/central/BackupPlatform.StorageProviders.Central.csproj" />
     <ProjectReference Include="../../src/providers/storage/sftp/BackupPlatform.StorageProviders.Sftp.csproj" />
     <ProjectReference Include="../../src/providers/storage/google-drive/BackupPlatform.StorageProviders.GoogleDrive.csproj" />
+    <ProjectReference Include="../../src/providers/storage/s3/BackupPlatform.StorageProviders.S3.csproj" />
+    <ProjectReference Include="../../src/providers/storage/smb/BackupPlatform.StorageProviders.Smb.csproj" />
     <ProjectReference Include="../../src/modules/storage/BackupPlatform.Storage.csproj" />
     <ProjectReference Include="../../src/modules/notifications/BackupPlatform.Notifications.csproj" />
     <ProjectReference Include="../../src/providers/secret/abstractions/BackupPlatform.SecretProviders.Abstractions.csproj" />
     <ProjectReference Include="../../src/providers/secret/data-protection/BackupPlatform.SecretProviders.DataProtection.csproj" />
     <ProjectReference Include="../../src/hosts/api/BackupPlatform.Api.csproj" />
     <ProjectReference Include="..\..\src\core\encryption\BackupPlatform.Encryption.csproj" />
+    <ProjectReference Include="..\..\src\tools\bp-decrypt\BackupPlatform.BpDecrypt.csproj" />
+    <ProjectReference Include="..\..\src\tools\bp-recovery\BackupPlatform.BpRecovery.csproj" />
   </ItemGroup>
 
 </Project>

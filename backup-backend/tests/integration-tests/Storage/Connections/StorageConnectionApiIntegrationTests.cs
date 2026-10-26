@@ -114,7 +114,7 @@ public sealed class StorageConnectionApiIntegrationTests(PostgreSqlFixture fixtu
             local.GetProperty("tenantCreatable").GetBoolean(), local.GetProperty("platformCreatable").GetBoolean()));
         Assert.Equal(("Available", "BackendRoundTrip", false, true), (central.GetProperty("availability").GetString(), central.GetProperty("testMode").GetString(),
             central.GetProperty("tenantCreatable").GetBoolean(), central.GetProperty("platformCreatable").GetBoolean()));
-        Assert.Equal(("Available", "BackendRoundTrip", true, false), (sftp.GetProperty("availability").GetString(), sftp.GetProperty("testMode").GetString(),
+        Assert.Equal(("Available", "AgentSide", true, false), (sftp.GetProperty("availability").GetString(), sftp.GetProperty("testMode").GetString(),
             sftp.GetProperty("tenantCreatable").GetBoolean(), sftp.GetProperty("platformCreatable").GetBoolean()));
     }
 
