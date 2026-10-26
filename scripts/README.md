@@ -60,6 +60,14 @@ Backend `Secrets:Provider` selects `Database` (default), `Vault` or `AwsSecretsM
 
 External stores receive **Data Protection ciphertext**, not plaintext credentials. Preserve the backend Data Protection key ring and keep its access separate from Vault/AWS access. Existing tenant/agent-bound reference authorization remains unchanged. Switching providers does not migrate existing ciphertext automatically: migrate it through approved deployment tooling before switching a populated system. Vault deletion soft-deletes the current KV version; AWS uses a seven-day recovery window. Grant only the configured prefix's read/write/delete operations and avoid logging provider request bodies. Never check provider tokens, PFX passwords or AWS credentials into configuration.
 
+## Full-system e2e (`scripts/e2e`)
+
+A Python scenario harness for a lab with the real stack and agents: Linux and Windows agents, MinIO (HTTPS), Samba, SFTP, PostgreSQL and SQL Server sources. It enrolls agents, creates tenants, users, plans and storage connections, then runs backup, restore and compare matrices plus pause/resume, kill, outage, quota, revoke, authorization, notification and UI scenarios. Results go to `docs/test-environment/results.jsonl` (git-ignored, with the lab state and credentials).
+
+- Compose files: `docker-compose.e2e.override.yml` (stack) and `docker-compose.e2e-targets.yml` (MinIO, Samba), with `.env.e2e` (git-ignored: `PUBLIC_HOST`, target credentials, optional `GOOGLE_*`).
+- `bootstrap.py`, `enroll.py`, `connections.py`, `plans.py` prepare the lab; `matrix.py`, `ops.py`, `resilience.py`, `quota.py`, `revoke.py`, `files_providers.py`, `authz_notify_ui.py` run scenarios; each takes an optional name filter. `update-agents.py` replaces the agent binaries on the VMs after a rebuild.
+- `gdrive.py` needs a Google Drive connection named "E2E Google Drive" that a person authorized in the browser (OAuth client of type Web, redirect `http://localhost:5252/api/platform/google-drive/oauth/callback`, test user added on the consent screen).
+
 ## `/tmp` policy
 
 `/tmp` is only for disposable runtime output:
