@@ -2,8 +2,10 @@ name: Fast CI
 
 on:
   pull_request:
+    paths-ignore: ['**.md', 'docs/**']
   push:
     branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
   workflow_call:
   workflow_dispatch:
 
@@ -22,6 +24,7 @@ env:
 jobs:
   backend:
     name: Backend
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -57,6 +60,7 @@ jobs:
 
   frontend:
     name: Frontend
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
