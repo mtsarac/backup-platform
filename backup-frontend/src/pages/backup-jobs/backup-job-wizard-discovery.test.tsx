@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { createMemoryRouter, createRoutesFromElements, Route, RouterProvider } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { saveBackupJob } from '@/features/backup-jobs/api'
 import { getDiscoveryAgents, getDiscoveryInstance, getDiscoveryInstances } from '@/features/discovery/api'
@@ -19,9 +19,10 @@ vi.mock('@/features/discovery/api')
 vi.mock('@/features/backup-jobs/api', () => ({ saveBackupJob: vi.fn(), getBackupJob: vi.fn(), getBackupJobHealth: vi.fn(), getBackupJobs: vi.fn(), getOccurrences: vi.fn(), startJobRun: vi.fn(), setJobEnabled: vi.fn() }))
 
 function mount(route = '/tenants/tenant-a/backup-jobs/new') {
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter initialEntries={[route]}><Routes>
+  const router = createMemoryRouter(createRoutesFromElements(<>
     <Route path="/tenants/:tenantId/backup-jobs/new" element={<BackupJobWizardPage />} /><Route path="/tenants/:tenantId/backup-jobs" element={<p>Job listesi</p>} />
-  </Routes></MemoryRouter></QueryClientProvider>)
+  </>), { initialEntries: [route] })
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><RouterProvider router={router} /></QueryClientProvider>)
 }
 const next = (times = 1) => { for (let i = 0; i < times; i++) fireEvent.click(screen.getByRole('button', { name: 'İleri' })) }
 async function toSummary() {

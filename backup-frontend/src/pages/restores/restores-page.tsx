@@ -6,7 +6,6 @@ import { Pagination } from '@/components/data/pagination'
 import { QueryState } from '@/components/data/query-state'
 import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
-import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Filters, FilterField, filterControlClass } from '@/components/ui/filters'
@@ -35,7 +34,6 @@ export function RestoresPage() {
   const agents = useAgents(tenantId, true)
   const base = `/tenants/${tenantId}`
   const filtering = Boolean(status || filters.artifactId || filters.agentId)
-  const emptyFiltered = filtering && query.data?.items.length === 0
   const clearFilters = () => update({ status: '', artifactId: '', agentId: '' })
   const computer = (restore: RestoreView) => agents.data?.find((agent) => agent.agentId === restore.agentId)?.hostName ?? tx('Yedekleme bilgisayarı bulunamadı')
   const sourceBackup = (restore: RestoreView) => <div className="space-y-1">
@@ -59,7 +57,7 @@ export function RestoresPage() {
   ]
   return <div className="space-y-6">
     <Tabs label={tx("Liste türü")} idPrefix="restore-view" value={verification ? 'tests' : 'restores'} onChange={(value) => update({ view: value === 'tests' ? 'tests' : '', status: '', artifactId: '', agentId: '' })} items={[{ value: 'restores', label: tx('Geri yüklemeler') }, { value: 'tests', label: tx('Geri yükleme testleri') }]} />
-    <Filters label={tx("Geri yükleme filtreleri")} onClear={emptyFiltered ? undefined : clearFilters}>
+    <Filters label={tx("Geri yükleme filtreleri")} onClear={filtering ? clearFilters : undefined}>
       <FilterField label={tx("Durum")}><select aria-label={tx("Durum")} className={filterControlClass} value={status} onChange={(event) => update({ status: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{restoreStatuses.map((value) => <option key={value} value={value}>{statusLabel('general', value)}</option>)}</select></FilterField>
       <BackupPicker tenantId={tenantId} value={filters.artifactId ?? ''} onChange={(artifactId) => update({ artifactId })} />
       <SearchablePicker label={tx("Yedekleme bilgisayarı")} placeholder={tx("Tüm yedekleme bilgisayarları")} value={filters.agentId ?? ''} onChange={agentId => update({ agentId })}
@@ -71,7 +69,7 @@ export function RestoresPage() {
       {query.data?.items.length === 0
         ? <div data-testid="restores-empty" className="rounded-xl border border-border bg-surface"><EmptyState icon={History} canAct={filtering || canOperate}
           message={filtering ? tx("Bu filtrelere uyan geri yükleme yok.") : verification ? tx("Henüz geri yükleme testi yapılmadı.") : tx("Henüz geri yükleme yapılmadı.")}
-          action={filtering ? <Button onClick={clearFilters}>{tx("Filtreleri temizle")}</Button> : <Link className={buttonVariants()} to={`${base}/artifacts`}>{tx("Yedek dosyalarını aç")}</Link>} /></div>
+          action={!filtering && <Link className={buttonVariants()} to={`${base}/artifacts`}>{tx("Yedek dosyalarını aç")}</Link>} /></div>
         : <DataList rows={query.data?.items ?? []} columns={verification ? testColumns : columns} keyExtractor={(restore) => restore.id} caption={tx("Geri yüklemeler")} />}
       {query.data && query.data.totalCount > 0 && <Pagination label={tx("Geri yükleme sayfaları")} page={query.data.page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
     </QueryState>

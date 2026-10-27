@@ -2,7 +2,7 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { render } from '@/test/render'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
+import { createMemoryRouter, createRoutesFromElements, Route, RouterProvider, useNavigate } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AuthContext } from '@/features/auth/auth-context'
 import { TenantProvider } from '@/features/tenancy/tenant-provider'
@@ -38,7 +38,8 @@ function mount(cache: QueryClient) {
     { tenantId: 'tenant-a', name: 'Tenant A', role: 'Administrator' as const, membershipRole: 'Owner' as const },
     { tenantId: 'tenant-b', name: 'Tenant B', role: 'Administrator' as const, membershipRole: 'Owner' as const },
   ]
-  return render(<QueryClientProvider client={cache}><AuthContext.Provider value={{ user: { userId: 'user', displayName: 'User', isPlatformAdmin: false }, tenants, isAuthenticated: true, isLoading: false, error: null, sessionExpired: false, login: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}><MemoryRouter initialEntries={['/tenants/tenant-a']}><Routes><Route path="/tenants/:tenantId/*" element={<TenantProvider><PickerShell /></TenantProvider>} /><Route path="/tenants/:tenantId" element={<TenantProvider><PickerShell /></TenantProvider>} /><Route path="/" element={<p>Root</p>} /></Routes></MemoryRouter></AuthContext.Provider></QueryClientProvider>)
+  const router = createMemoryRouter(createRoutesFromElements(<><Route path="/tenants/:tenantId/*" element={<TenantProvider><PickerShell /></TenantProvider>} /><Route path="/tenants/:tenantId" element={<TenantProvider><PickerShell /></TenantProvider>} /><Route path="/" element={<p>Root</p>} /></>), { initialEntries: ['/tenants/tenant-a'] })
+  return render(<QueryClientProvider client={cache}><AuthContext.Provider value={{ user: { userId: 'user', displayName: 'User', isPlatformAdmin: false }, tenants, isAuthenticated: true, isLoading: false, error: null, sessionExpired: false, login: vi.fn(), logout: vi.fn(), refresh: vi.fn() }}><RouterProvider router={router} /></AuthContext.Provider></QueryClientProvider>)
 }
 
 beforeEach(() => vi.clearAllMocks())
@@ -68,6 +69,9 @@ describe('job connection picker tenant lifecycle', () => {
     void cache.refetchQueries({ queryKey: storageConnectionKeys.tenantList('tenant-a') })
     await waitFor(() => expect(lateRequest.signal).toBeDefined())
     await userEvent.click(screen.getByRole('button', { name: action }))
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Kaydedilmemiş değişiklikler')
+    expect(cache.getQueryData(['tenant', 'tenant-a', 'backup-jobs', 'job-a'])).toBeDefined()
+    await userEvent.click(screen.getByRole('button', { name: 'Değişiklikleri at' }))
     await waitFor(() => expect(screen.getByLabelText('İş adı')).toHaveValue(''))
     await reachStorage('B form')
     await waitFor(() => expect(screen.getByRole('option', { name: /B private Local · Yerel/ })).toBeInTheDocument())

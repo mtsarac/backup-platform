@@ -1,7 +1,7 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { createMemoryRouter, createRoutesFromElements, Link, Outlet, Route, RouterProvider } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { BackupJobWizardPage } from './backup-job-wizard-page'
@@ -12,18 +12,24 @@ import { ApiError } from '@/lib/api/client'
 import { getTenantConnections, getTenantProviders } from '@/features/storage-connections/api'
 import { catalog, makeConnection, makeManaged, makeProvider } from '@/features/storage-connections/test-fixtures'
 import { healthyJobHealth } from '@/features/backup-jobs/test-fixtures'
+import { getAgents } from '@/features/agents/api'
+import { changeLanguage } from '@/lib/i18n/runtime'
 
 const access = vi.hoisted(() => ({ tenantId: 'tenant-a', canOperate: true, canAdmin: true }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('@/features/agents/api', () => ({ getAgents: vi.fn().mockResolvedValue([{ agentId: 'agent-a', hostName: 'SQL Agent', operationalStatus: 'Online' }]) }))
 vi.mock('@/features/storage-connections/api')
 vi.mock('@/features/backup-jobs/api', () => ({ saveBackupJob: vi.fn(), getBackupJob: vi.fn(), getBackupJobHealth: vi.fn(), getBackupJobs: vi.fn(), getOccurrences: vi.fn(), startJobRun: vi.fn(), setJobEnabled: vi.fn() }))
-function page(cache: QueryClient, route = '/tenants/tenant-a/backup-jobs/new') {
-  return <QueryClientProvider client={cache}><MemoryRouter initialEntries={[route]}><Routes>
+function makeRouter(route = '/tenants/tenant-a/backup-jobs/new', initialEntries = [route]) {
+  return createMemoryRouter(createRoutesFromElements(<Route element={<><nav><Link to="/tenants/tenant-a/agents">Computers</Link></nav><Outlet /></>}>
     <Route path="/tenants/:tenantId/backup-jobs/new" element={<BackupJobWizardPage />} />
     <Route path="/tenants/:tenantId/backup-jobs/:id/edit" element={<BackupJobEditPage />} />
     <Route path="/tenants/:tenantId/backup-jobs" element={<p>Job listesi</p>} />
-  </Routes></MemoryRouter></QueryClientProvider>
+    <Route path="/tenants/:tenantId/agents" element={<p>Computer list</p>} />
+  </Route>), { initialEntries })
+}
+function page(cache: QueryClient, route = '/tenants/tenant-a/backup-jobs/new') {
+  return <QueryClientProvider client={cache}><RouterProvider router={makeRouter(route)} /></QueryClientProvider>
 }
 function renderPage(route?: string) {
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
@@ -63,6 +69,35 @@ beforeEach(() => {
   vi.mocked(getOccurrences).mockResolvedValue([])
 })
 describe('iş formu', () => {
+  it('localizes the protocol mismatch enum in the computer picker and review without translating its name', async () => {
+    vi.mocked(getAgents).mockResolvedValueOnce([{
+      agentId: 'agent-a', hostName: 'SQL Agent', status: 'Active', connectivity: 'online', operationalStatus: 'VersionMismatch',
+      lastSeenAt: null, lastHeartbeatAt: null, lastConnectedAt: null, platform: 'Windows',
+      agentVersion: '1', protocolVersion: '0', capabilityRevision: null, capabilities: [],
+    }])
+    renderPage()
+    expect(await screen.findByRole('option', { name: 'SQL Agent · Protokol sürümü uyumsuz' })).toBeInTheDocument()
+    await reach(4)
+    expect(screen.getByText('SQL Agent · Protokol sürümü uyumsuz')).toBeInTheDocument()
+    act(() => changeLanguage('en'))
+    expect(screen.getByText('SQL Agent · Incompatible protocol version')).toBeInTheDocument()
+    expect(screen.queryByText(/VersionMismatch/)).not.toBeInTheDocument()
+  })
+
+  it('localizes schedule outcomes and reason codes instead of displaying backend enums', async () => {
+    vi.mocked(getOccurrences).mockResolvedValue([
+      { id: 'created', scheduledAt: '2026-10-01T08:00:00Z', decidedAt: '2026-10-01T08:00:00Z', outcome: 'RunCreated', reason: 'run_created', runId: 'run-a', delaySeconds: 0 },
+      { id: 'skipped', scheduledAt: '2026-10-02T08:00:00Z', decidedAt: '2026-10-02T08:00:00Z', outcome: 'SkippedOverlap', reason: 'active_run', runId: null, delaySeconds: 0 },
+    ])
+    renderPage(editRoute)
+    expect(await screen.findByText(/Zamanlanan yedekleme denemesi oluşturuldu\./)).toBeInTheDocument()
+    expect(screen.getByText(/Önceki yedekleme denemesi sürüyordu/)).toBeInTheDocument()
+    act(() => changeLanguage('en'))
+    expect(screen.getByText(/The scheduled backup attempt was created\./)).toBeInTheDocument()
+    expect(screen.getByText(/The previous backup attempt was still running/)).toBeInTheDocument()
+    expect(screen.queryByText(/RunCreated|SkippedOverlap|run_created|active_run/)).not.toBeInTheDocument()
+  })
+
   it('saves file selections, wildcard filters and symlink policy without database credentials', async () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
     renderPage()
@@ -547,7 +582,7 @@ describe('adım adım sihirbaz', () => {
     renderPage()
     await reach(2)
     fireEvent.click(screen.getByRole('button', { name: 'Her gün 02:00' }))
-    for (const label of ['Cron ifadesi', 'Saat dilimi (IANA / sistem adı)', 'Rastgele gecikme oranı', 'Önceki çalıştırma sürerken yeni zamanlama', 'Saklama süresi (saniye)']) {
+    for (const label of ['Cron ifadesi', 'Saat dilimi (IANA / sistem adı)', 'Rastgele gecikme oranı', 'Önceki yedekleme denemesi sürerken yeni zamanlama', 'Saklama süresi (saniye)']) {
       const details = screen.getByLabelText(label).closest('details')
       expect(details).not.toBeNull()
       expect(details).not.toHaveAttribute('open')
@@ -627,7 +662,7 @@ describe('mevcut işi düzenleme sayfası', () => {
   it('shows every setting on one page without any step navigation', async () => {
     renderPage(editRoute)
     expect(await screen.findByLabelText('İş adı')).toHaveValue('ERP backup')
-    for (const label of ['Yedekleme bilgisayarı', 'Veritabanı', 'Depolama bağlantısı', 'Önceki çalıştırma sürerken yeni zamanlama', 'Saklama süresi (saniye)', 'Yedek şifreleme politikası']) {
+    for (const label of ['Yedekleme bilgisayarı', 'Veritabanı', 'Depolama bağlantısı', 'Önceki yedekleme denemesi sürerken yeni zamanlama', 'Saklama süresi (saniye)', 'Yedek şifreleme politikası']) {
       expect(screen.getByLabelText(label)).toBeInTheDocument()
     }
     expect(screen.queryByRole('navigation', { name: 'Adımlar' })).toBeNull()
@@ -702,6 +737,76 @@ describe('kaydedilmemiş değişiklik uyarısı', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Vazgeç' }))
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Değişiklikleri at' }))
     expect(await screen.findByText('Job listesi')).toBeInTheDocument()
+  })
+  it.each(['/tenants/tenant-a/backup-jobs/new', editRoute])('guards internal links from %s, retaining values on stay and resuming the requested destination on discard', async route => {
+    renderPage(route)
+    fireEvent.change(await screen.findByLabelText('İş adı'), { target: { value: 'Keep this value' } })
+    fireEvent.click(screen.getByRole('link', { name: 'Computers' }))
+    let dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Vazgeç' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.getByLabelText('İş adı')).toHaveValue('Keep this value')
+    expect(unload()).toBe(true)
+    fireEvent.click(screen.getByRole('link', { name: 'Computers' }))
+    dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Değişiklikleri at' }))
+    expect(await screen.findByText('Computer list')).toBeInTheDocument()
+    expect(screen.queryByText('Job listesi')).toBeNull()
+    expect(unload()).toBe(false)
+    expect(saveBackupJob).not.toHaveBeenCalled()
+  })
+  it.each(['/tenants/tenant-a/backup-jobs/new', editRoute])('guards browser back from %s without replacing the pending history destination', async route => {
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    const router = makeRouter(route, ['/tenants/tenant-a/agents', route])
+    render(<QueryClientProvider client={cache}><RouterProvider router={router} /></QueryClientProvider>)
+    fireEvent.change(await screen.findByLabelText('İş adı'), { target: { value: 'Keep on back' } })
+    await act(async () => { await router.navigate(-1) })
+    let dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Vazgeç' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(router.state.location.pathname).toBe(route)
+    expect(screen.getByLabelText('İş adı')).toHaveValue('Keep on back')
+    await act(async () => { await router.navigate(-1) })
+    dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Değişiklikleri at' }))
+    expect(await screen.findByText('Computer list')).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/tenants/tenant-a/agents')
+    await act(async () => { await router.navigate(1) })
+    expect(await screen.findByLabelText('İş adı')).not.toHaveValue('Keep on back')
+  })
+  it.each(['/tenants/tenant-a/backup-jobs/new', editRoute])('allows clean internal navigation from %s without confirmation', async route => {
+    renderPage(route)
+    await screen.findByLabelText('İş adı')
+    fireEvent.click(screen.getByRole('link', { name: 'Computers' }))
+    expect(await screen.findByText('Computer list')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+  it('clears the wizard guard on a successful create without asking to discard saved values', async () => {
+    vi.mocked(saveBackupJob).mockResolvedValue({} as never)
+    renderPage()
+    await reach(4)
+    expect(unload()).toBe(true)
+    await submit()
+    expect(await screen.findByText('Job listesi')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(unload()).toBe(false)
+  })
+  it.each(['/tenants/tenant-a/backup-jobs/new', editRoute])('rearms the guard in a fresh form after saving from %s and returning', async route => {
+    vi.mocked(saveBackupJob).mockResolvedValue({} as never)
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+    const router = makeRouter(route)
+    render(<QueryClientProvider client={cache}><RouterProvider router={router} /></QueryClientProvider>)
+    if (route === editRoute) fireEvent.change(await screen.findByLabelText('İş adı'), { target: { value: 'Saved name' } })
+    else await reach(4)
+    await submit()
+    expect(await screen.findByText('Job listesi')).toBeInTheDocument()
+    await act(async () => { await router.navigate(-1) })
+    await screen.findByLabelText('İş adı')
+    expect(unload()).toBe(false)
+    fireEvent.change(screen.getByLabelText('İş adı'), { target: { value: 'Unsaved after returning' } })
+    expect(unload()).toBe(true)
+    fireEvent.click(screen.getByRole('link', { name: 'Computers' }))
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
   })
   it('guards the edit page the same way, and stops warning once the values are back to the saved ones', async () => {
     renderPage(editRoute)

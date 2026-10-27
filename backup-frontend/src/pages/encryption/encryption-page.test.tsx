@@ -6,6 +6,7 @@ import type { MembershipRole } from '@/features/platform/types'
 import { paged, renderPlatform } from '@/features/platform/test-utils'
 import { TenantContext } from '@/features/tenancy/tenant-context'
 import { EncryptionPage } from './encryption-page'
+import { formatDateTime } from '@/lib/format'
 
 vi.mock('@/features/artifact-encryption/api')
 const event = { id: 'event-a', artifactId: '11111111-1111-1111-1111-111111111111', status: 'Consumed' as const, reason: 'Incident 4711', createdAt: '2026-10-19T10:00:00Z', expiresAt: '2026-10-19T11:00:00Z', requestedByName: 'Ada Admin', decidedByName: 'Bo Admin', decidedAt: '2026-10-19T10:10:00Z', consumedAt: '2026-10-19T10:20:00Z' }
@@ -40,6 +41,14 @@ describe('tenant encryption page', () => {
     expect(within(details).getByRole('button', { name: 'Kopyala: Yedekleme anahtarı kimliği', hidden: true })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Yedek dosyasını görüntüle' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/11111111-1111-1111-1111-111111111111')
     expect(screen.getByRole('list', { name: 'Acil destek erişimi geçmişi' })).toBeInTheDocument()
+    const history = screen.getByRole('list', { name: 'Acil destek erişimi geçmişi' })
+    for (const at of [event.createdAt, event.consumedAt]) {
+      const time = within(history).getByLabelText(formatDateTime(at))
+      expect(time).toHaveAttribute('dateTime', at)
+      expect(time.closest('details')).toBeNull()
+    }
+    expect(within(history).queryByText('Açılış')).not.toBeInTheDocument()
+    expect(within(history).queryByText('Kullanılma zamanı')).not.toBeInTheDocument()
   })
 
   it('warns when the platform has no recovery key configured', async () => {
@@ -47,6 +56,8 @@ describe('tenant encryption page', () => {
     mount()
     expect(await screen.findByText(/Platform kurtarma anahtarı yapılandırılmamış: yeni şifreli/)).toBeInTheDocument()
     expect(screen.getByText('Henüz şifreli yedek oluşturulmadı')).toBeInTheDocument()
+    expect(screen.queryByText('Platform kurtarma anahtarı hazır değil')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Anahtarı kaydet' })).toBeDisabled()
   })
 
   it('registers a recovery public key, trims it and clears the field', async () => {

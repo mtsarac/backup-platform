@@ -84,7 +84,7 @@ describe('platform tenant detail', () => {
     vi.mocked(encryptionApi.getBreakGlassRequests).mockResolvedValue(paged([]))
     mount()
     await screen.findByRole('heading', { name: tenant.name })
-    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Özet', 'Kişiler', 'Abonelik', 'Depolama', 'Bilgisayarlar', 'Güvenlik'])
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Özet', 'Kişiler', 'Abonelik', 'Depolama', 'Yedekleme bilgisayarları', 'Güvenlik'])
     expect(api.getMemberships).not.toHaveBeenCalled()
     expect(api.getTenantSubscription).not.toHaveBeenCalled()
     expect(connectionApi.getPlatformTenantConnections).not.toHaveBeenCalled()
@@ -110,7 +110,7 @@ describe('platform tenant detail', () => {
     expect(storageApi.getPlatformTenantQuota).toHaveBeenCalled()
     expect(screen.queryByRole('switch')).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Bilgisayarlar' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Yedekleme bilgisayarları' }))
     expect(await screen.findByRole('switch')).toBeInTheDocument()
     expect(screen.getByTestId('location')).toHaveTextContent('?tab=computers')
     expect(supportApi.getSessions).not.toHaveBeenCalled()

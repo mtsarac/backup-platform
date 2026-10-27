@@ -56,6 +56,7 @@ beforeEach(() => {
   state.canOperate = true
   state.pending = false
   state.error = null as Error | null
+  state.data.jobs = { total: 1, enabled: 1, scheduled: 0 }
   state.data.agents.offline = 0
   state.data.runs.failedLast24Hours = 0
   state.data.runs.succeededLast24Hours = 1
@@ -220,6 +221,40 @@ describe('dashboard information ownership', () => {
   })
 })
 
+describe('dashboard missing-copy ownership', () => {
+  it.each([
+    ['replicas_missing', 'Yedeğin yeterince kopyası yok'],
+    ['no_verified_replica', 'Yedeğin doğrulanmış kopyası yok'],
+  ])('groups the %s health recommendation and the last-24-hour aggregate in one owning risk section', async (reason, message) => {
+    state.observability = { ...state.observability, state: 'Degraded', jobs: [
+      jobHealth('job-copy', 'Muhasebe', 'Degraded', 70, { replication: { score: 0, maxScore: 30, status: 'Unavailable', reason } }),
+    ] }
+    state.data.runs.replicationInsufficientLast24Hours = 4
+    renderDashboard()
+    await openDetails()
+    const risk = screen.getByRole('region', { name: 'Doğrulanmış kopyalar' })
+    expect(within(risk).getByRole('alert')).toHaveTextContent('Son 24 saatte 4 yedekleme')
+    expect(within(risk).getByRole('alert')).toHaveTextContent('Yedekler kullanılabilir durumda ama gereken kopya sayısına ulaşılamadı.')
+    expect(within(risk).getByRole('link', { name: `Muhasebe: ${message}` })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-copy/edit')
+    expect(within(risk).getByRole('link', { name: 'Çoğaltma sonuçlarını inceleyin.' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs?status=Succeeded')
+    expect(screen.getAllByRole('link', { name: /Muhasebe:/ })).toHaveLength(1)
+    expect(screen.getAllByText(/Son 24 saatte 4 yedekleme/)).toHaveLength(1)
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+  })
+
+  it('retains historical missing-copy health when the last 24 hours have no shortfalls', () => {
+    state.observability = { ...state.observability, state: 'Degraded', jobs: [
+      jobHealth('job-copy', 'Eski yedek', 'Degraded', 70, { replication: { score: 0, maxScore: 30, status: 'Unavailable', reason: 'replicas_missing' } }),
+    ] }
+    state.data.runs.replicationInsufficientLast24Hours = 0
+    renderDashboard()
+    const risk = screen.getByRole('region', { name: 'Doğrulanmış kopyalar' })
+    expect(within(risk).getByRole('link', { name: 'Eski yedek: Yedeğin yeterince kopyası yok' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-copy/edit')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Son 24 saatte/)).not.toBeInTheDocument()
+  })
+})
+
 describe('dashboard details', () => {
   it('keeps the counters, observability panels and average score collapsed until opened', async () => {
     state.observability = { ...state.observability, averageScore: 70, capacityRisks: [{ connectionId: 'disk-risk', connectionName: 'Dolu disk', status: 'Critical', totalBytes: 1_000_000_000, usedBytes: 920_000_000, freeBytes: 80_000_000, reportedAt: '2026-10-21T12:00:00Z' }] }
@@ -232,6 +267,17 @@ describe('dashboard details', () => {
     expect(screen.getByText('Dolu disk')).toBeVisible()
     expect(screen.getByText('Ortalama sağlık puanı')).toBeVisible()
     expect(screen.getByText('Çevrimdışı')).toBeVisible()
+  })
+
+  it('shows enabled and scheduled job counts as distinct facts once each', async () => {
+    state.data.jobs = { total: 9, enabled: 7, scheduled: 3 }
+    renderDashboard()
+    expect(screen.getByText('Etkin yedekleme işleri')).not.toBeVisible()
+    await openDetails()
+    expect(screen.getAllByText('Etkin yedekleme işleri')).toHaveLength(1)
+    expect(screen.getByText('Etkin yedekleme işleri').nextElementSibling).toHaveTextContent(/^7$/)
+    expect(screen.getAllByText('Planlı yedekleme işleri')).toHaveLength(1)
+    expect(screen.getByText('Planlı yedekleme işleri').nextElementSibling).toHaveTextContent(/^3$/)
   })
 })
 

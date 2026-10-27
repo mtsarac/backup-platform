@@ -7,7 +7,6 @@ import { Pagination } from '@/components/data/pagination'
 import { QueryState } from '@/components/data/query-state'
 import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
-import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { EmptyState } from '@/components/ui/empty-state'
 import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
@@ -88,7 +87,7 @@ export function BackupsPage() {
       <QueryState isPending={backups.isPending} error={backups.error}>
         {backups.data && (backups.data.totalCount === 0
           ? <div className="rounded-xl border border-border bg-surface">{filtering
-            ? <EmptyState icon={Activity} message={tx("Bu filtrelere uygun yedekleme denemesi bulunamadı.")} action={<Button variant="outline" onClick={clearFilters}>{tx("Filtreleri temizle")}</Button>} />
+            ? <EmptyState icon={Activity} message={tx("Bu filtrelere uygun yedekleme denemesi bulunamadı.")} />
             : <EmptyState icon={Activity} message={tx("Henüz yedekleme denemesi yok. Bir yedekleme işi çalıştığında burada görünür.")} action={<Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-jobs`}>{tx("Yedekleme işlerine git")}</Link>} />}</div>
           : <>
             <DataList rows={backups.data.items} columns={columns} keyExtractor={(run) => run.id} />

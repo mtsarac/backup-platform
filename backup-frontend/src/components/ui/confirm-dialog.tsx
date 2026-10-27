@@ -44,7 +44,7 @@ function Body({ title, consequence, pending, error, errorScope, onConfirm, confi
   const inputId = useId()
   const [typed, setTyped] = useState('')
   const blocked = pending || confirmDisabled || (name !== undefined && typed !== name)
-  function submit(event: FormEvent) { event.preventDefault(); if (!blocked) onConfirm() }
+  function submit(event: FormEvent) { event.preventDefault(); event.stopPropagation(); if (!blocked) onConfirm() }
   return <Dialog.Popup initialFocus={name === undefined ? cancelRef : undefined} className="fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 space-y-4 overflow-y-auto rounded-xl border border-border bg-surface p-6 shadow-overlay">
     <Dialog.Title className="text-lg font-semibold text-text-heading">{title}</Dialog.Title>
     <Dialog.Description render={<div />} className="text-sm"><Consequences consequence={consequence} /></Dialog.Description>

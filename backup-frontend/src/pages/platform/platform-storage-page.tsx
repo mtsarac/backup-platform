@@ -215,9 +215,9 @@ export function PlatformStoragePage() {
           <div className="space-y-4">
             <Section title={tx("Çalışma alanlarının kullanımı")} description={tx("Gösterilen kullanım, kullanılan ve ayrılmış alanın toplamıdır. Doğrulama ve baştan hesaplama yalnızca kullanım kayıtlarını günceller; yedek dosyalarını silmez.")} flush className="overflow-hidden">
               {data.items.length === 0
-                ? <ListEmpty message={tx("Kriterlere uygun tenant kullanımı bulunamadı.")} action={filtered
-                  ? <Button onClick={() => update({ search: '', quotaState: '', subscriptionStatus: '' })}>{tx("Filtreleri temizle")}</Button>
-                  : <Link className={buttonVariants()} to={platformPaths.tenants}>{tx("Çalışma alanlarını görüntüle")}</Link>} />
+                ? <ListEmpty message={tx("Kriterlere uygun tenant kullanımı bulunamadı.")} action={!filtered
+                  ? <Link className={buttonVariants()} to={platformPaths.tenants}>{tx("Çalışma alanlarını görüntüle")}</Link>
+                  : undefined} />
                 : <DataList caption={tx("Depolama kullanımı")} className={bareListClass} rows={data.items} columns={columns} keyExtractor={(row) => row.tenantId} />}
             </Section>
             {data.totalCount > 0 && (

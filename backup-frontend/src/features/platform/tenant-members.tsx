@@ -44,8 +44,8 @@ function AddMemberForm({ tenantId }: { tenantId: string }) {
           <option value="">{users.isPending ? tx('Kullanıcılar yükleniyor…') : users.error ? tx('Kullanıcılar alınamadı') : tx('Kullanıcı seçin')}</option>
           {users.data?.items.map((user) => <option key={user.userId} value={user.userId}>{user.displayName}{user.loginIdentifier ? ` (${user.loginIdentifier})` : ''}{user.isPlatformAdmin ? tx(' · PlatformAdmin') : ''}</option>)}
         </select>}</Field>
-        <Field label={tx("Rol")}>{(control) => <select {...control} className={`${selectClass} w-full`} value={role} onChange={(event) => { if (isRole(event.target.value)) setRole(event.target.value) }}>{membershipRoles.map((item) => <option key={item} value={item}>{item}</option>)}</select>}</Field>
-        <Button type="submit" disabled={!userId || add.isPending}>{add.isPending ? 'Ekleniyor…' : tx('Üye ekle')}</Button>
+        <Field label={tx("Rol")}>{(control) => <select {...control} className={`${selectClass} w-full`} value={role} onChange={(event) => { if (isRole(event.target.value)) setRole(event.target.value) }}>{membershipRoles.map((item) => <option key={item} value={item}>{tx(item)}</option>)}</select>}</Field>
+        <Button type="submit" disabled={!userId || add.isPending}>{add.isPending ? tx('Ekleniyor…') : tx('Üye ekle')}</Button>
       </form>
       {users.error && <p role="alert" className="text-sm text-error">{errorMessage(users.error)}</p>}
       {users.data && users.data.totalCount > users.data.items.length && <p className="text-sm text-text-muted">{tx("İlk")}{' '}{users.data.items.length}{' '}{tx("kullanıcı gösteriliyor; listeyi daraltmak için arayın.")}</p>}
@@ -66,7 +66,7 @@ export function MembershipsSection({ tenantId, tenantName }: { tenantId: string;
   const columns: Column<PlatformMembership>[] = [
     { key: 'name', header: tx('Ad'), wrap: true, render: (member) => <span className="font-medium">{member.displayName}</span> },
     { key: 'login', header: tx('Kullanıcı adı'), wrap: true, render: (member) => member.loginIdentifier ?? '—' },
-    { key: 'role', header: tx('Rol'), render: (member) => <select aria-label={tx("{0} rolü", { "0": member.displayName })} className={inlineSelectClass} value={member.role} disabled={changeRole.isPending} onChange={(event) => { if (isRole(event.target.value)) changeRole.mutate({ userId: member.userId, role: event.target.value }) }}>{membershipRoles.map((role) => <option key={role} value={role}>{role}</option>)}</select> },
+    { key: 'role', header: tx('Rol'), render: (member) => <select aria-label={tx("{0} rolü", { "0": member.displayName })} className={inlineSelectClass} value={member.role} disabled={changeRole.isPending} onChange={(event) => { if (isRole(event.target.value)) changeRole.mutate({ userId: member.userId, role: event.target.value }) }}>{membershipRoles.map((role) => <option key={role} value={role}>{tx(role)}</option>)}</select> },
     { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (member) => <Button variant="destructive" size="sm" aria-label={tx("{0} üyeliğini kaldır", { "0": member.displayName })} onClick={() => { remove.reset(); setSelected(member) }}>{tx("Kaldır")}</Button> },
   ]
   return <div className="space-y-6">

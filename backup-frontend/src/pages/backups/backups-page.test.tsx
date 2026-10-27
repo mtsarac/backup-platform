@@ -89,14 +89,18 @@ describe('run history filters and pagination', () => {
     expect(card.getAllByRole('term').map((term) => term.textContent)).toEqual(['Başlangıç', 'Süre'])
   })
 
-  it('with no runs and no filters, points to the backup jobs; with filters, offers to clear them', () => {
+  it('on a phone clears an empty filtered history from its filters and restores the first-run action', () => {
+    setViewport(false)
     state.page = { items: [], totalCount: 0, page: 1, pageSize: 25 }
-    render(<MemoryRouter><BackupsPage /></MemoryRouter>)
-    expect(screen.getByRole('link', { name: /yedekleme işlerine/i })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs')
-    expect(screen.queryByRole('button', { name: 'Filtreleri temizle' })).not.toBeInTheDocument()
-    fireEvent.change(screen.getByRole('combobox', { name: 'Durum' }), { target: { value: 'Failed' } })
-    expect(screen.getAllByRole('button', { name: 'Filtreleri temizle' }).length).toBeGreaterThan(0)
+    render(<MemoryRouter initialEntries={['/backup-runs?status=Failed']}><BackupsPage /><LocationProbe /></MemoryRouter>)
+    expect(screen.getByRole('combobox', { name: 'Durum' })).toHaveValue('Failed')
     expect(screen.queryByRole('link', { name: /yedekleme işlerine/i })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
+    expect(state.filters.at(-1)).toEqual({ page: 1, pageSize: 25 })
+    expect(screen.getByRole('combobox', { name: 'Durum' })).toHaveValue('')
+    expect(screen.getByTestId('location')).toHaveTextContent(/^\/backup-runs$/)
+    expect(screen.getByRole('link', { name: /yedekleme işlerine/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Filtreleri temizle' })).not.toBeInTheDocument()
   })
 })
 
@@ -121,6 +125,25 @@ describe('run history URL state', () => {
     mountAt('/?status=Nonsense&trigger=Nope&from=yesterday&page=-3')
     expect(state.filters.at(-1)).toEqual({ page: 1, pageSize: 25 })
     expect(screen.queryByRole('button', { name: 'Filtreleri temizle' })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    '2026-02-31', '2026-02-29', '1900-02-29', '2026-04-31',
+    '2026-13-01', '2026-00-01', '2026-01-00', '2026-01-32',
+    '2026-2-01', '2026-02-1', '2026-02-01T00:00:00Z', ' 2026-02-01', 'not-a-date',
+  ])('ignores invalid URL day %s in both date filters', (day) => {
+    mountAt(`/?from=${encodeURIComponent(day)}&to=${encodeURIComponent(day)}`)
+    expect(state.filters.at(-1)).toEqual({ page: 1, pageSize: 25 })
+    expect(screen.getByLabelText('Oluşturulma başlangıcı')).toHaveValue('')
+    expect(screen.getByLabelText('Oluşturulma sonu')).toHaveValue('')
+    expect(screen.queryByRole('button', { name: 'Filtreleri temizle' })).not.toBeInTheDocument()
+  })
+
+  it.each(['2024-02-29', '2000-02-29'])('uses valid leap day %s from the URL without changing the calendar day', (day) => {
+    mountAt(`/?from=${day}&to=${day}`)
+    expect(state.filters.at(-1)).toEqual({ page: 1, pageSize: 25, from: dateFilterInstant(day), to: dateFilterInstant(day, true) })
+    expect(screen.getByLabelText('Oluşturulma başlangıcı')).toHaveValue(day)
+    expect(screen.getByLabelText('Oluşturulma sonu')).toHaveValue(day)
   })
 
   it('writes every filter and page change to the URL; changing a filter drops the page and clearing empties the URL', () => {

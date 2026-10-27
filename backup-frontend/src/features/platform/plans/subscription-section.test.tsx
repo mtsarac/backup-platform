@@ -79,12 +79,12 @@ describe('subscription section states', () => {
 })
 
 describe('subscription summary', () => {
-  it('shows plan, status and the friendly effective limit; exact values stay collapsed and copyable', async () => {
+  it('shows plan, status and limit source; exact values stay collapsed and copyable', async () => {
     mount()
     const region = await section()
     expect(await region.findByText('Etkin')).toBeVisible()
     expect(region.getAllByText('5 GB').length).toBeGreaterThan(0)
-    expect(region.getByText('Kaynak: Plan')).toBeVisible()
+    expect(region.getByText('Limit kaynağı').nextElementSibling).toHaveTextContent('Plan')
     region.getAllByText(/5\.000\.000\.000 bayt/).forEach((value) => expect(value).not.toBeVisible())
     const details = region.getAllByText('Teknik ayrıntılar')[0].closest('details')!
     expect(details).not.toHaveAttribute('open')
@@ -99,15 +99,17 @@ describe('subscription summary', () => {
     serve(makeSubscription({ storageLimitOverride: { kind: 'limited', bytes: 2_500_000_000 }, effectiveStorageLimit: { unlimited: false, bytes: 2_500_000_000, source: 'override' } }))
     mount()
     const region = await section()
-    expect(await region.findByText(/Kaynak: (?:Override|Özel limit)/)).toBeVisible()
-    expect(region.getAllByText('2,5 GB').length).toBeGreaterThan(0)
+    await region.findByText('Etkin')
+    expect(region.getByText('Limit kaynağı').nextElementSibling).toHaveTextContent(/(?:Override|Özel limit)/)
+    await userEvent.click(region.getAllByText('Teknik ayrıntılar')[0])
+    expect(region.getAllByText('2.500.000.000 bayt')[0]).toBeVisible()
   })
 
   it('shows unlimited and system-assigned migration subscriptions', async () => {
     serve(makeSubscription({ planName: 'Legacy Unlimited', planStorageLimitBytes: null, effectiveStorageLimit: { unlimited: true, bytes: null, source: 'plan' }, assignedByUserId: null, assignedByDisplayName: null }))
     mount()
     const region = await section()
-    expect((await region.findAllByText(/(?:Sınırsız|Limitsiz)/)).length).toBeGreaterThan(0)
+    expect(await region.findByText('Legacy Unlimited')).toBeVisible()
     await userEvent.click(region.getAllByText('Teknik ayrıntılar')[0])
     expect(region.getByText('Sistem (geçiş)')).toBeVisible()
   })
@@ -177,7 +179,8 @@ describe('assign and change plan', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Plan ata' }))
     await waitFor(() => expect(api.assignSubscriptionPlan).toHaveBeenCalledWith('tenant-a', { planId: 'plan-50' }))
     const region = await section()
-    expect(await region.findByText('50 GB')).toBeVisible()
+    await userEvent.click(region.getAllByText('Teknik ayrıntılar')[0])
+    expect(region.getAllByText('50.000.000.000 bayt')[0]).toBeVisible()
     expect(region.getAllByText('Kurumsal 50').length).toBeGreaterThan(0)
   })
 

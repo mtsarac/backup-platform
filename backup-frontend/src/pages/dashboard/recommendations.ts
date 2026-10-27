@@ -25,7 +25,7 @@ function weakestFactor(job: BackupJobHealth): BackupHealthFactor {
   })
 }
 
-export interface Recommendation { jobId: string; jobName: string; message: string }
+export interface Recommendation { jobId: string; jobName: string; reason: string; message: string }
 
 /** Every unhealthy job, most urgent (lowest score) first. */
 export function unhealthyJobs(jobs: readonly BackupJobHealth[]): BackupJobHealth[] {
@@ -36,5 +36,8 @@ export function unhealthyJobs(jobs: readonly BackupJobHealth[]): BackupJobHealth
 export function recommendations(jobs: readonly BackupJobHealth[]): Recommendation[] {
   return unhealthyJobs(jobs)
     .slice(0, MAX_RECOMMENDATIONS)
-    .map(job => ({ jobId: job.jobId, jobName: job.jobName, message: (messages[weakestFactor(job).reason] ?? (() => tx("Dikkat gerekiyor")))() }))
+    .map(job => {
+      const reason = weakestFactor(job).reason
+      return { jobId: job.jobId, jobName: job.jobName, reason, message: (messages[reason] ?? (() => tx("Dikkat gerekiyor")))() }
+    })
 }

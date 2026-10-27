@@ -26,6 +26,14 @@ async function fillForm(login: string, name: string, password: string) {
 }
 
 describe('platform users', () => {
+  it('keeps the header create action usable when the list is empty', async () => {
+    vi.mocked(api.getUsers).mockResolvedValue(paged([]))
+    renderPlatform(<PlatformUsersPage />)
+    await screen.findByText('Henüz kullanıcı yok.')
+    await userEvent.click(screen.getByRole('button', { name: 'Yeni kullanıcı' }))
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Yeni kullanıcı')
+  })
+
   it('lists users and shows PlatformAdmin as a badge, never as a tenant role', async () => {
     renderPlatform(<PlatformUsersPage />)
     const adminRow = (await screen.findByText('Root Admin')).closest('tr')!

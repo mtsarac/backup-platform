@@ -4,6 +4,7 @@ import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { describeFailure } from '@/lib/api/failure-messages'
 import { artifactState, deletionReason } from './format'
+import { executionLocationLabel, storageProviderLabel } from '@/features/storage-connections/labels'
 import type { BackupArtifact, BackupReplica } from './types'
 import { ReplicationSummary } from '@/features/backups/replication'
 import { ArtifactEncryptionSection } from '@/features/artifact-encryption/artifact-encryption-section'
@@ -95,7 +96,7 @@ export function ArtifactMetadata({ artifact }: { artifact: ArtifactPresentation 
       <Fact label={tx("Doğrulama başladı")}>{formatDateTime(meta.verification?.startedAt)}</Fact>
       <Fact label={tx("Doğrulama tamamlandı")}>{formatDateTime(meta.verification?.finishedAt)}</Fact>
       {!isPg && !isFiles && <Fact label={tx("COPY_ONLY")}>{meta.appliedOptions?.copyOnly == null ? tx('Bildirilmedi') : meta.appliedOptions.copyOnly ? tx('Uygulandı') : tx('Uygulanmadı')}</Fact>}
-      {([[isFiles ? 'SHA-256' : isPg ? 'data_checksums' : 'CHECKSUM', meta.appliedOptions?.checksum], ['Compression', meta.appliedOptions?.compression]] as const).map(([label, applied]) => <Fact key={label} label={label}>{applied == null ? tx('Bildirilmedi') : applied ? tx('Uygulandı') : tx('Uygulanmadı')}</Fact>)}
+      {([[isFiles ? 'SHA-256' : isPg ? 'data_checksums' : 'CHECKSUM', meta.appliedOptions?.checksum], [tx('Compression'), meta.appliedOptions?.compression]] as const).map(([label, applied]) => <Fact key={label} label={label}>{applied == null ? tx('Bildirilmedi') : applied ? tx('Uygulandı') : tx('Uygulanmadı')}</Fact>)}
     </Facts> : <p className="text-sm text-text-muted">{tx("Bu history kaydında Database backup metadata bulunmuyor.")}</p>}
   </Section>
 }
@@ -109,7 +110,7 @@ export function ArtifactReplicas({ artifact }: { artifact: ArtifactPresentation 
       const deleting = Boolean(replica.waitingForAgent || replica.deleteFailureCode || replica.deleteRequestedAt)
       return <article key={replica.id} className="space-y-4 rounded-xl border border-border bg-surface p-5 shadow-card" aria-label={tx("Replika {0}", { "0": index + 1 })}>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="font-medium text-text-heading">{tx("Replika")}{' '}{index + 1} · {replica.storageProvider}</h3>
+          <h3 className="font-medium text-text-heading">{tx("Replika")}{' '}{index + 1} · {storageProviderLabel(replica.storageProvider)}</h3>
           <StatusPill status={replica.status} />
         </div>
         {replica.waitingForAgent && <Notice tone="warning">{tx("Fiziksel silme için Agent bekleniyor. Agent yeniden bağlandığında silme işlemi devam edecek.")}</Notice>}
@@ -129,7 +130,7 @@ export function ArtifactReplicas({ artifact }: { artifact: ArtifactPresentation 
           <div className="pt-4"><Facts columns={3}>
             <Fact label={tx("Checksum")}><code className="break-all font-mono text-sm">{replica.checksum}</code></Fact>
             <Fact label={tx("Checksum algoritması")}>{replica.checksumAlgorithm}</Fact>
-            <Fact label={tx("Silme yürütücüsü")}>{(replica.executionLocation ?? replica.deletionExecutor) === 'Agent' ? 'Agent' : 'Backend'}</Fact>
+            <Fact label={tx("Silme yürütücüsü")}>{executionLocationLabel((replica.executionLocation ?? replica.deletionExecutor) === 'Agent' ? 'Agent' : 'Backend')}</Fact>
             <Fact label={tx("Silme istendi")}>{formatDateTime(replica.deleteRequestedAt)}</Fact>
             <Fact label={tx("Fiziksel silme en erken")}>{formatDateTime(replica.deleteAfter)}</Fact>
             {replica.deleteNextAttemptAt !== undefined && <Fact label={tx("Sonraki silme denemesi")}>{formatDateTime(replica.deleteNextAttemptAt)}</Fact>}
@@ -142,7 +143,7 @@ export function ArtifactReplicas({ artifact }: { artifact: ArtifactPresentation 
   </section>
 }
 
-/** Everything about one Backup, stacked: used where there is no room for tabs (Backup Run attempts, platform support). */
+/** Everything about one Backup, stacked for the platform support view. */
 export function ArtifactDetails({ artifact }: { artifact: ArtifactPresentation }) {
   useLanguage()
   return <div className="space-y-6">

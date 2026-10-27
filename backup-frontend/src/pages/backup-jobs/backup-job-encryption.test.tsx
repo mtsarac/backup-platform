@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { createMemoryRouter, createRoutesFromElements, MemoryRouter, Route, RouterProvider } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { BackupJobWizardPage } from './backup-job-wizard-page'
 import { BackupJobEditPage } from './backup-job-edit-page'
@@ -29,10 +29,11 @@ const withPolicy = (encryptionPolicy: BackupJob['configuration']['encryptionPoli
 
 function renderWizard(route = '/tenants/tenant-a/backup-jobs/new') {
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-  return render(<QueryClientProvider client={cache}><MemoryRouter initialEntries={[route]}><Routes>
+  const router = createMemoryRouter(createRoutesFromElements(<>
     <Route path="/tenants/:tenantId/backup-jobs/new" element={<BackupJobWizardPage />} />
     <Route path="/tenants/:tenantId/backup-jobs/:id/edit" element={<BackupJobEditPage />} />
-  </Routes></MemoryRouter></QueryClientProvider>)
+  </>), { initialEntries: [route] })
+  return render(<QueryClientProvider client={cache}><RouterProvider router={router} /></QueryClientProvider>)
 }
 const next = (times = 1) => { for (let i = 0; i < times; i++) fireEvent.click(screen.getByRole('button', { name: 'İleri' })) }
 beforeEach(() => {

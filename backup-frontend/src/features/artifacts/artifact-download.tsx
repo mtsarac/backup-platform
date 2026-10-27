@@ -9,6 +9,7 @@ import { getDownloadAvailability, getDownloadStatus, prepareDownload } from './a
 import { DownloadFlowStatus } from './download-flow-status'
 import { useArtifactDownload } from './use-artifact-download'
 import { formatBytes } from '@/lib/format'
+import { storageProviderLabel } from '@/features/storage-connections/labels'
 
 export function ArtifactDownload({ tenantId, artifactId, canAdmin, eligible }: { tenantId: string; artifactId: string; canAdmin: boolean; eligible: boolean }) {
   useLanguage()
@@ -54,7 +55,7 @@ function DownloadController({ tenantId, artifactId, canAdmin, eligible }: { tena
         </Facts>
         <label className="block text-sm font-medium text-text-heading">{tx("İndirme hedefi")}<select aria-label={tx("İndirme hedefi")} className={`${selectClass} w-full`} value={replicaId} disabled={busy} onChange={event => setReplicaId(event.target.value)}>
             <option value="">{tx("Otomatik · en uygun doğrulanmış replika")}</option>
-            {availability.data.replicas.map(replica => <option key={replica.replicaId} value={replica.replicaId} disabled={!replica.available}>{replica.storageProvider} · {replica.storageTarget}{!replica.available ? ` · ${failureMessage(replica.reason)}` : ''}</option>)}
+            {availability.data.replicas.map(replica => <option key={replica.replicaId} value={replica.replicaId} disabled={!replica.available}>{storageProviderLabel(replica.storageProvider)} · {replica.storageTarget}{!replica.available ? ` · ${failureMessage(replica.reason)}` : ''}</option>)}
           </select>
         </label>
         {!replicaId && availability.data.replicas.filter(r => r.available).length > 1 && (

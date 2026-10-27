@@ -2,14 +2,13 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { Link } from 'react-router-dom'
 import { Pagination } from '@/components/data/pagination'
 import { QueryState } from '@/components/data/query-state'
-import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { linkClass } from '@/components/ui/form-styles'
 import { LIST_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
-import { formatDateTime } from '@/lib/format'
+import { formatDateTime, formatRelativeTime } from '@/lib/format'
 import { useTenantBreakGlass } from './hooks'
 
 export function TenantBreakGlassSection({ tenantId }: { tenantId: string }) {
@@ -27,19 +26,17 @@ export function TenantBreakGlassSection({ tenantId }: { tenantId: string }) {
             </div>
             <p className="break-words">{event.reason}</p>
             <Facts>
-              <Fact label={tx('İstek zamanı')}><RelativeTime value={event.createdAt} /></Fact>
+              <Fact label={tx('İstek zamanı')}><time dateTime={event.createdAt} title={formatDateTime(event.createdAt)} aria-label={formatDateTime(event.createdAt)}>{formatRelativeTime(event.createdAt)}</time></Fact>
               <Fact label={tx('Karar veren')}>{event.decidedByName ?? tx('Henüz karar verilmedi')}</Fact>
-              <Fact label={tx('Kullanıldı')}>{event.consumedAt ? <RelativeTime value={event.consumedAt} /> : tx('Hayır')}</Fact>
+              <Fact label={tx('Kullanıldı')}>{event.consumedAt ? <time dateTime={event.consumedAt} title={formatDateTime(event.consumedAt)} aria-label={formatDateTime(event.consumedAt)}>{formatRelativeTime(event.consumedAt)}</time> : tx('Hayır')}</Fact>
             </Facts>
             <Link className={`${linkClass} inline-flex min-h-11 items-center`} to={`/tenants/${tenantId}/artifacts/${event.artifactId}`}>{tx('Yedek dosyasını görüntüle')}</Link>
             <TechnicalDetails items={[
               { label: tx('İstek kimliği'), value: event.id },
               { label: tx('Yedek dosyası kimliği'), value: event.artifactId },
               { label: tx('Ham durum'), value: event.status },
-              { label: tx('Açılış'), value: formatDateTime(event.createdAt) },
               { label: tx('Süre sonu'), value: formatDateTime(event.expiresAt) },
               { label: tx('Karar zamanı'), value: formatDateTime(event.decidedAt) },
-              { label: tx('Kullanılma zamanı'), value: formatDateTime(event.consumedAt) },
             ]} />
           </li>)}
         </ul>}

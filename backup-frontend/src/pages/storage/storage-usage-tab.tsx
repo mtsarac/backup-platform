@@ -35,6 +35,7 @@ export function StorageUsageTab() {
       <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Fact label={tx("Aktif plan")}><PlanName plan={quota.plan} /></Fact>
         <Fact label={tx("Abonelik durumu")}><StatusPill domain="subscription" status={quota.subscriptionStatus} /></Fact>
+        <Fact label={tx("Yeni backup")}>{quota.newBackupsAllowed ? tx('Evet') : tx('Hayır')}</Fact>
         {quota.plan?.subscriptionEndsAt && <Fact label={tx("Abonelik bitişi")}>{formatDateTime(quota.plan.subscriptionEndsAt, tx('Henüz bildirilmedi'))}</Fact>}
       </dl>
     </Section>

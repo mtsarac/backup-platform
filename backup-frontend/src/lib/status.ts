@@ -197,6 +197,23 @@ const dictionary = {
     Degraded: { level: 'attention', get label() { return tx("Dikkat gerektiren") } },
     Critical: { level: 'urgent', get label() { return tx("Kritik") } },
   },
+  occurrence: {
+    RunCreated: { level: 'safe', get label() { return tx("Yedekleme denemesi oluşturuldu") } },
+    SkippedOverlap: { level: 'attention', get label() { return tx("Atlandı: önceki deneme sürüyor") } },
+    MissedGraceExpired: { level: 'attention', get label() { return tx("Kaçırıldı: tolerans süresi doldu") } },
+    MissedSuperseded: { level: 'neutral', get label() { return tx("Kaçırıldı: daha yeni zamanlama geçerli") } },
+    JobDisabled: { level: 'neutral', get label() { return tx("Atlandı: iş kapalı") } },
+    AdmissionDenied: { level: 'urgent', get label() { return tx("Başlatma reddedildi") } },
+  },
+  occurrenceReason: {
+    run_created: { level: 'neutral', get label() { return tx("Zamanlanan yedekleme denemesi oluşturuldu.") } },
+    active_run: { level: 'neutral', get label() { return tx("Önceki yedekleme denemesi sürüyordu ve iş çakışmaları atlıyor.") } },
+    agent_unavailable: { level: 'neutral', get label() { return tx("Yedekleme bilgisayarı yanıt vermiyordu.") } },
+    grace_elapsed: { level: 'neutral', get label() { return tx("Tolerans süresi içinde başlatılamadı.") } },
+    superseded_by_later_occurrence: { level: 'neutral', get label() { return tx("Daha yeni bir zamanlama onun yerini aldı.") } },
+    job_disabled: { level: 'neutral', get label() { return tx("İş kapalıydı.") } },
+    schedule_disabled: { level: 'neutral', get label() { return tx("Zamanlama kapalıydı.") } },
+  },
 } as const satisfies Record<string, Record<string, StatusMeta>>
 
 export type StatusDomain = keyof typeof dictionary

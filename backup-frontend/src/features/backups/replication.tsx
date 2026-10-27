@@ -6,8 +6,7 @@ import { Section } from '@/components/ui/section'
 import type { ReplicaRepairOperation, ReplicationDestination, ReplicationHealth } from '@/features/artifacts/types'
 import { failureMessage } from '@/lib/api/failure-messages'
 import { formatDateTime } from '@/lib/format'
-
-const providerLabels: Record<string, string> = { get local() { return tx("Agent yerel") }, get central() { return tx("Merkezi depolama") }, sftp: 'SFTP', 'google-drive': 'Google Drive', s3: 'S3', smb: 'SMB / NAS' }
+import { storageProviderLabel } from '@/features/storage-connections/labels'
 
 /** The status is always the backend's verdict; nothing here recomputes it from the counts. */
 export function ReplicationBadge({ replication }: { replication?: ReplicationHealth | null }) {
@@ -47,7 +46,7 @@ function DestinationRow({
   return (
     <li className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-border bg-surface-2 p-3 text-sm">
       <div className="min-w-0 space-y-1">
-        <p className="font-medium text-text">{providerLabels[destination.storageProvider] ?? destination.storageProvider}{destination.isPrimary && <span className="ml-2 text-xs text-text-muted">{tx("Birincil")}</span>}</p>
+        <p className="font-medium text-text">{storageProviderLabel(destination.storageProvider)}{destination.isPrimary && <span className="ml-2 text-xs text-text-muted">{tx("Birincil")}</span>}</p>
         {destination.state === 'Failed' && destination.failureCode && <p className="text-error">{failureMessage(destination.failureCode)} <span className="text-text-muted">· {destination.failureCode}</span></p>}
         {destination.objectMayRemain && destination.replicaStatus !== 'Quarantined' && <p className="text-warning">{tx("Hedefte tamamlanmamış bir dosya kalmış olabilir; saklama süreci bu dosyayı da kaldırır.")}</p>}
         {destination.replicaStatus === 'Quarantined' && <p className="text-warning">{tx("Bu replika karantinaya alınmıştır; sahipliği doğrulanmadan otomatik veya manuel olarak silinmez.")}</p>}

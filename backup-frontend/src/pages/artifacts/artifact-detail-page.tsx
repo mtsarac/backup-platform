@@ -22,6 +22,7 @@ import { useArtifact, useArtifactActions, useReplicaRepair, useRepairStatus, use
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { type ErrorDescription, describeError, describeFailure } from '@/lib/api/failure-messages'
 import { formatDateTime } from '@/lib/format'
+import { storageProviderLabel } from '@/features/storage-connections/labels'
 
 function DeleteCountdown({ deleteAfter }: { deleteAfter: string }) {
   useLanguage()
@@ -142,7 +143,6 @@ function ArtifactDetail({ id }: { id: string }) {
       <PageHeader
         crumbs={[{ label: tx('Yedek dosyaları'), to: `/tenants/${tenantId}/artifacts` }, { label: artifact?.databaseName ?? tx('Yedek dosyası') }]}
         title={artifact?.databaseName ? tx("{0} · Yedek dosyası", { "0": artifact.databaseName }) : tx('Yedek dosyası')}
-        description={tx("Dosyanın sağlam olup olmadığı, geri yüklenip yüklenemeyeceği ve ne zaman silineceği.")}
         meta={artifact && <>
           <StatusPill status={artifactState(artifact)} />
           {artifact.jobId && <Link className="text-sm text-primary underline-offset-4 hover:underline" to={`/tenants/${tenantId}/backup-jobs/${artifact.jobId}/edit`}>{artifact.jobName || tx('Yedekleme işleri')}</Link>}
@@ -188,7 +188,7 @@ function ArtifactDetail({ id }: { id: string }) {
         pending={requestDelete.isPending} error={requestDelete.error} confirmLabel={tx("Bekleme süresini başlat")} onConfirm={startDelete} />
       <ConfirmDialog open={Boolean(repairDestination) && canRepair} onClose={() => setRepairDestination(null)} title={tx("Replika onarılsın mı?")}
         consequence={{
-          what: <>{tx("Doğrulanmış bir kopyadan")}{' '}<strong>{repairDestination?.storageProvider}</strong>{' '}{tx("hedefine yeni bir kopya aktarılır ve sağlama toplamı doğrulanır.")}</>,
+          what: <>{tx("Doğrulanmış bir kopyadan")}{' '}<strong>{repairDestination ? storageProviderLabel(repairDestination.storageProvider) : ''}</strong>{' '}{tx("hedefine yeni bir kopya aktarılır ve sağlama toplamı doğrulanır.")}</>,
           who: tx("Depolama alanı ve aktarım kotası kullanılır. Kaynak kopya korunur."),
           reversible: tx("Evet. Onarım sürerken iptal edebilirsiniz; kaynak kopyanız değişmez."),
         }}

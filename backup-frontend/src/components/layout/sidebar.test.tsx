@@ -31,7 +31,7 @@ describe('Tenant sidebar', () => {
       ['Geri yüklemeler', `${base}/restores`],
     ])
     expect(links('Altyapı')).toEqual([
-      ['Bilgisayarlar', `${base}/agents`],
+      ['Yedekleme bilgisayarları', `${base}/agents`],
       ['Veritabanı bulma', `${base}/discovery`],
       ['Depolama', `${base}/storage`],
     ])
@@ -70,8 +70,8 @@ describe('Tenant sidebar', () => {
   it('shows the same menu in English without leftover Turkish labels', () => {
     render(<MemoryRouter><Sidebar /></MemoryRouter>)
     act(() => changeLanguage('en'))
-    expect(links('Backups').map(([label]) => label)).toEqual(['Backup jobs', 'Backup runs', 'Backup files', 'Restores'])
-    expect(links('Infrastructure').map(([label]) => label)).toEqual(['Computers', 'Database discovery', 'Storage'])
+    expect(links('Backups').map(([label]) => label)).toEqual(['Backup jobs', 'Backup attempts', 'Backup files', 'Restores'])
+    expect(links('Infrastructure').map(([label]) => label)).toEqual(['Backup computers', 'Database discovery', 'Storage'])
     expect(links('Settings').map(([label]) => label)).toEqual(['Notifications', 'Encryption', 'Upload bandwidth', 'Support access'])
     expect(within(nav()).getByRole('link', { name: 'Overview' })).toBeInTheDocument()
   })

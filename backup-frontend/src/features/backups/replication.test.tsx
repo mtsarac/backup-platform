@@ -28,7 +28,6 @@ vi.mock('@/features/backups/hooks', () => ({
 }))
 vi.mock('@/features/backup-jobs/hooks', () => ({ useBackupJobs: () => ({ data: [], isPending: false, error: null }) }))
 vi.mock('@/features/agents/hooks', () => ({ useAgents: () => ({ data: [], isPending: false, error: null }) }))
-vi.mock('@/features/artifacts/artifact-details', () => ({ ArtifactDetails: () => <p>Yedek çıktısı ayrıntıları</p> }))
 
 const destination = (storageProvider: string, state: string, failureCode: string | null = null, isPrimary = false) => ({
   storageProvider, storageConnectionId: `${storageProvider}-id`, isPrimary, state, failureCode,
@@ -103,6 +102,10 @@ describe('replication compliance rendering', () => {
     expect(screen.getAllByText("Kısmi çoğaltma · ilke karşılandı").length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('tab', { name: "Çoğaltma" }))
     expect(screen.getByRole('region', { name: "Çoğaltma" })).toBeInTheDocument()
+    const verdict = screen.getByText("Kısmi çoğaltma · ilke karşılandı")
+    expect(screen.getByRole('region', { name: "Çoğaltma" })).toContainElement(verdict)
+    fireEvent.click(screen.getByRole('tab', { name: 'Özet' }))
+    expect(screen.getByText("Kısmi çoğaltma · ilke karşılandı")).toBeVisible()
   })
 
   it('the run list leaves the replication verdict to the run page', () => {

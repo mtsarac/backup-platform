@@ -6,6 +6,7 @@ import { TechnicalDetails } from '@/components/ui/technical-details'
 import { selectClass } from '@/components/ui/form-styles'
 import type { RestoreTargetAgent, RestoreTargetsResponse } from './types'
 import { failureMessage } from '@/lib/api/failure-messages'
+import { statusLabel } from '@/lib/status'
 
 interface RestoreSourceStepProps {
   instancePrefix: string
@@ -35,7 +36,7 @@ export function RestoreSourceStep({ instancePrefix, engineName, targets, activeA
           >
             {targets.agents.map((ag) => (
               <option key={ag.agentId} value={ag.agentId}>
-                {ag.hostName ?? ag.agentId} ({tx(ag.connectivity)}) — {ag.canRestore ? tx('Geri yüklemeyi destekliyor') : tx('Geri yükleme desteği yok')}
+                {ag.hostName ?? ag.agentId} ({statusLabel('agent', ag.connectivity)}) — {ag.canRestore ? tx('Geri yüklemeyi destekliyor') : tx('Geri yükleme desteği yok')}
               </option>
             ))}
           </select>

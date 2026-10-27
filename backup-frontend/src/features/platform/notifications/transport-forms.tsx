@@ -55,7 +55,7 @@ function SecretControl({ label, transport, onSet, onClear }: {
     <p className="text-sm text-text-muted">{transport.hasSecret ? tx("{0}: kayıtlı. Kayıtlı değer geri okunamaz.", { "0": label }) : tx("{0}: ayarlanmadı.", { "0": label })}</p>
     <form onSubmit={submit} className="space-y-3">
       <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-0 flex-1 basis-48"><SecretField label={tx("Yeni {0}", { "0": label.toLocaleLowerCase(currentLocale()) })} saved={transport.hasSecret} value={secret.value} onChange={secret.set} /></div>
+        <div className="min-w-0 flex-1 basis-48"><SecretField label={tx("Yeni {0}", { "0": label.toLocaleLowerCase(currentLocale()) })} value={secret.value} onChange={secret.set} /></div>
         <Button type="submit" variant="outline" disabled={!secret.value || onSet.isPending}>{onSet.isPending ? tx('Kaydediliyor…') : tx('Ayarla')}</Button>
         {transport.hasSecret && <Button type="button" variant="outline" disabled={onClear.isPending} onClick={() => { onSet.reset(); onClear.reset(); setConfirmClear(true) }}>{tx("Temizle")}</Button>}
       </div>

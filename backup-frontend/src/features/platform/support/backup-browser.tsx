@@ -23,6 +23,7 @@ import { formatBytes, formatDateTime, formatSeconds } from '@/lib/format'
 import { statusLabel } from '@/lib/status'
 import { QueryState } from '@/components/data/query-state'
 import { errorMessage } from '@/lib/api/failure-messages'
+import { storageProviderLabel } from '@/features/storage-connections/labels'
 
 export function SupportBackupBrowser({ session }: { session: SupportSession }) {
   useLanguage()
@@ -48,7 +49,7 @@ export function SupportBackupBrowser({ session }: { session: SupportSession }) {
       { label: tx('Ham durum'), value: artifact.state },
       { label: tx('Yedekleme bilgisayarı'), value: artifact.agentName ?? '—' },
       { label: tx('Saklama sonu'), value: artifact.retentionExpiresAt ? formatDateTime(artifact.retentionExpiresAt) : tx('Süre sınırı yok') },
-      ...artifact.replicas.map((replica, index) => ({ label: tx('Kopya {0}', { '0': index + 1 }), value: `${replica.storageProvider} · ${replica.verificationState}` })),
+      ...artifact.replicas.map((replica, index) => ({ label: tx('Kopya {0}', { '0': index + 1 }), value: `${storageProviderLabel(replica.storageProvider)} · ${statusLabel('general', replica.verificationState)}` })),
     ]} /> },
   ]
   const jobColumns: Column<SupportJob>[] = [
@@ -59,8 +60,8 @@ export function SupportBackupBrowser({ session }: { session: SupportSession }) {
     { key: 'last', card: 'status', header: tx('Son sonuç'), render: job => job.lastRun ? <StatusPill status={job.lastRun.status} /> : '—' },
     { key: 'details', card: 'actions', header: tx('Ayrıntılar'), wrap: true, render: job => <TechnicalDetails items={[
       { label: tx('İş kimliği'), value: job.id },
-      { label: tx('Veritabanı motoru ve yedek türü'), value: `${job.engine} · ${job.backupType}` },
-      { label: tx('Depolama sağlayıcısı'), value: job.storageProvider },
+      { label: tx('Veritabanı motoru ve yedek türü'), value: `${job.engine} · ${tx(job.backupType)}` },
+      { label: tx('Depolama sağlayıcısı'), value: storageProviderLabel(job.storageProvider) },
       ...(job.schedule?.enabled ? [
         { label: tx('Zamanlama ifadesi (cron)'), value: job.schedule.cronExpression },
         { label: tx('Saat dilimi'), value: job.schedule.timeZone },
@@ -89,8 +90,9 @@ export function SupportBackupBrowser({ session }: { session: SupportSession }) {
   if (!access.view) return <Notice>{tx("Backup Browser için etkin oturum sahipliği ve ViewBackupMetadata izni gerekir.")}</Notice>
   const listing = view === 'runs' ? runs : artifacts
   return <div className="space-y-6">
-    <Tabs label={tx("Yedek tarayıcısı görünümleri")} idPrefix="support-browser" value={view} onChange={(value) => update({ view: value })} items={[{ value: 'jobs', label: tx('Yedekleme işleri') }, { value: 'runs', label: tx('Yedekleme denemeleri') }, { value: 'artifacts', label: tx('Yedek dosyaları') }]} />
+    <Tabs label={tx("Yedek tarayıcısı görünümleri")} idPrefix="support-browser" value={view} onChange={(value) => update({ view: value, artifact: '' })} items={[{ value: 'jobs', label: tx('Yedekleme işleri') }, { value: 'runs', label: tx('Yedekleme denemeleri') }, { value: 'artifacts', label: tx('Yedek dosyaları') }]} />
     <div role="tabpanel" id={`support-browser-panel-${view}`} aria-labelledby={`support-browser-tab-${view}`} className="space-y-4">
+    {get('artifact') ? <SupportArtifactPanel key={get('artifact')} session={session} artifactId={get('artifact')} /> : <>
     {view !== 'jobs' && <Filters label={tx("Yedek filtreleri")}>
       <SearchablePicker label={tx("Yedekleme işi")} placeholder={tx("Tüm yedekleme işleri")} value={jobId} onChange={value => update({ jobId: value })}
         options={(jobs.data ?? []).map(job => ({ value: job.id, label: job.name, description: job.database }))} disabled={jobs.isPending || Boolean(jobs.error)} />
@@ -105,8 +107,8 @@ export function SupportBackupBrowser({ session }: { session: SupportSession }) {
       {view === 'runs' ? <DataList rows={runs.data?.items ?? []} columns={runColumns} keyExtractor={run => run.id} /> : <DataList rows={artifacts.data?.items ?? []} columns={columns} keyExtractor={artifact => artifact.id} />}
       {listing.data && <Pagination page={page} pageSize={listing.data.pageSize} totalCount={listing.data.totalCount} disabled={listing.isFetching} onPageChange={next => update({ browserPage: next })} />}
     </QueryState>}
+    </>}
     </div>
-    {get('artifact') && <SupportArtifactPanel key={get('artifact')} session={session} artifactId={get('artifact')} />}
   </div>
 }
 function SupportArtifactPanel({ session, artifactId }: { session: SupportSession; artifactId: string }) {
@@ -120,6 +122,10 @@ function SupportArtifactPanel({ session, artifactId }: { session: SupportSession
       <div className="flex flex-wrap gap-3"><Button disabled={!access.restore || artifact.data.state !== 'Available' || artifact.data.backupType !== 'Full'} onClick={() => update({ tab: 'restores', restoreArtifact: artifactId, restoreId: '' })}>{tx("Restore…")}</Button>{!access.restore && <p className="text-sm text-text-muted">{tx("RestoreBackup izni gerekir.")}</p>}</div>
       <SupportArtifactDownload scope={supportScope(session, 'download')} artifactId={artifactId} eligible={artifact.data.state === 'Available'} />
       <ArtifactDetails artifact={artifact.data} />
+      <TechnicalDetails items={[
+        { label: tx('Yedek dosyası kimliği'), value: artifact.data.id },
+        { label: tx('Ham durum'), value: artifact.data.state },
+      ]} />
     </>}</QueryState>
     </div>
   </Section>

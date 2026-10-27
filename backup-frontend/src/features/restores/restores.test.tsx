@@ -314,12 +314,14 @@ describe('RestoresPage', () => {
       expect(within(screen.getByTestId('restores-empty')).getByText('Yöneticinize danışın')).toBeInTheDocument()
     })
 
-    it('offers clearing the filters when they are what hides the restores', async () => {
+    it('clears an empty filtered history from the filters and then offers the backup files', async () => {
       renderWithClient(<RestoresPage />, '/?status=Failed')
       await screen.findByTestId('restores-empty')
-      expect(screen.getAllByRole('button', { name: 'Filtreleri temizle' })).toHaveLength(1)
+      expect(within(screen.getByTestId('restores-empty')).queryByText('Yöneticinize danışın')).not.toBeInTheDocument()
       fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
       await waitFor(() => expect(RestoreApi.getRestores).toHaveBeenLastCalledWith('tenant-a', expect.objectContaining({ status: '' }), expect.anything()))
+      expect(screen.queryByRole('button', { name: 'Filtreleri temizle' })).not.toBeInTheDocument()
+      expect(within(await screen.findByTestId('restores-empty')).getByRole('link')).toHaveAttribute('href', '/tenants/tenant-a/artifacts')
     })
   })
 })

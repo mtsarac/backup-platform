@@ -48,7 +48,7 @@ export function PlatformQuotaPoliciesPage() {
     </>} />
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {query.data && (policies.length === 0
-        ? <ListEmpty message={tx("Tanımlı kota politikası bulunamadı.")} action={<Button onClick={() => setIsCreating(true)}>{tx("Yeni Politika")}</Button>} />
+        ? <ListEmpty message={tx("Tanımlı kota politikası bulunamadı.")} />
         : <Section title={tx("Kota politikaları")} description={tx("{0} politika · Değişiklikler mevcut kullanım hesaplamalarını etkileyebilir.", { "0": policies.length })} flush className="overflow-hidden"><DataList className={bareListClass} rows={policies} columns={columns} keyExtractor={(policy) => policy.policyId} /></Section>)}
     </QueryState>
     {isCreating && <QuotaPolicyDialog onClose={() => setIsCreating(false)} />}

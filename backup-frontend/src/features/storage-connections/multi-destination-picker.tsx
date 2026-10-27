@@ -4,6 +4,7 @@ import { ownershipLabel } from '@/features/storage/labels'
 import { errorMessage } from '@/lib/api/failure-messages'
 import type { ConnectionView, ProviderDescriptor } from './types'
 import { connectionUnavailableReason, primaryDestination, resolveDestinationConnection } from './job-connection-picker-utils'
+import { executionLocationLabel } from './labels'
 
 const selectClass = 'h-9 w-full rounded-md border border-border bg-surface-2 px-3 text-sm outline-none focus:border-ring disabled:opacity-60'
 
@@ -128,7 +129,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
         {fieldError && <p id="primary-storage-connection-error" role="alert" className="text-sm text-destructive">{fieldError}</p>}
         <p id="storage-connection-help" className="text-xs text-text-muted">{tx("Varsayılan seçimi bu sağlayıcının tenant varsayılanına gider. Açık seçim bağlantı kimliğini korur. Son uygunluk kontrolünü sunucu yapar.")}</p>
       </div>
-      <div className="space-y-1"><span className="block text-sm font-medium text-text-heading">{tx("Depolama yürütme konumu")}</span><p className="text-sm">{primary.storageExecutionLocation}</p><p className="text-xs text-text-muted">{tx("Yeni hedef seçildiğinde sağlayıcının yürütme konumu uygulanır.")}</p></div>
+      <div className="space-y-1"><span className="block text-sm font-medium text-text-heading">{tx("Depolama yürütme konumu")}</span><p className="text-sm">{executionLocationLabel(primary.storageExecutionLocation)}</p><p className="text-xs text-text-muted">{tx("Yeni hedef seçildiğinde sağlayıcının yürütme konumu uygulanır.")}</p></div>
       {pending && <p role="status" className="text-sm">{tx("Depolama bağlantıları yükleniyor…")}</p>}
       {error ? <div role="alert" className="text-sm text-destructive">{errorMessage(error)} <button type="button" className="underline" onClick={onRefresh}>{tx("Bağlantıları yeniden yükle")}</button></div> : !pending && reason && <p role="status" className="text-sm text-warning md:col-span-2">{target ? tx("“{0}” depolama hedefi", { "0": target.name }) : tx('Depolama hedefi')}: {reason}. {existingTarget ? tx("Mevcut hedef kimliği korunarak iş kaydedilebilir, ancak hedef kullanılabilir olana kadar yeni backup'lar (manuel ve zamanlanmış) başlatılamaz. Mevcut backup'lar etkilenmez.") : tx('Yeni iş veya yeni hedef için kullanılabilir bir bağlantı seçin; varsayılan seçimi bu engeli aşmaz.')}</p>}
 
@@ -154,21 +155,21 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
               <div key={`${dest.storageProvider}:${dest.storageConnectionId ?? 'default'}`} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-md border border-border bg-surface-2 text-sm">
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium text-text-heading">{tx(destProv?.displayName ?? dest.storageProvider)}</span>
+                    {!dest.isPrimary && <span className="font-medium text-text-heading">{tx(destProv?.displayName ?? dest.storageProvider)}</span>}
                     {dest.isPrimary ? (
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20">{tx("Primary")}</span>
                     ) : (
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] text-text-muted border border-border">{tx("Replica")}</span>
                     )}
-                    {unavailable && (
+                    {!dest.isPrimary && unavailable && (
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-destructive/10 text-destructive border border-destructive/20">
                         {unavailable}
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-text-muted">
-                    {destConn ? `${destConn.name} (${ownershipLabel(destConn.ownership)})` : (dest.storageConnectionId ? dest.storageConnectionId : tx('Tenant Varsayılanı'))} · {dest.storageExecutionLocation}
-                  </div>
+                  {!dest.isPrimary && <div className="text-xs text-text-muted">
+                    {destConn ? `${destConn.name} (${ownershipLabel(destConn.ownership)})` : (dest.storageConnectionId ? dest.storageConnectionId : tx('Tenant Varsayılanı'))} · {executionLocationLabel(dest.storageExecutionLocation)}
+                  </div>}
                 </div>
 
                 <div className="flex items-center gap-2 self-end sm:self-center">
@@ -219,7 +220,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
                 {providers.filter(p => p.availability === 'Available' && p.executionLocation).map(p => {
                   const alreadyAdded = destinations.some(d => d.storageProvider === p.providerType && !d.storageConnectionId)
                   return (
-                    <option key={`default:${p.providerType}`} value={`default:${p.providerType}`} disabled={alreadyAdded}>{tx("[Replication]")}{' '}{tx(p.displayName)}{' '}{tx("· Varsayılan")}{' '}{alreadyAdded ? '(Eklendi)' : ''}
+                    <option key={`default:${p.providerType}`} value={`default:${p.providerType}`} disabled={alreadyAdded}>{tx("[Replication]")}{' '}{tx(p.displayName)}{' '}{tx("· Varsayılan")}{' '}{alreadyAdded ? tx('(Eklendi)') : ''}
                     </option>
                   )
                 })}
@@ -230,7 +231,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
                   const unavail = connectionUnavailableReason(c, descriptor)
                   const alreadyAdded = destinations.some(d => d.storageProvider === c.providerType && d.storageConnectionId === c.id)
                   return (
-                    <option key={c.id} value={c.id} disabled={Boolean(unavail) || alreadyAdded}>{tx("Replication-Hedef:")}{' '}{c.name} ({tx(c.providerDisplayName)}) {unavail ? `· ${unavail}` : ''} {alreadyAdded ? '(Eklendi)' : ''}
+                    <option key={c.id} value={c.id} disabled={Boolean(unavail) || alreadyAdded}>{tx("Replication-Hedef:")}{' '}{c.name} ({tx(c.providerDisplayName)}) {unavail ? `· ${unavail}` : ''} {alreadyAdded ? tx('(Eklendi)') : ''}
                     </option>
                   )
                 })}

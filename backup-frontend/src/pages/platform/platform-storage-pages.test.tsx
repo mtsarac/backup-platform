@@ -110,9 +110,25 @@ describe('Platform Storage Usage Page states and operations', () => {
     vi.mocked(storageApi.getStorageUsage).mockResolvedValue(paged([]))
     renderPlatform(<PlatformStoragePage />, { path: '/platform/storage?search=missing&quotaState=Warning', route: '/platform/storage' })
     await screen.findByText('Kriterlere uygun çalışma alanı kullanımı bulunamadı.')
-    await userEvent.click(screen.getAllByRole('button', { name: 'Filtreleri temizle' }).at(-1)!)
+    await userEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/platform/storage'))
     expect(storageApi.getStorageUsage).toHaveBeenLastCalledWith(expect.objectContaining({ search: '', quotaState: undefined }), expect.any(AbortSignal))
+  })
+
+  it.each([false, true])('clears all storage filters from their owner with rows present: %s', async (hasRows) => {
+    vi.mocked(storageApi.getStorageUsage).mockResolvedValue(paged(hasRows ? [sampleUsageRow] : []))
+    renderPlatform(<PlatformStoragePage />, { path: '/platform/storage?search=missing&quotaState=Warning&subscriptionStatus=Active&page=2', route: '/platform/storage' })
+    if (hasRows) await screen.findByText('Acme Corp')
+    else await screen.findByText('Kriterlere uygun çalışma alanı kullanımı bulunamadı.')
+    const clear = screen.getByRole('button', { name: 'Filtreleri temizle' })
+    expect(within(screen.getByRole('region', { name: 'Depolama kullanım filtreleri' })).getByRole('button', { name: 'Filtreleri temizle' })).toBe(clear)
+    await userEvent.click(clear)
+    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/platform/storage'))
+    expect(screen.getByRole('searchbox', { name: 'Çalışma alanı ara' })).toHaveValue('')
+    expect(screen.getByRole('combobox', { name: 'Kota durumu' })).toHaveValue('')
+    expect(screen.getByRole('combobox', { name: 'Abonelik' })).toHaveValue('')
+    expect(storageApi.getStorageUsage).toHaveBeenLastCalledWith({ search: '', quotaState: undefined, subscriptionStatus: undefined, page: 1, pageSize: 25 }, expect.any(AbortSignal))
+    expect(screen.queryByRole('button', { name: 'Filtreleri temizle' })).not.toBeInTheDocument()
   })
 
   it('ignores hand-edited filter values instead of sending them to the API', async () => {
@@ -217,6 +233,14 @@ describe('Platform Storage Usage Page states and operations', () => {
 })
 
 describe('Platform Quota Policies Page and Dialog', () => {
+  it('keeps policy creation available from the header when no policies exist', async () => {
+    vi.mocked(storageApi.getQuotaPolicies).mockResolvedValue({ items: [] })
+    renderPlatform(<PlatformQuotaPoliciesPage />, { path: '/platform/quota-policies', route: '/platform/quota-policies' })
+    await screen.findByText('Tanımlı kota politikası bulunamadı.')
+    await userEvent.click(screen.getByRole('button', { name: 'Yeni Politika' }))
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Yeni Kota Politikası')
+  })
+
   it('renders policies list and handles create dialog with ProviderType scope', async () => {
     const user = userEvent.setup()
     vi.mocked(storageApi.createQuotaPolicy).mockResolvedValue({

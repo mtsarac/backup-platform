@@ -25,8 +25,6 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   if (!tenant) return <div role="alert" className="p-6">{tx("Bu tenant için üyeliğiniz yok.")}{' '}<button type="button" className="text-primary underline" onClick={() => navigate('/')}>{tx("Tenant seçimine dön")}</button></div>
   async function switchTenant(id: string) {
     if (id === tenantId || !tenants.some(item => item.tenantId === id)) return
-    await cache.cancelQueries({ queryKey: ['tenant', tenantId] })
-    cache.removeQueries({ queryKey: ['tenant', tenantId] })
     navigate(`/tenants/${encodeURIComponent(id)}`)
   }
   return <TenantContext.Provider value={{ tenantId, tenant, ...tenantPermissions(tenant.membershipRole ?? tenant.role), switchTenant }}><div key={tenantId}>{children}</div></TenantContext.Provider>

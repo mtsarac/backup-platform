@@ -18,6 +18,7 @@ import type { RestoreTarget } from './types'
 import { formatDateTime, formatDuration } from '@/lib/format'
 import { useIdempotencyKey } from '@/lib/idempotency-key'
 import { errorMessage } from '@/lib/api/failure-messages'
+import { statusLabel } from '@/lib/status'
 
 export function ArtifactVerificationSection({ tenantId, artifact }: { tenantId: string; artifact: BackupArtifact }) {
   useLanguage()
@@ -79,7 +80,7 @@ function VerificationForm({ tenantId, artifactId, onClose }: { tenantId: string;
     <Notice tone="info">{tx("Test, seçilen sunucuda geçici ve izole bir Database'e geri yükler ve işlem sonunda bu Database'i siler. Production Database değiştirilmez.")}</Notice>
     {agents.length === 0 ? <Notice tone="warning">{tx("Bu backup'ı test edebilecek uygun bir Agent yok.")}</Notice> : <>
       <div><label htmlFor="verify-agent" className="block text-sm font-medium">{tx("Agent")}</label>
-        <select id="verify-agent" className={`${selectClass} w-full`} value={selectedAgent} onChange={(event) => setAgentId(event.target.value)}>{agents.map((agent) => <option key={agent.agentId} value={agent.agentId}>{agent.hostName ?? agent.agentId} ({tx(agent.connectivity)})</option>)}</select></div>
+        <select id="verify-agent" className={`${selectClass} w-full`} value={selectedAgent} onChange={(event) => setAgentId(event.target.value)}>{agents.map((agent) => <option key={agent.agentId} value={agent.agentId}>{agent.hostName ?? agent.agentId} ({statusLabel('agent', agent.connectivity)})</option>)}</select></div>
       <div><label htmlFor="verify-target" className="block text-sm font-medium">{tx("Hedef SQL Server")}</label>
         <select id="verify-target" className={`${selectClass} w-full`} value={useConfigured ? targetIndex : -1} onChange={(event) => setTargetIndex(Number(event.target.value))}>
           {configured.map((item, index) => <option key={`${item.jobId}-${index}`} value={index}>{item.jobName} · {item.target.host}{item.target.port ? `:${item.target.port}` : ''}</option>)}

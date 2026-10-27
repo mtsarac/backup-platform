@@ -145,7 +145,7 @@ describe('restore verification detail', () => {
   it('renders NotRun for a cancelled verification', async () => {
     vi.mocked(RestoreApi.getRestore).mockResolvedValue({ ...base, status: 'Cancelled', verificationOutcome: 'NotRun', cleanup: cleanupOf({}) })
     renderDetail()
-    expect(await screen.findByText("Çalıştırılmadı · Çalıştırılmadı")).toBeInTheDocument()
+    expect(await screen.findByText("Çalıştırılmadı")).toBeInTheDocument()
   })
 
   it('retries a pending cleanup and flags needsAttention', async () => {

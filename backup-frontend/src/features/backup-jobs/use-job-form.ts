@@ -24,13 +24,14 @@ export function useJobForm({ job, prefill }: { job?: BackupJob; prefill?: JobPre
   const navigate = useNavigate()
   const save = useSaveBackupJob(job?.id)
   const agents = useQuery({ queryKey: ['tenant', tenantId, 'agents'], queryFn: ({ signal }) => getAgents(tenantId, signal) })
-  const [saved] = useState(() => initialValues(job, prefill))
+  const [saved, setSaved] = useState(() => initialValues(job, prefill))
   const [values, setValues] = useState(saved)
   const [results, setResults] = useState<Record<string, string>>({})
   const [discoveryInstanceId, setDiscoveryInstanceId] = useState(prefill?.instance.id ?? '')
   const [clientErrors, setClientErrors] = useState<FieldErrors>({})
   const engines = useRef<EngineMemory>({})
   const saving = useRef(false)
+  const [finished, setFinished] = useState(false)
   const connections = useTenantConnections()
   const providers = useTenantProviders()
   const connectionItems = connections.data?.items ?? []
@@ -54,7 +55,10 @@ export function useJobForm({ job, prefill }: { job?: BackupJob; prefill?: JobPre
     void connections.refetch()
     void providers.refetch()
   }
-  const set = (patch: Partial<JobValues>) => setValues(current => ({ ...current, ...patch }))
+  const set = (patch: Partial<JobValues>) => {
+    setFinished(false)
+    setValues(current => ({ ...current, ...patch }))
+  }
   const setConfiguration = (next: BackupConfiguration) => set({ configuration: next })
   function changeEngine(engine: Engine) {
     if (engine === configuration.engine) return
@@ -74,6 +78,14 @@ export function useJobForm({ job, prefill }: { job?: BackupJob; prefill?: JobPre
     setResults({})
   }
   const listPath = `/tenants/${tenantId}/backup-jobs`
+  useEffect(() => {
+    if (!finished) return
+    void navigate(listPath)
+  }, [finished, listPath, navigate])
+  function finish() {
+    setSaved(values)
+    setFinished(true)
+  }
   function submit() {
     if (saving.current || cannotSave) return
     saving.current = true
@@ -81,7 +93,7 @@ export function useJobForm({ job, prefill }: { job?: BackupJob; prefill?: JobPre
     const input: BackupJobInput = { name, agentId, configuration, retryPolicy: retry, overlapPolicy: overlap, enabled, schedule: scheduled ? { ...schedule, overlapPolicy: overlap } : null, ...(canAdmin ? { retention } : {}) }
     if (multi) { void createMany(input); return }
     save.mutate(input, {
-      onSuccess: () => navigate(listPath),
+      onSuccess: finish,
       onError: error => {
         if (error instanceof ApiError && ['storage_connection_disabled', 'storage_connection_unavailable'].includes(error.reason ?? error.code ?? '')) refreshConnections()
       },
@@ -102,7 +114,7 @@ export function useJobForm({ job, prefill }: { job?: BackupJob; prefill?: JobPre
     }
     setResults({ ...outcome })
     saving.current = false
-    if (selected.every(item => outcome[item] === 'ok')) navigate(listPath)
+    if (selected.every(item => outcome[item] === 'ok')) finish()
   }
   async function coveredAfterFailure(retrying: string[]) {
     if (!discoveryInstanceId || retrying.length === 0) return new Set<string>()

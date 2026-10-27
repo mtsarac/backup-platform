@@ -4,6 +4,8 @@ import { Notice } from '@/components/ui/notice'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import type { BackupArtifact } from '@/features/artifacts/types'
 import { formatBytes, formatDateTime } from '@/lib/format'
+import { storageProviderLabel } from '@/features/storage-connections/labels'
+import { statusLabel } from '@/lib/status'
 
 export function RestoreSourceSummary({ artifact, isPg, fileArchive = false }: { artifact: BackupArtifact; isPg: boolean; fileArchive?: boolean }) {
   useLanguage()
@@ -17,8 +19,8 @@ export function RestoreSourceSummary({ artifact, isPg, fileArchive = false }: { 
       <p className="text-text-muted">{verified > 0 ? tx('{0} kopyanın bütünlüğü doğrulandı.', { '0': verified }) : tx('Bütünlüğü doğrulanmış bir kopya yok.')}</p>
       <TechnicalDetails items={[
         { label: tx('Yedek dosyası kimliği'), value: artifact.id },
-        ...(artifact.backupType ? [{ label: tx('Yedek türü'), value: artifact.backupType }] : []),
-        { label: tx('Kopyalar'), value: artifact.replicas.map((r) => `${r.storageProvider} (${r.status})`).join(', ') },
+        ...(artifact.backupType ? [{ label: tx('Yedek türü'), value: tx(artifact.backupType) }] : []),
+        { label: tx('Kopyalar'), value: artifact.replicas.map((r) => `${storageProviderLabel(r.storageProvider)} (${statusLabel('general', r.status)})`).join(', ') },
       ]} />
     </section>
     {isPg && <Notice tone="info" title={tx("PostgreSQL Full Restore")}>{tx("Yalnızca güvendiğiniz platform arşivlerini geri yükleyin: pg_restore içindeki SQL, fonksiyonlar ve extension işlemleri hedefte superuser olarak çalışabilir. SHA-256 byte bütünlüğünü doğrular, kaynak SQL'in güvenliğini doğrulamaz. pg_dump cluster rollerini yedeklemez; hedef superuser kimlik bilgisi, kaynak sahiplikleri/ACL için gereken roller ve extension paketleri hazır olmalıdır. Hedef sürümü hem kaynak hem pg_dump sürümüyle aynı veya daha yeni olmalıdır. Önce geçici Database'e geri yüklenir, sonra hedef adı değiştirilir. Onaylı üzerine yazmada eski Database bağlantıları kapalı bp_old_* adıyla kurtarma için korunur; kontrol ve temizliği operatör yapmalıdır. WAL/PITR desteklenmez.")}</Notice>}

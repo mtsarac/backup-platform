@@ -11,7 +11,7 @@ const scope: SupportScope = { sessionId: 'support-a', tenantId: 'tenant-a', enab
 const url = '/api/platform/support-sessions/support-a/artifacts/artifact-a/downloads/download-a/content'
 beforeEach(() => {
   vi.resetAllMocks()
-  vi.mocked(api.getSupportDownloadAvailability).mockResolvedValue({ available: true, reason: null, checksum: 'expected-sha', sizeBytes: 4096, replicas: [{ replicaId: 'replica-a', storageProvider: 'Central', available: true, reason: null }, { replicaId: 'offline', storageProvider: 'Local', available: false, reason: 'agent_unavailable' }] })
+  vi.mocked(api.getSupportDownloadAvailability).mockResolvedValue({ available: true, reason: null, checksum: 'expected-sha', sizeBytes: 4096, replicas: [{ replicaId: 'replica-a', storageProvider: 'central', available: true, reason: null }, { replicaId: 'offline', storageProvider: 'local', available: false, reason: 'agent_unavailable' }] })
   vi.mocked(api.prepareSupportDownload).mockResolvedValue({ sessionId: 'download-a', downloadUrl: url, filename: 'backup.bak', checksum: 'expected-sha', sizeBytes: 4096, decrypted: false })
   vi.mocked(api.getSupportDownloadStatus).mockResolvedValue({ sessionId: 'download-a', state: 'Ready', transferredBytes: 0 })
 })
@@ -21,7 +21,7 @@ describe('support native download', () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     const { client } = renderPlatform(<SupportArtifactDownload scope={scope} artifactId="artifact-a" eligible />)
     fireEvent.change(await screen.findByRole('combobox', { name: "Kopya" }), { target: { value: 'replica-a' } })
-    expect(screen.getByRole('option', { name: /Yerel/ })).toBeDisabled()
+    expect(screen.getByRole('option', { name: /yerel depolaması/ })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: "İndir" }))
     await waitFor(() => expect(click).toHaveBeenCalledOnce())
     expect(api.prepareSupportDownload).toHaveBeenCalledWith('support-a', 'artifact-a', 'replica-a')

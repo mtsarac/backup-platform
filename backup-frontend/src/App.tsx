@@ -1,5 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { createBrowserRouter, Navigate, Route, RouterProvider, Routes } from 'react-router-dom'
 import { ProtectedRoute } from './components/auth/protected-route'
 import { PlatformAdminRoute } from './components/auth/platform-admin-route'
 import { AppShell } from './components/layout/app-shell'
@@ -29,6 +29,8 @@ function AppRoutes() {
     </Route>
   </Routes>
 }
+const router = createBrowserRouter([{ path: '*', element: <AppRoutes /> }])
+
 export default function App() {
   useLanguage()
-  return <BrowserRouter><AppRoutes /></BrowserRouter> }
+  return <RouterProvider router={router} /> }

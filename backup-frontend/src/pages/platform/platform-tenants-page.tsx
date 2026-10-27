@@ -60,7 +60,7 @@ export function PlatformTenantsPage() {
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">
         {data.totalCount === 0 && !search
-          ? <ListEmpty icon={Building2} message={tx("Henüz tenant yok.")} action={newTenant} />
+          ? <ListEmpty icon={Building2} message={tx("Henüz tenant yok.")} />
           : <DataList caption={tx('Çalışma alanları')} rows={data.items} columns={columns} keyExtractor={(tenant) => tenant.tenantId} emptyMessage={tx("Aramaya uygun tenant bulunamadı.")} />}
         {data.totalCount > 0 && <Pagination label={tx("Tenant sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
       </div>}

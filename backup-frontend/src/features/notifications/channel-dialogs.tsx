@@ -14,7 +14,7 @@ import type { ChannelKind, NotificationChannel, WebhookAuthentication } from './
 
 const targetHints: Record<ChannelKind, { label: string; placeholder: string }> = {
   email: { get label() { return tx("E-posta adresi") }, placeholder: 'ops@example.com' },
-  webhook: { get label() { return tx("Webhook adresi") }, placeholder: 'https://host/yol' },
+  webhook: { get label() { return tx("Webhook adresi") }, get placeholder() { return tx('https://host/yol') } },
   sms: { get label() { return tx("Telefon (E.164)") }, placeholder: '+905551112233' },
 }
 const invalidField = (error: unknown, field: string) => error instanceof ApiError && error.field === field

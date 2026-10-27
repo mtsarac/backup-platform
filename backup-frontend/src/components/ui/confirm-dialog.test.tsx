@@ -23,6 +23,14 @@ describe('ConfirmDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Sil' }))
     expect(onConfirm).toHaveBeenCalledOnce()
   })
+  it('does not submit the surrounding form when confirming a portaled dialog', () => {
+    const onConfirm = vi.fn()
+    const onSubmit = vi.fn(event => event.preventDefault())
+    render(<form onSubmit={onSubmit}><ConfirmDialog open onClose={() => {}} title="Silinsin mi?" consequence={consequence} pending={false} onConfirm={onConfirm} confirmLabel="Sil" /></form>)
+    fireEvent.click(screen.getByRole('button', { name: 'Sil' }))
+    expect(onConfirm).toHaveBeenCalledOnce()
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
   it('blocks a second confirmation while pending and shows a failure with its next step', () => {
     const onConfirm = vi.fn()
     render(<ConfirmDialog open onClose={() => {}} title="Silinsin mi?" consequence={consequence} pending error={new ApiError(409, { code: 'connection_in_use' })} onConfirm={onConfirm} confirmLabel="Sil" />)

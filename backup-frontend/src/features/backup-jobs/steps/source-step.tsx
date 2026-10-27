@@ -8,6 +8,7 @@ import { FilePathList } from '@/features/backup-jobs/file-path-list'
 import { defaultFiles, type Engine } from '@/features/backup-jobs/job-form-values'
 import type { JobFormState } from '@/features/backup-jobs/use-job-form'
 import { errorMessage } from '@/lib/api/failure-messages'
+import { statusLabel } from '@/lib/status'
 
 interface GroupProps { configuration: BackupConfiguration; errors: FieldErrors; onChange: (configuration: BackupConfiguration) => void }
 const engines: readonly (readonly [Engine, string])[] = [['mssql', 'Microsoft SQL Server'], ['postgres', 'PostgreSQL'], ['file-system', 'Dosya / Klasör']]
@@ -72,7 +73,7 @@ export function SourceStep({ form }: { form: JobFormState }) {
       <FormGrid>
         {text('name', tx('İş adı'), values.name, name => set({ name }))}
         <div className="min-w-0 space-y-1">
-          {select('agentId', tx('Yedekleme bilgisayarı'), values.agentId, [['', tx('Yedekleme bilgisayarı seçin')], ...(agents.data ?? []).map(item => [item.agentId, `${item.hostName ?? tx('Adsız bilgisayar')} · ${tx(item.operationalStatus)}`] as const)], agentId => set({ agentId }))}
+          {select('agentId', tx('Yedekleme bilgisayarı'), values.agentId, [['', tx('Yedekleme bilgisayarı seçin')], ...(agents.data ?? []).map(item => [item.agentId, `${item.hostName ?? tx('Adsız bilgisayar')} · ${statusLabel('agent', item.operationalStatus)}`] as const)], agentId => set({ agentId }))}
           {agents.isPending && <p role="status" className="text-sm text-text-muted">{tx("Bilgisayar listesi yükleniyor…")}</p>}{agents.error && <p role="alert" className="text-sm text-error">{errorMessage(agents.error)}</p>}
         </div>
       </FormGrid>

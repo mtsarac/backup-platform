@@ -43,7 +43,7 @@ export function TenantKeysSection({ tenantId, tenantName, encryption, platformVi
         </Notice>
         <Facts>
           <Fact label={tx("Kendi kurtarma anahtarınız")}>{tenantRecovery ? tx('Kurtarma anahtarınız eklenmiş') : tx('Kurtarma anahtarınız eklenmemiş')}</Fact>
-          <Fact label={tx("Acil destek erişimi")}>{platformRecovery.configured ? tx('Platform kurtarma anahtarı hazır') : tx('Platform kurtarma anahtarı hazır değil')}</Fact>
+          {platformRecovery.configured && <Fact label={tx("Acil destek erişimi")}>{tx('Platform kurtarma anahtarı hazır')}</Fact>}
         </Facts>
         {!platformRecovery.configured && <Notice tone="warning">{tx("Platform kurtarma anahtarı yapılandırılmamış: yeni şifreli yedekler yalnızca uygulamanın anahtarıyla ve varsa kendi kurtarma anahtarınızla açılabilir. Uygulamanın anahtarı kaybolursa bu dosyalar açılamayabilir.")}</Notice>}
         <TechnicalDetails items={[

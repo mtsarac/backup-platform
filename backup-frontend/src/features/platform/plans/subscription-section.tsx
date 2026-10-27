@@ -12,7 +12,7 @@ import { formatDateTime } from '@/lib/format'
 import { AssignPlanDialog } from './assign-plan-dialog'
 import { useResumeSubscription, useSuspendSubscription, useTenantSubscription } from './hooks'
 import { OverrideDialog } from './override-dialog'
-import { formatExactBytes, formatGb } from './storage'
+import { formatExactBytes } from './storage'
 import { subscriptionActions, type SubscriptionAction } from './subscription-actions'
 import { SubscriptionHistory } from './subscription-history'
 import { assignedByLabel, overrideLabel, sourceLabel } from './subscription-labels'
@@ -34,9 +34,9 @@ function Current({ subscription }: { subscription: Subscription }) {
   const unknown = tx('Henüz bildirilmedi')
   return <div className="space-y-4">
     <Facts columns={3}>
-      <Fact label="Plan"><span className="font-medium">{subscription.planName}</span></Fact>
+      <Fact label={tx("Plan")}><span className="font-medium">{subscription.planName}</span></Fact>
       <Fact label={tx("Durum")}><StatusPill domain="subscription" status={subscription.status} /></Fact>
-      <Fact label={tx("Etkin depolama limiti")}><span className="font-medium">{formatGb(effective.unlimited ? null : effective.bytes)}</span><div className="text-xs text-text-muted">{tx("Kaynak:")}{' '}{sourceLabel(effective.source)}</div></Fact>
+      <Fact label={tx("Limit kaynağı")}>{sourceLabel(effective.source)}</Fact>
     </Facts>
     {subscription.status === 'Expired' && <Notice tone="warning">{tx("Abonelik süresi doldu. Yeni bir plan atayabilirsiniz.")}</Notice>}
     <TechnicalDetails items={[

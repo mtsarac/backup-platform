@@ -8,6 +8,7 @@ import type { JobValues } from '@/features/backup-jobs/job-form-values'
 import { policyLabels } from '@/features/artifact-encryption/labels'
 import type { ConnectionView } from '@/features/storage-connections/types'
 import { formatSeconds } from '@/lib/format'
+import { executionLocationLabel, storageProviderLabel } from '@/features/storage-connections/labels'
 
 export interface JobSummaryProps { values: JobValues; agentLabel: string; canAdmin: boolean; connections: readonly ConnectionView[]; onGo: (step: JobStep) => void }
 
@@ -29,7 +30,7 @@ export function JobSummary({ values, agentLabel, canAdmin, connections, onGo }: 
       : [{ label: tx("Port"), value: c.port === null ? tx('Varsayılan') : String(c.port) },
         { label: tx("Kimlik doğrulama"), value: c.integratedSecurity ? tx('Windows kimlik doğrulaması') : c.databaseCredentialReference ? tx("Kayıtlı veritabanı girişi") : tx("Veritabanı girişi girilmedi") },
         { label: tx("Bağlantı"), value: [c.encrypt ? tx('Şifreli') : tx('Şifresiz'), c.trustServerCertificate && tx('sunucu sertifikasına güvenilir')].filter(Boolean).join(' · ') }]),
-    ...c.destinations.map((destination, index) => ({ label: tx("Hedef {0}", { "0": index + 1 }), value: [destination.storageProvider, destination.storageExecutionLocation === 'Agent' ? tx('Agent diski') : 'Backend', destination.isPrimary && tx('Birincil')].filter(Boolean).join(' · ') })),
+    ...c.destinations.map((destination, index) => ({ label: tx("Hedef {0}", { "0": index + 1 }), value: [storageProviderLabel(destination.storageProvider), executionLocationLabel(destination.storageExecutionLocation === 'Agent' ? 'Agent' : 'Backend'), destination.isPrimary && tx('Birincil')].filter(Boolean).join(' · ') })),
     { label: tx("Doğrulanmış Replica gereksinimi"), value: String(c.requiredVerifiedReplicaCount) },
     ...(c.enforceThreeTwoOne ? [{ label: tx('3-2-1 koruması'), value: `${tx('3 kopya · 2 medya · doğrulanmış off-site')} · ${c.sourceSite}` }] : []),
     { label: tx("Hedef öneki"), value: c.storagePrefix || tx('Yok') },

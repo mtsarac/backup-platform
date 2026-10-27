@@ -84,7 +84,7 @@ describe('Storage hub', () => {
     expect(within(card).queryByText('Yakında')).not.toBeInTheDocument()
   })
 
-  it('shows the quota state, thresholds and subscription status once each on the usage tab', async () => {
+  it('shows the quota state, thresholds, subscription status and API eligibility once each on the usage tab', async () => {
     vi.mocked(getTenantStorageQuota).mockResolvedValue({ ...quota, state: 'Warning', usedBytes: 8_500_000_000, remainingBytes: 1_500_000_000 })
     mount('/usage')
     await screen.findByRole('heading', { name: 'Plan ve abonelik' })
@@ -92,8 +92,21 @@ describe('Storage hub', () => {
     expect(screen.getAllByText(/%80/)).toHaveLength(1)
     expect(screen.getAllByText('Etkin')).toHaveLength(1)
     expect(screen.queryByText('Kota durumu')).not.toBeInTheDocument()
-    expect(screen.queryByText('Yeni backup')).not.toBeInTheDocument()
+    expect(screen.getAllByText('Yeni yedekleme')).toHaveLength(1)
+    expect(screen.getByText('Yeni yedekleme').nextElementSibling).toHaveTextContent('Evet')
     expect(screen.getByText('Kapasite dolmaya yaklaşıyor')).toBeInTheDocument()
+  })
+
+  it.each([
+    [false, 'Normal', 'Hayır'],
+    [true, 'OverQuota', 'Evet'],
+  ] as const)('shows API newBackupsAllowed=%s without inferring it from the %s quota state or active subscription', async (newBackupsAllowed, state, result) => {
+    vi.mocked(getTenantStorageQuota).mockResolvedValue({ ...quota, state, newBackupsAllowed })
+    mount('/usage')
+    const label = await screen.findByText('Yeni yedekleme')
+    expect(label.nextElementSibling).toHaveTextContent(result)
+    expect(screen.getAllByText('Yeni yedekleme')).toHaveLength(1)
+    expect(screen.getByText('Etkin')).toBeInTheDocument()
   })
 
   it('says existing backups are kept once when a suspended subscription and a full quota both block new backups', async () => {
@@ -107,9 +120,11 @@ describe('Storage hub', () => {
   })
 
   it('does not repeat the legacy unlimited plan or show thresholds that cannot apply without a limit', async () => {
-    vi.mocked(getTenantStorageQuota).mockResolvedValue({ ...quota, limitBytes: null, unlimited: true, remainingBytes: null, state: 'Unlimited', plan: { name: 'Eski plan', isSystem: true, systemKey: 'legacy_unlimited', subscriptionEndsAt: null } })
+    vi.mocked(getTenantStorageQuota).mockResolvedValue({ ...quota, limitBytes: null, unlimited: true, remainingBytes: null, state: 'Unlimited', plan: { name: 'Legacy Unlimited', isSystem: true, systemKey: 'legacy_unlimited', subscriptionEndsAt: null } })
     mount('/usage')
     await screen.findByRole('heading', { name: 'Plan ve abonelik' })
+    expect(screen.getAllByText('Legacy Unlimited')).toHaveLength(1)
+    expect(screen.getAllByText('Eski Sınırsız')).toHaveLength(1)
     expect(screen.queryByText('Eşikler')).not.toBeInTheDocument()
     expect(screen.queryByText(/eşikler uygulanmaz/)).not.toBeInTheDocument()
     expect(screen.queryByText(/\(Legacy Unlimited\)/)).not.toBeInTheDocument()

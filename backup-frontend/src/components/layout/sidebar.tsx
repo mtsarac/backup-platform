@@ -21,7 +21,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen?: boolean; o
       { label: tx("Geri yüklemeler"), to: `${base}/restores`, icon: RotateCcw },
     ] },
     { heading: tx("Altyapı"), items: [
-      { label: tx("Bilgisayarlar"), to: `${base}/agents`, icon: Monitor },
+      { label: tx("Yedekleme bilgisayarları"), to: `${base}/agents`, icon: Monitor },
       { label: tx("Veritabanı bulma"), to: `${base}/discovery`, icon: Radar },
       { label: tx("Depolama"), to: `${base}/storage`, icon: Gauge },
     ] },

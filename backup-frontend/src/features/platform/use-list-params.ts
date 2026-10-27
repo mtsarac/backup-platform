@@ -35,5 +35,7 @@ export function oneOf<T extends string>(value: string, allowed: readonly T[]): T
 
 /** A `YYYY-MM-DD` URL value for a date input, or '' when it is not a real day. */
 export function dayParam(value: string): string {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)) ? value : ''
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return ''
+  const date = new Date(value)
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value ? value : ''
 }

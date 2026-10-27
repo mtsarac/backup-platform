@@ -115,6 +115,8 @@ describe('Backup dosyaları', () => {
     expect(request).toHaveBeenCalledWith('tenants/tenant-a/backup-artifacts/artifact-a', { method: 'DELETE' })
     expect(screen.getByText(/Fiziksel silmeye kalan süre/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Silmeyi iptal et' })).toBeEnabled()
+    expect(screen.queryByText('Ne zaman silinecek?')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Veritabanını geri yükle' })).not.toBeInTheDocument()
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant', 'tenant-a', 'backup-artifacts'] })
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant', 'tenant-a', 'dashboard'] })
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant', 'tenant-a', 'backup-runs'] })
@@ -131,6 +133,8 @@ describe('Backup dosyaları', () => {
     await screen.findByText("Silme iptal edildi. Yedekleme dosyaları korunuyor.")
     expect(request).toHaveBeenCalledWith('tenants/tenant-a/backup-artifacts/artifact-a/cancel-delete', { method: 'POST' })
     expect(screen.queryByRole('button', { name: 'Silmeyi iptal et' })).not.toBeInTheDocument()
+    expect(screen.getByText('Ne zaman silinecek?')).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Veritabanını geri yükle' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/artifact-a/restore')
   })
 
   it('Agent bekleyişini açıkça gösterir ve henüz başlanmamış silmeyi iptal edilebilir tutar', async () => {
@@ -204,8 +208,8 @@ describe('Backup dosyaları', () => {
     cleanup()
     request.mockResolvedValue(artifact({ state: 'Deleted', replicas: [{ ...replica, status: 'Deleted', usable: false, deletedAt: '2026-10-06T10:00:00Z' }] }))
     mount()
-    await screen.findByText('Dosya sağlam mı?')
-    expect(screen.getByText('Geri yüklenemez')).toBeVisible()
+    await screen.findByText(/Bu kayıt yalnızca yedekleme geçmişidir/)
+    expect(screen.queryByText('Kısaca durum')).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Veritabanını geri yükle' })).not.toBeInTheDocument()
   })
 

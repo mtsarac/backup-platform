@@ -42,7 +42,7 @@ const tabs = [
   { value: 'people', get label() { return tx("Kişiler") } },
   { value: 'subscription', get label() { return tx("Abonelik") } },
   { value: 'storage', get label() { return tx("Depolama") } },
-  { value: 'computers', get label() { return tx("Bilgisayarlar") } },
+  { value: 'computers', get label() { return tx("Yedekleme bilgisayarları") } },
   { value: 'security', get label() { return tx("Güvenlik") } },
 ] as const
 /** `tab=storage-computers` was one section before it was split; old links land on the storage section. */
