@@ -1205,8 +1205,6 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Saklanan veri": {"tr":"Saklanan veri","en":"Stored data"},
   "Tenant'taki payı": {"tr":"Çalışma alanındaki payı","en":"Share of workspace usage"},
   "Son güncelleme": {"tr":"Son güncelleme","en":"Last updated"},
-  "Topoloji": {"tr":"Topoloji","en":"Topology"},
-  "Yürütme konumu": {"tr":"Yürütme konumu","en":"Execution location"},
   "Test yöntemi": {"tr":"Test yöntemi","en":"Test method"},
   "Gizli olmayan bağlantı ayarları.": {"tr":"Gizli olmayan bağlantı ayarları.","en":"Non-secret connection settings."},
   "Bu sağlayıcı ek yapılandırma gerektirmiyor.": {"tr":"Bu sağlayıcı ek yapılandırma gerektirmiyor.","en":"This provider does not require additional configuration."},

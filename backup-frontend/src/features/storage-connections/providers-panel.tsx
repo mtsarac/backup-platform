@@ -2,10 +2,8 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { Link } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button-variants'
-import { Facts, Fact } from '@/components/ui/section'
-import { ownershipLabel } from '@/features/storage/labels'
 import { CapabilityChips } from './connection-parts'
-import { executionLocationLabel, tenantCreateState, testModeLabel, topologyLabel } from './labels'
+import { tenantCreateState } from './labels'
 import { ProviderIcon } from './provider-icon'
 import type { ConnectionView, ProviderDescriptor } from './types'
 import { StatusPill } from '@/components/data/status-pill'
@@ -19,14 +17,9 @@ function ProviderCard({ provider, connections, addPath }: { provider: ProviderDe
       <ProviderIcon providerType={provider.providerType} />
       <div className="min-w-0 flex-1"><h3 className="font-medium text-text-heading">{tx(provider.displayName)}</h3>{!planned && <div className="mt-1"><StatusPill domain="provider" status={provider.availability} /></div>}</div>
     </div>
-    {planned
-      ? <p className="text-sm text-text-muted">{tx("Yakında / henüz kullanılamaz. Bu sağlayıcı için bağlantı oluşturulamaz ve test başarılı sayılmaz.")}</p>
-      : <Facts>
-        <Fact label={tx("Topoloji")}>{topologyLabel(provider.topology)}</Fact>
-        <Fact label={tx("Yürütme konumu")}>{executionLocationLabel(provider.executionLocation)}</Fact>
-        <Fact label={tx("Test")}>{testModeLabel(provider.testMode)}</Fact>
-        <Fact label={tx("Sahiplik")}>{provider.supportedOwnerships.map(ownershipLabel).join(', ') || '—'}</Fact>
-      </Facts>}
+    {planned && (
+      <p className="text-sm text-text-muted">{tx("Yakında / henüz kullanılamaz. Bu sağlayıcı için bağlantı oluşturulamaz ve test başarılı sayılmaz.")}</p>
+    )}
     <CapabilityChips capabilities={provider.capabilities} label={tx("{0} yetenekleri", { "0": tx(provider.displayName) })} />
     {!planned && (create.creatable
       ? addPath

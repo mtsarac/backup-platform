@@ -16,7 +16,7 @@ import { useTenant } from '@/features/tenancy/use-tenant'
 import { ConnectionActions } from './connection-actions'
 import { CapabilityChips, CapacityPill, HealthBadge, SecretStatus } from './connection-parts'
 import { useTenantConnectionCapacity, useProbeTenantConnectionCapacity, useTenantConnectionOps, useTenantConnections, useTenantProviders } from './hooks'
-import { configurationSummary, connectionHealth, disableEffects, enableEffect, footprintItems, platformLockState, executionLocationLabel, testMessage, testModeLabel, topologyLabel } from './labels'
+import { configurationSummary, connectionHealth, disableEffects, enableEffect, footprintItems, platformLockState, testMessage } from './labels'
 import type { ConnectionView, ProviderDescriptor } from './types'
 import { formatBytes, formatDateTime, formatRelativeTime } from '@/lib/format'
 import { RelativeTime } from '@/components/data/relative-time'
@@ -128,7 +128,7 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
 }
 
 /** Capacity numbers and history, quota scope, dates, provider internals and identifiers: everything the person does not need to read first. */
-function OverviewTechnical({ connection, descriptor, total }: { connection: ConnectionView; descriptor?: ProviderDescriptor; total: number }) {
+function OverviewTechnical({ connection, total }: { connection: ConnectionView; total: number }) {
   useLanguage()
   const { data: capacity } = useTenantConnectionCapacity(connection.id)
   const measured = capacity && capacity.status !== 'Pending' && capacity.totalBytes != null
@@ -139,9 +139,6 @@ function OverviewTechnical({ connection, descriptor, total }: { connection: Conn
     { label: tx("Kota kapsamı"), value: connection.quotaScope },
     { label: tx("Oluşturulma"), value: formatDateTime(connection.createdAt, tx('Henüz bildirilmedi')) },
     { label: tx("Son güncelleme"), value: formatDateTime(connection.updatedAt, tx('Henüz bildirilmedi')) },
-    { label: tx("Topoloji"), value: topologyLabel(descriptor?.topology ?? null) },
-    { label: tx("Yürütme konumu"), value: executionLocationLabel(descriptor?.executionLocation ?? null) },
-    { label: tx("Test yöntemi"), value: descriptor ? testModeLabel(descriptor.testMode) : '—' },
     { label: tx("Bağlantı kimliği"), value: connection.id },
   ]
   return <TechnicalDetails items={items}>
@@ -160,12 +157,12 @@ function OverviewTechnical({ connection, descriptor, total }: { connection: Conn
   </TechnicalDetails>
 }
 
-function Overview({ connection, descriptor, total }: { connection: ConnectionView; descriptor?: ProviderDescriptor; total: number }) {
+function Overview({ connection, total }: { connection: ConnectionView; total: number }) {
   useLanguage()
   return <div className="space-y-5">
     <HealthNotice connection={connection} />
     <CapacitySection connection={connection} />
-    <OverviewTechnical connection={connection} descriptor={descriptor} total={total} />
+    <OverviewTechnical connection={connection} total={total} />
   </div>
 }
 
@@ -237,7 +234,7 @@ export function ConnectionDetail() {
       actions={<ConnectionActions connection={connection} descriptor={descriptor} ops={ops} show={['test']} />} />
     <Tabs idPrefix="connection" label={tx("Bağlantı bölümleri")} value={active} items={visibleTabs} onChange={(value) => setParams(value === 'overview' ? {} : { tab: value }, { replace: true })} />
     <div role="tabpanel" id={`connection-panel-${active}`} aria-labelledby={`connection-tab-${active}`} className="space-y-5">
-      {active === 'overview' && <Overview connection={connection} descriptor={descriptor} total={total} />}
+      {active === 'overview' && <Overview connection={connection} total={total} />}
       {active === 'configuration' && <Configuration connection={connection} descriptor={descriptor} ops={ops} />}
       {active === 'credentials' && <Credentials connection={connection} descriptor={descriptor} ops={ops} />}
       {active === 'manage' && <Manage connection={connection} descriptor={descriptor} ops={ops} />}
