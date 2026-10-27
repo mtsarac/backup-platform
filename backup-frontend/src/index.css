@@ -36,7 +36,8 @@
   --input: #8a9a96;
   --ring: #0f7a82;
   --radius: 0.625rem;
-  --elevation-card: 0 1px 2px rgba(16, 27, 26, 0.05), 0 1px 1px rgba(16, 27, 26, 0.03);
+  /* Flat work surfaces: hierarchy comes from borders, spacing and type. Only overlays (dialogs, popovers) get a shadow. */
+  --elevation-card: none;
   --elevation-overlay: 0 18px 48px rgba(16, 27, 26, 0.22);
 
   /* Product aliases used across the app. */
@@ -86,7 +87,7 @@
   --border-strong: #6f8683;
   --input: #6f8683;
   --ring: #86dde1;
-  --elevation-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --elevation-card: none;
   --elevation-overlay: 0 18px 48px rgba(0, 0, 0, 0.6);
 
   --surface: #131d1e;
