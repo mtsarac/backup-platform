@@ -107,7 +107,7 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
               <Field label={tx("İşletim sistemi")}>{(control) => <select {...control} disabled={pending} value={platform} onChange={event => setPlatform(event.target.value as AgentPlatform)} className={`${selectClass} w-full`}><option>Windows</option><option>Linux</option></select>}</Field>
             </div>
           </section>
-          <TechnicalDetails items={[]} defaultOpen={serverUnknown}>
+          <TechnicalDetails accordion items={[]} defaultOpen={serverUnknown}>
             <Field label={tx("Backend HTTPS adresi")} hint={serverOk ? undefined : <span className="text-warning">{tx("Bilgisayarın erişebildiği HTTPS sunucu adresini girin (yalnızca protokol, sunucu ve port). HTTP geliştirme proxy’si güvenli bir adres belirlemez.")}</span>}>{(control) => <input {...control} required type="url" disabled={pending} value={server} placeholder="https://backup.example.com" onChange={event => { serverEdited.current = true; setServer(event.target.value) }} className={inputClass} />}</Field>
             <Field label={tx("Geçerlilik süresi (dakika)")}>{(control) => <input {...control} required type="number" min={5} max={10080} step={1} disabled={pending} value={lifetime} onChange={event => setLifetime(event.target.value)} className={inputClass} />}</Field>
           </TechnicalDetails>
@@ -134,7 +134,7 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
             <p role="status" className="rounded-lg border border-border bg-surface px-3 py-2 font-medium text-text">{labels[monitor.phase]}</p>
             {monitor.phase === 'Waiting' && <p className="text-sm text-text-muted">{tx("Komutu hedef bilgisayarda çalıştırın. Kayıt ve ilk bağlantı bekleniyor; bu sayfayı açık bırakın.")}</p>}
           </>}
-          <TechnicalDetails items={[]}><p>{tx('Sunucunun TLS sertifikası hedef bilgisayarda güvenilir olmalıdır. Sertifika doğrulamasını asla devre dışı bırakmayın.')}</p></TechnicalDetails>
+          <TechnicalDetails accordion items={[]}><p>{tx('Sunucunun TLS sertifikası hedef bilgisayarda güvenilir olmalıdır. Sertifika doğrulamasını asla devre dışı bırakmayın.')}</p></TechnicalDetails>
         </section>}
         {view === 'connect' && <section className="space-y-3">
           <h2 className="font-medium text-text-heading">{tx("Bağlantı")}</h2>
@@ -142,7 +142,7 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
           {monitor.phase !== 'Online' && <p className="text-sm text-text-muted">{tx("Kimlik kaydedildi. Yedekleme programının çalıştığını ve sunucuya erişebildiğini kontrol edin; bağlantı bekleniyor.")}</p>}
           {monitor.agent && <>
             <Facts columns={1}><Fact label={tx("Ad")}>{monitor.agent.hostName ?? tx('Bildirilmedi')}</Fact></Facts>
-            <TechnicalDetails items={[
+            <TechnicalDetails accordion items={[
               { label: tx('Bilgisayar kimliği'), value: monitor.agent.agentId },
               { label: tx('İşletim sistemi'), value: monitor.agent.osDescription ?? monitor.agent.platform },
               ...(monitor.agent.agentVersion ? [{ label: tx('Yedekleme programı sürümü'), value: monitor.agent.agentVersion }] : []),

@@ -13,13 +13,31 @@ export interface TechnicalDetailsProps {
   defaultOpen?: boolean
   /** Richer technical content (tables, cards) shown in the drawer. */
   children?: ReactNode
+  /** Inline accordion instead of the slide-over drawer; for places that are already an overlay, such as dialogs. */
+  accordion?: boolean
 }
 
-/**
- * Slide-over inspector drawer for identifiers, raw codes, and system internals.
- * Minimal on-page footprint; rich searchable inspector when opened.
- */
-export function TechnicalDetails({ items, defaultOpen = false, children }: TechnicalDetailsProps) {
+export function TechnicalDetails(props: TechnicalDetailsProps) {
+  return props.accordion ? <TechnicalAccordion {...props} /> : <TechnicalDrawer {...props} />
+}
+
+function TechnicalAccordion({ items, defaultOpen = false, children }: TechnicalDetailsProps) {
+  useLanguage()
+  if (items.length === 0 && !children) return null
+  return <details open={defaultOpen || undefined} className="group rounded-lg border border-border bg-surface-2 text-sm">
+    <summary className="cursor-pointer select-none rounded-lg px-3 py-2 font-medium text-text-heading">{tx('Teknik ayrıntılar')}</summary>
+    {items.length > 0 && <dl className="space-y-2 border-t border-border px-3 py-2">
+      {items.map(item => <div key={item.label} className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0"><dt className="text-text-muted">{item.label}</dt><dd className="break-all font-mono text-text">{item.value}</dd></div>
+        <CopyButton value={item.value} label={tx('Kopyala: {0}', { '0': item.label })} />
+      </div>)}
+    </dl>}
+    {children && <div className="space-y-6 border-t border-border p-3">{children}</div>}
+  </details>
+}
+
+/** Slide-over inspector drawer for identifiers, raw codes, and system internals. */
+function TechnicalDrawer({ items, defaultOpen = false, children }: TechnicalDetailsProps) {
   useLanguage()
   const [open, setOpen] = useState(defaultOpen)
   const [query, setQuery] = useState('')
