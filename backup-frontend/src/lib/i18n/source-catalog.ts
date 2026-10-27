@@ -7377,4 +7377,5 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Mevcut veritabanının bu yedeğin veritabanından oluşturulup oluşturulmadığı belirlenemedi.": {"tr":"Mevcut veritabanının bu yedeğin veritabanından oluşturulup oluşturulmadığı belirlenemedi.","en":"Whether the existing database was created from this backup's database could not be determined."},
   "Mevcut veritabanı yedeklenen veritabanıyla ilişkili değil (farklı aile GUID’i); üzerine yazma onaylandığı için değiştirilecek.": {"tr":"Mevcut veritabanı yedeklenen veritabanıyla ilişkili değil (farklı aile GUID’i); üzerine yazma onaylandığı için değiştirilecek.","en":"The existing database is not related to the backed-up database (different family GUID); it will be replaced because the overwrite was confirmed."},
   "İptal edilenleri göster": {"tr":"İptal edilenleri göster","en":"Show revoked"},
+  "Bilgisayarlar": {"tr":"Bilgisayarlar","en":"Computers"},
 }

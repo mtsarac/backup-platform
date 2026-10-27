@@ -2,6 +2,7 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { useId, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Dialog } from '@base-ui/react/dialog'
 import { Button } from '@/components/ui/button'
+import { controlClass } from '@/components/ui/form-styles'
 import { ErrorNotice } from '@/components/ui/notice'
 import type { ErrorDescription, ErrorScope } from '@/lib/api/failure-messages'
 
@@ -51,7 +52,7 @@ function Body({ title, consequence, pending, error, errorScope, onConfirm, confi
       {children}
       {name !== undefined && <div className="space-y-1">
         <label htmlFor={inputId} className="block text-sm font-medium text-text-heading">{tx("Onaylamak için adı yazın: {0}", { "0": name })}</label>
-        <input id={inputId} value={typed} onChange={event => setTyped(event.target.value)} disabled={pending} autoComplete="off" spellCheck={false} className="block min-h-11 w-full rounded-lg border border-border-strong/70 bg-surface px-3 py-2 font-mono text-text shadow-card disabled:opacity-60" />
+        <input id={inputId} value={typed} onChange={event => setTyped(event.target.value)} disabled={pending} autoComplete="off" spellCheck={false} className={`${controlClass} w-full font-mono`} />
       </div>}
       {error ? isDescribed(error) ? <ErrorNotice {...error} /> : <ErrorNotice error={error} scope={errorScope} /> : null}
       <div className="flex flex-wrap justify-end gap-2">

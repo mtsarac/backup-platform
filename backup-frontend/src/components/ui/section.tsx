@@ -28,5 +28,5 @@ export function Facts({ children, columns = 2 }: { children: ReactNode; columns?
 
 export function Fact({ label, children }: { label: ReactNode; children: ReactNode }) {
   useLanguage()
-  return <div className="min-w-0"><dt className="text-sm text-text-muted">{tx(label)}</dt><dd className="mt-0.5 break-words text-[0.9375rem] text-text">{children}</dd></div>
+  return <div className="min-w-0"><dt className="text-sm text-text-muted">{tx(label)}</dt><dd className="mt-0.5 break-words text-body text-text">{children}</dd></div>
 }

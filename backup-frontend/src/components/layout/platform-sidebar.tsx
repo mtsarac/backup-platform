@@ -22,8 +22,8 @@ export function PlatformSidebar({ mobileOpen, onMobileClose }: { mobileOpen?: bo
       { label: tx("Destek oturumları"), to: platformPaths.supportSessions, icon: ShieldCheck },
       { label: tx("Acil destek erişimi"), to: platformPaths.breakGlass, icon: KeyRound },
       { label: tx("Denetim kaydı"), to: platformPaths.audit(), icon: ScrollText },
-      { label: tx("Bildirim altyapısı"), to: platformPaths.notificationTransports, icon: Bell },
     ] },
+    { heading: tx("Ayarlar"), items: [{ label: tx("Bildirim altyapısı"), to: platformPaths.notificationTransports, icon: Bell }] },
     { items: [{ label: tx("Çalışma alanı arayüzüne dön"), to: '/', icon: ArrowLeft, end: true }] },
   ]
   return <SidebarFrame mobileOpen={mobileOpen} onMobileClose={onMobileClose} dialogLabel={tx("Platform menüsü")} label={tx("Platform gezinme menüsü")} brand={{ icon: ShieldCheck, title: tx("Platform Yönetimi"), caption: tx("Tüm müşteriler") }} groups={groups} />

@@ -55,7 +55,7 @@ function Cards<T>({ rows, columns, keyExtractor, className, caption }: ListProps
               {fields.map((column) => (
                 <div key={column.key} className="min-w-0">
                   <dt className="text-sm text-text-muted">{column.header}</dt>
-                  <dd className="mt-0.5 break-words text-[0.9375rem] text-text">{column.render(row)}</dd>
+                  <dd className="mt-0.5 break-words text-body text-text">{column.render(row)}</dd>
                 </div>
               ))}
             </dl>
@@ -70,7 +70,7 @@ function Cards<T>({ rows, columns, keyExtractor, className, caption }: ListProps
 function Table<T>({ rows, columns, keyExtractor, className, caption }: ListProps<T>) {
   return (
     <div className={cn('overflow-x-auto rounded-xl border border-border bg-surface shadow-card', className)}>
-      <table className="w-full border-collapse text-[0.9375rem]">
+      <table className="w-full border-collapse text-body">
         {caption && <caption className="sr-only">{caption}</caption>}
         <thead>
           <tr className="border-b border-border bg-surface-2 text-left text-sm text-text-muted">

@@ -166,6 +166,9 @@
   --font-sans: 'Geist Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Consolas, monospace;
 
+  /* Type scale: text-sm (labels, hints, helper text), text-body (table cells, facts, buttons, descriptions), text-base (titles, body default), text-lg (dialog titles). */
+  --text-body: 0.9375rem;
+
 }
 
 /* The top bar is sticky: keep keyboard focus and anchors from scrolling underneath it (rem, so it follows the text-size setting). */
