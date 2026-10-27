@@ -6,15 +6,15 @@ import { AuditTable } from '@/features/platform/audit-table'
 import { platformCrumb } from '@/features/platform/crumbs'
 import { usePlatformAudit } from '@/features/platform/hooks'
 import { TenantPicker } from '@/features/platform/tenant-picker'
-import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
+import { platformOnlyMessage } from '@/lib/api/failure-messages'
 
 export function PlatformAuditPage() {
   useLanguage()
   const { page, get, update } = useListParams()
   const tenantId = get('tenantId')
-  const query = usePlatformAudit({ tenantId, page, pageSize: PLATFORM_PAGE_SIZE })
+  const query = usePlatformAudit({ tenantId, page, pageSize: LIST_PAGE_SIZE })
   const data = query.data
   return <div className="space-y-6">
     <PageHeader crumbs={[platformCrumb]} title={tx("Audit")} description={tx("Kim, ne zaman, hangi çalışma alanında ne yaptı. Ham kodlar ve ayrıntı çiftleri “Teknik ayrıntılar” altındadır.")} />

@@ -19,7 +19,7 @@ export function JobSummary({ values, agentLabel, canAdmin, connections, onGo }: 
   const { name, enabled, configuration: c, scheduled, schedule, overlap, retry, retention } = values
   const isFiles = c.engine === 'file-system'
   const row = (label: string, step: JobStep, children: ReactNode) => <div key={label} className="flex flex-wrap items-start justify-between gap-3 border-b border-border py-3 last:border-b-0">
-    <div className="min-w-0"><dt className="text-sm text-text-muted">{label}</dt><dd className="mt-0.5 break-words text-[0.9375rem] text-text">{children}</dd></div>
+    <div className="min-w-0"><dt className="text-sm text-text-muted">{label}</dt><dd className="mt-0.5 break-words text-body text-text">{children}</dd></div>
     <Button type="button" variant="outline" size="sm" aria-label={tx("Değiştir: {0}", { "0": label })} onClick={() => onGo(step)}>{tx("Değiştir")}</Button>
   </div>
   const retentionText = !canAdmin ? tx('Sunucunun varsayılan politikası uygulanır.') : retention.enabled ? keepForLabel(retention.keepForSeconds) : tx('Süresiz')

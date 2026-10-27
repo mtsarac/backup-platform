@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { CheckField } from '@/components/ui/check-field'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Loader2, RefreshCw } from 'lucide-react'
@@ -30,11 +31,11 @@ function SettingsForm({ status }: { status: DiscoveryAgentStatus }) {
   const invalid = !Number.isInteger(minutes) || minutes < 15 || minutes > 10080
   const fieldError = save.error instanceof ApiError ? Object.values(save.error.fields).map(code => failureMessage(code))[0] : undefined
   return <form className="space-y-3" aria-label={tx("Tarama ayarları")} onSubmit={event => { event.preventDefault(); if (!invalid) save.mutate({ enabled, scanIntervalMinutes: minutes, includeDocker }) }}>
-    <label className="flex min-h-11 items-center gap-3 text-[0.9375rem] text-text"><input type="checkbox" className="size-5 accent-primary" checked={enabled} onChange={event => setEnabled(event.target.checked)} />{tx("Otomatik tarama açık")}</label>
+    <CheckField label={tx("Otomatik tarama açık")} checked={enabled} onChange={event => setEnabled(event.target.checked)} />
     <Field id={`interval-${status.agentId}`} label={tx("Tarama aralığı (dakika)")} hint={tx("15 ile 10080 arasında.")} error={invalid ? tx('Aralık 15 ile 10080 dakika arasında bir tam sayı olmalı.') : fieldError}>
       {control => <input {...control} type="number" className={inputClass} value={interval} onChange={event => setInterval(event.target.value)} />}
     </Field>
-    <label className="flex min-h-11 items-center gap-3 text-[0.9375rem] text-text"><input type="checkbox" className="size-5 accent-primary" checked={includeDocker} onChange={event => setIncludeDocker(event.target.checked)} />{tx("Docker container'larını da tara")}</label>
+    <CheckField label={tx("Docker container'larını da tara")} checked={includeDocker} onChange={event => setIncludeDocker(event.target.checked)} />
     {save.error && !fieldError && <ErrorNotice error={save.error} />}
     {save.isSuccess && <Notice tone="success">{tx("Tarama ayarları kaydedildi.")}</Notice>}
     <Button type="submit" disabled={invalid || save.isPending}>{save.isPending ? tx('Kaydediliyor…') : tx('Kaydet')}</Button>

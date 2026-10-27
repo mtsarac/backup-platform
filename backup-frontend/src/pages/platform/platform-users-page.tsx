@@ -18,10 +18,10 @@ import { FormDialog } from '@/components/ui/form-dialog'
 import { SearchForm } from '@/features/platform/search-form'
 import { inputClass } from '@/components/ui/form-styles'
 import type { PlatformUser } from '@/features/platform/types'
-import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { ApiError } from '@/lib/api/client'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
+import { platformOnlyMessage } from '@/lib/api/failure-messages'
 
 function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (name: string) => void }) {
   useLanguage()
@@ -46,7 +46,7 @@ export function PlatformUsersPage() {
   useLanguage()
   const { page, get, update } = useListParams()
   const search = get('search')
-  const query = usePlatformUsers({ search, page, pageSize: PLATFORM_PAGE_SIZE })
+  const query = usePlatformUsers({ search, page, pageSize: LIST_PAGE_SIZE })
   const [creating, setCreating] = useState(false)
   const [created, setCreated] = useState('')
   const data = query.data

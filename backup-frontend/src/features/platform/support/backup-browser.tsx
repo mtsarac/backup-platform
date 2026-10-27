@@ -13,7 +13,7 @@ import { SearchablePicker } from '@/components/ui/searchable-picker'
 import { ArtifactDetails } from '@/features/artifacts/artifact-details'
 import { artifactState } from '@/features/artifacts/format'
 import { runStatuses } from '@/features/backups/presentation'
-import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { failureMessage } from '@/lib/api/failure-messages'
 import { SupportArtifactDownload } from './artifact-download'
 import { useSupportArtifact, useSupportArtifacts, useSupportJobs, useSupportRuns } from './hooks'
@@ -34,8 +34,8 @@ export function SupportBackupBrowser({ session }: { session: SupportSession }) {
   const jobId = get('jobId')
   const from = get('from'), to = get('to')
   const invalidDates = Boolean((from && !/^\d{4}-\d{2}-\d{2}$/.test(from)) || (to && !/^\d{4}-\d{2}-\d{2}$/.test(to)) || (from && to && from > to))
-  const runs = useSupportRuns({ ...scope, enabled: scope.enabled && view === 'runs' }, { page, pageSize: PLATFORM_PAGE_SIZE, jobId, status: get('runStatus') })
-  const artifacts = useSupportArtifacts({ ...scope, enabled: scope.enabled && view === 'artifacts' && !invalidDates }, { page, pageSize: PLATFORM_PAGE_SIZE, jobId, state: get('state'), from: from && !invalidDates ? `${from}T00:00:00.000Z` : '', to: to && !invalidDates ? `${to}T23:59:59.999Z` : '' })
+  const runs = useSupportRuns({ ...scope, enabled: scope.enabled && view === 'runs' }, { page, pageSize: LIST_PAGE_SIZE, jobId, status: get('runStatus') })
+  const artifacts = useSupportArtifacts({ ...scope, enabled: scope.enabled && view === 'artifacts' && !invalidDates }, { page, pageSize: LIST_PAGE_SIZE, jobId, state: get('state'), from: from && !invalidDates ? `${from}T00:00:00.000Z` : '', to: to && !invalidDates ? `${to}T23:59:59.999Z` : '' })
   // Visible: names, result, size and everyday times. Collapsed and copyable: ids, raw states, trigger, schedule internals.
   const columns: Column<SupportArtifact>[] = [
     { key: 'database', card: 'title', header: tx('Veritabanı'), wrap: true, render: artifact => <button className="font-medium text-primary hover:underline" onClick={() => update({ artifact: artifact.id })}>{artifact.databaseName ?? tx('Veritabanı bildirilmedi')}</button> },

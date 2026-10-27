@@ -12,12 +12,11 @@ import { useNotificationDeliveries } from './hooks'
 import { eventTypeLabels, kindLabels, phaseLabels, severityLabels } from './labels'
 import { channelKinds, deliveryStatuses, eventTypes } from './types'
 import type { DeliveryFilters, NotificationDelivery } from './types'
-import { oneOf, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE, oneOf, useListParams } from '@/features/platform/use-list-params'
 import { formatDateTime, formatRelativeTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { statusLabel } from '@/lib/status'
 
-const PAGE_SIZE = 25
 const eventFilters = [...eventTypes, 'break_glass_access', 'test'] as const
 
 function DeliveryCard({ delivery }: { delivery: NotificationDelivery }) {
@@ -51,7 +50,7 @@ export function DeliveriesSection() {
   const status = oneOf(get('status'), deliveryStatuses)
   const kind = oneOf(get('kind'), channelKinds)
   const eventType = oneOf(get('eventType'), eventFilters)
-  const filters: DeliveryFilters = { page, pageSize: PAGE_SIZE, status, kind, eventType }
+  const filters: DeliveryFilters = { page, pageSize: LIST_PAGE_SIZE, status, kind, eventType }
   const deliveries = useNotificationDeliveries(filters)
   const data = deliveries.data
   const filter = (key: 'status' | 'kind' | 'eventType') => (event: ChangeEvent<HTMLSelectElement>) => update({ [key]: event.target.value })

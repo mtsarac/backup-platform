@@ -19,7 +19,7 @@ import { BackupPicker } from '@/features/artifacts/backup-picker'
 import { useRestores } from '@/features/restores/hooks'
 import { restoreModeLabel, restoreStatuses, targetStateLabel, verificationCleanupText } from '@/features/restores/presentation'
 import type { RestoreFilters, RestoreView } from '@/features/restores/types'
-import { oneOf, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE, oneOf, useListParams } from '@/features/platform/use-list-params'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { formatDuration } from '@/lib/format'
 import { statusLabel } from '@/lib/status'
@@ -30,7 +30,7 @@ export function RestoresPage() {
   const { page, get, update } = useListParams()
   const status = oneOf(get('status'), restoreStatuses) ?? ''
   const verification = get('view') === 'tests'
-  const filters: RestoreFilters = { page, pageSize: 25, purpose: verification ? 'Verification' : undefined, status, artifactId: get('artifactId'), agentId: get('agentId') }
+  const filters: RestoreFilters = { page, pageSize: LIST_PAGE_SIZE, purpose: verification ? 'Verification' : undefined, status, artifactId: get('artifactId'), agentId: get('agentId') }
   const query = useRestores(filters)
   const agents = useAgents(tenantId, true)
   const base = `/tenants/${tenantId}`

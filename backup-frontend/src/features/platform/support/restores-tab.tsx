@@ -10,7 +10,7 @@ import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { TechnicalDetails } from '@/components/ui/technical-details'
-import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { canCancelRestore, databaseStateLabel, isActiveRestore, restoreProgressPercent, restoreStageLabel, restoreStatuses, targetStateDescription, targetStateLabel } from '@/features/restores/presentation'
 import type { RestoreView } from '@/features/restores/types'
 import { failureMessage } from '@/lib/api/failure-messages'
@@ -27,7 +27,7 @@ export function SupportRestoresTab({ session }: { session: SupportSession }) {
   useLanguage()
   const { page, get, update } = useListParams('restorePage')
   const scope = supportScope(session, 'restores')
-  const query = useSupportRestores(scope, { page, pageSize: PLATFORM_PAGE_SIZE, status: get('restoreStatus') })
+  const query = useSupportRestores(scope, { page, pageSize: LIST_PAGE_SIZE, status: get('restoreStatus') })
   const columns: Column<RestoreView>[] = [
     { key: 'database', card: 'title', header: tx('Yeni veritabanı'), wrap: true, render: item => <button className="font-medium text-primary hover:underline" onClick={() => update({ restoreId: item.id, restoreArtifact: '' })}>{item.databaseName}</button> },
     { key: 'source', header: tx('Kaynak veritabanı'), wrap: true, render: item => item.sourceDatabaseName ?? '—' },

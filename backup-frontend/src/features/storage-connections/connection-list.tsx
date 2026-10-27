@@ -40,9 +40,9 @@ function ConnectionCard({ connection, total, tenantId, onTest, testing, testErro
       </div>
     </div>
     <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-3">
-      <div className="min-w-0"><dt className="text-sm text-text-muted">{tx("Sağlayıcı")}</dt><dd className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[0.9375rem] text-text">{tx(connection.providerDisplayName)}<StatusPill domain="ownership" status={connection.ownership} /></dd></div>
-      <div className="min-w-0"><dt className="text-sm text-text-muted">{tx("Son test")}</dt><dd className="mt-0.5 text-[0.9375rem] text-text">{connection.lastTest ? <RelativeTime value={connection.lastTest.testedAt} /> : tx('Henüz test edilmedi')}</dd></div>
-      {capacity && capacity.status !== 'Pending' && capacity.freeBytes != null && <div className="min-w-0"><dt className="text-sm text-text-muted">{tx("Boş Alan")}</dt><dd className="mt-0.5 text-[0.9375rem] text-text">{formatBytes(capacity.freeBytes)}</dd></div>}
+      <div className="min-w-0"><dt className="text-sm text-text-muted">{tx("Sağlayıcı")}</dt><dd className="mt-0.5 flex flex-wrap items-center gap-x-2 text-body text-text">{tx(connection.providerDisplayName)}<StatusPill domain="ownership" status={connection.ownership} /></dd></div>
+      <div className="min-w-0"><dt className="text-sm text-text-muted">{tx("Son test")}</dt><dd className="mt-0.5 text-body text-text">{connection.lastTest ? <RelativeTime value={connection.lastTest.testedAt} /> : tx('Henüz test edilmedi')}</dd></div>
+      {capacity && capacity.status !== 'Pending' && capacity.freeBytes != null && <div className="min-w-0"><dt className="text-sm text-text-muted">{tx("Boş Alan")}</dt><dd className="mt-0.5 text-body text-text">{formatBytes(capacity.freeBytes)}</dd></div>}
     </dl>
     {connection.administrativelyDisabled && <p className="text-sm font-medium text-warning">{tx(platformLockState)}</p>}
     {connection.permissions.canTest && <div><Button variant="outline" size="sm" aria-label={tx("{0} bağlantısı: test et", { "0": connection.name })} disabled={testing} onClick={onTest}>{testing ? tx('Test ediliyor…') : tx('Test et')}</Button></div>}

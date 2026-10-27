@@ -10,10 +10,10 @@ import { useBreakGlassRequests } from '@/features/artifact-encryption/hooks'
 import { breakGlassStatuses, type BreakGlassStatus } from '@/features/artifact-encryption/types'
 import { TenantPicker } from '@/features/platform/tenant-picker'
 import { platformCrumb } from '@/features/platform/crumbs'
-import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { statusLabel } from '@/lib/status'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
+import { platformOnlyMessage } from '@/lib/api/failure-messages'
 
 export function PlatformBreakGlassPage() {
   useLanguage()
@@ -26,7 +26,7 @@ export function PlatformBreakGlassPage() {
   const prefillTenant = get('requestTenantId')
   const prefillArtifact = get('requestArtifactId')
   const [dialogOpen, setDialogOpen] = useState(Boolean(prefillTenant && prefillArtifact))
-  const query = useBreakGlassRequests({ page, pageSize: PLATFORM_PAGE_SIZE, status, mine, tenantId })
+  const query = useBreakGlassRequests({ page, pageSize: LIST_PAGE_SIZE, status, mine, tenantId })
   function closeDialog() {
     setDialogOpen(false)
     update({ requestTenantId: '', requestArtifactId: '' })

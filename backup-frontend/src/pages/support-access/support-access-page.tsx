@@ -14,7 +14,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { PermissionBadges } from '@/features/platform/support/session-table'
-import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { useSupportAccessActivity, useSupportAccessSession, useSupportAccessSessions } from '@/features/support-access/hooks'
 import { auditActionLabel } from '@/features/audit/action-labels'
 import { auditResultLabel } from '@/features/audit/audit-details'
@@ -73,7 +73,7 @@ function SupportAccessContent({ tenantId }: { tenantId: string }) {
 
 function SessionHistory({ tenantId, page, onPage, onOpen }: { tenantId: string; page: number; onPage: (page: number) => void; onOpen: (sessionId: string) => void }) {
   useLanguage()
-  const query = useSupportAccessSessions(tenantId, { page, pageSize: PLATFORM_PAGE_SIZE })
+  const query = useSupportAccessSessions(tenantId, { page, pageSize: LIST_PAGE_SIZE })
   return <AccessQueryState isPending={query.isPending} error={query.error}>
     {query.data && <div className="space-y-4">
       {query.data.items.length === 0 ? <EmptyState message={tx('Henüz destek erişimi kaydı yok.')} /> : <ul aria-label={tx('Destek erişimi geçmişi')} className="space-y-3">
@@ -116,7 +116,7 @@ function SessionDetail({ tenantId, sessionId, onClose }: { tenantId: string; ses
 function SessionActivity({ tenantId, sessionId }: { tenantId: string; sessionId: string }) {
   useLanguage()
   const { page, update } = useListParams('activityPage')
-  const query = useSupportAccessActivity(tenantId, sessionId, { page, pageSize: PLATFORM_PAGE_SIZE })
+  const query = useSupportAccessActivity(tenantId, sessionId, { page, pageSize: LIST_PAGE_SIZE })
   return <div className="space-y-3"><h3 className="font-semibold">{tx('Etkinlik geçmişi')}</h3>
     <AccessQueryState isPending={query.isPending} error={query.error}>{query.data && <>
       {query.data.items.length === 0 ? <EmptyState message={tx('Bu oturum için etkinlik kaydı yok.')} /> : <ul aria-label={tx('Etkinlik geçmişi')} className="space-y-3">

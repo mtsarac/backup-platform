@@ -6,7 +6,7 @@ import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { bareListClass } from '@/features/platform/list-empty'
-import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { failureMessage } from '@/lib/api/failure-messages'
 import { useSupportDownloads } from './hooks'
 import { supportScope } from './presentation'
@@ -19,7 +19,7 @@ export function SupportDownloadsTab({ session }: { session: SupportSession }) {
   useLanguage()
   const { page, update } = useListParams('downloadPage')
   const scope = supportScope(session, 'downloads')
-  const query = useSupportDownloads(scope, { page, pageSize: PLATFORM_PAGE_SIZE })
+  const query = useSupportDownloads(scope, { page, pageSize: LIST_PAGE_SIZE })
   const columns: Column<SupportDownload>[] = [
     { key: 'filename', card: 'title', header: tx('Dosya'), wrap: true, render: item => item.filename },
     { key: 'artifact', header: tx('Yedek dosyası'), wrap: true, render: item => <div className="space-y-2"><button className="text-primary hover:underline" onClick={() => update({ tab: 'browser', view: 'artifacts', artifact: item.artifactId })}>{tx("Yedek dosyası ayrıntıları")}</button><TechnicalDetails items={[{ label: tx('Yedek dosyası kimliği'), value: item.artifactId }]} /></div> },

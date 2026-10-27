@@ -25,7 +25,7 @@ import type { PlatformTenantDetail } from '@/features/platform/types'
 import { useListParams } from '@/features/platform/use-list-params'
 import { PlatformTenantConnections } from '@/features/storage-connections/platform-tenant-connections'
 import { ApiError } from '@/lib/api/client'
-import { errorMessage } from '@/lib/api/failure-messages'
+import { errorMessage, platformOnlyMessage } from '@/lib/api/failure-messages'
 import { WrapKeysSection } from '@/features/artifact-encryption/wrap-keys-section'
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
@@ -34,9 +34,8 @@ import { TechnicalDetails } from '@/components/ui/technical-details'
 import { useBreakGlassRequests, useTenantEncryption } from '@/features/artifact-encryption/hooks'
 import { BreakGlassTable } from '@/features/artifact-encryption/break-glass-table'
 import { TenantKeysSection } from '@/features/artifact-encryption/tenant-recovery-key-section'
-import { PLATFORM_PAGE_SIZE } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE } from '@/features/platform/use-list-params'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
 
 const tabs = [
   { value: 'summary', get label() { return tx("Özet") } },
@@ -123,7 +122,7 @@ function RecoveryKeys({ tenant }: { tenant: PlatformTenantDetail }) {
 function EmergencyAccessHistory({ tenantId }: { tenantId: string }) {
   useLanguage()
   const { page, update } = useListParams('breakGlassPage')
-  const query = useBreakGlassRequests({ tenantId, page, pageSize: PLATFORM_PAGE_SIZE })
+  const query = useBreakGlassRequests({ tenantId, page, pageSize: LIST_PAGE_SIZE })
   return <Section title={tx('Acil destek erişimi geçmişi')}>
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {query.data && <div className="space-y-4">

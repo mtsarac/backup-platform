@@ -9,15 +9,14 @@ import { Field } from '@/components/ui/field'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { errorMessage } from '@/lib/api/failure-messages'
+import { errorMessage, platformOnlyMessage } from '@/lib/api/failure-messages'
 import { useAddMembership, useChangeMembershipRole, usePlatformMemberships, usePlatformUsers, useRemoveMembership } from './hooks'
 import { bareListClass } from './list-empty'
 import { SearchForm } from './search-form'
 import { inlineSelectClass, selectClass } from '@/components/ui/form-styles'
 import { membershipRoles, type MembershipRole, type PlatformMembership } from './types'
-import { PLATFORM_PAGE_SIZE, useListParams } from './use-list-params'
+import { LIST_PAGE_SIZE, useListParams } from './use-list-params'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
 
 function isRole(value: string): value is MembershipRole {
   return membershipRoles.some((role) => role === value)
@@ -59,7 +58,7 @@ function AddMemberForm({ tenantId }: { tenantId: string }) {
 export function MembershipsSection({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
   useLanguage()
   const { page, update } = useListParams('memberPage')
-  const query = usePlatformMemberships(tenantId, { page, pageSize: PLATFORM_PAGE_SIZE })
+  const query = usePlatformMemberships(tenantId, { page, pageSize: LIST_PAGE_SIZE })
   const changeRole = useChangeMembershipRole(tenantId)
   const remove = useRemoveMembership(tenantId)
   const [selected, setSelected] = useState<PlatformMembership | null>(null)

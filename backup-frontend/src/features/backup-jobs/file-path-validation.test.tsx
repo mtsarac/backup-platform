@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { stepOfField } from './job-wizard-model'
-import { validFilePath, validFilePaths } from './file-path-list'
+import { validFilePath, validFilePaths } from './file-path-validation'
 
 describe('confined file selections', () => {
   it.each(['../escape', '/absolute', 'C:/absolute', 'a\\b', 'a//b', 'a/./b', 'a/../b', 'a\u0000b', 'a\u0085b', ''])('rejects unsafe path %j', path => {

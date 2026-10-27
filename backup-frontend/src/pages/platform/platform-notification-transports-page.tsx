@@ -4,7 +4,7 @@ import { platformCrumb } from '@/features/platform/crumbs'
 import { useNotificationTransports } from '@/features/platform/notifications/hooks'
 import { EmailTransportCard, SmsTransportCard } from '@/features/platform/notifications/transport-forms'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
+import { platformOnlyMessage } from '@/lib/api/failure-messages'
 
 export function PlatformNotificationTransportsPage() {
   useLanguage()

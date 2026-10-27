@@ -6,7 +6,7 @@ import { CreateManagedTargetDialog } from './create-dialogs'
 import { usePlatformConnectionOps, usePlatformProviders, usePlatformTenantConnections } from './hooks'
 import { PlatformConnectionTable } from './platform-connection-table'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
+import { platformOnlyMessage } from '@/lib/api/failure-messages'
 
 /** 'Depolama bağlantıları' on the platform tenant detail page: every destination of one tenant, with the same row actions as the global list. */
 export function PlatformTenantConnections({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {

@@ -7,7 +7,7 @@ import { platformPaths } from '@/features/platform/paths'
 import { useSupportSessions } from '@/features/platform/support/hooks'
 import { supportStatuses } from '@/features/platform/support/presentation'
 import { SupportSessionTable } from '@/features/platform/support/session-table'
-import { oneOf, PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
+import { oneOf, LIST_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { statusLabel } from '@/lib/status'
 import { QueryState } from '@/components/data/query-state'
 import { errorMessage } from '@/lib/api/failure-messages'
@@ -18,7 +18,7 @@ export function PlatformSupportSessionsPage() {
   const status = oneOf(get('status'), supportStatuses) ?? ''
   const mine = get('mine') === 'true'
   const tenantId = get('tenantId')
-  const query = useSupportSessions({ page, pageSize: PLATFORM_PAGE_SIZE, status, mine, tenantId })
+  const query = useSupportSessions({ page, pageSize: LIST_PAGE_SIZE, status, mine, tenantId })
   return <div className="space-y-6">
     <PageHeader crumbs={[{ label: 'Platform', to: platformPaths.root }]} title={tx("Support Sessions")} description={tx("Tek tenant için süreli, gerekçeli ve izin kapsamlı müşteri erişimi. Yeni bir oturum tenant detayından açılır.")} />
     <Filters label={tx("Destek oturumu filtreleri")} onClear={status || mine || tenantId ? () => update({ status: '', mine: '', tenantId: '' }) : undefined}>

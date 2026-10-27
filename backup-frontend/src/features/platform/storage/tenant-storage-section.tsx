@@ -10,7 +10,7 @@ import { QuotaSummary, StandingBadge } from '@/features/storage/quota-summary'
 import { usePlatformTenantQuota, useRebuildUsage, useReconcileUsage } from './hooks'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
+import { platformOnlyMessage } from '@/lib/api/failure-messages'
 
 export function TenantStorageSection({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
   useLanguage()

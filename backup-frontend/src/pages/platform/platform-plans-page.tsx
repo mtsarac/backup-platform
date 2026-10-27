@@ -9,7 +9,7 @@ import { platformCrumb } from '@/features/platform/crumbs'
 import { ListEmpty } from '@/features/platform/list-empty'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { SearchForm } from '@/features/platform/search-form'
-import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { usePlans, useSetPlanEnabled } from '@/features/platform/plans/hooks'
 import { CreatePlanDialog, EditPlanDialog } from '@/features/platform/plans/plan-form-dialog'
 import { formatGb } from '@/features/platform/plans/storage'
@@ -18,7 +18,7 @@ import type { EnabledFilter, Plan } from '@/features/platform/plans/types'
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
+import { platformOnlyMessage } from '@/lib/api/failure-messages'
 
 function enabledFilter(value: string): EnabledFilter | undefined {
   return value === 'true' || value === 'false' ? value : undefined
@@ -29,7 +29,7 @@ export function PlatformPlansPage() {
   const { page, get, update } = useListParams()
   const search = get('search')
   const enabled = enabledFilter(get('enabled'))
-  const query = usePlans({ enabled, search, page, pageSize: PLATFORM_PAGE_SIZE })
+  const query = usePlans({ enabled, search, page, pageSize: LIST_PAGE_SIZE })
   const setEnabled = useSetPlanEnabled()
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Plan | null>(null)

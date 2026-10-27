@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { restorePath } from '@/lib/routes'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
@@ -36,7 +37,7 @@ export function ArtifactVerificationSection({ tenantId, artifact }: { tenantId: 
         { key: 'started', header: tx('Başlangıç'), render: row => formatDateTime(row.startedAt ?? row.createdAt) },
         { key: 'duration', header: tx('Süre'), render: row => row.completedAt ? formatDuration(row.startedAt, row.completedAt) : '—' },
         { key: 'agent', header: tx('Agent'), card: 'hidden', render: row => <span className="break-all font-mono text-xs">{row.agentId}</span> },
-        { key: 'open', header: tx('Ayrıntı'), card: 'actions', render: row => <Link className="text-primary hover:underline" to={`/tenants/${tenantId}/restores/${row.id}`}>{tx("Aç")}</Link> },
+        { key: 'open', header: tx('Ayrıntı'), card: 'actions', render: row => <Link className="text-primary hover:underline" to={restorePath(tenantId, row.id)}>{tx("Aç")}</Link> },
       ]} />}
     </div>
   </Section>
@@ -68,7 +69,7 @@ function VerificationForm({ tenantId, artifactId, onClose }: { tenantId: string;
     try {
       const restore = await start.mutateAsync({ artifactId, idempotencyKey: idempotencyKey.keyFor(request), request })
       idempotencyKey.settle()
-      navigate(`/tenants/${tenantId}/restores/${restore.id}`)
+      navigate(restorePath(tenantId, restore.id))
     } catch (caught) {
       idempotencyKey.settle(caught)
       setError(caught)

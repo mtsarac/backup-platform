@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatBytes, formatGb, MAX_STORAGE_BYTES, parseGb, toGbInput } from './storage'
+import { formatExactBytes, formatGb, MAX_STORAGE_BYTES, parseGb, toGbInput } from './storage'
 
 describe('decimal storage units (1 GB = 1,000,000,000 bytes)', () => {
   it('formats capacity as decimal GB, never binary', () => {
@@ -11,7 +11,7 @@ describe('decimal storage units (1 GB = 1,000,000,000 bytes)', () => {
   })
 
   it('shows exact bytes with Turkish grouping', () => {
-    expect(formatBytes(5_000_000_000)).toBe('5.000.000.000 bayt')
+    expect(formatExactBytes(5_000_000_000)).toBe('5.000.000.000 bayt')
   })
 
   it.each([

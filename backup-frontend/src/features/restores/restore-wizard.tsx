@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { restorePath } from '@/lib/routes'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Stepper } from '@/components/ui/stepper'
@@ -237,7 +238,7 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
       const result = await startRestore.mutateAsync(attempt.variables)
       restoreKey.settle()
       if (restoreAttemptRef.current !== attempt) return
-      navigate(`/tenants/${tenantId}/restores/${result.id}`)
+      navigate(restorePath(tenantId, result.id))
     } catch (error) {
       restoreKey.settle(error)
       if (restoreAttemptRef.current !== attempt) return

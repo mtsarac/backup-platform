@@ -13,7 +13,7 @@ import { artifactState } from '@/features/artifacts/format'
 import { useArtifacts } from '@/features/artifacts/hooks'
 import type { ArtifactFilters, BackupArtifact } from '@/features/artifacts/types'
 import { ReplicationSummary } from '@/features/backups/replication'
-import { dayParam, oneOf, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE, dayParam, oneOf, useListParams } from '@/features/platform/use-list-params'
 import { linkClass } from '@/components/ui/form-styles'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { formatBytes, formatDateTime } from '@/lib/format'
@@ -31,7 +31,7 @@ export function ArtifactsPage() {
   useLanguage()
   const { tenantId } = useTenant()
   const { page, get, update } = useListParams()
-  const filter: ArtifactFilters = { page, pageSize: 25, state: oneOf(get('state'), states) ?? '', from: dayParam(get('from')), to: dayParam(get('to')) }
+  const filter: ArtifactFilters = { page, pageSize: LIST_PAGE_SIZE, state: oneOf(get('state'), states) ?? '', from: dayParam(get('from')), to: dayParam(get('to')) }
   const query = useArtifacts(tenantId, filter)
   const invalidDates = Boolean(filter.from && filter.to && filter.from > filter.to)
   const filtering = Boolean(filter.state || filter.from || filter.to)

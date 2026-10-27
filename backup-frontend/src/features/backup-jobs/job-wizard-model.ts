@@ -1,7 +1,7 @@
 import { tx } from '@/lib/i18n'
-import type { BackupConfiguration, Schedule } from '@/features/backup-jobs/types'
+import type { BackupConfiguration } from '@/features/backup-jobs/types'
 import { loginErrors } from '@/features/backup-jobs/database-login-validation'
-import { validFilePaths } from './file-path-list'
+import { validFilePaths } from './file-path-validation'
 import type { JobValues } from './job-form-values'
 import { formatSeconds } from '@/lib/format'
 
@@ -29,12 +29,6 @@ export const retentionPresets = [7, 14, 30, 90].map(days => [days * day, days] a
 export function schedulePresetLabel(cronExpression: string) {
   const label = schedulePresets.find(([, cron]) => cron === cronExpression)?.[0]
   return label && tx(label)
-}
-
-/** Human label for a schedule: a preset name when the cron matches one, the raw cron otherwise. */
-export function scheduleLabel(schedule: Schedule | null | undefined) {
-  if (!schedule) return tx('Manuel')
-  return schedulePresetLabel(schedule.cronExpression) ?? schedule.cronExpression
 }
 
 /** Whole days when the period is one, otherwise hours/minutes/seconds. */

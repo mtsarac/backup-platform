@@ -13,19 +13,18 @@ import { Section } from '@/components/ui/section'
 import { bareListClass, ListEmpty } from '@/features/platform/list-empty'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { QuotaMeter } from '@/features/storage/quota-meter'
-import type { StorageUsageRow, QuotaState, EntitlementStatus } from '@/features/storage/types'
+import { quotaStates, type StorageUsageRow, type EntitlementStatus } from '@/features/storage/types'
 import { platformPaths } from '@/features/platform/paths'
 import { SearchForm } from '@/features/platform/search-form'
 import { linkClass } from '@/components/ui/form-styles'
-import { PLATFORM_PAGE_SIZE, oneOf, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE, oneOf, useListParams } from '@/features/platform/use-list-params'
 import { useStorageUsage, useReconcileUsage, useRebuildUsage } from '@/features/platform/storage/hooks'
 import { formatBytes, formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
+import { platformOnlyMessage } from '@/lib/api/failure-messages'
 
-const quotaStates: readonly QuotaState[] = ['Normal', 'Warning', 'Critical', 'OverQuota', 'Unlimited']
 const subscriptionStatuses: readonly EntitlementStatus[] = ['Active', 'Suspended', 'Expired', 'NoSubscription']
 
 export function PlatformStoragePage() {
@@ -41,7 +40,7 @@ export function PlatformStoragePage() {
     quotaState,
     subscriptionStatus,
     page,
-    pageSize: PLATFORM_PAGE_SIZE,
+    pageSize: LIST_PAGE_SIZE,
   })
 
   const [activeReconcile, setActiveReconcile] = useState<StorageUsageRow | null>(null)

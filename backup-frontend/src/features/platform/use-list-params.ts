@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
-export const PLATFORM_PAGE_SIZE = 25
+export const LIST_PAGE_SIZE = 25
 
 function positiveInt(value: string | null) {
   const parsed = Number(value)

@@ -10,7 +10,7 @@ import { platformPaths } from '@/features/platform/paths'
 import { DashboardStorage } from '@/features/platform/storage/dashboard-storage'
 import type { PlatformSummary } from '@/features/platform/types'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
+import { platformOnlyMessage } from '@/lib/api/failure-messages'
 
 interface Attention { key: string; text: string; to: string }
 
@@ -51,11 +51,11 @@ function DashboardAttention({ data }: { data: PlatformSummary }) {
   return <Section title={tx("Platform sağlıklı mı?")}>
     <div role="status" className="space-y-2">
       <StatusPill level={items.length > 0 ? 'attention' : 'safe'} />
-      <p className="text-[0.9375rem] text-text-muted">{items.length > 0 ? tx("Önce bunlara bakın.") : tx("Dikkat gerektiren bir durum yok.")}</p>
+      <p className="text-body text-text-muted">{items.length > 0 ? tx("Önce bunlara bakın.") : tx("Dikkat gerektiren bir durum yok.")}</p>
     </div>
     {items.length > 0 && <ul aria-label={tx("Dikkat gerektirenler")} className="mt-4 divide-y divide-border rounded-lg border border-border">
       {items.map((item) => <li key={item.key}>
-        <Link className="flex min-h-11 items-center justify-between gap-3 px-4 py-2.5 text-[0.9375rem] text-primary hover:bg-surface-3" to={item.to}>
+        <Link className="flex min-h-11 items-center justify-between gap-3 px-4 py-2.5 text-body text-primary hover:bg-surface-3" to={item.to}>
           <span className="min-w-0 break-words">{item.text}</span>
           <ChevronRight aria-hidden="true" className="size-4 shrink-0" />
         </Link>

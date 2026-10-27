@@ -34,7 +34,7 @@ interface Dashboard {
 }
 
 function Row({ label, value, tone }: { label: string; value: number; tone?: 'error' }) {
-  return <div className="flex items-center justify-between gap-3 py-1.5"><dt className="text-[0.9375rem] text-text-muted">{label}</dt><dd className={`font-semibold tabular-nums ${tone === 'error' && value > 0 ? 'text-error' : 'text-text-heading'}`}>{value}</dd></div>
+  return <div className="flex items-center justify-between gap-3 py-1.5"><dt className="text-body text-text-muted">{label}</dt><dd className={`font-semibold tabular-nums ${tone === 'error' && value > 0 ? 'text-error' : 'text-text-heading'}`}>{value}</dd></div>
 }
 
 /** One plain sentence about a run: why it failed, or what it is waiting for. */

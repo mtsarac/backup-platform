@@ -16,7 +16,6 @@ export const revokeSession = (id: string, reason: string) => apiRequest<SupportS
 export const getSessionAudit = (id: string, params: PageParams, signal?: AbortSignal) => apiRequest<PagedResult<SupportAuditEntry>>(`${sessionPath(id)}/audit${query(params)}`, { signal })
 export const getSupportJobs = (id: string, signal?: AbortSignal) => apiRequest<SupportJob[]>(`${sessionPath(id)}/backup-jobs`, { signal })
 export const getSupportRuns = (id: string, filters: SupportDataFilters, signal?: AbortSignal) => apiRequest<PagedResult<SupportRun>>(`${sessionPath(id)}/backup-runs${query(filters)}`, { signal })
-export const getSupportRun = (id: string, runId: string, signal?: AbortSignal) => apiRequest<SupportRun>(`${sessionPath(id)}/backup-runs/${encodeURIComponent(runId)}`, { signal })
 export const getSupportArtifacts = (id: string, filters: SupportDataFilters, signal?: AbortSignal) => apiRequest<PagedResult<SupportArtifact>>(`${sessionPath(id)}/artifacts${query(filters)}`, { signal })
 export const getSupportArtifact = (id: string, artifactId: string, signal?: AbortSignal) => apiRequest<SupportArtifact>(artifactPath(id, artifactId), { signal })
 export const getSupportDownloadAvailability = (id: string, artifactId: string, signal?: AbortSignal) => apiRequest<SupportDownloadAvailability>(`${artifactPath(id, artifactId)}/download-availability`, { signal })

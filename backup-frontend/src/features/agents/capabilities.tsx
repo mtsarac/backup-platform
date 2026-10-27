@@ -18,7 +18,7 @@ function sortCapabilities(capabilities: AgentCapability[]) {
 export function CapabilityList({ capabilities }: { capabilities: AgentCapability[] }) {
   useLanguage()
   const known = new Set<string>(groups.map((group) => group.support))
-  return <div className="space-y-5 text-[0.9375rem] text-text">
+  return <div className="space-y-5 text-body text-text">
     {groups.map((group) => {
       const items = sortCapabilities(capabilities.filter((item) => group.support === 'Unknown' ? item.support === 'Unknown' || !known.has(item.support) : item.support === group.support))
       if (items.length === 0) return null

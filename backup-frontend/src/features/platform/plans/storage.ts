@@ -24,7 +24,7 @@ export function formatGb(bytes: number | null): string {
 }
 
 /** `5.000.000.000 bayt` (Turkish grouping). */
-export function formatBytes(bytes: number): string {
+export function formatExactBytes(bytes: number): string {
   return tx("{0} bayt", { "0": bytes.toLocaleString(currentLocale()) })
 }
 

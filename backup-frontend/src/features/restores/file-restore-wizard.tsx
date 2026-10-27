@@ -1,9 +1,10 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { restorePath } from '@/lib/routes'
 import { useNavigate } from 'react-router-dom'
 import { tx, useLanguage } from '@/lib/i18n'
 import { isUncertainError, useIdempotencyKey } from '@/lib/idempotency-key'
 import { Stepper } from '@/components/ui/stepper'
-import { validFilePath, validFilePaths } from '@/features/backup-jobs/file-path-list'
+import { validFilePath, validFilePaths } from '@/features/backup-jobs/file-path-validation'
 import type { BackupArtifact } from '@/features/artifacts/types'
 import { useRestore, useStartRestore, useStartRestorePrecheck } from './hooks'
 import { FileRestoreConfirmStep } from './file-restore-confirm-step'
@@ -99,7 +100,7 @@ export function FileRestoreWizard({ tenantId, artifact, targets }: { tenantId: s
     try {
       const data = await startRestore.mutateAsync(attempt.variables)
       executionKey.settle()
-      if (mounted.current) navigate(`/tenants/${tenantId}/restores/${data.id}`)
+      if (mounted.current) navigate(restorePath(tenantId, data.id))
     } catch (error) {
       executionKey.settle(error)
       if (mounted.current) setExecutionFailure({ fingerprint: attempt.fingerprint, error })

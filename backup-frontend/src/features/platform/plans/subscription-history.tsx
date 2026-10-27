@@ -7,11 +7,11 @@ import { TechnicalDetails } from '@/components/ui/technical-details'
 import { formatDateTime } from '@/lib/format'
 import { useListParams } from '../use-list-params'
 import { useSubscriptionHistory } from './hooks'
-import { formatBytes, formatGb } from './storage'
+import { formatExactBytes, formatGb } from './storage'
 import { assignedByLabel, overrideLabel, sourceLabel } from './subscription-labels'
 import type { Subscription } from './types'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
+import { platformOnlyMessage } from '@/lib/api/failure-messages'
 
 const HISTORY_PAGE_SIZE = 10
 
@@ -24,12 +24,12 @@ function HistoryCard({ row }: { row: Subscription }) {
       <StatusPill domain="subscription" status={row.status} />
     </div>
     <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-      <div><dt className="text-sm text-text-muted">{tx("Başlangıç")}</dt><dd className="text-[0.9375rem] text-text">{formatDateTime(row.startsAt, unknown)}</dd></div>
-      <div><dt className="text-sm text-text-muted">{tx("Bitiş")}</dt><dd className="text-[0.9375rem] text-text">{row.endsAt ? formatDateTime(row.endsAt, unknown) : tx('Süresiz')}</dd></div>
+      <div><dt className="text-sm text-text-muted">{tx("Başlangıç")}</dt><dd className="text-body text-text">{formatDateTime(row.startsAt, unknown)}</dd></div>
+      <div><dt className="text-sm text-text-muted">{tx("Bitiş")}</dt><dd className="text-body text-text">{row.endsAt ? formatDateTime(row.endsAt, unknown) : tx('Süresiz')}</dd></div>
     </dl>
     <TechnicalDetails items={[
       { label: tx("Etkin limit"), value: formatGb(limit.unlimited ? null : limit.bytes) },
-      ...(!limit.unlimited && limit.bytes !== null ? [{ label: tx("Etkin limit (bayt)"), value: formatBytes(limit.bytes) }] : []),
+      ...(!limit.unlimited && limit.bytes !== null ? [{ label: tx("Etkin limit (bayt)"), value: formatExactBytes(limit.bytes) }] : []),
       { label: tx("Limit kaynağı"), value: sourceLabel(limit.source) },
       { label: tx("Override"), value: overrideLabel(row.storageLimitOverride) },
       { label: tx("Atayan"), value: assignedByLabel(row) },

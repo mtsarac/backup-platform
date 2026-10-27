@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { CheckField } from '@/components/ui/check-field'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
@@ -50,9 +51,9 @@ function CredentialForm({ instance }: { instance: DiscoveryInstanceDetail }) {
       setSubmitted(false)
     }}>
       {usesPassword && <DatabaseLoginFields idPrefix="credential" login={login} hasStored={hasStored} disabled={!canOperate} errors={loginProblem} onChange={setLogin} />}
-      {isMssql && <label className="flex min-h-11 items-center gap-3 text-[0.9375rem] text-text"><input type="checkbox" className="size-5 accent-primary" checked={integrated} disabled={!canOperate} onChange={event => setIntegrated(event.target.checked)} />{tx("Windows hesabıyla giriş yap")}</label>}
-      <label className="flex min-h-11 items-center gap-3 text-[0.9375rem] text-text"><input type="checkbox" className="size-5 accent-primary" checked={encrypt} disabled={!canOperate} onChange={event => setEncrypt(event.target.checked)} />{tx("Bağlantıyı şifrele")}</label>
-      <label className="flex min-h-11 items-center gap-3 text-[0.9375rem] text-text"><input type="checkbox" className="size-5 accent-primary" checked={trust} disabled={!canOperate} onChange={event => setTrust(event.target.checked)} />{tx("Sunucu sertifikasına güven")}</label>
+      {isMssql && <CheckField label={tx("Windows hesabıyla giriş yap")} checked={integrated} disabled={!canOperate} onChange={event => setIntegrated(event.target.checked)} />}
+      <CheckField label={tx("Bağlantıyı şifrele")} checked={encrypt} disabled={!canOperate} onChange={event => setEncrypt(event.target.checked)} />
+      <CheckField label={tx("Sunucu sertifikasına güven")} checked={trust} disabled={!canOperate} onChange={event => setTrust(event.target.checked)} />
       {otherError && <ErrorNotice {...otherError} />}
       {save.isSuccess && <Notice tone="success">{tx("Veritabanı girişi kaydedildi. Veritabanlarını listelemek için bağlantıyı doğrulayın.")}</Notice>}
       {verifyStarted && <Notice tone="info">{tx("Doğrulama istendi; sonuç bilgisayarın bir sonraki bağlantısında gelir.")}</Notice>}

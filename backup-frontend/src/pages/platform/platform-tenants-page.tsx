@@ -17,11 +17,11 @@ import { FormDialog } from '@/components/ui/form-dialog'
 import { SearchForm } from '@/features/platform/search-form'
 import { inputClass, linkClass } from '@/components/ui/form-styles'
 import type { PlatformTenant } from '@/features/platform/types'
-import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { ApiError } from '@/lib/api/client'
 import { StatusPill } from '@/components/data/status-pill'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
+import { platformOnlyMessage } from '@/lib/api/failure-messages'
 
 function CreateTenantDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (name: string) => void }) {
   useLanguage()
@@ -40,7 +40,7 @@ export function PlatformTenantsPage() {
   useLanguage()
   const { page, get, update } = useListParams()
   const search = get('search')
-  const query = usePlatformTenants({ search, page, pageSize: PLATFORM_PAGE_SIZE })
+  const query = usePlatformTenants({ search, page, pageSize: LIST_PAGE_SIZE })
   const [creating, setCreating] = useState(false)
   const [created, setCreated] = useState('')
   const data = query.data

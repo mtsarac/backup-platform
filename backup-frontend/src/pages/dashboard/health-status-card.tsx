@@ -23,10 +23,10 @@ function Verdict({ summary, state, base }: { summary: HealthSummary; state: Back
   const { level, title, text } = verdict(state)
   const items = recommendations(summary.jobs)
   return <Section>
-    <div role="status" className="space-y-1"><StatusPill level={level} className="text-sm" /><p className="pt-2 text-xl font-semibold text-text-heading">{title}</p><p className="text-[0.9375rem] text-text-muted">{text}</p></div>
+    <div role="status" className="space-y-1"><StatusPill level={level} className="text-sm" /><p className="pt-2 text-xl font-semibold text-text-heading">{title}</p><p className="text-body text-text-muted">{text}</p></div>
     {items.length > 0 && <ul aria-label={tx("Öneriler")} className="mt-4 divide-y divide-border rounded-lg border border-border">
       {items.map(item => <li key={item.jobId}>
-        <Link to={`${base}/backup-jobs/${item.jobId}/edit`} className="flex min-h-11 items-center justify-between gap-3 px-4 py-2.5 text-[0.9375rem] hover:bg-surface-3">
+        <Link to={`${base}/backup-jobs/${item.jobId}/edit`} className="flex min-h-11 items-center justify-between gap-3 px-4 py-2.5 text-body hover:bg-surface-3">
           <span className="min-w-0 break-words"><span className="font-medium text-text-heading">{item.jobName}</span>: {item.message}</span>
           <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-text-muted" />
         </Link>

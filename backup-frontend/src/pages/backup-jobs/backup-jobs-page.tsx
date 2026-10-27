@@ -16,11 +16,11 @@ import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { useBackupJobs, useRunBackupJob, useToggleBackupJob } from '@/features/backup-jobs/hooks'
 import type { BackupJob } from '@/features/backup-jobs/types'
-import { oneOf, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE, oneOf, useListParams } from '@/features/platform/use-list-params'
 import { linkClass } from '@/components/ui/form-styles'
 import { ApiError } from '@/lib/api/client'
 
-const pageSize = 25
+const pageSize = LIST_PAGE_SIZE
 const [runHint, disableHint, enableHint] = ['job-run-hint', 'job-disable-hint', 'job-enable-hint']
 
 export function BackupJobsPage() {

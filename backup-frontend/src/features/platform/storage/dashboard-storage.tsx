@@ -10,7 +10,7 @@ import { useStorageUsage } from './hooks'
 import { formatBytes } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
+import { platformOnlyMessage } from '@/lib/api/failure-messages'
 
 const columns: Column<StorageUsageRow>[] = [
   { key: 'tenant', get header() { return tx("Tenant") }, wrap: true, render: (row) => <Link className={linkClass} to={platformPaths.tenant(row.tenantId)}>{row.tenantName}</Link> },

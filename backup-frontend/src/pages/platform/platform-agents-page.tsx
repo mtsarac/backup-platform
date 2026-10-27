@@ -13,9 +13,9 @@ import { platformPaths } from '@/features/platform/paths'
 import { SearchForm } from '@/features/platform/search-form'
 import { TenantPicker } from '@/features/platform/tenant-picker'
 import type { AgentConnectivity, AgentLifecycle, PlatformAgent } from '@/features/platform/types'
-import { PLATFORM_PAGE_SIZE, oneOf, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE, oneOf, useListParams } from '@/features/platform/use-list-params'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
+import { platformOnlyMessage } from '@/lib/api/failure-messages'
 
 const connectivityValues: AgentConnectivity[] = ['online', 'offline', 'unknown']
 const lifecycleValues: AgentLifecycle[] = ['PendingEnrollment', 'Active', 'Disabled', 'Revoked']
@@ -27,7 +27,7 @@ export function PlatformAgentsPage() {
   const tenantId = get('tenantId')
   const connectivity = oneOf(get('connectivity'), connectivityValues)
   const status = oneOf(get('status'), lifecycleValues)
-  const query = usePlatformAgents({ tenantId, connectivity, status, search, page, pageSize: PLATFORM_PAGE_SIZE })
+  const query = usePlatformAgents({ tenantId, connectivity, status, search, page, pageSize: LIST_PAGE_SIZE })
   const data = query.data
   const filtered = Boolean(search || tenantId || connectivity || status)
   // OS, versions, capabilities and lifecycle details live on the computer's own page; the list only flags a lifecycle that is not Active.

@@ -27,7 +27,7 @@ function SidebarContent({ brand, label, groups, footer, onClose }: { brand: { ic
         {group.heading && <p aria-hidden="true" className="mb-1 px-3 text-xs font-medium text-sidebar-muted">{group.heading}</p>}
         <ul className="space-y-0.5">{group.items.map((item) => <li key={item.to}>
           <NavLink to={item.to} end={item.end} onClick={onClose}
-            className={({ isActive }) => `flex min-h-11 items-center gap-3 rounded-lg px-3 text-[0.9375rem] transition-colors ${isActive ? 'bg-sidebar-active font-medium text-white shadow-[inset_3px_0_0_var(--primary)]' : 'text-sidebar-foreground hover:bg-sidebar-active/60'}`}>
+            className={({ isActive }) => `flex min-h-11 items-center gap-3 rounded-lg px-3 text-body transition-colors ${isActive ? 'bg-sidebar-active font-medium text-white shadow-[inset_3px_0_0_var(--primary)]' : 'text-sidebar-foreground hover:bg-sidebar-active/60'}`}>
             <item.icon className="size-5 shrink-0" />{tx(item.label)}
           </NavLink>
         </li>)}</ul>

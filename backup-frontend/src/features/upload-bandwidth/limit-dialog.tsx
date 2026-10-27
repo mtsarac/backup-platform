@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { CheckField } from '@/components/ui/check-field'
 import { useState } from 'react'
 import { Field } from '@/components/ui/field'
 import { FormDialog } from '@/components/ui/form-dialog'
@@ -34,8 +35,7 @@ export function LimitDialog({ target, name, current, minimum, maximum, onClose }
   }
   return <FormDialog title={tx("Yükleme hız sınırı: {0}", { "0": name })} description={scopeHelp[target.scope]} submitLabel={tx("Kaydet")} pendingLabel={tx("Kaydediliyor…")} pending={save.isPending} disabled={invalid}
     error={save.error} onSubmit={submit} onClose={onClose}>
-    <label className="flex min-h-11 items-center gap-3 text-[0.9375rem] text-text">
-      <input type="checkbox" className="size-5 accent-primary" checked={unlimited} onChange={event => setUnlimited(event.target.checked)} />{tx("Limitsiz (sınır yok)")}</label>
+    <CheckField label={tx("Limitsiz (sınır yok)")} checked={unlimited} onChange={event => setUnlimited(event.target.checked)} />
     <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
       <Field label={tx("Hız sınırı")} error={showInvalid ? bandwidthErrorMessage(parsed.error, minimum, maximum) : undefined}>
         {control => <input {...control} className={inputClass} inputMode="decimal" value={text} disabled={unlimited} onChange={event => setText(event.target.value)} />}

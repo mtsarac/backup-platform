@@ -60,7 +60,7 @@ export function LoginPage() {
         </div>
         <div className="max-w-md space-y-8">
           <h2 className="text-3xl font-semibold leading-tight text-white">{tx("Veritabanı yedekleriniz, tek bakışta güvende.")}</h2>
-          <ul className="space-y-4">{promises.map(({ icon: Icon, text }) => <li key={text} className="flex gap-3"><Icon aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-primary" /><span className="text-[0.9375rem] text-sidebar-foreground">{tx(text)}</span></li>)}</ul>
+          <ul className="space-y-4">{promises.map(({ icon: Icon, text }) => <li key={text} className="flex gap-3"><Icon aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-primary" /><span className="text-body text-sidebar-foreground">{tx(text)}</span></li>)}</ul>
         </div>
         <p className="text-sm text-sidebar-muted">{tx("Yönetim konsolu")}</p>
       </aside>
@@ -71,7 +71,7 @@ export function LoginPage() {
             <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground"><DatabaseBackup aria-hidden="true" className="size-5" /></span>
             <span className="font-semibold text-text-heading">{tx("Backup Platform")}</span>
           </div>
-          <div className="space-y-1"><h1 className="text-2xl font-semibold text-text-heading">{tx("Giriş yapın")}</h1><p className="text-[0.9375rem] text-text-muted">{tx("Hesabınızla yönetim konsoluna devam edin.")}</p></div>
+          <div className="space-y-1"><h1 className="text-2xl font-semibold text-text-heading">{tx("Giriş yapın")}</h1><p className="text-body text-text-muted">{tx("Hesabınızla yönetim konsoluna devam edin.")}</p></div>
           <form onSubmit={handleSubmit} className="space-y-4 rounded-xl border border-border bg-surface p-6 shadow-card">
             <Field label={tx("Kullanıcı adı")}>{(control) => <input {...control} type="text" autoComplete="username" value={loginIdentifier} onChange={(e) => setLoginIdentifier(e.target.value)} className={`${inputClass} mt-0`} required />}</Field>
             <Field label={tx("Şifre")}>{(control) => <input {...control} type="password" value={password} autoComplete="current-password" onChange={(e) => setPassword(e.target.value)} className={`${inputClass} mt-0`} required />}</Field>

@@ -16,7 +16,7 @@ import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { RelativeTime } from '@/components/data/relative-time'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
+import { platformOnlyMessage } from '@/lib/api/failure-messages'
 
 /** TWK lifecycle of one tenant: versions, state and how many artifacts each version still protects. No key material is ever shown. */
 export function WrapKeysSection({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {

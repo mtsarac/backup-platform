@@ -18,13 +18,13 @@ import { useBackups } from '@/features/backups/hooks'
 import { dateFilterInstant, runStatuses } from '@/features/backups/presentation'
 import { SizeAnomalyBadge, SizeAnomalyComparison } from '@/features/backups/size-anomaly'
 import type { BackupRun, BackupRunFilters } from '@/features/backups/types'
-import { dayParam, oneOf, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE, dayParam, oneOf, useListParams } from '@/features/platform/use-list-params'
 import { linkClass } from '@/components/ui/form-styles'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { formatDuration } from '@/lib/format'
 import { statusLabel } from '@/lib/status'
 
-const pageSize = 25
+const pageSize = LIST_PAGE_SIZE
 
 export function BackupsPage() {
   useLanguage()

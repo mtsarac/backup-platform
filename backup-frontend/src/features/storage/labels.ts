@@ -1,5 +1,5 @@
 import { tx } from '@/lib/i18n'
-import type { AccountingMode, EnforcementMode, EntitlementStatus, PlanSummary, ScopeSelector } from './types'
+import type { AccountingMode, EnforcementMode, PlanSummary, ScopeSelector } from './types'
 import { LEGACY_UNLIMITED_KEY } from './types'
 
 export const accountingModeLabels: Record<AccountingMode, string> = {
@@ -50,8 +50,4 @@ export function scopeLabels(scopes: readonly ScopeSelector[]): string[] {
 /** The system plan every pre-quota tenant was migrated onto: unlimited, no commercial limit. */
 export function isLegacyUnlimited(plan: PlanSummary | null): boolean {
   return plan?.isSystem === true && plan.systemKey === LEGACY_UNLIMITED_KEY
-}
-
-export function isSubscriptionRestricted(status: EntitlementStatus): boolean {
-  return status !== 'Active'
 }

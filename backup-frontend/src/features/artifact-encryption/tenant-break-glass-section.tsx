@@ -8,14 +8,14 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { linkClass } from '@/components/ui/form-styles'
-import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { formatDateTime } from '@/lib/format'
 import { useTenantBreakGlass } from './hooks'
 
 export function TenantBreakGlassSection({ tenantId }: { tenantId: string }) {
   useLanguage()
   const { page, update } = useListParams('breakGlassPage')
-  const query = useTenantBreakGlass(tenantId, { page, pageSize: PLATFORM_PAGE_SIZE })
+  const query = useTenantBreakGlass(tenantId, { page, pageSize: LIST_PAGE_SIZE })
   return <Section title={tx('Acil destek erişimi')} description={tx('Platform çalışanlarının şifreli yedeklerinizi açma istekleri. Her istek gerekçeli, iki kişi tarafından onaylanan, süreli ve tek kullanımlıktır.')}>
     <QueryState isPending={query.isPending} error={query.error}>
       {query.data && <div className="space-y-4">

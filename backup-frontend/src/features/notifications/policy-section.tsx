@@ -23,7 +23,7 @@ const thresholdLabels: Record<ThresholdField, string> = {
   get maxNotificationsPerHour() { return tx("Saatlik azami bildirim") },
 }
 
-const checkClass = 'flex min-h-11 items-center gap-3 rounded-lg border border-border bg-surface-2 px-3 text-[0.9375rem] text-text'
+const checkClass = 'flex min-h-11 items-center gap-3 rounded-lg border border-border bg-surface-2 px-3 text-body text-text'
 const boxClass = 'size-5 accent-primary'
 
 function toggle<T>(list: T[], item: T, on: boolean) {

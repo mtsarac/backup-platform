@@ -5,9 +5,6 @@ export type AccountingMode = 'LogicalArtifactBytes' | 'PhysicalReplicaBytes'
 export type EnforcementMode = 'BlockNewBackups' | 'WarnOnly' | 'None'
 
 export const quotaStates: readonly QuotaState[] = ['Normal', 'Warning', 'Critical', 'OverQuota', 'Unlimited']
-export const entitlementStatuses: readonly EntitlementStatus[] = ['Active', 'Suspended', 'Expired', 'NoSubscription']
-export const accountingModes: readonly AccountingMode[] = ['LogicalArtifactBytes', 'PhysicalReplicaBytes']
-export const enforcementModes: readonly EnforcementMode[] = ['BlockNewBackups', 'WarnOnly', 'None']
 
 /** The selector kinds the backend accepts: `quotaScope` matches a connection's scope label, `storageConnection` matches connection GUIDs. */
 export type ScopeKind = 'all' | 'providerType' | 'ownershipType' | 'quotaScope' | 'storageConnection'

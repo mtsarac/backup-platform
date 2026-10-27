@@ -12,13 +12,13 @@ import { formatDateTime } from '@/lib/format'
 import { AssignPlanDialog } from './assign-plan-dialog'
 import { useResumeSubscription, useSuspendSubscription, useTenantSubscription } from './hooks'
 import { OverrideDialog } from './override-dialog'
-import { formatBytes, formatGb } from './storage'
+import { formatExactBytes, formatGb } from './storage'
 import { subscriptionActions, type SubscriptionAction } from './subscription-actions'
 import { SubscriptionHistory } from './subscription-history'
 import { assignedByLabel, overrideLabel, sourceLabel } from './subscription-labels'
 import type { Subscription } from './types'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
+import { platformOnlyMessage } from '@/lib/api/failure-messages'
 
 const actionLabels: Record<SubscriptionAction, () => string> = {
   assign: () => tx('Plan ata'),
@@ -40,8 +40,8 @@ function Current({ subscription }: { subscription: Subscription }) {
     </Facts>
     {subscription.status === 'Expired' && <Notice tone="warning">{tx("Abonelik süresi doldu. Yeni bir plan atayabilirsiniz.")}</Notice>}
     <TechnicalDetails items={[
-      ...(!effective.unlimited && effective.bytes !== null ? [{ label: tx("Etkin depolama limiti (bayt)"), value: formatBytes(effective.bytes) }] : []),
-      ...(subscription.planStorageLimitBytes !== null ? [{ label: tx("Plan limiti (bayt)"), value: formatBytes(subscription.planStorageLimitBytes) }] : []),
+      ...(!effective.unlimited && effective.bytes !== null ? [{ label: tx("Etkin depolama limiti (bayt)"), value: formatExactBytes(effective.bytes) }] : []),
+      ...(subscription.planStorageLimitBytes !== null ? [{ label: tx("Plan limiti (bayt)"), value: formatExactBytes(subscription.planStorageLimitBytes) }] : []),
       { label: tx("Override"), value: overrideLabel(subscription.storageLimitOverride) },
       { label: tx("Başlangıç"), value: formatDateTime(subscription.startsAt, unknown) },
       { label: tx("Bitiş"), value: subscription.endsAt ? formatDateTime(subscription.endsAt, unknown) : tx('Süresiz') },

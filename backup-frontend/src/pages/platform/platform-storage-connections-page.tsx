@@ -6,14 +6,14 @@ import { Button } from '@/components/ui/button'
 import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
 import { Notice } from '@/components/ui/notice'
 import { SearchForm } from '@/features/platform/search-form'
-import { PLATFORM_PAGE_SIZE, oneOf, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE, oneOf, useListParams } from '@/features/platform/use-list-params'
 import { CreateManagedTargetDialog } from '@/features/storage-connections/create-dialogs'
 import { usePlatformConnectionOps, usePlatformConnections, usePlatformProviders } from '@/features/storage-connections/hooks'
 import { platformLockMeaning } from '@/features/storage-connections/labels'
 import { PlatformConnectionTable } from '@/features/storage-connections/platform-connection-table'
 import { connectionOwnerships, type ConnectionOwnership, type PlatformConnectionFilters } from '@/features/storage-connections/types'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
+import { platformOnlyMessage } from '@/lib/api/failure-messages'
 
 /** `ownership` absent = the default view (PlatformManaged); `all` is the explicit unfiltered view. */
 function ownershipFilter(value: string): ConnectionOwnership | undefined {
@@ -36,7 +36,7 @@ export function PlatformStorageConnectionsPage() {
     enabled: enabled === 'true' ? true : enabled === 'false' ? false : undefined,
     search: search || undefined,
     page,
-    pageSize: PLATFORM_PAGE_SIZE,
+    pageSize: LIST_PAGE_SIZE,
   }
   const query = usePlatformConnections(filters)
   const providers = usePlatformProviders()
