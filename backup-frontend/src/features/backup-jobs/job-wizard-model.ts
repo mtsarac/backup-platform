@@ -1,19 +1,26 @@
 import { tx } from '@/lib/i18n'
-import type { BackupConfiguration, RetryPolicy, Schedule } from '@/features/backup-jobs/types'
+import type { BackupConfiguration, Schedule } from '@/features/backup-jobs/types'
 import { loginErrors } from '@/features/backup-jobs/database-login-validation'
 import { validFilePaths } from './file-path-list'
+import type { JobValues } from './job-form-values'
 import { formatSeconds } from '@/lib/format'
 
-/** One question per step; the last one is the summary. */
-export const jobSteps = ['İş adı', 'Bilgisayar', 'Kaynak', 'Depolama', 'Zamanlama', 'Saklama', 'Şifreleme', 'Özet'] as const
-export const nameStep = 0
-export const agentStep = 1
-export const sourceStep = 2
-export const storageStep = 3
-export const scheduleStep = 4
-export const retentionStep = 5
-export const protectionStep = 6
-export const summaryStep = jobSteps.length - 1
+/** Create flow, in order. The edit page shows the same sections on one page, without the review step. */
+export const jobSteps = ['source', 'storage', 'schedule', 'protection', 'review'] as const
+export type JobStep = (typeof jobSteps)[number]
+export type EditSection = Exclude<JobStep, 'review'>
+export const editSections: readonly EditSection[] = ['source', 'storage', 'schedule', 'protection']
+
+export function stepLabel(step: JobStep) {
+  switch (step) {
+    case 'source': return tx('Kaynak')
+    case 'storage': return tx('Depolama')
+    case 'schedule': return tx('Zamanlama')
+    case 'protection': return tx('Koruma')
+    case 'review': return tx('Özet ve onay')
+  }
+}
+
 export const schedulePresets = [['Her gün 02:00', '0 2 * * *'], ['Her gün 08:00', '0 8 * * *'], ['Günde 2 kez (08:00 ve 20:00)', '0 8,20 * * *']] as const
 const day = 86400
 export const retentionPresets = [7, 14, 30, 90].map(days => [days * day, days] as const)
@@ -35,35 +42,53 @@ export function keepForLabel(seconds: number) {
   return seconds > 0 && seconds % day === 0 ? tx('{0} gün', { '0': seconds / day }) : formatSeconds(seconds)
 }
 
-// Field-name prefixes owned by each step; server field errors are routed back to the step that shows them.
-const owners: readonly (readonly string[])[] = [
-  ['name', 'enabled'],
-  ['agentId'],
-  ['configuration.engine', 'configuration.host', 'configuration.database', 'configuration.files', 'configuration.databaseCredentialReference', 'configuration.databaseLogin.userName', 'configuration.databaseLogin.password', 'configuration.port', 'configuration.integratedSecurity', 'configuration.encrypt', 'configuration.trustServerCertificate'],
-  ['configuration.destinations', 'configuration.requiredVerifiedReplicaCount', 'configuration.enforceThreeTwoOne', 'configuration.sourceSite', 'configuration.storagePrefix', 'configuration.stagingReference'],
-  ['cronExpression', 'timeZone', 'missedRunGraceSeconds', 'overlapPolicy', 'retryPolicy.'],
-  ['retention.'],
-  ['configuration.copyOnly', 'configuration.checksumPolicy', 'configuration.compressionPolicy', 'configuration.encryptionPolicy'],
-]
-/** A prefix owns a field when it is the field, a parent path of it, or a trailing-dot group; never a mere string prefix ("configuration.encrypt" must not claim "configuration.encryptionPolicy"). */
-function owns(prefix: string, name: string) {
-  return name === prefix || name === prefix.split('.').at(-1) || name.startsWith(`${prefix}.`) || name.startsWith(`${prefix}[`) || (prefix.endsWith('.') && name.startsWith(prefix))
+// Configuration keys each step owns. Both server field routing and "what changed" are derived from this one table.
+const configurationKeys: Record<EditSection, readonly (keyof BackupConfiguration)[]> = {
+  source: ['engine', 'host', 'database', 'port', 'integratedSecurity', 'databaseCredentialReference', 'databaseLogin', 'files', 'encrypt', 'trustServerCertificate'],
+  storage: ['destinations', 'requiredVerifiedReplicaCount', 'enforceThreeTwoOne', 'sourceSite', 'storagePrefix', 'stagingReference'],
+  schedule: [],
+  protection: ['copyOnly', 'checksumPolicy', 'compressionPolicy', 'encryptionPolicy'],
 }
-export function stepOfField(field: string): number | undefined {
+// Request fields outside `configuration`; `schedule.` prefixes are stripped before matching.
+const requestFields: Record<EditSection, readonly string[]> = {
+  source: ['name', 'enabled', 'agentId'],
+  storage: [],
+  schedule: ['cronExpression', 'timeZone', 'missedRunGraceSeconds', 'overlapPolicy', 'retryPolicy', 'retention'],
+  protection: [],
+}
+const owners = Object.fromEntries(editSections.map(step => [step, [...requestFields[step], ...configurationKeys[step].map(key => `configuration.${key}`)]])) as Record<EditSection, string[]>
+
+/** A prefix owns a field when it is the field, a parent path of it, or its bare name; never a mere string prefix ("encrypt" must not claim "encryptionPolicy"). */
+function owns(prefix: string, name: string) {
+  return name === prefix || name === prefix.split('.').at(-1) || name.startsWith(`${prefix}.`) || name.startsWith(`${prefix}[`)
+}
+/** The step that shows a server-reported field; undefined when no step does. */
+export function stepOfField(field: string): EditSection | undefined {
   const name = field.replace(/^schedule\./, '')
-  const step = owners.findIndex(prefixes => prefixes.some(prefix => owns(prefix, name)))
-  return step < 0 ? undefined : step
+  return editSections.find(step => owners[step].some(prefix => owns(prefix, name)))
 }
 
-export interface StepValues { name: string; agentId: string; configuration: BackupConfiguration; scheduled: boolean; schedule: Schedule; retry: RetryPolicy }
-/** Required fields and numeric sanity only; cron syntax and policy limits remain server-authoritative. */
-export function validateStep(step: number, values: StepValues): Record<string, string> {
-  const errors: Record<string, string> = {}
-  if (step === nameStep) {
+/** What each step edits, for comparing a form against its saved state. */
+function sectionValues(step: EditSection, values: JobValues) {
+  const configuration = Object.fromEntries(configurationKeys[step].map(key => [key, values.configuration[key]]))
+  switch (step) {
+    case 'source': return { name: values.name, agentId: values.agentId, enabled: values.enabled, configuration }
+    case 'schedule': return { scheduled: values.scheduled, schedule: values.schedule, overlap: values.overlap, retry: values.retry, retention: values.retention }
+    default: return configuration
+  }
+}
+/** The sections whose values differ from the saved ones; the edit page lists them before saving. */
+export function changedSections(saved: JobValues, current: JobValues) {
+  return editSections.filter(step => JSON.stringify(sectionValues(step, saved)) !== JSON.stringify(sectionValues(step, current)))
+}
+
+export type StepErrors = Record<string, string>
+/** Required fields and numeric sanity only; cron syntax and policy limits remain server-authoritative. Each step validates only what it shows. */
+export function validateStep(step: JobStep, values: JobValues): StepErrors {
+  const errors: StepErrors = {}
+  if (step === 'source') {
     if (!values.name.trim()) errors.name = tx('İş adını girin.')
-  } else if (step === agentStep) {
     if (!values.agentId) errors.agentId = tx('Bir yedekleme bilgisayarı seçin.')
-  } else if (step === sourceStep) {
     const { host, database, port } = values.configuration
     if (values.configuration.engine === 'file-system') {
       if (!/^[A-Za-z0-9_.-]{1,128}$/.test(database)) errors['configuration.database'] = tx('Geçerli bir dosya kaynağı referansı girin.')
@@ -85,13 +110,20 @@ export function validateStep(step: number, values: StepValues): Record<string, s
     }
     if (values.configuration.engine === 'mssql' && host.includes('\\') && port !== null) errors['configuration.port'] = tx('Instance adı içeren host ile port birlikte verilemez; birini seçin.')
     if (port !== null && !(Number.isInteger(port) && port >= 1 && port <= 65535)) errors['configuration.port'] = tx('Port 1 ile 65535 arasında bir tam sayı olmalı.')
-  } else if (step === scheduleStep) {
-    if (values.scheduled && !values.schedule.cronExpression.trim()) errors.cronExpression = tx('Cron ifadesini girin veya hazır bir zamanlama seçin.')
-    if (!Number.isInteger(values.retry.maxAttempts) || values.retry.maxAttempts < 1) errors['retryPolicy.maxAttempts'] = tx('Toplam deneme sayısı en az 1 olan bir tam sayı olmalı.')
-    if (values.scheduled && (!Number.isFinite(values.schedule.missedRunGraceSeconds) || values.schedule.missedRunGraceSeconds < 0)) errors.missedRunGraceSeconds = tx('Tolerans sıfır veya daha büyük olmalı.')
-    if (!Number.isFinite(values.retry.initialDelaySeconds) || values.retry.initialDelaySeconds < 0) errors['retryPolicy.initialDelaySeconds'] = tx('Gecikme sıfır veya daha büyük olmalı.')
-    if (!Number.isFinite(values.retry.maxDelaySeconds) || values.retry.maxDelaySeconds < values.retry.initialDelaySeconds) errors['retryPolicy.maxDelaySeconds'] = tx('En uzun gecikme ilk gecikmeden küçük olamaz.')
-    if (!Number.isFinite(values.retry.jitter) || values.retry.jitter < 0 || values.retry.jitter > 1) errors['retryPolicy.jitter'] = tx('Rastgele gecikme oranı 0 ile 1 arasında olmalı.')
+  } else if (step === 'schedule') {
+    const { scheduled, schedule, retry } = values
+    if (scheduled && !schedule.cronExpression.trim()) errors.cronExpression = tx('Cron ifadesini girin veya hazır bir zamanlama seçin.')
+    if (!Number.isInteger(retry.maxAttempts) || retry.maxAttempts < 1) errors['retryPolicy.maxAttempts'] = tx('Toplam deneme sayısı en az 1 olan bir tam sayı olmalı.')
+    if (scheduled && (!Number.isFinite(schedule.missedRunGraceSeconds) || schedule.missedRunGraceSeconds < 0)) errors.missedRunGraceSeconds = tx('Tolerans sıfır veya daha büyük olmalı.')
+    if (!Number.isFinite(retry.initialDelaySeconds) || retry.initialDelaySeconds < 0) errors['retryPolicy.initialDelaySeconds'] = tx('Gecikme sıfır veya daha büyük olmalı.')
+    if (!Number.isFinite(retry.maxDelaySeconds) || retry.maxDelaySeconds < retry.initialDelaySeconds) errors['retryPolicy.maxDelaySeconds'] = tx('En uzun gecikme ilk gecikmeden küçük olamaz.')
+    if (!Number.isFinite(retry.jitter) || retry.jitter < 0 || retry.jitter > 1) errors['retryPolicy.jitter'] = tx('Rastgele gecikme oranı 0 ile 1 arasında olmalı.')
   }
   return errors
+}
+
+/** Every step's errors at once, with the first step that has any; used before saving, when steps may have been revisited out of order. */
+export function validateJob(values: JobValues) {
+  const byStep = editSections.map(step => [step, validateStep(step, values)] as const)
+  return { errors: Object.assign({}, ...byStep.map(([, errors]) => errors)) as StepErrors, firstInvalid: byStep.find(([, errors]) => Object.keys(errors).length > 0)?.[0] }
 }

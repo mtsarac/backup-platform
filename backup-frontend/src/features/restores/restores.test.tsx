@@ -249,7 +249,6 @@ afterEach(() => {
 describe('RestoresPage', () => {
   it('renders restore history list and filters', async () => {
     renderWithClient(<RestoresPage />)
-    expect(screen.getByRole('heading', { name: /Geri yükleme geçmişi/i })).toBeInTheDocument()
     expect(await screen.findByText('RestoredSalesDB')).toBeInTheDocument()
     expect(screen.getByText("Yeni veritabanı")).toBeInTheDocument()
     expect(screen.getAllByText('Çalışıyor').length).toBeGreaterThan(0)

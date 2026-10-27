@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
 import { BackupJobWizardPage } from './backup-job-wizard-page'
+import { BackupJobEditPage } from './backup-job-edit-page'
 import { getBackupJob, getBackupJobHealth, getOccurrences, saveBackupJob, setJobEnabled } from '@/features/backup-jobs/api'
 import type { BackupJob } from '@/features/backup-jobs/types'
 import { ApiError } from '@/lib/api/client'
@@ -18,7 +19,11 @@ vi.mock('@/features/agents/api', () => ({ getAgents: vi.fn().mockResolvedValue([
 vi.mock('@/features/storage-connections/api')
 vi.mock('@/features/backup-jobs/api', () => ({ saveBackupJob: vi.fn(), getBackupJob: vi.fn(), getBackupJobHealth: vi.fn(), getBackupJobs: vi.fn(), getOccurrences: vi.fn(), startJobRun: vi.fn(), setJobEnabled: vi.fn() }))
 function page(cache: QueryClient, route = '/tenants/tenant-a/backup-jobs/new') {
-  return <QueryClientProvider client={cache}><MemoryRouter initialEntries={[route]}><Routes><Route path="/tenants/:tenantId/backup-jobs/new" element={<BackupJobWizardPage />} /><Route path="/tenants/:tenantId/backup-jobs/:id/edit" element={<BackupJobWizardPage />} /></Routes></MemoryRouter></QueryClientProvider>
+  return <QueryClientProvider client={cache}><MemoryRouter initialEntries={[route]}><Routes>
+    <Route path="/tenants/:tenantId/backup-jobs/new" element={<BackupJobWizardPage />} />
+    <Route path="/tenants/:tenantId/backup-jobs/:id/edit" element={<BackupJobEditPage />} />
+    <Route path="/tenants/:tenantId/backup-jobs" element={<p>Job listesi</p>} />
+  </Routes></MemoryRouter></QueryClientProvider>
 }
 function renderPage(route?: string) {
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
@@ -29,22 +34,15 @@ async function submit() {
   fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
 }
 const next = (times = 1) => { for (let i = 0; i < times; i++) fireEvent.click(screen.getByRole('button', { name: 'İleri' })) }
-const goTo = (step: string) => fireEvent.click(screen.getByRole('button', { name: `Değiştir: ${step}` }))
-/** Fills the required fields of the create flow and stops on step index `target` (0 İş adı, 1 Bilgisayar, 2 Kaynak, 3 Depolama, 4 Zamanlama, 5 Saklama, 6 Şifreleme, 7 Özet). */
+const goTo = (row: string) => fireEvent.click(screen.getByRole('button', { name: `Değiştir: ${row}` }))
+/** Fills the required fields of the create flow and stops on step index `target` (0 Kaynak, 1 Depolama, 2 Zamanlama, 3 Koruma, 4 Özet ve onay). */
 async function reach(target: number) {
   fireEvent.change(screen.getByLabelText('İş adı'), { target: { value: 'ERP backup' } })
-  if (target > 0) {
-    next()
-    await screen.findByRole('option', { name: /(?:SQL Agent|SQL Ajanı)/ })
-    fireEvent.change(screen.getByLabelText('Yedekleme bilgisayarı'), { target: { value: 'agent-a' } })
-  }
-  if (target > 1) next()
-  if (target > 2) {
-    fireEvent.change(screen.getByLabelText("SQL Server ana bilgisayarı / veritabanı sunucusu"), { target: { value: 'sql' } })
-    fireEvent.change(screen.getByLabelText("Veritabanı"), { target: { value: 'ERP' } })
-    next()
-  }
-  if (target > 3) next(target - 3)
+  await screen.findByRole('option', { name: /(?:SQL Agent|SQL Ajanı)/ })
+  fireEvent.change(screen.getByLabelText('Yedekleme bilgisayarı'), { target: { value: 'agent-a' } })
+  fireEvent.change(screen.getByLabelText("SQL Server ana bilgisayarı / veritabanı sunucusu"), { target: { value: 'sql' } })
+  fireEvent.change(screen.getByLabelText("Veritabanı"), { target: { value: 'ERP' } })
+  next(target)
 }
 function makeJob(storageConnectionId: string | null = 'conn-local'): BackupJob {
   return {
@@ -54,6 +52,7 @@ function makeJob(storageConnectionId: string | null = 'conn-local'): BackupJob {
     retention: { enabled: true, keepForSeconds: 1209600, deleteGracePeriodSeconds: 86400 },
   }
 }
+const editRoute = '/tenants/tenant-a/backup-jobs/job-a/edit'
 beforeEach(() => {
   vi.clearAllMocks()
   access.tenantId = 'tenant-a'; access.canOperate = true; access.canAdmin = true
@@ -67,7 +66,7 @@ describe('iş formu', () => {
   it('saves file selections, wildcard filters and symlink policy without database credentials', async () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
     renderPage()
-    await reach(2)
+    await reach(0)
     fireEvent.click(screen.getByRole('radio', { name: 'Dosya / Klasör' }))
     expect(screen.queryByLabelText('Veritabanı parolası')).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Dosya kaynağı referansı'), { target: { value: 'documents' } })
@@ -78,7 +77,7 @@ describe('iş formu', () => {
     fireEvent.change(screen.getByLabelText('Dahil Edilecekler'), { target: { value: '**/*.txt\nreports/**' } })
     fireEvent.change(screen.getByLabelText('Hariç Tutulacaklar'), { target: { value: '**/temp/**' } })
     fireEvent.change(screen.getByLabelText('Sembolik Link Politikası'), { target: { value: 'Preserve' } })
-    next(5)
+    next(4)
     expect(screen.getByText(/documents/)).toBeInTheDocument()
     await submit()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(1))
@@ -88,19 +87,59 @@ describe('iş formu', () => {
       files: { paths: ['reports', 'notes.txt'], includes: ['**/*.txt', 'reports/**'], excludes: ['**/temp/**'], symlinkPolicy: 'Preserve' },
     })
   })
-  it('clears file-only configuration when switching back to a database engine', async () => {
+  it('gives the database fields back when switching from a file source to the database engine again; file-only configuration is not sent', async () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
     renderPage()
-    await reach(2)
+    await reach(0)
     fireEvent.click(screen.getByRole('radio', { name: 'Dosya / Klasör' }))
     fireEvent.change(screen.getByLabelText('Dosya kaynağı referansı'), { target: { value: 'documents' } })
     fireEvent.click(screen.getByRole('radio', { name: 'Microsoft SQL Server' }))
-    fireEvent.change(screen.getByLabelText('SQL Server ana bilgisayarı / veritabanı sunucusu'), { target: { value: 'sql' } })
-    fireEvent.change(screen.getByLabelText('Veritabanı'), { target: { value: 'ERP' } })
-    next(5)
+    expect(screen.getByLabelText('SQL Server ana bilgisayarı / veritabanı sunucusu')).toHaveValue('sql')
+    expect(screen.getByLabelText('Veritabanı')).toHaveValue('ERP')
+    next(4)
     await submit()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(1))
-    expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration).toMatchObject({ engine: 'mssql', files: null })
+    expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration).toMatchObject({ engine: 'mssql', host: 'sql', database: 'ERP', files: null })
+  })
+  it('keeps the advanced source values of each engine when switching engines back and forth', async () => {
+    renderPage()
+    await reach(0)
+    fireEvent.change(screen.getByLabelText(/Bağlantı noktası/), { target: { value: '1450' } })
+    fireEvent.click(screen.getByLabelText('Windows kimlik doğrulaması (tümleşik güvenlik)'))
+    fireEvent.change(screen.getByLabelText('Veritabanı kullanıcı adı'), { target: { value: 'sa' } })
+    fireEvent.click(screen.getByRole('radio', { name: 'PostgreSQL' }))
+    expect(screen.getByLabelText(/Bağlantı noktası/)).toHaveValue(5432)
+    expect(screen.getByLabelText('Veritabanı kullanıcı adı')).toHaveValue('')
+    fireEvent.click(screen.getByRole('radio', { name: 'Microsoft SQL Server' }))
+    expect(screen.getByLabelText(/Bağlantı noktası/)).toHaveValue(1450)
+    expect(screen.getByLabelText('Windows kimlik doğrulaması (tümleşik güvenlik)')).not.toBeChecked()
+    expect(screen.getByLabelText('Veritabanı kullanıcı adı')).toHaveValue('sa')
+  })
+  it('keeps the protection choices of each engine when switching away and back', async () => {
+    const back = () => { for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole('button', { name: 'Geri' })) }
+    renderPage()
+    await reach(0)
+    next(3)
+    fireEvent.change(screen.getByLabelText(/CHECKSUM/), { target: { value: 'Disabled' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: /Kopya yedek/ }))
+    back()
+    fireEvent.click(screen.getByRole('radio', { name: 'PostgreSQL' }))
+    fireEvent.change(screen.getByLabelText('PostgreSQL ana bilgisayarı'), { target: { value: 'pg' } })
+    fireEvent.change(screen.getByLabelText('Veritabanı'), { target: { value: 'crm' } })
+    fireEvent.change(screen.getByLabelText('Veritabanı kullanıcı adı'), { target: { value: 'u' } })
+    fireEvent.change(screen.getByLabelText('Veritabanı parolası'), { target: { value: 'p' } })
+    next(3)
+    fireEvent.change(screen.getByLabelText(/data_checksums/), { target: { value: 'Required' } })
+    back()
+    fireEvent.click(screen.getByRole('radio', { name: 'Microsoft SQL Server' }))
+    expect(screen.getByLabelText('Veritabanı')).toHaveValue('ERP')
+    next(3)
+    expect(screen.getByLabelText(/CHECKSUM/)).toHaveValue('Disabled')
+    expect(screen.getByRole('checkbox', { name: /Kopya yedek/ })).not.toBeChecked()
+    back()
+    fireEvent.click(screen.getByRole('radio', { name: 'PostgreSQL' }))
+    next(3)
+    expect(screen.getByLabelText(/data_checksums/)).toHaveValue('Required')
   })
   it('does not resubmit the obsolete copy-only switch when editing a PostgreSQL job', async () => {
     const job = makeJob()
@@ -108,7 +147,7 @@ describe('iş formu', () => {
       ...job.configuration, engine: 'postgres', integratedSecurity: false, databaseCredentialReference: 'pg-local', port: 5432, copyOnly: true,
     } })
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
-    renderPage('/tenants/tenant-a/backup-jobs/job-a/edit')
+    renderPage(editRoute)
     await screen.findByRole('button', { name: 'Kaydet' })
     await submit()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(1))
@@ -117,7 +156,7 @@ describe('iş formu', () => {
   it('switches engine defaults and sends a password-authenticated PostgreSQL Full job with byte-safe names', async () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
     renderPage()
-    await reach(2)
+    await reach(0)
     fireEvent.click(screen.getByRole('radio', { name: 'PostgreSQL' }))
     expect(screen.getByLabelText(/Bağlantı noktası/)).toHaveValue(5432)
     expect(screen.queryByLabelText(/Windows kimlik/)).not.toBeInTheDocument()
@@ -129,7 +168,7 @@ describe('iş formu', () => {
     expect(screen.getByLabelText("Veritabanı")).toHaveAttribute('aria-invalid', 'true')
     expect(saveBackupJob).not.toHaveBeenCalled()
     fireEvent.change(screen.getByLabelText("Veritabanı"), { target: { value: '数'.repeat(21) } })
-    next(4)
+    next(3)
     expect(screen.queryByRole('checkbox', { name: /Bağımsız yedekleme/ })).not.toBeInTheDocument()
     expect(screen.getByLabelText(/data_checksums/)).toHaveValue('Preferred')
     next()
@@ -148,15 +187,16 @@ describe('iş formu', () => {
   })
   it('Viewer can read job health without receiving edit controls', async () => {
     access.canOperate = false
-    renderPage('/tenants/tenant-a/backup-jobs/job-a/edit')
+    renderPage(editRoute)
     const region = screen.getByRole('region', { name: 'Yedekleme sağlığı' })
     expect(await within(region).findByText('100 / 100')).toBeInTheDocument()
     expect(within(region).getByText('Sağlıklı')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Kaydet' })).not.toBeInTheDocument()
   })
-  it('shows the schedule and encryption under collapsed technical details on the job page', async () => {
+  it('lets a read-only user see schedule and encryption under collapsed technical details', async () => {
+    access.canOperate = false
     vi.mocked(getBackupJob).mockResolvedValue({ ...makeJob(), schedule: { enabled: true, cronExpression: '17 3 * * 2', timeZone: 'Europe/Istanbul', missedRunGraceSeconds: 600, overlapPolicy: 'Skip' }, configuration: { ...makeJob().configuration, encryptionPolicy: 'Required' } })
-    renderPage('/tenants/tenant-a/backup-jobs/job-a/edit')
+    renderPage(editRoute)
     const details = await screen.findByRole('region', { name: 'İş ayrıntıları' })
     const cron = within(details).getByText('17 3 * * 2')
     expect(cron).not.toBeVisible()
@@ -166,20 +206,23 @@ describe('iş formu', () => {
     expect(cron).toBeVisible()
     expect(within(details).getByRole('button', { name: 'Kopyala: Cron ifadesi' })).toBeInTheDocument()
   })
-  it('lets a read-only user see the same technical details', async () => {
-    access.canOperate = false
-    vi.mocked(getBackupJob).mockResolvedValue({ ...makeJob(), schedule: { enabled: true, cronExpression: '17 3 * * 2', timeZone: 'Europe/Istanbul', missedRunGraceSeconds: 600, overlapPolicy: 'Skip' } })
-    renderPage('/tenants/tenant-a/backup-jobs/job-a/edit')
+  it('does not repeat the editable schedule and encryption in the job details for someone who can edit', async () => {
+    vi.mocked(getBackupJob).mockResolvedValue({ ...makeJob(), schedule: { enabled: true, cronExpression: '17 3 * * 2', timeZone: 'Europe/Istanbul', missedRunGraceSeconds: 600, overlapPolicy: 'Skip' }, configuration: { ...makeJob().configuration, encryptionPolicy: 'Required' } })
+    renderPage(editRoute)
     const details = await screen.findByRole('region', { name: 'İş ayrıntıları' })
-    expect(within(details).getByText('17 3 * * 2')).not.toBeVisible()
+    expect(within(details).getByText('job-a')).toBeInTheDocument()
+    expect(within(details).queryByText('17 3 * * 2')).toBeNull()
+    expect(within(details).queryByText(/Zorunlu/)).toBeNull()
+    expect(await screen.findByLabelText('Cron ifadesi')).toHaveValue('17 3 * * 2')
+    expect(screen.getByLabelText('Yedek şifreleme politikası')).toHaveValue('Required')
   })
   it('cron alanını yerel olarak yeniden doğrulamaz ve sunucu alan hatasını gösterir', async () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400, { field: 'cronExpression', code: 'invalid_cron' }))
     renderPage()
-    await reach(4)
+    await reach(2)
     fireEvent.click(screen.getByRole('button', { name: 'Her gün 02:00' }))
     fireEvent.change(screen.getByLabelText('Cron ifadesi'), { target: { value: 'invalid cron' } })
-    next(3)
+    next(2)
     await submit()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalled())
     expect(vi.mocked(saveBackupJob).mock.calls[0][1].schedule?.cronExpression).toBe('invalid cron')
@@ -189,10 +232,8 @@ describe('iş formu', () => {
   })
   it('SQL kimlik doğrulamasında kullanıcı adı ve parola girilmeden Kaynak adımından ilerlemez', async () => {
     renderPage()
-    await reach(2)
+    await reach(0)
     fireEvent.click(screen.getByLabelText("Windows kimlik doğrulaması (tümleşik güvenlik)"))
-    fireEvent.change(screen.getByLabelText("SQL Server ana bilgisayarı / veritabanı sunucusu"), { target: { value: 'sql' } })
-    fireEvent.change(screen.getByLabelText("Veritabanı"), { target: { value: 'ERP' } })
     next()
     expect(screen.getByLabelText("Veritabanı kullanıcı adı")).toHaveAttribute('aria-invalid', 'true')
     expect(screen.getByLabelText("Veritabanı parolası")).toHaveAttribute('aria-invalid', 'true')
@@ -200,9 +241,8 @@ describe('iş formu', () => {
   })
   it('instance adı içeren host ile portu birlikte kabul etmez', async () => {
     renderPage()
-    await reach(2)
+    await reach(0)
     fireEvent.change(screen.getByLabelText("SQL Server ana bilgisayarı / veritabanı sunucusu"), { target: { value: 'srv\\SQL2022' } })
-    fireEvent.change(screen.getByLabelText("Veritabanı"), { target: { value: 'ERP' } })
     fireEvent.change(screen.getByLabelText(/Bağlantı noktası/), { target: { value: '1433' } })
     next()
     expect(screen.getByLabelText(/Bağlantı noktası/)).toHaveAttribute('aria-invalid', 'true')
@@ -211,10 +251,10 @@ describe('iş formu', () => {
   it('geçersiz zamanlama kaydı alan hatasını gösterir ve başka istek göndermez', async () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400, { error: 'invalid_schedule', field: 'cronExpression', code: 'invalid_cron' }))
     renderPage()
-    await reach(4)
+    await reach(2)
     fireEvent.click(screen.getByRole('button', { name: 'Her gün 02:00' }))
     fireEvent.change(screen.getByLabelText('Cron ifadesi'), { target: { value: 'x' } })
-    next(3)
+    next(2)
     await submit()
     fireEvent.click(await screen.findByRole('button', { name: 'Hatalı alana git: Zamanlama' }))
     await waitFor(() => expect(document.getElementById('cronExpression-error')).toHaveTextContent(/.+/))
@@ -223,45 +263,50 @@ describe('iş formu', () => {
     expect(setJobEnabled).not.toHaveBeenCalled()
     expect(screen.queryByText(/uygulanmış olabilir/)).toBeNull()
   })
-  it('saklama süresi hatasını sunucudan alır', async () => {
+  it('saklama süresi hatasını sunucudan alır ve Zamanlama adımına yönlendirir', async () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400, { field: 'retention.keepForSeconds', code: 'invalid_request' }))
     renderPage()
-    await reach(5)
+    await reach(2)
     fireEvent.change(screen.getByLabelText("Saklama süresi (saniye)"), { target: { value: '-1' } })
     next(2)
     await submit()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalled())
     expect(vi.mocked(saveBackupJob).mock.calls[0][1].retention?.keepForSeconds).toBe(-1)
-    fireEvent.click(await screen.findByRole('button', { name: 'Hatalı alana git: Saklama' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Hatalı alana git: Zamanlama' }))
     await waitFor(() => expect(document.getElementById('retention.keepForSeconds-error')).toHaveTextContent(/.+/))
+  })
+  it('routes each server field error to the step that shows it, one button per step', async () => {
+    vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400, { errors: { name: ['x'], agentId: ['x'], 'retention.keepForSeconds': ['x'], 'configuration.compressionPolicy': ['x'], 'configuration.unknown': ['x'] } }))
+    renderPage()
+    await reach(4)
+    await submit()
+    await screen.findByRole('button', { name: 'Hatalı alana git: Kaynak' })
+    expect(screen.getAllByRole('button', { name: /^Hatalı alana git/ }).map(button => button.getAttribute('aria-label'))).toEqual(['Hatalı alana git: Kaynak', 'Hatalı alana git: Zamanlama', 'Hatalı alana git: Koruma'])
+    fireEvent.click(screen.getByRole('button', { name: 'Hatalı alana git: Koruma' }))
+    expect(document.getElementById('configuration.compressionPolicy-error')).toHaveTextContent(/.+/)
+    fireEvent.click(screen.getByRole('button', { name: 'Hatalı alana git: Kaynak' }))
+    expect(document.getElementById('name-error')).toHaveTextContent(/.+/)
   })
   it('adım doğrulaması eksik zorunlu alanlarda İleri düğmesini engeller', async () => {
     renderPage()
     next()
     expect(screen.getByLabelText('İş adı')).toHaveAttribute('aria-invalid', 'true')
     expect(document.getElementById('name-error')).toHaveTextContent(/.+/)
-    expect(screen.queryByLabelText('Yedekleme bilgisayarı')).not.toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('İş adı'), { target: { value: 'ERP backup' } })
-    next()
-    await screen.findByRole('option', { name: /(?:SQL Agent|SQL Ajanı)/ })
-    next()
     expect(screen.getByLabelText('Yedekleme bilgisayarı')).toHaveAttribute('aria-invalid', 'true')
     expect(document.getElementById('agentId-error')).toHaveTextContent(/.+/)
-    expect(screen.queryByLabelText("SQL Server ana bilgisayarı / veritabanı sunucusu")).not.toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Yedekleme bilgisayarı'), { target: { value: 'agent-a' } })
-    next()
-    next()
     expect(document.getElementById('configuration.host-error')).toHaveTextContent(/.+/)
     expect(document.getElementById('configuration.database-error')).toHaveTextContent(/.+/)
     expect(screen.queryByLabelText('Depolama bağlantısı')).not.toBeInTheDocument()
     expect(saveBackupJob).not.toHaveBeenCalled()
+    await reach(1)
+    expect(screen.getByLabelText('Depolama bağlantısı')).toBeInTheDocument()
   })
   it('ara adımda Enter sonraki adıma ilerler; kaydetme isteği göndermez', async () => {
     renderPage()
-    fireEvent.change(screen.getByLabelText('İş adı'), { target: { value: 'ERP backup' } })
+    await reach(0)
     await userEvent.click(screen.getByLabelText('İş adı'))
     await userEvent.keyboard('{Enter}')
-    expect(screen.getByLabelText('Yedekleme bilgisayarı')).toBeInTheDocument()
+    expect(screen.getByLabelText('Depolama bağlantısı')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Kaydet' })).not.toBeInTheDocument()
     expect(saveBackupJob).not.toHaveBeenCalled()
   })
@@ -269,7 +314,7 @@ describe('iş formu', () => {
     access.canAdmin = false
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
     renderPage()
-    await reach(5)
+    await reach(2)
     expect(screen.getByLabelText("Saklama süresi (saniye)")).toBeDisabled()
     next(2)
     await submit()
@@ -279,7 +324,7 @@ describe('iş formu', () => {
   it('yeni iş tek bir birincil local hedefle ve varsayılan bağlantı (null) ile gönderilir', async () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
     renderPage()
-    await reach(7)
+    await reach(4)
     await submit()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalled())
     const configuration = vi.mocked(saveBackupJob).mock.calls[0][1].configuration
@@ -292,16 +337,16 @@ describe('iş formu', () => {
   it('varsayılan hedef devre dışıysa yeni iş kaydında varsayılan seçimi engeli aşamaz', async () => {
     vi.mocked(getTenantConnections).mockResolvedValue({ items: [makeConnection({ enabled: false }), makeManaged()] })
     renderPage()
-    await reach(3)
+    await reach(1)
     expect(await screen.findByText(/Yeni iş veya yeni hedef/)).toHaveTextContent('varsayılan seçimi bu engeli aşmaz')
     expect(within(screen.getByLabelText('Depolama bağlantısı')).getByRole('option', { name: /Varsayılan/ })).toBeDisabled()
-    next(4)
+    next(3)
     expect(screen.getByRole('button', { name: 'Kaydet' })).toBeDisabled()
     fireEvent.submit(screen.getByRole('button', { name: 'Kaydet' }).closest('form')!)
     expect(saveBackupJob).not.toHaveBeenCalled()
     goTo('Depolama')
     fireEvent.change(screen.getByLabelText("Depolama Sağlayıcısı"), { target: { value: 'central' } })
-    next(4)
+    next(3)
     await waitFor(() => expect(screen.getByRole('button', { name: 'Kaydet' })).toBeEnabled())
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
     await submit()
@@ -318,7 +363,7 @@ describe('iş formu', () => {
       makeConnection({ id: 'ownership', name: 'Uyumsuz sahiplik', providerType: 'central', isDefault: false }),
     ] })
     renderPage()
-    await reach(3)
+    await reach(1)
     const select = screen.getByLabelText('Depolama bağlantısı')
     await waitFor(() => expect(select).toBeEnabled())
     expect(within(select).getByRole('option', { name: /Local · Yerel yedekleme bilgisayarı diski · (?:Çalışma Alanı|Çalışma alanı) yönetimli · Kullanılabilir/ })).toBeEnabled()
@@ -337,13 +382,13 @@ describe('iş formu', () => {
   it('seçilen gerçek kimliği, sağlayıcıyı ve uyumlu yürütme konumunu gönderir', async () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
     renderPage()
-    await reach(3)
+    await reach(1)
     const select = screen.getByLabelText('Depolama bağlantısı')
     await waitFor(() => expect(select).toBeEnabled())
     fireEvent.change(screen.getByLabelText("Depolama Sağlayıcısı"), { target: { value: 'central' } })
     fireEvent.change(select, { target: { value: 'conn-central' } })
     expect(screen.getByLabelText("Depolama Sağlayıcısı")).toHaveValue('central')
-    next(4)
+    next(3)
     await submit()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalled())
     expect(vi.mocked(saveBackupJob).mock.calls[0][1].configuration.destinations).toEqual([{ storageProvider: 'central', storageConnectionId: 'conn-central', storageExecutionLocation: 'Backend', isPrimary: true }])
@@ -354,24 +399,19 @@ describe('iş formu', () => {
     vi.mocked(getTenantConnections).mockResolvedValue({ items: state === 'missing' ? [makeManaged()] : [connection, makeManaged()] })
     if (state === 'unsupported') vi.mocked(getTenantProviders).mockResolvedValue({ items: [makeProvider({ supportedOwnerships: [] }), catalog[1]] })
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
-    renderPage('/tenants/tenant-a/backup-jobs/job-a/edit')
-    fireEvent.click(await screen.findByRole('button', { name: 'Değiştir: Depolama' }))
+    renderPage(editRoute)
     const select = await screen.findByLabelText('Depolama bağlantısı')
     await waitFor(() => expect(select).toBeEnabled())
     expect(select).toHaveValue('conn-local')
     expect(within(select).getByRole('option', { selected: true })).toBeDisabled()
     expect(await screen.findByText(/Mevcut hedef kimliği korunarak/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Özete dön' }))
-    goTo('İş adı')
     fireEvent.change(screen.getByLabelText('İş adı'), { target: { value: 'Changed name' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Özete dön' }))
     await submit()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalled())
     expect(vi.mocked(saveBackupJob).mock.calls[0]).toEqual(['tenant-a', expect.objectContaining({ name: 'Changed name', configuration: expect.objectContaining({ destinations: [{ storageProvider: 'local', storageConnectionId: 'conn-local', storageExecutionLocation: 'Agent', isPrimary: true }] }) }), 'job-a'])
   })
   it('başka sağlayıcıya geçip geri gelse bile mevcut açık kimliği otomatik olarak geri atamaz', async () => {
-    renderPage('/tenants/tenant-a/backup-jobs/job-a/edit')
-    fireEvent.click(await screen.findByRole('button', { name: 'Değiştir: Depolama' }))
+    renderPage(editRoute)
     const select = await screen.findByLabelText('Depolama bağlantısı')
     await waitFor(() => expect(select).toBeEnabled())
     fireEvent.change(screen.getByLabelText("Depolama Sağlayıcısı"), { target: { value: 'central' } })
@@ -383,12 +423,12 @@ describe('iş formu', () => {
     vi.mocked(getTenantConnections).mockResolvedValueOnce({ items: [makeConnection(), makeManaged()] }).mockResolvedValue({ items: [makeConnection(), makeManaged({ administrativelyDisabled: true })] })
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(409, { code, field: 'configuration.destinations[0].storageConnectionId' }))
     const { cache } = renderPage()
-    await reach(3)
+    await reach(1)
     const first = screen.getByLabelText('Depolama bağlantısı')
     await waitFor(() => expect(first).toBeEnabled())
     fireEvent.change(screen.getByLabelText("Depolama Sağlayıcısı"), { target: { value: 'central' } })
     fireEvent.change(first, { target: { value: 'conn-central' } })
-    next(4)
+    next(3)
     await submit()
     await waitFor(() => expect(getTenantConnections).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Kaydet' })).toBeDisabled())
@@ -404,20 +444,20 @@ describe('iş formu', () => {
   it('liste isteği başarısızsa varsayılan sahte başarıya dönüşmez ve tekrar yüklenebilir', async () => {
     vi.mocked(getTenantConnections).mockRejectedValueOnce(new ApiError(503)).mockResolvedValue({ items: [makeConnection()] })
     renderPage()
-    await reach(3)
+    await reach(1)
     expect(await screen.findByRole('button', { name: 'Bağlantıları yeniden yükle' })).toBeInTheDocument()
-    next(4)
+    next(3)
     expect(screen.getByRole('button', { name: 'Kaydet' })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: 'Adıma git: Depolama (hedef sorunu)' }))
     fireEvent.click(screen.getByRole('button', { name: 'Bağlantıları yeniden yükle' }))
     await waitFor(() => expect(screen.getByLabelText('Depolama bağlantısı')).toBeEnabled())
-    next(4)
+    next(3)
     await waitFor(() => expect(screen.getByRole('button', { name: 'Kaydet' })).toBeEnabled())
     expect(saveBackupJob).not.toHaveBeenCalled()
   })
   it('tenant değişiminde yeni form anahtarı eski seçimi ve yerel alanları temizler', async () => {
     const { cache, rerender } = renderPage()
-    await reach(3)
+    await reach(1)
     await waitFor(() => expect(screen.getByLabelText('Depolama bağlantısı')).toBeEnabled())
     fireEvent.change(screen.getByLabelText('Depolama bağlantısı'), { target: { value: 'conn-central' } })
     access.tenantId = 'tenant-b'
@@ -425,7 +465,7 @@ describe('iş formu', () => {
     vi.mocked(getTenantProviders).mockResolvedValue({ items: [catalog[0]] })
     rerender(page(cache))
     expect(screen.getByLabelText('İş adı')).toHaveValue('')
-    await reach(3)
+    await reach(1)
     await waitFor(() => expect(screen.getByLabelText('Depolama bağlantısı')).toBeEnabled())
     expect(screen.getByLabelText('Depolama bağlantısı')).toHaveValue('')
     expect(screen.queryByRole('option', { name: /Yönetilen Depolama/ })).not.toBeInTheDocument()
@@ -434,26 +474,34 @@ describe('iş formu', () => {
 })
 
 describe('adım adım sihirbaz', () => {
-  it.each([0, 1, 2, 3, 4, 5, 6, 7])('step %i shows its position in the progress indicator; every question step explains why it is asked', async target => {
+  const labels = ['Kaynak', 'Depolama', 'Zamanlama', 'Koruma', 'Özet ve onay']
+  it.each([0, 1, 2, 3, 4])('step %i shows its position among the five steps; every step explains why it is asked', async target => {
     renderPage()
     await reach(target)
     const items = within(screen.getByRole('navigation', { name: 'Adımlar' })).getAllByRole('listitem')
-    expect(items).toHaveLength(8)
+    expect(items).toHaveLength(5)
+    items.forEach((item, index) => expect(item).toHaveTextContent(labels[index]))
     expect(items.map(item => item.getAttribute('aria-current'))).toEqual(items.map((_, index) => index === target ? 'step' : null))
-    expect(screen.queryAllByText(/Neden soruluyor\?/)).toHaveLength(1)
+    expect(screen.queryAllByText(/Neden soruluyor\?/).length).toBeGreaterThan(0)
   })
-  it('asks for the name and the computer on separate steps', async () => {
+  it('asks for the name, the computer and the source together on the first step', async () => {
     renderPage()
     expect(screen.getByLabelText('İş adı')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Yedekleme bilgisayarı')).not.toBeInTheDocument()
-    await reach(1)
     expect(screen.getByLabelText('Yedekleme bilgisayarı')).toBeInTheDocument()
-    expect(screen.queryByLabelText('İş adı')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Veritabanı')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Depolama bağlantısı')).not.toBeInTheDocument()
+  })
+  it('keeps the job on/off switch and the connection options of the source in one collapsed technical-details block', () => {
+    renderPage()
+    const details = screen.getByLabelText('İş etkin').closest('details')
+    expect(details).not.toHaveAttribute('open')
+    expect(details).toContainElement(screen.getByLabelText(/Bağlantı noktası/))
+    expect(details).toContainElement(screen.getByLabelText('Sunucu sertifikasına güven'))
   })
   it('creates a job with only the defaults as a manual job (no schedule), without opening any technical details', async () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
     renderPage()
-    await reach(7)
+    await reach(4)
     expect(saveBackupJob).not.toHaveBeenCalled()
     await submit()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(1))
@@ -465,22 +513,31 @@ describe('adım adım sihirbaz', () => {
       configuration: { stagingReference: 'default', storagePrefix: '', copyOnly: true, checksumPolicy: 'Required', compressionPolicy: 'Preferred', encryptionPolicy: 'Off' },
     })
   })
+  it('checks every step again before saving when an earlier step was emptied on the way back', async () => {
+    renderPage()
+    await reach(4)
+    goTo('İş adı')
+    fireEvent.change(screen.getByLabelText('İş adı'), { target: { value: '' } })
+    next(4)
+    expect(screen.getByLabelText('İş adı')).toHaveAttribute('aria-invalid', 'true')
+    expect(saveBackupJob).not.toHaveBeenCalled()
+  })
   it('schedule presets set the schedule; "elle" removes it', async () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
     renderPage()
-    await reach(4)
+    await reach(2)
     expect(screen.getByRole('button', { name: 'Elle çalıştır' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: 'Her gün 02:00' })).toHaveAttribute('aria-pressed', 'false')
     fireEvent.click(screen.getByRole('button', { name: 'Her gün 08:00' }))
     expect(screen.getByRole('button', { name: 'Her gün 08:00' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: 'Her gün 02:00' })).toHaveAttribute('aria-pressed', 'false')
-    next(3)
+    next(2)
     await submit()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(1))
     expect(vi.mocked(saveBackupJob).mock.calls[0][1].schedule?.cronExpression).toBe('0 8 * * *')
     fireEvent.click(await screen.findByRole('button', { name: 'Değiştir: Zamanlama' }))
     fireEvent.click(screen.getByRole('button', { name: 'Elle çalıştır' }))
-    next(3)
+    next(2)
     await submit()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(2))
     expect(vi.mocked(saveBackupJob).mock.calls[1][1].schedule).toBeNull()
@@ -488,9 +545,9 @@ describe('adım adım sihirbaz', () => {
   it('keeps cron, time zone, retry, overlap and staging collapsed under "Teknik ayrıntılar" but editable', async () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
     renderPage()
-    await reach(4)
+    await reach(2)
     fireEvent.click(screen.getByRole('button', { name: 'Her gün 02:00' }))
-    for (const label of ['Cron ifadesi', 'Saat dilimi (IANA / sistem adı)', 'Rastgele gecikme oranı', 'Önceki çalıştırma sürerken yeni zamanlama']) {
+    for (const label of ['Cron ifadesi', 'Saat dilimi (IANA / sistem adı)', 'Rastgele gecikme oranı', 'Önceki çalıştırma sürerken yeni zamanlama', 'Saklama süresi (saniye)']) {
       const details = screen.getByLabelText(label).closest('details')
       expect(details).not.toBeNull()
       expect(details).not.toHaveAttribute('open')
@@ -499,7 +556,7 @@ describe('adım adım sihirbaz', () => {
     fireEvent.change(screen.getByLabelText('Cron ifadesi'), { target: { value: '0 3 * * 1-5' } })
     fireEvent.change(screen.getByLabelText('İlk gecikme (saniye)'), { target: { value: '45' } })
     expect(screen.getByRole('button', { name: 'Her gün 02:00' })).toHaveAttribute('aria-pressed', 'false')
-    next(3)
+    next(2)
     await submit()
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(1))
     const input = vi.mocked(saveBackupJob).mock.calls[0][1]
@@ -508,15 +565,15 @@ describe('adım adım sihirbaz', () => {
   })
   it('the storage step keeps staging and prefix in the collapsed technical details', async () => {
     renderPage()
-    await reach(3)
+    await reach(1)
     const details = screen.getByLabelText('Geçici alan referansı').closest('details')
     expect(details).not.toHaveAttribute('open')
     expect(within(details!).getByText('Teknik ayrıntılar')).toBeInTheDocument()
   })
-  it('retention is chosen from presets; the exact seconds stay in the technical details', async () => {
+  it('retention is chosen from presets next to the schedule; the exact seconds stay in the technical details', async () => {
     vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400))
     renderPage()
-    await reach(5)
+    await reach(2)
     expect(screen.getByRole('button', { name: '14 gün' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByLabelText('Saklama süresi (saniye)').closest('details')).not.toHaveAttribute('open')
     fireEvent.click(screen.getByRole('button', { name: '30 gün' }))
@@ -534,14 +591,14 @@ describe('adım adım sihirbaz', () => {
   it('Operator sees the retention presets but cannot change them', async () => {
     access.canAdmin = false
     renderPage()
-    await reach(5)
+    await reach(2)
     expect(screen.getByRole('button', { name: '30 gün' })).toBeDisabled()
   })
   it('the last step summarises the job in plain words before anything is created; technical values are copyable under "Teknik ayrıntılar"', async () => {
     renderPage()
-    await reach(4)
+    await reach(2)
     fireEvent.click(screen.getByRole('button', { name: 'Her gün 02:00' }))
-    next(3)
+    next(2)
     expect(saveBackupJob).not.toHaveBeenCalled()
     expect(screen.getByText('ERP backup')).toBeInTheDocument()
     expect(screen.getByText('Her gün 02:00')).toBeInTheDocument()
@@ -554,8 +611,114 @@ describe('adım adım sihirbaz', () => {
   })
   it('each summary row leads back to the step that owns it', async () => {
     renderPage()
-    await reach(7)
+    await reach(4)
     fireEvent.click(screen.getByRole('button', { name: 'Değiştir: Zamanlama' }))
     expect(screen.getByRole('button', { name: 'Her gün 02:00' })).toBeInTheDocument()
+    next(2)
+    fireEvent.click(screen.getByRole('button', { name: 'Değiştir: Şifreleme' }))
+    expect(screen.getByLabelText('Yedek şifreleme politikası')).toBeInTheDocument()
+    next()
+    fireEvent.click(screen.getByRole('button', { name: 'Değiştir: Bilgisayar' }))
+    expect(screen.getByLabelText('Yedekleme bilgisayarı')).toBeInTheDocument()
+  })
+})
+
+describe('mevcut işi düzenleme sayfası', () => {
+  it('shows every setting on one page without any step navigation', async () => {
+    renderPage(editRoute)
+    expect(await screen.findByLabelText('İş adı')).toHaveValue('ERP backup')
+    for (const label of ['Yedekleme bilgisayarı', 'Veritabanı', 'Depolama bağlantısı', 'Önceki çalıştırma sürerken yeni zamanlama', 'Saklama süresi (saniye)', 'Yedek şifreleme politikası']) {
+      expect(screen.getByLabelText(label)).toBeInTheDocument()
+    }
+    expect(screen.queryByRole('navigation', { name: 'Adımlar' })).toBeNull()
+    for (const name of ['İleri', 'Geri', /^Değiştir/, 'Özete dön']) expect(screen.queryByRole('button', { name })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Kaydet' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Vazgeç' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs')
+    expect(screen.getByRole('heading', { name: 'Yedekleme işini düzenle' })).toBeInTheDocument()
+  })
+  it('lists the changed sections before saving and saves everything with one click', async () => {
+    vi.mocked(saveBackupJob).mockResolvedValue({} as never)
+    renderPage(editRoute)
+    fireEvent.change(await screen.findByLabelText('İş adı'), { target: { value: 'Renamed' } })
+    expect(screen.getByText('Değişen bölümler: Kaynak')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Yedek şifreleme politikası'), { target: { value: 'Required' } })
+    fireEvent.click(screen.getByRole('button', { name: '30 gün' }))
+    expect(screen.getByText('Değişen bölümler: Kaynak, Zamanlama, Koruma')).toBeInTheDocument()
+    await submit()
+    await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(saveBackupJob).mock.calls[0]).toEqual(['tenant-a', expect.objectContaining({ name: 'Renamed', retention: expect.objectContaining({ keepForSeconds: 2592000 }), configuration: expect.objectContaining({ encryptionPolicy: 'Required' }) }), 'job-a'])
+    expect(await screen.findByText('Job listesi')).toBeInTheDocument()
+  })
+  it('says there is nothing to save yet when nothing was changed', async () => {
+    renderPage(editRoute)
+    await screen.findByLabelText('İş adı')
+    expect(screen.getByText('Henüz değişiklik yok.')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('İş adı'), { target: { value: 'ERP backup 2' } })
+    fireEvent.change(screen.getByLabelText('İş adı'), { target: { value: 'ERP backup' } })
+    expect(screen.getByText('Henüz değişiklik yok.')).toBeInTheDocument()
+  })
+  it('validates all sections on save and focuses the first invalid field', async () => {
+    renderPage(editRoute)
+    fireEvent.change(await screen.findByLabelText('İş adı'), { target: { value: ' ' } })
+    fireEvent.change(screen.getByLabelText('İlk gecikme (saniye)'), { target: { value: '-1' } })
+    await submit()
+    expect(saveBackupJob).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.getByLabelText('İş adı')).toHaveFocus())
+    expect(screen.getByLabelText('İlk gecikme (saniye)')).toHaveAttribute('aria-invalid', 'true')
+  })
+  it('shows a server field error next to its field and opens the technical details around it', async () => {
+    vi.mocked(saveBackupJob).mockRejectedValue(new ApiError(400, { field: 'retryPolicy.maxDelaySeconds', code: 'invalid_request' }))
+    renderPage(editRoute)
+    await screen.findByLabelText('İş adı')
+    await submit()
+    await waitFor(() => expect(document.getElementById('retryPolicy.maxDelaySeconds-error')).toHaveTextContent(/.+/))
+    expect(screen.getByLabelText('En uzun gecikme (saniye)').closest('details')).toHaveAttribute('open')
+    expect(screen.queryByRole('button', { name: /^Hatalı alana git/ })).toBeNull()
+  })
+})
+
+describe('kaydedilmemiş değişiklik uyarısı', () => {
+  const unload = () => {
+    const event = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(event)
+    return event.defaultPrevented
+  }
+  it('does not warn before anything was entered and leaves without asking', async () => {
+    renderPage()
+    expect(unload()).toBe(false)
+    fireEvent.click(screen.getByRole('link', { name: 'Vazgeç' }))
+    expect(await screen.findByText('Job listesi')).toBeInTheDocument()
+  })
+  it('warns the browser once data was entered in the wizard, and asks before cancelling', async () => {
+    renderPage()
+    fireEvent.change(screen.getByLabelText('İş adı'), { target: { value: 'Half done' } })
+    expect(unload()).toBe(true)
+    fireEvent.click(screen.getByRole('link', { name: 'Vazgeç' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Kaydedilmemiş değişiklikler atılsın mı?' })
+    expect(screen.queryByText('Job listesi')).toBeNull()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Vazgeç' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.getByLabelText('İş adı')).toHaveValue('Half done')
+    fireEvent.click(screen.getByRole('link', { name: 'Vazgeç' }))
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Değişiklikleri at' }))
+    expect(await screen.findByText('Job listesi')).toBeInTheDocument()
+  })
+  it('guards the edit page the same way, and stops warning once the values are back to the saved ones', async () => {
+    renderPage(editRoute)
+    fireEvent.change(await screen.findByLabelText('İş adı'), { target: { value: 'Other' } })
+    expect(unload()).toBe(true)
+    fireEvent.change(screen.getByLabelText('İş adı'), { target: { value: 'ERP backup' } })
+    expect(unload()).toBe(false)
+    fireEvent.change(screen.getByLabelText('İş adı'), { target: { value: 'Other' } })
+    fireEvent.click(screen.getByRole('link', { name: 'Vazgeç' }))
+    expect(await screen.findByRole('dialog', { name: 'Kaydedilmemiş değişiklikler atılsın mı?' })).toBeInTheDocument()
+  })
+  it('stops warning after the job was saved', async () => {
+    vi.mocked(saveBackupJob).mockResolvedValue({} as never)
+    renderPage(editRoute)
+    fireEvent.change(await screen.findByLabelText('İş adı'), { target: { value: 'Other' } })
+    await submit()
+    expect(await screen.findByText('Job listesi')).toBeInTheDocument()
+    expect(unload()).toBe(false)
   })
 })

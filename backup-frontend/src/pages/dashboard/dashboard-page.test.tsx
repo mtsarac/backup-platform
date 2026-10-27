@@ -29,6 +29,7 @@ const emptyObservability = () => ({
 
 const state = vi.hoisted(() => ({
   canAdmin: true,
+  canOperate: true,
   data: {
     jobs: { total: 1, enabled: 1, scheduled: 0 },
     agents: { total: 1, online: 1, offline: 0, unknown: 0, disabled: 0, revoked: 0 },
@@ -38,9 +39,11 @@ const state = vi.hoisted(() => ({
     upcomingJobs: [],
   },
   observability: {} as ReturnType<typeof emptyObservability>,
+  pending: false,
+  error: null as Error | null,
 }))
-vi.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ refetchQueries: vi.fn() }), useQuery: ({ queryKey }: { queryKey: string[] }) => ({ data: queryKey.includes('observability') ? state.observability : state.data, isPending: false, error: null }) }))
-vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', tenant: { name: 'Tenant A' }, canAdmin: state.canAdmin }) }))
+vi.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({ refetchQueries: vi.fn() }), useQuery: ({ queryKey }: { queryKey: string[] }) => ({ data: state.pending || state.error ? undefined : queryKey.includes('observability') ? state.observability : state.data, isPending: state.pending, error: state.error, refetch: vi.fn() }) }))
+vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', tenant: { name: 'Tenant A' }, canAdmin: state.canAdmin, canOperate: state.canOperate }) }))
 
 function renderDashboard() {
   return render(<MemoryRouter><DashboardPage /></MemoryRouter>)
@@ -50,6 +53,9 @@ const openDetails = () => userEvent.click(screen.getByText('Ayrıntılar'))
 beforeEach(() => {
   localStorage.clear()
   state.canAdmin = true
+  state.canOperate = true
+  state.pending = false
+  state.error = null as Error | null
   state.data.agents.offline = 0
   state.data.runs.failedLast24Hours = 0
   state.data.runs.succeededLast24Hours = 1
@@ -86,12 +92,34 @@ describe('tenant status card', () => {
     for (const word of ['Güvende', 'Dikkat', 'Acil']) expect(screen.queryByText(word)).not.toBeInTheDocument()
   })
 
-  it('sends a user who cannot create jobs to their administrator instead of offering the button', () => {
+  it('offers the create action to an operator who is not an administrator', () => {
     state.canAdmin = false
+    renderDashboard()
+    expect(screen.getByRole('link', { name: 'Yeni yedekleme işi' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/new')
+  })
+
+  it('offers the first-backup action to an operator when the tenant has no jobs, as the only create link', () => {
+    state.canAdmin = false
+    state.observability = emptyObservability()
+    renderDashboard()
+    expect(screen.getByRole('link', { name: 'İlk yedeğinizi oluşturun' })).toBeVisible()
+    expect(screen.queryByRole('link', { name: 'Yeni yedekleme işi' })).not.toBeInTheDocument()
+  })
+
+  it('sends a viewer to their administrator instead of offering any create action', () => {
+    state.canAdmin = false
+    state.canOperate = false
+    renderDashboard()
+    expect(screen.queryByRole('link', { name: 'Yeni yedekleme işi' })).not.toBeInTheDocument()
     state.observability = emptyObservability()
     renderDashboard()
     expect(screen.queryByRole('link', { name: 'İlk yedeğinizi oluşturun' })).not.toBeInTheDocument()
     expect(screen.getByText('Yöneticinize danışın')).toBeVisible()
+  })
+
+  it('names the page like the navigation entry', () => {
+    renderDashboard()
+    expect(screen.getByRole('heading', { level: 1, name: 'Genel Bakış' })).toBeVisible()
   })
 
   it('has no cards/table view switch and stores no view preference', () => {
@@ -133,6 +161,62 @@ describe('tenant recommendations', () => {
     state.observability = { ...state.observability, state: 'Degraded', jobs: [jobHealth('job-x', 'Yeni etken', 'Degraded', 70, { freshness: { score: 10, maxScore: 40, status: 'Degraded', reason: 'brand_new_code' } })] }
     renderDashboard()
     expect(within(screen.getByRole('list', { name: 'Öneriler' })).getByRole('link', { name: /Yeni etken/ })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-x/edit')
+  })
+})
+
+describe('dashboard loading and failure', () => {
+  it('shows a loading status while the data arrives and no stale verdict', () => {
+    state.pending = true
+    renderDashboard()
+    expect(screen.getAllByRole('status', { name: 'Yükleniyor' }).length).toBeGreaterThan(0)
+    expect(screen.queryByText('Yedekleriniz güvende')).not.toBeInTheDocument()
+  })
+
+  it('offers a retry when the data could not be loaded', () => {
+    state.error = new Error('network')
+    renderDashboard()
+    expect(screen.getAllByRole('button', { name: 'Tekrar dene' }).length).toBeGreaterThan(0)
+  })
+
+  it.each([['Degraded', 'Yedeklerinizden bazıları dikkat istiyor'], ['Critical', 'Yedeklerinizde acil bir sorun var']])('tells the user to open the listed jobs when the state is %s', (backendState, title) => {
+    state.observability = { ...state.observability, state: backendState, jobs: [jobHealth('job-bad', 'Muhasebe', 'Critical', 30, { freshness: { score: 0, maxScore: 40, status: 'Unavailable', reason: 'backup_missing' } })] }
+    renderDashboard()
+    expect(screen.getByText(title)).toBeVisible()
+    expect(within(screen.getByRole('list', { name: 'Öneriler' })).getByRole('link', { name: /Muhasebe/ })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-bad/edit')
+  })
+})
+
+describe('dashboard information ownership', () => {
+  it('lists each unhealthy job once: the top three above, only the rest in the details', async () => {
+    const stale = { freshness: { score: 0, maxScore: 40, status: 'Degraded', reason: 'backup_stale' } }
+    state.observability = { ...state.observability, state: 'Degraded', degraded: 5, jobs: ['a', 'b', 'c', 'd', 'e'].map((id, index) => jobHealth(id, `İş ${id}`, 'Degraded', 60 + index, stale)) }
+    renderDashboard()
+    await openDetails()
+    for (const id of ['a', 'b', 'c', 'd', 'e']) expect(screen.getAllByRole('link', { name: new RegExp(`İş ${id}`) })).toHaveLength(1)
+    expect(within(screen.getByRole('list', { name: 'Öneriler' })).getAllByRole('link')).toHaveLength(3)
+  })
+
+  it('shows a failure total with its storage cause split and one link, not a second alert', () => {
+    state.data.runs.failedLast24Hours = 8
+    state.data.runs.storageFailedLast24Hours = 6
+    renderDashboard()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByText(/6 tanesi depolamaya yazma veya kopya doğrulama hatası/)).toBeVisible()
+    expect(screen.getAllByRole('link', { name: 'Başarısız yedeklemeler' })).toHaveLength(1)
+    expect(screen.getByRole('link', { name: 'Başarısız yedeklemeler' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs?status=Failed')
+  })
+
+  it('has one link to the run history, in the recent-runs section', () => {
+    renderDashboard()
+    expect(screen.getAllByRole('link', { name: /Yedekleme denemeleri|Tüm geçmiş/ })).toHaveLength(1)
+  })
+
+  it('hides the health breakdown for a tenant without jobs', async () => {
+    state.observability = emptyObservability()
+    renderDashboard()
+    await openDetails()
+    expect(screen.queryByText('Ortalama sağlık puanı')).not.toBeInTheDocument()
+    expect(screen.queryByText('Sağlık değerlendirmesi için henüz iş yok.')).not.toBeInTheDocument()
   })
 })
 
@@ -194,28 +278,30 @@ describe('dashboard replication monitoring', () => {
 })
 
 describe('dashboard failure notices', () => {
-  it('reports every failure category in the details, each with a way to investigate', async () => {
-    state.data.runs.storageFailedLast24Hours = 6
+  it('reports delete failures and replication shortfalls as alerts with a way to investigate', () => {
     state.data.artifacts.deleteFailed = 2
+    state.data.runs.replicationInsufficientLast24Hours = 1
     renderDashboard()
-    await openDetails()
     expect(screen.getAllByRole('alert')).toHaveLength(2)
     expect(screen.getByRole('link', { name: 'Silme hatalarını inceleyin.' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts?state=DeleteFailed')
+  })
+
+  it('keeps the failed-backups link to the filtered run history', () => {
+    state.data.runs.failedLast24Hours = 1
+    renderDashboard()
+    expect(screen.getByRole('link', { name: 'Başarısız yedeklemeler' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs?status=Failed')
   })
 })
 
 describe('dashboard sentences and labels', () => {
   it('writes each alert as one whole sentence so the count sits where the language wants it', async () => {
     changeLanguage('en')
-    state.data.runs.storageFailedLast24Hours = 6
     state.data.artifacts.deleteFailed = 2
     state.data.runs.replicationInsufficientLast24Hours = 3
     renderDashboard()
-    await userEvent.click(screen.getByText('Details'))
     const alerts = screen.getAllByRole('alert').map(alert => alert.textContent)
     expect(alerts).toEqual(expect.arrayContaining([
       expect.stringContaining('2 backup file(s) could not be deleted.'),
-      expect.stringContaining('Storage write or replica verification failed for 6 backup(s) in the last 24 hours.'),
       expect.stringContaining('3 backup(s) in the last 24 hours produced a usable backup but did not reach the required number of verified copies.'),
     ]))
   })
@@ -223,7 +309,7 @@ describe('dashboard sentences and labels', () => {
   it('names the counters in plain words instead of raw state names', async () => {
     renderDashboard()
     await openDetails()
-    for (const label of ['Planlı yedekleme işleri', 'Yeniden denenecek', 'İptal isteniyor', 'Etkin yedekleme denemeleri', 'Etkin yedekleme işleri', 'Silinmeyi bekleyen yedek dosyaları']) expect(screen.getByText(label)).toBeInTheDocument()
+    for (const label of ['Planlı yedekleme işleri', 'Yeniden denenecek', 'İptal isteniyor', 'Etkin yedekleme denemeleri', 'Silinmeyi bekleyen yedek dosyaları']) expect(screen.getByText(label)).toBeInTheDocument()
     for (const jargon of ['Scheduled Jobs', 'RetryPending', 'CancellationRequested', 'Aktif Runs', 'Etkin Jobs']) expect(screen.queryByText(jargon)).not.toBeInTheDocument()
   })
 })

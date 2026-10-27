@@ -3,6 +3,7 @@ import { render } from '@/test/render'
 import { setViewport } from '@/test/viewport'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
+import { LocationProbe } from '@/features/platform/location-probe'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { BackupJobsPage } from './backup-jobs-page'
 import { getBackupJobs, startJobRun } from '@/features/backup-jobs/api'
@@ -137,4 +138,43 @@ it('on a phone shows the status beside the name and three key fields', async () 
   expect(card.getAllByRole('term')).toHaveLength(3)
   expect(card.getByText('Ofis PC')).toBeInTheDocument()
   expect(card.queryByText('17 3 * * 2')).not.toBeInTheDocument()
+})
+
+function mountAt(url: string) {
+  const cache = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(<QueryClientProvider client={cache}><MemoryRouter initialEntries={[url]}><BackupJobsPage /><LocationProbe /></MemoryRouter></QueryClientProvider>)
+}
+
+it('keeps search, status and page in the URL, so a refreshed or shared link shows the same list', async () => {
+  vi.mocked(getBackupJobs).mockResolvedValue(Array.from({ length: 60 }, (_, index) => ({ ...job, id: `job-${index}`, name: `İş ${index}`, enabled: index % 2 === 0 })))
+  mountAt('/?state=disabled&search=İş&page=2')
+  expect(await screen.findByLabelText('Durum')).toHaveValue('disabled')
+  expect(screen.getByLabelText('İş, yedekleme bilgisayarı veya veritabanı ara')).toHaveValue('İş')
+  expect(screen.getByText('30 kayıt · Sayfa 2 / 2')).toBeInTheDocument()
+  expect(screen.getAllByRole('row')).toHaveLength(6)
+})
+
+it('writes filter changes to the URL and drops the page; clearing removes them; typing replaces instead of piling up history', async () => {
+  vi.mocked(getBackupJobs).mockResolvedValue(Array.from({ length: 60 }, (_, index) => ({ ...job, id: `job-${index}`, name: `İş ${index}`, enabled: true })))
+  mountAt('/?page=2')
+  fireEvent.change(await screen.findByLabelText('Durum'), { target: { value: 'disabled' } })
+  expect(screen.getByTestId('location')).toHaveTextContent('/?state=disabled')
+  fireEvent.change(screen.getByLabelText('Durum'), { target: { value: 'all' } })
+  fireEvent.change(screen.getByLabelText('İş, yedekleme bilgisayarı veya veritabanı ara'), { target: { value: 'İş 5' } })
+  expect(screen.getByTestId('location')).toHaveTextContent(/^\/\?search=%C4%B0%C5%9F\+5$/)
+  fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
+  expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/)
+})
+
+it('ignores an unknown status value in the URL', async () => {
+  mountAt('/?state=nonsense')
+  expect(await screen.findByLabelText('Durum')).toHaveValue('all')
+  expect(screen.queryByRole('button', { name: 'Filtreleri temizle' })).not.toBeInTheDocument()
+})
+
+it('links a job that has run to its own run history', async () => {
+  vi.mocked(getBackupJobs).mockResolvedValue([scheduled])
+  mount()
+  const row = within(await screen.findByRole('row', { name: /Nightly/ }))
+  expect(row.getByRole('link', { name: 'Tüm denemeler' })).toHaveAttribute('href', '/tenants/tenant-a/backup-runs?jobId=job-b')
 })

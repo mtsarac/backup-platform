@@ -36,14 +36,14 @@ function Verdict({ summary, state, base }: { summary: HealthSummary; state: Back
 }
 
 /** The page's one question: are my backups safe? The state is the backend's; recommendations come from each unhealthy job's weakest factor. */
-export function HealthStatusCard({ tenantId, canAdmin }: { tenantId: string; canAdmin: boolean }) {
+export function HealthStatusCard({ tenantId, canOperate }: { tenantId: string; canOperate: boolean }) {
   useLanguage()
   const query = useHealthSummary(tenantId)
   const base = `/tenants/${tenantId}`
   const summary = query.data
   return <QueryState isPending={query.isPending} error={query.error} onRetry={() => void query.refetch()}>
     {summary && (summary.state === null
-      ? <Section><div role="status"><EmptyState icon={DatabaseBackup} canAct={canAdmin} message={tx("Henüz yedekleme kurulmadı")}
+      ? <Section><div role="status"><EmptyState icon={DatabaseBackup} canAct={canOperate} message={tx("Henüz yedekleme kurulmadı")}
           action={<Link to={`${base}/backup-jobs/new`} className={buttonVariants()}>{tx("İlk yedeğinizi oluşturun")}</Link>} /></div></Section>
       : <Verdict summary={summary} state={summary.state} base={base} />)}
   </QueryState>

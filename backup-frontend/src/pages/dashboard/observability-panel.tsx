@@ -3,6 +3,7 @@ import { Section } from '@/components/ui/section'
 import { QueryState } from '@/components/data/query-state'
 import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 import { useHealthSummary } from './health-summary'
+import { MAX_RECOMMENDATIONS, unhealthyJobs } from './recommendations'
 import { formatBytes, formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 
@@ -11,8 +12,10 @@ export function ObservabilityPanel({ tenantId }: { tenantId: string }) {
   const query = useHealthSummary(tenantId)
   const data = query.data
   const base = `/tenants/${tenantId}`
+  /** The top jobs are already the health card's recommendations; only the rest belong here. */
+  const others = unhealthyJobs(data?.jobs ?? []).slice(MAX_RECOMMENDATIONS)
   return <Section title={tx('Gözlemlenebilirlik & Güvenilirlik')}>
-    <QueryState isPending={query.isPending} error={query.error}>
+    <QueryState isPending={query.isPending} error={query.error} onRetry={() => void query.refetch()}>
       {data && <div className="space-y-5">
         <dl className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <div><dt className="text-sm text-text-muted">{tx('Ortalama sağlık puanı')}</dt><dd className="text-2xl font-semibold tabular-nums">{data.averageScore === null ? '—' : data.averageScore.toLocaleString(currentLocale(), { maximumFractionDigits: 1 })}<span className="text-sm text-text-muted"> / 100</span></dd></div>
@@ -20,14 +23,13 @@ export function ObservabilityPanel({ tenantId }: { tenantId: string }) {
           <div><dt className="text-sm text-text-muted">{tx('Zayıflamış işler')}</dt><dd className="text-2xl font-semibold tabular-nums text-warning">{data.degraded}</dd></div>
           <div><dt className="text-sm text-text-muted">{tx('Kritik işler')}</dt><dd className="text-2xl font-semibold tabular-nums text-error">{data.critical}</dd></div>
         </dl>
-        {data.totalJobs === 0 && <p className="text-sm text-text-muted">{tx('Sağlık değerlendirmesi için henüz iş yok.')}</p>}
         <div className="grid gap-5 xl:grid-cols-3">
-          <div><h3 className="mb-2 font-medium">{tx('İncelenmesi gereken işler')}</h3>
-            {data.jobs.some(job => job.state !== 'Healthy') ? <ul className="divide-y divide-border">{data.jobs.filter(job => job.state !== 'Healthy').sort((a, b) => a.score - b.score).map(job => <li key={job.jobId} className="flex flex-wrap items-center justify-between gap-2 py-2">
+          {others.length > 0 && <div><h3 className="mb-2 font-medium">{tx('Diğer dikkat isteyen işler')}</h3>
+            <ul className="divide-y divide-border">{others.map(job => <li key={job.jobId} className="flex flex-wrap items-center justify-between gap-2 py-2">
               <Link className="min-w-0 break-words text-primary underline-offset-4 hover:underline" to={`${base}/backup-jobs/${job.jobId}/edit`}>{job.jobName}</Link>
               <StatusPill level={job.state === 'Critical' ? 'urgent' : 'attention'}>{tx('{0} / 100', { '0': job.score })}</StatusPill>
-            </li>)}</ul> : <p className="text-sm text-text-muted">{tx('Düşük sağlık puanlı iş yok.')}</p>}
-          </div>
+            </li>)}</ul>
+          </div>}
           <div><h3 className="mb-2 font-medium">{tx('Depolama kapasite riskleri')}</h3>
             {data.capacityRisks.length ? <ul className="divide-y divide-border">{data.capacityRisks.map(risk => <li key={risk.connectionId} className="space-y-1 py-2">
               <div className="flex flex-wrap items-center justify-between gap-2"><Link className="min-w-0 break-words text-primary underline-offset-4 hover:underline" to={`${base}/storage/connections/${risk.connectionId}`}>{risk.connectionName}</Link><StatusPill level={risk.status === 'Critical' ? 'urgent' : 'attention'}>{risk.status === 'Critical' ? tx('Kritik kapasite') : tx('Kapasite uyarısı')}</StatusPill></div>

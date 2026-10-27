@@ -1,7 +1,7 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { AlertCircle, Database, HardDrive, Monitor, Plus } from 'lucide-react'
+import { AlertCircle, HardDrive, Plus } from 'lucide-react'
 import { apiRequest, tenantPath } from '@/lib/api/client'
 import { failureMessage } from '@/lib/api/failure-messages'
 import { useTenant } from '@/features/tenancy/use-tenant'
@@ -47,7 +47,7 @@ function runNote(run: BackupRun): string {
 
 export function DashboardPage() {
   useLanguage()
-  const { tenantId, tenant, canAdmin } = useTenant()
+  const { tenantId, tenant, canOperate } = useTenant()
   const query = useQuery({ queryKey: ['tenant', tenantId, 'dashboard'], queryFn: ({ signal }) => apiRequest<Dashboard>(tenantPath(tenantId, 'dashboard'), { signal }), refetchInterval: 15_000, refetchIntervalInBackground: false })
   const data = query.data
   const base = `/tenants/${tenantId}`
@@ -61,11 +61,22 @@ export function DashboardPage() {
   const replicationShort = data?.runs.replicationInsufficientLast24Hours ?? 0
   const noJobs = useHealthSummary(tenantId).data?.totalJobs === 0
   return <>
-    <PageHeader title={tx("Ana Sayfa")} description={tx("{0} · Yedeklerinizin durumu", { "0": tenant.name })}
-      actions={<><Link to={`${base}/backup-runs`} className={buttonVariants({ variant: 'outline' })}>{tx("Yedekleme denemeleri")}</Link>{canAdmin && <Link to={`${base}/backup-jobs/new`} className={buttonVariants()}><Plus aria-hidden="true" className="size-4" />{tx("Yeni yedekleme işi")}</Link>}</>} />
-    <HealthStatusCard tenantId={tenantId} canAdmin={canAdmin} />
+    <PageHeader title={tx("Genel Bakış")} description={tx("{0} · Yedeklerinizin durumu", { "0": tenant.name })}
+      actions={canOperate && !noJobs ? <Link to={`${base}/backup-jobs/new`} className={buttonVariants()}><Plus aria-hidden="true" className="size-4" />{tx("Yeni yedekleme işi")}</Link> : undefined} />
+    <HealthStatusCard tenantId={tenantId} canOperate={canOperate} />
     <QueryState isPending={query.isPending} error={query.error} onRetry={() => void query.refetch()}>
       {data && <>
+        {data.artifacts.deleteFailed > 0 && <ErrorNotice what={tx("{0} yedek dosyası silinemedi.", { "0": data.artifacts.deleteFailed })} dataImpact={tx("Silinemeyen dosyalar depoda duruyor; diğer yedekleriniz etkilenmedi.")} action={tx("Nedenini inceleyip silmeyi yeniden deneyin.")} control={<Link className="font-medium underline" to={`${base}/artifacts?state=DeleteFailed`}>{tx("Silme hatalarını inceleyin.")}</Link>} />}
+        {replicationShort > 0 && <ErrorNotice what={tx("Son 24 saatte {0} yedekleme kullanılabilir yedek oluşturdu, ancak gereken doğrulanmış kopya sayısına ulaşamadı.", { "0": replicationShort })} dataImpact={tx("Yedekler kullanılabilir durumda ama gereken kopya sayısına ulaşılamadı.")} action={tx("Eksik kopyaları onarmak için sonuçları inceleyin.")} control={<Link className="font-medium underline" to={`${base}/backup-runs?status=Succeeded`}>{tx("Replikasyon sonuçlarını inceleyin.")}</Link>} />}
+        {!noJobs && <div className="grid gap-4 sm:grid-cols-2">
+          <KpiCard label={tx("Yedek üretildi · son 24 saat")} value={data.runs.succeededLast24Hours} tone="success" icon={<HardDrive className="size-5" />} />
+          <KpiCard label={tx("Başarısız · son 24 saat")} value={data.runs.failedLast24Hours} tone={data.runs.failedLast24Hours > 0 ? 'error' : undefined} icon={<AlertCircle className="size-5" />}
+            hint={data.runs.failedLast24Hours > 0 || data.runs.storageFailedLast24Hours > 0 ? <>
+              {data.runs.storageFailedLast24Hours > 0 && <>{tx("{0} tanesi depolamaya yazma veya kopya doğrulama hatası.", { "0": data.runs.storageFailedLast24Hours })}{' '}</>}
+              {tx("Başarısız denemeler yedek üretmedi; önceki başarılı yedekleriniz korunur.")}{' '}
+              <Link className="font-medium text-primary underline underline-offset-4" to={`${base}/backup-runs?status=Failed`}>{tx("Başarısız yedeklemeler")}</Link>
+            </> : undefined} />
+        </div>}
         {!noJobs && <section className="min-w-0 space-y-3" aria-labelledby="recent-runs-heading">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 id="recent-runs-heading" className="text-base font-semibold text-text-heading">{tx("Son yedeklemeler")}</h2>
@@ -76,24 +87,15 @@ export function DashboardPage() {
         <details className="group rounded-xl border border-border bg-surface shadow-card">
           <summary className="min-h-11 cursor-pointer select-none rounded-xl px-5 py-3 font-semibold text-text-heading">{tx("Ayrıntılar")}</summary>
           <div className="space-y-6 border-t border-border p-5">
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <KpiCard label={tx("Yedekleme bilgisayarları")} hint={tx("{0} çevrimiçi · bağlı bilgisayar / sunucu", { "0": data.agents.online })} value={data.agents.total} icon={<Monitor className="size-5" />} />
-              <KpiCard label={tx("Planlı yedekleme işleri")} hint={tx("Otomatik çalışan görev")} value={data.jobs.scheduled} icon={<Database className="size-5" />} />
-              <KpiCard label={tx("Yedek üretildi · son 24 saat")} value={data.runs.succeededLast24Hours} tone="success" icon={<HardDrive className="size-5" />} />
-              <KpiCard label={tx("Başarısız · son 24 saat")} value={data.runs.failedLast24Hours} tone={data.runs.failedLast24Hours > 0 ? 'error' : undefined} icon={<AlertCircle className="size-5" />} />
-            </div>
-            {data.artifacts.deleteFailed > 0 && <ErrorNotice what={tx("{0} yedek dosyası silinemedi.", { "0": data.artifacts.deleteFailed })} dataImpact={tx("Silinemeyen dosyalar depoda duruyor; diğer yedekleriniz etkilenmedi.")} action={tx("Nedenini inceleyip silmeyi yeniden deneyin.")} control={<Link className="font-medium underline" to={`${base}/artifacts?state=DeleteFailed`}>{tx("Silme hatalarını inceleyin.")}</Link>} />}
-            {data.runs.storageFailedLast24Hours > 0 && <ErrorNotice what={tx("Son 24 saatte {0} yedeklemede depolamaya yazma veya kopya doğrulama hatası oluştu.", { "0": data.runs.storageFailedLast24Hours })} dataImpact={tx("Başarısız denemeler yedek üretmedi; önceki başarılı yedekleriniz korunur.")} action={tx("Başarısız yedeklemeleri inceleyin.")} control={<Link className="font-medium underline" to={`${base}/backup-runs?status=Failed`}>{tx("Başarısız yedeklemeler")}</Link>} />}
-            {replicationShort > 0 && <ErrorNotice what={tx("Son 24 saatte {0} yedekleme kullanılabilir yedek oluşturdu, ancak gereken doğrulanmış kopya sayısına ulaşamadı.", { "0": replicationShort })} dataImpact={tx("Yedekler kullanılabilir durumda ama gereken kopya sayısına ulaşılamadı.")} action={tx("Eksik kopyaları onarmak için sonuçları inceleyin.")} control={<Link className="font-medium underline" to={`${base}/backup-runs?status=Succeeded`}>{tx("Replikasyon sonuçlarını inceleyin.")}</Link>} />}
-            <ObservabilityPanel tenantId={tenantId} />
+            {!noJobs && <ObservabilityPanel tenantId={tenantId} />}
             <div className="grid gap-4 lg:grid-cols-3">
               <Section title={tx("Agent bağlantı durumu ve yaşam döngüsü")}><dl className="divide-y divide-border">
-                <Row label={tx("Çevrimiçi")} value={data.agents.online} /><Row label={tx("Çevrimdışı")} value={data.agents.offline} tone="error" /><Row label={tx("Bağlantı bilinmiyor")} value={data.agents.unknown} />
+                <Row label={tx("Toplam")} value={data.agents.total} /><Row label={tx("Çevrimiçi")} value={data.agents.online} /><Row label={tx("Çevrimdışı")} value={data.agents.offline} tone="error" /><Row label={tx("Bağlantı bilinmiyor")} value={data.agents.unknown} />
                 <Row label={tx("Devre dışı (lifecycle)")} value={data.agents.disabled} /><Row label={tx("İptal edilmiş (lifecycle)")} value={data.agents.revoked} />
               </dl></Section>
               <Section title={tx("Çalışan işler")}><dl className="divide-y divide-border">
                 <Row label={statusLabel('general', 'Running')} value={data.runs.running} /><Row label={statusLabel('general', 'RetryPending')} value={data.runs.retryPending} /><Row label={statusLabel('general', 'CancellationRequested')} value={data.runs.cancellationRequested} />
-                <Row label={tx("Etkin yedekleme denemeleri")} value={data.runs.active} /><Row label={tx("Etkin yedekleme işleri")} value={data.jobs.enabled} /><Row label={tx("Silinmeyi bekleyen yedek dosyaları")} value={data.artifacts.deletePending} />
+                <Row label={tx("Etkin yedekleme denemeleri")} value={data.runs.active} /><Row label={tx("Planlı yedekleme işleri")} value={data.jobs.scheduled} /><Row label={tx("Silinmeyi bekleyen yedek dosyaları")} value={data.artifacts.deletePending} />
               </dl></Section>
               <Section title={tx("Sonraki planlı yedeklemeler")}>{data.upcomingJobs.length
                 ? <ul className="divide-y divide-border">{data.upcomingJobs.map(job => <li key={job.id} className="space-y-0.5 py-2 first:pt-0 last:pb-0"><Link className="font-medium text-primary underline-offset-4 hover:underline" to={`${base}/backup-jobs/${job.id}/edit`}>{job.name}</Link><p className="text-sm text-text-muted">{job.schedule?.nextOccurrenceAt ? formatDateTime(job.schedule.nextOccurrenceAt) : '—'} · {job.schedule?.timeZone}</p></li>)}</ul>

@@ -1,6 +1,6 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { History } from 'lucide-react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { DataList, type Column } from '@/components/data/data-list'
 import { Pagination } from '@/components/data/pagination'
 import { QueryState } from '@/components/data/query-state'
@@ -13,13 +13,13 @@ import { Filters, FilterField, filterControlClass } from '@/components/ui/filter
 import { linkClass } from '@/components/ui/form-styles'
 import { Tabs } from '@/components/ui/tabs'
 import { ErrorNotice } from '@/components/ui/notice'
-import { PageHeader } from '@/components/ui/page-header'
 import { SearchablePicker } from '@/components/ui/searchable-picker'
 import { useAgents } from '@/features/agents/hooks'
 import { BackupPicker } from '@/features/artifacts/backup-picker'
 import { useRestores } from '@/features/restores/hooks'
 import { restoreModeLabel, restoreStatuses, targetStateLabel, verificationCleanupText } from '@/features/restores/presentation'
-import type { RestoreFilters, RestoreStatus, RestoreView } from '@/features/restores/types'
+import type { RestoreFilters, RestoreView } from '@/features/restores/types'
+import { oneOf, useListParams } from '@/features/platform/use-list-params'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { formatDuration } from '@/lib/format'
 import { statusLabel } from '@/lib/status'
@@ -27,27 +27,16 @@ import { statusLabel } from '@/lib/status'
 export function RestoresPage() {
   useLanguage()
   const { tenantId, canOperate } = useTenant()
-  const [search, setSearch] = useSearchParams()
-  const requestedPage = Number(search.get('page') ?? 1)
-  const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1
-  const rawStatus = search.get('status') ?? ''
-  const status: RestoreStatus | '' = restoreStatuses.includes(rawStatus as RestoreStatus) ? rawStatus as RestoreStatus : ''
-  const verification = search.get('view') === 'tests'
-  const filters: RestoreFilters = { page, pageSize: 25, purpose: verification ? 'Verification' : undefined, status, artifactId: search.get('artifactId') ?? '', agentId: search.get('agentId') ?? '' }
+  const { page, get, update } = useListParams()
+  const status = oneOf(get('status'), restoreStatuses) ?? ''
+  const verification = get('view') === 'tests'
+  const filters: RestoreFilters = { page, pageSize: 25, purpose: verification ? 'Verification' : undefined, status, artifactId: get('artifactId'), agentId: get('agentId') }
   const query = useRestores(filters)
   const agents = useAgents(tenantId, true)
   const base = `/tenants/${tenantId}`
   const filtering = Boolean(status || filters.artifactId || filters.agentId)
   const emptyFiltered = filtering && query.data?.items.length === 0
-  function updateFilters(patch: Record<string, string>) {
-    setSearch((current) => {
-      const next = new URLSearchParams(current)
-      next.delete('page')
-      Object.entries(patch).forEach(([key, value]) => { if (value) next.set(key, value); else next.delete(key) })
-      return next
-    })
-  }
-  const clearFilters = () => setSearch(verification ? { view: 'tests' } : {})
+  const clearFilters = () => update({ status: '', artifactId: '', agentId: '' })
   const computer = (restore: RestoreView) => agents.data?.find((agent) => agent.agentId === restore.agentId)?.hostName ?? tx('Yedekleme bilgisayarı bulunamadı')
   const sourceBackup = (restore: RestoreView) => <div className="space-y-1">
     <Link className={linkClass} to={`${base}/artifacts/${restore.artifactId}`}>{restore.sourceDatabaseName ?? restore.result?.sourceBackup?.databaseName ?? tx('Yedek dosyasını aç')}</Link>
@@ -69,12 +58,11 @@ export function RestoresPage() {
     when,
   ]
   return <div className="space-y-6">
-    <PageHeader title={tx("Geri yükleme geçmişi")} description={tx("Geri yüklemeleri ve hedef veritabanlarının son durumunu buradan izleyin.")} />
-    <Tabs label={tx("Liste türü")} idPrefix="restore-view" value={verification ? 'tests' : 'restores'} onChange={(value) => setSearch(value === 'tests' ? { view: 'tests' } : {})} items={[{ value: 'restores', label: tx('Geri yüklemeler') }, { value: 'tests', label: tx('Geri yükleme testleri') }]} />
+    <Tabs label={tx("Liste türü")} idPrefix="restore-view" value={verification ? 'tests' : 'restores'} onChange={(value) => update({ view: value === 'tests' ? 'tests' : '', status: '', artifactId: '', agentId: '' })} items={[{ value: 'restores', label: tx('Tümü') }, { value: 'tests', label: tx('Geri yükleme testleri') }]} />
     <Filters label={tx("Geri yükleme filtreleri")} onClear={emptyFiltered ? undefined : clearFilters}>
-      <FilterField label={tx("Durum")}><select aria-label={tx("Durum")} className={filterControlClass} value={status} onChange={(event) => updateFilters({ status: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{restoreStatuses.map((value) => <option key={value} value={value}>{statusLabel('general', value)}</option>)}</select></FilterField>
-      <BackupPicker tenantId={tenantId} value={filters.artifactId ?? ''} onChange={(artifactId) => updateFilters({ artifactId })} />
-      <SearchablePicker label={tx("Yedekleme bilgisayarı")} placeholder={tx("Tüm yedekleme bilgisayarları")} value={filters.agentId ?? ''} onChange={agentId => updateFilters({ agentId })}
+      <FilterField label={tx("Durum")}><select aria-label={tx("Durum")} className={filterControlClass} value={status} onChange={(event) => update({ status: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{restoreStatuses.map((value) => <option key={value} value={value}>{statusLabel('general', value)}</option>)}</select></FilterField>
+      <BackupPicker tenantId={tenantId} value={filters.artifactId ?? ''} onChange={(artifactId) => update({ artifactId })} />
+      <SearchablePicker label={tx("Yedekleme bilgisayarı")} placeholder={tx("Tüm yedekleme bilgisayarları")} value={filters.agentId ?? ''} onChange={agentId => update({ agentId })}
         options={(agents.data ?? []).map(agent => ({ value: agent.agentId, label: agent.hostName ?? tx("Adsız yedekleme bilgisayarı") }))}
         selectedLabel={filters.agentId ? tx("Yedekleme bilgisayarı bulunamadı") : undefined} disabled={agents.isPending || Boolean(agents.error)} />
     </Filters>
@@ -85,7 +73,7 @@ export function RestoresPage() {
           message={filtering ? tx("Bu filtrelere uyan geri yükleme yok.") : verification ? tx("Henüz geri yükleme testi yapılmadı.") : tx("Henüz geri yükleme yapılmadı.")}
           action={filtering ? <Button onClick={clearFilters}>{tx("Filtreleri temizle")}</Button> : <Link className={buttonVariants()} to={`${base}/artifacts`}>{tx("Yedek dosyalarını aç")}</Link>} /></div>
         : <DataList rows={query.data?.items ?? []} columns={verification ? testColumns : columns} keyExtractor={(restore) => restore.id} caption={tx("Geri yüklemeler")} />}
-      {query.data && query.data.totalCount > 0 && <Pagination label={tx("Geri yükleme sayfaları")} page={query.data.page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={(next) => updateFilters({ page: String(next) })} />}
+      {query.data && query.data.totalCount > 0 && <Pagination label={tx("Geri yükleme sayfaları")} page={query.data.page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
     </QueryState>
   </div>
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { jobSteps, stepOfField } from './job-wizard-model'
+import { stepOfField } from './job-wizard-model'
 import { validFilePath, validFilePaths } from './file-path-list'
 
 describe('confined file selections', () => {
@@ -16,8 +16,6 @@ describe('confined file selections', () => {
     expect(validFilePath('a'.repeat(1025))).toBe(false)
   })
   it('routes backend file-policy errors to the source step', () => {
-    expect(jobSteps[stepOfField('configuration.files')!]).toBe('Kaynak')
-    expect(jobSteps[stepOfField('configuration.files.paths[0]')!]).toBe('Kaynak')
-    expect(jobSteps[stepOfField('configuration.files.symlinkPolicy')!]).toBe('Kaynak')
+    expect(['configuration.files', 'configuration.files.paths[0]', 'configuration.files.symlinkPolicy'].map(stepOfField)).toEqual(['source', 'source', 'source'])
   })
 })

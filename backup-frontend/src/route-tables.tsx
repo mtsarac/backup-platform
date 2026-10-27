@@ -4,8 +4,10 @@ import { DashboardPage } from './pages/dashboard/dashboard-page'
 import { ClientsPage } from './pages/clients/clients-page'
 import { ClientDetailPage } from './pages/clients/client-detail-page'
 import { AgentRegisterPage } from './pages/clients/agent-register-page'
+import { BackupCenterLayout } from './pages/backup-center/backup-center-layout'
 import { BackupJobsPage } from './pages/backup-jobs/backup-jobs-page'
 import { BackupJobWizardPage } from './pages/backup-jobs/backup-job-wizard-page'
+import { BackupJobEditPage } from './pages/backup-jobs/backup-job-edit-page'
 import { BackupsPage } from './pages/backups/backups-page'
 import { BackupDetailPage } from './pages/backups/backup-detail-page'
 import { DiscoveryPage } from './pages/discovery/discovery-page'
@@ -48,10 +50,14 @@ export const tenantRoutes = <>
   <Route path="agents" element={<ClientsPage />} />
   <Route path="agents/:id" element={<ClientDetailPage />} />
   <Route path="enrollment" element={<AgentRegisterPage />} />
-  <Route path="backup-jobs" element={<BackupJobsPage />} />
+  <Route element={<BackupCenterLayout />}>
+    <Route path="backup-jobs" element={<BackupJobsPage />} />
+    <Route path="backup-runs" element={<BackupsPage />} />
+    <Route path="artifacts" element={<ArtifactsPage />} />
+    <Route path="restores" element={<RestoresPage />} />
+  </Route>
   <Route path="backup-jobs/new" element={<BackupJobWizardPage />} />
-  <Route path="backup-jobs/:id/edit" element={<BackupJobWizardPage />} />
-  <Route path="backup-runs" element={<BackupsPage />} />
+  <Route path="backup-jobs/:id/edit" element={<BackupJobEditPage />} />
   <Route path="backup-runs/:id" element={<BackupDetailPage />} />
   <Route path="storage" element={<StorageLayout />}>
     <Route index element={<ConnectionList />} />
@@ -63,10 +69,8 @@ export const tenantRoutes = <>
   <Route path="discovery" element={<DiscoveryPage />} />
   <Route path="discovery/instances/:instanceId" element={<InstanceDetailPage />} />
   <Route path="upload-bandwidth" element={<UploadBandwidthPage />} />
-  <Route path="artifacts" element={<ArtifactsPage />} />
   <Route path="artifacts/:id" element={<ArtifactDetailPage />} />
   <Route path="artifacts/:id/restore" element={<RestoreWizardPage />} />
-  <Route path="restores" element={<RestoresPage />} />
   <Route path="restores/:id" element={<RestoreDetailPage />} />
   <Route path="support-access" element={<SupportAccessPage />} />
   <Route path="notifications" element={<NotificationsPage />} />

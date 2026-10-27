@@ -145,7 +145,7 @@ function ArtifactDetail({ id }: { id: string }) {
         description={tx("Dosyanın sağlam olup olmadığı, geri yüklenip yüklenemeyeceği ve ne zaman silineceği.")}
         meta={artifact && <>
           <StatusPill status={artifactState(artifact)} />
-          {artifact.jobId && <Link className="text-sm text-primary underline-offset-4 hover:underline" to={`/tenants/${tenantId}/backup-jobs`}>{artifact.jobName || tx('Yedekleme işleri')}</Link>}
+          {artifact.jobId && <Link className="text-sm text-primary underline-offset-4 hover:underline" to={`/tenants/${tenantId}/backup-jobs/${artifact.jobId}/edit`}>{artifact.jobName || tx('Yedekleme işleri')}</Link>}
           {artifact.runId && <Link className="text-sm text-primary underline-offset-4 hover:underline" to={`/tenants/${tenantId}/backup-runs/${artifact.runId}`}>{tx("Yedekleme denemesini aç")}</Link>}
         </>}
         actions={artifact && <>

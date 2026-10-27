@@ -1,6 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import { MemoryRouter } from 'react-router-dom'
+import { LocationProbe } from '@/features/platform/location-probe'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { setViewport } from '@/test/viewport'
 import { makeRun } from '@/features/backups/test-data'
@@ -96,5 +97,41 @@ describe('run history filters and pagination', () => {
     fireEvent.change(screen.getByRole('combobox', { name: 'Durum' }), { target: { value: 'Failed' } })
     expect(screen.getAllByRole('button', { name: 'Filtreleri temizle' }).length).toBeGreaterThan(0)
     expect(screen.queryByRole('link', { name: /yedekleme işlerine/i })).not.toBeInTheDocument()
+  })
+})
+
+describe('run history URL state', () => {
+  const mountAt = (url: string) => render(<MemoryRouter initialEntries={[url]}><BackupsPage /><LocationProbe /></MemoryRouter>)
+
+  it.each([['Failed'], ['Succeeded']])('a dashboard link with status=%s filters the list and shows the filter', (status) => {
+    mountAt(`/?status=${status}`)
+    expect(state.filters.at(-1)).toMatchObject({ status, page: 1 })
+    expect(screen.getByRole('combobox', { name: 'Durum' })).toHaveValue(status)
+    expect(screen.getAllByRole('button', { name: 'Filtreleri temizle' })).toHaveLength(1)
+  })
+
+  it('a job link filters the history to that job, and the date, trigger and page filters survive a reload', () => {
+    mountAt('/?jobId=job-id&agentId=agent-id&trigger=Retry&from=2026-10-01&to=2026-10-06&page=2')
+    expect(state.filters.at(-1)).toEqual({ page: 2, pageSize: 25, jobId: 'job-id', agentId: 'agent-id', trigger: 'Retry', from: dateFilterInstant('2026-10-01'), to: dateFilterInstant('2026-10-06', true) })
+    expect(screen.getByRole('combobox', { name: 'İş' })).toHaveValue('job-id')
+    expect(screen.getByLabelText('Oluşturulma başlangıcı')).toHaveValue('2026-10-01')
+  })
+
+  it('ignores a status, trigger or date that is not a real value instead of sending it to the server', () => {
+    mountAt('/?status=Nonsense&trigger=Nope&from=yesterday&page=-3')
+    expect(state.filters.at(-1)).toEqual({ page: 1, pageSize: 25 })
+    expect(screen.queryByRole('button', { name: 'Filtreleri temizle' })).not.toBeInTheDocument()
+  })
+
+  it('writes every filter and page change to the URL; changing a filter drops the page and clearing empties the URL', () => {
+    mountAt('/')
+    fireEvent.click(screen.getByRole('button', { name: 'Sonraki' }))
+    expect(screen.getByTestId('location')).toHaveTextContent('/?page=2')
+    fireEvent.change(screen.getByRole('combobox', { name: 'Durum' }), { target: { value: 'Failed' } })
+    expect(screen.getByTestId('location')).toHaveTextContent('/?status=Failed')
+    fireEvent.change(screen.getByLabelText('Oluşturulma başlangıcı'), { target: { value: '2026-10-01' } })
+    expect(screen.getByTestId('location')).toHaveTextContent('/?status=Failed&from=2026-10-01')
+    fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
+    expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/)
   })
 })

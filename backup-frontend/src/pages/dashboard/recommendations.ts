@@ -27,11 +27,14 @@ function weakestFactor(job: BackupJobHealth): BackupHealthFactor {
 
 export interface Recommendation { jobId: string; jobName: string; message: string }
 
-/** Up to three, most urgent job first, one per unhealthy job. */
+/** Every unhealthy job, most urgent (lowest score) first. */
+export function unhealthyJobs(jobs: readonly BackupJobHealth[]): BackupJobHealth[] {
+  return jobs.filter(job => job.state !== 'Healthy').toSorted((a, b) => a.score - b.score)
+}
+
+/** Up to three, most urgent job first, one per unhealthy job. The jobs beyond them are the details panel's. */
 export function recommendations(jobs: readonly BackupJobHealth[]): Recommendation[] {
-  return jobs
-    .filter(job => job.state !== 'Healthy')
-    .toSorted((a, b) => a.score - b.score)
+  return unhealthyJobs(jobs)
     .slice(0, MAX_RECOMMENDATIONS)
     .map(job => ({ jobId: job.jobId, jobName: job.jobName, message: (messages[weakestFactor(job).reason] ?? (() => tx("Dikkat gerekiyor")))() }))
 }
