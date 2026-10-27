@@ -204,6 +204,7 @@ describe('Adding a backup computer', () => {
     vi.mocked(api.getAgent).mockResolvedValue({ ...detail, connectivity: 'online' })
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Takibi tekrar dene' })) })
     expect(screen.getByRole('status')).toHaveTextContent('Çevrimiçi')
+    expect(screen.getAllByText(/çevrimiçi/i)).toHaveLength(1)
   })
   it('does not abandon another active token if revocation fails', async () => {
     mount(); await issue()

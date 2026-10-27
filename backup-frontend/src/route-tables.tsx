@@ -28,6 +28,7 @@ import { PlatformDashboardPage } from './pages/platform/platform-dashboard-page'
 import { PlatformPlansPage } from './pages/platform/platform-plans-page'
 import { PlatformStoragePage } from './pages/platform/platform-storage-page'
 import { PlatformStorageConnectionsPage } from './pages/platform/platform-storage-connections-page'
+import { PlatformStorageLayout, PlatformStorageConnectionsRedirect } from './pages/platform/platform-storage-layout'
 import { PlatformQuotaPoliciesPage } from './pages/platform/platform-quota-policies-page'
 import { PlatformTenantsPage } from './pages/platform/platform-tenants-page'
 import { PlatformTenantDetailPage } from './pages/platform/platform-tenant-detail-page'
@@ -85,8 +86,11 @@ export const platformRoutes = <>
   <Route path="tenants/:tenantId" element={<PlatformTenantDetailPage />} />
   <Route path="tenants/:tenantId/agents/:agentId" element={<PlatformAgentDetailPage />} />
   <Route path="plans" element={<PlatformPlansPage />} />
-  <Route path="storage" element={<PlatformStoragePage />} />
-  <Route path="storage-connections" element={<PlatformStorageConnectionsPage />} />
+  <Route path="storage" element={<PlatformStorageLayout />}>
+    <Route index element={<PlatformStoragePage />} />
+    <Route path="connections" element={<PlatformStorageConnectionsPage />} />
+  </Route>
+  <Route path="storage-connections" element={<PlatformStorageConnectionsRedirect />} />
   <Route path="quota-policies" element={<PlatformQuotaPoliciesPage />} />
   <Route path="users" element={<PlatformUsersPage />} />
   <Route path="agents" element={<PlatformAgentsPage />} />

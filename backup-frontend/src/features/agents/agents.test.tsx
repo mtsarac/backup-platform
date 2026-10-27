@@ -196,6 +196,30 @@ describe('Backup computer page', () => {
     expect(screen.queryByText('Başka bilgisayarın işi')).not.toBeInTheDocument()
   })
 
+  it('links each job to its edit page and offers the discovered servers only for a computer that can scan', async () => {
+    vi.mocked(jobsApi.getBackupJobs).mockResolvedValue([{ id: 'job-1', name: 'Muhasebe', agentId: 'agent-a', enabled: true, lastRun: null, nextOccurrenceAt: null }] as never)
+    vi.mocked(api.getAgent).mockResolvedValue({ ...agent, capabilities: [{ identifier: 'discovery.database-inventory', support: 'Supported' }] })
+    const view = mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    expect(await screen.findByRole('link', { name: 'Muhasebe' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-1/edit')
+    expect(screen.getByRole('link', { name: 'Bulunan veritabanı sunucuları' })).toHaveAttribute('href', '/tenants/tenant-a/discovery?agentId=agent-a')
+    view.unmount()
+    vi.mocked(api.getAgent).mockResolvedValue(agent)
+    mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    await screen.findByRole('heading', { level: 1, name: 'SQL-01' })
+    expect(screen.queryByRole('link', { name: 'Bulunan veritabanı sunucuları' })).not.toBeInTheDocument()
+  })
+
+  it('tells the reader what to check when an active computer is offline, and says Bilinmiyor when the connection is unknown', async () => {
+    vi.mocked(api.getAgent).mockResolvedValue({ ...agent, connectivity: 'offline' })
+    const view = mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    expect(await screen.findByText(/yedekleme programının çalıştığını kontrol edin/)).toBeInTheDocument()
+    view.unmount()
+    vi.mocked(api.getAgent).mockResolvedValue({ ...agent, connectivity: 'unknown' })
+    mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    expect(await screen.findByText('Bilinmiyor')).toBeInTheDocument()
+    expect(screen.queryByText(/yedekleme programının çalıştığını kontrol edin/)).not.toBeInTheDocument()
+  })
+
   it('requires focused confirmation before an administrator removes a computer and invalidates only related scopes', async () => {
     const { client } = mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
     const invalidate = vi.spyOn(client, 'invalidateQueries')

@@ -215,7 +215,6 @@ function ConnectionWizardForm() {
                 ...configurationSummary({ configuration: buildConfiguration(provider.configFields, config) }, provider).filter((item) => item.value !== '—').map((item) => ({ label: tx(item.label), value: item.value })),
                 { label: tx("Veri yolu"), value: `${topologyLabel(provider.topology)} · ${executionLocationLabel(provider.executionLocation)}` },
                 { label: tx("Test yöntemi"), value: testModeLabel(provider.testMode) },
-                { label: tx("Yetenek kodları"), value: provider.capabilities.join(', ') || '—' },
               ]}>
                 <CapabilityChips capabilities={provider.capabilities} label={tx("{0} yetenekleri", { "0": tx(provider.displayName) })} />
               </TechnicalDetails>

@@ -8,7 +8,7 @@ import { useTenant } from '@/features/tenancy/use-tenant'
 import { useRemoveRollbackCopy, useRetryRestoreCleanup } from './hooks'
 import { isActiveRestore, verificationCheckLabel, verificationCleanupText } from './presentation'
 import type { RestoreView } from './types'
-import { formatDateTime, formatDuration } from '@/lib/format'
+import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { describeFailure } from '@/lib/api/failure-messages'
 
@@ -22,11 +22,10 @@ export function VerificationDetail({ restore }: { restore: RestoreView }) {
   return <>
     <Section title={tx("Restore testi sonucu")} description={tx("Test geçici bir Database'e geri yükler; kullanıcının Database'i değiştirilmez.")}>
       <div className="space-y-4">
-        <Facts columns={3}>
-          <Fact label={tx("Sonuç")}>{restore.verificationOutcome ? <StatusPill domain="verification" status={restore.verificationOutcome} /> : <StatusPill status={restore.status} />}</Fact>
-          <Fact label={tx("Süre")}>{restore.completedAt ? formatDuration(restore.startedAt, restore.completedAt) : '—'}</Fact>
+        {(restore.verificationOutcome || verification) && <Facts columns={3}>
+          {restore.verificationOutcome && <Fact label={tx("Sonuç")}><StatusPill domain="verification" status={restore.verificationOutcome} /></Fact>}
           {verification && <Fact label={tx("Tablolar")}>{verification.readableTableCount ?? '—'}{' '}{tx("okunabilir /")}{' '}{verification.userTableCount ?? '—'}{' '}{tx("kullanıcı tablosu")}</Fact>}
-        </Facts>
+        </Facts>}
         {restore.verificationOutcome === 'Failed' && (restore.reason || restore.failureCode) && <ErrorNotice {...describeFailure(restore.failureCode, 'restore')} {...(restore.reason ? { what: restore.reason } : {})} />}
         {verification && verification.checks.length > 0 && <ul aria-label={tx("Doğrulama kontrolleri")} className="divide-y divide-border text-sm">{verification.checks.map((check) => <li key={check.checkId} className="flex flex-wrap justify-between gap-2 py-3">
           <span className="min-w-0 break-words">{verificationCheckLabel(check.checkId)} · {check.message}</span><span className="font-medium">{check.status === 'Passed' ? tx('Geçti') : tx('Başarısız')}</span></li>)}</ul>}

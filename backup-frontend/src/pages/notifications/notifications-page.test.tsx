@@ -35,9 +35,9 @@ const delivery = (overrides: Partial<NotificationDelivery> = {}): NotificationDe
 })
 
 let client: QueryClient
-function mount() {
+function mount(path = '/') {
   client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-  return render(<MemoryRouter><QueryClientProvider client={client}><NotificationsPage /></QueryClientProvider></MemoryRouter>)
+  return render(<MemoryRouter initialEntries={[path]}><QueryClientProvider client={client}><NotificationsPage /></QueryClientProvider></MemoryRouter>)
 }
 
 const openTab = async (user: UserEvent, name: string) => user.click(await screen.findByRole('tab', { name }))
@@ -85,6 +85,34 @@ describe('role gating', () => {
   })
 })
 
+describe('URL state', () => {
+  it('opens the tab named in the URL and ignores unknown tab values', async () => {
+    mount('/?tab=channels')
+    expect(await screen.findByRole('heading', { name: 'Kanallar' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Kanallar' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('falls back to the policy tab for an unknown tab value', async () => {
+    mount('/?tab=nope')
+    expect(await screen.findByLabelText('Bildirimler etkin')).toBeInTheDocument()
+  })
+
+  it('restores delivery filters and page from the URL and drops unknown filter values', async () => {
+    mount('/?tab=deliveries&status=failed&kind=webhook&eventType=bogus&page=2')
+    await screen.findByText(/build-01/)
+    expect(api.getDeliveries).toHaveBeenLastCalledWith('tenant-a', { page: 2, pageSize: 25, status: 'failed', kind: 'webhook', eventType: undefined }, expect.anything())
+    expect(screen.getByLabelText('Durum')).toHaveValue('failed')
+  })
+
+  it('clears delivery filters with one action', async () => {
+    const user = userEvent.setup()
+    mount('/?tab=deliveries&status=failed&kind=webhook')
+    await screen.findByText(/build-01/)
+    await user.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
+    await waitFor(() => expect(api.getDeliveries).toHaveBeenLastCalledWith('tenant-a', { page: 1, pageSize: 25, status: undefined, kind: undefined, eventType: undefined }, expect.anything()))
+  })
+})
+
 describe('policy', () => {
   it('warns when a selected email/sms transport is unavailable', async () => {
     const user = userEvent.setup()
@@ -95,7 +123,7 @@ describe('policy', () => {
     expect(screen.getByText(/SMS aktarımı platform tarafından yapılandırılmamış/)).toBeInTheDocument()
   })
 
-  it('keeps numeric thresholds in collapsed copyable technical details', async () => {
+  it('keeps numeric thresholds only in the collapsed edit form, without a second read-only copy', async () => {
     const user = userEvent.setup()
     mount()
     await screen.findByLabelText('Bildirimler etkin')
@@ -103,7 +131,7 @@ describe('policy', () => {
     expect(details).not.toHaveAttribute('open')
     await user.click(screen.getByText('Teknik ayrıntılar'))
     expect(within(details).getByRole('textbox', { name: /Hatırlatma aralığı/ })).toHaveValue('24')
-    expect(within(details).getByRole('button', { name: /Kopyala:.*Hatırlatma/ })).toBeInTheDocument()
+    expect(within(details).queryByRole('button', { name: /Kopyala:.*Hatırlatma/ })).not.toBeInTheDocument()
   })
 
   it('blocks out-of-range thresholds with a field error and no request', async () => {

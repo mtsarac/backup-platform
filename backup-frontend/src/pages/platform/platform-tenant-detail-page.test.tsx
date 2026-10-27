@@ -78,14 +78,15 @@ describe('platform tenant detail', () => {
     await waitFor(() => expect(encryptionApi.removeTenantRecoveryKey).toHaveBeenCalledWith('tenant-a'))
   })
 
-  it('exposes four URL-addressable sections and loads only the active section', async () => {
+  it('exposes six URL-addressable sections and loads only the active section', async () => {
     vi.mocked(encryptionApi.getWrapKeys).mockResolvedValue({ items: [] })
     vi.mocked(encryptionApi.getTenantEncryption).mockRejectedValue(new ApiError(403))
     vi.mocked(encryptionApi.getBreakGlassRequests).mockResolvedValue(paged([]))
     mount()
     await screen.findByRole('heading', { name: tenant.name })
-    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Özet', 'Kişiler', 'Depolama ve bilgisayarlar', 'Güvenlik'])
+    expect(screen.getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Özet', 'Kişiler', 'Abonelik', 'Depolama', 'Bilgisayarlar', 'Güvenlik'])
     expect(api.getMemberships).not.toHaveBeenCalled()
+    expect(api.getTenantSubscription).not.toHaveBeenCalled()
     expect(connectionApi.getPlatformTenantConnections).not.toHaveBeenCalled()
     expect(storageApi.getPlatformTenantQuota).not.toHaveBeenCalled()
     expect(supportApi.getSessions).not.toHaveBeenCalled()
@@ -98,10 +99,20 @@ describe('platform tenant detail', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('?tab=people')
     expect(encryptionApi.getWrapKeys).not.toHaveBeenCalled()
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Depolama ve bilgisayarlar' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Abonelik' }))
+    expect(await screen.findByRole('button', { name: 'Plan ata' })).toBeInTheDocument()
+    expect(screen.getByTestId('location')).toHaveTextContent('?tab=subscription')
+    expect(connectionApi.getPlatformTenantConnections).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Depolama' }))
+    await waitFor(() => expect(connectionApi.getPlatformTenantConnections).toHaveBeenCalled())
+    expect(screen.getByTestId('location')).toHaveTextContent('?tab=storage')
+    expect(storageApi.getPlatformTenantQuota).toHaveBeenCalled()
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Bilgisayarlar' }))
     expect(await screen.findByRole('switch')).toBeInTheDocument()
-    expect(screen.getByTestId('location')).toHaveTextContent('?tab=storage-computers')
-    expect(connectionApi.getPlatformTenantConnections).toHaveBeenCalled()
+    expect(screen.getByTestId('location')).toHaveTextContent('?tab=computers')
     expect(supportApi.getSessions).not.toHaveBeenCalled()
 
     await userEvent.click(screen.getByRole('tab', { name: 'Güvenlik' }))
@@ -111,6 +122,7 @@ describe('platform tenant detail', () => {
     expect(encryptionApi.getWrapKeys).toHaveBeenCalledWith('tenant-a', expect.any(AbortSignal))
     expect(encryptionApi.getBreakGlassRequests).toHaveBeenCalledWith({ tenantId: 'tenant-a', page: 1, pageSize: 25 }, expect.any(AbortSignal))
     expect(await screen.findByText('Bu alan için yetkiniz yok')).toBeInTheDocument()
+    expect(screen.getByText(/yalnızca bu çalışma alanının Owner veya Admin üyeleri/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Anahtarı kaydet' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('tab', { name: 'Özet' }))
@@ -118,16 +130,31 @@ describe('platform tenant detail', () => {
     expect(screen.queryByRole('heading', { name: 'Destek erişimi' })).not.toBeInTheDocument()
   })
 
-  it('manages the plan and quota only on the storage tab', async () => {
+  it('sends an old storage-computers link to the storage section', async () => {
+    mount('storage-computers')
+    expect(await screen.findByRole('tab', { name: 'Depolama', selected: true })).toBeInTheDocument()
+    await waitFor(() => expect(connectionApi.getPlatformTenantConnections).toHaveBeenCalled())
+  })
+
+  it('manages the plan only on the subscription tab and the quota only on the storage tab', async () => {
     mount()
     expect(await screen.findByRole('heading', { name: 'Acme A.Ş.' })).toBeInTheDocument()
     expect(screen.queryByRole('region', { name: 'Plan ve kota' })).not.toBeInTheDocument()
     expect(api.getTenantSubscription).not.toHaveBeenCalled()
-    await userEvent.click(screen.getByRole('tab', { name: 'Depolama ve bilgisayarlar' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Abonelik' }))
     const plan = within(await screen.findByRole('region', { name: 'Plan ve kota' }))
     expect(await plan.findByText('Bu çalışma alanı için henüz bir plan atanmadı.')).toBeInTheDocument()
     expect(plan.getByRole('button', { name: 'Plan ata' })).toBeInTheDocument()
     expect(api.getTenantSubscription).toHaveBeenCalledWith('tenant-a', expect.any(AbortSignal))
+    expect(storageApi.getPlatformTenantQuota).not.toHaveBeenCalled()
+  })
+
+  it('states the computers link and enrollment state once per page', async () => {
+    mount('computers')
+    await screen.findByRole('switch')
+    expect(screen.getAllByRole('link', { name: 'Yedekleme bilgisayarlarını görüntüle' })).toHaveLength(1)
+    expect(screen.getAllByText('Kayıt açık')).toHaveLength(1)
+    expect(screen.queryByText('Yeni bilgisayar kaydı açık')).not.toBeInTheDocument()
   })
 
   it('shows counts, filtered links, memberships and recent tenant audit', async () => {
@@ -163,7 +190,7 @@ describe('platform tenant detail', () => {
 
   it('asks for confirmation before changing the enrollment policy', async () => {
     vi.mocked(api.setTenantEnrollment).mockResolvedValue({ tenantId: 'tenant-a', enabled: false, changed: true })
-    mount('storage-computers')
+    mount('computers')
     await userEvent.click(await screen.findByRole('switch', { name: "Yeni yedekleme bilgisayarı kayıtlarına izin ver" }))
     const dialog = await screen.findByRole('dialog')
     expect(dialog).toHaveTextContent("Bilgisayar kaydı kapatılsın mı?")

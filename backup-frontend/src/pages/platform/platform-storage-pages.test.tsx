@@ -115,6 +115,13 @@ describe('Platform Storage Usage Page states and operations', () => {
     expect(storageApi.getStorageUsage).toHaveBeenLastCalledWith(expect.objectContaining({ search: '', quotaState: undefined }), expect.any(AbortSignal))
   })
 
+  it('ignores hand-edited filter values instead of sending them to the API', async () => {
+    renderPlatform(<PlatformStoragePage />, { path: '/platform/storage?quotaState=bogus&subscriptionStatus=Superseded', route: '/platform/storage' })
+    await screen.findByText('Acme Corp')
+    expect(storageApi.getStorageUsage).toHaveBeenCalledWith(expect.objectContaining({ quotaState: undefined, subscriptionStatus: undefined }), expect.any(AbortSignal))
+    expect(screen.getByLabelText('Kota durumu')).toHaveValue('')
+  })
+
   it('opens confirmation dialog and runs Reconcile', async () => {
     const reconResult: UsageReconciliation = {
       tenantId: 'tenant-1',

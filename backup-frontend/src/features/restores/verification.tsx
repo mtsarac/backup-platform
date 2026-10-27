@@ -25,13 +25,11 @@ export function ArtifactVerificationSection({ tenantId, artifact }: { tenantId: 
   const history = useRestores({ purpose: 'Verification', artifactId: artifact.id, pageSize: 10 })
   if (restoreIneligibility(artifact)) return null
   const rows = history.data?.items ?? []
-  const latest = rows[0]
   return <Section title={tx("Restore doğrulaması")} description={tx("Backup'ın gerçekten geri yüklenebildiğini geçici, izole bir Database üzerinde kanıtlayın.")}
     actions={canOperate && !formOpen && <Button variant="outline" onClick={() => setFormOpen(true)}>{tx("Restore testi başlat")}</Button>}>
     <div className="space-y-4">
       {history.error ? <ErrorNotice title={tx("Restore testleri yüklenemedi")} error={history.error} scope="restore" />
-        : latest ? <p className="flex flex-wrap items-center gap-2 text-sm">{latest.verificationOutcome ? <StatusPill domain="verification" status={latest.verificationOutcome} /> : <StatusPill status={latest.status} />}<span>{formatDateTime(latest.startedAt ?? latest.createdAt)}</span>{latest.completedAt && <span className="text-text-muted">{tx("· Süre:")}{' '}{formatDuration(latest.startedAt, latest.completedAt)}</span>}</p>
-          : !history.isPending && <p className="text-sm text-text-muted">{tx("Henüz test edilmedi.")}</p>}
+        : rows.length === 0 && !history.isPending && <p className="text-sm text-text-muted">{tx("Henüz test edilmedi.")}</p>}
       {formOpen && canOperate && <VerificationForm tenantId={tenantId} artifactId={artifact.id} onClose={() => setFormOpen(false)} />}
       {rows.length > 0 && <DataList caption={tx("Son restore testleri")} rows={rows} keyExtractor={row => row.id} columns={[
         { key: 'outcome', header: tx('Sonuç'), card: 'status', render: row => <>{row.verificationOutcome ? <StatusPill domain="verification" status={row.verificationOutcome} /> : <StatusPill status={row.status} />}{row.cleanup && row.cleanup.state !== 'Completed' && <p className="mt-1 text-xs text-text-muted">{verificationCleanupText(row.cleanup)}</p>}</> },

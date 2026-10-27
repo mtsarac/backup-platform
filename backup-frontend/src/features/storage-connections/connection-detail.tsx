@@ -19,6 +19,7 @@ import { useTenantConnectionCapacity, useProbeTenantConnectionCapacity, useTenan
 import { configurationSummary, connectionHealth, disableEffects, enableEffect, footprintItems, platformLockState, executionLocationLabel, testMessage, testModeLabel, topologyLabel } from './labels'
 import type { ConnectionView, ProviderDescriptor } from './types'
 import { formatBytes, formatDateTime, formatRelativeTime } from '@/lib/format'
+import { RelativeTime } from '@/components/data/relative-time'
 import { ProgressBar } from '@/components/data/progress-bar'
 import { StatusPill } from '@/components/data/status-pill'
 
@@ -30,7 +31,7 @@ const tabs = [
 ] as const
 type TabValue = (typeof tabs)[number]['value']
 
-/** The headline finding for the connection, worded for what the person should do next. */
+/** The headline finding for the connection, worded for what the person should do next. A healthy connection needs none: the header badge says it. */
 function HealthNotice({ connection }: { connection: ConnectionView }) {
   useLanguage()
   const health = connectionHealth(connection)
@@ -40,7 +41,6 @@ function HealthNotice({ connection }: { connection: ConnectionView }) {
   if (health.key === 'failed' && test) return <ErrorNotice title={tx("Son test başarısız")} what={testMessage(test)} dataImpact={tx("Yeni yedekler bu depolamaya yazılamayabilir; mevcut yedekleriniz silinmedi.")} action={tx("Ayarları düzeltip bağlantıyı yeniden test edin.")} technical={[{ label: tx("Test zamanı"), value: formatDateTime(test.testedAt, tx('Henüz bildirilmedi')) }]} />
   if (health.key === 'untested') return <Notice tone="info" title={tx("Bağlantı henüz test edilmedi")}>{tx("Çalıştığından emin olmak için “Test et” düğmesini kullanın.")}</Notice>
   if (health.key === 'agent-side' && test) return <Notice tone="info" title={tx("Bu hedef Agent tarafında denetlenir")}>{testMessage(test)}</Notice>
-  if (test) return <Notice tone="success" title={tx("Bağlantı sağlıklı")}>{tx("Son test {0} başarılı oldu.", { "0": formatRelativeTime(test.testedAt) })}</Notice>
   return null
 }
 
@@ -226,13 +226,13 @@ export function ConnectionDetail() {
   const visibleTabs = tabs.filter((tab) => tab.value !== 'credentials' || hasCredentials)
   const requested = params.get('tab')
   const active: TabValue = visibleTabs.find((tab) => tab.value === requested)?.value ?? 'overview'
-  const crumbs = [{ label: tx('Storage'), to: storage }, { label: tx('Bağlantılar'), to: storage }, { label: connection?.name ?? tx('Bağlantı') }]
+  const crumbs = [{ label: tx('Depolama'), to: storage }, { label: connection?.name ?? tx('Bağlantı') }]
 
   if (connections.isPending || connections.error) return <><PageHeader title={tx("Depolama bağlantısı")} crumbs={crumbs} /><QueryState isPending={connections.isPending} error={connections.error} /></>
   if (!connection) return <><PageHeader title={tx("Bağlantı bulunamadı")} crumbs={crumbs} /><Notice tone="warning" title={tx("Bu bağlantı yok veya bu tenant altında erişilemiyor")} action={<Link to={storage} className={buttonVariants({ variant: 'outline', size: 'sm' })}>{tx("Bağlantılara dön")}</Link>} /></>
 
   return <>
-    <PageHeader crumbs={crumbs} title={connection.name} description={tx(connection.providerDisplayName)}
+    <PageHeader crumbs={crumbs} title={connection.name} description={<>{tx(connection.providerDisplayName)}{connection.lastTest && <> · {tx("Son test")}: <RelativeTime value={connection.lastTest.testedAt} /></>}</>}
       meta={<><HealthBadge connection={connection} /><StatusPill domain="ownership" status={connection.ownership} />{connection.isDefault && <Badge tone="accent">{tx("Varsayılan")}</Badge>}</>}
       actions={<ConnectionActions connection={connection} descriptor={descriptor} ops={ops} show={['test']} />} />
     <Tabs idPrefix="connection" label={tx("Bağlantı bölümleri")} value={active} items={visibleTabs} onChange={(value) => setParams(value === 'overview' ? {} : { tab: value }, { replace: true })} />

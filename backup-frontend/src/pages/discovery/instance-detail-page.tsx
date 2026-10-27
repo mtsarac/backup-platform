@@ -1,7 +1,8 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
+import { linkClass } from '@/components/ui/form-styles'
 import { QueryState } from '@/components/data/query-state'
 import { Button } from '@/components/ui/button'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
@@ -64,18 +65,30 @@ function CredentialForm({ instance }: { instance: DiscoveryInstanceDetail }) {
   </Section>
 }
 
+/** The one explanation of why the databases cannot be listed: the reason, what it means for the list below, and the next step (the login form). */
+function AccessNotice({ instance }: { instance: DiscoveryInstanceDetail }) {
+  useLanguage()
+  const { canOperate } = useTenant()
+  if (instance.access === 'CredentialsRequired') return <Notice tone="warning">{tx("Bu sunucuya giriş bilgisi verilmediği için veritabanları listelenemedi. Sunucuda veritabanı olmadığı anlamına gelmez; aşağıdaki bilgileri girin.")}</Notice>
+  const reason = plainReasonText(instance.accessReasonCode)
+  return <Notice tone="warning">
+    {reason && <p>{reason}</p>}
+    <p>{tx("Son denemede sunucuya giriş yapılamadı; aşağıdaki liste eski bir aramadan kalmadır ve yedekleme işi oluşturmak için sunulmaz.")}</p>
+    {canOperate && <p>{tx("Giriş bilgilerini kontrol edip bağlantıyı doğrulayın.")}</p>}
+  </Notice>
+}
+
 function Databases({ instance }: { instance: DiscoveryInstanceDetail }) {
   useLanguage()
   const { tenantId, canOperate } = useTenant()
   const navigate = useNavigate()
   const [selected, setSelected] = useState<string[]>([])
-  if (instance.access === 'CredentialsRequired') return <Notice tone="warning" title={tx("Kimlik bilgisi gerekli")}>{tx("Bu sunucuya giriş bilgisi verilmediği için veritabanları listelenemedi. Sunucuda veritabanı olmadığı anlamına gelmez; yukarıdaki bilgileri girin.")}</Notice>
+  if (instance.access === 'CredentialsRequired') return null
   const creatable = canCreateJob(instance)
   const picks = selected.filter(name => instance.databases.some(db => db.name === name && databaseSelectable(db, instance)))
   return <Section title={tx("Veritabanları")} description={tx("Yedeklenebilir olanları seçip yedekleme işi oluşturabilirsiniz. Sistem veritabanları ve zaten yedeklenenler seçilemez.")} flush
     actions={canOperate && creatable ? <Button disabled={picks.length === 0} onClick={() => navigate(`/tenants/${tenantId}/backup-jobs/new?${new URLSearchParams([['discoveryInstance', instance.id], ...picks.map(name => ['database', name])])}`)}>{tx("Yedekleme işi oluştur")}{picks.length > 0 ? ` (${picks.length})` : ''}</Button> : undefined}>
-    {instance.access !== 'Authenticated' && <div className="p-4"><Notice tone="warning" title={tx("Liste güncel olmayabilir")}>{tx("Son denemede sunucuya giriş yapılamadı; aşağıdaki liste eski bir aramadan kalmadır ve yedekleme işi oluşturmak için sunulmaz.")}</Notice></div>}
-    {instance.access === 'Authenticated' && !creatable && <div className="p-4"><Notice tone="warning">{tx("Bu sunucunun adresi bilinmediği için yedekleme işi oluşturulamıyor.")}</Notice></div>}
+    {instance.access === 'Authenticated' && !creatable && instance.presence === 'Present' && <div className="p-4"><Notice tone="warning">{tx("Bu sunucunun adresi bilinmediği için yedekleme işi oluşturulamıyor.")}</Notice></div>}
     {!canOperate && <p className="p-4 text-sm text-text-muted">{tx("Yöneticinize danışın")}</p>}
     <DatabaseTable instance={instance} selected={picks} onChange={canOperate && creatable ? setSelected : undefined} />
   </Section>
@@ -95,10 +108,7 @@ function technicalItems(instance: DiscoveryInstanceDetail): TechnicalItem[] {
     [tx("Son veritabanı kontrolü"), instance.databasesCheckedAt ? formatDateTime(instance.databasesCheckedAt, unknown) : null],
     [tx("Veritabanı sayısı"), tx("{0} (kullanıcı {1}, yedeklenebilir {2})", { "0": instance.databaseCounts.total, "1": instance.databaseCounts.user, "2": instance.databaseCounts.backupEligible })],
   ]
-  return [
-    ...pairs.filter((pair): pair is [string, string] => Boolean(pair[1])).map(([label, value]) => ({ label, value })),
-    ...instance.databases.map(db => ({ label: db.name, value: [db.state, db.presence, db.fullBackup, reasonText(db.fullBackupReasonCode)].filter(Boolean).join(' · ') })),
-  ]
+  return pairs.filter((pair): pair is [string, string] => Boolean(pair[1])).map(([label, value]) => ({ label, value }))
 }
 
 export function InstanceDetailPage() {
@@ -110,11 +120,10 @@ export function InstanceDetailPage() {
   const { scanning } = useDiscoveryAgents()
   const instance = query.data
   const computer = instance && (agents.data?.find(item => item.agentId === instance.agentId)?.hostName || tx('Adsız bilgisayar'))
-  const accessReason = instance && plainReasonText(instance.accessReasonCode)
   const needsLogin = instance && instance.access !== 'Authenticated'
   return <div className="space-y-6">
     <PageHeader crumbs={[{ label: tx('Veritabanı bulma'), to: discoveryPath(tenantId) }, { label: instance?.displayName ?? tx('Veritabanı sunucusu') }]} title={instance?.displayName ?? tx('Veritabanı sunucusu')}
-      description={computer ? tx("{0} bilgisayarında bulundu.", { "0": computer }) : undefined}
+      description={instance && <>{tx("Bilgisayar")}: <Link className={linkClass} to={`/tenants/${tenantId}/agents/${encodeURIComponent(instance.agentId)}`}>{computer}</Link></>}
       meta={<>
         {instance && <StatusPill domain="access" status={instance.access} />}
         {scanning && <span role="status" className="flex items-center gap-2 text-sm text-text-muted"><Loader2 aria-hidden="true" className="size-4 animate-spin" />{tx("Tarama sürüyor")}</span>}
@@ -122,7 +131,7 @@ export function InstanceDetailPage() {
     <QueryState isPending={query.isPending} error={query.error}>
       {instance && <>
         {instance.presence === 'Missing' && <Notice tone="warning" title={tx("Sunucu bulunamadı")}>{tx("Son aramalarda bu veritabanı sunucusu bulunamadı; kaydı silinmedi.")}</Notice>}
-        {accessReason && <p className="text-sm text-text">{accessReason}</p>}
+        {needsLogin && <AccessNotice instance={instance} />}
         {needsLogin && <CredentialForm key={instance.id} instance={instance} />}
         <Databases key={`${instance.id}:db`} instance={instance} />
         <TechnicalDetails items={technicalItems(instance)}>{!needsLogin && <CredentialForm key={instance.id} instance={instance} />}</TechnicalDetails>

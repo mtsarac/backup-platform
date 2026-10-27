@@ -134,6 +134,8 @@ describe('support session detail', () => {
     expect(screen.getByRole('tab', { name: 'Genel Bakış' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Denetim' })).toBeInTheDocument()
     expect(screen.getByText(/Müşteri verilerine erişim ve tüm işlemler kapalıdır/)).toBeInTheDocument()
+    expect(screen.queryByText('Müşteri ortamındasınız')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Erişim sona erdi\./)).not.toBeInTheDocument()
     for (const fn of dataFunctions()) expect(fn).not.toHaveBeenCalled()
     expect(api.closeSession).not.toHaveBeenCalled()
   })

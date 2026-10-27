@@ -1,13 +1,13 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { DataList, type Column } from '@/components/data/data-list'
 import { QueryState } from '@/components/data/query-state'
 import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
-import { ErrorNotice } from '@/components/ui/notice'
+import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
 import { useTenant } from '@/features/tenancy/use-tenant'
@@ -18,6 +18,9 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useBackupJobs } from '@/features/backup-jobs/hooks'
 import type { BackupJob } from '@/features/backup-jobs/types'
 import { notFound } from '@/lib/api/failure-messages'
+import { supportsDiscovery } from '@/features/discovery/status'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { linkClass } from '@/components/ui/form-styles'
 
 export function ClientDetailPage() {
   useLanguage()
@@ -45,8 +48,12 @@ function AgentDetailContent({ tenantId, id, canAdmin }: { tenantId: string; id: 
       {agent && <>
         <PageHeader crumbs={crumbs} title={agent.hostName ?? tx('Adsız bilgisayar')}
           description={<>{tx("Son görülme")}: {agent.lastSeenAt ? <RelativeTime value={agent.lastSeenAt} /> : tx('Henüz bağlanmadı')}</>}
-          meta={<><StatusPill status={agent.connectivity} />{agent.status !== 'Active' && <StatusPill domain="agent" status={agent.status} />}</>}
-          actions={canAdmin && agent.status !== 'Revoked' && <Button variant="destructive" onClick={() => { revoke.reset(); setConfirmOpen(true) }}>{tx("Bilgisayar kaydını iptal et")}</Button>} />
+          meta={<><StatusPill domain="agent" status={agent.connectivity} />{agent.status !== 'Active' && <StatusPill domain="agent" status={agent.status} />}</>}
+          actions={<>
+            {supportsDiscovery(agent.capabilities) && <Link className={buttonVariants({ variant: 'outline' })} to={`/tenants/${tenantId}/discovery?agentId=${encodeURIComponent(id)}`}>{tx("Bulunan veritabanı sunucuları")}</Link>}
+            {canAdmin && agent.status !== 'Revoked' && <Button variant="destructive" onClick={() => { revoke.reset(); setConfirmOpen(true) }}>{tx("Bilgisayar kaydını iptal et")}</Button>}
+          </>} />
+        {agent.status === 'Active' && agent.connectivity === 'offline' && <Notice tone="warning">{tx("Bu bilgisayar çevrimdışı; yedeklemeler bilgisayar yeniden bağlanana kadar çalışmaz. Bilgisayarın açık olduğunu ve yedekleme programının çalıştığını kontrol edin.")}</Notice>}
         <AgentJobs agentId={id} />
         <AgentTechnicalDetails agent={agent} />
       </>}
@@ -63,10 +70,11 @@ function AgentDetailContent({ tenantId, id, canAdmin }: { tenantId: string; id: 
 
 function AgentJobs({ agentId }: { agentId: string }) {
   useLanguage()
+  const { tenantId } = useTenant()
   const jobs = useBackupJobs()
   const rows = (jobs.data ?? []).filter((job) => job.agentId === agentId)
   const columns: Column<BackupJob>[] = [
-    { key: 'name', header: tx('Yedekleme işi'), card: 'title', wrap: true, render: (job) => <span className="font-medium text-text-heading">{job.name}</span> },
+    { key: 'name', header: tx('Yedekleme işi'), card: 'title', wrap: true, render: (job) => <Link className={`font-medium ${linkClass}`} to={`/tenants/${tenantId}/backup-jobs/${encodeURIComponent(job.id)}/edit`}>{job.name}</Link> },
     { key: 'enabled', card: 'status', header: tx('Durum'), render: (job) => <StatusPill status={job.enabled ? 'Active' : 'Disabled'} /> },
     { key: 'lastRun', header: tx('Son sonuç'), render: (job) => job.lastRun ? <div className="flex flex-wrap items-center gap-2"><StatusPill status={job.lastRun.status} /><span className="text-sm text-text-muted"><RelativeTime value={job.lastRun.createdAt} /></span></div> : tx('Henüz çalışmadı') },
     { key: 'next', header: tx('Sonraki yedek'), render: (job) => job.nextOccurrenceAt ? <RelativeTime value={job.nextOccurrenceAt} /> : tx('Zamanlanmadı') },

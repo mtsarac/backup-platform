@@ -17,14 +17,14 @@ function ProviderCard({ provider, connections, addPath }: { provider: ProviderDe
   return <li aria-disabled={planned || undefined} className={`space-y-4 rounded-xl border border-border bg-surface p-5 shadow-card ${planned ? 'opacity-70' : ''}`}>
     <div className="flex items-start gap-3">
       <ProviderIcon providerType={provider.providerType} />
-      <div className="min-w-0 flex-1"><h3 className="font-medium text-text-heading">{tx(provider.displayName)}</h3><div className="mt-1"><StatusPill domain="provider" status={provider.availability} /></div></div>
+      <div className="min-w-0 flex-1"><h3 className="font-medium text-text-heading">{tx(provider.displayName)}</h3>{!planned && <div className="mt-1"><StatusPill domain="provider" status={provider.availability} /></div>}</div>
     </div>
     {planned
       ? <p className="text-sm text-text-muted">{tx("Yakında / henüz kullanılamaz. Bu sağlayıcı için bağlantı oluşturulamaz ve test başarılı sayılmaz.")}</p>
       : <Facts>
         <Fact label={tx("Topoloji")}>{topologyLabel(provider.topology)}</Fact>
         <Fact label={tx("Yürütme konumu")}>{executionLocationLabel(provider.executionLocation)}</Fact>
-        <Fact label="Test">{testModeLabel(provider.testMode)}</Fact>
+        <Fact label={tx("Test")}>{testModeLabel(provider.testMode)}</Fact>
         <Fact label={tx("Sahiplik")}>{provider.supportedOwnerships.map(ownershipLabel).join(', ') || '—'}</Fact>
       </Facts>}
     <CapabilityChips capabilities={provider.capabilities} label={tx("{0} yetenekleri", { "0": tx(provider.displayName) })} />

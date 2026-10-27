@@ -56,6 +56,13 @@ describe('break-glass list', () => {
     expect(screen.getByTestId('location').textContent).not.toContain('requestTenantId')
   })
 
+  it('clears tenant, status and mine filters with one action', async () => {
+    list('?status=Pending&mine=true&tenantId=22222222-2222-2222-2222-222222222222&page=2')
+    fireEvent.click(await screen.findByRole('button', { name: 'Filtreleri temizle' }))
+    await waitFor(() => expect(api.getBreakGlassRequests).toHaveBeenLastCalledWith({ page: 1, pageSize: 25, status: '', mine: false, tenantId: '' }, expect.any(AbortSignal)))
+    expect(screen.getByTestId('location').textContent).toBe('/platform/break-glass')
+  })
+
   it('answers 403 with the authorization state, not a generic error', async () => {
     vi.mocked(api.getBreakGlassRequests).mockRejectedValue(new ApiError(403))
     list()

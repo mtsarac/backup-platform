@@ -42,7 +42,7 @@ describe('platform notification transports page', () => {
     expect(card.getByDisplayValue('noreply@example.com')).toBeVisible()
     await user.click(card.getByText('Teknik ayrıntılar'))
     expect(card.getByDisplayValue('smtp.example.com')).toBeVisible()
-    expect(card.getByRole('button', { name: /Kayıtlı sunucu/ })).toBeVisible()
+    expect(card.queryByRole('button', { name: /Kayıtlı sunucu/ })).not.toBeInTheDocument()
     expect(card.getByRole('button', { name: /Gizli değerin ayarlandığı zaman/ })).toBeVisible()
     expect(screen.getByText('UYGULANDI — DOĞRULANMADI')).toBeInTheDocument()
     expect(screen.getByText(/genel bir HTTP JSON bağdaştırıcısı/)).toBeInTheDocument()

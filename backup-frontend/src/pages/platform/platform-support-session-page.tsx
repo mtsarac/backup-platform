@@ -78,7 +78,7 @@ function SessionView({ session, receivedAt }: { session: SupportSession; receive
   const active = effective.status === 'Active'
   return <div className="space-y-6">
     <PageHeader crumbs={crumbs} title={tx("{0} · Support Session", { "0": effective.tenantName })} description={tx("Oturumu açan: {0}", { "0": effective.actorDisplayName ?? effective.platformAdminId })}
-      meta={<><StatusPill domain="supportSession" status={effective.status} /><span aria-label={tx("Oturum süresi")} className="text-sm text-text-muted">{active ? tx("Kalan süre: {0}", { "0": countdown.label }) : tx('Erişim sona erdi.')}{' '}{tx("· Süre sonu:")}{' '}<RelativeTime value={effective.expiresAt} /></span></>}
+      meta={<><StatusPill domain="supportSession" status={effective.status} /><span aria-label={tx("Oturum süresi")} className="text-sm text-text-muted">{active ? <>{tx("Kalan süre: {0}", { "0": countdown.label })}{' '}{tx("· Süre sonu:")}</> : <>{tx("Süre sonu")}:</>}{' '}<RelativeTime value={effective.expiresAt} /></span></>}
       actions={<SessionActions session={effective} />} />
     {effective.status !== 'Active' ? <Notice tone="warning">{endedMessages[effective.status]}{' '}{tx("Yalnızca oturum özeti ve audit okunabilir.")}</Notice>
       : !effective.isOwner && <Notice tone="warning">{tx("Bu oturumun sahibi değilsiniz. Müşteri verileri yalnızca oturumu açan PlatformAdmin'e açıktır. Özeti ve audit kayıtlarını görebilir veya gerekçeyle erişimi geri alabilirsiniz.")}</Notice>}
@@ -93,10 +93,10 @@ function SessionView({ session, receivedAt }: { session: SupportSession; receive
 function SessionOverview({ session }: { session: SupportSession }) {
   useLanguage()
   return <div className="space-y-5">
-    <Notice tone="warning" title={tx("Müşteri ortamındasınız")}>
+    {session.status === 'Active' && <Notice tone="warning" title={tx("Müşteri ortamındasınız")}>
       <p>{tx("Bu erişim yalnızca belirtilen tenant ve süre için geçerlidir; tüm veri erişimleri denetlenir.")}</p>
       <p>{tx("ViewBackupMetadata metadata okumaya, DownloadBackup dosya indirmeye, RestoreBackup yalnızca yeni Database oluşturmaya izin verir. Restore hedefleri müşterinin gerçek veritabanı sunucusudur, izole değildir.")}</p>
-    </Notice>
+    </Notice>}
     <Section title={tx("Oturum özeti")}>
       <div className="space-y-4">
         <Facts columns={1}>

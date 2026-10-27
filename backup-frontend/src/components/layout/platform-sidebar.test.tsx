@@ -25,9 +25,8 @@ describe('Platform sidebar', () => {
       ['Planlar', '/platform/plans'],
     ])
     expect(links('Altyapı')).toEqual([
-      ['Depolama kullanımı', '/platform/storage'],
-      ['Depolama hedefleri', '/platform/storage-connections'],
       ['Yedekleme bilgisayarları', '/platform/agents'],
+      ['Depolama', '/platform/storage'],
       ['Kota ilkeleri', '/platform/quota-policies'],
     ])
     expect(links('Güvenlik ve destek')).toEqual([
@@ -46,7 +45,7 @@ describe('Platform sidebar', () => {
     act(() => changeLanguage('en'))
     expect(links('Overview').map(([label]) => label)).toEqual(['Platform overview'])
     expect(links('Customers').map(([label]) => label)).toEqual(['Workspaces', 'Users', 'Plans'])
-    expect(links('Infrastructure').map(([label]) => label)).toEqual(['Storage usage', 'Storage destinations', 'Backup computers', 'Quota policies'])
+    expect(links('Infrastructure').map(([label]) => label)).toEqual(['Backup computers', 'Storage', 'Quota policies'])
     expect(links('Security and support').map(([label]) => label)).toEqual(['Support sessions', 'Emergency support access', 'Audit log'])
     expect(links('Settings').map(([label]) => label)).toEqual(['Notification infrastructure'])
     expect(labels().join(' ')).not.toMatch(/break-glass|agent\b/i)
@@ -56,7 +55,7 @@ describe('Platform sidebar', () => {
     render(<MemoryRouter><PlatformSidebar /></MemoryRouter>)
     const routes = createRoutesFromChildren(platformRoutes)
     const targets = within(nav()).getAllByRole('link').map((link) => link.getAttribute('href')!).filter((href) => href.startsWith('/platform'))
-    expect(targets).toHaveLength(12)
+    expect(targets).toHaveLength(11)
     for (const href of targets) expect(matchRoutes(routes, href.slice('/platform'.length) || '/')?.at(-1)?.route.path, href).not.toBe('*')
   })
 

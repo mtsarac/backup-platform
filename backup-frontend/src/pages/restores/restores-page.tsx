@@ -58,7 +58,7 @@ export function RestoresPage() {
     when,
   ]
   return <div className="space-y-6">
-    <Tabs label={tx("Liste türü")} idPrefix="restore-view" value={verification ? 'tests' : 'restores'} onChange={(value) => update({ view: value === 'tests' ? 'tests' : '', status: '', artifactId: '', agentId: '' })} items={[{ value: 'restores', label: tx('Tümü') }, { value: 'tests', label: tx('Geri yükleme testleri') }]} />
+    <Tabs label={tx("Liste türü")} idPrefix="restore-view" value={verification ? 'tests' : 'restores'} onChange={(value) => update({ view: value === 'tests' ? 'tests' : '', status: '', artifactId: '', agentId: '' })} items={[{ value: 'restores', label: tx('Geri yüklemeler') }, { value: 'tests', label: tx('Geri yükleme testleri') }]} />
     <Filters label={tx("Geri yükleme filtreleri")} onClear={emptyFiltered ? undefined : clearFilters}>
       <FilterField label={tx("Durum")}><select aria-label={tx("Durum")} className={filterControlClass} value={status} onChange={(event) => update({ status: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{restoreStatuses.map((value) => <option key={value} value={value}>{statusLabel('general', value)}</option>)}</select></FilterField>
       <BackupPicker tenantId={tenantId} value={filters.artifactId ?? ''} onChange={(artifactId) => update({ artifactId })} />

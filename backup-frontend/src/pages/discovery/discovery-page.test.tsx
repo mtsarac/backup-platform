@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
@@ -14,8 +14,8 @@ vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => access }))
 vi.mock('@/features/discovery/api')
 vi.mock('@/features/agents/api')
 
-function mount() {
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter><DiscoveryPage /></MemoryRouter></QueryClientProvider>)
+function mount(path = '/') {
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter initialEntries={[path]}><DiscoveryPage /></MemoryRouter></QueryClientProvider>)
 }
 beforeEach(() => {
   vi.clearAllMocks()
@@ -38,6 +38,39 @@ describe('discovery page', () => {
     fireEvent.click(within(computer).getByText('Teknik ayrıntılar'))
     expect(within(details).getByText(/Docker yok demek değildir/)).toBeInTheDocument()
     expect(within(details).getByRole('button', { name: 'Kopyala: Bilgisayar kimliği' })).toBeInTheDocument()
+  })
+  it('links the computer from its scan card and from every server row', async () => {
+    mount()
+    const card = await screen.findByRole('region', { name: 'SQL Agent' })
+    expect(within(card).getByRole('link', { name: 'SQL Agent' })).toHaveAttribute('href', '/tenants/tenant-a/agents/agent-a')
+    const row = screen.getByRole('link', { name: 'SQL Server (default)' }).closest('tr')!
+    expect(within(row).getByRole('link', { name: 'SQL Agent' })).toHaveAttribute('href', '/tenants/tenant-a/agents/agent-a')
+  })
+  it('opens already filtered from the URL and ignores values it does not know', async () => {
+    mount('/?agentId=agent-a&engine=mssql&includeMissing=1')
+    await screen.findByRole('link', { name: 'SQL Server (default)' })
+    expect(getDiscoveryInstances).toHaveBeenLastCalledWith('tenant-a', { agentId: 'agent-a', engine: 'mssql', includeMissing: true }, expect.anything())
+    expect(screen.getByLabelText('Veritabanı türü')).toHaveValue('mssql')
+    cleanup()
+    mount('/?agentId=gone&engine=oracle')
+    await screen.findByRole('link', { name: 'SQL Server (default)' })
+    expect(getDiscoveryInstances).toHaveBeenLastCalledWith('tenant-a', {}, expect.anything())
+  })
+  it('shows the scan interval once for administrators and read-only for others', async () => {
+    mount()
+    fireEvent.click((await screen.findAllByText('Teknik ayrıntılar'))[0])
+    expect(screen.getAllByText('Tarama aralığı (dakika)')).toHaveLength(1)
+    expect(screen.getByLabelText('Tarama aralığı (dakika)')).toHaveValue(360)
+    cleanup()
+    Object.assign(access, { canOperate: false, canAdmin: false })
+    mount()
+    fireEvent.click((await screen.findAllByText('Teknik ayrıntılar'))[0])
+    expect(screen.getByText('Tarama aralığı (dakika)')).toBeInTheDocument()
+  })
+  it('says an offline computer scans when it reconnects', async () => {
+    vi.mocked(getAgents).mockResolvedValue([{ ...supportedAgent, connectivity: 'offline' }] as never)
+    mount()
+    expect(await screen.findByText(/şu anda çevrimdışı; tarama bilgisayar yeniden bağlandığında çalışır/)).toBeInTheDocument()
   })
   it('has one rescan per computer and explains why an unsupported computer cannot be scanned', async () => {
     mount()

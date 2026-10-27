@@ -103,13 +103,7 @@ export function EmailTransportCard({ transport }: { transport: EmailTransport })
         <Field label={tx("Gönderen adresi")}>{(control) => <input {...control} className={inputClass} value={fromAddress} onChange={(event) => setFromAddress(event.target.value)} />}</Field>
         <Field label={tx("Gönderen adı")}>{(control) => <input {...control} className={inputClass} value={fromName} onChange={(event) => setFromName(event.target.value)} />}</Field>
       </div>
-      <TechnicalDetails items={[
-        { label: tx("Kayıtlı sunucu"), value: transport.host ?? '—' },
-        { label: tx("Kayıtlı bağlantı noktası"), value: transport.port === null ? '—' : String(transport.port) },
-        { label: tx("Kayıtlı güvenlik"), value: emailSecurityLabels[transport.security] },
-        { label: tx("Kayıtlı kullanıcı adı"), value: transport.username ?? '—' },
-        ...secretItems(transport),
-      ]}>
+      <TechnicalDetails items={secretItems(transport)}>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label={tx("Sunucu")}>{(control) => <input {...control} className={inputClass} value={host} onChange={(event) => setHost(event.target.value)} />}</Field>
         <Field label={tx("Port")}>{(control) => <input {...control} className={inputClass} inputMode="numeric" value={port} aria-invalid={!Number.isInteger(portNumber) || portNumber < 1 || portNumber > 65535} onChange={(event) => setPort(event.target.value)} />}</Field>
@@ -157,11 +151,7 @@ export function SmsTransportCard({ transport }: { transport: SmsTransport }) {
     <form onSubmit={submit} noValidate className="space-y-4">
       <label className="flex items-center gap-2 text-sm text-text"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />{tx("SMS aktarımı etkin")}</label>
       <Field label={tx("Gönderen")}>{(control) => <input {...control} className={inputClass} value={sender} onChange={(event) => setSender(event.target.value)} />}</Field>
-      <TechnicalDetails items={[
-        { label: tx("Kayıtlı uç nokta"), value: transport.endpoint ?? '—' },
-        { label: tx("Kayıtlı kimlik doğrulama"), value: smsAuthLabels[transport.authentication] },
-        ...secretItems(transport),
-      ]}>
+      <TechnicalDetails items={secretItems(transport)}>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label={tx("Sağlayıcı")}>{(control) => <input {...control} className={inputClass} value="generic-http" disabled readOnly />}</Field>
         <Field label={tx("Uç nokta (https://…)")}>{(control) => <input {...control} className={inputClass} value={endpoint} onChange={(event) => setEndpoint(event.target.value)} />}</Field>

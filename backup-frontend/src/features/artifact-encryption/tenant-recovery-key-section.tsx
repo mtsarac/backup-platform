@@ -17,8 +17,8 @@ function publicKeyError(value: string) {
   return ''
 }
 
-/** Overview of the keys that open this tenant's encrypted Backups, plus registration of the optional tenant recovery public key. */
-export function TenantKeysSection({ tenantId, tenantName, encryption }: { tenantId: string; tenantName: string; encryption: TenantEncryption }) {
+/** Overview of the keys that open this tenant's encrypted Backups, plus registration of the optional tenant recovery public key. `platformView`: the platform page already lists the wrap keys in its own table, so their ids are not repeated here. */
+export function TenantKeysSection({ tenantId, tenantName, encryption, platformView = false }: { tenantId: string; tenantName: string; encryption: TenantEncryption; platformView?: boolean }) {
   useLanguage()
   const { set, remove } = useTenantRecoveryKeyActions(tenantId)
   const [pem, setPem] = useState('')
@@ -47,7 +47,7 @@ export function TenantKeysSection({ tenantId, tenantName, encryption }: { tenant
         </Facts>
         {!platformRecovery.configured && <Notice tone="warning">{tx("Platform kurtarma anahtarı yapılandırılmamış: yeni şifreli yedekler yalnızca uygulamanın anahtarıyla ve varsa kendi kurtarma anahtarınızla açılabilir. Uygulamanın anahtarı kaybolursa bu dosyalar açılamayabilir.")}</Notice>}
         <TechnicalDetails items={[
-          ...(wrapKey ? [
+          ...(wrapKey && !platformView ? [
             { label: tx('Yedekleme anahtarı kimliği'), value: wrapKey.keyId },
             { label: tx('Yedekleme anahtarı sürümü'), value: String(wrapKey.version) },
             { label: tx('Yedekleme anahtarı durumu'), value: wrapKey.state },

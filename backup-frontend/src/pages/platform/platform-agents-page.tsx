@@ -13,16 +13,12 @@ import { platformPaths } from '@/features/platform/paths'
 import { SearchForm } from '@/features/platform/search-form'
 import { TenantPicker } from '@/features/platform/tenant-picker'
 import type { AgentConnectivity, AgentLifecycle, PlatformAgent } from '@/features/platform/types'
-import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
+import { PLATFORM_PAGE_SIZE, oneOf, useListParams } from '@/features/platform/use-list-params'
 import { QueryState } from '@/components/data/query-state'
 import { platformOnlyMessage } from '@/components/auth/access-denied'
 
 const connectivityValues: AgentConnectivity[] = ['online', 'offline', 'unknown']
 const lifecycleValues: AgentLifecycle[] = ['PendingEnrollment', 'Active', 'Disabled', 'Revoked']
-
-function oneOf<T extends string>(value: string, allowed: readonly T[]): T | undefined {
-  return allowed.find((item) => item === value)
-}
 
 export function PlatformAgentsPage() {
   useLanguage()

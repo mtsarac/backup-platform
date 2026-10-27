@@ -5,9 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { useTenantStorageQuota } from '@/features/storage/hooks'
-import { accountingModeHelp, accountingModeLabels, enforcementModeHelp, enforcementModeLabels, isLegacyUnlimited, scopeLabels } from '@/features/storage/labels'
+import { accountingModeHelp, accountingModeLabels, enforcementModeHelp, enforcementModeLabels, scopeLabels } from '@/features/storage/labels'
 import { PlanName } from '@/features/storage/quota-badges'
-import { Fact, QuotaSummary, StandingBadge, StorageNotices } from '@/features/storage/quota-summary'
+import { Fact, QuotaSummary, StorageNotices } from '@/features/storage/quota-summary'
 import { isForbidden } from '@/lib/api/client'
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
@@ -19,20 +19,22 @@ export function StorageUsageTab() {
   const quota = query.data
   const forbidden = isForbidden(query.error)
   if (forbidden) return <AccessDenied title={tx("Bu tenant'ın depolama bilgisine erişiminiz yok")} what={tx("Depolama kullanımını yalnızca bu tenant'ın üyeleri görebilir.")} />
-  if (!quota) return <QueryState isPending={query.isPending} error={query.error} />
+  if (!quota) return <QueryState isPending={query.isPending} error={query.error} onRetry={() => void query.refetch()} />
   return <div className="space-y-5">
     {query.isError && <Notice tone="warning">{tx("Güncel veri alınamadı; son başarılı okuma gösteriliyor (")}{formatDateTime(quota.calculatedAt, tx('Henüz bildirilmedi'))}{' '}{tx("hesaplaması).")}</Notice>}
     <StorageNotices quota={quota} />
     <Section title={tx("Kullanım")} description={tx("En küçük birim MB.")}
-      actions={<Button variant="outline" size="sm" onClick={() => { void query.refetch() }} disabled={query.isFetching}><RefreshCw className={`size-4 ${query.isFetching ? 'animate-spin' : ''}`} aria-hidden="true" />{query.isFetching && !query.isPending ? 'Yenileniyor…' : tx('Yenile')}</Button>}>
+      actions={<>
+        {/* With no subscription the quota state is meaningless (no limit); the subscription pill below says it. */}
+        {quota.subscriptionStatus !== 'NoSubscription' && <StatusPill domain="quota" status={quota.state} />}
+        <Button variant="outline" size="sm" onClick={() => { void query.refetch() }} disabled={query.isFetching}><RefreshCw className={`size-4 ${query.isFetching ? 'animate-spin' : ''}`} aria-hidden="true" />{query.isFetching && !query.isPending ? tx('Yenileniyor…') : tx('Yenile')}</Button>
+      </>}>
       <QuotaSummary quota={quota} />
     </Section>
     <Section title={tx("Plan ve abonelik")}>
       <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Fact label={tx("Aktif plan")}><PlanName plan={quota.plan} /></Fact>
         <Fact label={tx("Abonelik durumu")}><StatusPill domain="subscription" status={quota.subscriptionStatus} /></Fact>
-        <Fact label={tx("Kota durumu")}><StandingBadge quota={quota} /></Fact>
-        <Fact label={tx("Yeni backup")}>{quota.newBackupsAllowed ? tx('Başlatılabilir') : tx('Başlatılamaz')}</Fact>
         {quota.plan?.subscriptionEndsAt && <Fact label={tx("Abonelik bitişi")}>{formatDateTime(quota.plan.subscriptionEndsAt, tx('Henüz bildirilmedi'))}</Fact>}
       </dl>
     </Section>
@@ -43,9 +45,8 @@ export function StorageUsageTab() {
           <ul className="list-inside list-disc">{scopeLabels(quota.includedStorageScopes).map((label) => <li key={label}>{tx(label)}</li>)}</ul>
         </Fact>
         <Fact label={tx("Kota uygulaması")} hint={enforcementModeHelp[quota.enforcementMode]}>{enforcementModeLabels[quota.enforcementMode]}</Fact>
-        <Fact label={tx("Eşikler")}>{tx("Warning %")}{quota.warningThreshold}{' '}{tx("· Critical %")}{quota.criticalThreshold}</Fact>
+        {quota.limitBytes !== null && <Fact label={tx("Eşikler")}>{tx("Warning %")}{quota.warningThreshold}{' '}{tx("· Critical %")}{quota.criticalThreshold}</Fact>}
       </dl>
-      {isLegacyUnlimited(quota.plan) && <p className="mt-3 text-sm text-text-muted">{tx("Legacy Unlimited planda limit olmadığı için eşikler uygulanmaz.")}</p>}
     </Section>
   </div>
 }

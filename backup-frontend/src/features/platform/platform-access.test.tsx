@@ -66,7 +66,7 @@ describe('PlatformAdminRoute guard', () => {
     expect(await screen.findByRole('heading', { name: 'Platform özeti' })).toBeInTheDocument()
     const nav = screen.getAllByRole('navigation', { name: "Platform gezinme menüsü" })[0]
     for (const name of ['Platform özeti', 'Çalışma alanları', 'Kullanıcılar', 'Yedekleme bilgisayarları', 'Denetim kaydı']) expect(within(nav).getByRole('link', { name })).toBeInTheDocument()
-    expect(within(nav).getByRole('link', { name: "Depolama hedefleri" })).toHaveAttribute('href', '/platform/storage-connections')
+    expect(within(nav).getByRole('link', { name: "Depolama" })).toHaveAttribute('href', '/platform/storage')
     expect(within(nav).getByRole('link', { name: "Çalışma alanı arayüzüne dön" })).toHaveAttribute('href', '/')
     expect(screen.getAllByText("Platform Yönetimi").length).toBeGreaterThan(0)
     expect(screen.getByText("Platform Yöneticisi")).toBeInTheDocument()
@@ -81,29 +81,22 @@ describe('PlatformAdminRoute guard', () => {
 })
 
 describe('platform dashboard', () => {
-  it('keeps KPI totals, agent breakdown and bounded storage preview in collapsed details', async () => {
+  it('leads with health, then shows the overview counts and a bounded storage preview with no collapsed block and no repeated counts', async () => {
     renderPlatform(<PlatformDashboardPage />)
     const card = (label: string | RegExp) => screen.getByText(label).parentElement!.parentElement!
-    const details = (await screen.findByText('Ayrıntılar')).closest('details')!
-    expect(details).not.toHaveAttribute('open')
-    expect(screen.getByText('Çalışma alanları')).not.toBeVisible()
-    expect(screen.getByText('Çevrimiçi')).not.toBeVisible()
-    expect(await screen.findByText('Henüz depolama kullanım kaydı yok.')).not.toBeVisible()
-    await userEvent.setup().click(within(details).getByText('Ayrıntılar'))
-    expect(details).toHaveAttribute('open')
-    expect(screen.getByText('Çalışma alanları')).toBeVisible()
-    expect(screen.getByText('Çevrimiçi')).toBeVisible()
+    const attention = await screen.findByRole('list', { name: 'Dikkat gerektirenler' })
+    expect(document.querySelector('details')).toBeNull()
+    expect(within(attention).getAllByRole('link').map(link => link.getAttribute('href'))).toEqual([
+      '/platform/audit', '/platform/agents?connectivity=offline', '/platform/agents?connectivity=unknown', '/platform/agents?status=Disabled',
+    ])
     expect(card('Çalışma alanları')).toHaveTextContent('3')
     expect(card('Kullanıcılar')).toHaveTextContent('7')
     expect(card('Etkin yedekleme işleri')).toHaveTextContent('9')
-    expect(card('Başarısız yedeklemeler · son 24 saat')).toHaveTextContent('2')
-    expect(screen.getByText('Çevrimiçi').nextSibling).toHaveTextContent('6')
-    expect(screen.getByText('Çevrimdışı').nextSibling).toHaveTextContent('2')
-    expect(screen.getByText('Devre dışı').nextSibling).toHaveTextContent('1')
-    expect(screen.getByText('İptal edilmiş').nextSibling).toHaveTextContent('0')
-    const attention = screen.getByRole('list', { name: 'Dikkat gerektirenler' })
-    expect(within(attention).getAllByRole('link')[1]).toHaveAttribute('href', '/platform/agents?connectivity=offline')
-    expect(await screen.findByText('Henüz depolama kullanım kaydı yok.')).toBeInTheDocument()
+    expect(card('Yedekleme bilgisayarları')).toHaveTextContent('10')
+    expect(card('Yedekleme bilgisayarları')).toHaveTextContent('6 çevrimiçi · 0 iptal edilmiş')
+    expect(screen.queryByText('Başarısız yedeklemeler · son 24 saat')).not.toBeInTheDocument()
+    expect(screen.queryByText('Çevrimdışı')).not.toBeInTheDocument()
+    expect(await screen.findByText('Henüz depolama kullanım kaydı yok.')).toBeVisible()
     expect(storageApi.getStorageUsage).toHaveBeenCalledWith({ page: 1, pageSize: 5 }, expect.any(AbortSignal))
     expect(screen.getByRole('link', { name: 'Tüm depolama kullanımı' })).toHaveAttribute('href', '/platform/storage')
   })

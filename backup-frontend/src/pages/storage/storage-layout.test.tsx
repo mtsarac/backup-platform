@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -65,5 +65,53 @@ describe('Storage hub', () => {
     expect(await screen.findByText("Bu çalışma alanının depolama bilgilerine erişiminiz yok")).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Depolama hedefleri' })).not.toBeInTheDocument()
     expect(connectionApi.getTenantConnections).not.toHaveBeenCalled()
+  })
+
+  it('names the hub once and offers one add action on every tab', async () => {
+    mount()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Depolama' })).toBeInTheDocument()
+    expect(screen.queryByText(/Depolama hedefleri, kullanım ve kota/)).not.toBeInTheDocument()
+    expect(screen.getAllByRole('link', { name: 'Bağlantı ekle' })).toHaveLength(1)
+    await userEvent.click(screen.getByRole('link', { name: 'Kullanım ve kota' }))
+    await screen.findByRole('heading', { name: 'Plan ve abonelik' })
+    expect(screen.getAllByRole('link', { name: 'Bağlantı ekle' })).toHaveLength(1)
+  })
+
+  it('on the providers tab marks a planned provider once, with the sentence only', async () => {
+    mount('/providers')
+    const card = (await screen.findByRole('heading', { name: 'SFTP' })).closest('li')!
+    expect(within(card).getByText(/Yakında \/ henüz kullanılamaz/)).toBeInTheDocument()
+    expect(within(card).queryByText('Yakında')).not.toBeInTheDocument()
+  })
+
+  it('shows the quota state, thresholds and subscription status once each on the usage tab', async () => {
+    vi.mocked(getTenantStorageQuota).mockResolvedValue({ ...quota, state: 'Warning', usedBytes: 8_500_000_000, remainingBytes: 1_500_000_000 })
+    mount('/usage')
+    await screen.findByRole('heading', { name: 'Plan ve abonelik' })
+    expect(screen.getAllByText('Uyarı')).toHaveLength(1)
+    expect(screen.getAllByText(/%80/)).toHaveLength(1)
+    expect(screen.getAllByText('Etkin')).toHaveLength(1)
+    expect(screen.queryByText('Kota durumu')).not.toBeInTheDocument()
+    expect(screen.queryByText('Yeni backup')).not.toBeInTheDocument()
+    expect(screen.getByText('Kapasite dolmaya yaklaşıyor')).toBeInTheDocument()
+  })
+
+  it('says existing backups are kept once when a suspended subscription and a full quota both block new backups', async () => {
+    vi.mocked(getTenantStorageQuota).mockResolvedValue({ ...quota, subscriptionStatus: 'Suspended', state: 'OverQuota', newBackupsAllowed: false, denialCode: 'subscription_required', usedBytes: 10_000_000_000, remainingBytes: 0 })
+    mount('/usage')
+    expect(await screen.findByText('Abonelik askıda')).toBeInTheDocument()
+    expect(screen.getByText(/Depolama kotası doldu/)).toBeInTheDocument()
+    expect(screen.getAllByText(/silinmez ve korunur/)).toHaveLength(1)
+    expect(screen.getAllByText('Askıda')).toHaveLength(1)
+    expect(screen.getAllByText('Kota aşıldı')).toHaveLength(1)
+  })
+
+  it('does not repeat the legacy unlimited plan or show thresholds that cannot apply without a limit', async () => {
+    vi.mocked(getTenantStorageQuota).mockResolvedValue({ ...quota, limitBytes: null, unlimited: true, remainingBytes: null, state: 'Unlimited', plan: { name: 'Eski plan', isSystem: true, systemKey: 'legacy_unlimited', subscriptionEndsAt: null } })
+    mount('/usage')
+    await screen.findByRole('heading', { name: 'Plan ve abonelik' })
+    expect(screen.queryByText('Eşikler')).not.toBeInTheDocument()
+    expect(screen.queryByText(/eşikler uygulanmaz/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/\(Legacy Unlimited\)/)).not.toBeInTheDocument()
   })
 })

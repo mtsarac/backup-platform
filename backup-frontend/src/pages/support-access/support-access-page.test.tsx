@@ -45,15 +45,15 @@ describe('tenant support transparency', () => {
     expect(screen.queryByRole('link', { name: /Support access|Destek erişimi/, hidden: true })).not.toBeInTheDocument()
   })
 
-  it.each(['Owner', 'Admin'] as const)('renders history, all six counters and read-only activity for %s', async (role) => {
+  it.each(['Owner', 'Admin'] as const)('renders history, then the opened session with its six counters and read-only activity for %s', async (role) => {
     renderAccess(role)
     expect(await screen.findByText('Destek Uzmanı')).toBeInTheDocument()
-    for (const [label, count] of [['Görüntülenen yedek dosyası', 2], ['Başlatılan indirme', 3], ['Tamamlanan indirme', 4], ['Başarısız indirme', 5], ['İstenen geri yükleme', 6], ['İptal edilen geri yükleme', 7]] as const) {
-      expect(screen.getByText(label).parentElement).toHaveTextContent(String(count))
-    }
     fireEvent.click(screen.getByRole('button', { name: 'Etkinliği görüntüle' }))
     expect(await screen.findByText('support.artifact.viewed')).toBeInTheDocument()
     const detail = screen.getByRole('region', { name: 'Destek oturumu ayrıntısı' })
+    for (const [label, count] of [['Görüntülenen yedek dosyası', 2], ['Başlatılan indirme', 3], ['Tamamlanan indirme', 4], ['Başarısız indirme', 5], ['İstenen geri yükleme', 6], ['İptal edilen geri yükleme', 7]] as const) {
+      expect(within(detail).getByText(label).parentElement).toHaveTextContent(String(count))
+    }
     expect(within(detail).getByText('İnceleme tamamlandı')).toBeInTheDocument()
     expect(within(detail).getByText('artifact-a')).toBeInTheDocument()
     const actionButtons = within(detail).getAllByRole('button').filter(button => !button.getAttribute('aria-label')?.startsWith('Kopyala:'))
@@ -62,7 +62,21 @@ describe('tenant support transparency', () => {
     await waitFor(() => expect(api.getSupportAccessActivity).toHaveBeenLastCalledWith('tenant-a', 'session-a', { page: 2, pageSize: 25 }, expect.any(AbortSignal)))
   })
 
-  it('keeps staff, reason and readable activity on cards and raw targets in copyable collapsed details', async () => {
+  it('shows each session once: the opened session replaces the history, and going back keeps the history page', async () => {
+    renderAccess('Owner', '/tenants/tenant-a/support-access?page=2')
+    fireEvent.click(await screen.findByRole('button', { name: 'Etkinliği görüntüle' }))
+    await screen.findByRole('region', { name: 'Destek oturumu ayrıntısı' })
+    expect(screen.queryByRole('list', { name: 'Destek erişimi geçmişi' })).not.toBeInTheDocument()
+    await screen.findByText(session.reason)
+    expect(screen.getAllByText(session.reason)).toHaveLength(1)
+    expect(screen.getByTestId('location')).toHaveTextContent('page=2&sessionId=session-a')
+    fireEvent.click(screen.getByRole('button', { name: 'Geçmişe dön' }))
+    expect(await screen.findByRole('list', { name: 'Destek erişimi geçmişi' })).toBeInTheDocument()
+    expect(screen.getByTestId('location')).toHaveTextContent('page=2')
+    expect(screen.getByTestId('location')).not.toHaveTextContent('sessionId')
+  })
+
+  it('keeps staff and reason on history cards and readable activity with raw targets in copyable collapsed details', async () => {
     renderAccess()
     const history = await screen.findByRole('list', { name: 'Destek erişimi geçmişi' })
     expect(within(history).getByText(session.actorDisplayName!)).toBeInTheDocument()

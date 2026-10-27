@@ -179,7 +179,7 @@ describe('Backup dosyaları', () => {
     for (const question of ['Geri yüklenebilir mi?', 'Ne zaman silinecek?']) expect(screen.getByText(question)).toBeVisible()
     expect(screen.getByText('Sağlam')).toBeVisible()
     expect(screen.getByText('Geri yüklenebilir')).toBeVisible()
-    expect(screen.getByRole('link', { name: 'Geri yükle' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/artifact-a/restore')
+    expect(screen.getByRole('link', { name: 'Veritabanını geri yükle' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/artifact-a/restore')
     // The checksums, replicas and metadata wait behind the collapsed details.
     for (const checksum of screen.getAllByText('abc123')) expect(checksum).not.toBeVisible()
     expect(screen.getByText('Teknik ayrıntılar', { selector: 'summary' }).closest('details')).not.toHaveAttribute('open')
@@ -188,18 +188,25 @@ describe('Backup dosyaları', () => {
     expect(screen.getByRole('button', { name: 'Kopyala: Yedek dosyası sağlama toplamı' })).toBeVisible()
   })
 
+  it('names the restore action after what is restored: a database or files', async () => {
+    request.mockResolvedValue(artifact({ backupMetadata: { engine: 'file-system' } as never }))
+    mount()
+    expect(await screen.findByRole('link', { name: 'Dosyaları geri yükle' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/artifact-a/restore')
+    expect(screen.queryByRole('link', { name: 'Veritabanını geri yükle' })).not.toBeInTheDocument()
+  })
+
   it('doğrulanmış kopya yoksa sağlam demez; silinmiş dosya geri yüklenemez', async () => {
     request.mockResolvedValue(artifact({ replicas: [{ ...replica, verificationState: 'Pending' }] }))
     mount()
     await screen.findByText('Dosya sağlam mı?')
     expect(screen.queryByText('Sağlam')).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Geri yükle' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Veritabanını geri yükle' })).not.toBeInTheDocument()
     cleanup()
     request.mockResolvedValue(artifact({ state: 'Deleted', replicas: [{ ...replica, status: 'Deleted', usable: false, deletedAt: '2026-10-06T10:00:00Z' }] }))
     mount()
     await screen.findByText('Dosya sağlam mı?')
     expect(screen.getByText('Geri yüklenemez')).toBeVisible()
-    expect(screen.queryByRole('link', { name: 'Geri yükle' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Veritabanını geri yükle' })).not.toBeInTheDocument()
   })
 
   it('geri yükleme yetkisi olmayana Yöneticinize danışın der', async () => {
@@ -207,7 +214,7 @@ describe('Backup dosyaları', () => {
     request.mockResolvedValue(artifact())
     mount()
     await screen.findByText('Dosya sağlam mı?')
-    expect(screen.queryByRole('link', { name: 'Geri yükle' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Veritabanını geri yükle' })).not.toBeInTheDocument()
     expect(screen.getByText(/Yöneticinize danışın/)).toBeVisible()
   })
 

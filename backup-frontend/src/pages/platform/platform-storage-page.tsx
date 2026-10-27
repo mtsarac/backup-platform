@@ -9,9 +9,7 @@ import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
 import { Notice } from '@/components/ui/notice'
-import { PageHeader } from '@/components/ui/page-header'
 import { Section } from '@/components/ui/section'
-import { platformCrumb } from '@/features/platform/crumbs'
 import { bareListClass, ListEmpty } from '@/features/platform/list-empty'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { QuotaMeter } from '@/features/storage/quota-meter'
@@ -19,7 +17,7 @@ import type { StorageUsageRow, QuotaState, EntitlementStatus } from '@/features/
 import { platformPaths } from '@/features/platform/paths'
 import { SearchForm } from '@/features/platform/search-form'
 import { linkClass } from '@/components/ui/form-styles'
-import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
+import { PLATFORM_PAGE_SIZE, oneOf, useListParams } from '@/features/platform/use-list-params'
 import { useStorageUsage, useReconcileUsage, useRebuildUsage } from '@/features/platform/storage/hooks'
 import { formatBytes, formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
@@ -27,12 +25,15 @@ import { TechnicalDetails } from '@/components/ui/technical-details'
 import { QueryState } from '@/components/data/query-state'
 import { platformOnlyMessage } from '@/components/auth/access-denied'
 
+const quotaStates: readonly QuotaState[] = ['Normal', 'Warning', 'Critical', 'OverQuota', 'Unlimited']
+const subscriptionStatuses: readonly EntitlementStatus[] = ['Active', 'Suspended', 'Expired', 'NoSubscription']
+
 export function PlatformStoragePage() {
   useLanguage()
   const { page, get, update } = useListParams()
   const search = get('search')
-  const quotaState = (get('quotaState') || undefined) as QuotaState | undefined
-  const subscriptionStatus = (get('subscriptionStatus') || undefined) as EntitlementStatus | undefined
+  const quotaState = oneOf(get('quotaState'), quotaStates)
+  const subscriptionStatus = oneOf(get('subscriptionStatus'), subscriptionStatuses)
   const filtered = Boolean(search || quotaState || subscriptionStatus)
 
   const query = useStorageUsage({
@@ -195,12 +196,12 @@ export function PlatformStoragePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader crumbs={[platformCrumb]} title={tx("Depolama kullanımı")} description={tx("Hangi çalışma alanı depolama sınırına yaklaşıyor? Kullanılan ve ayrılmış alanı geçerli sınırla karşılaştırın.")} actions={<>
+      <div className="flex flex-wrap justify-end gap-2">
         <Button variant="outline" onClick={() => void query.refetch()} disabled={query.isFetching}><RefreshCw aria-hidden="true" className={`size-4 ${query.isFetching ? 'animate-spin motion-reduce:animate-none' : ''}`} />{tx("Yenile")}</Button>
         <Link to={platformPaths.quotaPolicies} className={buttonVariants({ variant: 'outline' })}><ShieldCheck aria-hidden="true" className="size-4" />{tx("Kota Politikaları")}</Link>
-      </>} />
+      </div>
       {statusMessage && <Notice tone="success">{statusMessage}</Notice>}
-      <Filters label={tx("Depolama kullanım filtreleri")} onClear={search || quotaState || subscriptionStatus ? () => update({ search: '', quotaState: '', subscriptionStatus: '' }) : undefined}>
+      <Filters label={tx("Depolama kullanım filtreleri")} onClear={filtered ? () => update({ search: '', quotaState: '', subscriptionStatus: '' }) : undefined}>
         <SearchForm className="sm:col-span-2" label={tx("Tenant ara")} value={search} onSearch={(value) => update({ search: value })} placeholder={tx("Tenant adı...")} />
         <FilterField label={tx("Kota durumu")}><select className={filterControlClass} value={quotaState ?? ''} onChange={(event) => update({ quotaState: event.target.value })}>
           <option value="">{tx("Tümü")}</option><option value="Normal">{tx("Yeterli alan var")}</option><option value="Warning">{tx("Alan azalıyor")}</option><option value="Critical">{tx("Alan dolmak üzere")}</option><option value="OverQuota">{tx("Kota Doldu")}</option><option value="Unlimited">{tx("Limitsiz")}</option>

@@ -71,7 +71,7 @@ describe('databaseAvailability', () => {
     expect(result.kind).toBe('unavailable')
     expect(result.reason).not.toContain('weird_new_code')
   })
-  it('is unavailable for every database of an unusable instance', () => {
-    expect(databaseAvailability(makeDatabase(), makeInstance({ access: 'CredentialsRequired' })).kind).toBe('unavailable')
+  it('is unavailable for every database of an unusable instance, without repeating the server reason per row', () => {
+    expect(databaseAvailability(makeDatabase(), makeInstance({ access: 'CredentialsRequired' }))).toEqual({ kind: 'unavailable', reason: null })
   })
 })

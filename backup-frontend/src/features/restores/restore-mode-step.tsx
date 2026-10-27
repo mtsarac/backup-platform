@@ -27,6 +27,8 @@ interface RestoreModeStepProps {
   restoreStarting: boolean
   eligibleForRestore: boolean
   targetValid: boolean
+  /** A typed database login that is not stored yet: the target is not usable until it is. */
+  loginPending: boolean
   onSelectNewDatabase: () => void
   onSelectReplaceExisting: () => void
   onRefreshDiscovery: () => void
@@ -36,7 +38,7 @@ interface RestoreModeStepProps {
   onRunPrecheck: () => void
 }
 
-export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName, databaseNameValid, options, discoveryData, discoveryError, discoveryQueryError, currentDiscovery, discoveryRetryable, discoveryStarting, discoveryScanning, precheckError, precheckRetryable, precheckStarting, restoreStarting, eligibleForRestore, targetValid, onSelectNewDatabase, onSelectReplaceExisting, onRefreshDiscovery, changeDatabaseName, changeOptions, onBack, onRunPrecheck }: RestoreModeStepProps) {
+export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName, databaseNameValid, options, discoveryData, discoveryError, discoveryQueryError, currentDiscovery, discoveryRetryable, discoveryStarting, discoveryScanning, precheckError, precheckRetryable, precheckStarting, restoreStarting, eligibleForRestore, targetValid, loginPending, onSelectNewDatabase, onSelectReplaceExisting, onRefreshDiscovery, changeDatabaseName, changeOptions, onBack, onRunPrecheck }: RestoreModeStepProps) {
   useLanguage()
   const newDescriptionId = useId()
   const replaceDescriptionId = useId()
@@ -66,7 +68,7 @@ export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName
             >
               <p className="font-semibold text-error">{tx("Mevcut bir veritabanının yerine (riskli)")}</p>
               <p id={replaceDescriptionId} className="mt-1 text-base text-text-muted">
-                {isPg ? tx('Seçtiğiniz veritabanı yedektekiyle değiştirilir. Eskisi silinmez, kenara alınır; onu temizlemek sizin sorumluluğunuzdadır.') : tx('Seçtiğiniz veritabanının içeriği silinir ve yedektekiyle değiştirilir. Oradaki güncel veriler kalıcı olarak kaybolur.')}
+                {isPg ? tx('Seçtiğiniz veritabanı yedektekiyle değiştirilir.') : tx('Seçtiğiniz veritabanının içeriği yedektekiyle değiştirilir.')}
               </p>
             </button>
           </div>
@@ -95,7 +97,7 @@ export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <label htmlFor={`${instancePrefix}-replace-db-select`} className="block text-sm font-medium">{tx("Yerine geçilecek veritabanı")}</label>
-                  <Button variant="outline" size="sm" onClick={() => onRefreshDiscovery()} disabled={discoveryScanning}>
+                  <Button variant="outline" size="sm" onClick={() => onRefreshDiscovery()} disabled={discoveryScanning || !targetValid || loginPending}>
                     {discoveryScanning ? tx('Taranıyor…') : discoveryRetryable ? tx('Tekrar Dene') : tx('Listeyi yenile')}
                   </Button>
                 </div>
@@ -174,7 +176,7 @@ export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName
       <div className="flex flex-wrap justify-between gap-3">
         <Button variant="outline" onClick={() => onBack()}>{tx("← Geri")}</Button>
         <Button
-          disabled={!eligibleForRestore || !targetValid || !databaseNameValid || precheckStarting || restoreStarting}
+          disabled={!eligibleForRestore || !targetValid || loginPending || !databaseNameValid || precheckStarting || restoreStarting}
           onClick={() => onRunPrecheck()}
         >
           {precheckStarting ? tx('Ön Kontrol Başlatılıyor…') : precheckRetryable ? tx('Tekrar Dene') : tx('Ön Kontrolü Çalıştır →')}

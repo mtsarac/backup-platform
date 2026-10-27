@@ -70,7 +70,6 @@ function PolicyForm({ policy }: { policy: NotificationPolicy }) {
       <div className="flex items-end"><label className={checkClass}><input type="checkbox" className={boxClass} checked={recovery} onChange={(event) => setRecovery(event.target.checked)} />{tx("Düzelme bildirimleri gönder")}</label></div>
     </div>
     <TechnicalDetails defaultOpen={submitted && Object.keys(errors).length > 0} items={[
-      ...(Object.keys(thresholdRanges) as ThresholdField[]).map(field => ({ label: thresholdLabels[field], value: thresholds[field] })),
       ...(policy.updatedAt ? [{ label: tx('Son güncelleme'), value: formatDateTime(policy.updatedAt) }] : []),
     ]}>
       <div className="grid gap-4 sm:grid-cols-2">{(Object.keys(thresholdRanges) as ThresholdField[]).map((field) => <Field key={field} label={thresholdLabels[field]} error={submitted ? errors[field] : undefined}>

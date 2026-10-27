@@ -53,7 +53,6 @@ function ChannelCard({ channel }: { channel: NotificationChannel }) {
       { label: tx('Kanal kimliği'), value: channel.id },
       { label: tx('Oluşturma'), value: formatDateTime(channel.createdAt) },
       { label: tx('Son güncelleme'), value: formatDateTime(channel.updatedAt) },
-      ...(last ? [{ label: tx('Son gönderim'), value: formatDateTime(last.at) }] : []),
       ...(last?.errorCode ? [{ label: tx('Hata kodu'), value: last.errorCode }] : []),
       ...(channel.secretUpdatedAt ? [{ label: tx('Gizli anahtar güncelleme zamanı'), value: formatDateTime(channel.secretUpdatedAt) }] : []),
       ...(channel.kind === 'webhook' ? [{ label: tx('Kimlik doğrulama'), value: authenticationLabels[channel.authentication] }] : []),

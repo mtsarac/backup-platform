@@ -24,7 +24,7 @@ export function AgentRegisterPage() {
   const { tenantId, canAdmin } = useTenant()
   useLanguage()
   return canAdmin ? <EnrollmentContent key={tenantId} tenantId={tenantId} /> : <div className="space-y-6">
-    <PageHeader title={tx("Yeni bilgisayar kaydı")} description={tx("Yeni yedekleme bilgisayarı eklenmesine izin verin ve bekleyen kayıt anahtarlarını yönetin.")} />
+    <PageHeader title={tx("Yeni bilgisayar kaydı")} />
     <AccessDenied title={tx("Yetkiniz yok")} what={tx("Yeni yedekleme bilgisayarı eklemek için çalışma alanı yöneticisi olmalısınız.")} control={<Link className={linkClass} to={`/tenants/${tenantId}/agents`}>{tx("Yedekleme bilgisayarlarına dön")}</Link>} />
   </div>
 }
@@ -56,7 +56,7 @@ function EnrollmentContent({ tenantId }: { tenantId: string }) {
     { key: 'actions', card: 'actions', header: tx('İşlemler'), render: (token) => <Button variant="destructive" aria-label={tx("{0} tarihinde oluşturulan kayıt anahtarını iptal et", { "0": formatDateTime(token.createdAt, tx('Henüz bildirilmedi')) })} onClick={() => { revoke.reset(); setSelected(token) }}>{tx("İptal et")}</Button> },
   ]
   return <div className="space-y-6">
-    <PageHeader title={tx("Yeni bilgisayar kaydı")} description={tx("Yeni yedekleme bilgisayarı eklenmesine izin verin ve bekleyen kayıt anahtarlarını yönetin.")} />
+    <PageHeader title={tx("Yeni bilgisayar kaydı")} />
     <AgentsTabs />
     <QueryState isPending={policy.isPending} error={policy.error}>
       {policy.data && <Section title={tx("Yeni bilgisayar kayıtları")} description={policy.data.enabled ? tx('Yeni yedekleme bilgisayarı eklenebilir.') : tx('Yeni yedekleme bilgisayarı eklenemez.')} actions={<Button role="switch" aria-checked={policy.data.enabled} aria-label={tx("Yeni bilgisayar kayıtlarına izin ver")} variant="outline" disabled={changePolicy.isPending} onClick={() => changePolicy.mutate(!policy.data!.enabled)}>{changePolicy.isPending ? tx('Kaydediliyor…') : policy.data.enabled ? tx('Kaydı kapat') : tx('Kaydı aç')}</Button>}>

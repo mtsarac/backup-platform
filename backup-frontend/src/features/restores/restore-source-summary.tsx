@@ -3,16 +3,18 @@ import { StatusPill } from '@/components/data/status-pill'
 import { Notice } from '@/components/ui/notice'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import type { BackupArtifact } from '@/features/artifacts/types'
-import { formatBytes } from '@/lib/format'
+import { formatBytes, formatDateTime } from '@/lib/format'
 
 export function RestoreSourceSummary({ artifact, isPg, fileArchive = false }: { artifact: BackupArtifact; isPg: boolean; fileArchive?: boolean }) {
   useLanguage()
+  const verified = artifact.replicas.filter((replica) => replica.verificationState === 'Verified' && replica.usable).length
   return <>
     <section aria-label={tx("Yedek dosyası bilgisi")} className="space-y-2 rounded-xl border border-border bg-surface-2 p-4 text-sm">
       <div className="flex flex-wrap items-center justify-between gap-2 font-medium">
-        <span className="min-w-0 break-words">{tx("Yedek dosyası:")}{' '}{artifact.databaseName ?? (fileArchive ? tx('Bilinmeyen dosya kaynağı') : tx('Bilinmeyen veritabanı'))} · {formatBytes(artifact.sizeBytes)}</span>
+        <span className="min-w-0 break-words">{tx("Yedek dosyası:")}{' '}{artifact.databaseName ?? (fileArchive ? tx('Bilinmeyen dosya kaynağı') : tx('Bilinmeyen veritabanı'))} · {formatBytes(artifact.sizeBytes)} · {formatDateTime(artifact.createdAt)}</span>
         <StatusPill status={artifact.state} />
       </div>
+      <p className="text-text-muted">{verified > 0 ? tx('{0} kopyanın bütünlüğü doğrulandı.', { '0': verified }) : tx('Bütünlüğü doğrulanmış bir kopya yok.')}</p>
       <TechnicalDetails items={[
         { label: tx('Yedek dosyası kimliği'), value: artifact.id },
         ...(artifact.backupType ? [{ label: tx('Yedek türü'), value: artifact.backupType }] : []),

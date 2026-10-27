@@ -32,7 +32,7 @@ export function ClientsPage() {
     (agent.hostName ?? tx('Adsız bilgisayar')).toLocaleLowerCase(currentLocale()).includes(term))
   const columns: Column<Agent>[] = [
     { key: 'hostName', header: tx('Bilgisayar'), card: 'title', wrap: true, render: (agent) => <Link className={linkClass} to={`/tenants/${tenantId}/agents/${agent.agentId}`}>{agent.hostName ?? tx('Adsız bilgisayar')}</Link> },
-    { key: 'connectivity', card: 'status', header: tx('Durum'), render: (agent) => <div className="flex flex-wrap items-center gap-1.5"><StatusPill status={agent.connectivity} />{agent.status !== 'Active' && <StatusPill domain="agent" status={agent.status} />}</div> },
+    { key: 'connectivity', card: 'status', header: tx('Durum'), render: (agent) => <div className="flex flex-wrap items-center gap-1.5"><StatusPill domain="agent" status={agent.connectivity} />{agent.status !== 'Active' && <StatusPill domain="agent" status={agent.status} />}</div> },
     { key: 'lastSeenAt', header: tx('Son görülme'), render: (agent) => agent.lastSeenAt ? <RelativeTime value={agent.lastSeenAt} /> : tx('Henüz bağlanmadı') },
   ]
   const empty = query.data?.length === 0

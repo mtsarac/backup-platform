@@ -30,7 +30,6 @@ import { WrapKeysSection } from '@/features/artifact-encryption/wrap-keys-sectio
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { Pagination } from '@/components/data/pagination'
-import { RelativeTime } from '@/components/data/relative-time'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { useBreakGlassRequests, useTenantEncryption } from '@/features/artifact-encryption/hooks'
 import { BreakGlassTable } from '@/features/artifact-encryption/break-glass-table'
@@ -42,9 +41,14 @@ import { platformOnlyMessage } from '@/components/auth/access-denied'
 const tabs = [
   { value: 'summary', get label() { return tx("Özet") } },
   { value: 'people', get label() { return tx("Kişiler") } },
-  { value: 'storage-computers', get label() { return tx("Depolama ve bilgisayarlar") } },
+  { value: 'subscription', get label() { return tx("Abonelik") } },
+  { value: 'storage', get label() { return tx("Depolama") } },
+  { value: 'computers', get label() { return tx("Bilgisayarlar") } },
   { value: 'security', get label() { return tx("Güvenlik") } },
 ] as const
+/** `tab=storage-computers` was one section before it was split; old links land on the storage section. */
+const legacyStorageTab = 'storage-computers'
+const tenantMembershipMessage = () => tx('Tenant kurtarma anahtarını yalnızca bu çalışma alanının Owner veya Admin üyeleri görüntüleyebilir ve yönetebilir; platform yöneticisi yetkisi bunu kapsamaz.')
 type TabValue = (typeof tabs)[number]['value']
 
 function RenameForm({ tenantId, name }: { tenantId: string; name: string }) {
@@ -75,9 +79,9 @@ function EnrollmentSection({ tenant }: { tenant: PlatformTenantDetail }) {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const change = useSetTenantEnrollment(tenant.tenantId)
   const enabled = tenant.enrollment.enabled
-  return <Section title={tx("Yedekleme bilgisayarı kaydı")} description={tx("Kaydı kapatmak mevcut yedekleme bilgisayarlarını etkilemez; yalnızca yeni kayıtları engeller.")}
-    actions={<Button role="switch" aria-checked={enabled} aria-label={tx("Yeni yedekleme bilgisayarı kayıtlarına izin ver")} variant="outline" onClick={() => { change.reset(); setConfirmOpen(true) }}>{enabled ? tx('Kaydı kapat') : tx('Kaydı aç')}</Button>}>
-    <p className="text-[0.9375rem]"><StatusPill level={enabled ? 'safe' : 'neutral'}>{enabled ? tx('Yeni bilgisayar kaydı açık') : tx('Yeni bilgisayar kaydı kapalı')}</StatusPill>{tenant.enrollment.changedAt && <span className="ml-2 text-text-muted"><RelativeTime value={tenant.enrollment.changedAt} /></span>}</p>
+  return <>
+    <Section title={tx("Yedekleme bilgisayarı kaydı")} description={tx("Kaydı kapatmak mevcut yedekleme bilgisayarlarını etkilemez; yalnızca yeni kayıtları engeller.")}
+      actions={<Button role="switch" aria-checked={enabled} aria-label={tx("Yeni yedekleme bilgisayarı kayıtlarına izin ver")} variant="outline" onClick={() => { change.reset(); setConfirmOpen(true) }}>{enabled ? tx('Kaydı kapat') : tx('Kaydı aç')}</Button>} />
     <ConfirmDialog open={confirmOpen} onClose={() => setConfirmOpen(false)} title={enabled ? tx('Bilgisayar kaydı kapatılsın mı?') : tx('Bilgisayar kaydı açılsın mı?')}
       consequence={{
         what: enabled ? tx("“{0}” çalışma alanında yeni yedekleme bilgisayarı kayıtları engellenir.", { "0": tenant.name }) : tx("“{0}” çalışma alanında yeni yedekleme bilgisayarı kayıtlarına izin verilir.", { "0": tenant.name }),
@@ -86,7 +90,7 @@ function EnrollmentSection({ tenant }: { tenant: PlatformTenantDetail }) {
       }}
       confirmLabel={enabled ? tx('Kaydı kapat') : tx('Kaydı aç')} pending={change.isPending} error={change.error}
       onConfirm={() => change.mutate(!enabled, { onSuccess: () => setConfirmOpen(false) })} />
-  </Section>
+  </>
 }
 
 function RecentAudit({ tenantId }: { tenantId: string }) {
@@ -108,10 +112,11 @@ function Header({ tenant }: { tenant: PlatformTenantDetail }) {
     actions={<Link className={buttonVariants({ variant: 'outline' })} to={platformPaths.agents(tenant.tenantId)}>{tx("Yedekleme bilgisayarlarını görüntüle")}</Link>} />
 }
 
+/** Tenant-scoped endpoint: it needs a tenant Owner/Admin membership, which platform administration alone does not grant (the 403 is expected for a non-member). */
 function RecoveryKeys({ tenant }: { tenant: PlatformTenantDetail }) {
   const encryption = useTenantEncryption(tenant.tenantId)
-  return <QueryState forbiddenMessage={platformOnlyMessage} isPending={encryption.isPending} error={encryption.error}>
-    {encryption.data && <TenantKeysSection tenantId={tenant.tenantId} tenantName={tenant.name} encryption={encryption.data} />}
+  return <QueryState forbiddenMessage={tenantMembershipMessage} isPending={encryption.isPending} error={encryption.error}>
+    {encryption.data && <TenantKeysSection tenantId={tenant.tenantId} tenantName={tenant.name} encryption={encryption.data} platformView />}
   </QueryState>
 }
 
@@ -133,7 +138,7 @@ function TenantTabs({ tenant }: { tenant: PlatformTenantDetail }) {
   useLanguage()
   const { get, update } = useListParams()
   const requested = get('tab')
-  const tab: TabValue = tabs.find((item) => item.value === requested)?.value ?? 'summary'
+  const tab: TabValue = tabs.find((item) => item.value === (requested === legacyStorageTab ? 'storage' : requested))?.value ?? 'summary'
   return <div className="space-y-6">
     <Tabs label={tx("Tenant bölümleri")} idPrefix="tenant" value={tab} items={tabs} onChange={(value) => update({ tab: value, memberPage: '', subPage: '', breakGlassPage: '' })} />
     <div role="tabpanel" id={`tenant-panel-${tab}`} aria-labelledby={`tenant-tab-${tab}`} className="space-y-6">
@@ -141,20 +146,18 @@ function TenantTabs({ tenant }: { tenant: PlatformTenantDetail }) {
         <div className="grid gap-4 sm:grid-cols-3"><KpiCard label={tx("Kişiler")} value={tenant.memberCount} /><KpiCard label={tx("Yedekleme bilgisayarları")} value={tenant.agents.total} /><KpiCard label={tx("Etkin yedekleme işleri")} value={tenant.enabledBackupJobs} /></div>
         <RenameForm key={tenant.name} tenantId={tenant.tenantId} name={tenant.name} />
         <RecentAudit tenantId={tenant.tenantId} />
+        <TechnicalDetails items={[{ label: tx('Tenant kimliği'), value: tenant.tenantId }]} />
       </>}
       {tab === 'people' && <MembershipsSection tenantId={tenant.tenantId} tenantName={tenant.name} />}
-      {tab === 'storage-computers' && <>
+      {tab === 'subscription' && <SubscriptionSection tenantId={tenant.tenantId} tenantName={tenant.name} />}
+      {tab === 'storage' && <>
         <TenantStorageSection tenantId={tenant.tenantId} tenantName={tenant.name} />
-        <SubscriptionSection tenantId={tenant.tenantId} tenantName={tenant.name} />
         <PlatformTenantConnections tenantId={tenant.tenantId} tenantName={tenant.name} />
-        <Section title={tx("Yedekleme bilgisayarlarının durumu")} actions={<Link className={`${linkClass} inline-flex min-h-11 items-center text-sm`} to={platformPaths.agents(tenant.tenantId)}>{tx("Yedekleme bilgisayarlarını görüntüle")}</Link>}>
-          <AgentBreakdown counts={tenant.agents} />
-        </Section>
+      </>}
+      {tab === 'computers' && <>
+        <Section title={tx("Yedekleme bilgisayarlarının durumu")}><AgentBreakdown counts={tenant.agents} /></Section>
         <EnrollmentSection tenant={tenant} />
-        <TechnicalDetails items={[
-          { label: tx('Tenant kimliği'), value: tenant.tenantId },
-          { label: tx('Son değişiklik'), value: formatDateTime(tenant.enrollment.changedAt) },
-        ]} />
+        <TechnicalDetails items={[{ label: tx('Kayıt ayarı son değişiklik'), value: formatDateTime(tenant.enrollment.changedAt) }]} />
       </>}
       {tab === 'security' && <>
         <SupportAccessSection tenantId={tenant.tenantId} tenantName={tenant.name} />

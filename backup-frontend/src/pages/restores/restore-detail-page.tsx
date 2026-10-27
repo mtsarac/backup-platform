@@ -98,8 +98,8 @@ function RestoreDetail({ id }: { id: string }) {
     <QueryState isPending={query.isPending} error={query.error} empty={!query.isPending && !restore} onRetry={() => void query.refetch()}>
       {restore && <>
         <PageHeader title={`${restore.purpose === 'Verification' ? tx('Geri yükleme testi') : restore.purpose === 'Precheck' ? tx('Geri yükleme ön kontrolü') : restore.purpose === 'Discovery' ? tx('Hedef veritabanı bulma') : tx('Geri yükleme')} · ${restore.databaseName}`}
-          crumbs={[{ label: tx('Geri yükleme geçmişi'), to: `/tenants/${tenantId}/restores` }, { label: restore.databaseName }]}
-          description={fileRestore ? tx('Dosya / klasör geri yükleme') : restoreModeLabel(restore.mode)}
+          crumbs={[{ label: tx('Geri yüklemeler'), to: `/tenants/${tenantId}/restores` }, { label: restore.databaseName }]}
+          description={fileRestore ? tx('Dosya / klasör geri yükleme') : undefined}
           meta={<><StatusPill status={restore.status} /><span className="text-sm text-text-muted"><RelativeTime value={restore.createdAt} /></span></>}
           actions={mayCancel && <Button variant="destructive" disabled={cancel.isPending} onClick={() => { cancel.reset(); setConfirmOpen(true) }}>{tx("Geri yüklemeyi iptal et")}</Button>} />
         {notice && (isActiveRestore(restore.status) || restore.status === 'Cancelled') && <Notice>{notice}</Notice>}
@@ -110,7 +110,7 @@ function RestoreDetail({ id }: { id: string }) {
           {...(restore.status === 'Failed' && restore.failureCode ? {} : { what: restore.status === 'AgentLost' ? tx('Yedekleme bilgisayarıyla bağlantı koptu.') : tx('Geri yükleme iptal edildi.') })}
           dataImpact={fileRestore ? tx('Başarısız veya iptal edilmiş işlemden sonra hedef dosyaları ve varsa korunan geri dönüş verilerini kontrol edin; elle müdahale gerekebilir.') : tx("Bu durum veritabanının sağlıklı olduğunu göstermez. Hedef veritabanının durumunu kontrol edin; elle müdahale gerekebilir.")} /></section>}
         <Tabs label={tx("Geri yükleme bölümleri")} idPrefix="restore" value={tab} onChange={setTab} items={[
-          { value: 'summary', label: tx('Özet') }, { value: 'details', label: tx('Kaynak ve seçenekler') }, { value: 'attempts', label: tx('Denemeler') }, { value: 'checks', label: tx('Doğrulama sonucu') },
+          { value: 'summary', label: tx('Özet') }, { value: 'details', label: tx('Seçenekler') }, { value: 'attempts', label: tx('Denemeler') }, { value: 'checks', label: tx('Doğrulama sonucu') },
         ]} />
         <div role="tabpanel" id={`restore-panel-${tab}`} aria-labelledby={`restore-tab-${tab}`} className="space-y-6">
           {tab === 'summary' && <>
@@ -122,7 +122,6 @@ function RestoreDetail({ id }: { id: string }) {
             </Section>}
             <Section title={tx("İlerleme")}><RestoreProgress stage={restore.progress.stage} percent={restore.progress.percent} at={restore.progress.at} label={tx("Geri yükleme ilerlemesi")} /></Section>
             <Section title={tx("Geri yükleme özeti")}><Facts columns={3}>
-              <Fact label={fileRestore ? tx('Hedef dosya kaynağı referansı') : tx("Hedef veritabanı")}>{restore.databaseName}</Fact>
               <Fact label={tx("Mod")}>{fileRestore ? restore.mode === 'ReplaceExistingDatabase' ? tx('Mevcut dosyaların üzerine yazmaya izin ver') : tx('Mevcut dosyaların üzerine yazılmaz') : restoreModeLabel(restore.mode)}</Fact>
               {source}
               <Fact label={tx("Yedekleme bilgisayarı")}>{computer}</Fact>
@@ -131,9 +130,7 @@ function RestoreDetail({ id }: { id: string }) {
               {restore.completedAt && <Fact label={tx("Süre")}>{formatDuration(restore.startedAt, restore.completedAt)}</Fact>}
             </Facts></Section>
           </>}
-          {tab === 'details' && <Section title={tx("Kaynak ve seçenekler")}><Facts>
-            {source}
-            <Fact label={tx("Yedekleme bilgisayarı")}>{computer}</Fact>
+          {tab === 'details' && <Section title={tx("Seçenekler")}><Facts>
             <Fact label={tx("Dosya bütünlüğü kontrolü istendi")}>{yesNo(restore.options.verifyChecksum)}</Fact>
             <Fact label={tx("Yedek doğrulaması istendi")}>{yesNo(restore.options.verifyBackup)}</Fact>
             {fileRestore ? <>

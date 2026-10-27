@@ -8,7 +8,6 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { accountingModeLabels, enforcementModeLabels, scopeLabels } from '@/features/storage/labels'
 import { QuotaSummary, StandingBadge } from '@/features/storage/quota-summary'
 import { usePlatformTenantQuota, useRebuildUsage, useReconcileUsage } from './hooks'
-import { formatDateTime } from '@/lib/format'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { QueryState } from '@/components/data/query-state'
 import { platformOnlyMessage } from '@/components/auth/access-denied'
@@ -93,7 +92,6 @@ export function TenantStorageSection({ tenantId, tenantName }: { tenantId: strin
               { label: tx("Hesaplama Modu"), value: accountingModeLabels[quota.accountingMode] },
               { label: tx("Uygulama Modu"), value: enforcementModeLabels[quota.enforcementMode] },
               { label: tx("Kapsam"), value: scopeLabels(quota.includedStorageScopes).join('; ') },
-              { label: tx("Son Hesaplama"), value: formatDateTime(quota.calculatedAt, tx('Henüz bildirilmedi')) },
             ]} />
 
             {!quota.newBackupsAllowed && <ErrorNotice what={tx("Yeni yedekleme başlatma engellendi.")} dataImpact={tx("Mevcut yedekler silinmedi ve geri yüklenebilir.")} action={tx("Kota ve abonelik durumunu gözden geçirin.")} technical={[{ label: tx("Red kodu"), value: quota.denialCode ?? tx("bilinmiyor") }]} />}

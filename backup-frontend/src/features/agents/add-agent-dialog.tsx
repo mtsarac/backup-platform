@@ -87,7 +87,7 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
     } catch (cause) { if (!controller.signal.aborted) setError(describeError(cause)) }
     finally { if (!controller.signal.aborted) setPending(false) }
   }
-  const labels = { Waiting: tx('Komutun çalıştırılması bekleniyor'), Checking: tx('Kayıt anahtarı gizlendi; kayıt durumu doğrulanıyor'), Enrolled: tx('Kayıt tamamlandı'), Connecting: tx('Bilgisayar bağlanıyor'), Online: tx('Çevrimiçi'), Expired: tx('Kayıt anahtarının süresi doldu'), Revoked: tx('Kayıt anahtarı iptal edildi'), Consumed: tx('Kayıt anahtarı kullanıldı; bilgisayar bilgisi bulunamadı') }
+  const labels = { Waiting: tx('Komutun çalıştırılması bekleniyor'), Checking: tx('Kayıt anahtarı gizlendi; kayıt durumu doğrulanıyor'), Enrolled: tx('Kayıt tamamlandı'), Connecting: tx('Bilgisayar bağlanıyor'), Online: tx('Çevrimiçi. Kurulum tamamlandı.'), Expired: tx('Kayıt anahtarının süresi doldu'), Revoked: tx('Kayıt anahtarı iptal edildi'), Consumed: tx('Kayıt anahtarı kullanıldı; bilgisayar bilgisi bulunamadı') }
   const view = monitor.phase === 'Enrolled' || monitor.phase === 'Connecting' || monitor.phase === 'Online' ? 'connect' : step
   const packageReady = Boolean(distribution?.packages[platform === 'Windows' ? 'win-x64' : 'linux-x64'])
   const command = packageReady ? enrollmentCommands(platform, server, secret, name, mode, language) : ''
@@ -96,7 +96,7 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
     <Dialog.Portal><Dialog.Backdrop className="fixed inset-0 z-40 bg-black/50" />
       <Dialog.Popup initialFocus={nameRef} className="fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 space-y-4 overflow-y-auto rounded-xl border border-border bg-surface p-6 shadow-xl">
         <Dialog.Title className="text-lg font-semibold text-text-heading">{tx("Yedekleme bilgisayarı ekle")}</Dialog.Title>
-        <Dialog.Description className="text-sm text-text-muted">{tx("Yedekleri alacak bilgisayara küçük bir program kurulur. Kayıt anahtarı tek kullanımlıktır ve bu ekrandan kapandıktan sonra tekrar gösterilmez.")}</Dialog.Description>
+        <Dialog.Description className="text-sm text-text-muted">{tx("Yedekleri alacak bilgisayara küçük bir program kurulur.")}</Dialog.Description>
         <Stepper steps={[tx('Bilgisayar'), tx('Kurulum'), tx('Bağlantı')]} current={view === 'computer' ? 0 : view === 'install' ? 1 : 2} />
         {view === 'computer' && <form id="add-agent" className="space-y-4" onSubmit={(event) => { event.preventDefault(); setStep('install') }}>
           <section className="space-y-4">
@@ -137,18 +137,17 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
           <TechnicalDetails items={[]}><p>{tx('Sunucunun TLS sertifikası hedef bilgisayarda güvenilir olmalıdır. Sertifika doğrulamasını asla devre dışı bırakmayın.')}</p></TechnicalDetails>
         </section>}
         {view === 'connect' && <section className="space-y-3">
-          <h2 className="font-medium text-text-heading">{tx("Bilgisayar bağlanıyor")}</h2>
+          <h2 className="font-medium text-text-heading">{tx("Bağlantı")}</h2>
           <p role="status" className="rounded-lg border border-border bg-surface px-3 py-2 font-medium text-text">{labels[monitor.phase]}</p>
           {monitor.phase !== 'Online' && <p className="text-sm text-text-muted">{tx("Kimlik kaydedildi. Yedekleme programının çalıştığını ve sunucuya erişebildiğini kontrol edin; bağlantı bekleniyor.")}</p>}
           {monitor.agent && <>
-            <Facts><Fact label={tx("Ad")}>{monitor.agent.hostName ?? tx('Bildirilmedi')}</Fact><Fact label={tx("Bağlantı")}>{monitor.agent.connectivity === 'online' ? tx('Çevrimiçi') : monitor.agent.connectivity === 'offline' ? tx('Çevrimdışı') : tx('Bilinmiyor')}</Fact></Facts>
+            <Facts columns={1}><Fact label={tx("Ad")}>{monitor.agent.hostName ?? tx('Bildirilmedi')}</Fact></Facts>
             <TechnicalDetails items={[
               { label: tx('Bilgisayar kimliği'), value: monitor.agent.agentId },
               { label: tx('İşletim sistemi'), value: monitor.agent.osDescription ?? monitor.agent.platform },
               ...(monitor.agent.agentVersion ? [{ label: tx('Yedekleme programı sürümü'), value: monitor.agent.agentVersion }] : []),
             ]} />
           </>}
-          {monitor.phase === 'Online' && <p className="text-sm font-medium text-success">{tx("Bilgisayar çevrimiçi. Kurulum tamamlandı.")}</p>}
         </section>}
         {(error || monitor.error) && <ErrorNotice {...(error ?? monitor.error!)} />}
         <div className="flex flex-wrap justify-end gap-2">
