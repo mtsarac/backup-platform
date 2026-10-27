@@ -64,6 +64,7 @@ public sealed class PlatformDbContext : DbContext
     public DbSet<PlatformAdmin> PlatformAdmins => Set<PlatformAdmin>();
     public DbSet<Agent> Agents => Set<Agent>();
     public DbSet<TenantAgentEnrollmentPolicy> TenantAgentEnrollmentPolicies => Set<TenantAgentEnrollmentPolicy>();
+    public DbSet<PlatformAgentSettings> PlatformAgentSettings => Set<PlatformAgentSettings>();
     public DbSet<EnrollmentToken> EnrollmentTokens => Set<EnrollmentToken>();
     public DbSet<AgentCredential> AgentCredentials => Set<AgentCredential>();
     public DbSet<AgentConnectivityRecord> AgentConnectivity => Set<AgentConnectivityRecord>();
@@ -215,7 +216,7 @@ public sealed class PlatformDbContext : DbContext
             {
                 throw new InvalidOperationException("Authentication state writes require explicit identity infrastructure operations.");
             }
-            if (!IsPlatformOperations && entry.Entity is TenantAgentEnrollmentPolicy or AgentCredential or AgentConnectivityRecord or AgentCapabilityRecord)
+            if (!IsPlatformOperations && (entry.Entity is TenantAgentEnrollmentPolicy or AgentCredential or AgentConnectivityRecord or AgentCapabilityRecord || entry.Entity is BackupPlatform.Agents.Enrollment.PlatformAgentSettings))
             {
                 throw new InvalidOperationException("Enrollment policy, agent credential, connectivity and capability writes require explicit platform operations.");
             }

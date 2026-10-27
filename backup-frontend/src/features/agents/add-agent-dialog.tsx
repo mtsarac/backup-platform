@@ -11,11 +11,10 @@ import { TechnicalDetails } from '@/components/ui/technical-details'
 import { useLanguage, tx } from '@/lib/i18n'
 import { inputClass, selectClass } from '@/components/ui/form-styles'
 import { CopyButton } from '@/components/ui/copy-button'
-import { API_BASE_URL } from '@/lib/api/client'
 import { type ErrorDescription, accessDenied, describeError } from '@/lib/api/failure-messages'
 import { createEnrollmentToken, getAgentDistribution, getEnrollmentTokenStatus, revokeEnrollmentToken } from './api'
 import { agentQueryKeys } from './hooks'
-import { enrollmentCommands, httpsServerOrigin, suggestedServerOrigin } from './enrollment-commands'
+import { enrollmentCommands, httpsServerOrigin } from './enrollment-commands'
 import type { AgentPlatform, InstallationMode } from './enrollment-commands'
 import type { AgentDistribution } from './api'
 import { useEnrollmentMonitor } from './use-enrollment-monitor'
@@ -26,13 +25,12 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
   const { language } = useLanguage()
   const client = useQueryClient()
   const [platform, setPlatform] = useState<AgentPlatform>('Windows')
-  const [initialServer] = useState(() => httpsServerOrigin(import.meta.env.VITE_AGENT_PUBLIC_URL ?? '') || suggestedServerOrigin(API_BASE_URL, window.location.origin))
-  const [server, setServer] = useState(initialServer)
-  const [mode, setMode] = useState<InstallationMode>('interactive')
   const [distribution, setDistribution] = useState<AgentDistribution | null>(null)
+  // The platform administrator owns the server address; tenants only consume it.
+  const server = httpsServerOrigin(distribution?.serverUrl ?? '')
+  const [mode, setMode] = useState<InstallationMode>('interactive')
   const [distributionError, setDistributionError] = useState<ErrorDescription | null>(null)
   const [name, setName] = useState('')
-  const [lifetime, setLifetime] = useState('1440')
   const [ticket, setTicket] = useState<{ tokenId: string; expiresAt: string } | null>(null)
   const [secret, setSecret] = useState('')
   const [pending, setPending] = useState(false)
@@ -40,22 +38,15 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
   const request = useRef<AbortController | null>(null)
   const nameRef = useRef<HTMLInputElement>(null)
   const [step, setStep] = useState<'computer' | 'install'>('computer')
-  // Opens the technical details once no safe server address could be found, so the one value the user must supply is in view.
-  const [serverUnknown, setServerUnknown] = useState(false)
-  const serverEdited = useRef(false)
   const monitor = useEnrollmentMonitor(tenantId, ticket, () => setSecret(''))
   useEffect(() => () => { request.current?.abort() }, [])
   useEffect(() => {
     const controller = new AbortController()
     void getAgentDistribution(controller.signal).then(result => {
-      if (controller.signal.aborted) return
-      setDistribution(result)
-      const publicOrigin = httpsServerOrigin(import.meta.env.VITE_AGENT_PUBLIC_URL ?? '') || httpsServerOrigin(result.serverUrl ?? '')
-      if (publicOrigin && !serverEdited.current) setServer(publicOrigin)
-      if (!publicOrigin && !initialServer) setServerUnknown(true)
-    }).catch(cause => { if (!controller.signal.aborted) { setDistributionError(describeError(cause)); if (!initialServer) setServerUnknown(true) } })
+      if (!controller.signal.aborted) setDistribution(result)
+    }).catch(cause => { if (!controller.signal.aborted) setDistributionError(describeError(cause)) })
     return () => controller.abort()
-  }, [initialServer])
+  }, [])
   useEffect(() => {
     if (monitor.phase === 'Online') {
       void client.invalidateQueries({ queryKey: agentQueryKeys.all(tenantId) })
@@ -64,7 +55,7 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
   }, [monitor.phase, client, tenantId])
   function close() { request.current?.abort(); setSecret(''); setTicket(null); onClose() }
   async function create() {
-    if (pending || !httpsServerOrigin(server)) return
+    if (pending || !server) return
     const controller = new AbortController()
     request.current = controller
     setPending(true); setError(null); setSecret('')
@@ -77,7 +68,7 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
         if (controller.signal.aborted) return
       }
       setTicket(null)
-      const result = await createEnrollmentToken(tenantId, Number(lifetime), controller.signal)
+      const result = await createEnrollmentToken(tenantId, controller.signal)
       if (controller.signal.aborted) return
       setSecret(result.token)
       setTicket({ tokenId: result.tokenId, expiresAt: result.expiresAt })
@@ -91,7 +82,6 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
   const view = monitor.phase === 'Enrolled' || monitor.phase === 'Connecting' || monitor.phase === 'Online' ? 'connect' : step
   const packageReady = Boolean(distribution?.packages[platform === 'Windows' ? 'win-x64' : 'linux-x64'])
   const command = packageReady ? enrollmentCommands(platform, server, secret, name, mode, language) : ''
-  const serverOk = Boolean(httpsServerOrigin(server))
   return <Dialog.Root open onOpenChange={(open) => { if (!open) close() }}>
     <Dialog.Portal><Dialog.Backdrop className="fixed inset-0 z-40 bg-black/50" />
       <Dialog.Popup initialFocus={nameRef} className="fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 space-y-4 overflow-y-auto rounded-xl border border-border bg-surface p-6 shadow-xl">
@@ -107,10 +97,8 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
               <Field label={tx("İşletim sistemi")}>{(control) => <select {...control} disabled={pending} value={platform} onChange={event => setPlatform(event.target.value as AgentPlatform)} className={`${selectClass} w-full`}><option>Windows</option><option>Linux</option></select>}</Field>
             </div>
           </section>
-          <TechnicalDetails accordion items={[]} defaultOpen={serverUnknown}>
-            <Field label={tx("Backend HTTPS adresi")} hint={serverOk ? undefined : <span className="text-warning">{tx("Bilgisayarın erişebildiği HTTPS sunucu adresini girin (yalnızca protokol, sunucu ve port). HTTP geliştirme proxy’si güvenli bir adres belirlemez.")}</span>}>{(control) => <input {...control} required type="url" disabled={pending} value={server} placeholder="https://backup.example.com" onChange={event => { serverEdited.current = true; setServer(event.target.value) }} className={inputClass} />}</Field>
-            <Field label={tx("Geçerlilik süresi (dakika)")}>{(control) => <input {...control} required type="number" min={5} max={10080} step={1} disabled={pending} value={lifetime} onChange={event => setLifetime(event.target.value)} className={inputClass} />}</Field>
-          </TechnicalDetails>
+          {distribution && !server && <Notice tone="warning">{tx("Sunucu adresi henüz ayarlanmadı. Platform yöneticisi, Yedekleme bilgisayarı ayarları sayfasında sunucu HTTPS adresini belirlemeden kurulum komutu oluşturulamaz.")}</Notice>}
+          {distributionError && <ErrorNotice {...distributionError} />}
         </form>}
         {view === 'install' && <section className="space-y-3">
           <h2 className="font-medium text-text-heading">{tx("Kurulum komutunu bilgisayarda çalıştırın")}</h2>
@@ -154,8 +142,8 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
           {view === 'install' && <Button variant="outline" disabled={pending} onClick={() => setStep('computer')}>{tx("Geri")}</Button>}
           <Dialog.Close render={<Button variant="outline" />}>{monitor.phase === 'Online' ? tx('Tamam') : tx('Kapat')}</Dialog.Close>
           {monitor.paused && <Button variant="outline" onClick={monitor.retry}>{tx("Takibi tekrar dene")}</Button>}
-          {view === 'computer' && <Button type="submit" form="add-agent" disabled={!serverOk}>{tx("İleri")}</Button>}
-          {view === 'install' && <Button disabled={pending || !serverOk} onClick={() => void create()}>{pending ? tx('Oluşturuluyor…') : ticket ? tx('Yeni kayıt anahtarı oluştur') : tx('Kayıt anahtarı oluştur')}</Button>}
+          {view === 'computer' && <Button type="submit" form="add-agent" disabled={!server}>{tx("İleri")}</Button>}
+          {view === 'install' && <Button disabled={pending || !server} onClick={() => void create()}>{pending ? tx('Oluşturuluyor…') : ticket ? tx('Yeni kayıt anahtarı oluştur') : tx('Kayıt anahtarı oluştur')}</Button>}
         </div>
       </Dialog.Popup>
     </Dialog.Portal>

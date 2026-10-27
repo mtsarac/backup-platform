@@ -261,12 +261,10 @@ describe('Adding a computer from the new-computer page', () => {
     await screen.findByRole('switch')
     fireEvent.click(screen.getByRole('button', { name: 'Yedekleme bilgisayarı ekle' }))
     const dialog = await screen.findByRole('dialog')
-    const lifetime = within(dialog).getByRole('spinbutton', { name: 'Geçerlilik süresi (dakika)' })
-    fireEvent.change(lifetime, { target: { value: '60' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'İleri' }))
     fireEvent.click(within(dialog).getByRole('button', { name: "Kayıt anahtarı oluştur" }))
     expect(await screen.findByDisplayValue('secret-once-only')).toBeInTheDocument()
-    expect(api.createEnrollmentToken).toHaveBeenCalledWith('tenant-a', 60, expect.any(AbortSignal))
+    expect(api.createEnrollmentToken).toHaveBeenCalledWith('tenant-a', expect.any(AbortSignal))
     expect(within(dialog).getByText(/Anahtarı paylaşmayın/)).toBeInTheDocument()
     expect(JSON.stringify(client.getQueryCache().getAll().map((query) => query.state.data))).not.toContain('secret-once-only')
     expect(client.getMutationCache().getAll()).toHaveLength(0)
@@ -275,7 +273,7 @@ describe('Adding a computer from the new-computer page', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Kapat' }))
     await waitFor(() => expect(screen.queryByDisplayValue('secret-once-only')).not.toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Yedekleme bilgisayarı ekle' }))
-    expect(await screen.findByRole('spinbutton')).toHaveValue(1440)
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
     expect(screen.queryByDisplayValue('secret-once-only')).not.toBeInTheDocument()
   })
 
@@ -297,7 +295,7 @@ describe('Adding a computer from the new-computer page', () => {
     const view = mount(<AddAgentDialog tenantId="tenant-a" onClose={vi.fn()} onCreated={onCreated} />)
     fireEvent.click(await screen.findByRole('button', { name: 'İleri' }))
     fireEvent.click(await screen.findByRole('button', { name: "Kayıt anahtarı oluştur" }))
-    const signal = vi.mocked(api.createEnrollmentToken).mock.calls[0]![2]
+    const signal = vi.mocked(api.createEnrollmentToken).mock.calls[0]![1]
     view.unmount()
     expect(signal.aborted).toBe(true)
     await act(async () => { resolve({ tokenId: 'token-b', token: 'late-secret', expiresAt: '2026-10-07T10:00:00Z' }) })

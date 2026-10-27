@@ -6,8 +6,7 @@ namespace BackupPlatform.Agents.Enrollment;
 public enum CreateEnrollmentTokenStatus
 {
     Created = 1,
-    EnrollmentDisabled = 2,
-    InvalidLifetime = 3
+    EnrollmentDisabled = 2
 }
 
 public sealed record CreateEnrollmentTokenResult(CreateEnrollmentTokenStatus Status, NewEnrollmentToken? Issued);
@@ -26,7 +25,7 @@ public sealed record EnrollmentTokenStatus(Guid TokenId, DateTimeOffset ExpiresA
 /// Policy and token administration. Authorization is the caller's responsibility: platform administrator for
 /// platform policy routes, or administrator membership of the same tenant for tenant policy and token routes.
 /// </summary>
-public sealed class EnrollmentAdministrationService(IAgentEnrollmentStore store, TimeProvider timeProvider, AgentSecurityOptions options)
+public sealed class EnrollmentAdministrationService(IAgentEnrollmentStore store, PlatformAgentSettingsService settings, TimeProvider timeProvider)
 {
     public Task<EnrollmentPolicyState?> GetPolicyAsync(TenantId tenantId, CancellationToken cancellationToken)
     {
@@ -42,23 +41,19 @@ public sealed class EnrollmentAdministrationService(IAgentEnrollmentStore store,
         return store.SetPolicyAsync(tenantId, isEnabled, actor, actorKind, timeProvider.GetUtcNow(), cancellationToken);
     }
 
-    /// <summary>Creates a token only while the tenant's enrollment permission is enabled. The plaintext is returned once.</summary>
+    /// <summary>Creates a token only while the tenant's enrollment permission is enabled, living for the platform-wide lifetime. The plaintext is returned once.</summary>
     public async Task<CreateEnrollmentTokenResult> CreateTokenAsync(
-        TenantId tenantId, UserId createdBy, TimeSpan? lifetime, CancellationToken cancellationToken)
+        TenantId tenantId, UserId createdBy, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(tenantId);
         ArgumentNullException.ThrowIfNull(createdBy);
-        var effective = lifetime ?? options.DefaultEnrollmentTokenLifetime;
-        if (effective < options.MinimumEnrollmentTokenLifetime || effective > options.MaximumEnrollmentTokenLifetime)
-        {
-            return new CreateEnrollmentTokenResult(CreateEnrollmentTokenStatus.InvalidLifetime, null);
-        }
         var policy = await store.GetPolicyAsync(tenantId, cancellationToken).ConfigureAwait(false);
         if (policy is not { IsEnabled: true })
         {
             return new CreateEnrollmentTokenResult(CreateEnrollmentTokenStatus.EnrollmentDisabled, null);
         }
-        var issued = EnrollmentToken.Issue(tenantId, createdBy, timeProvider.GetUtcNow(), effective);
+        var lifetime = await settings.GetTokenLifetimeAsync(cancellationToken).ConfigureAwait(false);
+        var issued = EnrollmentToken.Issue(tenantId, createdBy, timeProvider.GetUtcNow(), lifetime);
         await store.AddTokenAsync(issued.Token, cancellationToken).ConfigureAwait(false);
         return new CreateEnrollmentTokenResult(CreateEnrollmentTokenStatus.Created, issued);
     }

@@ -282,10 +282,18 @@ internal sealed class AgentWorld : IAsyncDisposable
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
-    public async Task<(Guid TokenId, string Token)> CreateTokenAsync(TenantSetup setup, int? lifetimeMinutes = null)
+    public async Task SetAgentSettingsAsync(string? serverUrl, int lifetimeMinutes)
     {
-        using var response = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/tenants/{setup.Tenant.Id.Value}/agent-enrollment-tokens",
-            lifetimeMinutes is null ? null : new { lifetimeMinutes });
+        var platformAdmin = await SeedUserAsync(platformAdmin: true);
+        var session = await SignInAsync(platformAdmin);
+        using var response = await session.SendAsync(HttpMethod.Put, "/api/platform/agent-settings",
+            new { serverUrl, enrollmentTokenLifetimeMinutes = lifetimeMinutes });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    public async Task<(Guid TokenId, string Token)> CreateTokenAsync(TenantSetup setup)
+    {
+        using var response = await setup.Admin.SendAsync(HttpMethod.Post, $"/api/tenants/{setup.Tenant.Id.Value}/agent-enrollment-tokens");
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var json = ReadJson(response);
         return (json.GetProperty("tokenId").GetGuid(), json.GetProperty("token").GetString()!);

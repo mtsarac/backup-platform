@@ -6,6 +6,7 @@ export const platformPaths = {
   storage: '/platform/storage',
   storageConnections: '/platform/storage/connections',
   notificationTransports: '/platform/notification-transports',
+  agentSettings: '/platform/agent-settings',
   quotaPolicies: '/platform/quota-policies',
   supportSessions: '/platform/support-sessions',
   supportSession: (sessionId: string) => `/platform/support-sessions/${encodeURIComponent(sessionId)}`,

@@ -66,8 +66,8 @@ def fixture():
         "configuration": {"endpoint": f"https://{api.env['PUBLIC_HOST']}:9000", "bucket": "authz-none", "region": "us-east-1"},
         "secret": {"accessKey": "AUTHZACCESSKEY", "secretKey": secrets.token_urlsafe(24)}})
     chan = t.call("POST", "/notifications/channels", {"kind": "webhook", "name": f"e2e-authz-hook {uuid.uuid4().hex[:6]}", "target": f"https://example.invalid/e2e-authz-{uuid.uuid4().hex[:8]}"})
-    tok = t.call("POST", "/agent-enrollment-tokens", {"lifetimeMinutes": 60})
-    synth_tok = t.call("POST", "/agent-enrollment-tokens", {"lifetimeMinutes": 60})
+    tok = t.call("POST", "/agent-enrollment-tokens")
+    synth_tok = t.call("POST", "/agent-enrollment-tokens")
     host = f"e2e-authz-synth-{uuid.uuid4().hex[:6]}"
     r = enroll(synth_tok["token"], host); check(r.status_code == 201, f"synthetic enroll {r.status_code} {r.text[:200]}")
     inst = t.call("GET", "/discovery/instances")["items"][0]["id"]
@@ -190,7 +190,7 @@ def role_matrix():
         ("agents", "POST", f"/agents/{g}/database-logins", {"userName": "u", "password": "p"}, O), ("agents", "GET", "/discovery/instances", None, V),
         ("agents", "PUT", f"/discovery/agents/{g}/settings", {}, A),
         ("enrollment", "GET", "/agent-enrollment", None, A), ("enrollment", "PUT", "/agent-enrollment", {"enabled": True}, A),
-        ("enrollment", "POST", "/agent-enrollment-tokens", {"lifetimeMinutes": 5}, A), ("enrollment", "GET", "/agent-enrollment-tokens", None, A),
+        ("enrollment", "POST", "/agent-enrollment-tokens", None, A), ("enrollment", "GET", "/agent-enrollment-tokens", None, A),
         ("enrollment", "DELETE", f"/agent-enrollment-tokens/{g}", None, A),
         ("connections", "GET", "/storage-connections", None, V), ("connections", "GET", f"/storage-connections/{g}", None, V), ("connections", "POST", "/storage-connections", {}, A),
         ("connections", "PUT", f"/storage-connections/{g}", {}, A), ("connections", "DELETE", f"/storage-connections/{g}", None, A),
@@ -223,7 +223,8 @@ PLATFORM_ROUTES = [("GET", "/api/platform/users"), ("POST", "/api/platform/users
                    ("GET", "/api/platform/plans"), ("PUT", f"/api/platform/tenants/{TA}/agent-enrollment"), ("GET", "/api/platform/notification-transports"),
                    ("PUT", "/api/platform/notification-transports/email"), ("GET", "/api/platform/storage-connections"), ("GET", "/api/platform/quota-policies"),
                    ("GET", f"/api/platform/tenants/{TA}/quota"), ("GET", f"/api/platform/tenants/{TA}/wrap-keys"), ("GET", "/api/platform/artifact-break-glass"),
-                   ("POST", "/api/platform/agent-updates"), ("PUT", f"/api/platform/tenants/{TA}/subscription")]
+                   ("POST", "/api/platform/agent-updates"), ("PUT", f"/api/platform/tenants/{TA}/subscription"),
+                   ("GET", "/api/platform/agent-settings"), ("PUT", "/api/platform/agent-settings")]
 
 
 def make_user(prefix):
@@ -386,7 +387,7 @@ SYNTH_AGENTS = []
 
 @scenario("enroll/1.4 token is single use; invalid request does not burn it")
 def enroll_single_use():
-    t = F["t"]; tok = t.call("POST", "/agent-enrollment-tokens", {"lifetimeMinutes": 30}); host = f"e2e-synth-{uuid.uuid4().hex[:6]}"
+    t = F["t"]; tok = t.call("POST", "/agent-enrollment-tokens"); host = f"e2e-synth-{uuid.uuid4().hex[:6]}"
     bad = enroll(tok["token"], host, platform="Plan9"); check(bad.status_code == 400 and err(bad) == "invalid_request", f"bad platform -> {bad.status_code} {bad.text[:100]}")
     check(token_state(t, tok["tokenId"])[1] == "Active", "token consumed by an invalid request")
     r = enroll(tok["token"], host); check(r.status_code == 201, f"first enroll {r.status_code} {r.text[:150]}"); aid = r.json()["agentId"]; SYNTH_AGENTS.append(aid)
@@ -402,7 +403,7 @@ def enroll_single_use():
 
 @scenario("enroll/1.4 revoked token cannot enroll; malformed and unknown tokens indistinguishable")
 def enroll_revocation():
-    t = F["t"]; tok = t.call("POST", "/agent-enrollment-tokens", {"lifetimeMinutes": 30})
+    t = F["t"]; tok = t.call("POST", "/agent-enrollment-tokens")
     check(t.raw("DELETE", f"/agent-enrollment-tokens/{tok['tokenId']}").status_code == 204, "revoke failed")
     r = enroll(tok["token"], "e2e-synth-revoked"); check(r.status_code == 401, f"revoked token enrolled: {r.status_code} {r.text[:150]}")
     revoked_err = err(r)
@@ -418,7 +419,7 @@ def enroll_revocation():
 
 @scenario("enroll/1.4 token is bound to its tenant; other tenant cannot see/revoke it")
 def enroll_tenant_binding():
-    t, tb = F["t"], F["tb"]; tok = t.call("POST", "/agent-enrollment-tokens", {"lifetimeMinutes": 30}); host = f"e2e-synth-bind-{uuid.uuid4().hex[:6]}"
+    t, tb = F["t"], F["tb"]; tok = t.call("POST", "/agent-enrollment-tokens"); host = f"e2e-synth-bind-{uuid.uuid4().hex[:6]}"
     check(tb.raw("DELETE", f"/agent-enrollment-tokens/{tok['tokenId']}").status_code == 404, "tenant B could revoke A's token")
     check(tb.raw("GET", f"/agent-enrollment-tokens/{tok['tokenId']}").status_code == 404, "tenant B could read A's token")
     check(tok["tokenId"] not in json.dumps(tb.call("GET", "/agent-enrollment-tokens")), "A's token listed for B")
@@ -434,7 +435,7 @@ def enroll_tenant_binding():
 def enroll_disabled():
     tb = F["tb"]; tok = None
     try:
-        tok = tb.call("POST", "/agent-enrollment-tokens", {"lifetimeMinutes": 30})
+        tok = tb.call("POST", "/agent-enrollment-tokens")
         tb.call("PUT", "/agent-enrollment", {"enabled": False})
         r = tb.raw("POST", "/agent-enrollment-tokens", {}); check(r.status_code == 403 and r.json().get("error") == "enrollment_disabled", f"token create while disabled {r.status_code} {r.text[:120]}")
         e = enroll(tok["token"], "e2e-synth-disabled"); check(e.status_code == 403 and err(e) == "enrollment_disabled", f"enroll while disabled {e.status_code} {e.text[:150]}")
@@ -449,15 +450,16 @@ def enroll_disabled():
 
 @scenario("enroll/1.4 lifetime bounds enforced (min 5 min, max 7 days)")
 def enroll_lifetime_bounds():
-    t = F["t"]; res = {}
+    P = platform(); res = {}
     for m in (-5, 0, 1, 4, 10081, 100000):
-        r = t.raw("POST", "/agent-enrollment-tokens", {"lifetimeMinutes": m}); res[m] = r.status_code
-        if r.status_code == 201: t.raw("DELETE", f"/agent-enrollment-tokens/{r.json()['tokenId']}")
+        r = call(P, "PUT", "/api/platform/agent-settings", {"serverUrl": None, "enrollmentTokenLifetimeMinutes": m})
+        res[m] = r.status_code
     check(all(res[m] == 400 for m in (-5, 0, 1, 4, 10081, 100000)), f"out-of-range lifetimes accepted: {res}")
     for m in (5, 10080):
-        r = t.raw("POST", "/agent-enrollment-tokens", {"lifetimeMinutes": m}); res[m] = r.status_code
-        if r.status_code == 201: t.raw("DELETE", f"/agent-enrollment-tokens/{r.json()['tokenId']}")
-    check(res[5] == 201 and res[10080] == 201, f"boundary lifetimes rejected: {res}")
+        r = call(P, "PUT", "/api/platform/agent-settings", {"serverUrl": None, "enrollmentTokenLifetimeMinutes": m})
+        res[m] = r.status_code
+    check(res[5] == 200 and res[10080] == 200, f"boundary lifetimes rejected: {res}")
+    call(P, "PUT", "/api/platform/agent-settings", {"serverUrl": None, "enrollmentTokenLifetimeMinutes": 1440})
     return {"status_by_minutes": res}
 
 
@@ -468,7 +470,9 @@ def expiry_worker():
     """Started in the background at the beginning of the run; a 5 minute token needs 5+ minutes to expire."""
     @scenario("enroll/1.4 expired token is refused (5 min lifetime)")
     def body():
-        t = F["t"]; tok = t.call("POST", "/agent-enrollment-tokens", {"lifetimeMinutes": TOKEN_LIFETIME_MIN})
+        P = platform(); t = F["t"]
+        call(P, "PUT", "/api/platform/agent-settings", {"serverUrl": None, "enrollmentTokenLifetimeMinutes": TOKEN_LIFETIME_MIN})
+        tok = t.call("POST", "/agent-enrollment-tokens")
         early = enroll(tok["token"], "x", platform="Plan9"); check(early.status_code == 400, f"token not accepted before expiry: {early.status_code}")
         left = (TOKEN_LIFETIME_MIN * 60) + 8
         time.sleep(left)

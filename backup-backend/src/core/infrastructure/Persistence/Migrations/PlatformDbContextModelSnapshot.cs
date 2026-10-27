@@ -257,6 +257,32 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BackupPlatform.Agents.Enrollment.PlatformAgentSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EnrollmentTokenLifetimeMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ServerUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("platform_agent_settings", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_platform_agent_settings_singleton", "\"Id\" = 1");
+                        });
+                });
+
             modelBuilder.Entity("BackupPlatform.Agents.Enrollment.TenantAgentEnrollmentPolicy", b =>
                 {
                     b.Property<Guid>("TenantId")

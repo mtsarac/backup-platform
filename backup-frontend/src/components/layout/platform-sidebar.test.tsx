@@ -34,7 +34,7 @@ describe('Platform sidebar', () => {
       ['Acil destek erişimi', '/platform/break-glass'],
       ['Denetim kaydı', '/platform/audit'],
     ])
-    expect(links('Ayarlar')).toEqual([['Bildirim altyapısı', '/platform/notification-transports']])
+    expect(links('Ayarlar')).toEqual([['Bildirim altyapısı', '/platform/notification-transports'], ['Yedekleme bilgisayarı ayarları', '/platform/agent-settings']])
     expect(within(nav()).getByRole('link', { name: 'Çalışma alanı arayüzüne dön' })).toHaveAttribute('href', '/')
   })
 
@@ -47,7 +47,7 @@ describe('Platform sidebar', () => {
     expect(links('Customers').map(([label]) => label)).toEqual(['Workspaces', 'Users', 'Plans'])
     expect(links('Infrastructure').map(([label]) => label)).toEqual(['Backup computers', 'Storage', 'Quota policies'])
     expect(links('Security and support').map(([label]) => label)).toEqual(['Support sessions', 'Emergency support access', 'Audit log'])
-    expect(links('Settings').map(([label]) => label)).toEqual(['Notification infrastructure'])
+    expect(links('Settings').map(([label]) => label)).toEqual(['Notification infrastructure', 'Backup computer settings'])
     expect(labels().join(' ')).not.toMatch(/break-glass|agent\b/i)
   })
 
@@ -55,7 +55,7 @@ describe('Platform sidebar', () => {
     render(<MemoryRouter><PlatformSidebar /></MemoryRouter>)
     const routes = createRoutesFromChildren(platformRoutes)
     const targets = within(nav()).getAllByRole('link').map((link) => link.getAttribute('href')!).filter((href) => href.startsWith('/platform'))
-    expect(targets).toHaveLength(11)
+    expect(targets).toHaveLength(12)
     for (const href of targets) expect(matchRoutes(routes, href.slice('/platform'.length) || '/')?.at(-1)?.route.path, href).not.toBe('*')
   })
 

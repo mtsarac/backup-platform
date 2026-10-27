@@ -1,3 +1,5 @@
+using BackupPlatform.Agents.Enrollment;
+
 namespace BackupPlatform.Api.Endpoints;
 
 public static class AgentDistributionEndpoints
@@ -8,9 +10,9 @@ public static class AgentDistributionEndpoints
         dist.MapMethods("/install.ps1", ["GET", "HEAD"], () => Installer("install.ps1"));
         dist.MapMethods("/install.sh", ["GET", "HEAD"], () => Installer("install.sh"));
         dist.MapMethods("/packages/{platform}", ["GET", "HEAD"], GetPackage);
-        dist.MapGet("/status", (IConfiguration configuration) => Results.Ok(new
+        dist.MapGet("/status", async (IConfiguration configuration, PlatformAgentSettingsService settings, CancellationToken cancellationToken) => Results.Ok(new
         {
-            serverUrl = PublicBaseUrl(configuration),
+            serverUrl = await settings.GetServerUrlAsync(cancellationToken) ?? PublicBaseUrl(configuration),
             packages = new Dictionary<string, bool>
             {
                 ["win-x64"] = PackagePath("win-x64", configuration) is not null,
@@ -46,11 +48,6 @@ public static class AgentDistributionEndpoints
         return File.Exists(path) && new FileInfo(path).Length > 0 ? path : null;
     }
 
-    private static string? PublicBaseUrl(IConfiguration configuration)
-    {
-        var value = configuration["AgentDistribution:PublicBaseUrl"];
-        return Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps
-            && uri.Host.Length > 0 && uri.UserInfo.Length == 0 && uri.Query.Length == 0 && uri.Fragment.Length == 0
-            ? uri.AbsoluteUri.TrimEnd('/') : null;
-    }
+    private static string? PublicBaseUrl(IConfiguration configuration) =>
+        AgentServerUrl.TryNormalize(configuration["AgentDistribution:PublicBaseUrl"], out var normalized) ? normalized : null;
 }

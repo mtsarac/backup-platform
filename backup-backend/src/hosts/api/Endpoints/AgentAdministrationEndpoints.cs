@@ -12,8 +12,12 @@ namespace BackupPlatform.Api.Endpoints;
 
 public sealed class CreateEnrollmentTokenRequest
 {
-    /// <summary>Optional token lifetime in minutes; the service default applies when omitted.</summary>
-    public int? LifetimeMinutes { get; init; }
+}
+
+public sealed class UpdatePlatformAgentSettingsRequest
+{
+    public string? ServerUrl { get; init; }
+    public int EnrollmentTokenLifetimeMinutes { get; init; }
 }
 
 public sealed class SetAgentEnrollmentRequest
@@ -34,6 +38,11 @@ public static class AgentAdministrationEndpoints
             .RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
         platform.MapGet("", GetPolicyAsync);
         platform.MapPut("", SetPlatformPolicyAsync);
+
+        var settings = endpoints.MapGroup("/api/platform/agent-settings")
+            .RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
+        settings.MapGet("", GetAgentSettingsAsync);
+        settings.MapPut("", UpdateAgentSettingsAsync);
 
         var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}")
             .WithMetadata(new TenantScopedEndpoint());
@@ -77,13 +86,10 @@ public static class AgentAdministrationEndpoints
     }
 
     private static async Task<IResult> CreateTokenAsync(
-        CreateEnrollmentTokenRequest? request, ITenantContext tenantContext, ICurrentUser currentUser,
+        ITenantContext tenantContext, ICurrentUser currentUser,
         EnrollmentAdministrationService service, CancellationToken cancellationToken)
     {
-        var lifetime = request?.LifetimeMinutes is { } minutes
-            ? TimeSpan.FromMinutes(Math.Clamp(minutes, 0, (int)TimeSpan.FromDays(3650).TotalMinutes))
-            : (TimeSpan?)null;
-        var result = await service.CreateTokenAsync(tenantContext.TenantId!, currentUser.UserId!, lifetime, cancellationToken);
+        var result = await service.CreateTokenAsync(tenantContext.TenantId!, currentUser.UserId!, cancellationToken);
         return result.Status switch
         {
             CreateEnrollmentTokenStatus.Created => Results.Json(new
@@ -94,9 +100,44 @@ public static class AgentAdministrationEndpoints
             }, statusCode: StatusCodes.Status201Created),
             CreateEnrollmentTokenStatus.EnrollmentDisabled => Results.Json(
                 new { error = "enrollment_disabled", message = "Agent enrollment is not enabled for this tenant." }, statusCode: StatusCodes.Status403Forbidden),
-            _ => Results.Json(new { error = "The requested token lifetime is outside the allowed range." }, statusCode: StatusCodes.Status400BadRequest)
+            _ => Results.BadRequest()
         };
     }
+
+    private static async Task<IResult> GetAgentSettingsAsync(PlatformAgentSettingsService service, CancellationToken cancellationToken)
+    {
+        var view = await service.GetAsync(cancellationToken);
+        return Results.Ok(ToAgentSettingsResponse(view));
+    }
+
+    private static async Task<IResult> UpdateAgentSettingsAsync(
+        UpdatePlatformAgentSettingsRequest? request, ICurrentUser currentUser, PlatformAgentSettingsService service, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            return Results.BadRequest(new { error = "invalid_request" });
+        }
+        var result = await service.SaveAsync(request.ServerUrl, request.EnrollmentTokenLifetimeMinutes, currentUser.UserId!, cancellationToken);
+        return result.Status switch
+        {
+            SavePlatformAgentSettingsStatus.Saved => Results.Ok(ToAgentSettingsResponse(result.Settings!)),
+            SavePlatformAgentSettingsStatus.InvalidServerUrl => Results.BadRequest(new { error = "invalid_server_url" }),
+            SavePlatformAgentSettingsStatus.InvalidLifetime => Results.BadRequest(new { error = "invalid_lifetime" }),
+            _ => Results.BadRequest(new { error = "invalid_request" })
+        };
+    }
+
+    private static object ToAgentSettingsResponse(PlatformAgentSettingsView view) => new
+    {
+        serverUrl = view.ServerUrl,
+        enrollmentTokenLifetimeMinutes = view.EnrollmentTokenLifetimeMinutes,
+        limits = new
+        {
+            minMinutes = view.MinimumMinutes,
+            maxMinutes = view.MaximumMinutes
+        },
+        updatedAt = view.UpdatedAt
+    };
 
     private static async Task<IResult> ListTokensAsync(ITenantContext tenantContext, EnrollmentAdministrationService service, CancellationToken cancellationToken)
     {

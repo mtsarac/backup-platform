@@ -11,13 +11,6 @@ export function httpsServerOrigin(value: string): string {
   } catch { return '' }
 }
 
-export function suggestedServerOrigin(apiBase: string, currentOrigin: string): string {
-  try {
-    const url = new URL(apiBase, currentOrigin)
-    return url.username || url.password ? '' : httpsServerOrigin(url.origin)
-  } catch { return '' }
-}
-
 export function enrollmentCommands(platform: AgentPlatform, server: string, token: string, name: string, mode: InstallationMode = 'automatic', language: SupportedLanguage = 'tr'): string {
   const origin = httpsServerOrigin(server)
   if (!origin || (mode === 'automatic' && (!token || !name.trim()))) return ''

@@ -41,6 +41,7 @@ import { PlatformSupportSessionPage } from './pages/platform/platform-support-se
 import { SupportAccessPage } from './pages/support-access/support-access-page'
 import { NotificationsPage } from './pages/notifications/notifications-page'
 import { PlatformNotificationTransportsPage } from './pages/platform/platform-notification-transports-page'
+import { PlatformAgentSettingsPage } from './pages/platform/platform-agent-settings-page'
 import { PlatformBreakGlassPage } from './pages/platform/platform-break-glass-page'
 import { PlatformBreakGlassDetailPage } from './pages/platform/platform-break-glass-detail-page'
 import { EncryptionPage } from './pages/encryption/encryption-page'
@@ -100,5 +101,6 @@ export const platformRoutes = <>
   <Route path="break-glass" element={<PlatformBreakGlassPage />} />
   <Route path="break-glass/:requestId" element={<PlatformBreakGlassDetailPage />} />
   <Route path="notification-transports" element={<PlatformNotificationTransportsPage />} />
+  <Route path="agent-settings" element={<PlatformAgentSettingsPage />} />
   <Route path="*" element={<NotFound />} />
 </>
