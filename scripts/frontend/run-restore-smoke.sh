@@ -22,9 +22,15 @@ target_database="bp_m5_target_$suffix"
 stack_pid='' agent_pid=''
 cleanup_smoke() {
     local result=0
-    if [[ ${1:-0} != 0 && -f "$work/agent.log" ]]; then
-        printf 'Restore smoke Agent diagnostic (redacted):\n' >&2
-        run_redacted cat "$work/agent.log" >&2
+    if [[ ${1:-0} != 0 ]]; then
+        local evidence
+        evidence=$(mktemp -d "${TMPDIR:-/tmp}/bp-restore-diagnostics.XXXXXXXX")
+        [[ ! -f "$work/agent.log" ]] || run_redacted cat "$work/agent.log" >"$evidence/agent.log"
+        [[ ! -f "$work/stack.log" ]] || run_redacted cat "$work/stack.log" >"$evidence/stack.log"
+        if [[ -n ${state:-} && -f "$(dirname "$state")/backup-diagnostic.json" ]]; then
+            cp -- "$(dirname "$state")/backup-diagnostic.json" "$evidence/backup-diagnostic.json"
+        fi
+        printf 'SMOKE_FAILURE_EVIDENCE_DIRECTORY=%s\n' "$evidence" >&2
     fi
     for pid in "$agent_pid" "$stack_pid"; do [[ -z $pid ]] || kill "$pid" 2>/dev/null || true; done
     for pid in "$agent_pid" "$stack_pid"; do [[ -z $pid ]] || wait "$pid" 2>/dev/null || true; done

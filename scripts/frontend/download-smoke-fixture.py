@@ -57,6 +57,21 @@ def setup(options):
     print(json.dumps({'tenantId': tenant_id, 'tenantScope': state['tenantScope'], 'ownerLogin': owner['login']}))
 
 
+def backup_diagnostic(options, api, path, job_id, run_id, agent_id, detail):
+    if not detail:
+        _, detail = api.call('GET', path + f'/backup-runs/{run_id}')
+    fields = ('id', 'jobId', 'agentId', 'status', 'currentAttemptNumber', 'createdAt', 'startedAt',
+              'completedAt', 'reasonCode', 'progressStage', 'progressPercent', 'progressAt', 'retryable')
+    snapshot = {key: detail[key] for key in fields if key in detail}
+    snapshot.update(jobId=job_id, runId=run_id, agentId=agent_id)
+    snapshot['attempts'] = [{key: attempt[key] for key in fields if key in attempt}
+                            for attempt in detail.get('attempts', [])]
+    _, agent = api.call('GET', path + f'/agents/{agent_id}')
+    snapshot['agent'] = {key: agent[key] for key in ('status', 'connectivity', 'lastSeenAt', 'lastHeartbeatAt') if key in agent}
+    shared.write_private(str(Path(options.state).with_name('backup-diagnostic.json')), snapshot)
+    print(json.dumps({'backupDiagnostic': snapshot}), flush=True)
+
+
 def backup(options):
     state, api = tenant_api(options)
     path = f'/api/tenants/{state["tenantId"]}'
@@ -70,11 +85,13 @@ def backup(options):
             agent_id = agent.get('agentId', agent.get('id'))
             _, detail = api.call('GET', path + f'/agents/{agent_id}')
             caps = detail.get('capabilities', [])
-            if any(c.get('identifier') == 'core.backup.multi-destination' and c.get('support') == 'Supported' for c in caps):
+            if any(c.get('identifier') == 'backup.multi-destination' and c.get('support') == 'Supported' for c in caps):
                 break
         time.sleep(1)
-    if agent is None:
-        raise FixtureFailure('Actual enrolled Agent was not found.')
+    else:
+        if agent is None:
+            raise FixtureFailure('Actual enrolled Agent was not found.')
+        raise FixtureFailure('Actual Agent multi-destination capability was not ready before the timeout.')
     agent_id = agent.get('agentId', agent.get('id'))
     configuration = {'engine': 'mssql', 'host': options.sql_host, 'port': options.sql_port, 'database': options.database,
                      'databaseCredentialReference': shared.store_sql_login(api, path, agent_id, options.sql_login_file), 'trustServerCertificate': True,
@@ -98,6 +115,10 @@ def backup(options):
     run_id = run.get('id', run.get('run', {}).get('id'))
     if not run_id:
         raise FixtureFailure('Backup API returned no run identifier.')
+    state['pendingBackup'] = {'jobId': job['id'], 'runId': run_id, 'agentId': agent_id}
+    shared.write_private(options.state, state)
+    detail = {}
+    deadline = time.monotonic() + options.timeout
     while time.monotonic() < deadline:
         _, detail = api.call('GET', path + f'/backup-runs/{run_id}')
         status = detail['status']
@@ -120,9 +141,11 @@ def backup(options):
             print(json.dumps({'provider': options.provider, **state['artifacts'][options.provider]}))
             return
         if status in ('Failed', 'Cancelled', 'AgentLost', 'Skipped'):
-            codes = [attempt.get('failureCode') for attempt in detail.get('attempts', [])]
+            backup_diagnostic(options, api, path, job['id'], run_id, agent_id, detail)
+            codes = [attempt.get('reasonCode') for attempt in detail.get('attempts', [])]
             raise FixtureFailure(f'Real backup ended as {status} ({codes}).')
         time.sleep(1)
+    backup_diagnostic(options, api, path, job['id'], run_id, agent_id, detail)
     raise FixtureFailure('Actual MSSQL backup timed out.')
 
 
