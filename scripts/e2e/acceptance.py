@@ -1,7 +1,7 @@
-"""The acceptance scenario in one command: agent enrollment, a denied role, then the 27-cell matrix (3 engines/hosts x local/sftp/s3 x encryption Off/Optional/Required).
+"""The acceptance scenario in one command: agent enrollment, a denied role, agent mTLS, Central storage, break-glass approve + decrypt, then the 27-cell matrix (3 engines/hosts x local/sftp/s3 x encryption Off/Optional/Required).
 Every check is one PASS/FAIL row in results.jsonl; nothing is retried. Run: python3 acceptance.py [filter]"""
 import secrets, sys, uuid, requests
-import api, lib, matrix
+import api, lib, matrix, mtls, central, breakglass
 from lib import scenario
 
 BASE = api.BASE
@@ -52,6 +52,9 @@ def role_denied():
 
 if __name__ == "__main__":
     only = sys.argv[1] if len(sys.argv) > 1 else None
+    t = lib.Tenant("a")
     for fn in (enrollment, role_denied):
         if not only or only in fn.scenario: fn()
+    for fn in (mtls.mtls, central.central, breakglass.break_glass):
+        if not only or only in fn.scenario: fn(t)
     matrix.main(only)
