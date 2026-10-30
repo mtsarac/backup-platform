@@ -1,7 +1,7 @@
 import { tx } from '@/lib/i18n'
+import { Select } from '@/components/ui/text-input'
 import { CheckField } from '@/components/ui/check-field'
 import { Field } from '@/components/ui/field'
-import { selectClass } from '@/components/ui/form-styles'
 import { TextInput } from '@/components/ui/text-input'
 
 export type FieldErrors = Record<string, string>
@@ -18,6 +18,6 @@ export function fieldKit(errors: FieldErrors) {
     check: (label: string, value: boolean, onChange: (value: boolean) => void, disabled = false) =>
       <CheckField label={tx(label)} checked={value} disabled={disabled} onChange={event => onChange(event.target.checked)} />,
     select: (name: string, label: string, value: string, options: readonly (readonly [string, string])[], onChange: (value: string) => void) =>
-      <Field id={name} label={label} error={error(name)}>{control => <select {...control} className={`${selectClass} w-full min-w-0`} value={value} onChange={event => onChange(event.target.value)}>{options.map(([key, text]) => <option key={key} value={key}>{text}</option>)}</select>}</Field>,
+      <Field id={name} label={label} error={error(name)}>{control => <Select {...control} value={value} onChange={event => onChange(event.target.value)}>{options.map(([key, text]) => <option key={key} value={key}>{text}</option>)}</Select>}</Field>,
   }
 }

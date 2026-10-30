@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { tx, useLanguage } from '@/lib/i18n'
 import { StatusPill } from '@/components/data/status-pill'
-import { Section } from '@/components/ui/section'
+import { Section, Fact, Facts } from '@/components/ui/section'
 import type { StatusLevel } from '@/lib/status'
 import { formatDateTime } from '@/lib/format'
 import { deletionInProgress } from './format'
@@ -42,11 +42,8 @@ export function ArtifactAnswers({ artifact, canOperate, now }: { artifact: Backu
   ]
   if (!deletionInProgress(artifact) && artifact.state !== 'DeletePending') answers.push([tx('Ne zaman silinecek?'), deletion(artifact, now)])
   return <Section title={tx('Kısaca durum')}>
-    <dl className="grid gap-5 md:grid-cols-3">
-      {answers.map(([question, { level, label, text }]) => <div key={question} className="min-w-0 space-y-1.5">
-        <dt className="text-sm text-text-muted">{question}</dt>
-        <dd className="space-y-1.5"><StatusPill level={level}>{label}</StatusPill>{text && <p className="text-sm text-text">{text}</p>}</dd>
-      </div>)}
-    </dl>
+    <Facts columns={3}>
+      {answers.map(([question, { level, label, text }]) => <Fact key={question} label={question}><span className="block space-y-1.5"><StatusPill level={level}>{label}</StatusPill>{text && <span className="block text-sm text-text">{text}</span>}</span></Fact>)}
+    </Facts>
   </Section>
 }

@@ -1,9 +1,9 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { Select } from '@/components/ui/text-input'
 import { CheckCircle2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Section } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
-import { selectClass } from '@/components/ui/form-styles'
 import type { RestoreTargetAgent, RestoreTargetsResponse } from './types'
 import { failureMessage } from '@/lib/api/failure-messages'
 import { statusLabel } from '@/lib/status'
@@ -28,9 +28,8 @@ export function RestoreSourceStep({ instancePrefix, engineName, targets, activeA
       <Section title={tx("Hangi yedekleme bilgisayarı geri yüklesin?")} description={tx("Neden soruluyor? Yedek dosyasını alıp {0} sunucusuna aktaracak yedekleme bilgisayarını seçmeniz gerekir.", { "0": engineName })}>
         <div className="space-y-3">
           <label htmlFor={`${instancePrefix}-agent`} className="block text-sm font-medium">{tx("Yedekleme bilgisayarı")}</label>
-          <select
+          <Select
             id={`${instancePrefix}-agent`}
-            className={`${selectClass} w-full`}
             value={selectedAgentId}
             onChange={(e) => { invalidateDiscovery(); setSelectedAgentId(e.target.value) }}
           >
@@ -39,7 +38,7 @@ export function RestoreSourceStep({ instancePrefix, engineName, targets, activeA
                 {ag.hostName ?? ag.agentId} ({statusLabel('agent', ag.connectivity)}) — {ag.canRestore ? tx('Geri yüklemeyi destekliyor') : tx('Geri yükleme desteği yok')}
               </option>
             ))}
-          </select>
+          </Select>
 
           {activeAgent && (
             <div className={`rounded-md p-3 text-sm ${activeAgent.sourceEligible && activeAgent.canRestore ? 'bg-success-subtle text-success' : 'bg-error-subtle text-error'}`}>
