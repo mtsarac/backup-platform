@@ -14,8 +14,9 @@ import { TechnicalDetails } from '@/components/ui/technical-details'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { activeSecretFields, buildConfiguration, configurationComplete, editableConfigFields, initialFieldValues, providerPayload, secretsComplete } from './descriptor-values'
 import type { FieldValues } from './descriptor-values'
-import { openGoogleOAuthPopup } from './google-oauth'
-import { useCreateTenantConnection, useGoogleDriveConnect, useTenantConnectionOps, useTenantConnections, useTenantProviders } from './hooks'
+import { GoogleOAuthNotice } from './google-oauth-flow'
+import { useGoogleOAuth } from './use-google-oauth'
+import { useCreateTenantConnection, useTenantConnectionOps, useTenantConnections, useTenantProviders } from './hooks'
 import { CapabilityChips } from './connection-parts'
 import { connectionPath } from '@/lib/routes'
 import { errorField, executionLocationLabel, tenantCreateState, testMessage, testModeLabel, topologyLabel, configurationSummary } from './labels'
@@ -93,7 +94,7 @@ function ConnectionWizardForm() {
   const connections = useTenantConnections()
   const ops = useTenantConnectionOps()
   const create = useCreateTenantConnection()
-  const googleConnect = useGoogleDriveConnect()
+  const { start: authorizeGoogle, connect: googleConnect, outcome: googleOutcome } = useGoogleOAuth(ops)
   const reset = create.reset
   useEffect(() => reset, [reset])
 
@@ -151,10 +152,6 @@ function ConnectionWizardForm() {
     })
   }
 
-  function authorizeGoogle(connection: ConnectionView) {
-    googleConnect.mutate({ tenantId: connection.tenantId, connectionId: connection.id }, { onSuccess: ({ authorizationUrl }) => openGoogleOAuthPopup(authorizationUrl, () => ops.test.mutate(connection)) })
-  }
-
   const crumbs = [{ label: tx('Depolama'), to: storage }, { label: tx('Bağlantı ekle') }]
 
   if (created) {
@@ -167,6 +164,7 @@ function ConnectionWizardForm() {
         <div className="space-y-4">
           {google && !test && !testing && <Notice tone="info" title={tx("Google hesabını yetkilendirin")}>{tx("Hesap izni verilmeden bağlantı kullanılamaz. Düğmeye bastığınızda Google penceresi açılır; izin verdikten sonra bağlantı otomatik test edilir.")}</Notice>}
           {Boolean(googleConnect.error) && <ErrorNotice title={tx("Google yetkilendirmesi başlatılamadı")} error={googleConnect.error} scope="storageConnection" />}
+          <GoogleOAuthNotice outcome={googleOutcome} />
           {testing && <Notice tone="info" title={tx("Bağlantı test ediliyor…")}>{tx("Küçük bir test dosyası yazılıp okunur ve silinir; mevcut yedekleriniz değişmez.")}</Notice>}
           {Boolean(ops.test.error) && !testing && <ErrorNotice title={tx("Test tamamlanamadı")} error={ops.test.error} scope="storageConnection" />}
           {test?.status === 'Succeeded' && <Notice tone="success" title={tx("Bağlantı çalışıyor")}>{testMessage(test)}</Notice>}
