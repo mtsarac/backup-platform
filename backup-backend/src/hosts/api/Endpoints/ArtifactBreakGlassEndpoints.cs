@@ -38,6 +38,7 @@ public static class ArtifactBreakGlassEndpoints
         var group = endpoints.MapGroup("/api/platform/artifact-break-glass").RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
         group.MapPost("", OpenAsync);
         group.MapGet("", ListAsync);
+        group.MapGet("/artifacts", ArtifactsAsync);
         group.MapGet("/{requestId:guid}", GetAsync);
         group.MapPost("/{requestId:guid}/approve", ApproveAsync);
         group.MapPost("/{requestId:guid}/deny", DenyAsync);
@@ -110,6 +111,22 @@ public static class ArtifactBreakGlassEndpoints
         }
         var result = await service.ListAsync(tenantId is { } id && id != Guid.Empty ? new TenantId(id) : null, parsed, mine == true ? user.UserId : null, p, size, cancellationToken);
         return Results.Ok(new { items = result.Items.Select(row => service.ToView(row, user.UserId!)).ToList(), totalCount = result.TotalCount, page = result.Page, pageSize = result.PageSize });
+    }
+
+    /// <summary>
+    /// What the request dialog may pick from: the tenant's available ENCRYPTED backups, named by database and job only. Break-glass is its own PlatformAdmin-gated, dual-control,
+    /// audited path, so this does not ride on a support session (a flagged-off feature); no checksum, replica or storage detail is returned.
+    /// </summary>
+    private static async Task<IResult> ArtifactsAsync(Guid? tenantId, int? page, int? pageSize, BackupArtifactService artifacts, CancellationToken cancellationToken)
+    {
+        if (tenantId is not { } tenant || tenant == Guid.Empty) return Invalid("tenantId", "required");
+        if (!TryPaging(page, pageSize, out var p, out var size)) return Invalid("page", "invalid_value");
+        var result = await artifacts.QueryAsync(new TenantId(tenant), new BackupArtifactQuery(State: "Available", Page: p, PageSize: size, EncryptedOnly: true), cancellationToken);
+        return Results.Ok(new
+        {
+            items = result.Items.Select(artifact => new { id = artifact.Id, databaseName = artifact.DatabaseName, jobName = artifact.JobName, createdAt = artifact.CreatedAt }).ToList(),
+            totalCount = result.TotalCount, page = result.Page, pageSize = result.PageSize
+        });
     }
 
     private static async Task<IResult> GetAsync(Guid requestId, ICurrentUser user, ArtifactBreakGlassService service, CancellationToken cancellationToken)

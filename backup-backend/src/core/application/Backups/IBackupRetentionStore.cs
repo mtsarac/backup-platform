@@ -10,7 +10,7 @@ public sealed record BackupArtifactRecord(BackupArtifact Artifact, Guid RunId, G
 
 /// <summary>Created-at bounds are inclusive UTC instants; pagination has no history cutoff.</summary>
 public sealed record BackupArtifactQuery(Guid? JobId = null, Guid? AgentId = null, string? State = null,
-    DateTimeOffset? From = null, DateTimeOffset? To = null, int Page = 1, int PageSize = 25);
+    DateTimeOffset? From = null, DateTimeOffset? To = null, int Page = 1, int PageSize = 25, bool EncryptedOnly = false);
 
 public sealed record BackupArtifactPage<T>(IReadOnlyList<T> Items, long TotalCount, int Page, int PageSize);
 

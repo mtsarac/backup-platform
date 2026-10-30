@@ -7,15 +7,10 @@ import { BreakGlassRequestDialog } from './break-glass-request-dialog'
 import { makeBreakGlass } from './test-fixtures'
 import { tx } from '@/lib/i18n'
 import * as platformApi from '@/features/platform/api'
-import * as supportApi from '@/features/platform/support/api'
-import * as artifactApi from '@/features/artifacts/api'
 import { paged } from '@/features/platform/test-utils'
-import { makeArtifact, makeSession } from '@/features/platform/support/test-fixtures'
 
 vi.mock('./api')
 vi.mock('@/features/platform/api')
-vi.mock('@/features/platform/support/api')
-vi.mock('@/features/artifacts/api')
 beforeEach(() => {
   vi.resetAllMocks()
   vi.mocked(platformApi.getTenants).mockResolvedValue(paged([
@@ -23,10 +18,7 @@ beforeEach(() => {
     { tenantId: 'tenant-other', name: 'Other company', memberCount: 0, agentCount: 0, enrollmentEnabled: false },
   ]))
   vi.mocked(platformApi.getTenant).mockResolvedValue({ tenantId, name: 'Acme', memberCount: 1, enabledBackupJobs: 1, agents: { total: 1, online: 1, offline: 0, unknown: 0, disabled: 0, revoked: 0 }, enrollment: { enabled: true, changedAt: null } })
-  vi.mocked(supportApi.getSessions).mockResolvedValue(paged([makeSession({ tenantId, permissions: ['ViewBackupMetadata'] })]))
-  vi.mocked(supportApi.getSession).mockResolvedValue(makeSession({ tenantId, permissions: ['ViewBackupMetadata'] }))
-  vi.mocked(supportApi.getSupportArtifacts).mockResolvedValue(paged([makeArtifact({ id: artifactId, databaseName: 'Accounts' })]))
-  vi.mocked(supportApi.getSupportArtifact).mockResolvedValue(makeArtifact({ id: artifactId, databaseName: 'Accounts' }))
+  vi.mocked(api.getBreakGlassArtifacts).mockResolvedValue(paged([{ id: artifactId, databaseName: 'Accounts', jobName: 'Nightly', createdAt: '2026-10-09T10:00:00Z' }]))
 })
 const tenantId = '22222222-2222-2222-2222-222222222222'
 const artifactId = '11111111-1111-1111-1111-111111111111'
@@ -55,15 +47,12 @@ describe('break-glass request dialog', () => {
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/platform/break-glass/new-request'))
   })
 
-  it('preserves deep-linked targets without granting metadata access when no support session exists', async () => {
-    vi.mocked(supportApi.getSessions).mockResolvedValue(paged([]))
+  it('preserves deep-linked targets', async () => {
     vi.mocked(api.createBreakGlassRequest).mockResolvedValue(makeBreakGlass({ id: 'new-request' }))
     mount({ initialTenantId: tenantId, initialArtifactId: artifactId })
     fireEvent.change(await screen.findByLabelText('Gerekçe'), { target: { value: 'investigate' } })
     fireEvent.click(screen.getByRole('button', { name: 'İstek aç' }))
     await waitFor(() => expect(api.createBreakGlassRequest).toHaveBeenCalledWith({ tenantId, artifactId, reason: 'investigate', ttlMinutes: 60 }))
-    expect(supportApi.getSupportArtifacts).not.toHaveBeenCalled()
-    expect(artifactApi.listArtifacts).not.toHaveBeenCalled()
   })
 
   it('shows why the server refused an artifact that is not encrypted', async () => {
@@ -74,7 +63,7 @@ describe('break-glass request dialog', () => {
     expect(await screen.findByText('Bu yedek dosyası şifreli değil; şifre çözme veya acil destek erişimi uygulanamaz.')).toBeInTheDocument()
   })
 
-  it('searches names through an authorized support session and sends the unchanged IDs', async () => {
+  it('searches encrypted backups by name without any support session and sends the unchanged IDs', async () => {
     vi.mocked(api.createBreakGlassRequest).mockResolvedValue(makeBreakGlass({ id: 'new-request' }))
     mount()
     fireEvent.change(await screen.findByRole('combobox', { name: tx('Tenant') }), { target: { value: 'Acme' } })
@@ -84,8 +73,7 @@ describe('break-glass request dialog', () => {
     fireEvent.change(screen.getByLabelText('Gerekçe'), { target: { value: 'investigate' } })
     fireEvent.click(screen.getByRole('button', { name: 'İstek aç' }))
     await waitFor(() => expect(api.createBreakGlassRequest).toHaveBeenCalledWith({ tenantId, artifactId, reason: 'investigate', ttlMinutes: 60 }))
-    expect(supportApi.getSupportArtifacts).toHaveBeenCalledWith('support-a', expect.anything(), expect.any(AbortSignal))
-    expect(artifactApi.listArtifacts).not.toHaveBeenCalled()
+    expect(api.getBreakGlassArtifacts).toHaveBeenCalledWith(tenantId, expect.any(AbortSignal))
   })
 
   it('clears the selected backup when the tenant changes', async () => {
@@ -99,16 +87,9 @@ describe('break-glass request dialog', () => {
     expect(api.createBreakGlassRequest).not.toHaveBeenCalled()
   })
 
-  it.each([
-    { permissions: [] },
-    { isOwner: false },
-    { status: 'Expired' as const },
-    { expiresAt: '2026-10-09T11:59:59Z', serverNow: '2026-10-09T12:00:00Z' },
-  ])('never loads backup metadata without a usable support session (%j)', async overrides => {
-    vi.mocked(supportApi.getSessions).mockResolvedValue(paged([makeSession({ tenantId, ...overrides })]))
+  it('says so when the tenant has no encrypted backup', async () => {
+    vi.mocked(api.getBreakGlassArtifacts).mockResolvedValue(paged([]))
     mount({ initialTenantId: tenantId })
-    expect(await screen.findByRole('link', { name: tx('Destek erişimi') })).toHaveAttribute('href', expect.stringContaining('/platform/support-sessions'))
-    expect(supportApi.getSupportArtifacts).not.toHaveBeenCalled()
-    expect(artifactApi.listArtifacts).not.toHaveBeenCalled()
+    expect(await screen.findByText(tx('Bu müşterinin şifreli yedek dosyası yok.'))).toBeInTheDocument()
   })
 })
