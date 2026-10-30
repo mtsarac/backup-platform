@@ -14,7 +14,11 @@ internal static class TestContainers
     private const string PostgresImage = "postgres:18-alpine";
     private const string MsSqlImage = "mcr.microsoft.com/mssql/server:2025-latest";
 
-    private static readonly Lazy<PostgreSqlContainer> Postgres = new(() => Start(new PostgreSqlBuilder(PostgresImage).Build()));
+    private static readonly Lazy<PostgreSqlContainer> Postgres = new(() => Start(new PostgreSqlBuilder(PostgresImage)
+        // Docker's bridge is not container localhost; physical replication needs its own HBA rule.
+        .WithResourceMapping(System.Text.Encoding.UTF8.GetBytes("#!/bin/sh\nprintf '\\nhost replication all samenet scram-sha-256\\n' >> \"$PGDATA/pg_hba.conf\"\n"),
+            DotNet.Testcontainers.Builders.FilePath.Of("/docker-entrypoint-initdb.d/replication.sh"))
+        .Build()));
     private static readonly Lazy<MsSqlServer> MsSql = new(StartMsSql);
 
     /// <summary>A superuser connection (database <c>postgres</c>) to the shared PostgreSQL container; tests create their own databases on it.</summary>
