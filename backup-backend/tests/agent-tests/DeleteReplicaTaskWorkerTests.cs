@@ -84,7 +84,6 @@ public sealed class DeleteReplicaTaskWorkerTests
         harness.Start();
         Assert.True(harness.Worker.TryPublish(envelope));
         await Wait.UntilAsync(() => harness.Client.Renewals.Count == 1, "authority request");
-        await Task.Delay(50);
         Assert.Empty(harness.Client.Completions);
         Assert.Empty(harness.External.Scopes);
         Assert.Empty(harness.Storage.Calls);

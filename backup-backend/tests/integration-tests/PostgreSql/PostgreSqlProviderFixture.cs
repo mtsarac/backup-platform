@@ -23,9 +23,7 @@ public sealed class PostgreSqlProviderFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        var configured = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_CONNECTION_STRING");
-        if (string.IsNullOrWhiteSpace(configured)) throw new InvalidOperationException("Set BACKUP_PLATFORM_TEST_CONNECTION_STRING to an isolated PostgreSQL superuser test instance.");
-        var builder = new NpgsqlConnectionStringBuilder(configured) { Pooling = false };
+        var builder = new NpgsqlConnectionStringBuilder(TestContainers.PostgresAdministrativeConnectionString) { Pooling = false };
         if (string.IsNullOrEmpty(builder.Password)) throw new InvalidOperationException("Provider tests require password authentication, not peer/trust-only credentials.");
         _admin = builder.ConnectionString;
         Settings = new DatabaseConnectionSettings(new DatabaseEndpoint(builder.Host!, builder.Port), new DatabaseConnectionOptions(requireEncryption: false));

@@ -5,7 +5,8 @@ import { Send } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
-import { Section } from '@/components/ui/section'
+import { Fact, Facts, Section } from '@/components/ui/section'
+import { Card } from '@/components/ui/card'
 import { QueryState } from '@/components/data/query-state'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { useNotificationDeliveries } from './hooks'
@@ -21,15 +22,15 @@ const eventFilters = [...eventTypes, 'break_glass_access', 'test'] as const
 
 function DeliveryCard({ delivery }: { delivery: NotificationDelivery }) {
   const event = eventTypeLabels[delivery.eventType]
-  return <li><article aria-label={tx('{0} · {1}', { '0': event, '1': delivery.subjectName })} className="space-y-3 rounded-xl border border-border bg-surface p-4">
+  return <li><Card as="article" aria-label={tx('{0} · {1}', { '0': event, '1': delivery.subjectName })} className="space-y-3">
     <div className="flex flex-wrap items-start justify-between gap-2">
       <h3 className="min-w-0 break-words font-medium text-text-heading">{event} · {delivery.subjectName}</h3>
       <StatusPill domain="delivery" status={delivery.status} />
     </div>
-    <dl className="grid gap-2 text-sm sm:grid-cols-2">
-      <div><dt className="text-text-muted">{tx('Zaman')}</dt><dd><time dateTime={delivery.createdAt} title={formatDateTime(delivery.createdAt)}>{formatRelativeTime(delivery.createdAt)}</time></dd></div>
-      <div><dt className="text-text-muted">{tx('Kanal')}</dt><dd className="break-words">{delivery.channelName}</dd><dd className="break-all text-text-muted">{kindLabels[delivery.channelKind]} · {delivery.targetDisplay}</dd></div>
-    </dl>
+    <Facts>
+      <Fact label={tx('Zaman')}><time dateTime={delivery.createdAt} title={formatDateTime(delivery.createdAt)}>{formatRelativeTime(delivery.createdAt)}</time></Fact>
+      <Fact label={tx('Kanal')} hint={<span className="break-all">{kindLabels[delivery.channelKind]} · {delivery.targetDisplay}</span>}>{delivery.channelName}</Fact>
+    </Facts>
     <TechnicalDetails items={[
       { label: tx('Gönderim kimliği'), value: delivery.id },
       { label: tx('Olay kimliği'), value: delivery.eventId },
@@ -41,7 +42,7 @@ function DeliveryCard({ delivery }: { delivery: NotificationDelivery }) {
       ...(delivery.nextAttemptAt ? [{ label: tx('Sonraki deneme'), value: formatDateTime(delivery.nextAttemptAt) }] : []),
       ...(delivery.sentAt ? [{ label: tx('Gönderilme zamanı'), value: formatDateTime(delivery.sentAt) }] : []),
     ]} />
-  </article></li>
+  </Card></li>
 }
 
 export function DeliveriesSection() {

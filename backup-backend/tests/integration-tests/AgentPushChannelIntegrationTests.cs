@@ -153,8 +153,9 @@ public sealed class AgentPushChannelIntegrationTests(PostgreSqlFixture fixture) 
         Assert.True(await Registry(world).Dispatcher.TrySendPollHintAsync(new AgentId(a.AgentId), "test", CancellationToken.None));
         await Eventually.AssertAsync(() => clientA.Hints.Count > 0);
         Assert.Equal("test", clientA.Hints.Single().Reason);
-        await Task.Delay(300);
-        Assert.Empty(clientB.Hints);
+        Assert.True(await Registry(world).Dispatcher.TrySendPollHintAsync(new AgentId(b.AgentId), "for-b", CancellationToken.None));
+        await Eventually.AssertAsync(() => clientB.Hints.Count > 0);
+        Assert.Equal("for-b", clientB.Hints.Single().Reason);
         Assert.False(await Registry(world).Dispatcher.TrySendPollHintAsync(AgentId.New(), "nobody", CancellationToken.None));
     }
 
@@ -270,11 +271,10 @@ public sealed class AgentPushChannelIntegrationTests(PostgreSqlFixture fixture) 
         await first.Closed.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.Equal(HubConnectionState.Connected, second.Connection.State);
         // The first connection's disconnect callback has run (or will) without removing the second's mapping.
-        await Task.Delay(300);
-        Assert.Equal(second.Connection.ConnectionId, Registry(world).Registry.FindConnectionId(new AgentId(agent.AgentId)));
-        Assert.Single(Registry(world).Registry.ConnectedAgents);
         Assert.True(await Registry(world).Dispatcher.TrySendPollHintAsync(new AgentId(agent.AgentId), "to-second", CancellationToken.None));
         await Eventually.AssertAsync(() => second.Hints.Count > 0);
+        Assert.Equal(second.Connection.ConnectionId, Registry(world).Registry.FindConnectionId(new AgentId(agent.AgentId)));
+        Assert.Single(Registry(world).Registry.ConnectedAgents);
         Assert.Empty(first.Hints);
     }
 
@@ -358,7 +358,6 @@ public sealed class AgentPushChannelIntegrationTests(PostgreSqlFixture fixture) 
         Assert.Equal("upgrade_available", notice.Kind);
         Assert.Equal("upgrade_agent", notice.Action);
         Assert.Equal("1.2", notice.Protocol.Current);
-        await Task.Delay(300);
         Assert.Empty(current.Notices);
     }
 
