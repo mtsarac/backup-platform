@@ -118,7 +118,7 @@ public sealed class AgentUpdateService
             else Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
             return destination;
         }
-        async Task Copy(Stream source, string destination, long length)
+        async Task Copy(Stream source, string destination, long length, bool executable)
         {
             if (length < 0 || length > MaximumExpandedBytes - expanded) throw new InvalidDataException("Expanded update exceeds its limit.");
             expanded += length;
@@ -133,7 +133,9 @@ public sealed class AgentUpdateService
                 await output.WriteAsync(buffer.AsMemory(0, count), token).ConfigureAwait(false);
             }
             if (actual != length) throw new InvalidDataException("Truncated archive entry.");
-            if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(destination, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+            // The archive is signed and its modes are bounded (no setuid, no group/other write); keep the helper binaries it ships executable (backup-direct-download).
+            if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(destination, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead
+                | (executable ? UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute : 0));
         }
         if (platform == "win-x64")
         {
@@ -147,7 +149,7 @@ public sealed class AgentUpdateService
                 var destination = Destination(entry.FullName, directory, (entry.ExternalAttributes >> 16) & 0xFFFF);
                 if (directory) { if (entry.Length != 0) throw new InvalidDataException("Directory entry has content."); continue; }
                 await using var content = entry.Open();
-                await Copy(content, destination, entry.Length).ConfigureAwait(false);
+                await Copy(content, destination, entry.Length, false).ConfigureAwait(false);  // the Windows package: Unix modes do not apply
             }
         }
         else
@@ -161,7 +163,7 @@ public sealed class AgentUpdateService
                 if (entry.EntryType is not (TarEntryType.RegularFile or TarEntryType.V7RegularFile or TarEntryType.Directory)) throw new InvalidDataException("Links and special archive entries are forbidden.");
                 var directory = entry.EntryType == TarEntryType.Directory;
                 var destination = Destination(entry.Name, directory, (int)entry.Mode);
-                if (!directory) await Copy(entry.DataStream ?? Stream.Null, destination, entry.Length).ConfigureAwait(false);
+                if (!directory) await Copy(entry.DataStream ?? Stream.Null, destination, entry.Length, (entry.Mode & UnixFileMode.UserExecute) != 0).ConfigureAwait(false);
             }
             var drain = new byte[65536];
             while (await bounded.ReadAsync(drain, token).ConfigureAwait(false) != 0) { }

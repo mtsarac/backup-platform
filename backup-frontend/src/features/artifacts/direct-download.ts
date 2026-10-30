@@ -57,7 +57,8 @@ export async function receiveDirectDownload(session: PreparedDownload, file: Dow
         }
       }).catch(reject)
     }
-    channel.onerror = abort
+    // The agent closes the peer right after the saved acknowledgement; the browser reports that as an error event before close.
+    channel.onerror = () => { if (!published) abort() }
     channel.onclose = () => { if (published) resolve(); else abort() }
     peer.onconnectionstatechange = () => { if (['failed', 'closed', 'disconnected'].includes(peer.connectionState) && !published) abort() }
   // Attach immediately: a failed peer must not produce an unhandled rejection during signaling.
