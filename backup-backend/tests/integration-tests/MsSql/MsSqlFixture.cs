@@ -6,24 +6,14 @@ using Microsoft.Data.SqlClient;
 namespace BackupPlatform.IntegrationTests.MsSql;
 
 /// <summary>
-/// A real SQL Server. Configuration comes from environment variables and is mandatory: with no server configured the fixture
-/// throws, so these tests fail loudly instead of passing or skipping silently (the same rule as the PostgreSQL fixture).
-/// The administrative login needs sysadmin; the fixture creates uniquely named databases and logins and drops them afterwards.
-/// The staging directory is mandatory too: it is the one directory the server writes backups to and the agent (this process) reads,
+/// A real SQL Server, a Testcontainers container shared by the test process (see <see cref="TestContainers"/>); the only prerequisite is Docker.
+/// The administrative login is sa; the fixture creates uniquely named databases and logins and drops them afterwards.
+/// The staging directory is the one directory the server writes backups to and the agent (this process) reads,
 /// declared once as the server's path and once as the agent's path (<see cref="StagingArea.Mapped"/>), so the tests exercise the real
 /// path mapping instead of a same-host shortcut.
 /// </summary>
 public sealed class MsSqlFixture : IAsyncLifetime
 {
-    private const string ConfigurationHint =
-        "Set BACKUP_PLATFORM_TEST_MSSQL_HOST, BACKUP_PLATFORM_TEST_MSSQL_USER and BACKUP_PLATFORM_TEST_MSSQL_PASSWORD (a sysadmin SQL login) "
-        + "before running MSSQL integration tests. Optional: BACKUP_PLATFORM_TEST_MSSQL_PORT or BACKUP_PLATFORM_TEST_MSSQL_INSTANCE (not both), "
-        + "BACKUP_PLATFORM_TEST_MSSQL_TRUST_SERVER_CERTIFICATE=true for self-signed servers. Required for the backup tests: "
-        + "BACKUP_PLATFORM_TEST_MSSQL_STAGING_SERVER_DIR (a directory the SQL Server service account can write, as the server sees it) and "
-        + "BACKUP_PLATFORM_TEST_MSSQL_STAGING_AGENT_DIR (the same directory as this test process sees it; it must be able to read and delete the files SQL Server creates there). "
-        + "Optional: BACKUP_PLATFORM_TEST_MSSQL_UNWRITABLE_SERVER_DIR (an existing directory the service account cannot write; defaults to /root or C:\\Windows\\System32) and, on Windows "
-        + "with a test account that is a sysadmin, BACKUP_PLATFORM_TEST_MSSQL_WINDOWS_AUTH=true to run the Windows Authentication tests.";
-
     private const int BigDatabaseBatches = 24;
     private const int BigDatabaseRowsPerBatch = 5000;
 
@@ -83,29 +73,10 @@ public sealed class MsSqlFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        var host = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_HOST");
-        var user = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_USER");
-        var password = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_PASSWORD");
-        var serverDirectory = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_STAGING_SERVER_DIR");
-        var agentDirectory = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_STAGING_AGENT_DIR");
-        if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(user) || string.IsNullOrEmpty(password)
-            || string.IsNullOrWhiteSpace(serverDirectory) || string.IsNullOrWhiteSpace(agentDirectory))
-        {
-            throw new InvalidOperationException(ConfigurationHint);
-        }
-
-        var portText = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_PORT");
-        var instance = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_INSTANCE");
-        var trust = string.Equals(Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_TRUST_SERVER_CERTIFICATE"), "true", StringComparison.OrdinalIgnoreCase);
-
-        _settings = new DatabaseConnectionSettings(
-            new DatabaseEndpoint(
-                host,
-                string.IsNullOrWhiteSpace(portText) ? null : int.Parse(portText, System.Globalization.CultureInfo.InvariantCulture),
-                string.IsNullOrWhiteSpace(instance) ? null : instance),
-            new DatabaseConnectionOptions(trustServerCertificate: trust));
-        _admin = new PasswordDatabaseCredential(user, new DatabaseSecret(password));
-        _staging = StagingArea.Mapped(new DatabaseServerPath(serverDirectory), new AgentPath(agentDirectory));
+        var server = TestContainers.MsSqlServer;
+        _settings = new DatabaseConnectionSettings(new DatabaseEndpoint(server.Host, server.Port, null), new DatabaseConnectionOptions(trustServerCertificate: true));
+        _admin = new PasswordDatabaseCredential(server.User, new DatabaseSecret(server.Password));
+        _staging = StagingArea.Mapped(new DatabaseServerPath(server.StagingServerDirectory), new AgentPath(server.StagingAgentDirectory));
 
         try
         {
