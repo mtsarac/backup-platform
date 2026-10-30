@@ -3,11 +3,11 @@ import { RefreshCw } from 'lucide-react'
 import { QueryState } from '@/components/data/query-state'
 import { Button } from '@/components/ui/button'
 import { Notice } from '@/components/ui/notice'
-import { Section } from '@/components/ui/section'
+import { Fact, Facts, Section } from '@/components/ui/section'
 import { useTenantStorageQuota } from '@/features/storage/hooks'
 import { accountingModeHelp, accountingModeLabels, enforcementModeHelp, enforcementModeLabels, scopeLabels } from '@/features/storage/labels'
 import { PlanName } from '@/features/storage/quota-badges'
-import { Fact, QuotaSummary, StorageNotices } from '@/features/storage/quota-summary'
+import { QuotaSummary, StorageNotices } from '@/features/storage/quota-summary'
 import { isForbidden } from '@/lib/api/client'
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
@@ -32,22 +32,22 @@ export function StorageUsageTab() {
       <QuotaSummary quota={quota} />
     </Section>
     <Section title={tx("Plan ve abonelik")}>
-      <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <Facts columns={3}>
         <Fact label={tx("Aktif plan")}><PlanName plan={quota.plan} /></Fact>
         <Fact label={tx("Abonelik durumu")}><StatusPill domain="subscription" status={quota.subscriptionStatus} /></Fact>
         <Fact label={tx("Yeni backup")}>{quota.newBackupsAllowed ? tx('Evet') : tx('Hayır')}</Fact>
         {quota.plan?.subscriptionEndsAt && <Fact label={tx("Abonelik bitişi")}>{formatDateTime(quota.plan.subscriptionEndsAt, tx('Henüz bildirilmedi'))}</Fact>}
-      </dl>
+      </Facts>
     </Section>
     <Section title={tx("Nasıl hesaplanır")}>
-      <dl className="grid gap-4 lg:grid-cols-2">
+      <Facts>
         <Fact label={tx("Hesaplama modu")} hint={accountingModeHelp[quota.accountingMode]}>{accountingModeLabels[quota.accountingMode]}</Fact>
         <Fact label={tx("Kotaya dahil storage kapsamı")} hint={tx("Yalnızca bu kapsamdaki kopyalar kullanıma sayılır.")}>
           <ul className="list-inside list-disc">{scopeLabels(quota.includedStorageScopes).map((label) => <li key={label}>{tx(label)}</li>)}</ul>
         </Fact>
         <Fact label={tx("Kota uygulaması")} hint={enforcementModeHelp[quota.enforcementMode]}>{enforcementModeLabels[quota.enforcementMode]}</Fact>
         {quota.limitBytes !== null && <Fact label={tx("Eşikler")}>{tx("Warning %")}{quota.warningThreshold}{' '}{tx("· Critical %")}{quota.criticalThreshold}</Fact>}
-      </dl>
+      </Facts>
     </Section>
   </div>
 }

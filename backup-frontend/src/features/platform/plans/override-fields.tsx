@@ -1,6 +1,7 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { Field } from '@/components/ui/field'
-import { selectClass, inputClass } from '@/components/ui/form-styles'
+import { selectClass } from '@/components/ui/form-styles'
+import { TextInput } from '@/components/ui/text-input'
 import { isOverrideKind, type OverrideDraft } from './override-draft'
 import { overrideKinds, type OverrideKind } from './types'
 
@@ -13,7 +14,7 @@ export function OverrideFields({ draft, onChange, error, legend = tx('Depolama l
       {overrideKinds.map((kind) => <option key={kind} value={kind}>{kindLabels[kind]}</option>)}
     </select>}</Field>
     {draft.kind === 'limited' && <Field label={tx("Override boyutu (GB)")} hint={tx("1 GB = 1.000.000.000 bayt (ondalık). En fazla 3 ondalık basamak.")} error={error}>
-      {(control) => <input {...control} className={inputClass} inputMode="decimal" required value={draft.gb} onChange={(event) => onChange({ ...draft, gb: event.target.value })} />}
+      {(control) => <TextInput {...control} inputMode="decimal" required value={draft.gb} onChange={(event) => onChange({ ...draft, gb: event.target.value })} />}
     </Field>}
   </div>
 }

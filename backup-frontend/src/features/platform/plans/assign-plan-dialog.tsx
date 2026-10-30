@@ -1,7 +1,8 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Field } from '@/components/ui/field'
-import { inputClass } from '@/components/ui/form-styles'
+import { CheckField } from '@/components/ui/check-field'
+import { TextInput } from '@/components/ui/text-input'
 import { FormDialog } from '@/components/ui/form-dialog'
 import { ErrorNotice } from '@/components/ui/notice'
 import { SearchablePicker } from '@/components/ui/searchable-picker'
@@ -49,11 +50,11 @@ export function AssignPlanDialog({ tenantId, replacing, onClose }: { tenantId: s
       onChange={(planId) => setChosen(options.find((plan) => plan.planId === planId) ?? null)}
       options={options.map((plan) => ({ value: plan.planId, label: plan.name, description: formatGb(plan.storageLimitBytes) }))} />
     {plans.error && <ErrorNotice title={tx("Planlar alınamadı")} error={plans.error} onRetry={() => void plans.refetch()} />}
-    {plans.data && plans.data.totalCount > plans.data.items.length && <p className="text-xs text-text-muted">{tx("İlk {0} plan gösteriliyor; diğerleri için adı yazarak arayın.", { "0": plans.data.items.length })}</p>}
-    <label className="flex min-h-11 items-center gap-2 text-sm text-text"><input type="checkbox" className="size-4" checked={showSystem} onChange={(event) => { setShowSystem(event.target.checked); setChosen(null) }} />{tx("Sistem planlarını göster")}</label>
+    {plans.data && plans.data.totalCount > plans.data.items.length && <p className="text-sm text-text-muted">{tx("İlk {0} plan gösteriliyor; diğerleri için adı yazarak arayın.", { "0": plans.data.items.length })}</p>}
+    <CheckField label={tx("Sistem planlarını göster")} checked={showSystem} onChange={(event) => { setShowSystem(event.target.checked); setChosen(null) }} />
     <OverrideFields draft={override} onChange={setOverride} error={overrideError} />
     <Field label={tx("Bitiş tarihi (isteğe bağlı)")} hint={tx("Boş bırakırsanız abonelik süresiz olur.")} error={endsAtError}>
-      {(control) => <input {...control} type="datetime-local" className={inputClass} value={endsAt} onChange={(event) => setEndsAt(event.target.value)} />}
+      {(control) => <TextInput {...control} type="datetime-local" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} />}
     </Field>
   </FormDialog>
 }

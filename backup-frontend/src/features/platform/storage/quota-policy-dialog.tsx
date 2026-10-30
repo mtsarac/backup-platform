@@ -4,6 +4,8 @@ import { Field } from '@/components/ui/field'
 import { ApiError } from '@/lib/api/client'
 import { FormDialog } from '@/components/ui/form-dialog'
 import { inputClass, selectClass } from '@/components/ui/form-styles'
+import { CheckField } from '@/components/ui/check-field'
+import { TextInput } from '@/components/ui/text-input'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { accountingModeLabels, enforcementModeLabels, scopeLabels } from '@/features/storage/labels'
 import { parseQuotaScopeLabels, parseStorageConnectionIds, type ScopeValuesResult } from '@/features/storage/scope-input'
@@ -141,10 +143,10 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
       <fieldset className="space-y-4">
         <legend className="mb-3 text-sm font-semibold text-text-heading">{tx("Kimlik ve durum")}</legend>
         {!isEditing && <Field label={tx("Politika Anahtarı (Key)")} hint={tx("Benzersiz kimlik. Oluşturulduktan sonra değiştirilemez.")}>
-          {(control) => <input {...control} className={inputClass} value={key} maxLength={64} required aria-invalid={errField === 'key'} onChange={(event) => setKey(event.target.value)} placeholder={tx('ornek-politika-key')} />}
+          {(control) => <TextInput {...control} value={key} maxLength={64} required aria-invalid={errField === 'key'} onChange={(event) => setKey(event.target.value)} placeholder={tx('ornek-politika-key')} />}
         </Field>}
-        <Field label={tx("Politika Adı")}>{(control) => <input {...control} className={inputClass} value={name} maxLength={100} required aria-invalid={errField === 'name'} onChange={(event) => setName(event.target.value)} />}</Field>
-        <label className="flex min-h-11 items-center gap-2 text-sm text-text"><input className="size-4" type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />{tx("Etkin politika (planlarda seçilebilir)")}</label>
+        <Field label={tx("Politika Adı")}>{(control) => <TextInput {...control} value={name} maxLength={100} required aria-invalid={errField === 'name'} onChange={(event) => setName(event.target.value)} />}</Field>
+        <CheckField label={tx("Etkin politika (planlarda seçilebilir)")} checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
       </fieldset>
       <fieldset className="space-y-4 border-t border-border pt-4">
         <legend className="pt-4 text-sm font-semibold text-text-heading">{tx("Hesaplama ve eşikler")}</legend>
@@ -155,8 +157,8 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
           <Field label={tx("Uygulama Modu (Enforcement)")}>{(control) => <select {...control} className={`${selectClass} w-full`} value={enforcementMode} onChange={(event) => setEnforcementMode(event.target.value as EnforcementMode)}>
             <option value="BlockNewBackups">{tx("BlockNewBackups (Yeni backup engellenir)")}</option><option value="WarnOnly">{tx("WarnOnly (Yalnızca uyar)")}</option><option value="None">{tx("None (Uygulanmaz)")}</option>
           </select>}</Field>
-          <Field label={tx("Warning Eşiği (%)")}>{(control) => <input {...control} className={inputClass} type="number" min={1} max={99} value={warningThreshold} required onChange={(event) => setWarningThreshold(Number(event.target.value))} />}</Field>
-          <Field label={tx("Critical Eşiği (%)")}>{(control) => <input {...control} className={inputClass} type="number" min={1} max={100} value={criticalThreshold} required onChange={(event) => setCriticalThreshold(Number(event.target.value))} />}</Field>
+          <Field label={tx("Warning Eşiği (%)")}>{(control) => <TextInput {...control} type="number" min={1} max={99} value={warningThreshold} required onChange={(event) => setWarningThreshold(Number(event.target.value))} />}</Field>
+          <Field label={tx("Critical Eşiği (%)")}>{(control) => <TextInput {...control} type="number" min={1} max={100} value={criticalThreshold} required onChange={(event) => setCriticalThreshold(Number(event.target.value))} />}</Field>
         </div>
       </fieldset>
       <fieldset className="space-y-4 border-t border-border pt-4">
@@ -166,14 +168,14 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
         </select>}</Field>
         {scopeKind === 'all' && <p className="text-sm text-text-muted">{tx("Tüm replikalar ve depolama sağlayıcıları kotaya dahil edilir.")}</p>}
         {scopeKind === 'providerType' && <Field label={tx("Provider Anahtarları (virgülle ayırın):")} hint={<>{tx("Desteklenen sistem provider anahtarları:")}{' '}<code>central</code>, <code>local</code>.</>}>
-          {(control) => <input {...control} className={inputClass} value={providerTypes} onChange={(event) => setProviderTypes(event.target.value)} placeholder="central, local" />}
+          {(control) => <TextInput {...control} value={providerTypes} onChange={(event) => setProviderTypes(event.target.value)} placeholder="central, local" />}
         </Field>}
         {scopeKind === 'ownershipType' && <div className="space-y-2 text-sm"><p className="text-text-muted">{tx("Dahil edilecek sahiplik türleri:")}</p><div className="space-y-2">
-          <label className="flex min-h-11 items-center gap-2"><input className="size-4" type="checkbox" checked={ownershipTypes.includes('PlatformManaged')} onChange={() => toggleOwnership('PlatformManaged')} />{tx("PlatformManaged (Platform yönetimli / central)")}</label>
-          <label className="flex min-h-11 items-center gap-2"><input className="size-4" type="checkbox" checked={ownershipTypes.includes('TenantManaged')} onChange={() => toggleOwnership('TenantManaged')} />{tx("TenantManaged (Tenant yönetimli / local)")}</label>
+          <CheckField label={tx("PlatformManaged (Platform yönetimli / central)")} checked={ownershipTypes.includes('PlatformManaged')} onChange={() => toggleOwnership('PlatformManaged')} />
+          <CheckField label={tx("TenantManaged (Tenant yönetimli / local)")} checked={ownershipTypes.includes('TenantManaged')} onChange={() => toggleOwnership('TenantManaged')} />
         </div></div>}
         {scopeKind === 'quotaScope' && <Field label={tx("Kota kapsamı etiketleri (virgülle ayırın):")} hint={tx("Bir depolama bağlantısının kota kapsamı etiketiyle eşleşir. Küçük harf, rakam ve “-”; her etiket 1-64 karakter.")}>
-          {(control) => <input {...control} className={inputClass} value={quotaScopes} onChange={(event) => setQuotaScopes(event.target.value)} placeholder="managed, tenant" aria-invalid={scopeError !== null} />}
+          {(control) => <TextInput {...control} value={quotaScopes} onChange={(event) => setQuotaScopes(event.target.value)} placeholder="managed, tenant" aria-invalid={scopeError !== null} />}
         </Field>}
         {scopeKind === 'storageConnection' && <div className="space-y-3">
           <QuotaConnectionPicker values={connectionIds.split(/[,\n]+/).map(value => value.trim()).filter(Boolean)} onChange={(selected) => setConnectionIds(selected.join('\n'))} invalid={scopeError !== null} />

@@ -1,5 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import type { ReactNode } from 'react'
+import { Fact, Facts } from '@/components/ui/section'
 import { allocatedPercent } from './format'
 import { isLegacyUnlimited } from './labels'
 import { QuotaMeter } from './quota-meter'
@@ -10,10 +10,6 @@ import { ErrorNotice, Notice } from '@/components/ui/notice'
 
 type Standing = Pick<TenantQuota, 'limitBytes' | 'unlimited' | 'usedBytes' | 'reservedBytes' | 'remainingBytes' | 'state' | 'subscriptionStatus' | 'plan' | 'calculatedAt'>
 
-export function Fact({ label, children, hint }: { label: string; children: ReactNode; hint?: ReactNode }) {
-  useLanguage()
-  return <div><dt className="text-xs text-text-muted">{tx(label)}</dt><dd className="mt-0.5 text-sm">{children}</dd>{hint && <p className="mt-0.5 text-xs text-text-muted">{hint}</p>}</div>
-}
 
 function Capacity({ bytes }: { bytes: number }) {
   useLanguage()
@@ -36,19 +32,19 @@ export function QuotaSummary({ quota }: { quota: Standing }) {
   const percent = allocatedPercent(quota.usedBytes, quota.reservedBytes, quota.limitBytes)
   const noLimit = quota.limitBytes === null
   return <div className="space-y-4">
-    <dl className="grid gap-4 sm:grid-cols-3">
+    <Facts columns={3}>
       <Fact label={tx("Kullanılan (Used)")} hint={tx("Saklanan backup'ların kapasiteye sayılan boyutu.")}><Capacity bytes={quota.usedBytes} /></Fact>
       <Fact label={tx("Rezerve (Reserved)")} hint={tx("Çalışan veya sıradaki backup'lar için ayrılan tahmini alan.")}><Capacity bytes={quota.reservedBytes} /></Fact>
       <Fact label={tx("Toplam")} hint={percent === null ? undefined : tx("%{0} ayrılmış", { "0": percent })}><Capacity bytes={committed} /></Fact>
-    </dl>
+    </Facts>
     <QuotaMeter usedBytes={quota.usedBytes} reservedBytes={quota.reservedBytes} limitBytes={quota.limitBytes} state={quota.state} />
-    <dl className="grid gap-4 sm:grid-cols-3">
+    <Facts columns={3}>
       <Fact label={tx("Etkin limit")}>{noLimit
         ? (quota.subscriptionStatus === 'NoSubscription' ? tx('Tanımlı değil (abonelik yok)') : tx('Limitsiz'))
         : <Capacity bytes={quota.limitBytes ?? 0} />}</Fact>
       <Fact label={tx("Kalan")}>{quota.remainingBytes === null ? '—' : <Capacity bytes={quota.remainingBytes} />}</Fact>
       <Fact label={tx("Son hesaplama")}>{formatDateTime(quota.calculatedAt, tx('Henüz bildirilmedi'))}</Fact>
-    </dl>
+    </Facts>
   </div>
 }
 
