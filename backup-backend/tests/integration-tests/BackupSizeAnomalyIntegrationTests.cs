@@ -197,6 +197,29 @@ public sealed class BackupSizeAnomalyIntegrationTests : IAsyncLifetime
         Assert.Contains(log.Errors, error => error.Contains(run.Id.ToString(), StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public async Task A_run_is_not_evaluated_while_the_size_anomaly_feature_is_off()
+    {
+        var kit = _world.Quota.Harness;
+        var agent = await kit.AddAgentAsync();
+        var job = await kit.AddJobAsync(agent);
+        await _world.AddEmailAsync(agent.TenantId);
+        await _world.EnableAsync(agent.TenantId, [NotificationEventTypes.BackupSizeAnomaly]);
+        for (var index = 0; index < 3; index++) await CompleteStoreAsync(agent, job, 1000);
+        var store = new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRunStore(
+            new DbContextOptionsBuilder<BackupPlatform.Infrastructure.Persistence.PlatformDbContext>().UseNpgsql(_database.ConnectionString).Options,
+            AdmitAllBackupAdmission.Instance, null, () => 0, null, null, new BackupPlatform.Contracts.Flags.FeatureFlags(_ => false));
+        var now = _world.Clock.GetUtcNow();
+        var run = await kit.StartRunAsync(store, job, "anomaly-off", now);
+        var claim = (await ClaimAsync(store, agent, now))!;
+        await StartAttemptAsync(store, claim, now);
+        await CompleteAsync(store, claim, SizedSuccess(now, 5000), now);
+        var completed = (await kit.Store().GetRunAsync(agent.TenantId, run.Id, default))!;
+        Assert.Equal(BackupStatus.Succeeded, completed.Status);
+        Assert.Null(completed.SizeAnomalyStatus);
+        Assert.Empty(await _world.EventsAsync(agent.TenantId));
+    }
+
     private sealed class CapturedLogger : Microsoft.Extensions.Logging.ILogger<BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRunStore>
     {
         public List<string> Errors { get; } = [];

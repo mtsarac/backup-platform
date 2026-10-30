@@ -2,6 +2,7 @@ using BackupPlatform.Agent.Core.Connectivity;
 using BackupPlatform.Agent.Core.Identity;
 using BackupPlatform.Agent.Host;
 using BackupPlatform.Agent.Transport;
+using BackupPlatform.Contracts.Flags;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -21,6 +22,23 @@ public sealed class OptionsValidationTests
         var options = new AgentHostOptions { Backend = { BaseUri = "https://backup.example.test/" } };
         change(options);
         return new AgentHostOptionsValidator().Validate(null, options);
+    }
+
+    [Theory]
+    [InlineData(BackupPlatform.SnapshotProviders.Abstractions.SnapshotKind.Vss, "windowsVss")]
+    [InlineData(BackupPlatform.SnapshotProviders.Abstractions.SnapshotKind.Lvm, "linuxSnapshots")]
+    [InlineData(BackupPlatform.SnapshotProviders.Abstractions.SnapshotKind.Btrfs, "linuxSnapshots")]
+    [InlineData(BackupPlatform.SnapshotProviders.Abstractions.SnapshotKind.Zfs, "linuxSnapshots")]
+    public void A_snapshot_file_source_is_refused_until_its_feature_is_on(BackupPlatform.SnapshotProviders.Abstractions.SnapshotKind kind, string feature)
+    {
+        var options = new AgentHostOptions { Backend = { BaseUri = "https://backup.example.test/" } };
+        options.Backup = new AgentBackupOptions { FileSources = new() { ["data"] = new(AbsoluteDirectory, kind) } };
+        FeatureFlags Flags(bool on) => new(key => key == feature ? on : null);
+
+        var off = new AgentHostOptionsValidator(Flags(false)).Validate(null, options);
+        Assert.True(off.Failed);
+        Assert.Contains($"Features:{feature}", off.FailureMessage);
+        Assert.True(new AgentHostOptionsValidator(Flags(true)).Validate(null, options).Succeeded);
     }
 
     [Theory]

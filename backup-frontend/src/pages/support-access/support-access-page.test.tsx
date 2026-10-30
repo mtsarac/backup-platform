@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { Sidebar } from '@/components/layout/sidebar'
@@ -26,6 +27,7 @@ function renderAccess(role: MembershipRole = 'Owner', path = '/tenants/tenant-a/
 }
 
 beforeEach(() => {
+  setFeatureFlags({ supportSessions: true })
   vi.resetAllMocks()
   vi.mocked(api.getSupportAccessSessions).mockResolvedValue(paged([session], { totalCount: 30 }))
   vi.mocked(api.getSupportAccessSession).mockResolvedValue(session)
@@ -38,6 +40,12 @@ describe('tenant support transparency', () => {
     const links = screen.getAllByRole('link', { name: /Support access|Destek erişimi/, hidden: true })
     expect(links.length).toBeGreaterThan(0)
     for (const link of links) expect(link).toHaveAttribute('href', '/tenants/tenant-a/support-access')
+  })
+
+  it('hides the tenant support navigation and page while the supportSessions feature is off', () => {
+    setFeatureFlags({})
+    renderAccess('Owner', '/tenants/tenant-a/support-access', <Sidebar />)
+    expect(screen.queryByRole('link', { name: /Support access|Destek erişimi/, hidden: true })).not.toBeInTheDocument()
   })
 
   it.each(['Operator', 'Viewer'] as const)('hides the tenant support navigation for %s', (role) => {

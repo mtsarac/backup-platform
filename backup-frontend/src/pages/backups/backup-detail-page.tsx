@@ -21,6 +21,7 @@ import { ReplicationBadge, ReplicationSection } from '@/features/backups/replica
 import { SizeAnomalyComparison } from '@/features/backups/size-anomaly'
 import type { BackupAttempt, BackupRun } from '@/features/backups/types'
 import { linkClass } from '@/components/ui/form-styles'
+import { isFeatureEnabled } from '@/features/feature-flags/feature-flags'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { describeFailure } from '@/lib/api/failure-messages'
 import { formatDateTime, formatDuration, formatSeconds } from '@/lib/format'
@@ -142,8 +143,8 @@ function BackupDetail({ id }: { id: string }) {
           <Tabs label={tx("Yedekleme denemesi bölümleri")} idPrefix="run" value={tab} onChange={setTab} items={tabs} />
           <div role="tabpanel" id={`run-panel-${tab}`} aria-labelledby={`run-tab-${tab}`} className="space-y-6">
             {tab === 'summary' && <>
-              {run.sizeAnomalyStatus === 'SizeAnomalyWarning' && <Notice tone="warning">{tx("Yedek başarıyla tamamlandı. Boyut uyarısı yedeği geçersiz kılmaz; beklenmeyen veri değişikliklerini inceleyin.")}</Notice>}
-              {run.sizeAnomalyStatus === 'BaselinePending' && <p className="text-sm text-text-muted">{tx("Karşılaştırma için en az 3 önceki başarılı yedek gerekir.")}</p>}
+              {isFeatureEnabled('sizeAnomaly') && run.sizeAnomalyStatus === 'SizeAnomalyWarning' && <Notice tone="warning">{tx("Yedek başarıyla tamamlandı. Boyut uyarısı yedeği geçersiz kılmaz; beklenmeyen veri değişikliklerini inceleyin.")}</Notice>}
+              {isFeatureEnabled('sizeAnomaly') && run.sizeAnomalyStatus === 'BaselinePending' && <p className="text-sm text-text-muted">{tx("Karşılaştırma için en az 3 önceki başarılı yedek gerekir.")}</p>}
               <SizeAnomalyComparison run={run} />
               {(run.status === 'Failed' || run.status === 'AgentLost') && <ErrorNotice title={tx("Yedekleme denemesi başarısız oldu")} {...describeFailure(failureCode)}
                 action={canOperate ? tx("Sorunu giderdikten sonra “Yeniden dene” ile yeni bir deneme başlatın.") : tx("Yöneticinize danışın.")} />}

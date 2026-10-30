@@ -19,6 +19,7 @@ import { platformPaths } from '@/features/platform/paths'
 import { TenantStorageSection } from '@/features/platform/storage/tenant-storage-section'
 import { SubscriptionSection } from '@/features/platform/plans/subscription-section'
 import { inputClass, linkClass } from '@/components/ui/form-styles'
+import { isFeatureEnabled } from '@/features/feature-flags/feature-flags'
 import { SupportAccessSection } from '@/features/platform/support/support-access-section'
 import { MembershipsSection } from '@/features/platform/tenant-members'
 import type { PlatformTenantDetail } from '@/features/platform/types'
@@ -159,7 +160,7 @@ function TenantTabs({ tenant }: { tenant: PlatformTenantDetail }) {
         <TechnicalDetails items={[{ label: tx('Kayıt ayarı son değişiklik'), value: formatDateTime(tenant.enrollment.changedAt) }]} />
       </>}
       {tab === 'security' && <>
-        <SupportAccessSection tenantId={tenant.tenantId} tenantName={tenant.name} />
+        {isFeatureEnabled('supportSessions') && <SupportAccessSection tenantId={tenant.tenantId} tenantName={tenant.name} />}
         <WrapKeysSection tenantId={tenant.tenantId} tenantName={tenant.name} />
         <RecoveryKeys tenant={tenant} />
         <EmergencyAccessHistory tenantId={tenant.tenantId} />

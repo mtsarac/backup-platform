@@ -38,6 +38,7 @@ import { PlatformAgentDetailPage } from './pages/platform/platform-agent-detail-
 import { PlatformAuditPage } from './pages/platform/platform-audit-page'
 import { PlatformSupportSessionsPage } from './pages/platform/platform-support-sessions-page'
 import { PlatformSupportSessionPage } from './pages/platform/platform-support-session-page'
+import { FeatureGate } from './features/feature-flags/feature-gate'
 import { SupportAccessPage } from './pages/support-access/support-access-page'
 import { NotificationsPage } from './pages/notifications/notifications-page'
 import { PlatformNotificationTransportsPage } from './pages/platform/platform-notification-transports-page'
@@ -74,7 +75,7 @@ export const tenantRoutes = <>
   <Route path="artifacts/:id" element={<ArtifactDetailPage />} />
   <Route path="artifacts/:id/restore" element={<RestoreWizardPage />} />
   <Route path="restores/:id" element={<RestoreDetailPage />} />
-  <Route path="support-access" element={<SupportAccessPage />} />
+  <Route path="support-access" element={<FeatureGate feature="supportSessions"><SupportAccessPage /></FeatureGate>} />
   <Route path="notifications" element={<NotificationsPage />} />
   <Route path="encryption" element={<EncryptionPage />} />
   <Route path="*" element={<NotFound />} />
@@ -96,8 +97,8 @@ export const platformRoutes = <>
   <Route path="users" element={<PlatformUsersPage />} />
   <Route path="agents" element={<PlatformAgentsPage />} />
   <Route path="audit" element={<PlatformAuditPage />} />
-  <Route path="support-sessions" element={<PlatformSupportSessionsPage />} />
-  <Route path="support-sessions/:sessionId" element={<PlatformSupportSessionPage />} />
+  <Route path="support-sessions" element={<FeatureGate feature="supportSessions"><PlatformSupportSessionsPage /></FeatureGate>} />
+  <Route path="support-sessions/:sessionId" element={<FeatureGate feature="supportSessions"><PlatformSupportSessionPage /></FeatureGate>} />
   <Route path="break-glass" element={<PlatformBreakGlassPage />} />
   <Route path="break-glass/:requestId" element={<PlatformBreakGlassDetailPage />} />
   <Route path="notification-transports" element={<PlatformNotificationTransportsPage />} />

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Contracts.Flags;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using Microsoft.Extensions.DependencyInjection;
@@ -47,6 +48,9 @@ public sealed class AutomaticReplicaRepairWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Read once at start like the routes; a provider without flags (hand-built in tests) keeps repair on.
+        using (var scope = scopes.CreateScope())
+            if (scope.ServiceProvider.GetService<FeatureFlags>() is { } flags && !flags.IsEnabled(Features.ReplicaRepair)) return;
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, _workerStoppingCts.Token);
         var combinedToken = linkedCts.Token;
 

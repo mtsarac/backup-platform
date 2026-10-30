@@ -2,6 +2,7 @@ using BackupPlatform.Domain.Storage;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Contracts.Backups;
+using BackupPlatform.Contracts.Flags;
 using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Identity;
@@ -27,7 +28,7 @@ namespace BackupPlatform.Infrastructure.Backups;
 /// agent limits are decided against a consistent count of Leased/Running attempts by any number of backend instances. Releasing
 /// transitions (complete, expire, cancel) never wait on that lock, so the two lock orders cannot cycle.
 /// </summary>
-public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext> options, IBackupAdmissionPolicy admission, BackupExecutionOptions? limits = null, Func<double>? jitter = null, NotificationOptions? notifications = null, ILogger<PostgreSqlBackupRunStore>? log = null) : IBackupRunStore
+public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext> options, IBackupAdmissionPolicy admission, BackupExecutionOptions? limits = null, Func<double>? jitter = null, NotificationOptions? notifications = null, ILogger<PostgreSqlBackupRunStore>? log = null, FeatureFlags? flags = null) : IBackupRunStore
 {
     // Arbitrary fixed application key for the claim critical section.
     private const long ClaimLockKey = 0x4250_434C_4149_4D01;
@@ -541,7 +542,8 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         catch (InvalidOperationException) { return BackupMutationResult.Conflict; }
         catch (ArgumentException) { return BackupMutationResult.Conflict; }
         BackupAudit.RecordCompletion(context, run, wasTerminal, attemptWasTerminal, command.Now);
-        if (!wasTerminal && run.Status == BackupStatus.Succeeded) await EvaluateSizeAnomalyAsync(context, transaction, run, command.Now, cancellationToken);
+        // No flags (a store built by hand) means no gate; the API always registers them.
+        if (!wasTerminal && run.Status == BackupStatus.Succeeded && (flags?.IsEnabled(Features.SizeAnomaly) ?? true)) await EvaluateSizeAnomalyAsync(context, transaction, run, command.Now, cancellationToken);
         try { await context.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateConcurrencyException) { return BackupMutationResult.Conflict; }
         await transaction.CommitAsync(cancellationToken);

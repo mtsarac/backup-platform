@@ -1,6 +1,7 @@
 using BackupPlatform.Api.Security;
 using BackupPlatform.Application.Identity;
 using BackupPlatform.Application.Tenancy;
+using BackupPlatform.Contracts.Flags;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Storage;
 using BackupPlatform.Storage;
@@ -91,7 +92,14 @@ public static class StorageConnectionEndpoints
 
     // ---- shared -------------------------------------------------------------------------------------------------------------------------------
 
-    private static IResult ListProviders(StorageConnectionService service) => Results.Ok(new { items = service.Providers.Select(ToResponse).ToList() });
+    // SMB is the one provider behind a flag: offering it and creating a connection of it both ask the flag; nothing else reaches SMB.
+    private static bool SmbOff(FeatureFlags flags, string? providerType) =>
+        string.Equals(providerType, StorageProviderTypes.Smb, StringComparison.OrdinalIgnoreCase) && !flags.IsEnabled(Features.Smb);
+
+    private static IResult FeatureDisabled => Results.NotFound(new { error = "feature_disabled" });
+
+    private static IResult ListProviders(StorageConnectionService service, FeatureFlags flags) =>
+        Results.Ok(new { items = service.Providers.Where(provider => !SmbOff(flags, provider.ProviderType)).Select(ToResponse).ToList() });
 
     private static StorageScope Scope(ITenantContext tenant) => StorageScope.Tenant(tenant.TenantId!, canManage: true);
 
@@ -150,8 +158,8 @@ public static class StorageConnectionEndpoints
         return view is null ? Failure(StorageConnectionOutcome.NotFound, null) : Results.Ok(ToResponse(view));
     }
 
-    private static Task<IResult> CreateForTenantAsync(CreateStorageConnectionRequest? request, ITenantContext tenant, ICurrentUser user, StorageConnectionService service, CancellationToken cancellationToken) =>
-        GuardAsync(async () => Respond(await service.CreateAsync(Scope(tenant), tenant.TenantId!, ToCommand(request), user.UserId!, cancellationToken), created: true));
+    private static Task<IResult> CreateForTenantAsync(CreateStorageConnectionRequest? request, FeatureFlags flags, ITenantContext tenant, ICurrentUser user, StorageConnectionService service, CancellationToken cancellationToken) =>
+        SmbOff(flags, request?.ProviderType) ? Task.FromResult(FeatureDisabled) : GuardAsync(async () => Respond(await service.CreateAsync(Scope(tenant), tenant.TenantId!, ToCommand(request), user.UserId!, cancellationToken), created: true));
 
     private static Task<IResult> UpdateForTenantAsync(Guid id, UpdateStorageConnectionRequest? request, ITenantContext tenant, ICurrentUser user, StorageConnectionService service, CancellationToken cancellationToken) =>
         GuardAsync(async () => Respond(await service.UpdateAsync(Scope(tenant), id, ToCommand(request), user.UserId!, cancellationToken)));
@@ -199,8 +207,8 @@ public static class StorageConnectionEndpoints
         return items is null ? Failure(StorageConnectionOutcome.TenantNotFound, null) : Results.Ok(new { items = items.Select(ToResponse).ToList() });
     }
 
-    private static Task<IResult> CreateForPlatformAsync(Guid tenantId, CreateStorageConnectionRequest? request, ICurrentUser user, StorageConnectionService service, CancellationToken cancellationToken) =>
-        GuardAsync(async () => Respond(await service.CreateAsync(StorageScope.Platform, new TenantId(tenantId), ToCommand(request), user.UserId!, cancellationToken), created: true));
+    private static Task<IResult> CreateForPlatformAsync(Guid tenantId, CreateStorageConnectionRequest? request, FeatureFlags flags, ICurrentUser user, StorageConnectionService service, CancellationToken cancellationToken) =>
+        SmbOff(flags, request?.ProviderType) ? Task.FromResult(FeatureDisabled) : GuardAsync(async () => Respond(await service.CreateAsync(StorageScope.Platform, new TenantId(tenantId), ToCommand(request), user.UserId!, cancellationToken), created: true));
 
     private static async Task<IResult> GetForPlatformAsync(Guid id, StorageConnectionService service, CancellationToken cancellationToken)
     {

@@ -18,6 +18,7 @@ import { restoreIneligibility } from '@/features/artifacts/restore-eligibility'
 import { artifactName, artifactState, canCancelDeletion, deletionInProgress } from '@/features/artifacts/format'
 import { ReplicationSection } from '@/features/backups/replication'
 import type { ReplicationDestination } from '@/features/artifacts/types'
+import { isFeatureEnabled } from '@/features/feature-flags/feature-flags'
 import { useArtifact, useArtifactActions, useReplicaRepair, useRepairStatus, useArtifactRepairs } from '@/features/artifacts/hooks'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { type ErrorDescription, describeError, describeFailure } from '@/lib/api/failure-messages'
@@ -80,6 +81,7 @@ function ArtifactDetail({ id }: { id: string }) {
   }, [expiresAt, now, pinnedAt])
 
   const canRepair = Boolean(
+    isFeatureEnabled('replicaRepair') &&
     canOperate &&
     artifact &&
     artifact.state !== 'Deleted' &&

@@ -8,6 +8,7 @@ import { DiscoverySourcePicker, type DiscoverySourceProps } from '@/features/bac
 import { FilePathList } from '@/features/backup-jobs/file-path-list'
 import { defaultFiles, type Engine } from '@/features/backup-jobs/job-form-values'
 import type { JobFormState } from '@/features/backup-jobs/use-job-form'
+import { isFeatureEnabled } from '@/features/feature-flags/feature-flags'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { statusLabel } from '@/lib/status'
 
@@ -27,9 +28,10 @@ function FileSourceGroup({ configuration, errors, onChange }: GroupProps) {
   useLanguage()
   const { text, select } = fieldKit(errors)
   const files = configuration.files ?? defaultFiles
+  const snapshotsOn = isFeatureEnabled('windowsVss') || isFeatureEnabled('linuxSnapshots')
   return <FormGrid>
     {text('configuration.database', tx('Dosya kaynağı referansı'), configuration.database, database => onChange({ ...configuration, database }))}
-    <p className="text-sm text-text-muted md:col-span-2">{tx('Referans Agent FileSources ayarındaki ada karşılık gelir; fiziksel kök yol sunucudan seçilemez. . tüm kaynağı seçer. İzinler ve SHA-256 manifesti arşivde korunur. Canlı dosya değişiklikleri yedeği durdurur; noktasal görünüm için yapılandırılmış snapshot kaynağı kullanın.')}</p>
+    <p className="text-sm text-text-muted md:col-span-2">{tx('Referans Agent FileSources ayarındaki ada karşılık gelir; fiziksel kök yol sunucudan seçilemez. . tüm kaynağı seçer. İzinler ve SHA-256 manifesti arşivde korunur. Canlı dosya değişiklikleri yedeği durdurur.')}{snapshotsOn && ' ' + tx('Noktasal görünüm için yapılandırılmış snapshot kaynağı kullanın.')}</p>
     <FilePathList id="configuration.files.paths" label={tx('Yedeklenecek dosya ve klasörler')} paths={files.paths} error={errors['configuration.files.paths'] ?? errors['configuration.files']} onChange={paths => onChange({ ...configuration, files: { ...files, paths } })} />
     <FilePathList id="configuration.files.includes" label={tx('Dahil Edilecekler')} paths={files.includes} error={errors['configuration.files.includes']} onChange={includes => onChange({ ...configuration, files: { ...files, includes } })} />
     <FilePathList id="configuration.files.excludes" label={tx('Hariç Tutulacaklar')} paths={files.excludes} error={errors['configuration.files.excludes']} onChange={excludes => onChange({ ...configuration, files: { ...files, excludes } })} />

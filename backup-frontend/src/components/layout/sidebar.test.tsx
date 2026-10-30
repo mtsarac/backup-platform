@@ -2,6 +2,7 @@ import { act, fireEvent, screen, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import { MemoryRouter, createRoutesFromChildren, matchRoutes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import { changeLanguage } from '@/lib/i18n/runtime'
 import { tenantRoutes } from '@/route-tables'
 import { AppShell } from './app-shell'
@@ -13,7 +14,7 @@ vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({ user: { isPlatfor
 
 vi.mock('@/hooks/use-theme', () => ({ useTheme: () => ({ resolvedTheme: 'light', toggleTheme: vi.fn() }) }))
 
-beforeEach(() => { access.canAdmin = true; access.isPlatformAdmin = false })
+beforeEach(() => { access.canAdmin = true; access.isPlatformAdmin = false; setFeatureFlags({ supportSessions: true }) })
 
 const base = '/tenants/tenant-a'
 const nav = () => screen.getAllByRole('navigation')[0]

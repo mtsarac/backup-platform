@@ -3,6 +3,7 @@ import { render } from '@/test/render'
 import { MemoryRouter } from 'react-router-dom'
 import { LocationProbe } from '@/features/platform/location-probe'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import { setViewport } from '@/test/viewport'
 import { makeRun } from '@/features/backups/test-data'
 import { dateFilterInstant } from '@/features/backups/presentation'
@@ -20,6 +21,7 @@ vi.mock('@/features/backup-jobs/hooks', () => ({ useBackupJobs: () => ({ data: [
 vi.mock('@/features/agents/hooks', () => ({ useAgents: () => ({ data: [{ agentId: 'agent-id', hostName: 'SQL ajanı' }], isPending: false, error: null }) }))
 
 beforeEach(() => {
+  setFeatureFlags({ sizeAnomaly: true })
   state.filters = []
   state.page = { items: [makeRun()], totalCount: 60, page: 1, pageSize: 25 }
 })
@@ -101,6 +103,16 @@ describe('run history filters and pagination', () => {
     expect(screen.getByTestId('location')).toHaveTextContent(/^\/backup-runs$/)
     expect(screen.getByRole('link', { name: /yedekleme işlerine/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Filtreleri temizle' })).not.toBeInTheDocument()
+  })
+})
+
+describe('size anomaly feature off', () => {
+  it('shows no anomaly badge or comparison', () => {
+    setFeatureFlags({})
+    state.page = { items: [makeRun({ status: 'Succeeded', isSizeAnomaly: true, sizeAnomalyStatus: 'SizeAnomalyWarning', sizeAnomalyBaselineBytes: 5_000_000_000, sizeAnomalyDeviationRatio: 2 })], totalCount: 1, page: 1, pageSize: 25 }
+    render(<MemoryRouter><BackupsPage /></MemoryRouter>)
+    expect(screen.queryByText('Boyut Anomalisi')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Geçmiş ortalama/)).not.toBeInTheDocument()
   })
 })
 

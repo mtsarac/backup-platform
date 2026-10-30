@@ -25,7 +25,7 @@ def win_ms_drop(db):
 def dests(t):
     c = ST["connections"]
     conn = lambda p: {"storageProvider": p, "storageConnectionId": c[p], "storageExecutionLocation": "Backend", "isPrimary": True}
-    return {"local": [flows.local_dest()], "local-vol2": [flows.local_dest("vol2")], "sftp": [conn("sftp")], "s3": [conn("s3")], "smb": [conn("smb")]}
+    return {"local": [flows.local_dest()], "local-vol2": [flows.local_dest("vol2")], "sftp": [conn("sftp")], "s3": [conn("s3")], **({"smb": [conn("smb")]} if "smb" in c else {})}
 
 def targets(t, agents):
     fa, wa = agents["fedora-e2e"], agents["win11-e2e"]
