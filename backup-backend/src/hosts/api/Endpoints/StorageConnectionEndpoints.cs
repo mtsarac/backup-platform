@@ -45,6 +45,18 @@ public static class StorageConnectionEndpoints
     public static IEndpointRouteBuilder MapStorageConnectionEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}").WithMetadata(new TenantScopedEndpoint());
+        tenant.AddEndpointFilter(async (context, next) =>
+        {
+            var services = context.HttpContext.RequestServices;
+            var flags = services.GetRequiredService<FeatureFlags>();
+            if (!flags.IsEnabled(Features.Smb) && Guid.TryParse(context.HttpContext.Request.RouteValues["id"]?.ToString(), out var id))
+            {
+                var tenantId = services.GetRequiredService<ITenantContext>().TenantId;
+                var record = await services.GetRequiredService<IStorageConnectionStore>().FindAsync(id, tenantId, context.HttpContext.RequestAborted);
+                if (record is not null && SmbOff(flags, record.Connection.ProviderType)) return FeatureDisabled;
+            }
+            return await next(context);
+        });
         tenant.MapGet("/storage-providers", ListProviders).RequireAuthorization(AuthorizationPolicies.TenantViewer);
         tenant.MapGet("/storage-connections", ListForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
         tenant.MapGet("/storage-connections/{id:guid}", GetForTenantAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
@@ -66,6 +78,17 @@ public static class StorageConnectionEndpoints
         tenant.MapGet("/storage-connections/google-drive/callback", GoogleDriveOAuthCallbackAsync).AllowAnonymous();
 
         var platform = endpoints.MapGroup("/api/platform").RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
+        platform.AddEndpointFilter(async (context, next) =>
+        {
+            var services = context.HttpContext.RequestServices;
+            var flags = services.GetRequiredService<FeatureFlags>();
+            if (!flags.IsEnabled(Features.Smb) && Guid.TryParse(context.HttpContext.Request.RouteValues["id"]?.ToString(), out var id))
+            {
+                var record = await services.GetRequiredService<IStorageConnectionStore>().FindAsync(id, null, context.HttpContext.RequestAborted);
+                if (record is not null && SmbOff(flags, record.Connection.ProviderType)) return FeatureDisabled;
+            }
+            return await next(context);
+        });
         platform.MapGet("/storage-providers", ListProviders);
         platform.MapGet("/storage-connections", SearchAsync);
         platform.MapGet("/tenants/{tenantId:guid}/storage-connections", ListForPlatformAsync);
@@ -92,7 +115,7 @@ public static class StorageConnectionEndpoints
 
     // ---- shared -------------------------------------------------------------------------------------------------------------------------------
 
-    // SMB is the one provider behind a flag: offering it and creating a connection of it both ask the flag; nothing else reaches SMB.
+    // Existing connections remain stored while the provider is disabled.
     private static bool SmbOff(FeatureFlags flags, string? providerType) =>
         string.Equals(providerType, StorageProviderTypes.Smb, StringComparison.OrdinalIgnoreCase) && !flags.IsEnabled(Features.Smb);
 
@@ -145,11 +168,11 @@ public static class StorageConnectionEndpoints
 
     // ---- tenant -------------------------------------------------------------------------------------------------------------------------------
 
-    private static async Task<IResult> ListForTenantAsync(HttpContext context, ITenantContext tenant, IAuthorizationService authorization, StorageConnectionService service, CancellationToken cancellationToken)
+    private static async Task<IResult> ListForTenantAsync(HttpContext context, ITenantContext tenant, IAuthorizationService authorization, StorageConnectionService service, FeatureFlags flags, CancellationToken cancellationToken)
     {
         var scope = await ReadScopeAsync(context, tenant, authorization);
         var items = await service.ListAsync(scope, tenant.TenantId!, cancellationToken);
-        return items is null ? Failure(StorageConnectionOutcome.TenantNotFound, null) : Results.Ok(new { items = items.Select(ToResponse).ToList() });
+        return items is null ? Failure(StorageConnectionOutcome.TenantNotFound, null) : Results.Ok(new { items = items.Where(item => !SmbOff(flags, item.ProviderType)).Select(ToResponse).ToList() });
     }
 
     private static async Task<IResult> GetForTenantAsync(Guid id, HttpContext context, ITenantContext tenant, IAuthorizationService authorization, StorageConnectionService service, CancellationToken cancellationToken)
@@ -179,7 +202,7 @@ public static class StorageConnectionEndpoints
     // ---- platform -----------------------------------------------------------------------------------------------------------------------------
 
     private static async Task<IResult> SearchAsync(
-        string? ownership, string? providerType, Guid? tenantId, bool? enabled, string? search, int? page, int? pageSize, StorageConnectionService service, CancellationToken cancellationToken)
+        string? ownership, string? providerType, Guid? tenantId, bool? enabled, string? search, int? page, int? pageSize, StorageConnectionService service, FeatureFlags flags, CancellationToken cancellationToken)
     {
         var p = page ?? 1;
         var size = pageSize ?? DefaultPageSize;
@@ -196,15 +219,15 @@ public static class StorageConnectionEndpoints
             }
             parsedOwnership = value;
         }
-        var filter = new StorageConnectionFilter(parsedOwnership, providerType, tenantId is { } id ? new TenantId(id) : null, enabled, search);
+        var filter = new StorageConnectionFilter(parsedOwnership, providerType, tenantId is { } id ? new TenantId(id) : null, enabled, search, !flags.IsEnabled(Features.Smb));
         var result = await service.SearchAsync(filter, p, size, cancellationToken);
         return Results.Ok(new { items = result.Items.Select(ToResponse).ToList(), totalCount = result.TotalCount, page = result.Page, pageSize = result.PageSize });
     }
 
-    private static async Task<IResult> ListForPlatformAsync(Guid tenantId, StorageConnectionService service, CancellationToken cancellationToken)
+    private static async Task<IResult> ListForPlatformAsync(Guid tenantId, StorageConnectionService service, FeatureFlags flags, CancellationToken cancellationToken)
     {
         var items = await service.ListAsync(StorageScope.Platform, new TenantId(tenantId), cancellationToken);
-        return items is null ? Failure(StorageConnectionOutcome.TenantNotFound, null) : Results.Ok(new { items = items.Select(ToResponse).ToList() });
+        return items is null ? Failure(StorageConnectionOutcome.TenantNotFound, null) : Results.Ok(new { items = items.Where(item => !SmbOff(flags, item.ProviderType)).Select(ToResponse).ToList() });
     }
 
     private static Task<IResult> CreateForPlatformAsync(Guid tenantId, CreateStorageConnectionRequest? request, FeatureFlags flags, ICurrentUser user, StorageConnectionService service, CancellationToken cancellationToken) =>
@@ -438,7 +461,7 @@ public static class StorageConnectionEndpoints
 
     private static async Task<IResult> GetCapacityV1Async(
         Guid id, ICurrentUser user, TenantResolutionService resolution, IUserAccessStore userAccess,
-        IStorageConnectionStore store, StorageCapacityProbeService service, CancellationToken cancellationToken)
+        IStorageConnectionStore store, StorageCapacityProbeService service, FeatureFlags flags, CancellationToken cancellationToken)
     {
         if (!user.IsAuthenticated || user.UserId is not { } userId) return Results.Unauthorized();
         var record = await store.FindAsync(id, null, cancellationToken);
@@ -450,6 +473,7 @@ public static class StorageConnectionEndpoints
         {
             return Results.NotFound(new { error = "storage_connection_not_found" });
         }
+        if (SmbOff(flags, record.Connection.ProviderType)) return FeatureDisabled;
 
         var capacity = await service.GetCapacityAsync(record.Connection.TenantId, id, cancellationToken);
         return capacity is null ? Results.NotFound(new { error = "capacity_not_found" }) : Results.Ok(capacity);
@@ -457,7 +481,7 @@ public static class StorageConnectionEndpoints
 
     private static async Task<IResult> ProbeV1Async(
         Guid id, ICurrentUser user, TenantResolutionService resolution, IUserAccessStore userAccess,
-        IStorageConnectionStore store, StorageCapacityProbeService service, CancellationToken cancellationToken)
+        IStorageConnectionStore store, StorageCapacityProbeService service, FeatureFlags flags, CancellationToken cancellationToken)
     {
         if (!user.IsAuthenticated || user.UserId is not { } userId) return Results.Unauthorized();
         var record = await store.FindAsync(id, null, cancellationToken);
@@ -469,6 +493,7 @@ public static class StorageConnectionEndpoints
         {
             return Results.NotFound(new { error = "storage_connection_not_found" });
         }
+        if (SmbOff(flags, record.Connection.ProviderType)) return FeatureDisabled;
 
         var capacity = await service.ProbeAsync(record.Connection.TenantId, id, cancellationToken);
         return capacity is null ? Results.NotFound(new { error = "storage_connection_not_found" })

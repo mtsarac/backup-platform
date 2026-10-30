@@ -1,5 +1,6 @@
 using BackupPlatform.Agents.Connectivity;
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Contracts.Flags;
 using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Backups;
@@ -17,7 +18,7 @@ namespace BackupPlatform.Infrastructure.Backups;
 /// one occurrence row per (job, instant) and one run per (job, instant). Neither the scheduler library nor process memory holds any
 /// scheduling state.
 /// </summary>
-public sealed class PostgreSqlBackupScheduleStore(DbContextOptions<PlatformDbContext> options, IBackupAdmissionPolicy admission, AgentConnectivityOptions? connectivity = null) : IBackupScheduleStore
+public sealed class PostgreSqlBackupScheduleStore(DbContextOptions<PlatformDbContext> options, IBackupAdmissionPolicy admission, AgentConnectivityOptions? connectivity = null, FeatureFlags? flags = null) : IBackupScheduleStore
 {
     private readonly AgentConnectivityOptions _connectivity = connectivity ?? new AgentConnectivityOptions();
 
@@ -68,7 +69,7 @@ public sealed class PostgreSqlBackupScheduleStore(DbContextOptions<PlatformDbCon
         {
             // Same gate as a manual start. A refusal is a decided occurrence like any other: recorded with its reason, so it is never silently lost.
             var runId = Guid.NewGuid();
-            var target = await StorageTargetGate.ForNewRunAsync(context, tenantId, owner, job.Configuration, now, cancellationToken);
+            var target = await StorageTargetGate.ForNewRunAsync(context, tenantId, owner, job.Configuration, now, cancellationToken, flags);
             var decision = target.Allowed
                 ? await BackupAdmissionGate.AdmitAsync(admission, context, new BackupAdmissionRequest(tenantId, jobId, runId, BackupTriggerTypes.Scheduled, now) { Configuration = target.Configuration }, cancellationToken)
                 : BackupAdmissionDecision.Denied(target.DenialCode!);

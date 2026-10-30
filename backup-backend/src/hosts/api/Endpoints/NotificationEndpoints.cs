@@ -82,6 +82,18 @@ public static class NotificationEndpoints
     {
         var tenant = endpoints.MapGroup("/api/tenants/{tenantId:guid}/notifications").WithMetadata(new TenantScopedEndpoint())
             .RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
+        tenant.AddEndpointFilter(async (context, next) =>
+        {
+            var services = context.HttpContext.RequestServices;
+            var flags = services.GetRequiredService<FeatureFlags>();
+            if (!flags.IsEnabled(Features.Sms) && Guid.TryParse(context.HttpContext.Request.RouteValues["id"]?.ToString(), out var id))
+            {
+                var tenantId = services.GetRequiredService<ITenantContext>().TenantId!;
+                var channel = await services.GetRequiredService<NotificationAdministrationService>().GetChannelAsync(tenantId, id, context.HttpContext.RequestAborted);
+                if (channel is not null && SmsOff(flags, channel.Kind)) return FeatureDisabled;
+            }
+            return await next(context);
+        });
         tenant.MapGet("/policy", GetPolicyAsync);
         tenant.MapPut("/policy", PutPolicyAsync);
         tenant.MapGet("/channels", ListChannelsAsync);
@@ -164,10 +176,14 @@ public static class NotificationEndpoints
         await service.GetPolicyAsync(tenant.TenantId!, cancellationToken) is { } view ? Results.Ok(ToResponse(view, flags)) : Failure(NotificationOutcome.TenantNotFound);
 
     private static Task<IResult> PutPolicyAsync(NotificationPolicyRequest request, FeatureFlags flags, ITenantContext tenant, ICurrentUser user, NotificationAdministrationService service, CancellationToken cancellationToken) =>
-        request.EventTypes?.Contains(NotificationEventTypes.BackupSizeAnomaly) == true && !flags.IsEnabled(Features.SizeAnomaly) ? Task.FromResult(FeatureDisabled) : GuardAsync(async () =>
+        (request.EventTypes?.Contains(NotificationEventTypes.BackupSizeAnomaly) == true && !flags.IsEnabled(Features.SizeAnomaly)) || request.ChannelKinds?.Any(kind => SmsOff(flags, kind)) == true ? Task.FromResult(FeatureDisabled) : GuardAsync(async () =>
         {
+            var kinds = request.ChannelKinds;
+            if (!flags.IsEnabled(Features.Sms) && kinds is not null &&
+                (await service.GetPolicyAsync(tenant.TenantId!, cancellationToken))?.ChannelKinds.Any(kind => SmsOff(flags, kind)) == true)
+                kinds = [.. kinds, NotificationTransports.Sms];
             var command = new PolicyCommand(
-                request.Enabled ?? throw new InvalidNotificationException("enabled", "required"), request.EventTypes, request.MinimumSeverity, request.ChannelKinds,
+                request.Enabled ?? throw new InvalidNotificationException("enabled", "required"), request.EventTypes, request.MinimumSeverity, kinds,
                 request.RecoveryNotifications ?? throw new InvalidNotificationException("recoveryNotifications", "required"),
                 request.StaleAfterHours ?? throw new InvalidNotificationException("staleAfterHours", "required"),
                 request.AgentOfflineAfterMinutes ?? throw new InvalidNotificationException("agentOfflineAfterMinutes", "required"),
@@ -179,16 +195,16 @@ public static class NotificationEndpoints
 
     private static object ToResponse(NotificationPolicyView view, FeatureFlags flags) => new
     {
-        enabled = view.Enabled, eventTypes = view.EventTypes.Where(type => type != NotificationEventTypes.BackupSizeAnomaly || flags.IsEnabled(Features.SizeAnomaly)), minimumSeverity = view.MinimumSeverity, channelKinds = view.ChannelKinds,
+        enabled = view.Enabled, eventTypes = view.EventTypes.Where(type => type != NotificationEventTypes.BackupSizeAnomaly || flags.IsEnabled(Features.SizeAnomaly)), minimumSeverity = view.MinimumSeverity, channelKinds = view.ChannelKinds.Where(kind => !SmsOff(flags, kind)),
         recoveryNotifications = view.RecoveryNotifications, staleAfterHours = view.StaleAfterHours, agentOfflineAfterMinutes = view.AgentOfflineAfterMinutes,
         reminderIntervalHours = view.ReminderIntervalHours, maxNotificationsPerHour = view.MaxNotificationsPerHour, updatedAt = view.UpdatedAt,
-        transports = new { email = new { available = view.EmailAvailable }, sms = new { available = view.SmsAvailable } }
+        transports = new { email = new { available = view.EmailAvailable }, sms = new { available = flags.IsEnabled(Features.Sms) && view.SmsAvailable } }
     };
 
     // ---- channels -----------------------------------------------------------------------------------------------------------------------
 
-    private static async Task<IResult> ListChannelsAsync(ITenantContext tenant, NotificationAdministrationService service, CancellationToken cancellationToken) =>
-        await service.ListChannelsAsync(tenant.TenantId!, cancellationToken) is { } items ? Results.Ok(new { items = items.Select(ToResponse).ToList() }) : Failure(NotificationOutcome.TenantNotFound);
+    private static async Task<IResult> ListChannelsAsync(FeatureFlags flags, ITenantContext tenant, NotificationAdministrationService service, CancellationToken cancellationToken) =>
+        await service.ListChannelsAsync(tenant.TenantId!, cancellationToken) is { } items ? Results.Ok(new { items = items.Where(item => !SmsOff(flags, item.Kind)).Select(ToResponse).ToList() }) : Failure(NotificationOutcome.TenantNotFound);
 
     private static async Task<IResult> GetChannelAsync(Guid id, ITenantContext tenant, NotificationAdministrationService service, CancellationToken cancellationToken) =>
         await service.GetChannelAsync(tenant.TenantId!, id, cancellationToken) is { } view ? Results.Ok(ToResponse(view)) : Failure(NotificationOutcome.NotFound);
@@ -272,8 +288,8 @@ public static class NotificationEndpoints
             return result.Succeeded ? Results.Ok(ToEmailResponse(result.Value!)) : Failure(result.Outcome);
         });
 
-    private static Task<IResult> PutSmsTransportAsync(SmsTransportRequest request, ICurrentUser user, NotificationTransportService service, CancellationToken cancellationToken) =>
-        GuardAsync(async () =>
+    private static Task<IResult> PutSmsTransportAsync(SmsTransportRequest request, FeatureFlags flags, ICurrentUser user, NotificationTransportService service, CancellationToken cancellationToken) =>
+        !flags.IsEnabled(Features.Sms) ? Task.FromResult(FeatureDisabled) : GuardAsync(async () =>
         {
             var values = new Dictionary<string, string?>
             {

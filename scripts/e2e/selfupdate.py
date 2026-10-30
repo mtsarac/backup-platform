@@ -7,7 +7,7 @@ docs/test-environment/agent-builds) and signed by the e2e key. Checks, in order,
      downloads and stages nothing, and stays on 1.0.0 online;
   3. the original manifest is restored: the agent updates itself, restarts from releases/1.0.1, reports version 1.0.1 online with the same AgentId, and acknowledges the new release.
 Run: python3 selfupdate.py"""
-import base64, datetime, hashlib, importlib, io, json, os, pathlib, shutil, subprocess, tarfile, tempfile, time, uuid
+import base64, datetime, hashlib, importlib, io, json, os, pathlib, shutil, subprocess, sys, tarfile, tempfile, time, uuid, zipfile
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec, utils
 import api, lib
@@ -50,12 +50,12 @@ def package(directory):
     return buf.getvalue()
 
 
-def sign(version, pkg, key, key_id=KEY_ID):
+def sign(version, pkg, key, key_id=KEY_ID, rid=RID):
     """A manifest exactly as the platform defines it: ECDSA P-256/SHA-256 over the canonical payload string, signature as fixed-size r||s."""
-    now = int(time.time()); url = f"{SERVER}/api/agent/updates/packages/{RID}/{version}"; sha = hashlib.sha256(pkg).hexdigest()
-    canonical = f"{RID}:{version}:{OLD}:{sha}:{len(pkg)}:{url}:{now}".encode()
+    now = int(time.time()); url = f"{SERVER}/api/agent/updates/packages/{rid}/{version}"; sha = hashlib.sha256(pkg).hexdigest()
+    canonical = f"{rid}:{version}:{OLD}:{sha}:{len(pkg)}:{url}:{now}".encode()
     r, s = utils.decode_dss_signature(key.sign(canonical, ec.ECDSA(hashes.SHA256())))
-    return {"payload": {"version": version, "platform": RID, "minimumSupportedVersion": OLD, "packageSha256": sha, "packageSize": len(pkg), "downloadUrl": url,
+    return {"payload": {"version": version, "platform": rid, "minimumSupportedVersion": OLD, "packageSha256": sha, "packageSize": len(pkg), "downloadUrl": url,
                         "publishedAt": datetime.datetime.fromtimestamp(now, datetime.timezone.utc).isoformat()},
             "keyId": key_id, "signatureBase64": base64.b64encode(r.to_bytes(32, "big") + s.to_bytes(32, "big")).decode()}
 
@@ -169,5 +169,133 @@ def self_update(t):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def windows_package(directory, include_settings=False):
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(directory.rglob("*")):
+            if path.is_file() and (include_settings or not path.name.lower().startswith("appsettings")):
+                archive.write(path, path.relative_to(directory).as_posix())
+    return buf.getvalue()
+
+
+def windows_build(version):
+    out = BUILDS / f"win-x64-{version}"
+    if not (out / "BackupPlatform.Agent.Host.exe").exists():
+        r = subprocess.run(["dotnet", "publish", "src/hosts/agent/BackupPlatform.Agent.Host.csproj", "-c", "Release", "-r", "win-x64",
+                            "--self-contained", "true", "-p:AgentPlatform=Windows", f"-p:Version={version}", "-o", str(out)],
+                           cwd=api.ROOT / "backup-backend", capture_output=True, text=True)
+        check(r.returncode == 0, f"Windows dotnet publish failed: {r.stdout[-600:]} {r.stderr[-600:]}")
+    return out
+
+
+def windows_ps(host, script, secrets=()):
+    r = subprocess.run(["ssh", host, "powershell -NoProfile -NonInteractive -Command -"],
+                       input="$ErrorActionPreference='Stop'\ntry {\n" + script + "\n} catch { Write-Error $_; exit 1 }\n",
+                       capture_output=True, text=True, timeout=300)
+    error = r.stderr[-1000:]
+    for secret in secrets: error = error.replace(secret, "[redacted]")
+    check(r.returncode == 0, f"Windows command failed: {error}")
+    return r.stdout.strip()
+
+
+@scenario("agents/windows-self-update-signed-manifest-version-changes")
+def windows_self_update(t):
+    """Run only against a disposable Windows host and an isolated update server."""
+    host = os.environ.get("E2E_WINDOWS_SELFUPDATE_HOST", "")
+    check(host and not host.startswith("-") and all(c.isalnum() or c in ".-_@" for c in host),
+          "Set E2E_WINDOWS_SELFUPDATE_HOST to a disposable Windows SSH host.")
+    check(os.environ.get("E2E_WINDOWS_SELFUPDATE_ISOLATED") == "yes",
+          "Set E2E_WINDOWS_SELFUPDATE_ISOLATED=yes only for a dedicated backend and Windows host.")
+    check(lab.KEY.exists(), "Missing e2e signing key; configure the backend to trust it before running.")
+    key = lab.signing_key(); pem = lab.public_pem()
+    admin = api.login()
+    rc, output = api_sh("test ! -e /app/agent-updates/win-x64")
+    check(rc == 0, f"Windows release store must be absent on the isolated backend: {output}")
+    windows_ps(host, """
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'SSH PowerShell must run elevated.' }
+if (Get-Service BackupAgent -ErrorAction SilentlyContinue) { throw 'BackupAgent already exists; use a disposable host.' }
+if (Get-ScheduledTask -TaskName BackupAgentUpdate -ErrorAction SilentlyContinue) { throw 'BackupAgentUpdate already exists; use a disposable host.' }
+""")
+    name = f"selfupdate-win-e2e-{uuid.uuid4().hex[:8]}"
+    marker = uuid.uuid4().hex
+    remote_zip = f"bp-selfupdate-{marker}.zip"
+    root = f"C:\\Program Files\\bp-selfupdate-{marker}"
+    store = f"C:\\ProgramData\\bp-selfupdate-{marker}"
+    installer = api.ROOT / "backup-backend/deploy/windows"
+    old = windows_build(OLD)
+    pkg = windows_package(windows_build(NEW))
+    token = subprocess.run(["python3", "enroll.py", "a"], cwd=api.ROOT / "scripts/e2e", capture_output=True, text=True, check=True).stdout.strip()
+    with tempfile.TemporaryDirectory(prefix="e2e-win-update-") as tmp:
+        bundle = pathlib.Path(tmp) / remote_zip
+        with zipfile.ZipFile(bundle, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for path in old.rglob("*"):
+                if path.is_file(): archive.write(path, "bin/" + path.relative_to(old).as_posix())
+            for script in ("Install-BackupAgentService.ps1", "Uninstall-BackupAgentService.ps1"):
+                archive.write(installer / script, script)
+        subprocess.run(["scp", "-q", str(bundle), f"{host}:{remote_zip}"], check=True)
+        created = False
+        try:
+            created = True
+            windows_ps(host, f"""
+$root = '{root}'; $store = '{store}'; $bundle = Join-Path $HOME '{remote_zip}'
+if ((Test-Path $root) -or (Test-Path $store) -or (Test-Path "$store.updates")) {{ throw 'Scenario paths already exist.' }}
+New-Item -ItemType Directory -Path $root | Out-Null
+New-Item -ItemType File -Path "$root\\.e2e-owned" | Out-Null
+& icacls.exe $root /inheritance:r /grant '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Null
+if ($LASTEXITCODE -ne 0) {{ throw 'Could not protect the scenario binary directory.' }}
+Expand-Archive -LiteralPath $bundle -DestinationPath $root
+& "$root\\Install-BackupAgentService.ps1" -BinaryDirectory "$root\\bin" -StoreDirectory $store -BackendUri '{SERVER}' -EnrollmentToken '{token}' -AgentName '{name}' -TrustedUpdateKeys @{{ e2e = @'
+{pem}
+'@
+}}
+""", secrets=(token,))
+            before = wait_agent(t, name, OLD)
+            r = publish(admin, sign(NEW, pkg, key, rid="win-x64"), pkg)
+            check(r.status_code == 201, f"Windows release publish failed: {r.status_code} {r.text[:200]}")
+            windows_ps(host, "Restart-Service BackupAgent")
+            after = wait_agent(t, name, NEW, timeout=300)
+            check(after["agentId"] == before["agentId"], "Windows update changed the agent identity")
+            end = time.time() + 90
+            state = None
+            while time.time() < end:
+                output = windows_ps(host, f"""
+$control = '{root}\\bin\\update-control'
+$active = Get-Content "$control\\active.json" -Raw | ConvertFrom-Json
+$service = Get-CimInstance Win32_Service -Filter "Name='BackupAgent'"
+@{{ version = $active.Version; executable = $active.Executable; path = $service.PathName; status = $service.State;
+   pending = (Test-Path "$control\\pending.json"); activation = (Test-Path "$control\\activation");
+   healthy = $(if (Test-Path '{store}.updates\\healthy') {{ Get-Content '{store}.updates\\healthy' -Raw }} else {{ $null }}) }} | ConvertTo-Json -Compress
+""")
+                state = json.loads(output)
+                expected = f"{root}\\bin\\releases\\{NEW}\\BackupPlatform.Agent.Host.exe"
+                if (state["version"] == NEW and state["executable"].lower() == expected.lower()
+                    and state["path"].strip('"').lower() == expected.lower() and state["status"] == "Running"
+                    and not state["pending"] and not state["activation"] and state["healthy"] == NEW):
+                    break
+                time.sleep(2)
+            else:
+                raise AssertionError(f"Windows update was not acknowledged: {state}")
+            return {"agent": name, "before": OLD, "after": NEW, "online": after["connectivity"], "identityPreserved": True}
+        finally:
+            try:
+                a = agent_now(t, name)
+                if a:
+                    response = t.raw("POST", f"/agents/{a['agentId']}/revoke", {})
+                    check(response.status_code in (200, 201, 202, 204), f"Agent revocation failed: {response.status_code}")
+            finally:
+                if created:
+                    windows_ps(host, f"""
+$root = '{root}'; $store = '{store}'
+if (Test-Path "$root\\.e2e-owned") {{
+    $service = Get-CimInstance Win32_Service -Filter "Name='BackupAgent'"
+    if ($service -and $service.PathName -like "*$root\\bin\\*") {{
+        & "$root\\Uninstall-BackupAgentService.ps1" -RemoveIdentity -StoreDirectory $store
+    }} elseif ($service) {{ throw 'Another BackupAgent service exists; refusing cleanup.' }}
+    Remove-Item -LiteralPath $root,"$store.updates" -Recurse -Force -ErrorAction SilentlyContinue
+}}
+Remove-Item -LiteralPath (Join-Path $HOME '{remote_zip}') -Force -ErrorAction SilentlyContinue
+""")
+
+
 if __name__ == "__main__":
-    self_update(lib.Tenant("a"))
+    (windows_self_update if sys.argv[1:] == ["--windows"] else self_update)(lib.Tenant("a"))

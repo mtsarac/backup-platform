@@ -8,6 +8,7 @@ using BackupPlatform.Application.Restores;
 using BackupPlatform.Contracts.Agents;
 using BackupPlatform.Contracts.Backups;
 using BackupPlatform.Contracts.Restores;
+using BackupPlatform.Contracts.Flags;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Restores;
@@ -296,6 +297,9 @@ public static class AgentStorageTransferEndpoints
         HttpRequest request, StorageConnection connection, ISecretProvider secrets,
         GoogleDriveConnectionProviderFactory driveFactory, CancellationToken cancellationToken)
     {
+        if (connection.ProviderType == StorageProviderTypes.Smb &&
+            !request.HttpContext.RequestServices.GetRequiredService<FeatureFlags>().IsEnabled(Features.Smb))
+            return Results.NotFound(new { error = "feature_disabled" });
         request.HttpContext.Response.Headers.CacheControl = "no-store";
         if (connection.ProviderType is StorageProviderTypes.S3 or StorageProviderTypes.Smb)
         {

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using BackupPlatform.Contracts.Flags;
 using BackupPlatform.Domain.Storage;
 using BackupPlatform.SecretProviders.Abstractions;
 using BackupPlatform.StorageProviders.Abstractions;
@@ -7,10 +8,12 @@ using BackupPlatform.StorageProviders.Smb;
 
 namespace BackupPlatform.Api.Backups;
 
-public sealed class NetworkStorageConnectionProviderFactory(IHttpClientFactory clients, IWindowsNetworkSession? windowsSession = null)
+public sealed class NetworkStorageConnectionProviderFactory(IHttpClientFactory clients, IWindowsNetworkSession? windowsSession = null, FeatureFlags? flags = null)
 {
     public IStorageProvider Create(StorageConnection connection, ISecretProvider secrets)
     {
+        if (connection.ProviderType == StorageProviderTypes.Smb && !(flags?.IsEnabled(Features.Smb) ?? true))
+            throw new StorageException(StorageFailureKind.InvalidConfiguration, "The storage provider is disabled.");
         var config = connection.Configuration;
         var tenant = connection.TenantId.Value;
         var id = connection.Id;

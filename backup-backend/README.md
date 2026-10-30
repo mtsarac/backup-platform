@@ -161,13 +161,15 @@ A feature that can be switched off is one line in `Features` (`src/core/contract
 
 | Key | Default | Off means |
 |---|---|---|
-| `sms` | off | SMS transport, secrets and channel kind rejected (404), hidden in the UI |
+| `sms` | off | SMS transport, secrets and channels are hidden or rejected; queued deliveries wait until re-enabled |
 | `supportSessions` | off | `/api/platform/support-sessions*` and `/api/tenants/{id}/support-access*` not registered; no UI entry |
-| `smb` | off | creating an SMB storage connection is rejected (404) and SMB is not offered as a provider |
+| `smb` | off | SMB connections are hidden or rejected, new backup admissions and credential issuance are blocked, and SMB is not offered as a provider |
 | `sizeAnomaly` | off | runs are not evaluated, the health summary lists none, the `backup_size_anomaly` event cannot be selected |
 | `windowsVss` / `linuxSnapshots` | off | agent-side: the agent refuses to start with a file source whose `SnapshotKind` is `Vss` / `Lvm`, `Btrfs` or `Zfs` (set `Features__windowsVss=true` in the agent's environment) |
 | `externalSecrets` | off | `Secrets:Provider` other than `Database` (Vault, AWS Secrets Manager) stops the API from starting |
 | `replicaRepair` | **on** | policy exception so multi-destination repair keeps working; off removes the manual repair routes and stops automatic repair |
+
+Disabling SMB or SMS retains existing resources. Re-enabling SMS permits queued deliveries to resume; already-issued SMB credentials cannot be recalled by changing the flag.
 
 ## 3-2-1 and protected external storage
 

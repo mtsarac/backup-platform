@@ -2,6 +2,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text.Json;
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Contracts.Flags;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Storage;
@@ -28,6 +29,25 @@ public sealed class StorageConnectionAdmissionIntegrationTests(PostgreSqlFixture
     private readonly ScheduleKit _schedule = new(fixture);
 
     // ---- disabled connection denies new runs -----------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Disabled_smb_blocks_existing_job_before_admission()
+    {
+        var agent = await _world.Quota.AgentAsync();
+        var job = await _world.Quota.JobAsync(agent);
+        var target = await _world.AddAsync(agent.TenantId, "NAS", StorageProviderTypes.Smb);
+        await _world.Quota.RunStore().UpdateJobAsync(agent.TenantId, job.Id,
+            new BackupJobUpdate(job.Name, job.AgentId, BackupStoreHarness.Configuration("smb", BackupStorageExecutionLocation.Backend, target.Id), null, null), default);
+        var admission = new CountingAdmission(_world.Quota.Admission());
+        var store = new PostgreSqlBackupRunStore(_world.Quota.Options(), admission, flags: new FeatureFlags(key => key == Features.Smb.Key ? false : true));
+
+        var result = await store.StartRunAsync(agent.TenantId, job.Id, "smb-disabled", ConnectionWorld.Now, default);
+
+        Assert.Equal(BackupStartOutcome.AdmissionDenied, result.Outcome);
+        Assert.Equal(BackupAdmissionDenialCodes.StorageConnectionUnavailable, result.DenialCode);
+        Assert.Equal(0, admission.Calls);
+        Assert.Equal(0, await _world.Quota.Harness.CountRunsAsync(job.Id));
+    }
 
     [Fact]
     public async Task ADisabledConnectionDeniesAManualRunAtStartWithoutCreatingARunOrAReservation()

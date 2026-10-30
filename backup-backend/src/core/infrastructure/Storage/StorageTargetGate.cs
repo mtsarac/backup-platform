@@ -1,4 +1,5 @@
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Contracts.Flags;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Storage;
@@ -90,8 +91,10 @@ internal readonly record struct StorageTargetDecision(BackupConfiguration? Confi
 internal static class StorageTargetGate
 {
     public static async Task<StorageTargetDecision> ForNewRunAsync(
-        PlatformDbContext context, TenantId tenantId, AgentId agentId, BackupConfiguration configuration, DateTimeOffset now, CancellationToken cancellationToken)
+        PlatformDbContext context, TenantId tenantId, AgentId agentId, BackupConfiguration configuration, DateTimeOffset now, CancellationToken cancellationToken, FeatureFlags? flags = null)
     {
+        if (!(flags?.IsEnabled(Features.Smb) ?? true) && configuration.Destinations.Any(destination => destination.StorageProvider == StorageProviderTypes.Smb))
+            return new(null, BackupAdmissionDenialCodes.StorageConnectionUnavailable);
         var resolvedDestinations = new List<BackupDestination>();
         var effectiveDestinations = configuration.Destinations;
 
