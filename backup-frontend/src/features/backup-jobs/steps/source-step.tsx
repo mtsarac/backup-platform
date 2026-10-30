@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { RadioField } from '@/components/ui/radio-field'
 import { Advanced, FormGrid, Question } from '@/features/backup-jobs/job-form-fields'
 import { fieldKit, type FieldErrors } from '@/features/backup-jobs/job-field-kit'
 import type { BackupConfiguration } from '@/features/backup-jobs/types'
@@ -17,10 +18,7 @@ const engines: readonly (readonly [Engine, string])[] = [['mssql', 'Microsoft SQ
 function EngineGroup({ engine, onEngine }: { engine: Engine; onEngine: (engine: Engine) => void }) {
   useLanguage()
   return <div role="group" aria-label={tx('Kaynak türü')} className="mb-4 flex flex-wrap gap-4">
-    {engines.map(([value, label]) => <label key={value} className="flex items-center gap-2 cursor-pointer font-medium text-sm text-text-heading">
-      <input type="radio" name="engine" value={value} checked={engine === value} onChange={() => onEngine(value)} className="size-4 accent-primary" />
-      {value === 'file-system' ? tx('Dosya / Klasör') : label}
-    </label>)}
+    {engines.map(([value, label]) => <RadioField key={value} className="font-medium text-text-heading" name="engine" value={value} checked={engine === value} onChange={() => onEngine(value)} label={value === 'file-system' ? tx('Dosya / Klasör') : label} />)}
   </div>
 }
 

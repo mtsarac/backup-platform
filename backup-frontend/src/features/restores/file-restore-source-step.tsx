@@ -1,10 +1,11 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { RadioField } from '@/components/ui/radio-field'
+import { Select } from '@/components/ui/text-input'
 import { CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ErrorNotice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
-import { selectClass } from '@/components/ui/form-styles'
 import { FilePathList } from '@/features/backup-jobs/file-path-list'
 import type { RestoreTargetAgent, RestoreTargetsResponse } from './types'
 
@@ -34,12 +35,12 @@ export function FileRestoreSourceStep({ instancePrefix, targets, agent, agentId,
       <Section title={tx("Hangi yedekleme bilgisayarı geri yüklesin?")} description={tx("Neden soruluyor? Dosyaları yedekten alıp yerlerine koyacak yedekleme bilgisayarını seçmeniz gerekir.")}>
         <div className="space-y-3">
           <label htmlFor={`${instancePrefix}-agent`} className="block text-sm font-medium">{tx("Yedekleme bilgisayarı")}</label>
-          <select id={`${instancePrefix}-agent`} className={`${selectClass} w-full`} value={agentId} onChange={(event) => onAgentChange(event.target.value)}>
+          <Select id={`${instancePrefix}-agent`} value={agentId} onChange={(event) => onAgentChange(event.target.value)}>
             <option value="">{tx("Yedekleme bilgisayarı seçin")}</option>
             {targets.agents.map((item) => (
               <option key={item.agentId} value={item.agentId} disabled={!item.canRestore || !item.canPrecheck || !item.sourceEligible || (original && item.agentId !== originalAgent?.agentId)}>{item.hostName ?? item.agentId}</option>
             ))}
-          </select>
+          </Select>
           {eligible && <p className="flex items-center gap-2 text-sm text-success"><CheckCircle2 aria-hidden="true" className="size-4 shrink-0" />{tx("Bu bilgisayar bu yedek dosyasına ulaşabilir.")}</p>}
           {agent && !eligible && <ErrorNotice failureCode={agent.rejectionCode} scope="restore" />}
           {agent && <TechnicalDetails items={[
@@ -53,8 +54,8 @@ export function FileRestoreSourceStep({ instancePrefix, targets, agent, agentId,
         <div className="space-y-4">
           <fieldset className="flex flex-wrap gap-4">
             <legend className="sr-only">{tx("Geri yükleme kapsamı")}</legend>
-            <label className="flex items-center gap-2 text-sm"><input type="radio" name={`${instancePrefix}-scope`} checked={scope === 'all'} onChange={() => onScopeChange('all')} />{tx("Tüm dosya ve klasörler")}</label>
-            <label className="flex items-center gap-2 text-sm"><input type="radio" name={`${instancePrefix}-scope`} checked={scope === 'selected'} onChange={() => onScopeChange('selected')} />{tx("Seçili dosya ve klasörler")}</label>
+            <RadioField label={tx("Tüm dosya ve klasörler")} name={`${instancePrefix}-scope`} checked={scope === 'all'} onChange={() => onScopeChange('all')} />
+            <RadioField label={tx("Seçili dosya ve klasörler")} name={`${instancePrefix}-scope`} checked={scope === 'selected'} onChange={() => onScopeChange('selected')} />
           </fieldset>
           {scope === 'selected' && <FilePathList id={`${instancePrefix}-paths`} label={tx('Geri yüklenecek göreli yollar')} paths={paths} onChange={onPathsChange} error={!pathsValid ? tx('1–256 geçerli göreli yol girin.') : undefined} />}
           <p className="text-sm text-text-muted">{tx("Seçilen klasörlerin altındaki dosyalar da geri yüklenir; arşivdeki göreli dizin yapısı korunur. Arşivde bulunmayan seçimler işlemi durdurur.")}</p>

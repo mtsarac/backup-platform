@@ -1,4 +1,5 @@
 import { currentLocale, tx, useLanguage } from '@/lib/i18n'
+import { Select, TextInput } from '@/components/ui/text-input'
 import { CheckField } from '@/components/ui/check-field'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -8,8 +9,9 @@ import { QueryState } from '@/components/data/query-state'
 import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
-import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
+import { FilterField, Filters } from '@/components/ui/filters'
 import { PageHeader } from '@/components/ui/page-header'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { useAgents } from '@/features/agents/hooks'
@@ -45,11 +47,11 @@ export function ClientsPage() {
     <AgentsTabs />
     <CheckField className="w-fit" label={tx("İptal edilenleri göster")} checked={showRevoked} onChange={(event) => update({ revoked: event.target.checked ? 'true' : '' })} />
     {!empty && <Filters label={tx("Bilgisayar filtreleri")} onClear={filtered ? () => update({ search: '', connectivity: '' }) : undefined}>
-      <FilterField label={tx("Bilgisayar ara")} className="sm:col-span-2"><input type="search" aria-label={tx("Bilgisayar ara")} className={filterControlClass} placeholder={tx("Bilgisayar adı")} value={search} onChange={(event) => update({ search: event.target.value }, { replace: true })} /></FilterField>
-      <FilterField label={tx("Durum")}><select className={filterControlClass} value={connectivity ?? 'all'} onChange={(event) => update({ connectivity: event.target.value === 'all' ? '' : event.target.value })}><option value="all">{tx("Tümü")}</option><option value="online">{tx("Çevrimiçi")}</option><option value="offline">{tx("Çevrimdışı")}</option><option value="unknown">{tx("Bilinmiyor")}</option></select></FilterField>
+      <FilterField label={tx("Bilgisayar ara")} className="sm:col-span-2"><TextInput type="search" aria-label={tx("Bilgisayar ara")} placeholder={tx("Bilgisayar adı")} value={search} onChange={(event) => update({ search: event.target.value }, { replace: true })} /></FilterField>
+      <FilterField label={tx("Durum")}><Select value={connectivity ?? 'all'} onChange={(event) => update({ connectivity: event.target.value === 'all' ? '' : event.target.value })}><option value="all">{tx("Tümü")}</option><option value="online">{tx("Çevrimiçi")}</option><option value="offline">{tx("Çevrimdışı")}</option><option value="unknown">{tx("Bilinmiyor")}</option></Select></FilterField>
     </Filters>}
     <QueryState isPending={query.isPending} error={query.error}>
-      {empty ? <div className="rounded-xl border border-border bg-surface"><EmptyState icon={Server} message={tx("Henüz yedekleme bilgisayarı eklenmedi.")} canAct={canAdmin} action={addButton} /></div>
+      {empty ? <Card padding="none"><EmptyState icon={Server} message={tx("Henüz yedekleme bilgisayarı eklenmedi.")} canAct={canAdmin} action={addButton} /></Card>
         : <DataList rows={rows} columns={columns} keyExtractor={(agent) => agent.agentId} caption={tx("Yedekleme bilgisayarları")} emptyMessage={filtered ? tx('Filtrelere uygun bilgisayar bulunamadı.') : tx('Henüz yedekleme bilgisayarı eklenmedi.')} />}
     </QueryState>
     {canAdmin && addingTenant === tenantId && <AddAgentDialog key={tenantId} tenantId={tenantId} onClose={() => setAddingTenant(null)} />}

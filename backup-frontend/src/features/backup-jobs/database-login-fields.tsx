@@ -1,7 +1,7 @@
 import { tx } from '@/lib/i18n'
+import { TextInput } from '@/components/ui/text-input'
 import { Field } from '@/components/ui/field'
 import { SecretField } from '@/components/ui/secret-field'
-import { inputClass } from '@/components/ui/form-styles'
 import type { DatabaseLogin } from '@/features/backup-jobs/types'
 
 interface Props {
@@ -21,7 +21,7 @@ export function DatabaseLoginFields({ idPrefix, login, onChange, hasStored = fal
   const change = (next: DatabaseLogin) => onChange(next.userName === '' && next.password === '' ? null : next)
   return <>
     <Field id={`${idPrefix}-user`} label={tx("Veritabanı kullanıcı adı")} error={errors?.userName}>
-      {control => <input {...control} className={inputClass} autoComplete="off" value={userName} disabled={disabled} onChange={event => change({ userName: event.target.value, password })} />}
+      {control => <TextInput {...control} autoComplete="off" value={userName} disabled={disabled} onChange={event => change({ userName: event.target.value, password })} />}
     </Field>
     <SecretField id={`${idPrefix}-password`} label={tx("Veritabanı parolası")} hint={hasStored ? tx("Kayıtlı bir giriş var. Değiştirmek için yeni kullanıcı adı ve parola girin; boş bırakırsanız mevcut giriş korunur.") : undefined} error={errors?.password}
       saved={hasStored} value={password} disabled={disabled} onChange={value => change({ userName, password: value })} />

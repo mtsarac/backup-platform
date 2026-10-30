@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { TextInput } from '@/components/ui/text-input'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, ExternalLink, RefreshCw } from 'lucide-react'
@@ -9,7 +10,6 @@ import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { Stepper } from '@/components/ui/stepper'
-import { inputClass } from '@/components/ui/form-styles'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { activeSecretFields, buildConfiguration, configurationComplete, editableConfigFields, initialFieldValues, providerPayload, secretsComplete } from './descriptor-values'
@@ -195,7 +195,7 @@ function ConnectionWizardForm() {
             {step === 'provider' && <ProviderStep providers={creatable} connections={connections.data?.items ?? []} value={chosen} onChange={choose} />}
             {step === 'connection' && provider && <>
               <p className="text-sm text-text-muted">{tx(provider.displayName)}</p>
-              <label className="block space-y-1 text-sm font-medium text-text-heading">{tx("Ad")}<input className={inputClass} value={name} required aria-label={tx("Ad")} aria-invalid={errorField(createError) === 'name'} onChange={(event) => setName(event.target.value)} />
+              <label className="block space-y-1 text-sm font-medium text-text-heading">{tx("Ad")}<TextInput className="mt-1" value={name} required aria-label={tx("Ad")} aria-invalid={errorField(createError) === 'name'} onChange={(event) => setName(event.target.value)} />
                 <span className="block text-sm font-normal text-text-muted">{tx("Örneğin: Ofis yedekleri veya Arşiv depolaması.")}</span>
               </label>
             </>}

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { Select, TextArea, TextInput } from '@/components/ui/text-input'
 import { Dialog } from '@base-ui/react/dialog'
 import { useQueryClient } from '@tanstack/react-query'
+import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
@@ -9,7 +11,6 @@ import { Stepper } from '@/components/ui/stepper'
 import { Tabs } from '@/components/ui/tabs'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { useLanguage, tx } from '@/lib/i18n'
-import { inputClass, selectClass } from '@/components/ui/form-styles'
 import { CopyButton } from '@/components/ui/copy-button'
 import { type ErrorDescription, accessDenied, describeError } from '@/lib/api/failure-messages'
 import { createEnrollmentToken, getAgentDistribution, getEnrollmentTokenStatus, revokeEnrollmentToken } from './api'
@@ -93,8 +94,8 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
             <h2 className="font-medium text-text-heading">{tx("Hangi bilgisayara kurulacak?")}</h2>
             <p className="text-sm text-text-muted"><span className="font-medium text-text-heading">{tx("Neden soruluyor?")}</span>{' '}{tx("Ad, bilgisayarı listede tanımanızı sağlar; işletim sistemi doğru kurulum komutunu seçmemize yarar.")}</p>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label={tx("Bilgisayarın adı")} hint={mode === 'automatic' ? tx("Tek komutla kurulum için ad gereklidir.") : tx("İsteğe bağlı; boş bırakırsanız kurulum sırasında sorulur.")}>{(control) => <input {...control} ref={nameRef} disabled={pending} value={name} maxLength={200} onChange={event => setName(event.target.value)} className={inputClass} />}</Field>
-              <Field label={tx("İşletim sistemi")}>{(control) => <select {...control} disabled={pending} value={platform} onChange={event => setPlatform(event.target.value as AgentPlatform)} className={`${selectClass} w-full`}><option>Windows</option><option>Linux</option></select>}</Field>
+              <Field label={tx("Bilgisayarın adı")} hint={mode === 'automatic' ? tx("Tek komutla kurulum için ad gereklidir.") : tx("İsteğe bağlı; boş bırakırsanız kurulum sırasında sorulur.")}>{(control) => <TextInput {...control} ref={nameRef} disabled={pending} value={name} maxLength={200} onChange={event => setName(event.target.value)} />}</Field>
+              <Field label={tx("İşletim sistemi")}>{(control) => <Select {...control} disabled={pending} value={platform} onChange={event => setPlatform(event.target.value as AgentPlatform)}><option>Windows</option><option>Linux</option></Select>}</Field>
             </div>
           </section>
           {distribution && !server && <Notice tone="warning">{tx("Sunucu adresi henüz ayarlanmadı. Platform yöneticisi, Yedekleme bilgisayarı ayarları sayfasında sunucu HTTPS adresini belirlemeden kurulum komutu oluşturulamaz.")}</Notice>}
@@ -103,16 +104,16 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
         {view === 'install' && <section className="space-y-3">
           <h2 className="font-medium text-text-heading">{tx("Kurulum komutunu bilgisayarda çalıştırın")}</h2>
           <Tabs label={tx('Kurulum şekli')} value={mode} onChange={setMode} idPrefix="agent-install-mode" items={[{ value: 'interactive', label: tx('Adım adım kurulum') }, { value: 'automatic', label: tx('Tek komutla kurulum') }]} />
-          <div role="tabpanel" id={`agent-install-mode-panel-${mode}`} aria-labelledby={`agent-install-mode-tab-${mode}`} className="space-y-2 rounded-lg border border-border bg-surface-2 p-4 text-sm text-text-muted">
+          <Card tone="subtle" role="tabpanel" id={`agent-install-mode-panel-${mode}`} aria-labelledby={`agent-install-mode-tab-${mode}`} className="space-y-2 text-sm text-text-muted">
             <p>{mode === 'interactive' ? tx('Kurulum eksik bilgileri sorar. Kayıt anahtarını istendiğinde yapıştırın; komut anahtarı içermez.') : tx('Kurulum her şeyi soru sormadan yapar; komut kayıt anahtarını içerir. Kopyalamadan önce bilgisayarın adını girin.')}</p>
             <p>{platform === 'Windows' ? tx('Hedef bilgisayarda PowerShell’i yönetici olarak açın.') : tx('Hedef bilgisayarda yönetici (sudo) yetkisi olan bir terminal açın. Kurulum bir sistem hizmeti oluşturur.')}</p>
             {!distribution && !distributionError && <p>{tx('Kurulum dosyalarının hazır olup olmadığı denetleniyor…')}</p>}
             {distributionError && <ErrorNotice {...distributionError} />}
             {distribution && !packageReady && <ErrorNotice {...accessDenied(tx('Bu işletim sistemi için kurulum paketi yayımlanmamış. Yöneticinizle iletişime geçin.'))} />}
-          </div>
+          </Card>
           {!ticket && <p className="text-sm text-text-muted">{tx("Anahtarı oluşturduğunuzda komut burada görünür.")}</p>}
           {ticket && secret && <div className="space-y-3">
-            {mode === 'interactive' && <><Field label={tx('Tek kullanımlık kayıt anahtarı')}>{control => <textarea {...control} readOnly value={secret} rows={2} className={inputClass} />}</Field><CopyButton value={secret} label={tx('Kayıt anahtarını kopyala')} /></>}
+            {mode === 'interactive' && <><Field label={tx('Tek kullanımlık kayıt anahtarı')}>{control => <TextArea {...control} readOnly value={secret} rows={2} />}</Field><CopyButton value={secret} label={tx('Kayıt anahtarını kopyala')} /></>}
             <Field label={tx("Tek kullanımlık kurulum komutu")}>{(control) => <textarea {...control} readOnly rows={4} value={command} className="mt-1 block w-full resize-none break-all rounded-lg border border-border-strong/70 bg-surface p-3 font-mono text-sm text-text" />}</Field>
             <CopyButton value={command} label={tx("Kurulum komutunu kopyala")} />
             {mode === 'automatic' && !name.trim() && <Notice tone="warning">{tx('Tek komutla kurulum komutunu oluşturmak için bilgisayarın adını girin.')}</Notice>}

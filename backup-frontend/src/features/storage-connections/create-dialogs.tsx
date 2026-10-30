@@ -1,8 +1,8 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { Select, TextInput } from '@/components/ui/text-input'
 import { useEffect, useState } from 'react'
 import { FormDialog } from '@/components/ui/form-dialog'
 import { TenantPicker } from '@/features/platform/tenant-picker'
-import { inputClass, selectClass } from '@/components/ui/form-styles'
 import { QUOTA_SCOPE_PATTERN } from '@/features/storage/scope-input'
 import { activeSecretFields, configurationComplete, initialFieldValues, providerPayload, secretsComplete } from './descriptor-values'
 import type { FieldValues } from './descriptor-values'
@@ -50,14 +50,14 @@ export function CreateManagedTargetDialog({ tenant, onClose }: { tenant?: Picked
     disabled={!tenantId || !provider || !name.trim() || quotaScopeInvalid || !configurationComplete(provider.configFields, config) || !secretsComplete(activeSecretFields(provider.providerType, config, provider.secretFields), secret)}
     error={create.error ?? providers.error} errorScope="storageConnection" onSubmit={submit} onClose={onClose}>
     {tenant ? <p className="text-sm text-text-muted">{tx("Çalışma alanı:")}{' '}<span className="font-medium text-text">{tenant.name}</span></p> : <TenantPicker value={tenantId} onChange={setTenantId} />}
-    <label className="block text-sm text-text-muted">{tx("Depolama sağlayıcısı")}<select className={`${selectClass} w-full`} value={providerType} onChange={(event) => chooseProvider(event.target.value)} disabled={providers.isPending}>
+    <label className="block text-sm text-text-muted">{tx("Depolama sağlayıcısı")}<Select className="mt-1" value={providerType} onChange={(event) => chooseProvider(event.target.value)} disabled={providers.isPending}>
         <option value="">{providers.isPending ? tx('Sağlayıcılar yükleniyor…') : creatable.length === 0 ? tx('Oluşturulabilir sağlayıcı yok') : tx('Sağlayıcı seçin')}</option>
         {creatable.map((item) => <option key={item.providerType} value={item.providerType}>{tx(item.displayName)}</option>)}
-      </select>
+      </Select>
     </label>
-    <label className="block text-sm text-text-muted">{tx("Hedef adı")}<input className={inputClass} value={name} required aria-invalid={errorField(create.error) === 'name'} onChange={(event) => setName(event.target.value)} />
+    <label className="block text-sm text-text-muted">{tx("Hedef adı")}<TextInput className="mt-1" value={name} required aria-invalid={errorField(create.error) === 'name'} onChange={(event) => setName(event.target.value)} />
     </label>
-    <label className="block text-sm text-text-muted">{tx("Kota kapsamı (isteğe bağlı)")}<input className={inputClass} value={quotaScope} maxLength={64} placeholder="managed" aria-invalid={quotaScopeInvalid || errorField(create.error) === 'quotaScope'} onChange={(event) => setQuotaScope(event.target.value)} />
+    <label className="block text-sm text-text-muted">{tx("Kota kapsamı (isteğe bağlı)")}<TextInput className="mt-1" value={quotaScope} maxLength={64} placeholder="managed" aria-invalid={quotaScopeInvalid || errorField(create.error) === 'quotaScope'} onChange={(event) => setQuotaScope(event.target.value)} />
       <span className="mt-1 block text-xs">{tx("Bu hedefin hangi kota grubuna sayılacağını belirler. Boş bırakırsanız platform varsayılanı kullanılır.")}</span>
       {quotaScopeInvalid && <span role="alert" className="mt-1 block text-xs text-error">{tx("Kota kapsamı yalnızca küçük harf, rakam ve “-” içerebilir (1-64 karakter).")}</span>}
     </label>
