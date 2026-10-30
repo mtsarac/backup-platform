@@ -7,6 +7,7 @@ using static BackupPlatform.IntegrationTests.SupportScenario;
 
 namespace BackupPlatform.IntegrationTests;
 
+[Trait("Category", "Frozen")]
 public sealed class SupportSessionLifecycleTests(PostgreSqlFixture fixture) : IClassFixture<PostgreSqlFixture>
 {
     [Fact]

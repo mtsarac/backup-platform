@@ -223,6 +223,8 @@ later clones. Normal process exit drops the template; forced termination may lea
 Frontend tests use two `vmThreads` workers to reuse expensive jsdom environments while retaining file isolation.
 Run `bun run test` from `backup-frontend`, or append a test-file path for an explicit focused selection.
 These startup optimizations do not remove cases or change full-acceptance filters.
+Tests of frozen features (VSS, Linux snapshots, SMS, size anomaly, external secrets, SMB, support sessions) are excluded from every default backend and frontend run;
+`scripts/integration/run-frozen-tests.sh [--no-build]` runs the backend ones (unit, agent, integration) and `bun run test:frozen` in `backup-frontend` the frontend ones.
 
 Storage connections smoke (real Central backup -> download -> restore,):
 

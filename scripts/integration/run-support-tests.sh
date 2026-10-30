@@ -23,9 +23,9 @@ if [[ $selected == false ]]; then unit=true; postgres=true; fi
 load_local_env
 require_command dotnet
 if [[ $unit == true ]]; then
-    run_dotnet_tests "$REPO_ROOT/backup-backend/tests/unit-tests" -c Release "${build_args[@]}" --filter 'FullyQualifiedName~SupportAccessSessionTests'
+    run_dotnet_tests "$REPO_ROOT/backup-backend/tests/unit-tests" -c Release "${build_args[@]}" -p:IncludeFrozenTests=true --filter 'FullyQualifiedName~SupportAccessSessionTests'
 fi
 if [[ $postgres == true ]]; then
-    run_dotnet_tests "$REPO_ROOT/backup-backend/tests/integration-tests" -c Release "${build_args[@]}" \
+    run_dotnet_tests "$REPO_ROOT/backup-backend/tests/integration-tests" -c Release "${build_args[@]}" -p:IncludeFrozenTests=true \
         --filter 'FullyQualifiedName~IntegrationTests.SupportSession|FullyQualifiedName~IntegrationTests.SupportData|FullyQualifiedName~IntegrationTests.SupportRestore' -- xUnit.MaxParallelThreads=2
 fi

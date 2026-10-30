@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Default for every test project (wired in Directory.Build.props): frozen features' tests stay out of the run.
+     On demand: dotnet test PROJECT with the filter Category=Frozen. A filter given on the command line replaces this one. -->
+<RunSettings>
+  <RunConfiguration>
+    <TestCaseFilter>Category!=Frozen</TestCaseFilter>
+  </RunConfiguration>
+</RunSettings>

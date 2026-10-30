@@ -3,6 +3,7 @@ using Xunit;
 
 namespace BackupPlatform.UnitTests.Backup;
 
+[Trait("Category", "Frozen")]
 public sealed class BackupSizeAnomalyDetectorTests
 {
     [Theory]
