@@ -6,7 +6,7 @@ import { Field } from '@/components/ui/field'
 import { ErrorNotice } from '@/components/ui/notice'
 import { platformPaths } from '@/features/platform/paths'
 import { FormDialog } from '@/components/ui/form-dialog'
-import { inputClass } from '@/components/ui/form-styles'
+import { TextInput, TextArea } from '@/components/ui/text-input'
 import { TenantPicker } from '@/features/platform/tenant-picker'
 import { BackupPicker } from '@/features/artifacts/backup-picker'
 import { removeSupportData, useSupportSession, useSupportSessions } from '@/features/platform/support/hooks'
@@ -55,10 +55,10 @@ export function BreakGlassRequestDialog({ initialTenantId = '', initialArtifactI
       {tenantId && <EmergencyBackupPicker key={tenantId} tenantId={tenantId} value={artifactId} onChange={setArtifactId} />}
       {errors.artifactId && <p role="alert" className="text-sm text-error">{errors.artifactId}</p>}
       <Field label={tx("Gerekçe")} hint={tx("Zorunludur; en fazla 500 karakter. Tenant sahipleri bu gerekçeyi görür.")} error={errors.reason}>
-        {control => <textarea {...control} className={inputClass} rows={3} maxLength={500} value={reason} onChange={event => setReason(event.target.value)} />}
+        {control => <TextArea {...control}  rows={3} maxLength={500} value={reason} onChange={event => setReason(event.target.value)} />}
       </Field>
       <Field label={tx("Süre (dakika)")} hint={tx("Onay ve kullanım bu süre içinde olmalıdır. En fazla 240, varsayılan 60.")} error={errors.ttl}>
-        {control => <input {...control} type="number" step={1} className={inputClass} value={ttl} onChange={event => setTtl(event.target.value)} />}
+        {control => <TextInput {...control} type="number" step={1}  value={ttl} onChange={event => setTtl(event.target.value)} />}
       </Field>
     </fieldset>
     {create.error && <ErrorNotice error={create.error} />}

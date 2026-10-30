@@ -1,12 +1,12 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import type { BackupConfiguration, BackupDestination } from '@/features/backup-jobs/types'
+import { CheckField } from '@/components/ui/check-field'
+import { Select, TextInput } from '@/components/ui/text-input'
 import { ownershipLabel } from '@/features/storage/labels'
 import { errorMessage } from '@/lib/api/failure-messages'
 import type { ConnectionView, ProviderDescriptor } from './types'
 import { connectionUnavailableReason, primaryDestination, resolveDestinationConnection } from './job-connection-picker-utils'
 import { executionLocationLabel } from './labels'
-
-const selectClass = 'h-9 w-full rounded-md border border-border bg-surface-2 px-3 text-sm outline-none focus:border-ring disabled:opacity-60'
 
 interface Props {
   configuration: BackupConfiguration
@@ -105,7 +105,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
     <>
       <div className="space-y-1">
         <label htmlFor="primary-storage-provider" className="block text-sm font-medium text-text-heading">{tx("Storage Provider")}</label>
-        <select id="primary-storage-provider" className={selectClass} value={primary.storageProvider} disabled={pending || Boolean(error)} onChange={event => {
+        <Select id="primary-storage-provider" value={primary.storageProvider} disabled={pending || Boolean(error)} onChange={event => {
           const descriptor = providers.find(item => item.providerType === event.target.value)
           if (descriptor?.availability === 'Available' && descriptor.executionLocation && descriptor.topology) {
             replacePrimaryTarget({ storageProvider: descriptor.providerType, storageConnectionId: null, storageExecutionLocation: descriptor.executionLocation })
@@ -113,11 +113,11 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
         }}>
           {!provider && <option value={primary.storageProvider} disabled>{primary.storageProvider}{' '}{tx("· Sağlayıcı bulunamadı")}</option>}
           {providers.map(item => <option key={item.providerType} value={item.providerType} disabled={item.availability !== 'Available' || !item.executionLocation || !item.topology}>{tx(item.displayName)}{item.availability !== 'Available' ? tx(' · Yakında / kullanılamıyor') : ''}</option>)}
-        </select>
+        </Select>
       </div>
       <div className="space-y-1">
         <label htmlFor="primary-storage-connection" className="block text-sm font-medium text-text-heading">{tx("Depolama bağlantısı")}</label>
-        <select id="primary-storage-connection" className={selectClass} value={primary.storageConnectionId ?? ''} disabled={pending || Boolean(error)} aria-invalid={Boolean(fieldError)} aria-describedby="storage-connection-help primary-storage-connection-error" onChange={event => chooseConnection(event.target.value)}>
+        <Select id="primary-storage-connection" value={primary.storageConnectionId ?? ''} disabled={pending || Boolean(error)} aria-invalid={Boolean(fieldError)} aria-describedby="storage-connection-help primary-storage-connection-error" onChange={event => chooseConnection(event.target.value)}>
           <option value="" disabled={Boolean(defaultReason)}>{tx("Varsayılan ·")}{' '}{tx(provider?.displayName ?? primary.storageProvider)} · {defaultTarget?.name ?? tx('Bağlantı yok')}{defaultTarget ? ` · ${ownershipLabel(defaultTarget.ownership)}` : ''}{defaultReason ? ` · ${defaultReason}` : tx(' · Kullanılabilir')}</option>
           {selectedMissing && <option value={primary.storageConnectionId!} disabled>{tx("Mevcut bağlantı ·")}{' '}{primary.storageConnectionId}{' '}{tx("· Bağlantı bulunamadı")}</option>}
           {connections.filter(connection => connection.providerType === primary.storageProvider).map(connection => {
@@ -125,7 +125,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
             const unavailable = connectionUnavailableReason(connection, descriptor)
             return <option key={connection.id} value={connection.id} disabled={Boolean(unavailable)}>{connection.name} · {tx(connection.providerDisplayName)} · {ownershipLabel(connection.ownership)} · {unavailable ?? tx('Kullanılabilir')}</option>
           })}
-        </select>
+        </Select>
         {fieldError && <p id="primary-storage-connection-error" role="alert" className="text-sm text-destructive">{fieldError}</p>}
         <p id="storage-connection-help" className="text-xs text-text-muted">{tx("Varsayılan seçimi bu sağlayıcının tenant varsayılanına gider. Açık seçim bağlantı kimliğini korur. Son uygunluk kontrolünü sunucu yapar.")}</p>
       </div>
@@ -198,9 +198,9 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
         <div className="grid gap-3 sm:grid-cols-2 pt-2">
           <div>
             <label htmlFor="add-replication-destination" className="block text-xs font-medium text-text-muted mb-1">{tx("Yeni Replikasyon Hedefi Ekle")}</label>
-            <select
+            <Select
               id="add-replication-destination"
-              className={selectClass}
+             
               value=""
               disabled={pending || Boolean(error)}
               onChange={e => {
@@ -236,18 +236,18 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
                   )
                 })}
               </optgroup>
-            </select>
+            </Select>
           </div>
 
           <div>
             <label htmlFor="required-replica-count" className="block text-xs font-medium text-text-muted mb-1">{tx("Gerekli Doğrulanmış Kopya Sayısı (Required Verified Replicas)")}</label>
-            <input
+            <TextInput
               id="required-replica-count"
               type="number"
               min={configuration.enforceThreeTwoOne ? 3 : 1}
               max={destinations.length}
               value={requiredCount}
-              className={selectClass}
+             
               onChange={e => {
                 const count = Number(e.target.value)
                 if (!Number.isNaN(count)) updateDestinations(destinations, count)
@@ -263,17 +263,14 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
           </p>
         )}
 
-        <label htmlFor="enforce-three-two-one" className="flex items-center gap-2 text-sm">
-          <input id="enforce-three-two-one" type="checkbox" checked={Boolean(configuration.enforceThreeTwoOne)}
+        <CheckField id="enforce-three-two-one" label={tx('3-2-1 koruması: 3 doğrulanmış kopya, 2 medya sınıfı, 1 doğrulanmış off-site')} checked={Boolean(configuration.enforceThreeTwoOne)}
             disabled={destinations.length < 3}
             onChange={event => onChange({ ...configuration, enforceThreeTwoOne: event.target.checked,
               requiredVerifiedReplicaCount: event.target.checked ? Math.max(3, requiredCount) : requiredCount })} />
-          {tx('3-2-1 koruması: 3 doğrulanmış kopya, 2 medya sınıfı, 1 doğrulanmış off-site')}
-        </label>
         <p className="text-xs text-text-muted">{tx('En az üç hedef ekleyin. Bağlantılarda fiziksel site ve medya sınıfını tanımlayın; uzak bağlantının erişim testini çalıştırın. Aynı site veya aynı medya üzerindeki kopyalar tek başına 3-2-1 sağlamaz.')}</p>
         {configuration.enforceThreeTwoOne && <div className="space-y-1">
           <label htmlFor="backup-source-site" className="block text-sm font-medium">{tx('Kaynak fiziksel site')}</label>
-          <input id="backup-source-site" className={selectClass} required maxLength={64} pattern="[A-Za-z0-9_-]+"
+          <TextInput id="backup-source-site" required maxLength={64} pattern="[A-Za-z0-9_-]+"
             value={configuration.sourceSite ?? ''} onChange={event => onChange({ ...configuration, sourceSite: event.target.value })} />
         </div>}
       </div>

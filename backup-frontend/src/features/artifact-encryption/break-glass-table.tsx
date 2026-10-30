@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { Card } from '@/components/ui/card'
 import { Link } from 'react-router-dom'
 import { DataList, type Column } from '@/components/data/data-list'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -16,6 +17,6 @@ export function BreakGlassTable({ rows }: { rows: readonly BreakGlassRequest[] }
     { key: 'reason', header: tx('Gerekçe'), wrap: true, render: request => <span className="line-clamp-2" title={request.reason}>{request.reason}</span> },
     { key: 'expires', header: tx('Süre sonu'), render: request => formatDateTime(request.expiresAt) },
   ]
-  if (rows.length === 0) return <div className="rounded-xl border border-border bg-surface"><EmptyState message={tx("Acil destek erişimi isteği bulunamadı.")} /></div>
+  if (rows.length === 0) return <Card padding="none"><EmptyState message={tx("Acil destek erişimi isteği bulunamadı.")} /></Card>
   return <DataList rows={rows} columns={columns} keyExtractor={request => request.id} emptyMessage={tx("Acil destek erişimi isteği bulunamadı.")} />
 }

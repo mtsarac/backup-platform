@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { Card } from '@/components/ui/card'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
@@ -24,12 +25,7 @@ interface KpiCardProps {
 export function KpiCard({ label, value, icon, tone, hint, className }: KpiCardProps) {
   useLanguage()
   return (
-    <div
-      className={cn(
-        'rounded-xl border border-border bg-surface p-4 shadow-card',
-        className
-      )}
-    >
+    <Card className={className}>
       <div className="flex items-center justify-between">
         <span className="text-sm text-text-muted">{tx(label)}</span>
         {icon && (
@@ -42,6 +38,6 @@ export function KpiCard({ label, value, icon, tone, hint, className }: KpiCardPr
         {value}
       </div>
       {hint && <p className="mt-0.5 text-sm text-text-muted">{hint}</p>}
-    </div>
+    </Card>
   )
 }

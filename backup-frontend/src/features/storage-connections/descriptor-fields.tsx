@@ -1,8 +1,8 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { CheckField } from '@/components/ui/check-field'
 import { Select, TextInput } from '@/components/ui/text-input'
 import { useId } from 'react'
 import { SecretField as SecretInput } from '@/components/ui/secret-field'
-import { inputClass } from '@/components/ui/form-styles'
 import { editableConfigFields, type FieldValues } from './descriptor-values'
 import type { ConfigField, SecretField } from './types'
 
@@ -23,9 +23,7 @@ export function ConfigFieldInputs({ fields, values, onChange, invalidName, provi
     const id = `${prefix}-${field.name}`
     const invalid = invalidName === field.name
     if (field.kind === 'Boolean') {
-      return <label key={field.name} htmlFor={id} className="flex items-center gap-2 text-sm text-text">
-        <input id={id} className="size-5 accent-primary" type="checkbox" checked={values[field.name] === true} aria-invalid={invalid} onChange={(event) => onChange(field.name, event.target.checked)} />{configLabel(field, providerType)}
-      </label>
+      return <CheckField key={field.name} id={id} label={configLabel(field, providerType)} checked={values[field.name] === true} aria-invalid={invalid} onChange={(event) => onChange(field.name, event.target.checked)} />
     }
     if (providerType === 'sftp' && field.name === 'authenticationType') {
       return <div key={field.name} className="space-y-1 text-sm">
@@ -50,7 +48,7 @@ export function ConfigFieldInputs({ fields, values, onChange, invalidName, provi
 export function SecretFieldInputs({ fields, values, onChange, invalidName, providerType, savedNames = [] }: { fields: readonly SecretField[]; values: Record<string, string>; onChange: (name: string, value: string) => void; invalidName?: string; providerType?: string; savedNames?: readonly string[] }) {
   useLanguage()
   const prefix = useId()
-  return <>{fields.map((field) => <SecretInput key={field.name} id={`${prefix}-${field.name}`} label={tx(field.label)} className={`${inputClass} mt-0`}
+  return <>{fields.map((field) => <SecretInput key={field.name} id={`${prefix}-${field.name}`} label={tx(field.label)}
     multiline={providerType === 'sftp' && field.name === 'privateKey'} saved={savedNames.includes(field.name)} invalid={invalidName === field.name}
     hint={(providerType === 'sftp' && field.name === 'passphrase') || field.required ? <>
       {providerType === 'sftp' && field.name === 'passphrase' && <span className="block">{tx("İsteğe bağlı; yalnızca şifreli özel anahtar için girin.")}</span>}

@@ -15,7 +15,8 @@ import { ListEmpty } from '@/features/platform/list-empty'
 import { platformPaths } from '@/features/platform/paths'
 import { FormDialog } from '@/components/ui/form-dialog'
 import { SearchForm } from '@/features/platform/search-form'
-import { inputClass, linkClass } from '@/components/ui/form-styles'
+import { linkClass } from '@/components/ui/form-styles'
+import { TextInput } from '@/components/ui/text-input'
 import type { PlatformTenant } from '@/features/platform/types'
 import { LIST_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { ApiError } from '@/lib/api/client'
@@ -32,7 +33,7 @@ function CreateTenantDialog({ onClose, onCreated }: { onClose: () => void; onCre
     submitLabel={tx("Tenant oluştur")} pendingLabel={tx("Oluşturuluyor…")} pending={create.isPending} disabled={!name.trim()}
     error={create.error} onClose={onClose}
     onSubmit={() => create.mutate(name.trim(), { onSuccess: (tenant) => { onCreated(tenant.name); onClose() } })}>
-    <Field label={tx("Tenant adı")}>{(control) => <input {...control} className={inputClass} value={name} maxLength={200} required aria-invalid={nameInvalid} onChange={(event) => setName(event.target.value)} />}</Field>
+    <Field label={tx("Tenant adı")}>{(control) => <TextInput {...control}  value={name} maxLength={200} required aria-invalid={nameInvalid} onChange={(event) => setName(event.target.value)} />}</Field>
   </FormDialog>
 }
 
