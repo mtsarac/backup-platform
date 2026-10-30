@@ -1,6 +1,8 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { RadioField } from '@/components/ui/radio-field'
+import { CheckField } from '@/components/ui/check-field'
+import { Select, TextInput } from '@/components/ui/text-input'
 import { Section } from '@/components/ui/section'
-import { inputClass, selectClass } from '@/components/ui/form-styles'
 import { StoredLoginPanel } from './stored-login-panel'
 import type { RestoreTarget, RestoreTargetsResponse } from './types'
 
@@ -28,33 +30,20 @@ export function RestoreTargetStep({ tenantId, instancePrefix, isPg, engineName, 
     <Section title={tx("Hangi {0} sunucusuna geri yüklensin?", { "0": engineName })} description={tx("Neden soruluyor? Geri yüklemenin yapılacağı {0} sunucusunun bağlantı bilgisi gerekir.", { "0": engineName })}>
       <div className="space-y-4">
         <div className="flex flex-wrap gap-4 text-sm">
-          <label className="flex items-center gap-2">
-            <input
-              type="radio"
-              name="targetType"
+          <RadioField label={tx("Yedekleme işlerinde kayıtlı bağlantı ({0})", { "0": targets.targets.length })} name="targetType"
               checked={targetType === 'configured'}
               onChange={() => { invalidateDiscovery(); setTargetType('configured') }}
-              disabled={targets.targets.length === 0}
-            />
-            <span>{tx("Yedekleme işlerinde kayıtlı bağlantı ({0})", { "0": targets.targets.length })}</span>
-          </label>
-          <label className="flex items-center gap-2">
-            <input
-              type="radio"
-              name="targetType"
+              disabled={targets.targets.length === 0} />
+          <RadioField label={tx("Başka bir sunucu")} name="targetType"
               checked={targetType === 'custom'}
-              onChange={() => { invalidateDiscovery(); setTargetType('custom') }}
-            />
-            <span>{tx("Başka bir sunucu")}</span>
-          </label>
+              onChange={() => { invalidateDiscovery(); setTargetType('custom') }} />
         </div>
 
         {targetType === 'configured' && targets.targets.length > 0 && (
           <div>
             <label htmlFor={`${instancePrefix}-target-select`} className="block text-sm font-medium">{tx("Bağlantı")}</label>
-            <select
+            <Select
               id={`${instancePrefix}-target-select`}
-              className={`${selectClass} w-full`}
               value={selectedTargetIndex}
               onChange={(e) => { invalidateDiscovery(); setSelectedTargetIndex(Number(e.target.value)) }}
             >
@@ -63,7 +52,7 @@ export function RestoreTargetStep({ tenantId, instancePrefix, isPg, engineName, 
                   {t.jobName} · {t.target.host}{t.target.port ? `:${t.target.port}` : ''} ({t.database})
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         )}
 
@@ -71,9 +60,8 @@ export function RestoreTargetStep({ tenantId, instancePrefix, isPg, engineName, 
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label htmlFor={`${instancePrefix}-host`} className="block text-sm font-medium">{isPg ? tx('PostgreSQL Host') : tx('Host / Instance')}</label>
-              <input
+              <TextInput
                 id={`${instancePrefix}-host`}
-                className={inputClass}
                 value={customTarget.host}
                 onChange={(e) => changeCustomTarget({ ...customTarget, host: e.target.value })}
                 placeholder={isPg ? 'localhost' : tx('localhost veya SQLSERVER')}
@@ -81,39 +69,23 @@ export function RestoreTargetStep({ tenantId, instancePrefix, isPg, engineName, 
             </div>
             <div>
               <label htmlFor={`${instancePrefix}-port`} className="block text-sm font-medium">{tx("Port (İsteğe bağlı)")}</label>
-              <input
+              <TextInput
                 id={`${instancePrefix}-port`}
                 type="number"
-                className={inputClass}
                 value={customTarget.port ?? ''}
                 onChange={(e) => changeCustomTarget({ ...customTarget, port: e.target.value ? Number(e.target.value) : null })}
                 placeholder={isPg ? '5432' : '1433'}
               />
             </div>
             {!customTarget.integratedSecurity && <StoredLoginPanel tenantId={tenantId} agentId={selectedAgentId} idPrefix={`${instancePrefix}-login`} reference={customTarget.databaseCredentialReference} onPendingChange={onLoginPendingChange} onStored={(reference) => changeCustomTarget({ ...customTarget, databaseCredentialReference: reference })} />}
-            <label className="flex items-center gap-2 text-sm sm:col-span-2">
-              <input type="checkbox" checked={customTarget.integratedSecurity} onChange={(e) => changeCustomTarget({ ...customTarget, integratedSecurity: e.target.checked, databaseCredentialReference: null })} />
-              <span>{tx("Windows kimlik doğrulaması")}</span>
-            </label>
+            <CheckField label={tx("Windows kimlik doğrulaması")} className="sm:col-span-2" checked={customTarget.integratedSecurity} onChange={(e) => changeCustomTarget({ ...customTarget, integratedSecurity: e.target.checked, databaseCredentialReference: null })} />
             <details className="rounded-lg border border-border bg-surface-2 text-sm sm:col-span-2">
               <summary className="cursor-pointer select-none rounded-lg px-3 py-2 font-medium text-text-heading">{tx("Gelişmiş bağlantı ayarları")}</summary>
               <div className="flex flex-wrap items-center gap-4 border-t border-border px-3 py-2">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={customTarget.encrypt}
-                    onChange={(e) => changeCustomTarget({ ...customTarget, encrypt: e.target.checked })}
-                  />
-                  <span>{tx("Bağlantıyı Şifrele")}</span>
-                </label>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={customTarget.trustServerCertificate}
-                    onChange={(e) => changeCustomTarget({ ...customTarget, trustServerCertificate: e.target.checked })}
-                  />
-                  <span>{tx("Sunucu Sertifikasına Güven")}</span>
-                </label>
+                <CheckField label={tx("Bağlantıyı Şifrele")} checked={customTarget.encrypt}
+                    onChange={(e) => changeCustomTarget({ ...customTarget, encrypt: e.target.checked })} />
+                <CheckField label={tx("Sunucu Sertifikasına Güven")} checked={customTarget.trustServerCertificate}
+                    onChange={(e) => changeCustomTarget({ ...customTarget, trustServerCertificate: e.target.checked })} />
               </div>
             </details>
           </div>

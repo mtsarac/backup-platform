@@ -8,7 +8,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as api from '@/features/notifications/api'
 import type { NotificationChannel, NotificationDelivery, NotificationPolicy } from '@/features/notifications/types'
+import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import { ApiError } from '@/lib/api/client'
+import { tx } from '@/lib/i18n'
 import { NotificationsPage } from './notifications-page'
 
 const access = vi.hoisted(() => ({ tenantId: 'tenant-a', tenant: { name: 'Acme', role: 'Owner' }, canAdmin: true, canOperate: true }))
@@ -114,7 +116,16 @@ describe('URL state', () => {
 })
 
 describe('policy', () => {
+  it('offers no SMS channel kind while the SMS feature is off', async () => {
+    setFeatureFlags({})
+    mount()
+    await screen.findByLabelText('Bildirimler etkin')
+    expect(screen.getByLabelText(tx('Webhook'))).toBeInTheDocument()
+    expect(screen.queryByLabelText('SMS')).not.toBeInTheDocument()
+  })
+
   it('warns when a selected email/sms transport is unavailable', async () => {
+    setFeatureFlags({ sms: true })
     const user = userEvent.setup()
     mount()
     await screen.findByLabelText('Bildirimler etkin')

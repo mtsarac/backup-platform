@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { CheckField } from '@/components/ui/check-field'
 import { Link } from 'react-router-dom'
 import { DataList, type Column } from '@/components/data/data-list'
 import { StatusPill } from '@/components/data/status-pill'
@@ -14,7 +15,7 @@ export function DatabaseTable({ instance, selected = [], onChange }: { instance:
   const toggle = (name: string, checked: boolean) => onChange?.(checked ? [...selected, name] : selected.filter(item => item !== name))
   const columns: Column<DiscoveryDatabase>[] = [
     { key: 'name', card: 'title', header: tx('Veritabanı'), wrap: true, render: db => onChange
-      ? <label className="flex min-h-11 items-center gap-3"><input type="checkbox" className="size-5 shrink-0 accent-primary" aria-label={tx("{0} seç", { "0": db.name })} checked={selected.includes(db.name)} disabled={!databaseSelectable(db, instance)} onChange={event => toggle(db.name, event.target.checked)} />{db.name}</label>
+      ? <CheckField label={db.name} aria-label={tx("{0} seç", { "0": db.name })} checked={selected.includes(db.name)} disabled={!databaseSelectable(db, instance)} onChange={event => toggle(db.name, event.target.checked)} />
       : db.name },
     { key: 'backup', card: 'status', header: tx('Yedeklenebilir mi?'), render: db => {
       const { kind } = databaseAvailability(db, instance)

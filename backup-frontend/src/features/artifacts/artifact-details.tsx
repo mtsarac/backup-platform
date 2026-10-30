@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { Card } from '@/components/ui/card'
 import { StatusPill } from '@/components/data/status-pill'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
@@ -108,7 +109,7 @@ export function ArtifactReplicas({ artifact }: { artifact: ArtifactPresentation 
     {artifact.replicas.length === 0 && <p className="text-sm text-text-muted">{tx("Replika kaydı bulunamadı.")}</p>}
     {artifact.replicas.map((replica, index) => {
       const deleting = Boolean(replica.waitingForAgent || replica.deleteFailureCode || replica.deleteRequestedAt)
-      return <article key={replica.id} className="space-y-4 rounded-xl border border-border bg-surface p-5 shadow-card" aria-label={tx("Replika {0}", { "0": index + 1 })}>
+      return <Card as="article" key={replica.id} padding="lg" className="space-y-4" aria-label={tx("Replika {0}", { "0": index + 1 })}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-medium text-text-heading">{tx("Replika")}{' '}{index + 1} · {storageProviderLabel(replica.storageProvider)}</h3>
           <StatusPill status={replica.status} />
@@ -138,7 +139,7 @@ export function ArtifactReplicas({ artifact }: { artifact: ArtifactPresentation 
             {replica.deleteReason !== undefined && <Fact label={tx("Silme nedeni")}>{deletionReason(replica.deleteReason)}</Fact>}
           </Facts></div>
         </details>
-      </article>
+      </Card>
     })}
   </section>
 }

@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { Select, TextInput } from '@/components/ui/text-input'
 import { Archive } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { DataList } from '@/components/data/data-list'
@@ -6,8 +7,9 @@ import type { Column } from '@/components/data/data-list'
 import { Pagination } from '@/components/data/pagination'
 import { QueryState } from '@/components/data/query-state'
 import { StatusPill } from '@/components/data/status-pill'
+import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
-import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
+import { FilterField, Filters } from '@/components/ui/filters'
 import { Notice } from '@/components/ui/notice'
 import { artifactState } from '@/features/artifacts/format'
 import { useArtifacts } from '@/features/artifacts/hooks'
@@ -50,14 +52,14 @@ export function ArtifactsPage() {
   return (
     <div className="space-y-6">
       <Filters label={tx("Backup filtreleri")} onClear={filtering ? () => update({ state: '', from: '', to: '' }) : undefined}>
-        <FilterField label={tx("Durum")}><select aria-label={tx("Durum")} className={filterControlClass} value={filter.state} onChange={(event) => update({ state: event.target.value })}>{stateOptions.map((item) => <option key={item.value} value={item.value}>{tx(item.label)}</option>)}</select></FilterField>
-        <FilterField label={tx("Başlangıç tarihi")}><input type="date" className={filterControlClass} value={filter.from} onChange={(event) => update({ from: event.target.value })} /></FilterField>
-        <FilterField label={tx("Bitiş tarihi")}><input type="date" className={filterControlClass} value={filter.to} min={filter.from || undefined} onChange={(event) => update({ to: event.target.value })} /></FilterField>
+        <FilterField label={tx("Durum")}><Select aria-label={tx("Durum")} value={filter.state} onChange={(event) => update({ state: event.target.value })}>{stateOptions.map((item) => <option key={item.value} value={item.value}>{tx(item.label)}</option>)}</Select></FilterField>
+        <FilterField label={tx("Başlangıç tarihi")}><TextInput type="date" value={filter.from} onChange={(event) => update({ from: event.target.value })} /></FilterField>
+        <FilterField label={tx("Bitiş tarihi")}><TextInput type="date" value={filter.to} min={filter.from || undefined} onChange={(event) => update({ to: event.target.value })} /></FilterField>
       </Filters>
       {invalidDates && <Notice tone="warning">{tx("Bitiş tarihi başlangıç tarihinden önce olamaz.")}</Notice>}
       {!invalidDates && <QueryState isPending={query.isPending} error={query.error}>
         {query.data?.items.length === 0
-          ? <div className="rounded-xl border border-border bg-surface"><EmptyState icon={Archive} message={tx("Bu filtrelerde Backup dosyası yok; filtreleri temizleyin veya bir Backup Job çalıştırın.")} /></div>
+          ? <Card padding="none"><EmptyState icon={Archive} message={tx("Bu filtrelerde Backup dosyası yok; filtreleri temizleyin veya bir Backup Job çalıştırın.")} /></Card>
           : <DataList rows={query.data?.items ?? []} columns={columns} keyExtractor={(artifact) => artifact.id} />}
       </QueryState>}
       {query.data && !invalidDates && query.data.totalCount > 0 && <Pagination label={tx("Backup sayfalama")} page={filter.page} pageSize={filter.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}

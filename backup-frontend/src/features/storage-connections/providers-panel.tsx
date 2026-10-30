@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { Card } from '@/components/ui/card'
 import { Link } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button-variants'
@@ -12,7 +13,7 @@ function ProviderCard({ provider, connections, addPath }: { provider: ProviderDe
   useLanguage()
   const planned = provider.availability !== 'Available'
   const create = tenantCreateState(provider, connections)
-  return <li aria-disabled={planned || undefined} className={`space-y-4 rounded-xl border border-border bg-surface p-5 shadow-card ${planned ? 'opacity-70' : ''}`}>
+  return <Card as="li" aria-disabled={planned || undefined} className={`space-y-4 ${planned ? 'opacity-70' : ''}`}>
     <div className="flex items-start gap-3">
       <ProviderIcon providerType={provider.providerType} />
       <div className="min-w-0 flex-1"><h3 className="font-medium text-text-heading">{tx(provider.displayName)}</h3>{!planned && <div className="mt-1"><StatusPill domain="provider" status={provider.availability} /></div>}</div>
@@ -26,7 +27,7 @@ function ProviderCard({ provider, connections, addPath }: { provider: ProviderDe
         ? <Link to={`${addPath}?provider=${encodeURIComponent(provider.providerType)}`} aria-label={tx("{0} için bağlantı ekle", { "0": tx(provider.displayName) })} className={buttonVariants({ variant: 'outline', size: 'sm' })}><Plus aria-hidden="true" className="size-4" />{tx("Bağlantı ekle")}</Link>
         : <p className="text-sm text-text-muted">{tx("Bağlantı eklemek için Owner / Admin rolü gerekir.")}</p>
       : <p className="text-sm text-text-muted">{create.reason}.</p>)}
-  </li>
+  </Card>
 }
 
 /** What each Storage Provider can do. Planned providers are listed for capability display only: no link, no wizard. `addPath` is set only for roles that may add. */

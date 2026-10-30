@@ -14,7 +14,7 @@ import { useNotificationPolicy, useUpdateNotificationPolicy } from './hooks'
 import { eventTypeLabels, kindLabels, severityLabels } from './labels'
 import { thresholdRanges, toThresholds, validateThresholds } from './policy-validation'
 import type { ThresholdField } from './policy-validation'
-import { channelKinds, eventTypes, severities } from './types'
+import { eventTypes, severities, visibleChannelKinds } from './types'
 import type { ChannelKind, EventType, NotificationPolicy, Severity } from './types'
 import { formatDateTime } from '@/lib/format'
 
@@ -43,7 +43,7 @@ function PolicyForm({ policy }: { policy: NotificationPolicy }) {
   })
   const [submitted, setSubmitted] = useState(false)
   const errors = validateThresholds(thresholds)
-  const unavailable = kinds.filter((kind) => kind !== 'webhook' && !policy.transports[kind].available)
+  const unavailable = visibleChannelKinds().filter((kind) => kinds.includes(kind) && kind !== 'webhook' && !policy.transports[kind].available)
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -59,7 +59,7 @@ function PolicyForm({ policy }: { policy: NotificationPolicy }) {
       <p className="text-sm text-text-muted">{tx("Bir platform yöneticisi şifreli yedeklerinize acil destek erişimi kullandığında kritik uyarı gönderilir. Bu olay kapatılamaz; genel kanallara gönderim için bildirimlerin etkin ve en az bir kanalın hazır olması gerekir. Sahiplerin kayıtlı güvenlik adresleri ayrıca her zaman bilgilendirilir.")}</p>
     </fieldset>
     <fieldset className="space-y-2"><legend className="text-sm font-medium text-text-heading">{tx("Kanal türleri")}</legend>
-      <div className="flex flex-wrap gap-x-6">{channelKinds.map((kind) => <CheckField key={kind} label={kindLabels[kind]} checked={kinds.includes(kind)} onChange={(event) => setKinds(toggle(kinds, kind, event.target.checked))} />)}</div>
+      <div className="flex flex-wrap gap-x-6">{visibleChannelKinds().map((kind) => <CheckField key={kind} label={kindLabels[kind]} checked={kinds.includes(kind)} onChange={(event) => setKinds(toggle(kinds, kind, event.target.checked))} />)}</div>
       {unavailable.map((kind) => <Notice key={kind} tone="warning">{tx("{0} aktarımı platform tarafından yapılandırılmamış veya etkin değil; bu tür seçili olsa da bildirim gönderilemez.", { '0': kindLabels[kind] })}</Notice>)}
     </fieldset>
     <div className="grid gap-4 sm:grid-cols-2">

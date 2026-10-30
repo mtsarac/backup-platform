@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { Select, TextInput } from '@/components/ui/text-input'
 import { Activity } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { DataList } from '@/components/data/data-list'
@@ -8,8 +9,9 @@ import { QueryState } from '@/components/data/query-state'
 import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { buttonVariants } from '@/components/ui/button-variants'
+import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
-import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
+import { FilterField, Filters } from '@/components/ui/filters'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { useAgents } from '@/features/agents/hooks'
 import { useBackupJobs } from '@/features/backup-jobs/hooks'
@@ -53,42 +55,42 @@ export function BackupsPage() {
       <Filters label={tx("Yedekleme filtreleri")} onClear={filtering ? clearFilters : undefined}
         footer={<span className="text-sm text-text-muted">{tx("Tarihler yerel saat diliminizdeki oluşturulma günlerini kapsar.")}</span>}>
         <FilterField label={tx("Durum")}>
-          <select aria-label={tx("Durum")} className={filterControlClass} value={status ?? ''} onChange={(event) => update({ status: event.target.value })}>
+          <Select aria-label={tx("Durum")} value={status ?? ''} onChange={(event) => update({ status: event.target.value })}>
             <option value="">{tx("Tüm durumlar")}</option>
             {runStatuses.map((value) => <option key={value} value={value}>{statusLabel('general', value)}</option>)}
-          </select>
+          </Select>
         </FilterField>
         <FilterField label={tx("İş")}>
-          <select aria-label={tx("İş")} className={filterControlClass} value={filters.jobId ?? ''} onChange={(event) => update({ jobId: event.target.value })} disabled={jobs.isPending || Boolean(jobs.error)}>
+          <Select aria-label={tx("İş")} value={filters.jobId ?? ''} onChange={(event) => update({ jobId: event.target.value })} disabled={jobs.isPending || Boolean(jobs.error)}>
             <option value="">{tx("Tüm işler")}</option>
             {jobs.data?.map((job) => <option key={job.id} value={job.id}>{job.name}</option>)}
-          </select>
+          </Select>
         </FilterField>
         <FilterField label={tx("Yedekleme bilgisayarı")}>
-          <select aria-label={tx("Yedekleme bilgisayarı")} className={filterControlClass} value={filters.agentId ?? ''} onChange={(event) => update({ agentId: event.target.value })} disabled={agents.isPending || Boolean(agents.error)}>
+          <Select aria-label={tx("Yedekleme bilgisayarı")} value={filters.agentId ?? ''} onChange={(event) => update({ agentId: event.target.value })} disabled={agents.isPending || Boolean(agents.error)}>
             <option value="">{tx("Tüm yedekleme bilgisayarları")}</option>
             {agents.data?.map((agent) => <option key={agent.agentId} value={agent.agentId}>{agent.hostName ?? tx('Adsız yedekleme bilgisayarı')}</option>)}
-          </select>
+          </Select>
         </FilterField>
         <FilterField label={tx("Tetikleyici")}>
-          <select aria-label={tx("Tetikleyici")} className={filterControlClass} value={trigger ?? ''} onChange={(event) => update({ trigger: event.target.value })}>
+          <Select aria-label={tx("Tetikleyici")} value={trigger ?? ''} onChange={(event) => update({ trigger: event.target.value })}>
             <option value="">{tx("Tüm tetikleyiciler")}</option><option value="Manual">{tx("Elle başlatıldı")}</option><option value="Scheduled">{tx("Zamanlanmış")}</option><option value="Retry">{tx("Yeniden denemeler")}</option>
-          </select>
+          </Select>
         </FilterField>
         <FilterField label={tx("Oluşturulma başlangıcı")}>
-          <input aria-label={tx("Oluşturulma başlangıcı")} type="date" max={toDay || undefined} className={filterControlClass} value={fromDay} onChange={(event) => update({ from: event.target.value })} />
+          <TextInput aria-label={tx("Oluşturulma başlangıcı")} type="date" max={toDay || undefined} value={fromDay} onChange={(event) => update({ from: event.target.value })} />
         </FilterField>
         <FilterField label={tx("Oluşturulma sonu")}>
-          <input aria-label={tx("Oluşturulma sonu")} type="date" min={fromDay || undefined} className={filterControlClass} value={toDay} onChange={(event) => update({ to: event.target.value })} />
+          <TextInput aria-label={tx("Oluşturulma sonu")} type="date" min={fromDay || undefined} value={toDay} onChange={(event) => update({ to: event.target.value })} />
         </FilterField>
       </Filters>
       {invalidDateRange && <Notice tone="warning">{tx("Başlangıç tarihi bitiş tarihinden sonra olamaz.")}</Notice>}
       {filterError && <ErrorNotice title={tx("Filtre seçenekleri yüklenemedi")} error={filterError} />}
       <QueryState isPending={backups.isPending} error={backups.error}>
         {backups.data && (backups.data.totalCount === 0
-          ? <div className="rounded-xl border border-border bg-surface">{filtering
+          ? <Card padding="none">{filtering
             ? <EmptyState icon={Activity} message={tx("Bu filtrelere uygun yedekleme denemesi bulunamadı.")} />
-            : <EmptyState icon={Activity} message={tx("Henüz yedekleme denemesi yok. Bir yedekleme işi çalıştığında burada görünür.")} action={<Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-jobs`}>{tx("Yedekleme işlerine git")}</Link>} />}</div>
+            : <EmptyState icon={Activity} message={tx("Henüz yedekleme denemesi yok. Bir yedekleme işi çalıştığında burada görünür.")} action={<Link className={buttonVariants()} to={`/tenants/${tenantId}/backup-jobs`}>{tx("Yedekleme işlerine git")}</Link>} />}</Card>
           : <>
             <DataList rows={backups.data.items} columns={columns} keyExtractor={(run) => run.id} />
             <Pagination label={tx("Yedekleme sayfaları")} page={page} pageSize={pageSize} totalCount={backups.data.totalCount} disabled={backups.isFetching} onPageChange={(next) => update({ page: next })} />

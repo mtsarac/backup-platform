@@ -7,6 +7,7 @@ import { ProgressBar } from '@/components/data/progress-bar'
 import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
@@ -161,7 +162,7 @@ function BackupDetail({ id }: { id: string }) {
               <div role="region" aria-label={tx("Yedekleme denemesi ayrıntıları")}><TechnicalDetails items={runTechnicalItems(run)} /></div>
             </>}
             {tab === 'attempts' && (run.attempts.length === 0
-              ? <div className="rounded-xl border border-border bg-surface"><EmptyState icon={History} message={tx("Henüz deneme oluşturulmadı.")} /></div>
+              ? <Card padding="none"><EmptyState icon={History} message={tx("Henüz deneme oluşturulmadı.")} /></Card>
               : run.attempts.map((attempt) => <Section key={attempt.id} title={tx("{0}. deneme · {1}", { "0": attempt.number, "1": triggerLabel(attempt.trigger) })} actions={<><StatusPill status={attempt.status} /><ReplicationBadge replication={attempt.replication} /></>}>
                 <div className="space-y-4">
                   <Facts columns={3}>
