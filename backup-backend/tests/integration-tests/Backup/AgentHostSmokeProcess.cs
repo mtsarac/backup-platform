@@ -29,7 +29,7 @@ internal sealed class AgentHostSmokeProcess : IAsyncDisposable
     /// <param name="localStorageRoot">An existing directory the caller owns and cleans up, to be the agent's local storage (the backend retention workers need to reach the same one); default: a directory inside the host's scratch space.</param>
     public static async Task<AgentHostSmokeProcess> StartAsync(AgentWorld world, EnrolledAgent agent, Action<string>? diagnostic = null, string? localStorageRoot = null)
     {
-        var executable = Required("BACKUP_PLATFORM_TEST_AGENT_HOST_PATH");
+        var executable = ResolveExecutable();
         var scratch = Path.Combine(Path.GetTempPath(), "bp_agent_orchestration_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(scratch);
         var storage = localStorageRoot ?? Path.Combine(scratch, "storage");
@@ -62,8 +62,10 @@ internal sealed class AgentHostSmokeProcess : IAsyncDisposable
         start.Environment["Agent__Connectivity__PollInterval"] = "00:00:05";
         start.Environment["Agent__Connectivity__PushFallbackDelay"] = "00:00:00";
         start.Environment["Agent__Connectivity__MinimumPollSpacing"] = "00:00:01";
-        var serverStaging = Required("BACKUP_PLATFORM_TEST_MSSQL_STAGING_SERVER_DIR");
-        var agentStaging = Required("BACKUP_PLATFORM_TEST_MSSQL_STAGING_AGENT_DIR");
+        var serverStaging = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_STAGING_SERVER_DIR")
+            ?? TestContainers.MsSqlServer.StagingServerDirectory;
+        var agentStaging = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_STAGING_AGENT_DIR")
+            ?? TestContainers.MsSqlServer.StagingAgentDirectory;
         start.Environment["Agent__Backup__Staging__Mapping"] = serverStaging == agentStaging ? "SameHost" : "Mapped";
         start.Environment["Agent__Backup__Staging__ServerDirectory"] = serverStaging;
         start.Environment["Agent__Backup__Staging__AgentDirectory"] = agentStaging;
@@ -98,6 +100,19 @@ internal sealed class AgentHostSmokeProcess : IAsyncDisposable
         _diagnostic?.Invoke(await _output + await _error);
         _process.Dispose();
         Directory.Delete(_scratch, recursive: true);
+    }
+
+    private static string ResolveExecutable()
+    {
+        var configured = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_AGENT_HOST_PATH");
+        if (!string.IsNullOrWhiteSpace(configured) && File.Exists(configured)) return configured;
+        var candidates = new[]
+        {
+            "/tmp/bp-integration-agent/BackupPlatform.Agent.Host",
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local/share/backup-platform-dev/agent-bin/BackupPlatform.Agent.Host")
+        };
+        return candidates.FirstOrDefault(File.Exists)
+            ?? throw new InvalidOperationException("Set BACKUP_PLATFORM_TEST_AGENT_HOST_PATH before running the real Agent.Host/MSSQL orchestration smoke.");
     }
 
     internal static string Required(string name) => Environment.GetEnvironmentVariable(name) is { Length: > 0 } value

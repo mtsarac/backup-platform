@@ -12,6 +12,12 @@ def check(cond, msg):
     if not cond: raise AssertionError(msg)
 
 
+def wait_api_ready(timeout=120):
+    if hasattr(api, "wait_ready"):
+        return api.wait_ready(timeout=timeout)
+    return True
+
+
 @scenario("accept/enrollment: both lab agents joined by token; a new token enrolls once and is then refused")
 def enrollment():
     t = lib.Tenant("a"); agents = t.agents()
@@ -52,6 +58,7 @@ def role_denied():
 
 if __name__ == "__main__":
     only = sys.argv[1] if len(sys.argv) > 1 else None
+    wait_api_ready()
     t = lib.Tenant("a")
     for fn in (enrollment, role_denied):
         if not only or only in fn.scenario: fn()

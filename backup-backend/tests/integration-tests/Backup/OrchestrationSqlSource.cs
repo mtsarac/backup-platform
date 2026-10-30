@@ -8,20 +8,38 @@ internal sealed class OrchestrationSqlSource : IAsyncDisposable
     private readonly string _connectionString;
     private bool _created;
     public string DatabaseName { get; } = "bp_orchestration_" + Guid.NewGuid().ToString("N");
-    public string Host { get; } = AgentHostSmokeProcess.Required("BACKUP_PLATFORM_TEST_MSSQL_HOST");
-    public int? Port { get; } = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_PORT") is { Length: > 0 } value
-        ? int.Parse(value, System.Globalization.CultureInfo.InvariantCulture) : null;
+    public string Host { get; }
+    public int? Port { get; }
     private readonly int _rows;
 
     /// <param name="rows">Number of ~8 KB incompressible rows: more rows make the real backup take longer.</param>
     public OrchestrationSqlSource(int rows = 12000)
     {
         _rows = rows;
+        var envHost = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_HOST");
+        string user, password;
+        if (!string.IsNullOrWhiteSpace(envHost))
+        {
+            Host = envHost;
+            Port = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_PORT") is { Length: > 0 } value
+                ? int.Parse(value, System.Globalization.CultureInfo.InvariantCulture) : null;
+            user = AgentHostSmokeProcess.Required("BACKUP_PLATFORM_TEST_MSSQL_USER");
+            password = AgentHostSmokeProcess.Required("BACKUP_PLATFORM_TEST_MSSQL_PASSWORD");
+        }
+        else
+        {
+            var server = TestContainers.MsSqlServer;
+            Host = server.Host;
+            Port = server.Port;
+            user = server.User;
+            password = server.Password;
+        }
+
         var builder = new SqlConnectionStringBuilder
         {
             DataSource = Port is { } port ? $"tcp:{Host},{port}" : Host,
-            UserID = AgentHostSmokeProcess.Required("BACKUP_PLATFORM_TEST_MSSQL_USER"),
-            Password = AgentHostSmokeProcess.Required("BACKUP_PLATFORM_TEST_MSSQL_PASSWORD"),
+            UserID = user,
+            Password = password,
             InitialCatalog = "master", Encrypt = true, TrustServerCertificate = true, Pooling = false
         };
         _connectionString = builder.ConnectionString;

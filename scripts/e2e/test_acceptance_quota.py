@@ -137,6 +137,23 @@ class AcceptanceRouting(unittest.TestCase):
         large.assert_called_once_with()
         matrix_main.assert_called_once_with('matrix')
 
+    def test_acceptance_invokes_wait_ready_when_defined(self):
+        wait_ready = Mock()
+        tenant = Mock()
+        matrix_main = Mock()
+        modules = {'api': module('api', BASE='https://example.invalid', wait_ready=wait_ready),
+                   'lib': module('lib', scenario=scenario, Tenant=Mock(return_value=tenant)),
+                   'matrix': module('matrix', main=matrix_main),
+                   'large': module('large', large_cell=Mock(scenario='matrix/large'))}
+        for name, function in [('mtls', 'mtls'), ('central', 'central'),
+                               ('breakglass', 'break_glass'), ('webrtc', 'webrtc_direct'),
+                               ('selfupdate', 'self_update')]:
+            fn = Mock()
+            fn.scenario = 'other/' + name
+            modules[name] = module(name, **{function: fn})
+        with patch.dict(sys.modules, modules), patch.object(sys, 'argv', ['acceptance.py', 'not-a-scenario']):
+            runpy.run_path(str(HERE / 'acceptance.py'), run_name='__main__')
+        wait_ready.assert_called_once_with(timeout=120)
 
 if __name__ == '__main__':
     unittest.main()
