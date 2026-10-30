@@ -3,7 +3,8 @@ import { CheckField } from '@/components/ui/check-field'
 import { useState } from 'react'
 import { Field } from '@/components/ui/field'
 import { FormDialog } from '@/components/ui/form-dialog'
-import { inputClass, selectClass } from '@/components/ui/form-styles'
+import { selectClass } from '@/components/ui/form-styles'
+import { TextInput } from '@/components/ui/text-input'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { useSetUploadBandwidth } from './hooks'
 import type { BandwidthTarget } from './types'
@@ -38,7 +39,7 @@ export function LimitDialog({ target, name, current, minimum, maximum, onClose }
     <CheckField label={tx("Limitsiz (sınır yok)")} checked={unlimited} onChange={event => setUnlimited(event.target.checked)} />
     <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
       <Field label={tx("Hız sınırı")} error={showInvalid ? bandwidthErrorMessage(parsed.error, minimum, maximum) : undefined}>
-        {control => <input {...control} className={inputClass} inputMode="decimal" value={text} disabled={unlimited} onChange={event => setText(event.target.value)} />}
+        {control => <TextInput {...control}  inputMode="decimal" value={text} disabled={unlimited} onChange={event => setText(event.target.value)} />}
       </Field>
       <Field label={tx("Birim")}>
         {control => <select {...control} className={`${selectClass} w-full`} value={unit} disabled={unlimited} onChange={event => setUnit(event.target.value as BandwidthUnitId)}>

@@ -24,7 +24,7 @@ One visual language, defined in `src/index.css` tokens and the shared components
 - **Forms.** `Field` binds label, hint and error to one control; put `TextInput`, a `selectClass` select or `SecretField` inside it and spread the `control` props. `CheckField`, `SearchablePicker`, `Stepper`, `FormDialog` and `ConfirmDialog` cover the rest.
 - **Data.** `DataList` (table on desktop, cards on small screens), `QueryState` for loading/empty/error, `StatusPill` for every status (colour + icon + text), `Badge` for plain tags, `KpiCard`, `ProgressBar`, `Pagination`.
 - **Messages.** `Notice` for non-failures, `ErrorNotice` for failures (what happened, effect on data, what to do, raw code under technical details), `EmptyState` for empty lists, `TechnicalDetails` for ids and raw values.
-- **Rules.** Every user-visible string goes through `tx()`. State is never colour alone. Components added for the redesign sit beside the older ones; a screen moves over when it is redesigned, and old components are removed only when no screen uses them. The login page is the reference screen.
+- **Rules.** Every user-visible string goes through `tx()`. State is never colour alone. Every screen, frozen and platform ones included, uses these components; the old per-screen input and surface styles are gone. The login page is the reference screen.
 
 ## Run it
 

@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { Card } from '@/components/ui/card'
 import { useState } from 'react'
 import { DataList } from '@/components/data/data-list'
 import type { Column } from '@/components/data/data-list'
@@ -129,10 +130,10 @@ export function UploadBandwidthPage() {
               <h2 className="text-base font-semibold text-text-heading">{tx("Bant Genişliği Profilleri")}</h2>
               {profileList.length > 0 && newProfile}
             </div>
-            {profileList.length === 0 ? <div className="rounded-xl border border-border bg-surface"><EmptyState message={tx("Henüz profil yok. Saate göre değişen bir hız sınırı için profil oluşturun.")} action={newProfile} canAct={canAdmin} /></div> : (
+            {profileList.length === 0 ? <Card padding="none"><EmptyState message={tx("Henüz profil yok. Saate göre değişen bir hız sınırı için profil oluşturun.")} action={newProfile} canAct={canAdmin} /></Card> : (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {profileList.map(p => (
-                  <div key={p.id} className="space-y-3 rounded-xl border border-border bg-surface p-4 shadow-card">
+                  <Card key={p.id} className="space-y-3">
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="min-w-0 break-words font-semibold text-text-heading">{p.name}</h3>
                       {canAdmin && (
@@ -146,7 +147,7 @@ export function UploadBandwidthPage() {
                       <ul className="space-y-1 text-sm text-text">{describeSchedule(p.windows).map(line => <li key={line}>{line}</li>)}</ul>
                       <p className="text-sm text-text-muted">{tx("Diğer saatlerde sınırsız.")}</p>
                     </>}
-                  </div>
+                  </Card>
                 ))}
               </div>
             )}

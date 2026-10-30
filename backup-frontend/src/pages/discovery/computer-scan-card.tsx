@@ -7,7 +7,8 @@ import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
-import { inputClass, linkClass } from '@/components/ui/form-styles'
+import { linkClass } from '@/components/ui/form-styles'
+import { TextInput } from '@/components/ui/text-input'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { TechnicalDetails, type TechnicalItem } from '@/components/ui/technical-details'
@@ -33,7 +34,7 @@ function SettingsForm({ status }: { status: DiscoveryAgentStatus }) {
   return <form className="space-y-3" aria-label={tx("Tarama ayarları")} onSubmit={event => { event.preventDefault(); if (!invalid) save.mutate({ enabled, scanIntervalMinutes: minutes, includeDocker }) }}>
     <CheckField label={tx("Otomatik tarama açık")} checked={enabled} onChange={event => setEnabled(event.target.checked)} />
     <Field id={`interval-${status.agentId}`} label={tx("Tarama aralığı (dakika)")} hint={tx("15 ile 10080 arasında.")} error={invalid ? tx('Aralık 15 ile 10080 dakika arasında bir tam sayı olmalı.') : fieldError}>
-      {control => <input {...control} type="number" className={inputClass} value={interval} onChange={event => setInterval(event.target.value)} />}
+      {control => <TextInput {...control} type="number"  value={interval} onChange={event => setInterval(event.target.value)} />}
     </Field>
     <CheckField label={tx("Docker container'larını da tara")} checked={includeDocker} onChange={event => setIncludeDocker(event.target.checked)} />
     {save.error && !fieldError && <ErrorNotice error={save.error} />}
