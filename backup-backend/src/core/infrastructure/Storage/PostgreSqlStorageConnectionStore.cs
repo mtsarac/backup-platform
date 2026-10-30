@@ -43,6 +43,7 @@ public sealed class PostgreSqlStorageConnectionStore(
         ArgumentNullException.ThrowIfNull(filter);
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
         var rows = Records(context);
+        if (filter.ExcludeSmb) rows = rows.Where(row => row.Connection.ProviderType != StorageProviderTypes.Smb);
         if (filter.Ownership is { } ownership)
         {
             rows = rows.Where(row => row.Connection.Ownership == ownership);

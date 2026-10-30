@@ -65,7 +65,7 @@ public sealed record StorageTestResult(StorageTestStatus Status, string? Code, s
 
 public sealed record StorageTestOutcome(StorageConnectionView Connection, StorageTestSummary Test, double DurationMilliseconds);
 
-public sealed record StorageConnectionFilter(StorageOwnership? Ownership, string? ProviderType, TenantId? TenantId, bool? Enabled, string? Search);
+public sealed record StorageConnectionFilter(StorageOwnership? Ownership, string? ProviderType, TenantId? TenantId, bool? Enabled, string? Search, bool ExcludeSmb = false);
 
 public enum StorageConnectionOutcome
 {

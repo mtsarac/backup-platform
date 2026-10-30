@@ -1,4 +1,6 @@
 using BackupPlatform.Domain.Identity;
+using BackupPlatform.Contracts.Flags;
+using BackupPlatform.Infrastructure.Notifications;
 using BackupPlatform.Domain.Notifications;
 using BackupPlatform.Notifications;
 using Microsoft.EntityFrameworkCore;
@@ -20,6 +22,33 @@ public sealed class NotificationStoreIntegrationTests : IAsyncLifetime
     public Task DisposeAsync() => fixture.DisposeAsync();
 
     private Task<TenantId> TenantAsync() => _world.Quota.Harness.AddTenantAsync();
+
+    [Fact]
+    public async Task Disabled_sms_leaves_queued_deliveries_untouched_until_reenabled()
+    {
+        var tenant = await TenantAsync();
+        var channel = await _world.Admin().CreateChannelAsync(tenant, new CreateChannelCommand("sms", "Mobile", "+15551234567", null, null), _world.Actor, default);
+        Assert.True(channel.Succeeded);
+        var transport = await _world.Transports().UpdateAsync(NotificationTransports.Sms, new TransportCommand(true, new Dictionary<string, string?>
+        {
+            ["provider"] = "generic-http", ["endpoint"] = "https://sms.example.com/send", ["authentication"] = "none"
+        }), _world.PlatformActor, default);
+        Assert.True(transport.Succeeded);
+        var queued = await _world.Admin().RequestTestAsync(tenant, channel.Value!.Id, _world.Actor, default);
+        Assert.True(queued.Succeeded);
+
+        var enabled = false;
+        var store = new PostgreSqlNotificationStore(_world.Quota.Options(), _world.Clock, new FeatureFlags(_ => enabled));
+        Assert.Empty(await store.ClaimDueAsync("worker", _world.Clock.GetUtcNow(), 10, TimeSpan.FromMinutes(1), 4, default));
+        var pending = Assert.Single(await _world.DeliveriesAsync(tenant));
+        Assert.Equal(NotificationDeliveryStatus.Pending, pending.Status);
+        Assert.Equal(0, pending.AttemptCount);
+
+        enabled = true;
+        var claimed = Assert.Single(await store.ClaimDueAsync("worker", _world.Clock.GetUtcNow(), 10, TimeSpan.FromMinutes(1), 4, default));
+        Assert.Equal(queued.Value!.DeliveryId, claimed.DeliveryId);
+        Assert.Equal(NotificationChannelKind.Sms, claimed.Kind);
+    }
 
     [Fact]
     public async Task A_tenant_never_sees_or_changes_another_tenants_channels_or_history()

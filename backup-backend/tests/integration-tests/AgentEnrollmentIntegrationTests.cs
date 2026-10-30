@@ -148,7 +148,7 @@ public sealed class AgentEnrollmentIntegrationTests(PostgreSqlFixture fixture) :
         var (tokenId, token) = await world.CreateTokenAsync(setup);
         using var list = await setup.Admin.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/agent-enrollment-tokens");
         Assert.Single(AgentWorld.ReadJson(list).EnumerateArray());
-        world.Clock.Advance(TimeSpan.FromMinutes(1));
+        world.Clock.Advance(TimeSpan.FromMinutes(5));
         using var expiredList = await setup.Admin.GetAsync($"/api/tenants/{setup.Tenant.Id.Value}/agent-enrollment-tokens");
         Assert.Empty(AgentWorld.ReadJson(expiredList).EnumerateArray());
         using var enroll = await world.PostEnrollAsync(AgentWorld.EnrollmentRequest(token));
@@ -220,70 +220,6 @@ public sealed class AgentEnrollmentIntegrationTests(PostgreSqlFixture fixture) :
         Assert.Equal(world.Clock.GetUtcNow().AddMinutes(120), secondExpiresAt);
     }
 
-    [Fact]
-    public async Task PlatformAgentSettingsValidationAndAuditing()
-    {
-        await using var world = await AgentWorld.CreateAsync(fixture);
-        var setup = await world.CreateTenantAsync();
-        var platformAdmin = await world.SeedUserAsync(platformAdmin: true);
-        var adminSession = await world.SignInAsync(platformAdmin);
-
-        // Tenant admin cannot read or change platform agent settings
-        using var forbiddenRead = await setup.Admin.GetAsync("/api/platform/agent-settings");
-        Assert.Equal(HttpStatusCode.Forbidden, forbiddenRead.StatusCode);
-        using var forbiddenWrite = await setup.Admin.SendAsync(HttpMethod.Put, "/api/platform/agent-settings",
-            new { serverUrl = "https://backup.example", enrollmentTokenLifetimeMinutes = 60 });
-        Assert.Equal(HttpStatusCode.Forbidden, forbiddenWrite.StatusCode);
-
-        // Default GET response
-        using var initial = await adminSession.GetAsync("/api/platform/agent-settings");
-        Assert.Equal(HttpStatusCode.OK, initial.StatusCode);
-        var initialJson = AgentWorld.ReadJson(initial);
-        Assert.Equal(System.Text.Json.JsonValueKind.Null, initialJson.GetProperty("serverUrl").ValueKind);
-        Assert.Equal(1440, initialJson.GetProperty("enrollmentTokenLifetimeMinutes").GetInt32());
-        Assert.Equal(5, initialJson.GetProperty("limits").GetProperty("minMinutes").GetInt32());
-        Assert.Equal(10080, initialJson.GetProperty("limits").GetProperty("maxMinutes").GetInt32());
-
-        // Invalid URLs
-        foreach (var badUrl in new[] { "http://insecure.example", "https://user:pass@example.com", "https://example.com/?query=1", "https://example.com/#frag", "not-a-url" })
-        {
-            using var response = await adminSession.SendAsync(HttpMethod.Put, "/api/platform/agent-settings",
-                new { serverUrl = badUrl, enrollmentTokenLifetimeMinutes = 60 });
-            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-            Assert.Equal("invalid_server_url", AgentWorld.ReadJson(response).GetProperty("error").GetString());
-        }
-
-        // Invalid lifetimes
-        foreach (var badMinutes in new[] { 4, 0, -1, 10081, 20000 })
-        {
-            using var response = await adminSession.SendAsync(HttpMethod.Put, "/api/platform/agent-settings",
-                new { serverUrl = "https://backup.example", enrollmentTokenLifetimeMinutes = badMinutes });
-            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-            Assert.Equal("invalid_lifetime", AgentWorld.ReadJson(response).GetProperty("error").GetString());
-        }
-
-        // Valid update normalizes trailing slash and records audit event
-        using var valid = await adminSession.SendAsync(HttpMethod.Put, "/api/platform/agent-settings",
-            new { serverUrl = "https://backup.example:5252/path/", enrollmentTokenLifetimeMinutes = 60 });
-        Assert.Equal(HttpStatusCode.OK, valid.StatusCode);
-        var validJson = AgentWorld.ReadJson(valid);
-        Assert.Equal("https://backup.example:5252/path", validJson.GetProperty("serverUrl").GetString());
-        Assert.Equal(60, validJson.GetProperty("enrollmentTokenLifetimeMinutes").GetInt32());
-
-        await using (var context = fixture.CreatePlatformContext())
-        {
-            var audit = await context.AuditEvents.SingleOrDefaultAsync(row => row.Action == AuditActions.AgentSettingsChanged);
-            Assert.NotNull(audit);
-            Assert.Equal(AuditActorKind.PlatformAdmin, audit.ActorKind);
-            Assert.Equal(platformAdmin.UserId, audit.ActorUserId);
-        }
-
-        // Null or empty serverUrl clears it
-        using var cleared = await adminSession.SendAsync(HttpMethod.Put, "/api/platform/agent-settings",
-            new { serverUrl = (string?)null, enrollmentTokenLifetimeMinutes = 1440 });
-        Assert.Equal(HttpStatusCode.OK, cleared.StatusCode);
-        Assert.Equal(System.Text.Json.JsonValueKind.Null, AgentWorld.ReadJson(cleared).GetProperty("serverUrl").ValueKind);
-    }
     [Fact]
     public async Task TokensAreBoundToTheirTenantAndCannotBeUsedOrManagedAcrossTenants()
     {
@@ -445,5 +381,73 @@ public sealed class AgentEnrollmentIntegrationTests(PostgreSqlFixture fixture) :
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
         using var valid = await world.PostEnrollAsync(AgentWorld.EnrollmentRequest(token));
         Assert.Equal(HttpStatusCode.Created, valid.StatusCode);
+    }
+}
+
+public sealed class PlatformAgentSettingsIntegrationTests(PostgreSqlFixture fixture) : IClassFixture<PostgreSqlFixture>
+{
+    [Fact]
+    public async Task PlatformAgentSettingsValidationAndAuditing()
+    {
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var setup = await world.CreateTenantAsync();
+        var platformAdmin = await world.SeedUserAsync(platformAdmin: true);
+        var adminSession = await world.SignInAsync(platformAdmin);
+
+        // Tenant admin cannot read or change platform agent settings
+        using var forbiddenRead = await setup.Admin.GetAsync("/api/platform/agent-settings");
+        Assert.Equal(HttpStatusCode.Forbidden, forbiddenRead.StatusCode);
+        using var forbiddenWrite = await setup.Admin.SendAsync(HttpMethod.Put, "/api/platform/agent-settings",
+            new { serverUrl = "https://backup.example", enrollmentTokenLifetimeMinutes = 60 });
+        Assert.Equal(HttpStatusCode.Forbidden, forbiddenWrite.StatusCode);
+
+        // Default GET response
+        using var initial = await adminSession.GetAsync("/api/platform/agent-settings");
+        Assert.Equal(HttpStatusCode.OK, initial.StatusCode);
+        var initialJson = AgentWorld.ReadJson(initial);
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, initialJson.GetProperty("serverUrl").ValueKind);
+        Assert.Equal(1440, initialJson.GetProperty("enrollmentTokenLifetimeMinutes").GetInt32());
+        Assert.Equal(5, initialJson.GetProperty("limits").GetProperty("minMinutes").GetInt32());
+        Assert.Equal(10080, initialJson.GetProperty("limits").GetProperty("maxMinutes").GetInt32());
+
+        // Invalid URLs
+        foreach (var badUrl in new[] { "http://insecure.example", "https://user:pass@example.com", "https://example.com/?query=1", "https://example.com/#frag", "not-a-url" })
+        {
+            using var response = await adminSession.SendAsync(HttpMethod.Put, "/api/platform/agent-settings",
+                new { serverUrl = badUrl, enrollmentTokenLifetimeMinutes = 60 });
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            Assert.Equal("invalid_server_url", AgentWorld.ReadJson(response).GetProperty("error").GetString());
+        }
+
+        // Invalid lifetimes
+        foreach (var badMinutes in new[] { 4, 0, -1, 10081, 20000 })
+        {
+            using var response = await adminSession.SendAsync(HttpMethod.Put, "/api/platform/agent-settings",
+                new { serverUrl = "https://backup.example", enrollmentTokenLifetimeMinutes = badMinutes });
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            Assert.Equal("invalid_lifetime", AgentWorld.ReadJson(response).GetProperty("error").GetString());
+        }
+
+        // Valid update normalizes trailing slash and records audit event
+        using var valid = await adminSession.SendAsync(HttpMethod.Put, "/api/platform/agent-settings",
+            new { serverUrl = "https://backup.example:5252/path/", enrollmentTokenLifetimeMinutes = 60 });
+        Assert.Equal(HttpStatusCode.OK, valid.StatusCode);
+        var validJson = AgentWorld.ReadJson(valid);
+        Assert.Equal("https://backup.example:5252/path", validJson.GetProperty("serverUrl").GetString());
+        Assert.Equal(60, validJson.GetProperty("enrollmentTokenLifetimeMinutes").GetInt32());
+
+        await using (var context = fixture.CreatePlatformContext())
+        {
+            var audit = await context.AuditEvents.SingleOrDefaultAsync(row => row.Action == AuditActions.AgentSettingsChanged);
+            Assert.NotNull(audit);
+            Assert.Equal(AuditActorKind.PlatformAdmin, audit.ActorKind);
+            Assert.Equal(platformAdmin.UserId, audit.ActorUserId);
+        }
+
+        // Null or empty serverUrl clears it
+        using var cleared = await adminSession.SendAsync(HttpMethod.Put, "/api/platform/agent-settings",
+            new { serverUrl = (string?)null, enrollmentTokenLifetimeMinutes = 1440 });
+        Assert.Equal(HttpStatusCode.OK, cleared.StatusCode);
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, AgentWorld.ReadJson(cleared).GetProperty("serverUrl").ValueKind);
     }
 }

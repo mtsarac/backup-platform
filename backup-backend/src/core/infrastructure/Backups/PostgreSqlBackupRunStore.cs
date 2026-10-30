@@ -119,7 +119,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         if (job.OverlapPolicy == BackupOverlapPolicy.Skip && await ActiveRunIdAsync(context, tenantId, jobId, null, cancellationToken) is { } active)
             return new BackupStartResult(BackupStartOutcome.SkippedOverlap, null, active);
         // The destination of a NEW run: refused while its storage connection is disabled (or missing), resolved and snapshotted otherwise. No reservation exists yet to give back.
-        var target = await StorageTargetGate.ForNewRunAsync(context, tenantId, owner, job.Configuration, now, cancellationToken);
+        var target = await StorageTargetGate.ForNewRunAsync(context, tenantId, owner, job.Configuration, now, cancellationToken, flags);
         if (!target.Allowed)
         {
             await transaction.CommitAsync(cancellationToken);
