@@ -10,7 +10,7 @@ import { TextInput } from '@/components/ui/text-input'
 import { ApiError } from '@/lib/api/client'
 import { useCreateChannel, useSetChannelSecret, useUpdateChannel } from './hooks'
 import { authenticationLabels, kindLabels } from './labels'
-import { channelKinds, webhookAuthentications } from './types'
+import { visibleChannelKinds, webhookAuthentications } from './types'
 import type { ChannelKind, NotificationChannel, WebhookAuthentication } from './types'
 
 const targetHints: Record<ChannelKind, { label: string; placeholder: string }> = {
@@ -55,7 +55,7 @@ export function AddChannelDialog({ onClose }: { onClose: () => void }) {
   return <FormDialog title={tx("Kanal ekle")} submitLabel={tx("Kanal ekle")} pendingLabel={tx("Ekleniyor…")} pending={create.isPending} disabled={!name.trim() || !target.trim()}
     error={error} onSubmit={submit} onClose={onClose}>
     <Field label={tx("Tür")}>
-      {(control) => <select {...control} className={`${selectClass} w-full`} value={kind} onChange={(event) => setKind(event.target.value as ChannelKind)}>{channelKinds.map((item) => <option key={item} value={item}>{kindLabels[item]}</option>)}</select>}
+      {(control) => <select {...control} className={`${selectClass} w-full`} value={kind} onChange={(event) => setKind(event.target.value as ChannelKind)}>{visibleChannelKinds().map((item) => <option key={item} value={item}>{kindLabels[item]}</option>)}</select>}
     </Field>
     <p className="text-sm text-text-muted">{webhook
       ? tx('Olay, önem düzeyi ve etkilenen yedek veya bilgisayar bilgileri bu HTTPS adresine JSON olarak gönderilir. Yedek dosyalarının içeriği gönderilmez.')

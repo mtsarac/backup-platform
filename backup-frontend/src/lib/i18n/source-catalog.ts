@@ -1869,6 +1869,8 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "Bildirimleri yönetme yetkiniz yok": {"tr":"Bildirimleri yönetme yetkiniz yok","en":"You do not have permission to manage notifications"},
   "Bildirim ayarlarını yalnızca bu tenant'ın Owner ve Admin rolleri görebilir.": {"tr":"Bildirim ayarlarını yalnızca bu çalışma alanının Sahip ve Yönetici rollerindeki üyeleri görebilir.","en":"Only members with the Owner or Admin role in this workspace can view notification settings."},
   "{0} · E-posta, webhook ve SMS ile uyarı bildirimleri.": {"tr":"{0} · E-posta, web kancası ve SMS ile uyarı bildirimleri.","en":"{0} · Alert notifications via email, webhook, and SMS."},
+  "{0} · E-posta ve webhook ile uyarı bildirimleri.": {"tr":"{0} · E-posta ve web kancası ile uyarı bildirimleri.","en":"{0} · Alert notifications via email and webhook."},
+  "Tenant bildirimlerinin kullandığı e-posta gönderimi çalışıyor mu? Gizli değerler hiçbir zaman gösterilmez.": {"tr":"Çalışma alanı bildirimlerinin kullandığı e-posta gönderimi çalışıyor mu? Gizli değerler hiçbir zaman gösterilmez.","en":"Is email delivery working for workspace notifications? Secret values are never shown."},
   "Bildirim bölümleri": {"tr":"Bildirim bölümleri","en":"Notification sections"},
   "Politika": {"tr":"Politika","en":"Policy"},
   "Storage bölümleri": {"tr":"Depolama bölümleri","en":"Storage sections"},
