@@ -33,6 +33,7 @@ __pycache__/
 !.env.example
 appsettings.Development.local.json
 appsettings.Local.json
+client_secret*.json
 
 # Logs
 *.log
