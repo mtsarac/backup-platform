@@ -17,4 +17,4 @@ for key in ("a", "b"):
     ok(s.put(f"{api.BASE}/api/platform/tenants/{tid}/agent-enrollment", json={"enabled": True}))
     st[key] = {"tenantId": tid, "login": f"owner-{key}", "password": pw, "userId": uid}
 STATE.write_text(json.dumps(st, indent=2)); STATE.chmod(0o600)
-print({k: {"tenantId": v["tenantId"], "login": v["login"]} for k, v in st.items()})
+print({k: {"tenantId": v["tenantId"], "login": v["login"]} for k, v in st.items() if "tenantId" in v})

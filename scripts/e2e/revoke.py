@@ -2,6 +2,10 @@
 import subprocess, time, lib
 from lib import scenario
 
+def revoked_view(t):
+    """The tenant agent list hides revoked agents unless includeRevoked=true (d9d27687)."""
+    return {a["hostName"]: a for a in t.s.get(f"{t.base}/agents?includeRevoked=true").json()}
+
 @scenario("agents/revoke-cuts-off-agent-immediately")
 def revoke(t):
     tok = subprocess.run(["python3", "enroll.py", "a"], capture_output=True, text=True, check=True).stdout.strip()
@@ -18,12 +22,12 @@ def revoke(t):
         assert ag and ag["connectivity"] == "online", f"second agent never came online: {ag and ag['connectivity']} {out}"
         r = t.raw("POST", f"/agents/{ag['agentId']}/revoke", {}); assert r.status_code in (200, 204), (r.status_code, r.text[:200])
         time.sleep(100)
-        after = t.agents()["revoke-e2e"]
+        after = revoked_view(t)["revoke-e2e"]
         _, log = lib.fedora("sudo journalctl -u bp-agent2 --no-pager --since '-100 sec' -o cat | grep -v '^ *at ' | tail -8 | cut -c1-220")
         assert after["status"] == "Revoked" and after["connectivity"] != "online", (after["status"], after["connectivity"], after.get("lastHeartbeatAt"), log)
         # a revoked agent must not be able to get work or heartbeat again
         time.sleep(40)
-        again = t.agents()["revoke-e2e"]
+        again = revoked_view(t)["revoke-e2e"]
         assert again["connectivity"] != "online", "revoked agent came back online"
         return {"status": after["status"], "connectivity": again["connectivity"]}
     finally:

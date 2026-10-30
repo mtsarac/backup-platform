@@ -152,6 +152,8 @@ def webhook_guard():
 @scenario("notify/9.1 real failing run -> backup_failed mail + denied webhook; unconfirmed address suppressed")
 def failing_run_notification():
     t = F["t"]; fa = t.agents()["fedora-e2e"]
+    for k in ("mail", "hook"):  # earlier scenarios leave same-named channels behind; names are unique per tenant
+        if k in S: t.raw("DELETE", f"/notifications/channels/{S.pop(k)}")
     # channel creation already queues the confirmation mail (no extra test request: the tenant allows only 20 tests/confirmations per hour)
     c = t.call("POST", "/notifications/channels", {"kind": "email", "name": f"e2e-mail {RUN}", "target": MAIL}); S["mail"] = c["id"]
     ghost = f"e2e-notify-ghost-{RUN}@e2e.test"
