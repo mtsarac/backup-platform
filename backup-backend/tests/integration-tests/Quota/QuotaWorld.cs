@@ -158,7 +158,7 @@ internal sealed class QuotaWorld(PostgreSqlFixture database)
             $"UPDATE tenant_storage_usage SET \"UsedBytes\" = {usedBytes}, \"ReservedBytes\" = {reservedBytes} WHERE \"TenantId\" = {tenantId.Value}");
     }
 
-    /// <summary>The source-of-truth usage computed by a deliberately independent, simple SQL query (no accumulator): occupying replicas = every status except Deleted.</summary>
+    /// <summary>The source-of-truth usage computed by a deliberately independent, simple SQL query (no accumulator): counted replicas = every status except Deleted and a verified DeletePending (a soft delete releases its bytes at once).</summary>
     public async Task<(long Logical, long Physical)> SourceUsageAsync(TenantId tenantId, string? provider = null)
     {
         await using var connection = new NpgsqlConnection(Database.ConnectionString);
@@ -166,8 +166,8 @@ internal sealed class QuotaWorld(PostgreSqlFixture database)
         await using var command = new NpgsqlCommand("""
             SELECT
               COALESCE((SELECT SUM(a."SizeBytes") FROM backup_artifacts a WHERE a."TenantId" = @t AND EXISTS (
-                  SELECT 1 FROM backup_replicas r WHERE r."ArtifactId" = a."Id" AND r."TenantId" = a."TenantId" AND r."Status" <> 'Deleted' AND (@p::text IS NULL OR r."StorageProvider" = @p))), 0),
-              COALESCE((SELECT SUM(r."SizeBytes") FROM backup_replicas r WHERE r."TenantId" = @t AND r."Status" <> 'Deleted' AND (@p::text IS NULL OR r."StorageProvider" = @p)), 0)
+                  SELECT 1 FROM backup_replicas r WHERE r."ArtifactId" = a."Id" AND r."TenantId" = a."TenantId" AND r."Status" <> 'Deleted' AND NOT (r."Status" = 'DeletePending' AND r."VerificationState" = 'Verified') AND (@p::text IS NULL OR r."StorageProvider" = @p))), 0),
+              COALESCE((SELECT SUM(r."SizeBytes") FROM backup_replicas r WHERE r."TenantId" = @t AND r."Status" <> 'Deleted' AND NOT (r."Status" = 'DeletePending' AND r."VerificationState" = 'Verified') AND (@p::text IS NULL OR r."StorageProvider" = @p)), 0)
             """, connection);
         command.Parameters.AddWithValue("t", tenantId.Value);
         command.Parameters.AddWithValue("p", (object?)provider ?? DBNull.Value);

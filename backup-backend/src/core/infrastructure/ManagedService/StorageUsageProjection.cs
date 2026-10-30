@@ -47,7 +47,8 @@ internal sealed class StorageUsageProjection
                     // What the replica was before this save; none for a replica this save creates.
                     StoredReplica? original = entry.State == EntityState.Added
                         ? null
-                        : new StoredReplica(replica.Id, replica.SizeBytes, replica.StorageConnectionId, (BackupReplicaStatus)entry.Property(nameof(BackupReplica.Status)).OriginalValue!);
+                        : new StoredReplica(replica.Id, replica.SizeBytes, replica.StorageConnectionId, (BackupReplicaStatus)entry.Property(nameof(BackupReplica.Status)).OriginalValue!,
+                            (string)entry.Property(nameof(BackupReplica.VerificationState)).OriginalValue! == "Verified");
                     projection.Tenant(replica.TenantId).Artifact(replica.ArtifactId).Reverts[replica.Id] = original;
                     break;
                 }

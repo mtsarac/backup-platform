@@ -46,9 +46,9 @@ public sealed class UsageReconcileRaceIntegrationTests(PostgreSqlFixture databas
         }
         await Task.WhenAll(racers);
 
-        // Soft-deleted artifacts still occupy storage, so nothing was lost: 3 GB that existed + 6 x 2 GB published.
-        await _world.AssertUsedAsync(tenantId, 15 * Gb);
-        await _world.AssertOracleAsync(tenantId, 15 * Gb, 15 * Gb + 6 * 2 * Gb);
+        // The soft-deleted artifacts released their bytes, and no concurrent recomputation brought them back: only the 6 x 2 GB published remain.
+        await _world.AssertUsedAsync(tenantId, 12 * Gb);
+        await _world.AssertOracleAsync(tenantId, 12 * Gb, 6 * 2 * Gb * 2);
         await _world.AssertNoDriftAsync(tenantId);
     }
 }

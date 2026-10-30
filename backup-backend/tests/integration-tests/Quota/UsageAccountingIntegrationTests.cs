@@ -183,7 +183,7 @@ public sealed class UsageAccountingIntegrationTests(PostgreSqlFixture database) 
     [Theory]
     [InlineData(QuotaAccountingMode.LogicalArtifactBytes)]
     [InlineData(QuotaAccountingMode.PhysicalReplicaBytes)]
-    public async Task OnlyVerifiedAbsenceLowersUsageAndTheArtifactStopsCountingWithItsLastReplica(QuotaAccountingMode mode)
+    public async Task ASoftDeleteReleasesAtOnceAndAPhysicalDeleteCountsUntilItsAbsenceIsVerified(QuotaAccountingMode mode)
     {
         var (agent, _) = await _world.TenantOnPolicyAsync(mode, QuotaScopeRule.All);
         var tenant = agent.TenantId;
@@ -199,36 +199,36 @@ public sealed class UsageAccountingIntegrationTests(PostgreSqlFixture database) 
 
         await ExpectAsync(2, 6);
 
-        // A soft delete (and asking for it again) keeps every byte.
+        // The delete request releases every byte (asking again changes nothing): the tenant gave the data up, grace only keeps it restorable.
         await _world.ChangeArtifactAsync(artifactId, artifact => Assert.Equal(BackupArtifactDeleteOutcome.Requested, artifact.RequestDelete(QuotaWorld.T0, null)));
-        await ExpectAsync(2, 6);
+        await ExpectAsync(0, 0);
         await _world.ChangeArtifactAsync(artifactId, artifact => Assert.Equal(BackupArtifactDeleteOutcome.AlreadyInProgress, artifact.RequestDelete(QuotaWorld.T0, null)));
-        await ExpectAsync(2, 6);
+        await ExpectAsync(0, 0);
 
+        // Once grace is over the bytes are really being removed, so a copy counts again until its absence is verified, whether it fails or not.
         var first = Guid.NewGuid();
         await _world.ChangeArtifactAsync(artifactId, artifact => Assert.True(UsageTestKit.ReplicaOf(artifact, "central").BeginDelete(first, "node-a", Due, Lease)));
-        await ExpectAsync(2, 6);
+        await ExpectAsync(2, 2);
         await _world.ChangeArtifactAsync(artifactId, artifact =>
             Assert.True(UsageTestKit.ReplicaOf(artifact, "central").FailDelete(first, Due, BackupDeleteFailureCodes.IoError, Due.AddMinutes(1))));
-        await ExpectAsync(2, 6);
+        await ExpectAsync(2, 2);
 
         var second = Guid.NewGuid();
         await _world.ChangeArtifactAsync(artifactId, artifact => Assert.True(UsageTestKit.ReplicaOf(artifact, "central").BeginDelete(second, "node-a", Due.AddMinutes(1), Lease)));
-        await ExpectAsync(2, 6);
+        await ExpectAsync(2, 2);
         await _world.ChangeArtifactAsync(artifactId, artifact => Assert.True(UsageTestKit.ReplicaOf(artifact, "central").CompleteDelete(second, Due.AddMinutes(1))));
-        // One of three copies is gone: the artifact is still stored, so its logical size stays.
-        await ExpectAsync(2, 4);
+        await ExpectAsync(0, 0);
 
         await _world.ChangeArtifactAsync(artifactId, artifact => Assert.False(UsageTestKit.ReplicaOf(artifact, "central").CompleteDelete(second, Due.AddMinutes(2))));
-        await ExpectAsync(2, 4);
+        await ExpectAsync(0, 0);
 
-        foreach (var (provider, during, after) in new[] { ("googledrive", (2L, 4L), (2L, 2L)), ("sftp", (2L, 2L), (0L, 0L)) })
+        foreach (var provider in new[] { "googledrive", "sftp" })
         {
             var token = Guid.NewGuid();
             await _world.ChangeArtifactAsync(artifactId, artifact => Assert.True(UsageTestKit.ReplicaOf(artifact, provider).BeginDelete(token, "node-a", Due, Lease)));
-            await ExpectAsync(during.Item1, during.Item2);
+            await ExpectAsync(2, 2);
             await _world.ChangeArtifactAsync(artifactId, artifact => Assert.True(UsageTestKit.ReplicaOf(artifact, provider).CompleteDelete(token, Due)));
-            await ExpectAsync(after.Item1, after.Item2);
+            await ExpectAsync(0, 0);
         }
 
         await _world.ChangeArtifactAsync(artifactId, artifact => Assert.Equal(BackupArtifactDeleteOutcome.AlreadyDeleted, artifact.RequestDelete(QuotaWorld.T0, null)));
@@ -236,14 +236,14 @@ public sealed class UsageAccountingIntegrationTests(PostgreSqlFixture database) 
     }
 
     [Fact]
-    public async Task CancellingASoftDeleteKeepsUsageAndAReplicaAlreadyBeingDeletedIsNotRestored()
+    public async Task CancellingASoftDeleteCountsTheBytesAgainAndAReplicaAlreadyBeingDeletedIsNotRestored()
     {
         var (agent, _) = await _world.TenantOnPolicyAsync(QuotaAccountingMode.PhysicalReplicaBytes, QuotaScopeRule.All);
         var job = await _world.JobAsync(agent);
         var (_, artifactId) = await _world.PublishCopiesAsync(agent, job, 2 * Gb, ReplicaSpec.Central, ReplicaSpec.SftpLike);
 
         await _world.ChangeArtifactAsync(artifactId, artifact => artifact.RequestDelete(QuotaWorld.T0, null));
-        await _world.AssertUsedAsync(agent.TenantId, 4 * Gb);
+        await _world.AssertUsedAsync(agent.TenantId, 0);
         await _world.ChangeArtifactAsync(artifactId, artifact => Assert.Equal(2, artifact.CancelDelete(QuotaWorld.T0)));
         await _world.AssertUsedAsync(agent.TenantId, 4 * Gb);
         await _world.AssertOracleAsync(agent.TenantId, 2 * Gb, 4 * Gb);
@@ -261,7 +261,7 @@ public sealed class UsageAccountingIntegrationTests(PostgreSqlFixture database) 
     }
 
     [Fact]
-    public async Task AnAgentLocalReplicaStopsCountingOnlyWhenTheAgentVerifiesAbsence()
+    public async Task AnAgentLocalReplicaBeingDeletedCountsUntilTheAgentVerifiesAbsence()
     {
         var (agent, _) = await _world.TenantOnPolicyAsync(QuotaAccountingMode.LogicalArtifactBytes, QuotaScopeRule.All);
         var tenant = agent.TenantId;
@@ -277,7 +277,7 @@ public sealed class UsageAccountingIntegrationTests(PostgreSqlFixture database) 
 
         await ExpectAsync(Gb);
         await _world.ChangeArtifactAsync(artifactId, artifact => artifact.RequestDelete(QuotaWorld.T0, null));
-        await ExpectAsync(Gb);
+        await ExpectAsync(0);
 
         var operation = Guid.NewGuid();
         await _world.ChangeArtifactAsync(artifactId, artifact => Assert.True(UsageTestKit.ReplicaOf(artifact, "local").DispatchAgentDeletion(operation, Due, Due.AddMinutes(1))));

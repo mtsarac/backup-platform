@@ -84,12 +84,12 @@ internal static class TenantUsageEngine
                    join connection in context.StorageConnections.AsNoTracking() on new { replica.StorageConnectionId, replica.TenantId } equals new { StorageConnectionId = connection.Id, connection.TenantId }
                    select new
                    {
-                       replica.ArtifactId, ArtifactSize = artifact.SizeBytes, ReplicaSize = replica.SizeBytes, replica.Status,
+                       replica.ArtifactId, ArtifactSize = artifact.SizeBytes, ReplicaSize = replica.SizeBytes, replica.Status, replica.VerificationState,
                        connection.ProviderType, connection.Ownership, connection.QuotaScope, ConnectionId = connection.Id
                    };
         await foreach (var row in rows.AsAsyncEnumerable().WithCancellation(cancellationToken))
         {
-            accumulator.Add(new ReplicaFact(row.ArtifactId, row.ArtifactSize, row.ReplicaSize, new ReplicaStorageFacts(row.ProviderType, row.Ownership, row.QuotaScope, row.ConnectionId), row.Status));
+            accumulator.Add(new ReplicaFact(row.ArtifactId, row.ArtifactSize, row.ReplicaSize, new ReplicaStorageFacts(row.ProviderType, row.Ownership, row.QuotaScope, row.ConnectionId), row.Status, row.VerificationState == "Verified"));
         }
         return accumulator.TotalBytes;
     }
@@ -287,13 +287,13 @@ internal static class TenantUsageEngine
             return null;
         }
         var replicas = await context.BackupReplicas.AsNoTracking().Where(replica => replica.TenantId == tenantId && replica.ArtifactId == artifactId)
-            .Select(replica => new StoredReplica(replica.Id, replica.SizeBytes, replica.StorageConnectionId, replica.Status))
+            .Select(replica => new StoredReplica(replica.Id, replica.SizeBytes, replica.StorageConnectionId, replica.Status, replica.VerificationState == "Verified"))
             .ToListAsync(cancellationToken);
         return new StoredArtifact(artifactId, size.Value, replicas, await LoadConnectionFactsAsync(context, tenantId, cancellationToken));
     }
 }
 
-internal sealed record StoredReplica(Guid Id, long SizeBytes, Guid StorageConnectionId, BackupReplicaStatus Status);
+internal sealed record StoredReplica(Guid Id, long SizeBytes, Guid StorageConnectionId, BackupReplicaStatus Status, bool Verified);
 
 /// <summary>One artifact's replicas with the connection facts needed to count them.</summary>
 internal sealed record StoredArtifact(Guid ArtifactId, long ArtifactSize, List<StoredReplica> Replicas, IReadOnlyDictionary<Guid, ReplicaStorageFacts> ConnectionFacts)
@@ -307,5 +307,5 @@ internal sealed record StoredArtifact(Guid ArtifactId, long ArtifactSize, List<S
         ConnectionFacts.TryGetValue(replica.StorageConnectionId, out var facts)
             ? facts
             : new ReplicaStorageFacts(string.Empty, StorageOwnership.TenantManaged, string.Empty, replica.StorageConnectionId),
-        replica.Status);
+        replica.Status, replica.Verified);
 }
