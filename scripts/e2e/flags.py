@@ -105,36 +105,37 @@ def smb_flag(t):
 def size_anomaly_flag(t):
     anomaly = "backup_size_anomaly"
     policy = lambda: t.call("GET", "/notifications/policy")
+    keys = ("enabled", "eventTypes", "minimumSeverity", "channelKinds", "recoveryNotifications", "staleAfterHours", "agentOfflineAfterMinutes", "reminderIntervalHours", "maxNotificationsPerHour")
     set_flags(sizeAnomaly=False)
+    original = None
     try:
         assert anomaly not in policy()["eventTypes"], "policy still lists the size anomaly event while off"
         r = t.raw("PUT", "/notifications/policy", {"eventTypes": [anomaly]}); assert r.status_code == 404, f"size anomaly event accepted while off: {r.status_code}"
         set_flags(sizeAnomaly=True)
-        current = policy(); assert anomaly in current["eventTypes"], "policy hides the size anomaly event while on"
-        r = t.raw("PUT", "/notifications/policy", {k: current[k] for k in ("enabled", "eventTypes", "minimumSeverity", "channelKinds", "recoveryNotifications", "staleAfterHours",
-                                                                            "agentOfflineAfterMinutes", "reminderIntervalHours", "maxNotificationsPerHour")})
-        assert r.status_code == 200, f"policy with the size anomaly event rejected while on: {r.status_code} {r.text[:200]}"
+        original = {k: policy()[k] for k in keys}
+        r = t.raw("PUT", "/notifications/policy", {**original, "eventTypes": sorted({*original["eventTypes"], anomaly})})
+        assert r.status_code == 200, f"size anomaly event rejected while on: {r.status_code} {r.text[:200]}"
+        assert anomaly in policy()["eventTypes"], "policy hides the size anomaly event while on"
         return {"offStatus": 404}
     finally:
+        if original: t.raw("PUT", "/notifications/policy", original)
         set_flags()
 
 @scenario("flags/replica-repair-default-on-off-rejects")
 def repair_flag(t):
-    ghost = uuid.uuid4()
-    start = lambda: t.raw("POST", f"/backup-artifacts/{ghost}/repairs", {})
-    listing = lambda: t.raw("GET", f"/backup-artifacts/{ghost}/repairs")
-    # With repair routed, an unknown artifact is a JSON refusal from the handler; unrouted it is the bare 404 of a missing route.
-    routed = lambda r: r.status_code != 404 or (r.content and r.json().get("error") == "artifact_not_found")
+    artifact = t.call("GET", "/backup-artifacts?pageSize=1")["items"][0]["id"]
+    listing = lambda: t.raw("GET", f"/backup-artifacts/{artifact}/repairs")
+    start = lambda: t.raw("POST", f"/backup-artifacts/{artifact}/repairs", {"storageConnectionId": str(uuid.uuid4())})  # a made-up connection: the handler refuses it, so no repair ever starts
     assert features()["replicaRepair"] is True, "replicaRepair must default to on"
-    assert routed(start()) and routed(listing()), "repair routes are missing with the default flag"
+    assert listing().status_code == 200, "repair routes are missing with the default flag"
     set_flags(replicaRepair=False)
     try:
-        off = {"start": start(), "list": listing()}
-        assert all(r.status_code == 404 and not r.content for r in off.values()), f"repair routes answered while off: { {k: v.status_code for k, v in off.items()} }"
+        off = {"list": listing(), "start": start()}
+        assert all(r.status_code == 404 and not r.content for r in off.values()), f"repair routes answered while off: { {k: (v.status_code, v.text[:80]) for k, v in off.items()} }"
         assert t.raw("GET", "/backup-artifacts").status_code == 200, "the rest of artifacts must stay reachable"
     finally:
         set_flags()
-    assert routed(start()), "repair routes did not come back"
+    assert listing().status_code == 200, "repair routes did not come back"
     return {"offStatus": 404}
 
 @scenario("flags/external-secrets-off-refuses-provider")
@@ -161,9 +162,19 @@ def agent_start(host, kind):
     if host == "fedora":
         exports = " ".join(f"{k}='{v}'" for k, v in env.items())
         return lib.fedora(f"cd /opt/backup-agent/bin && sudo -u backup-agent env {exports} timeout 60 ./BackupPlatform.Agent.Host 2>&1 | head -40")[1]
-    sets = "; ".join(f"$env:{k}='{v}'" for k, v in env.items())
-    return lib.win(f"{sets}; $p = Start-Process -FilePath 'C:\\Program Files\\BackupAgent\\bin\\BackupPlatform.Agent.Host.exe' -NoNewWindow -PassThru -RedirectStandardError C:\\e2e\\flagtest.err -RedirectStandardOutput C:\\e2e\\flagtest.out; "
-                   "if (-not $p.WaitForExit(60000)) { $p.Kill(); 'STILL RUNNING' }; Get-Content C:\\e2e\\flagtest.out,C:\\e2e\\flagtest.err | Select -First 40")[1]
+    # The service account is a virtual one and the agent refuses to read its identity as anyone else, so the service itself is restarted with the extra
+    # environment (put back in finally) and the refusal is read from the Application event log.
+    extra = ",".join(f"'{k}={v}'" for k, v in env.items())
+    return lib.win(f"""$k='HKLM:\\SYSTEM\\CurrentControlSet\\Services\\BackupAgent'; $orig=@((Get-ItemProperty $k).Environment); $since=Get-Date
+try {{
+  Set-ItemProperty $k -Name Environment -Type MultiString -Value ($orig + @({extra}))
+  Restart-Service BackupAgent -ErrorAction SilentlyContinue; Start-Sleep 5
+  Get-WinEvent -FilterHashtable @{{LogName='Application'; StartTime=$since}} -ErrorAction SilentlyContinue | ? {{ $_.Message -match 'Features:' }} | Select -First 1 -ExpandProperty Message
+  'service after refusal: ' + (Get-Service BackupAgent).Status
+}} finally {{
+  Set-ItemProperty $k -Name Environment -Type MultiString -Value $orig
+  Restart-Service BackupAgent; Start-Sleep 3; 'service restored: ' + (Get-Service BackupAgent).Status
+}}""", timeout=300)[1]
 
 @scenario("flags/linux-snapshots-off-refuses-btrfs-source")
 def linux_snapshots_flag(t):
@@ -174,7 +185,7 @@ def linux_snapshots_flag(t):
 @scenario("flags/windows-vss-off-refuses-vss-source")
 def windows_vss_flag(t):
     out = agent_start("win", AGENT_SNAPSHOTS["windowsVss"])
-    assert "Features:windowsVss" in out, f"the windows agent did not refuse a Vss file source while windowsVss is off: {out[-600:]}"
+    assert "Features:windowsVss" in out and "service restored: Running" in out, f"the windows agent did not refuse a Vss file source while windowsVss is off (or was not restored): {out[-600:]}"
     return {"offStatus": "refused at startup"}
 
 SCENARIOS = [sms_flag, support_flag, smb_flag, size_anomaly_flag, repair_flag, external_secrets_flag, linux_snapshots_flag, windows_vss_flag]
