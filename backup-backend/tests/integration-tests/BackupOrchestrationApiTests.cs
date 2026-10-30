@@ -135,6 +135,16 @@ public sealed class BackupOrchestrationApiTests(PostgreSqlFixture fixture) : ICl
         Assert.Equal(HttpStatusCode.Conflict, wrongToken.StatusCode);
         using var started = await world.SendAgentAsync(HttpMethod.Post, taskRoot + "/start", agent.CredentialId, agent.Secret, body: start);
         Assert.Equal(HttpStatusCode.OK, started.StatusCode);
+        using var quota = await world.SendAgentAsync(HttpMethod.Post, taskRoot + "/quota-reservation", agent.CredentialId, agent.Secret,
+            body: new BackupQuotaReservationRequest { LeaseToken = token, SizeBytes = 101 });
+        Assert.Equal(HttpStatusCode.OK, quota.StatusCode);
+        Assert.True(AgentWorld.ReadJson(quota).GetProperty("allowed").GetBoolean());
+        using var staleQuota = await world.SendAgentAsync(HttpMethod.Post, taskRoot + "/quota-reservation", agent.CredentialId, agent.Secret,
+            body: new BackupQuotaReservationRequest { LeaseToken = Guid.NewGuid(), SizeBytes = 101 });
+        Assert.Equal(HttpStatusCode.Conflict, staleQuota.StatusCode);
+        using var invalidQuota = await world.SendAgentAsync(HttpMethod.Post, taskRoot + "/quota-reservation", agent.CredentialId, agent.Secret,
+            body: new BackupQuotaReservationRequest { LeaseToken = token, SizeBytes = -1 });
+        Assert.Equal(HttpStatusCode.BadRequest, invalidQuota.StatusCode);
         using var missingArtifact = await world.SendAgentAsync(HttpMethod.Post, taskRoot + "/complete", agent.CredentialId, agent.Secret,
             body: new BackupTaskCompletionRequest { LeaseToken = token, Status = "Succeeded" });
         Assert.Equal(HttpStatusCode.BadRequest, missingArtifact.StatusCode);

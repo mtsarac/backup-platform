@@ -1,5 +1,5 @@
 """Hard quota: a limited override of used+150 MiB blocks runs once it is reached; deleting artifacts releases the space."""
-import sys, time, json, lib, flows, ops, api
+import sys, time, json, uuid, lib, flows, ops, api
 from lib import ST, scenario
 
 def override(body):
@@ -14,17 +14,22 @@ def run_with_headroom(t, job):
 @scenario("quota/hard-limit-blocks-and-delete-releases")
 def quota(t):
     fa = t.agents()["fedora-e2e"]
-    job = ops.big_file_job(t, fa, "quota", [flows.local_dest()])
+    cfg = flows.file_job_config("e2efiles", [flows.local_dest()], paths=["bin"])
+    job = t.call("POST", "/backup-jobs", {"name": f"quota {uuid.uuid4().hex[:6]}", "agentId": fa["agentId"], "overlapPolicy": "Skip",
+                                         "configuration": cfg, "retryPolicy": {"maxAttempts": 1}})
     override({"kind": "unlimited"})  # a job without size history is refused (quota_size_unknown) under a hard limit; bootstrap it once
-    seed = ops.artifacts_of(ops.lc(t, ops.start(t, job), 300))[0]
-    t.call("DELETE", f"/backup-artifacts/{seed['id']}"); time.sleep(45)
-    used0 = t.call("GET", "/storage-quota")["usedBytes"]; limit = used0 + 150 * 1024 * 1024
-    override({"kind": "limited", "bytes": limit}); arts, outcomes = [], []
     try:
+        seed_run = ops.lc(t, ops.start(t, job), 300)
+        assert seed_run["status"] == "Succeeded" and len(seed_run["attempts"]) == 1, f"seed failed: {seed_run['status']}"
+        seed = ops.artifacts_of(seed_run)[0]
+        t.call("DELETE", f"/backup-artifacts/{seed['id']}"); time.sleep(45)
+        used0 = t.call("GET", "/storage-quota")["usedBytes"]; limit = used0 + 150 * 1024 * 1024
+        override({"kind": "limited", "bytes": limit}); arts, outcomes = [], []
         for i in range(5):
             r, d = run_with_headroom(t, job)
             if d is None:
                 outcomes.append((i, "refused-at-admission", r.status_code, r.json().get("code") if r.content else None)); break
+            assert len(d["attempts"]) == 1, f"unexpected retry: {d['status']}"
             a = d["attempts"][-1]
             if d["status"] == "Succeeded": arts.append(ops.artifacts_of(d)[0]); outcomes.append((i, "Succeeded"))
             else: outcomes.append((i, d["status"], a["reasonCode"], a["reason"])); break
@@ -46,8 +51,10 @@ def quota(t):
         assert released >= sum(a["sizeBytes"] for a in arts) * 0.99, f"deleted {len(arts)} artifacts but only {released} bytes were released"
         r, d = run_with_headroom(t, job)
         assert d is not None, f"run after release refused at admission: {r.status_code} {r.text}"
+        assert len(d["attempts"]) == 1, f"unexpected retry after release: {d['status']}"
         assert d["status"] == "Succeeded", f"run after release: {d['status']} {d['attempts'][-1]['reasonCode']} {d['attempts'][-1]['reason']}"
-        return {"outcomes": outcomes, "used0": used0, "limit": limit, "usedAtBlock": used["usedBytes"], "released": released}
+        return {"outcomes": outcomes, "seedSize": seed["sizeBytes"], "artifactSizes": [a["sizeBytes"] for a in arts],
+                "used0": used0, "limit": limit, "usedAtBlock": used["usedBytes"], "released": released}
     finally:
         override({"kind": "none"})
 

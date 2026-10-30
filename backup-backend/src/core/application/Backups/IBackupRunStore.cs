@@ -29,6 +29,7 @@ public sealed record BackupClaim(BackupRun Run, BackupRunAttempt Attempt)
 }
 public sealed record BackupLeaseResult(DateTimeOffset LeaseExpiresAt, bool CancellationRequested, bool PauseRequested = false);
 public enum BackupMutationResult { Accepted, NotFound, Conflict }
+public sealed record BackupQuotaReservationResult(BackupMutationResult Mutation, bool Allowed);
 
 public enum BackupStartOutcome
 {
@@ -98,6 +99,7 @@ public interface IBackupRunStore
     Task<BackupClaim?> ClaimNextAsync(TenantId tenantId, AgentId agentId, DateTimeOffset now, TimeSpan leaseDuration, CancellationToken cancellationToken);
     Task<BackupClaim?> GetAttemptAsync(TenantId tenantId, AgentId agentId, Guid attemptId, CancellationToken cancellationToken);
     Task<BackupMutationResult> StartAttemptAsync(BackupLeaseCommand command, CancellationToken cancellationToken);
+    Task<BackupQuotaReservationResult> AdjustQuotaReservationAsync(BackupLeaseCommand command, long sizeBytes, CancellationToken cancellationToken);
     Task<BackupLeaseResult?> RenewLeaseAsync(BackupLeaseCommand command, TimeSpan leaseDuration, CancellationToken cancellationToken);
     Task<BackupMutationResult> RecordTransferAsync(BackupLeaseCommand command, BackupTransferIntent transfer, CancellationToken cancellationToken);
     Task<BackupMutationResult> ReportProgressAsync(BackupLeaseCommand command, BackupProgress progress, CancellationToken cancellationToken);

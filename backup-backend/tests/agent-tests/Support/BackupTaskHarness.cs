@@ -121,6 +121,13 @@ internal sealed class TaskClient(TimeProvider time) : IBackupTaskClient
     public Func<int, AgentBackendResult<bool>>? OnComplete { get; set; }
     public ConcurrentQueue<UploadPolicyRequest> UploadPolicies { get; } = new();
     public Func<UploadPolicyRequest, AgentBackendResult<UploadPolicyResponse>>? OnUploadPolicy { get; set; }
+    public ConcurrentQueue<(Guid AttemptId, BackupQuotaReservationRequest Request, Guid CredentialId)> QuotaReservations { get; } = new();
+    public Func<BackupQuotaReservationRequest, AgentBackendResult<BackupQuotaReservationResponse>>? OnQuotaReservation { get; set; }
+    public Task<AgentBackendResult<BackupQuotaReservationResponse>> AdjustQuotaReservationAsync(AgentLocalIdentity identity, Guid attemptId, BackupQuotaReservationRequest request, CancellationToken cancellationToken)
+    {
+        QuotaReservations.Enqueue((attemptId, request, identity.Current.CredentialId));
+        return Task.FromResult(OnQuotaReservation?.Invoke(request) ?? AgentBackendResult<BackupQuotaReservationResponse>.Success(new BackupQuotaReservationResponse { Allowed = true }));
+    }
     public Task<AgentBackendResult<bool>> CanReleaseRetainedTransferAsync(AgentLocalIdentity identity, Guid attemptId, CancellationToken cancellationToken) =>
         Task.FromResult(AgentBackendResult<bool>.Success(false));
 

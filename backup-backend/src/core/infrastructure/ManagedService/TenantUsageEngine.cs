@@ -94,10 +94,10 @@ internal static class TenantUsageEngine
         return accumulator.TotalBytes;
     }
 
-    public static async Task<long> ComputeReservedAsync(PlatformDbContext context, TenantId tenantId, CancellationToken cancellationToken)
+    public static async Task<long> ComputeReservedAsync(PlatformDbContext context, TenantId tenantId, CancellationToken cancellationToken, Guid? excludeRunId = null)
     {
         var policy = await ResolvePolicyAsync(context, tenantId, cancellationToken);
-        var reservations = await context.QuotaReservations.AsNoTracking().Where(row => row.TenantId == tenantId && row.ReleasedAt == null)
+        var reservations = await context.QuotaReservations.AsNoTracking().Where(row => row.TenantId == tenantId && row.ReleasedAt == null && row.RunId != excludeRunId)
             .Select(row => new { row.RunId, row.Bytes }).ToListAsync(cancellationToken);
         var total = 0L;
         foreach (var reservation in reservations)
@@ -241,8 +241,8 @@ internal static class TenantUsageEngine
             if (connection is null) return null;
             if (!policy.IncludedStorageScopes.Matches(
                 new ReplicaStorageFacts(connection.ProviderType, connection.Ownership, connection.QuotaScope, connection.Id))) continue;
-            if (policy.AccountingMode == QuotaAccountingMode.LogicalArtifactBytes) return 1;
-            copies++;
+            if (policy.AccountingMode == QuotaAccountingMode.LogicalArtifactBytes) copies = 1;
+            else copies++;
         }
         return copies;
     }

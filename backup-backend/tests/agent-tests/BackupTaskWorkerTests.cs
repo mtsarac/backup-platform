@@ -12,6 +12,27 @@ namespace BackupPlatform.AgentTests;
 public sealed class BackupTaskWorkerTests
 {
     [Fact]
+    public async Task Quota_adjustment_uses_the_current_attempt_lease_identity_and_artifact_size()
+    {
+        await using var harness = new BackupTaskHarness();
+        var envelope = harness.Envelope();
+        envelope = envelope with { Backup = envelope.Backup! with { MaxArtifactBytes = 1 } };
+        harness.Pipeline.Execute = async (request, _, token) =>
+        {
+            Assert.True(await request.AdjustQuotaReservationAsync!(256, token));
+            return harness.Success(request);
+        };
+        harness.Start();
+        Assert.True(harness.Worker.TryPublish(envelope));
+        await Wait.UntilAsync(() => harness.Client.Completions.Count == 1, "quota-adjusted result");
+        var call = Assert.Single(harness.Client.QuotaReservations);
+        Assert.Equal(envelope.Backup!.AttemptId, call.AttemptId);
+        Assert.Equal(envelope.Backup.LeaseToken, call.Request.LeaseToken);
+        Assert.Equal(256, call.Request.SizeBytes);
+        Assert.Equal(TestIdentity.Create().Current.CredentialId, call.CredentialId);
+    }
+
+    [Fact]
     public async Task PostgreSqlBackupSnapshotUsesItsEngineAndNamedPasswordCredential()
     {
         await using var harness = new BackupTaskHarness();

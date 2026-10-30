@@ -47,6 +47,93 @@ public sealed class HardQuotaDestinationIntegrationTests(PostgreSqlFixture fixtu
         var claim = await ClaimStartedAsync(World.RunStore(), agent, T0.AddMinutes(1));
         Assert.Equal(100L, claim.MaxArtifactBytes);
     }
+    [Theory]
+    [InlineData(QuotaAccountingMode.LogicalArtifactBytes, 201, 101)]
+    [InlineData(QuotaAccountingMode.PhysicalReplicaBytes, 302, 202)]
+    public async Task ActualGrowthReservesEveryCountedCopyAndKeepsTheHoldOnReplay(QuotaAccountingMode mode, long limit, long expected)
+    {
+        var (agent, job) = await SetupAsync(mode, QuotaScopeRule.All, limit);
+        var store = World.RunStore();
+        await World.PublishAsync(store, agent, job, 100, [ReplicaSpec.Central], T0);
+        job = await AddDestinationAsync(agent, job);
+        var run = await StartAsync(store, job, "growth", T0.AddMinutes(1));
+        var claim = await ClaimStartedAsync(store, agent, T0.AddMinutes(1));
+        var command = new BackupLeaseCommand(agent.TenantId, agent.AgentId, claim.Attempt.Id, claim.Attempt.LeaseToken!.Value, T0.AddMinutes(1));
+
+        Assert.True((await store.AdjustQuotaReservationAsync(command, 101, default)).Allowed);
+        Assert.True((await store.AdjustQuotaReservationAsync(command, 101, default)).Allowed);
+        Assert.True((await store.AdjustQuotaReservationAsync(command, 100, default)).Allowed);
+        Assert.Equal(expected, (await ReservationOfAsync(fixture, agent.TenantId, run.Id)).Bytes);
+        Assert.Equal(expected, (await World.StoredUsageAsync(agent.TenantId))!.ReservedBytes);
+        Assert.Equal(101, (await store.GetAttemptAsync(agent.TenantId, agent.AgentId, claim.Attempt.Id, default))!.MaxArtifactBytes);
+        Assert.False((await store.AdjustQuotaReservationAsync(command, 102, default)).Allowed);
+        Assert.False((await store.AdjustQuotaReservationAsync(command, long.MaxValue, default)).Allowed);
+        Assert.Equal(expected, (await ReservationOfAsync(fixture, agent.TenantId, run.Id)).Bytes);
+    }
+
+    [Fact]
+    public async Task ConcurrentAgentsCannotReserveTheSameLastByte()
+    {
+        var (first, firstJob) = await SetupAsync(QuotaAccountingMode.LogicalArtifactBytes, QuotaScopeRule.All, 401);
+        var second = await AddAgentAsync(World, first.TenantId);
+        var secondJob = await World.JobAsync(second);
+        var store = World.RunStore();
+        await World.PublishAsync(store, first, firstJob, 100, [ReplicaSpec.Central], T0);
+        await World.PublishAsync(store, second, secondJob, 100, [ReplicaSpec.Central], T0);
+        await StartAsync(store, firstJob, "first", T0.AddMinutes(1));
+        await StartAsync(store, secondJob, "second", T0.AddMinutes(1));
+        var firstClaim = await ClaimStartedAsync(store, first, T0.AddMinutes(1));
+        var secondClaim = await ClaimStartedAsync(store, second, T0.AddMinutes(1));
+        BackupLeaseCommand Command(StoreAgent agent, BackupClaim claim) =>
+            new(agent.TenantId, agent.AgentId, claim.Attempt.Id, claim.Attempt.LeaseToken!.Value, T0.AddMinutes(1));
+
+        var results = await Task.WhenAll(
+            World.RunStore().AdjustQuotaReservationAsync(Command(first, firstClaim), 101, default),
+            World.RunStore().AdjustQuotaReservationAsync(Command(second, secondClaim), 101, default));
+        Assert.All(results, result => Assert.Equal(BackupMutationResult.Accepted, result.Mutation));
+        Assert.Single(results, result => result.Allowed);
+        Assert.Equal(201, (await World.StoredUsageAsync(first.TenantId))!.ReservedBytes);
+        Assert.Equal(401, (await World.StoredUsageAsync(first.TenantId))!.UsedBytes + (await World.StoredUsageAsync(first.TenantId))!.ReservedBytes);
+    }
+
+    [Fact]
+    public async Task AdjustmentRejectsStaleLeasesAndMissingReservations()
+    {
+        var (agent, job) = await SetupAsync(QuotaAccountingMode.LogicalArtifactBytes, QuotaScopeRule.All);
+        var store = World.RunStore();
+        await World.PublishAsync(store, agent, job, 100, [ReplicaSpec.Central], T0);
+        var run = await StartAsync(store, job, "fence", T0.AddMinutes(1));
+        var claim = await ClaimStartedAsync(store, agent, T0.AddMinutes(1));
+        var command = new BackupLeaseCommand(agent.TenantId, agent.AgentId, claim.Attempt.Id, claim.Attempt.LeaseToken!.Value, T0.AddMinutes(1));
+        Assert.Equal(BackupMutationResult.Conflict, (await store.AdjustQuotaReservationAsync(command with { LeaseToken = Guid.NewGuid() }, 101, default)).Mutation);
+        Assert.Equal(BackupMutationResult.Conflict, (await store.AdjustQuotaReservationAsync(command with { Now = claim.Attempt.LeaseExpiresAt!.Value }, 101, default)).Mutation);
+        await World.Admission().ReleaseAsync(agent.TenantId, run.Id, default);
+        var missing = await store.AdjustQuotaReservationAsync(command, 101, default);
+        Assert.Equal(BackupMutationResult.Accepted, missing.Mutation);
+        Assert.False(missing.Allowed);
+    }
+
+    [Fact]
+    public async Task ResumeDoesNotCountAnExistingIntentTwiceOrReleaseItsHold()
+    {
+        var (agent, job) = await SetupAsync(QuotaAccountingMode.PhysicalReplicaBytes, QuotaScopeRule.All, 300);
+        var store = World.RunStore();
+        await World.PublishAsync(store, agent, job, 100, [ReplicaSpec.Central], T0);
+        job = await AddDestinationAsync(agent, job);
+        var run = await StartAsync(store, job, "resume", T0.AddMinutes(1));
+        var claim = await ClaimStartedAsync(store, agent, T0.AddMinutes(1));
+        var command = new BackupLeaseCommand(agent.TenantId, agent.AgentId, claim.Attempt.Id, claim.Attempt.LeaseToken!.Value, T0.AddMinutes(1));
+        var sftp = job.Configuration.Destinations.Single(destination => destination.StorageProvider == "sftp");
+        var key = $"{ManagedBackupLayout.AttemptScope(agent.TenantId.Value, job.Id, run.Id, claim.Attempt.Id)}/Sales_20261005T000000Z_aaaaaaaa_FULL.bak";
+        Assert.Equal(BackupMutationResult.Accepted, await store.RecordTransferAsync(command,
+            new BackupTransferIntent(sftp.StorageConnectionId!.Value, key, 100, BackupStoreHarness.ArtifactHash), default));
+        Assert.True((await store.AdjustQuotaReservationAsync(command, 100, default)).Allowed);
+        Assert.Equal(200, (await ReservationOfAsync(fixture, agent.TenantId, run.Id)).Bytes);
+        var usage = (await World.StoredUsageAsync(agent.TenantId))!;
+        Assert.Equal(200, usage.UsedBytes);
+        Assert.Equal(100, usage.ReservedBytes);
+    }
+
 
     [Fact]
     public async Task CurrentScopeCountsNewDestinationEvenWhenHistoryWasEntirelyOutsideScope()
@@ -67,6 +154,8 @@ public sealed class HardQuotaDestinationIntegrationTests(PostgreSqlFixture fixtu
         var claim = await ClaimStartedAsync(World.RunStore(), agent, T0);
         Assert.Null(claim.MaxArtifactBytes);
         Assert.Empty(await ReservationsAsync(fixture, agent.TenantId));
+        var command = new BackupLeaseCommand(agent.TenantId, agent.AgentId, claim.Attempt.Id, claim.Attempt.LeaseToken!.Value, T0);
+        Assert.True((await World.RunStore().AdjustQuotaReservationAsync(command, long.MaxValue, default)).Allowed);
     }
 
     [Theory]
@@ -145,6 +234,13 @@ public sealed class HardQuotaDestinationIntegrationTests(PostgreSqlFixture fixtu
         await store.StartDueRetriesAsync(at.AddMinutes(1), 100, default);
         var retry = await ClaimStartedAsync(store, agent, at.AddMinutes(1));
         Assert.Equal(50L, retry.MaxArtifactBytes);
+        var command = new BackupLeaseCommand(agent.TenantId, agent.AgentId, retry.Attempt.Id, retry.Attempt.LeaseToken!.Value, at.AddMinutes(1));
+        Assert.True((await store.AdjustQuotaReservationAsync(command, 101, default)).Allowed);
+        Assert.Equal(302, (await ReservationOfAsync(fixture, agent.TenantId, run.Id)).Bytes);
+        Assert.Equal(202, (await World.StoredUsageAsync(agent.TenantId))!.ReservedBytes);
+        Assert.Equal(101, (await store.GetAttemptAsync(agent.TenantId, agent.AgentId, retry.Attempt.Id, default))!.MaxArtifactBytes);
+        Assert.Equal(BackupMutationResult.Conflict, (await store.AdjustQuotaReservationAsync(
+            command with { AttemptId = claim.Attempt.Id, LeaseToken = claim.Attempt.LeaseToken!.Value }, 1, default)).Mutation);
     }
 
     [Theory]
@@ -205,7 +301,10 @@ public sealed class HardQuotaDestinationIntegrationTests(PostgreSqlFixture fixtu
             await context.AgentCapabilities.Where(row => row.AgentId == agent.AgentId && row.Identifier == BackupTaskProtocol.QuotaBoundedUploadCapability).ExecuteDeleteAsync();
         }
         await StartAsync(World.RunStore(), job, "old-unlimited", T0);
-        Assert.Null((await ClaimStartedAsync(World.RunStore(), agent, T0)).MaxArtifactBytes);
+        var claim = await ClaimStartedAsync(World.RunStore(), agent, T0);
+        Assert.Null(claim.MaxArtifactBytes);
+        var command = new BackupLeaseCommand(agent.TenantId, agent.AgentId, claim.Attempt.Id, claim.Attempt.LeaseToken!.Value, T0);
+        Assert.True((await World.RunStore().AdjustQuotaReservationAsync(command, long.MaxValue, default)).Allowed);
         Assert.Empty(await ReservationsAsync(fixture, agent.TenantId));
     }
 }

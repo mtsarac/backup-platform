@@ -19,6 +19,7 @@ public static class BackupTaskEndpoints
             .RequireAuthorization(AuthorizationPolicies.Agent);
         tasks.MapPost("/start", StartAsync);
         tasks.MapPost("/lease", RenewAsync);
+        tasks.MapPost("/quota-reservation", AdjustQuotaReservationAsync);
         tasks.MapPost("/progress", ProgressAsync).WithMetadata(new RequestSizeLimitAttribute(8 * 1024 * 1024));
         tasks.MapPost("/complete", CompleteAsync);
         tasks.MapGet("/retained-transfer-release", CanReleaseRetainedTransferAsync);
@@ -67,6 +68,16 @@ public static class BackupTaskEndpoints
             LeaseExpiresAt = lease.LeaseExpiresAt, CancellationRequested = lease.CancellationRequested, PauseRequested = lease.PauseRequested,
             TimeRulePauseRequested = (await bandwidth.PolicyAsync(command, UploadSliceAction.Observe, cancellationToken))?.PauseRequested == true
         });
+    }
+
+    private static async Task<IResult> AdjustQuotaReservationAsync(Guid attemptId, BackupQuotaReservationRequest request, ICurrentAgent agent,
+        BackupOrchestrator service, IBackupRunStore store, CancellationToken cancellationToken)
+    {
+        if (request.LeaseToken == Guid.Empty || request.SizeBytes < 0) return Invalid();
+        var result = await store.AdjustQuotaReservationAsync(service.Command(agent.Identity!, attemptId, request.LeaseToken), request.SizeBytes, cancellationToken);
+        return result.Mutation == BackupMutationResult.Accepted
+            ? Results.Ok(new BackupQuotaReservationResponse { Allowed = result.Allowed })
+            : Mutation(result.Mutation);
     }
 
     private static async Task<IResult> ProgressAsync(Guid attemptId, BackupTaskProgressRequest request, ICurrentAgent agent,
