@@ -251,15 +251,15 @@ Run from this directory.
 | Unit | `dotnet test tests/unit-tests -c Release` | nothing |
 | Architecture | `dotnet test tests/architecture-tests -c Release` | nothing |
 | Agent | `dotnet test tests/agent-tests -c Release` | nothing |
-| PostgreSQL integration | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName!~MsSql&FullyQualifiedName!~BackupPipelineSmoke&FullyQualifiedName!~StorageCapacityAgentHostSmokeTests" -- xUnit.MaxParallelThreads=4` | administrative PostgreSQL connection and current/older client tools; see scripts README |
-| MSSQL integration | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName~IntegrationTests.MsSql\|FullyQualifiedName~BackupPipelineSmoke"` | PostgreSQL and MSSQL variables |
+| PostgreSQL integration | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName!~MsSql&FullyQualifiedName!~BackupPipelineSmoke&FullyQualifiedName!~StorageCapacityAgentHostSmokeTests" -- xUnit.MaxParallelThreads=4` | Docker and current/older client tools; see scripts README |
+| MSSQL integration | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName~IntegrationTests.MsSql\|FullyQualifiedName~BackupPipelineSmoke"` | Docker |
 | Windows | `dotnet test tests/windows-tests -c Release` | Windows host |
+
+Integration tests start their own PostgreSQL (`postgres:18-alpine`) and SQL Server (`mssql/server:2025-latest`) with Testcontainers: Docker is the only prerequisite, and the containers are removed when the test run ends. The integration-test fixtures read no connection string or MSSQL variable.
 
 Integration test variables:
 
-- `BACKUP_PLATFORM_TEST_CONNECTION_STRING`: administrative PostgreSQL connection with `CREATEDB`. Each run creates and drops its own database.
-- `BACKUP_PLATFORM_TEST_MSSQL_HOST`, `_USER`, `_PASSWORD`: SQL Server connection.
-- `BACKUP_PLATFORM_TEST_MSSQL_STAGING_SERVER_DIR`, `_AGENT_DIR`: the same staging folder as SQL Server sees it and as the agent sees it.
+- `BACKUP_PLATFORM_TEST_MSSQL_HOST`, `_PORT`, `_USER`, `_PASSWORD`, `_STAGING_SERVER_DIR`, `_AGENT_DIR`: only the real-Agent.Host smokes (`*AgentSmokeTests`, restore acceptance) still read these; they point at a SQL Server you provide.
 - `BACKUP_PLATFORM_TEST_POSTGRES_TOOLS_DIRECTORY`: current `pg_dump`/`pg_restore`, plus matching-major `pg_basebackup`/`pg_verifybackup`/`pg_waldump` for physical tests.
 - `BACKUP_PLATFORM_TEST_POSTGRES_OLD_TOOLS_DIRECTORY`: older client binaries for compatibility-refusal tests.
 - Physical tests also require remote replication access for the test login in `pg_hba.conf`. Limit collection parallelism on high-core hosts to avoid exhausting the database connection limit.
