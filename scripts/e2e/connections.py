@@ -1,5 +1,5 @@
-"""Create the e2e storage connections for tenant A (sftp, s3, smb) and record their ids in state.json."""
-import lib, json, pathlib, subprocess, base64, hashlib
+"""Create the e2e storage connections for tenant A (sftp, s3, and smb while the smb feature is on) and record their ids in state.json."""
+import lib, json, pathlib, subprocess, base64, hashlib, requests
 p = lib.api.ROOT / "docs/test-environment/state.json"; st = json.loads(p.read_text()); env = lib.api.env
 t = lib.Tenant("a")
 rc, out = lib.fedora("ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub")
@@ -15,8 +15,10 @@ specs = {
           "secret": {"username": env["E2E_SMB_USER"], "password": env["E2E_SMB_PASSWORD"]}},
 }
 st.setdefault("connections", {})
+smb_on = requests.get(f"{lib.api.BASE}/api/features", verify=False).json().get("smb") is True
 for k, body in specs.items():
     if k in st["connections"]: continue
+    if k == "smb" and not smb_on: print("smb skipped: Features__smb is off"); continue
     try:
         v = t.call("POST", "/storage-connections", body)
         st["connections"][k] = v["id"]

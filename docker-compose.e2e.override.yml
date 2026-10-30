@@ -7,6 +7,13 @@ services:
       Backups__Retention__MinimumDeleteGracePeriod: "00:00:10"
       Notifications__PublicBaseUrl: https://192.168.122.1:5173
       Notifications__AllowedPrivateNetworks__0: 192.168.122.0/24
+      # Every flag the API reads; scripts/e2e/flags.py flips them one at a time through the E2E_FEATURE_* variables (defaults are the product defaults).
       Features__sms: ${E2E_FEATURE_SMS:-false}
+      Features__supportSessions: ${E2E_FEATURE_SUPPORTSESSIONS:-false}
+      Features__smb: ${E2E_FEATURE_SMB:-false}
+      Features__sizeAnomaly: ${E2E_FEATURE_SIZEANOMALY:-false}
+      Features__externalSecrets: ${E2E_FEATURE_EXTERNALSECRETS:-false}
+      Features__replicaRepair: ${E2E_FEATURE_REPLICAREPAIR:-true}
+      Secrets__Provider: ${E2E_SECRETS_PROVIDER:-Database}
     volumes:
       - ./docs/test-environment/certs/ca-bundle.pem:/etc/ssl/e2e-ca-bundle.pem:ro

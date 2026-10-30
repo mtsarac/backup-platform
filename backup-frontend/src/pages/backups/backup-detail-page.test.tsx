@@ -2,6 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import { ApiError } from '@/lib/api/client'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { makeRun } from '@/features/backups/test-data'
@@ -28,6 +29,7 @@ function renderDetail() {
 }
 
 beforeEach(() => {
+  setFeatureFlags({ sizeAnomaly: true })
   vi.clearAllMocks()
   state.canOperate = true
   state.query.data = makeRun()

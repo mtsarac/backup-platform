@@ -1,4 +1,5 @@
 using BackupPlatform.Application.Backups;
+using BackupPlatform.Contracts.Flags;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Restores;
@@ -10,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BackupPlatform.Infrastructure.Backups;
 
-public sealed class PostgreSqlBackupHealthStore(DbContextOptions<PlatformDbContext> options, AgentConnectivityOptions connectivity) : IBackupHealthStore
+public sealed class PostgreSqlBackupHealthStore(DbContextOptions<PlatformDbContext> options, AgentConnectivityOptions connectivity, FeatureFlags? flags = null) : IBackupHealthStore
 {
     public async Task<TenantId?> FindJobTenantAsync(Guid jobId, CancellationToken cancellationToken)
     {
@@ -79,6 +80,7 @@ public sealed class PostgreSqlBackupHealthStore(DbContextOptions<PlatformDbConte
 
     public async Task<(IReadOnlyList<BackupRecentSizeAnomaly> Items, int Total)> ReadRecentSizeAnomaliesAsync(TenantId tenantId, DateTimeOffset now, CancellationToken cancellationToken)
     {
+        if (!(flags?.IsEnabled(Features.SizeAnomaly) ?? true)) return ([], 0);
         await using var db = PlatformDbContext.CreateForPlatformOperations(options);
         var since = now.AddDays(-7);
         var warnings = from run in db.BackupRuns.AsNoTracking()

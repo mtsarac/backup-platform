@@ -1,4 +1,6 @@
 using BackupPlatform.Api.Backups;
+using BackupPlatform.Api.Flags;
+using BackupPlatform.Contracts.Flags;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Application.Agents;
 using BackupPlatform.Application.Backups;
@@ -19,6 +21,7 @@ public static class ReplicaRepairTaskEndpoints
 {
     public static IEndpointRouteBuilder MapReplicaRepairTaskEndpoints(this IEndpointRouteBuilder endpoints)
     {
+        if (!endpoints.IsFeatureEnabled(Features.ReplicaRepair)) return endpoints;
         var repairs = endpoints.MapGroup("/api/agent/replica-repairs/{operationId:guid}")
             .WithMetadata(new AgentApiEndpoint(), new RequiresAgentProtocol(), new RequestSizeLimitAttribute(16 * 1024))
             .RequireAuthorization(AuthorizationPolicies.Agent);

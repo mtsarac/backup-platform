@@ -124,6 +124,17 @@ describe('policy', () => {
     expect(screen.queryByLabelText('SMS')).not.toBeInTheDocument()
   })
 
+  it('offers the size-anomaly event only while the sizeAnomaly feature is on', async () => {
+    setFeatureFlags({})
+    const { unmount } = mount()
+    await screen.findByLabelText('Bildirimler etkin')
+    expect(screen.queryByLabelText('Boyut Anomalisi')).not.toBeInTheDocument()
+    unmount()
+    setFeatureFlags({ sizeAnomaly: true })
+    mount()
+    expect(await screen.findByLabelText('Boyut Anomalisi')).toBeInTheDocument()
+  })
+
   it('warns when a selected email/sms transport is unavailable', async () => {
     setFeatureFlags({ sms: true })
     const user = userEvent.setup()

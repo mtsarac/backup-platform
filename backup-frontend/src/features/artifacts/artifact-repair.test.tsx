@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import type { BackupArtifact, ReplicaRepairOperation, StartReplicaRepairRequest } from './types'
 import { ArtifactDetailPage } from '@/pages/artifacts/artifact-detail-page'
 
@@ -152,6 +153,7 @@ function renderPage() {
 
 describe('Manual replica repair frontend flow', () => {
   beforeEach(() => {
+    setFeatureFlags({ replicaRepair: true })
     state.canOperate = true
     state.artifact = undefined
     state.repairOp = undefined
@@ -173,6 +175,13 @@ describe('Manual replica repair frontend flow', () => {
     const replicas = within(screen.getByRole('region', { name: 'Kopyalar' }))
     expect(replicas.getByText('Evet · dosya korunuyor')).toBeVisible()
     expect(replicas.getByText('Doğrulama durumu').closest('div')).toHaveTextContent('Doğrulandı')
+  })
+
+  it('offers no repair while the replicaRepair feature is off', () => {
+    setFeatureFlags({})
+    state.artifact = sampleArtifact('Failed', true)
+    renderPage()
+    expect(screen.queryByRole('button', { name: 'Onar' })).not.toBeInTheDocument()
   })
 
   it('does not expose replica repair or repair cancellation to Viewer', () => {

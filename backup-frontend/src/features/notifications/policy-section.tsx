@@ -14,7 +14,7 @@ import { useNotificationPolicy, useUpdateNotificationPolicy } from './hooks'
 import { eventTypeLabels, kindLabels, severityLabels } from './labels'
 import { thresholdRanges, toThresholds, validateThresholds } from './policy-validation'
 import type { ThresholdField } from './policy-validation'
-import { eventTypes, severities, visibleChannelKinds } from './types'
+import { severities, visibleChannelKinds, visibleEventTypes } from './types'
 import type { ChannelKind, EventType, NotificationPolicy, Severity } from './types'
 import { formatDateTime } from '@/lib/format'
 
@@ -55,7 +55,7 @@ function PolicyForm({ policy }: { policy: NotificationPolicy }) {
   return <form onSubmit={submit} noValidate className="space-y-6">
     <CheckField role="switch" className="font-medium" label={tx("Bildirimler etkin")} checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
     <fieldset className="space-y-2"><legend className="text-sm font-medium text-text-heading">{tx("Olay türleri")}</legend>
-      <div className="flex flex-wrap gap-x-6">{eventTypes.map((type) => <CheckField key={type} label={eventTypeLabels[type]} checked={events.includes(type)} onChange={(event) => setEvents(toggle(events, type, event.target.checked))} />)}</div>
+      <div className="flex flex-wrap gap-x-6">{visibleEventTypes().map((type) => <CheckField key={type} label={eventTypeLabels[type]} checked={events.includes(type)} onChange={(event) => setEvents(toggle(events, type, event.target.checked))} />)}</div>
       <p className="text-sm text-text-muted">{tx("Bir platform yöneticisi şifreli yedeklerinize acil destek erişimi kullandığında kritik uyarı gönderilir. Bu olay kapatılamaz; genel kanallara gönderim için bildirimlerin etkin ve en az bir kanalın hazır olması gerekir. Sahiplerin kayıtlı güvenlik adresleri ayrıca her zaman bilgilendirilir.")}</p>
     </fieldset>
     <fieldset className="space-y-2"><legend className="text-sm font-medium text-text-heading">{tx("Kanal türleri")}</legend>

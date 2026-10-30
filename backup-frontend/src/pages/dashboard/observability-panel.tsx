@@ -5,6 +5,7 @@ import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 import { useHealthSummary } from './health-summary'
 import { MAX_RECOMMENDATIONS, unhealthyJobs } from './recommendations'
 import { formatBytes, formatDateTime } from '@/lib/format'
+import { isFeatureEnabled } from '@/features/feature-flags/feature-flags'
 import { StatusPill } from '@/components/data/status-pill'
 
 export function ObservabilityPanel({ tenantId }: { tenantId: string }) {
@@ -37,14 +38,14 @@ export function ObservabilityPanel({ tenantId }: { tenantId: string }) {
               <p className="text-xs text-text-muted">{tx('Son ölçüm: {0}', { '0': formatDateTime(risk.reportedAt) })}</p>
             </li>)}</ul> : <p className="text-sm text-text-muted">{tx('Kapasite eşiğini aşan hedef yok.')}</p>}
           </div>
-          <div><h3 className="mb-2 font-medium">{tx('Son 7 günün boyut anomalileri')}</h3>
+          {isFeatureEnabled('sizeAnomaly') && <div><h3 className="mb-2 font-medium">{tx('Son 7 günün boyut anomalileri')}</h3>
             {data.recentSizeAnomalies.length ? <ul className="divide-y divide-border">{data.recentSizeAnomalies.map(anomaly => <li key={anomaly.runId} className="space-y-1 py-2">
               <Link className="break-words text-primary underline-offset-4 hover:underline" to={`${base}/backup-runs/${anomaly.runId}`}>{anomaly.jobName}</Link>{' '}<StatusPill level="attention">{tx('Boyut Anomalisi')}</StatusPill>
               <p className="text-sm text-text-muted">{tx('Yedek: {0} · Geçmiş ortalama: {1}', { '0': formatBytes(anomaly.sizeBytes), '1': formatBytes(anomaly.baselineMeanBytes) })}</p>
               <p className="text-xs text-text-muted">{formatDateTime(anomaly.completedAt)}</p>
             </li>)}</ul> : <p className="text-sm text-text-muted">{tx('Son 7 günde boyut anomalisi yok.')}</p>}
             {data.recentSizeAnomaliesTotal > data.recentSizeAnomalies.length && <p className="mt-2 text-sm text-text-muted">{tx('Toplam {0} anomalinin son {1} kaydı gösteriliyor.', { '0': data.recentSizeAnomaliesTotal, '1': data.recentSizeAnomalies.length })}</p>}
-          </div>
+          </div>}
         </div>
       </div>}
     </QueryState>

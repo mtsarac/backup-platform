@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import * as api from '@/features/platform/api'
@@ -33,6 +34,7 @@ function mount(tab = '') {
 }
 
 beforeEach(() => {
+  setFeatureFlags({ supportSessions: true })
   vi.resetAllMocks()
   vi.mocked(api.getTenant).mockResolvedValue(tenant)
   vi.mocked(api.getMemberships).mockResolvedValue(paged([ayse, can]))
@@ -155,6 +157,14 @@ describe('platform tenant detail', () => {
     expect(screen.getAllByRole('link', { name: 'Yedekleme bilgisayarlarını görüntüle' })).toHaveLength(1)
     expect(screen.getAllByText('Kayıt açık')).toHaveLength(1)
     expect(screen.queryByText('Yeni bilgisayar kaydı açık')).not.toBeInTheDocument()
+  })
+
+  it('hides the support section while the supportSessions feature is off', async () => {
+    setFeatureFlags({})
+    mount('security')
+    expect(await screen.findByRole('heading', { name: 'Acme A.Ş.' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Destek erişimi' })).not.toBeInTheDocument()
+    expect(supportApi.getSessions).not.toHaveBeenCalled()
   })
 
   it('shows counts, filtered links, memberships and recent tenant audit', async () => {

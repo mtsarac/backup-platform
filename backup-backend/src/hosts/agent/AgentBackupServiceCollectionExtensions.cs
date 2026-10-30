@@ -1,3 +1,4 @@
+using BackupPlatform.Contracts.Flags;
 using BackupPlatform.Agent.Core.Connectivity;
 using BackupPlatform.Agent.Core.Backup;
 using BackupPlatform.Agent.Core.Restore;
@@ -202,7 +203,8 @@ internal static class AgentBackupOptionsValidation
     }
 
     /// <summary>One message per problem, each naming the setting. Empty when the section is valid or absent.</summary>
-    public static IEnumerable<string> Validate(AgentBackupOptions? options)
+    /// <summary>Without <paramref name="flags"/> (a hand-built validator) no snapshot kind is gated.</summary>
+    public static IEnumerable<string> Validate(AgentBackupOptions? options, FeatureFlags? flags = null)
     {
         if (options is null)
         {
@@ -220,6 +222,11 @@ internal static class AgentBackupOptionsValidation
                 yield return prefix + "FileSources requires simple source references and absolute root directories.";
             if (pair.Value.SnapshotKind is { } kind && !Enum.IsDefined(kind))
                 yield return prefix + "FileSources snapshot kind must be Vss, Lvm, Btrfs or Zfs.";
+            else if (pair.Value.SnapshotKind is { } configured && flags is not null)
+            {
+                var feature = configured == BackupPlatform.SnapshotProviders.Abstractions.SnapshotKind.Vss ? Features.WindowsVss : Features.LinuxSnapshots;
+                if (!flags.IsEnabled(feature)) yield return $"{prefix}FileSources:{pair.Key} uses a {configured} snapshot, which needs Features:{feature.Key}=true.";
+            }
         }
 
         if (options.Staging is { } staging)

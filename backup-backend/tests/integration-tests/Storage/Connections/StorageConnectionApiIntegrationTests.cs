@@ -33,11 +33,12 @@ public sealed class StorageConnectionApiIntegrationTests(PostgreSqlFixture fixtu
         public string TenantRoot => $"/api/tenants/{Tenant.Id.Value}";
 
         public static async Task<ApiWorld> CreateAsync(
-            PostgreSqlFixture database, bool withCentralStorage = false, Action<IServiceCollection>? configureServices = null)
+            PostgreSqlFixture database, bool withCentralStorage = false, Action<IServiceCollection>? configureServices = null,
+            IReadOnlyDictionary<string, string?>? configuration = null)
         {
             var tenantId = TenantId.New();
             var centralRoot = Directory.CreateTempSubdirectory("api-central-test-").FullName;
-            var settings = new Dictionary<string, string?>();
+            var settings = new Dictionary<string, string?>(configuration ?? new Dictionary<string, string?>());
             if (withCentralStorage)
             {
                 settings["Backups:Storage:Central:RootDirectory"] = centralRoot;

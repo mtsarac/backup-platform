@@ -45,6 +45,8 @@ internal sealed class AuthApiFactory(
             ["Notifications:Enabled"] = "false",
             ["Notifications:PublicBaseUrl"] = "https://backup.example.com"
         };
+        // Suites exercise the features themselves, so every flag starts on; a test passes Features:{key}=false to cover the off state.
+        foreach (var feature in BackupPlatform.Contracts.Flags.Features.All) settings[$"Features:{feature.Key}"] = "true";
         foreach (var (key, value) in configuration ?? new Dictionary<string, string?>()) settings[key] = value;
         builder.ConfigureAppConfiguration((_, builderConfiguration) => builderConfiguration.AddInMemoryCollection(settings));
         builder.ConfigureServices(services =>

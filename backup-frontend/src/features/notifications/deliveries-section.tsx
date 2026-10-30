@@ -11,14 +11,14 @@ import { QueryState } from '@/components/data/query-state'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { useNotificationDeliveries } from './hooks'
 import { eventTypeLabels, kindLabels, phaseLabels, severityLabels } from './labels'
-import { channelKinds, deliveryStatuses, eventTypes, visibleChannelKinds } from './types'
+import { channelKinds, deliveryStatuses, visibleChannelKinds, visibleEventTypes } from './types'
 import type { DeliveryFilters, NotificationDelivery } from './types'
 import { LIST_PAGE_SIZE, oneOf, useListParams } from '@/features/platform/use-list-params'
 import { formatDateTime, formatRelativeTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { statusLabel } from '@/lib/status'
 
-const eventFilters = [...eventTypes, 'break_glass_access', 'test'] as const
+const eventFilters = () => [...visibleEventTypes(), 'break_glass_access', 'test'] as const
 
 function DeliveryCard({ delivery }: { delivery: NotificationDelivery }) {
   const event = eventTypeLabels[delivery.eventType]
@@ -50,7 +50,7 @@ export function DeliveriesSection() {
   const { page, get, update } = useListParams()
   const status = oneOf(get('status'), deliveryStatuses)
   const kind = oneOf(get('kind'), channelKinds)
-  const eventType = oneOf(get('eventType'), eventFilters)
+  const eventType = oneOf(get('eventType'), eventFilters())
   const filters: DeliveryFilters = { page, pageSize: LIST_PAGE_SIZE, status, kind, eventType }
   const deliveries = useNotificationDeliveries(filters)
   const data = deliveries.data
@@ -61,7 +61,7 @@ export function DeliveriesSection() {
       <Filters label={tx("Gönderim filtreleri")} onClear={status || kind || eventType ? () => update({ status: '', kind: '', eventType: '' }) : undefined}>
         <FilterField label={tx("Durum")}><select aria-label={tx("Durum")} className={`${filterControlClass} min-h-11`} value={status ?? ''} onChange={filter('status')}><option value="">{tx("Tümü")}</option>{deliveryStatuses.map((item) => <option key={item} value={item}>{statusLabel('delivery', item)}</option>)}</select></FilterField>
         <FilterField label={tx("Kanal türü")}><select aria-label={tx("Kanal türü")} className={`${filterControlClass} min-h-11`} value={kind ?? ''} onChange={filter('kind')}><option value="">{tx("Tümü")}</option>{visibleChannelKinds().map((item) => <option key={item} value={item}>{kindLabels[item]}</option>)}</select></FilterField>
-        <FilterField label={tx("Olay türü")}><select aria-label={tx("Olay türü")} className={`${filterControlClass} min-h-11`} value={eventType ?? ''} onChange={filter('eventType')}><option value="">{tx("Tümü")}</option>{eventFilters.map((item) => <option key={item} value={item}>{eventTypeLabels[item]}</option>)}</select></FilterField>
+        <FilterField label={tx("Olay türü")}><select aria-label={tx("Olay türü")} className={`${filterControlClass} min-h-11`} value={eventType ?? ''} onChange={filter('eventType')}><option value="">{tx("Tümü")}</option>{eventFilters().map((item) => <option key={item} value={item}>{eventTypeLabels[item]}</option>)}</select></FilterField>
       </Filters>
       <QueryState isPending={deliveries.isPending} error={deliveries.error}>
         {data && (data.totalCount === 0

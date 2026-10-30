@@ -1,6 +1,7 @@
 import { act, fireEvent, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, createRoutesFromChildren, matchRoutes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import { render } from '@/test/render'
 import { ThemeProvider } from '@/components/theme-provider'
 import { renderPlatform } from '@/features/platform/test-utils'
@@ -13,7 +14,7 @@ const nav = () => screen.getAllByRole('navigation')[0]
 const group = (name: string) => within(nav()).getByRole('group', { name })
 const links = (name: string) => within(group(name)).getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])
 
-beforeEach(() => localStorage.setItem('backup-theme', 'light'))
+beforeEach(() => { localStorage.setItem('backup-theme', 'light'); setFeatureFlags({ supportSessions: true }) })
 
 describe('Platform sidebar', () => {
   it('groups every platform page under plain-language headings with unchanged URLs', () => {

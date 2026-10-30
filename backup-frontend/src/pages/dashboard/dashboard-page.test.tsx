@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { render } from '@/test/render'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import { changeLanguage } from '@/lib/i18n/runtime'
 import { setViewport } from '@/test/viewport'
 import { makeRun } from '@/features/backups/test-data'
@@ -51,6 +52,7 @@ function renderDashboard() {
 const openDetails = () => userEvent.click(screen.getByText('Ayrıntılar'))
 
 beforeEach(() => {
+  setFeatureFlags({ sizeAnomaly: true })
   localStorage.clear()
   state.canAdmin = true
   state.canOperate = true
@@ -393,6 +395,14 @@ describe('dashboard recent runs', () => {
 })
 
 describe('observability dashboard', () => {
+  it('hides the size-anomaly list while the sizeAnomaly feature is off', async () => {
+    setFeatureFlags({})
+    state.observability = { ...emptyObservability(), totalJobs: 1, averageScore: 70, state: 'Degraded', degraded: 1, jobs: [jobHealth('job-risk', 'Riskli veritabanı', 'Degraded', 70)] }
+    renderDashboard()
+    await openDetails()
+    expect(screen.queryByText('Son 7 günün boyut anomalileri')).not.toBeInTheDocument()
+  })
+
   it('links capacity risks and successful anomalous backups to their investigation screens', async () => {
     state.observability = {
       ...emptyObservability(), totalJobs: 1, averageScore: 70, state: 'Degraded', degraded: 1,

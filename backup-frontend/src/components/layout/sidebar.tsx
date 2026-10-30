@@ -29,7 +29,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen?: boolean; o
       { label: tx("Bildirimler"), to: `${base}/notifications`, icon: Bell, admin: true },
       { label: tx("Şifreleme"), to: `${base}/encryption`, icon: KeyRound, admin: true },
       { label: tx("Yükleme bant genişliği"), to: `${base}/upload-bandwidth`, icon: Upload },
-      { label: tx("Destek erişimi"), to: `${base}/support-access`, icon: ShieldCheck, admin: true },
+      { label: tx("Destek erişimi"), to: `${base}/support-access`, icon: ShieldCheck, admin: true, feature: 'supportSessions' },
     ] },
     ...(user?.isPlatformAdmin ? [{ heading: tx("Platform"), items: [{ label: tx("Platform Yönetimi"), to: '/platform', icon: ShieldCheck }] }] : []),
   ]

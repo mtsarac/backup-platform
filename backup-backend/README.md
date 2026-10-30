@@ -164,7 +164,17 @@ Email notifications stay off until three things are set. `Notifications:PublicBa
 
 ### Feature flags
 
-A feature that can be switched off is one line in `Features` (`src/hosts/api/Flags/FeatureFlags.cs`) with its default. The operator overrides it with configuration `Features:{key}` (environment `Features__{key}=true|false`). A disabled feature's routes are not registered (404), handlers on shared routes ask `FeatureFlags.IsEnabled`, and the UI reads every flag once at startup from the anonymous `GET /api/features`. SMS (`sms`) is off by default.
+A feature that can be switched off is one line in `Features` (`src/core/contracts/Flags/FeatureFlags.cs`, shared by the API and the agent) with its default. The operator overrides it with configuration `Features:{key}` (environment `Features__{key}=true|false`). A disabled feature's routes are not registered (404), handlers on shared routes ask `FeatureFlags.IsEnabled`, and the UI reads every flag once at startup from the anonymous `GET /api/features`.
+
+| Key | Default | Off means |
+|---|---|---|
+| `sms` | off | SMS transport, secrets and channel kind rejected (404), hidden in the UI |
+| `supportSessions` | off | `/api/platform/support-sessions*` and `/api/tenants/{id}/support-access*` not registered; no UI entry |
+| `smb` | off | creating an SMB storage connection is rejected (404) and SMB is not offered as a provider |
+| `sizeAnomaly` | off | runs are not evaluated, the health summary lists none, the `backup_size_anomaly` event cannot be selected |
+| `windowsVss` / `linuxSnapshots` | off | agent-side: the agent refuses to start with a file source whose `SnapshotKind` is `Vss` / `Lvm`, `Btrfs` or `Zfs` (set `Features__windowsVss=true` in the agent's environment) |
+| `externalSecrets` | off | `Secrets:Provider` other than `Database` (Vault, AWS Secrets Manager) stops the API from starting |
+| `replicaRepair` | **on** | policy exception so multi-destination repair keeps working; off removes the manual repair routes and stops automatic repair |
 
 ## 3-2-1 and protected external storage
 
