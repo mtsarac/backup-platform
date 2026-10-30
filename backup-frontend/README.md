@@ -15,6 +15,17 @@ src/
   test/        Test setup
 ```
 
+## Design system
+
+One visual language, defined in `src/index.css` tokens and the shared components in `src/components/ui` and `src/components/data`. New and redesigned screens use only these; do not hand-write `rounded-xl border ...` surfaces or raw inputs.
+
+- **Tokens.** Semantic colors (`bg-surface`, `text-text-muted`, `border-border`, `bg-primary`), status pairs (`success|warning|error|info` with `-subtle` fills), `shadow-card` (flat on purpose; only overlays use `shadow-overlay`), the type scale (`text-sm` hints, `text-body` content, `text-base` titles, `text-2xl` page title), and a 44 px minimum target for every control. Light, dark and high-contrast are all token-driven; never use a literal color.
+- **Page structure.** `PageHeader` (one `h1`, crumbs, primary actions) then `Section` (titled surface) or `Card` (plain surface; `as="section|article|li|form"`, `tone="default|subtle|danger"`, `padding="none|md|lg"`). `Facts`/`Fact` for read-only label/value pairs, `BrandMark` for the product mark.
+- **Forms.** `Field` binds label, hint and error to one control; put `TextInput`, a `selectClass` select or `SecretField` inside it and spread the `control` props. `CheckField`, `SearchablePicker`, `Stepper`, `FormDialog` and `ConfirmDialog` cover the rest.
+- **Data.** `DataList` (table on desktop, cards on small screens), `QueryState` for loading/empty/error, `StatusPill` for every status (colour + icon + text), `Badge` for plain tags, `KpiCard`, `ProgressBar`, `Pagination`.
+- **Messages.** `Notice` for non-failures, `ErrorNotice` for failures (what happened, effect on data, what to do, raw code under technical details), `EmptyState` for empty lists, `TechnicalDetails` for ids and raw values.
+- **Rules.** Every user-visible string goes through `tx()`. State is never colour alone. Components added for the redesign sit beside the older ones; a screen moves over when it is redesigned, and old components are removed only when no screen uses them. The login page is the reference screen.
+
 ## Run it
 
 You need [bun](https://bun.sh) 1.4+.

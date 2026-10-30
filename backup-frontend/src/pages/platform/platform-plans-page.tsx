@@ -51,7 +51,7 @@ export function PlatformPlansPage() {
       { label: tx("Güncellendi"), value: formatDateTime(plan.updatedAt) },
     ]} /> },
     { key: 'actions', card: 'actions', header: tx('İşlemler'), wrap: true, render: (plan) => plan.isSystem
-      ? <span className="text-xs text-text-muted">{tx("Sistem planı; salt okunur.")}</span>
+      ? <span className="text-sm text-text-muted">{tx("Sistem planı; salt okunur.")}</span>
       : <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" aria-label={tx("{0} planını düzenle", { "0": plan.name })} onClick={() => setEditing(plan)}>{tx("Düzenle")}</Button>
         <Button variant="outline" size="sm" aria-label={tx("{0} planını {1}", { "0": plan.name, "1": plan.enabled ? tx('devre dışı bırak') : tx('etkinleştir') })} onClick={() => { setEnabled.reset(); setToggling(plan) }}>{plan.enabled ? tx('Devre dışı bırak') : tx('Etkinleştir')}</Button>
