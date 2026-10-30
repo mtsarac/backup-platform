@@ -89,7 +89,7 @@ def wait_agent(t, name, version, timeout=240):
 
 def install(t, name, pem):
     """The product's versioned installer at 1.0.0 (payload = the package the api serves), the e2e key pinned, enrolled as `name`, service started."""
-    tok = subprocess.run(["python3", "enroll.py", "a"], capture_output=True, text=True, check=True).stdout.strip()
+    tok = subprocess.run(["python3", str(api.ROOT / "scripts/e2e/enroll.py"), "a"], capture_output=True, text=True, check=True).stdout.strip()
     vm("sudo rm -rf /tmp/bpupd; mkdir -p /tmp/bpupd")
     subprocess.run(["scp", "-q", *map(str, [DEPLOY / "install-agent.sh", DEPLOY / "backup-platform-agent.service", DEPLOY / "agent-environment.example"]), "virtual-fedora:/tmp/bpupd/"], check=True)
     out = vm(f"""set -e
@@ -224,7 +224,7 @@ if (Get-ScheduledTask -TaskName BackupAgentUpdate -ErrorAction SilentlyContinue)
     installer = api.ROOT / "backup-backend/deploy/windows"
     old = windows_build(OLD)
     pkg = windows_package(windows_build(NEW))
-    token = subprocess.run(["python3", "enroll.py", "a"], cwd=api.ROOT / "scripts/e2e", capture_output=True, text=True, check=True).stdout.strip()
+    token = subprocess.run(["python3", str(api.ROOT / "scripts/e2e/enroll.py"), "a"], capture_output=True, text=True, check=True).stdout.strip()
     with tempfile.TemporaryDirectory(prefix="e2e-win-update-") as tmp:
         bundle = pathlib.Path(tmp) / remote_zip
         with zipfile.ZipFile(bundle, "w", compression=zipfile.ZIP_DEFLATED) as archive:

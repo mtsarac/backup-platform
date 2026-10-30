@@ -68,6 +68,45 @@ class RuntimeCleanup(unittest.TestCase):
             self.assertFalse(owned.exists())
 
 
+class DisposableDatabases(unittest.TestCase):
+    def test_restore_exports_isolated_endpoints_and_cleans_up(self):
+        with tempfile.TemporaryDirectory(prefix='bp-disposable-contract-') as directory:
+            root = Path(directory)
+            fake = root / 'docker'
+            fake.write_text('''#!/usr/bin/env python3
+import json, os, sys
+args = sys.argv[1:]
+with open(os.environ['BP_DOCKER_CALLS'], 'a') as calls:
+    calls.write(json.dumps(args) + '\\n')
+if args[0] == 'inspect':
+    template = args[args.index('--format') + 1]
+    if '.State.Running' in template: print('true')
+    elif '5432/tcp' in template: print('45101')
+    elif 'target' in args[-1]: print('45103')
+    else: print('45102')
+elif args[0] == 'logs':
+    print('SQL Server is now ready for client connections')
+''')
+            fake.chmod(0o700)
+            calls = root / 'calls'
+            env = {**os.environ, 'PATH': str(root) + os.pathsep + os.environ['PATH'],
+                   'TMPDIR': str(root), 'BP_CREDENTIAL_FILE': str(root / 'absent'),
+                   'BP_DOCKER_CALLS': str(calls),
+                   'BACKUP_PLATFORM_TEST_MSSQL_HOST': 'production.invalid',
+                   'BACKUP_PLATFORM_TEST_MSSQL_PASSWORD': 'existing-secret'}
+            env.pop('BP_COMMON_LOADED', None)
+            command = ['bash', str(REPO / 'scripts/database/with-disposable-databases.sh'), '--restore', '--',
+                       'python3', '-c', 'import os; e=os.environ; assert e["BACKUP_PLATFORM_TEST_MSSQL_HOST"] == "127.0.0.1"; assert e["BACKUP_PLATFORM_TEST_MSSQL_PORT"] == "45102"; assert e["BACKUP_PLATFORM_TEST_MSSQL_RESTORE_TARGET_PORT"] == "45103"; assert "Port=45101" in e["BACKUP_PLATFORM_TEST_CONNECTION_STRING"]; assert e["BACKUP_PLATFORM_TEST_MSSQL_PASSWORD"] != "existing-secret"; assert os.path.isdir(e["BACKUP_PLATFORM_TEST_MSSQL_STAGING_AGENT_DIR"])']
+            result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=20, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            recorded = [json.loads(line) for line in calls.read_text().splitlines()]
+            runs = [args for args in recorded if args[0] == 'run']
+            self.assertEqual(len(runs), 3)
+            self.assertTrue(all(any(arg.startswith('127.0.0.1::') for arg in args) for args in runs))
+            self.assertEqual(len([args for args in recorded if args[:2] == ['rm', '--force']]), 3)
+            self.assertFalse(any(root.glob('bp-local.*')))
+
+
 class DownloadFixture(unittest.TestCase):
     def setUp(self):
         spec = importlib.util.spec_from_file_location('download_smoke', REPO / 'scripts/frontend/download-smoke-fixture.py')
@@ -165,7 +204,7 @@ rows = '' if outcome == 'Empty' else f'<UnitTestResult outcome=\"{outcome}\" />'
             'PATH': str(self.bin) + os.pathsep + os.environ['PATH'],
             'BP_CREDENTIAL_FILE': str(self.root / 'absent-credentials'),
             'BP_CONTRACT_CALLS': str(self.log),
-            'BACKUP_PLATFORM_TEST_CONNECTION_STRING': 'Host=contract-not-used',
+            'BACKUP_PLATFORM_TEST_CONNECTION_STRING': '',
             'TMPDIR': str(self.root),
         }
         self.environment.pop('BP_COMMON_LOADED', None)
@@ -340,6 +379,7 @@ if __name__ == '__main__':
     options = parser.parse_args()
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(TestEvidence)
     suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(RuntimeCleanup))
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(DisposableDatabases))
     suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(BackendRunners))
     suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(DownloadFixture))
     if options.windows:

@@ -83,7 +83,8 @@ internal sealed class RestoreApiScenario : IAsyncDisposable
             agentId = owner.AgentId,
             configuration = new BackupExecutionConfiguration
             {
-                Engine = engine, Database = "master", Host = "sql-server", IntegratedSecurity = engine == "mssql", DatabaseCredentialReference = engine == "postgres" ? "pg-credential" : null,
+                Engine = engine, Database = "master", Host = "sql-server", IntegratedSecurity = engine == "mssql",
+                DatabaseLogin = engine == "mssql" ? null : new("test-user", "test-password"),
                 CopyOnly = engine == "mssql", Destinations = [agentLocal || backendLocal ? BackupTestDestinations.Local(location: location) : BackupTestDestinations.Central()]
             }
         };

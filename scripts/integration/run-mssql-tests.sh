@@ -66,7 +66,7 @@ if [[ "$provider" == true ]]; then
     run_dotnet_tests tests/integration-tests -c Release "${build_args[@]}" --filter "$filter" -- xUnit.MaxParallelThreads=2
 fi
 if [[ "$agent" == true ]]; then
-    run_dotnet_tests tests/integration-tests -c Release "${build_args[@]}" --filter 'FullyQualifiedName~AgentSmokeTests' -- xUnit.MaxParallelThreads=1
+    run_dotnet_tests tests/integration-tests -c Release "${build_args[@]}" --filter 'FullyQualifiedName~AgentSmokeTests|FullyQualifiedName~MsSqlCapabilitySyncSmokeTests' -- xUnit.MaxParallelThreads=1
 fi
 if [[ "$restore" == true ]]; then
     run_dotnet_tests tests/integration-tests -c Release "${build_args[@]}" --filter 'FullyQualifiedName~MsSqlRestoreAcceptanceTests' -- xUnit.MaxParallelThreads=1

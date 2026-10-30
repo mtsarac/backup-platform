@@ -9,16 +9,22 @@ DB = ["docker", "exec", "bp-postgres", "psql", "-U", "postgres", "-d", "backup_p
 
 
 def second_admin():
-    """A second PlatformAdmin session; created once and kept (login and password in state.json under 'admin2')."""
+    """Reuse credentials only while their platform administrator exists in this database."""
     p = api.ROOT / "docs/test-environment/state.json"; st = json.loads(p.read_text())
-    if "admin2" not in st:
+    admin = st.get("admin2")
+    if admin:
+        uid = uuid.UUID(admin["userId"])
+        out = subprocess.run(DB + [f"select exists(select 1 from platform_admins where \"UserId\" = '{uid}')"], capture_output=True, text=True)
+        assert out.returncode == 0, out.stderr[:300]
+    if not admin or out.stdout.strip() != "t":
         s = api.login(); pw = secrets.token_urlsafe(18) + "Aa1!"
-        r = s.post(f"{api.BASE}/api/platform/users", json={"loginIdentifier": "e2e-admin2", "displayName": "E2E second admin", "password": pw}, headers={"Idempotency-Key": uuid.uuid4().hex})
+        login = f"e2e-admin2-{uuid.uuid4().hex[:12]}"
+        r = s.post(f"{api.BASE}/api/platform/users", json={"loginIdentifier": login, "displayName": "E2E second admin", "password": pw}, headers={"Idempotency-Key": uuid.uuid4().hex})
         assert r.status_code == 201, f"create second admin: {r.status_code} {r.text[:200]}"
         uid = r.json().get("userId") or r.json().get("id")
         out = subprocess.run(DB + [f"insert into platform_admins (\"UserId\") values ('{uid}') on conflict do nothing"], capture_output=True, text=True)
         assert out.returncode == 0, out.stderr[:300]
-        st["admin2"] = {"login": "e2e-admin2", "password": pw, "userId": uid}; p.write_text(json.dumps(st, indent=2))
+        st["admin2"] = {"login": login, "password": pw, "userId": uid}; p.write_text(json.dumps(st, indent=2))
     return api.login(st["admin2"]["login"], st["admin2"]["password"])
 
 

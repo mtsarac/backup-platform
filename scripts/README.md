@@ -157,8 +157,7 @@ scripts/database/test-mssql.sh
 scripts/database/check-databases.sh
 ```
 
-Disposable databases reuse the existing CI starters instead of duplicating
-them:
+The disposable database wrapper requires cached PostgreSQL 18 and SQL Server 2025 images, Docker, OpenSSL and Python. It creates fresh credentials, binds Docker-assigned ports to loopback, and removes its containers and runtime files on exit. PostgreSQL runs with `fsync=off`; never use it for durable data.
 
 ```bash
 scripts/database/with-disposable-databases.sh -- ./scripts/database/check-databases.sh
@@ -208,14 +207,20 @@ or weakens tests; every selected test must execute and pass through the shared T
 
 ### PostgreSQL provider tests (`Category=PostgreSqlProvider`)
 
-The PostgreSQL Full Backup/Restore provider tests run the **real** `pg_dump`/`pg_restore` against the configured PostgreSQL
-server (a superuser; every database and role they create is uniquely named and dropped). They are part of the full
-PostgreSQL selection, so these clients must be reachable:
+The PostgreSQL Full Backup/Restore provider tests run real client tools against the disposable PostgreSQL 18 Testcontainers server. Docker must be available to the test process. The provider fixture uses its password-authenticated superuser and creates uniquely named databases and roles.
 
-- `BACKUP_PLATFORM_TEST_POSTGRES_TOOLS_DIRECTORY`: directory with `pg_dump`/`pg_restore` at least as new as the server (otherwise the `PATH` is used).
-- `BACKUP_PLATFORM_TEST_POSTGRES_OLD_TOOLS_DIRECTORY`: **required** directory with clients *older* than the server (for example PostgreSQL 16 against 18). The tool-version and archive-version refusal tests use them and fail loudly when it is unset.
+- `BACKUP_PLATFORM_TEST_POSTGRES_TOOLS_DIRECTORY`: absolute directory containing runnable PostgreSQL 18 `pg_dump` and `pg_restore`. If unset, absolute directories in `PATH` are searched. Physical tests also need matching-major `pg_basebackup`, `pg_verifybackup`, and `pg_waldump` (used by `pg_verifybackup`), plus replication access and available WAL senders on the server.
+- `BACKUP_PLATFORM_TEST_POSTGRES_OLD_TOOLS_DIRECTORY`: **required** absolute directory containing runnable older `pg_dump` and `pg_restore` for the version-refusal tests; PostgreSQL 16 clients work against the PostgreSQL 18 server.
 
-Local development: extract the clients from a cached server image, or use wrappers that run `docker run --network=host <older image> pg_dump "$@"`. The agent finds its tools through `Agent:Backup:PostgreSql:ClientToolsDirectory` (absolute directory) or `PATH`.
+Install both versions separately using your platform's PostgreSQL packages or isolated client distributions; binaries and their shared libraries must be compatible with the host. For a direct `dotnet test` run, export both directory variables and, if the current clients need non-system shared libraries, include their library directory in `LD_LIBRARY_PATH`. For example, with isolated installations at `$HOME/.local/pg18` and `$HOME/.local/pg16`:
+
+```bash
+export BACKUP_PLATFORM_TEST_POSTGRES_TOOLS_DIRECTORY="$HOME/.local/pg18/bin"
+export BACKUP_PLATFORM_TEST_POSTGRES_OLD_TOOLS_DIRECTORY="$HOME/.local/pg16/bin"
+export LD_LIBRARY_PATH="$HOME/.local/pg18/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+```
+
+The integration script loads these conventional directories and the PostgreSQL 18 library directory when present; explicit environment values take precedence. Docker-based client wrappers must expose the test server and archive paths to the container and propagate its authentication environment; pulling an uncached image may exceed the provider's client-version probe timeout. The agent separately finds its tools through `Agent:Backup:PostgreSql:ClientToolsDirectory` (absolute directory) or `PATH`.
 
 PostgreSQL fixtures migrate one private schema template per test process, then clone a separate database for each
 fixture. Tenant rows, transaction/lease state and migration changes never share a database between fixtures.

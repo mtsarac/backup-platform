@@ -15,7 +15,7 @@ while (($#)); do
             shift ;;
         -h|--help)
             printf '%s\n' 'Usage: run-postgres-tests.sh [--no-build] [--filter EXPRESSION]' \
-                'Explicit PostgreSQL acceptance: requires BACKUP_PLATFORM_TEST_CONNECTION_STRING; runs the existing PostgreSQL filter in Release.' \
+                'Explicit PostgreSQL acceptance: requires Docker and PostgreSQL client tools; runs the existing PostgreSQL filter in Release.' \
                 '--filter narrows that selection (e.g. FullyQualifiedName~ManagedService); it never widens it.' \
                 'Builds only the integration test project and its dependencies; --no-build explicitly reuses existing Release output.'
             exit 0 ;;
@@ -25,7 +25,6 @@ while (($#)); do
 done
 load_local_env
 require_command dotnet
-[[ -n "${BACKUP_PLATFORM_TEST_CONNECTION_STRING:-}" ]] || fail 'Set BACKUP_PLATFORM_TEST_CONNECTION_STRING.'
 cd -- "$REPO_ROOT/backup-backend"
 filter='FullyQualifiedName!~MsSql&FullyQualifiedName!~BackupPipelineSmoke'
 [[ -z $extra_filter ]] || filter="(${filter})&(${extra_filter})"

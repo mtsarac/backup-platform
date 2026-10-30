@@ -1,5 +1,5 @@
 """Enroll a throwaway second agent on the Fedora VM, revoke it from the API and verify it is cut off immediately."""
-import subprocess, time, lib
+import subprocess, time, api, lib
 from lib import scenario
 
 def revoked_view(t):
@@ -8,7 +8,7 @@ def revoked_view(t):
 
 @scenario("agents/revoke-cuts-off-agent-immediately")
 def revoke(t):
-    tok = subprocess.run(["python3", "enroll.py", "a"], capture_output=True, text=True, check=True).stdout.strip()
+    tok = subprocess.run(["python3", str(api.ROOT / "scripts/e2e/enroll.py"), "a"], capture_output=True, text=True, check=True).stdout.strip()
     lib.fedora("sudo systemctl stop bp-agent2 2>/dev/null; sudo rm -rf /var/lib/backup-agent/agent2; sudo -u backup-agent mkdir -m 700 /var/lib/backup-agent/agent2")
     rc, out = lib.fedora(f"sudo -u backup-agent /opt/backup-agent/bin/BackupPlatform.Agent.Host enroll --server https://192.168.122.1:5252 --token '{tok}' --store-directory /var/lib/backup-agent/agent2 --name revoke-e2e --non-interactive 2>&1 | tail -3")
     assert rc == 0, out

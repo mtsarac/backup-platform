@@ -109,6 +109,8 @@ public sealed class MsSqlRestoreHarness(MsSqlFixture fixture) : IAsyncDisposable
         var name = fixture.StagedFileName("rs" + tag);
         var target = Path.Combine(fixture.Staging.AgentDirectory.Value, name);
         File.WriteAllBytes(target, bytes);
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(target, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead);
         _files.Add(target);
         return new StagedRestoreSource(string.Empty, name, fixture.Staging.ServerDirectory.Combine(name), target, bytes.Length);
     }

@@ -1,6 +1,9 @@
+import json
 import runpy
 import sys
+import tempfile
 import unittest
+import uuid
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock, patch
@@ -55,23 +58,48 @@ class QuotaRuns(unittest.TestCase):
         seed = {'id': 'seed', 'sizeBytes': size}
         artifacts = [{'id': str(i), 'sizeBytes': size} for i in range(2)]
         ops = self.quota.__globals__['ops']
-        ops.big_file_job = Mock(return_value={'id': 'job'})
+        self.quota.__globals__['flows'].file_job_config = Mock(return_value={})
         ops.start = Mock(return_value='seed-run')
         ops.artifacts_of = Mock(side_effect=[[seed], [artifacts[0]], [artifacts[1]]])
-        ops.lc.return_value = {'status': 'Succeeded'}
+        ops.lc.return_value = {'status': 'Succeeded', 'attempts': [{}]}
         self.quota.__globals__['flows'].local_dest = Mock()
         self.quota.__globals__['override'] = Mock()
         self.quota.__globals__['time'] = SimpleNamespace(sleep=Mock())
         success = {'status': 'Succeeded', 'attempts': [{}]}
         failed = {'status': 'Failed', 'attempts': [{'reasonCode': 'StorageUnavailable', 'reason': 'offline'}]}
         self.quota.__globals__['run_with_headroom'] = Mock(side_effect=[(None, success), (None, success), (None, failed)])
-        tenant = SimpleNamespace(agents=lambda: {'fedora-e2e': {}},
-                                 call=Mock(side_effect=[None, {'usedBytes': 0}, {'usedBytes': 2 * size}]))
+        tenant = SimpleNamespace(agents=lambda: {'fedora-e2e': {'agentId': 'agent'}},
+                                 call=Mock(side_effect=[{'id': 'job'}, None, {'usedBytes': 0}, {'usedBytes': 2 * size}]))
         with self.assertRaisesRegex(AssertionError, 'other than quota'):
             self.quota(tenant)
         self.assertEqual(self.quota.__globals__['run_with_headroom'].call_count, 3)
         self.quota.__globals__['override'].assert_called_with({'kind': 'none'})
 
+
+
+class BreakGlassAdmin(unittest.TestCase):
+    def test_stale_admin_is_recreated_before_login(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            state = root / 'docs/test-environment/state.json'
+            state.parent.mkdir(parents=True)
+            state.write_text(json.dumps({'admin2': {'userId': str(uuid.uuid4()), 'login': 'old', 'password': 'old'}}))
+            uid = str(uuid.uuid4())
+            response = SimpleNamespace(status_code=201, json=lambda: {'id': uid})
+            session = SimpleNamespace(post=Mock(return_value=response))
+            login = Mock(side_effect=[session, 'new-session'])
+            api = module('api', ROOT=root, BASE='https://example.invalid', login=login)
+            modules = {'api': api, 'lib': module('lib', ST={}, scenario=scenario), 'flows': module('flows')}
+            with patch.dict(sys.modules, modules):
+                namespace = runpy.run_path(str(HERE / 'breakglass.py'))
+            result = SimpleNamespace(returncode=0, stdout='f\n', stderr='')
+            with patch.object(namespace['subprocess'], 'run', return_value=result) as run:
+                self.assertEqual(namespace['second_admin'](), 'new-session')
+            admin = json.loads(state.read_text())['admin2']
+            self.assertEqual(admin['userId'], uid)
+            self.assertNotEqual(admin['login'], 'old')
+            login.assert_called_with(admin['login'], admin['password'])
+            self.assertEqual(run.call_count, 2)
 
 
 class AcceptanceRouting(unittest.TestCase):
