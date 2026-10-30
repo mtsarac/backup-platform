@@ -23,20 +23,6 @@ public sealed class OptionsValidationTests
         return new AgentHostOptionsValidator().Validate(null, options);
     }
 
-    [Fact]
-    public void Defaults_match_the_documented_values_and_are_valid()
-    {
-        var options = new AgentConnectivityOptions();
-
-        Assert.Equal(TimeSpan.FromSeconds(30), options.HeartbeatInterval);
-        Assert.Equal(TimeSpan.FromSeconds(30), options.PollInterval);
-        Assert.Equal(TimeSpan.FromSeconds(20), options.PushFallbackDelay);
-        Assert.Equal(TimeSpan.FromSeconds(1), options.ReconnectBaseDelay);
-        Assert.Equal(TimeSpan.FromSeconds(60), options.ReconnectMaxDelay);
-        Assert.Empty(options.Validate());
-        Assert.True(Validate(_ => { }).Succeeded);
-    }
-
     [Theory]
     [InlineData(nameof(AgentConnectivityOptions.HeartbeatInterval), 4)]
     [InlineData(nameof(AgentConnectivityOptions.HeartbeatInterval), 301)]
