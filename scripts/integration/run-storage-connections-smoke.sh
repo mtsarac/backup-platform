@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # M7a smoke: disposable MSSQL data -> REAL verified Central backup (actual Agent) -> storage connection API checks -> the connection
-# migration is rolled back and re-applied under the real replica (the upgrade path) -> HTTP download and real restore still work ->
+# HTTP download and real restore still work ->
 # a disabled connection blocks new runs only -> enabled again, a second real backup succeeds.
 set +x
 set -euo pipefail
@@ -53,7 +53,6 @@ print(*(values[key] for key in ('SMOKE_API_URL', 'SMOKE_CERTIFICATE_FILE', 'SMOK
 PY
 )
 scope=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["tenantScope"])' "$state")
-smoke_database=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["database"])' "$smoke_state")
 fixture=("$REPO_ROOT/scripts/frontend/storage-connections-smoke-fixture.py" --server "$server" --certificate "$certificate" --state "$state" --credentials-file "$credentials")
 step() { printf '== %s\n' "$1"; }
 
@@ -76,31 +75,12 @@ step 'real Central backup (Agent -> MSSQL -> Central root)'
 python3 "$REPO_ROOT/scripts/frontend/download-smoke-fixture.py" --server "$server" --certificate "$certificate" --state "$state" backup \
     --provider central --agent-name "Connections smoke $suffix" --sql-host "$BACKUP_PLATFORM_TEST_MSSQL_HOST" --sql-port "$BACKUP_PLATFORM_TEST_MSSQL_PORT" --database "$source_database"
 
-step 'connections before the upgrade'
+step 'connections after the backup'
 python3 "${fixture[@]}" inspect --stage before
 python3 "${fixture[@]}" checks
 
-step 'upgrade path: roll the connection migration back and apply it again under the real replica'
-admin=$BACKUP_PLATFORM_TEST_CONNECTION_STRING
-BACKUP_PLATFORM_CONNECTION_STRING=$(python3 - "$admin" "$smoke_database" <<'PY'
-import sys
-parts = [p for p in sys.argv[1].split(';') if p.strip() and not p.strip().lower().startswith('database=')]
-print(';'.join(parts + ['Database="%s"' % sys.argv[2]]))
-PY
-)
-export BACKUP_PLATFORM_CONNECTION_STRING
-(
-    cd "$REPO_ROOT/backup-backend"
-    run_redacted dotnet tool restore >/dev/null
-    run_redacted dotnet ef database update 20261009072143_SupportAccess --project src/core/infrastructure --configuration Release --no-build >/dev/null
-    printf 'Rolled back to the schema before storage connections\n'
-    run_redacted dotnet ef database update --project src/core/infrastructure --configuration Release --no-build >/dev/null
-    printf 'Storage connections migration re-applied (backfilled the real replica)\n'
-)
-unset BACKUP_PLATFORM_CONNECTION_STRING
-python3 "${fixture[@]}" inspect --stage after-upgrade
 
-step 'download and real restore after the upgrade'
+step 'download and real restore'
 python3 "$REPO_ROOT/scripts/frontend/download-smoke-fixture.py" --server "$server" --certificate "$certificate" --state "$state" verify \
     --provider central --output "$work/download-1.bak"
 python3 "${fixture[@]}" restore --database "$target_database" --sql-host "$BACKUP_PLATFORM_TEST_MSSQL_HOST" --sql-port "$BACKUP_PLATFORM_TEST_MSSQL_PORT"

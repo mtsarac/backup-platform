@@ -13,15 +13,15 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BackupPlatform.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PlatformDbContext))]
-    [Migration("20261021121543_BandwidthProfilesAndPacing")]
-    partial class BandwidthProfilesAndPacing
+    [Migration("20261030110609_Baseline")]
+    partial class Baseline
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -260,6 +260,32 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BackupPlatform.Agents.Enrollment.PlatformAgentSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EnrollmentTokenLifetimeMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ServerUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("platform_agent_settings", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_platform_agent_settings_singleton", "\"Id\" = 1");
+                        });
+                });
+
             modelBuilder.Entity("BackupPlatform.Agents.Enrollment.TenantAgentEnrollmentPolicy", b =>
                 {
                     b.Property<Guid>("TenantId")
@@ -372,6 +398,14 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<string>("DetailsJson")
                         .IsRequired()
                         .HasColumnType("jsonb");
+
+                    b.Property<string>("SealKeyId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("SealSignature")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.Property<Guid?>("SupportSessionId")
                         .HasColumnType("uuid");
@@ -935,6 +969,9 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("DeleteAfter")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("DeleteAgentId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("DeleteAttempts")
                         .HasColumnType("integer");
 
@@ -1060,6 +1097,10 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.HasIndex("StorageProvider", "Key")
                         .HasDatabaseName("ix_backup_replicas_location");
 
+                    b.HasIndex("TenantId", "DeleteAfter")
+                        .HasDatabaseName("ix_backup_replicas_external_agent_deletions")
+                        .HasFilter("\"ExecutionLocation\" = 'Backend' AND \"StorageProvider\" IN ('sftp','google-drive') AND \"Status\" = 'Deleting'");
+
                     b.HasIndex("TenantId", "StorageConnectionId")
                         .HasDatabaseName("ix_backup_replicas_connection");
 
@@ -1083,11 +1124,11 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_backup_replica_checksum", "\"ChecksumAlgorithm\" = 'sha256' AND \"Checksum\" ~ '^[0-9a-f]{64}$'");
 
-                            t.HasCheckConstraint("ck_backup_replica_completion", "(\"DeleteCompletionToken\" IS NULL AND \"DeleteCompletionAbsenceVerified\" IS NULL AND \"DeleteCompletionFailureCode\" IS NULL) OR (\"ExecutionLocation\" = 'Agent' AND \"DeleteOperationId\" IS NOT NULL AND \"DeleteCompletionToken\" IS NOT NULL AND \"DeleteCompletionAbsenceVerified\" IS NOT NULL AND ((\"Status\" = 'Deleted' AND \"DeleteCompletionAbsenceVerified\" AND \"DeleteCompletionFailureCode\" IS NULL) OR (\"Status\" = 'DeleteFailed' AND NOT \"DeleteCompletionAbsenceVerified\" AND \"DeleteCompletionFailureCode\" = \"DeleteFailureCode\")))");
+                            t.HasCheckConstraint("ck_backup_replica_completion", "(\"DeleteCompletionToken\" IS NULL AND \"DeleteCompletionAbsenceVerified\" IS NULL AND \"DeleteCompletionFailureCode\" IS NULL) OR ((\"ExecutionLocation\" = 'Agent' OR (\"ExecutionLocation\" = 'Backend' AND \"StorageProvider\" IN ('sftp','google-drive') AND \"DeleteAgentId\" IS NOT NULL)) AND \"DeleteOperationId\" IS NOT NULL AND \"DeleteCompletionToken\" IS NOT NULL AND \"DeleteCompletionAbsenceVerified\" IS NOT NULL AND ((\"Status\" = 'Deleted' AND \"DeleteCompletionAbsenceVerified\" AND \"DeleteCompletionFailureCode\" IS NULL) OR (\"Status\" = 'DeleteFailed' AND NOT \"DeleteCompletionAbsenceVerified\" AND \"DeleteCompletionFailureCode\" = \"DeleteFailureCode\")))");
 
-                            t.HasCheckConstraint("ck_backup_replica_executor", "(\"ExecutionLocation\" = 'Backend' AND \"OwningAgentId\" IS NULL AND \"DeleteOperationId\" IS NULL AND \"DeleteCompletionToken\" IS NULL) OR (\"ExecutionLocation\" = 'Agent' AND \"StorageProvider\" = 'local' AND \"OwningAgentId\" IS NOT NULL AND \"OwningAgentId\" <> '00000000-0000-0000-0000-000000000000'::uuid)");
+                            t.HasCheckConstraint("ck_backup_replica_executor", "(\"DeleteAgentId\" IS NULL OR \"DeleteAgentId\" <> '00000000-0000-0000-0000-000000000000'::uuid) AND ((\"ExecutionLocation\" = 'Backend' AND \"OwningAgentId\" IS NULL AND (\"StorageProvider\" IN ('sftp','google-drive') OR (\"DeleteOperationId\" IS NULL AND \"DeleteCompletionToken\" IS NULL AND \"DeleteAgentId\" IS NULL))) OR (\"ExecutionLocation\" = 'Agent' AND \"StorageProvider\" = 'local' AND \"OwningAgentId\" IS NOT NULL AND \"OwningAgentId\" <> '00000000-0000-0000-0000-000000000000'::uuid))");
 
-                            t.HasCheckConstraint("ck_backup_replica_lifecycle", "(\"DeleteReason\" IS NULL OR \"DeleteReason\" IN ('RetentionExpired','Manual')) AND (\"DeleteRequestedByUserId\" IS NULL OR \"DeleteReason\" = 'Manual') AND ((\"Status\" IN ('Available','Quarantined') AND \"DeleteRequestedAt\" IS NULL AND \"DeleteReason\" IS NULL AND \"DeleteAfter\" IS NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL AND \"DeleteLeaseExpiresAt\" IS NULL AND \"DeleteNextAttemptAt\" IS NULL AND \"DeleteFailureCode\" IS NULL AND \"DeletedAt\" IS NULL AND \"DeleteAttempts\" = 0) OR (\"Status\" = 'DeletePending' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeleteAfter\" IS NOT NULL AND \"DeleteAfter\" >= \"DeleteRequestedAt\" AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL AND \"DeleteLeaseExpiresAt\" IS NULL AND \"DeleteNextAttemptAt\" IS NULL AND \"DeleteFailureCode\" IS NULL AND \"DeletedAt\" IS NULL AND \"DeleteAttempts\" = 0) OR (\"Status\" = 'Deleting' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeleteAfter\" IS NOT NULL AND \"DeletedAt\" IS NULL AND ((\"DeleteLeaseToken\" IS NOT NULL AND \"DeleteLeaseOwner\" IS NOT NULL AND \"DeleteLeaseExpiresAt\" IS NOT NULL AND \"DeleteNextAttemptAt\" IS NULL AND \"DeleteAttempts\" >= 1 AND (\"ExecutionLocation\" = 'Backend' OR (\"DeleteOperationId\" IS NOT NULL AND \"DeleteFailureCode\" IS NULL))) OR (\"ExecutionLocation\" = 'Agent' AND \"DeleteOperationId\" IS NOT NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL AND \"DeleteLeaseExpiresAt\" IS NULL AND \"DeleteNextAttemptAt\" IS NOT NULL AND \"DeleteFailureCode\" = 'agent_unavailable' AND \"DeleteAttempts\" >= 0))) OR (\"Status\" = 'DeleteFailed' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeleteAfter\" IS NOT NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL AND \"DeleteLeaseExpiresAt\" IS NULL AND (\"ExecutionLocation\" = 'Agent' OR \"DeleteNextAttemptAt\" IS NOT NULL) AND \"DeleteFailureCode\" IS NOT NULL AND \"DeletedAt\" IS NULL AND \"DeleteAttempts\" >= 1) OR (\"Status\" = 'Deleted' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeletedAt\" IS NOT NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL AND \"DeleteLeaseExpiresAt\" IS NULL AND \"DeleteNextAttemptAt\" IS NULL AND \"DeleteFailureCode\" IS NULL AND \"DeleteAttempts\" >= 1))");
+                            t.HasCheckConstraint("ck_backup_replica_lifecycle", "(\"DeleteReason\" IS NULL OR \"DeleteReason\" IN ('RetentionExpired','Manual')) AND (\"DeleteRequestedByUserId\" IS NULL OR \"DeleteReason\" = 'Manual') AND ((\"Status\" IN ('Available','Quarantined') AND \"DeleteRequestedAt\" IS NULL AND \"DeleteReason\" IS NULL AND \"DeleteAfter\" IS NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL AND \"DeleteLeaseExpiresAt\" IS NULL AND \"DeleteNextAttemptAt\" IS NULL AND \"DeleteFailureCode\" IS NULL AND \"DeletedAt\" IS NULL AND \"DeleteAttempts\" = 0) OR (\"Status\" = 'DeletePending' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeleteAfter\" IS NOT NULL AND \"DeleteAfter\" >= \"DeleteRequestedAt\" AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL AND \"DeleteLeaseExpiresAt\" IS NULL AND \"DeleteNextAttemptAt\" IS NULL AND \"DeleteFailureCode\" IS NULL AND \"DeletedAt\" IS NULL AND \"DeleteAttempts\" = 0) OR (\"Status\" = 'Deleting' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeleteAfter\" IS NOT NULL AND \"DeletedAt\" IS NULL AND ((\"DeleteLeaseToken\" IS NOT NULL AND \"DeleteLeaseOwner\" IS NOT NULL AND \"DeleteLeaseExpiresAt\" IS NOT NULL AND \"DeleteNextAttemptAt\" IS NULL AND \"DeleteAttempts\" >= 1 AND (\"ExecutionLocation\" = 'Backend' OR (\"DeleteOperationId\" IS NOT NULL AND \"DeleteFailureCode\" IS NULL))) OR ((\"ExecutionLocation\" = 'Agent' OR (\"ExecutionLocation\" = 'Backend' AND \"StorageProvider\" IN ('sftp','google-drive'))) AND \"DeleteOperationId\" IS NOT NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL AND \"DeleteLeaseExpiresAt\" IS NULL AND \"DeleteNextAttemptAt\" IS NOT NULL AND \"DeleteFailureCode\" = 'agent_unavailable' AND \"DeleteAttempts\" >= 0))) OR (\"Status\" = 'DeleteFailed' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeleteAfter\" IS NOT NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL AND \"DeleteLeaseExpiresAt\" IS NULL AND (\"ExecutionLocation\" = 'Agent' OR (\"ExecutionLocation\" = 'Backend' AND \"StorageProvider\" IN ('sftp','google-drive')) OR \"DeleteNextAttemptAt\" IS NOT NULL) AND \"DeleteFailureCode\" IS NOT NULL AND \"DeletedAt\" IS NULL AND \"DeleteAttempts\" >= 1) OR (\"Status\" = 'Deleted' AND \"DeleteRequestedAt\" IS NOT NULL AND \"DeleteReason\" IS NOT NULL AND \"DeletedAt\" IS NOT NULL AND \"DeleteLeaseToken\" IS NULL AND \"DeleteLeaseOwner\" IS NULL AND \"DeleteLeaseExpiresAt\" IS NULL AND \"DeleteNextAttemptAt\" IS NULL AND \"DeleteFailureCode\" IS NULL AND \"DeleteAttempts\" >= 1))");
 
                             t.HasCheckConstraint("ck_backup_replica_size", "\"SizeBytes\" > 0");
 
@@ -1249,7 +1290,7 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TenantId", "JobId")
                         .IsUnique()
-                        .HasFilter("\"OverlapPolicy\" = 'Skip' AND \"Status\" IN (1,2,3,8)");
+                        .HasFilter("\"OverlapPolicy\" = 'Skip' AND \"Status\" IN (1,2,3,8,9)");
 
                     b.HasIndex("TenantId", "JobId", "CreatedAt");
 
@@ -1284,7 +1325,7 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_backup_runs_retry_state", "\"RetryState\" BETWEEN 0 AND 3 AND ((\"Status\" = 8) = (\"RetryState\" = 1))");
 
-                            t.HasCheckConstraint("ck_backup_runs_status", "\"Status\" BETWEEN 1 AND 8");
+                            t.HasCheckConstraint("ck_backup_runs_status", "\"Status\" BETWEEN 1 AND 9");
 
                             t.HasCheckConstraint("ck_backup_runs_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
 
@@ -1324,6 +1365,12 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("Number")
                         .HasColumnType("integer");
+
+                    b.Property<int?>("PauseReason")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("PauseRequested")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Platform")
                         .HasMaxLength(32)
@@ -1406,7 +1453,7 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_backup_run_attempts_id", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
 
-                            t.HasCheckConstraint("ck_backup_run_attempts_status", "\"Status\" BETWEEN 1 AND 7");
+                            t.HasCheckConstraint("ck_backup_run_attempts_status", "(\"Status\" BETWEEN 1 AND 7) OR \"Status\" = 9");
 
                             t.HasCheckConstraint("ck_backup_run_attempts_tenant", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
                         });
@@ -1883,6 +1930,41 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.TransferCheckpoint", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AttemptId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("StorageProvider")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("DestinationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ProviderState")
+                        .HasMaxLength(2097152)
+                        .HasColumnType("character varying(2097152)");
+
+                    b.Property<DateTimeOffset>("RecordedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("VerifiedByteOffset")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("TenantId", "AttemptId", "StorageProvider", "DestinationId");
+
+                    b.HasIndex("AttemptId", "TenantId");
+
+                    b.ToTable("transfer_checkpoints", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_transfer_checkpoint_offset", "\"VerifiedByteOffset\" >= 0");
+                        });
+                });
+
             modelBuilder.Entity("BackupPlatform.Domain.Backups.TransferScheduleWindow", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1910,7 +1992,7 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.ToTable("transfer_schedule_windows", null, t =>
                         {
-                            t.HasCheckConstraint("ck_transfer_schedule_windows_rate", "\"BytesPerSecond\" BETWEEN 16000 AND 100000000000");
+                            t.HasCheckConstraint("ck_transfer_schedule_windows_rate", "\"BytesPerSecond\" = 0 OR \"BytesPerSecond\" BETWEEN 16000 AND 100000000000");
                         });
                 });
 
@@ -2482,6 +2564,9 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("TenantId")
                         .IsConcurrencyToken()
                         .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UnsubscribedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -3237,6 +3322,16 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                             b1.Property<bool>("VerifyChecksum")
                                 .HasColumnType("boolean")
                                 .HasColumnName("OptionVerifyChecksum");
+
+                            b1.ComplexProperty(typeof(Dictionary<string, object>), "Files", "BackupPlatform.Domain.Restores.RestoreOperation.Options#RestoreOptions.Files#FileRestorePolicy", b2 =>
+                                {
+                                    b2.PrimitiveCollection<string[]>("Paths")
+                                        .HasColumnType("text[]");
+
+                                    b2.Property<string>("RelativeDirectory")
+                                        .IsRequired()
+                                        .HasColumnType("text");
+                                });
                         });
 
                     b.ComplexProperty(typeof(Dictionary<string, object>), "Target", "BackupPlatform.Domain.Restores.RestoreOperation.Target#RestoreTarget", b1 =>
@@ -3650,6 +3745,9 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("LeaseToken")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid>("RoundId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("TenantId")
                         .IsConcurrencyToken()
                         .HasColumnType("uuid");
@@ -3668,12 +3766,12 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ConnectionId", "TenantId");
 
-                    b.HasIndex("TenantId", "ConnectionId")
+                    b.HasIndex("TenantId", "AgentId", "CreatedAt");
+
+                    b.HasIndex("TenantId", "ConnectionId", "AgentId")
                         .IsUnique()
                         .HasDatabaseName("ux_storage_capacity_tasks_pending")
                         .HasFilter("\"CompletedAt\" IS NULL");
-
-                    b.HasIndex("TenantId", "AgentId", "CreatedAt");
 
                     b.ToTable("storage_capacity_tasks", null, t =>
                         {
@@ -4008,6 +4106,25 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_users_id_nonempty", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid");
                         });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Identity.LoginThrottleEntry", b =>
+                {
+                    b.Property<string>("Identifier")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("Failures")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("WindowStart")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Identifier");
+
+                    b.HasIndex("WindowStart");
+
+                    b.ToTable("login_throttle_entries", (string)null);
                 });
 
             modelBuilder.Entity("BackupPlatform.Identity.PasswordCredential", b =>
@@ -4769,6 +4886,16 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("BackupPlatform.Domain.Backups.TransferCheckpoint", b =>
+                {
+                    b.HasOne("BackupPlatform.Domain.Backups.BackupRunAttempt", null)
+                        .WithMany()
+                        .HasForeignKey("AttemptId", "TenantId")
+                        .HasPrincipalKey("Id", "TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 

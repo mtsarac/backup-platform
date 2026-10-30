@@ -631,38 +631,6 @@ public sealed class StorageCapacityProbeIntegrationTests(PostgreSqlFixture fixtu
         Assert.Equal(80, AgentWorld.ReadJson(final).GetProperty("freeBytes").GetInt64());
     }
 
-    [Fact]
-    public async Task DowngradeRefusesWarningAndCriticalRows_AndRollsBackSchemaDataAndMigrationHistory()
-    {
-        await using var fixture = new PostgreSqlFixture();
-        await fixture.InitializeAsync();
-        await using var world = await AgentWorld.CreateAsync(fixture);
-        var setup = await world.CreateTenantAsync();
-        var agent = await ReadyAgentAsync(world, setup);
-        var connection = await AddConnectionAsync(world, setup, "local", new() { ["volume"] = "local" });
-        var pending = new StorageCapacityTask(setup.Tenant.Id, connection, agent.AgentId, world.Clock.GetUtcNow());
-        await using (var db = fixture.CreatePlatformContext())
-        {
-            db.StorageCapacityTasks.Add(pending);
-            db.StorageCapacitySnapshots.AddRange(
-                new StorageCapacitySnapshot(Guid.NewGuid(), setup.Tenant.Id, connection, 100, 80, 20, "Warning", world.Clock.GetUtcNow()),
-                new StorageCapacitySnapshot(Guid.NewGuid(), setup.Tenant.Id, connection, 100, 90, 10, "Critical", world.Clock.GetUtcNow()));
-            await db.SaveChangesAsync();
-            var migrator = db.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>();
-            var refused = await Assert.ThrowsAsync<Npgsql.PostgresException>(() => migrator.MigrateAsync("20261021100000_StorageCapacitySnapshots"));
-            Assert.Equal("23514", refused.SqlState);
-        }
-        await using var preserved = fixture.CreatePlatformContext();
-        Assert.Contains("20261021110000_StorageCapacityTaskTransport", await preserved.Database.GetAppliedMigrationsAsync());
-        // The newer migrations were reverted on the way down to the refusing one; bring them back before reading through the current model.
-        await preserved.Database.MigrateAsync();
-        Assert.NotNull(await preserved.StorageCapacityTasks.SingleOrDefaultAsync(t => t.Id == pending.Id));
-        var statuses = await preserved.StorageCapacitySnapshots.Where(s => s.TenantId == setup.Tenant.Id && s.ConnectionId == connection).Select(s => s.Status).ToListAsync();
-        Assert.Equal(2, statuses.Count);
-        Assert.Contains("Warning", statuses);
-        Assert.Contains("Critical", statuses);
-    }
-
     private static async Task AddWriterAsync(AgentWorld world, TenantSetup setup, EnrolledAgent agent, Guid? connectionId)
     {
         var configuration = new BackupPlatform.Domain.Backups.BackupConfiguration("mssql", "db", "sql", null, true, null, true, true, "default", "", true, "Required", "Preferred")

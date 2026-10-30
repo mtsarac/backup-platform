@@ -224,7 +224,7 @@ Frontend tests use two `vmThreads` workers to reuse expensive jsdom environments
 Run `bun run test` from `backup-frontend`, or append a test-file path for an explicit focused selection.
 These startup optimizations do not remove cases or change full-acceptance filters.
 
-Storage connections smoke (real Central backup -> download -> restore, with the connection upgrade applied to the real replica in between):
+Storage connections smoke (real Central backup -> download -> restore,):
 
 ```bash
 scripts/integration/run-storage-connections-smoke.sh

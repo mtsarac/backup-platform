@@ -47,7 +47,7 @@ public sealed class PostgreSqlFixtureIsolationTests
     }
 
     [Fact]
-    public async Task DowngradingAndUpgradingOneCloneCannotPoisonTheNextFixturesSchemaOrRows()
+    public async Task WritingToOneCloneCannotPoisonTheNextFixturesRows()
     {
         var template = PostgreSqlFixture.SharedTemplate;
         var first = new PostgreSqlFixture(template);
@@ -57,18 +57,13 @@ public sealed class PostgreSqlFixtureIsolationTests
             await first.InitializeAsync();
             await using var context = first.CreatePlatformContext();
             var migrations = context.Database.GetMigrations().ToArray();
-            Assert.True(migrations.Length >= 2);
             var tenantId = TenantId.New();
             context.Tenants.Add(new Tenant(tenantId, "Migration clone"));
             await context.SaveChangesAsync();
-            await context.GetService<IMigrator>().MigrateAsync(migrations[^2]);
-            Assert.Equal(migrations[..^1], (await context.Database.GetAppliedMigrationsAsync()).ToArray());
             await second.InitializeAsync();
             await using var untouched = second.CreatePlatformContext();
             Assert.Equal(migrations, (await untouched.Database.GetAppliedMigrationsAsync()).ToArray());
             Assert.Empty(await untouched.Tenants.ToListAsync());
-            await context.Database.MigrateAsync();
-            Assert.Equal(migrations, (await context.Database.GetAppliedMigrationsAsync()).ToArray());
             Assert.Equal(tenantId, Assert.Single(await context.Tenants.AsNoTracking().ToListAsync()).Id);
         }
         finally

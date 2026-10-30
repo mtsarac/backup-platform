@@ -96,13 +96,6 @@ notification condition/event, and outbox delivery commit atomically.
 Snapshots older than 90 days are pruned in the same transaction as each new snapshot; a
 connection's newest snapshot and its newest measured snapshot are always kept.
 
-Downgrading `StorageCapacityTaskTransport` requires snapshot rows to be
-representable by the old schema: only Available or CapacityUnavailable. If any
-Warning or Critical row exists, the downgrade refuses the narrower constraint
-and PostgreSQL rolls the entire migration back, preserving all rows, the task
-table, and migration history. It never rewrites measurements or deletes rows to
-make a downgrade pass.
-
 
 ### Scheduled upload bandwidth
 
