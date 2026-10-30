@@ -252,7 +252,24 @@ public sealed class PostgreSqlProviderIntegrationTests(PostgreSqlProviderFixture
     public async Task RealOlderClientsRefuseNewerServerAndArchiveWithoutMutatingExistingData()
     {
         var directory = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_POSTGRES_OLD_TOOLS_DIRECTORY");
+        if (string.IsNullOrWhiteSpace(directory))
+        {
+            var candidate = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "pg16", "bin");
+            if (Directory.Exists(candidate) && File.Exists(Path.Combine(candidate, "pg_dump")))
+            {
+                directory = candidate;
+            }
+        }
         Assert.False(string.IsNullOrWhiteSpace(directory), "Set BACKUP_PLATFORM_TEST_POSTGRES_OLD_TOOLS_DIRECTORY to actual PostgreSQL 16 clients for the PostgreSQL 18 test server.");
+        var companionLib = Path.GetFullPath(Path.Combine(directory, "..", "lib"));
+        if (Directory.Exists(companionLib))
+        {
+            var currentLd = Environment.GetEnvironmentVariable("LD_LIBRARY_PATH");
+            if (string.IsNullOrEmpty(currentLd) || !currentLd.Split(':').Contains(companionLib))
+            {
+                Environment.SetEnvironmentVariable("LD_LIBRARY_PATH", string.IsNullOrEmpty(currentLd) ? companionLib : $"{companionLib}:{currentLd}");
+            }
+        }
         var olderOptions = new PostgreSqlProviderOptions(directory);
         var olderBackup = new PostgreSqlBackupProvider(NullLogger<PostgreSqlBackupProvider>.Instance, olderOptions);
         var source = await fixture.DatabaseAsync(populated: true);

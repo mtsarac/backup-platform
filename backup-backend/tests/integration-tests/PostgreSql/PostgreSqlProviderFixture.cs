@@ -28,7 +28,28 @@ public sealed class PostgreSqlProviderFixture : IAsyncLifetime
         _admin = builder.ConnectionString;
         Settings = new DatabaseConnectionSettings(new DatabaseEndpoint(builder.Host!, builder.Port), new DatabaseConnectionOptions(requireEncryption: false));
         Credential = new PasswordDatabaseCredential(builder.Username!, new DatabaseSecret(builder.Password));
-        Options = new PostgreSqlProviderOptions(Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_POSTGRES_TOOLS_DIRECTORY"));
+        var toolsDir = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_POSTGRES_TOOLS_DIRECTORY");
+        if (string.IsNullOrWhiteSpace(toolsDir))
+        {
+            var candidate = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "pg18", "bin");
+            if (Directory.Exists(candidate) && File.Exists(Path.Combine(candidate, "pg_dump")))
+            {
+                toolsDir = candidate;
+            }
+        }
+        if (!string.IsNullOrWhiteSpace(toolsDir))
+        {
+            var companionLib = Path.GetFullPath(Path.Combine(toolsDir, "..", "lib"));
+            if (Directory.Exists(companionLib))
+            {
+                var currentLd = Environment.GetEnvironmentVariable("LD_LIBRARY_PATH");
+                if (string.IsNullOrEmpty(currentLd) || !currentLd.Split(':').Contains(companionLib))
+                {
+                    Environment.SetEnvironmentVariable("LD_LIBRARY_PATH", string.IsNullOrEmpty(currentLd) ? companionLib : $"{companionLib}:{currentLd}");
+                }
+            }
+        }
+        Options = new PostgreSqlProviderOptions(toolsDir);
         Backup = new PostgreSqlBackupProvider(NullLogger<PostgreSqlBackupProvider>.Instance, Options);
         Restore = new PostgreSqlRestoreProvider(NullLogger<PostgreSqlRestoreProvider>.Instance, Options);
         Directory.CreateDirectory(DirectoryPath);

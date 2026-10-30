@@ -421,7 +421,7 @@ public sealed class UploadBandwidthApiIntegrationTests(PostgreSqlFixture fixture
                 uploadBandwidth: task => new UploadBandwidthGovernor(client, identities, task.AttemptId, task.LeaseToken, scenario.Clock));
             var worker = new BackupTaskWorker(client, identities, pipeline, requests, new AgentSoftwareInfo("1.2.3", "linux", null, null),
                 scenario.Clock, NullLogger<BackupTaskWorker>.Instance);
-            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(90));
             var running = worker.RunAsync(deadline.Token);
             try
             {

@@ -135,4 +135,18 @@ public sealed class PostgreSqlFixtureIsolationTests
         command.Parameters.AddWithValue("second", secondName!);
         Assert.Equal(0L, await command.ExecuteScalarAsync());
     }
+
+    [Fact]
+    public async Task PostgreSqlContainerDisablesSslAndTunesMaxConnections()
+    {
+        var cs = PostgreSqlFixture.GetAdministrativeConnectionString();
+        var builder = new NpgsqlConnectionStringBuilder(cs);
+        Assert.Equal(SslMode.Disable, builder.SslMode);
+
+        await using var conn = new NpgsqlConnection(cs);
+        await conn.OpenAsync();
+        await using var cmd = new NpgsqlCommand("SHOW max_connections", conn);
+        var maxConnections = int.Parse((string)(await cmd.ExecuteScalarAsync())!, System.Globalization.CultureInfo.InvariantCulture);
+        Assert.True(maxConnections >= 300, $"Expected max_connections >= 300, got {maxConnections}");
+    }
 }

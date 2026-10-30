@@ -1,3 +1,4 @@
+using Npgsql;
 using Testcontainers.MsSql;
 using Testcontainers.PostgreSql;
 
@@ -14,15 +15,12 @@ internal static class TestContainers
     private const string PostgresImage = "postgres:18-alpine";
     private const string MsSqlImage = "mcr.microsoft.com/mssql/server:2025-latest";
 
-    private static readonly Lazy<PostgreSqlContainer> Postgres = new(() => Start(new PostgreSqlBuilder(PostgresImage)
-        // Docker's bridge is not container localhost; physical replication needs its own HBA rule.
-        .WithResourceMapping(System.Text.Encoding.UTF8.GetBytes("#!/bin/sh\nprintf '\\nhost replication all samenet scram-sha-256\\n' >> \"$PGDATA/pg_hba.conf\"\n"),
-            DotNet.Testcontainers.Builders.FilePath.Of("/docker-entrypoint-initdb.d/replication.sh"))
-        .Build()));
+    private static readonly Lazy<PostgreSqlContainer> Postgres = new(StartPostgres);
     private static readonly Lazy<MsSqlServer> MsSql = new(StartMsSql);
 
     /// <summary>A superuser connection (database <c>postgres</c>) to the shared PostgreSQL container; tests create their own databases on it.</summary>
-    public static string PostgresAdministrativeConnectionString => Postgres.Value.GetConnectionString();
+    public static string PostgresAdministrativeConnectionString =>
+        new NpgsqlConnectionStringBuilder(Postgres.Value.GetConnectionString()) { SslMode = SslMode.Disable }.ConnectionString;
 
     public static MsSqlServer MsSqlServer => MsSql.Value;
 
@@ -31,6 +29,34 @@ internal static class TestContainers
     {
         container.StartAsync().GetAwaiter().GetResult();
         return container;
+    }
+
+    private static PostgreSqlContainer StartPostgres()
+    {
+        const int maxAttempts = 5;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            var container = new PostgreSqlBuilder(PostgresImage)
+                // Docker's bridge is not container localhost; physical replication needs its own HBA rule.
+                // Tune connections and disable synchronous fsync for parallel test performance.
+                .WithResourceMapping(System.Text.Encoding.UTF8.GetBytes(
+                    "#!/bin/sh\n" +
+                    "printf '\\nhost replication all samenet scram-sha-256\\n' >> \"$PGDATA/pg_hba.conf\"\n" +
+                    "printf '\\nmax_connections = 500\\nfsync = off\\nsynchronous_commit = off\\nfull_page_writes = off\\n' >> \"$PGDATA/postgresql.conf\"\n"),
+                    DotNet.Testcontainers.Builders.FilePath.Of("/docker-entrypoint-initdb.d/init-config.sh"))
+                .Build();
+
+            try
+            {
+                return Start(container);
+            }
+            catch (Exception) when (attempt < maxAttempts)
+            {
+                try { container.DisposeAsync().AsTask().GetAwaiter().GetResult(); } catch { }
+                Thread.Sleep(500);
+            }
+        }
+        throw new InvalidOperationException("Failed to start PostgreSQL testcontainer after retries.");
     }
 
     [System.Runtime.InteropServices.DllImport("libc")]
@@ -53,9 +79,22 @@ internal static class TestContainers
             builder = builder.WithCreateParameterModifier(parameters => (parameters.HostConfig ??= new()).GroupAdd = [getgid().ToString(System.Globalization.CultureInfo.InvariantCulture)]);
         }
 
-        var container = builder.Build();
-        Start(container);
-        return new MsSqlServer(container.Hostname, container.GetMappedPublicPort(1433), MsSqlBuilder.DefaultUsername, MsSqlBuilder.DefaultPassword, serverStaging, staging.FullName);
+        const int maxAttempts = 5;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            var container = builder.Build();
+            try
+            {
+                Start(container);
+                return new MsSqlServer(container.Hostname, container.GetMappedPublicPort(1433), MsSqlBuilder.DefaultUsername, MsSqlBuilder.DefaultPassword, serverStaging, staging.FullName);
+            }
+            catch (Exception) when (attempt < maxAttempts)
+            {
+                try { container.DisposeAsync().AsTask().GetAwaiter().GetResult(); } catch { }
+                Thread.Sleep(500);
+            }
+        }
+        throw new InvalidOperationException("Failed to start MSSQL testcontainer after retries.");
     }
 }
 

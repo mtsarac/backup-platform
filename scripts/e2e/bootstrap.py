@@ -2,6 +2,7 @@
 import api, json, secrets, pathlib, sys
 STATE = api.ROOT / "docs/test-environment/state.json"
 st = json.loads(STATE.read_text()) if STATE.exists() else {}
+if hasattr(api, "wait_ready"): api.wait_ready()
 s = api.login()
 def ok(r):
     if not r.ok: sys.exit(f"{r.request.method} {r.url} -> {r.status_code} {r.text[:300]}")
