@@ -13,6 +13,10 @@ internal sealed class AgentHttpClient(HttpClient http, AgentBackendEndpoint endp
     public Task<AgentBackendResult<T>> SendAsync<T>(AgentLocalIdentity identity, HttpMethod method, string path, HttpContent? content, CancellationToken cancellationToken)
         where T : class => SendCoreAsync(identity, method, path, content, ReadSuccessAsync<T>, cancellationToken);
 
+    internal Task<AgentBackendResult<T>> SendWithReaderAsync<T>(AgentLocalIdentity identity, HttpMethod method, string path, HttpContent? content,
+        Func<HttpResponseMessage, CancellationToken, Task<AgentBackendResult<T>>> readSuccess, CancellationToken cancellationToken) =>
+        SendCoreAsync(identity, method, path, content, readSuccess, cancellationToken);
+
     /// <summary>Like <see cref="SendAsync{T}"/>, but a 204 answer is a success without a value (the claim route had nothing to hand out).</summary>
     public Task<AgentBackendResult<T?>> SendOptionalAsync<T>(AgentLocalIdentity identity, HttpMethod method, string path, HttpContent? content, CancellationToken cancellationToken)
         where T : class => SendCoreAsync<T?>(identity, method, path, content, ReadOptionalSuccessAsync<T>, cancellationToken);

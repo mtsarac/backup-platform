@@ -12,6 +12,7 @@ using BackupPlatform.Infrastructure.Notifications;
 using BackupPlatform.Notifications;
 using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.Infrastructure.Storage;
+using BackupPlatform.ManagedService.Quota;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -368,6 +369,61 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
             MaxArtifactBytes = await TenantUsageEngine.ReadRunMaxArtifactBytesAsync(context, run, run.CurrentAttempt.LeasedAt ?? run.CreatedAt, cancellationToken)
         };
     }
+    public async Task<BackupQuotaReservationResult> AdjustQuotaReservationAsync(BackupLeaseCommand command, long sizeBytes, CancellationToken cancellationToken)
+    {
+        var elapsed = System.Diagnostics.Stopwatch.StartNew();
+        var conflict = new BackupQuotaReservationResult(BackupMutationResult.Conflict, false);
+        if (sizeBytes < 0) return conflict;
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        if (!await LockAgentAsync(context, command.TenantId, command.AgentId, cancellationToken))
+            return new(BackupMutationResult.NotFound, false);
+        var run = await Runs(context).SingleOrDefaultAsync(run => run.TenantId == command.TenantId && run.AgentId == command.AgentId &&
+            run.Attempts.Any(attempt => attempt.Id == command.AttemptId && attempt.TenantId == command.TenantId && attempt.AgentId == command.AgentId), cancellationToken);
+        if (run is null) return new(BackupMutationResult.NotFound, false);
+        if (run.CurrentAttempt.Id != command.AttemptId) return conflict;
+        if (!await TenantUsageEngine.LockTenantAsync(context, command.TenantId, cancellationToken)) return conflict;
+        if (!run.CurrentAttempt.HasLease(command.LeaseToken, command.Now + elapsed.Elapsed)) return conflict;
+
+        var policy = await TenantUsageEngine.ResolvePolicyAsync(context, command.TenantId, cancellationToken);
+        var entitlement = await PostgreSqlTenantEntitlementReader.ResolveAsync(context, command.TenantId, command.Now, cancellationToken);
+        if (policy.EnforcementMode != QuotaEnforcementMode.BlockNewBackups || entitlement.StorageLimit is not { IsUnlimited: false })
+            return new(BackupMutationResult.Accepted, true);
+        var copies = await TenantUsageEngine.CountCopiesAsync(context, command.TenantId, run.Configuration, policy, command.Now, cancellationToken);
+        if (copies == 0) return new(BackupMutationResult.Accepted, true);
+        if (copies is null) return new(BackupMutationResult.Accepted, false);
+        var reservation = await context.QuotaReservations.AsNoTracking().SingleOrDefaultAsync(row =>
+            row.TenantId == command.TenantId && row.RunId == run.Id && row.ReleasedAt == null, cancellationToken);
+        if (reservation is null || sizeBytes > long.MaxValue / copies.Value) return new(BackupMutationResult.Accepted, false);
+        var prior = await TenantUsageEngine.ComputeUsedAsync(context, command.TenantId, policy, cancellationToken, run.Id, command.AttemptId);
+        var size = sizeBytes * copies.Value;
+        if (prior > long.MaxValue - size) return new(BackupMutationResult.Accepted, false);
+        // Partial destination bytes may not yet be recorded, so a repeated adjustment must not release the existing hold.
+        var desired = Math.Max(reservation.Bytes, prior + size);
+        var consumed = await TenantUsageEngine.ComputeUsedAsync(context, command.TenantId, policy, cancellationToken, run.Id);
+        var ownRemaining = Math.Max(0, reservation.Bytes - consumed);
+        var desiredRemaining = Math.Max(0, desired - consumed);
+        var (usage, _) = await TenantUsageEngine.EnsureCurrentAsync(context, command.TenantId, policy, command.Now, cancellationToken);
+        var otherReserved = usage.ReservedBytes == long.MaxValue
+            ? await TenantUsageEngine.ComputeReservedAsync(context, command.TenantId, cancellationToken, run.Id)
+            : Math.Max(0, usage.ReservedBytes - ownRemaining);
+        var limit = entitlement.StorageLimit.Value.Bytes!.Value;
+        if (usage.UsedBytes > limit || otherReserved > limit - usage.UsedBytes ||
+            desiredRemaining > limit - usage.UsedBytes - otherReserved)
+            return new(BackupMutationResult.Accepted, false);
+        if (reservation.Bytes != desired)
+        {
+            await context.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE quota_reservations SET "Bytes" = {desired}
+                WHERE "TenantId" = {command.TenantId.Value} AND "RunId" = {run.Id} AND "ReleasedAt" IS NULL
+                """, cancellationToken);
+            await TenantUsageEngine.RefreshReservedAsync(context, command.TenantId, cancellationToken);
+        }
+        if (!run.CurrentAttempt.HasLease(command.LeaseToken, command.Now + elapsed.Elapsed)) return conflict;
+        await transaction.CommitAsync(cancellationToken);
+        return new(BackupMutationResult.Accepted, true);
+    }
+
     public Task<BackupMutationResult> StartAttemptAsync(BackupLeaseCommand command, CancellationToken cancellationToken) =>
         MutateAsync(command, run => run.Start(command.LeaseToken, command.Now, command.SoftwareVersion!, command.ProtocolVersion!, command.Platform!), cancellationToken);
     public Task<BackupMutationResult> ReportProgressAsync(BackupLeaseCommand command, BackupProgress progress, CancellationToken cancellationToken) =>

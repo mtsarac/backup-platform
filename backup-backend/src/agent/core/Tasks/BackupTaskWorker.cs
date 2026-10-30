@@ -201,6 +201,13 @@ public sealed partial class BackupTaskWorker : IAgentTaskSink
             {
                 AttemptId = task.AttemptId, ResumeTransfer = task.ResumeTransfer, Checkpoints = task.Checkpoints, PauseToken = pauseToken,
                 TimeRulePauseToken = timeRulePauseToken, ShutdownToken = shutdownToken,
+                AdjustQuotaReservationAsync = async (size, token) =>
+                {
+                    var response = await BackupTaskLease.CallAsync(_identities, null, identity => _client.AdjustQuotaReservationAsync(identity, task.AttemptId,
+                        new BackupQuotaReservationRequest { LeaseToken = task.LeaseToken, SizeBytes = size }, token), token).ConfigureAwait(false);
+                    if (!response.IsSuccess || response.Value is null) throw new IOException("The hard-quota reservation could not be adjusted.");
+                    return response.Value.Allowed;
+                },
                 RecordCheckpointAsync = async (checkpoint, _) =>
                 {
                     var response = await BackupTaskLease.CallAsync(_identities, null, identity => _client.ReportProgressAsync(identity, task.AttemptId,

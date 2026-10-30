@@ -33,24 +33,50 @@ public sealed class MultiDestinationPipelineTests : IDisposable
     }
 
     [Theory]
-    [InlineData(-1, DatabaseBackupStatus.Failed)]
-    [InlineData(0, DatabaseBackupStatus.Succeeded)]
-    public async Task Hard_quota_cap_is_checked_before_any_destination_is_written(int offset, DatabaseBackupStatus expected)
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Hard_quota_adjustment_precedes_every_destination_and_can_allow_growth(bool allowed)
     {
         var stores = new[] { NewStorage(), NewStorage() };
-        var result = await _h.RunAsync(Request([Destination("central", stores[0], true), Destination("sftp", stores[1])],
-            maxBytes: PipelineHarness.BackupBytes.LongLength + offset));
-        Assert.Equal(expected, result.Status);
-        if (expected == DatabaseBackupStatus.Failed)
+        var calls = 0;
+        var request = Request([Destination("local", stores[0], true), Destination("sftp", stores[1])],
+            maxBytes: PipelineHarness.BackupBytes.LongLength - 1) with
+        {
+            AdjustQuotaReservationAsync = (size, _) =>
+            {
+                calls++;
+                Assert.Equal(PipelineHarness.BackupBytes.LongLength, size);
+                Assert.All(stores, store => Assert.Empty(store.Objects));
+                return Task.FromResult(allowed);
+            }
+        };
+        var result = await _h.RunAsync(request);
+        Assert.Equal(1, calls);
+        Assert.Equal(allowed ? DatabaseBackupStatus.Succeeded : DatabaseBackupStatus.Failed, result.Status);
+        if (!allowed)
         {
             Assert.Equal(BackupPipelineReasons.QuotaExceeded, result.Failure!.ReasonCode);
             Assert.All(stores, store => Assert.Empty(store.Objects));
         }
-        else
-        {
-            Assert.All(stores, store => Assert.Equal(PipelineHarness.BackupBytes, Assert.Single(store.Objects).Value));
-        }
+        else Assert.All(stores, store => Assert.Equal(PipelineHarness.BackupBytes, Assert.Single(store.Objects).Value));
         Assert.Empty(_h.StagedFiles);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Missing_or_failed_quota_adjustment_never_writes_a_destination(bool missing)
+    {
+        var stores = new[] { NewStorage(), NewStorage() };
+        var request = Request([Destination("local", stores[0], true), Destination("central", stores[1])],
+            maxBytes: PipelineHarness.BackupBytes.LongLength) with
+        {
+            AdjustQuotaReservationAsync = missing ? null : (_, _) => throw new IOException("backend unavailable")
+        };
+        var result = await _h.RunAsync(request);
+        Assert.Equal(DatabaseBackupStatus.Failed, result.Status);
+        Assert.NotEqual(BackupPipelineReasons.QuotaExceeded, result.Failure!.ReasonCode);
+        Assert.All(stores, store => Assert.Empty(store.Objects));
     }
 
     [Fact]
@@ -64,9 +90,17 @@ public sealed class MultiDestinationPipelineTests : IDisposable
             token.ThrowIfCancellationRequested();
             throw new InvalidOperationException("The pause signal must cancel the open transfer.");
         };
-        var request = Request([Destination("central", stores[0], true), Destination("sftp", stores[1])], required: 2) with
+        var adjustments = 0;
+        var request = Request([Destination("central", stores[0], true), Destination("sftp", stores[1])], required: 2,
+            maxBytes: PipelineHarness.BackupBytes.LongLength) with
         {
-            AttemptId = Guid.NewGuid(), PauseToken = pause.Token, RecordCheckpointAsync = (_, _) => Task.CompletedTask
+            AttemptId = Guid.NewGuid(), PauseToken = pause.Token, RecordCheckpointAsync = (_, _) => Task.CompletedTask,
+            AdjustQuotaReservationAsync = (size, _) =>
+            {
+                Assert.Equal(PipelineHarness.BackupBytes.LongLength, size);
+                adjustments++;
+                return Task.FromResult(true);
+            }
         };
 
         var paused = await _h.RunAsync(request);
@@ -80,9 +114,38 @@ public sealed class MultiDestinationPipelineTests : IDisposable
         var resumed = await _h.RunAsync(request with { ResumeTransfer = true, PauseToken = default });
 
         Assert.Equal(DatabaseBackupStatus.Succeeded, resumed.Status);
+        Assert.Equal(2, adjustments);
         Assert.All(resumed.Destinations, destination => Assert.Equal(BackupDestinationState.Verified, destination.State));
         Assert.Equal(2, resumed.Destinations.Count);
         Assert.All(stores, store => Assert.Equal(PipelineHarness.BackupBytes, Assert.Single(store.Objects).Value));
+    }
+
+    [Fact]
+    public async Task Resume_denied_a_new_reservation_does_not_write_remaining_destinations()
+    {
+        using var pause = new CancellationTokenSource();
+        var stores = new[] { NewStorage(), NewStorage() };
+        stores[1].OnPut = (_, _, _, token) =>
+        {
+            pause.Cancel();
+            token.ThrowIfCancellationRequested();
+            throw new InvalidOperationException();
+        };
+        var adjustments = 0;
+        var request = Request([Destination("local", stores[0], true), Destination("central", stores[1])], required: 2,
+            maxBytes: PipelineHarness.BackupBytes.LongLength) with
+        {
+            AttemptId = Guid.NewGuid(), PauseToken = pause.Token, RecordCheckpointAsync = (_, _) => Task.CompletedTask,
+            AdjustQuotaReservationAsync = (_, _) => Task.FromResult(++adjustments == 1)
+        };
+        Assert.Equal(DatabaseBackupStatus.Paused, (await _h.RunAsync(request)).Status);
+        stores[1].OnPut = null;
+        var resumed = await _h.RunAsync(request with { ResumeTransfer = true, PauseToken = default });
+        Assert.Equal(DatabaseBackupStatus.Failed, resumed.Status);
+        Assert.Equal(BackupPipelineReasons.QuotaExceeded, resumed.Failure!.ReasonCode);
+        Assert.Equal(2, adjustments);
+        Assert.Single(stores[0].Objects);
+        Assert.Empty(stores[1].Objects);
     }
 
     [Fact]

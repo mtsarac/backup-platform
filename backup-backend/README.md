@@ -192,6 +192,12 @@ Policy failure keeps every successfully verified copy available and accounted
 for while reporting the run failed. Agents must advertise `backup.three-two-one`
 and the relevant `storage.s3`/`storage.smb` capabilities.
 
+For hard storage limits, admission reserves an estimate from the previous artifact.
+After staging and hashing, the agent requests an atomic adjustment for the actual
+artifact and its counted destinations before writing to any destination. If the
+remaining capacity is insufficient, the run fails without writing a destination;
+concurrent runs cannot reserve the same capacity.
+
 S3 configuration requires an HTTPS `endpoint` (origin only), `bucket`, and
 signing `region`. Secrets are `accessKey`, `secretKey`, and optional
 `sessionToken`. Transfers go directly from the agent to the S3-compatible
