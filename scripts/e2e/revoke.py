@@ -21,15 +21,15 @@ def revoke(t):
             time.sleep(3)
         assert ag and ag["connectivity"] == "online", f"second agent never came online: {ag and ag['connectivity']} {out}"
         r = t.raw("POST", f"/agents/{ag['agentId']}/revoke", {}); assert r.status_code in (200, 204), (r.status_code, r.text[:200])
-        time.sleep(100)
+        # "connectivity" is liveness (last seen < 120 s), so it stays online for up to the timeout by design; the cut-off is: status/operationalStatus Revoked at once and no later sign of life.
+        time.sleep(15)  # lets an in-flight heartbeat settle
+        frozen = revoked_view(t)["revoke-e2e"]
+        assert frozen["status"] == "Revoked" and frozen["operationalStatus"] == "Revoked", (frozen["status"], frozen["operationalStatus"])
+        time.sleep(75)  # more than two heartbeat intervals
+        _, log = lib.fedora("sudo journalctl -u bp-agent2 --no-pager --since '-90 sec' -o cat | grep -v '^ *at ' | tail -8 | cut -c1-220")
         after = revoked_view(t)["revoke-e2e"]
-        _, log = lib.fedora("sudo journalctl -u bp-agent2 --no-pager --since '-100 sec' -o cat | grep -v '^ *at ' | tail -8 | cut -c1-220")
-        assert after["status"] == "Revoked" and after["connectivity"] != "online", (after["status"], after["connectivity"], after.get("lastHeartbeatAt"), log)
-        # a revoked agent must not be able to get work or heartbeat again
-        time.sleep(40)
-        again = revoked_view(t)["revoke-e2e"]
-        assert again["connectivity"] != "online", "revoked agent came back online"
-        return {"status": after["status"], "connectivity": again["connectivity"]}
+        assert after["status"] == "Revoked" and after["lastSeenAt"] == frozen["lastSeenAt"], (after["status"], frozen["lastSeenAt"], after["lastSeenAt"], log)
+        return {"status": after["status"], "operationalStatus": after["operationalStatus"], "lastSeenAt": after["lastSeenAt"]}
     finally:
         lib.fedora("sudo systemctl stop bp-agent2; sudo rm -rf /var/lib/backup-agent/agent2")
 

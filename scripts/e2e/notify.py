@@ -155,11 +155,12 @@ def failing_run_notification():
     for k in ("mail", "hook"):  # earlier scenarios leave same-named channels behind; names are unique per tenant
         if k in S: t.raw("DELETE", f"/notifications/channels/{S.pop(k)}")
     # channel creation already queues the confirmation mail (no extra test request: the tenant allows only 20 tests/confirmations per hour)
+    seen = len(mails(MAIL))  # earlier scenarios already mailed this address: only a mail newer than these is the new confirmation
     c = t.call("POST", "/notifications/channels", {"kind": "email", "name": f"e2e-mail {RUN}", "target": MAIL}); S["mail"] = c["id"]
     ghost = f"e2e-notify-ghost-{RUN}@e2e.test"
     g = t.call("POST", "/notifications/channels", {"kind": "email", "name": f"e2e-ghost {RUN}", "target": ghost}); S["ghost"] = g["id"]
     h = t.call("POST", "/notifications/channels", {"kind": "webhook", "name": f"e2e-hook-denied {RUN}", "target": "https://10.10.20.1/e2e-hook"}); S["hook"] = h["id"]
-    ms = wait_mail(MAIL, 1, timeout=90); confirm = link(ms[-1], "confirm")
+    ms = wait_mail(MAIL, seen + 1, timeout=90); confirm = link(ms[seen], "confirm")
     check(requests.post(f"{BASE}/api/notifications/recipient/confirm", data={"token": token_of(confirm)}, verify=False).status_code == 200, "confirm failed")
     check(chan(t, S["mail"])["recipientVerified"], "channel not verified")
     cfg = copy.deepcopy(F["cfg"]); cfg["database"] = "e2e_missing_db"
