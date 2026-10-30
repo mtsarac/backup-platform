@@ -299,6 +299,7 @@ public sealed class PostgreSqlBackupRetentionStore(DbContextOptions<PlatformDbCo
                     (query.AgentId == null || run.AgentId == new AgentId(query.AgentId.Value)))));
         if (query.From is { } from) artifacts = artifacts.Where(artifact => artifact.CreatedAt >= from.ToUniversalTime());
         if (query.To is { } to) artifacts = artifacts.Where(artifact => artifact.CreatedAt <= to.ToUniversalTime());
+        if (query.EncryptedOnly) artifacts = artifacts.Where(artifact => artifact.Format == BackupArtifact.BpeFormat);
         artifacts = FilterState(artifacts, query.State);
         var totalCount = await artifacts.LongCountAsync(cancellationToken);
         var offset = (long)(query.Page - 1) * query.PageSize;

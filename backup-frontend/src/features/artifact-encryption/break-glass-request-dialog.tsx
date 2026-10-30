@@ -1,18 +1,15 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
+import { useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Field } from '@/components/ui/field'
 import { ErrorNotice } from '@/components/ui/notice'
 import { platformPaths } from '@/features/platform/paths'
 import { FormDialog } from '@/components/ui/form-dialog'
 import { TextInput, TextArea } from '@/components/ui/text-input'
 import { TenantPicker } from '@/features/platform/tenant-picker'
-import { BackupPicker } from '@/features/artifacts/backup-picker'
-import { removeSupportData, useSupportSession, useSupportSessions } from '@/features/platform/support/hooks'
-import { supportAccess } from '@/features/platform/support/presentation'
-import { useSupportCountdown } from '@/features/platform/support/use-support-countdown'
-import { useCreateBreakGlass } from './hooks'
+import { backupOption } from '@/features/artifacts/backup-option'
+import { SearchablePicker } from '@/components/ui/searchable-picker'
+import { useBreakGlassArtifacts, useCreateBreakGlass } from './hooks'
 import { QueryState } from '@/components/data/query-state'
 import { errorMessage } from '@/lib/api/failure-messages'
 
@@ -52,7 +49,7 @@ export function BreakGlassRequestDialog({ initialTenantId = '', initialArtifactI
     <fieldset disabled={create.isPending} className="space-y-4">
       <TenantPicker value={tenantId} onChange={id => { setTenantId(id); setArtifactId('') }} />
       {errors.tenantId && <p role="alert" className="text-sm text-error">{errors.tenantId}</p>}
-      {tenantId && <EmergencyBackupPicker key={tenantId} tenantId={tenantId} value={artifactId} onChange={setArtifactId} />}
+      {tenantId && <EncryptedBackupPicker key={tenantId} tenantId={tenantId} value={artifactId} onChange={setArtifactId} />}
       {errors.artifactId && <p role="alert" className="text-sm text-error">{errors.artifactId}</p>}
       <Field label={tx("Gerekçe")} hint={tx("Zorunludur; en fazla 500 karakter. Tenant sahipleri bu gerekçeyi görür.")} error={errors.reason}>
         {control => <TextArea {...control}  rows={3} maxLength={500} value={reason} onChange={event => setReason(event.target.value)} />}
@@ -65,23 +62,14 @@ export function BreakGlassRequestDialog({ initialTenantId = '', initialArtifactI
   </FormDialog>
 }
 
-/** Platform authority alone cannot read customer metadata; use an already-authorized support session. */
-function EmergencyBackupPicker({ tenantId, value, onChange }: { tenantId: string; value: string; onChange: (id: string) => void }) {
-  const client = useQueryClient()
-  const sessions = useSupportSessions({ tenantId, status: 'Active', mine: true, page: 1, pageSize: 100 })
-  const found = sessions.data?.items.find(session => session.tenantId === tenantId && supportAccess(session).view && Date.parse(session.expiresAt) > Date.parse(session.serverNow))
-  const detail = useSupportSession(found?.id ?? '')
-  const session = detail.data ?? found
-  const countdown = useSupportCountdown(session?.expiresAt ?? '', session?.serverNow ?? '', detail.dataUpdatedAt || sessions.dataUpdatedAt)
-  const enabled = Boolean(!sessions.error && !detail.error && session && session.tenantId === tenantId && supportAccess(session).view && countdown.seconds > 0)
-  useEffect(() => {
-    if (session && !enabled) removeSupportData(client, session.id)
-  }, [client, enabled, session])
+/** The tenant's encrypted backups, from the break-glass endpoint itself: dual control and audit are its gate, not a support session. */
+function EncryptedBackupPicker({ tenantId, value, onChange }: { tenantId: string; value: string; onChange: (id: string) => void }) {
+  const list = useBreakGlassArtifacts(tenantId)
+  const options = (list.data?.items ?? []).map(backupOption)
   return <div className="space-y-2">
-    <BackupPicker tenantId={tenantId} value={value} onChange={onChange} supportScope={{ tenantId, sessionId: session?.id ?? '', enabled }} />
-    {(sessions.error || detail.error) && <QueryState forbiddenMessage={errorMessage} isPending={false} error={sessions.error ?? detail.error} />}
-    {!sessions.isPending && !enabled && <p className="text-sm text-text-muted">{tx("Yedek dosyalarını adla seçmek için bu müşteri üzerinde yedek bilgilerini görüntüleme izinli bir destek oturumu açın.")}{' '}
-      <Link className="text-primary underline" to={`${platformPaths.supportSessions}?tenantId=${encodeURIComponent(tenantId)}`}>{tx("Destek erişimi")}</Link>
-    </p>}
+    <SearchablePicker label={tx("Yedek dosyası")} placeholder={tx("Yedek dosyası seçin")} options={options} value={value} onChange={onChange}
+      selectedLabel={value && list.data && !options.some(option => option.value === value) ? tx("Seçili yedek dosyası") : undefined} disabled={list.isPending || Boolean(list.error)} />
+    {list.error && <QueryState forbiddenMessage={errorMessage} isPending={false} error={list.error} />}
+    {list.data && options.length === 0 && <p className="text-sm text-text-muted">{tx("Bu müşterinin şifreli yedek dosyası yok.")}</p>}
   </div>
 }

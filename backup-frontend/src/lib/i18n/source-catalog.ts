@@ -3237,7 +3237,7 @@ export const sourceCatalog: Record<string, { tr: string; en: string }> = {
   "{0} · {1}": {"tr":"{0} · {1}","en":"{0} · {1}"},
   "Yedek dosyası seçin": {"tr":"Yedek dosyası seçin","en":"Select a backup file"},
   "Seçili yedek dosyası": {"tr":"Seçili yedek dosyası","en":"Selected backup file"},
-  "Yedek dosyalarını adla seçmek için bu müşteri üzerinde yedek bilgilerini görüntüleme izinli bir destek oturumu açın.": {"tr":"Yedek dosyalarını adla seçmek için bu müşteri üzerinde yedek bilgilerini görüntüleme izinli bir destek oturumu açın.","en":"To select backup files by name, open a support session for this customer with permission to view backup information."},
+  "Bu müşterinin şifreli yedek dosyası yok.": {"tr":"Bu müşterinin şifreli yedek dosyası yok.","en":"This customer has no encrypted backup files."},
   "Platform sağlıklı mı?": {"tr":"Platform sağlıklı mı?","en":"Is the platform healthy?"},
   "Tüm çalışma alanlarının genel durumu.": {"tr":"Tüm çalışma alanlarının genel durumu.","en":"Overall status across all workspaces."},
   "Son 24 saatte {0} yedekleme denemesi başarısız oldu.": {"tr":"Son 24 saatte {0} yedekleme denemesi başarısız oldu.","en":"{0} backup attempts failed in the last 24 hours."},

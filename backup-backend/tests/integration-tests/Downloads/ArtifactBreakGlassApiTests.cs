@@ -78,6 +78,35 @@ public sealed class ArtifactBreakGlassApiTests(PostgreSqlFixture fixture) : ICla
     }
 
     [Fact]
+    public async Task PickerListsOnlyEncryptedBackupsAndBreakGlassWorksWithSupportSessionsOff()
+    {
+        await using var scenario = await DownloadApiScenario.CreateAsync(fixture,
+            configuration: new Dictionary<string, string?> { [$"Features:{BackupPlatform.Contracts.Flags.Features.SupportSessions.Key}"] = "false" });
+        var requester = await scenario.World.SignInAsync(await scenario.World.SeedUserAsync(platformAdmin: true));
+        var approver = await scenario.World.SignInAsync(await scenario.World.SeedUserAsync(platformAdmin: true));
+        var list = Root + "/artifacts?tenantId=" + scenario.Backup.TenantId;
+        using var supportOff = await requester.GetAsync("/api/platform/support-sessions");
+        Assert.Equal(HttpStatusCode.NotFound, supportOff.StatusCode);
+        using var plain = await requester.GetAsync(list);
+        Assert.Equal(HttpStatusCode.OK, plain.StatusCode);
+        Assert.Empty(AgentWorld.ReadJson(plain).GetProperty("items").EnumerateArray());
+        await scenario.EncryptAsync();
+        using var encrypted = await requester.GetAsync(list);
+        var item = Assert.Single(AgentWorld.ReadJson(encrypted).GetProperty("items").EnumerateArray());
+        Assert.Equal(scenario.Accepted.ArtifactId, item.GetProperty("id").GetGuid());
+        using var tenantAdmin = await scenario.Admin.GetAsync(list);
+        Assert.Equal(HttpStatusCode.Forbidden, tenantAdmin.StatusCode);
+        using var noTenant = await requester.GetAsync(Root + "/artifacts");
+        Assert.Equal(HttpStatusCode.BadRequest, noTenant.StatusCode);
+        var id = (await OpenAsync(scenario, requester)).GetProperty("id").GetGuid();
+        using var approved = await approver.SendAsync(HttpMethod.Post, Root + "/" + id + "/approve");
+        Assert.Equal(HttpStatusCode.OK, approved.StatusCode);
+        using var prepared = await requester.SendAsync(HttpMethod.Post, Root + "/" + id + "/download", new { });
+        using var content = await requester.GetAsync(AgentWorld.ReadJson(prepared).GetProperty("downloadUrl").GetString()!);
+        Assert.Equal(scenario.Bytes, await content.Content.ReadAsByteArrayAsync());
+    }
+
+    [Fact]
     public async Task ExpiryPreventsApprovalAndUseAndCannotBeExtendedByAStreamingLease()
     {
         await using var scenario = await DownloadApiScenario.CreateAsync(fixture);

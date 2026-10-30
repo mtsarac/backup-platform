@@ -10,9 +10,19 @@ linux = {
     "Agent__Backup__LocalStorage__RootDirectory": "/var/lib/backup-agent/local-store",
     "Agent__Backup__LocalStorage__Volumes__vol2": "/srv/e2e/volume2",
     "Agent__Backup__FileSources__e2efiles__RootDirectory": "/srv/e2e/files",
+    # Central storage: the Samba share is mounted below; the backend sees the same tree at /central-share (docker-compose.e2e.override.yml).
+    "Agent__Backup__CentralStorage__RootDirectory": "/mnt/e2e-share/central",
+    "Agent__Backup__CentralStorage__TenantScope": "e2e-a",
 }
 unit = "[Service]\n" + "".join(f'Environment="{k}={v}"\n' for k, v in linux.items())
+smb = f"username={api.env['E2E_SMB_USER']}\npassword={api.env['E2E_SMB_PASSWORD']}\n"
 ssh("virtual-fedora", "sudo bash -s", f"""set -e
+install -m 600 /dev/null /etc/e2e-smb.cred; cat > /etc/e2e-smb.cred <<'EOT'
+{smb}EOT
+mkdir -p /mnt/e2e-share
+grep -q ' /mnt/e2e-share ' /etc/fstab || echo '//{api.env['PUBLIC_HOST']}/Data /mnt/e2e-share cifs credentials=/etc/e2e-smb.cred,uid=backup-agent,gid=backup-agent,file_mode=0660,dir_mode=0770,vers=3.1.1,_netdev,nofail 0 0' >> /etc/fstab
+systemctl daemon-reload; mountpoint -q /mnt/e2e-share || mount /mnt/e2e-share
+mkdir -p /mnt/e2e-share/central && chown backup-agent: /mnt/e2e-share/central
 mkdir -p /var/lib/backup-agent/staging /var/lib/backup-agent/local-store /srv/e2e/volume2 /srv/e2e/restore
 chown -R backup-agent: /var/lib/backup-agent/staging /var/lib/backup-agent/local-store /srv/e2e
 mkdir -p /etc/systemd/system/backup-agent.service.d
