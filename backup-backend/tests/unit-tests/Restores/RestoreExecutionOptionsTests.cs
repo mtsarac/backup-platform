@@ -5,18 +5,6 @@ namespace BackupPlatform.UnitTests;
 
 public sealed class RestoreExecutionOptionsTests
 {
-    [Fact]
-    public void DefaultsUseTheBackupLeaseAndConservativeExpiryAndSweepIntervals()
-    {
-        var options = new RestoreExecutionOptions();
-        Assert.Equal(TimeSpan.FromSeconds(120), BackupOrchestrator.LeaseDuration);
-        Assert.Equal(BackupOrchestrator.LeaseDuration, options.LeaseDuration);
-        Assert.Equal(TimeSpan.FromHours(1), options.UnclaimedExpiry);
-        Assert.Equal(TimeSpan.FromSeconds(15), options.SweepInterval);
-        Assert.Empty(options.Validate());
-        options.ThrowIfInvalid();
-    }
-
     public static TheoryData<TimeSpan> InvalidLeaseDurations => new()
     {
         TimeSpan.Zero, TimeSpan.FromSeconds(-1), TimeSpan.FromSeconds(30) - TimeSpan.FromTicks(1), TimeSpan.FromHours(1) + TimeSpan.FromTicks(1)

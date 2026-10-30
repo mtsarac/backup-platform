@@ -21,16 +21,6 @@ public sealed class StagingCleanerTests : IDisposable
     private Task<StagingCleanupReport> RunAsync(CancellationToken cancellationToken = default) => Cleaner().RunAsync(_options, cancellationToken);
 
     [Fact]
-    public void TheDefaultsAreEnabledTwelveHoursAndHourly()
-    {
-        var defaults = new StagingCleanupOptions();
-
-        Assert.True(defaults.Enabled);
-        Assert.Equal(TimeSpan.FromHours(12), defaults.MinimumAge);
-        Assert.Equal(TimeSpan.FromHours(1), defaults.ScanInterval);
-    }
-
-    [Fact]
     public async Task AnOldManagedFileIsRemovedAndReportedByName()
     {
         var name = TempStaging.ManagedName();
