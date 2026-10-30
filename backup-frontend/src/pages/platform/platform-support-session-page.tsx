@@ -12,7 +12,7 @@ import { Tabs } from '@/components/ui/tabs'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { platformPaths } from '@/features/platform/paths'
 import { FormDialog } from '@/components/ui/form-dialog'
-import { inputClass } from '@/components/ui/form-styles'
+import { TextArea } from '@/components/ui/text-input'
 import { useListParams } from '@/features/platform/use-list-params'
 import { SupportAuditTab } from '@/features/platform/support/audit-tab'
 import { SupportBackupBrowser } from '@/features/platform/support/backup-browser'
@@ -142,7 +142,7 @@ function SessionActions({ session }: { session: SupportSession }) {
     {revokeOpen && active && <FormDialog title={tx("Destek erişimini geri al")} description={tx("Oturumun erişimi hemen sona erer. Gerekçe audit kaydına eklenir.")} submitLabel={tx("Erişimi geri al")} pendingLabel={tx("Erişim geri alınıyor…")} pending={busy}
       error={revoke.error} onSubmit={revokeAccess} onClose={() => setRevokeOpen(false)}>
       <Field label={tx("Gerekçe")} hint={tx("Zorunlu; en fazla 500 karakter.")} error={invalid ? tx('Gerekçe zorunludur ve en fazla 500 karakter olabilir.') : undefined}>
-        {control => <textarea {...control} className={inputClass} rows={3} value={reason} maxLength={500} disabled={busy} onChange={event => setReason(event.target.value)} />}
+        {control => <TextArea {...control}  rows={3} value={reason} maxLength={500} disabled={busy} onChange={event => setReason(event.target.value)} />}
       </Field>
     </FormDialog>}
   </>

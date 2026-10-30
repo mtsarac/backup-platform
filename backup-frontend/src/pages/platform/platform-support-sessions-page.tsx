@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { CheckField } from '@/components/ui/check-field'
 import { Pagination } from '@/components/data/pagination'
 import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
 import { PageHeader } from '@/components/ui/page-header'
@@ -24,7 +25,7 @@ export function PlatformSupportSessionsPage() {
     <Filters label={tx("Destek oturumu filtreleri")} onClear={status || mine || tenantId ? () => update({ status: '', mine: '', tenantId: '' }) : undefined}>
       <TenantPicker value={tenantId} onChange={value => update({ tenantId: value })} />
       <FilterField label={tx("Durum")}><select aria-label={tx("Durum")} className={filterControlClass} value={status} onChange={event => update({ status: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{supportStatuses.map(value => <option key={value} value={value}>{statusLabel('supportSession', value)}</option>)}</select></FilterField>
-      <label className="flex min-h-11 items-center gap-2 self-end text-sm font-medium text-text-heading"><input type="checkbox" className="size-4 accent-primary" checked={mine} onChange={event => update({ mine: event.target.checked ? 'true' : 'false' })} />{tx("Yalnızca benim oturumlarım")}</label>
+      <CheckField className="self-end" label={tx("Yalnızca benim oturumlarım")} checked={mine} onChange={event => update({ mine: event.target.checked ? 'true' : 'false' })} />
     </Filters>
     <QueryState forbiddenMessage={errorMessage} isPending={query.isPending} error={query.error}>{query.data && <div className="space-y-4">
       <SupportSessionTable rows={query.data.items} />

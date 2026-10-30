@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { Card } from '@/components/ui/card'
 import { Link } from 'react-router-dom'
 import { Pagination } from '@/components/data/pagination'
 import { QueryState } from '@/components/data/query-state'
@@ -19,7 +20,7 @@ export function TenantBreakGlassSection({ tenantId }: { tenantId: string }) {
     <QueryState isPending={query.isPending} error={query.error}>
       {query.data && <div className="space-y-4">
         {query.data.items.length === 0 ? <EmptyState message={tx('Henüz acil destek erişimi isteği yok.')} /> : <ul aria-label={tx('Acil destek erişimi geçmişi')} className="space-y-3">
-          {query.data.items.map(event => <li key={event.id} className="space-y-4 rounded-xl border border-border p-4">
+          {query.data.items.map(event => <Card as="li" key={event.id} className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="break-words font-semibold">{event.requestedByName ?? tx('Bilinmiyor')}</h3>
               <StatusPill domain="breakGlass" status={event.status} />
@@ -38,7 +39,7 @@ export function TenantBreakGlassSection({ tenantId }: { tenantId: string }) {
               { label: tx('Süre sonu'), value: formatDateTime(event.expiresAt) },
               { label: tx('Karar zamanı'), value: formatDateTime(event.decidedAt) },
             ]} />
-          </li>)}
+          </Card>)}
         </ul>}
         {query.data.totalCount > 0 && <Pagination label={tx('Acil destek erişimi sayfaları')} page={page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={next => update({ breakGlassPage: next })} />}
       </div>}

@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { Card } from '@/components/ui/card'
 import { Link } from 'react-router-dom'
 import { DataList, type Column } from '@/components/data/data-list'
 import { RelativeTime } from '@/components/data/relative-time'
@@ -23,6 +24,6 @@ export function SupportSessionTable({ rows, showTenant = true }: { rows: readonl
     { key: 'expires', header: tx('Süre sonu'), render: session => <RelativeTime value={session.expiresAt} /> },
     { key: 'details', card: 'actions', header: tx('Ayrıntılar'), wrap: true, render: session => <TechnicalDetails items={supportSessionDetails(session, { plainView: false })} /> },
   ]
-  if (rows.length === 0) return <div className="rounded-xl border border-border bg-surface"><EmptyState message={tx("Destek oturumu bulunamadı; yeni oturum tenant detayındaki Destek erişimi bölümünden açılır.")} /></div>
+  if (rows.length === 0) return <Card padding="none"><EmptyState message={tx("Destek oturumu bulunamadı; yeni oturum tenant detayındaki Destek erişimi bölümünden açılır.")} /></Card>
   return <DataList caption={tx("Destek oturumları")} rows={rows} columns={columns} keyExtractor={session => session.id} emptyMessage={tx("Destek oturumu bulunamadı.")} />
 }

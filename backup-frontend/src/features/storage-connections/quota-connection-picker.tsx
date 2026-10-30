@@ -1,7 +1,7 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { inputClass } from '@/components/ui/form-styles'
+import { TextInput } from '@/components/ui/text-input'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { usePlatformConnections, usePlatformProviders } from './hooks'
 import { connectionOptions } from './job-connection-picker-utils'
@@ -26,7 +26,7 @@ export function QuotaConnectionPicker({ values, onChange, invalid }: { values: r
 
   return <div className="space-y-2">
     <div className="flex items-end gap-2">
-      <label className="min-w-0 flex-1 text-xs text-text-muted">{tx("Tenant veya bağlantı adı ara")}<input className={inputClass} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => {
+      <label className="min-w-0 flex-1 text-xs text-text-muted">{tx("Tenant veya bağlantı adı ara")}<TextInput className="mt-1" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => {
           if (event.key === 'Enter') { event.preventDefault(); searchConnections() }
         }} />
       </label>

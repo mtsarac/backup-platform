@@ -3,9 +3,9 @@ import { useState } from 'react'
 import { Field } from '@/components/ui/field'
 import { ApiError } from '@/lib/api/client'
 import { FormDialog } from '@/components/ui/form-dialog'
-import { inputClass, selectClass } from '@/components/ui/form-styles'
+import { selectClass } from '@/components/ui/form-styles'
 import { CheckField } from '@/components/ui/check-field'
-import { TextInput } from '@/components/ui/text-input'
+import { TextInput, TextArea } from '@/components/ui/text-input'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { accountingModeLabels, enforcementModeLabels, scopeLabels } from '@/features/storage/labels'
 import { parseQuotaScopeLabels, parseStorageConnectionIds, type ScopeValuesResult } from '@/features/storage/scope-input'
@@ -179,7 +179,7 @@ export function QuotaPolicyDialog({ policy, onClose }: Props) {
         </Field>}
         {scopeKind === 'storageConnection' && <div className="space-y-3">
           <QuotaConnectionPicker values={connectionIds.split(/[,\n]+/).map(value => value.trim()).filter(Boolean)} onChange={(selected) => setConnectionIds(selected.join('\n'))} invalid={scopeError !== null} />
-          <Field label={tx("Depolama bağlantısı kimlikleri (her satıra veya virgülle bir GUID):")}>{(control) => <textarea {...control} className={`${inputClass} h-24 font-mono`} value={connectionIds} onChange={(event) => setConnectionIds(event.target.value)} placeholder={'3f2b8c1e-0d4a-4b6e-9a7c-5e1d2f3a4b5c\n11111111-2222-3333-4444-555555555555'} aria-invalid={scopeError !== null} />}</Field>
+          <Field label={tx("Depolama bağlantısı kimlikleri (her satıra veya virgülle bir GUID):")}>{(control) => <TextArea {...control} className="h-24 font-mono" value={connectionIds} onChange={(event) => setConnectionIds(event.target.value)} placeholder={'3f2b8c1e-0d4a-4b6e-9a7c-5e1d2f3a4b5c\n11111111-2222-3333-4444-555555555555'} aria-invalid={scopeError !== null} />}</Field>
         </div>}
       </fieldset>
     </FormDialog>
