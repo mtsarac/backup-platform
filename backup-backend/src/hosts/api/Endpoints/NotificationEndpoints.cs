@@ -1,3 +1,4 @@
+using BackupPlatform.Api.Flags;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Application.Identity;
 using BackupPlatform.Application.Tenancy;
@@ -98,7 +99,7 @@ public static class NotificationEndpoints
         var platform = endpoints.MapGroup("/api/platform/notification-transports").RequireAuthorization(AuthorizationPolicies.PlatformAdmin);
         platform.MapGet("", ListTransportsAsync);
         platform.MapPut("/email", PutEmailTransportAsync);
-        platform.MapPut("/sms", PutSmsTransportAsync);
+        if (endpoints.IsFeatureEnabled(Features.Sms)) platform.MapPut("/sms", PutSmsTransportAsync);
         platform.MapPut("/{key}/secret", SetTransportSecretAsync);
         platform.MapDelete("/{key}/secret", ClearTransportSecretAsync);
         return endpoints;
@@ -125,6 +126,11 @@ public static class NotificationEndpoints
             return Results.BadRequest(new { error = "invalid_request", field = "request", code = "invalid_value" });
         }
     }
+
+    // SMS shares routes with email and webhook (channel create, transport secrets), so those handlers ask the flag too; `name` is a channel kind or a transport key.
+    private static bool SmsOff(FeatureFlags flags, string? name) => string.Equals(name, NotificationTransports.Sms, StringComparison.OrdinalIgnoreCase) && !flags.IsEnabled(Features.Sms);
+
+    private static IResult FeatureDisabled => Results.NotFound(new { error = "feature_disabled" });
 
     private static IResult Failure(NotificationOutcome outcome) => outcome switch
     {
@@ -192,8 +198,8 @@ public static class NotificationEndpoints
             : GuardAsync(async () => Respond(await service.SetSecurityOwnerAsync(tenant.TenantId!, id, request.Enabled, TenantActor(user), cancellationToken)));
 
 
-    private static Task<IResult> CreateChannelAsync(CreateNotificationChannelRequest request, ITenantContext tenant, ICurrentUser user, NotificationAdministrationService service, CancellationToken cancellationToken) =>
-        GuardAsync(async () => Respond(await service.CreateChannelAsync(tenant.TenantId!,
+    private static Task<IResult> CreateChannelAsync(CreateNotificationChannelRequest request, FeatureFlags flags, ITenantContext tenant, ICurrentUser user, NotificationAdministrationService service, CancellationToken cancellationToken) =>
+        SmsOff(flags, request.Kind) ? Task.FromResult(FeatureDisabled) : GuardAsync(async () => Respond(await service.CreateChannelAsync(tenant.TenantId!,
             new CreateChannelCommand(request.Kind, request.Name, request.Target, request.Authentication, request.Secret), TenantActor(user), cancellationToken), created: true));
 
     private static Task<IResult> UpdateChannelAsync(Guid id, UpdateNotificationChannelRequest request, ITenantContext tenant, ICurrentUser user, NotificationAdministrationService service, CancellationToken cancellationToken) =>
@@ -247,10 +253,10 @@ public static class NotificationEndpoints
 
     // ---- platform transports ------------------------------------------------------------------------------------------------------------
 
-    private static async Task<IResult> ListTransportsAsync(NotificationTransportService service, CancellationToken cancellationToken)
+    private static async Task<IResult> ListTransportsAsync(FeatureFlags flags, NotificationTransportService service, CancellationToken cancellationToken)
     {
         var transports = await service.ListAsync(cancellationToken);
-        return Results.Ok(new { email = ToEmailResponse(transports[0]), sms = ToSmsResponse(transports[1]) });
+        return flags.IsEnabled(Features.Sms) ? Results.Ok(new { email = ToEmailResponse(transports[0]), sms = ToSmsResponse(transports[1]) }) : Results.Ok(new { email = ToEmailResponse(transports[0]) });
     }
 
     private static Task<IResult> PutEmailTransportAsync(EmailTransportRequest request, ICurrentUser user, NotificationTransportService service, CancellationToken cancellationToken) =>
@@ -277,11 +283,11 @@ public static class NotificationEndpoints
             return result.Succeeded ? Results.Ok(ToSmsResponse(result.Value!)) : Failure(result.Outcome);
         });
 
-    private static Task<IResult> SetTransportSecretAsync(string key, NotificationSecretRequest request, ICurrentUser user, NotificationTransportService service, CancellationToken cancellationToken) =>
-        GuardAsync(async () => RespondTransport(await service.SetSecretAsync(key, request.Value, PlatformActor(user), cancellationToken)));
+    private static Task<IResult> SetTransportSecretAsync(string key, NotificationSecretRequest request, FeatureFlags flags, ICurrentUser user, NotificationTransportService service, CancellationToken cancellationToken) =>
+        SmsOff(flags, key) ? Task.FromResult(FeatureDisabled) : GuardAsync(async () => RespondTransport(await service.SetSecretAsync(key, request.Value, PlatformActor(user), cancellationToken)));
 
-    private static Task<IResult> ClearTransportSecretAsync(string key, ICurrentUser user, NotificationTransportService service, CancellationToken cancellationToken) =>
-        GuardAsync(async () => RespondTransport(await service.ClearSecretAsync(key, PlatformActor(user), cancellationToken)));
+    private static Task<IResult> ClearTransportSecretAsync(string key, FeatureFlags flags, ICurrentUser user, NotificationTransportService service, CancellationToken cancellationToken) =>
+        SmsOff(flags, key) ? Task.FromResult(FeatureDisabled) : GuardAsync(async () => RespondTransport(await service.ClearSecretAsync(key, PlatformActor(user), cancellationToken)));
 
     private static IResult RespondTransport(NotificationResult<NotificationTransportView> result) =>
         !result.Succeeded ? Failure(result.Outcome) : Results.Ok(result.Value!.Key == NotificationTransports.Email ? ToEmailResponse(result.Value) : ToSmsResponse(result.Value));

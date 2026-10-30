@@ -1,4 +1,5 @@
 using BackupPlatform.Api.Endpoints;
+using BackupPlatform.Api.Flags;
 using BackupPlatform.Api.Downloads;
 using BackupPlatform.Api.Push;
 using BackupPlatform.Api.Support;
@@ -11,6 +12,7 @@ var builder = WebApplication.CreateBuilder(isBootstrap ? args.Where(argument => 
 // Hosting's request-start messages include the query string: OAuth callback credentials and the one-click unsubscribe token (NotificationRecipientApiIntegrationTests pins this).
 builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
 builder.Services.AddPlatformSecurity();
+builder.Services.AddSingleton<FeatureFlags>();
 builder.Services.AddExternalSecrets(builder.Configuration);
 builder.Services.AddAgentCertificates(builder.Configuration);
 if (builder.Configuration.GetValue<bool>("AgentSecurity:Mtls:Enabled"))
@@ -41,6 +43,7 @@ if (isBootstrap)
 }
 
 app.UsePlatformSecurity();
+app.MapFeatureEndpoints();
 app.MapAuthenticationEndpoints();
 app.MapUserEndpoints();
 app.MapAgentEndpoints();

@@ -5,6 +5,7 @@ import * as api from '@/features/platform/notifications/api'
 import type { EmailTransport, NotificationTransports, SmsTransport } from '@/features/platform/notifications/types'
 import { renderPlatform } from '@/features/platform/test-utils'
 import { PlatformNotificationTransportsPage } from './platform-notification-transports-page'
+import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import { tx } from '@/lib/i18n'
 
 vi.mock('@/features/platform/notifications/api')
@@ -19,6 +20,13 @@ const serve = (value: EmailTransport) => vi.mocked(api.getTransports).mockResolv
 beforeEach(() => { vi.resetAllMocks(); serve(email()) })
 
 describe('platform notification transports page', () => {
+  it('shows no SMS gateway while the SMS feature is off', async () => {
+    setFeatureFlags({})
+    renderPlatform(<PlatformNotificationTransportsPage />)
+    await screen.findByRole('region', { name: tx('E-posta (SMTP)') })
+    expect(screen.queryByRole('region', { name: tx('SMS ağ geçidi') })).not.toBeInTheDocument()
+  })
+
   it.each([
     ['enabled and complete', { enabled: true, configured: true, host: 'smtp.example.com', port: 465 }, 'Çalışıyor'],
     ['complete but switched off', { enabled: false, configured: true, host: 'smtp.example.com', port: 465 }, 'Kapalı'],
@@ -32,6 +40,7 @@ describe('platform notification transports page', () => {
   })
 
   it('keeps host, port and secret dates under collapsed copyable technical details and still says SMS is unverified', async () => {
+    setFeatureFlags({ sms: true })
     serve(email({ enabled: true, configured: true, host: 'smtp.example.com', port: 465, security: 'implicit', fromAddress: 'noreply@example.com', hasSecret: true, secretUpdatedAt: '2026-10-14T10:00:00Z' }))
     const user = userEvent.setup()
     renderPlatform(<PlatformNotificationTransportsPage />)
