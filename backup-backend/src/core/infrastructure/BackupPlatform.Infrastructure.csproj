@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Scheduling\Schema\*.sql" LogicalName="BackupPlatform.Infrastructure.Scheduling.Schema.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Persistence\Schema\*.sql" LogicalName="BackupPlatform.Infrastructure.Persistence.Schema.%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

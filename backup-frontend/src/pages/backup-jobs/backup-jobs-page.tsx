@@ -1,4 +1,5 @@
 import { currentLocale, tx, useLanguage } from '@/lib/i18n'
+import { Select, TextInput } from '@/components/ui/text-input'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, DatabaseBackup } from 'lucide-react'
@@ -10,8 +11,9 @@ import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
+import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
-import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
+import { FilterField, Filters } from '@/components/ui/filters'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { useBackupJobs, useRunBackupJob, useToggleBackupJob } from '@/features/backup-jobs/hooks'
@@ -63,7 +65,7 @@ export function BackupJobsPage() {
       : <ErrorNotice title={tx("İşlem tamamlanamadı")} error={actionError} />)}
     {startedRun && <Notice tone="success" title={tx("Yedekleme denemesi başlatıldı")}>{tx("Yedekleme denemesi kuyruğa alındı.")}{' '}<Link className={linkClass} to={`${base}/backup-runs/${startedRun}`}>{tx("Denemeyi aç")}</Link></Notice>}
     <QueryState isPending={jobs.isPending} error={jobs.error}>
-      {all.length === 0 ? <div className="rounded-xl border border-border bg-surface"><EmptyState icon={DatabaseBackup} message={tx("Henüz yedekleme işi oluşturulmadı.")} canAct={canOperate} action={<Link className={buttonVariants()} to={`${base}/backup-jobs/new`}><Plus aria-hidden="true" />{tx("İlk yedeğinizi oluşturun")}</Link>} /></div> : <div className="space-y-4">
+      {all.length === 0 ? <Card padding="none"><EmptyState icon={DatabaseBackup} message={tx("Henüz yedekleme işi oluşturulmadı.")} canAct={canOperate} action={<Link className={buttonVariants()} to={`${base}/backup-jobs/new`}><Plus aria-hidden="true" />{tx("İlk yedeğinizi oluşturun")}</Link>} /></Card> : <div className="space-y-4">
         {canOperate && <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1 text-sm text-text-muted">
             <p id={runHint}>{tx("Şimdi çalıştır: yedekleme hemen başlar; zamanlanmış çalışmalar etkilenmez.")}</p>
@@ -73,8 +75,8 @@ export function BackupJobsPage() {
           {newJob}
         </div>}
         <Filters label={tx("Yedekleme işi filtreleri")} onClear={filtering ? () => update({ search: '', state: '' }) : undefined}>
-          <FilterField label={tx("İş, yedekleme bilgisayarı veya veritabanı ara")}><input type="search" value={search} aria-label={tx("İş, yedekleme bilgisayarı veya veritabanı ara")} onChange={event => update({ search: event.target.value }, { replace: true })} className={filterControlClass} /></FilterField>
-          <FilterField label={tx("Durum")}><select value={state ?? 'all'} aria-label={tx("Durum")} onChange={event => update({ state: event.target.value === 'all' ? '' : event.target.value })} className={filterControlClass}><option value="all">{tx("Tümü")}</option><option value="enabled">{tx("Etkin")}</option><option value="disabled">{tx("Devre dışı")}</option></select></FilterField>
+          <FilterField label={tx("İş, yedekleme bilgisayarı veya veritabanı ara")}><TextInput type="search" value={search} aria-label={tx("İş, yedekleme bilgisayarı veya veritabanı ara")} onChange={event => update({ search: event.target.value }, { replace: true })} /></FilterField>
+          <FilterField label={tx("Durum")}><Select value={state ?? 'all'} aria-label={tx("Durum")} onChange={event => update({ state: event.target.value === 'all' ? '' : event.target.value })}><option value="all">{tx("Tümü")}</option><option value="enabled">{tx("Etkin")}</option><option value="disabled">{tx("Devre dışı")}</option></Select></FilterField>
         </Filters>
         <DataList rows={filtered.slice((current - 1) * pageSize, current * pageSize)} columns={columns} keyExtractor={job => job.id} emptyMessage={tx("Aramanızla eşleşen iş yok.")} />
         {filtered.length > pageSize && <Pagination label={tx("Yedekleme işi sayfaları")} page={current} pageSize={pageSize} totalCount={filtered.length} onPageChange={next => update({ page: next })} />}

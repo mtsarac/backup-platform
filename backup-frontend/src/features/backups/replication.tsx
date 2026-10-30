@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { Card } from '@/components/ui/card'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
@@ -44,7 +45,7 @@ function DestinationRow({
   const isExhausted = Boolean(repairOperation?.isExhausted)
   const repairEligible = Boolean(canRepair && destination.state !== 'Verified' && onRepair)
   return (
-    <li className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-border bg-surface-2 p-3 text-sm">
+    <Card as="li" tone="subtle" className="flex flex-wrap items-start justify-between gap-2 text-sm">
       <div className="min-w-0 space-y-1">
         <p className="font-medium text-text">{storageProviderLabel(destination.storageProvider)}{destination.isPrimary && <span className="ml-2 text-xs text-text-muted">{tx("Birincil")}</span>}</p>
         {destination.state === 'Failed' && destination.failureCode && <p className="text-error">{failureMessage(destination.failureCode)} <span className="text-text-muted">· {destination.failureCode}</span></p>}
@@ -75,7 +76,7 @@ function DestinationRow({
           </Button>
         )}
       </div>
-    </li>
+    </Card>
   )
 }
 

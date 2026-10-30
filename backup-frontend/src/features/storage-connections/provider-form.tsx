@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { Card } from '@/components/ui/card'
 import { ConfigFieldInputs, SecretFieldInputs } from './descriptor-fields'
 import { activeSecretFields } from './descriptor-values'
 import type { FieldValues } from './descriptor-values'
@@ -16,10 +17,10 @@ export function ProviderFields({ provider, config, secret, error, onConfig, onSe
   const fields = activeSecretFields(provider.providerType, config, provider.secretFields)
   return <>
     {part !== 'credentials' && <ConfigFieldInputs providerType={provider.providerType} fields={provider.configFields} values={config} invalidName={invalidFieldName(error, 'configuration')} onChange={onConfig} />}
-    {part !== 'configuration' && fields.length > 0 && <div className="space-y-3 rounded-lg border border-border bg-surface-2 p-3">
+    {part !== 'configuration' && fields.length > 0 && <Card tone="subtle" className="space-y-3">
       <p className="text-sm text-text-muted">{tx("Kimlik bilgisi değerleri yalnızca sunucuya gönderilir; kaydedildikten sonra bir daha gösterilmez.")}</p>
       <SecretFieldInputs providerType={provider.providerType} fields={fields} values={secret} invalidName={invalidFieldName(error, 'secret')} onChange={onSecret} />
-    </div>}
+    </Card>}
   </>
 }
 

@@ -110,8 +110,8 @@ internal sealed class DownloadApiScenario : IAsyncDisposable
         foreach (var r in replicas)
         {
             await context.Database.ExecuteSqlInterpolatedAsync($"""
-                INSERT INTO backup_replicas ("Id", "TenantId", "ArtifactId", "StorageProvider", "StorageTarget", "StorageConnectionId", "Key", "SizeBytes", "Checksum", "ChecksumAlgorithm", "VerificationState", "VerificationMethod", "Status", "ExecutionLocation", "OwningAgentId", "VerifiedAt", "CreatedAt")
-                VALUES ({r.Id}, {r.TenantId.Value}, {r.ArtifactId}, {r.StorageProvider}, {r.StorageTarget}, {r.StorageConnectionId}, {r.Key}, {stored.LongLength}, {checksum}, {r.ChecksumAlgorithm}, {r.VerificationState}, {r.VerificationMethod}, {r.Status.ToString()}, {r.ExecutionLocation.ToString()}, {r.OwningAgentId}, {r.VerifiedAt}, {r.CreatedAt})
+                INSERT INTO backup_replicas ("Id", "TenantId", "ArtifactId", "StorageProvider", "StorageTarget", "StorageConnectionId", "Key", "SizeBytes", "Checksum", "ChecksumAlgorithm", "VerificationState", "VerificationMethod", "Status", "ExecutionLocation", "OwningAgentId", "VerifiedAt", "CreatedAt", "DeleteAttempts")
+                VALUES ({r.Id}, {r.TenantId.Value}, {r.ArtifactId}, {r.StorageProvider}, {r.StorageTarget}, {r.StorageConnectionId}, {r.Key}, {stored.LongLength}, {checksum}, {r.ChecksumAlgorithm}, {r.VerificationState}, {r.VerificationMethod}, {r.Status.ToString()}, {r.ExecutionLocation.ToString()}, {r.OwningAgentId}, {r.VerifiedAt}, {r.CreatedAt}, 0)
                 """);
         }
         await transaction.CommitAsync();
