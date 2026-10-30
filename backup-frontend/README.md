@@ -49,6 +49,8 @@ The `Dockerfile` serves the production build with nginx. `docker-compose.yml` in
 bun run test src/features/platform/audit-table.test.tsx
 ```
 
+`bun run test` skips the test files of frozen features (support sessions, listed in `vitest.config.ts`); `bun run test:frozen` runs only those.
+
 Before opening a PR, run typecheck, lint, the full test suite, and the build.
 
 ## Behavior worth knowing

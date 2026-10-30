@@ -262,6 +262,8 @@ Run from this directory.
 | MSSQL integration | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName~IntegrationTests.MsSql\|FullyQualifiedName~BackupPipelineSmoke"` | Docker |
 | Windows | `dotnet test tests/windows-tests -c Release` | Windows host |
 
+**Frozen features' tests.** Tests of Windows VSS, Linux snapshots, SMS, backup size anomaly, external secrets, SMB and support sessions carry `[Trait("Category", "Frozen")]` and are left out of every `dotnet test` run: `Directory.Build.props` points all test projects at `tests/default.runsettings` (`Category!=Frozen`), and a `--filter` you pass is combined with it. Run them on demand with `scripts/integration/run-frozen-tests.sh`, or per project with `dotnet test tests/unit-tests -p:IncludeFrozenTests=true --filter "Category=Frozen"` (the Windows VSS test: `tests/windows-tests`, on Windows). Replica repair stays on by default, so its tests are not frozen. A new test of a frozen feature takes the same trait.
+
 Integration tests start their own PostgreSQL (`postgres:18-alpine`) and SQL Server (`mssql/server:2025-latest`) with Testcontainers: Docker is the only prerequisite, and the containers are removed when the test run ends. The integration-test fixtures read no connection string or MSSQL variable.
 
 Integration test variables:

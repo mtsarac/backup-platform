@@ -7,6 +7,7 @@ using static BackupPlatform.IntegrationTests.SupportScenario;
 
 namespace BackupPlatform.IntegrationTests;
 
+[Trait("Category", "Frozen")]
 public sealed class SupportRestoreTests(PostgreSqlFixture fixture) : IClassFixture<PostgreSqlFixture>
 {
     private const string PrecheckTask = "database-restore-precheck";

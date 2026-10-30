@@ -6,5 +6,7 @@
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
     <TreatWarningsAsErrors Condition="'$(ContinuousIntegrationBuild)' == 'true'">true</TreatWarningsAsErrors>
     <WarningsAsErrors>$(WarningsAsErrors);nullable</WarningsAsErrors>
+    <!-- Frozen features' tests (Category=Frozen) stay out of every default run; opt in with -p:IncludeFrozenTests=true (see scripts/integration/run-frozen-tests.sh). -->
+    <RunSettingsFilePath Condition="'$(IncludeFrozenTests)' != 'true'">$(MSBuildThisFileDirectory)tests/default.runsettings</RunSettingsFilePath>
   </PropertyGroup>
 </Project>

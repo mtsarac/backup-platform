@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.DataProtection;
 
 namespace BackupPlatform.UnitTests.Storage.Connections;
 
+[Trait("Category", "Frozen")]
 public sealed class ExternalSecretsTests
 {
     [Fact]

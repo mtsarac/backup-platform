@@ -16,6 +16,7 @@ using static BackupPlatform.IntegrationTests.BackupStoreHarness;
 
 namespace BackupPlatform.IntegrationTests;
 
+[Trait("Category", "Frozen")]
 public sealed class BackupSizeAnomalyIntegrationTests : IAsyncLifetime
 {
     private readonly PostgreSqlFixture _database = new();

@@ -4,6 +4,7 @@ using BackupPlatform.Domain.Support;
 
 namespace BackupPlatform.UnitTests;
 
+[Trait("Category", "Frozen")]
 public sealed class SupportAccessSessionTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 9, 9, 0, 0, TimeSpan.Zero);

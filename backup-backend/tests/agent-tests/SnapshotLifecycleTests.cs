@@ -2,6 +2,7 @@ using BackupPlatform.SnapshotProviders.Abstractions;
 
 namespace BackupPlatform.AgentTests;
 
+[Trait("Category", "Frozen")]
 public sealed class SnapshotLifecycleTests
 {
     [Fact]
