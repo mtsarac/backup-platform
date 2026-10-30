@@ -1,4 +1,4 @@
-# e2e-only: let the api container trust the self-signed MinIO certificate (S3 connections must be https), and add the Central-storage and agent-mTLS lab wiring.
+# e2e-only: let the api container trust the self-signed MinIO certificate (S3 connections must be https), and add the Central-storage, agent-mTLS and agent self-update lab wiring.
 services:
   api:
     # List form because the Central tenant-scope key embeds E2E_TENANT_A, the tenant id as 32 hex digits because sh drops env names with '-' (compose interpolates values, not map keys). scripts/e2e/lab-central-mtls.py writes it to .env.e2e.
@@ -26,6 +26,8 @@ services:
       - AgentSecurity__Mtls__Enabled=true
       - AgentSecurity__Mtls__IssuerPfxPath=/etc/e2e-mtls/issuer.pfx
       - AGENT_MTLS_ISSUER_PASSWORD=${E2E_MTLS_ISSUER_PASSWORD:-unset}
+      # Agent self-update: the public key release manifests must verify against (scripts/e2e/lab-selfupdate.py writes it; empty = no key trusted).
+      - AgentUpdates__TrustedKeys__e2e=${E2E_UPDATE_PUBLIC_KEY:-}
     ports:
       - "${PUBLIC_HOST:-192.168.122.1}:5253:5001"
     volumes:

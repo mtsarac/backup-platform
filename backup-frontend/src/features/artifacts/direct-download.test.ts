@@ -11,7 +11,7 @@ class FakePeer {
   iceGatheringState = 'complete'
   localDescription = { sdp: 'offer' }
   connectionState = 'connected'
-  channel = { binaryType: '', onmessage: null as ((event: { data: unknown }) => void) | null, onerror: null, onclose: null as (() => void) | null, send: vi.fn(), close: vi.fn() }
+  channel = { binaryType: '', onmessage: null as ((event: { data: unknown }) => void) | null, onerror: null as (() => void) | null, onclose: null as (() => void) | null, send: vi.fn(), close: vi.fn() }
   onconnectionstatechange: (() => void) | null = null
   onicegatheringstatechange: (() => void) | null = null
   config: RTCConfiguration
@@ -58,6 +58,23 @@ describe('direct browser disk publication', () => {
     expect(writer.abort).not.toHaveBeenCalled()
     expect(FakePeer.current.config.iceServers?.every(server => !JSON.stringify(server).includes('turn:'))).toBe(true)
     expect(vi.mocked(apiRequest).mock.calls.every(([, options]) => !JSON.stringify(options).includes('AQIDBA=='))).toBe(true)
+  })
+
+  it('stays successful when the agent closes the peer right after the saved acknowledgement (error event, then close)', async () => {
+    const writer = { write: vi.fn(async () => {}), close: vi.fn(async () => {}), abort: vi.fn(async () => {}) }
+    const run = receiveDirectDownload(session, { createWritable: async () => writer as unknown as FileSystemWritableFileStream }, new AbortController().signal)
+    const channel = await connected()
+    channel.onmessage!({ data: JSON.stringify({ sizeBytes: bytes.length, checksum: session.checksum }) })
+    await vi.waitFor(() => expect(channel.send).toHaveBeenCalledWith('ready'))
+    channel.onmessage!({ data: bytes.buffer })
+    await vi.waitFor(() => expect(channel.send).toHaveBeenCalledWith('ack'))
+    channel.onmessage!({ data: 'done' })
+    await vi.waitFor(() => expect(channel.send).toHaveBeenCalledWith('saved'))
+    channel.onerror!()
+    channel.onclose!()
+    await expect(run).resolves.toBeUndefined()
+    expect(writer.close).toHaveBeenCalledTimes(1)
+    expect(writer.abort).not.toHaveBeenCalled()
   })
 
   it('aborts unverified output rather than publishing corrupt content or retrying through backend', async () => {
