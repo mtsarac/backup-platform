@@ -5,7 +5,8 @@ import { SecretField } from '@/components/ui/secret-field'
 import { useSecretValue } from '@/components/ui/secret-value'
 import { FormDialog } from '@/components/ui/form-dialog'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { inputClass, selectClass } from '@/components/ui/form-styles'
+import { selectClass } from '@/components/ui/form-styles'
+import { TextInput } from '@/components/ui/text-input'
 import { ApiError } from '@/lib/api/client'
 import { useCreateChannel, useSetChannelSecret, useUpdateChannel } from './hooks'
 import { authenticationLabels, kindLabels } from './labels'
@@ -62,10 +63,10 @@ export function AddChannelDialog({ onClose }: { onClose: () => void }) {
         ? tx('Olay ve önem bilgileri, etkilenen yedek veya bilgisayarın adıyla birlikte bu e-posta adresine gönderilir. Yedek dosyalarının içeriği gönderilmez.')
         : tx('Uyarıların kısa özeti bu telefon numarasına SMS olarak gönderilir.')}</p>
     <Field label={tx("Ad")}>
-      {(control) => <input {...control} className={inputClass} value={name} maxLength={100} required aria-invalid={invalidField(error, 'name')} onChange={(event) => setName(event.target.value)} />}
+      {(control) => <TextInput {...control} value={name} maxLength={100} required aria-invalid={invalidField(error, 'name')} onChange={(event) => setName(event.target.value)} />}
     </Field>
     <Field label={hint.label} hint={kind === 'email' ? tx('Adrese bir onay e-postası gönderilir. Adres sahibi bağlantıya tıklayıp onaylayana kadar bildirim gönderilmez; her e-postada abonelikten çıkma bağlantısı bulunur.') : webhook ? tx('Webhook adresi yalnızca 443 numaralı HTTPS portunu kullanabilir (platform yöneticisi başka port tanımlamadıysa).') : undefined}>
-      {(control) => <input {...control} className={inputClass} value={target} placeholder={hint.placeholder} required aria-invalid={invalidField(error, 'target')} onChange={(event) => setTarget(event.target.value)} />}
+      {(control) => <TextInput {...control} value={target} placeholder={hint.placeholder} required aria-invalid={invalidField(error, 'target')} onChange={(event) => setTarget(event.target.value)} />}
     </Field>
     {webhook && <AuthenticationSelect value={authentication} onChange={setAuthentication} />}
     {webhook && authentication !== 'none' && <SecretField label={authentication === 'bearer' ? tx('Bearer token') : tx('HMAC imza anahtarı')} hint={tx("Yalnızca bir kez girilir ve bir daha gösterilmez. Şimdi girmezseniz sonradan ayarlayın; ayarlanana kadar gönderimler başarısız olur.")}
@@ -98,10 +99,10 @@ export function EditChannelDialog({ channel, onClose }: { channel: NotificationC
       else submit()
     }} onClose={onClose}>
     <Field label={tx("Ad")}>
-      {(control) => <input {...control} className={inputClass} value={name} maxLength={100} required aria-invalid={invalidField(update.error, 'name')} onChange={(event) => setName(event.target.value)} />}
+      {(control) => <TextInput {...control} value={name} maxLength={100} required aria-invalid={invalidField(update.error, 'name')} onChange={(event) => setName(event.target.value)} />}
     </Field>
     <Field label={hint.label} hint={tx("Mevcut: {0} · boş bırakılırsa korunur", { "0": channel.targetDisplay })}>
-      {(control) => <input {...control} className={inputClass} value={target} placeholder={hint.placeholder} aria-invalid={invalidField(update.error, 'target')} onChange={(event) => setTarget(event.target.value)} />}
+      {(control) => <TextInput {...control} value={target} placeholder={hint.placeholder} aria-invalid={invalidField(update.error, 'target')} onChange={(event) => setTarget(event.target.value)} />}
     </Field>
     {webhook && <AuthenticationSelect value={authentication} onChange={setAuthentication} />}
     {webhook && authentication !== 'none' && authentication !== channel.authentication && <p className="text-sm text-text-muted">{tx("Kaydettikten sonra “Secret ayarla” ile secret girin; ayarlanana kadar gönderimler başarısız olur.")}</p>}

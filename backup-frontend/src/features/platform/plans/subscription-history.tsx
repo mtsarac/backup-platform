@@ -2,7 +2,8 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { Pagination } from '@/components/data/pagination'
 import { StatusPill } from '@/components/data/status-pill'
 import { EmptyState } from '@/components/ui/empty-state'
-import { Section } from '@/components/ui/section'
+import { Card } from '@/components/ui/card'
+import { Fact, Facts, Section } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { formatDateTime } from '@/lib/format'
 import { useListParams } from '../use-list-params'
@@ -18,15 +19,15 @@ const HISTORY_PAGE_SIZE = 10
 function HistoryCard({ row }: { row: Subscription }) {
   const limit = row.effectiveStorageLimit
   const unknown = tx('Henüz bildirilmedi')
-  return <li className="space-y-3 rounded-xl border border-border bg-surface-2 p-4">
+  return <Card as="li" tone="subtle" className="space-y-3">
     <div className="flex flex-wrap items-start justify-between gap-2">
       <h3 className="min-w-0 break-words text-base font-semibold text-text-heading">{row.planName}</h3>
       <StatusPill domain="subscription" status={row.status} />
     </div>
-    <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-      <div><dt className="text-sm text-text-muted">{tx("Başlangıç")}</dt><dd className="text-body text-text">{formatDateTime(row.startsAt, unknown)}</dd></div>
-      <div><dt className="text-sm text-text-muted">{tx("Bitiş")}</dt><dd className="text-body text-text">{row.endsAt ? formatDateTime(row.endsAt, unknown) : tx('Süresiz')}</dd></div>
-    </dl>
+    <Facts>
+      <Fact label={tx("Başlangıç")}>{formatDateTime(row.startsAt, unknown)}</Fact>
+      <Fact label={tx("Bitiş")}>{row.endsAt ? formatDateTime(row.endsAt, unknown) : tx('Süresiz')}</Fact>
+    </Facts>
     <TechnicalDetails items={[
       { label: tx("Etkin limit"), value: formatGb(limit.unlimited ? null : limit.bytes) },
       ...(!limit.unlimited && limit.bytes !== null ? [{ label: tx("Etkin limit (bayt)"), value: formatExactBytes(limit.bytes) }] : []),
@@ -35,7 +36,7 @@ function HistoryCard({ row }: { row: Subscription }) {
       { label: tx("Atayan"), value: assignedByLabel(row) },
       { label: tx("Abonelik kimliği"), value: row.subscriptionId },
     ]} />
-  </li>
+  </Card>
 }
 
 export function SubscriptionHistory({ tenantId }: { tenantId: string }) {

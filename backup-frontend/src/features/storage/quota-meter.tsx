@@ -29,7 +29,7 @@ export function QuotaMeter({ usedBytes, reservedBytes, limitBytes, state, label 
   return <div className="space-y-1.5">
     <ProgressBar label={label} value={usedWidth} reserved={reservedWidth} now={percent} tone={toneByState[state]} className="h-3"
       valueText={tx("{0} / {1} ayrılmış (%{2})", { "0": formatBytes(committed), "1": formatBytes(limitBytes), "2": percent })} />
-    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
+    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-text-muted">
       <span className="inline-flex items-center gap-1.5"><span className={cn('size-2 rounded-full', fill)} aria-hidden="true" />{tx("Kullanılan")}</span>
       <span className="inline-flex items-center gap-1.5"><span className={cn('size-2 rounded-full opacity-45', fill)} aria-hidden="true" />{tx("Rezerve")}</span>
     </div>
