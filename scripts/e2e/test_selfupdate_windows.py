@@ -1,12 +1,13 @@
 import base64
 import io
+import re
 import runpy
 import sys
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from unittest.mock import patch
 
 from cryptography.hazmat.primitives import hashes
@@ -54,6 +55,27 @@ class WindowsUpdatePackage(unittest.TestCase):
         signature = base64.b64decode(manifest['signatureBase64'])
         self.assertEqual(len(signature), 64)
         key.public_key().verify(utils.encode_dss_signature(int.from_bytes(signature[:32], 'big'), int.from_bytes(signature[32:], 'big')), canonical, ec.ECDSA(hashes.SHA256()))
+
+    def test_remote_script_is_run_to_completion_and_secrets_are_redacted(self):
+        windows_ps = load()['windows_ps']
+        sent = {}
+
+        def finished(command, input, **_):
+            sent['input'] = input
+            return SimpleNamespace(returncode=0, stdout='out\n' + re.search(r"Write-Output '([0-9a-f]{32})'", input).group(1) + '\n', stderr='')
+
+        with patch('subprocess.run', finished):
+            self.assertEqual(windows_ps('host', 'Write-Output out'), 'out')
+        # PowerShell holds a trailing try/catch back from stdin until a blank line; without it the script never runs.
+        self.assertTrue(sent['input'].endswith('}\n\n'))
+        with patch('subprocess.run', lambda *a, **k: SimpleNamespace(returncode=0, stdout='', stderr='')):
+            with self.assertRaisesRegex(AssertionError, 'Windows command failed'):
+                windows_ps('host', 'x')
+        with patch('subprocess.run', lambda *a, **k: SimpleNamespace(returncode=1, stdout='', stderr='bad token s3cret')):
+            with self.assertRaises(AssertionError) as raised:
+                windows_ps('host', 'x', secrets=('s3cret',))
+        self.assertIn('[redacted]', str(raised.exception))
+        self.assertNotIn('s3cret', str(raised.exception))
 
 
 if __name__ == '__main__':

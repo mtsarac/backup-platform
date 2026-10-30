@@ -1,0 +1,22 @@
+# A second, disposable backend next to the lab one, for scenarios that need an empty agent release store (Windows self-update, scripts/e2e/selfupdate.py --windows).
+# Layer it last, under its own project name: `docker compose -p bpe2e-iso --env-file .env.e2e -f docker-compose.yml -f docker-compose.e2e.override.yml -f docker-compose.e2e-isolated.yml up -d --build`.
+# Own containers, host ports, database and volumes (the Central share is not mounted); the lab override's certificate and mTLS wiring is reused.
+services:
+  postgres:
+    container_name: bp-iso-postgres
+    ports: !override
+      - "${POSTGRES_PORT}:5432"
+  api:
+    container_name: ${E2E_API_CONTAINER:?set E2E_API_CONTAINER in .env.e2e}
+    ports: !override
+      - "${PUBLIC_HOST}:${E2E_MTLS_PORT:?set E2E_MTLS_PORT in .env.e2e}:5001"
+    volumes: !override
+      - api_dp_keys:/app/dp-keys
+      - api_gdrive_staging:/app/gdrive-staging
+      - ./docs/test-environment/certs/ca-bundle.pem:/etc/ssl/e2e-ca-bundle.pem:ro
+      - ./docs/test-environment/certs/mtls:/etc/e2e-mtls:ro
+      - frontend_certs:/etc/e2e-tls:ro
+  frontend:
+    container_name: bp-iso-frontend
+volumes:
+  samba_data: !reset {}

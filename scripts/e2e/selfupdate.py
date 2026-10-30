@@ -6,7 +6,7 @@ docs/test-environment/agent-builds) and signed by the e2e key. Checks, in order,
   2. a signed 1.0.1 release is published; its stored manifest is then tampered with on the api's volume (the agent must not trust whoever serves it): the restarted agent rejects it,
      downloads and stages nothing, and stays on 1.0.0 online;
   3. the original manifest is restored: the agent updates itself, restarts from releases/1.0.1, reports version 1.0.1 online with the same AgentId, and acknowledges the new release.
-Run: python3 selfupdate.py"""
+Run: python3 selfupdate.py; the Windows scenario (python3 selfupdate.py --windows) needs an isolated backend and a disposable Windows host, see scripts/README.md."""
 import base64, datetime, hashlib, importlib, io, json, os, pathlib, shutil, subprocess, sys, tarfile, tempfile, time, uuid, zipfile
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec, utils
@@ -66,7 +66,7 @@ def publish(admin, manifest, pkg):
 
 
 def api_sh(cmd):
-    r = subprocess.run(["docker", "exec", "bp-api", "sh", "-c", cmd], capture_output=True, text=True); return r.returncode, (r.stdout + r.stderr).strip()
+    r = subprocess.run(["docker", "exec", api.env.get("E2E_API_CONTAINER", "bp-api"), "sh", "-c", cmd], capture_output=True, text=True); return r.returncode, (r.stdout + r.stderr).strip()
 
 
 def vm(cmd):
@@ -189,13 +189,16 @@ def windows_build(version):
 
 
 def windows_ps(host, script, secrets=()):
-    r = subprocess.run(["ssh", host, "powershell -NoProfile -NonInteractive -Command -"],
-                       input="$ErrorActionPreference='Stop'\ntry {\n" + script + "\n} catch { Write-Error $_; exit 1 }\n",
+    # Read from stdin, PowerShell holds a trailing try/catch back until a blank line follows it (without one the script silently never runs), and `-Command -` exits 0 after a parse error:
+    # success therefore needs the sentinel printed as the script's last statement.
+    done = uuid.uuid4().hex
+    r = subprocess.run(["ssh", host, "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command -"],
+                       input="$ErrorActionPreference='Stop'\ntry {\n" + script + f"\nWrite-Output '{done}'\n}} catch {{ Write-Error $_; exit 1 }}\n\n",
                        capture_output=True, text=True, timeout=300)
-    error = r.stderr[-1000:]
+    error = r.stderr + r.stdout
     for secret in secrets: error = error.replace(secret, "[redacted]")
-    check(r.returncode == 0, f"Windows command failed: {error}")
-    return r.stdout.strip()
+    check(r.returncode == 0 and done in r.stdout, f"Windows command failed: {error[-1500:]}")
+    return r.stdout.replace(done, "").strip()
 
 
 @scenario("agents/windows-self-update-signed-manifest-version-changes")
@@ -209,7 +212,7 @@ def windows_self_update(t):
     check(lab.KEY.exists(), "Missing e2e signing key; configure the backend to trust it before running.")
     key = lab.signing_key(); pem = lab.public_pem()
     admin = api.login()
-    rc, output = api_sh("test ! -e /app/agent-updates/win-x64")
+    rc, output = api_sh(f"test ! -e {STORE}/win-x64")  # the agent would update at its first check if a release were already published
     check(rc == 0, f"Windows release store must be absent on the isolated backend: {output}")
     windows_ps(host, """
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'SSH PowerShell must run elevated.' }
@@ -264,7 +267,7 @@ $active = Get-Content "$control\\active.json" -Raw | ConvertFrom-Json
 $service = Get-CimInstance Win32_Service -Filter "Name='BackupAgent'"
 @{{ version = $active.Version; executable = $active.Executable; path = $service.PathName; status = $service.State;
    pending = (Test-Path "$control\\pending.json"); activation = (Test-Path "$control\\activation");
-   healthy = $(if (Test-Path '{store}.updates\\healthy') {{ Get-Content '{store}.updates\\healthy' -Raw }} else {{ $null }}) }} | ConvertTo-Json -Compress
+   healthy = $(if (Test-Path '{store}.updates\\healthy') {{ (Get-Content '{store}.updates\\healthy' -Raw).Trim() }} else {{ $null }}) }} | ConvertTo-Json -Compress
 """)
                 state = json.loads(output)
                 expected = f"{root}\\bin\\releases\\{NEW}\\BackupPlatform.Agent.Host.exe"
@@ -283,8 +286,9 @@ $service = Get-CimInstance Win32_Service -Filter "Name='BackupAgent'"
                     response = t.raw("POST", f"/agents/{a['agentId']}/revoke", {})
                     check(response.status_code in (200, 201, 202, 204), f"Agent revocation failed: {response.status_code}")
             finally:
-                if created:
-                    windows_ps(host, f"""
+                try:
+                    if created:
+                        windows_ps(host, f"""
 $root = '{root}'; $store = '{store}'
 if (Test-Path "$root\\.e2e-owned") {{
     $service = Get-CimInstance Win32_Service -Filter "Name='BackupAgent'"
@@ -295,6 +299,8 @@ if (Test-Path "$root\\.e2e-owned") {{
 }}
 Remove-Item -LiteralPath (Join-Path $HOME '{remote_zip}') -Force -ErrorAction SilentlyContinue
 """)
+                finally:
+                    api_sh(f"rm -rf {STORE}/win-x64")  # leave the isolated store empty so the scenario can run again
 
 
 if __name__ == "__main__":
