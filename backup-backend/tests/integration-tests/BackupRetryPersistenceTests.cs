@@ -927,7 +927,7 @@ public sealed class BackupRetryPersistenceTests(PostgreSqlFixture fixture) : ICl
 
         // (Run, Number) is unique: a second number 2 is impossible however the row is written.
         await AssertViolationAsync(context, PostgresErrorCodes.UniqueViolation,
-            $"INSERT INTO backup_run_attempts (\"Id\", \"TenantId\", \"RunId\", \"AgentId\", \"Number\", \"Status\", \"CreatedAt\", \"EligibleAt\") SELECT {Guid.NewGuid()}, \"TenantId\", \"RunId\", \"AgentId\", \"Number\", 1, \"CreatedAt\", \"EligibleAt\" FROM backup_run_attempts WHERE \"Id\" = {retryAttempt.Id}",
+            $"INSERT INTO backup_run_attempts (\"Id\", \"TenantId\", \"RunId\", \"AgentId\", \"Number\", \"Status\", \"CreatedAt\", \"EligibleAt\", \"PauseRequested\") SELECT {Guid.NewGuid()}, \"TenantId\", \"RunId\", \"AgentId\", \"Number\", 1, \"CreatedAt\", \"EligibleAt\", FALSE FROM backup_run_attempts WHERE \"Id\" = {retryAttempt.Id}",
             "IX_backup_run_attempts_TenantId_RunId_Number");
         await AssertAttemptNumbersAsync(env, scheduled.Id, 2);
 

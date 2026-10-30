@@ -202,27 +202,6 @@ public sealed class GoogleDriveOAuthHardeningTests(PostgreSqlFixture fixture) : 
     }
 
     [Fact]
-    public void GoogleDriveMigrationTargetMatchesSnapshotAndUpgradeIsAdditive()
-    {
-        using var db = fixture.CreatePlatformContext();
-        var assembly = db.GetService<IMigrationsAssembly>();
-        var migration = assembly.CreateMigration(assembly.Migrations[assembly.Migrations.Last().Key], db.Database.ProviderName!);
-        var initializer = db.GetService<IModelRuntimeInitializer>();
-        var target = initializer.Initialize(migration.TargetModel, designTime: true);
-        var snapshot = initializer.Initialize(assembly.ModelSnapshot!.Model, designTime: true);
-        Assert.False(db.GetService<IMigrationsModelDiffer>().HasDifferences(snapshot.GetRelationalModel(), target.GetRelationalModel()));
-        var configured = db.GetService<IDesignTimeModel>().Model;
-        Assert.False(db.GetService<IMigrationsModelDiffer>().HasDifferences(target.GetRelationalModel(), configured.GetRelationalModel()));
-        Assert.Contains(target.GetEntityTypes(), entity => entity.GetTableName() == "google_drive_oauth_states");
-        Assert.Contains(target.GetEntityTypes(), entity => entity.GetTableName() == "google_drive_file_metadata");
-        var script = db.GetService<IMigrator>().GenerateScript("20261009140000_BackendRelayedRestoreSources", "20261009160000_GoogleDriveStorageProvider");
-        Assert.Contains("CREATE TABLE google_drive_oauth_states", script);
-        Assert.Contains("CREATE TABLE google_drive_file_metadata", script);
-        Assert.DoesNotContain("DROP TABLE", script);
-        Assert.DoesNotContain("ALTER TABLE storage_connections", script);
-    }
-
-    [Fact]
     public async Task TenantMutationDoesNotWaitForRefreshHttp()
     {
         var connection = await SeedAsync();

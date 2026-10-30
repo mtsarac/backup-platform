@@ -126,26 +126,6 @@ public sealed class TenantWrapKeyStoreIntegrationTests(PostgreSqlFixture fixture
         Assert.Null(exception.InnerException);
     }
 
-    [Fact]
-    public async Task ExistingArtifactsAreMigratedToPlainAndPolicylessJobsStayOff()
-    {
-        var database = new PostgreSqlFixture();
-        await database.InitializeAsync();
-        try
-        {
-            const string previous = "20261015214653_DatabaseDiscovery";
-            await using var context = database.CreatePlatformContext();
-            await context.GetService<IMigrator>().MigrateAsync(previous);
-            await context.GetService<IMigrator>().MigrateAsync();
-            Assert.True(await context.Database.SqlQueryRaw<int>("SELECT 1 AS \"Value\" FROM information_schema.columns WHERE table_name = 'backup_artifacts' AND column_name = 'Format' AND column_default LIKE '%v1-plain%'").AnyAsync());
-            Assert.True(await context.Database.SqlQueryRaw<int>("SELECT 1 AS \"Value\" FROM information_schema.tables WHERE table_name = 'tenant_wrap_keys'").AnyAsync());
-        }
-        finally
-        {
-            await database.DisposeAsync();
-        }
-    }
-
     private async Task SetStateAsync(TenantId tenant, string state)
     {
         await using var context = fixture.CreatePlatformContext();

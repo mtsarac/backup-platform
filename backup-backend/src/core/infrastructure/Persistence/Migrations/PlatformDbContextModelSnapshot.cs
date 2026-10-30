@@ -18,7 +18,7 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -3763,12 +3763,12 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ConnectionId", "TenantId");
 
+                    b.HasIndex("TenantId", "AgentId", "CreatedAt");
+
                     b.HasIndex("TenantId", "ConnectionId", "AgentId")
                         .IsUnique()
                         .HasDatabaseName("ux_storage_capacity_tasks_pending")
                         .HasFilter("\"CompletedAt\" IS NULL");
-
-                    b.HasIndex("TenantId", "AgentId", "CreatedAt");
 
                     b.ToTable("storage_capacity_tasks", null, t =>
                         {
