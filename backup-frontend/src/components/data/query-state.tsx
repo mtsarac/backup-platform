@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { Card } from '@/components/ui/card'
 import type { ReactNode } from 'react'
 import { Inbox } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -17,11 +18,11 @@ export function QueryState({ isPending, error, empty, onRetry, forbiddenMessage,
 }) {
   useLanguage()
   const client = useQueryClient()
-  if (isPending) return <div role="status" aria-label={tx("Yükleniyor")} className="space-y-3 rounded-xl border border-border bg-surface p-5">
+  if (isPending) return <Card role="status" aria-label={tx("Yükleniyor")} className="space-y-3 p-5">
     <Skeleton className="h-5 w-1/3" /><Skeleton className="h-4 w-full" /><Skeleton className="h-4 w-4/5" /><span className="sr-only">{tx("Yükleniyor…")}</span>
-  </div>
+  </Card>
   if (forbiddenMessage && isForbidden(error)) return <AccessDenied what={forbiddenMessage(error)} />
   if (error) return <ErrorNotice title={tx("Veriler alınamadı")} error={error} onRetry={onRetry ?? (() => { void client.refetchQueries({ predicate: query => query.state.status === 'error' }) })} />
-  if (empty) return <div className="rounded-xl border border-border bg-surface"><EmptyState icon={Inbox} message={tx("Kayıt bulunamadı.")} /></div>
+  if (empty) return <Card padding="none"><EmptyState icon={Inbox} message={tx("Kayıt bulunamadı.")} /></Card>
   return children
 }

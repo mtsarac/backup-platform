@@ -5,7 +5,7 @@ import { Field } from '@/components/ui/field'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { inputClass } from '@/components/ui/form-styles'
+import { TextInput, TextArea } from '@/components/ui/text-input'
 import { useTenantRecoveryKeyActions } from './hooks'
 import type { TenantEncryption } from './types'
 import { formatDateTime } from '@/lib/format'
@@ -69,7 +69,7 @@ export function TenantKeysSection({ tenantId, tenantName, encryption, platformVi
       actions={tenantRecovery && <Button variant="outline" onClick={() => { remove.reset(); setRemoving(true) }}>{tx("Anahtarı kaldır")}</Button>}>
       <form className="space-y-3" onSubmit={event => { event.preventDefault(); if (!set.isPending && pem.trim()) submit() }}>
         <Field label={tx('Genel anahtar dosyası')} hint={tx('Yalnızca genel anahtar dosyasını seçin; özel anahtarınızı yüklemeyin.')}>
-          {control => <input {...control} type="file" accept=".pem,.pub,text/plain" className={inputClass} disabled={set.isPending} onChange={event => {
+          {control => <TextInput {...control} type="file" accept=".pem,.pub,text/plain"  disabled={set.isPending} onChange={event => {
             const file = event.target.files?.[0]
             event.target.value = ''
             if (!file) return
@@ -88,7 +88,7 @@ export function TenantKeysSection({ tenantId, tenantName, encryption, platformVi
           }} />}
         </Field>
         <Field label={tx("Genel anahtar (PEM)")} hint={tx("“-----BEGIN PUBLIC KEY-----” ile başlayan RSA genel anahtarı, en az 4096 bit. Özel anahtar girmeyin.")} error={pemError}>
-          {control => <textarea {...control} className={`${inputClass} font-mono text-sm`} rows={6} required disabled={set.isPending} spellCheck={false} autoComplete="off" value={pem} onChange={event => { setSaved(false); setPemError(''); setPem(event.target.value) }} />}
+          {control => <TextArea {...control} className="font-mono text-sm" rows={6} required disabled={set.isPending} spellCheck={false} autoComplete="off" value={pem} onChange={event => { setSaved(false); setPemError(''); setPem(event.target.value) }} />}
         </Field>
         {set.error && <ErrorNotice error={set.error} />}
         {saved && <Notice tone="success">{tx("Kurtarma anahtarınız kaydedildi. Sonraki şifreli yedeklere eklenir.")}</Notice>}

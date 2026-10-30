@@ -16,7 +16,7 @@ import { useCreateUser, usePlatformUsers } from '@/features/platform/hooks'
 import { ListEmpty } from '@/features/platform/list-empty'
 import { FormDialog } from '@/components/ui/form-dialog'
 import { SearchForm } from '@/features/platform/search-form'
-import { inputClass } from '@/components/ui/form-styles'
+import { TextInput } from '@/components/ui/text-input'
 import type { PlatformUser } from '@/features/platform/types'
 import { LIST_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { ApiError } from '@/lib/api/client'
@@ -36,8 +36,8 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
     })
   }
   return <FormDialog title={tx("Yeni kullanıcı")} description={tx("Bu işlem yalnızca kullanıcı hesabını oluşturur. Çalışma alanı üyeliğini ve rolünü çalışma alanı sayfasından ekleyin.")} submitLabel={tx("Kullanıcı oluştur")} pendingLabel={tx("Oluşturuluyor…")} pending={create.isPending} onSubmit={submit} onClose={onClose} error={create.error}>
-    <Field label={tx("Kullanıcı adı")} hint={tx("3-128 karakter: harf, rakam, nokta, alt çizgi, tire.")}>{(control) => <input {...control} className={inputClass} value={loginIdentifier} required autoComplete="off" aria-invalid={invalidField === 'loginIdentifier'} onChange={(event) => setLoginIdentifier(event.target.value)} />}</Field>
-    <Field label={tx("Görünen ad")}>{(control) => <input {...control} className={inputClass} value={displayName} required autoComplete="off" aria-invalid={invalidField === 'displayName'} onChange={(event) => setDisplayName(event.target.value)} />}</Field>
+    <Field label={tx("Kullanıcı adı")} hint={tx("3-128 karakter: harf, rakam, nokta, alt çizgi, tire.")}>{(control) => <TextInput {...control}  value={loginIdentifier} required autoComplete="off" aria-invalid={invalidField === 'loginIdentifier'} onChange={(event) => setLoginIdentifier(event.target.value)} />}</Field>
+    <Field label={tx("Görünen ad")}>{(control) => <TextInput {...control}  value={displayName} required autoComplete="off" aria-invalid={invalidField === 'displayName'} onChange={(event) => setDisplayName(event.target.value)} />}</Field>
     <SecretField label={tx("Şifre")} hint={tx("En az 12 karakter.")} required value={password.value} invalid={invalidField === 'password'} onChange={password.set} />
   </FormDialog>
 }

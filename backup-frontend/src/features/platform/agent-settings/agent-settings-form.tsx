@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { tx, useLanguage } from '@/lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
-import { inputClass } from '@/components/ui/form-styles'
+import { TextInput } from '@/components/ui/text-input'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { ApiError } from '@/lib/api/client'
@@ -30,10 +30,10 @@ export function AgentSettingsForm({ settings }: { settings: AgentSettings }) {
   return <Section title={tx("Kurulum ayarları")} description={tx("Tüm çalışma alanları için geçerlidir; çalışma alanı kullanıcıları bu değerleri görmez ve değiştiremez.")}>
     <form onSubmit={submit} noValidate className="space-y-4">
       <Field label={tx("Sunucu HTTPS adresi")} error={urlError} hint={tx("Yedekleme bilgisayarları bu adrese bağlanır. Yalnızca https, sunucu adı ve isteğe bağlı port yazın; yol, sorgu veya kullanıcı bilgisi eklemeyin.")}>
-        {(control) => <input {...control} type="url" className={inputClass} value={serverUrl} placeholder="https://backup.example.com" onChange={(event) => setServerUrl(event.target.value)} />}
+        {(control) => <TextInput {...control} type="url"  value={serverUrl} placeholder="https://backup.example.com" onChange={(event) => setServerUrl(event.target.value)} />}
       </Field>
       <Field label={tx("Kayıt anahtarının geçerlilik süresi (dakika)")} error={lifetimeError} hint={tx("Kullanılmamış bir kurulum komutu bu süre sonunda geçersiz olur. Kurulu bilgisayarlar etkilenmez.")}>
-        {(control) => <input {...control} type="number" className={inputClass} min={minMinutes} max={maxMinutes} step={1} value={lifetime} onChange={(event) => setLifetime(event.target.value)} />}
+        {(control) => <TextInput {...control} type="number"  min={minMinutes} max={maxMinutes} step={1} value={lifetime} onChange={(event) => setLifetime(event.target.value)} />}
       </Field>
       <p className="text-sm text-text-muted">{tx('Son güncelleme')}: {formatDateTime(settings.updatedAt, tx('Henüz bildirilmedi'))}</p>
       {save.isError && !urlError && !lifetimeError && <ErrorNotice error={save.error} />}

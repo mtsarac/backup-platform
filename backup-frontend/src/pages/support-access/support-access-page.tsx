@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { Card } from '@/components/ui/card'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { AccessDenied } from '@/components/auth/access-denied'
@@ -77,7 +78,7 @@ function SessionHistory({ tenantId, page, onPage, onOpen }: { tenantId: string; 
   return <AccessQueryState isPending={query.isPending} error={query.error}>
     {query.data && <div className="space-y-4">
       {query.data.items.length === 0 ? <EmptyState message={tx('Henüz destek erişimi kaydı yok.')} /> : <ul aria-label={tx('Destek erişimi geçmişi')} className="space-y-3">
-        {query.data.items.map(row => <li key={row.id} className="space-y-4 rounded-xl border border-border bg-surface p-4 shadow-card">
+        {query.data.items.map(row => <Card as="li" key={row.id} className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="break-words font-semibold">{row.actorDisplayName ?? tx('Bilinmiyor')}</h2>
             <StatusPill domain="supportSession" status={row.status} />
@@ -88,7 +89,7 @@ function SessionHistory({ tenantId, page, onPage, onOpen }: { tenantId: string; 
             <Fact label={tx('İzin verilen işlemler')}><PermissionBadges permissions={row.permissions} /></Fact>
           </Facts>
           <Button variant="outline" onClick={() => onOpen(row.id)}>{tx('Etkinliği görüntüle')}</Button>
-        </li>)}
+        </Card>)}
       </ul>}
       {query.data.totalCount > 0 && <Pagination label={tx('Destek oturumu sayfaları')} page={page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={onPage} />}
     </div>}
@@ -120,7 +121,7 @@ function SessionActivity({ tenantId, sessionId }: { tenantId: string; sessionId:
   return <div className="space-y-3"><h3 className="font-semibold">{tx('Etkinlik geçmişi')}</h3>
     <AccessQueryState isPending={query.isPending} error={query.error}>{query.data && <>
       {query.data.items.length === 0 ? <EmptyState message={tx('Bu oturum için etkinlik kaydı yok.')} /> : <ul aria-label={tx('Etkinlik geçmişi')} className="space-y-3">
-        {query.data.items.map(row => <li key={row.id} className="space-y-3 rounded-xl border border-border p-4">
+        {query.data.items.map(row => <Card as="li" key={row.id} className="space-y-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <h4 className="break-words font-medium">{auditActionLabel(row.action) ?? tx('Destek işlemi')}</h4>
             <RelativeTime value={row.at} />
@@ -135,7 +136,7 @@ function SessionActivity({ tenantId, sessionId }: { tenantId: string; sessionId:
             { label: tx('Ham sonuç'), value: row.result ?? '—' },
             { label: tx('Zaman'), value: formatDateTime(row.at) },
           ]} />
-        </li>)}
+        </Card>)}
       </ul>}
       {query.data.totalCount > 0 && <Pagination label={tx('Destek etkinliği sayfaları')} page={page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ activityPage: next })} />}
     </>}</AccessQueryState>

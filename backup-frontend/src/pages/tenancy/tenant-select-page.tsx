@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { Card } from '@/components/ui/card'
 import { Link, Navigate } from 'react-router-dom'
 import { useState } from 'react'
 import { ArrowRight, LogOut, ShieldCheck } from 'lucide-react'
@@ -19,7 +20,7 @@ export function TenantSelectPage() {
     <div className="flex justify-end"><LanguageSwitcher /></div>
     <PageHeader title={tx("Tenant seçin")} description={<>{user?.displayName} · {user?.isPlatformAdmin ? tx('PlatformAdmin yetkisi tenant üyeliğinden ayrıdır.') : tx('Yönetmek istediğiniz tenant ile devam edin.')}</>}
       actions={<Button variant="outline" onClick={() => { void logout().catch(error => setError(describeError(error))) }}><LogOut aria-hidden="true" className="size-4" />{tx("Çıkış")}</Button>} />
-    {tenants.length === 0 ? <div className="rounded-xl border border-border bg-surface"><EmptyState message={tx("Henüz bir tenant üyeliğiniz yok")} canAct={false} /></div>
+    {tenants.length === 0 ? <Card padding="none"><EmptyState message={tx("Henüz bir tenant üyeliğiniz yok")} canAct={false} /></Card>
       : <ul className="grid gap-3 sm:grid-cols-2">{tenants.map(tenant => <li key={tenant.tenantId}>
         <Link className="group flex h-full min-w-0 items-center justify-between gap-3 rounded-xl border border-border bg-surface p-5 shadow-card transition-colors hover:border-primary focus-visible:outline-2 focus-visible:outline-ring" to={`/tenants/${tenant.tenantId}`}>
           <span className="min-w-0"><span className="block break-words font-semibold text-text-heading">{tenant.name}</span><span className="text-sm text-text-muted">{tx(tenant.membershipRole ?? tenant.role)}</span></span>

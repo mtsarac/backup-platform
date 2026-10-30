@@ -18,7 +18,8 @@ import { bareListClass } from '@/features/platform/list-empty'
 import { platformPaths } from '@/features/platform/paths'
 import { TenantStorageSection } from '@/features/platform/storage/tenant-storage-section'
 import { SubscriptionSection } from '@/features/platform/plans/subscription-section'
-import { inputClass, linkClass } from '@/components/ui/form-styles'
+import { linkClass } from '@/components/ui/form-styles'
+import { TextInput } from '@/components/ui/text-input'
 import { isFeatureEnabled } from '@/features/feature-flags/feature-flags'
 import { SupportAccessSection } from '@/features/platform/support/support-access-section'
 import { MembershipsSection } from '@/features/platform/tenant-members'
@@ -65,7 +66,7 @@ function RenameForm({ tenantId, name }: { tenantId: string; name: string }) {
   return <Section title={tx("Tenant adı")} description={tx("Ad tüm listelerde ve audit kayıtlarında görünür.")}>
     <form onSubmit={submit} className="space-y-3">
       <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-0 flex-1 basis-64"><Field label={tx("Ad")}>{(control) => <input {...control} className={inputClass} value={draft} maxLength={200} required aria-invalid={invalid} onChange={(event) => { setSaved(false); setDraft(event.target.value) }} />}</Field></div>
+        <div className="min-w-0 flex-1 basis-64"><Field label={tx("Ad")}>{(control) => <TextInput {...control}  value={draft} maxLength={200} required aria-invalid={invalid} onChange={(event) => { setSaved(false); setDraft(event.target.value) }} />}</Field></div>
         <Button type="submit" disabled={rename.isPending || !draft.trim() || draft.trim() === name}>{rename.isPending ? tx('Kaydediliyor…') : tx('Yeniden adlandır')}</Button>
       </div>
       {rename.error && <p role="alert" className="text-sm text-error">{errorMessage(rename.error)}</p>}

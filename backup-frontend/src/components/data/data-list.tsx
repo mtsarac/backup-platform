@@ -1,4 +1,5 @@
 import { currentLocale, tx, useLanguage } from '@/lib/i18n'
+import { Card, cardClass } from '@/components/ui/card'
 import { useState, type ReactNode } from 'react'
 import { Pagination } from '@/components/data/pagination'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -45,7 +46,7 @@ function Cards<T>({ rows, columns, keyExtractor, className, caption }: ListProps
   return (
     <ul aria-label={caption} className={cn('space-y-3', className)}>
       {rows.map((row) => (
-        <li key={keyExtractor(row)} className="space-y-3 rounded-xl border border-border bg-surface p-4 shadow-card">
+        <Card as="li" key={keyExtractor(row)} className="space-y-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
             {title && <h3 className="min-w-0 break-words text-base font-semibold text-text-heading">{title.render(row)}</h3>}
             {statuses.length > 0 && <div className="flex flex-wrap items-center gap-2">{statuses.map(column => <span key={column.key}>{column.render(row)}</span>)}</div>}
@@ -61,7 +62,7 @@ function Cards<T>({ rows, columns, keyExtractor, className, caption }: ListProps
             </dl>
           )}
           {actions.length > 0 && <div className="flex flex-wrap items-center gap-2 [&_button]:min-h-11 [&_button]:min-w-11">{actions.map(column => <span key={column.key}>{column.render(row)}</span>)}</div>}
-        </li>
+        </Card>
       ))}
     </ul>
   )
@@ -69,7 +70,7 @@ function Cards<T>({ rows, columns, keyExtractor, className, caption }: ListProps
 
 function Table<T>({ rows, columns, keyExtractor, className, caption }: ListProps<T>) {
   return (
-    <div className={cn('overflow-x-auto rounded-xl border border-border bg-surface shadow-card', className)}>
+    <div className={cn(cardClass, 'overflow-x-auto', className)}>
       <table className="w-full border-collapse text-body">
         {caption && <caption className="sr-only">{caption}</caption>}
         <thead>
@@ -113,7 +114,7 @@ export function DataList<T>({ rows, columns, keyExtractor, emptyMessage = tx('Ka
         </Filters>
       )}
       {visible.length === 0
-        ? <div className={cn('rounded-xl border border-border bg-surface', className)}><EmptyState message={needle ? tx('Aramayla eşleşen kayıt yok.') : emptyMessage} /></div>
+        ? <div className={cn(cardClass, className)}><EmptyState message={needle ? tx('Aramayla eşleşen kayıt yok.') : emptyMessage} /></div>
         : <List rows={visible} columns={columns} keyExtractor={keyExtractor} className={className} caption={caption} />}
       {search && matches.length > PAGE_SIZE && <Pagination label={tx("{0} sayfaları", { "0": search.label })} page={current} pageSize={PAGE_SIZE} totalCount={matches.length} onPageChange={setPage} />}
     </div>

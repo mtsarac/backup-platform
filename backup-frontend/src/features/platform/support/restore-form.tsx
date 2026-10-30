@@ -7,7 +7,8 @@ import { Field } from '@/components/ui/field'
 import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { Stepper } from '@/components/ui/stepper'
-import { inputClass, selectClass } from '@/components/ui/form-styles'
+import { selectClass } from '@/components/ui/form-styles'
+import { TextInput } from '@/components/ui/text-input'
 import { isActiveRestore, safeRestoreCode } from '@/features/restores/presentation'
 import type { SupportRestoreTargets, SupportSession } from './types'
 import { useSupportRestore, useSupportRestoreActions, useSupportRestoreTargets } from './hooks'
@@ -78,7 +79,7 @@ function RestoreForm({ session, artifactId, targets, onStarted }: { session: Sup
     <fieldset disabled={busy || !scope.enabled} className="grid gap-4 sm:grid-cols-2">
       <Field label={tx("Agent")}>{(control) => <select {...control} className={`${selectClass} w-full`} value={agentId} onChange={event => { const id = event.target.value; setAgentId(id); setTargetJobId(targets.targets.find(item => item.agentId === id)?.jobId ?? ''); setAcknowledged(false) }}><option value="">{tx("Agent seçin")}</option>{eligibleAgents.map(agent => <option key={agent.agentId} value={agent.agentId}>{agent.hostName ?? agent.agentId} · {agent.sourceAccess}</option>)}</select>}</Field>
       <Field label={tx("Hedef {0}", { "0": engineName })}>{(control) => <select {...control} className={`${selectClass} w-full`} value={targetJobId} onChange={event => { setTargetJobId(event.target.value); setAcknowledged(false) }}><option value="">{tx("Hedef seçin")}</option>{targets.targets.filter(item => item.agentId === agentId).map(item => <option key={item.jobId} value={item.jobId}>{item.jobName} · {item.host}{item.port ? `:${item.port}` : ''} · {item.database}</option>)}</select>}</Field>
-      <div className="sm:col-span-2"><Field label={tx("Yeni Database adı")}>{(control) => <input {...control} className={inputClass} value={databaseName} maxLength={128} onChange={event => { setDatabaseName(event.target.value); setAcknowledged(false) }} />}</Field></div>
+      <div className="sm:col-span-2"><Field label={tx("Yeni Database adı")}>{(control) => <TextInput {...control}  value={databaseName} maxLength={128} onChange={event => { setDatabaseName(event.target.value); setAcknowledged(false) }} />}</Field></div>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={verifyChecksum} onChange={event => { setVerifyChecksum(event.target.checked); setAcknowledged(false) }} />{tx("Checksum doğrula")}</label>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={verifyBackup} onChange={event => { setVerifyBackup(event.target.checked); setAcknowledged(false) }} />{tx("Backup doğrula ·")}{' '}{isPg ? tx('pg_restore arşiv doğrulaması') : 'RESTORE VERIFYONLY'}</label>
     </fieldset>

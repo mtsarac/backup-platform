@@ -2,7 +2,8 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Field } from '@/components/ui/field'
 import { FormDialog } from '@/components/ui/form-dialog'
-import { inputClass, selectClass } from '@/components/ui/form-styles'
+import { selectClass } from '@/components/ui/form-styles'
+import { TextInput } from '@/components/ui/text-input'
 import { useSaveBandwidthProfile } from './hooks'
 import type { BandwidthProfile, TransferScheduleWindowDto } from './types'
 import { DAYS } from './schedule'
@@ -63,10 +64,10 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
     >
       <div className="space-y-4">
         <Field label={tx("Profil Adı")}>
-          {control => <input {...control} className={inputClass} value={name} onChange={e => setName(e.target.value)} placeholder={tx("Örn. Mesai Saatleri")} maxLength={200} required />}
+          {control => <TextInput {...control}  value={name} onChange={e => setName(e.target.value)} placeholder={tx("Örn. Mesai Saatleri")} maxLength={200} required />}
         </Field>
         <Field label={tx("Zaman Dilimi (IANA)")}>
-          {control => <input {...control} className={inputClass} value={timeZoneId} onChange={e => setTimeZoneId(e.target.value)} placeholder="Europe/Istanbul" required />}
+          {control => <TextInput {...control}  value={timeZoneId} onChange={e => setTimeZoneId(e.target.value)} placeholder="Europe/Istanbul" required />}
         </Field>
 
         <div className="rounded-lg border border-border p-3 space-y-3 bg-surface-muted/30">
@@ -86,15 +87,15 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
               )}
             </Field>
             <Field label={tx("Başlangıç")}>
-              {control => <input {...control} type="time" className={inputClass} value={startTime} onChange={e => setStartTime(e.target.value)} />}
+              {control => <TextInput {...control} type="time"  value={startTime} onChange={e => setStartTime(e.target.value)} />}
             </Field>
             <Field label={tx("Bitiş")}>
-              {control => <input {...control} type="time" className={inputClass} value={endTime} onChange={e => setEndTime(e.target.value)} />}
+              {control => <TextInput {...control} type="time"  value={endTime} onChange={e => setEndTime(e.target.value)} />}
             </Field>
             <Field label={tx("Hız Limiti")}>
               {control => (
                 <div className="flex gap-1">
-                  <input {...control} className={inputClass} value={rateText} disabled={pause} onChange={e => setRateText(e.target.value)} />
+                  <TextInput {...control}  value={rateText} disabled={pause} onChange={e => setRateText(e.target.value)} />
                   <select aria-label={tx("Hız Birimi")} className={selectClass} value={rateUnit} disabled={pause} onChange={e => setRateUnit(e.target.value as BandwidthUnitId)}>
                     {bandwidthUnits.map(u => <option key={u.id} value={u.id}>{unitLabel(u.id)}</option>)}
                   </select>
