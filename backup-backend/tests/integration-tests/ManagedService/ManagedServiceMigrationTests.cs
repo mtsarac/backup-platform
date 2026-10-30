@@ -18,9 +18,7 @@ public sealed class ManagedServiceMigrationTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        var configured = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_CONNECTION_STRING");
-        Assert.False(string.IsNullOrWhiteSpace(configured), "Set BACKUP_PLATFORM_TEST_CONNECTION_STRING.");
-        var builder = new NpgsqlConnectionStringBuilder(configured) { Pooling = false };
+        var builder = new NpgsqlConnectionStringBuilder(TestContainers.PostgresAdministrativeConnectionString) { Pooling = false };
         _administrative = builder.ConnectionString;
         await using (var connection = new NpgsqlConnection(_administrative))
         {

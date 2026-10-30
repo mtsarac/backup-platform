@@ -96,11 +96,7 @@ public sealed class PostgreSqlFixture : IAsyncLifetime
 
     internal static string GetAdministrativeConnectionString()
     {
-        var configured = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_CONNECTION_STRING");
-        if (string.IsNullOrWhiteSpace(configured))
-            throw new InvalidOperationException(
-                "Set BACKUP_PLATFORM_TEST_CONNECTION_STRING to an administrative PostgreSQL connection with CREATE DATABASE privileges before running integration tests.");
-        return new NpgsqlConnectionStringBuilder(configured) { Pooling = false }.ConnectionString;
+        return new NpgsqlConnectionStringBuilder(TestContainers.PostgresAdministrativeConnectionString) { Pooling = false }.ConnectionString;
     }
 }
 
