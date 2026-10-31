@@ -43,6 +43,16 @@ services:
     volumes:
       - samba_data:/storage
 
+  # SMTP sink for the notify scenarios (scripts/e2e/notify.py): SMTP on the bridge address, REST API on localhost:8181.
+  greenmail:
+    image: greenmail/standalone
+    container_name: e2e-greenmail
+    environment:
+      GREENMAIL_OPTS: -Dgreenmail.setup.test.smtp -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.users=u:p@e2e.test -Dgreenmail.api.hostname=0.0.0.0
+    ports:
+      - "${PUBLIC_HOST:-192.168.122.1}:3025:3025"
+      - "127.0.0.1:8181:8080"
+
 volumes:
   minio_data:
   samba_data:
