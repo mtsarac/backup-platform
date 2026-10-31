@@ -10,6 +10,7 @@ import type { BackupArtifact, BackupReplica } from './types'
 import { ReplicationSummary } from '@/features/backups/replication'
 import { ArtifactEncryptionSection } from '@/features/artifact-encryption/artifact-encryption-section'
 import { formatBytes, formatDateTime } from '@/lib/format'
+import { Disclosure } from '@/components/ui/disclosure'
 
 /** Metadata presentation also accepts the deliberately redacted platform support projection. */
 export interface ArtifactPresentation extends Omit<BackupArtifact, 'attemptId' | 'replicas'> {
@@ -126,9 +127,7 @@ export function ArtifactReplicas({ artifact }: { artifact: ArtifactPresentation 
           <Fact label={tx("Doğrulama yöntemi")}>{replica.verificationMethod}</Fact>
           <Fact label={tx("Doğrulama zamanı")}>{formatDateTime(replica.verifiedAt)}</Fact>
         </Facts>
-        <details className="rounded-lg border border-border bg-surface-2 px-4 py-3" open={deleting}>
-          <summary className="min-h-11 cursor-pointer text-sm font-medium text-text-heading">{tx("Checksum ve silme ayrıntıları")}</summary>
-          <div className="pt-4"><Facts columns={3}>
+        <Disclosure title={tx("Checksum ve silme ayrıntıları")} open={deleting}><Facts columns={3}>
             <Fact label={tx("Checksum")}><code className="break-all font-mono text-sm">{replica.checksum}</code></Fact>
             <Fact label={tx("Checksum algoritması")}>{replica.checksumAlgorithm}</Fact>
             <Fact label={tx("Silme yürütücüsü")}>{executionLocationLabel((replica.executionLocation ?? replica.deletionExecutor) === 'Agent' ? 'Agent' : 'Backend')}</Fact>
@@ -137,8 +136,7 @@ export function ArtifactReplicas({ artifact }: { artifact: ArtifactPresentation 
             {replica.deleteNextAttemptAt !== undefined && <Fact label={tx("Sonraki silme denemesi")}>{formatDateTime(replica.deleteNextAttemptAt)}</Fact>}
             {replica.deleteAttempts !== undefined && <Fact label={tx("Silme denemesi")}>{replica.deleteAttempts}</Fact>}
             {replica.deleteReason !== undefined && <Fact label={tx("Silme nedeni")}>{deletionReason(replica.deleteReason)}</Fact>}
-          </Facts></div>
-        </details>
+          </Facts></Disclosure>
       </Card>
     })}
   </section>

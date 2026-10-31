@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/features/auth/use-auth'
 import { TenantContext } from './tenant-context'
 import { tenantPermissions } from './permissions'
+import { Button } from '@/components/ui/button'
 
 export function TenantProvider({ children }: { children: ReactNode }) {
   useLanguage()
@@ -22,7 +23,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       cache.removeQueries({ queryKey: ['tenant', oldId] })
     }
   }, [cache, tenantId])
-  if (!tenant) return <div role="alert" className="p-6">{tx("Bu tenant için üyeliğiniz yok.")}{' '}<button type="button" className="text-primary underline" onClick={() => navigate('/')}>{tx("Tenant seçimine dön")}</button></div>
+  if (!tenant) return <div role="alert" className="p-6">{tx("Bu tenant için üyeliğiniz yok.")}{' '}<Button variant="link" size="sm" type="button" onClick={() => navigate('/')}>{tx("Tenant seçimine dön")}</Button></div>
   async function switchTenant(id: string) {
     if (id === tenantId || !tenants.some(item => item.tenantId === id)) return
     navigate(`/tenants/${encodeURIComponent(id)}`)

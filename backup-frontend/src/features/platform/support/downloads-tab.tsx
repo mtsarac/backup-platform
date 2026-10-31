@@ -14,6 +14,7 @@ import type { SupportDownload, SupportSession } from './types'
 import { formatBytes, formatDateTime } from '@/lib/format'
 import { QueryState } from '@/components/data/query-state'
 import { errorMessage } from '@/lib/api/failure-messages'
+import { Button } from '@/components/ui/button'
 
 export function SupportDownloadsTab({ session }: { session: SupportSession }) {
   useLanguage()
@@ -22,7 +23,7 @@ export function SupportDownloadsTab({ session }: { session: SupportSession }) {
   const query = useSupportDownloads(scope, { page, pageSize: LIST_PAGE_SIZE })
   const columns: Column<SupportDownload>[] = [
     { key: 'filename', card: 'title', header: tx('Dosya'), wrap: true, render: item => item.filename },
-    { key: 'artifact', header: tx('Yedek dosyası'), wrap: true, render: item => <div className="space-y-2"><button className="text-primary hover:underline" onClick={() => update({ tab: 'browser', view: 'artifacts', artifact: item.artifactId })}>{tx("Yedek dosyası ayrıntıları")}</button><TechnicalDetails items={[{ label: tx('Yedek dosyası kimliği'), value: item.artifactId }]} /></div> },
+    { key: 'artifact', header: tx('Yedek dosyası'), wrap: true, render: item => <div className="space-y-2"><Button variant="link" size="sm" type="button" onClick={() => update({ tab: 'browser', view: 'artifacts', artifact: item.artifactId })}>{tx("Yedek dosyası ayrıntıları")}</Button><TechnicalDetails items={[{ label: tx('Yedek dosyası kimliği'), value: item.artifactId }]} /></div> },
     { key: 'state', card: 'status', header: tx('Durum'), render: item => <StatusPill status={item.state} /> },
     { key: 'bytes', header: tx('Aktarım / Boyut'), render: item => `${formatBytes(item.transferredBytes)} / ${formatBytes(item.sizeBytes)}` },
     { key: 'failure', header: tx('Sonuç'), wrap: true, render: item => item.failureCode ? failureMessage(item.failureCode) : '—' },

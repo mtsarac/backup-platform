@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { DataList, type Column } from '@/components/data/data-list'
 import { Pagination } from '@/components/data/pagination'
 import { Button } from '@/components/ui/button'
-import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
+import { FilterField, Filters } from '@/components/ui/filters'
 import { PageHeader } from '@/components/ui/page-header'
 import { platformCrumb } from '@/features/platform/crumbs'
 import { ListEmpty } from '@/features/platform/list-empty'
@@ -19,6 +19,7 @@ import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { QueryState } from '@/components/data/query-state'
 import { platformOnlyMessage } from '@/lib/api/failure-messages'
+import { Select } from '@/components/ui/text-input'
 
 function enabledFilter(value: string): EnabledFilter | undefined {
   return value === 'true' || value === 'false' ? value : undefined
@@ -61,9 +62,9 @@ export function PlatformPlansPage() {
     <PageHeader crumbs={[platformCrumb]} title={tx("Plans")} description={tx("Depolama planlarını yönetin. 1 GB = 1.000.000.000 bayt (ondalık).")} actions={<Button onClick={() => setCreating(true)}>{tx("Yeni plan")}</Button>} />
     <Filters label={tx("Plan filtreleri")} onClear={filtered ? () => update({ search: '', enabled: '' }) : undefined}>
       <SearchForm className="sm:col-span-2" label={tx("Plan ara")} value={search} onSearch={(value) => update({ search: value })} placeholder={tx("Plan adı")} />
-      <FilterField label={tx("Durum")}><select className={filterControlClass} value={enabled ?? ''} onChange={(event) => update({ enabled: event.target.value })}>
+      <FilterField label={tx("Durum")}><Select className="text-sm" value={enabled ?? ''} onChange={(event) => update({ enabled: event.target.value })}>
         <option value="">{tx("Tümü")}</option><option value="true">{tx("Etkin")}</option><option value="false">{tx("Devre dışı")}</option>
-      </select></FilterField>
+      </Select></FilterField>
     </Filters>
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">

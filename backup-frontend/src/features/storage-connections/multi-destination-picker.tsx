@@ -7,6 +7,7 @@ import { errorMessage } from '@/lib/api/failure-messages'
 import type { ConnectionView, ProviderDescriptor } from './types'
 import { connectionUnavailableReason, primaryDestination, resolveDestinationConnection } from './job-connection-picker-utils'
 import { executionLocationLabel } from './labels'
+import { Button } from '@/components/ui/button'
 
 interface Props {
   configuration: BackupConfiguration
@@ -131,7 +132,7 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
       </div>
       <div className="space-y-1"><span className="block text-sm font-medium text-text-heading">{tx("Depolama yürütme konumu")}</span><p className="text-sm">{executionLocationLabel(primary.storageExecutionLocation)}</p><p className="text-xs text-text-muted">{tx("Yeni hedef seçildiğinde sağlayıcının yürütme konumu uygulanır.")}</p></div>
       {pending && <p role="status" className="text-sm">{tx("Depolama bağlantıları yükleniyor…")}</p>}
-      {error ? <div role="alert" className="text-sm text-destructive">{errorMessage(error)} <button type="button" className="underline" onClick={onRefresh}>{tx("Bağlantıları yeniden yükle")}</button></div> : !pending && reason && <p role="status" className="text-sm text-warning md:col-span-2">{target ? tx("“{0}” depolama hedefi", { "0": target.name }) : tx('Depolama hedefi')}: {reason}. {existingTarget ? tx("Mevcut hedef kimliği korunarak iş kaydedilebilir, ancak hedef kullanılabilir olana kadar yeni backup'lar (manuel ve zamanlanmış) başlatılamaz. Mevcut backup'lar etkilenmez.") : tx('Yeni iş veya yeni hedef için kullanılabilir bir bağlantı seçin; varsayılan seçimi bu engeli aşmaz.')}</p>}
+      {error ? <div role="alert" className="text-sm text-destructive">{errorMessage(error)} <Button variant="link" size="sm" type="button" onClick={onRefresh}>{tx("Bağlantıları yeniden yükle")}</Button></div> : !pending && reason && <p role="status" className="text-sm text-warning md:col-span-2">{target ? tx("“{0}” depolama hedefi", { "0": target.name }) : tx('Depolama hedefi')}: {reason}. {existingTarget ? tx("Mevcut hedef kimliği korunarak iş kaydedilebilir, ancak hedef kullanılabilir olana kadar yeni backup'lar (manuel ve zamanlanmış) başlatılamaz. Mevcut backup'lar etkilenmez.") : tx('Yeni iş veya yeni hedef için kullanılabilir bir bağlantı seçin; varsayılan seçimi bu engeli aşmaz.')}</p>}
 
       {/* Multi-destination replication section */}
       <div className="space-y-3 pt-4 border-t border-border md:col-span-2">
@@ -174,20 +175,18 @@ export function MultiDestinationPicker({ configuration, connections, providers, 
 
                 <div className="flex items-center gap-2 self-end sm:self-center">
                   {!dest.isPrimary && (
-                    <button
+                    <Button variant="link" size="sm"
                       type="button"
                       onClick={() => handleSetPrimary(index)}
-                      className="text-xs text-primary hover:underline px-2 py-1 rounded hover:bg-surface"
-                    >{tx("Primary Yap")}</button>
+                    >{tx("Primary Yap")}</Button>
                   )}
                   {destinations.length > 1 && (
-                    <button
+                    <Button variant="destructive" size="sm"
                       type="button"
                       aria-label={tx("{0} hedefini kaldır", { "0": tx(destProv?.displayName ?? dest.storageProvider) })}
                       disabled={Boolean(configuration.enforceThreeTwoOne) && destinations.length <= 3}
                       onClick={() => handleRemove(index)}
-                      className="text-xs text-destructive hover:underline px-2 py-1 rounded hover:bg-surface"
-                    >{tx("Kaldır")}</button>
+                    >{tx("Kaldır")}</Button>
                   )}
                 </div>
               </div>

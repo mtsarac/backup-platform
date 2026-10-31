@@ -3,7 +3,7 @@ import { CheckField } from '@/components/ui/check-field'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Pagination } from '@/components/data/pagination'
-import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
+import { FilterField, Filters } from '@/components/ui/filters'
 import { PageHeader } from '@/components/ui/page-header'
 import { BreakGlassRequestDialog } from '@/features/artifact-encryption/break-glass-request-dialog'
 import { BreakGlassTable } from '@/features/artifact-encryption/break-glass-table'
@@ -15,6 +15,7 @@ import { LIST_PAGE_SIZE, useListParams } from '@/features/platform/use-list-para
 import { statusLabel } from '@/lib/status'
 import { QueryState } from '@/components/data/query-state'
 import { platformOnlyMessage } from '@/lib/api/failure-messages'
+import { Select } from '@/components/ui/text-input'
 
 export function PlatformBreakGlassPage() {
   useLanguage()
@@ -37,7 +38,7 @@ export function PlatformBreakGlassPage() {
       actions={<Button onClick={() => setDialogOpen(true)}>{tx("Yeni istek")}</Button>} />
     <Filters label={tx("Acil destek erişimi filtreleri")} onClear={status || mine || tenantId ? () => update({ status: '', mine: '', tenantId: '' }) : undefined}>
       <TenantPicker value={tenantId} onChange={value => update({ tenantId: value })} />
-      <FilterField label={tx("Durum")}><select aria-label={tx("Durum")} className={filterControlClass} value={status} onChange={event => update({ status: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{breakGlassStatuses.map(value => <option key={value} value={value}>{statusLabel('breakGlass', value)}</option>)}</select></FilterField>
+      <FilterField label={tx("Durum")}><Select aria-label={tx("Durum")} className="text-sm" value={status} onChange={event => update({ status: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{breakGlassStatuses.map(value => <option key={value} value={value}>{statusLabel('breakGlass', value)}</option>)}</Select></FilterField>
       <CheckField className="self-end" label={tx("Yalnızca benim isteklerim")} checked={mine} onChange={event => update({ mine: event.target.checked ? 'true' : 'false' })} />
     </Filters>
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>{query.data && <div className="space-y-4">

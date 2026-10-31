@@ -24,6 +24,7 @@ import { ProviderIcon } from './provider-icon'
 import { ProviderFields } from './provider-form'
 import type { ConnectionView, ProviderDescriptor } from './types'
 import { describeError } from '@/lib/api/failure-messages'
+import { RadioField } from '@/components/ui/radio-field'
 
 type StepKey = 'provider' | 'connection' | 'settings' | 'credentials' | 'review'
 const stepLabels: Record<StepKey, string> = {
@@ -64,14 +65,13 @@ function ProviderStep({ providers, connections, value, onChange }: { providers: 
       const state = tenantCreateState(provider, connections)
       const selected = value === provider.providerType
       return <li key={provider.providerType}>
-        <label className={`flex h-full gap-3 rounded-xl border p-4 transition-colors ${state.creatable ? 'cursor-pointer hover:bg-surface-2' : 'cursor-not-allowed opacity-60'} ${selected ? 'border-primary bg-accent ring-2 ring-primary/30' : 'border-border-strong/50 bg-surface'}`}>
-          <input type="radio" name="provider" className="mt-1 size-4 accent-primary" value={provider.providerType} checked={selected} disabled={!state.creatable} onChange={() => onChange(provider.providerType)} />
+        <RadioField className={`h-full items-start gap-3 rounded-xl border p-4 transition-colors ${state.creatable ? 'cursor-pointer hover:bg-surface-2' : 'cursor-not-allowed opacity-60'} ${selected ? 'border-primary bg-accent ring-2 ring-primary/30' : 'border-border-strong/50 bg-surface'}`} name="provider" value={provider.providerType} checked={selected} disabled={!state.creatable} onChange={() => onChange(provider.providerType)} label={<>
           <ProviderIcon providerType={provider.providerType} />
           <span className="min-w-0 space-y-1">
             <span className="block font-medium text-text-heading">{tx(provider.displayName)}</span>
             <span className="block text-sm text-text-muted">{state.creatable ? prerequisites[provider.providerType] ?? topologyLabel(provider.topology) : `${state.reason}.`}</span>
           </span>
-        </label>
+        </>} />
       </li>
     })}</ul>
   </fieldset>

@@ -23,6 +23,7 @@ import { HealthStatusCard } from './health-status-card'
 import { useHealthSummary } from './health-summary'
 import { ObservabilityPanel } from './observability-panel'
 import { formatDateTime } from '@/lib/format'
+import { Disclosure } from '@/components/ui/disclosure'
 
 interface Dashboard {
   jobs: { total: number; enabled: number; scheduled: number }
@@ -83,9 +84,7 @@ export function DashboardPage() {
           </div>
           <DataList rows={data.recentRuns} columns={columns} keyExtractor={run => run.id} emptyMessage={tx("Henüz yedekleme kaydı yok.")} />
         </section>}
-        <details className="group rounded-xl border border-border bg-surface shadow-card">
-          <summary className="min-h-11 cursor-pointer select-none rounded-xl px-5 py-3 font-semibold text-text-heading">{tx("Ayrıntılar")}</summary>
-          <div className="space-y-6 border-t border-border p-5">
+        <Disclosure title={tx("Ayrıntılar")}><div className="space-y-6">
             {!noJobs && <ObservabilityPanel tenantId={tenantId} />}
             <div className="grid gap-4 lg:grid-cols-3">
               <Section title={tx("Agent bağlantı durumu ve yaşam döngüsü")}><dl className="divide-y divide-border">
@@ -101,7 +100,7 @@ export function DashboardPage() {
                 : <p className="text-sm text-text-muted">{tx("Etkin zamanlama yok.")}</p>}</Section>
             </div>
           </div>
-        </details>
+        </Disclosure>
       </>}
     </QueryState>
   </>

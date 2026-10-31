@@ -2,13 +2,14 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Field } from '@/components/ui/field'
 import { FormDialog } from '@/components/ui/form-dialog'
-import { selectClass } from '@/components/ui/form-styles'
 import { TextInput } from '@/components/ui/text-input'
 import { useSaveBandwidthProfile } from './hooks'
 import type { BandwidthProfile, TransferScheduleWindowDto } from './types'
 import { DAYS } from './schedule'
 import { bandwidthUnits, formatBandwidth, parseBandwidth, unitLabel } from './units'
 import type { BandwidthUnitId } from './units'
+import { Select } from '@/components/ui/text-input'
+import { Button } from '@/components/ui/button'
 
 export function ProfileDialog({ profile, minimum, maximum, onClose }: {
   profile?: BandwidthProfile | null; minimum: number; maximum: number; onClose: () => void
@@ -73,17 +74,17 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
         <div className="rounded-lg border border-border p-3 space-y-3 bg-surface-muted/30">
           <h4 className="text-sm font-semibold text-text-heading">{tx("Pencere Ekle")}</h4>
           <Field label={tx("Pencere Davranışı")}>
-            {control => <select {...control} className={selectClass} value={pause ? 'pause' : 'limit'} onChange={e => setPause(e.target.value === 'pause')}>
+            {control => <Select {...control} value={pause ? 'pause' : 'limit'} onChange={e => setPause(e.target.value === 'pause')}>
               <option value="limit">{tx("Hız Limiti")}</option>
               <option value="pause">{tx("Aktarımı Duraklat")}</option>
-            </select>}
+            </Select>}
           </Field>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <Field label={tx("Gün")}>
               {control => (
-                <select {...control} className={selectClass} value={day} onChange={e => setDay(Number(e.target.value))}>
+                <Select {...control} value={day} onChange={e => setDay(Number(e.target.value))}>
                   {DAYS.map(d => <option key={d.value} value={d.value}>{d.label()}</option>)}
-                </select>
+                </Select>
               )}
             </Field>
             <Field label={tx("Başlangıç")}>
@@ -96,16 +97,16 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
               {control => (
                 <div className="flex gap-1">
                   <TextInput {...control}  value={rateText} disabled={pause} onChange={e => setRateText(e.target.value)} />
-                  <select aria-label={tx("Hız Birimi")} className={selectClass} value={rateUnit} disabled={pause} onChange={e => setRateUnit(e.target.value as BandwidthUnitId)}>
+                  <div className="w-28 shrink-0"><Select aria-label={tx("Hız Birimi")} value={rateUnit} disabled={pause} onChange={e => setRateUnit(e.target.value as BandwidthUnitId)}>
                     {bandwidthUnits.map(u => <option key={u.id} value={u.id}>{unitLabel(u.id)}</option>)}
-                  </select>
+                  </Select></div>
                 </div>
               )}
             </Field>
           </div>
-          <button type="button" onClick={addWindow} disabled={!isRateValid || !startTime || !endTime || startTime === endTime} className="text-xs font-medium text-primary hover:underline">
+          <Button variant="link" size="sm" type="button" onClick={addWindow} disabled={!isRateValid || !startTime || !endTime || startTime === endTime}>
             + {tx("Pencereyi Listeye Ekle")}
-          </button>
+          </Button>
         </div>
 
         {windows.length > 0 && (
@@ -117,7 +118,7 @@ export function ProfileDialog({ profile, minimum, maximum, onClose }: {
                   <span>
                     <strong>{DAYS.find(d => d.value === w.dayOfWeek)?.label()}</strong>: {w.startTime.slice(0, 5)} - {w.endTime.slice(0, 5)} &rarr; {w.bytesPerSecond === 0 ? tx("Aktarımı Duraklat") : formatBandwidth(w.bytesPerSecond)}
                   </span>
-                  <button type="button" onClick={() => removeWindow(idx)} className="text-error hover:underline">{tx("Kaldır")}</button>
+                  <Button variant="destructive" size="sm" onClick={() => removeWindow(idx)}>{tx("Kaldır")}</Button>
                 </div>
               ))}
             </div>

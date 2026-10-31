@@ -1,8 +1,8 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Section } from '@/components/ui/section'
+import { Disclosure } from '@/components/ui/disclosure'
 
 export function FormGrid({ children }: { children: ReactNode }) {
   useLanguage()
@@ -18,10 +18,7 @@ export function Question({ title, why, children }: { title: string; why: string;
 /** Collapsed-by-default settings with safe defaults; opens when one of its fields has an error. */
 export function Advanced({ open, children }: { open?: boolean; children: ReactNode }) {
   useLanguage()
-  return <Card as="details" padding="none" open={open || undefined}>
-    <summary className="min-h-11 cursor-pointer px-5 py-3 font-semibold text-text-heading">{tx("Teknik ayrıntılar")} <span className="text-sm font-normal text-text-muted">{tx("(güvenli varsayılanlar kullanılır; değiştirmeniz gerekmez)")}</span></summary>
-    <div className="border-t border-border p-5"><FormGrid>{children}</FormGrid></div>
-  </Card>
+  return <Disclosure open={open} title={<>{tx("Teknik ayrıntılar")} <span className="text-sm font-normal text-text-muted">{tx("(güvenli varsayılanlar kullanılır; değiştirmeniz gerekmez)")}</span></>}><FormGrid>{children}</FormGrid></Disclosure>
 }
 
 /** A ready-made choice for a setting: exactly one option is pressed, or none when the current value is custom. */

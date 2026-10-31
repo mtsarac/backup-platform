@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Plus, RefreshCw } from 'lucide-react'
 import { Pagination } from '@/components/data/pagination'
 import { Button } from '@/components/ui/button'
-import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
+import { FilterField, Filters } from '@/components/ui/filters'
 import { Notice } from '@/components/ui/notice'
 import { SearchForm } from '@/features/platform/search-form'
 import { LIST_PAGE_SIZE, oneOf, useListParams } from '@/features/platform/use-list-params'
@@ -14,6 +14,7 @@ import { PlatformConnectionTable } from '@/features/storage-connections/platform
 import { connectionOwnerships, type ConnectionOwnership, type PlatformConnectionFilters } from '@/features/storage-connections/types'
 import { QueryState } from '@/components/data/query-state'
 import { platformOnlyMessage } from '@/lib/api/failure-messages'
+import { Select } from '@/components/ui/text-input'
 
 /** `ownership` absent = the default view (PlatformManaged); `all` is the explicit unfiltered view. */
 function ownershipFilter(value: string): ConnectionOwnership | undefined {
@@ -54,20 +55,20 @@ export function PlatformStorageConnectionsPage() {
     <Filters label={tx("Depolama hedefi filtreleri")} onClear={filtered ? () => update({ search: '', ownership: '', providerType: '', enabled: '', tenantId: '' }) : undefined}
       footer={tenantId ? <span className="text-sm text-text-muted">{tx("Tek bir çalışma alanına göre filtrelendi.")}</span> : undefined}>
       <SearchForm className="sm:col-span-2" label={tx("Çalışma alanı ara")} value={search} onSearch={(value) => update({ search: value })} placeholder={tx("Çalışma alanı adı")} />
-      <FilterField label={tx("Sahiplik")}><select className={filterControlClass} value={ownershipFilter(ownership) ?? 'all'} onChange={(event) => update({ ownership: event.target.value === 'PlatformManaged' ? undefined : event.target.value })}>
+      <FilterField label={tx("Sahiplik")}><Select className="text-sm" value={ownershipFilter(ownership) ?? 'all'} onChange={(event) => update({ ownership: event.target.value === 'PlatformManaged' ? undefined : event.target.value })}>
         <option value="PlatformManaged">{tx("Platform yönetimli")}</option>
         <option value="TenantManaged">{tx("Tenant yönetimli")}</option>
         <option value="all">{tx("Tümü")}</option>
-      </select></FilterField>
-      <FilterField label={tx("Depolama sağlayıcısı")}><select className={filterControlClass} value={providerType} onChange={(event) => update({ providerType: event.target.value })}>
+      </Select></FilterField>
+      <FilterField label={tx("Depolama sağlayıcısı")}><Select className="text-sm" value={providerType} onChange={(event) => update({ providerType: event.target.value })}>
         <option value="">{tx("Tümü")}</option>
         {providers.data?.items.map((provider) => <option key={provider.providerType} value={provider.providerType}>{tx(provider.displayName)}</option>)}
-      </select></FilterField>
-      <FilterField label={tx("Durum")}><select className={filterControlClass} value={enabled} onChange={(event) => update({ enabled: event.target.value })}>
+      </Select></FilterField>
+      <FilterField label={tx("Durum")}><Select className="text-sm" value={enabled} onChange={(event) => update({ enabled: event.target.value })}>
         <option value="">{tx("Tümü")}</option>
         <option value="true">{tx("Etkin")}</option>
         <option value="false">{tx("Devre dışı")}</option>
-      </select></FilterField>
+      </Select></FilterField>
     </Filters>
 
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>

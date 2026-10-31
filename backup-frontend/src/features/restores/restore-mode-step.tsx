@@ -8,6 +8,7 @@ import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import type { RestoreMode, RestoreOptions, RestoreView } from './types'
 import { errorMessage } from '@/lib/api/failure-messages'
+import { Disclosure } from '@/components/ui/disclosure'
 
 interface RestoreModeStepProps {
   instancePrefix: string
@@ -134,15 +135,12 @@ export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName
             </Card>
           )}
 
-          <details className="rounded-lg border border-border bg-surface-2 text-sm">
-            <summary className="cursor-pointer select-none rounded-lg px-3 py-2 font-medium text-text-heading">{tx("Gelişmiş seçenekler")}</summary>
-            <div className="grid gap-2 border-t border-border px-3 py-2 sm:grid-cols-2">
+          <Disclosure title={tx("Gelişmiş seçenekler")}><div className="grid gap-2 sm:grid-cols-2">
               <CheckField label={tx("Yedek dosyasının bütünlüğünü doğrula (SHA-256)")} checked={options.verifyChecksum ?? true}
                   onChange={(e) => changeOptions({ ...options, verifyChecksum: e.target.checked })} />
               <CheckField label={<>{isPg ? tx('Yedek arşivini doğrula (pg_restore)') : tx('Yedeği geri yüklemeden önce sına (RESTORE VERIFYONLY)')}</>} checked={options.verifyBackup ?? true}
                   onChange={(e) => changeOptions({ ...options, verifyBackup: e.target.checked })} />
-            </div>
-          </details>
+            </div></Disclosure>
         </div>
       </Section>
 

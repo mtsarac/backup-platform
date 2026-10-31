@@ -7,7 +7,7 @@ import { Pagination } from '@/components/data/pagination'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { buttonVariants } from '@/components/ui/button-variants'
-import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
+import { FilterField, Filters } from '@/components/ui/filters'
 import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { bareListClass, ListEmpty } from '@/features/platform/list-empty'
@@ -24,6 +24,7 @@ import { StatusPill } from '@/components/data/status-pill'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { QueryState } from '@/components/data/query-state'
 import { platformOnlyMessage } from '@/lib/api/failure-messages'
+import { Select } from '@/components/ui/text-input'
 
 const subscriptionStatuses: readonly EntitlementStatus[] = ['Active', 'Suspended', 'Expired', 'NoSubscription']
 
@@ -202,12 +203,12 @@ export function PlatformStoragePage() {
       {statusMessage && <Notice tone="success">{statusMessage}</Notice>}
       <Filters label={tx("Depolama kullanım filtreleri")} onClear={filtered ? () => update({ search: '', quotaState: '', subscriptionStatus: '' }) : undefined}>
         <SearchForm className="sm:col-span-2" label={tx("Tenant ara")} value={search} onSearch={(value) => update({ search: value })} placeholder={tx("Tenant adı...")} />
-        <FilterField label={tx("Kota durumu")}><select className={filterControlClass} value={quotaState ?? ''} onChange={(event) => update({ quotaState: event.target.value })}>
+        <FilterField label={tx("Kota durumu")}><Select className="text-sm" value={quotaState ?? ''} onChange={(event) => update({ quotaState: event.target.value })}>
           <option value="">{tx("Tümü")}</option><option value="Normal">{tx("Yeterli alan var")}</option><option value="Warning">{tx("Alan azalıyor")}</option><option value="Critical">{tx("Alan dolmak üzere")}</option><option value="OverQuota">{tx("Kota Doldu")}</option><option value="Unlimited">{tx("Limitsiz")}</option>
-        </select></FilterField>
-        <FilterField label={tx("Abonelik")}><select className={filterControlClass} value={subscriptionStatus ?? ''} onChange={(event) => update({ subscriptionStatus: event.target.value })}>
+        </Select></FilterField>
+        <FilterField label={tx("Abonelik")}><Select className="text-sm" value={subscriptionStatus ?? ''} onChange={(event) => update({ subscriptionStatus: event.target.value })}>
           <option value="">{tx("Tümü")}</option><option value="Active">{tx("Etkin")}</option><option value="Suspended">{tx("Askıda")}</option><option value="Expired">{tx("Süresi doldu")}</option><option value="NoSubscription">{tx("Abonelik yok")}</option>
-        </select></FilterField>
+        </Select></FilterField>
       </Filters>
 
       <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>

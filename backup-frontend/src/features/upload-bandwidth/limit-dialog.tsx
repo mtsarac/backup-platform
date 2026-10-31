@@ -3,13 +3,13 @@ import { CheckField } from '@/components/ui/check-field'
 import { useState } from 'react'
 import { Field } from '@/components/ui/field'
 import { FormDialog } from '@/components/ui/form-dialog'
-import { selectClass } from '@/components/ui/form-styles'
 import { TextInput } from '@/components/ui/text-input'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { useSetUploadBandwidth } from './hooks'
 import type { BandwidthTarget } from './types'
 import { bandwidthErrorMessage, bandwidthUnits, formatBandwidth, formatExactRate, parseBandwidth, toInput, unitLabel } from './units'
 import type { BandwidthUnitId } from './units'
+import { Select } from '@/components/ui/text-input'
 
 const scopeHelp = {
   get tenant() { return tx("Tenant genelinde eş zamanlı tüm yüklemelerin toplamı için üst sınırdır; tüm Agent'lardaki yüklemeler bu sınırı adil paylaşır.") },
@@ -42,9 +42,9 @@ export function LimitDialog({ target, name, current, minimum, maximum, onClose }
         {control => <TextInput {...control}  inputMode="decimal" value={text} disabled={unlimited} onChange={event => setText(event.target.value)} />}
       </Field>
       <Field label={tx("Birim")}>
-        {control => <select {...control} className={`${selectClass} w-full`} value={unit} disabled={unlimited} onChange={event => setUnit(event.target.value as BandwidthUnitId)}>
+        {control => <Select {...control} value={unit} disabled={unlimited} onChange={event => setUnit(event.target.value as BandwidthUnitId)}>
           {bandwidthUnits.map(item => <option key={item.id} value={item.id}>{unitLabel(item.id)}</option>)}
-        </select>}
+        </Select>}
       </Field>
     </div>
     <p className="text-sm text-text-muted">{tx("En az {0}, en çok {1}.", { "0": formatBandwidth(minimum), "1": formatBandwidth(maximum) })}</p>

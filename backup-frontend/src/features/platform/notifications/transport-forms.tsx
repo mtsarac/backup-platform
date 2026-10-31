@@ -8,7 +8,6 @@ import { useSecretValue } from '@/components/ui/secret-value'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { selectClass } from '@/components/ui/form-styles'
 import { TextInput } from '@/components/ui/text-input'
 import {
   useClearEmailSecret, useClearSmsSecret, useSetEmailSecret, useSetSmsSecret, useUpdateEmailTransport, useUpdateSmsTransport,
@@ -17,6 +16,7 @@ import type { EmailSecurity, EmailTransport, SmsAuthentication, SmsTransport } f
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { TechnicalDetails, type TechnicalItem } from '@/components/ui/technical-details'
+import { Select } from '@/components/ui/text-input'
 
 const emailSecurityLabels: Record<EmailSecurity, string> = { starttls: 'STARTTLS', get implicit() { return tx("Implicit TLS") }, get none() { return tx("Şifreleme yok") } }
 const smsAuthLabels: Record<SmsAuthentication, string> = { get none() { return tx("Yok") }, get bearer() { return tx("Bearer token") }, get basic() { return tx("Basic (kullanıcı + parola)") }, get header() { return tx("Özel header") } }
@@ -109,7 +109,7 @@ export function EmailTransportCard({ transport }: { transport: EmailTransport })
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label={tx("Sunucu")}>{(control) => <TextInput {...control} value={host} onChange={(event) => setHost(event.target.value)} />}</Field>
         <Field label={tx("Port")}>{(control) => <TextInput {...control} inputMode="numeric" value={port} aria-invalid={!Number.isInteger(portNumber) || portNumber < 1 || portNumber > 65535} onChange={(event) => setPort(event.target.value)} />}</Field>
-        <Field label={tx("Güvenlik")}>{(control) => <select {...control} className={`${selectClass} w-full`} value={security} onChange={(event) => setSecurity(event.target.value as EmailSecurity)}>{(Object.keys(emailSecurityLabels) as EmailSecurity[]).map((item) => <option key={item} value={item}>{emailSecurityLabels[item]}</option>)}</select>}</Field>
+        <Field label={tx("Güvenlik")}>{(control) => <Select {...control} value={security} onChange={(event) => setSecurity(event.target.value as EmailSecurity)}>{(Object.keys(emailSecurityLabels) as EmailSecurity[]).map((item) => <option key={item} value={item}>{emailSecurityLabels[item]}</option>)}</Select>}</Field>
         <Field label={tx("Kullanıcı adı")}>{(control) => <TextInput {...control} value={username} autoComplete="off" onChange={(event) => setUsername(event.target.value)} />}</Field>
       </div>
       <p className="text-sm text-text-muted">{tx("“Şifreleme yok” seçeneği kullanıcı adı/parola yapılandırıldığında reddedilir.")}</p>
@@ -157,7 +157,7 @@ export function SmsTransportCard({ transport }: { transport: SmsTransport }) {
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label={tx("Sağlayıcı")}>{(control) => <TextInput {...control} value="generic-http" disabled readOnly />}</Field>
         <Field label={tx("Uç nokta (https://…)")}>{(control) => <TextInput {...control} value={endpoint} onChange={(event) => setEndpoint(event.target.value)} />}</Field>
-        <Field label={tx("Kimlik doğrulama")}>{(control) => <select {...control} className={`${selectClass} w-full`} value={authentication} onChange={(event) => setAuthentication(event.target.value as SmsAuthentication)}>{(Object.keys(smsAuthLabels) as SmsAuthentication[]).map((item) => <option key={item} value={item}>{smsAuthLabels[item]}</option>)}</select>}</Field>
+        <Field label={tx("Kimlik doğrulama")}>{(control) => <Select {...control} value={authentication} onChange={(event) => setAuthentication(event.target.value as SmsAuthentication)}>{(Object.keys(smsAuthLabels) as SmsAuthentication[]).map((item) => <option key={item} value={item}>{smsAuthLabels[item]}</option>)}</Select>}</Field>
         {authentication === 'basic' && <Field label={tx("Kullanıcı adı")}>{(control) => <TextInput {...control} value={username} autoComplete="off" onChange={(event) => setUsername(event.target.value)} />}</Field>}
         {authentication === 'header' && <Field label={tx("Header adı")}>{(control) => <TextInput {...control} value={headerName} onChange={(event) => setHeaderName(event.target.value)} />}</Field>}
       </div>

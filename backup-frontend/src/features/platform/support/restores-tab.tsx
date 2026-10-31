@@ -5,7 +5,7 @@ import { Pagination } from '@/components/data/pagination'
 import { ProgressBar } from '@/components/data/progress-bar'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
-import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
+import { FilterField, Filters } from '@/components/ui/filters'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -22,6 +22,7 @@ import { formatDateTime } from '@/lib/format'
 import { statusLabel } from '@/lib/status'
 import { QueryState } from '@/components/data/query-state'
 import { errorMessage } from '@/lib/api/failure-messages'
+import { Select } from '@/components/ui/text-input'
 
 export function SupportRestoresTab({ session }: { session: SupportSession }) {
   useLanguage()
@@ -29,7 +30,7 @@ export function SupportRestoresTab({ session }: { session: SupportSession }) {
   const scope = supportScope(session, 'restores')
   const query = useSupportRestores(scope, { page, pageSize: LIST_PAGE_SIZE, status: get('restoreStatus') })
   const columns: Column<RestoreView>[] = [
-    { key: 'database', card: 'title', header: tx('Yeni veritabanı'), wrap: true, render: item => <button className="font-medium text-primary hover:underline" onClick={() => update({ restoreId: item.id, restoreArtifact: '' })}>{item.databaseName}</button> },
+    { key: 'database', card: 'title', header: tx('Yeni veritabanı'), wrap: true, render: item => <Button variant="link" size="sm" type="button" onClick={() => update({ restoreId: item.id, restoreArtifact: '' })}>{item.databaseName}</Button> },
     { key: 'source', header: tx('Kaynak veritabanı'), wrap: true, render: item => item.sourceDatabaseName ?? '—' },
     { key: 'target', header: tx('Hedef'), wrap: true, render: item => `${item.target.host}${item.target.port ? `:${item.target.port}` : ''}` },
     { key: 'status', card: 'status', header: tx('Durum'), render: item => <StatusPill status={item.status} /> },
@@ -40,7 +41,7 @@ export function SupportRestoresTab({ session }: { session: SupportSession }) {
   if (!scope.enabled) return <Notice>{tx("Restore Operations için etkin oturum sahipliği ve ViewBackupMetadata veya RestoreBackup izni gerekir.")}</Notice>
   return <div className="space-y-6">
     {get('restoreId') ? <SupportRestoreDetail key={get('restoreId')} session={session} id={get('restoreId')} /> : <>
-    <Filters label={tx("Restore filtreleri")}><FilterField label={tx("Restore durumu")}><select className={filterControlClass} value={get('restoreStatus')} onChange={event => update({ restoreStatus: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{restoreStatuses.map(status => <option key={status} value={status}>{statusLabel('general', status)}</option>)}</select></FilterField></Filters>
+    <Filters label={tx("Restore filtreleri")}><FilterField label={tx("Restore durumu")}><Select className="text-sm" value={get('restoreStatus')} onChange={event => update({ restoreStatus: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{restoreStatuses.map(status => <option key={status} value={status}>{statusLabel('general', status)}</option>)}</Select></FilterField></Filters>
     <QueryState forbiddenMessage={errorMessage} isPending={query.isPending} error={query.error}>{query.data && <div className="space-y-4">
       <DataList rows={query.data.items} columns={columns} keyExtractor={item => item.id} />
       <Pagination page={page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={next => update({ restorePage: next })} />

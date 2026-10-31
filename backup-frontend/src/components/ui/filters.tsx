@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { controlClass } from '@/components/ui/form-styles'
 
-/** Shared look for filter controls (select, date, search); pair with `FilterField`. */
+/** Shared look for filter controls; pair with `FilterField`. */
 export const filterControlClass = `${controlClass} w-full text-sm`
 
 /** One row of filters above a list. `onClear` adds the standard "Filtreleri temizle" button. */

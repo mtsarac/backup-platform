@@ -5,6 +5,7 @@ import { Select, TextInput } from '@/components/ui/text-input'
 import { Section } from '@/components/ui/section'
 import { StoredLoginPanel } from './stored-login-panel'
 import type { RestoreTarget, RestoreTargetsResponse } from './types'
+import { Disclosure } from '@/components/ui/disclosure'
 
 interface RestoreTargetStepProps {
   tenantId: string
@@ -79,15 +80,12 @@ export function RestoreTargetStep({ tenantId, instancePrefix, isPg, engineName, 
             </div>
             {!customTarget.integratedSecurity && <StoredLoginPanel tenantId={tenantId} agentId={selectedAgentId} idPrefix={`${instancePrefix}-login`} reference={customTarget.databaseCredentialReference} onPendingChange={onLoginPendingChange} onStored={(reference) => changeCustomTarget({ ...customTarget, databaseCredentialReference: reference })} />}
             <CheckField label={tx("Windows kimlik doğrulaması")} className="sm:col-span-2" checked={customTarget.integratedSecurity} onChange={(e) => changeCustomTarget({ ...customTarget, integratedSecurity: e.target.checked, databaseCredentialReference: null })} />
-            <details className="rounded-lg border border-border bg-surface-2 text-sm sm:col-span-2">
-              <summary className="cursor-pointer select-none rounded-lg px-3 py-2 font-medium text-text-heading">{tx("Gelişmiş bağlantı ayarları")}</summary>
-              <div className="flex flex-wrap items-center gap-4 border-t border-border px-3 py-2">
+            <Disclosure className="sm:col-span-2" title={tx("Gelişmiş bağlantı ayarları")}><div className="flex flex-wrap items-center gap-4">
                 <CheckField label={tx("Bağlantıyı Şifrele")} checked={customTarget.encrypt}
                     onChange={(e) => changeCustomTarget({ ...customTarget, encrypt: e.target.checked })} />
                 <CheckField label={tx("Sunucu Sertifikasına Güven")} checked={customTarget.trustServerCertificate}
                     onChange={(e) => changeCustomTarget({ ...customTarget, trustServerCertificate: e.target.checked })} />
-              </div>
-            </details>
+              </div></Disclosure>
           </div>
         )}
       </div>

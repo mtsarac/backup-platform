@@ -4,7 +4,6 @@ import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
-import { linkClass } from '@/components/ui/form-styles'
 import { Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
@@ -19,6 +18,7 @@ import { assignedByLabel, overrideLabel, sourceLabel } from './subscription-labe
 import type { Subscription } from './types'
 import { QueryState } from '@/components/data/query-state'
 import { platformOnlyMessage } from '@/lib/api/failure-messages'
+import { Disclosure } from '@/components/ui/disclosure'
 
 const actionLabels: Record<SubscriptionAction, () => string> = {
   assign: () => tx('Plan ata'),
@@ -73,10 +73,7 @@ export function SubscriptionSection({ tenantId, tenantName }: { tenantId: string
         {query.data && (subscription
           ? <div className="space-y-4">
             <Current subscription={subscription} />
-            {others.length > 0 && <details>
-              <summary className={`${linkClass} inline-flex min-h-11 cursor-pointer select-none items-center text-sm`}>{tx("Diğer işlemler")}</summary>
-              <div className="flex flex-wrap gap-2 pt-2">{others.map((action) => button(action, 'outline'))}</div>
-            </details>}
+            {others.length > 0 && <Disclosure title={tx("Diğer işlemler")}><div className="flex flex-wrap gap-2">{others.map((action) => button(action, 'outline'))}</div></Disclosure>}
           </div>
           : <EmptyState message={tx("Bu çalışma alanı için henüz bir plan atanmadı.")} action={button('assign', 'default')} />)}
       </QueryState>

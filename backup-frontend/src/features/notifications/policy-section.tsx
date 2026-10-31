@@ -8,7 +8,6 @@ import { TextInput } from '@/components/ui/text-input'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { QueryState } from '@/components/data/query-state'
-import { selectClass } from '@/components/ui/form-styles'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { useNotificationPolicy, useUpdateNotificationPolicy } from './hooks'
 import { eventTypeLabels, kindLabels, severityLabels } from './labels'
@@ -17,6 +16,7 @@ import type { ThresholdField } from './policy-validation'
 import { severities, visibleChannelKinds, visibleEventTypes } from './types'
 import type { ChannelKind, EventType, NotificationPolicy, Severity } from './types'
 import { formatDateTime } from '@/lib/format'
+import { Select } from '@/components/ui/text-input'
 
 const thresholdLabels: Record<ThresholdField, string> = {
   get staleAfterHours() { return tx("Backup güncel değil eşiği (saat)") },
@@ -64,7 +64,7 @@ function PolicyForm({ policy }: { policy: NotificationPolicy }) {
     </fieldset>
     <div className="grid gap-4 sm:grid-cols-2">
       <Field label={tx("Asgari önem düzeyi")}>
-        {(control) => <select {...control} className={`${selectClass} w-full`} value={minimumSeverity} onChange={(event) => setMinimumSeverity(event.target.value as Severity)}>{severities.map((severity) => <option key={severity} value={severity}>{severityLabels[severity]}</option>)}</select>}
+        {(control) => <Select {...control} value={minimumSeverity} onChange={(event) => setMinimumSeverity(event.target.value as Severity)}>{severities.map((severity) => <option key={severity} value={severity}>{severityLabels[severity]}</option>)}</Select>}
       </Field>
       <div className="flex items-end"><CheckField label={tx("Düzelme bildirimleri gönder")} checked={recovery} onChange={(event) => setRecovery(event.target.checked)} /></div>
     </div>

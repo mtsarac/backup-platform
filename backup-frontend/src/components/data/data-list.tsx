@@ -3,7 +3,8 @@ import { Card, cardClass } from '@/components/ui/card'
 import { useState, type ReactNode } from 'react'
 import { Pagination } from '@/components/data/pagination'
 import { EmptyState } from '@/components/ui/empty-state'
-import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
+import { FilterField, Filters } from '@/components/ui/filters'
+import { TextInput } from '@/components/ui/text-input'
 import { useLargeScreen } from '@/hooks/use-large-screen'
 import { cn } from '@/lib/utils'
 
@@ -110,7 +111,7 @@ export function DataList<T>({ rows, columns, keyExtractor, emptyMessage = tx('Ka
     <div className="space-y-4">
       {search && (
         <Filters label={tx("{0} filtreleri", { "0": search.label })}>
-          <FilterField label={search.label}><input type="search" aria-label={search.label} placeholder={search.label} className={filterControlClass} value={query} onChange={event => { setQuery(event.target.value); setPage(1) }} /></FilterField>
+          <FilterField label={search.label}><TextInput type="search" aria-label={search.label} placeholder={search.label} className="text-sm" value={query} onChange={event => { setQuery(event.target.value); setPage(1) }} /></FilterField>
         </Filters>
       )}
       {visible.length === 0

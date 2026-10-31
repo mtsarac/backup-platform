@@ -12,7 +12,7 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { Button } from '@/components/ui/button'
 import { ErrorNotice } from '@/components/ui/notice'
 import { EmptyState } from '@/components/ui/empty-state'
-import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
+import { FilterField, Filters } from '@/components/ui/filters'
 import { linkClass } from '@/components/ui/form-styles'
 import { PageHeader } from '@/components/ui/page-header'
 import { oneOf, useListParams } from '@/features/platform/use-list-params'
@@ -24,6 +24,7 @@ import { useTenant } from '@/features/tenancy/use-tenant'
 import { isForbidden } from '@/lib/api/client'
 import { discoveryInstancePath } from '@/lib/routes'
 import { ComputerScanCard } from './computer-scan-card'
+import { Select } from '@/components/ui/text-input'
 
 
 export function DiscoveryPage() {
@@ -57,8 +58,8 @@ export function DiscoveryPage() {
   else body = <>
     <div className="grid gap-4 lg:grid-cols-2">{agentList.map(agent => <ComputerScanCard key={agent.agentId} agent={agent} status={statuses.data?.items.find(item => item.agentId === agent.agentId)} />)}</div>
     <Filters label={tx("Veritabanı bulma filtreleri")} footer={<CheckField label={tx("Bulunamayanları da göster")} checked={includeMissing} onChange={event => update({ includeMissing: event.target.checked ? '1' : '' })} />}>
-      <FilterField label={tx("Veritabanı türü")}><select aria-label={tx("Veritabanı türü")} className={filterControlClass} value={engine} onChange={event => update({ engine: event.target.value })}><option value="">{tx("Tümü")}</option><option value="mssql">MSSQL</option><option value="postgres">PostgreSQL</option></select></FilterField>
-      {agentList.length > 1 && <FilterField label={tx("Bilgisayar")}><select aria-label={tx("Bilgisayar")} className={filterControlClass} value={agentId} onChange={event => update({ agentId: event.target.value })}><option value="">{tx("Tümü")}</option>{agentList.map(item => <option key={item.agentId} value={item.agentId}>{item.hostName || tx('Adsız bilgisayar')}</option>)}</select></FilterField>}
+      <FilterField label={tx("Veritabanı türü")}><Select aria-label={tx("Veritabanı türü")} className="text-sm" value={engine} onChange={event => update({ engine: event.target.value })}><option value="">{tx("Tümü")}</option><option value="mssql">MSSQL</option><option value="postgres">PostgreSQL</option></Select></FilterField>
+      {agentList.length > 1 && <FilterField label={tx("Bilgisayar")}><Select aria-label={tx("Bilgisayar")} className="text-sm" value={agentId} onChange={event => update({ agentId: event.target.value })}><option value="">{tx("Tümü")}</option>{agentList.map(item => <option key={item.agentId} value={item.agentId}>{item.hostName || tx('Adsız bilgisayar')}</option>)}</Select></FilterField>}
     </Filters>
     <QueryState isPending={instances.isPending} error={instances.error}>
       {instances.data && (instances.data.items.length === 0

@@ -2,9 +2,9 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Field } from '@/components/ui/field'
 import { FormDialog } from '@/components/ui/form-dialog'
-import { selectClass } from '@/components/ui/form-styles'
 import { useAssignBandwidthProfile, useBandwidthProfiles } from './hooks'
 import type { BandwidthTarget } from './types'
+import { Select } from '@/components/ui/text-input'
 
 export function AssignProfileDialog({ target, name, currentProfileId, onClose }: {
   target: BandwidthTarget; name: string; currentProfileId?: string | null; onClose: () => void
@@ -31,12 +31,12 @@ export function AssignProfileDialog({ target, name, currentProfileId, onClose }:
     >
       <Field label={tx("Bant Genişliği Profili")}>
         {control => (
-          <select {...control} className={selectClass} value={selectedProfileId} onChange={e => setSelectedProfileId(e.target.value)}>
+          <Select {...control} value={selectedProfileId} onChange={e => setSelectedProfileId(e.target.value)}>
             <option value="">{tx("Profil Yok (Yalnızca Statik Limit / Limitsiz)")}</option>
             {(profiles.data ?? []).map(p => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
-          </select>
+          </Select>
         )}
       </Field>
     </FormDialog>

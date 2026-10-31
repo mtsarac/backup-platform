@@ -114,7 +114,7 @@ export function AddAgentDialog({ tenantId, onClose, onCreated }: { tenantId: str
           {!ticket && <p className="text-sm text-text-muted">{tx("Anahtarı oluşturduğunuzda komut burada görünür.")}</p>}
           {ticket && secret && <div className="space-y-3">
             {mode === 'interactive' && <><Field label={tx('Tek kullanımlık kayıt anahtarı')}>{control => <TextArea {...control} readOnly value={secret} rows={2} />}</Field><CopyButton value={secret} label={tx('Kayıt anahtarını kopyala')} /></>}
-            <Field label={tx("Tek kullanımlık kurulum komutu")}>{(control) => <textarea {...control} readOnly rows={4} value={command} className="mt-1 block w-full resize-none break-all rounded-lg border border-border-strong/70 bg-surface p-3 font-mono text-sm text-text" />}</Field>
+            <Field label={tx("Tek kullanımlık kurulum komutu")}>{(control) => <TextArea {...control} readOnly rows={4} value={command} className="resize-none break-all font-mono text-sm" />}</Field>
             <CopyButton value={command} label={tx("Kurulum komutunu kopyala")} />
             {mode === 'automatic' && !name.trim() && <Notice tone="warning">{tx('Tek komutla kurulum komutunu oluşturmak için bilgisayarın adını girin.')}</Notice>}
             <p className="text-sm text-text-muted">{tx('Anahtarı paylaşmayın; günlüklere, ayar dosyalarına veya komut geçmişine kaydetmeyin. Kapatıldıktan sonra tekrar gösterilmez.')} {tx('Son kullanma:')} {formatDateTime(ticket.expiresAt, tx('Henüz bildirilmedi'))}</p>

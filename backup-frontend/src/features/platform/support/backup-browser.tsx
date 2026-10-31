@@ -4,7 +4,7 @@ import { Pagination } from '@/components/data/pagination'
 import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
-import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
+import { FilterField, Filters } from '@/components/ui/filters'
 import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
@@ -24,6 +24,8 @@ import { statusLabel } from '@/lib/status'
 import { QueryState } from '@/components/data/query-state'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { storageProviderLabel } from '@/features/storage-connections/labels'
+import { Select } from '@/components/ui/text-input'
+import { TextInput } from '@/components/ui/text-input'
 
 export function SupportBackupBrowser({ session }: { session: SupportSession }) {
   useLanguage()
@@ -39,7 +41,7 @@ export function SupportBackupBrowser({ session }: { session: SupportSession }) {
   const artifacts = useSupportArtifacts({ ...scope, enabled: scope.enabled && view === 'artifacts' && !invalidDates }, { page, pageSize: LIST_PAGE_SIZE, jobId, state: get('state'), from: from && !invalidDates ? `${from}T00:00:00.000Z` : '', to: to && !invalidDates ? `${to}T23:59:59.999Z` : '' })
   // Visible: names, result, size and everyday times. Collapsed and copyable: ids, raw states, trigger, schedule internals.
   const columns: Column<SupportArtifact>[] = [
-    { key: 'database', card: 'title', header: tx('Veritabanı'), wrap: true, render: artifact => <button className="font-medium text-primary hover:underline" onClick={() => update({ artifact: artifact.id })}>{artifact.databaseName ?? tx('Veritabanı bildirilmedi')}</button> },
+    { key: 'database', card: 'title', header: tx('Veritabanı'), wrap: true, render: artifact => <Button variant="link" size="sm" type="button" onClick={() => update({ artifact: artifact.id })}>{artifact.databaseName ?? tx('Veritabanı bildirilmedi')}</Button> },
     { key: 'job', header: tx('Yedekleme işi'), wrap: true, render: artifact => artifact.jobName ?? '—' },
     { key: 'size', header: tx('Boyut'), render: artifact => formatBytes(artifact.sizeBytes) },
     { key: 'created', header: tx('Oluşturulma'), render: artifact => <RelativeTime value={artifact.createdAt} /> },
@@ -53,7 +55,7 @@ export function SupportBackupBrowser({ session }: { session: SupportSession }) {
     ]} /> },
   ]
   const jobColumns: Column<SupportJob>[] = [
-    { key: 'name', card: 'title', header: tx('Yedekleme işi'), wrap: true, render: job => <button className="font-medium text-primary hover:underline" onClick={() => update({ view: 'runs', jobId: job.id })}>{job.name}</button> },
+    { key: 'name', card: 'title', header: tx('Yedekleme işi'), wrap: true, render: job => <Button variant="link" size="sm" type="button" onClick={() => update({ view: 'runs', jobId: job.id })}>{job.name}</Button> },
     { key: 'agent', header: tx('Yedekleme bilgisayarı'), wrap: true, render: job => job.agentName },
     { key: 'database', header: tx('Veritabanı'), wrap: true, render: job => job.database },
     { key: 'enabled', header: tx('Etkin'), render: job => job.enabled ? tx('Evet') : tx('Hayır') },
@@ -76,7 +78,7 @@ export function SupportBackupBrowser({ session }: { session: SupportSession }) {
     { key: 'started', header: tx('Başladı'), render: run => <RelativeTime value={run.startedAt} /> },
     { key: 'reason', header: tx('Sonuç'), wrap: true, render: run => run.reasonCode ? failureMessage(run.reasonCode) : '—' },
     { key: 'details', card: 'actions', header: tx('Ayrıntılar'), wrap: true, render: run => <div className="space-y-2">
-      {run.artifactIds.map((id, index) => <div key={id}><button className="text-primary hover:underline" onClick={() => update({ view: 'artifacts', artifact: id })}>{tx("Yedek dosyası {0} ayrıntıları", { '0': index + 1 })}</button></div>)}
+      {run.artifactIds.map((id, index) => <div key={id}><Button variant="link" size="sm" type="button" onClick={() => update({ view: 'artifacts', artifact: id })}>{tx("Yedek dosyası {0} ayrıntıları", { '0': index + 1 })}</Button></div>)}
       <TechnicalDetails items={[
         { label: tx('Deneme kimliği'), value: run.id },
         { label: tx('Tetikleyici'), value: run.triggerType },
@@ -96,10 +98,10 @@ export function SupportBackupBrowser({ session }: { session: SupportSession }) {
     {view !== 'jobs' && <Filters label={tx("Yedek filtreleri")}>
       <SearchablePicker label={tx("Yedekleme işi")} placeholder={tx("Tüm yedekleme işleri")} value={jobId} onChange={value => update({ jobId: value })}
         options={(jobs.data ?? []).map(job => ({ value: job.id, label: job.name, description: job.database }))} disabled={jobs.isPending || Boolean(jobs.error)} />
-      {view === 'runs' ? <FilterField label={tx("Deneme durumu")}><select className={filterControlClass} value={get('runStatus')} onChange={event => update({ runStatus: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{runStatuses.map(status => <option key={status} value={status}>{statusLabel('general', status)}</option>)}</select></FilterField> : <>
-        <FilterField label={tx("Yedek dosyası durumu")}><select className={filterControlClass} value={get('state')} onChange={event => update({ state: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{['Available', 'DeletePending', 'DeleteFailed', 'Deleted'].map(state => <option key={state} value={state}>{statusLabel('general', state)}</option>)}</select></FilterField>
-        <FilterField label={tx("Başlangıç tarihi")}><input className={filterControlClass} type="date" value={from} onChange={event => update({ from: event.target.value })} /></FilterField>
-        <FilterField label={tx("Bitiş tarihi")}><input className={filterControlClass} type="date" value={to} onChange={event => update({ to: event.target.value })} /></FilterField>
+      {view === 'runs' ? <FilterField label={tx("Deneme durumu")}><Select className="text-sm" value={get('runStatus')} onChange={event => update({ runStatus: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{runStatuses.map(status => <option key={status} value={status}>{statusLabel('general', status)}</option>)}</Select></FilterField> : <>
+        <FilterField label={tx("Yedek dosyası durumu")}><Select className="text-sm" value={get('state')} onChange={event => update({ state: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{['Available', 'DeletePending', 'DeleteFailed', 'Deleted'].map(state => <option key={state} value={state}>{statusLabel('general', state)}</option>)}</Select></FilterField>
+        <FilterField label={tx("Başlangıç tarihi")}><TextInput className="text-sm" type="date" value={from} onChange={event => update({ from: event.target.value })} /></FilterField>
+        <FilterField label={tx("Bitiş tarihi")}><TextInput className="text-sm" type="date" value={to} onChange={event => update({ to: event.target.value })} /></FilterField>
       </>}
     </Filters>}
     {jobs.error && <QueryState forbiddenMessage={errorMessage} isPending={false} error={jobs.error} />}

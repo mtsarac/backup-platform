@@ -5,13 +5,13 @@ import { SecretField } from '@/components/ui/secret-field'
 import { useSecretValue } from '@/components/ui/secret-value'
 import { FormDialog } from '@/components/ui/form-dialog'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { selectClass } from '@/components/ui/form-styles'
 import { TextInput } from '@/components/ui/text-input'
 import { ApiError } from '@/lib/api/client'
 import { useCreateChannel, useSetChannelSecret, useUpdateChannel } from './hooks'
 import { authenticationLabels, kindLabels } from './labels'
 import { visibleChannelKinds, webhookAuthentications } from './types'
 import type { ChannelKind, NotificationChannel, WebhookAuthentication } from './types'
+import { Select } from '@/components/ui/text-input'
 
 const targetHints: Record<ChannelKind, { label: string; placeholder: string }> = {
   email: { get label() { return tx("E-posta adresi") }, placeholder: 'ops@example.com' },
@@ -23,7 +23,7 @@ const invalidField = (error: unknown, field: string) => error instanceof ApiErro
 function AuthenticationSelect({ value, onChange }: { value: WebhookAuthentication; onChange: (value: WebhookAuthentication) => void }) {
   useLanguage()
   return <Field label={tx("Kimlik doğrulama")}>
-    {(control) => <select {...control} className={`${selectClass} w-full`} value={value} onChange={(event) => onChange(event.target.value as WebhookAuthentication)}>{webhookAuthentications.map((item) => <option key={item} value={item}>{authenticationLabels[item]}</option>)}</select>}
+    {(control) => <Select {...control} value={value} onChange={(event) => onChange(event.target.value as WebhookAuthentication)}>{webhookAuthentications.map((item) => <option key={item} value={item}>{authenticationLabels[item]}</option>)}</Select>}
   </Field>
 }
 
@@ -55,7 +55,7 @@ export function AddChannelDialog({ onClose }: { onClose: () => void }) {
   return <FormDialog title={tx("Kanal ekle")} submitLabel={tx("Kanal ekle")} pendingLabel={tx("Ekleniyor…")} pending={create.isPending} disabled={!name.trim() || !target.trim()}
     error={error} onSubmit={submit} onClose={onClose}>
     <Field label={tx("Tür")}>
-      {(control) => <select {...control} className={`${selectClass} w-full`} value={kind} onChange={(event) => setKind(event.target.value as ChannelKind)}>{visibleChannelKinds().map((item) => <option key={item} value={item}>{kindLabels[item]}</option>)}</select>}
+      {(control) => <Select {...control} value={kind} onChange={(event) => setKind(event.target.value as ChannelKind)}>{visibleChannelKinds().map((item) => <option key={item} value={item}>{kindLabels[item]}</option>)}</Select>}
     </Field>
     <p className="text-sm text-text-muted">{webhook
       ? tx('Olay, önem düzeyi ve etkilenen yedek veya bilgisayar bilgileri bu HTTPS adresine JSON olarak gönderilir. Yedek dosyalarının içeriği gönderilmez.')

@@ -4,7 +4,7 @@ import { Pagination } from '@/components/data/pagination'
 import { Send } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
-import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
+import { FilterField, Filters } from '@/components/ui/filters'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { Card } from '@/components/ui/card'
 import { QueryState } from '@/components/data/query-state'
@@ -17,6 +17,7 @@ import { LIST_PAGE_SIZE, oneOf, useListParams } from '@/features/platform/use-li
 import { formatDateTime, formatRelativeTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { statusLabel } from '@/lib/status'
+import { Select } from '@/components/ui/text-input'
 
 const eventFilters = () => [...visibleEventTypes(), 'break_glass_access', 'test'] as const
 
@@ -59,9 +60,9 @@ export function DeliveriesSection() {
   return <Section title={tx("Gönderim geçmişi")} description={tx("En yeni bildirim gönderimleri; silinen kanalların kayıtları korunur.")}>
     <div className="space-y-4">
       <Filters label={tx("Gönderim filtreleri")} onClear={status || kind || eventType ? () => update({ status: '', kind: '', eventType: '' }) : undefined}>
-        <FilterField label={tx("Durum")}><select aria-label={tx("Durum")} className={`${filterControlClass} min-h-11`} value={status ?? ''} onChange={filter('status')}><option value="">{tx("Tümü")}</option>{deliveryStatuses.map((item) => <option key={item} value={item}>{statusLabel('delivery', item)}</option>)}</select></FilterField>
-        <FilterField label={tx("Kanal türü")}><select aria-label={tx("Kanal türü")} className={`${filterControlClass} min-h-11`} value={kind ?? ''} onChange={filter('kind')}><option value="">{tx("Tümü")}</option>{visibleChannelKinds().map((item) => <option key={item} value={item}>{kindLabels[item]}</option>)}</select></FilterField>
-        <FilterField label={tx("Olay türü")}><select aria-label={tx("Olay türü")} className={`${filterControlClass} min-h-11`} value={eventType ?? ''} onChange={filter('eventType')}><option value="">{tx("Tümü")}</option>{eventFilters().map((item) => <option key={item} value={item}>{eventTypeLabels[item]}</option>)}</select></FilterField>
+        <FilterField label={tx("Durum")}><Select aria-label={tx("Durum")} value={status ?? ''} onChange={filter('status')}><option value="">{tx("Tümü")}</option>{deliveryStatuses.map((item) => <option key={item} value={item}>{statusLabel('delivery', item)}</option>)}</Select></FilterField>
+        <FilterField label={tx("Kanal türü")}><Select aria-label={tx("Kanal türü")} value={kind ?? ''} onChange={filter('kind')}><option value="">{tx("Tümü")}</option>{visibleChannelKinds().map((item) => <option key={item} value={item}>{kindLabels[item]}</option>)}</Select></FilterField>
+        <FilterField label={tx("Olay türü")}><Select aria-label={tx("Olay türü")} value={eventType ?? ''} onChange={filter('eventType')}><option value="">{tx("Tümü")}</option>{eventFilters().map((item) => <option key={item} value={item}>{eventTypeLabels[item]}</option>)}</Select></FilterField>
       </Filters>
       <QueryState isPending={deliveries.isPending} error={deliveries.error}>
         {data && (data.totalCount === 0
