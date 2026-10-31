@@ -5,7 +5,7 @@ using AgentCore::BackupPlatform.Agent.Core.Identity;
 
 namespace BackupPlatform.IntegrationTests.Backup;
 
-/// <summary>Launches the actual published host. An optional deployment launcher can supply the test's existing shared SQL volume.</summary>
+/// <summary>Launches the actual published host (see <see cref="ResolveExecutable"/>). An optional deployment launcher can supply the test's existing shared SQL volume.</summary>
 internal sealed class AgentHostSmokeProcess : IAsyncDisposable
 {
     private readonly string _scratch;
@@ -29,7 +29,7 @@ internal sealed class AgentHostSmokeProcess : IAsyncDisposable
     /// <param name="localStorageRoot">An existing directory the caller owns and cleans up, to be the agent's local storage (the backend retention workers need to reach the same one); default: a directory inside the host's scratch space.</param>
     public static async Task<AgentHostSmokeProcess> StartAsync(AgentWorld world, EnrolledAgent agent, Action<string>? diagnostic = null, string? localStorageRoot = null)
     {
-        var executable = ResolveExecutable();
+        var executable = Executable.Value;
         var scratch = Path.Combine(Path.GetTempPath(), "bp_agent_orchestration_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(scratch);
         var storage = localStorageRoot ?? Path.Combine(scratch, "storage");
@@ -62,10 +62,9 @@ internal sealed class AgentHostSmokeProcess : IAsyncDisposable
         start.Environment["Agent__Connectivity__PollInterval"] = "00:00:05";
         start.Environment["Agent__Connectivity__PushFallbackDelay"] = "00:00:00";
         start.Environment["Agent__Connectivity__MinimumPollSpacing"] = "00:00:01";
-        var serverStaging = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_STAGING_SERVER_DIR")
-            ?? TestContainers.MsSqlServer.StagingServerDirectory;
-        var agentStaging = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_STAGING_AGENT_DIR")
-            ?? TestContainers.MsSqlServer.StagingAgentDirectory;
+        var sql = MsSqlServer.ForAgentHost;
+        var serverStaging = sql.StagingServerDirectory;
+        var agentStaging = sql.StagingAgentDirectory;
         start.Environment["Agent__Backup__Staging__Mapping"] = serverStaging == agentStaging ? "SameHost" : "Mapped";
         start.Environment["Agent__Backup__Staging__ServerDirectory"] = serverStaging;
         start.Environment["Agent__Backup__Staging__AgentDirectory"] = agentStaging;
@@ -102,19 +101,39 @@ internal sealed class AgentHostSmokeProcess : IAsyncDisposable
         Directory.Delete(_scratch, recursive: true);
     }
 
+    private static readonly Lazy<string> Executable = new(ResolveExecutable);
+
+    /// <summary>BACKUP_PLATFORM_TEST_AGENT_HOST_PATH, else a host published from this repository once per test run (needs only the .NET SDK).</summary>
     private static string ResolveExecutable()
     {
-        var configured = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_AGENT_HOST_PATH");
-        if (!string.IsNullOrWhiteSpace(configured) && File.Exists(configured)) return configured;
-        var candidates = new[]
+        if (Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_AGENT_HOST_PATH") is { Length: > 0 } configured)
+            return File.Exists(configured) ? configured : throw new FileNotFoundException("BACKUP_PLATFORM_TEST_AGENT_HOST_PATH does not exist.", configured);
+        var project = FindAgentHostProject();
+        var output = Directory.CreateTempSubdirectory("bp_it_agent_host_").FullName;
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
         {
-            "/tmp/bp-integration-agent/BackupPlatform.Agent.Host",
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local/share/backup-platform-dev/agent-bin/BackupPlatform.Agent.Host")
+            try { Directory.Delete(output, recursive: true); } catch (IOException) { }
         };
-        return candidates.FirstOrDefault(File.Exists)
-            ?? throw new InvalidOperationException("Set BACKUP_PLATFORM_TEST_AGENT_HOST_PATH before running the real Agent.Host/MSSQL orchestration smoke.");
+        // The Go direct-download helper is only used by the WebRTC download path, which these tests do not drive through the host.
+        var publish = new ProcessStartInfo("dotnet", ["publish", project, "-c", "Release", "-o", output, "-p:SkipDirectDownloadBuild=true", "--nologo", "-v", "q"])
+        {
+            UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true
+        };
+        using var process = Process.Start(publish) ?? throw new InvalidOperationException("dotnet publish could not start.");
+        var log = Task.WhenAll(process.StandardOutput.ReadToEndAsync(), process.StandardError.ReadToEndAsync());
+        process.WaitForExit();
+        var text = string.Concat(log.GetAwaiter().GetResult());
+        if (process.ExitCode != 0) throw new InvalidOperationException($"dotnet publish of {project} failed ({process.ExitCode}):\n{text}");
+        return Path.Combine(output, OperatingSystem.IsWindows() ? "BackupPlatform.Agent.Host.exe" : "BackupPlatform.Agent.Host");
     }
 
-    internal static string Required(string name) => Environment.GetEnvironmentVariable(name) is { Length: > 0 } value
-        ? value : throw new InvalidOperationException($"Set {name} before running the real Agent.Host/MSSQL orchestration smoke.");
+    private static string FindAgentHostProject()
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            var project = Path.Combine(directory.FullName, "src", "hosts", "agent", "BackupPlatform.Agent.Host.csproj");
+            if (File.Exists(project)) return project;
+        }
+        throw new InvalidOperationException("The Agent.Host project was not found above the test binaries; set BACKUP_PLATFORM_TEST_AGENT_HOST_PATH.");
+    }
 }

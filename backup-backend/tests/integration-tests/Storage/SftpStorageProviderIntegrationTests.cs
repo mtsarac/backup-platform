@@ -7,25 +7,18 @@ namespace BackupPlatform.IntegrationTests.Storage;
 
 public sealed class SftpStorageProviderIntegrationTests
 {
-    private static readonly bool Enabled =
-        string.Equals(Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_SFTP_ENABLED"), "true", StringComparison.OrdinalIgnoreCase);
     private static readonly string[] AllowedNetworks = ["127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"];
 
-    private static readonly string Host = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_SFTP_HOST") ?? "127.0.0.1";
-    private static readonly int Port = int.TryParse(Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_SFTP_PORT"), out var p) ? p : 2222;
-    private static readonly string Username = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_SFTP_USER") ?? "testuser";
-    private static readonly string Password = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_SFTP_PASSWORD") ?? "testpass";
-    private static readonly string Fingerprint = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_SFTP_FINGERPRINT") ?? "";
-    private static readonly string BaseDir = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_SFTP_BASE_DIR") ?? "/upload";
+    private static string Host => SftpServer.Current.Host;
+    private static int Port => SftpServer.Current.Port;
+    private static string Username => SftpServer.Current.User;
+    private static string Password => SftpServer.Current.Password;
+    private static string Fingerprint => SftpServer.Current.Fingerprint;
+    private static string BaseDir => SftpServer.Current.BaseDirectory;
 
     [Fact]
-    public async Task SftpStorageProvider_FullLifecycle_WhenConfigured()
+    public async Task SftpStorageProvider_FullLifecycle()
     {
-        if (!Enabled || string.IsNullOrWhiteSpace(Fingerprint))
-        {
-            return;
-        }
-
         var tenantId = Guid.NewGuid();
         var connectionId = Guid.NewGuid();
         var options = new SftpStorageOptions(Host, Port, Username, "password", BaseDir, Fingerprint, tenantId, connectionId);
@@ -82,13 +75,8 @@ public sealed class SftpStorageProviderIntegrationTests
     }
 
     [Fact]
-    public async Task DeleteAsync_PermissionDeniedParent_RemainsFailure_WhenConfigured()
+    public async Task DeleteAsync_PermissionDeniedParent_RemainsFailure()
     {
-        if (!Enabled || string.IsNullOrWhiteSpace(Fingerprint))
-        {
-            return;
-        }
-
         var tenantId = Guid.NewGuid();
         var options = new SftpStorageOptions(Host, Port, Username, "password", BaseDir, Fingerprint, tenantId, Guid.NewGuid());
         var network = new SftpNetworkOptions(allowedPrivateNetworks: AllowedNetworks);
@@ -115,13 +103,8 @@ public sealed class SftpStorageProviderIntegrationTests
     }
 
     [Fact]
-    public async Task DeleteAsync_AuthenticationFailure_ReleasesLock_WhenConfigured()
+    public async Task DeleteAsync_AuthenticationFailure_ReleasesLock()
     {
-        if (!Enabled || string.IsNullOrWhiteSpace(Fingerprint))
-        {
-            return;
-        }
-
         var tenantId = Guid.NewGuid();
         var options = new SftpStorageOptions(Host, Port, Username, "password", BaseDir, Fingerprint, tenantId, Guid.NewGuid());
         var network = new SftpNetworkOptions(allowedPrivateNetworks: AllowedNetworks);
@@ -143,13 +126,8 @@ public sealed class SftpStorageProviderIntegrationTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task PutAsync_FailedTemporaryCleanup_RetainsExactKey_WhenConfigured(bool cancel)
+    public async Task PutAsync_FailedTemporaryCleanup_RetainsExactKey(bool cancel)
     {
-        if (!Enabled || string.IsNullOrWhiteSpace(Fingerprint))
-        {
-            return;
-        }
-
         var tenantId = Guid.NewGuid();
         var options = new SftpStorageOptions(Host, Port, Username, "password", BaseDir, Fingerprint, tenantId, Guid.NewGuid());
         var network = new SftpNetworkOptions(allowedPrivateNetworks: AllowedNetworks);
@@ -193,13 +171,8 @@ public sealed class SftpStorageProviderIntegrationTests
     }
 
     [Fact]
-    public async Task DeleteAsync_MissingFinal_RemovesRestartPartial_WhenConfigured()
+    public async Task DeleteAsync_MissingFinal_RemovesRestartPartial()
     {
-        if (!Enabled || string.IsNullOrWhiteSpace(Fingerprint))
-        {
-            return;
-        }
-
         var tenantId = Guid.NewGuid();
         var options = new SftpStorageOptions(Host, Port, Username, "password", BaseDir, Fingerprint, tenantId, Guid.NewGuid());
         var network = new SftpNetworkOptions(allowedPrivateNetworks: AllowedNetworks);

@@ -26,22 +26,18 @@ public sealed class StorageCapacityAgentHostSmokeTests(PostgreSqlFixture fixture
         output.WriteLine("Actual Agent.Host capacity: total={0}, free={1}; production poll/lease/completion, no dispatcher substitution.", measured, capacity.GetProperty("freeBytes").GetInt64());
     }
 
-    [SftpServerFact]
+    [Fact]
     public async Task PublishedAgent_ProbesRealSftpStatvfs_WithPinnedHostAndOperatorNetworkPolicy()
     {
-        var hostName = AgentHostSmokeProcess.Required("BACKUP_PLATFORM_TEST_SFTP_HOST");
-        var port = AgentHostSmokeProcess.Required("BACKUP_PLATFORM_TEST_SFTP_PORT");
-        var username = AgentHostSmokeProcess.Required("BACKUP_PLATFORM_TEST_SFTP_USER");
-        var password = AgentHostSmokeProcess.Required("BACKUP_PLATFORM_TEST_SFTP_PASSWORD");
-        var fingerprint = AgentHostSmokeProcess.Required("BACKUP_PLATFORM_TEST_SFTP_FINGERPRINT");
+        var sftp = SftpServer.Current;
         await using var world = await AgentWorld.CreateAsync(fixture, clock: new MutableClock(live: true), kestrel: true);
         var setup = await world.CreateTenantAsync();
         var agent = await world.EnrollAsync(setup);
         var reference = "capacity-smoke-" + Guid.NewGuid().ToString("N");
         var connection = await StorageCapacityProbeIntegrationTests.AddConnectionAsync(world, setup, "sftp", new()
         {
-            ["host"] = hostName, ["port"] = port, ["username"] = username, ["authenticationType"] = "password",
-            ["remoteBaseDirectory"] = "/", ["hostKeyFingerprint"] = fingerprint
+            ["host"] = sftp.Host, ["port"] = sftp.Port.ToString(System.Globalization.CultureInfo.InvariantCulture), ["username"] = sftp.User, ["authenticationType"] = "password",
+            ["remoteBaseDirectory"] = "/", ["hostKeyFingerprint"] = sftp.Fingerprint
         });
         await using (var db = fixture.CreatePlatformContext())
         {
@@ -50,7 +46,7 @@ public sealed class StorageCapacityAgentHostSmokeTests(PostgreSqlFixture fixture
         }
         await world.Factory.Services.GetRequiredService<BackupPlatform.SecretProviders.Abstractions.ISecretStore>()
             .SetAsync(new BackupPlatform.SecretProviders.Abstractions.SecretReference(reference),
-                new BackupPlatform.SecretProviders.Abstractions.SecretValue(JsonSerializer.Serialize(new Dictionary<string, string> { ["password"] = password })), default);
+                new BackupPlatform.SecretProviders.Abstractions.SecretValue(JsonSerializer.Serialize(new Dictionary<string, string> { ["password"] = sftp.Password })), default);
         await using var host = await AgentHostSmokeProcess.StartAsync(world, agent, output.WriteLine);
         var capacity = await ProbeAndWaitAsync(setup, host, connection);
         Assert.Contains(capacity.GetProperty("status").GetString(), new[] { "Available", "Warning", "Critical" });
