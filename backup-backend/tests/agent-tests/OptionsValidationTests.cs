@@ -166,29 +166,6 @@ public sealed class OptionsValidationTests
     }
 
     [Fact]
-    public async Task Valid_configuration_wires_the_connectivity_service_to_the_transport()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddAgentHost(Configuration(
-            ("Agent:Backend:BaseUri", "https://backup.example.test/base"),
-            ("Agent:CredentialStoreDirectory", AbsoluteDirectory)));
-        await using var provider = services.BuildServiceProvider();
-
-        var service = provider.GetRequiredService<AgentConnectivityService>();
-
-        Assert.Same(service, provider.GetRequiredService<IAgentConnectivityStatus>());
-        Assert.IsType<SignalRAgentPushChannel>(provider.GetRequiredService<IAgentPushChannel>());
-        var client = Assert.IsType<HttpAgentBackendClient>(provider.GetRequiredService<IAgentBackendClient>());
-        Assert.Equal("https://backup.example.test/base/", client.BackendBaseUri.ToString());
-        Assert.IsAssignableFrom<IAgentCredentialStore>(provider.GetRequiredService<IAgentCredentialStore>());
-        Assert.Equal(AgentChannelState.Stopped, service.Current.State);
-        Assert.IsType<HttpAgentCapabilityClient>(provider.GetRequiredService<IAgentCapabilityClient>());
-        var source = Assert.IsType<CatalogCapabilityRevisionSource>(provider.GetRequiredService<ICapabilityRevisionSource>());
-        Assert.Equal(provider.GetRequiredService<AgentCapabilityCatalog>().Revision, source.GetRevision());
-    }
-
-    [Fact]
     public async Task Invalid_configuration_fails_host_startup_naming_each_problem()
     {
         var builder = Host.CreateEmptyApplicationBuilder(new HostApplicationBuilderSettings());

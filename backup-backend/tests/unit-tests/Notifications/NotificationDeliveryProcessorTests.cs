@@ -154,18 +154,21 @@ public sealed class NotificationDeliveryProcessorTests
         var options = new NotificationOptions { MaxConcurrentDeliveries = 3, DeliveryBatchSize = 50 };
         for (var i = 0; i < 12; i++) _store.Due.Add(Hook());
         int running = 0, peak = 0;
+        var limitReached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         await Processor(async _ =>
         {
             var now = Interlocked.Increment(ref running);
             int seen;
             while (now > (seen = Volatile.Read(ref peak))) Interlocked.CompareExchange(ref peak, now, seen);
-            await Task.Delay(40);
+            if (now == 3) limitReached.TrySetResult();
+            await limitReached.Task.WaitAsync(TimeSpan.FromSeconds(10)); // the first three sends overlap until the third is in
+            for (var i = 0; i < 50; i++) await Task.Yield(); // lets a send beyond the limit start while three are held
             Interlocked.Decrement(ref running);
             return SendOutcome.Sent;
         }, options).ProcessAsync("w1", CancellationToken.None);
 
         Assert.Equal(12, _store.Completed.Count);
-        Assert.InRange(peak, 2, 3);
+        Assert.Equal(3, peak);
     }
 }

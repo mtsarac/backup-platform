@@ -176,7 +176,7 @@ public sealed class ReplicaRepairWorkerOwnershipUnitTests
             while (!tcs.Task.IsCompleted)
             {
                 time.Advance(TimeSpan.FromSeconds(20));
-                await Task.Delay(5);
+                await Task.Yield();
             }
 
             var cancelTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -335,7 +335,7 @@ public sealed class ReplicaRepairWorkerOwnershipUnitTests
             while (!tcs.Task.IsCompleted)
             {
                 time.Advance(TimeSpan.FromSeconds(20));
-                await Task.Delay(5);
+                await Task.Yield();
             }
 
             var cancelTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);

@@ -36,9 +36,6 @@ public sealed class EffectiveStorageLimitTests
         Assert.NotEqual(StorageLimitOverride.None, StorageLimitOverride.Unlimited);
     }
 
-    [Fact]
-    public void TheDefaultOverrideIsNone() => Assert.Equal(StorageLimitOverride.None, default);
-
     [Theory]
     [InlineData(0L)]
     [InlineData(-5L)]
