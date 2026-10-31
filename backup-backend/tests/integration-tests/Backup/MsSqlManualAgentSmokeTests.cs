@@ -97,11 +97,11 @@ public sealed class MsSqlManualAgentSmokeTests(PostgreSqlFixture database, ITest
         output.WriteLine("Actual invalid database: Run Failed (NotRetryable) -> Attempt Failed / DatabaseNotFound; no artifact or storage output.");
     }
 
-    /// <summary>Stores the test SQL login for the agent through the API and returns the reference a restore target uses.</summary>
-    internal static async Task<string> StoreSqlLoginAsync(TenantSetup tenant, Guid agentId)
+    /// <summary>Stores a SQL login for the agent through the API and returns the reference a restore target uses.</summary>
+    internal static async Task<string> StoreSqlLoginAsync(TenantSetup tenant, Guid agentId, string user, string password)
     {
         using var response = await tenant.Admin.SendAsync(HttpMethod.Post, $"/api/tenants/{tenant.Tenant.Id.Value}/agents/{agentId}/database-logins",
-            new { userName = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_USER"), password = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_PASSWORD") });
+            new { userName = user, password });
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         return AgentWorld.ReadJson(response).GetProperty("reference").GetString()!;
     }
@@ -109,7 +109,7 @@ public sealed class MsSqlManualAgentSmokeTests(PostgreSqlFixture database, ITest
     internal static BackupExecutionConfiguration Configuration(OrchestrationSqlSource sql, string databaseName) => new()
     {
         Host = sql.Host, Port = sql.Port, Database = databaseName,
-        DatabaseLogin = new(Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_USER")!, Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_PASSWORD")!), TrustServerCertificate = true,
+        DatabaseLogin = new(sql.User, sql.Password), TrustServerCertificate = true,
         StagingReference = "default", Destinations = BackupTestDestinations.LocalAgent, StoragePrefix = "manual",
         CopyOnly = true, ChecksumPolicy = "Required", CompressionPolicy = "Preferred"
     };

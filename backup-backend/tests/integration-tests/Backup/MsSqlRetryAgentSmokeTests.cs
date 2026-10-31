@@ -20,7 +20,7 @@ public sealed class MsSqlRetryAgentSmokeTests(PostgreSqlFixture database, ITestO
     {
         await using var sql = new OrchestrationSqlSource();
         await sql.InitializeAsync();
-        await using var forwarder = new TcpForwarder(sql.Host, sql.Port ?? 1433);
+        await using var forwarder = new TcpForwarder(sql.Host, sql.Port);
         await using var world = await AgentWorld.CreateAsync(database, clock: new MutableClock(live: true), kestrel: true);
         var tenant = await world.CreateTenantAsync();
         await world.EntitleAsync(tenant.Tenant);
@@ -82,7 +82,7 @@ public sealed class MsSqlRetryAgentSmokeTests(PostgreSqlFixture database, ITestO
     {
         await using var sql = new OrchestrationSqlSource();
         await sql.InitializeAsync();
-        await using var forwarder = new TcpForwarder(sql.Host, sql.Port ?? 1433); // never started: every attempt is refused
+        await using var forwarder = new TcpForwarder(sql.Host, sql.Port); // never started: every attempt is refused
         await using var world = await AgentWorld.CreateAsync(database, clock: new MutableClock(live: true), kestrel: true);
         var tenant = await world.CreateTenantAsync();
         await world.EntitleAsync(tenant.Tenant);
@@ -139,7 +139,7 @@ public sealed class MsSqlRetryAgentSmokeTests(PostgreSqlFixture database, ITestO
     {
         await using var sql = new OrchestrationSqlSource();
         await sql.InitializeAsync();
-        await using var forwarder = new TcpForwarder(sql.Host, sql.Port ?? 1433);
+        await using var forwarder = new TcpForwarder(sql.Host, sql.Port);
         await using var world = await AgentWorld.CreateAsync(database, clock: new MutableClock(live: true), kestrel: true);
         var tenant = await world.CreateTenantAsync();
         await world.EntitleAsync(tenant.Tenant);

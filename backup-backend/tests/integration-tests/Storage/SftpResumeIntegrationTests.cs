@@ -6,18 +6,18 @@ using Xunit;
 namespace BackupPlatform.IntegrationTests.Storage;
 
 /// <summary>
-/// Resume from a retained SFTP partial against a real server (same BACKUP_PLATFORM_TEST_SFTP_* settings as the lifecycle tests).
-/// Set BACKUP_PLATFORM_TEST_SFTP_PRIVATE_KEY_FILE to authenticate with a key instead of the password.
+/// Resume from a retained SFTP partial against a real server: the Testcontainers one, or the one <see cref="SftpServer.Current"/> names.
+/// Set BACKUP_PLATFORM_TEST_SFTP_PRIVATE_KEY_FILE (with an external server) to authenticate with a key instead of the password.
 /// </summary>
 public sealed class SftpResumeIntegrationTests
 {
     private static readonly string[] AllowedNetworks = ["127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"];
-    private static readonly string Host = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_SFTP_HOST") ?? "127.0.0.1";
-    private static readonly int Port = int.TryParse(Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_SFTP_PORT"), out var p) ? p : 2222;
-    private static readonly string Username = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_SFTP_USER") ?? "testuser";
-    private static readonly string Password = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_SFTP_PASSWORD") ?? "testpass";
-    private static readonly string Fingerprint = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_SFTP_FINGERPRINT") ?? "";
-    private static readonly string BaseDir = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_SFTP_BASE_DIR") ?? "/upload";
+    private static string Host => SftpServer.Current.Host;
+    private static int Port => SftpServer.Current.Port;
+    private static string Username => SftpServer.Current.User;
+    private static string Password => SftpServer.Current.Password;
+    private static string Fingerprint => SftpServer.Current.Fingerprint;
+    private static string BaseDir => SftpServer.Current.BaseDirectory;
     private static readonly string? KeyFile = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_SFTP_PRIVATE_KEY_FILE");
 
     private readonly Guid _tenantId = Guid.NewGuid();
@@ -46,8 +46,8 @@ public sealed class SftpResumeIntegrationTests
             },
             progress is null ? null : new Progress<long>(progress.Add), CancellationToken.None);
 
-    [SftpServerFact]
-    public async Task Put_VerifiesRetainedPrefixThenContinuesFromItsEnd_WhenConfigured()
+    [Fact]
+    public async Task Put_VerifiesRetainedPrefixThenContinuesFromItsEnd()
     {
         var content = RandomNumberGenerator.GetBytes(300_000);
         const int retained = 100_000;
@@ -71,8 +71,8 @@ public sealed class SftpResumeIntegrationTests
         await _provider.DeleteAsync(_key, CancellationToken.None);
     }
 
-    [SftpServerFact]
-    public async Task Put_RejectsCorruptedRetainedPrefix_AndKeepsPartial_WhenConfigured()
+    [Fact]
+    public async Task Put_RejectsCorruptedRetainedPrefix_AndKeepsPartial()
     {
         var content = RandomNumberGenerator.GetBytes(300_000);
         var corrupted = content[..100_000];
@@ -87,8 +87,8 @@ public sealed class SftpResumeIntegrationTests
         await _provider.DeleteAsync(_partial, CancellationToken.None);
     }
 
-    [SftpServerFact]
-    public async Task Put_RejectsRetainedPrefixLongerThanTheArtifact_WhenConfigured()
+    [Fact]
+    public async Task Put_RejectsRetainedPrefixLongerThanTheArtifact()
     {
         var content = RandomNumberGenerator.GetBytes(1_000);
         await SeedPartial(RandomNumberGenerator.GetBytes(2_000));
@@ -100,8 +100,8 @@ public sealed class SftpResumeIntegrationTests
         await _provider.DeleteAsync(_partial, CancellationToken.None);
     }
 
-    [SftpServerFact]
-    public async Task Put_OfAnAlreadyVerifiedObjectReturnsItWithoutWritingAgain_WhenConfigured()
+    [Fact]
+    public async Task Put_OfAnAlreadyVerifiedObjectReturnsItWithoutWritingAgain()
     {
         var content = RandomNumberGenerator.GetBytes(200_000);
         await Resume(content, [], 0);
@@ -116,8 +116,8 @@ public sealed class SftpResumeIntegrationTests
         await _provider.DeleteAsync(_key, CancellationToken.None);
     }
 
-    [SftpServerFact]
-    public async Task Put_CheckpointsPerInterval_NotPerBuffer_WhenConfigured()
+    [Fact]
+    public async Task Put_CheckpointsPerInterval_NotPerBuffer()
     {
         var content = RandomNumberGenerator.GetBytes(20 * 1024 * 1024);
         var checkpoints = new List<long>();

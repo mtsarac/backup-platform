@@ -59,12 +59,15 @@
     <DirectDownloadName Condition="'$(AgentPlatform)' == 'Windows'">backup-direct-download.exe</DirectDownloadName>
     <DirectDownloadOutput>$(MSBuildProjectDirectory)/$(IntermediateOutputPath)direct/$(DirectDownloadName)</DirectDownloadOutput>
   </PropertyGroup>
-  <ItemGroup>
+  <ItemGroup Condition="'$(SkipDirectDownloadBuild)' != 'true'">
     <Content Include="$(DirectDownloadOutput)" Link="$(DirectDownloadName)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <Content Include="../../agent/direct-download/THIRD-PARTY-NOTICES.txt" Link="THIRD-PARTY-DIRECT-DOWNLOAD.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../../providers/storage/smb/THIRD-PARTY-NOTICES.txt" Link="THIRD-PARTY-SMBLIBRARY.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
-  <Target Name="BuildDirectDownloadTransport" BeforeTargets="PrepareForBuild">
+  <!-- SkipDirectDownloadBuild=true builds without the Go toolchain; the host then ships without the WebRTC download helper. -->
+  <Target Name="BuildDirectDownloadTransport" BeforeTargets="PrepareForBuild" Condition="'$(SkipDirectDownloadBuild)' != 'true'">
     <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(DirectDownloadOutput)'))" />
     <Exec WorkingDirectory="$(MSBuildProjectDirectory)/../../agent/direct-download" Command="go build -mod=readonly -trimpath -o &quot;$(DirectDownloadOutput)&quot; ." EnvironmentVariables="GOOS=$(DirectDownloadOs);GOARCH=$(DirectDownloadArch);CGO_ENABLED=0" />
   </Target>
