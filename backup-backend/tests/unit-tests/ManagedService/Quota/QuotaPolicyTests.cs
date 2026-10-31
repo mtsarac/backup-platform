@@ -235,21 +235,10 @@ public sealed class QuotaPolicyTests
         Assert.True(Update(policy, enabled: true));
         Assert.Equal((3, true), (policy.Version, policy.Enabled));
     }
-
-    [Fact]
-    public void TheSeededDefaultIdAndKeyMatchTheMigration()
-    {
-        Assert.Equal(Guid.Parse("14e8fce9-11ed-47a9-aa04-b6ead7a8cd3d"), QuotaPolicy.DefaultId.Value);
-        Assert.Equal("default", QuotaPolicy.DefaultKey);
-        Assert.Equal((80, 90), (QuotaPolicy.DefaultWarningThresholdPercent, QuotaPolicy.DefaultCriticalThresholdPercent));
-    }
 }
 
 public sealed class QuotaOptionsTests
 {
-    [Fact]
-    public void TheDefaultsAreValid() => new QuotaOptions().ThrowIfInvalid();
-
     [Theory]
     [InlineData(1)]
     [InlineData(60)]

@@ -554,14 +554,21 @@ public sealed class DiscoveryScannerTests
         var rig = new Rig();
         rig.Detectors.Add(new FakeDetector(DiscoverySources.Service,
             DetectionResult.Scanned([.. Enumerable.Range(0, 6).Select(i => Mssql($"mssql|service|I{i}", 2000 + i))])));
+        var twoEnriching = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         rig.Mssql.OnDiscover = async (_, _, _) =>
         {
-            await Task.Delay(30);
+            if (rig.Mssql.PeakConcurrency >= 2) twoEnriching.TrySetResult();
+            await release.Task;
             return Discovery(DatabaseEngineId.MsSql);
         };
         var plan = new AgentDiscoveryPlan { Bindings = [.. Enumerable.Range(0, 6).Select(i => Binding($"mssql|service|I{i}"))] };
 
-        var report = await ScanAsync(rig, plan);
+        var scan = ScanAsync(rig, plan);
+        await twoEnriching.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        for (var i = 0; i < 50; i++) await Task.Yield(); // gives a third enrichment every chance to start while two are held
+        release.SetResult();
+        var report = await scan;
 
         Assert.All(report.Instances, instance => Assert.Equal(DiscoveryAccess.Authenticated, instance.Access));
         Assert.Equal(2, rig.Mssql.PeakConcurrency);

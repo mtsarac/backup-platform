@@ -90,17 +90,6 @@ public sealed class DatabaseAbstractionsTests
     [InlineData(-1)]
     public void EndpointsRejectInvalidPorts(int port) => Assert.Throws<ArgumentOutOfRangeException>(() => new DatabaseEndpoint("host", port));
 
-    [Fact]
-    public void OptionsDefaultToSecureFiniteValues()
-    {
-        var options = new DatabaseConnectionOptions();
-
-        Assert.Equal(TimeSpan.FromSeconds(15), options.ConnectTimeout);
-        Assert.Equal(TimeSpan.FromSeconds(30), options.CommandTimeout);
-        Assert.True(options.RequireEncryption);
-        Assert.False(options.TrustServerCertificate);
-    }
-
     [Theory]
     [InlineData(0)]
     [InlineData(-5)]

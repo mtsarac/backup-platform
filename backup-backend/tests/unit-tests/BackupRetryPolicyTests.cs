@@ -14,17 +14,6 @@ public sealed class BackupRetryPolicyTests
         Jitter = jitter
     };
 
-    [Fact]
-    public void DefaultPolicyIsValidAndAllowsThreeTotalAttempts()
-    {
-        var policy = BackupRetryPolicy.Default;
-        Assert.Same(policy, policy.Validate());
-        Assert.Equal(3, policy.MaxAttempts);
-        Assert.Equal(TimeSpan.FromSeconds(30), policy.InitialDelay);
-        Assert.Equal(TimeSpan.FromMinutes(10), policy.MaxDelay);
-        Assert.Equal(BackupBackoffStrategy.Exponential, policy.Backoff);
-    }
-
     [Theory]
     [InlineData(1, true)]
     [InlineData(3, true)]

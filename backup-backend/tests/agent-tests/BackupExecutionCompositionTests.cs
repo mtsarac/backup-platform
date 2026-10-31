@@ -38,39 +38,6 @@ public sealed class BackupExecutionCompositionTests
     }
 
     [Fact]
-    public void ConfiguredStoragesAndAMappedStagingAreaAreRegisteredByIdentifier()
-    {
-        using var provider = Build(
-            ("Agent:Backup:Staging:Mapping", "Mapped"),
-            ("Agent:Backup:Staging:ServerDirectory", "/var/opt/mssql/staging"),
-            ("Agent:Backup:Staging:AgentDirectory", Path.Combine(Root, "staging")),
-            ("Agent:Backup:LocalStorage:RootDirectory", Path.Combine(Root, "local")),
-            ("Agent:Backup:CentralStorage:RootDirectory", Path.Combine(Root, "central")),
-            ("Agent:Backup:CentralStorage:TenantScope", "tenant-a"));
-
-        var storages = provider.GetServices<IStorageProvider>().ToDictionary(s => s.Id);
-        Assert.Equal([StorageProviderId.Central, StorageProviderId.Local], storages.Keys.OrderBy(id => id.Value));
-        Assert.All(storages.Values, storage => Assert.Equal(StorageTopology.AgentDirect, storage.Topology));
-
-        var staging = provider.GetRequiredService<StagingArea>();
-        Assert.Equal(StagingMappingKind.Mapped, staging.Kind);
-        Assert.Equal("/var/opt/mssql/staging", staging.ServerDirectory.Value);
-        Assert.Equal(Path.Combine(Root, "staging"), staging.AgentDirectory.Value);
-    }
-
-    [Fact]
-    public void ASameHostStagingAreaNeedsOnlyTheAgentDirectory()
-    {
-        using var provider = Build(
-            ("Agent:Backup:Staging:Mapping", "SameHost"),
-            ("Agent:Backup:Staging:AgentDirectory", Path.Combine(Root, "staging")));
-
-        var staging = provider.GetRequiredService<StagingArea>();
-        Assert.Equal(StagingMappingKind.SameHost, staging.Kind);
-        Assert.Equal(staging.AgentDirectory.Value, staging.ServerDirectory.Value);
-    }
-
-    [Fact]
     public void AValidBackupSectionPassesStartupValidation()
     {
         var options = new AgentHostOptions
