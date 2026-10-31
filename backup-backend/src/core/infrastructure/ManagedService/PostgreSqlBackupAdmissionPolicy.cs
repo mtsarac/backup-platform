@@ -164,6 +164,50 @@ public sealed class PostgreSqlBackupAdmissionPolicy(
         return BackupAdmissionDecision.Admitted;
     }
 
+    /// <summary>
+    /// Grows the run's hold to the staged artifact size inside the caller's transaction (tenant already locked). <c>Adjusted</c> is false when nothing
+    /// needed changing (the answer is <c>Granted</c>); otherwise the hold fits the limit (<c>Granted</c>) or does not.
+    /// </summary>
+    internal static async Task<(bool Granted, bool Adjusted)> AdjustQuotaReservationAsync(
+        PlatformDbContext context, TenantId tenantId, BackupRun run, Guid attemptId, long sizeBytes, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var policy = await TenantUsageEngine.ResolvePolicyAsync(context, tenantId, cancellationToken);
+        var entitlement = await PostgreSqlTenantEntitlementReader.ResolveAsync(context, tenantId, now, cancellationToken);
+        if (policy.EnforcementMode != QuotaEnforcementMode.BlockNewBackups || entitlement.StorageLimit is not { IsUnlimited: false })
+            return (true, false);
+        var copies = await TenantUsageEngine.CountCopiesAsync(context, tenantId, run.Configuration, policy, now, cancellationToken);
+        if (copies == 0) return (true, false);
+        if (copies is null) return (false, false);
+        var reservation = await context.QuotaReservations.AsNoTracking().SingleOrDefaultAsync(row =>
+            row.TenantId == tenantId && row.RunId == run.Id && row.ReleasedAt == null, cancellationToken);
+        if (reservation is null || sizeBytes > long.MaxValue / copies.Value) return (false, false);
+        var prior = await TenantUsageEngine.ComputeUsedAsync(context, tenantId, policy, cancellationToken, run.Id, attemptId);
+        var size = sizeBytes * copies.Value;
+        if (prior > long.MaxValue - size) return (false, false);
+        // Partial destination bytes may not yet be recorded, so a repeated adjustment must not release the existing hold.
+        var desired = Math.Max(reservation.Bytes, prior + size);
+        var consumed = await TenantUsageEngine.ComputeUsedAsync(context, tenantId, policy, cancellationToken, run.Id);
+        var ownRemaining = Math.Max(0, reservation.Bytes - consumed);
+        var desiredRemaining = Math.Max(0, desired - consumed);
+        var (usage, _) = await TenantUsageEngine.EnsureCurrentAsync(context, tenantId, policy, now, cancellationToken);
+        var otherReserved = usage.ReservedBytes == long.MaxValue
+            ? await TenantUsageEngine.ComputeReservedAsync(context, tenantId, cancellationToken, run.Id)
+            : Math.Max(0, usage.ReservedBytes - ownRemaining);
+        var limit = entitlement.StorageLimit.Value.Bytes!.Value;
+        if (usage.UsedBytes > limit || otherReserved > limit - usage.UsedBytes ||
+            desiredRemaining > limit - usage.UsedBytes - otherReserved)
+            return (false, false);
+        if (reservation.Bytes != desired)
+        {
+            await context.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE quota_reservations SET "Bytes" = {desired}
+                WHERE "TenantId" = {tenantId.Value} AND "RunId" = {run.Id} AND "ReleasedAt" IS NULL
+                """, cancellationToken);
+            await TenantUsageEngine.RefreshReservedAsync(context, tenantId, cancellationToken);
+        }
+        return (true, true);
+    }
+
     public async Task ReleaseAsync(TenantId tenantId, Guid runId, CancellationToken cancellationToken)
     {
         await using var context = PlatformDbContext.CreateForPlatformOperations(options);
