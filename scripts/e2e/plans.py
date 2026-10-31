@@ -14,5 +14,6 @@ small = ensure("E2E Small 300MB", storageLimitBytes=300 * 1024 * 1024, unlimited
 pid = lambda p: p.get("id") or p.get("planId")
 st["plans"] = {"unlimited": pid(unl), "small": pid(small)}
 for k in ("a", "b"):
-    chk(s.put(f"{api.BASE}/api/platform/tenants/{st[k]['tenantId']}/subscription", json={"planId": pid(unl)}))
+    r = s.put(f"{api.BASE}/api/platform/tenants/{st[k]['tenantId']}/subscription", json={"planId": pid(unl)})
+    if not (r.status_code == 409 and r.json().get("error") == "plan_already_assigned"): chk(r)  # a preserved lab already has the plan
 (api.ROOT / "docs/test-environment/state.json").write_text(json.dumps(st, indent=2)); print(st["plans"])
