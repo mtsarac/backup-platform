@@ -92,6 +92,36 @@ describe('direct browser disk publication', () => {
     expect(FakePeer.current.close).toHaveBeenCalledTimes(1)
   })
 
+  describe('when ICE gathering does not complete', () => {
+    beforeEach(() => { vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }) })
+    afterEach(() => { vi.useRealTimers() })
+    const writer = () => ({ write: vi.fn(async () => {}), close: vi.fn(async () => {}), abort: vi.fn(async () => {}) })
+
+    it('offers the candidates gathered so far after 15 s instead of failing', async () => {
+      const w = writer()
+      vi.stubGlobal('RTCPeerConnection', class extends FakePeer {
+        iceGatheringState = 'gathering'
+        localDescription = { sdp: 'v=0\na=candidate:1 1 udp 2113937151 192.0.2.1 5000 typ host\n' }
+      })
+      void receiveDirectDownload(session, { createWritable: async () => w as unknown as FileSystemWritableFileStream }, new AbortController().signal).catch(() => {})
+      await vi.advanceTimersByTimeAsync(15_000)
+      expect(apiRequest).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ method: 'POST', json: { sdp: expect.stringContaining('a=candidate:') } }))
+    })
+
+    it('fails closed after 15 s when no candidate exists', async () => {
+      const w = writer()
+      vi.stubGlobal('RTCPeerConnection', class extends FakePeer {
+        iceGatheringState = 'gathering'
+        localDescription = { sdp: 'v=0\n' }
+      })
+      const run = receiveDirectDownload(session, { createWritable: async () => w as unknown as FileSystemWritableFileStream }, new AbortController().signal)
+      const failure = expect(run).rejects.toThrow('DirectPathUnavailable')
+      await vi.advanceTimersByTimeAsync(15_000)
+      await failure
+      expect(apiRequest).not.toHaveBeenCalled()
+    })
+  })
+
   it('rejects unsafe signaling URLs before any disk or backend operation', async () => {
     const createWritable = vi.fn()
     await expect(receiveDirectDownload({ ...session, downloadUrl: 'https://attacker.test/content' }, { createWritable }, new AbortController().signal)).rejects.toThrow('DirectPathUnavailable')

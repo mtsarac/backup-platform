@@ -69,7 +69,8 @@ export async function receiveDirectDownload(session: PreparedDownload, file: Dow
     const gathering = Promise.withResolvers<void>()
     peer.onicegatheringstatechange = () => { if (peer.iceGatheringState === 'complete') gathering.resolve() }
     if (peer.iceGatheringState === 'complete') gathering.resolve()
-    const gatherTimeout = window.setTimeout(() => gathering.reject(new Error('DirectPathUnavailable')), 15_000)
+    // A dead STUN path (for example IPv6) can keep gathering "incomplete" for 40 s although usable candidates arrived at once: after 15 s send what was gathered, and fail closed only when there is nothing to offer.
+    const gatherTimeout = window.setTimeout(() => /^a=candidate:/m.test(peer.localDescription?.sdp ?? '') ? gathering.resolve() : gathering.reject(new Error('DirectPathUnavailable')), 15_000)
     try { await gathering.promise } finally { window.clearTimeout(gatherTimeout) }
     await apiRequest(path, { method: 'POST', json: { sdp: peer.localDescription!.sdp }, signal })
     const until = Date.now() + 45_000
