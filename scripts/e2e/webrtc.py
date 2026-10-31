@@ -1,6 +1,6 @@
 """Agent-direct download over WebRTC, end to end in a real browser: a file backup stored on the Fedora agent's local volume is downloaded through the UI
 (Artifact -> Download -> Download Backup -> Save file). The browser peer is headless Chromium (browser.py) running the product's own download code against the agent VM's pion peer
-over the libvirt bridge; no STUN/TURN is configured for the lab, the host candidates connect directly. The one stub is the native save dialog, which no automation can drive:
+over the libvirt bridge; the product's stock STUN entry stays configured, and the host candidates connect directly. The one stub is the native save dialog, which no automation can drive:
 `showSaveFilePicker` is replaced by an in-memory sink that records every byte the data channel delivers. The scenario then compares what arrived with the artifact:
 byte count == artifact size, SHA-256 of the received bytes == the artifact checksum, and the platform's download session is Completed with the same byte count.
 One pass, no retries. Run: python3 webrtc.py"""
@@ -8,15 +8,15 @@ import re, api, browser, flows, lib
 from lib import ST, scenario
 
 UI = f"https://{api.env['PUBLIC_HOST']}:{api.env.get('FRONTEND_PORT', '5173')}"
-# Lab adaptations of the browser peer, nothing else: no STUN (the stock stun.cloudflare.com entry makes this host's ICE gathering take ~40 s, past the product's 15 s limit,
-# because its IPv6 path is dead), and Chromium enumerates only the host's physical interface (192.168.1.25) although the agent VM can reach the host only as PUBLIC_HOST
-# over virbr0, so the offer's host candidate is re-addressed to PUBLIC_HOST. The data channel, DTLS, SCTP and the download code are the product's.
+# Lab adaptation of the browser peer, nothing else: Chromium enumerates only the host's physical interface (192.168.1.25) although the agent VM can reach the host only as PUBLIC_HOST
+# over virbr0, so the offer's host candidate is re-addressed to PUBLIC_HOST. The stock stun.cloudflare.com entry is kept: its dead IPv6 path makes ICE gathering take ~40 s,
+# so the product must offer the candidates gathered after its 15 s limit. The data channel, DTLS, SCTP and the download code are the product's.
 SINK = """
 localStorage.setItem('bp_language', 'en');
 const Native = window.RTCPeerConnection;
 const localDescription = Object.getOwnPropertyDescriptor(Native.prototype, 'localDescription').get;
 window.RTCPeerConnection = function (config, ...rest) {
-  const peer = new Native({ ...config, iceServers: [] }, ...rest);
+  const peer = new Native(config, ...rest);
   Object.defineProperty(peer, 'localDescription', { get: () => { const d = localDescription.call(peer); return d && { type: d.type, sdp: d.sdp.replace(/(a=candidate:\\S+ \\d+ udp \\d+ )\\S+( \\d+ typ host)/g, '$1' + __PUBLIC_HOST__ + '$2') } } });
   return peer;
 };
