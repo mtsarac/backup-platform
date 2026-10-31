@@ -8,6 +8,8 @@ services:
       - Backups__Retention__MinimumDeleteGracePeriod=00:00:10
       - Notifications__PublicBaseUrl=https://192.168.122.1:5173
       - Notifications__AllowedPrivateNetworks__0=192.168.122.0/24
+      # The notify scenario spends ~15 test sends per run and the product caps a tenant at 20 per hour; the per-channel cap (5) is what the scenario asserts.
+      - Notifications__TestNotificationsPerTenantPerHour=1000
       # Every flag the API reads; scripts/e2e/flags.py flips them one at a time through the E2E_FEATURE_* variables (defaults are the product defaults).
       - Features__sms=${E2E_FEATURE_SMS:-false}
       - Features__supportSessions=${E2E_FEATURE_SUPPORTSESSIONS:-false}
