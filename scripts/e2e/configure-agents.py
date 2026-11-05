@@ -13,7 +13,15 @@ linux = {
     # Central storage: the Samba share is mounted below; the backend sees the same tree at /central-share (docker-compose.e2e.override.yml).
     "Agent__Backup__CentralStorage__RootDirectory": "/mnt/e2e-share/central",
     "Agent__Backup__CentralStorage__TenantScope": "e2e-a",
+    # Snapshot source: dedicated 2 GiB LV /dev/fedora/e2esnap (mounted at /srv/e2e-snap, tree/ is the file source); the agent runs lvcreate/mount itself, hence the capabilities below.
+    "Features__linuxSnapshots": "true",
+    "Agent__Backup__FileSources__e2esnap__RootDirectory": "/srv/e2e-snap",
+    "Agent__Backup__FileSources__e2esnap__SnapshotKind": "Lvm",
+    "Agent__Backup__FileSources__e2esnap__SnapshotSource": "/dev/fedora/e2esnap",
+    "Agent__Backup__FileSources__e2esnap__SnapshotRelativePath": "tree",
+    "Agent__Backup__FileSources__e2esnap__LvmSize": "256M",
 }
+caps = "CAP_SYS_ADMIN CAP_DAC_OVERRIDE CAP_SYS_RAWIO CAP_MKNOD CAP_SYS_NICE CAP_IPC_LOCK CAP_SYS_RESOURCE CAP_CHOWN CAP_FOWNER"
 unit = "[Service]\n" + "".join(f'Environment="{k}={v}"\n' for k, v in linux.items())
 smb = f"username={api.env['E2E_SMB_USER']}\npassword={api.env['E2E_SMB_PASSWORD']}\n"
 ssh("virtual-fedora", "sudo bash -s", f"""set -e
@@ -28,6 +36,7 @@ chown -R backup-agent: /var/lib/backup-agent/staging /var/lib/backup-agent/local
 mkdir -p /etc/systemd/system/backup-agent.service.d
 cat > /etc/systemd/system/backup-agent.service.d/e2e.conf <<'EOT'
 {unit}EOT
+printf '[Service]\\nAmbientCapabilities={caps}\\n' > /etc/systemd/system/backup-agent.service.d/snapshots.conf
 systemctl daemon-reload && systemctl restart backup-agent && sleep 2 && systemctl is-active backup-agent
 """)
 
@@ -38,10 +47,14 @@ win = {
     "Agent__Backup__LocalStorage__Volumes__vol2": r"C:\e2e\volume2",
     "Agent__Backup__FileSources__e2efiles__RootDirectory": r"C:\e2e\files",
     "Agent__Backup__PostgreSql__ClientToolsDirectory": r"C:\Program Files\PostgreSQL\18\bin",
+    "Features__windowsVss": "true",
+    "Agent__Backup__FileSources__e2esnap__RootDirectory": r"C:\e2e\snap-src",
+    "Agent__Backup__FileSources__e2esnap__SnapshotKind": "Vss",
 }
 items = ",".join("'%s=%s'" % (k, v) for k, v in win.items())
 ps = f"""
-New-Item -ItemType Directory -Force C:\\e2e\\staging,C:\\e2e\\local-store,C:\\e2e\\volume2,C:\\e2e\\restore | Out-Null
+New-Item -ItemType Directory -Force C:\\e2e\\snap-src,C:\\e2e\\staging,C:\\e2e\\local-store,C:\\e2e\\volume2,C:\\e2e\\restore | Out-Null
+if(-not (Test-Path C:\\e2e\\snap-src\\a.txt)){{ Set-Content C:\\e2e\\snap-src\\a.txt alpha; Set-Content C:\\e2e\\snap-src\\b.txt 'türkçe-şğü' -Encoding UTF8; $b=New-Object byte[] 5MB; (New-Object Random 7).NextBytes($b); [IO.File]::WriteAllBytes('C:\\e2e\\snap-src\\big.bin',$b) }}
 icacls C:\\e2e /grant 'Everyone:(OI)(CI)M' /T /Q | Out-Null
 Set-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\BackupAgent' -Name Environment -Type MultiString -Value @({items})
 Restart-Service BackupAgent; Start-Sleep 3; (Get-Service BackupAgent).Status

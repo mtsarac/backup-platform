@@ -1,0 +1,103 @@
+{
+  "gap/AGT-09/docker-source-in-agent": {
+    "class": "product-defect", "issue": "#50", "priority": "P1",
+    "evidence": "DI resolves IDockerEngineTransport with the (HttpClient, bool) constructor, so the Unix-socket ConnectCallback is never used; scripts/e2e/agt09-docker-di-repro.fsx: constructed by hand 45298 bytes, resolved by DI NULL."
+  },
+  "gap/JOB-06/windows-vss-roundtrip": {
+    "class": "product-defect", "issue": "#51", "priority": "P1",
+    "evidence": "File backup of a VSS source fails on the Windows agent (mapped to StagingInvalid by FileSystemBackupEngine); A manual Win32_ShadowCopy.Create on the VM returned 5 (access denied) and NT SERVICE\\BackupAgent is not a member of Backup Operators. Root cause still to be proven in #51 (diagnose before granting any privilege)."
+  },
+  "gap/POL-08/static-with-active-profile": {
+    "class": "product-defect", "issue": "#52", "priority": "P1",
+    "evidence": "Re-run 2026-11-05 23:53: tenant static ceiling 512 KiB/s, job profile 4 MiB/s, measured mean 1.8 MB/s. PostgreSqlUploadBandwidthStore.LimitsAsync returns only the profile limit once any profile is assigned (lines 168-172) and drops all static ceilings."
+  },
+  "gap/POL-08/static-with-outside-profile": {
+    "class": "product-defect", "issue": "#52", "priority": "P1",
+    "evidence": "Re-run 23:53: profile assigned but outside every window, tenant static ceiling 512 KiB/s, 24 MiB uploaded in 3.0 s (about 8 MB/s). Same cause as the active-profile case: the static ceiling is dropped as soon as a profile exists."
+  },
+  "gap/POL-08/static-with-outside-profile-remeasured": {
+    "class": "product-defect", "issue": "#52", "priority": "P1",
+    "evidence": "Earlier duplicate of gap/POL-08/static-with-outside-profile (same scenario function, same result: 24 MiB in 3.0 s against a 512 KiB/s static ceiling)."
+  },
+  "gap/POL-07/change-remove-remeasured": {
+    "class": "superseded", "supersededBy": "gap/POL-07/change-remove",
+    "evidence": "The failing assertion looked for the rate jump after the limit removal one second short of the last sample, and the 80 MiB file ended just after it (test off-by-one, fixed in static_change). The raise and removal detection lags were 2.96 s and 2.79 s in gap/POL-07/change-remove-samples; the re-run of gap/POL-07/change-remove after the fix passes."
+  },
+  "gap/POL-08/precedence-delete-remeasured": {
+    "class": "superseded", "supersededBy": "gap/POL-08/precedence-delete",
+    "evidence": "Earlier version of the precedence scenario asserted the mean against the limit; the current assertion is a cap (mean <= 1.12 x limit, p95 <= 1.15 x limit) plus 'rate rises when a higher-priority profile is removed'. The re-run under the current code passes."
+  },
+  "gap/POL-04/cancel-midflight-releases-reservation": {
+    "class": "product-defect", "issue": "#55", "priority": "P2",
+    "evidence": "Run Cancelled, reservation released and used bytes unchanged, but a 16 MiB .partial file stays in the agent local store: 6 of 7 runs on 2026-11-05/06 (one run left none). The file was still there 5 s after the run ended."
+  },
+  "gap/AUTH-01b NUL byte in the login identifier must not produce a 500 (anonymous input)": {
+    "class": "product-defect", "issue": "#56", "priority": "P2",
+    "evidence": "Re-run 23:49: anonymous login with a NUL character in the identifier returns HTTP 500 with Npgsql 22021 'invalid byte sequence for encoding UTF8: 0' (the database error text is in the response)."
+  },
+  "gap/SEC zero GUID agent endpoint fails closed": {
+    "class": "product-defect", "issue": "#56", "priority": "P2",
+    "evidence": "Re-run 23:49: GET /agents/00000000-0000-0000-0000-000000000000 returns HTTP 500 with ArgumentException 'An identity must not be empty' and a stack trace."
+  },
+  "gap/STO-02/host-key-and-credential-failures-are-distinguishable": {
+    "class": "product-defect", "issue": "#56", "priority": "P2",
+    "evidence": "Re-run 2026-11-06 00:14: a host-key mismatch and a wrong password both end as PermissionDenied 'A required permission is missing.' although the connection test already has distinct codes (host_key_mismatch, authentication_failed)."
+  },
+  "gap/JOB-02/validation-matrix-field-errors-nothing-saved": {
+    "class": "product-defect", "issue": "#56", "priority": "P3",
+    "evidence": "Re-run 23:49: 1 deviation out of the matrix. Job create with retention below the minimum answers 400 invalid_request without a field: CreateJobAsync catches ArgumentException and calls Invalid(...) (BackupEndpoints.cs:56), while PUT /retention names field 'retention'. Nothing is saved (checked)."
+  },
+  "gap/JOB-15/unsupported-engine-admission": {
+    "class": "product-defect", "issue": "#53", "priority": "P1",
+    "evidence": "Re-run 23:49: a SQL Server job for a Linux agent is accepted (HTTP 200) because AgentCapabilityCatalog.CreateDefault advertises MSSQL on every platform."
+  },
+  "gap/STO-14/s3-loopback": {
+    "class": "product-defect", "issue": "#64", "priority": "P1",
+    "evidence": "The API process connects to 127.0.0.1: a throwaway TLS listener inside the API container logged ACCEPT and 'server accepts (SSL_accept()) 1' during the S3 connection test. No network guard on the 'network-storage' client."
+  },
+  "gap/STO-14/s3-private": {
+    "class": "product-defect", "issue": "#64", "priority": "P1",
+    "evidence": "https://10.77.61.254:1 gives no answer for 60 s and then HTTP 504 (a connection was attempted and waited for); the lab MinIO on a private address answers access_verified. Infinite client timeout, no address policy."
+  },
+  "gap/STO-14/s3-link-local": {
+    "class": "product-defect", "issue": "#64", "priority": "P1",
+    "evidence": "https://169.254.0.1:1 behaves like the private case: 60 s, then HTTP 504; the link-local range includes the cloud metadata address."
+  },
+  "gap/STO-14/s3-ipv6": {
+    "class": "product-defect", "issue": "#64", "priority": "P1",
+    "evidence": "https://[::1]:1 returns network_unavailable (a refused connection), not network_denied: the connection was attempted."
+  },
+  "gap/ART-02/csrf-less-authenticated-content": {
+    "class": "decision-pending", "issue": "#62", "priority": "P2",
+    "evidence": "Re-run 23:49: GET .../downloads/{session}/content with the session cookie but without the CSRF header returns the 1.1 MB artifact (hash matches). The test plan row ART-02 only requires 403/404 for Viewer or unauthorised accounts (those scenarios pass); a safe GET authenticated by cookie, bound to the creating user, single use and an unguessable id may be acceptable. #62 decides with an acceptance test."
+  },
+  "gap/UI-06/precheck-duplicate-labels": {
+    "class": "product-defect", "issue": "#57", "priority": "P3",
+    "evidence": "Restore pre-check shows the permission and target-mode checks twice (screenshots UI-01-13-restore-precheck.png, UI-02-*; pre-check 76c76add... returns the same check ids twice). Recorded by the UI run; not re-run (no UI change since)."
+  },
+  "gap/UI-07/axe-contrast": {
+    "class": "product-defect", "issue": "#58", "priority": "P2",
+    "evidence": "axe-core color-contrast serious on the inactive EN language label on five pages (ui-audit.json). Recorded by the UI run; not re-run (no UI change since)."
+  },
+  "gap/AGT-02/windows-standard-user-denied": {
+    "class": "superseded", "supersededBy": "gap/AGT-02/windows-standard-token-denied",
+    "evidence": "Harness failure (the user could not be created / the scheduled task produced no output), not a product result. The same property is proved by the token scenario: who=windows-test\\gapwinstd, file and directory reads both UnauthorizedAccessException."
+  },
+  "gap/OPS-04/feature-flag-flips": {
+    "class": "superseded",
+    "supersededBy": ["flags/support-sessions-off-rejects-on-works", "flags/smb-off-rejects-on-works", "flags/size-anomaly-off-rejects-on-works", "flags/replica-repair-default-on-off-rejects", "flags/external-secrets-off-refuses-provider", "flags/linux-snapshots-off-refuses-btrfs-source", "flags/windows-vss-off-refuses-vss-source"],
+    "evidence": "The coordinator-owned flag flips were run by flags.py: every flag except sms is flipped off and on with the API recreated each time. sms was skipped by decision (no SMS provider)."
+  },
+  "gap/OPS-06/support-sessions-flag-on": {
+    "class": "superseded", "supersededBy": ["flags/support-sessions-off-rejects-on-works", "encryption/break-glass-api"],
+    "evidence": "supportSessions on is the lab default: the flag-off refusal and the flag-on working path are in flags/support-sessions-off-rejects-on-works, the break-glass flow in encryption/break-glass-api."
+  },
+  "gap/OPS-07/audit-tamper-detection-live": {
+    "class": "environment",
+    "evidence": "Audit signing (Audit:SigningKeyPemPath) is not configured in the lab, so every event is Unsealed. Tamper detection is covered at integration level: AuditSealIntegrationTests (UPDATE of a stored event is detected) passed on 2026-11-06 (1/1). A live run needs a signing key in the lab API configuration."
+  },
+  "gap/SEC/dns-rebinding": {
+    "class": "environment",
+    "evidence": "The lab has no DNS server the test controls. NotificationNetworkGuard and SftpNetworkValidator resolve once and connect to the checked address (Dns.GetHostAddressesAsync, then pinning); neither has a resolver seam and no automated test covers a changing answer. Residual risk: untested, not known broken."
+  }
+}

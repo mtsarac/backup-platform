@@ -53,6 +53,17 @@ services:
       - "${PUBLIC_HOST:-192.168.122.1}:3025:3025"
       - "127.0.0.1:8181:8080"
 
+  # HashiCorp Vault dev server with TLS for the externalSecrets scenarios (KV v2 at secret/, HTTPS on the bridge address). The generated CA lands in certs/vault/vault-ca.pem and must be appended to certs/ca-bundle.pem for the api.
+  vault:
+    image: hashicorp/vault:1.20
+    container_name: bpe2e-vault
+    cap_add: [IPC_LOCK]
+    command: ["server", "-dev", "-dev-tls", "-dev-tls-san=${PUBLIC_HOST:-192.168.122.1}", "-dev-tls-cert-dir=/vault/tls", "-dev-listen-address=0.0.0.0:8200", "-dev-root-token-id=${E2E_VAULT_TOKEN:?set E2E_VAULT_TOKEN}"]
+    ports:
+      - "${PUBLIC_HOST:-192.168.122.1}:8200:8200"
+    volumes:
+      - ./docs/test-environment/certs/vault:/vault/tls
+
 volumes:
   minio_data:
   samba_data:
