@@ -185,8 +185,14 @@ public static class SecurityServiceCollectionExtensions
             return new SftpConnectionTester((connection, secrets) => factory.Create(connection, secrets));
         });
         services.AddSingleton<BackupPlatform.Api.Backups.NetworkStorageConnectionProviderFactory>();
+        services.AddSingleton(provider =>
+        {
+            var config = provider.GetRequiredService<IConfiguration>().GetSection("Backups:S3");
+            return new BackupPlatform.StorageProviders.S3.S3NetworkPolicy(config.GetSection("AllowedPrivateNetworks").Get<string[]>() ?? [],
+                TimeSpan.FromSeconds(config.GetValue<int?>("ConnectionTimeoutSeconds") ?? 10));
+        });
         services.AddHttpClient("network-storage", client => client.Timeout = Timeout.InfiniteTimeSpan)
-            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false })
+            .ConfigurePrimaryHttpMessageHandler(provider => provider.GetRequiredService<BackupPlatform.StorageProviders.S3.S3NetworkPolicy>().CreateHandler())
             .RemoveAllLoggers();
         services.AddScoped<IStorageConnectionTester>(_ => new AgentSideConnectionTester(StorageProviderTypes.Smb));
         services.AddScoped<IStorageConnectionTester>(provider =>

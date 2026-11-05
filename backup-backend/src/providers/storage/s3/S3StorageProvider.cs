@@ -307,6 +307,8 @@ public sealed class S3StorageProvider(HttpClient http, S3StorageOptions configur
         HttpResponseMessage response;
         try { response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token); }
         catch (OperationCanceledException) when (!token.IsCancellationRequested) { throw new StorageException(StorageFailureKind.Timeout, "The S3 request timed out."); }
+        // The connect callback (S3NetworkPolicy) refuses or times out with a StorageException; HttpClient wraps it.
+        catch (HttpRequestException error) when (error.InnerException is StorageException refused) { throw new StorageException(refused.Kind, refused.Message); }
         catch (Exception error) when (error is HttpRequestException or IOException) { throw new StorageException(StorageFailureKind.NetworkUnavailable, "The S3 storage is unavailable."); }
         if (response.IsSuccessStatusCode || allowMissing && response.StatusCode == HttpStatusCode.NotFound) return response;
         var status = response.StatusCode;

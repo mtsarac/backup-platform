@@ -274,21 +274,36 @@ public sealed class GoogleDriveConnectionTester(Func<StorageConnection, ISecretP
     private static string CodeFor(StorageFailureKind kind) => CentralConnectionTester.CodeFor(kind);
 }
 
-public sealed class S3ConnectionTester(Func<StorageConnection, ISecretProvider, IStorageProvider> factory) : IStorageConnectionTester
+public sealed class S3ConnectionTester(Func<StorageConnection, ISecretProvider, IStorageProvider> factory, TimeSpan? timeout = null) : IStorageConnectionTester
 {
     public string ProviderType => StorageProviderTypes.S3;
+    /// <summary>A test that gets no answer ends with a code instead of waiting for the caller's HTTP timeout.</summary>
+    private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
+
     public async Task<StorageTestResult> TestAsync(StorageConnection connection, ISecretProvider secrets, CancellationToken cancellationToken)
     {
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        limit.CancelAfter(timeout ?? DefaultTimeout);
         try
         {
             if (factory(connection, secrets) is not IS3AccessChecker checker)
                 return new(StorageTestStatus.Failed, StorageTestCodes.IoError, "The S3 provider cannot verify bucket access.");
-            await checker.CheckAccessAsync(cancellationToken);
+            await checker.CheckAccessAsync(limit.Token);
             return new(StorageTestStatus.Succeeded, StorageTestCodes.AccessVerified, StorageTestMessages.For(StorageTestCodes.AccessVerified));
+        }
+        catch (StorageException error) when (error.Kind == StorageFailureKind.NetworkDenied)
+        {
+            // Same answer for every refused address, open port or not: the platform is not a port scanner. A private endpoint is the customer's own; the agent reaches it.
+            return new(StorageTestStatus.NotTestable, StorageTestCodes.AgentSideStorage,
+                "This storage is on a private network; it is reached by the agent and checked by the agent when a backup runs.");
         }
         catch (StorageException error)
         {
             return new(StorageTestStatus.Failed, CentralConnectionTester.CodeFor(error.Kind), error.Message);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return new(StorageTestStatus.Failed, StorageTestCodes.Timeout, StorageTestMessages.For(StorageTestCodes.Timeout));
         }
     }
 }
