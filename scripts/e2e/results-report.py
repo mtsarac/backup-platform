@@ -1,27 +1,30 @@
 """Builds the e2e results report from results.jsonl and the triage file; nothing in the report is typed by hand.
 
-Usage: python3 results-report.py [--start N] [--triage FILE] [--out FILE]
-  --start   first row to read, counted from 0 (default: first number in <results dir>/run-20261105/results-start.txt)
-  --triage  JSON object scenario -> {class, issue, priority, evidence, supersededBy}; default scripts/e2e/triage-run-20261105.json
+Usage: python3 results-report.py [--results FILE] [--row-offset N] [--triage FILE] [--out FILE]
+  --results     rows to read; default scripts/e2e/evidence/run-20261105/results.jsonl (rows 454-1040 of the lab's results.jsonl, see SHA256SUMS there)
+  --row-offset  rows of the lab file that come before the first row of --results, so row numbers match it (default 453)
+  --triage      JSON object scenario -> {class, issue, priority, evidence, supersededBy}; default scripts/e2e/triage-run-20261105.json
+Reproduce: cd scripts/e2e/evidence/run-20261105 && sha256sum -c SHA256SUMS && cd ../../../.. && python3 scripts/e2e/results-report.py
 The last row of a scenario is its result. Every scenario whose last row is not PASS needs a triage entry; the exit code is 1 when one is missing,
 when a row has no string result, or when a triage entry contradicts the rows (stale, or "superseded" by a scenario that is not PASS).
 The verdict is NO-GO while any product defect, undecided case or unclassified row is open, otherwise GO."""
 import argparse, collections, json, pathlib, sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-RESULTS = ROOT / "docs/test-environment/results.jsonl"
+RESULTS = ROOT / "scripts/e2e/evidence/run-20261105/results.jsonl"
 CLASSES = {"product-defect": "issue", "decision-pending": "issue", "test-defect": None, "environment": None, "accepted": None, "superseded": "supersededBy", "not-applicable": None}
 OPEN = ("product-defect", "decision-pending")
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--start", type=int)
+    ap.add_argument("--results", default=str(RESULTS))
+    ap.add_argument("--row-offset", type=int, default=453)
     ap.add_argument("--triage", default=str(ROOT / "scripts/e2e/triage-run-20261105.json"))
     ap.add_argument("--out")
     args = ap.parse_args()
-    start = args.start if args.start is not None else int((RESULTS.parent / "run-20261105/results-start.txt").read_text().split()[0])
-    rows = [json.loads(line) for line in RESULTS.read_text().splitlines()[start:]]
+    start = args.row_offset
+    rows = [json.loads(line) for line in pathlib.Path(args.results).read_text().splitlines()]
     triage = json.loads(pathlib.Path(args.triage).read_text())
 
     last, history, invalid = {}, collections.defaultdict(list), []
