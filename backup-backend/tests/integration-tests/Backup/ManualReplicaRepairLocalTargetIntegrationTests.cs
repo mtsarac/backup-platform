@@ -54,12 +54,12 @@ public sealed partial class ManualReplicaRepairIntegrationTests
         }
         var artifact = await fixture.CreatePlatformContext().BackupArtifacts.SingleAsync(a => a.TenantId == agent.TenantId && a.AttemptId == claim.Attempt.Id);
         var store = new PostgreSqlReplicaRepairStore(World.Options());
-        var service = new ReplicaRepairService(store, null!, TimeProvider.System, NullLogger<ReplicaRepairService>.Instance);
+        var service = new ReplicaRepairService(store, null!, new MutableClock(BackupStoreHarness.T0), NullLogger<ReplicaRepairService>.Instance);
 
         var start = await service.StartRepairAsync(agent.TenantId, artifact.Id, new(StorageConnectionId: local.Id), null, default);
         Assert.True(start.Success, start.Message);
         var operation = start.Operation!;
-        Assert.Null(await store.ClaimDueRepairAsync("backend", DateTimeOffset.UtcNow, TimeSpan.FromMinutes(10), default, agent.TenantId, backendExecutedOnly: true));
+        Assert.Null(await store.ClaimDueRepairAsync("backend", BackupStoreHarness.T0, TimeSpan.FromMinutes(10), default, agent.TenantId, backendExecutedOnly: true));
         var other = await AdmissionTestKit.AddAgentAsync(World, agent.TenantId);
         Assert.Null(await service.ClaimForAgentAsync(new AgentIdentity(other.AgentId, other.TenantId, Guid.NewGuid(), 1), default));
 
@@ -108,7 +108,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
             ]), T0);
         var artifact = await fixture.CreatePlatformContext().BackupArtifacts.SingleAsync(a => a.TenantId == agent.TenantId && a.AttemptId == claim.Attempt.Id);
 
-        var start = await new ReplicaRepairService(new PostgreSqlReplicaRepairStore(World.Options()), null!, TimeProvider.System, NullLogger<ReplicaRepairService>.Instance)
+        var start = await new ReplicaRepairService(new PostgreSqlReplicaRepairStore(World.Options()), null!, new MutableClock(BackupStoreHarness.T0), NullLogger<ReplicaRepairService>.Instance)
             .StartRepairAsync(agent.TenantId, artifact.Id, new(StorageConnectionId: local.Id), null, default);
 
         Assert.False(start.Success);

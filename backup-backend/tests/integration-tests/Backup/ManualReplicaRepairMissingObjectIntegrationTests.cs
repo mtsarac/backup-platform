@@ -15,7 +15,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
     {
         var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp" });
         var tenant = setup.Agent.TenantId;
-        var repairs = new ReplicaRepairService(setup.RepairStore, setup.Resolver, TimeProvider.System, NullLogger<ReplicaRepairService>.Instance,
+        var repairs = new ReplicaRepairService(setup.RepairStore, setup.Resolver, new MutableClock(BackupStoreHarness.T0), NullLogger<ReplicaRepairService>.Instance,
             new PostgreSqlReplicaMissingReporter(World.Options()));
         var central = (InMemoryStorageProvider)setup.Resolver.Resolve(tenant, "central", "central")!;
         central.Storage.Clear();
@@ -76,7 +76,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
         var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp" });
         var world = new RestoreWorld(fixture);
         await world.EnableRestoreAsync(setup.Agent);
-        var now = DateTimeOffset.UtcNow;
+        var now = BackupStoreHarness.T0;
         var store = new PostgreSqlRestoreStore(World.Options(), setup.Resolver);
         await store.CreateAsync(RestoreWorld.Command(setup.Agent.TenantId, setup.Artifact.Id, setup.Agent.AgentId, now: now), default);
         var primary = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "central");
