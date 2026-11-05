@@ -8,6 +8,8 @@ services:
       - Backups__Retention__MinimumDeleteGracePeriod=00:00:10
       - Notifications__PublicBaseUrl=https://192.168.122.1:5173
       - Notifications__AllowedPrivateNetworks__0=192.168.122.0/24
+      # The lab MinIO sits on the host bridge address; without this the API refuses to talk to it (#64).
+      - Backups__S3__AllowedPrivateNetworks__0=192.168.122.0/24
       # The notify scenario spends ~15 test sends per run and the product caps a tenant at 20 per hour; the per-channel cap (5) is what the scenario asserts.
       - Notifications__TestNotificationsPerTenantPerHour=1000
       # Every flag the API reads; scripts/e2e/flags.py flips them one at a time through the E2E_FEATURE_* variables (defaults are the product defaults).
@@ -18,6 +20,8 @@ services:
       - Features__externalSecrets=${E2E_FEATURE_EXTERNALSECRETS:-false}
       - Features__replicaRepair=${E2E_FEATURE_REPLICAREPAIR:-true}
       - Secrets__Provider=${E2E_SECRETS_PROVIDER:-Database}
+      - Secrets__Vault__Endpoint=https://${PUBLIC_HOST:-192.168.122.1}:8200
+      - VAULT_TOKEN=${E2E_VAULT_TOKEN:-}
       # Central (platform-managed) storage: the share is also mounted on the Fedora agent (configure-agents.py), so agent and backend see one tree.
       - Backups__Storage__Central__RootDirectory=/central-share/central
       - Backups__Storage__Central__TenantScopes__${E2E_TENANT_A:-00000000000000000000000000000001}=e2e-a
