@@ -152,7 +152,8 @@ def smb_case(host, share, expected):
 
 def ssrf(url):
     c=conn('s3',s3cfg(url),credentials()); status,code=test(c)
-    assert status == 'Failed' and 'denied' in str(code).lower(), 'endpoint not denied '+str((status,code))
+    # A refused address answers like SFTP does (the agent reaches private storage), the same for every port; a refusal that came from a real connection attempt would be network_unavailable or a hang.
+    assert (status, code) in (('NotTestable', 'agent_side_storage'), ('Failed', 'network_denied')), 'endpoint not denied '+str((status,code))
     return {'test':status,'code':code}
 
 def sftp_case(host, allowed):
@@ -171,7 +172,8 @@ def main():
     T=g.ensure_tenant('sec'); A=g.ensure_agent('sec','sec',sftp_allow=['192.168.122.0/24'])
     (g.agent_root('sec')/'files'/'gap-sp-sec.txt').write_text('gap-sp-sec test\n')
     try:
-        run('STO-03/wrong-endpoint',lambda:negative_s3('https://127.0.0.1:1'))
+        # A closed port on the allow-listed lab network: a loopback endpoint is now refused (STO-14), which is not the "wrong endpoint" case.
+        run('STO-03/wrong-endpoint',lambda:negative_s3('https://'+api.env['PUBLIC_HOST']+':1'))
         run('STO-03/wrong-access-key',lambda:negative_s3(secret={'accessKey':'gap-sp-sec-invalid','secretKey':secrets.token_urlsafe(20)}))
         run('STO-03/restricted-write',restricted)
         run('STO-03/restricted-read',restricted_read)
