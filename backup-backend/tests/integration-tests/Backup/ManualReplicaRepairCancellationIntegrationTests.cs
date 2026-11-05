@@ -70,7 +70,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
         var service = CancellationService(setup, destination);
         var gate = new RepairRowLockGate();
         var options = new DbContextOptionsBuilder<PlatformDbContext>(World.Options()).AddInterceptors(gate).Options;
-        var cancellingService = new ReplicaRepairService(new PostgreSqlReplicaRepairStore(options), setup.Resolver, TimeProvider.System, NullLogger<ReplicaRepairService>.Instance);
+        var cancellingService = new ReplicaRepairService(new PostgreSqlReplicaRepairStore(options), setup.Resolver, new MutableClock(BackupStoreHarness.T0), NullLogger<ReplicaRepairService>.Instance);
         Task<bool>? cancellation = null;
         using var shutdown = new CancellationTokenSource();
         var execution = service.ExecuteRepairAsync(tenantId, setup.Artifact.Id, started.Operation!.Id, externalToken: shutdown.Token);
@@ -124,7 +124,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
             await using (var context = fixture.CreatePlatformContext())
             {
                 var operation = await context.ReplicaRepairOperations.SingleAsync(op => op.Id == started.Operation.Id);
-                var now = DateTimeOffset.UtcNow;
+                var now = BackupStoreHarness.T0;
                 switch (status)
                 {
                     case ReplicaRepairStatus.Cancelled: operation.Cancel(operation.LeaseToken!.Value, now); break;
@@ -164,7 +164,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         Task<bool>? cancelling = null;
         Task<ReplicaRepairOperation?>? claiming = null;
-        var now = DateTimeOffset.UtcNow;
+        var now = BackupStoreHarness.T0;
         try
         {
             if (cancellationFirst)
@@ -191,7 +191,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
                 Assert.Equal("InProgress", operation!.Status);
                 Assert.NotNull(operation.CancellationRequestedAt);
                 Assert.Equal(1, operation.AttemptCount);
-                Assert.True(await setup.RepairStore.CancelOperationAsync(tenantId, operation.Id, claimed!.LeaseToken!.Value, DateTimeOffset.UtcNow, default));
+                Assert.True(await setup.RepairStore.CancelOperationAsync(tenantId, operation.Id, claimed!.LeaseToken!.Value, BackupStoreHarness.T0, default));
             }
         }
         finally
@@ -215,12 +215,12 @@ public sealed partial class ManualReplicaRepairIntegrationTests
         var tenantId = setup.Agent.TenantId;
         var started = await setup.RepairService.StartRepairAsync(tenantId, setup.Artifact.Id, new(StorageConnectionId: setup.Sftp.Id), null, default);
         Assert.True(started.Success);
-        var claimed = await setup.RepairStore.ClaimOperationAsync(tenantId, started.Operation!.Id, Guid.NewGuid(), "readmission-fault", DateTimeOffset.UtcNow, TimeSpan.FromMinutes(10), default);
+        var claimed = await setup.RepairStore.ClaimOperationAsync(tenantId, started.Operation!.Id, Guid.NewGuid(), "readmission-fault", BackupStoreHarness.T0, TimeSpan.FromMinutes(10), default);
         Assert.NotNull(claimed);
         var fault = new RepairAdmissionFault();
         var options = new DbContextOptionsBuilder<PlatformDbContext>(World.Options()).AddInterceptors(fault).Options;
         var store = new PostgreSqlReplicaRepairStore(options);
-        var service = new ReplicaRepairService(store, setup.Resolver, TimeProvider.System, NullLogger<ReplicaRepairService>.Instance);
+        var service = new ReplicaRepairService(store, setup.Resolver, new MutableClock(BackupStoreHarness.T0), NullLogger<ReplicaRepairService>.Instance);
         var registrations = (ConcurrentDictionary<Guid, CancellationTokenSource>)typeof(ReplicaRepairService)
             .GetField("_activeLocalCts", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null)!;
 
@@ -248,7 +248,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
         var setup = await SetupAsync(QuotaAccountingMode.PhysicalReplicaBytes,
             new HashSet<string> { "central", "google-drive" });
         var tenantId = setup.Agent.TenantId;
-        var now = DateTimeOffset.UtcNow;
+        var now = BackupStoreHarness.T0;
         var started = await setup.RepairService.StartRepairAsync(tenantId, setup.Artifact.Id, new(StorageConnectionId: setup.Sftp.Id), null, default);
         var claimed = await setup.RepairStore.ClaimOperationAsync(tenantId, started.Operation!.Id, Guid.NewGuid(),
             "readmission-policy-change", now, TimeSpan.FromMinutes(10), default);
@@ -310,7 +310,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
         await using var context = fixture.CreatePlatformContext();
         var operation = await context.ReplicaRepairOperations.SingleAsync(op => op.Id == operationId);
         if (operation.IsTerminal) return;
-        operation.CancelStale(DateTimeOffset.UtcNow);
+        operation.CancelStale(BackupStoreHarness.T0);
         await context.SaveChangesAsync();
     }
 
@@ -319,7 +319,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
 
     private static ReplicaRepairService CancellationService(MultiSetup setup, BlockingRepairDestination destination) =>
         new(setup.RepairStore, new RepairCancellationResolver(setup.Resolver, setup.Sftp.Id.ToString("D"), destination),
-            TimeProvider.System, NullLogger<ReplicaRepairService>.Instance);
+            new MutableClock(BackupStoreHarness.T0), NullLogger<ReplicaRepairService>.Instance);
 
     private sealed class RepairCancellationResolver(FakeResolver inner, string target, IStorageProvider destination) : IBackupStorageResolver
     {

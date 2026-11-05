@@ -39,7 +39,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
     public async Task DelayedOldCleanupCannotDeleteTheTakeoverReplica()
     {
         var setup = await SetupAsync(verified: new HashSet<string> { "central", "google-drive" });
-        var clock = new MutableClock();
+        var clock = new MutableClock(BackupStoreHarness.T0);
         var service = new ReplicaRepairService(setup.RepairStore, setup.Resolver, clock, NullLogger<ReplicaRepairService>.Instance);
         var started = await service.StartRepairAsync(setup.Agent.TenantId, setup.Artifact.Id, new(StorageConnectionId: setup.Sftp.Id), null, default);
         var destination = (InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, "sftp", setup.Sftp.Id.ToString("D"))!;
@@ -92,7 +92,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
     public async Task StaleRestartKeepsLegacyAndConflictingTargetsQuarantined()
     {
         var setup = await SetupAsync(verified: new HashSet<string> { "central", "google-drive" });
-        var clock = new MutableClock();
+        var clock = new MutableClock(BackupStoreHarness.T0);
         var source = setup.Artifact.Replicas.Single(r => r.StorageProvider == "central");
         var operation = new ReplicaRepairOperation(Guid.NewGuid(), setup.Agent.TenantId, setup.Artifact.Id, setup.Sftp.Id,
             "sftp", source.Id, clock.GetUtcNow().AddMinutes(-20), totalBytes: Content.Length);
@@ -122,7 +122,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
     public async Task ActiveRepairProtectsItsTargetAndTerminalAttemptsPartialUploads()
     {
         var setup = await SetupAsync(verified: new HashSet<string> { "central", "google-drive" });
-        var now = DateTimeOffset.UtcNow;
+        var now = BackupStoreHarness.T0;
         var operation = new ReplicaRepairOperation(Guid.NewGuid(), setup.Agent.TenantId, setup.Artifact.Id, setup.Sftp.Id,
             "sftp", setup.Artifact.Replicas.First().Id, now, totalBytes: Content.Length);
         var token = Guid.NewGuid();
@@ -168,7 +168,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
     {
         var setup = await SetupAsync(QuotaAccountingMode.PhysicalReplicaBytes, new HashSet<string> { "central", "google-drive" });
         var key = $"orphan-{Guid.NewGuid():N}.bak";
-        var now = DateTimeOffset.UtcNow;
+        var now = BackupStoreHarness.T0;
         for (var attempt = 0; attempt < 2; attempt++)
             await setup.RepairStore.RecordRepairOrphanAsync(setup.Agent.TenantId, setup.Artifact.Id, setup.Sftp.Id, "sftp",
                 setup.Sftp.Id.ToString("D"), key, Content.Length, Checksum, now, default);
@@ -248,7 +248,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
     public async Task LateOldPutCannotBecomeUnaccountedAfterRecoveryAndRetention()
     {
         var setup = await SetupAsync(QuotaAccountingMode.PhysicalReplicaBytes, new HashSet<string> { "central", "google-drive" });
-        var clock = new MutableClock();
+        var clock = new MutableClock(BackupStoreHarness.T0);
         var service = new ReplicaRepairService(setup.RepairStore, setup.Resolver, clock, NullLogger<ReplicaRepairService>.Instance);
         var started = await service.StartRepairAsync(setup.Agent.TenantId, setup.Artifact.Id, new(StorageConnectionId: setup.Sftp.Id), null, default);
         var destination = (InMemoryStorageProvider)setup.Resolver.Resolve(setup.Agent.TenantId, "sftp", setup.Sftp.Id.ToString("D"))!;
@@ -303,7 +303,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
         int maxAttempts, bool cancelled, string expectedStatus, long expectedReserved)
     {
         var setup = await SetupAsync(QuotaAccountingMode.PhysicalReplicaBytes, new HashSet<string> { "central", "google-drive" });
-        var now = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var now = BackupStoreHarness.T0;
         var source = setup.Artifact.Replicas.Single(r => r.StorageProvider == "central");
         var token = Guid.NewGuid();
         var operation = new ReplicaRepairOperation(Guid.NewGuid(), setup.Agent.TenantId, setup.Artifact.Id, setup.Sftp.Id, "sftp",
@@ -331,7 +331,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests
     public async Task ConflictProjectionFailureRollsBackQuarantineAndOperationFailureTogether()
     {
         var setup = await SetupAsync(QuotaAccountingMode.PhysicalReplicaBytes, new HashSet<string> { "central", "google-drive" });
-        var now = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+        var now = BackupStoreHarness.T0;
         var started = await setup.RepairService.StartRepairAsync(setup.Agent.TenantId, setup.Artifact.Id, new(StorageConnectionId: setup.Sftp.Id), null, default);
         var operation = await setup.RepairStore.ClaimOperationAsync(setup.Agent.TenantId, started.Operation!.Id, Guid.NewGuid(), "conflict",
             now, TimeSpan.FromMinutes(10), default);
