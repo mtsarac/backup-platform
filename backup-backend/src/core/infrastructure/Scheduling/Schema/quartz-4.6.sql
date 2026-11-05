@@ -1,9 +1,9 @@
--- Quartz.NET 4.3.0 persistent job store, PostgreSQL.
--- Source: quartznet/quartznet tag v4.3.0, database/tables/tables_postgres.sql, with three changes only:
+-- Quartz.NET 4.6 persistent job store, PostgreSQL.
+-- Source: quartznet/quartznet tag v4.3.0 database/tables plus the three mandatory 4.6 columns (database/migrations/4.6), with three changes only:
 --   1. every object lives in the dedicated "quartz" schema, apart from the platform's domain tables;
 --   2. CREATE ... IF NOT EXISTS, so applying it is repeatable;
 --   3. the optional execution/misfire history tables are left out (the scheduler is not configured to use them) and so is the script's DROP block.
--- Applied by the QuartzSchedulerStore EF migration; to upgrade Quartz, add a new migration, never edit this file in place.
+-- Applied by the Baseline EF migration. Upgrading Quartz means updating this file (development databases are recreated).
 
 CREATE SCHEMA IF NOT EXISTS quartz;
 
@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS quartz.qrtz_triggers
     pause_reason VARCHAR(250) NULL,
     paused_by VARCHAR(200) NULL,
     paused_at BIGINT NULL,
+    misfire_threshold BIGINT NULL,
     job_data BYTEA NULL,
     PRIMARY KEY (sched_name, trigger_name, trigger_group),
     FOREIGN KEY (sched_name, job_name, job_group)
@@ -166,6 +167,7 @@ CREATE TABLE IF NOT EXISTS quartz.qrtz_fired_triggers
     execution_group VARCHAR(200) NULL,
     progress INTEGER NULL,
     progress_message VARCHAR(250) NULL,
+    interrupt_requested_time BIGINT NULL,
     PRIMARY KEY (sched_name, entry_id)
 );
 
@@ -175,6 +177,7 @@ CREATE TABLE IF NOT EXISTS quartz.qrtz_scheduler_state
     instance_name TEXT NOT NULL,
     last_checkin_time BIGINT NOT NULL,
     checkin_interval BIGINT NOT NULL,
+    quartz_version VARCHAR(20) NULL,
     PRIMARY KEY (sched_name, instance_name)
 );
 

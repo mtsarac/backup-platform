@@ -3307,7 +3307,7 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                 column: "UserId");
 
             // Quartz job store (own schema) and the non-model objects: seed rows, guard functions, triggers.
-            ExecuteEmbedded(migrationBuilder, "BackupPlatform.Infrastructure.Scheduling.Schema.quartz-4.3.0-postgres.sql");
+            ExecuteEmbedded(migrationBuilder, "BackupPlatform.Infrastructure.Scheduling.Schema.quartz-4.6.sql");
             ExecuteEmbedded(migrationBuilder, "BackupPlatform.Infrastructure.Persistence.Schema.baseline-objects.sql");
         }
 
