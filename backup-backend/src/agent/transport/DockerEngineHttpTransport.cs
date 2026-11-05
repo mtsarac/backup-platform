@@ -26,6 +26,8 @@ public sealed class DockerEngineHttpTransport : IDockerEngineTransport, IDisposa
         {
             if (OperatingSystem.IsWindows())
             {
+                // ConnectAsync waits for a missing pipe to appear, which would read as a scan timeout; no pipe means no Docker.
+                if (!Directory.EnumerateFileSystemEntries(@"\\.\pipe\", "docker_engine").Any()) throw new IOException("The Docker named pipe is not available.");
                 var pipe = new NamedPipeClientStream(".", "docker_engine", PipeDirection.InOut, PipeOptions.Asynchronous);
                 try { await pipe.ConnectAsync(token).ConfigureAwait(false); return pipe; }
                 catch { pipe.Dispose(); throw; }
