@@ -142,7 +142,7 @@ def repair_flag(t):
 def external_secrets_flag(t):
     """Secrets:Provider=Vault is the external-secrets feature; with the flag off the api must refuse to start rather than quietly keep secrets elsewhere."""
     def logs(): return subprocess.run(["docker", "logs", "bp-api"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True).stdout
-    recreate_api({"E2E_SECRETS_PROVIDER": "Vault"})
+    recreate_api({"E2E_SECRETS_PROVIDER": "Vault", "E2E_FEATURE_EXTERNALSECRETS": "false"})
     try:
         end = time.time() + 90
         while time.time() < end and "externalSecrets" not in logs(): time.sleep(3)
@@ -163,11 +163,11 @@ def agent_start(host, kind):
         exports = " ".join(f"{k}='{v}'" for k, v in env.items())
         return lib.fedora(f"cd /opt/backup-agent/bin && sudo -u backup-agent env {exports} timeout 60 ./BackupPlatform.Agent.Host 2>&1 | head -40")[1]
     # The service account is a virtual one and the agent refuses to read its identity as anyone else, so the service itself is restarted with the extra
-    # environment (put back in finally) and the refusal is read from the Application event log.
+    # environment (put back in finally) and the refusal is read from the Application event log. The lab service has Features__windowsVss=true for the VSS tests, so that entry is left out while the flag-off case runs.
     extra = ",".join(f"'{k}={v}'" for k, v in env.items())
     return lib.win(f"""$k='HKLM:\\SYSTEM\\CurrentControlSet\\Services\\BackupAgent'; $orig=@((Get-ItemProperty $k).Environment); $since=Get-Date
 try {{
-  Set-ItemProperty $k -Name Environment -Type MultiString -Value ($orig + @({extra}))
+  Set-ItemProperty $k -Name Environment -Type MultiString -Value (@($orig | ? {{ $_ -notmatch '^Features__windowsVss=' }}) + @({extra}))
   Restart-Service BackupAgent -ErrorAction SilentlyContinue; Start-Sleep 5
   Get-WinEvent -FilterHashtable @{{LogName='Application'; StartTime=$since}} -ErrorAction SilentlyContinue | ? {{ $_.Message -match 'Features:' }} | Select -First 1 -ExpandProperty Message
   'service after refusal: ' + (Get-Service BackupAgent).Status

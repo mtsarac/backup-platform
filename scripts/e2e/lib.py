@@ -41,7 +41,9 @@ def win(ps, timeout=600):
     return ssh("virtual-win11", "powershell -NoProfile -EncodedCommand " + base64.b64encode(ps.encode("utf-16le")).decode(), timeout=timeout)
 
 def record(name, ok, **detail):
-    row = {"scenario": name, "result": "PASS" if ok else "FAIL", "at": time.strftime("%FT%T"), **detail}
+    # A scenario's own "result"/"scenario"/"at" key must not overwrite the verdict (a dict "result" once did), so the detail is kept under a prefix.
+    clash = {k: detail.pop(k) for k in ("scenario", "result", "at") if k in detail}
+    row = {"scenario": name, "result": "PASS" if ok else "FAIL", "at": time.strftime("%FT%T"), **detail, **({"detail_" + k: v for k, v in clash.items()})}
     print(json.dumps(row, default=str), flush=True)
     with RESULTS.open("a") as f: f.write(json.dumps(row, default=str) + "\n")
     return ok
