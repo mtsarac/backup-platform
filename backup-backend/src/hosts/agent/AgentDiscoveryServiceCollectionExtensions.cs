@@ -25,7 +25,8 @@ internal static class AgentDiscoveryServiceCollectionExtensions
         services.AddSingleton<IInstanceDetector, WindowsSqlServerDetector>();
         services.AddSingleton<IInstanceDetector, WindowsPostgreSqlDetector>();
 #endif
-        services.AddSingleton<IDockerEngineTransport, DockerEngineHttpTransport>();
+        // Explicit factory: with an HttpClient registered, the container would pick the (HttpClient, bool) constructor and lose the Docker socket handler.
+        services.AddSingleton<IDockerEngineTransport>(_ => new DockerEngineHttpTransport());
         services.AddSingleton<IInstanceDetector, DockerContainerDetector>();
         services.TryAddSingleton<IListenerProbe, LoopbackListenerProbe>();
         services.AddSingleton<DiscoveryScanner>();
