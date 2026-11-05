@@ -5,7 +5,7 @@ import { Field } from '@/components/ui/field'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { inputClass } from '@/components/ui/form-styles'
+import { TextInput, TextArea } from '@/components/ui/text-input'
 import { useTenantRecoveryKeyActions } from './hooks'
 import type { TenantEncryption } from './types'
 import { formatDateTime } from '@/lib/format'
@@ -17,8 +17,8 @@ function publicKeyError(value: string) {
   return ''
 }
 
-/** Overview of the keys that open this tenant's encrypted Backups, plus registration of the optional tenant recovery public key. */
-export function TenantKeysSection({ tenantId, tenantName, encryption }: { tenantId: string; tenantName: string; encryption: TenantEncryption }) {
+/** Overview of the keys that open this tenant's encrypted Backups, plus registration of the optional tenant recovery public key. `platformView`: the platform page already lists the wrap keys in its own table, so their ids are not repeated here. */
+export function TenantKeysSection({ tenantId, tenantName, encryption, platformView = false }: { tenantId: string; tenantName: string; encryption: TenantEncryption; platformView?: boolean }) {
   useLanguage()
   const { set, remove } = useTenantRecoveryKeyActions(tenantId)
   const [pem, setPem] = useState('')
@@ -43,11 +43,11 @@ export function TenantKeysSection({ tenantId, tenantName, encryption }: { tenant
         </Notice>
         <Facts>
           <Fact label={tx("Kendi kurtarma anahtarınız")}>{tenantRecovery ? tx('Kurtarma anahtarınız eklenmiş') : tx('Kurtarma anahtarınız eklenmemiş')}</Fact>
-          <Fact label={tx("Acil destek erişimi")}>{platformRecovery.configured ? tx('Platform kurtarma anahtarı hazır') : tx('Platform kurtarma anahtarı hazır değil')}</Fact>
+          {platformRecovery.configured && <Fact label={tx("Acil destek erişimi")}>{tx('Platform kurtarma anahtarı hazır')}</Fact>}
         </Facts>
         {!platformRecovery.configured && <Notice tone="warning">{tx("Platform kurtarma anahtarı yapılandırılmamış: yeni şifreli yedekler yalnızca uygulamanın anahtarıyla ve varsa kendi kurtarma anahtarınızla açılabilir. Uygulamanın anahtarı kaybolursa bu dosyalar açılamayabilir.")}</Notice>}
         <TechnicalDetails items={[
-          ...(wrapKey ? [
+          ...(wrapKey && !platformView ? [
             { label: tx('Yedekleme anahtarı kimliği'), value: wrapKey.keyId },
             { label: tx('Yedekleme anahtarı sürümü'), value: String(wrapKey.version) },
             { label: tx('Yedekleme anahtarı durumu'), value: wrapKey.state },
@@ -69,7 +69,7 @@ export function TenantKeysSection({ tenantId, tenantName, encryption }: { tenant
       actions={tenantRecovery && <Button variant="outline" onClick={() => { remove.reset(); setRemoving(true) }}>{tx("Anahtarı kaldır")}</Button>}>
       <form className="space-y-3" onSubmit={event => { event.preventDefault(); if (!set.isPending && pem.trim()) submit() }}>
         <Field label={tx('Genel anahtar dosyası')} hint={tx('Yalnızca genel anahtar dosyasını seçin; özel anahtarınızı yüklemeyin.')}>
-          {control => <input {...control} type="file" accept=".pem,.pub,text/plain" className={inputClass} disabled={set.isPending} onChange={event => {
+          {control => <TextInput {...control} type="file" accept=".pem,.pub,text/plain"  disabled={set.isPending} onChange={event => {
             const file = event.target.files?.[0]
             event.target.value = ''
             if (!file) return
@@ -88,7 +88,7 @@ export function TenantKeysSection({ tenantId, tenantName, encryption }: { tenant
           }} />}
         </Field>
         <Field label={tx("Genel anahtar (PEM)")} hint={tx("“-----BEGIN PUBLIC KEY-----” ile başlayan RSA genel anahtarı, en az 4096 bit. Özel anahtar girmeyin.")} error={pemError}>
-          {control => <textarea {...control} className={`${inputClass} font-mono text-sm`} rows={6} required disabled={set.isPending} spellCheck={false} autoComplete="off" value={pem} onChange={event => { setSaved(false); setPemError(''); setPem(event.target.value) }} />}
+          {control => <TextArea {...control} className="font-mono text-sm" rows={6} required disabled={set.isPending} spellCheck={false} autoComplete="off" value={pem} onChange={event => { setSaved(false); setPemError(''); setPem(event.target.value) }} />}
         </Field>
         {set.error && <ErrorNotice error={set.error} />}
         {saved && <Notice tone="success">{tx("Kurtarma anahtarınız kaydedildi. Sonraki şifreli yedeklere eklenir.")}</Notice>}

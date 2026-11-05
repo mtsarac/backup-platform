@@ -3,7 +3,7 @@ import sys, json, lib, flows
 from lib import ST, CRED, scenario
 
 PGQ = "select count(*)||'|'||md5(string_agg(name||payload, ',' order by id)) from items"
-MSQ = "select cast(count(*) as varchar(20))+'|'+cast(checksum_agg(checksum(name,payload)) as varchar(40)) from items"
+MSQ = "select cast(count(*) as varchar(20))+'|'+convert(varchar(64),hashbytes('SHA2_256',(select string_agg(cast(name as nvarchar(max))+payload, ',') within group (order by id) from items)),2) from items"
 WPSQL = r"C:\Program Files\PostgreSQL\18\bin\psql.exe"
 
 def fed_pg_hash(db):
@@ -25,7 +25,7 @@ def win_ms_drop(db):
 def dests(t):
     c = ST["connections"]
     conn = lambda p: {"storageProvider": p, "storageConnectionId": c[p], "storageExecutionLocation": "Backend", "isPrimary": True}
-    return {"local": [flows.local_dest()], "local-vol2": [flows.local_dest("vol2")], "sftp": [conn("sftp")], "s3": [conn("s3")], "smb": [conn("smb")]}
+    return {"local": [flows.local_dest()], "local-vol2": [flows.local_dest("vol2")], "sftp": [conn("sftp")], "s3": [conn("s3")], **({"smb": [conn("smb")]} if "smb" in c else {})}
 
 def targets(t, agents):
     fa, wa = agents["fedora-e2e"], agents["win11-e2e"]
@@ -49,13 +49,29 @@ def db_roundtrip(t, tg, dest_name, dest, tag="", **job_extra):
     assert src == got, f"restored data differs: src={src} restored={got}"
     return {"artifactId": art["id"], "sizeBytes": art.get("sizeBytes"), "rows": src}
 
+POLICIES = ("Off", "Optional", "Required")
+CELL_DESTS = ("local", "sftp", "s3")
+
+
+def cell(t, tg, dname, dest, policy):
+    """One acceptance cell: backup to the destination under the policy, check where the replica landed and whether it is encrypted, restore into a new database and compare rows + hash. No retries."""
+    res = db_roundtrip(t, tg, dname, dest, tag=f"{policy}-", encryptionPolicy=policy)
+    art = t.call("GET", f"/backup-artifacts/{res['artifactId']}")
+    encrypted = art.get("encryption") is not None
+    providers = sorted({r["storageProvider"] for r in art["replicas"]})
+    assert providers == [dname], f"replica stored on {providers}, expected [{dname!r}]"
+    assert encrypted == (policy != "Off"), f"policy {policy} but artifact encrypted={encrypted}"
+    return {**res, "encrypted": encrypted}
+
+
 def main(only=None):
     t = lib.Tenant("a"); agents = t.agents(); tg = targets(t, agents); d = dests(t)
     for tname, spec in tg.items():
-        for dname, dest in d.items():
-            name = f"matrix/{tname}/{dname}"
-            if only and only not in name: continue
-            scenario(name)(lambda: db_roundtrip(t, spec, dname, dest))()
+        for dname in CELL_DESTS:
+            for policy in POLICIES:
+                name = f"matrix/{tname}/{dname}/{policy}"
+                if only and only not in name: continue
+                scenario(name)(lambda: cell(t, spec, dname, d[dname], policy))()
 
 if __name__ == "__main__":
     main(sys.argv[1] if len(sys.argv) > 1 else None)

@@ -12,7 +12,7 @@ import { Tabs } from '@/components/ui/tabs'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { platformPaths } from '@/features/platform/paths'
 import { FormDialog } from '@/components/ui/form-dialog'
-import { inputClass } from '@/components/ui/form-styles'
+import { TextArea } from '@/components/ui/text-input'
 import { useListParams } from '@/features/platform/use-list-params'
 import { SupportAuditTab } from '@/features/platform/support/audit-tab'
 import { SupportBackupBrowser } from '@/features/platform/support/backup-browser'
@@ -78,7 +78,7 @@ function SessionView({ session, receivedAt }: { session: SupportSession; receive
   const active = effective.status === 'Active'
   return <div className="space-y-6">
     <PageHeader crumbs={crumbs} title={tx("{0} · Support Session", { "0": effective.tenantName })} description={tx("Oturumu açan: {0}", { "0": effective.actorDisplayName ?? effective.platformAdminId })}
-      meta={<><StatusPill domain="supportSession" status={effective.status} /><span aria-label={tx("Oturum süresi")} className="text-sm text-text-muted">{active ? tx("Kalan süre: {0}", { "0": countdown.label }) : tx('Erişim sona erdi.')}{' '}{tx("· Süre sonu:")}{' '}<RelativeTime value={effective.expiresAt} /></span></>}
+      meta={<><StatusPill domain="supportSession" status={effective.status} /><span aria-label={tx("Oturum süresi")} className="text-sm text-text-muted">{active ? <>{tx("Kalan süre: {0}", { "0": countdown.label })}{' '}{tx("· Süre sonu:")}</> : <>{tx("Süre sonu")}:</>}{' '}<RelativeTime value={effective.expiresAt} /></span></>}
       actions={<SessionActions session={effective} />} />
     {effective.status !== 'Active' ? <Notice tone="warning">{endedMessages[effective.status]}{' '}{tx("Yalnızca oturum özeti ve audit okunabilir.")}</Notice>
       : !effective.isOwner && <Notice tone="warning">{tx("Bu oturumun sahibi değilsiniz. Müşteri verileri yalnızca oturumu açan PlatformAdmin'e açıktır. Özeti ve audit kayıtlarını görebilir veya gerekçeyle erişimi geri alabilirsiniz.")}</Notice>}
@@ -93,10 +93,10 @@ function SessionView({ session, receivedAt }: { session: SupportSession; receive
 function SessionOverview({ session }: { session: SupportSession }) {
   useLanguage()
   return <div className="space-y-5">
-    <Notice tone="warning" title={tx("Müşteri ortamındasınız")}>
+    {session.status === 'Active' && <Notice tone="warning" title={tx("Müşteri ortamındasınız")}>
       <p>{tx("Bu erişim yalnızca belirtilen tenant ve süre için geçerlidir; tüm veri erişimleri denetlenir.")}</p>
       <p>{tx("ViewBackupMetadata metadata okumaya, DownloadBackup dosya indirmeye, RestoreBackup yalnızca yeni Database oluşturmaya izin verir. Restore hedefleri müşterinin gerçek veritabanı sunucusudur, izole değildir.")}</p>
-    </Notice>
+    </Notice>}
     <Section title={tx("Oturum özeti")}>
       <div className="space-y-4">
         <Facts columns={1}>
@@ -142,7 +142,7 @@ function SessionActions({ session }: { session: SupportSession }) {
     {revokeOpen && active && <FormDialog title={tx("Destek erişimini geri al")} description={tx("Oturumun erişimi hemen sona erer. Gerekçe audit kaydına eklenir.")} submitLabel={tx("Erişimi geri al")} pendingLabel={tx("Erişim geri alınıyor…")} pending={busy}
       error={revoke.error} onSubmit={revokeAccess} onClose={() => setRevokeOpen(false)}>
       <Field label={tx("Gerekçe")} hint={tx("Zorunlu; en fazla 500 karakter.")} error={invalid ? tx('Gerekçe zorunludur ve en fazla 500 karakter olabilir.') : undefined}>
-        {control => <textarea {...control} className={inputClass} rows={3} value={reason} maxLength={500} disabled={busy} onChange={event => setReason(event.target.value)} />}
+        {control => <TextArea {...control}  rows={3} value={reason} maxLength={500} disabled={busy} onChange={event => setReason(event.target.value)} />}
       </Field>
     </FormDialog>}
   </>

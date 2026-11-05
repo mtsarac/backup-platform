@@ -5,12 +5,12 @@ import { Pagination } from '@/components/data/pagination'
 import { ProgressBar } from '@/components/data/progress-bar'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
-import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
+import { FilterField, Filters } from '@/components/ui/filters'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { TechnicalDetails } from '@/components/ui/technical-details'
-import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { canCancelRestore, databaseStateLabel, isActiveRestore, restoreProgressPercent, restoreStageLabel, restoreStatuses, targetStateDescription, targetStateLabel } from '@/features/restores/presentation'
 import type { RestoreView } from '@/features/restores/types'
 import { failureMessage } from '@/lib/api/failure-messages'
@@ -22,14 +22,15 @@ import { formatDateTime } from '@/lib/format'
 import { statusLabel } from '@/lib/status'
 import { QueryState } from '@/components/data/query-state'
 import { errorMessage } from '@/lib/api/failure-messages'
+import { Select } from '@/components/ui/text-input'
 
 export function SupportRestoresTab({ session }: { session: SupportSession }) {
   useLanguage()
   const { page, get, update } = useListParams('restorePage')
   const scope = supportScope(session, 'restores')
-  const query = useSupportRestores(scope, { page, pageSize: PLATFORM_PAGE_SIZE, status: get('restoreStatus') })
+  const query = useSupportRestores(scope, { page, pageSize: LIST_PAGE_SIZE, status: get('restoreStatus') })
   const columns: Column<RestoreView>[] = [
-    { key: 'database', card: 'title', header: tx('Yeni veritabanı'), wrap: true, render: item => <button className="font-medium text-primary hover:underline" onClick={() => update({ restoreId: item.id, restoreArtifact: '' })}>{item.databaseName}</button> },
+    { key: 'database', card: 'title', header: tx('Yeni veritabanı'), wrap: true, render: item => <Button variant="link" size="sm" type="button" onClick={() => update({ restoreId: item.id, restoreArtifact: '' })}>{item.databaseName}</Button> },
     { key: 'source', header: tx('Kaynak veritabanı'), wrap: true, render: item => item.sourceDatabaseName ?? '—' },
     { key: 'target', header: tx('Hedef'), wrap: true, render: item => `${item.target.host}${item.target.port ? `:${item.target.port}` : ''}` },
     { key: 'status', card: 'status', header: tx('Durum'), render: item => <StatusPill status={item.status} /> },
@@ -39,17 +40,19 @@ export function SupportRestoresTab({ session }: { session: SupportSession }) {
   ]
   if (!scope.enabled) return <Notice>{tx("Restore Operations için etkin oturum sahipliği ve ViewBackupMetadata veya RestoreBackup izni gerekir.")}</Notice>
   return <div className="space-y-6">
-    <Filters label={tx("Restore filtreleri")}><FilterField label={tx("Restore durumu")}><select className={filterControlClass} value={get('restoreStatus')} onChange={event => update({ restoreStatus: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{restoreStatuses.map(status => <option key={status} value={status}>{statusLabel('general', status)}</option>)}</select></FilterField></Filters>
+    {get('restoreId') ? <SupportRestoreDetail key={get('restoreId')} session={session} id={get('restoreId')} /> : <>
+    <Filters label={tx("Restore filtreleri")}><FilterField label={tx("Restore durumu")}><Select className="text-sm" value={get('restoreStatus')} onChange={event => update({ restoreStatus: event.target.value })}><option value="">{tx("Tüm durumlar")}</option>{restoreStatuses.map(status => <option key={status} value={status}>{statusLabel('general', status)}</option>)}</Select></FilterField></Filters>
     <QueryState forbiddenMessage={errorMessage} isPending={query.isPending} error={query.error}>{query.data && <div className="space-y-4">
       <DataList rows={query.data.items} columns={columns} keyExtractor={item => item.id} />
       <Pagination page={page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={next => update({ restorePage: next })} />
     </div>}</QueryState>
     {get('restoreArtifact') && <SupportRestoreForm key={`${session.id}:${get('restoreArtifact')}`} session={session} artifactId={get('restoreArtifact')} onStarted={id => update({ restoreId: id, restoreArtifact: '' })} />}
-    {get('restoreId') && <SupportRestoreDetail key={get('restoreId')} session={session} id={get('restoreId')} />}
+    </>}
   </div>
 }
 function SupportRestoreDetail({ session, id }: { session: SupportSession; id: string }) {
   useLanguage()
+  const { update } = useListParams('restorePage')
   const scope = supportScope(session, 'restores')
   const query = useSupportRestore(scope, id)
   const access = supportAccess(session)
@@ -58,10 +61,11 @@ function SupportRestoreDetail({ session, id }: { session: SupportSession; id: st
   const restore = query.data
   const mayCancel = Boolean(access.restore && restore && canCancelRestore(restore.status, restore.cancellationRequestedAt))
   const percent = restoreProgressPercent(restore?.progress.percent)
-  return <Section title={tx("Restore detayları")}>
+  return <Section title={tx("Restore detayları")} actions={<Button variant="outline" onClick={() => update({ restoreId: '' })}>{tx("Detayları gizle")}</Button>}>
     <div className="space-y-4">
     <QueryState forbiddenMessage={errorMessage} isPending={query.isPending} error={query.error || (!confirm && cancel.error)}>{restore && <>
       <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-medium">{restore.databaseName}{' '}{tx("· yeni veritabanı")}</h3><StatusPill status={restore.status} /><Button variant="destructive" disabled={!mayCancel || cancel.isPending} onClick={() => { cancel.reset(); setConfirm(true) }}>{tx("Restore iptal et")}</Button></div>
+      {restore.sourceDatabaseName && <p className="break-words text-sm">{tx("Kaynak veritabanı")}{': '}{restore.sourceDatabaseName}</p>}
       <p className="break-words text-sm">{restore.target.host}{restore.target.port ? `:${restore.target.port}` : ''}</p>
       <ProgressBar label={tx("Restore ilerlemesi")} value={percent} />
       <p className="text-sm">{restoreStageLabel(restore.progress.stage)} · {percent === undefined ? tx('Yüzde bildirilmedi') : tx('%{0}', { '0': percent })} · {formatDateTime(restore.progress.at)}</p>

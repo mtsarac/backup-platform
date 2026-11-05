@@ -16,6 +16,21 @@ services:
       - minio_data:/bitnami/minio/data
       - ./docs/test-environment/certs/minio:/certs:ro
 
+  # Creates the bucket the S3 scenarios use; a fresh minio_data volume has none. --insecure: self-signed cert.
+  minio-init:
+    image: bitnamilegacy/minio:latest
+    depends_on: [minio]
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until /opt/bitnami/minio-client/bin/mc --insecure alias set t https://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" >/dev/null 2>&1; do sleep 1; done
+        /opt/bitnami/minio-client/bin/mc --insecure mb --ignore-existing t/bpe2e
+    environment:
+      MINIO_ROOT_USER: ${E2E_MINIO_USER:-bpe2e}
+      MINIO_ROOT_PASSWORD: ${E2E_MINIO_PASSWORD:?set E2E_MINIO_PASSWORD}
+      MC_CONFIG_DIR: /tmp/mc
+
   samba:
     image: dockurr/samba:latest
     container_name: bpe2e-samba
@@ -27,6 +42,16 @@ services:
       - "${PUBLIC_HOST:-192.168.122.1}:445:445"
     volumes:
       - samba_data:/storage
+
+  # SMTP sink for the notify scenarios (scripts/e2e/notify.py): SMTP on the bridge address, REST API on localhost:8181.
+  greenmail:
+    image: greenmail/standalone
+    container_name: e2e-greenmail
+    environment:
+      GREENMAIL_OPTS: -Dgreenmail.setup.test.smtp -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.users=u:p@e2e.test -Dgreenmail.api.hostname=0.0.0.0
+    ports:
+      - "${PUBLIC_HOST:-192.168.122.1}:3025:3025"
+      - "127.0.0.1:8181:8080"
 
 volumes:
   minio_data:

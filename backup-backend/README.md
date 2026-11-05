@@ -96,13 +96,6 @@ notification condition/event, and outbox delivery commit atomically.
 Snapshots older than 90 days are pruned in the same transaction as each new snapshot; a
 connection's newest snapshot and its newest measured snapshot are always kept.
 
-Downgrading `StorageCapacityTaskTransport` requires snapshot rows to be
-representable by the old schema: only Available or CapacityUnavailable. If any
-Warning or Critical row exists, the downgrade refuses the narrower constraint
-and PostgreSQL rolls the entire migration back, preserving all rows, the task
-table, and migration history. It never rewrites measurements or deletes rows to
-make a downgrade pass.
-
 
 ### Scheduled upload bandwidth
 
@@ -162,6 +155,22 @@ The `Dockerfile` builds the API image. `docker-compose.yml` in the repository ro
 
 Email notifications stay off until three things are set. `Notifications:PublicBaseUrl` (environment `Notifications__PublicBaseUrl`) is the absolute http(s) URL recipients reach the API at; confirmation and unsubscribe links are built from it, and without it the policy reports `transports.email.available=false`, channel tests answer `409 transport_not_configured` and deliveries fail with `public_url_not_configured`. The platform email transport (SMTP host, port, security, sender and optional login) must be saved by a PlatformAdmin under `/platform/notification-transports`; credentials require TLS (plain SMTP is accepted only without them). `Notifications:AllowedPrivateNetworks` (array of CIDR ranges, for example `Notifications__AllowedPrivateNetworks__0=192.168.0.0/16`) is needed whenever the SMTP relay or a webhook/SMS target sits on a private, loopback or link-local address: such addresses are refused with `network_denied` before any connection, and the list is empty by default.
 
+### Feature flags
+
+A feature that can be switched off is one line in `Features` (`src/core/contracts/Flags/FeatureFlags.cs`, shared by the API and the agent) with its default. The operator overrides it with configuration `Features:{key}` (environment `Features__{key}=true|false`). A disabled feature's routes are not registered (404), handlers on shared routes ask `FeatureFlags.IsEnabled`, and the UI reads every flag once at startup from the anonymous `GET /api/features`.
+
+| Key | Default | Off means |
+|---|---|---|
+| `sms` | off | SMS transport, secrets and channels are hidden or rejected; queued deliveries wait until re-enabled |
+| `supportSessions` | off | `/api/platform/support-sessions*` and `/api/tenants/{id}/support-access*` not registered; no UI entry |
+| `smb` | off | SMB connections are hidden or rejected, new backup admissions and credential issuance are blocked, and SMB is not offered as a provider |
+| `sizeAnomaly` | off | runs are not evaluated, the health summary lists none, the `backup_size_anomaly` event cannot be selected |
+| `windowsVss` / `linuxSnapshots` | off | agent-side: the agent refuses to start with a file source whose `SnapshotKind` is `Vss` / `Lvm`, `Btrfs` or `Zfs` (set `Features__windowsVss=true` in the agent's environment) |
+| `externalSecrets` | off | `Secrets:Provider` other than `Database` (Vault, AWS Secrets Manager) stops the API from starting |
+| `replicaRepair` | **on** | policy exception so multi-destination repair keeps working; off removes the manual repair routes and stops automatic repair |
+
+Disabling SMB or SMS retains existing resources. Re-enabling SMS permits queued deliveries to resume; already-issued SMB credentials cannot be recalled by changing the flag.
+
 ## 3-2-1 and protected external storage
 
 The existing tenant storage-connection APIs and connection wizard support `s3`
@@ -182,6 +191,12 @@ admission; changing a connection never rewrites an old run's compliance.
 Policy failure keeps every successfully verified copy available and accounted
 for while reporting the run failed. Agents must advertise `backup.three-two-one`
 and the relevant `storage.s3`/`storage.smb` capabilities.
+
+For hard storage limits, admission reserves an estimate from the previous artifact.
+After staging and hashing, the agent requests an atomic adjustment for the actual
+artifact and its counted destinations before writing to any destination. If the
+remaining capacity is insufficient, the run fails without writing a destination;
+concurrent runs cannot reserve the same capacity.
 
 S3 configuration requires an HTTPS `endpoint` (origin only), `bucket`, and
 signing `region`. Secrets are `accessKey`, `secretKey`, and optional
@@ -251,19 +266,22 @@ Run from this directory.
 | Unit | `dotnet test tests/unit-tests -c Release` | nothing |
 | Architecture | `dotnet test tests/architecture-tests -c Release` | nothing |
 | Agent | `dotnet test tests/agent-tests -c Release` | nothing |
-| PostgreSQL integration | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName!~MsSql&FullyQualifiedName!~BackupPipelineSmoke&FullyQualifiedName!~StorageCapacityAgentHostSmokeTests" -- xUnit.MaxParallelThreads=4` | administrative PostgreSQL connection and current/older client tools; see scripts README |
-| MSSQL integration | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName~IntegrationTests.MsSql\|FullyQualifiedName~BackupPipelineSmoke"` | PostgreSQL and MSSQL variables |
+| PostgreSQL integration | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName!~MsSql&FullyQualifiedName!~BackupPipelineSmoke&FullyQualifiedName!~StorageCapacityAgentHostSmokeTests" -- xUnit.MaxParallelThreads=4` | Docker and current/older client tools; see scripts README |
+| MSSQL integration | `dotnet test tests/integration-tests -c Release --filter "FullyQualifiedName~IntegrationTests.MsSql\|FullyQualifiedName~BackupPipelineSmoke"` | Docker |
 | Windows | `dotnet test tests/windows-tests -c Release` | Windows host |
 
-Integration test variables:
+**Frozen features' tests.** Tests of Windows VSS, Linux snapshots, SMS, backup size anomaly, external secrets, SMB and support sessions carry `[Trait("Category", "Frozen")]` and are left out of every `dotnet test` run: `Directory.Build.props` points all test projects at `tests/default.runsettings` (`Category!=Frozen`), and a `--filter` you pass is combined with it. Run them on demand with `scripts/integration/run-frozen-tests.sh`, or per project with `dotnet test tests/unit-tests -p:IncludeFrozenTests=true --filter "Category=Frozen"` (the Windows VSS test: `tests/windows-tests`, on Windows). Replica repair stays on by default, so its tests are not frozen. A new test of a frozen feature takes the same trait.
 
-- `BACKUP_PLATFORM_TEST_CONNECTION_STRING`: administrative PostgreSQL connection with `CREATEDB`. Each run creates and drops its own database.
-- `BACKUP_PLATFORM_TEST_MSSQL_HOST`, `_USER`, `_PASSWORD`: SQL Server connection.
-- `BACKUP_PLATFORM_TEST_MSSQL_STAGING_SERVER_DIR`, `_AGENT_DIR`: the same staging folder as SQL Server sees it and as the agent sees it.
-- `BACKUP_PLATFORM_TEST_POSTGRES_TOOLS_DIRECTORY`: current `pg_dump`/`pg_restore`, plus matching-major `pg_basebackup`/`pg_verifybackup`/`pg_waldump` for physical tests.
-- `BACKUP_PLATFORM_TEST_POSTGRES_OLD_TOOLS_DIRECTORY`: older client binaries for compatibility-refusal tests.
+The integration fixtures start their own PostgreSQL 18 Alpine, SQL Server 2025 (plus a second one for the cross-instance restore row) and SFTP (`atmoz/sftp`) containers with Testcontainers, and the real-Agent.Host smokes publish the agent from this repository once per test run (`dotnet publish` without the Go direct-download helper, which these tests never use). Docker and the .NET SDK are the only prerequisites; no variable has to be set.
+
+To run the real-agent tests against your own disposable SQL Server instead, set `BACKUP_PLATFORM_TEST_MSSQL_HOST`, `_PORT`, `_USER`, `_PASSWORD`, `_STAGING_SERVER_DIR` and `_STAGING_AGENT_DIR` together (the login must be sysadmin; SQL Server must write the staging directory and the agent must read and delete the same files through the agent-side path; these tests create and drop databases). The cross-instance restore row then also needs `BACKUP_PLATFORM_TEST_MSSQL_RESTORE_TARGET_PORT`, a second instance on the same host with the same login and staging mount. `BACKUP_PLATFORM_TEST_AGENT_HOST_PATH` points at an already published host instead of publishing one. For your own SFTP server set `BACKUP_PLATFORM_TEST_SFTP_HOST`, `_PORT`, `_USER`, `_PASSWORD` and `_FINGERPRINT` (`SHA256:` host key), and optionally `_BASE_DIR` (default `/upload`) and `_PRIVATE_KEY_FILE`.
+
+On Linux, from the repository root, `scripts/database/with-disposable-databases.sh --restore -- ./scripts/integration/run-mssql-tests.sh --provider --agent --restore` provisions disposable servers through the variables above; see the scripts README for image prerequisites. A Docker host-port collision during Testcontainers startup is an environment bind failure, not a SQL authentication failure; identify the process or container occupying the reported host port before rerunning.
+
+Other integration test variables:
+- `BACKUP_PLATFORM_TEST_POSTGRES_TOOLS_DIRECTORY`: absolute directory containing runnable PostgreSQL 18 `pg_dump` and `pg_restore`; if unset, the process `PATH` is searched. Physical tests additionally need matching-major `pg_basebackup`, `pg_verifybackup`, and `pg_waldump`.
+- `BACKUP_PLATFORM_TEST_POSTGRES_OLD_TOOLS_DIRECTORY`: required absolute directory containing older `pg_dump` and `pg_restore` for compatibility-refusal tests (PostgreSQL 16 clients work against the test server).
 - Physical tests also require remote replication access for the test login in `pg_hba.conf`. Limit collection parallelism on high-core hosts to avoid exhausting the database connection limit.
-- Published-host capacity smokes run separately with `BACKUP_PLATFORM_TEST_AGENT_HOST_PATH` and staging paths; the SFTP variant additionally needs an operator-approved server and pinned host key.
 
 CI runs the unit, architecture, and a fast subset of the agent tests. For the helper scripts that start disposable databases and run the integration suites, see [scripts/README.md](../scripts/README.md).
 

@@ -18,10 +18,12 @@ import { restoreIneligibility } from '@/features/artifacts/restore-eligibility'
 import { artifactName, artifactState, canCancelDeletion, deletionInProgress } from '@/features/artifacts/format'
 import { ReplicationSection } from '@/features/backups/replication'
 import type { ReplicationDestination } from '@/features/artifacts/types'
+import { isFeatureEnabled } from '@/features/feature-flags/feature-flags'
 import { useArtifact, useArtifactActions, useReplicaRepair, useRepairStatus, useArtifactRepairs } from '@/features/artifacts/hooks'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { type ErrorDescription, describeError, describeFailure } from '@/lib/api/failure-messages'
 import { formatDateTime } from '@/lib/format'
+import { storageProviderLabel } from '@/features/storage-connections/labels'
 
 function DeleteCountdown({ deleteAfter }: { deleteAfter: string }) {
   useLanguage()
@@ -79,6 +81,7 @@ function ArtifactDetail({ id }: { id: string }) {
   }, [expiresAt, now, pinnedAt])
 
   const canRepair = Boolean(
+    isFeatureEnabled('replicaRepair') &&
     canOperate &&
     artifact &&
     artifact.state !== 'Deleted' &&
@@ -142,14 +145,13 @@ function ArtifactDetail({ id }: { id: string }) {
       <PageHeader
         crumbs={[{ label: tx('Yedek dosyaları'), to: `/tenants/${tenantId}/artifacts` }, { label: artifact?.databaseName ?? tx('Yedek dosyası') }]}
         title={artifact?.databaseName ? tx("{0} · Yedek dosyası", { "0": artifact.databaseName }) : tx('Yedek dosyası')}
-        description={tx("Dosyanın sağlam olup olmadığı, geri yüklenip yüklenemeyeceği ve ne zaman silineceği.")}
         meta={artifact && <>
           <StatusPill status={artifactState(artifact)} />
-          {artifact.jobId && <Link className="text-sm text-primary underline-offset-4 hover:underline" to={`/tenants/${tenantId}/backup-jobs`}>{artifact.jobName || tx('Yedekleme işleri')}</Link>}
+          {artifact.jobId && <Link className="text-sm text-primary underline-offset-4 hover:underline" to={`/tenants/${tenantId}/backup-jobs/${artifact.jobId}/edit`}>{artifact.jobName || tx('Yedekleme işleri')}</Link>}
           {artifact.runId && <Link className="text-sm text-primary underline-offset-4 hover:underline" to={`/tenants/${tenantId}/backup-runs/${artifact.runId}`}>{tx("Yedekleme denemesini aç")}</Link>}
         </>}
         actions={artifact && <>
-          {canRestore && <Link className={buttonVariants()} to={`/tenants/${tenantId}/artifacts/${artifact.id}/restore`}>{tx("Geri yükle")}</Link>}
+          {canRestore && <Link className={buttonVariants()} to={`/tenants/${tenantId}/artifacts/${artifact.id}/restore`}>{artifact.backupMetadata?.engine === 'file-system' ? tx("Dosyaları geri yükle") : tx("Veritabanını geri yükle")}</Link>}
           {canDownload && <Button variant="outline" aria-expanded={showDownload} onClick={() => setShowDownload(shown => !shown)}>{tx("İndir")}</Button>}
           {canRequestDelete && <Button variant="destructive" disabled={busy} onClick={() => { requestDelete.reset(); cancelDelete.reset(); setDialogOpen(true) }}>{tx("Silme isteği oluştur")}</Button>}
         </>}
@@ -188,7 +190,7 @@ function ArtifactDetail({ id }: { id: string }) {
         pending={requestDelete.isPending} error={requestDelete.error} confirmLabel={tx("Bekleme süresini başlat")} onConfirm={startDelete} />
       <ConfirmDialog open={Boolean(repairDestination) && canRepair} onClose={() => setRepairDestination(null)} title={tx("Replika onarılsın mı?")}
         consequence={{
-          what: <>{tx("Doğrulanmış bir kopyadan")}{' '}<strong>{repairDestination?.storageProvider}</strong>{' '}{tx("hedefine yeni bir kopya aktarılır ve sağlama toplamı doğrulanır.")}</>,
+          what: <>{tx("Doğrulanmış bir kopyadan")}{' '}<strong>{repairDestination ? storageProviderLabel(repairDestination.storageProvider) : ''}</strong>{' '}{tx("hedefine yeni bir kopya aktarılır ve sağlama toplamı doğrulanır.")}</>,
           who: tx("Depolama alanı ve aktarım kotası kullanılır. Kaynak kopya korunur."),
           reversible: tx("Evet. Onarım sürerken iptal edebilirsiniz; kaynak kopyanız değişmez."),
         }}

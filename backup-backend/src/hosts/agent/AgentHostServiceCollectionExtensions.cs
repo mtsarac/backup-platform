@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using BackupPlatform.Agent.Core.Connectivity;
 using BackupPlatform.Agent.Core.Identity;
 using BackupPlatform.Agent.Core.Restore;
@@ -21,6 +22,7 @@ public static class AgentHostServiceCollectionExtensions
         services.AddOptions<AgentHostOptions>()
             .Bind(configuration.GetSection(AgentHostOptions.SectionName))
             .ValidateOnStart();
+        services.AddSingleton(new BackupPlatform.Contracts.Flags.FeatureFlags(key => configuration.GetValue<bool?>($"Features:{key}")));
         services.AddSingleton<IValidateOptions<AgentHostOptions>, AgentHostOptionsValidator>();
 
         services.TryAddSingleton<TimeProvider>(static _ => new ServerAlignedTimeProvider(TimeProvider.System));

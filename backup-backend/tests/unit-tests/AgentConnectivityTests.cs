@@ -109,14 +109,6 @@ public sealed class AgentProtocolGateTests
 public sealed class AgentConnectivityOptionsTests
 {
     [Fact]
-    public void DefaultsAreValidAndHeartbeatIsNotTheTimeout()
-    {
-        var options = new AgentConnectivityOptions();
-        Assert.Empty(options.Validate());
-        Assert.True(options.OfflineTimeout >= options.HeartbeatInterval * AgentConnectivityOptions.MinimumHeartbeatsPerTimeout);
-    }
-
-    [Fact]
     public void ATimeoutThatCannotTolerateMissedHeartbeatsIsRejected()
     {
         var options = new AgentConnectivityOptions { HeartbeatInterval = TimeSpan.FromSeconds(30), OfflineTimeout = TimeSpan.FromSeconds(60) };

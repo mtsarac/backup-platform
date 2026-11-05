@@ -72,29 +72,43 @@ describe('Storage connections list and detail', () => {
     expect(local.getByRole('button', { name: 'Kopyala: Saklanan veri' })).toBeInTheDocument()
   })
 
-  it('keeps the tenant-wide statistics under a collapsed Ayrıntılar section', async () => {
+  it('summarizes the tenant in one line instead of a collapsed statistics block, and gives each card one link to its page', async () => {
+    serve([makeConnection({ lastTest: { status: 'Succeeded', code: 'ok', message: '', testedAt: new Date().toISOString() } }), s3({ lastTest: { status: 'Failed', code: 'access_denied', message: 'Access denied.', testedAt: new Date().toISOString() } }), makeManaged()])
     mount()
     await screen.findByRole('article', { name: "Local" })
-    expect(screen.getByText('Dikkat gerektiren')).not.toBeVisible()
-    await userEvent.click(screen.getByText('Ayrıntılar'))
-    expect(screen.getByText('Dikkat gerektiren')).toBeVisible()
+    expect(screen.getByText('3 bağlantı · 1 sağlıklı · 1 dikkat gerektiriyor')).toBeVisible()
+    expect(screen.queryByText('Ayrıntılar')).not.toBeInTheDocument()
+    expect(article('Local').getAllByRole('link')).toHaveLength(1)
+    expect(article('Local').getByRole('link', { name: 'Local' })).toHaveAttribute('href', `${base}/connections/conn-local`)
   })
 
-  it('gives an empty list one sentence and one primary action, or asks to consult the administrator', async () => {
+  it('puts free space and the platform lock into the card once', async () => {
+    vi.mocked(api.getTenantConnectionCapacity).mockResolvedValue({ connectionId: 'conn-local', totalBytes: 500_000_000_000, usedBytes: 300_000_000_000, freeBytes: 200_000_000_000, status: 'Available', reportedAt: '2026-10-21T10:00:00Z' })
+    serve([makeConnection({ administrativelyDisabled: true })])
+    mount()
+    await screen.findByRole('article', { name: 'Local' })
+    const local = article('Local')
+    expect(await local.findByText('200 GB')).toBeVisible()
+    expect(local.queryByText('Platform kilidi')).not.toBeInTheDocument()
+    expect(local.getAllByText(/kilit kalkana kadar yeni yedeklemeler için kullanılamaz/)).toHaveLength(1)
+  })
+
+  it('gives an empty list one sentence and no second add button, or asks to consult the administrator', async () => {
     serve([])
     const { unmount } = mount()
-    expect(await screen.findByRole('link', { name: 'İlk bağlantıyı ekle' })).toBeInTheDocument()
+    expect(await screen.findByText(/İlk hedefi “Bağlantı ekle” ile ekleyin/)).toBeInTheDocument()
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
     unmount()
     access.canAdmin = false
     mount()
     expect(await screen.findByText('Yöneticinize danışın')).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'İlk bağlantıyı ekle' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/“Bağlantı ekle” ile ekleyin/)).not.toBeInTheDocument()
   })
 
   it('opens a destination from its card without exposing credentials or configuration; quota scope and capabilities are technical', async () => {
     mount()
     await screen.findByRole('article', { name: "Local" })
-    await userEvent.click(article('Local').getByRole('link', { name: 'Local bağlantısını yönet' }))
+    await userEvent.click(article('Local').getByRole('link', { name: 'Local' }))
     await screen.findByRole('heading', { level: 1, name: 'Local' })
     expect(screen.getByRole('list', { name: 'Local yetenekleri' })).not.toBeVisible()
     expect(screen.getByText('tenant')).not.toBeVisible()
@@ -163,7 +177,7 @@ describe('Storage connections list and detail', () => {
     })
     mount(detail('conn-local'))
     await userEvent.click(await screen.findByRole('button', { name: 'Kapasiteyi Sorgula' }))
-    expect(await screen.findByText(/Agent yanıtı bekleniyor/)).toBeInTheDocument()
+    expect(await screen.findByText(/yedekleme bilgisayarı yanıtı bekleniyor/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Sorgulanıyor…' })).toBeDisabled()
     expect(screen.queryByText('100 kB')).not.toBeInTheDocument()
     expect(await screen.findByText('Alan dolmak üzere', {}, { timeout: 4_000 })).toBeInTheDocument()
@@ -254,7 +268,7 @@ describe('Storage connections list and detail', () => {
     expect(article('Local').queryByText('Sağlıklı')).not.toBeInTheDocument()
     expect(article('Managed Storage').getByText('Sağlıklı')).toBeInTheDocument()
     expect(article('S3 Arşiv').getByText('Bağlantı sorunu')).toBeInTheDocument()
-    await userEvent.click(article('Local').getByRole('link', { name: /bağlantısını yönet/ }))
+    await userEvent.click(article('Local').getByRole('link', { name: 'Local' }))
     expect(await screen.findByText(/(?:Backend Agent diskine erişemez|yedekleme bilgisayarı diskine erişemez)/)).toBeInTheDocument()
     expect(screen.queryByText(/cannot reach/)).not.toBeInTheDocument()
   })
@@ -277,6 +291,26 @@ describe('Storage connections list and detail', () => {
     access.canAdmin = false
     mount(detail('conn-local', 'manage'))
     expect(await screen.findByRole('button', { name: 'Local bağlantısı: sil' })).toBeInTheDocument()
+  })
+
+  it('states a healthy connection once in the header with its last test time, and keeps a single breadcrumb back to Depolama', async () => {
+    serve([makeConnection({ lastTest: { status: 'Succeeded', code: 'ok', message: '', testedAt: new Date(Date.now() - 3 * 3_600_000).toISOString() }, permissions: { ...tenantAdminPermissions } })])
+    mount(detail('conn-local'))
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Local' })
+    expect(within(heading.closest('header')!).getByText('Sağlıklı')).toBeInTheDocument()
+    expect(within(heading.closest('header')!).getByText('3 saat önce')).toBeInTheDocument()
+    expect(screen.getAllByText('Sağlıklı')).toHaveLength(1)
+    expect(screen.queryByText('Bağlantı sağlıklı')).not.toBeInTheDocument()
+    const crumbs = within(screen.getByRole('navigation', { name: 'Sayfa yolu' }))
+    expect(crumbs.getAllByRole('link')).toHaveLength(1)
+    expect(crumbs.getByRole('link', { name: 'Depolama' })).toHaveAttribute('href', base)
+  })
+
+  it('still explains a failed test and asks to retry, without hiding the header status', async () => {
+    serve([s3({ lastTest: { status: 'Failed', code: 'access_denied', message: 'Access denied.', testedAt: new Date().toISOString() } })])
+    mount(detail('conn-s3'))
+    expect(await screen.findByText('Son test başarısız')).toBeInTheDocument()
+    expect(screen.getByText('Bağlantı sorunu')).toBeInTheDocument()
   })
 })
 
@@ -348,6 +382,8 @@ describe('Connection wizard', () => {
     const technical = screen.getByText('Teknik ayrıntılar').closest('details')!
     expect(technical).not.toHaveAttribute('open')
     expect(within(technical).getByRole('button', { name: /Kopyala: Kova/ })).toBeInTheDocument()
+    expect(within(technical).queryByRole('button', { name: /Kopyala: Yetenek kodları/ })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('list', { name: /yetenekleri/ })).toHaveLength(1)
     expect(document.body.textContent).not.toContain(SECRET_A)
     await user.click(screen.getByRole('button', { name: 'Bağlantıyı oluştur ve test et' }))
     expect(screen.getByRole('button', { name: 'Oluşturuluyor…' })).toBeDisabled()

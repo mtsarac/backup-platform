@@ -5,6 +5,7 @@ import * as api from '@/features/platform/notifications/api'
 import type { EmailTransport, NotificationTransports, SmsTransport } from '@/features/platform/notifications/types'
 import { renderPlatform } from '@/features/platform/test-utils'
 import { PlatformNotificationTransportsPage } from './platform-notification-transports-page'
+import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import { tx } from '@/lib/i18n'
 
 vi.mock('@/features/platform/notifications/api')
@@ -19,6 +20,13 @@ const serve = (value: EmailTransport) => vi.mocked(api.getTransports).mockResolv
 beforeEach(() => { vi.resetAllMocks(); serve(email()) })
 
 describe('platform notification transports page', () => {
+  it('shows no SMS gateway while the SMS feature is off', async () => {
+    setFeatureFlags({})
+    renderPlatform(<PlatformNotificationTransportsPage />)
+    await screen.findByRole('region', { name: tx('E-posta (SMTP)') })
+    expect(screen.queryByRole('region', { name: tx('SMS ağ geçidi') })).not.toBeInTheDocument()
+  })
+
   it.each([
     ['enabled and complete', { enabled: true, configured: true, host: 'smtp.example.com', port: 465 }, 'Çalışıyor'],
     ['complete but switched off', { enabled: false, configured: true, host: 'smtp.example.com', port: 465 }, 'Kapalı'],
@@ -32,6 +40,7 @@ describe('platform notification transports page', () => {
   })
 
   it('keeps host, port and secret dates under collapsed copyable technical details and still says SMS is unverified', async () => {
+    setFeatureFlags({ sms: true })
     serve(email({ enabled: true, configured: true, host: 'smtp.example.com', port: 465, security: 'implicit', fromAddress: 'noreply@example.com', hasSecret: true, secretUpdatedAt: '2026-10-14T10:00:00Z' }))
     const user = userEvent.setup()
     renderPlatform(<PlatformNotificationTransportsPage />)
@@ -42,7 +51,7 @@ describe('platform notification transports page', () => {
     expect(card.getByDisplayValue('noreply@example.com')).toBeVisible()
     await user.click(card.getByText('Teknik ayrıntılar'))
     expect(card.getByDisplayValue('smtp.example.com')).toBeVisible()
-    expect(card.getByRole('button', { name: /Kayıtlı sunucu/ })).toBeVisible()
+    expect(card.queryByRole('button', { name: /Kayıtlı sunucu/ })).not.toBeInTheDocument()
     expect(card.getByRole('button', { name: /Gizli değerin ayarlandığı zaman/ })).toBeVisible()
     expect(screen.getByText('UYGULANDI — DOĞRULANMADI')).toBeInTheDocument()
     expect(screen.getByText(/genel bir HTTP JSON bağdaştırıcısı/)).toBeInTheDocument()
@@ -83,11 +92,16 @@ describe('platform notification transports page', () => {
     vi.mocked(api.clearEmailSecret).mockResolvedValue(email())
     const user = userEvent.setup()
     renderPlatform(<PlatformNotificationTransportsPage />)
+    expect(await screen.findByText(tx('{0}: kayıtlı. Kayıtlı değer geri okunamaz.', { '0': tx('SMTP parolası') }))).toBeVisible()
+    expect(screen.queryByText(tx('Kayıtlı'), { exact: true })).not.toBeInTheDocument()
     await user.click(await screen.findByRole('button', { name: 'Temizle' }))
     expect(api.clearEmailSecret).not.toHaveBeenCalled()
     const dialog = await screen.findByRole('dialog')
     for (const part of ['Ne olacak?', 'Kimleri etkiler?', 'Geri alınabilir mi?']) expect(dialog).toHaveTextContent(part)
+    serve(email())
     await user.click(screen.getByRole('button', { name: "Gizli değeri temizle" }))
     await waitFor(() => expect(api.clearEmailSecret).toHaveBeenCalled())
+    expect(await screen.findByText(tx('{0}: ayarlanmadı.', { '0': tx('SMTP parolası') }))).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Temizle' })).not.toBeInTheDocument()
   })
 })

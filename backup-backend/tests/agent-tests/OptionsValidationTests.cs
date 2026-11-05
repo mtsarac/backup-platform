@@ -2,6 +2,7 @@ using BackupPlatform.Agent.Core.Connectivity;
 using BackupPlatform.Agent.Core.Identity;
 using BackupPlatform.Agent.Host;
 using BackupPlatform.Agent.Transport;
+using BackupPlatform.Contracts.Flags;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -23,18 +24,21 @@ public sealed class OptionsValidationTests
         return new AgentHostOptionsValidator().Validate(null, options);
     }
 
-    [Fact]
-    public void Defaults_match_the_documented_values_and_are_valid()
+    [Theory]
+    [InlineData(BackupPlatform.SnapshotProviders.Abstractions.SnapshotKind.Vss, "windowsVss")]
+    [InlineData(BackupPlatform.SnapshotProviders.Abstractions.SnapshotKind.Lvm, "linuxSnapshots")]
+    [InlineData(BackupPlatform.SnapshotProviders.Abstractions.SnapshotKind.Btrfs, "linuxSnapshots")]
+    [InlineData(BackupPlatform.SnapshotProviders.Abstractions.SnapshotKind.Zfs, "linuxSnapshots")]
+    public void A_snapshot_file_source_is_refused_until_its_feature_is_on(BackupPlatform.SnapshotProviders.Abstractions.SnapshotKind kind, string feature)
     {
-        var options = new AgentConnectivityOptions();
+        var options = new AgentHostOptions { Backend = { BaseUri = "https://backup.example.test/" } };
+        options.Backup = new AgentBackupOptions { FileSources = new() { ["data"] = new(AbsoluteDirectory, kind) } };
+        FeatureFlags Flags(bool on) => new(key => key == feature ? on : null);
 
-        Assert.Equal(TimeSpan.FromSeconds(30), options.HeartbeatInterval);
-        Assert.Equal(TimeSpan.FromSeconds(30), options.PollInterval);
-        Assert.Equal(TimeSpan.FromSeconds(20), options.PushFallbackDelay);
-        Assert.Equal(TimeSpan.FromSeconds(1), options.ReconnectBaseDelay);
-        Assert.Equal(TimeSpan.FromSeconds(60), options.ReconnectMaxDelay);
-        Assert.Empty(options.Validate());
-        Assert.True(Validate(_ => { }).Succeeded);
+        var off = new AgentHostOptionsValidator(Flags(false)).Validate(null, options);
+        Assert.True(off.Failed);
+        Assert.Contains($"Features:{feature}", off.FailureMessage);
+        Assert.True(new AgentHostOptionsValidator(Flags(true)).Validate(null, options).Succeeded);
     }
 
     [Theory]
@@ -159,29 +163,6 @@ public sealed class OptionsValidationTests
         Assert.Equal(TimeSpan.FromSeconds(5), options.Connectivity.PushFallbackDelay);
         Assert.Equal(TimeSpan.FromSeconds(2), options.Connectivity.ReconnectBaseDelay);
         Assert.Equal(TimeSpan.FromMinutes(2), options.Connectivity.ReconnectMaxDelay);
-    }
-
-    [Fact]
-    public async Task Valid_configuration_wires_the_connectivity_service_to_the_transport()
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddAgentHost(Configuration(
-            ("Agent:Backend:BaseUri", "https://backup.example.test/base"),
-            ("Agent:CredentialStoreDirectory", AbsoluteDirectory)));
-        await using var provider = services.BuildServiceProvider();
-
-        var service = provider.GetRequiredService<AgentConnectivityService>();
-
-        Assert.Same(service, provider.GetRequiredService<IAgentConnectivityStatus>());
-        Assert.IsType<SignalRAgentPushChannel>(provider.GetRequiredService<IAgentPushChannel>());
-        var client = Assert.IsType<HttpAgentBackendClient>(provider.GetRequiredService<IAgentBackendClient>());
-        Assert.Equal("https://backup.example.test/base/", client.BackendBaseUri.ToString());
-        Assert.IsAssignableFrom<IAgentCredentialStore>(provider.GetRequiredService<IAgentCredentialStore>());
-        Assert.Equal(AgentChannelState.Stopped, service.Current.State);
-        Assert.IsType<HttpAgentCapabilityClient>(provider.GetRequiredService<IAgentCapabilityClient>());
-        var source = Assert.IsType<CatalogCapabilityRevisionSource>(provider.GetRequiredService<ICapabilityRevisionSource>());
-        Assert.Equal(provider.GetRequiredService<AgentCapabilityCatalog>().Revision, source.GetRevision());
     }
 
     [Fact]

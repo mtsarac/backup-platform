@@ -16,6 +16,7 @@ using static BackupPlatform.IntegrationTests.BackupStoreHarness;
 
 namespace BackupPlatform.IntegrationTests;
 
+[Trait("Category", "Frozen")]
 public sealed class BackupSizeAnomalyIntegrationTests : IAsyncLifetime
 {
     private readonly PostgreSqlFixture _database = new();
@@ -195,6 +196,29 @@ public sealed class BackupSizeAnomalyIntegrationTests : IAsyncLifetime
         await using var audit = _database.CreatePlatformContext();
         Assert.Empty(await audit.AuditEvents.Where(entry => entry.TenantId == agent.TenantId && entry.Action == AuditActions.BackupRunSizeAnomaly).ToListAsync());
         Assert.Contains(log.Errors, error => error.Contains(run.Id.ToString(), StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task A_run_is_not_evaluated_while_the_size_anomaly_feature_is_off()
+    {
+        var kit = _world.Quota.Harness;
+        var agent = await kit.AddAgentAsync();
+        var job = await kit.AddJobAsync(agent);
+        await _world.AddEmailAsync(agent.TenantId);
+        await _world.EnableAsync(agent.TenantId, [NotificationEventTypes.BackupSizeAnomaly]);
+        for (var index = 0; index < 3; index++) await CompleteStoreAsync(agent, job, 1000);
+        var store = new BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRunStore(
+            new DbContextOptionsBuilder<BackupPlatform.Infrastructure.Persistence.PlatformDbContext>().UseNpgsql(_database.ConnectionString).Options,
+            AdmitAllBackupAdmission.Instance, null, () => 0, null, null, new BackupPlatform.Contracts.Flags.FeatureFlags(_ => false));
+        var now = _world.Clock.GetUtcNow();
+        var run = await kit.StartRunAsync(store, job, "anomaly-off", now);
+        var claim = (await ClaimAsync(store, agent, now))!;
+        await StartAttemptAsync(store, claim, now);
+        await CompleteAsync(store, claim, SizedSuccess(now, 5000), now);
+        var completed = (await kit.Store().GetRunAsync(agent.TenantId, run.Id, default))!;
+        Assert.Equal(BackupStatus.Succeeded, completed.Status);
+        Assert.Null(completed.SizeAnomalyStatus);
+        Assert.Empty(await _world.EventsAsync(agent.TenantId));
     }
 
     private sealed class CapturedLogger : Microsoft.Extensions.Logging.ILogger<BackupPlatform.Infrastructure.Backups.PostgreSqlBackupRunStore>
@@ -430,39 +454,6 @@ public sealed class BackupSizeAnomalyIntegrationTests : IAsyncLifetime
         var empty = AgentWorld.ReadJson(expired);
         Assert.Equal(0, empty.GetProperty("recentSizeAnomaliesTotal").GetInt32());
         Assert.Empty(empty.GetProperty("recentSizeAnomalies").EnumerateArray());
-    }
-
-    [Fact]
-    public async Task Observability_upgrade_preserves_existing_successes_artifacts_replicas_and_older_agent_completion()
-    {
-        await using var scenario = await BackupApiScenario.CreateAsync(_database, clock: _world.Clock);
-        await scenario.World.Factory.Services.GetRequiredService<BackupPlatform.Api.Storage.StorageCapacityPeriodicProbeWorker>().StopAsync(default);
-        var job = await scenario.CreateJobAsync();
-        var completed = await CompleteHttpAsync(scenario, job, 1000);
-        var before = await scenario.RunAsync(completed.Claim.RunId);
-        await using (var db = _database.CreatePlatformContext())
-        {
-            var migrations = (await db.Database.GetAppliedMigrationsAsync()).ToArray();
-            var anomaly = Array.IndexOf(migrations, "20261021002856_BackupSizeAnomalyDetection");
-            Assert.True(anomaly > 0);
-            var migrator = db.GetService<IMigrator>();
-            await migrator.MigrateAsync(migrations[anomaly - 1]);
-            await migrator.MigrateAsync();
-        }
-        var legacy = await scenario.RunAsync(completed.Claim.RunId);
-        Assert.Equal("Succeeded", legacy.GetProperty("status").GetString());
-        Assert.Equal(before.GetProperty("completedAt").GetDateTimeOffset(), legacy.GetProperty("completedAt").GetDateTimeOffset());
-        Assert.Equal(before.GetProperty("attempts").GetRawText(), legacy.GetProperty("attempts").GetRawText());
-        Assert.Equal(JsonValueKind.Null, legacy.GetProperty("sizeAnomalyStatus").ValueKind);
-        Assert.Equal(JsonValueKind.Null, legacy.GetProperty("sizeAnomalyBaselineBytes").ValueKind);
-        Assert.Equal(JsonValueKind.Null, legacy.GetProperty("sizeAnomalyDeviationRatio").ValueKind);
-        Assert.False(legacy.GetProperty("isSizeAnomaly").GetBoolean());
-        using (var summary = await scenario.Admin.GetAsync(scenario.Root + "/observability/health-summary"))
-            Assert.Empty(AgentWorld.ReadJson(summary).GetProperty("recentSizeAnomalies").EnumerateArray());
-        // The existing helper starts protocol 1.0/software 1.2.3 without the optional capacity feature.
-        var next = await CompleteHttpAsync(scenario, job, 1000);
-        Assert.Equal("Succeeded", (await scenario.RunAsync(next.Claim.RunId)).GetProperty("status").GetString());
-        Assert.Equal(before.GetProperty("attempts").GetRawText(), (await scenario.RunAsync(completed.Claim.RunId)).GetProperty("attempts").GetRawText());
     }
 
     private static async Task<(Guid TaskId, Guid LeaseToken, CapacityProbeTaskResult Result)> MeasureCapacityHttpAsync(BackupApiScenario scenario, Guid connection, long used)

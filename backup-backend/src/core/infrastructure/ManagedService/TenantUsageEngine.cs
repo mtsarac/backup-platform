@@ -84,20 +84,20 @@ internal static class TenantUsageEngine
                    join connection in context.StorageConnections.AsNoTracking() on new { replica.StorageConnectionId, replica.TenantId } equals new { StorageConnectionId = connection.Id, connection.TenantId }
                    select new
                    {
-                       replica.ArtifactId, ArtifactSize = artifact.SizeBytes, ReplicaSize = replica.SizeBytes, replica.Status,
+                       replica.ArtifactId, ArtifactSize = artifact.SizeBytes, ReplicaSize = replica.SizeBytes, replica.Status, replica.VerificationState,
                        connection.ProviderType, connection.Ownership, connection.QuotaScope, ConnectionId = connection.Id
                    };
         await foreach (var row in rows.AsAsyncEnumerable().WithCancellation(cancellationToken))
         {
-            accumulator.Add(new ReplicaFact(row.ArtifactId, row.ArtifactSize, row.ReplicaSize, new ReplicaStorageFacts(row.ProviderType, row.Ownership, row.QuotaScope, row.ConnectionId), row.Status));
+            accumulator.Add(new ReplicaFact(row.ArtifactId, row.ArtifactSize, row.ReplicaSize, new ReplicaStorageFacts(row.ProviderType, row.Ownership, row.QuotaScope, row.ConnectionId), row.Status, row.VerificationState == "Verified"));
         }
         return accumulator.TotalBytes;
     }
 
-    public static async Task<long> ComputeReservedAsync(PlatformDbContext context, TenantId tenantId, CancellationToken cancellationToken)
+    public static async Task<long> ComputeReservedAsync(PlatformDbContext context, TenantId tenantId, CancellationToken cancellationToken, Guid? excludeRunId = null)
     {
         var policy = await ResolvePolicyAsync(context, tenantId, cancellationToken);
-        var reservations = await context.QuotaReservations.AsNoTracking().Where(row => row.TenantId == tenantId && row.ReleasedAt == null)
+        var reservations = await context.QuotaReservations.AsNoTracking().Where(row => row.TenantId == tenantId && row.ReleasedAt == null && row.RunId != excludeRunId)
             .Select(row => new { row.RunId, row.Bytes }).ToListAsync(cancellationToken);
         var total = 0L;
         foreach (var reservation in reservations)
@@ -241,8 +241,8 @@ internal static class TenantUsageEngine
             if (connection is null) return null;
             if (!policy.IncludedStorageScopes.Matches(
                 new ReplicaStorageFacts(connection.ProviderType, connection.Ownership, connection.QuotaScope, connection.Id))) continue;
-            if (policy.AccountingMode == QuotaAccountingMode.LogicalArtifactBytes) return 1;
-            copies++;
+            if (policy.AccountingMode == QuotaAccountingMode.LogicalArtifactBytes) copies = 1;
+            else copies++;
         }
         return copies;
     }
@@ -287,13 +287,13 @@ internal static class TenantUsageEngine
             return null;
         }
         var replicas = await context.BackupReplicas.AsNoTracking().Where(replica => replica.TenantId == tenantId && replica.ArtifactId == artifactId)
-            .Select(replica => new StoredReplica(replica.Id, replica.SizeBytes, replica.StorageConnectionId, replica.Status))
+            .Select(replica => new StoredReplica(replica.Id, replica.SizeBytes, replica.StorageConnectionId, replica.Status, replica.VerificationState == "Verified"))
             .ToListAsync(cancellationToken);
         return new StoredArtifact(artifactId, size.Value, replicas, await LoadConnectionFactsAsync(context, tenantId, cancellationToken));
     }
 }
 
-internal sealed record StoredReplica(Guid Id, long SizeBytes, Guid StorageConnectionId, BackupReplicaStatus Status);
+internal sealed record StoredReplica(Guid Id, long SizeBytes, Guid StorageConnectionId, BackupReplicaStatus Status, bool Verified);
 
 /// <summary>One artifact's replicas with the connection facts needed to count them.</summary>
 internal sealed record StoredArtifact(Guid ArtifactId, long ArtifactSize, List<StoredReplica> Replicas, IReadOnlyDictionary<Guid, ReplicaStorageFacts> ConnectionFacts)
@@ -307,5 +307,5 @@ internal sealed record StoredArtifact(Guid ArtifactId, long ArtifactSize, List<S
         ConnectionFacts.TryGetValue(replica.StorageConnectionId, out var facts)
             ? facts
             : new ReplicaStorageFacts(string.Empty, StorageOwnership.TenantManaged, string.Empty, replica.StorageConnectionId),
-        replica.Status);
+        replica.Status, replica.Verified);
 }

@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { createMemoryRouter, createRoutesFromElements, Route, RouterProvider } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getAgents } from '@/features/agents/api'
 import { saveBackupJob } from '@/features/backup-jobs/api'
@@ -21,9 +21,10 @@ vi.mock('@/features/storage-connections/api')
 vi.mock('@/features/backup-jobs/api')
 
 function mount() {
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><MemoryRouter initialEntries={['/tenants/tenant-a/discovery/instances/inst-1']}><Routes>
+  const router = createMemoryRouter(createRoutesFromElements(<>
     <Route path="/tenants/:tenantId/discovery/instances/:instanceId" element={<InstanceDetailPage />} /><Route path="/tenants/:tenantId/backup-jobs/new" element={<BackupJobWizardPage />} /><Route path="/tenants/:tenantId/backup-jobs" element={<p>Saved jobs</p>} />
-  </Routes></MemoryRouter></QueryClientProvider>)
+  </>), { initialEntries: ['/tenants/tenant-a/discovery/instances/inst-1'] })
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}><RouterProvider router={router} /></QueryClientProvider>)
 }
 beforeEach(() => {
   vi.clearAllMocks()
@@ -46,6 +47,33 @@ describe('instance detail page', () => {
     expect(screen.queryByRole('button', { name: /Yedekleme işi oluştur/ })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Bağlantıyı doğrula' })).toBeDisabled()
   })
+  it('explains a login problem in one block and keeps the old list read-only', async () => {
+    vi.mocked(getDiscoveryInstance).mockResolvedValue(makeDetail({ access: 'AuthenticationFailed', accessReasonCode: 'authentication_failed' }))
+    mount()
+    expect(await screen.findByText('Kimlik doğrulaması başarısız.')).toBeInTheDocument()
+    expect(screen.getAllByText('Kimlik doğrulaması başarısız')).toHaveLength(1)
+    expect(screen.getAllByText(/eski bir aramadan kalmadır/)).toHaveLength(1)
+    expect(screen.getByText(/Giriş bilgilerini kontrol edip bağlantıyı doğrulayın/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Veritabanı kullanıcı adı')).toBeVisible()
+    expect(screen.getByRole('table')).toHaveTextContent('ERP')
+    expect(screen.queryByLabelText('ERP seç')).not.toBeInTheDocument()
+    expect(screen.queryByText(/henüz bağlanılamadığı için/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Yedekleme işi oluştur/ })).not.toBeInTheDocument()
+  })
+  it('says the missing address once instead of on every database row', async () => {
+    vi.mocked(getDiscoveryInstance).mockResolvedValue(makeDetail({ port: null }))
+    mount()
+    expect(await screen.findAllByText(/adresi bilinmediği için/)).toHaveLength(1)
+    expect(screen.queryByLabelText('ERP seç')).not.toBeInTheDocument()
+    expect(screen.queryByText(/henüz bağlanılamadığı için/)).not.toBeInTheDocument()
+  })
+  it('links back to the computer and keeps per-database lines out of the technical details', async () => {
+    mount()
+    expect(await screen.findByRole('link', { name: 'SQL Agent' })).toHaveAttribute('href', '/tenants/tenant-a/agents/agent-a')
+    const summary = screen.getByText('Teknik ayrıntılar')
+    fireEvent.click(summary)
+    expect(within(summary.closest('details')!).queryByText('ERP')).not.toBeInTheDocument()
+  })
   it('prefills the ticket 10 wizard and creates only the picked databases after confirmation', async () => {
     mount()
     expect(await screen.findByLabelText('ERP seç')).toBeEnabled()
@@ -59,12 +87,10 @@ describe('instance detail page', () => {
     fireEvent.click(screen.getByLabelText('CRM seç'))
     fireEvent.click(screen.getByRole('button', { name: /Yedekleme işi oluştur/ }))
     fireEvent.change(await screen.findByLabelText('İş adı'), { target: { value: 'Finance' } })
-    fireEvent.click(screen.getByRole('button', { name: 'İleri' }))
     expect(screen.getByLabelText('Yedekleme bilgisayarı')).toHaveValue('agent-a')
-    fireEvent.click(screen.getByRole('button', { name: 'İleri' }))
     expect(screen.getByLabelText('Veritabanı')).toHaveValue('ERP')
     expect(screen.getByLabelText('Veritabanı')).toBeDisabled()
-    for (let i = 0; i < 5; i++) fireEvent.click(screen.getByRole('button', { name: 'İleri' }))
+    for (let i = 0; i < 4; i++) fireEvent.click(screen.getByRole('button', { name: 'İleri' }))
     expect(saveBackupJob).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }))
     await waitFor(() => expect(saveBackupJob).toHaveBeenCalledTimes(2))

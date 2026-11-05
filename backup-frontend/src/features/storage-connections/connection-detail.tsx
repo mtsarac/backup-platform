@@ -14,11 +14,15 @@ import { TechnicalDetails } from '@/components/ui/technical-details'
 import { CopyButton } from '@/components/ui/copy-button'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { ConnectionActions } from './connection-actions'
+import { GoogleOAuthNotice } from './google-oauth-flow'
+import { useGoogleOAuth } from './use-google-oauth'
+import { errorMessage } from '@/lib/api/failure-messages'
 import { CapabilityChips, CapacityPill, HealthBadge, SecretStatus } from './connection-parts'
 import { useTenantConnectionCapacity, useProbeTenantConnectionCapacity, useTenantConnectionOps, useTenantConnections, useTenantProviders } from './hooks'
-import { configurationSummary, connectionHealth, disableEffects, enableEffect, footprintItems, platformLockState, executionLocationLabel, testMessage, testModeLabel, topologyLabel } from './labels'
+import { configurationSummary, connectionHealth, disableEffects, enableEffect, footprintItems, platformLockState, testMessage } from './labels'
 import type { ConnectionView, ProviderDescriptor } from './types'
 import { formatBytes, formatDateTime, formatRelativeTime } from '@/lib/format'
+import { RelativeTime } from '@/components/data/relative-time'
 import { ProgressBar } from '@/components/data/progress-bar'
 import { StatusPill } from '@/components/data/status-pill'
 
@@ -30,17 +34,17 @@ const tabs = [
 ] as const
 type TabValue = (typeof tabs)[number]['value']
 
-/** The headline finding for the connection, worded for what the person should do next. */
-function HealthNotice({ connection }: { connection: ConnectionView }) {
+/** The headline finding for the connection, worded for what the person should do next. A healthy connection needs none: the header badge says it. */
+function HealthNotice({ connection, oauth }: { connection: ConnectionView; oauth: ReturnType<typeof useGoogleOAuth> }) {
   useLanguage()
   const health = connectionHealth(connection)
   const test = connection.lastTest
   if (health.key === 'disabled') return <Notice tone="warning" title={tx("Bu hedef devre dışı")}>{tx("Yeni backup başlatılamaz. Mevcut backup'lar indirilebilir ve geri yüklenebilir kalır.")}</Notice>
-  if (health.key === 'reauthorize') return <Notice tone="warning" title={tx("Google hesabının yeniden yetkilendirilmesi gerekiyor")}>{tx("Kimlik bilgisi sekmesinden hesabı yeniden bağlayın; bağlanana kadar bu hedefe erişen işlemler başarısız olabilir.")}</Notice>
+  if (health.key === 'reauthorize') return <Notice tone="warning" title={tx("Google hesabının yeniden yetkilendirilmesi gerekiyor")}
+    action={connection.permissions.canManageSecret && <Button size="sm" disabled={oauth.connect.isPending} onClick={() => oauth.start(connection)}>{oauth.connect.isPending ? tx('Yönlendiriliyor…') : tx('Yeniden yetkilendir')}</Button>}>{tx("Bağlanana kadar bu hedefe erişen işlemler başarısız olabilir. Google penceresinde izni onaylayın.")}</Notice>
   if (health.key === 'failed' && test) return <ErrorNotice title={tx("Son test başarısız")} what={testMessage(test)} dataImpact={tx("Yeni yedekler bu depolamaya yazılamayabilir; mevcut yedekleriniz silinmedi.")} action={tx("Ayarları düzeltip bağlantıyı yeniden test edin.")} technical={[{ label: tx("Test zamanı"), value: formatDateTime(test.testedAt, tx('Henüz bildirilmedi')) }]} />
   if (health.key === 'untested') return <Notice tone="info" title={tx("Bağlantı henüz test edilmedi")}>{tx("Çalıştığından emin olmak için “Test et” düğmesini kullanın.")}</Notice>
   if (health.key === 'agent-side' && test) return <Notice tone="info" title={tx("Bu hedef Agent tarafında denetlenir")}>{testMessage(test)}</Notice>
-  if (test) return <Notice tone="success" title={tx("Bağlantı sağlıklı")}>{tx("Son test {0} başarılı oldu.", { "0": formatRelativeTime(test.testedAt) })}</Notice>
   return null
 }
 
@@ -128,7 +132,7 @@ function CapacitySection({ connection }: { connection: ConnectionView }) {
 }
 
 /** Capacity numbers and history, quota scope, dates, provider internals and identifiers: everything the person does not need to read first. */
-function OverviewTechnical({ connection, descriptor, total }: { connection: ConnectionView; descriptor?: ProviderDescriptor; total: number }) {
+function OverviewTechnical({ connection, total }: { connection: ConnectionView; total: number }) {
   useLanguage()
   const { data: capacity } = useTenantConnectionCapacity(connection.id)
   const measured = capacity && capacity.status !== 'Pending' && capacity.totalBytes != null
@@ -139,9 +143,6 @@ function OverviewTechnical({ connection, descriptor, total }: { connection: Conn
     { label: tx("Kota kapsamı"), value: connection.quotaScope },
     { label: tx("Oluşturulma"), value: formatDateTime(connection.createdAt, tx('Henüz bildirilmedi')) },
     { label: tx("Son güncelleme"), value: formatDateTime(connection.updatedAt, tx('Henüz bildirilmedi')) },
-    { label: tx("Topoloji"), value: topologyLabel(descriptor?.topology ?? null) },
-    { label: tx("Yürütme konumu"), value: executionLocationLabel(descriptor?.executionLocation ?? null) },
-    { label: tx("Test yöntemi"), value: descriptor ? testModeLabel(descriptor.testMode) : '—' },
     { label: tx("Bağlantı kimliği"), value: connection.id },
   ]
   return <TechnicalDetails items={items}>
@@ -160,12 +161,16 @@ function OverviewTechnical({ connection, descriptor, total }: { connection: Conn
   </TechnicalDetails>
 }
 
-function Overview({ connection, descriptor, total }: { connection: ConnectionView; descriptor?: ProviderDescriptor; total: number }) {
+function Overview({ connection, total, ops }: { connection: ConnectionView; total: number; ops: ReturnType<typeof useTenantConnectionOps> }) {
   useLanguage()
+  // Owned here, not by the warning, so the outcome stays visible after the warning clears.
+  const oauth = useGoogleOAuth(ops)
   return <div className="space-y-5">
-    <HealthNotice connection={connection} />
+    <HealthNotice connection={connection} oauth={oauth} />
+    {Boolean(oauth.connect.error) && <p role="alert" className="text-sm text-error">{errorMessage(oauth.connect.error, 'storageConnection')}</p>}
+    <GoogleOAuthNotice outcome={oauth.outcome} />
     <CapacitySection connection={connection} />
-    <OverviewTechnical connection={connection} descriptor={descriptor} total={total} />
+    <OverviewTechnical connection={connection} total={total} />
   </div>
 }
 
@@ -226,18 +231,18 @@ export function ConnectionDetail() {
   const visibleTabs = tabs.filter((tab) => tab.value !== 'credentials' || hasCredentials)
   const requested = params.get('tab')
   const active: TabValue = visibleTabs.find((tab) => tab.value === requested)?.value ?? 'overview'
-  const crumbs = [{ label: tx('Storage'), to: storage }, { label: tx('Bağlantılar'), to: storage }, { label: connection?.name ?? tx('Bağlantı') }]
+  const crumbs = [{ label: tx('Depolama'), to: storage }, { label: connection?.name ?? tx('Bağlantı') }]
 
   if (connections.isPending || connections.error) return <><PageHeader title={tx("Depolama bağlantısı")} crumbs={crumbs} /><QueryState isPending={connections.isPending} error={connections.error} /></>
   if (!connection) return <><PageHeader title={tx("Bağlantı bulunamadı")} crumbs={crumbs} /><Notice tone="warning" title={tx("Bu bağlantı yok veya bu tenant altında erişilemiyor")} action={<Link to={storage} className={buttonVariants({ variant: 'outline', size: 'sm' })}>{tx("Bağlantılara dön")}</Link>} /></>
 
   return <>
-    <PageHeader crumbs={crumbs} title={connection.name} description={tx(connection.providerDisplayName)}
+    <PageHeader crumbs={crumbs} title={connection.name} description={<>{tx(connection.providerDisplayName)}{connection.lastTest && <> · {tx("Son test")}: <RelativeTime value={connection.lastTest.testedAt} /></>}</>}
       meta={<><HealthBadge connection={connection} /><StatusPill domain="ownership" status={connection.ownership} />{connection.isDefault && <Badge tone="accent">{tx("Varsayılan")}</Badge>}</>}
       actions={<ConnectionActions connection={connection} descriptor={descriptor} ops={ops} show={['test']} />} />
     <Tabs idPrefix="connection" label={tx("Bağlantı bölümleri")} value={active} items={visibleTabs} onChange={(value) => setParams(value === 'overview' ? {} : { tab: value }, { replace: true })} />
     <div role="tabpanel" id={`connection-panel-${active}`} aria-labelledby={`connection-tab-${active}`} className="space-y-5">
-      {active === 'overview' && <Overview connection={connection} descriptor={descriptor} total={total} />}
+      {active === 'overview' && <Overview connection={connection} total={total} ops={ops} />}
       {active === 'configuration' && <Configuration connection={connection} descriptor={descriptor} ops={ops} />}
       {active === 'credentials' && <Credentials connection={connection} descriptor={descriptor} ops={ops} />}
       {active === 'manage' && <Manage connection={connection} descriptor={descriptor} ops={ops} />}

@@ -1,4 +1,5 @@
 using BackupPlatform.Application.Platform;
+using BackupPlatform.Contracts.Flags;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Identity;
 using BackupPlatform.Domain.Notifications;
@@ -21,7 +22,7 @@ namespace BackupPlatform.Infrastructure.Notifications;
 /// every result is a fenced update (owner + attempt), so concurrent workers never process one delivery at the same time and a stale worker cannot
 /// overwrite its successor.
 /// </remarks>
-public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbContext> options, TimeProvider time) : INotificationStore
+public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbContext> options, TimeProvider time, FeatureFlags? flags = null) : INotificationStore
 {
     private const string UniqueViolation = "23505";
 
@@ -288,11 +289,12 @@ public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbConte
     public async Task<IReadOnlyList<DeliveryWork>> ClaimDueAsync(string owner, DateTimeOffset now, int batchSize, TimeSpan lease, int maxAttempts, CancellationToken cancellationToken)
     {
         await using var context = Open();
+        var smsEnabled = flags?.IsEnabled(Features.Sms) ?? true;
         // A delivery whose worker died on its last allowed attempt is finished, not retried forever.
         await context.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE notification_deliveries SET "Status" = 'Failed', "ErrorCode" = {NotificationDeliveryCodes.AttemptsExhausted}, "LeaseOwner" = NULL, "LeaseExpiresAt" = NULL,
                    "CompletedAt" = {now}, "UpdatedAt" = {now}
-            WHERE "Status" = 'InProgress' AND "LeaseExpiresAt" <= {now} AND "AttemptCount" >= {maxAttempts}
+            WHERE "Status" = 'InProgress' AND "LeaseExpiresAt" <= {now} AND "AttemptCount" >= {maxAttempts} AND ({smsEnabled} OR "ChannelKind" <> 'Sms')
             """, cancellationToken);
         var leaseUntil = now + lease;
         var ids = await context.Database.SqlQuery<Guid>($"""
@@ -300,7 +302,8 @@ public sealed class PostgreSqlNotificationStore(DbContextOptions<PlatformDbConte
                    "LastAttemptAt" = {now}, "NextAttemptAt" = NULL, "UpdatedAt" = {now}
             WHERE d."Id" IN (
                 SELECT "Id" FROM notification_deliveries
-                WHERE ("Status" = 'Pending' AND "NextAttemptAt" <= {now}) OR ("Status" = 'InProgress' AND "LeaseExpiresAt" <= {now})
+                WHERE (("Status" = 'Pending' AND "NextAttemptAt" <= {now}) OR ("Status" = 'InProgress' AND "LeaseExpiresAt" <= {now}))
+                  AND ({smsEnabled} OR "ChannelKind" <> 'Sms')
                 ORDER BY COALESCE("NextAttemptAt", "LeaseExpiresAt"), "Id"
                 LIMIT {batchSize}
                 FOR UPDATE SKIP LOCKED)

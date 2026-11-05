@@ -3,7 +3,6 @@ import type { TechnicalItem } from '@/components/ui/technical-details'
 import { formatDateTime } from '@/lib/format'
 import type { SupportPermission, SupportScope, SupportSession, SupportStatus } from './types'
 
-export const supportPermissions: readonly SupportPermission[] = ['ViewBackupMetadata', 'DownloadBackup', 'RestoreBackup']
 export const supportStatuses: readonly SupportStatus[] = ['Active', 'Expired', 'Closed', 'Revoked']
 export const permissionLabels: Record<SupportPermission, string> = {
   get ViewBackupMetadata() { return `${tx('Backup metadata görüntüle')} · ViewBackupMetadata` },

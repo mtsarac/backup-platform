@@ -4,7 +4,7 @@ import { DataList, type Column } from '@/components/data/data-list'
 import { Pagination } from '@/components/data/pagination'
 import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
-import { FilterField, Filters, filterControlClass } from '@/components/ui/filters'
+import { FilterField, Filters } from '@/components/ui/filters'
 import { linkClass } from '@/components/ui/form-styles'
 import { PageHeader } from '@/components/ui/page-header'
 import { platformCrumb } from '@/features/platform/crumbs'
@@ -13,16 +13,13 @@ import { platformPaths } from '@/features/platform/paths'
 import { SearchForm } from '@/features/platform/search-form'
 import { TenantPicker } from '@/features/platform/tenant-picker'
 import type { AgentConnectivity, AgentLifecycle, PlatformAgent } from '@/features/platform/types'
-import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE, oneOf, useListParams } from '@/features/platform/use-list-params'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
+import { platformOnlyMessage } from '@/lib/api/failure-messages'
+import { Select } from '@/components/ui/text-input'
 
 const connectivityValues: AgentConnectivity[] = ['online', 'offline', 'unknown']
 const lifecycleValues: AgentLifecycle[] = ['PendingEnrollment', 'Active', 'Disabled', 'Revoked']
-
-function oneOf<T extends string>(value: string, allowed: readonly T[]): T | undefined {
-  return allowed.find((item) => item === value)
-}
 
 export function PlatformAgentsPage() {
   useLanguage()
@@ -31,7 +28,7 @@ export function PlatformAgentsPage() {
   const tenantId = get('tenantId')
   const connectivity = oneOf(get('connectivity'), connectivityValues)
   const status = oneOf(get('status'), lifecycleValues)
-  const query = usePlatformAgents({ tenantId, connectivity, status, search, page, pageSize: PLATFORM_PAGE_SIZE })
+  const query = usePlatformAgents({ tenantId, connectivity, status, search, page, pageSize: LIST_PAGE_SIZE })
   const data = query.data
   const filtered = Boolean(search || tenantId || connectivity || status)
   // OS, versions, capabilities and lifecycle details live on the computer's own page; the list only flags a lifecycle that is not Active.
@@ -46,8 +43,8 @@ export function PlatformAgentsPage() {
     <Filters label={tx("Bilgisayar filtreleri")} onClear={filtered ? () => update({ search: '', connectivity: '', status: '', tenantId: '' }) : undefined}>
       <SearchForm className="sm:col-span-2" label={tx("Bilgisayar ara")} value={search} onSearch={(value) => update({ search: value })} placeholder={tx("Bilgisayar adı, platform veya sürüm")} />
       <TenantPicker value={tenantId} onChange={(value) => update({ tenantId: value })} />
-      <FilterField label={tx("Bağlantı")}><select className={filterControlClass} value={connectivity ?? ''} onChange={(event) => update({ connectivity: event.target.value })}><option value="">{tx("Tümü")}</option><option value="online">{tx("Çevrimiçi")}</option><option value="offline">{tx("Çevrimdışı")}</option><option value="unknown">{tx("Bilinmiyor")}</option></select></FilterField>
-      <FilterField label={tx("Kayıt durumu")}><select className={filterControlClass} value={status ?? ''} onChange={(event) => update({ status: event.target.value })}><option value="">{tx("Tümü")}</option><option value="PendingEnrollment">{tx("Kayıt bekliyor")}</option><option value="Active">{tx("Etkin")}</option><option value="Disabled">{tx("Devre dışı")}</option><option value="Revoked">{tx("İptal edildi")}</option></select></FilterField>
+      <FilterField label={tx("Bağlantı")}><Select className="text-sm" value={connectivity ?? ''} onChange={(event) => update({ connectivity: event.target.value })}><option value="">{tx("Tümü")}</option><option value="online">{tx("Çevrimiçi")}</option><option value="offline">{tx("Çevrimdışı")}</option><option value="unknown">{tx("Bilinmiyor")}</option></Select></FilterField>
+      <FilterField label={tx("Kayıt durumu")}><Select className="text-sm" value={status ?? ''} onChange={(event) => update({ status: event.target.value })}><option value="">{tx("Tümü")}</option><option value="PendingEnrollment">{tx("Kayıt bekliyor")}</option><option value="Active">{tx("Etkin")}</option><option value="Disabled">{tx("Devre dışı")}</option><option value="Revoked">{tx("İptal edildi")}</option></Select></FilterField>
     </Filters>
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">

@@ -1,9 +1,10 @@
+using BackupPlatform.Contracts.Flags;
 using Microsoft.Extensions.Options;
 
 namespace BackupPlatform.Agent.Host;
 
 /// <summary>Fails startup with one message per invalid setting.</summary>
-public sealed class AgentHostOptionsValidator : IValidateOptions<AgentHostOptions>
+public sealed class AgentHostOptionsValidator(FeatureFlags? flags = null) : IValidateOptions<AgentHostOptions>
 {
     public ValidateOptionsResult Validate(string? name, AgentHostOptions options)
     {
@@ -40,7 +41,7 @@ public sealed class AgentHostOptionsValidator : IValidateOptions<AgentHostOption
             failures.AddRange(options.Connectivity.Validate().Select(problem => $"{prefix}Connectivity:{problem}"));
         }
 
-        failures.AddRange(AgentBackupOptionsValidation.Validate(options.Backup));
+        failures.AddRange(AgentBackupOptionsValidation.Validate(options.Backup, flags));
 
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
     }

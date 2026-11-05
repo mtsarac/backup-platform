@@ -2,13 +2,17 @@
 import api, json, secrets, pathlib, sys
 STATE = api.ROOT / "docs/test-environment/state.json"
 st = json.loads(STATE.read_text()) if STATE.exists() else {}
+if hasattr(api, "wait_ready"): api.wait_ready()
 s = api.login()
 def ok(r):
     if not r.ok: sys.exit(f"{r.request.method} {r.url} -> {r.status_code} {r.text[:300]}")
     return r.json()
 me = next(u for u in ok(s.get("/api/platform/users".join([api.BASE, ""])))["items"] if u["loginIdentifier"] == "admin")
+known = {t.get("tenantId") or t.get("id") for t in ok(s.get(f"{api.BASE}/api/platform/tenants?pageSize=100"))["items"]}
 for key in ("a", "b"):
-    if key in st: continue
+    if key in st and st[key]["tenantId"] in known: continue
+    if key in st:  # fresh volume with a preserved state file: forget everything that pointed at the old tenants
+        for stale in ("plans", "connections"): st.pop(stale, None)
     t = ok(s.post(f"{api.BASE}/api/platform/tenants", json={"name": f"E2E Tenant {key.upper()}"}))
     pw = secrets.token_urlsafe(18) + "Aa1!"
     u = ok(s.post(f"{api.BASE}/api/platform/users", json={"loginIdentifier": f"owner-{key}", "displayName": f"Owner {key.upper()}", "password": pw}))
@@ -17,4 +21,4 @@ for key in ("a", "b"):
     ok(s.put(f"{api.BASE}/api/platform/tenants/{tid}/agent-enrollment", json={"enabled": True}))
     st[key] = {"tenantId": tid, "login": f"owner-{key}", "password": pw, "userId": uid}
 STATE.write_text(json.dumps(st, indent=2)); STATE.chmod(0o600)
-print({k: {"tenantId": v["tenantId"], "login": v["login"]} for k, v in st.items()})
+print({k: {"tenantId": v["tenantId"], "login": v["login"]} for k, v in st.items() if "tenantId" in v})

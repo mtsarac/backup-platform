@@ -1,13 +1,15 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { CheckField } from '@/components/ui/check-field'
 import { useState } from 'react'
 import { Field } from '@/components/ui/field'
 import { FormDialog } from '@/components/ui/form-dialog'
-import { inputClass, selectClass } from '@/components/ui/form-styles'
+import { TextInput } from '@/components/ui/text-input'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { useSetUploadBandwidth } from './hooks'
 import type { BandwidthTarget } from './types'
 import { bandwidthErrorMessage, bandwidthUnits, formatBandwidth, formatExactRate, parseBandwidth, toInput, unitLabel } from './units'
 import type { BandwidthUnitId } from './units'
+import { Select } from '@/components/ui/text-input'
 
 const scopeHelp = {
   get tenant() { return tx("Tenant genelinde eş zamanlı tüm yüklemelerin toplamı için üst sınırdır; tüm Agent'lardaki yüklemeler bu sınırı adil paylaşır.") },
@@ -34,16 +36,15 @@ export function LimitDialog({ target, name, current, minimum, maximum, onClose }
   }
   return <FormDialog title={tx("Yükleme hız sınırı: {0}", { "0": name })} description={scopeHelp[target.scope]} submitLabel={tx("Kaydet")} pendingLabel={tx("Kaydediliyor…")} pending={save.isPending} disabled={invalid}
     error={save.error} onSubmit={submit} onClose={onClose}>
-    <label className="flex min-h-11 items-center gap-3 text-[0.9375rem] text-text">
-      <input type="checkbox" className="size-5 accent-primary" checked={unlimited} onChange={event => setUnlimited(event.target.checked)} />{tx("Limitsiz (sınır yok)")}</label>
+    <CheckField label={tx("Limitsiz (sınır yok)")} checked={unlimited} onChange={event => setUnlimited(event.target.checked)} />
     <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
       <Field label={tx("Hız sınırı")} error={showInvalid ? bandwidthErrorMessage(parsed.error, minimum, maximum) : undefined}>
-        {control => <input {...control} className={inputClass} inputMode="decimal" value={text} disabled={unlimited} onChange={event => setText(event.target.value)} />}
+        {control => <TextInput {...control}  inputMode="decimal" value={text} disabled={unlimited} onChange={event => setText(event.target.value)} />}
       </Field>
       <Field label={tx("Birim")}>
-        {control => <select {...control} className={`${selectClass} w-full`} value={unit} disabled={unlimited} onChange={event => setUnit(event.target.value as BandwidthUnitId)}>
+        {control => <Select {...control} value={unit} disabled={unlimited} onChange={event => setUnit(event.target.value as BandwidthUnitId)}>
           {bandwidthUnits.map(item => <option key={item.id} value={item.id}>{unitLabel(item.id)}</option>)}
-        </select>}
+        </Select>}
       </Field>
     </div>
     <p className="text-sm text-text-muted">{tx("En az {0}, en çok {1}.", { "0": formatBandwidth(minimum), "1": formatBandwidth(maximum) })}</p>

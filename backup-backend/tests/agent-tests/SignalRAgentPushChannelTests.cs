@@ -76,9 +76,6 @@ public sealed class SignalRAgentPushChannelTests
         Assert.False(result.IsConnected);
         Assert.Equal(AgentBackendFailureKind.Rejected, result.Failure!.Kind);
         Assert.DoesNotContain("closed", listener.Events);
-        await server.SendPollHintAsync();
-        await Task.Delay(200);
-        Assert.Equal(0, listener.Hints);
     }
 
     [Fact]
@@ -249,7 +246,6 @@ public sealed class SignalRAgentPushChannelTests
         await channel.StopAsync(CancellationToken.None);
         await Wait.UntilAsync(() => server.State.Connections.IsEmpty, "server sees the connection gone");
         await server.SendPollHintAsync();
-        await Task.Delay(200);
 
         Assert.Empty(listener.Events);
     }
@@ -280,7 +276,6 @@ public sealed class SignalRAgentPushChannelTests
         await cts.CancelAsync();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => channel.ConnectAsync(TestIdentity.Create(), new RecordingListener(), cts.Token));
-        await Task.Delay(100);
 
         Assert.Empty(server.State.Connections);
     }

@@ -2,6 +2,8 @@
 """Exercise evidence rejection and, optionally, the real Windows SSH wrappers."""
 import argparse
 import hashlib
+import importlib.util
+import io
 import json
 import os
 import subprocess
@@ -9,6 +11,9 @@ import tempfile
 import unittest
 import uuid
 from pathlib import Path
+from contextlib import redirect_stdout
+from types import SimpleNamespace
+from unittest.mock import patch
 
 REPO = Path(__file__).resolve().parents[2]
 CHECKER = REPO / 'scripts/lib/assert-test-results.py'
@@ -63,6 +68,105 @@ class RuntimeCleanup(unittest.TestCase):
             self.assertFalse(owned.exists())
 
 
+class DisposableDatabases(unittest.TestCase):
+    def test_restore_exports_isolated_endpoints_and_cleans_up(self):
+        with tempfile.TemporaryDirectory(prefix='bp-disposable-contract-') as directory:
+            root = Path(directory)
+            fake = root / 'docker'
+            fake.write_text('''#!/usr/bin/env python3
+import json, os, sys
+args = sys.argv[1:]
+with open(os.environ['BP_DOCKER_CALLS'], 'a') as calls:
+    calls.write(json.dumps(args) + '\\n')
+if args[0] == 'inspect':
+    template = args[args.index('--format') + 1]
+    if '.State.Running' in template: print('true')
+    elif '5432/tcp' in template: print('45101')
+    elif 'target' in args[-1]: print('45103')
+    else: print('45102')
+elif args[0] == 'logs':
+    print('SQL Server is now ready for client connections')
+''')
+            fake.chmod(0o700)
+            calls = root / 'calls'
+            env = {**os.environ, 'PATH': str(root) + os.pathsep + os.environ['PATH'],
+                   'TMPDIR': str(root), 'BP_CREDENTIAL_FILE': str(root / 'absent'),
+                   'BP_DOCKER_CALLS': str(calls),
+                   'BACKUP_PLATFORM_TEST_MSSQL_HOST': 'production.invalid',
+                   'BACKUP_PLATFORM_TEST_MSSQL_PASSWORD': 'existing-secret'}
+            env.pop('BP_COMMON_LOADED', None)
+            command = ['bash', str(REPO / 'scripts/database/with-disposable-databases.sh'), '--restore', '--',
+                       'python3', '-c', 'import os; e=os.environ; assert e["BACKUP_PLATFORM_TEST_MSSQL_HOST"] == "127.0.0.1"; assert e["BACKUP_PLATFORM_TEST_MSSQL_PORT"] == "45102"; assert e["BACKUP_PLATFORM_TEST_MSSQL_RESTORE_TARGET_PORT"] == "45103"; assert "Port=45101" in e["BACKUP_PLATFORM_TEST_CONNECTION_STRING"]; assert e["BACKUP_PLATFORM_TEST_MSSQL_PASSWORD"] != "existing-secret"; assert os.path.isdir(e["BACKUP_PLATFORM_TEST_MSSQL_STAGING_AGENT_DIR"])']
+            result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=20, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            recorded = [json.loads(line) for line in calls.read_text().splitlines()]
+            runs = [args for args in recorded if args[0] == 'run']
+            self.assertEqual(len(runs), 3)
+            self.assertTrue(all(any(arg.startswith('127.0.0.1::') for arg in args) for args in runs))
+            self.assertEqual(len([args for args in recorded if args[:2] == ['rm', '--force']]), 3)
+            self.assertFalse(any(root.glob('bp-local.*')))
+
+
+class DownloadFixture(unittest.TestCase):
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location('download_smoke', REPO / 'scripts/frontend/download-smoke-fixture.py')
+        self.fixture = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.fixture)
+        self.clock = 0
+        self.ready_at = 0
+        self.polls = 0
+        self.created_jobs = 0
+        self.state = {'tenantId': 'tenant', 'agents': {}, 'artifacts': {}}
+        self.options = SimpleNamespace(state='/unused/state.json', timeout=3, agent_name='smoke',
+                                       sql_host='localhost', sql_port=1433, database='smoke', sql_login_file=None,
+                                       provider='central', upload_limit=0)
+
+    def sleep(self, seconds):
+        self.clock += seconds
+
+    def call(self, method, path, *args, **kwargs):
+        if path.endswith('/agents'):
+            return 200, [{'agentId': 'agent', 'hostName': 'smoke', 'connectivity': 'online'}]
+        if path.endswith('/agents/agent'):
+            caps = [{'identifier': 'backup.multi-destination', 'support': 'Supported'}] if self.clock >= self.ready_at else []
+            return 200, {'capabilities': caps}
+        if path.endswith('/backup-jobs'):
+            self.created_jobs += 1
+            return 201, {'id': 'job'}
+        if path.endswith('/runs'):
+            return 202, {'id': 'run'}
+        if path.endswith('/backup-runs/run'):
+            self.polls += 1
+            return 200, {'status': 'Pending' if self.polls == 1 else 'Succeeded',
+                         'attempts': [{'artifacts': [{'id': 'artifact', 'artifactChecksum': 'sha256', 'sizeBytes': 1}]}]}
+        self.fail('Unexpected fixture request: ' + path)
+
+    def invoke(self):
+        with patch.object(self.fixture, 'tenant_api', return_value=(self.state, self)), \
+             patch.object(self.fixture.shared, 'store_sql_login', return_value='stored-login'), \
+             patch.object(self.fixture.shared, 'write_private'), \
+             patch.object(self.fixture.time, 'monotonic', side_effect=lambda: self.clock), \
+             patch.object(self.fixture.time, 'sleep', side_effect=self.sleep), redirect_stdout(io.StringIO()):
+            self.fixture.backup(self.options)
+
+    def test_current_capability_starts_without_exhausting_timeout(self):
+        self.invoke()
+        self.assertEqual(self.state['artifacts']['central']['id'], 'artifact')
+        self.assertEqual(self.clock, 1)
+
+    def test_capability_timeout_does_not_create_a_job(self):
+        self.ready_at = 10
+        with self.assertRaisesRegex(self.fixture.FixtureFailure, 'capability'):
+            self.invoke()
+        self.assertEqual(self.created_jobs, 0)
+
+    def test_backup_gets_its_own_deadline_after_readiness(self):
+        self.ready_at = 2
+        self.invoke()
+        self.assertEqual(self.state['artifacts']['central']['id'], 'artifact')
+        self.assertEqual(self.polls, 2)
+
+
 class BackendRunners(unittest.TestCase):
     """Exercise real runner routing and fail-closed evidence without building .NET."""
 
@@ -100,7 +204,7 @@ rows = '' if outcome == 'Empty' else f'<UnitTestResult outcome=\"{outcome}\" />'
             'PATH': str(self.bin) + os.pathsep + os.environ['PATH'],
             'BP_CREDENTIAL_FILE': str(self.root / 'absent-credentials'),
             'BP_CONTRACT_CALLS': str(self.log),
-            'BACKUP_PLATFORM_TEST_CONNECTION_STRING': 'Host=contract-not-used',
+            'BACKUP_PLATFORM_TEST_CONNECTION_STRING': '',
             'TMPDIR': str(self.root),
         }
         self.environment.pop('BP_COMMON_LOADED', None)
@@ -275,7 +379,9 @@ if __name__ == '__main__':
     options = parser.parse_args()
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(TestEvidence)
     suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(RuntimeCleanup))
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(DisposableDatabases))
     suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(BackendRunners))
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(DownloadFixture))
     if options.windows:
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(WindowsTransport))
     result = unittest.TextTestRunner(verbosity=2).run(suite)

@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
+using BackupPlatform.Agents;
+using BackupPlatform.Agents.Enrollment;
 using BackupPlatform.Api.Endpoints;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -15,9 +17,9 @@ namespace BackupPlatform.UnitTests.Agents;
 public sealed class AgentDistributionEndpointsTests : IAsyncLifetime
 {
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "bp-dist-tests-" + Guid.NewGuid().ToString("N"));
+    private readonly FakeSettingsStore _settingsStore = new();
     private WebApplication _app = null!;
     private HttpClient _client = null!;
-
     public async Task InitializeAsync()
     {
         Directory.CreateDirectory(_directory);
@@ -29,6 +31,10 @@ public sealed class AgentDistributionEndpointsTests : IAsyncLifetime
             ["AgentDistribution:PackagesDirectory"] = _directory,
             ["AgentDistribution:PublicBaseUrl"] = "https://backup.example/platform/"
         });
+        builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton(new AgentSecurityOptions());
+        builder.Services.AddSingleton<IPlatformAgentSettingsStore>(_settingsStore);
+        builder.Services.AddSingleton<PlatformAgentSettingsService>();
         _app = builder.Build();
         _app.MapAgentDistributionEndpoints();
         await _app.StartAsync();
@@ -121,6 +127,24 @@ public sealed class AgentDistributionEndpointsTests : IAsyncLifetime
         Assert.Equal(JsonValueKind.Null, status.RootElement.GetProperty("serverUrl").ValueKind);
     }
 
+    [Fact]
+    public async Task Stored_server_url_takes_precedence_over_configuration_fallback()
+    {
+        _settingsStore.State = new PlatformAgentSettingsState("https://stored.example", 1440, DateTimeOffset.UtcNow);
+        using var status = JsonDocument.Parse(await _client.GetStringAsync("/api/agent-dist/status"));
+        Assert.Equal("https://stored.example", status.RootElement.GetProperty("serverUrl").GetString());
+    }
+
+    private sealed class FakeSettingsStore : IPlatformAgentSettingsStore
+    {
+        public PlatformAgentSettingsState? State { get; set; }
+        public Task<PlatformAgentSettingsState?> GetAsync(CancellationToken cancellationToken) => Task.FromResult(State);
+        public Task SaveAsync(string? serverUrl, int enrollmentTokenLifetimeMinutes, BackupPlatform.Domain.Identity.UserId actor, DateTimeOffset now, CancellationToken cancellationToken)
+        {
+            State = new PlatformAgentSettingsState(serverUrl, enrollmentTokenLifetimeMinutes, now);
+            return Task.CompletedTask;
+        }
+    }
     [Theory]
     [InlineData("--non-interactive", "Server and enrollment token are required")]
     [InlineData("--non-interactive --server", "Missing option value")]

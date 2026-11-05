@@ -8,20 +8,29 @@ internal sealed class OrchestrationSqlSource : IAsyncDisposable
     private readonly string _connectionString;
     private bool _created;
     public string DatabaseName { get; } = "bp_orchestration_" + Guid.NewGuid().ToString("N");
-    public string Host { get; } = AgentHostSmokeProcess.Required("BACKUP_PLATFORM_TEST_MSSQL_HOST");
-    public int? Port { get; } = Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_PORT") is { Length: > 0 } value
-        ? int.Parse(value, System.Globalization.CultureInfo.InvariantCulture) : null;
+    public string Host { get; }
+    public int Port { get; }
+
+    /// <summary>The administrative login of the server, for the job configuration and the stored database login.</summary>
+    public string User { get; }
+    public string Password { get; }
     private readonly int _rows;
 
     /// <param name="rows">Number of ~8 KB incompressible rows: more rows make the real backup take longer.</param>
     public OrchestrationSqlSource(int rows = 12000)
     {
         _rows = rows;
+        var server = MsSqlServer.ForAgentHost;
+        Host = server.Host;
+        Port = server.Port;
+        User = server.User;
+        Password = server.Password;
+
         var builder = new SqlConnectionStringBuilder
         {
-            DataSource = Port is { } port ? $"tcp:{Host},{port}" : Host,
-            UserID = AgentHostSmokeProcess.Required("BACKUP_PLATFORM_TEST_MSSQL_USER"),
-            Password = AgentHostSmokeProcess.Required("BACKUP_PLATFORM_TEST_MSSQL_PASSWORD"),
+            DataSource = $"tcp:{Host},{Port}",
+            UserID = User,
+            Password = Password,
             InitialCatalog = "master", Encrypt = true, TrustServerCertificate = true, Pooling = false
         };
         _connectionString = builder.ConnectionString;

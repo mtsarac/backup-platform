@@ -7,7 +7,7 @@ import { TechnicalDetails } from '@/components/ui/technical-details'
 import { auditActionLabel } from '@/features/audit/action-labels'
 import { auditDetailItems, auditResultLabel } from '@/features/audit/audit-details'
 import { bareListClass } from '@/features/platform/list-empty'
-import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { useSupportAudit } from './hooks'
 import type { SupportAuditEntry, SupportSession } from './types'
 import { formatDateTime } from '@/lib/format'
@@ -17,7 +17,7 @@ import { errorMessage } from '@/lib/api/failure-messages'
 export function SupportAuditTab({ session }: { session: SupportSession }) {
   useLanguage()
   const { page, update } = useListParams('auditPage')
-  const query = useSupportAudit(session, { page, pageSize: PLATFORM_PAGE_SIZE })
+  const query = useSupportAudit(session, { page, pageSize: LIST_PAGE_SIZE })
   const columns: Column<SupportAuditEntry>[] = [
     { key: 'at', header: tx('Zaman'), render: item => <RelativeTime value={item.at} /> },
     { key: 'action', card: 'title', header: tx('İşlem'), wrap: true, render: item => auditActionLabel(item.action) ?? tx('Bilinmeyen işlem') },

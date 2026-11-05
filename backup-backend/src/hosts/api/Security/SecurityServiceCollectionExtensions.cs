@@ -423,7 +423,9 @@ public static class SecurityServiceCollectionExtensions
     {
         services.TryAddSingleton(new AgentSecurityOptions());
         services.AddScoped<IAgentEnrollmentStore, PostgreSqlAgentEnrollmentStore>();
+        services.AddScoped<IPlatformAgentSettingsStore, PostgreSqlPlatformAgentSettingsStore>();
         services.AddScoped<IAgentRegistryStore, PostgreSqlAgentRegistryStore>();
+        services.AddScoped<PlatformAgentSettingsService>();
         services.AddScoped<EnrollmentAdministrationService>();
         services.AddScoped<AgentEnrollmentService>();
         services.AddScoped<AgentCredentialService>();

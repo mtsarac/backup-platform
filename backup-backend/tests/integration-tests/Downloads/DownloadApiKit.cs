@@ -31,7 +31,7 @@ internal sealed class DownloadApiScenario : IAsyncDisposable
     public string ArtifactPath => Root + $"/backup-artifacts/{Accepted.ArtifactId}";
     public PostgreSqlDownloadStore Store() => new(new DbContextOptionsBuilder<PlatformDbContext>().UseNpgsql(World.Database.ConnectionString).Options);
 
-    public static async Task<DownloadApiScenario> CreateAsync(PostgreSqlFixture fixture, bool agentLocal = false, bool kestrel = false, Action<IServiceCollection>? configureServices = null)
+    public static async Task<DownloadApiScenario> CreateAsync(PostgreSqlFixture fixture, bool agentLocal = false, bool kestrel = false, Action<IServiceCollection>? configureServices = null, IReadOnlyDictionary<string, string?>? configuration = null)
     {
         var backup = await RestoreApiScenario.CreateAsync(fixture);
         var bytes = Enumerable.Range(0, 1024).Select(index => (byte)(index % 251)).ToArray();
@@ -63,7 +63,7 @@ internal sealed class DownloadApiScenario : IAsyncDisposable
         var file = Path.Combine(directory, "tenants", "download-tenant", accepted.Key.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         await File.WriteAllBytesAsync(file, bytes);
-        var world = await AgentWorld.CreateAsync(fixture, clock: backup.Clock, kestrel: kestrel, configureServices: configureServices, configuration: new Dictionary<string, string?>
+        var world = await AgentWorld.CreateAsync(fixture, clock: backup.Clock, kestrel: kestrel, configureServices: configureServices, configuration: new Dictionary<string, string?>(configuration ?? new Dictionary<string, string?>())
         {
             ["Backups:Storage:Central:RootDirectory"] = directory,
             [$"Backups:Storage:Central:TenantScopes:{backup.TenantId}"] = "download-tenant"
@@ -110,8 +110,8 @@ internal sealed class DownloadApiScenario : IAsyncDisposable
         foreach (var r in replicas)
         {
             await context.Database.ExecuteSqlInterpolatedAsync($"""
-                INSERT INTO backup_replicas ("Id", "TenantId", "ArtifactId", "StorageProvider", "StorageTarget", "StorageConnectionId", "Key", "SizeBytes", "Checksum", "ChecksumAlgorithm", "VerificationState", "VerificationMethod", "Status", "ExecutionLocation", "OwningAgentId", "VerifiedAt", "CreatedAt")
-                VALUES ({r.Id}, {r.TenantId.Value}, {r.ArtifactId}, {r.StorageProvider}, {r.StorageTarget}, {r.StorageConnectionId}, {r.Key}, {stored.LongLength}, {checksum}, {r.ChecksumAlgorithm}, {r.VerificationState}, {r.VerificationMethod}, {r.Status.ToString()}, {r.ExecutionLocation.ToString()}, {r.OwningAgentId}, {r.VerifiedAt}, {r.CreatedAt})
+                INSERT INTO backup_replicas ("Id", "TenantId", "ArtifactId", "StorageProvider", "StorageTarget", "StorageConnectionId", "Key", "SizeBytes", "Checksum", "ChecksumAlgorithm", "VerificationState", "VerificationMethod", "Status", "ExecutionLocation", "OwningAgentId", "VerifiedAt", "CreatedAt", "DeleteAttempts")
+                VALUES ({r.Id}, {r.TenantId.Value}, {r.ArtifactId}, {r.StorageProvider}, {r.StorageTarget}, {r.StorageConnectionId}, {r.Key}, {stored.LongLength}, {checksum}, {r.ChecksumAlgorithm}, {r.VerificationState}, {r.VerificationMethod}, {r.Status.ToString()}, {r.ExecutionLocation.ToString()}, {r.OwningAgentId}, {r.VerifiedAt}, {r.CreatedAt}, 0)
                 """);
         }
         await transaction.CommitAsync();

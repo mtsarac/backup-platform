@@ -64,7 +64,8 @@ export type DatabaseAvailability = { kind: 'available' | 'covered' | 'unavailabl
 /** Whether a database can be backed up, and in plain words why not. `covered` means it could be, but a backup job already protects it. */
 export function databaseAvailability(database: DiscoveryDatabase, instance: Pick<DiscoveryInstanceSummary, 'presence' | 'access' | 'host' | 'port'>): DatabaseAvailability {
   if (databaseSelectable(database, instance)) return { kind: 'available', reason: null }
-  if (!canCreateJob(instance)) return { kind: 'unavailable', reason: tx('Bu veritabanı sunucusuna henüz bağlanılamadığı için yedekleme işi oluşturulamıyor.') }
+  // The server-level reason is shown once above the table, never repeated on every row.
+  if (!canCreateJob(instance)) return { kind: 'unavailable', reason: null }
   if (database.isSystem) return { kind: 'unavailable', reason: tx('Sistem veritabanı; yedeklenmez.') }
   if (database.presence !== 'Present') return { kind: 'unavailable', reason: tx('Son aramada bulunamadı.') }
   if (database.state !== 'Online') return { kind: 'unavailable', reason: tx('Veritabanı çevrimiçi değil.') }

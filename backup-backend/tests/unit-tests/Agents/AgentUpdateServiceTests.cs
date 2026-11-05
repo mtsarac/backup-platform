@@ -165,6 +165,24 @@ public sealed class AgentUpdateServiceTests : IDisposable
         await AssertRejectedArchiveAsync(Tar(mode: UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.OtherWrite), "linux-x64");
     }
 
+    [Fact]
+    public async Task Staged_linux_release_keeps_execute_bits_of_shipped_helper_binaries_and_adds_none_elsewhere()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        const UnixFileMode read = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead;
+        const UnixFileMode execute = read | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute;
+        using var bytes = new MemoryStream();
+        using (var gzip = new GZipStream(bytes, CompressionLevel.Fastest, true))
+        using (var archive = new TarWriter(gzip, leaveOpen: true))
+            foreach (var (name, mode) in new[] { ("BackupPlatform.Agent.Host", execute), ("backup-direct-download", execute), ("BackupPlatform.Agent.Core.dll", read) })
+                archive.WriteEntry(new UstarTarEntry(TarEntryType.RegularFile, name) { Mode = mode, DataStream = new MemoryStream("content"u8.ToArray()) });
+        var package = Path.Combine(_root, "package");
+        await File.WriteAllBytesAsync(package, bytes.ToArray());
+        var release = await _updates.StageAsync(package, Path.Combine(_root, "releases"), Sign(bytes.ToArray(), "linux-x64"), "linux-x64", Keys, default);
+        Assert.True(File.GetUnixFileMode(Path.Combine(release, "backup-direct-download")).HasFlag(UnixFileMode.UserExecute), "the WebRTC download helper must stay executable");
+        Assert.False(File.GetUnixFileMode(Path.Combine(release, "BackupPlatform.Agent.Core.dll")).HasFlag(UnixFileMode.UserExecute));
+    }
+
     private async Task AssertRejectedArchiveAsync(byte[] bytes, string platform)
     {
         var package = Path.Combine(_root, "package");

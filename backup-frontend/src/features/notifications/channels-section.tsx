@@ -4,7 +4,8 @@ import { BellOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
-import { Section } from '@/components/ui/section'
+import { Section, Fact, Facts } from '@/components/ui/section'
+import { Card } from '@/components/ui/card'
 import { QueryState } from '@/components/data/query-state'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useAuth } from '@/features/auth/use-auth'
@@ -37,14 +38,14 @@ function ChannelCard({ channel }: { channel: NotificationChannel }) {
   const last = channel.lastDelivery
   const unconfirmed = channel.kind === 'email' && channel.recipientVerified === false
 
-  return <li><article aria-label={channel.name} className="space-y-3 rounded-xl border border-border p-4">
+  return <li><Card as="article" aria-label={channel.name} className="space-y-3">
     <div className="flex flex-wrap items-start justify-between gap-2">
       <div className="min-w-0"><h3 className="break-words font-medium text-text-heading">{channel.name}</h3><p className="break-all text-sm text-text-muted">{kindLabels[channel.kind]} · {channel.targetDisplay}</p></div>
       <div className="flex flex-wrap gap-1"><StatusPill status={channel.enabled ? 'Active' : 'Disabled'} />{channel.kind === 'email' && <StatusPill level={channel.recipientVerified ? 'safe' : 'attention'}>{channel.recipientVerified ? tx('Adres onaylandı') : tx('Adres onayı bekleniyor')}</StatusPill>}</div>
     </div>
-    <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-      <div><dt className="text-text-muted">{tx("Son gönderim")}</dt><dd>{last ? <span className="flex flex-wrap items-center gap-2"><StatusPill domain="delivery" status={last.status} /><time dateTime={last.at} title={formatDateTime(last.at)}>{formatRelativeTime(last.at)}</time></span> : tx('Henüz gönderim yok')}</dd></div>
-    </dl>
+    <Facts>
+      <Fact label={tx("Son gönderim")}>{last ? <span className="flex flex-wrap items-center gap-2"><StatusPill domain="delivery" status={last.status} /><time dateTime={last.at} title={formatDateTime(last.at)}>{formatRelativeTime(last.at)}</time></span> : tx('Henüz gönderim yok')}</Fact>
+    </Facts>
     <div className="flex flex-wrap gap-2">
       <Button variant="outline" aria-label={label(tx('düzenle'))} onClick={() => { setDialog('edit') }}>{tx("Düzenle")}</Button>
       <Button variant="outline" aria-label={label(unconfirmed ? tx('onay isteğini yeniden gönder') : tx('test gönder'))} disabled={test.isPending} onClick={() => test.mutate(channel.id)}>{test.isPending ? tx('Gönderiliyor…') : unconfirmed ? tx('Onay isteğini yeniden gönder') : tx('Test gönder')}</Button>
@@ -53,7 +54,6 @@ function ChannelCard({ channel }: { channel: NotificationChannel }) {
       { label: tx('Kanal kimliği'), value: channel.id },
       { label: tx('Oluşturma'), value: formatDateTime(channel.createdAt) },
       { label: tx('Son güncelleme'), value: formatDateTime(channel.updatedAt) },
-      ...(last ? [{ label: tx('Son gönderim'), value: formatDateTime(last.at) }] : []),
       ...(last?.errorCode ? [{ label: tx('Hata kodu'), value: last.errorCode }] : []),
       ...(channel.secretUpdatedAt ? [{ label: tx('Gizli anahtar güncelleme zamanı'), value: formatDateTime(channel.secretUpdatedAt) }] : []),
       ...(channel.kind === 'webhook' ? [{ label: tx('Kimlik doğrulama'), value: authenticationLabels[channel.authentication] }] : []),
@@ -99,7 +99,7 @@ function ChannelCard({ channel }: { channel: NotificationChannel }) {
       confirmLabel={boundToMe ? tx('Kaldır') : tx('Kaydet')} pending={securityRecipient.isPending}
       error={securityRecipient.error}
       onConfirm={() => securityRecipient.mutate({ id: channel.id, enabled: !boundToMe }, { onSuccess: close })} />
-  </article></li>
+  </Card></li>
 }
 
 export function ChannelsSection() {

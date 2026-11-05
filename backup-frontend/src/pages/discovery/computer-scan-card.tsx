@@ -1,11 +1,14 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { CheckField } from '@/components/ui/check-field'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Loader2, RefreshCw } from 'lucide-react'
 import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
-import { inputClass } from '@/components/ui/form-styles'
+import { linkClass } from '@/components/ui/form-styles'
+import { TextInput } from '@/components/ui/text-input'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { TechnicalDetails, type TechnicalItem } from '@/components/ui/technical-details'
@@ -29,11 +32,11 @@ function SettingsForm({ status }: { status: DiscoveryAgentStatus }) {
   const invalid = !Number.isInteger(minutes) || minutes < 15 || minutes > 10080
   const fieldError = save.error instanceof ApiError ? Object.values(save.error.fields).map(code => failureMessage(code))[0] : undefined
   return <form className="space-y-3" aria-label={tx("Tarama ayarları")} onSubmit={event => { event.preventDefault(); if (!invalid) save.mutate({ enabled, scanIntervalMinutes: minutes, includeDocker }) }}>
-    <label className="flex min-h-11 items-center gap-3 text-[0.9375rem] text-text"><input type="checkbox" className="size-5 accent-primary" checked={enabled} onChange={event => setEnabled(event.target.checked)} />{tx("Otomatik tarama açık")}</label>
+    <CheckField label={tx("Otomatik tarama açık")} checked={enabled} onChange={event => setEnabled(event.target.checked)} />
     <Field id={`interval-${status.agentId}`} label={tx("Tarama aralığı (dakika)")} hint={tx("15 ile 10080 arasında.")} error={invalid ? tx('Aralık 15 ile 10080 dakika arasında bir tam sayı olmalı.') : fieldError}>
-      {control => <input {...control} type="number" className={inputClass} value={interval} onChange={event => setInterval(event.target.value)} />}
+      {control => <TextInput {...control} type="number"  value={interval} onChange={event => setInterval(event.target.value)} />}
     </Field>
-    <label className="flex min-h-11 items-center gap-3 text-[0.9375rem] text-text"><input type="checkbox" className="size-5 accent-primary" checked={includeDocker} onChange={event => setIncludeDocker(event.target.checked)} />{tx("Docker container'larını da tara")}</label>
+    <CheckField label={tx("Docker container'larını da tara")} checked={includeDocker} onChange={event => setIncludeDocker(event.target.checked)} />
     {save.error && !fieldError && <ErrorNotice error={save.error} />}
     {save.isSuccess && <Notice tone="success">{tx("Tarama ayarları kaydedildi.")}</Notice>}
     <Button type="submit" disabled={invalid || save.isPending}>{save.isPending ? tx('Kaydediliyor…') : tx('Kaydet')}</Button>
@@ -58,11 +61,13 @@ function ScanSummary({ supported, status }: { supported: boolean; status: Discov
 
 export function ComputerScanCard({ agent, status }: { agent: Agent; status: DiscoveryAgentStatus | undefined }) {
   useLanguage()
-  const { canOperate, canAdmin } = useTenant()
+  const { tenantId, canOperate, canAdmin } = useTenant()
   const rescan = useRescanAgent()
   const name = agent.hostName || tx('Adsız bilgisayar')
   const supported = supportsDiscovery(agent.capabilities)
   const busy = status ? status.scanState !== 'Idle' : false
+  // The editable interval field owns the value for administrators; everyone else reads it here.
+  const editable = supported && Boolean(status) && canAdmin
   const items: TechnicalItem[] = status ? [
     { label: tx("Bilgisayar kimliği"), value: agent.agentId },
     { label: tx("Tarama durumu (ham)"), value: status.scanState },
@@ -72,15 +77,16 @@ export function ComputerScanCard({ agent, status }: { agent: Agent; status: Disc
     { label: tx("Son tarama"), value: formatDateTime(status.lastScanAt, tx('Henüz bildirilmedi')) },
     { label: tx("Son başarılı tarama"), value: formatDateTime(status.lastSuccessfulScanAt, tx('Henüz bildirilmedi')) },
     { label: tx("Sonraki tarama"), value: formatDateTime(status.nextScanDueAt, tx('Planlanmamış')) },
-    { label: tx("Tarama aralığı (dakika)"), value: String(status.scanIntervalMinutes) },
+    ...(editable ? [] : [{ label: tx("Tarama aralığı (dakika)"), value: String(status.scanIntervalMinutes) }]),
     { label: tx("Bulunan veritabanı sunucusu"), value: String(status.instanceCount) },
     ...status.sources.map(source => ({ label: tx("Kaynak: {0}", { "0": sourceLabels[source.source] ?? source.source }), value: [source.status, reasonText(source.reasonCode), source.source === 'Docker' && source.status === 'Unavailable' ? tx("container'lar listelenmedi; Docker yok demek değildir") : null].filter(Boolean).join(' · ') })),
   ] : [{ label: tx("Bilgisayar kimliği"), value: agent.agentId }]
-  return <Section title={name} actions={canOperate && <Button aria-label={tx("{0} yeniden tara", { "0": name })} disabled={!supported || busy || rescan.isPending} onClick={() => rescan.mutate(agent.agentId)}>
+  return <Section title={<Link className={linkClass} to={`/tenants/${tenantId}/agents/${encodeURIComponent(agent.agentId)}`}>{name}</Link>} actions={canOperate && <Button aria-label={tx("{0} yeniden tara", { "0": name })} disabled={!supported || busy || rescan.isPending} onClick={() => rescan.mutate(agent.agentId)}>
     {busy || rescan.isPending ? <Loader2 aria-hidden="true" className="animate-spin" /> : <RefreshCw aria-hidden="true" />}{tx("Yeniden tara")}</Button>}>
     <div className="space-y-3">
       <ScanSummary supported={supported} status={status} />
       {supported && status && !status.enabled && <p className="text-sm text-warning">{tx("Otomatik tarama kapalı; liste yalnızca elle tarama yapıldığında güncellenir.")}</p>}
+      {supported && agent.connectivity === 'offline' && <p className="text-sm text-warning">{tx("Bu bilgisayar şu anda çevrimdışı; tarama bilgisayar yeniden bağlandığında çalışır.")}</p>}
       {rescan.error && <ErrorNotice error={rescan.error} />}
       <TechnicalDetails items={items}>{supported && status && canAdmin && <SettingsForm status={status} />}</TechnicalDetails>
     </div>

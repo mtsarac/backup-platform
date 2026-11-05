@@ -78,15 +78,26 @@ public sealed class QuotaAccountingTests
 
     [Theory]
     [InlineData(BackupReplicaStatus.Available)]
-    [InlineData(BackupReplicaStatus.DeletePending)]
     [InlineData(BackupReplicaStatus.Deleting)]
     [InlineData(BackupReplicaStatus.DeleteFailed)]
-    public void EveryStatusExceptDeletedStillOccupiesStorage(BackupReplicaStatus status)
+    public void EveryStatusExceptDeletedAndSoftDeletedStillOccupiesStorage(BackupReplicaStatus status)
     {
         var replica = Replica(Guid.NewGuid(), status: status);
         Assert.Equal(2 * Gb, Total(QuotaAccountingMode.LogicalArtifactBytes, QuotaScopeRule.All, replica));
         Assert.Equal(2 * Gb, Total(QuotaAccountingMode.PhysicalReplicaBytes, QuotaScopeRule.All, replica));
     }
+
+    [Theory]
+    [InlineData(QuotaAccountingMode.LogicalArtifactBytes)]
+    [InlineData(QuotaAccountingMode.PhysicalReplicaBytes)]
+    public void ASoftDeletedReplicaCountsNothingSoDeletingReleasesQuotaAtOnce(QuotaAccountingMode mode) =>
+        Assert.Equal(0, Total(mode, QuotaScopeRule.All, Replica(Guid.NewGuid(), status: BackupReplicaStatus.DeletePending)));
+
+    [Theory]
+    [InlineData(QuotaAccountingMode.LogicalArtifactBytes)]
+    [InlineData(QuotaAccountingMode.PhysicalReplicaBytes)]
+    public void AnUnverifiedOrphanAwaitingCleanupStillCounts(QuotaAccountingMode mode) =>
+        Assert.Equal(2 * Gb, Total(mode, QuotaScopeRule.All, Replica(Guid.NewGuid(), status: BackupReplicaStatus.DeletePending) with { Verified = false }));
 
     [Theory]
     [InlineData(QuotaAccountingMode.LogicalArtifactBytes)]
@@ -98,7 +109,7 @@ public sealed class QuotaAccountingTests
     public void AnArtifactStaysCountedWhileAnyCopyOccupiesStorageAndDropsOnlyWhenTheLastIsDeleted()
     {
         var artifact = Guid.NewGuid();
-        var oneGone = new[] { Replica(artifact, "central", BackupReplicaStatus.Deleted), Replica(artifact, "sftp", BackupReplicaStatus.DeletePending) };
+        var oneGone = new[] { Replica(artifact, "central", BackupReplicaStatus.Deleted), Replica(artifact, "sftp", BackupReplicaStatus.Deleting) };
         Assert.Equal(2 * Gb, Total(QuotaAccountingMode.LogicalArtifactBytes, QuotaScopeRule.All, oneGone));
         Assert.Equal(2 * Gb, Total(QuotaAccountingMode.PhysicalReplicaBytes, QuotaScopeRule.All, oneGone));
 

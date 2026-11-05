@@ -1,11 +1,16 @@
+import { isFeatureEnabled } from '@/features/feature-flags/feature-flags'
 import type { PagedResult } from '@/features/platform/types'
 
 export const eventTypes = ['backup_failed', 'backup_stale', 'agent_offline', 'quota_critical', 'replica_degraded', 'storage_capacity_critical', 'backup_size_anomaly'] as const
 export const severities = ['info', 'warning', 'critical'] as const
 export const channelKinds = ['email', 'webhook', 'sms'] as const
+/** The kinds the UI offers: SMS only while its feature flag is on. */
+export const visibleChannelKinds = () => channelKinds.filter((kind) => kind !== 'sms' || isFeatureEnabled('sms'))
 export const webhookAuthentications = ['none', 'bearer', 'hmac'] as const
 export const deliveryStatuses = ['pending', 'in_progress', 'sent', 'failed', 'suppressed', 'cancelled'] as const
 
+/** The event types the UI offers: size anomalies only while their feature flag is on. */
+export const visibleEventTypes = () => eventTypes.filter((type) => type !== 'backup_size_anomaly' || isFeatureEnabled('sizeAnomaly'))
 export type EventType = (typeof eventTypes)[number]
 export type Severity = (typeof severities)[number]
 export type ChannelKind = (typeof channelKinds)[number]

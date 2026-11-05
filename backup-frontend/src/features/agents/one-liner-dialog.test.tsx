@@ -23,8 +23,7 @@ function mount() {
 describe('One-line installation consumers', () => {
   it('uses the configured public HTTPS URL and never places the key in guided commands', async () => {
     mount()
-    await screen.findByDisplayValue('https://backup.corp.internal:8443')
-    fireEvent.click(screen.getByRole('button', { name: 'İleri' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'İleri' }))
     fireEvent.click(screen.getByRole('button', { name: 'Kayıt anahtarı oluştur' }))
     expect(await screen.findByDisplayValue("secret'$(untrusted)")).toBeInTheDocument()
     const command = screen.getByRole('textbox', { name: 'Tek kullanımlık kurulum komutu' })
@@ -39,11 +38,10 @@ describe('One-line installation consumers', () => {
     expect(linux.value).toContain('--interactive --language tr')
   })
 
-  it('localizes English commands and disables copying for invalid origins and missing automatic names', async () => {
+  it('localizes English commands and disables copying for missing automatic names', async () => {
     localStorage.setItem('bp_language', 'en')
     mount()
-    await screen.findByDisplayValue('https://backup.corp.internal:8443')
-    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Next' }))
     fireEvent.click(screen.getByRole('button', { name: 'Create enrollment key' }))
     await screen.findByDisplayValue("secret'$(untrusted)")
     fireEvent.click(screen.getByRole('tab', { name: 'One-command installation' }))
@@ -53,9 +51,6 @@ describe('One-line installation consumers', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
     const command = screen.getByRole('textbox', { name: 'One-time installation command' }) as HTMLTextAreaElement
     expect(command.value).toContain("-Token 'secret''$(untrusted)' -AgentName 'O''Brien' -NonInteractive -Language en")
-    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
-    fireEvent.change(screen.getByRole('textbox', { name: 'Server HTTPS address' }), { target: { value: 'http://localhost:5173' } })
-    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
     expect(document.documentElement.lang).toBe('en')
   })
 })

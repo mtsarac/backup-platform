@@ -5,6 +5,7 @@ using Xunit;
 
 namespace BackupPlatform.UnitTests.Storage;
 
+[Trait("Category", "Frozen")]
 public sealed class SmbStorageProviderTests
 {
     [Theory]

@@ -1,6 +1,8 @@
 import { tx } from '@/lib/i18n'
+import { Select } from '@/components/ui/text-input'
+import { CheckField } from '@/components/ui/check-field'
 import { Field } from '@/components/ui/field'
-import { inputClass, selectClass } from '@/components/ui/form-styles'
+import { TextInput } from '@/components/ui/text-input'
 
 export type FieldErrors = Record<string, string>
 
@@ -10,12 +12,12 @@ export function fieldKit(errors: FieldErrors) {
   return {
     withErrors: (...names: string[]) => names.some(item => errors[item]),
     text: (name: string, label: string, value: string, onChange: (value: string) => void, disabled = false) =>
-      <Field id={name} label={label} error={error(name)}>{control => <input {...control} className={inputClass} value={value} disabled={disabled} onChange={event => onChange(event.target.value)} />}</Field>,
+      <Field id={name} label={label} error={error(name)}>{control => <TextInput {...control} value={value} disabled={disabled} onChange={event => onChange(event.target.value)} />}</Field>,
     number: (name: string, label: string, value: number | null, onChange: (value: number | null) => void, disabled = false) =>
-      <Field id={name} label={label} error={error(name)}>{control => <input {...control} type="number" step="any" className={inputClass} value={value ?? ''} disabled={disabled} onChange={event => onChange(event.target.value === '' ? null : Number(event.target.value))} />}</Field>,
+      <Field id={name} label={label} error={error(name)}>{control => <TextInput {...control} type="number" step="any" value={value ?? ''} disabled={disabled} onChange={event => onChange(event.target.value === '' ? null : Number(event.target.value))} />}</Field>,
     check: (label: string, value: boolean, onChange: (value: boolean) => void, disabled = false) =>
-      <label className="flex min-h-11 items-center gap-3 text-[0.9375rem] text-text"><input type="checkbox" className="size-5 shrink-0 accent-primary" checked={value} disabled={disabled} onChange={event => onChange(event.target.checked)} />{tx(label)}</label>,
+      <CheckField label={tx(label)} checked={value} disabled={disabled} onChange={event => onChange(event.target.checked)} />,
     select: (name: string, label: string, value: string, options: readonly (readonly [string, string])[], onChange: (value: string) => void) =>
-      <Field id={name} label={label} error={error(name)}>{control => <select {...control} className={`${selectClass} w-full min-w-0`} value={value} onChange={event => onChange(event.target.value)}>{options.map(([key, text]) => <option key={key} value={key}>{text}</option>)}</select>}</Field>,
+      <Field id={name} label={label} error={error(name)}>{control => <Select {...control} value={value} onChange={event => onChange(event.target.value)}>{options.map(([key, text]) => <option key={key} value={key}>{text}</option>)}</Select>}</Field>,
   }
 }

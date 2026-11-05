@@ -6,13 +6,11 @@ import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { describeStartFailure, restoreModeLabel } from './presentation'
-import type { BackupArtifact } from '@/features/artifacts/types'
 import type { RestoreMode, RestoreTarget, RestoreTargetAgent } from './types'
 import { ApiError } from '@/lib/api/client'
 
 interface RestoreConfirmStepProps {
   isPg: boolean
-  artifact: BackupArtifact
   mode: RestoreMode
   targetDatabaseName: string
   activeAgent: RestoreTargetAgent | undefined
@@ -28,7 +26,7 @@ interface RestoreConfirmStepProps {
   onStart: () => void
 }
 
-export function RestoreConfirmStep({ isPg, artifact, mode, targetDatabaseName, activeAgent, selectedAgentId, effectiveTarget, precheckPassed, precheckStarting, restoreStarting, executionError, executionRetryable, eligibleForRestore, onBack, onStart }: RestoreConfirmStepProps) {
+export function RestoreConfirmStep({ isPg, mode, targetDatabaseName, activeAgent, selectedAgentId, effectiveTarget, precheckPassed, precheckStarting, restoreStarting, executionError, executionRetryable, eligibleForRestore, onBack, onStart }: RestoreConfirmStepProps) {
   useLanguage()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const replacing = mode === 'ReplaceExistingDatabase'
@@ -46,7 +44,7 @@ export function RestoreConfirmStep({ isPg, artifact, mode, targetDatabaseName, a
       <Section title={tx("Onay")} description={tx("Bilgileri kontrol edin. Onayınızdan sonra seçtiğiniz yedekleme bilgisayarı geri yüklemeyi başlatır.")}>
         <div className="space-y-4">
           <Facts>
-            <Fact label={tx("Yedeklenen veritabanı")}>{artifact.databaseName ?? tx('Bilinmeyen veritabanı')}</Fact>
+            <Fact label={tx("Hedef sunucu")}>{effectiveTarget.host}{effectiveTarget.port ? `:${effectiveTarget.port}` : ''}</Fact>
             <Fact label={tx("Geri yüklenecek veritabanı")}>{databaseName}</Fact>
             <Fact label={tx("Yedekleme bilgisayarı")}>{activeAgent?.hostName ?? selectedAgentId}</Fact>
             <Fact label={tx("Yöntem")}>{restoreModeLabel(mode)}</Fact>
@@ -58,11 +56,7 @@ export function RestoreConfirmStep({ isPg, artifact, mode, targetDatabaseName, a
               : tx('Seçtiğiniz veritabanındaki güncel veriler kalıcı olarak kaybolur. İşlem geri alınamaz; iptal etmek eski içeriği geri getirmez.')}</p>
             <p className="mt-1">{tx("Başlatmadan önce veritabanı adını yazarak onaylamanız istenecek.")}</p>
           </Notice>}
-          <TechnicalDetails items={[
-            { label: tx('Hedef sunucu'), value: `${effectiveTarget.host}${effectiveTarget.port ? `:${effectiveTarget.port}` : ''}` },
-            { label: tx('Yedekleme bilgisayarı kimliği'), value: selectedAgentId },
-            { label: tx('Yedek dosyası kimliği'), value: artifact.id },
-          ]} />
+          <TechnicalDetails items={[{ label: tx('Yedekleme bilgisayarı kimliği'), value: selectedAgentId }]} />
         </div>
       </Section>
       {failure && !confirmOpen && (failure instanceof ApiError ? <ErrorNotice error={failure} scope="restore" /> : <ErrorNotice {...failure} />)}

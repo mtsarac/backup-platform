@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { LocationProbe } from '@/features/platform/location-probe'
 import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ArtifactsPage } from '@/pages/artifacts/artifacts-page'
@@ -42,12 +43,12 @@ function artifact(overrides: Partial<BackupArtifact> = {}): BackupArtifact {
 function pending(overrides: Partial<BackupReplica> = {}) {
   return artifact({ state: 'DeletePending', deleteAfter: '2099-10-06T10:00:00Z', replicas: [{ ...replica, status: 'DeletePending', deleteAfter: '2099-10-06T10:00:00Z', ...overrides }] })
 }
-function mount(page: 'list' | 'detail' = 'detail') {
+function mount(page: 'list' | 'detail' = 'detail', search = '') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-  render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[page === 'list' ? '/tenants/tenant-a/artifacts' : '/tenants/tenant-a/artifacts/artifact-a']}><Routes>
+  render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[page === 'list' ? `/tenants/tenant-a/artifacts${search}` : '/tenants/tenant-a/artifacts/artifact-a']}><Routes>
     <Route path="/tenants/:tenantId/artifacts" element={<ArtifactsPage />} />
     <Route path="/tenants/:tenantId/artifacts/:id" element={<ArtifactDetailPage />} />
-  </Routes></MemoryRouter></QueryClientProvider>)
+  </Routes><LocationProbe /></MemoryRouter></QueryClientProvider>)
   return client
 }
 const request = vi.mocked(apiRequest)
@@ -114,6 +115,8 @@ describe('Backup dosyaları', () => {
     expect(request).toHaveBeenCalledWith('tenants/tenant-a/backup-artifacts/artifact-a', { method: 'DELETE' })
     expect(screen.getByText(/Fiziksel silmeye kalan süre/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Silmeyi iptal et' })).toBeEnabled()
+    expect(screen.queryByText('Ne zaman silinecek?')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Veritabanını geri yükle' })).not.toBeInTheDocument()
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant', 'tenant-a', 'backup-artifacts'] })
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant', 'tenant-a', 'dashboard'] })
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tenant', 'tenant-a', 'backup-runs'] })
@@ -130,6 +133,8 @@ describe('Backup dosyaları', () => {
     await screen.findByText("Silme iptal edildi. Yedekleme dosyaları korunuyor.")
     expect(request).toHaveBeenCalledWith('tenants/tenant-a/backup-artifacts/artifact-a/cancel-delete', { method: 'POST' })
     expect(screen.queryByRole('button', { name: 'Silmeyi iptal et' })).not.toBeInTheDocument()
+    expect(screen.getByText('Ne zaman silinecek?')).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Veritabanını geri yükle' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/artifact-a/restore')
   })
 
   it('Agent bekleyişini açıkça gösterir ve henüz başlanmamış silmeyi iptal edilebilir tutar', async () => {
@@ -178,7 +183,7 @@ describe('Backup dosyaları', () => {
     for (const question of ['Geri yüklenebilir mi?', 'Ne zaman silinecek?']) expect(screen.getByText(question)).toBeVisible()
     expect(screen.getByText('Sağlam')).toBeVisible()
     expect(screen.getByText('Geri yüklenebilir')).toBeVisible()
-    expect(screen.getByRole('link', { name: 'Geri yükle' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/artifact-a/restore')
+    expect(screen.getByRole('link', { name: 'Veritabanını geri yükle' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/artifact-a/restore')
     // The checksums, replicas and metadata wait behind the collapsed details.
     for (const checksum of screen.getAllByText('abc123')) expect(checksum).not.toBeVisible()
     expect(screen.getByText('Teknik ayrıntılar', { selector: 'summary' }).closest('details')).not.toHaveAttribute('open')
@@ -187,18 +192,25 @@ describe('Backup dosyaları', () => {
     expect(screen.getByRole('button', { name: 'Kopyala: Yedek dosyası sağlama toplamı' })).toBeVisible()
   })
 
+  it('names the restore action after what is restored: a database or files', async () => {
+    request.mockResolvedValue(artifact({ backupMetadata: { engine: 'file-system' } as never }))
+    mount()
+    expect(await screen.findByRole('link', { name: 'Dosyaları geri yükle' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/artifact-a/restore')
+    expect(screen.queryByRole('link', { name: 'Veritabanını geri yükle' })).not.toBeInTheDocument()
+  })
+
   it('doğrulanmış kopya yoksa sağlam demez; silinmiş dosya geri yüklenemez', async () => {
     request.mockResolvedValue(artifact({ replicas: [{ ...replica, verificationState: 'Pending' }] }))
     mount()
     await screen.findByText('Dosya sağlam mı?')
     expect(screen.queryByText('Sağlam')).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'Geri yükle' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Veritabanını geri yükle' })).not.toBeInTheDocument()
     cleanup()
     request.mockResolvedValue(artifact({ state: 'Deleted', replicas: [{ ...replica, status: 'Deleted', usable: false, deletedAt: '2026-10-06T10:00:00Z' }] }))
     mount()
-    await screen.findByText('Dosya sağlam mı?')
-    expect(screen.getByText('Geri yüklenemez')).toBeVisible()
-    expect(screen.queryByRole('link', { name: 'Geri yükle' })).not.toBeInTheDocument()
+    await screen.findByText(/Bu kayıt yalnızca yedekleme geçmişidir/)
+    expect(screen.queryByText('Kısaca durum')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Veritabanını geri yükle' })).not.toBeInTheDocument()
   })
 
   it('geri yükleme yetkisi olmayana Yöneticinize danışın der', async () => {
@@ -206,7 +218,7 @@ describe('Backup dosyaları', () => {
     request.mockResolvedValue(artifact())
     mount()
     await screen.findByText('Dosya sağlam mı?')
-    expect(screen.queryByRole('link', { name: 'Geri yükle' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Veritabanını geri yükle' })).not.toBeInTheDocument()
     expect(screen.getByText(/Yöneticinize danışın/)).toBeVisible()
   })
 
@@ -227,7 +239,8 @@ describe('Backup dosyaları', () => {
     mount('list')
     await screen.findByRole('link', { name: 'Accounting' })
     expect(screen.getByRole('link', { name: 'History' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/artifact-b')
-    expect(screen.getAllByRole('link', { name: 'Günlük SQL' })[0]).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs')
+    expect(screen.getAllByRole('link', { name: 'Günlük SQL' })[0]).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-internal/edit')
+    expect(screen.getAllByRole('link', { name: 'Bu yedeğin geri yüklemeleri' })[0]).toHaveAttribute('href', '/tenants/tenant-a/restores?artifactId=artifact-a')
     expect(screen.getAllByRole('link', { name: 'Çalıştırmayı aç' })[0]).toHaveAttribute('href', '/tenants/tenant-a/backup-runs/run-internal')
     fireEvent.change(screen.getByRole('combobox', { name: 'Durum' }), { target: { value: 'DeleteFailed' } })
     await waitFor(() => expect(request).toHaveBeenCalledWith(expect.stringContaining('state=DeleteFailed'), expect.objectContaining({ signal: expect.any(AbortSignal) })))
@@ -274,5 +287,26 @@ describe('Backup dosyaları', () => {
     await waitFor(() => expect(request).toHaveBeenCalledWith(expect.stringContaining('page=2&'), expect.objectContaining({ signal: expect.any(AbortSignal) })))
     fireEvent.change(screen.getByRole('combobox', { name: 'Durum' }), { target: { value: 'Available' } })
     await waitFor(() => expect(request).toHaveBeenCalledWith(expect.stringContaining('page=1&pageSize=25&state=Available'), expect.objectContaining({ signal: expect.any(AbortSignal) })))
+  })
+
+  it('a dashboard link with state=DeleteFailed lists only failed deletions and shows the filter', async () => {
+    request.mockResolvedValue({ items: [artifact()], totalCount: 1, page: 1, pageSize: 25 })
+    mount('list', '?state=DeleteFailed')
+    await screen.findByRole('link', { name: 'Accounting' })
+    expect(request).toHaveBeenCalledWith(expect.stringContaining('state=DeleteFailed'), expect.anything())
+    expect(screen.getByRole('combobox', { name: 'Durum' })).toHaveValue('DeleteFailed')
+    expect(screen.getAllByRole('button', { name: 'Filtreleri temizle' })).toHaveLength(1)
+  })
+
+  it('keeps state, dates and page in the URL; an unknown state is ignored', async () => {
+    request.mockResolvedValue({ items: [artifact()], totalCount: 51, page: 2, pageSize: 25 })
+    mount('list', '?state=Nonsense&page=2&from=2026-10-01')
+    await screen.findByRole('link', { name: 'Accounting' })
+    expect(request).toHaveBeenCalledWith(expect.stringMatching(/page=2&pageSize=25&from=/), expect.anything())
+    expect(request).not.toHaveBeenCalledWith(expect.stringContaining('state='), expect.anything())
+    fireEvent.change(screen.getByRole('combobox', { name: 'Durum' }), { target: { value: 'Available' } })
+    expect(screen.getByTestId('location')).toHaveTextContent('/tenants/tenant-a/artifacts?state=Available&from=2026-10-01')
+    fireEvent.click(screen.getByRole('button', { name: 'Filtreleri temizle' }))
+    expect(screen.getByTestId('location')).toHaveTextContent(/artifacts$/)
   })
 })

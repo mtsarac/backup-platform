@@ -27,6 +27,8 @@ export interface TenantEncryption {
 
 export type BreakGlassStatus = 'Pending' | 'Approved' | 'Denied' | 'Consumed' | 'Expired'
 export const breakGlassStatuses: readonly BreakGlassStatus[] = ['Pending', 'Approved', 'Denied', 'Consumed', 'Expired']
+/** What the request dialog may pick: an encrypted, available backup named by database and job only. */
+export interface BreakGlassArtifact { id: string; databaseName: string | null; jobName: string | null; createdAt: string }
 export interface BreakGlassRequest {
   id: string; tenantId: string; tenantName: string | null; artifactId: string
   status: BreakGlassStatus

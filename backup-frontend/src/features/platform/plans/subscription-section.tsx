@@ -4,7 +4,6 @@ import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
-import { linkClass } from '@/components/ui/form-styles'
 import { Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
@@ -12,13 +11,14 @@ import { formatDateTime } from '@/lib/format'
 import { AssignPlanDialog } from './assign-plan-dialog'
 import { useResumeSubscription, useSuspendSubscription, useTenantSubscription } from './hooks'
 import { OverrideDialog } from './override-dialog'
-import { formatBytes, formatGb } from './storage'
+import { formatExactBytes } from './storage'
 import { subscriptionActions, type SubscriptionAction } from './subscription-actions'
 import { SubscriptionHistory } from './subscription-history'
 import { assignedByLabel, overrideLabel, sourceLabel } from './subscription-labels'
 import type { Subscription } from './types'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
+import { platformOnlyMessage } from '@/lib/api/failure-messages'
+import { Disclosure } from '@/components/ui/disclosure'
 
 const actionLabels: Record<SubscriptionAction, () => string> = {
   assign: () => tx('Plan ata'),
@@ -34,14 +34,14 @@ function Current({ subscription }: { subscription: Subscription }) {
   const unknown = tx('Henüz bildirilmedi')
   return <div className="space-y-4">
     <Facts columns={3}>
-      <Fact label="Plan"><span className="font-medium">{subscription.planName}</span></Fact>
+      <Fact label={tx("Plan")}><span className="font-medium">{subscription.planName}</span></Fact>
       <Fact label={tx("Durum")}><StatusPill domain="subscription" status={subscription.status} /></Fact>
-      <Fact label={tx("Etkin depolama limiti")}><span className="font-medium">{formatGb(effective.unlimited ? null : effective.bytes)}</span><div className="text-xs text-text-muted">{tx("Kaynak:")}{' '}{sourceLabel(effective.source)}</div></Fact>
+      <Fact label={tx("Limit kaynağı")}>{sourceLabel(effective.source)}</Fact>
     </Facts>
     {subscription.status === 'Expired' && <Notice tone="warning">{tx("Abonelik süresi doldu. Yeni bir plan atayabilirsiniz.")}</Notice>}
     <TechnicalDetails items={[
-      ...(!effective.unlimited && effective.bytes !== null ? [{ label: tx("Etkin depolama limiti (bayt)"), value: formatBytes(effective.bytes) }] : []),
-      ...(subscription.planStorageLimitBytes !== null ? [{ label: tx("Plan limiti (bayt)"), value: formatBytes(subscription.planStorageLimitBytes) }] : []),
+      ...(!effective.unlimited && effective.bytes !== null ? [{ label: tx("Etkin depolama limiti (bayt)"), value: formatExactBytes(effective.bytes) }] : []),
+      ...(subscription.planStorageLimitBytes !== null ? [{ label: tx("Plan limiti (bayt)"), value: formatExactBytes(subscription.planStorageLimitBytes) }] : []),
       { label: tx("Override"), value: overrideLabel(subscription.storageLimitOverride) },
       { label: tx("Başlangıç"), value: formatDateTime(subscription.startsAt, unknown) },
       { label: tx("Bitiş"), value: subscription.endsAt ? formatDateTime(subscription.endsAt, unknown) : tx('Süresiz') },
@@ -73,10 +73,7 @@ export function SubscriptionSection({ tenantId, tenantName }: { tenantId: string
         {query.data && (subscription
           ? <div className="space-y-4">
             <Current subscription={subscription} />
-            {others.length > 0 && <details>
-              <summary className={`${linkClass} inline-flex min-h-11 cursor-pointer select-none items-center text-sm`}>{tx("Diğer işlemler")}</summary>
-              <div className="flex flex-wrap gap-2 pt-2">{others.map((action) => button(action, 'outline'))}</div>
-            </details>}
+            {others.length > 0 && <Disclosure title={tx("Diğer işlemler")}><div className="flex flex-wrap gap-2">{others.map((action) => button(action, 'outline'))}</div></Disclosure>}
           </div>
           : <EmptyState message={tx("Bu çalışma alanı için henüz bir plan atanmadı.")} action={button('assign', 'default')} />)}
       </QueryState>

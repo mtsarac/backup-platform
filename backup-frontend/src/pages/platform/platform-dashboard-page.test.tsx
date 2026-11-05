@@ -41,14 +41,14 @@ describe('platform dashboard status', () => {
     expect(within(items).getByRole('link')).toHaveAttribute('href', href)
   })
 
-  it('limits linked attention items to three in the existing rule order', async () => {
+  it('lists every attention item in the existing rule order, never hiding one', async () => {
     vi.mocked(api.getSummary).mockResolvedValue({ ...healthy, failedRunsLast24Hours: 4, agents: { ...healthy.agents, offline: 2, unknown: 1, disabled: 1 } })
     renderPlatform(<PlatformDashboardPage />)
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Dikkat'))
     const items = screen.getByRole('list', { name: 'Dikkat gerektirenler' })
-    expect(within(items).getAllByRole('listitem')).toHaveLength(3)
+    expect(within(items).getAllByRole('listitem')).toHaveLength(4)
     expect(within(items).getAllByRole('link').map(link => link.getAttribute('href'))).toEqual([
-      '/platform/audit', '/platform/agents?connectivity=offline', '/platform/agents?connectivity=unknown',
+      '/platform/audit', '/platform/agents?connectivity=offline', '/platform/agents?connectivity=unknown', '/platform/agents?status=Disabled',
     ])
     expect(within(items).getAllByRole('link').every(link => link.textContent?.trim())).toBe(true)
   })

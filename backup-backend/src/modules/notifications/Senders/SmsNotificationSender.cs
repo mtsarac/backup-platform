@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using BackupPlatform.Contracts.Flags;
 using BackupPlatform.Domain.Notifications;
 using BackupPlatform.SecretProviders.Abstractions;
 
@@ -57,7 +58,7 @@ public sealed class GenericHttpSmsProvider(NotificationHttpClient http) : ISmsPr
 }
 
 /// <summary>Sends SMS deliveries through the operator-configured gateway adapter. Recipients are the tenant's; the gateway and its credential are the platform's.</summary>
-public sealed class SmsNotificationSender(INotificationStore store, ISecretProvider secrets, IEnumerable<ISmsProvider> providers) : INotificationSender
+public sealed class SmsNotificationSender(INotificationStore store, ISecretProvider secrets, IEnumerable<ISmsProvider> providers, FeatureFlags? flags = null) : INotificationSender
 {
     private readonly Dictionary<string, ISmsProvider> _providers = providers.ToDictionary(provider => provider.Key, StringComparer.Ordinal);
 
@@ -65,6 +66,7 @@ public sealed class SmsNotificationSender(INotificationStore store, ISecretProvi
 
     public async Task<SendOutcome> SendAsync(DeliveryWork work, CancellationToken cancellationToken)
     {
+        if (!(flags?.IsEnabled(Features.Sms) ?? true)) return SendOutcome.Transient("feature_disabled");
         if (work.Target is null || NotificationTargets.Normalize(NotificationChannelKind.Sms, work.Target) is null) return SendOutcome.Permanent("invalid_recipient");
         var transport = await store.GetTransportAsync(NotificationTransports.Sms, cancellationToken);
         if (NotificationTransportRules.ReadSms(transport) is not { } settings || !_providers.TryGetValue(settings.Provider, out var provider))

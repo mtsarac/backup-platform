@@ -10,6 +10,7 @@ using static BackupPlatform.IntegrationTests.SupportScenario;
 
 namespace BackupPlatform.IntegrationTests;
 
+[Trait("Category", "Frozen")]
 public sealed class SupportDataAccessTests(PostgreSqlFixture fixture) : IClassFixture<PostgreSqlFixture>
 {
     private static string DownloadsPath(Guid session, Guid artifact) => Path(session, $"/artifacts/{artifact}/downloads");

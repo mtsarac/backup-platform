@@ -241,6 +241,10 @@ describe('MultiDestinationPicker', () => {
     const updatedRemoved = onChange.mock.calls[1][0] as BackupConfiguration
     expect(updatedRemoved.destinations).toHaveLength(1)
     expect(updatedRemoved.requiredVerifiedReplicaCount).toBe(1)
+
+    fireEvent.click(screen.getByRole('button', { name: /Yerel yedekleme bilgisayarı diski hedefini kaldır/i }))
+    const withoutPrimary = onChange.mock.calls[2][0] as BackupConfiguration
+    expect(withoutPrimary.destinations).toEqual([{ ...config.destinations[1], isPrimary: true }])
   })
 
   it('edits the primary destination in place and leaves replicas untouched', () => {

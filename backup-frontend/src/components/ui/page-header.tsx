@@ -22,7 +22,7 @@ export function PageHeader({ title, description, crumbs, actions, meta }: {
     <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
       <div className="min-w-0 max-w-3xl space-y-1">
         <h1 className="break-words text-2xl font-semibold text-text-heading sm:text-[1.75rem] sm:leading-9">{title}</h1>
-        {description && <p className="break-words text-[0.9375rem] text-text-muted">{description}</p>}
+        {description && <p className="break-words text-body text-text-muted">{description}</p>}
         {meta && <div className="flex flex-wrap items-center gap-2 pt-1">{meta}</div>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}

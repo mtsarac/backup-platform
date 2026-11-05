@@ -14,5 +14,5 @@ export function overrideLabel(override: Subscription['storageLimitOverride']) {
 }
 
 export function sourceLabel(source: Subscription['effectiveStorageLimit']['source']) {
-  return source === 'override' ? tx('Override') : 'Plan'
+  return source === 'override' ? tx('Override') : tx('Plan')
 }

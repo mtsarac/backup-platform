@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { restorePath } from '@/lib/routes'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Stepper } from '@/components/ui/stepper'
@@ -7,6 +8,7 @@ import { useRestore, useStartRestore, useStartRestoreDiscovery, useStartRestoreP
 import type { RestoreMode, RestoreOptions, RestoreTarget, RestoreTargetsResponse, RestoreView, StartRestoreDiscoveryVariables, StartRestorePrecheckVariables, StartRestoreVariables } from './types'
 import { isUncertainError, useIdempotencyKey } from '@/lib/idempotency-key'
 import { RestoreSourceSummary } from './restore-source-summary'
+import { RestoreSourceStep } from './restore-source-step'
 import { RestoreTargetStep } from './restore-target-step'
 import { RestoreModeStep } from './restore-mode-step'
 import { RestoreCheckStep } from './restore-check-step'
@@ -33,6 +35,7 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
   const defaultAgent = targets.agents.find((a) => a.canRestore && a.sourceEligible) ?? targets.agents[0]
 
   const [step, setStep] = useState<number>(1)
+  const [loginPending, setLoginPending] = useState(false)
   const [selectedAgentId, setSelectedAgentId] = useState<string>(defaultAgent?.agentId ?? '')
   const [targetType, setTargetType] = useState<'configured' | 'custom'>(defaultTarget ? 'configured' : 'custom')
   const [selectedTargetIndex, setSelectedTargetIndex] = useState<number>(0)
@@ -151,7 +154,7 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
   }
 
   async function triggerDiscovery() {
-    if (!eligibleForRestore || !targetValid || pendingRef.current.discovery) return
+    if (!eligibleForRestore || !targetValid || loginPending || pendingRef.current.discovery) return
     const request = { agentId: selectedAgentId, target: { ...effectiveTarget } }
     const attempt: RequestAttempt<StartRestoreDiscoveryVariables> = {
       fingerprint: discoveryFingerprint,
@@ -177,7 +180,7 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
   }
 
   async function triggerPrecheck(fresh = false) {
-    if (!eligibleForRestore || !targetValid || !databaseNameValid || pendingRef.current.precheck || pendingRef.current.execution) return
+    if (!eligibleForRestore || !targetValid || loginPending || !databaseNameValid || pendingRef.current.precheck || pendingRef.current.execution) return
     if (fresh) precheckKey.reset()
     const request = {
       agentId: selectedAgentId,
@@ -235,7 +238,7 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
       const result = await startRestore.mutateAsync(attempt.variables)
       restoreKey.settle()
       if (restoreAttemptRef.current !== attempt) return
-      navigate(`/tenants/${tenantId}/restores/${result.id}`)
+      navigate(restorePath(tenantId, result.id))
     } catch (error) {
       restoreKey.settle(error)
       if (restoreAttemptRef.current !== attempt) return
@@ -265,33 +268,41 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
 
   return (
     <div className="space-y-6">
-      <Stepper steps={[tx('Nereye'), tx('Nasıl'), tx('Kontrol'), tx('Onay')]} current={shownStep - 1} />
+      <Stepper steps={[tx('Kaynak'), tx('Hedef'), tx('Ön kontrol'), tx('Onay')]} current={shownStep - 1} />
       <RestoreSourceSummary artifact={artifact} isPg={isPg} />
 
       {shownStep === 1 && (
+        <RestoreSourceStep
+          instancePrefix={instancePrefix}
+          engineName={engineName}
+          targets={targets}
+          activeAgent={activeAgent}
+          selectedAgentId={selectedAgentId}
+          eligibleForRestore={Boolean(eligibleForRestore)}
+          invalidateDiscovery={invalidateDiscovery}
+          setSelectedAgentId={setSelectedAgentId}
+          onContinue={() => setStep(2)}
+        />
+      )}
+
+      {shownStep === 2 && (
+        <div className="space-y-5">
         <RestoreTargetStep
           tenantId={tenantId}
           instancePrefix={instancePrefix}
           isPg={isPg}
           engineName={engineName}
           targets={targets}
-          activeAgent={activeAgent}
           selectedAgentId={selectedAgentId}
           targetType={targetType}
           selectedTargetIndex={selectedTargetIndex}
           customTarget={customTarget}
-          eligibleForRestore={Boolean(eligibleForRestore)}
-          targetValid={targetValid}
           invalidateDiscovery={invalidateDiscovery}
-          setSelectedAgentId={setSelectedAgentId}
           setTargetType={setTargetType}
           setSelectedTargetIndex={setSelectedTargetIndex}
           changeCustomTarget={changeCustomTarget}
-          onContinue={() => setStep(2)}
+          onLoginPendingChange={setLoginPending}
         />
-      )}
-
-      {shownStep === 2 && (
         <RestoreModeStep
           instancePrefix={instancePrefix}
           isPg={isPg}
@@ -312,6 +323,7 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
           restoreStarting={startRestore.isPending}
           eligibleForRestore={Boolean(eligibleForRestore)}
           targetValid={targetValid}
+          loginPending={loginPending}
           onSelectNewDatabase={selectNewDatabase}
           onSelectReplaceExisting={selectReplaceExisting}
           onRefreshDiscovery={() => void triggerDiscovery()}
@@ -320,6 +332,7 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
           onBack={() => setStep(1)}
           onRunPrecheck={() => void triggerPrecheck()}
         />
+        </div>
       )}
 
       {shownStep === 3 && (
@@ -343,7 +356,6 @@ export function RestoreWizard({ tenantId, artifact, targets }: RestoreWizardProp
       {shownStep === 4 && (
         <RestoreConfirmStep
           isPg={isPg}
-          artifact={artifact}
           mode={mode}
           targetDatabaseName={targetDatabaseName}
           activeAgent={activeAgent}

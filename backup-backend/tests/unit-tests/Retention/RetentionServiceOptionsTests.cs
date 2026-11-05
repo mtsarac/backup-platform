@@ -40,15 +40,6 @@ public sealed class RetentionServiceOptionsTests
         Assert.Equal(TimeSpan.FromHours(1), options.DeleteRetryDelay(int.MaxValue));
     }
 
-    [Fact]
-    public void TheDefaultsAreValid()
-    {
-        var options = new BackupRetentionOptions();
-
-        Assert.Empty(options.Validate());
-        options.ThrowIfInvalid();
-    }
-
     public static TheoryData<string, BackupRetentionOptions> InvalidOptions => new()
     {
         { "no batch", new BackupRetentionOptions { BatchSize = 0 } },

@@ -1,3 +1,5 @@
+using BackupPlatform.Api.Flags;
+using BackupPlatform.Contracts.Flags;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Api.Security;
 using BackupPlatform.Application.Backups;
@@ -19,10 +21,13 @@ public static class BackupArtifactEndpoints
         tenant.MapGet("/backup-artifacts/{artifactId:guid}", GetAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
         tenant.MapDelete("/backup-artifacts/{artifactId:guid}", DeleteAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
         tenant.MapPost("/backup-artifacts/{artifactId:guid}/cancel-delete", CancelDeleteAsync).RequireAuthorization(AuthorizationPolicies.TenantAdministrator);
-        tenant.MapPost("/backup-artifacts/{artifactId:guid}/repairs", StartRepairAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
-        tenant.MapGet("/backup-artifacts/{artifactId:guid}/repairs/{repairId:guid}", GetRepairAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
-        tenant.MapPost("/backup-artifacts/{artifactId:guid}/repairs/{repairId:guid}/cancel", CancelRepairAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
-        tenant.MapGet("/backup-artifacts/{artifactId:guid}/repairs", ListRepairsAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
+        if (endpoints.IsFeatureEnabled(Features.ReplicaRepair))
+        {
+            tenant.MapPost("/backup-artifacts/{artifactId:guid}/repairs", StartRepairAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
+            tenant.MapGet("/backup-artifacts/{artifactId:guid}/repairs/{repairId:guid}", GetRepairAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
+            tenant.MapPost("/backup-artifacts/{artifactId:guid}/repairs/{repairId:guid}/cancel", CancelRepairAsync).RequireAuthorization(AuthorizationPolicies.TenantOperator);
+            tenant.MapGet("/backup-artifacts/{artifactId:guid}/repairs", ListRepairsAsync).RequireAuthorization(AuthorizationPolicies.TenantViewer);
+        }
         return endpoints;
     }
 

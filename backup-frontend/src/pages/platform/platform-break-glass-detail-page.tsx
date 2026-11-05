@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { platformCrumb } from '@/features/platform/crumbs'
 import { platformPaths } from '@/features/platform/paths'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
+import { platformOnlyMessage } from '@/lib/api/failure-messages'
 
 export function PlatformBreakGlassDetailPage() {
   useLanguage()

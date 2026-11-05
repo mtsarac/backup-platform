@@ -155,9 +155,15 @@ internal sealed class DatabaseBackupExecution
                 _providerResult?.Verification ?? BackupVerification.NotRun, _startedAt, _providerResult?.BackupStartedAt, _providerResult?.BackupFinishedAt);
             _retained.Save(_staging, _request.AttemptId);
         }
-        if (_request.MaxArtifactBytes is { } maximum && _artifact!.SizeBytes > maximum)
-            throw Fail(BackupExecutionStage.HashingArtifact, BackupPipelineReasons.QuotaExceeded,
-                "The backup artifact exceeds its hard-quota reservation; no destination was written.", kind: BackupFailureKind.PreCheckFailed);
+        if (_request.MaxArtifactBytes is not null)
+        {
+            if (_request.AdjustQuotaReservationAsync is null)
+                throw Fail(BackupExecutionStage.HashingArtifact, BackupPipelineReasons.Unexpected,
+                    "The hard-quota reservation could not be adjusted; no destination was written.");
+            if (!await _request.AdjustQuotaReservationAsync(_artifact!.SizeBytes, cancellationToken).ConfigureAwait(false))
+                throw Fail(BackupExecutionStage.HashingArtifact, BackupPipelineReasons.QuotaExceeded,
+                    "The backup artifact exceeds its hard-quota reservation; no destination was written.", kind: BackupFailureKind.PreCheckFailed);
+        }
         await TransferAsync(targets, cancellationToken).ConfigureAwait(false);
     }
 

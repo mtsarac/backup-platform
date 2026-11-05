@@ -361,6 +361,7 @@ public sealed class ArtifactEncryptionPolicyTests
         public Task<BackupRun?> RequestCancellationAsync(TenantId tenantId, Guid runId, DateTimeOffset now, CancellationToken cancellationToken, UserId? actor = null) => throw new NotSupportedException();
         public Task<BackupRetryResult> RetryRunAsync(TenantId tenantId, Guid runId, DateTimeOffset now, CancellationToken cancellationToken, UserId? actor = null) => throw new NotSupportedException();
         public Task<BackupMutationResult> StartAttemptAsync(BackupLeaseCommand command, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<BackupQuotaReservationResult> AdjustQuotaReservationAsync(BackupLeaseCommand command, long sizeBytes, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<BackupLeaseResult?> RenewLeaseAsync(BackupLeaseCommand command, TimeSpan leaseDuration, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<BackupMutationResult> RecordTransferAsync(BackupLeaseCommand command, BackupTransferIntent transfer, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<BackupMutationResult> ReportProgressAsync(BackupLeaseCommand command, BackupProgress progress, CancellationToken cancellationToken) => throw new NotSupportedException();

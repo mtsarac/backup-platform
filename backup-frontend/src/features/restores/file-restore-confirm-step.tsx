@@ -6,12 +6,10 @@ import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { ApiError } from '@/lib/api/client'
-import type { BackupArtifact } from '@/features/artifacts/types'
 import { describeStartFailure } from './presentation'
 import type { RestoreTargetAgent } from './types'
 
 interface FileRestoreConfirmStepProps {
-  artifact: BackupArtifact
   agent: RestoreTargetAgent | undefined
   agentId: string
   original: boolean
@@ -30,7 +28,7 @@ interface FileRestoreConfirmStepProps {
   onStart: () => void
 }
 
-export function FileRestoreConfirmStep({ artifact, agent, agentId, original, targetReference, relativeDirectory, scope, paths, overwrite, precheckPassed, precheckStarting, restoreStarting, executionError, executionRetryable, eligible, onBack, onStart }: FileRestoreConfirmStepProps) {
+export function FileRestoreConfirmStep({ agent, agentId, original, targetReference, relativeDirectory, scope, paths, overwrite, precheckPassed, precheckStarting, restoreStarting, executionError, executionRetryable, eligible, onBack, onStart }: FileRestoreConfirmStepProps) {
   useLanguage()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const retryLabel = executionRetryable ? tx('Tekrar dene') : undefined
@@ -41,7 +39,6 @@ export function FileRestoreConfirmStep({ artifact, agent, agentId, original, tar
       <Section title={tx("Onay")} description={tx("Bilgileri kontrol edin. Onayınızdan sonra seçtiğiniz yedekleme bilgisayarı geri yüklemeyi başlatır.")}>
         <div className="space-y-4">
           <Facts>
-            <Fact label={tx("Yedeklenen dosya kaynağı")}>{artifact.databaseName ?? tx('Bilinmeyen dosya kaynağı')}</Fact>
             <Fact label={tx("Yedekleme bilgisayarı")}>{agent?.hostName ?? agentId}</Fact>
             <Fact label={tx("Geri yükleme konumu")}>{original ? tx('Özgün konum') : tx('Alternatif konum')}</Fact>
             <Fact label={tx("Hedef dosya kaynağı referansı")}>{targetReference}</Fact>
@@ -56,7 +53,6 @@ export function FileRestoreConfirmStep({ artifact, agent, agentId, original, tar
           </Notice>}
           <TechnicalDetails items={[
             { label: tx('Yedekleme bilgisayarı kimliği'), value: agentId },
-            { label: tx('Yedek dosyası kimliği'), value: artifact.id },
             { label: tx('Dosya ve manifest bütünlüğü (SHA-256)'), value: tx('Zorunlu') },
           ]} />
         </div>

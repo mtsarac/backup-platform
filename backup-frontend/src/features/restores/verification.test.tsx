@@ -9,6 +9,7 @@ import { RestoreDetailPage } from '@/pages/restores/restore-detail-page'
 import * as RestoreApi from './api'
 import * as AgentApi from '@/features/agents/api'
 import * as ArtifactApi from '@/features/artifacts/api'
+import { statusLabel } from '@/lib/status'
 import type { BackupArtifact } from '@/features/artifacts/types'
 import type { RestoreCleanup, RestoreTargetsResponse, RestoreView } from './types'
 
@@ -105,6 +106,13 @@ describe('artifact restore verification', () => {
     expect(screen.getByText(/otomatik yeniden denenecek \(deneme 2\)/)).toBeInTheDocument()
     expect(screen.getAllByText(/Süre: 30 sn|30 sn/).length).toBeGreaterThan(0)
   })
+
+  it('lists the latest test once, in the history, not again as a summary line', async () => {
+    vi.mocked(RestoreApi.getRestores).mockResolvedValue(page([base]))
+    renderAt(<ArtifactVerificationSection tenantId="tenant-a" artifact={artifact} />)
+    await screen.findByRole('table')
+    expect(screen.getAllByText('Başarılı')).toHaveLength(1)
+  })
 })
 
 describe('restore verification detail', () => {
@@ -118,6 +126,14 @@ describe('restore verification detail', () => {
     expect(screen.queryByRole('button', { name: 'Temizliği yeniden dene' })).not.toBeInTheDocument()
   })
 
+  it('shows the run status once while no outcome is reported, and no outcome row', async () => {
+    vi.mocked(RestoreApi.getRestore).mockResolvedValue({ ...base, status: 'Running', verificationOutcome: undefined, completedAt: null })
+    renderDetail()
+    await screen.findByRole('heading', { level: 1, name: /Geri yükleme testi/ })
+    expect(screen.getAllByText(statusLabel('general', 'Running'))).toHaveLength(1)
+    expect(screen.queryByText('Sonuç')).not.toBeInTheDocument()
+  })
+
   it('renders a Failed outcome with the server reason', async () => {
     vi.mocked(RestoreApi.getRestore).mockResolvedValue(withResult({ ...base, status: 'Failed', verificationOutcome: 'Failed', failureCode: 'VerificationFailed', reason: 'The backup restored, but checks failed.', cleanup: cleanupOf({}) }, false))
     renderDetail()
@@ -129,7 +145,7 @@ describe('restore verification detail', () => {
   it('renders NotRun for a cancelled verification', async () => {
     vi.mocked(RestoreApi.getRestore).mockResolvedValue({ ...base, status: 'Cancelled', verificationOutcome: 'NotRun', cleanup: cleanupOf({}) })
     renderDetail()
-    expect(await screen.findByText("Çalıştırılmadı · Çalıştırılmadı")).toBeInTheDocument()
+    expect(await screen.findByText("Çalıştırılmadı")).toBeInTheDocument()
   })
 
   it('retries a pending cleanup and flags needsAttention', async () => {

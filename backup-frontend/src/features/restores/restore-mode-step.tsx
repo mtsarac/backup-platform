@@ -1,11 +1,14 @@
 import { useId } from 'react'
+import { CheckField } from '@/components/ui/check-field'
+import { Card } from '@/components/ui/card'
+import { Select, TextInput } from '@/components/ui/text-input'
 import { tx, useLanguage } from '@/lib/i18n'
 import { Button } from '@/components/ui/button'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
-import { inputClass, selectClass } from '@/components/ui/form-styles'
 import type { RestoreMode, RestoreOptions, RestoreView } from './types'
 import { errorMessage } from '@/lib/api/failure-messages'
+import { Disclosure } from '@/components/ui/disclosure'
 
 interface RestoreModeStepProps {
   instancePrefix: string
@@ -27,6 +30,8 @@ interface RestoreModeStepProps {
   restoreStarting: boolean
   eligibleForRestore: boolean
   targetValid: boolean
+  /** A typed database login that is not stored yet: the target is not usable until it is. */
+  loginPending: boolean
   onSelectNewDatabase: () => void
   onSelectReplaceExisting: () => void
   onRefreshDiscovery: () => void
@@ -36,7 +41,7 @@ interface RestoreModeStepProps {
   onRunPrecheck: () => void
 }
 
-export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName, databaseNameValid, options, discoveryData, discoveryError, discoveryQueryError, currentDiscovery, discoveryRetryable, discoveryStarting, discoveryScanning, precheckError, precheckRetryable, precheckStarting, restoreStarting, eligibleForRestore, targetValid, onSelectNewDatabase, onSelectReplaceExisting, onRefreshDiscovery, changeDatabaseName, changeOptions, onBack, onRunPrecheck }: RestoreModeStepProps) {
+export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName, databaseNameValid, options, discoveryData, discoveryError, discoveryQueryError, currentDiscovery, discoveryRetryable, discoveryStarting, discoveryScanning, precheckError, precheckRetryable, precheckStarting, restoreStarting, eligibleForRestore, targetValid, loginPending, onSelectNewDatabase, onSelectReplaceExisting, onRefreshDiscovery, changeDatabaseName, changeOptions, onBack, onRunPrecheck }: RestoreModeStepProps) {
   useLanguage()
   const newDescriptionId = useId()
   const replaceDescriptionId = useId()
@@ -66,7 +71,7 @@ export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName
             >
               <p className="font-semibold text-error">{tx("Mevcut bir veritabanının yerine (riskli)")}</p>
               <p id={replaceDescriptionId} className="mt-1 text-base text-text-muted">
-                {isPg ? tx('Seçtiğiniz veritabanı yedektekiyle değiştirilir. Eskisi silinmez, kenara alınır; onu temizlemek sizin sorumluluğunuzdadır.') : tx('Seçtiğiniz veritabanının içeriği silinir ve yedektekiyle değiştirilir. Oradaki güncel veriler kalıcı olarak kaybolur.')}
+                {isPg ? tx('Seçtiğiniz veritabanı yedektekiyle değiştirilir.') : tx('Seçtiğiniz veritabanının içeriği yedektekiyle değiştirilir.')}
               </p>
             </button>
           </div>
@@ -74,9 +79,8 @@ export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName
           {mode === 'NewDatabase' && (
             <div className="space-y-2">
               <label htmlFor={`${instancePrefix}-new-dbname`} className="block text-sm font-medium">{tx("Yeni Veritabanı Adı")}</label>
-              <input
+              <TextInput
                 id={`${instancePrefix}-new-dbname`}
-                className={inputClass}
                 value={targetDatabaseName}
                 onChange={(e) => changeDatabaseName(e.target.value)}
                 placeholder={tx("Yeni veritabanı adı")}
@@ -87,7 +91,7 @@ export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName
           )}
 
           {mode === 'ReplaceExistingDatabase' && (
-            <div className="space-y-4 rounded-xl border border-error/40 bg-surface p-4">
+            <Card tone="danger" className="space-y-4">
               <Notice tone="warning" title={tx("Veri kaybı riski")}>
                 {isPg ? tx('Seçtiğiniz veritabanı değiştirilecek. Eski veritabanı kenarda saklanır; kurtarma ve temizlik size aittir.') : tx('Seçtiğiniz veritabanının içeriği tamamen silinecek. İşlem geri alınamaz.')}
               </Notice>
@@ -95,15 +99,14 @@ export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <label htmlFor={`${instancePrefix}-replace-db-select`} className="block text-sm font-medium">{tx("Yerine geçilecek veritabanı")}</label>
-                  <Button variant="outline" size="sm" onClick={() => onRefreshDiscovery()} disabled={discoveryScanning}>
+                  <Button variant="outline" size="sm" onClick={() => onRefreshDiscovery()} disabled={discoveryScanning || !targetValid || loginPending}>
                     {discoveryScanning ? tx('Taranıyor…') : discoveryRetryable ? tx('Tekrar Dene') : tx('Listeyi yenile')}
                   </Button>
                 </div>
 
                 {discoveryData?.result?.discovery ? (
-                  <select
+                  <Select
                     id={`${instancePrefix}-replace-db-select`}
-                    className={`${selectClass} w-full`}
                     value={targetDatabaseName}
                     onChange={(e) => changeDatabaseName(e.target.value)}
                   >
@@ -113,11 +116,10 @@ export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName
                         {db.isSystem ? tx('{0} (sistem veritabanı, seçilemez)', { "0": db.name }) : `${db.name} (${db.availability})`}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 ) : (
-                  <input
+                  <TextInput
                     id={`${instancePrefix}-replace-db-select`}
-                    className={inputClass}
                     value={targetDatabaseName}
                     onChange={(e) => changeDatabaseName(e.target.value)}
                     placeholder={tx("Yerine geçilecek veritabanının adı")}
@@ -128,42 +130,17 @@ export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName
                 )}
               </div>
 
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={options.terminateActiveConnections ?? false}
-                  onChange={(e) => changeOptions({ ...options, terminateActiveConnections: e.target.checked })}
-                />
-                <span>
-                  {tx("Açık bağlantıları kapat")}
-                  <span className="block text-text-muted">{tx("Veritabanını şu an kullanan bağlantılar varsa önce kapatılır; kapatılmazsa geri yükleme engellenebilir.")}</span>
-                </span>
-              </label>
-            </div>
+              <CheckField className="items-start" label={<span>{tx("Açık bağlantıları kapat")}<span className="block text-text-muted">{tx("Veritabanını şu an kullanan bağlantılar varsa önce kapatılır; kapatılmazsa geri yükleme engellenebilir.")}</span></span>} checked={options.terminateActiveConnections ?? false}
+                  onChange={(e) => changeOptions({ ...options, terminateActiveConnections: e.target.checked })} />
+            </Card>
           )}
 
-          <details className="rounded-lg border border-border bg-surface-2 text-sm">
-            <summary className="cursor-pointer select-none rounded-lg px-3 py-2 font-medium text-text-heading">{tx("Gelişmiş seçenekler")}</summary>
-            <div className="grid gap-2 border-t border-border px-3 py-2 sm:grid-cols-2">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={options.verifyChecksum ?? true}
-                  onChange={(e) => changeOptions({ ...options, verifyChecksum: e.target.checked })}
-                />
-                <span>{tx("Yedek dosyasının bütünlüğünü doğrula (SHA-256)")}</span>
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={options.verifyBackup ?? true}
-                  onChange={(e) => changeOptions({ ...options, verifyBackup: e.target.checked })}
-                />
-                <span>{isPg ? tx('Yedek arşivini doğrula (pg_restore)') : tx('Yedeği geri yüklemeden önce sına (RESTORE VERIFYONLY)')}</span>
-              </label>
-            </div>
-          </details>
+          <Disclosure title={tx("Gelişmiş seçenekler")}><div className="grid gap-2 sm:grid-cols-2">
+              <CheckField label={tx("Yedek dosyasının bütünlüğünü doğrula (SHA-256)")} checked={options.verifyChecksum ?? true}
+                  onChange={(e) => changeOptions({ ...options, verifyChecksum: e.target.checked })} />
+              <CheckField label={<>{isPg ? tx('Yedek arşivini doğrula (pg_restore)') : tx('Yedeği geri yüklemeden önce sına (RESTORE VERIFYONLY)')}</>} checked={options.verifyBackup ?? true}
+                  onChange={(e) => changeOptions({ ...options, verifyBackup: e.target.checked })} />
+            </div></Disclosure>
         </div>
       </Section>
 
@@ -174,7 +151,7 @@ export function RestoreModeStep({ instancePrefix, isPg, mode, targetDatabaseName
       <div className="flex flex-wrap justify-between gap-3">
         <Button variant="outline" onClick={() => onBack()}>{tx("← Geri")}</Button>
         <Button
-          disabled={!eligibleForRestore || !targetValid || !databaseNameValid || precheckStarting || restoreStarting}
+          disabled={!eligibleForRestore || !targetValid || loginPending || !databaseNameValid || precheckStarting || restoreStarting}
           onClick={() => onRunPrecheck()}
         >
           {precheckStarting ? tx('Ön Kontrol Başlatılıyor…') : precheckRetryable ? tx('Tekrar Dene') : tx('Ön Kontrolü Çalıştır →')}

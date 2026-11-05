@@ -16,12 +16,12 @@ import { useCreateUser, usePlatformUsers } from '@/features/platform/hooks'
 import { ListEmpty } from '@/features/platform/list-empty'
 import { FormDialog } from '@/components/ui/form-dialog'
 import { SearchForm } from '@/features/platform/search-form'
-import { inputClass } from '@/components/ui/form-styles'
+import { TextInput } from '@/components/ui/text-input'
 import type { PlatformUser } from '@/features/platform/types'
-import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { ApiError } from '@/lib/api/client'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
+import { platformOnlyMessage } from '@/lib/api/failure-messages'
 
 function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (name: string) => void }) {
   useLanguage()
@@ -36,8 +36,8 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
     })
   }
   return <FormDialog title={tx("Yeni kullanıcı")} description={tx("Bu işlem yalnızca kullanıcı hesabını oluşturur. Çalışma alanı üyeliğini ve rolünü çalışma alanı sayfasından ekleyin.")} submitLabel={tx("Kullanıcı oluştur")} pendingLabel={tx("Oluşturuluyor…")} pending={create.isPending} onSubmit={submit} onClose={onClose} error={create.error}>
-    <Field label={tx("Kullanıcı adı")} hint={tx("3-128 karakter: harf, rakam, nokta, alt çizgi, tire.")}>{(control) => <input {...control} className={inputClass} value={loginIdentifier} required autoComplete="off" aria-invalid={invalidField === 'loginIdentifier'} onChange={(event) => setLoginIdentifier(event.target.value)} />}</Field>
-    <Field label={tx("Görünen ad")}>{(control) => <input {...control} className={inputClass} value={displayName} required autoComplete="off" aria-invalid={invalidField === 'displayName'} onChange={(event) => setDisplayName(event.target.value)} />}</Field>
+    <Field label={tx("Kullanıcı adı")} hint={tx("3-128 karakter: harf, rakam, nokta, alt çizgi, tire.")}>{(control) => <TextInput {...control}  value={loginIdentifier} required autoComplete="off" aria-invalid={invalidField === 'loginIdentifier'} onChange={(event) => setLoginIdentifier(event.target.value)} />}</Field>
+    <Field label={tx("Görünen ad")}>{(control) => <TextInput {...control}  value={displayName} required autoComplete="off" aria-invalid={invalidField === 'displayName'} onChange={(event) => setDisplayName(event.target.value)} />}</Field>
     <SecretField label={tx("Şifre")} hint={tx("En az 12 karakter.")} required value={password.value} invalid={invalidField === 'password'} onChange={password.set} />
   </FormDialog>
 }
@@ -46,7 +46,7 @@ export function PlatformUsersPage() {
   useLanguage()
   const { page, get, update } = useListParams()
   const search = get('search')
-  const query = usePlatformUsers({ search, page, pageSize: PLATFORM_PAGE_SIZE })
+  const query = usePlatformUsers({ search, page, pageSize: LIST_PAGE_SIZE })
   const [creating, setCreating] = useState(false)
   const [created, setCreated] = useState('')
   const data = query.data
@@ -62,7 +62,7 @@ export function PlatformUsersPage() {
     <Filters label={tx("Kullanıcı filtreleri")} onClear={search ? () => update({ search: '' }) : undefined}><SearchForm className="sm:col-span-2" label={tx("Kullanıcı ara")} value={search} onSearch={(value) => update({ search: value })} placeholder={tx("Ad veya kullanıcı adı")} /></Filters>
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {data && <div className="space-y-4">
-        {data.totalCount === 0 && !search ? <ListEmpty icon={Users} message={tx("Henüz kullanıcı yok.")} action={<Button onClick={() => setCreating(true)}>{tx("Yeni kullanıcı")}</Button>} />
+        {data.totalCount === 0 && !search ? <ListEmpty icon={Users} message={tx("Henüz kullanıcı yok.")} />
           : <DataList caption={tx("Kullanıcılar")} rows={data.items} columns={columns} keyExtractor={(user) => user.userId} emptyMessage={tx("Aramaya uygun kullanıcı bulunamadı.")} />}
         {data.totalCount > 0 && <Pagination label={tx("Kullanıcı sayfaları")} page={page} pageSize={data.pageSize} totalCount={data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
       </div>}

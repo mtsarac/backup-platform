@@ -1,7 +1,7 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { TextInput } from '@/components/ui/text-input'
 import { useEffect, useState } from 'react'
 import { FormDialog } from '@/components/ui/form-dialog'
-import { inputClass } from '@/components/ui/form-styles'
 import { QUOTA_SCOPE_PATTERN } from '@/features/storage/scope-input'
 import { ConfigFieldInputs, SecretFieldInputs } from './descriptor-fields'
 import { activeSecretFields, buildConfiguration, buildSecretValues, configurationComplete, hasSecretInput, initialFieldValues, secretsComplete } from './descriptor-values'
@@ -38,11 +38,11 @@ export function EditConnectionDialog({ connection, configFields, ops, onClose }:
   return <FormDialog title={tx("Bağlantıyı düzenle: {0}", { "0": connection.name })} submitLabel={tx("Kaydet")} pendingLabel={tx("Kaydediliyor…")} pending={mutation.isPending}
     disabled={Object.keys(input).length === 0 || !valid} error={mutation.error} errorScope="storageConnection"
     onSubmit={() => mutation.mutate({ connection, input }, { onSuccess: onClose })} onClose={onClose}>
-    <label className="block text-sm text-text-muted">{tx("Ad")}<input className={inputClass} value={name} required disabled={!canEdit} aria-invalid={errorField(mutation.error) === 'name'} onChange={(event) => setName(event.target.value)} />
+    <label className="block text-sm text-text-muted">{tx("Ad")}<TextInput className="mt-1" value={name} required disabled={!canEdit} aria-invalid={errorField(mutation.error) === 'name'} onChange={(event) => setName(event.target.value)} />
     </label>
     {canEdit && configFields.length > 0 && <ConfigFieldInputs providerType={connection.providerType} fields={configFields} values={values} invalidName={invalidFieldName(mutation.error, 'configuration')} onChange={(field, value) => setValues((current) => ({ ...current, [field]: value }))} />}
     {canEdit && connection.providerType === 'sftp' && <p className="text-xs text-text-muted">{tx("Kimlik doğrulama yöntemini değiştirdikten sonra yeni yöntem için kimlik bilgisi ayarlayın ve bağlantıyı test edin. Kullanımdaki bir bağlantının sunucu, kullanıcı, dizin ve kimlik doğrulama yöntemi değiştirilemez.")}</p>}
-    {canSetQuotaScope && <label className="block text-sm text-text-muted">{tx("Kota kapsamı")}<input className={inputClass} value={quotaScope} maxLength={64} required aria-invalid={quotaScopeInvalid} onChange={(event) => setQuotaScope(event.target.value)} />
+    {canSetQuotaScope && <label className="block text-sm text-text-muted">{tx("Kota kapsamı")}<TextInput className="mt-1" value={quotaScope} maxLength={64} required aria-invalid={quotaScopeInvalid} onChange={(event) => setQuotaScope(event.target.value)} />
       <span className="mt-1 block text-xs">{tx("Kota Politikası seçicileri bu etikete göre eşleşir (küçük harf, rakam ve “-”, 1-64 karakter). Değiştirmek tenant'ın kullanımını yeniden hesaplar.")}</span>
       {quotaScopeInvalid && <span role="alert" className="mt-1 block text-xs text-error">{tx("Kota kapsamı yalnızca küçük harf, rakam ve “-” içerebilir (1-64 karakter).")}</span>}
     </label>}

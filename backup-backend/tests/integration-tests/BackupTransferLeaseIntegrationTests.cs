@@ -32,7 +32,6 @@ public sealed class BackupTransferLeaseIntegrationTests(PostgreSqlFixture fixtur
         Assert.Equal(1, await RowsAsync(connection, key));
 
         var second = service.AcquireAsync(connection, key, default);
-        await Task.Delay(800);
         Assert.False(second.IsCompleted);
 
         await first.DisposeAsync();

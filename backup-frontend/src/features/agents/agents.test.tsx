@@ -196,6 +196,30 @@ describe('Backup computer page', () => {
     expect(screen.queryByText('Başka bilgisayarın işi')).not.toBeInTheDocument()
   })
 
+  it('links each job to its edit page and offers the discovered servers only for a computer that can scan', async () => {
+    vi.mocked(jobsApi.getBackupJobs).mockResolvedValue([{ id: 'job-1', name: 'Muhasebe', agentId: 'agent-a', enabled: true, lastRun: null, nextOccurrenceAt: null }] as never)
+    vi.mocked(api.getAgent).mockResolvedValue({ ...agent, capabilities: [{ identifier: 'discovery.database-inventory', support: 'Supported' }] })
+    const view = mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    expect(await screen.findByRole('link', { name: 'Muhasebe' })).toHaveAttribute('href', '/tenants/tenant-a/backup-jobs/job-1/edit')
+    expect(screen.getByRole('link', { name: 'Bulunan veritabanı sunucuları' })).toHaveAttribute('href', '/tenants/tenant-a/discovery?agentId=agent-a')
+    view.unmount()
+    vi.mocked(api.getAgent).mockResolvedValue(agent)
+    mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    await screen.findByRole('heading', { level: 1, name: 'SQL-01' })
+    expect(screen.queryByRole('link', { name: 'Bulunan veritabanı sunucuları' })).not.toBeInTheDocument()
+  })
+
+  it('tells the reader what to check when an active computer is offline, and says Bilinmiyor when the connection is unknown', async () => {
+    vi.mocked(api.getAgent).mockResolvedValue({ ...agent, connectivity: 'offline' })
+    const view = mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    expect(await screen.findByText(/yedekleme programının çalıştığını kontrol edin/)).toBeInTheDocument()
+    view.unmount()
+    vi.mocked(api.getAgent).mockResolvedValue({ ...agent, connectivity: 'unknown' })
+    mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
+    expect(await screen.findByText('Bilinmiyor')).toBeInTheDocument()
+    expect(screen.queryByText(/yedekleme programının çalıştığını kontrol edin/)).not.toBeInTheDocument()
+  })
+
   it('requires focused confirmation before an administrator removes a computer and invalidates only related scopes', async () => {
     const { client } = mount(<ClientDetailPage />, '/tenants/tenant-a/agents/agent-a')
     const invalidate = vi.spyOn(client, 'invalidateQueries')
@@ -237,12 +261,10 @@ describe('Adding a computer from the new-computer page', () => {
     await screen.findByRole('switch')
     fireEvent.click(screen.getByRole('button', { name: 'Yedekleme bilgisayarı ekle' }))
     const dialog = await screen.findByRole('dialog')
-    const lifetime = within(dialog).getByRole('spinbutton', { name: 'Geçerlilik süresi (dakika)' })
-    fireEvent.change(lifetime, { target: { value: '60' } })
     fireEvent.click(within(dialog).getByRole('button', { name: 'İleri' }))
     fireEvent.click(within(dialog).getByRole('button', { name: "Kayıt anahtarı oluştur" }))
     expect(await screen.findByDisplayValue('secret-once-only')).toBeInTheDocument()
-    expect(api.createEnrollmentToken).toHaveBeenCalledWith('tenant-a', 60, expect.any(AbortSignal))
+    expect(api.createEnrollmentToken).toHaveBeenCalledWith('tenant-a', expect.any(AbortSignal))
     expect(within(dialog).getByText(/Anahtarı paylaşmayın/)).toBeInTheDocument()
     expect(JSON.stringify(client.getQueryCache().getAll().map((query) => query.state.data))).not.toContain('secret-once-only')
     expect(client.getMutationCache().getAll()).toHaveLength(0)
@@ -251,7 +273,7 @@ describe('Adding a computer from the new-computer page', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Kapat' }))
     await waitFor(() => expect(screen.queryByDisplayValue('secret-once-only')).not.toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Yedekleme bilgisayarı ekle' }))
-    expect(await screen.findByRole('spinbutton')).toHaveValue(1440)
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
     expect(screen.queryByDisplayValue('secret-once-only')).not.toBeInTheDocument()
   })
 
@@ -273,7 +295,7 @@ describe('Adding a computer from the new-computer page', () => {
     const view = mount(<AddAgentDialog tenantId="tenant-a" onClose={vi.fn()} onCreated={onCreated} />)
     fireEvent.click(await screen.findByRole('button', { name: 'İleri' }))
     fireEvent.click(await screen.findByRole('button', { name: "Kayıt anahtarı oluştur" }))
-    const signal = vi.mocked(api.createEnrollmentToken).mock.calls[0]![2]
+    const signal = vi.mocked(api.createEnrollmentToken).mock.calls[0]![1]
     view.unmount()
     expect(signal.aborted).toBe(true)
     await act(async () => { resolve({ tokenId: 'token-b', token: 'late-secret', expiresAt: '2026-10-07T10:00:00Z' }) })

@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { AddAgentDialog } from './add-agent-dialog'
 import { ClientsPage } from '@/pages/clients/clients-page'
-import { enrollmentCommands, httpsServerOrigin, suggestedServerOrigin } from './enrollment-commands'
+import { enrollmentCommands, httpsServerOrigin } from './enrollment-commands'
 import type { AgentDetail, CreatedEnrollmentToken, EnrollmentTokenStatus } from './types'
 import { ApiError } from '@/lib/api/client'
 import * as api from './api'
@@ -36,9 +36,9 @@ function mount() {
 }
 /** Walks the plain steps: which computer, then the key and command. Automatic mode is the one-command variant. */
 async function issue(mode: 'guided' | 'automatic' = 'automatic') {
+  await act(async () => {})
   const name = screen.getByRole('textbox', { name: 'Bilgisayarın adı' }) as HTMLInputElement
   if (!name.value) fireEvent.change(name, { target: { value: 'Backup agent' } })
-  fireEvent.change(screen.getByRole('textbox', { name: "Sunucu HTTPS adresi" }), { target: { value: 'https://backend.example:7443' } })
   fireEvent.click(screen.getByRole('button', { name: 'İleri' }))
   if (mode === 'automatic') fireEvent.click(screen.getByRole('tab', { name: 'Tek komutla kurulum' }))
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: "Kayıt anahtarı oluştur" })) })
@@ -57,9 +57,6 @@ describe('Enrollment commands', () => {
     }
   })
   it('derives only secure origins and never generates an insecure command', () => {
-    expect(suggestedServerOrigin('/api', 'https://frontend.example')).toBe('https://frontend.example')
-    expect(suggestedServerOrigin('https://backend.example/api', 'http://localhost:5173')).toBe('https://backend.example')
-    expect(suggestedServerOrigin('/api', 'http://localhost:5173')).toBe('')
     for (const value of ['http://backend.example', 'https://user:pass@backend.example', 'https://backend.example/api', 'https://backend.example?token=x']) expect(httpsServerOrigin(value)).toBe('')
     expect(enrollmentCommands('Linux', 'http://backend.example', 'secret', '')).toBe('')
   })
@@ -79,21 +76,17 @@ describe('Adding a backup computer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Geri' }))
     expect(screen.getByRole('textbox', { name: 'Bilgisayarın adı' })).toBeInTheDocument()
   })
-  it('keeps the server address and key lifetime under collapsed technical details, opened when the address is unknown', async () => {
+  it('warns on the first step and disables continue when no server address is configured', async () => {
     vi.mocked(api.getAgentDistribution).mockResolvedValue({ serverUrl: null, packages: { 'win-x64': true, 'linux-x64': true } })
     mount()
     await act(async () => {})
-    const address = screen.getByRole('textbox', { name: 'Sunucu HTTPS adresi' })
-    expect(address).toBeVisible()
+    expect(screen.getByText(/Platform yöneticisi, Yedekleme bilgisayarı ayarları sayfasında sunucu HTTPS adresini belirlemeden kurulum komutu oluşturulamaz/)).toBeVisible()
     expect(screen.getByRole('button', { name: 'İleri' })).toBeDisabled()
-    fireEvent.change(address, { target: { value: 'https://backend.example:7443' } })
-    expect(screen.getByRole('button', { name: 'İleri' })).toBeEnabled()
   })
-  it('hides the server address when it is already known', async () => {
+  it('creates an enrollment token without sending lifetime', async () => {
     mount()
-    await act(async () => {})
-    expect(screen.getByRole('textbox', { name: 'Sunucu HTTPS adresi' })).not.toBeVisible()
-    expect(screen.getByRole('spinbutton', { name: 'Geçerlilik süresi (dakika)' })).not.toBeVisible()
+    await issue()
+    expect(api.createEnrollmentToken).toHaveBeenCalledWith('tenant-a', expect.any(AbortSignal))
   })
   it('shows the connected computer by name and keeps its id, system and version collapsed', async () => {
     mount(); await issue()
@@ -204,6 +197,7 @@ describe('Adding a backup computer', () => {
     vi.mocked(api.getAgent).mockResolvedValue({ ...detail, connectivity: 'online' })
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Takibi tekrar dene' })) })
     expect(screen.getByRole('status')).toHaveTextContent('Çevrimiçi')
+    expect(screen.getAllByText(/çevrimiçi/i)).toHaveLength(1)
   })
   it('does not abandon another active token if revocation fails', async () => {
     mount(); await issue()
@@ -270,7 +264,7 @@ describe('Adding a backup computer', () => {
     const { promise, resolve } = Promise.withResolvers<CreatedEnrollmentToken>()
     vi.mocked(api.createEnrollmentToken).mockReturnValue(promise)
     const view = mount(); await issue()
-    const signal = vi.mocked(api.createEnrollmentToken).mock.calls[0]![2]
+    const signal = vi.mocked(api.createEnrollmentToken).mock.calls[0]![1]
     view.unmount()
     expect(signal.aborted).toBe(true)
     await act(async () => { resolve({ tokenId: 'late', token: 'late-secret', expiresAt }) })

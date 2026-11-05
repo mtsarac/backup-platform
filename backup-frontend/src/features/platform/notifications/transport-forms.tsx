@@ -1,13 +1,14 @@
 import { currentLocale, tx, useLanguage } from '@/lib/i18n'
 import { useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
+import { CheckField } from '@/components/ui/check-field'
 import { Field } from '@/components/ui/field'
 import { SecretField } from '@/components/ui/secret-field'
 import { useSecretValue } from '@/components/ui/secret-value'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { inputClass, selectClass } from '@/components/ui/form-styles'
+import { TextInput } from '@/components/ui/text-input'
 import {
   useClearEmailSecret, useClearSmsSecret, useSetEmailSecret, useSetSmsSecret, useUpdateEmailTransport, useUpdateSmsTransport,
 } from './hooks'
@@ -15,6 +16,7 @@ import type { EmailSecurity, EmailTransport, SmsAuthentication, SmsTransport } f
 import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { TechnicalDetails, type TechnicalItem } from '@/components/ui/technical-details'
+import { Select } from '@/components/ui/text-input'
 
 const emailSecurityLabels: Record<EmailSecurity, string> = { starttls: 'STARTTLS', get implicit() { return tx("Implicit TLS") }, get none() { return tx("Şifreleme yok") } }
 const smsAuthLabels: Record<SmsAuthentication, string> = { get none() { return tx("Yok") }, get bearer() { return tx("Bearer token") }, get basic() { return tx("Basic (kullanıcı + parola)") }, get header() { return tx("Özel header") } }
@@ -55,7 +57,7 @@ function SecretControl({ label, transport, onSet, onClear }: {
     <p className="text-sm text-text-muted">{transport.hasSecret ? tx("{0}: kayıtlı. Kayıtlı değer geri okunamaz.", { "0": label }) : tx("{0}: ayarlanmadı.", { "0": label })}</p>
     <form onSubmit={submit} className="space-y-3">
       <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-0 flex-1 basis-48"><SecretField label={tx("Yeni {0}", { "0": label.toLocaleLowerCase(currentLocale()) })} saved={transport.hasSecret} value={secret.value} onChange={secret.set} /></div>
+        <div className="min-w-0 flex-1 basis-48"><SecretField label={tx("Yeni {0}", { "0": label.toLocaleLowerCase(currentLocale()) })} value={secret.value} onChange={secret.set} /></div>
         <Button type="submit" variant="outline" disabled={!secret.value || onSet.isPending}>{onSet.isPending ? tx('Kaydediliyor…') : tx('Ayarla')}</Button>
         {transport.hasSecret && <Button type="button" variant="outline" disabled={onClear.isPending} onClick={() => { onSet.reset(); onClear.reset(); setConfirmClear(true) }}>{tx("Temizle")}</Button>}
       </div>
@@ -98,25 +100,19 @@ export function EmailTransportCard({ transport }: { transport: EmailTransport })
     <div className="space-y-6">
     <p className="text-sm text-text">{status.sentence}</p>
     <form onSubmit={submit} noValidate className="space-y-4">
-      <label className="flex items-center gap-2 text-sm text-text"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />{tx("E-posta aktarımı etkin")}</label>
+      <CheckField label={tx("E-posta aktarımı etkin")} checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label={tx("Gönderen adresi")}>{(control) => <input {...control} className={inputClass} value={fromAddress} onChange={(event) => setFromAddress(event.target.value)} />}</Field>
-        <Field label={tx("Gönderen adı")}>{(control) => <input {...control} className={inputClass} value={fromName} onChange={(event) => setFromName(event.target.value)} />}</Field>
+        <Field label={tx("Gönderen adresi")}>{(control) => <TextInput {...control} value={fromAddress} onChange={(event) => setFromAddress(event.target.value)} />}</Field>
+        <Field label={tx("Gönderen adı")}>{(control) => <TextInput {...control} value={fromName} onChange={(event) => setFromName(event.target.value)} />}</Field>
       </div>
-      <TechnicalDetails items={[
-        { label: tx("Kayıtlı sunucu"), value: transport.host ?? '—' },
-        { label: tx("Kayıtlı bağlantı noktası"), value: transport.port === null ? '—' : String(transport.port) },
-        { label: tx("Kayıtlı güvenlik"), value: emailSecurityLabels[transport.security] },
-        { label: tx("Kayıtlı kullanıcı adı"), value: transport.username ?? '—' },
-        ...secretItems(transport),
-      ]}>
+      <TechnicalDetails items={secretItems(transport)}>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label={tx("Sunucu")}>{(control) => <input {...control} className={inputClass} value={host} onChange={(event) => setHost(event.target.value)} />}</Field>
-        <Field label={tx("Port")}>{(control) => <input {...control} className={inputClass} inputMode="numeric" value={port} aria-invalid={!Number.isInteger(portNumber) || portNumber < 1 || portNumber > 65535} onChange={(event) => setPort(event.target.value)} />}</Field>
-        <Field label={tx("Güvenlik")}>{(control) => <select {...control} className={`${selectClass} w-full`} value={security} onChange={(event) => setSecurity(event.target.value as EmailSecurity)}>{(Object.keys(emailSecurityLabels) as EmailSecurity[]).map((item) => <option key={item} value={item}>{emailSecurityLabels[item]}</option>)}</select>}</Field>
-        <Field label={tx("Kullanıcı adı")}>{(control) => <input {...control} className={inputClass} value={username} autoComplete="off" onChange={(event) => setUsername(event.target.value)} />}</Field>
+        <Field label={tx("Sunucu")}>{(control) => <TextInput {...control} value={host} onChange={(event) => setHost(event.target.value)} />}</Field>
+        <Field label={tx("Port")}>{(control) => <TextInput {...control} inputMode="numeric" value={port} aria-invalid={!Number.isInteger(portNumber) || portNumber < 1 || portNumber > 65535} onChange={(event) => setPort(event.target.value)} />}</Field>
+        <Field label={tx("Güvenlik")}>{(control) => <Select {...control} value={security} onChange={(event) => setSecurity(event.target.value as EmailSecurity)}>{(Object.keys(emailSecurityLabels) as EmailSecurity[]).map((item) => <option key={item} value={item}>{emailSecurityLabels[item]}</option>)}</Select>}</Field>
+        <Field label={tx("Kullanıcı adı")}>{(control) => <TextInput {...control} value={username} autoComplete="off" onChange={(event) => setUsername(event.target.value)} />}</Field>
       </div>
-      <p className="text-xs text-text-muted">{tx("“Şifreleme yok” seçeneği kullanıcı adı/parola yapılandırıldığında reddedilir.")}</p>
+      <p className="text-sm text-text-muted">{tx("“Şifreleme yok” seçeneği kullanıcı adı/parola yapılandırıldığında reddedilir.")}</p>
       </TechnicalDetails>
       {!valid && <p className="text-sm text-text-muted">{tx("Kaydetmek için sunucu, geçerli bir bağlantı noktası ve gönderen adresi gerekir. Sunucu bilgileri “Teknik ayrıntılar” altındadır.")}</p>}
       {save.isError && <ErrorNotice error={save.error} />}
@@ -155,19 +151,15 @@ export function SmsTransportCard({ transport }: { transport: SmsTransport }) {
     <p className="text-sm text-text">{status.sentence}</p>
     <Notice tone="warning" title={tx("UYGULANDI — DOĞRULANMADI")}>{tx("Yalnızca genel bir HTTP JSON bağdaştırıcısı uygulandı; hiçbir gerçek SMS sağlayıcısına karşı doğrulanmadı. Canlıya almadan önce kendi sağlayıcınızla deneyin.")}</Notice>
     <form onSubmit={submit} noValidate className="space-y-4">
-      <label className="flex items-center gap-2 text-sm text-text"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />{tx("SMS aktarımı etkin")}</label>
-      <Field label={tx("Gönderen")}>{(control) => <input {...control} className={inputClass} value={sender} onChange={(event) => setSender(event.target.value)} />}</Field>
-      <TechnicalDetails items={[
-        { label: tx("Kayıtlı uç nokta"), value: transport.endpoint ?? '—' },
-        { label: tx("Kayıtlı kimlik doğrulama"), value: smsAuthLabels[transport.authentication] },
-        ...secretItems(transport),
-      ]}>
+      <CheckField label={tx("SMS aktarımı etkin")} checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
+      <Field label={tx("Gönderen")}>{(control) => <TextInput {...control} value={sender} onChange={(event) => setSender(event.target.value)} />}</Field>
+      <TechnicalDetails items={secretItems(transport)}>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label={tx("Sağlayıcı")}>{(control) => <input {...control} className={inputClass} value="generic-http" disabled readOnly />}</Field>
-        <Field label={tx("Uç nokta (https://…)")}>{(control) => <input {...control} className={inputClass} value={endpoint} onChange={(event) => setEndpoint(event.target.value)} />}</Field>
-        <Field label={tx("Kimlik doğrulama")}>{(control) => <select {...control} className={`${selectClass} w-full`} value={authentication} onChange={(event) => setAuthentication(event.target.value as SmsAuthentication)}>{(Object.keys(smsAuthLabels) as SmsAuthentication[]).map((item) => <option key={item} value={item}>{smsAuthLabels[item]}</option>)}</select>}</Field>
-        {authentication === 'basic' && <Field label={tx("Kullanıcı adı")}>{(control) => <input {...control} className={inputClass} value={username} autoComplete="off" onChange={(event) => setUsername(event.target.value)} />}</Field>}
-        {authentication === 'header' && <Field label={tx("Header adı")}>{(control) => <input {...control} className={inputClass} value={headerName} onChange={(event) => setHeaderName(event.target.value)} />}</Field>}
+        <Field label={tx("Sağlayıcı")}>{(control) => <TextInput {...control} value="generic-http" disabled readOnly />}</Field>
+        <Field label={tx("Uç nokta (https://…)")}>{(control) => <TextInput {...control} value={endpoint} onChange={(event) => setEndpoint(event.target.value)} />}</Field>
+        <Field label={tx("Kimlik doğrulama")}>{(control) => <Select {...control} value={authentication} onChange={(event) => setAuthentication(event.target.value as SmsAuthentication)}>{(Object.keys(smsAuthLabels) as SmsAuthentication[]).map((item) => <option key={item} value={item}>{smsAuthLabels[item]}</option>)}</Select>}</Field>
+        {authentication === 'basic' && <Field label={tx("Kullanıcı adı")}>{(control) => <TextInput {...control} value={username} autoComplete="off" onChange={(event) => setUsername(event.target.value)} />}</Field>}
+        {authentication === 'header' && <Field label={tx("Header adı")}>{(control) => <TextInput {...control} value={headerName} onChange={(event) => setHeaderName(event.target.value)} />}</Field>}
       </div>
       </TechnicalDetails>
       {!endpoint.trim() && <p className="text-sm text-text-muted">{tx("Kaydetmek için uç nokta gerekir. Uç nokta “Teknik ayrıntılar” altındadır.")}</p>}

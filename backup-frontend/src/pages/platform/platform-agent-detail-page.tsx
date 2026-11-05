@@ -9,7 +9,7 @@ import { platformCrumb } from '@/features/platform/crumbs'
 import { usePlatformAgent } from '@/features/platform/hooks'
 import { platformPaths } from '@/features/platform/paths'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
+import { platformOnlyMessage } from '@/lib/api/failure-messages'
 
 /** Connection state and last seen lead; lifecycle, system, versions and capabilities are collapsed in the technical details. */
 export function PlatformAgentDetailPage() {

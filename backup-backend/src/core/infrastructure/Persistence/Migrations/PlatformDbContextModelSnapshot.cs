@@ -18,7 +18,7 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -254,6 +254,32 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_agent_enrollment_tokens_tenant_id", "\"TenantId\" <> '00000000-0000-0000-0000-000000000000'::uuid");
 
                             t.HasCheckConstraint("ck_agent_enrollment_tokens_terminal", "\"ConsumedAt\" IS NULL OR \"RevokedAt\" IS NULL");
+                        });
+                });
+
+            modelBuilder.Entity("BackupPlatform.Agents.Enrollment.PlatformAgentSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EnrollmentTokenLifetimeMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ServerUrl")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UpdatedBy")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("platform_agent_settings", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_platform_agent_settings_singleton", "\"Id\" = 1");
                         });
                 });
 
@@ -3737,12 +3763,12 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ConnectionId", "TenantId");
 
+                    b.HasIndex("TenantId", "AgentId", "CreatedAt");
+
                     b.HasIndex("TenantId", "ConnectionId", "AgentId")
                         .IsUnique()
                         .HasDatabaseName("ux_storage_capacity_tasks_pending")
                         .HasFilter("\"CompletedAt\" IS NULL");
-
-                    b.HasIndex("TenantId", "AgentId", "CreatedAt");
 
                     b.ToTable("storage_capacity_tasks", null, t =>
                         {

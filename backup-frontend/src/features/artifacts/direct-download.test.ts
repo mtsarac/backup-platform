@@ -11,7 +11,7 @@ class FakePeer {
   iceGatheringState = 'complete'
   localDescription = { sdp: 'offer' }
   connectionState = 'connected'
-  channel = { binaryType: '', onmessage: null as ((event: { data: unknown }) => void) | null, onerror: null, onclose: null as (() => void) | null, send: vi.fn(), close: vi.fn() }
+  channel = { binaryType: '', onmessage: null as ((event: { data: unknown }) => void) | null, onerror: null as (() => void) | null, onclose: null as (() => void) | null, send: vi.fn(), close: vi.fn() }
   onconnectionstatechange: (() => void) | null = null
   onicegatheringstatechange: (() => void) | null = null
   config: RTCConfiguration
@@ -60,6 +60,23 @@ describe('direct browser disk publication', () => {
     expect(vi.mocked(apiRequest).mock.calls.every(([, options]) => !JSON.stringify(options).includes('AQIDBA=='))).toBe(true)
   })
 
+  it('stays successful when the agent closes the peer right after the saved acknowledgement (error event, then close)', async () => {
+    const writer = { write: vi.fn(async () => {}), close: vi.fn(async () => {}), abort: vi.fn(async () => {}) }
+    const run = receiveDirectDownload(session, { createWritable: async () => writer as unknown as FileSystemWritableFileStream }, new AbortController().signal)
+    const channel = await connected()
+    channel.onmessage!({ data: JSON.stringify({ sizeBytes: bytes.length, checksum: session.checksum }) })
+    await vi.waitFor(() => expect(channel.send).toHaveBeenCalledWith('ready'))
+    channel.onmessage!({ data: bytes.buffer })
+    await vi.waitFor(() => expect(channel.send).toHaveBeenCalledWith('ack'))
+    channel.onmessage!({ data: 'done' })
+    await vi.waitFor(() => expect(channel.send).toHaveBeenCalledWith('saved'))
+    channel.onerror!()
+    channel.onclose!()
+    await expect(run).resolves.toBeUndefined()
+    expect(writer.close).toHaveBeenCalledTimes(1)
+    expect(writer.abort).not.toHaveBeenCalled()
+  })
+
   it('aborts unverified output rather than publishing corrupt content or retrying through backend', async () => {
     const writer = { write: vi.fn(async () => {}), close: vi.fn(async () => {}), abort: vi.fn(async () => {}) }
     const run = receiveDirectDownload(session, { createWritable: async () => writer as unknown as FileSystemWritableFileStream }, new AbortController().signal)
@@ -73,6 +90,36 @@ describe('direct browser disk publication', () => {
     expect(writer.close).not.toHaveBeenCalled()
     expect(apiRequest).toHaveBeenCalledTimes(2)
     expect(FakePeer.current.close).toHaveBeenCalledTimes(1)
+  })
+
+  describe('when ICE gathering does not complete', () => {
+    beforeEach(() => { vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }) })
+    afterEach(() => { vi.useRealTimers() })
+    const writer = () => ({ write: vi.fn(async () => {}), close: vi.fn(async () => {}), abort: vi.fn(async () => {}) })
+
+    it('offers the candidates gathered so far after 15 s instead of failing', async () => {
+      const w = writer()
+      vi.stubGlobal('RTCPeerConnection', class extends FakePeer {
+        iceGatheringState = 'gathering'
+        localDescription = { sdp: 'v=0\na=candidate:1 1 udp 2113937151 192.0.2.1 5000 typ host\n' }
+      })
+      void receiveDirectDownload(session, { createWritable: async () => w as unknown as FileSystemWritableFileStream }, new AbortController().signal).catch(() => {})
+      await vi.advanceTimersByTimeAsync(15_000)
+      expect(apiRequest).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ method: 'POST', json: { sdp: expect.stringContaining('a=candidate:') } }))
+    })
+
+    it('fails closed after 15 s when no candidate exists', async () => {
+      const w = writer()
+      vi.stubGlobal('RTCPeerConnection', class extends FakePeer {
+        iceGatheringState = 'gathering'
+        localDescription = { sdp: 'v=0\n' }
+      })
+      const run = receiveDirectDownload(session, { createWritable: async () => w as unknown as FileSystemWritableFileStream }, new AbortController().signal)
+      const failure = expect(run).rejects.toThrow('DirectPathUnavailable')
+      await vi.advanceTimersByTimeAsync(15_000)
+      await failure
+      expect(apiRequest).not.toHaveBeenCalled()
+    })
   })
 
   it('rejects unsafe signaling URLs before any disk or backend operation', async () => {

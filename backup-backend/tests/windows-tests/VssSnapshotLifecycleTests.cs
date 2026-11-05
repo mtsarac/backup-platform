@@ -3,6 +3,7 @@ using Xunit;
 
 namespace BackupPlatform.Agent.Platform.Windows.Tests;
 
+[Trait("Category", "Frozen")]
 public sealed class VssSnapshotLifecycleTests
 {
     [WindowsFact]

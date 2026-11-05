@@ -7,7 +7,7 @@ import { Field } from '@/components/ui/field'
 import { Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { Stepper } from '@/components/ui/stepper'
-import { inputClass, selectClass } from '@/components/ui/form-styles'
+import { TextInput } from '@/components/ui/text-input'
 import { isActiveRestore, safeRestoreCode } from '@/features/restores/presentation'
 import type { SupportRestoreTargets, SupportSession } from './types'
 import { useSupportRestore, useSupportRestoreActions, useSupportRestoreTargets } from './hooks'
@@ -16,6 +16,8 @@ import { formatBytes } from '@/lib/format'
 import { failureMessage } from '@/lib/api/failure-messages'
 import { QueryState } from '@/components/data/query-state'
 import { errorMessage } from '@/lib/api/failure-messages'
+import { Select } from '@/components/ui/text-input'
+import { CheckField } from '@/components/ui/check-field'
 
 const customerWarning = 'Bu hedef müşterinin canlı (production) ortamı olabilir; izole bir Support Restore Environment değildir.'
 export function SupportRestoreForm({ session, artifactId, onStarted }: { session: SupportSession; artifactId: string; onStarted: (id: string) => void }) {
@@ -76,18 +78,18 @@ function RestoreForm({ session, artifactId, targets, onStarted }: { session: Sup
     <Stepper steps={[tx('Hedef ve Ön Kontrol'), tx('Sonucu onayla'), tx('Geri Yüklemeyi başlat')]} current={passed ? acknowledged ? 2 : 1 : 0} />
     <Notice tone="warning" title={tx(customerWarning)}>{targets.environment.warning && targets.environment.warning !== tx(customerWarning) && <p>{targets.environment.warning}</p>}<p>{tx("Hedef tenant'ın gerçek")}{' '}{engineName}{' '}{tx("bağlantısıdır. Mevcut Database'ler değiştirilmez; yalnızca yeni Database oluşturulur.")}</p>{isPg && <p>{tx("Yalnızca güvenilir platform arşivlerini kullanın: pg_restore arşiv SQL ve fonksiyonlarını hedefte superuser olarak çalıştırabilir. SHA-256 byte bütünlüğünü doğrular, SQL güvenliğini doğrulamaz. pg_dump cluster rollerini yedeklemez; kaynak sahiplikleri/ACL için gereken roller ve extension paketleri hazır olmalı; hedef sürümü hem kaynak hem pg_dump sürümünden eski olmamalıdır.")}</p>}</Notice>
     <fieldset disabled={busy || !scope.enabled} className="grid gap-4 sm:grid-cols-2">
-      <Field label={tx("Agent")}>{(control) => <select {...control} className={`${selectClass} w-full`} value={agentId} onChange={event => { const id = event.target.value; setAgentId(id); setTargetJobId(targets.targets.find(item => item.agentId === id)?.jobId ?? ''); setAcknowledged(false) }}><option value="">{tx("Agent seçin")}</option>{eligibleAgents.map(agent => <option key={agent.agentId} value={agent.agentId}>{agent.hostName ?? agent.agentId} · {agent.sourceAccess}</option>)}</select>}</Field>
-      <Field label={tx("Hedef {0}", { "0": engineName })}>{(control) => <select {...control} className={`${selectClass} w-full`} value={targetJobId} onChange={event => { setTargetJobId(event.target.value); setAcknowledged(false) }}><option value="">{tx("Hedef seçin")}</option>{targets.targets.filter(item => item.agentId === agentId).map(item => <option key={item.jobId} value={item.jobId}>{item.jobName} · {item.host}{item.port ? `:${item.port}` : ''} · {item.database}</option>)}</select>}</Field>
-      <div className="sm:col-span-2"><Field label={tx("Yeni Database adı")}>{(control) => <input {...control} className={inputClass} value={databaseName} maxLength={128} onChange={event => { setDatabaseName(event.target.value); setAcknowledged(false) }} />}</Field></div>
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={verifyChecksum} onChange={event => { setVerifyChecksum(event.target.checked); setAcknowledged(false) }} />{tx("Checksum doğrula")}</label>
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={verifyBackup} onChange={event => { setVerifyBackup(event.target.checked); setAcknowledged(false) }} />{tx("Backup doğrula ·")}{' '}{isPg ? tx('pg_restore arşiv doğrulaması') : 'RESTORE VERIFYONLY'}</label>
+      <Field label={tx("Agent")}>{(control) => <Select {...control} value={agentId} onChange={event => { const id = event.target.value; setAgentId(id); setTargetJobId(targets.targets.find(item => item.agentId === id)?.jobId ?? ''); setAcknowledged(false) }}><option value="">{tx("Agent seçin")}</option>{eligibleAgents.map(agent => <option key={agent.agentId} value={agent.agentId}>{agent.hostName ?? agent.agentId} · {agent.sourceAccess}</option>)}</Select>}</Field>
+      <Field label={tx("Hedef {0}", { "0": engineName })}>{(control) => <Select {...control} value={targetJobId} onChange={event => { setTargetJobId(event.target.value); setAcknowledged(false) }}><option value="">{tx("Hedef seçin")}</option>{targets.targets.filter(item => item.agentId === agentId).map(item => <option key={item.jobId} value={item.jobId}>{item.jobName} · {item.host}{item.port ? `:${item.port}` : ''} · {item.database}</option>)}</Select>}</Field>
+      <div className="sm:col-span-2"><Field label={tx("Yeni Database adı")}>{(control) => <TextInput {...control}  value={databaseName} maxLength={128} onChange={event => { setDatabaseName(event.target.value); setAcknowledged(false) }} />}</Field></div>
+      <CheckField checked={verifyChecksum} onChange={event => { setVerifyChecksum(event.target.checked); setAcknowledged(false) }} label={tx("Checksum doğrula")} />
+      <CheckField checked={verifyBackup} onChange={event => { setVerifyBackup(event.target.checked); setAcknowledged(false) }} label={<>{tx("Backup doğrula ·")}{' '}{isPg ? tx('pg_restore arşiv doğrulaması') : 'RESTORE VERIFYONLY'}</>} />
     </fieldset>
     {!eligible && <p role="status" className="text-sm">{tx("Uygun, çevrimiçi ve restore/precheck destekleyen bir Agent ve ona ait hedef gerekir. Yalnızca Full backup geri yüklenebilir.")}</p>}
     {validation && <p role="alert" className="text-sm text-error">{validation}</p>}
     <QueryState forbiddenMessage={errorMessage} isPending={false} error={precheck.error || start.error || operation.error} />
     <Button variant="outline" disabled={!eligible || busy || !scope.enabled || !databaseName.trim()} onClick={runPrecheck}>{busy && !start.isPending ? tx('Ön Kontrol çalışıyor…') : checked ? tx('Ön Kontrolü tekrar çalıştır') : tx('Ön Kontrol')}</Button>
     {checked && operation.data && <section aria-label={tx("Precheck sonucu")} className="space-y-2 rounded-lg border border-border bg-surface-2 p-4"><StatusPill status={operation.data.status} />{!matching && <p role="status">{tx("Ayarlar değişti. Start için yeniden başarılı Precheck gerekir.")}</p>}<ul className="space-y-1 text-sm">{operation.data.result?.preCheck.map((check, index) => <li key={`${check.checkId}:${index}`}>{safeRestoreCode(check.checkId)} · {tx(check.status)} · {check.status === 'Failed' ? failureMessage(check.reasonCode, 'restore') : check.message || safeRestoreCode(check.reasonCode)}</li>)}</ul>{operation.data.failureCode && <p className="text-sm text-error">{failureMessage(operation.data.failureCode, 'restore')}</p>}{passed && <p className="text-sm text-success">{tx("Precheck başarılı. Canlı ortam uyarısını onaylayarak başlatabilirsiniz.")}</p>}</section>}
-    <label className="flex items-start gap-2 rounded-lg border border-warning/30 p-4 text-sm"><input type="checkbox" className="mt-0.5" checked={acknowledged} disabled={!scope.enabled || start.isPending} onChange={event => setAcknowledged(event.target.checked)} />{tx("Bu işlemin müşterinin canlı ortamında çalışabileceğini anladım ve yeni Database geri yüklemesini onaylıyorum.")}</label>
+    <CheckField className="items-start rounded-lg border border-warning/30 p-4" checked={acknowledged} disabled={!scope.enabled || start.isPending} onChange={event => setAcknowledged(event.target.checked)} label={tx("Bu işlemin müşterinin canlı ortamında çalışabileceğini anladım ve yeni Database geri yüklemesini onaylıyorum.")} />
     <Button disabled={!scope.enabled || !eligible || !passed || !acknowledged || busy || Boolean(operation.error)} onClick={startRestore}>{start.isPending ? tx('Geri yükleme başlatılıyor…') : tx('Geri Yüklemeyi başlat')}</Button>
     </div>
     </Section>

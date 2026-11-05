@@ -7,20 +7,21 @@ import { ProgressBar } from '@/components/data/progress-bar'
 import { RelativeTime } from '@/components/data/relative-time'
 import { StatusPill } from '@/components/data/status-pill'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { TechnicalDetails, type TechnicalItem } from '@/components/ui/technical-details'
 import { Tabs } from '@/components/ui/tabs'
-import { ArtifactDetails } from '@/features/artifacts/artifact-details'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { useBackup, useBackupActions } from '@/features/backups/hooks'
 import { canCancelRun, canRetryRun, isActiveRun, progressStageLabel, retryStateLabels, triggerLabel } from '@/features/backups/presentation'
 import { ReplicationBadge, ReplicationSection } from '@/features/backups/replication'
-import { SizeAnomalyBadge, SizeAnomalyComparison } from '@/features/backups/size-anomaly'
+import { SizeAnomalyComparison } from '@/features/backups/size-anomaly'
 import type { BackupAttempt, BackupRun } from '@/features/backups/types'
 import { linkClass } from '@/components/ui/form-styles'
+import { isFeatureEnabled } from '@/features/feature-flags/feature-flags'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { describeFailure } from '@/lib/api/failure-messages'
 import { formatDateTime, formatDuration, formatSeconds } from '@/lib/format'
@@ -43,7 +44,7 @@ function runTechnicalItems(run: BackupRun): TechnicalItem[] {
     { label: tx("İptal isteği"), value: formatDateTime(run.cancellationRequestedAt) },
     { label: tx("Bitiş"), value: formatDateTime(run.completedAt) },
     { label: tx("Yeniden deneme durumu"), value: retryStateLabels[retry.state] ?? retry.state },
-    { label: tx("Sonraki deneme"), value: formatDateTime(retry.nextAttemptAt) },
+    ...(run.status !== 'RetryPending' && retry.nextAttemptAt ? [{ label: tx("Sonraki deneme"), value: formatDateTime(retry.nextAttemptAt) }] : []),
     { label: tx("Çakışma politikası"), value: retry.overlapPolicy === 'Skip' ? tx('Aktif iş varsa atla') : tx('Sıraya al') },
     { label: tx("Yeniden deneme ilk gecikmesi"), value: formatSeconds(retry.policy.initialDelaySeconds) },
     { label: tx("Yeniden deneme üst gecikmesi"), value: formatSeconds(retry.policy.maxDelaySeconds) },
@@ -117,8 +118,7 @@ function BackupDetail({ id }: { id: string }) {
       <PageHeader
         crumbs={[{ label: tx('Yedekleme denemeleri'), to: `/tenants/${tenantId}/backup-runs` }, { label: run?.jobName ?? tx('Yedekleme denemesi') }]}
         title={run?.jobName ?? tx('Yedekleme denemesi')}
-        description={run ? `${run.configuration.database} · ${run.agentName ?? tx('Yedekleme bilgisayarı')}` : undefined}
-        meta={run && <><StatusPill status={run.status} /><ReplicationBadge replication={run.replication} /><SizeAnomalyBadge run={run} /><span className="text-sm text-text-muted"><RelativeTime value={run.startedAt ?? run.createdAt} /></span></>}
+        meta={run && <><StatusPill status={run.status} />{tab !== 'replication' && <ReplicationBadge replication={run.replication} />}</>}
         actions={run && canOperate && <>
           {canRetryRun(run.status) && <Button disabled={busy} onClick={() => void perform('retry')}>{actions.retry.isPending ? tx('Sıraya alınıyor…') : tx('Yeniden dene')}</Button>}
           {(run.status === 'Running' || run.status === 'Leased') && <Button disabled={busy || run.pauseRequested} onClick={() => void perform('pause')}>{actions.pause.isPending || run.pauseRequested ? tx('İletiliyor…') : tx('Duraklat')}</Button>}
@@ -143,8 +143,8 @@ function BackupDetail({ id }: { id: string }) {
           <Tabs label={tx("Yedekleme denemesi bölümleri")} idPrefix="run" value={tab} onChange={setTab} items={tabs} />
           <div role="tabpanel" id={`run-panel-${tab}`} aria-labelledby={`run-tab-${tab}`} className="space-y-6">
             {tab === 'summary' && <>
-              {run.sizeAnomalyStatus === 'SizeAnomalyWarning' && <Notice tone="warning">{tx("Yedek başarıyla tamamlandı. Boyut uyarısı yedeği geçersiz kılmaz; beklenmeyen veri değişikliklerini inceleyin.")}</Notice>}
-              {run.sizeAnomalyStatus === 'BaselinePending' && <p className="text-sm text-text-muted">{tx("Karşılaştırma için en az 3 önceki başarılı yedek gerekir.")}</p>}
+              {isFeatureEnabled('sizeAnomaly') && run.sizeAnomalyStatus === 'SizeAnomalyWarning' && <Notice tone="warning">{tx("Yedek başarıyla tamamlandı. Boyut uyarısı yedeği geçersiz kılmaz; beklenmeyen veri değişikliklerini inceleyin.")}</Notice>}
+              {isFeatureEnabled('sizeAnomaly') && run.sizeAnomalyStatus === 'BaselinePending' && <p className="text-sm text-text-muted">{tx("Karşılaştırma için en az 3 önceki başarılı yedek gerekir.")}</p>}
               <SizeAnomalyComparison run={run} />
               {(run.status === 'Failed' || run.status === 'AgentLost') && <ErrorNotice title={tx("Yedekleme denemesi başarısız oldu")} {...describeFailure(failureCode)}
                 action={canOperate ? tx("Sorunu giderdikten sonra “Yeniden dene” ile yeni bir deneme başlatın.") : tx("Yöneticinize danışın.")} />}
@@ -163,7 +163,7 @@ function BackupDetail({ id }: { id: string }) {
               <div role="region" aria-label={tx("Yedekleme denemesi ayrıntıları")}><TechnicalDetails items={runTechnicalItems(run)} /></div>
             </>}
             {tab === 'attempts' && (run.attempts.length === 0
-              ? <div className="rounded-xl border border-border bg-surface"><EmptyState icon={History} message={tx("Henüz deneme oluşturulmadı.")} /></div>
+              ? <Card padding="none"><EmptyState icon={History} message={tx("Henüz deneme oluşturulmadı.")} /></Card>
               : run.attempts.map((attempt) => <Section key={attempt.id} title={tx("{0}. deneme · {1}", { "0": attempt.number, "1": triggerLabel(attempt.trigger) })} actions={<><StatusPill status={attempt.status} /><ReplicationBadge replication={attempt.replication} /></>}>
                 <div className="space-y-4">
                   <Facts columns={3}>
@@ -176,7 +176,7 @@ function BackupDetail({ id }: { id: string }) {
                   <TechnicalDetails items={attemptTechnicalItems(attempt)} />
                   <section aria-label={tx("{0}. deneme çıktıları", { "0": attempt.number })} className="space-y-3 border-t border-border pt-4">
                     <h3 className="text-sm font-medium text-text-heading">{tx("Yedek dosyaları")}</h3>
-                    {attempt.artifacts.length === 0 ? <p className="text-sm text-text-muted">{tx("Bu denemede kayıtlı yedek dosyası yok.")}</p> : attempt.artifacts.map((artifact) => <div key={artifact.id} className="space-y-2"><ArtifactDetails artifact={{ ...artifact, jobName: artifact.jobName ?? run.jobName, agentName: artifact.agentName ?? run.agentName, databaseName: artifact.databaseName ?? run.configuration.database }} /><Link className={`text-sm ${linkClass}`} to={`/tenants/${tenantId}/artifacts/${artifact.id}`}>{tx("Yedek dosyasını aç")}</Link></div>)}
+                    {attempt.artifacts.length === 0 ? <p className="text-sm text-text-muted">{tx("Bu denemede kayıtlı yedek dosyası yok.")}</p> : attempt.artifacts.map((artifact) => <div key={artifact.id}><Link className={`text-sm ${linkClass}`} to={`/tenants/${tenantId}/artifacts/${artifact.id}`}>{tx("Yedek dosyasını aç")}</Link></div>)}
                   </section>
                 </div>
               </Section>))}

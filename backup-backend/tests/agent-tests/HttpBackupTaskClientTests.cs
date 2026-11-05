@@ -12,6 +12,32 @@ namespace BackupPlatform.AgentTests;
 
 public sealed class HttpBackupTaskClientTests
 {
+    [Theory]
+    [InlineData(HttpStatusCode.OK, "{\"allowed\":true}", true, true)]
+    [InlineData(HttpStatusCode.OK, "{\"allowed\":false}", true, false)]
+    [InlineData(HttpStatusCode.OK, "{}", false, false)]
+    [InlineData(HttpStatusCode.OK, "{\"allowed\":\"true\"}", false, false)]
+    [InlineData(HttpStatusCode.NoContent, "", false, false)]
+    [InlineData(HttpStatusCode.Conflict, "", false, false)]
+    public async Task Quota_reservation_requires_an_explicit_valid_answer(HttpStatusCode status, string body, bool success, bool allowed)
+    {
+        using var handler = new FakeHttpHandler { Respond = (_, _) => Task.FromResult(FakeHttpHandler.Json(status, body)) };
+        using var http = new HttpClient(handler);
+        var client = new HttpBackupTaskClient(http, new AgentBackendEndpoint(new Uri("https://backup.example.test/")), new FakeTimeProvider());
+        var attempt = Guid.NewGuid();
+        var lease = Guid.NewGuid();
+        var result = await client.AdjustQuotaReservationAsync(TestIdentity.Create(), attempt,
+            new BackupQuotaReservationRequest { LeaseToken = lease, SizeBytes = 256 }, default);
+        Assert.Equal(success, result.IsSuccess);
+        if (success) Assert.Equal(allowed, result.Value!.Allowed);
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Post, request.Method);
+        Assert.Equal($"/api/agent/tasks/{attempt:D}/quota-reservation", request.Uri.AbsolutePath);
+        using var json = JsonDocument.Parse(request.Body!);
+        Assert.Equal(lease, json.RootElement.GetProperty("leaseToken").GetGuid());
+        Assert.Equal(256, json.RootElement.GetProperty("sizeBytes").GetInt64());
+    }
+
     [Fact]
     public async Task Task_mutations_authenticate_current_identity_and_carry_the_lease_without_identity_in_body()
     {

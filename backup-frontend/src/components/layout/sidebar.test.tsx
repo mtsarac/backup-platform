@@ -1,18 +1,20 @@
 import { act, fireEvent, screen, within } from '@testing-library/react'
 import { render } from '@/test/render'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, createRoutesFromChildren, matchRoutes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import { changeLanguage } from '@/lib/i18n/runtime'
+import { tenantRoutes } from '@/route-tables'
 import { AppShell } from './app-shell'
 import { Sidebar } from './sidebar'
 
-const access = vi.hoisted(() => ({ tenantId: 'tenant-a', canAdmin: true }))
+const access = vi.hoisted(() => ({ tenantId: 'tenant-a', canAdmin: true, isPlatformAdmin: false }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ ...access, tenant: { role: 'Owner' }, switchTenant: vi.fn() }) }))
-vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({ user: { isPlatformAdmin: false, displayName: 'Ada' }, tenants: [{ tenantId: 'tenant-a', name: 'Acme' }], logout: vi.fn() }) }))
+vi.mock('@/features/auth/use-auth', () => ({ useAuth: () => ({ user: { isPlatformAdmin: access.isPlatformAdmin, displayName: 'Ada' }, tenants: [{ tenantId: 'tenant-a', name: 'Acme' }], logout: vi.fn() }) }))
 
 vi.mock('@/hooks/use-theme', () => ({ useTheme: () => ({ resolvedTheme: 'light', toggleTheme: vi.fn() }) }))
 
-beforeEach(() => { access.canAdmin = true })
+beforeEach(() => { access.canAdmin = true; access.isPlatformAdmin = false; setFeatureFlags({ supportSessions: true }) })
 
 const base = '/tenants/tenant-a'
 const nav = () => screen.getAllByRole('navigation')[0]
@@ -20,44 +22,59 @@ const group = (name: string) => within(nav()).getByRole('group', { name })
 const links = (name: string) => within(group(name)).getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])
 
 describe('Tenant sidebar', () => {
-  it('groups every existing page under the four plain-language headings with unchanged URLs', () => {
+  it('groups every existing page under four groups with unchanged URLs', () => {
     render(<MemoryRouter><Sidebar /></MemoryRouter>)
-    expect(within(nav()).getByRole('link', { name: 'Ana Sayfa' })).toHaveAttribute('href', base)
-    expect(links('Yedeklerim')).toEqual([
+    expect(within(nav()).getByRole('link', { name: 'Genel Bakış' })).toHaveAttribute('href', base)
+    expect(links('Yedeklemeler')).toEqual([
       ['Yedekleme işleri', `${base}/backup-jobs`],
       ['Yedekleme denemeleri', `${base}/backup-runs`],
       ['Yedek dosyaları', `${base}/artifacts`],
       ['Geri yüklemeler', `${base}/restores`],
     ])
-    expect(links('Bilgisayarlarım ve Depolama')).toEqual([
+    expect(links('Altyapı')).toEqual([
       ['Yedekleme bilgisayarları', `${base}/agents`],
       ['Veritabanı bulma', `${base}/discovery`],
-      ['Depolama alanları', `${base}/storage`],
-      ['Yükleme bant genişliği', `${base}/upload-bandwidth`],
+      ['Depolama', `${base}/storage`],
     ])
     expect(links('Ayarlar')).toEqual([
       ['Bildirimler', `${base}/notifications`],
       ['Şifreleme', `${base}/encryption`],
+      ['Yükleme bant genişliği', `${base}/upload-bandwidth`],
       ['Destek erişimi', `${base}/support-access`],
     ])
+    expect(within(nav()).queryByRole('link', { name: 'Platform Yönetimi' })).not.toBeInTheDocument()
   })
 
-  it('hides the whole Ayarlar group from non-administrators but keeps the other pages', () => {
+  it('keeps only upload bandwidth in Ayarlar for non-administrators', () => {
     access.canAdmin = false
     render(<MemoryRouter><Sidebar /></MemoryRouter>)
-    expect(within(nav()).queryByRole('group', { name: 'Ayarlar' })).not.toBeInTheDocument()
-    for (const label of ['Bildirimler', 'Şifreleme', 'Destek erişimi']) expect(within(nav()).queryByRole('link', { name: label })).not.toBeInTheDocument()
-    expect(links('Yedeklerim')).toHaveLength(4)
-    expect(links('Bilgisayarlarım ve Depolama')).toHaveLength(4)
+    expect(links('Ayarlar')).toEqual([['Yükleme bant genişliği', `${base}/upload-bandwidth`]])
+    expect(links('Yedeklemeler')).toHaveLength(4)
+    expect(links('Altyapı')).toHaveLength(3)
+  })
+
+  it('links to Platform Yönetimi only for platform administrators', () => {
+    access.isPlatformAdmin = true
+    render(<MemoryRouter><Sidebar /></MemoryRouter>)
+    expect(within(nav()).getByRole('link', { name: 'Platform Yönetimi' })).toHaveAttribute('href', '/platform')
+  })
+
+  it('never links to a page that has no route', () => {
+    access.isPlatformAdmin = true
+    render(<MemoryRouter><Sidebar /></MemoryRouter>)
+    const routes = createRoutesFromChildren(tenantRoutes)
+    const targets = within(nav()).getAllByRole('link').map((link) => link.getAttribute('href')!).filter((href) => href.startsWith(base))
+    expect(targets).toHaveLength(12)
+    for (const href of targets) expect(matchRoutes(routes, href.slice(base.length) || '/')?.at(-1)?.route.path, href).not.toBe('*')
   })
 
   it('shows the same menu in English without leftover Turkish labels', () => {
     render(<MemoryRouter><Sidebar /></MemoryRouter>)
     act(() => changeLanguage('en'))
-    expect(links('My backups').map(([label]) => label)).toEqual(['Backup jobs', 'Backup runs', 'Backup files', 'Restores'])
-    expect(links('My computers and storage').map(([label]) => label)).toEqual(['Backup computers', 'Database discovery', 'Storage locations', 'Upload bandwidth'])
-    expect(links('Settings').map(([label]) => label)).toEqual(['Notifications', 'Encryption', 'Support access'])
-    expect(within(nav()).getByRole('link', { name: 'Home' })).toBeInTheDocument()
+    expect(links('Backups').map(([label]) => label)).toEqual(['Backup jobs', 'Backup attempts', 'Backup files', 'Restores'])
+    expect(links('Infrastructure').map(([label]) => label)).toEqual(['Backup computers', 'Database discovery', 'Storage'])
+    expect(links('Settings').map(([label]) => label)).toEqual(['Notifications', 'Encryption', 'Upload bandwidth', 'Support access'])
+    expect(within(nav()).getByRole('link', { name: 'Overview' })).toBeInTheDocument()
   })
 
   it('opens the same menu in a drawer from the top bar on phones', () => {

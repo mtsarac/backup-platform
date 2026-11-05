@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { TextInput } from '@/components/ui/text-input'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, ExternalLink, RefreshCw } from 'lucide-react'
@@ -9,13 +10,13 @@ import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { PageHeader } from '@/components/ui/page-header'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { Stepper } from '@/components/ui/stepper'
-import { inputClass } from '@/components/ui/form-styles'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { activeSecretFields, buildConfiguration, configurationComplete, editableConfigFields, initialFieldValues, providerPayload, secretsComplete } from './descriptor-values'
 import type { FieldValues } from './descriptor-values'
-import { openGoogleOAuthPopup } from './google-oauth'
-import { useCreateTenantConnection, useGoogleDriveConnect, useTenantConnectionOps, useTenantConnections, useTenantProviders } from './hooks'
+import { GoogleOAuthNotice } from './google-oauth-flow'
+import { useGoogleOAuth } from './use-google-oauth'
+import { useCreateTenantConnection, useTenantConnectionOps, useTenantConnections, useTenantProviders } from './hooks'
 import { CapabilityChips } from './connection-parts'
 import { connectionPath } from '@/lib/routes'
 import { errorField, executionLocationLabel, tenantCreateState, testMessage, testModeLabel, topologyLabel, configurationSummary } from './labels'
@@ -23,6 +24,7 @@ import { ProviderIcon } from './provider-icon'
 import { ProviderFields } from './provider-form'
 import type { ConnectionView, ProviderDescriptor } from './types'
 import { describeError } from '@/lib/api/failure-messages'
+import { RadioField } from '@/components/ui/radio-field'
 
 type StepKey = 'provider' | 'connection' | 'settings' | 'credentials' | 'review'
 const stepLabels: Record<StepKey, string> = {
@@ -63,14 +65,13 @@ function ProviderStep({ providers, connections, value, onChange }: { providers: 
       const state = tenantCreateState(provider, connections)
       const selected = value === provider.providerType
       return <li key={provider.providerType}>
-        <label className={`flex h-full gap-3 rounded-xl border p-4 transition-colors ${state.creatable ? 'cursor-pointer hover:bg-surface-2' : 'cursor-not-allowed opacity-60'} ${selected ? 'border-primary bg-accent ring-2 ring-primary/30' : 'border-border-strong/50 bg-surface'}`}>
-          <input type="radio" name="provider" className="mt-1 size-4 accent-primary" value={provider.providerType} checked={selected} disabled={!state.creatable} onChange={() => onChange(provider.providerType)} />
+        <RadioField className={`h-full items-start gap-3 rounded-xl border p-4 transition-colors ${state.creatable ? 'cursor-pointer hover:bg-surface-2' : 'cursor-not-allowed opacity-60'} ${selected ? 'border-primary bg-accent ring-2 ring-primary/30' : 'border-border-strong/50 bg-surface'}`} name="provider" value={provider.providerType} checked={selected} disabled={!state.creatable} onChange={() => onChange(provider.providerType)} label={<>
           <ProviderIcon providerType={provider.providerType} />
           <span className="min-w-0 space-y-1">
             <span className="block font-medium text-text-heading">{tx(provider.displayName)}</span>
             <span className="block text-sm text-text-muted">{state.creatable ? prerequisites[provider.providerType] ?? topologyLabel(provider.topology) : `${state.reason}.`}</span>
           </span>
-        </label>
+        </>} />
       </li>
     })}</ul>
   </fieldset>
@@ -93,7 +94,7 @@ function ConnectionWizardForm() {
   const connections = useTenantConnections()
   const ops = useTenantConnectionOps()
   const create = useCreateTenantConnection()
-  const googleConnect = useGoogleDriveConnect()
+  const { start: authorizeGoogle, connect: googleConnect, outcome: googleOutcome } = useGoogleOAuth(ops)
   const reset = create.reset
   useEffect(() => reset, [reset])
 
@@ -151,10 +152,6 @@ function ConnectionWizardForm() {
     })
   }
 
-  function authorizeGoogle(connection: ConnectionView) {
-    googleConnect.mutate({ tenantId: connection.tenantId, connectionId: connection.id }, { onSuccess: ({ authorizationUrl }) => openGoogleOAuthPopup(authorizationUrl, () => ops.test.mutate(connection)) })
-  }
-
   const crumbs = [{ label: tx('Depolama'), to: storage }, { label: tx('Bağlantı ekle') }]
 
   if (created) {
@@ -167,6 +164,7 @@ function ConnectionWizardForm() {
         <div className="space-y-4">
           {google && !test && !testing && <Notice tone="info" title={tx("Google hesabını yetkilendirin")}>{tx("Hesap izni verilmeden bağlantı kullanılamaz. Düğmeye bastığınızda Google penceresi açılır; izin verdikten sonra bağlantı otomatik test edilir.")}</Notice>}
           {Boolean(googleConnect.error) && <ErrorNotice title={tx("Google yetkilendirmesi başlatılamadı")} error={googleConnect.error} scope="storageConnection" />}
+          <GoogleOAuthNotice outcome={googleOutcome} />
           {testing && <Notice tone="info" title={tx("Bağlantı test ediliyor…")}>{tx("Küçük bir test dosyası yazılıp okunur ve silinir; mevcut yedekleriniz değişmez.")}</Notice>}
           {Boolean(ops.test.error) && !testing && <ErrorNotice title={tx("Test tamamlanamadı")} error={ops.test.error} scope="storageConnection" />}
           {test?.status === 'Succeeded' && <Notice tone="success" title={tx("Bağlantı çalışıyor")}>{testMessage(test)}</Notice>}
@@ -195,7 +193,7 @@ function ConnectionWizardForm() {
             {step === 'provider' && <ProviderStep providers={creatable} connections={connections.data?.items ?? []} value={chosen} onChange={choose} />}
             {step === 'connection' && provider && <>
               <p className="text-sm text-text-muted">{tx(provider.displayName)}</p>
-              <label className="block space-y-1 text-sm font-medium text-text-heading">{tx("Ad")}<input className={inputClass} value={name} required aria-label={tx("Ad")} aria-invalid={errorField(createError) === 'name'} onChange={(event) => setName(event.target.value)} />
+              <label className="block space-y-1 text-sm font-medium text-text-heading">{tx("Ad")}<TextInput className="mt-1" value={name} required aria-label={tx("Ad")} aria-invalid={errorField(createError) === 'name'} onChange={(event) => setName(event.target.value)} />
                 <span className="block text-sm font-normal text-text-muted">{tx("Örneğin: Ofis yedekleri veya Arşiv depolaması.")}</span>
               </label>
             </>}
@@ -215,7 +213,6 @@ function ConnectionWizardForm() {
                 ...configurationSummary({ configuration: buildConfiguration(provider.configFields, config) }, provider).filter((item) => item.value !== '—').map((item) => ({ label: tx(item.label), value: item.value })),
                 { label: tx("Veri yolu"), value: `${topologyLabel(provider.topology)} · ${executionLocationLabel(provider.executionLocation)}` },
                 { label: tx("Test yöntemi"), value: testModeLabel(provider.testMode) },
-                { label: tx("Yetenek kodları"), value: provider.capabilities.join(', ') || '—' },
               ]}>
                 <CapabilityChips capabilities={provider.capabilities} label={tx("{0} yetenekleri", { "0": tx(provider.displayName) })} />
               </TechnicalDetails>

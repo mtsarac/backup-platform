@@ -45,6 +45,10 @@ export function useBreakGlassRequests(filters: BreakGlassFilters) {
   return useQuery({ queryKey: encryptionKeys.breakGlassList(filters), queryFn: ({ signal }) => api.getBreakGlassRequests(filters, signal), placeholderData: keepPreviousData })
 }
 
+export function useBreakGlassArtifacts(tenantId: string) {
+  return useQuery({ queryKey: [...encryptionKeys.breakGlassAll, 'artifacts', tenantId], queryFn: ({ signal }) => api.getBreakGlassArtifacts(tenantId, signal), enabled: Boolean(tenantId) })
+}
+
 export function useBreakGlassRequest(id: string) {
   return useQuery({
     queryKey: encryptionKeys.breakGlass(id), queryFn: ({ signal }) => api.getBreakGlassRequest(id, signal), enabled: Boolean(id),

@@ -1,5 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
-import type { ReactNode } from 'react'
+import { Fact, Facts } from '@/components/ui/section'
 import { allocatedPercent } from './format'
 import { isLegacyUnlimited } from './labels'
 import { QuotaMeter } from './quota-meter'
@@ -10,10 +10,6 @@ import { ErrorNotice, Notice } from '@/components/ui/notice'
 
 type Standing = Pick<TenantQuota, 'limitBytes' | 'unlimited' | 'usedBytes' | 'reservedBytes' | 'remainingBytes' | 'state' | 'subscriptionStatus' | 'plan' | 'calculatedAt'>
 
-export function Fact({ label, children, hint }: { label: string; children: ReactNode; hint?: ReactNode }) {
-  useLanguage()
-  return <div><dt className="text-xs text-text-muted">{tx(label)}</dt><dd className="mt-0.5 text-sm">{children}</dd>{hint && <p className="mt-0.5 text-xs text-text-muted">{hint}</p>}</div>
-}
 
 function Capacity({ bytes }: { bytes: number }) {
   useLanguage()
@@ -29,28 +25,26 @@ export function StandingBadge({ quota }: { quota: Pick<TenantQuota, 'state' | 's
   return quota.subscriptionStatus === 'NoSubscription' ? <StatusPill domain="subscription" status="NoSubscription" /> : <StatusPill domain="quota" status={quota.state} />
 }
 
-/** Used and Reserved side by side, the committed total against the limit, the meter and what is left. */
+/** Used and Reserved side by side with the committed total, the meter against the limit, and what is left. The limit is stated once, in the second row. */
 export function QuotaSummary({ quota }: { quota: Standing }) {
   useLanguage()
   const committed = quota.usedBytes + quota.reservedBytes
   const percent = allocatedPercent(quota.usedBytes, quota.reservedBytes, quota.limitBytes)
   const noLimit = quota.limitBytes === null
   return <div className="space-y-4">
-    <dl className="grid gap-4 sm:grid-cols-3">
+    <Facts columns={3}>
       <Fact label={tx("Kullanılan (Used)")} hint={tx("Saklanan backup'ların kapasiteye sayılan boyutu.")}><Capacity bytes={quota.usedBytes} /></Fact>
       <Fact label={tx("Rezerve (Reserved)")} hint={tx("Çalışan veya sıradaki backup'lar için ayrılan tahmini alan.")}><Capacity bytes={quota.reservedBytes} /></Fact>
-      <Fact label={tx("Toplam")} hint={percent === null ? undefined : tx("%{0} ayrılmış", { "0": percent })}>
-        <span className="text-lg font-semibold text-text-heading">{noLimit ? formatBytes(committed) : `${formatBytes(committed)} / ${formatBytes(quota.limitBytes ?? 0)}`}</span>
-      </Fact>
-    </dl>
+      <Fact label={tx("Toplam")} hint={percent === null ? undefined : tx("%{0} ayrılmış", { "0": percent })}><Capacity bytes={committed} /></Fact>
+    </Facts>
     <QuotaMeter usedBytes={quota.usedBytes} reservedBytes={quota.reservedBytes} limitBytes={quota.limitBytes} state={quota.state} />
-    <dl className="grid gap-4 sm:grid-cols-3">
+    <Facts columns={3}>
       <Fact label={tx("Etkin limit")}>{noLimit
-        ? (quota.subscriptionStatus === 'NoSubscription' ? tx('Tanımlı değil (abonelik yok)') : isLegacyUnlimited(quota.plan) ? tx('Limitsiz (Legacy Unlimited)') : 'Limitsiz')
+        ? (quota.subscriptionStatus === 'NoSubscription' ? tx('Tanımlı değil (abonelik yok)') : tx('Limitsiz'))
         : <Capacity bytes={quota.limitBytes ?? 0} />}</Fact>
       <Fact label={tx("Kalan")}>{quota.remainingBytes === null ? '—' : <Capacity bytes={quota.remainingBytes} />}</Fact>
       <Fact label={tx("Son hesaplama")}>{formatDateTime(quota.calculatedAt, tx('Henüz bildirilmedi'))}</Fact>
-    </dl>
+    </Facts>
   </div>
 }
 
@@ -64,27 +58,31 @@ const subscriptionExplanations: Record<'Suspended' | 'Expired' | 'NoSubscription
 
 /**
  * What the tenant can and cannot do right now, and why. A subscription restriction (`subscription_required`) and a full quota
- * (`quota_exceeded`) are different problems with different remedies, so they never share a message.
+ * (`quota_exceeded`) are different problems with different remedies, so they never share a message. "Existing backups are kept" is
+ * said once per page, by the blocking quota error when there is one (its "Verileriniz için" slot), else by the first notice shown.
+ * The status itself is a badge elsewhere and the thresholds are a fact; the notices only add what it means and what to do.
  */
-export function StorageNotices({ quota }: { quota: Pick<TenantQuota, 'subscriptionStatus' | 'state' | 'newBackupsAllowed' | 'enforcementMode' | 'warningThreshold' | 'criticalThreshold' | 'plan'> }) {
+export function StorageNotices({ quota }: { quota: Pick<TenantQuota, 'subscriptionStatus' | 'state' | 'newBackupsAllowed' | 'enforcementMode' | 'plan'> }) {
   useLanguage()
   const status = quota.subscriptionStatus
   // Explanation only: with an open subscription the backend's own admission answer says whether the quota blocks; otherwise that answer is the subscription's, so the policy mode is read.
   const quotaBlocks = status === 'Active' ? !quota.newBackupsAllowed : quota.enforcementMode === 'BlockNewBackups'
+  const overQuota = quota.state === 'OverQuota' && status !== 'NoSubscription'
+  const quotaError = overQuota && quotaBlocks
   return <>
     {status !== 'Active' && <Notice tone="warning" title={subscriptionExplanations[status].title}>
       <p>{subscriptionExplanations[status].text}{' '}{tx("Bu bir kota sorunu değildir; yeni backup için platform yöneticinizin bir plan atamasını veya aboneliği yeniden etkinleştirmesini isteyin.")}</p>
-      <p>{tx(dataSafe)}</p>
+      {!quotaError && <p>{tx(dataSafe)}</p>}
     </Notice>}
-    {quota.state === 'OverQuota' && status !== 'NoSubscription' && (!quotaBlocks
-      ? <Notice tone="warning" title={tx("Depolama limiti aşıldı")}>
+    {overQuota && (quotaError
+      ? <ErrorNotice title={tx("Depolama kotası doldu (OverQuota)")} what={tx("Kullanılan ve rezerve edilen alan limite ulaştığı için yeni backup'lar başlatılamıyor (quota_exceeded).")} dataImpact={tx(dataSafe)}
+        action={tx("Yer açmak için eski backup'ları silebilir ya da daha büyük bir plan için platform yöneticinizle iletişime geçebilirsiniz.")} />
+      : <Notice tone="warning" title={tx("Depolama limiti aşıldı")}>
         <p>{tx("Kullanım limite ulaştı. Bu tenant'ın kota politikası yalnızca uyarır; yeni backup'lar kota nedeniyle engellenmiyor.")}</p>
-        <p>{tx(dataSafe)}</p>
-      </Notice>
-      : <ErrorNotice title={tx("Depolama kotası doldu (OverQuota)")} what={tx("Kullanılan ve rezerve edilen alan limite ulaştığı için yeni backup'lar başlatılamıyor (quota_exceeded).")} dataImpact={tx(dataSafe)}
-        action={tx("Yer açmak için eski backup'ları silebilir ya da daha büyük bir plan için platform yöneticinizle iletişime geçebilirsiniz.")} />)}
+        {status === 'Active' && <p>{tx(dataSafe)}</p>}
+      </Notice>)}
     {(quota.state === 'Warning' || quota.state === 'Critical') && <Notice tone="info" title={quota.state === 'Critical' ? tx('Kapasite kritik seviyede') : tx('Kapasite dolmaya yaklaşıyor')}>
-      <p>{tx("Politika eşikleri: Warning %")}{quota.warningThreshold}{tx(", Critical %")}{quota.criticalThreshold}{tx(". Limite ulaşıldığında yeni backup'lar engellenebilir; mevcut backup'lar korunur.")}</p>
+      <p>{tx("Limite ulaşıldığında yeni backup'lar engellenebilir.")}</p>
     </Notice>}
     {isLegacyUnlimited(quota.plan) && <Notice tone="info" title={tx("Legacy Unlimited")}>
       <p>{tx("Bu tenant kota öncesi sınırsız plandadır; depolama limiti yoktur. Kullanım yine de izlenir.")}</p>

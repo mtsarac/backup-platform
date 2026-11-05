@@ -3,8 +3,9 @@ import { useEffect, useRef, type ComponentType, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
+import { isFeatureEnabled, type FeatureKey } from '@/features/feature-flags/feature-flags'
 
-export interface NavItem { label: string; to: string; icon: ComponentType<{ className?: string }>; end?: boolean }
+export interface NavItem { label: string; to: string; icon: ComponentType<{ className?: string }>; end?: boolean; feature?: FeatureKey }
 export interface NavGroup { heading?: string; items: readonly NavItem[] }
 
 function Brand({ icon: Icon, title, caption }: { icon: ComponentType<{ className?: string }>; title: string; caption: string }) {
@@ -25,10 +26,10 @@ function SidebarContent({ brand, label, groups, footer, onClose }: { brand: { ic
     <nav aria-label={label} className="flex-1 space-y-5 overflow-y-auto px-3 py-3">
       {groups.map((group, index) => <div key={group.heading ?? index} role={group.heading ? 'group' : undefined} aria-label={group.heading}>
         {group.heading && <p aria-hidden="true" className="mb-1 px-3 text-xs font-medium text-sidebar-muted">{group.heading}</p>}
-        <ul className="space-y-0.5">{group.items.map((item) => <li key={item.to}>
+        <ul className="space-y-0.5">{group.items.filter((item) => !item.feature || isFeatureEnabled(item.feature)).map((item) => <li key={item.to}>
           <NavLink to={item.to} end={item.end} onClick={onClose}
-            className={({ isActive }) => `flex min-h-11 items-center gap-3 rounded-lg px-3 text-[0.9375rem] transition-colors ${isActive ? 'bg-sidebar-active font-medium text-white shadow-[inset_3px_0_0_var(--primary)]' : 'text-sidebar-foreground hover:bg-sidebar-active/60'}`}>
-            <item.icon className="size-5 shrink-0" />{tx(item.label)}
+            className={({ isActive }) => `flex min-h-11 items-center gap-3 rounded-lg px-3 text-body transition-colors ${isActive ? 'bg-sidebar-active font-medium text-white shadow-[inset_3px_0_0_var(--primary)]' : 'text-sidebar-foreground hover:bg-sidebar-active/60'}`}>
+            <item.icon className="size-5 shrink-0" /><span className="min-w-0 break-words">{tx(item.label)}</span>
           </NavLink>
         </li>)}</ul>
       </div>)}

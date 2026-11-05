@@ -27,8 +27,8 @@ export function getEnrollmentTokens(tenantId: string, signal?: AbortSignal) {
 }
 
 // Call directly from transient UI state; never place the plaintext result in Query's mutation cache.
-export function createEnrollmentToken(tenantId: string, lifetimeMinutes: number, signal: AbortSignal) {
-  return apiRequest<CreatedEnrollmentToken>(tenantPath(tenantId, 'agent-enrollment-tokens'), { method: 'POST', json: { lifetimeMinutes }, signal })
+export function createEnrollmentToken(tenantId: string, signal: AbortSignal) {
+  return apiRequest<CreatedEnrollmentToken>(tenantPath(tenantId, 'agent-enrollment-tokens'), { method: 'POST', signal })
 }
 
 export function getEnrollmentTokenStatus(tenantId: string, tokenId: string, signal?: AbortSignal) {

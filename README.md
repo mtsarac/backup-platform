@@ -26,7 +26,7 @@ The agent only connects outward. It polls the backend for work and renews a leas
 - **Discovery** of databases on an agent host, including Docker containers.
 - **Restore verification** into a disposable database, with an integrity check before cleanup.
 - **Downloads** of verified artifacts for tenant owners and admins, checked against SHA-256.
-- **Notifications** by email, webhook, and SMS. SMS has not been tested against a real provider.
+- **Notifications** by email, webhook, and SMS. SMS is off by default (feature flag `Features__sms=true` turns it on) and has not been tested against a real provider.
 - **Upload bandwidth limits** per agent, tenant, or job.
 - **Resilience**: a transfer that moves no bytes for two minutes (`Agent:Backup:UploadStallTimeout`) pauses as a network error, and network pauses resume by themselves with backoff (at most 10 times). Operator and time-rule pauses never resume on their own.
 - **Agent install** with one command on Windows (service) or Linux (systemd).

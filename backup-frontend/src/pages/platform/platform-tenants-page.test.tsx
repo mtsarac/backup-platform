@@ -69,6 +69,8 @@ describe('platform tenants list', () => {
     renderPlatform(<PlatformTenantsPage />)
     expect(await screen.findByText("Henüz çalışma alanı yok.")).toBeInTheDocument()
     expect(screen.queryByRole('navigation', { name: "Çalışma alanı sayfaları" })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Yeni çalışma alanı' }))
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Yeni çalışma alanı')
   })
 
   it('renders a server error as an alert', async () => {

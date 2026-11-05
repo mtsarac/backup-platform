@@ -1,10 +1,12 @@
 import { act, fireEvent, screen, within } from '@testing-library/react'
-import { MemoryRouter, Route } from 'react-router-dom'
+import { MemoryRouter, Route, createRoutesFromChildren, matchRoutes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import { render } from '@/test/render'
 import { ThemeProvider } from '@/components/theme-provider'
 import { renderPlatform } from '@/features/platform/test-utils'
 import { changeLanguage } from '@/lib/i18n/runtime'
+import { platformRoutes } from '@/route-tables'
 import { PlatformShell } from './platform-shell'
 import { PlatformSidebar } from './platform-sidebar'
 
@@ -12,10 +14,10 @@ const nav = () => screen.getAllByRole('navigation')[0]
 const group = (name: string) => within(nav()).getByRole('group', { name })
 const links = (name: string) => within(group(name)).getAllByRole('link').map((link) => [link.textContent, link.getAttribute('href')])
 
-beforeEach(() => localStorage.setItem('backup-theme', 'light'))
+beforeEach(() => { localStorage.setItem('backup-theme', 'light'); setFeatureFlags({ supportSessions: true }) })
 
 describe('Platform sidebar', () => {
-  it('groups every platform page under the four plain-language headings with unchanged URLs', () => {
+  it('groups every platform page under plain-language headings with unchanged URLs', () => {
     render(<MemoryRouter><PlatformSidebar /></MemoryRouter>)
     expect(links('Genel bakış')).toEqual([['Platform özeti', '/platform']])
     expect(links('Müşteriler')).toEqual([
@@ -24,17 +26,16 @@ describe('Platform sidebar', () => {
       ['Planlar', '/platform/plans'],
     ])
     expect(links('Altyapı')).toEqual([
-      ['Depolama kullanımı', '/platform/storage'],
-      ['Depolama hedefleri', '/platform/storage-connections'],
       ['Yedekleme bilgisayarları', '/platform/agents'],
+      ['Depolama', '/platform/storage'],
       ['Kota ilkeleri', '/platform/quota-policies'],
     ])
     expect(links('Güvenlik ve destek')).toEqual([
       ['Destek oturumları', '/platform/support-sessions'],
       ['Acil destek erişimi', '/platform/break-glass'],
       ['Denetim kaydı', '/platform/audit'],
-      ['Bildirim altyapısı', '/platform/notification-transports'],
     ])
+    expect(links('Ayarlar')).toEqual([['Bildirim altyapısı', '/platform/notification-transports'], ['Yedekleme bilgisayarı ayarları', '/platform/agent-settings']])
     expect(within(nav()).getByRole('link', { name: 'Çalışma alanı arayüzüne dön' })).toHaveAttribute('href', '/')
   })
 
@@ -45,9 +46,18 @@ describe('Platform sidebar', () => {
     act(() => changeLanguage('en'))
     expect(links('Overview').map(([label]) => label)).toEqual(['Platform overview'])
     expect(links('Customers').map(([label]) => label)).toEqual(['Workspaces', 'Users', 'Plans'])
-    expect(links('Infrastructure').map(([label]) => label)).toEqual(['Storage usage', 'Storage destinations', 'Backup computers', 'Quota policies'])
-    expect(links('Security and support').map(([label]) => label)).toEqual(['Support sessions', 'Emergency support access', 'Audit log', 'Notification infrastructure'])
+    expect(links('Infrastructure').map(([label]) => label)).toEqual(['Backup computers', 'Storage', 'Quota policies'])
+    expect(links('Security and support').map(([label]) => label)).toEqual(['Support sessions', 'Emergency support access', 'Audit log'])
+    expect(links('Settings').map(([label]) => label)).toEqual(['Notification infrastructure', 'Backup computer settings'])
     expect(labels().join(' ')).not.toMatch(/break-glass|agent\b/i)
+  })
+
+  it('never links to a page that has no route', () => {
+    render(<MemoryRouter><PlatformSidebar /></MemoryRouter>)
+    const routes = createRoutesFromChildren(platformRoutes)
+    const targets = within(nav()).getAllByRole('link').map((link) => link.getAttribute('href')!).filter((href) => href.startsWith('/platform'))
+    expect(targets).toHaveLength(12)
+    for (const href of targets) expect(matchRoutes(routes, href.slice('/platform'.length) || '/')?.at(-1)?.route.path, href).not.toBe('*')
   })
 
   it('opens the same menu in a drawer from the top bar on phones', async () => {

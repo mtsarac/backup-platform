@@ -1,10 +1,11 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { inputClass } from '@/components/ui/form-styles'
+import { TextInput } from '@/components/ui/text-input'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { usePlatformConnections, usePlatformProviders } from './hooks'
 import { connectionOptions } from './job-connection-picker-utils'
+import { CheckField } from '@/components/ui/check-field'
 
 /** Quotas account for existing replicas, including disabled connections. Catalog refreshes never remove selected IDs. */
 export function QuotaConnectionPicker({ values, onChange, invalid }: { values: readonly string[]; onChange: (values: string[]) => void; invalid?: boolean }) {
@@ -26,7 +27,7 @@ export function QuotaConnectionPicker({ values, onChange, invalid }: { values: r
 
   return <div className="space-y-2">
     <div className="flex items-end gap-2">
-      <label className="min-w-0 flex-1 text-xs text-text-muted">{tx("Tenant veya bağlantı adı ara")}<input className={inputClass} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => {
+      <label className="min-w-0 flex-1 text-xs text-text-muted">{tx("Tenant veya bağlantı adı ara")}<TextInput className="mt-1" value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => {
           if (event.key === 'Enter') { event.preventDefault(); searchConnections() }
         }} />
       </label>
@@ -36,18 +37,12 @@ export function QuotaConnectionPicker({ values, onChange, invalid }: { values: r
       <legend className="text-xs text-text-muted">{tx("Depolama bağlantıları listesi")}</legend>
       {values.map((id, index) => {
         const option = options.find((item) => item.id === id)
-        return <label key={id} className="flex items-start gap-2 text-xs text-text">
-          <input type="checkbox" checked onChange={() => onChange(values.filter((value) => value !== id))} />
-          {option?.label ?? selectedLabels[id] ?? tx("Mevcut bağlantı {0} · Bu listede bulunamadı; seçim korunuyor", { "0": index + 1 })}
-        </label>
+        return <CheckField key={id} checked onChange={() => onChange(values.filter((value) => value !== id))} label={option?.label ?? selectedLabels[id] ?? tx("Mevcut bağlantı {0} · Bu listede bulunamadı; seçim korunuyor", { "0": index + 1 })} />
       })}
-      {options.filter((option) => !values.includes(option.id)).map((option) => <label key={option.id} className="flex items-start gap-2 text-xs text-text">
-        <input type="checkbox" checked={false} disabled={connections.isFetching || providers.isPending || Boolean(error)} onChange={() => toggle(option.id, option.label)} />
-        {tx(option.label)}
-      </label>)}
+      {options.filter((option) => !values.includes(option.id)).map((option) => <CheckField key={option.id} checked={false} disabled={connections.isFetching || providers.isPending || Boolean(error)} onChange={() => toggle(option.id, option.label)} label={tx(option.label)} />)}
     </fieldset>
     {connections.isFetching && <p role="status" className="text-xs text-text-muted">{tx("Bağlantılar yükleniyor…")}</p>}
-    {error ? <p role="status" className="text-xs text-error">{errorMessage(error)} <button type="button" className="underline" onClick={() => { void connections.refetch(); void providers.refetch() }}>{tx("Yeniden yükle")}</button></p>
+    {error ? <p role="status" className="text-xs text-error">{errorMessage(error)} <Button variant="link" size="sm" type="button" onClick={() => { void connections.refetch(); void providers.refetch() }}>{tx("Yeniden yükle")}</Button></p>
       : !connections.isPending && options.length === 0 && <p className="text-xs text-text-muted">{tx("Eşleşen bağlantı yok.")}</p>}
     <div className="flex items-center gap-2">
       <Button type="button" variant="outline" size="sm" disabled={page === 1 || connections.isFetching} onClick={() => setPage(page - 1)}>{tx("Önceki")}</Button>

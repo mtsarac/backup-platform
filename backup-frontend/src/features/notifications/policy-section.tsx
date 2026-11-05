@@ -2,19 +2,21 @@ import { tx, useLanguage } from '@/lib/i18n'
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
+import { CheckField } from '@/components/ui/check-field'
 import { Field } from '@/components/ui/field'
+import { TextInput } from '@/components/ui/text-input'
 import { ErrorNotice, Notice } from '@/components/ui/notice'
 import { Section } from '@/components/ui/section'
 import { QueryState } from '@/components/data/query-state'
-import { inputClass, selectClass } from '@/components/ui/form-styles'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { useNotificationPolicy, useUpdateNotificationPolicy } from './hooks'
 import { eventTypeLabels, kindLabels, severityLabels } from './labels'
 import { thresholdRanges, toThresholds, validateThresholds } from './policy-validation'
 import type { ThresholdField } from './policy-validation'
-import { channelKinds, eventTypes, severities } from './types'
+import { severities, visibleChannelKinds, visibleEventTypes } from './types'
 import type { ChannelKind, EventType, NotificationPolicy, Severity } from './types'
 import { formatDateTime } from '@/lib/format'
+import { Select } from '@/components/ui/text-input'
 
 const thresholdLabels: Record<ThresholdField, string> = {
   get staleAfterHours() { return tx("Backup güncel değil eşiği (saat)") },
@@ -22,9 +24,6 @@ const thresholdLabels: Record<ThresholdField, string> = {
   get reminderIntervalHours() { return tx("Hatırlatma aralığı (saat, 0 = hatırlatma yok)") },
   get maxNotificationsPerHour() { return tx("Saatlik azami bildirim") },
 }
-
-const checkClass = 'flex min-h-11 items-center gap-3 rounded-lg border border-border bg-surface-2 px-3 text-[0.9375rem] text-text'
-const boxClass = 'size-5 accent-primary'
 
 function toggle<T>(list: T[], item: T, on: boolean) {
   return on ? [...list, item] : list.filter((entry) => entry !== item)
@@ -44,7 +43,7 @@ function PolicyForm({ policy }: { policy: NotificationPolicy }) {
   })
   const [submitted, setSubmitted] = useState(false)
   const errors = validateThresholds(thresholds)
-  const unavailable = kinds.filter((kind) => kind !== 'webhook' && !policy.transports[kind].available)
+  const unavailable = visibleChannelKinds().filter((kind) => kinds.includes(kind) && kind !== 'webhook' && !policy.transports[kind].available)
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -54,27 +53,26 @@ function PolicyForm({ policy }: { policy: NotificationPolicy }) {
   }
 
   return <form onSubmit={submit} noValidate className="space-y-6">
-    <label className={`${checkClass} font-medium`}><input type="checkbox" role="switch" className={boxClass} checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />{tx("Bildirimler etkin")}</label>
+    <CheckField role="switch" className="font-medium" label={tx("Bildirimler etkin")} checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
     <fieldset className="space-y-2"><legend className="text-sm font-medium text-text-heading">{tx("Olay türleri")}</legend>
-      <div className="flex flex-wrap gap-2">{eventTypes.map((type) => <label key={type} className={checkClass}><input type="checkbox" className={boxClass} checked={events.includes(type)} onChange={(event) => setEvents(toggle(events, type, event.target.checked))} />{eventTypeLabels[type]}</label>)}</div>
+      <div className="flex flex-wrap gap-x-6">{visibleEventTypes().map((type) => <CheckField key={type} label={eventTypeLabels[type]} checked={events.includes(type)} onChange={(event) => setEvents(toggle(events, type, event.target.checked))} />)}</div>
       <p className="text-sm text-text-muted">{tx("Bir platform yöneticisi şifreli yedeklerinize acil destek erişimi kullandığında kritik uyarı gönderilir. Bu olay kapatılamaz; genel kanallara gönderim için bildirimlerin etkin ve en az bir kanalın hazır olması gerekir. Sahiplerin kayıtlı güvenlik adresleri ayrıca her zaman bilgilendirilir.")}</p>
     </fieldset>
     <fieldset className="space-y-2"><legend className="text-sm font-medium text-text-heading">{tx("Kanal türleri")}</legend>
-      <div className="flex flex-wrap gap-2">{channelKinds.map((kind) => <label key={kind} className={checkClass}><input type="checkbox" className={boxClass} checked={kinds.includes(kind)} onChange={(event) => setKinds(toggle(kinds, kind, event.target.checked))} />{kindLabels[kind]}</label>)}</div>
+      <div className="flex flex-wrap gap-x-6">{visibleChannelKinds().map((kind) => <CheckField key={kind} label={kindLabels[kind]} checked={kinds.includes(kind)} onChange={(event) => setKinds(toggle(kinds, kind, event.target.checked))} />)}</div>
       {unavailable.map((kind) => <Notice key={kind} tone="warning">{tx("{0} aktarımı platform tarafından yapılandırılmamış veya etkin değil; bu tür seçili olsa da bildirim gönderilemez.", { '0': kindLabels[kind] })}</Notice>)}
     </fieldset>
     <div className="grid gap-4 sm:grid-cols-2">
       <Field label={tx("Asgari önem düzeyi")}>
-        {(control) => <select {...control} className={`${selectClass} w-full`} value={minimumSeverity} onChange={(event) => setMinimumSeverity(event.target.value as Severity)}>{severities.map((severity) => <option key={severity} value={severity}>{severityLabels[severity]}</option>)}</select>}
+        {(control) => <Select {...control} value={minimumSeverity} onChange={(event) => setMinimumSeverity(event.target.value as Severity)}>{severities.map((severity) => <option key={severity} value={severity}>{severityLabels[severity]}</option>)}</Select>}
       </Field>
-      <div className="flex items-end"><label className={checkClass}><input type="checkbox" className={boxClass} checked={recovery} onChange={(event) => setRecovery(event.target.checked)} />{tx("Düzelme bildirimleri gönder")}</label></div>
+      <div className="flex items-end"><CheckField label={tx("Düzelme bildirimleri gönder")} checked={recovery} onChange={(event) => setRecovery(event.target.checked)} /></div>
     </div>
-    <TechnicalDetails defaultOpen={submitted && Object.keys(errors).length > 0} items={[
-      ...(Object.keys(thresholdRanges) as ThresholdField[]).map(field => ({ label: thresholdLabels[field], value: thresholds[field] })),
+    <TechnicalDetails accordion defaultOpen={submitted && Object.keys(errors).length > 0} items={[
       ...(policy.updatedAt ? [{ label: tx('Son güncelleme'), value: formatDateTime(policy.updatedAt) }] : []),
     ]}>
       <div className="grid gap-4 sm:grid-cols-2">{(Object.keys(thresholdRanges) as ThresholdField[]).map((field) => <Field key={field} label={thresholdLabels[field]} error={submitted ? errors[field] : undefined}>
-        {(control) => <input {...control} className={inputClass} inputMode="numeric" value={thresholds[field]} onChange={(event) => setThresholds({ ...thresholds, [field]: event.target.value })} />}
+        {(control) => <TextInput {...control} inputMode="numeric" value={thresholds[field]} onChange={(event) => setThresholds({ ...thresholds, [field]: event.target.value })} />}
       </Field>)}</div>
     </TechnicalDetails>
     {save.isError && <ErrorNotice error={save.error} />}

@@ -7,6 +7,7 @@ import { makeArtifact, makeJob, makeRestore, makeRun, makeSession } from '@/feat
 import type { SupportSession } from '@/features/platform/support/types'
 import { paged, renderPlatform } from '@/features/platform/test-utils'
 import { ApiError } from '@/lib/api/client'
+import { tx } from '@/lib/i18n'
 import { PlatformSupportSessionPage } from './platform-support-session-page'
 
 vi.mock('@/features/platform/support/api')
@@ -88,7 +89,7 @@ describe('support session detail', () => {
     expect(within(row).getByText('SQL-01')).toBeVisible()
     expect(within(row).getByText('CustomerDB')).toBeVisible()
     expect(within(row).getByText('Başarılı')).toBeVisible()
-    for (const technical of ['0 2 * * *', 'Europe/Istanbul', 'mssql · Full', 'Central', 'job-a']) expect(within(row).getByText(technical)).not.toBeVisible()
+    for (const technical of ['0 2 * * *', 'Europe/Istanbul', 'mssql · Tam Yedekleme', 'Central', 'job-a']) expect(within(row).getByText(technical)).not.toBeVisible()
     fireEvent.click(within(row).getByText('Teknik ayrıntılar'))
     expect(within(row).getByText('0 2 * * *')).toBeVisible()
     expect(within(row).getByText('Europe/Istanbul')).toBeVisible()
@@ -112,6 +113,35 @@ describe('support session detail', () => {
     expect(within(row).getByText('Kullanılabilir')).toBeVisible()
     expect(within(row).getByText('artifact-a')).not.toBeVisible()
   })
+  it('lets artifact details own the selected view and returns to the same filtered list', async () => {
+    mount('?tab=browser&state=Available')
+    fireEvent.click(await screen.findByRole('button', { name: 'CustomerDB' }))
+    await screen.findByRole('button', { name: tx('Detayları gizle') })
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: tx('Yedek filtreleri') })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: tx('Restore…') })).toBeEnabled()
+    await waitFor(() => expect(screen.getByRole('button', { name: tx('İndir') })).toBeEnabled())
+    expect(screen.getByText(tx('Kaynak checksum'))).toBeVisible()
+    const technical = screen.getByText('artifact-a').closest('details')!
+    expect(technical).not.toHaveAttribute('open')
+    fireEvent.click(within(technical).getByText(tx('Teknik ayrıntılar')))
+    expect(within(technical).getByRole('button', { name: /Kopyala:.*Yedek dosyası kimliği/ })).toBeVisible()
+    expect(within(technical).getByText('Available')).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: tx('Detayları gizle') }))
+    await screen.findByRole('button', { name: 'CustomerDB' })
+    expect(screen.getByRole('combobox', { name: tx('Yedek dosyası durumu') })).toHaveValue('Available')
+    expect(screen.getByTestId('location')).toHaveTextContent('state=Available')
+    expect(screen.getByTestId('location')).not.toHaveTextContent('artifact=')
+  })
+  it('changing browser view leaves the selected artifact and restores list navigation', async () => {
+    vi.mocked(api.getSupportJobs).mockResolvedValue([makeJob()])
+    mount('?tab=browser&artifact=artifact-a')
+    await screen.findByRole('button', { name: tx('Detayları gizle') })
+    fireEvent.click(screen.getByRole('tab', { name: tx('Yedekleme işleri') }))
+    await screen.findByRole('button', { name: 'Daily Backup' })
+    expect(screen.getByTestId('location')).not.toHaveTextContent('artifact=')
+    expect(screen.queryByRole('button', { name: tx('Detayları gizle') })).not.toBeInTheDocument()
+  })
   it('DownloadBackup enables download but not restore; RestoreBackup enables restore but not download', async () => {
     vi.mocked(api.getSession).mockResolvedValue(makeSession({ permissions: ['ViewBackupMetadata', 'DownloadBackup'] }))
     const view = mount('?tab=browser&artifact=artifact-a')
@@ -134,6 +164,8 @@ describe('support session detail', () => {
     expect(screen.getByRole('tab', { name: 'Genel Bakış' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Denetim' })).toBeInTheDocument()
     expect(screen.getByText(/Müşteri verilerine erişim ve tüm işlemler kapalıdır/)).toBeInTheDocument()
+    expect(screen.queryByText('Müşteri ortamındasınız')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Erişim sona erdi\./)).not.toBeInTheDocument()
     for (const fn of dataFunctions()) expect(fn).not.toHaveBeenCalled()
     expect(api.closeSession).not.toHaveBeenCalled()
   })
@@ -259,6 +291,24 @@ describe('support session detail', () => {
     expect(screen.getByText('customer-sql:1433')).toBeVisible()
     expect(screen.getByText('agent-a')).not.toBeVisible()
     expect(screen.getByText('execution-a')).not.toBeVisible()
+  })
+  it('lets selected restore details own status and target, then restores the filtered list', async () => {
+    const restore = makeRestore({ id: 'execution-a', purpose: 'Execution', status: 'Running', targetState: 'Unknown', sourceDatabaseName: 'CustomerDB' })
+    vi.mocked(api.getSupportRestores).mockResolvedValue(paged([restore]))
+    vi.mocked(api.getSupportRestore).mockResolvedValue(restore)
+    mount('?tab=restores&restoreStatus=Running')
+    fireEvent.click(await screen.findByRole('button', { name: 'CustomerDB_support' }))
+    await screen.findByRole('button', { name: tx('Restore iptal et') })
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: tx('Restore filtreleri') })).not.toBeInTheDocument()
+    expect(screen.getByText('customer-sql:1433')).toBeVisible()
+    expect(screen.getByText(`${tx('Kaynak veritabanı')}: CustomerDB`)).toBeVisible()
+    expect(screen.getByText(/Yedekleme bilgisayarı veritabanının durumunu belirleyemedi/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: tx('Detayları gizle') }))
+    await screen.findByRole('button', { name: 'CustomerDB_support' })
+    expect(screen.getByRole('combobox', { name: tx('Restore durumu') })).toHaveValue('Running')
+    expect(screen.getByTestId('location')).toHaveTextContent('restoreStatus=Running')
+    expect(screen.getByTestId('location')).not.toHaveTextContent('restoreId=')
   })
   it('downloads show the backup file link while its id waits under details', async () => {
     vi.mocked(api.getSupportDownloads).mockResolvedValue(paged([{ downloadId: 'dl-a', artifactId: 'artifact-a', replicaId: 'replica-a', state: 'Succeeded', failureCode: null, transferredBytes: 4096, sizeBytes: 4096, filename: 'customer.bak', createdAt: '2026-10-09T10:00:00Z', releasedAt: null }]))

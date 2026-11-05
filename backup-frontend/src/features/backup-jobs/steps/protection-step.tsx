@@ -1,23 +1,24 @@
 import { tx, useLanguage } from '@/lib/i18n'
 import { Advanced, Question } from '@/features/backup-jobs/job-form-fields'
-import { fieldKit, type FieldErrors } from '@/features/backup-jobs/job-field-kit'
+import { fieldKit } from '@/features/backup-jobs/job-field-kit'
 import type { BackupConfiguration } from '@/features/backup-jobs/types'
 import { encryptionPolicies, type EncryptionPolicy } from '@/features/artifact-encryption/types'
 import { policyDescriptions, policyLabels } from '@/features/artifact-encryption/labels'
+import type { JobFormState } from '@/features/backup-jobs/use-job-form'
 
 const policies = [['Disabled', 'Off — kapalı'], ['Preferred', 'IfSupported — destekleniyorsa'], ['Required', 'Required — zorunlu']] as const
 
-interface Props { configuration: BackupConfiguration; errors: FieldErrors; onChange: (configuration: BackupConfiguration) => void }
-
 /** Question: whether backups are encrypted. Copy-only, checksum and compression stay under the technical details. */
-export function ProtectionStep({ configuration, errors, onChange }: Props) {
+export function ProtectionStep({ form }: { form: JobFormState }) {
   useLanguage()
+  const { errors, setConfiguration: onChange } = form
+  const { configuration } = form.values
   const { check, select, withErrors } = fieldKit(errors)
   return <>
     <Question title={tx("Yedekler şifrelensin mi?")} why={tx("Şifreli bir yedek, dosya yanlış ellere geçse bile okunamaz.")}>
       <div className="min-w-0 space-y-1">
         {select('configuration.encryptionPolicy', tx('Yedek şifreleme politikası'), configuration.encryptionPolicy, encryptionPolicies.map(policy => [policy, policyLabels[policy]] as const), value => onChange({ ...configuration, encryptionPolicy: value as EncryptionPolicy }))}
-        <p className="text-sm text-text-muted">{policyDescriptions[configuration.encryptionPolicy]}{' '}{tx("Şifreleme Agent'ta, depolamaya yazılmadan önce yapılır; yalnızca sonraki çalıştırmalar etkilenir, mevcut yedekler değişmez.")}</p>
+        <p className="text-sm text-text-muted">{policyDescriptions[configuration.encryptionPolicy]}{' '}{tx("Şifreleme Agent'ta, depolamaya yazılmadan önce yapılır.")}</p>
       </div>
     </Question>
     <Advanced open={withErrors('configuration.copyOnly', 'configuration.checksumPolicy', 'configuration.compressionPolicy')}>

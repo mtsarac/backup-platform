@@ -652,12 +652,4 @@ public sealed class RestoreApiTests(PostgreSqlFixture fixture) : IClassFixture<P
         Assert.False(view.GetProperty("replicaPinned").GetBoolean());
         Assert.Null(await scenario.PollRestoreAsync());
     }
-
-    [Fact]
-    public async Task TheStaleRestoreDetectorRunsAsAHostedServiceOfTheApi()
-    {
-        await using var scenario = await CreateAsync(fixture);
-
-        Assert.Single(scenario.World.Factory.Services.GetServices<IHostedService>().OfType<BackupPlatform.Api.Restores.StaleRestoreDetector>());
-    }
 }

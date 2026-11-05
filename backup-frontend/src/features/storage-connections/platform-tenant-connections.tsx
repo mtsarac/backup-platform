@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { Card } from '@/components/ui/card'
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -6,7 +7,7 @@ import { CreateManagedTargetDialog } from './create-dialogs'
 import { usePlatformConnectionOps, usePlatformProviders, usePlatformTenantConnections } from './hooks'
 import { PlatformConnectionTable } from './platform-connection-table'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
+import { platformOnlyMessage } from '@/lib/api/failure-messages'
 
 /** 'Depolama bağlantıları' on the platform tenant detail page: every destination of one tenant, with the same row actions as the global list. */
 export function PlatformTenantConnections({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
@@ -15,7 +16,7 @@ export function PlatformTenantConnections({ tenantId, tenantName }: { tenantId: 
   const providers = usePlatformProviders()
   const ops = usePlatformConnectionOps()
   const [adding, setAdding] = useState(false)
-  return <section className="space-y-3 rounded-lg border border-border bg-surface p-4" aria-labelledby="tenant-connections-heading">
+  return <Card as="section" className="space-y-3" aria-labelledby="tenant-connections-heading">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h2 id="tenant-connections-heading" className="font-medium text-text-heading">{tx("Depolama bağlantıları")}</h2>
         <p className="mt-1 text-sm text-text-muted">{tx("Tenant'ın backup hedefleri. Devre dışı bırakmak yalnızca yeni backup'ları engeller; mevcut Replica'lar silinmez.")}</p></div>
@@ -25,5 +26,5 @@ export function PlatformTenantConnections({ tenantId, tenantName }: { tenantId: 
       {connections.data && <PlatformConnectionTable rows={connections.data.items} providers={providers.data?.items ?? []} ops={ops} showTenant={false} emptyMessage={tx("Bu tenant için depolama bağlantısı yok.")} />}
     </QueryState>
     {adding && <CreateManagedTargetDialog tenant={{ tenantId, name: tenantName }} onClose={() => setAdding(false)} />}
-  </section>
+  </Card>
 }

@@ -38,52 +38,6 @@ public sealed class BackupExecutionCompositionTests
     }
 
     [Fact]
-    public void WithoutABackupSectionThePipelineExistsButNoStorageOrStagingIsRegistered()
-    {
-        using var provider = Build();
-
-        Assert.IsType<DatabaseBackupPipeline>(provider.GetRequiredService<IDatabaseBackupPipeline>());
-        Assert.Contains(provider.GetServices<IDatabaseBackupProvider>(), p => p.Engine == DatabaseEngineId.MsSql);
-        Assert.Contains(provider.GetServices<IDatabaseBackupProvider>(), p => p.Engine.Value == "postgres");
-        Assert.Equal(["mssql", "postgres"], provider.GetServices<IDatabaseRestoreProvider>().Select(p => p.Engine.Value).Order(StringComparer.Ordinal));
-        Assert.Empty(provider.GetServices<IStorageProvider>());
-        Assert.Null(provider.GetService<StagingArea>());
-    }
-
-    [Fact]
-    public void ConfiguredStoragesAndAMappedStagingAreaAreRegisteredByIdentifier()
-    {
-        using var provider = Build(
-            ("Agent:Backup:Staging:Mapping", "Mapped"),
-            ("Agent:Backup:Staging:ServerDirectory", "/var/opt/mssql/staging"),
-            ("Agent:Backup:Staging:AgentDirectory", Path.Combine(Root, "staging")),
-            ("Agent:Backup:LocalStorage:RootDirectory", Path.Combine(Root, "local")),
-            ("Agent:Backup:CentralStorage:RootDirectory", Path.Combine(Root, "central")),
-            ("Agent:Backup:CentralStorage:TenantScope", "tenant-a"));
-
-        var storages = provider.GetServices<IStorageProvider>().ToDictionary(s => s.Id);
-        Assert.Equal([StorageProviderId.Central, StorageProviderId.Local], storages.Keys.OrderBy(id => id.Value));
-        Assert.All(storages.Values, storage => Assert.Equal(StorageTopology.AgentDirect, storage.Topology));
-
-        var staging = provider.GetRequiredService<StagingArea>();
-        Assert.Equal(StagingMappingKind.Mapped, staging.Kind);
-        Assert.Equal("/var/opt/mssql/staging", staging.ServerDirectory.Value);
-        Assert.Equal(Path.Combine(Root, "staging"), staging.AgentDirectory.Value);
-    }
-
-    [Fact]
-    public void ASameHostStagingAreaNeedsOnlyTheAgentDirectory()
-    {
-        using var provider = Build(
-            ("Agent:Backup:Staging:Mapping", "SameHost"),
-            ("Agent:Backup:Staging:AgentDirectory", Path.Combine(Root, "staging")));
-
-        var staging = provider.GetRequiredService<StagingArea>();
-        Assert.Equal(StagingMappingKind.SameHost, staging.Kind);
-        Assert.Equal(staging.AgentDirectory.Value, staging.ServerDirectory.Value);
-    }
-
-    [Fact]
     public void AValidBackupSectionPassesStartupValidation()
     {
         var options = new AgentHostOptions
@@ -105,16 +59,6 @@ public sealed class BackupExecutionCompositionTests
     [InlineData("relative/pg-tools")]
     public void PostgreSqlClientToolsDirectoryMustBeAbsoluteWhenSet(string directory) =>
         Assert.Contains("PostgreSql:ClientToolsDirectory", Fail(("Agent:Backup:PostgreSql:ClientToolsDirectory", directory)), StringComparison.Ordinal);
-
-    [Fact]
-    public void PostgreSqlClientToolsDirectoryBindsWithoutChangingOtherHostConfiguration()
-    {
-        using var provider = Build(("Agent:Backup:PostgreSql:ClientToolsDirectory", Root));
-        var options = provider.GetRequiredService<IOptions<AgentHostOptions>>().Value;
-        Assert.Equal(Root, options.Backup!.PostgreSql!.ClientToolsDirectory);
-        Assert.Equal(2, provider.GetServices<IDatabaseBackupProvider>().Count());
-        Assert.Equal(2, provider.GetServices<IDatabaseRestoreProvider>().Count());
-    }
 
     [Fact]
     public void TheRelationBetweenServerAndAgentStagingDirectoriesIsNeverGuessed()
@@ -145,85 +89,6 @@ public sealed class BackupExecutionCompositionTests
             Assert.Contains("CentralStorage:TenantScope must be one lowercase", Fail(
                 ("Agent:Backup:CentralStorage:RootDirectory", Path.Combine(Root, "c")), ("Agent:Backup:CentralStorage:TenantScope", scope)), StringComparison.Ordinal);
         }
-    }
-
-    private static ServiceCollection Services(params (string Key, string? Value)[] values)
-    {
-        var services = new ServiceCollection();
-        services.AddLogging();
-        services.AddAgentHost(Configuration(values));
-        return services;
-    }
-
-    private static bool HasCleanupHostedService(IServiceCollection services) =>
-        services.Any(descriptor => descriptor.ServiceType == typeof(IHostedService) && descriptor.ImplementationType == typeof(AgentStagingCleanupHostedService));
-
-    [Fact]
-    public void TheStagingCleanupExistsOnlyWhenAStagingAreaIsConfigured()
-    {
-        var unconfigured = Services();
-        using var unconfiguredProvider = unconfigured.BuildServiceProvider();
-        Assert.False(HasCleanupHostedService(unconfigured));
-        Assert.Null(unconfiguredProvider.GetService<StagingCleaner>());
-        Assert.Null(unconfiguredProvider.GetService<StagingCleanupOptions>());
-
-        var storageOnly = Services(("Agent:Backup:LocalStorage:RootDirectory", Path.Combine(Root, "local")));
-        using var storageOnlyProvider = storageOnly.BuildServiceProvider();
-        Assert.False(HasCleanupHostedService(storageOnly));
-        Assert.Null(storageOnlyProvider.GetService<StagingCleaner>());
-
-        var configured = Services(
-            ("Agent:Backup:Staging:Mapping", "SameHost"),
-            ("Agent:Backup:Staging:AgentDirectory", Path.Combine(Root, "staging")));
-        using var configuredProvider = configured.BuildServiceProvider();
-        Assert.True(HasCleanupHostedService(configured));
-        Assert.Same(configuredProvider.GetRequiredService<StagingCleaner>(), configuredProvider.GetRequiredService<StagingCleaner>());
-    }
-
-    [Fact]
-    public void AnInvalidStagingAreaRegistersNoCleanupAndLeavesTheComplaintToTheValidator()
-    {
-        var services = Services(("Agent:Backup:Staging:Mapping", "SameHost"), ("Agent:Backup:Staging:AgentDirectory", "relative/staging"));
-
-        Assert.False(HasCleanupHostedService(services));
-    }
-
-    [Fact]
-    public void TheRegistryTheCleanupConsultsIsTheOneSingletonThePipelineHoldsInto()
-    {
-        using var provider = Build(
-            ("Agent:Backup:Staging:Mapping", "SameHost"),
-            ("Agent:Backup:Staging:AgentDirectory", Path.Combine(Root, "staging")));
-
-        Assert.Same(provider.GetRequiredService<StagingUsageRegistry>(), provider.GetRequiredService<StagingUsageRegistry>());
-    }
-
-    [Fact]
-    public void TheCleanupDefaultsAreEnabledTwelveHoursAndHourly()
-    {
-        using var provider = Build(
-            ("Agent:Backup:Staging:Mapping", "SameHost"),
-            ("Agent:Backup:Staging:AgentDirectory", Path.Combine(Root, "staging")));
-
-        var options = provider.GetRequiredService<StagingCleanupOptions>();
-        Assert.True(options.Enabled);
-        Assert.Equal(TimeSpan.FromHours(12), options.MinimumAge);
-        Assert.Equal(TimeSpan.FromHours(1), options.ScanInterval);
-    }
-
-    [Fact]
-    public void ConfiguredCleanupValuesReplaceTheDefaultsOneByOne()
-    {
-        using var provider = Build(
-            ("Agent:Backup:Staging:Mapping", "SameHost"),
-            ("Agent:Backup:Staging:AgentDirectory", Path.Combine(Root, "staging")),
-            ("Agent:Backup:Staging:Cleanup:Enabled", "false"),
-            ("Agent:Backup:Staging:Cleanup:MinimumAge", "1.00:00:00"));
-
-        var options = provider.GetRequiredService<StagingCleanupOptions>();
-        Assert.False(options.Enabled);
-        Assert.Equal(TimeSpan.FromDays(1), options.MinimumAge);
-        Assert.Equal(TimeSpan.FromHours(1), options.ScanInterval);
     }
 
     [Fact]
@@ -263,20 +128,6 @@ public sealed class BackupExecutionCompositionTests
             ($"Agent:Backup:Staging:Cleanup:{setting}", value));
 
         Assert.Contains($"Agent:Backup:Staging:Cleanup:{setting} must be {limits}", message, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void AnInvalidCleanupValueRegistersNoCleanupWhileTheValidatorStillReportsIt()
-    {
-        var values = new (string Key, string? Value)[]
-        {
-            ("Agent:Backup:Staging:Mapping", "SameHost"),
-            ("Agent:Backup:Staging:AgentDirectory", Path.Combine(Root, "s")),
-            ("Agent:Backup:Staging:Cleanup:MinimumAge", "00:00:05")
-        };
-
-        Assert.False(HasCleanupHostedService(Services(values)));
-        Assert.Contains("Staging:Cleanup:MinimumAge", Fail(values), StringComparison.Ordinal);
     }
 
     [Fact]

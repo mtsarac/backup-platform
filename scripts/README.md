@@ -65,8 +65,11 @@ External stores receive **Data Protection ciphertext**, not plaintext credential
 A Python scenario harness for a lab with the real stack and agents: Linux and Windows agents, MinIO (HTTPS), Samba, SFTP, PostgreSQL and SQL Server sources. It enrolls agents, creates tenants, users, plans and storage connections, then runs backup, restore and compare matrices plus pause/resume, kill, outage, quota, revoke, authorization, notification and UI scenarios. Results go to `docs/test-environment/results.jsonl` (git-ignored, with the lab state and credentials).
 
 - Compose files: `docker-compose.e2e.override.yml` (stack) and `docker-compose.e2e-targets.yml` (MinIO, Samba), with `.env.e2e` (git-ignored: `PUBLIC_HOST`, target credentials, optional `GOOGLE_*`).
-- `bootstrap.py`, `enroll.py`, `connections.py`, `plans.py` prepare the lab; `matrix.py`, `ops.py`, `resilience.py`, `quota.py`, `revoke.py`, `files_providers.py`, `authz_notify_ui.py` run scenarios; each takes an optional name filter. `update-agents.py` replaces the agent binaries on the VMs after a rebuild.
-- `gdrive.py` needs a Google Drive connection named "E2E Google Drive" that a person authorized in the browser (OAuth client of type Web, redirect `http://localhost:5252/api/platform/google-drive/oauth/callback`, test user added on the consent screen).
+- `bootstrap.py`, `enroll.py`, `connections.py`, `plans.py` prepare the lab; `matrix.py`, `ops.py`, `resilience.py`, `quota.py`, `revoke.py`, `mtls.py`, `central.py`, `breakglass.py`, `webrtc.py`, `selfupdate.py`, `files_providers.py`, `authz_notify_ui.py` run scenarios (`acceptance.py` runs a bounded startup readiness check against `/api/auth/antiforgery` with accurate error reporting without scenario retries, then runs enrollment, role-denied, `mtls.py`, `central.py`, `breakglass.py`, `webrtc.py`, `selfupdate.py` and then the 27-cell matrix); each takes an optional name filter. `lab-central-mtls.py` (once, before recreating the api with the compose override) writes `E2E_TENANT_A`/`E2E_MTLS_ISSUER_PASSWORD` to `.env.e2e` and creates the agent-certificate issuer CA; `configure-agents.py` also mounts the Samba share on Fedora for Central storage. `mtls.py` talks to the backend's own TLS endpoint on `:5253` (Kestrel sees client certificates; nginx does not). `breakglass.py` needs `Features__supportSessions` off and adds a second PlatformAdmin to the lab database (the API cannot promote a user). `webrtc.py` downloads a local-volume artifact through the UI in headless Chromium (`browser.py`, stdlib CDP driver; only the native save dialog, STUN and the host-candidate address are adapted to the lab) and compares the bytes the agent's WebRTC data channel delivers with the artifact size and SHA-256. `selfupdate.py` installs a throwaway update-capable Fedora agent with `install-agent.sh`, then checks that a tampered manifest is refused (by the api at publish time and by the agent on disk) and that a signed one updates the agent to 1.0.1 online; it needs `lab-selfupdate.py` once (release signing key, trusted by the api via the compose override; then recreate the api), `dotnet`/`go` on this PC to build the 1.0.1 package (cached in `docs/test-environment/agent-builds`), and `pip install cryptography`. `update-agents.py` replaces the agent binaries on the VMs after a rebuild.
+- `acceptance.py` also runs `large.py` after the 27-cell matrix. Before an unfiltered run, seed the Fedora `e2e_big` database from this checkout with `ssh virtual-fedora 'sudo bash -s' < scripts/e2e/seed-large-fedora.sh`; a matching name filter runs only the selected scenarios. The large cell records backup and restore durations, progress and pauses, and verifies restored data.
+- Windows self-update has a separate opt-in scenario: `E2E_WINDOWS_SELFUPDATE_HOST=<disposable-elevated-ssh-host> E2E_WINDOWS_SELFUPDATE_ISOLATED=yes python3 scripts/e2e/selfupdate.py --windows`. It requires a dedicated backend with an empty Windows release store, the e2e signing key trusted by that backend, a Windows host that trusts its TLS certificate and has no `BackupAgent` service or update task, and a local .NET SDK able to publish `win-x64`. It installs and removes a throwaway service and checks signed activation and identity continuity; afterwards it deletes the release it published, so it can be repeated. This scenario does not cover tampered manifests on Windows.
+  The dedicated backend is `docker-compose.e2e-isolated.yml` layered last under its own project name (own containers, host ports, database and volumes). Its own checkout (or worktree) needs a `.env.e2e` copied from the lab one with different `POSTGRES_PORT`, `API_PORT`, `FRONTEND_PORT`, `FRONTEND_HTTP_PORT` and new `E2E_MTLS_PORT` and `E2E_API_CONTAINER` (the container `selfupdate.py` runs `docker exec` in), and its own `docs/test-environment/state.json`. Run `docker compose -p bpe2e-iso --env-file .env.e2e -f docker-compose.yml -f docker-compose.e2e.override.yml -f docker-compose.e2e-isolated.yml up --no-start --build`, copy the lab's `cert.pem` and `key.pem` into the new `frontend_certs` volume so the Windows host's existing trust applies, `up -d`, then `bootstrap.py` and `plans.py` there. Remove it with `down -v` afterwards. The ssh host must allow PowerShell scripts (`-ExecutionPolicy Bypass` is passed) and run elevated.
+- `gdrive.py` runs connect (prints a Google consent URL and waits for a human), test, capacity, backup + restore with tree hash compare, multi-destination, retention delete and disconnect against the connection "E2E Google Drive" (OAuth client of type Web, redirect `http://localhost:5252/api/platform/google-drive/oauth/callback`, test user added on the consent screen). Without a platform OAuth client it exits 2 with `MISSING PREREQUISITE`; setup steps are in ticket 15.
 
 ## `/tmp` policy
 
@@ -155,8 +158,7 @@ scripts/database/test-mssql.sh
 scripts/database/check-databases.sh
 ```
 
-Disposable databases reuse the existing CI starters instead of duplicating
-them:
+The disposable database wrapper requires cached PostgreSQL 18 and SQL Server 2025 images, Docker, OpenSSL and Python. It creates fresh credentials, binds Docker-assigned ports to loopback, and removes its containers and runtime files on exit. PostgreSQL runs with `fsync=off`; never use it for durable data.
 
 ```bash
 scripts/database/with-disposable-databases.sh -- ./scripts/database/check-databases.sh
@@ -206,14 +208,20 @@ or weakens tests; every selected test must execute and pass through the shared T
 
 ### PostgreSQL provider tests (`Category=PostgreSqlProvider`)
 
-The PostgreSQL Full Backup/Restore provider tests run the **real** `pg_dump`/`pg_restore` against the configured PostgreSQL
-server (a superuser; every database and role they create is uniquely named and dropped). They are part of the full
-PostgreSQL selection, so these clients must be reachable:
+The PostgreSQL Full Backup/Restore provider tests run real client tools against the disposable PostgreSQL 18 Testcontainers server. Docker must be available to the test process. The provider fixture uses its password-authenticated superuser and creates uniquely named databases and roles.
 
-- `BACKUP_PLATFORM_TEST_POSTGRES_TOOLS_DIRECTORY`: directory with `pg_dump`/`pg_restore` at least as new as the server (otherwise the `PATH` is used).
-- `BACKUP_PLATFORM_TEST_POSTGRES_OLD_TOOLS_DIRECTORY`: **required** directory with clients *older* than the server (for example PostgreSQL 16 against 18). The tool-version and archive-version refusal tests use them and fail loudly when it is unset.
+- `BACKUP_PLATFORM_TEST_POSTGRES_TOOLS_DIRECTORY`: absolute directory containing runnable PostgreSQL 18 `pg_dump` and `pg_restore`. If unset, absolute directories in `PATH` are searched. Physical tests also need matching-major `pg_basebackup`, `pg_verifybackup`, and `pg_waldump` (used by `pg_verifybackup`), plus replication access and available WAL senders on the server.
+- `BACKUP_PLATFORM_TEST_POSTGRES_OLD_TOOLS_DIRECTORY`: **required** absolute directory containing runnable older `pg_dump` and `pg_restore` for the version-refusal tests; PostgreSQL 16 clients work against the PostgreSQL 18 server.
 
-Local development: extract the clients from a cached server image, or use wrappers that run `docker run --network=host <older image> pg_dump "$@"`. The agent finds its tools through `Agent:Backup:PostgreSql:ClientToolsDirectory` (absolute directory) or `PATH`.
+Install both versions separately using your platform's PostgreSQL packages or isolated client distributions; binaries and their shared libraries must be compatible with the host. For a direct `dotnet test` run, export both directory variables and, if the current clients need non-system shared libraries, include their library directory in `LD_LIBRARY_PATH`. For example, with isolated installations at `$HOME/.local/pg18` and `$HOME/.local/pg16`:
+
+```bash
+export BACKUP_PLATFORM_TEST_POSTGRES_TOOLS_DIRECTORY="$HOME/.local/pg18/bin"
+export BACKUP_PLATFORM_TEST_POSTGRES_OLD_TOOLS_DIRECTORY="$HOME/.local/pg16/bin"
+export LD_LIBRARY_PATH="$HOME/.local/pg18/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+```
+
+The integration script loads these conventional directories and the PostgreSQL 18 library directory when present; explicit environment values take precedence. Docker-based client wrappers must expose the test server and archive paths to the container and propagate its authentication environment; pulling an uncached image may exceed the provider's client-version probe timeout. The agent separately finds its tools through `Agent:Backup:PostgreSql:ClientToolsDirectory` (absolute directory) or `PATH`.
 
 PostgreSQL fixtures migrate one private schema template per test process, then clone a separate database for each
 fixture. Tenant rows, transaction/lease state and migration changes never share a database between fixtures.
@@ -223,8 +231,10 @@ later clones. Normal process exit drops the template; forced termination may lea
 Frontend tests use two `vmThreads` workers to reuse expensive jsdom environments while retaining file isolation.
 Run `bun run test` from `backup-frontend`, or append a test-file path for an explicit focused selection.
 These startup optimizations do not remove cases or change full-acceptance filters.
+Tests of frozen features (VSS, Linux snapshots, SMS, size anomaly, external secrets, SMB, support sessions) are excluded from every default backend and frontend run;
+`scripts/integration/run-frozen-tests.sh [--no-build]` runs the backend ones (unit, agent, integration) and `bun run test:frozen` in `backup-frontend` the frontend ones.
 
-Storage connections smoke (real Central backup -> download -> restore, with the connection upgrade applied to the real replica in between):
+Storage connections smoke (real Central backup -> download -> restore,):
 
 ```bash
 scripts/integration/run-storage-connections-smoke.sh

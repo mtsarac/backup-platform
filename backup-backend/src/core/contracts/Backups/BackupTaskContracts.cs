@@ -92,6 +92,17 @@ public sealed record BackupTaskStartRequest
     public string Platform { get; init; } = string.Empty;
 }
 
+public sealed record BackupQuotaReservationRequest
+{
+    public Guid LeaseToken { get; init; }
+    public long SizeBytes { get; init; }
+}
+
+public sealed record BackupQuotaReservationResponse
+{
+    public bool Allowed { get; init; }
+}
+
 public sealed record BackupTaskLeaseRequest
 {
     public Guid LeaseToken { get; init; }

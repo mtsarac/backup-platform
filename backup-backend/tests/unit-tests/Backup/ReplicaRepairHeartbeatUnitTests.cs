@@ -65,7 +65,7 @@ public sealed class ReplicaRepairHeartbeatUnitTests
                 while (!tcs.Task.IsCompleted)
                 {
                     time.Advance(TimeSpan.FromSeconds(20));
-                    await Task.Delay(5);
+                    await Task.Yield();
                 }
             }
 
@@ -120,7 +120,7 @@ public sealed class ReplicaRepairHeartbeatUnitTests
             while (!tcs.Task.IsCompleted)
             {
                 time.Advance(TimeSpan.FromSeconds(20));
-                await Task.Delay(5);
+                await Task.Yield();
             }
 
             while (!ct.IsCancellationRequested)

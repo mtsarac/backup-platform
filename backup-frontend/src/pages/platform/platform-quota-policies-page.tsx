@@ -16,7 +16,7 @@ import { formatDateTime } from '@/lib/format'
 import { StatusPill } from '@/components/data/status-pill'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { QueryState } from '@/components/data/query-state'
-import { platformOnlyMessage } from '@/components/auth/access-denied'
+import { platformOnlyMessage } from '@/lib/api/failure-messages'
 
 export function PlatformQuotaPoliciesPage() {
   useLanguage()
@@ -48,7 +48,7 @@ export function PlatformQuotaPoliciesPage() {
     </>} />
     <QueryState forbiddenMessage={platformOnlyMessage} isPending={query.isPending} error={query.error}>
       {query.data && (policies.length === 0
-        ? <ListEmpty message={tx("Tanımlı kota politikası bulunamadı.")} action={<Button onClick={() => setIsCreating(true)}>{tx("Yeni Politika")}</Button>} />
+        ? <ListEmpty message={tx("Tanımlı kota politikası bulunamadı.")} />
         : <Section title={tx("Kota politikaları")} description={tx("{0} politika · Değişiklikler mevcut kullanım hesaplamalarını etkileyebilir.", { "0": policies.length })} flush className="overflow-hidden"><DataList className={bareListClass} rows={policies} columns={columns} keyExtractor={(policy) => policy.policyId} /></Section>)}
     </QueryState>
     {isCreating && <QuotaPolicyDialog onClose={() => setIsCreating(false)} />}

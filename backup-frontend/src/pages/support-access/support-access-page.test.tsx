@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { Sidebar } from '@/components/layout/sidebar'
@@ -26,6 +27,7 @@ function renderAccess(role: MembershipRole = 'Owner', path = '/tenants/tenant-a/
 }
 
 beforeEach(() => {
+  setFeatureFlags({ supportSessions: true })
   vi.resetAllMocks()
   vi.mocked(api.getSupportAccessSessions).mockResolvedValue(paged([session], { totalCount: 30 }))
   vi.mocked(api.getSupportAccessSession).mockResolvedValue(session)
@@ -40,20 +42,26 @@ describe('tenant support transparency', () => {
     for (const link of links) expect(link).toHaveAttribute('href', '/tenants/tenant-a/support-access')
   })
 
+  it('hides the tenant support navigation and page while the supportSessions feature is off', () => {
+    setFeatureFlags({})
+    renderAccess('Owner', '/tenants/tenant-a/support-access', <Sidebar />)
+    expect(screen.queryByRole('link', { name: /Support access|Destek erişimi/, hidden: true })).not.toBeInTheDocument()
+  })
+
   it.each(['Operator', 'Viewer'] as const)('hides the tenant support navigation for %s', (role) => {
     renderAccess(role, '/tenants/tenant-a/support-access', <Sidebar />)
     expect(screen.queryByRole('link', { name: /Support access|Destek erişimi/, hidden: true })).not.toBeInTheDocument()
   })
 
-  it.each(['Owner', 'Admin'] as const)('renders history, all six counters and read-only activity for %s', async (role) => {
+  it.each(['Owner', 'Admin'] as const)('renders history, then the opened session with its six counters and read-only activity for %s', async (role) => {
     renderAccess(role)
     expect(await screen.findByText('Destek Uzmanı')).toBeInTheDocument()
-    for (const [label, count] of [['Görüntülenen yedek dosyası', 2], ['Başlatılan indirme', 3], ['Tamamlanan indirme', 4], ['Başarısız indirme', 5], ['İstenen geri yükleme', 6], ['İptal edilen geri yükleme', 7]] as const) {
-      expect(screen.getByText(label).parentElement).toHaveTextContent(String(count))
-    }
     fireEvent.click(screen.getByRole('button', { name: 'Etkinliği görüntüle' }))
     expect(await screen.findByText('support.artifact.viewed')).toBeInTheDocument()
     const detail = screen.getByRole('region', { name: 'Destek oturumu ayrıntısı' })
+    for (const [label, count] of [['Görüntülenen yedek dosyası', 2], ['Başlatılan indirme', 3], ['Tamamlanan indirme', 4], ['Başarısız indirme', 5], ['İstenen geri yükleme', 6], ['İptal edilen geri yükleme', 7]] as const) {
+      expect(within(detail).getByText(label).parentElement).toHaveTextContent(String(count))
+    }
     expect(within(detail).getByText('İnceleme tamamlandı')).toBeInTheDocument()
     expect(within(detail).getByText('artifact-a')).toBeInTheDocument()
     const actionButtons = within(detail).getAllByRole('button').filter(button => !button.getAttribute('aria-label')?.startsWith('Kopyala:'))
@@ -62,7 +70,21 @@ describe('tenant support transparency', () => {
     await waitFor(() => expect(api.getSupportAccessActivity).toHaveBeenLastCalledWith('tenant-a', 'session-a', { page: 2, pageSize: 25 }, expect.any(AbortSignal)))
   })
 
-  it('keeps staff, reason and readable activity on cards and raw targets in copyable collapsed details', async () => {
+  it('shows each session once: the opened session replaces the history, and going back keeps the history page', async () => {
+    renderAccess('Owner', '/tenants/tenant-a/support-access?page=2')
+    fireEvent.click(await screen.findByRole('button', { name: 'Etkinliği görüntüle' }))
+    await screen.findByRole('region', { name: 'Destek oturumu ayrıntısı' })
+    expect(screen.queryByRole('list', { name: 'Destek erişimi geçmişi' })).not.toBeInTheDocument()
+    await screen.findByText(session.reason)
+    expect(screen.getAllByText(session.reason)).toHaveLength(1)
+    expect(screen.getByTestId('location')).toHaveTextContent('page=2&sessionId=session-a')
+    fireEvent.click(screen.getByRole('button', { name: 'Geçmişe dön' }))
+    expect(await screen.findByRole('list', { name: 'Destek erişimi geçmişi' })).toBeInTheDocument()
+    expect(screen.getByTestId('location')).toHaveTextContent('page=2')
+    expect(screen.getByTestId('location')).not.toHaveTextContent('sessionId')
+  })
+
+  it('keeps staff and reason on history cards and readable activity with raw targets in copyable collapsed details', async () => {
     renderAccess()
     const history = await screen.findByRole('list', { name: 'Destek erişimi geçmişi' })
     expect(within(history).getByText(session.actorDisplayName!)).toBeInTheDocument()

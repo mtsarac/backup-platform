@@ -2,12 +2,15 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { render } from '@/test/render'
 import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { setFeatureFlags } from '@/features/feature-flags/feature-flags'
 import { ApiError } from '@/lib/api/client'
 import { errorMessage } from '@/lib/api/failure-messages'
 import { makeRun } from '@/features/backups/test-data'
 import { runStatuses } from '@/features/backups/presentation'
 import type { BackupRun } from '@/features/backups/types'
 import { BackupDetailPage } from './backup-detail-page'
+import type { BackupArtifact } from '@/features/artifacts/types'
+import { formatDateTime } from '@/lib/format'
 
 const state = vi.hoisted(() => ({
   canOperate: true,
@@ -20,13 +23,13 @@ const state = vi.hoisted(() => ({
 vi.mock('@tanstack/react-query', async importOriginal => ({ ...await importOriginal<typeof import('@tanstack/react-query')>(), useQueryClient: () => ({ refetchQueries: vi.fn() }) }))
 vi.mock('@/features/tenancy/use-tenant', () => ({ useTenant: () => ({ tenantId: 'tenant-a', canOperate: state.canOperate }) }))
 vi.mock('@/features/backups/hooks', () => ({ useBackup: () => state.query, useBackupActions: () => ({ retry: state.retry, cancel: state.cancel, pause: state.pause, resume: state.resume }) }))
-vi.mock('@/features/artifacts/artifact-details', () => ({ ArtifactDetails: () => <p>Yedek çıktısı ayrıntıları</p> }))
 
 function renderDetail() {
   return render(<MemoryRouter initialEntries={['/tenants/tenant-a/backup-runs/run-id']}><Routes><Route path="/tenants/:tenantId/backup-runs/:id" element={<BackupDetailPage />} /></Routes></MemoryRouter>)
 }
 
 beforeEach(() => {
+  setFeatureFlags({ sizeAnomaly: true })
   vi.clearAllMocks()
   state.canOperate = true
   state.query.data = makeRun()
@@ -43,11 +46,37 @@ beforeEach(() => {
 })
 
 describe('run detail controls and attention', () => {
+  it('keeps identity and start time in the summary and links attempt outputs to their artifact owner', () => {
+    const run = makeRun()
+    run.attempts[0].artifacts = [{ id: 'artifact-a' } as BackupArtifact]
+    state.query.data = run
+    renderDetail()
+    expect(screen.getByText('Veritabanı').closest('div')).toHaveTextContent('Uygulama')
+    expect(screen.getByText('Yedekleme bilgisayarı').closest('div')).toHaveTextContent('SQL ajanı')
+    expect(screen.getByText('Başlangıç').closest('div')?.querySelector('time')).toHaveAttribute('dateTime', run.startedAt)
+    fireEvent.click(screen.getByRole('tab', { name: /^Denemeler/ }))
+    const output = within(screen.getByRole('region', { name: '1. deneme çıktıları' }))
+    expect(output.getByRole('link', { name: 'Yedek dosyasını aç' })).toHaveAttribute('href', '/tenants/tenant-a/artifacts/artifact-a')
+    expect(output.queryByText('Uygulama')).not.toBeInTheDocument()
+    expect(output.queryByText('SQL ajanı')).not.toBeInTheDocument()
+    expect(output.queryByText('Yedekleme bilgileri')).not.toBeInTheDocument()
+  })
+
+  it('keeps the retry deadline with the recovery notice instead of repeating it in technical details', () => {
+    const run = makeRun({ status: 'RetryPending' })
+    run.retry.nextAttemptAt = '2026-10-06T10:30:00Z'
+    state.query.data = run
+    renderDetail()
+    expect(screen.getByRole('status')).toHaveTextContent(formatDateTime(run.retry.nextAttemptAt))
+    const details = screen.getByRole('region', { name: 'Yedekleme denemesi ayrıntıları' })
+    expect(within(details).queryByText('Sonraki deneme')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Yeniden dene' })).not.toBeInTheDocument()
+  })
+
   it('shows a yellow advisory and historical comparison without treating a successful backup as failed', () => {
     state.query.data = makeRun({ status: 'Succeeded', isSizeAnomaly: true, sizeAnomalyStatus: 'SizeAnomalyWarning', sizeAnomalyBaselineBytes: 5_000_000_000, sizeAnomalyDeviationRatio: -0.5 })
     renderDetail()
-    expect(screen.getByText('Boyut Anomalisi')).toBeInTheDocument()
-    expect(screen.getByText('Boyut Anomalisi')).toHaveClass('bg-warning-subtle')
+    expect(screen.queryByText('Boyut Anomalisi')).not.toBeInTheDocument()
     expect(screen.getByText(/Geçmiş ortalama: 5 GB/)).toHaveTextContent('-%50')
     expect(screen.getByText('Yedek başarıyla tamamlandı. Boyut uyarısı yedeği geçersiz kılmaz; beklenmeyen veri değişikliklerini inceleyin.')).toBeInTheDocument()
     expect(screen.getByText('Başarılı')).toBeInTheDocument()
@@ -58,7 +87,6 @@ describe('run detail controls and attention', () => {
   it('distinguishes cold-start metadata from missing measurements', () => {
     state.query.data = makeRun({ status: 'Succeeded', sizeAnomalyStatus: 'BaselinePending' })
     renderDetail()
-    expect(screen.getByText('Boyut baz çizgisi bekleniyor')).toBeInTheDocument()
     expect(screen.getByText('Karşılaştırma için en az 3 önceki başarılı yedek gerekir.')).toBeInTheDocument()
     expect(screen.queryByText('Boyut Anomalisi')).not.toBeInTheDocument()
     expect(screen.queryByText(/Geçmiş ortalama:/)).not.toBeInTheDocument()

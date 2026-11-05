@@ -7,10 +7,12 @@ import { ErrorNotice } from '@/components/ui/notice'
 import { ApiError } from '@/lib/api/client'
 import { platformPaths } from '../paths'
 import { FormDialog } from '@/components/ui/form-dialog'
-import { inputClass, linkClass } from '@/components/ui/form-styles'
+import { linkClass } from '@/components/ui/form-styles'
+import { TextInput, TextArea } from '@/components/ui/text-input'
 import { useOpenSupportSession } from './hooks'
 import { permissionDescriptions, permissionLabels } from './presentation'
 import type { SupportPermission } from './types'
+import { CheckField } from '@/components/ui/check-field'
 
 const permissions: SupportPermission[] = ['ViewBackupMetadata', 'DownloadBackup', 'RestoreBackup']
 const durationErrorMessage = 'Süre 1 ile 240 dakika arasında tam sayı olmalıdır.'
@@ -81,23 +83,20 @@ export function OpenSessionDialog({ tenantId, tenantName, onClose }: { tenantId:
   return <FormDialog title={tx("Destek oturumu aç")} description={tx("“{0}” tenant'ına süreli ve gerekçeli destek erişimi verilir. İşlemler audit kayıtlarına yazılır ve tenant yöneticileri tarafından görülebilir.", { "0": tenantName })}
     submitLabel={tx("Oturumu aç")} pendingLabel={tx("Oturum açılıyor…")} pending={open.isPending} onSubmit={submit} onClose={close}>
     <fieldset disabled={open.isPending} className="space-y-4">
-      <Field label={tx("Tenant")}>{control => <input {...control} className={inputClass} value={tenantName} readOnly />}</Field>
+      <Field label={tx("Tenant")}>{control => <TextInput {...control}  value={tenantName} readOnly />}</Field>
       <Field label={tx("Erişim gerekçesi")} hint={tx("Gerekçe zorunludur; en fazla 500 karakter.")} error={reasonError}>
-        {control => <textarea {...control} className={inputClass} rows={3} maxLength={500} value={reason}
+        {control => <TextArea {...control}  rows={3} maxLength={500} value={reason}
           onChange={event => { setReason(event.target.value); setReasonError('') }} />}
       </Field>
       <fieldset className="space-y-2" aria-describedby={`${formId}-permission-help${permissionError ? ` ${formId}-permission-error` : ''}`}>
         <legend className="mb-2 text-sm font-medium text-text-heading">{tx("Erişim izinleri")}</legend>
-        {permissions.map(permission => <label key={permission} className="flex min-h-11 items-start gap-3 rounded-lg bg-surface-2 p-3 text-sm text-text">
-          <input type="checkbox" className="mt-1 size-4 shrink-0 accent-primary" checked={selected.includes(permission)}
-            disabled={permission === 'ViewBackupMetadata' && viewRequired} onChange={event => togglePermission(permission, event.target.checked)} />
-          <span className="min-w-0"><span className="block font-medium">{permissionLabels[permission]}</span><span className="mt-0.5 block text-text-muted">{permissionDescriptions[permission]}</span></span>
-        </label>)}
+        {permissions.map(permission => <CheckField key={permission} className="items-start rounded-lg bg-surface-2 p-3" checked={selected.includes(permission)}
+            disabled={permission === 'ViewBackupMetadata' && viewRequired} onChange={event => togglePermission(permission, event.target.checked)} label={<span className="min-w-0"><span className="block font-medium">{permissionLabels[permission]}</span><span className="mt-0.5 block text-text-muted">{permissionDescriptions[permission]}</span></span>} />)}
         <p id={`${formId}-permission-help`} className="text-xs text-text-muted">{tx("İndirme ve geri yükleme izinleri ViewBackupMetadata iznini gerektirir; bu izin otomatik seçilir.")}</p>
         {permissionError && <p id={`${formId}-permission-error`} role="alert" className="text-sm text-error">{tx(permissionError)}</p>}
       </fieldset>
       <Field label={tx("Süre (dakika)")} hint={tx("En fazla 240 dakika. Varsayılan süre 60 dakikadır.")} error={durationError}>
-        {control => <input {...control} type="number" min={1} max={240} step={1} list={`${formId}-durations`} className={inputClass} value={duration}
+        {control => <TextInput {...control} type="number" min={1} max={240} step={1} list={`${formId}-durations`}  value={duration}
           onInvalid={event => { event.preventDefault(); setDurationError(tx(durationErrorMessage)) }}
           onChange={event => { setDuration(event.target.value); setDurationError('') }} />}
       </Field>

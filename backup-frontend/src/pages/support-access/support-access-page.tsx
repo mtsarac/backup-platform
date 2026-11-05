@@ -1,4 +1,5 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { Card } from '@/components/ui/card'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { AccessDenied } from '@/components/auth/access-denied'
@@ -14,7 +15,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { TechnicalDetails } from '@/components/ui/technical-details'
 import { PermissionBadges } from '@/features/platform/support/session-table'
-import { PLATFORM_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
+import { LIST_PAGE_SIZE, useListParams } from '@/features/platform/use-list-params'
 import { useSupportAccessActivity, useSupportAccessSession, useSupportAccessSessions } from '@/features/support-access/hooks'
 import { auditActionLabel } from '@/features/audit/action-labels'
 import { auditResultLabel } from '@/features/audit/audit-details'
@@ -41,7 +42,6 @@ function sessionDetails(session: SupportAccessSession) {
     { label: tx('Oturum kimliği'), value: session.id },
     { label: tx('Ham durum'), value: session.status },
     { label: tx('İzin kodları'), value: session.permissions.join(', ') },
-    { label: tx('Başlangıç'), value: formatDateTime(session.startedAt) },
     { label: tx('Süre sonu'), value: formatDateTime(session.expiresAt) },
     { label: tx('Kapanış'), value: formatDateTime(session.closedAt) },
     { label: tx('Kapanış gerekçesi'), value: session.closeReason ?? '—' },
@@ -63,38 +63,43 @@ export function SupportAccessPage() {
 function SupportAccessContent({ tenantId }: { tenantId: string }) {
   useLanguage()
   const { page, get, update } = useListParams()
-  const query = useSupportAccessSessions(tenantId, { page, pageSize: PLATFORM_PAGE_SIZE })
   const selected = get('sessionId')
   return <div className="space-y-6">
     <PageHeader title={tx('Destek erişimi')} description={tx('Hangi platform çalışanı verilerinize ne zaman, neden ve nasıl erişti? Bu geçmiş değiştirilemez.')} />
-    <AccessQueryState isPending={query.isPending} error={query.error}>
-      {query.data && <div className="space-y-4">
-        {query.data.items.length === 0 ? <EmptyState message={tx('Henüz destek erişimi kaydı yok.')} /> : <ul aria-label={tx('Destek erişimi geçmişi')} className="space-y-3">
-          {query.data.items.map(row => <li key={row.id} className="space-y-4 rounded-xl border border-border bg-surface p-4 shadow-card">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="break-words font-semibold">{row.actorDisplayName ?? tx('Bilinmiyor')}</h2>
-              <StatusPill domain="supportSession" status={row.status} />
-            </div>
-            <p className="break-words">{row.reason}</p>
-            <Facts>
-              <Fact label={tx('Başlangıç')}><RelativeTime value={row.startedAt} /></Fact>
-              <Fact label={tx('İzin verilen işlemler')}><PermissionBadges permissions={row.permissions} /></Fact>
-            </Facts>
-            <Button variant="outline" onClick={() => update({ sessionId: row.id, activityPage: '', page })}>{tx('Etkinliği görüntüle')}</Button>
-            <TechnicalDetails items={sessionDetails(row)} />
-          </li>)}
-        </ul>}
-        {query.data.totalCount > 0 && <Pagination label={tx('Destek oturumu sayfaları')} page={page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ page: next })} />}
-      </div>}
-    </AccessQueryState>
-    {selected && <SessionDetail key={selected} tenantId={tenantId} sessionId={selected} onClose={() => update({ sessionId: '', activityPage: '', page })} />}
+    {selected
+      ? <SessionDetail key={selected} tenantId={tenantId} sessionId={selected} onClose={() => update({ sessionId: '', activityPage: '', page })} />
+      : <SessionHistory tenantId={tenantId} page={page} onPage={next => update({ page: next })} onOpen={id => update({ sessionId: id, activityPage: '', page })} />}
   </div>
+}
+
+function SessionHistory({ tenantId, page, onPage, onOpen }: { tenantId: string; page: number; onPage: (page: number) => void; onOpen: (sessionId: string) => void }) {
+  useLanguage()
+  const query = useSupportAccessSessions(tenantId, { page, pageSize: LIST_PAGE_SIZE })
+  return <AccessQueryState isPending={query.isPending} error={query.error}>
+    {query.data && <div className="space-y-4">
+      {query.data.items.length === 0 ? <EmptyState message={tx('Henüz destek erişimi kaydı yok.')} /> : <ul aria-label={tx('Destek erişimi geçmişi')} className="space-y-3">
+        {query.data.items.map(row => <Card as="li" key={row.id} className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="break-words font-semibold">{row.actorDisplayName ?? tx('Bilinmiyor')}</h2>
+            <StatusPill domain="supportSession" status={row.status} />
+          </div>
+          <p className="break-words">{row.reason}</p>
+          <Facts>
+            <Fact label={tx('Başlangıç')}><RelativeTime value={row.startedAt} /></Fact>
+            <Fact label={tx('İzin verilen işlemler')}><PermissionBadges permissions={row.permissions} /></Fact>
+          </Facts>
+          <Button variant="outline" onClick={() => onOpen(row.id)}>{tx('Etkinliği görüntüle')}</Button>
+        </Card>)}
+      </ul>}
+      {query.data.totalCount > 0 && <Pagination label={tx('Destek oturumu sayfaları')} page={page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={onPage} />}
+    </div>}
+  </AccessQueryState>
 }
 
 function SessionDetail({ tenantId, sessionId, onClose }: { tenantId: string; sessionId: string; onClose: () => void }) {
   useLanguage()
   const query = useSupportAccessSession(tenantId, sessionId)
-  return <Section title={tx('Destek oturumu ayrıntısı')} description={tx('Bu çalışma alanındaki destek erişiminin gerekçesi ve yapılan işlemler.')} actions={<Button variant="outline" onClick={onClose}>{tx('Ayrıntıyı kapat')}</Button>}>
+  return <Section title={tx('Destek oturumu ayrıntısı')} description={tx('Bu çalışma alanındaki destek erişiminin gerekçesi ve yapılan işlemler.')} actions={<Button variant="outline" onClick={onClose}>{tx('Geçmişe dön')}</Button>}>
     <AccessQueryState isPending={query.isPending} error={query.error}>{query.data && <div className="space-y-6">
       <Facts>
         <Fact label={tx('İşlemi yapan')}>{query.data.actorDisplayName ?? tx('Bilinmiyor')}</Fact>
@@ -112,11 +117,11 @@ function SessionDetail({ tenantId, sessionId, onClose }: { tenantId: string; ses
 function SessionActivity({ tenantId, sessionId }: { tenantId: string; sessionId: string }) {
   useLanguage()
   const { page, update } = useListParams('activityPage')
-  const query = useSupportAccessActivity(tenantId, sessionId, { page, pageSize: PLATFORM_PAGE_SIZE })
+  const query = useSupportAccessActivity(tenantId, sessionId, { page, pageSize: LIST_PAGE_SIZE })
   return <div className="space-y-3"><h3 className="font-semibold">{tx('Etkinlik geçmişi')}</h3>
     <AccessQueryState isPending={query.isPending} error={query.error}>{query.data && <>
       {query.data.items.length === 0 ? <EmptyState message={tx('Bu oturum için etkinlik kaydı yok.')} /> : <ul aria-label={tx('Etkinlik geçmişi')} className="space-y-3">
-        {query.data.items.map(row => <li key={row.id} className="space-y-3 rounded-xl border border-border p-4">
+        {query.data.items.map(row => <Card as="li" key={row.id} className="space-y-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <h4 className="break-words font-medium">{auditActionLabel(row.action) ?? tx('Destek işlemi')}</h4>
             <RelativeTime value={row.at} />
@@ -131,7 +136,7 @@ function SessionActivity({ tenantId, sessionId }: { tenantId: string; sessionId:
             { label: tx('Ham sonuç'), value: row.result ?? '—' },
             { label: tx('Zaman'), value: formatDateTime(row.at) },
           ]} />
-        </li>)}
+        </Card>)}
       </ul>}
       {query.data.totalCount > 0 && <Pagination label={tx('Destek etkinliği sayfaları')} page={page} pageSize={query.data.pageSize} totalCount={query.data.totalCount} disabled={query.isFetching} onPageChange={(next) => update({ activityPage: next })} />}
     </>}</AccessQueryState>

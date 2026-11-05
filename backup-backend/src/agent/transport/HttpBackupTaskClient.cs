@@ -24,6 +24,18 @@ public sealed class HttpBackupTaskClient : IBackupTaskClient
 
     public Task<AgentBackendResult<BackupTaskLeaseResponse>> RenewAsync(AgentLocalIdentity identity, Guid attemptId, BackupTaskLeaseRequest request, CancellationToken cancellationToken) =>
         _client.SendAsync<BackupTaskLeaseResponse>(identity, HttpMethod.Post, Path(attemptId, "lease"), Content(request), cancellationToken);
+    public Task<AgentBackendResult<BackupQuotaReservationResponse>> AdjustQuotaReservationAsync(AgentLocalIdentity identity, Guid attemptId, BackupQuotaReservationRequest request, CancellationToken cancellationToken) =>
+        _client.SendWithReaderAsync(identity, HttpMethod.Post, Path(attemptId, "quota-reservation"), Content(request), async (response, token) =>
+        {
+            if (response.StatusCode != System.Net.HttpStatusCode.OK)
+                return AgentBackendResult<BackupQuotaReservationResponse>.Fail(new AgentBackendFailure(AgentBackendFailureKind.Transient, "the backend answer could not be read"));
+            using var body = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(token), cancellationToken: token);
+            if (body.RootElement.ValueKind != JsonValueKind.Object || !body.RootElement.TryGetProperty("allowed", out var allowed) ||
+                allowed.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                return AgentBackendResult<BackupQuotaReservationResponse>.Fail(new AgentBackendFailure(AgentBackendFailureKind.Transient, "the backend answer could not be read"));
+            return AgentBackendResult<BackupQuotaReservationResponse>.Success(new BackupQuotaReservationResponse { Allowed = allowed.GetBoolean() });
+        }, cancellationToken);
+
 
     public Task<AgentBackendResult<UploadPolicyResponse>> GetUploadPolicyAsync(AgentLocalIdentity identity, Guid attemptId, UploadPolicyRequest request, CancellationToken cancellationToken) =>
         _client.SendAsync<UploadPolicyResponse>(identity, HttpMethod.Post, Path(attemptId, "upload-policy"), Content(request), cancellationToken);

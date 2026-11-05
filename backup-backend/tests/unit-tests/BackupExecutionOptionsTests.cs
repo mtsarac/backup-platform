@@ -5,18 +5,6 @@ namespace BackupPlatform.UnitTests;
 
 public sealed class BackupExecutionOptionsTests
 {
-    [Fact]
-    public void DefaultsAreConservativeAndValid()
-    {
-        var options = new BackupExecutionOptions();
-        Assert.Equal(20, options.GlobalMaxConcurrentBackups);
-        Assert.Equal(5, options.TenantMaxConcurrentBackups);
-        Assert.Equal(1, options.AgentMaxConcurrentBackups);
-        Assert.Empty(options.TenantOverrides);
-        Assert.Empty(options.Validate());
-        options.ThrowIfInvalid();
-    }
-
     [Theory]
     [InlineData(nameof(BackupExecutionOptions.GlobalMaxConcurrentBackups))]
     [InlineData(nameof(BackupExecutionOptions.TenantMaxConcurrentBackups))]

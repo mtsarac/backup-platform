@@ -2,6 +2,7 @@ using BackupPlatform.Domain.Storage;
 using BackupPlatform.Domain.Backups;
 using BackupPlatform.Application.Backups;
 using BackupPlatform.Contracts.Backups;
+using BackupPlatform.Contracts.Flags;
 using BackupPlatform.Domain.Agents;
 using BackupPlatform.Domain.Audit;
 using BackupPlatform.Domain.Identity;
@@ -11,6 +12,7 @@ using BackupPlatform.Infrastructure.Notifications;
 using BackupPlatform.Notifications;
 using BackupPlatform.Infrastructure.Persistence;
 using BackupPlatform.Infrastructure.Storage;
+using BackupPlatform.ManagedService.Quota;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -27,7 +29,7 @@ namespace BackupPlatform.Infrastructure.Backups;
 /// agent limits are decided against a consistent count of Leased/Running attempts by any number of backend instances. Releasing
 /// transitions (complete, expire, cancel) never wait on that lock, so the two lock orders cannot cycle.
 /// </summary>
-public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext> options, IBackupAdmissionPolicy admission, BackupExecutionOptions? limits = null, Func<double>? jitter = null, NotificationOptions? notifications = null, ILogger<PostgreSqlBackupRunStore>? log = null) : IBackupRunStore
+public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext> options, IBackupAdmissionPolicy admission, BackupExecutionOptions? limits = null, Func<double>? jitter = null, NotificationOptions? notifications = null, ILogger<PostgreSqlBackupRunStore>? log = null, FeatureFlags? flags = null) : IBackupRunStore
 {
     // Arbitrary fixed application key for the claim critical section.
     private const long ClaimLockKey = 0x4250_434C_4149_4D01;
@@ -118,7 +120,7 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         if (job.OverlapPolicy == BackupOverlapPolicy.Skip && await ActiveRunIdAsync(context, tenantId, jobId, null, cancellationToken) is { } active)
             return new BackupStartResult(BackupStartOutcome.SkippedOverlap, null, active);
         // The destination of a NEW run: refused while its storage connection is disabled (or missing), resolved and snapshotted otherwise. No reservation exists yet to give back.
-        var target = await StorageTargetGate.ForNewRunAsync(context, tenantId, owner, job.Configuration, now, cancellationToken);
+        var target = await StorageTargetGate.ForNewRunAsync(context, tenantId, owner, job.Configuration, now, cancellationToken, flags);
         if (!target.Allowed)
         {
             await transaction.CommitAsync(cancellationToken);
@@ -367,6 +369,29 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
             MaxArtifactBytes = await TenantUsageEngine.ReadRunMaxArtifactBytesAsync(context, run, run.CurrentAttempt.LeasedAt ?? run.CreatedAt, cancellationToken)
         };
     }
+    public async Task<BackupQuotaReservationResult> AdjustQuotaReservationAsync(BackupLeaseCommand command, long sizeBytes, CancellationToken cancellationToken)
+    {
+        var elapsed = System.Diagnostics.Stopwatch.StartNew();
+        var conflict = new BackupQuotaReservationResult(BackupMutationResult.Conflict, false);
+        if (sizeBytes < 0) return conflict;
+        await using var context = PlatformDbContext.CreateForPlatformOperations(options);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        if (!await LockAgentAsync(context, command.TenantId, command.AgentId, cancellationToken))
+            return new(BackupMutationResult.NotFound, false);
+        var run = await Runs(context).SingleOrDefaultAsync(run => run.TenantId == command.TenantId && run.AgentId == command.AgentId &&
+            run.Attempts.Any(attempt => attempt.Id == command.AttemptId && attempt.TenantId == command.TenantId && attempt.AgentId == command.AgentId), cancellationToken);
+        if (run is null) return new(BackupMutationResult.NotFound, false);
+        if (run.CurrentAttempt.Id != command.AttemptId) return conflict;
+        if (!await TenantUsageEngine.LockTenantAsync(context, command.TenantId, cancellationToken)) return conflict;
+        if (!run.CurrentAttempt.HasLease(command.LeaseToken, command.Now + elapsed.Elapsed)) return conflict;
+
+        var (granted, adjusted) = await PostgreSqlBackupAdmissionPolicy.AdjustQuotaReservationAsync(context, command.TenantId, run, command.AttemptId, sizeBytes, command.Now, cancellationToken);
+        if (!adjusted) return new(BackupMutationResult.Accepted, granted);
+        if (!run.CurrentAttempt.HasLease(command.LeaseToken, command.Now + elapsed.Elapsed)) return conflict;
+        await transaction.CommitAsync(cancellationToken);
+        return new(BackupMutationResult.Accepted, true);
+    }
+
     public Task<BackupMutationResult> StartAttemptAsync(BackupLeaseCommand command, CancellationToken cancellationToken) =>
         MutateAsync(command, run => run.Start(command.LeaseToken, command.Now, command.SoftwareVersion!, command.ProtocolVersion!, command.Platform!), cancellationToken);
     public Task<BackupMutationResult> ReportProgressAsync(BackupLeaseCommand command, BackupProgress progress, CancellationToken cancellationToken) =>
@@ -541,7 +566,8 @@ public sealed class PostgreSqlBackupRunStore(DbContextOptions<PlatformDbContext>
         catch (InvalidOperationException) { return BackupMutationResult.Conflict; }
         catch (ArgumentException) { return BackupMutationResult.Conflict; }
         BackupAudit.RecordCompletion(context, run, wasTerminal, attemptWasTerminal, command.Now);
-        if (!wasTerminal && run.Status == BackupStatus.Succeeded) await EvaluateSizeAnomalyAsync(context, transaction, run, command.Now, cancellationToken);
+        // No flags (a store built by hand) means no gate; the API always registers them.
+        if (!wasTerminal && run.Status == BackupStatus.Succeeded && (flags?.IsEnabled(Features.SizeAnomaly) ?? true)) await EvaluateSizeAnomalyAsync(context, transaction, run, command.Now, cancellationToken);
         try { await context.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateConcurrencyException) { return BackupMutationResult.Conflict; }
         await transaction.CommitAsync(cancellationToken);

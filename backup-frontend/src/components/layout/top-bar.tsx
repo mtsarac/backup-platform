@@ -9,6 +9,7 @@ import { ErrorNotice } from '@/components/ui/notice'
 import { useAuth } from '@/features/auth/use-auth'
 import { useTenant } from '@/features/tenancy/use-tenant'
 import { type ErrorDescription, describeError } from '@/lib/api/failure-messages'
+import { Select } from '@/components/ui/text-input'
 
 /** Shared by the tenant and platform shells: context on the left, account and display controls on the right. */
 export function ShellBar({ onMenuToggle, context, badges }: { onMenuToggle: () => void; context: ReactNode; badges?: ReactNode }) {
@@ -42,7 +43,7 @@ export function TopBar({ onMenuToggle }: { onMenuToggle: () => void }) {
   return <ShellBar onMenuToggle={onMenuToggle}
     context={<div className="flex min-w-0 items-center gap-2">
       <label htmlFor="tenant-select" className="text-sm text-text-muted">{tx("Çalışma Alanı")}</label>
-      <select id="tenant-select" value={tenantId} onChange={(event) => { void switchTenant(event.target.value) }} className="min-h-11 min-w-0 max-w-52 flex-1 rounded-lg border border-border-strong/60 bg-surface px-3 text-sm font-medium text-text sm:max-w-72">{tenants.map((item) => <option key={item.tenantId} value={item.tenantId}>{item.name}</option>)}</select>
+      <Select id="tenant-select" value={tenantId} onChange={(event) => { void switchTenant(event.target.value) }} className="min-w-0 max-w-52 flex-1 text-sm font-medium sm:max-w-72">{tenants.map((item) => <option key={item.tenantId} value={item.tenantId}>{item.name}</option>)}</Select>
     </div>}
     badges={<><Badge tone="info">{tx(tenant.membershipRole ?? tenant.role)}</Badge>{user?.isPlatformAdmin && <Badge tone="warning">{tx("Platform Yöneticisi")}</Badge>}</>} />
 }

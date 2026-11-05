@@ -3,8 +3,9 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { EditConnectionDialog, SecretDialog } from './connection-dialogs'
-import { useGoogleDriveConnect, useGoogleDriveDisconnect, type ConnectionOps } from './hooks'
-import { openGoogleOAuthPopup } from './google-oauth'
+import { useGoogleDriveDisconnect, type ConnectionOps } from './hooks'
+import { GoogleOAuthNotice } from './google-oauth-flow'
+import { useGoogleOAuth } from './use-google-oauth'
 import { disableEffects, enableEffect } from './labels'
 import type { ConnectionView, ProviderDescriptor, SecretField } from './types'
 import { errorMessage } from '@/lib/api/failure-messages'
@@ -39,14 +40,8 @@ export function ConnectionActions({ connection, descriptor, ops, show = ['edit',
     reset()
     setDialog(next)
   }
-  const connectGoogle = useGoogleDriveConnect()
+  const { start: startGoogleOAuth, connect: connectGoogle, outcome: googleOutcome } = useGoogleOAuth(ops)
   const disconnectGoogle = useGoogleDriveDisconnect()
-
-  function startGoogleOAuth() {
-    connectGoogle.mutate({ tenantId: connection.tenantId, connectionId: connection.id }, {
-      onSuccess: ({ authorizationUrl }) => openGoogleOAuthPopup(authorizationUrl, () => ops.test.mutate(connection)),
-    })
-  }
 
   return <div className="space-y-2">
     <div className="flex flex-wrap gap-2">
@@ -55,7 +50,7 @@ export function ConnectionActions({ connection, descriptor, ops, show = ['edit',
       {show.includes('test') && permissions.canTest && <Button variant="outline" size="sm" aria-label={label(tx('test et'))} disabled={testing} onClick={() => ops.test.mutate(connection)}>{testing ? tx('Test ediliyor…') : tx('Test et')}</Button>}
       {!show.includes('credentials') ? null : connection.providerType === 'google-drive' ? (
         permissions.canManageSecret && <>
-          <Button variant="outline" size="sm" aria-label={label(connection.hasSecret ? tx('yeniden bağla') : tx('google hesabını bağla'))} disabled={connectGoogle.isPending} onClick={startGoogleOAuth}>
+          <Button variant="outline" size="sm" aria-label={label(connection.hasSecret ? tx('yeniden bağla') : tx('google hesabını bağla'))} disabled={connectGoogle.isPending} onClick={() => startGoogleOAuth(connection)}>
             {connectGoogle.isPending ? tx('Yönlendiriliyor…') : connection.hasSecret ? tx('Yeniden bağla') : tx('Google Hesabını Bağla')}
           </Button>
           {connection.hasSecret && <Button variant="outline" size="sm" aria-label={label(tx('bağlantıyı kes'))} onClick={() => open('disconnectGoogle', disconnectGoogle.reset)}>{tx("Bağlantıyı kes")}</Button>}
@@ -70,6 +65,7 @@ export function ConnectionActions({ connection, descriptor, ops, show = ['edit',
     </div>
     {show.includes('test') && testError && <p role="alert" className="text-sm text-error">{testError}</p>}
     {show.includes('credentials') && Boolean(connectGoogle.error) && <p role="alert" className="text-sm text-error">{errorMessage(connectGoogle.error, 'storageConnection')}</p>}
+    {show.includes('credentials') && <GoogleOAuthNotice outcome={googleOutcome} />}
 
     {dialog === 'edit' && <EditConnectionDialog connection={connection} configFields={descriptor?.configFields ?? []} ops={ops} onClose={close} />}
     {dialog === 'secret' && <SecretDialog connection={connection} fields={secretFields} ops={ops} onClose={close} />}

@@ -18,17 +18,22 @@ public sealed class MsSqlRestoreAcceptanceTests(PostgreSqlFixture database, ITes
     [InlineData(false, true)]
     public async Task VerifiedArtifactRestoresAfterSourceDeletionAndExplicitlyReplacesDisposableTarget(bool crossInstance, bool encrypted)
     {
-        var hostName = AgentHostSmokeProcess.Required("BACKUP_PLATFORM_TEST_MSSQL_HOST");
-        var sourcePort = int.Parse(AgentHostSmokeProcess.Required("BACKUP_PLATFORM_TEST_MSSQL_PORT"), System.Globalization.CultureInfo.InvariantCulture);
-        var targetPort = crossInstance
-            ? int.Parse(AgentHostSmokeProcess.Required("BACKUP_PLATFORM_TEST_MSSQL_RESTORE_TARGET_PORT"), System.Globalization.CultureInfo.InvariantCulture)
-            : sourcePort;
+        var overridden = MsSqlServer.FromEnvironment();
+        var sourceServer = MsSqlServer.ForAgentHost;
+        // BACKUP_PLATFORM_TEST_MSSQL_RESTORE_TARGET_PORT names the second instance of an external server; otherwise it is a second container.
+        var targetServer = !crossInstance ? sourceServer
+            : overridden is null ? TestContainers.MsSqlRestoreTarget
+            : overridden with { Port = int.Parse(Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_RESTORE_TARGET_PORT")
+                ?? throw new InvalidOperationException("Set BACKUP_PLATFORM_TEST_MSSQL_RESTORE_TARGET_PORT to run the cross-instance restore against an external SQL Server."), System.Globalization.CultureInfo.InvariantCulture) };
+        var hostName = sourceServer.Host;
+        var sourcePort = sourceServer.Port;
+        var targetPort = targetServer.Port;
         var suffix = Guid.NewGuid().ToString("N");
         var sourceName = "bp_restore_source_" + suffix;
         var targetName = "bp_restore_target_" + suffix;
         var rejectedName = "bp_restore_rejected_" + suffix;
-        await using var source = new RestoreSmokeSql(hostName, sourcePort);
-        await using var target = new RestoreSmokeSql(hostName, targetPort);
+        await using var source = new RestoreSmokeSql(sourceServer);
+        await using var target = new RestoreSmokeSql(targetServer);
         try
         {
             await source.ExecuteAsync($"CREATE DATABASE {Identifier(sourceName)};");
@@ -46,7 +51,7 @@ public sealed class MsSqlRestoreAcceptanceTests(PostgreSqlFixture database, ITes
             var configuration = new BackupExecutionConfiguration
             {
                 Host = hostName, Port = sourcePort, Database = sourceName,
-                DatabaseLogin = new(Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_USER")!, Environment.GetEnvironmentVariable("BACKUP_PLATFORM_TEST_MSSQL_PASSWORD")!), TrustServerCertificate = true,
+                DatabaseLogin = new(sourceServer.User, sourceServer.Password), TrustServerCertificate = true,
                 StagingReference = "default", Destinations = BackupTestDestinations.LocalAgent, StoragePrefix = "restore-smoke",
                 CopyOnly = true, ChecksumPolicy = "Required", CompressionPolicy = "Preferred", EncryptionPolicy = encrypted ? "Required" : "Off"
             };
@@ -68,7 +73,7 @@ public sealed class MsSqlRestoreAcceptanceTests(PostgreSqlFixture database, ITes
             var request = new
             {
                 agentId = agent.AgentId,
-                target = new { host = hostName, port = targetPort, databaseCredentialReference = await MsSqlManualAgentSmokeTests.StoreSqlLoginAsync(tenant, agent.AgentId), trustServerCertificate = true },
+                target = new { host = targetServer.Host, port = targetPort, databaseCredentialReference = await MsSqlManualAgentSmokeTests.StoreSqlLoginAsync(tenant, agent.AgentId, targetServer.User, targetServer.Password), trustServerCertificate = true },
                 databaseName = targetName
             };
             var restore = await RequestAsync(tenant, artifactId, "new-name", request);
@@ -128,7 +133,7 @@ public sealed class MsSqlRestoreAcceptanceTests(PostgreSqlFixture database, ITes
             Assert.Equal("NotModified", mismatchResult.GetProperty("targetState").GetString());
             Assert.False(mismatchResult.GetProperty("replicaPinned").GetBoolean());
             Assert.Equal(0, await target.DatabaseCountAsync(rejectedName));
-            Assert.Empty(Directory.GetFiles(AgentHostSmokeProcess.Required("BACKUP_PLATFORM_TEST_MSSQL_STAGING_AGENT_DIR"), "restore_*"));
+            Assert.Empty(Directory.GetFiles(sourceServer.StagingAgentDirectory, "restore_*"));
             output.WriteLine("Changed physical replica rejected as ChecksumMismatch before RESTORE; no target created, pin released and staging removed.");
         }
         finally
@@ -193,13 +198,12 @@ public sealed class MsSqlRestoreAcceptanceTests(PostgreSqlFixture database, ITes
 internal sealed class RestoreSmokeSql : IAsyncDisposable
 {
     private readonly SqlConnection _connection;
-    public RestoreSmokeSql(string host, int port)
+    public RestoreSmokeSql(MsSqlServer server)
     {
         _connection = new SqlConnection(new SqlConnectionStringBuilder
         {
-            DataSource = $"tcp:{host},{port}", InitialCatalog = "master", Encrypt = true, TrustServerCertificate = true, Pooling = false,
-            UserID = AgentHostSmokeProcess.Required("BACKUP_PLATFORM_TEST_MSSQL_USER"),
-            Password = AgentHostSmokeProcess.Required("BACKUP_PLATFORM_TEST_MSSQL_PASSWORD")
+            DataSource = $"tcp:{server.Host},{server.Port}", InitialCatalog = "master", Encrypt = true, TrustServerCertificate = true, Pooling = false,
+            UserID = server.User, Password = server.Password
         }.ConnectionString);
     }
     private async Task<SqlCommand> CommandAsync(string text)

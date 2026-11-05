@@ -21,13 +21,17 @@ const googleDriveProvider: ProviderDescriptor = {
   secretFields: [{ name: 'refreshToken', label: 'Refresh token', required: false }], testMode: 'BackendRoundTrip',
 }
 
-function mount(overrides: Partial<ConnectionView> = {}) {
+function mount(overrides: Partial<ConnectionView> = {}, tab = 'credentials') {
   const connection = makeConnection({ id: 'drive', name: 'Google Drive Yedekleri', providerType: 'google-drive', providerDisplayName: 'Google Drive', permissions: { ...tenantAdminPermissions }, ...overrides })
   vi.mocked(api.getTenantConnections).mockResolvedValue({ items: [connection] })
   vi.mocked(api.getTenantProviders).mockResolvedValue({ items: [googleDriveProvider] })
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
-  return render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/storage/drive?tab=credentials']}><Routes><Route path="/storage/:connectionId" element={<ConnectionDetail />} /></Routes></MemoryRouter></QueryClientProvider>)
+  render(<QueryClientProvider client={client}><MemoryRouter initialEntries={[`/storage/drive?tab=${tab}`]}><Routes><Route path="/storage/:connectionId" element={<ConnectionDetail />} /></Routes></MemoryRouter></QueryClientProvider>)
+  return { connection }
 }
+/** What the server reports after a successful consent. */
+const connectedAccount = (connection: ConnectionView): ConnectionView => ({ ...connection, hasSecret: true, secretUpdatedAt: '2026-10-30T10:00:00Z', configuration: { accountEmail: 'ayse@example.com', accountName: 'Ayşe Yılmaz', reauthorizationRequired: 'false' } })
+const testSucceeded = (connection: ConnectionView) => ({ connection, test: { status: 'Succeeded' as const, code: 'ok', message: '', testedAt: '2026-10-30T10:01:00Z', durationMs: 12 } })
 const panel = () => within(screen.getByRole('tabpanel'))
 beforeEach(() => vi.resetAllMocks())
 
@@ -100,14 +104,119 @@ describe('Google Drive storage destination', () => {
       await waitFor(() => expect(open).toHaveBeenCalledWith(authorizationUrl, 'google_oauth', expect.any(String)))
       expect(api.getGoogleDriveAuthorizeUrl).toHaveBeenCalledWith('tenant-a', 'drive-new')
       expect(api.testTenantConnection).not.toHaveBeenCalled()
-      act(() => window.dispatchEvent(new MessageEvent('message', { data: { type: 'GOOGLE_DRIVE_OAUTH_COMPLETED' }, origin: 'https://untrusted.example', source: popup })))
+      vi.mocked(api.getTenantConnections).mockResolvedValue({ items: [connectedAccount(connection)] })
+      act(() => window.dispatchEvent(new MessageEvent('message', { data: { type: 'GOOGLE_DRIVE_OAUTH_COMPLETED' }, origin: 'https://localhost:5252', source: popup })))
       expect(api.testTenantConnection).not.toHaveBeenCalled()
       act(() => window.dispatchEvent(new MessageEvent('message', { data: { type: 'GOOGLE_DRIVE_OAUTH_COMPLETED' }, origin: 'http://localhost:5252', source: popup })))
       expect(await screen.findByText('Bağlantı çalışıyor')).toBeInTheDocument()
+      expect(screen.getByText('Google hesabı bağlandı: Ayşe Yılmaz (ayse@example.com)')).toBeInTheDocument()
       expect(api.testTenantConnection).toHaveBeenCalledExactlyOnceWith('tenant-a', 'drive-new')
       expect(popup.close).toHaveBeenCalledOnce()
     } finally {
       open.mockRestore()
     }
+  })
+
+  describe('completion without the callback message', () => {
+    const authorizationUrl = `https://accounts.google.com/o/oauth2/v2/auth?redirect_uri=${encodeURIComponent('http://localhost:5252/api/platform/google-drive/oauth/callback')}`
+    const reconnect = async (overrides: Partial<ConnectionView>, popup: { close: () => void; closed: boolean }) => {
+      vi.mocked(api.getGoogleDriveAuthorizeUrl).mockResolvedValue({ authorizationUrl })
+      vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window)
+      const connection = mount(overrides)
+      await userEvent.click(await screen.findByRole('button', { name: /yeniden bağla|Google hesabını bağla/i }))
+      await waitFor(() => expect(window.open).toHaveBeenCalled())
+      return connection
+    }
+
+    it('tests the connection and reports the account once polling sees it connected', async () => {
+      const popup = { close: vi.fn(), closed: false }
+      const { connection } = await reconnect({ hasSecret: false }, popup)
+      vi.mocked(api.testTenantConnection).mockResolvedValue(testSucceeded(connectedAccount(connection)))
+      expect(api.testTenantConnection).not.toHaveBeenCalled()
+      vi.mocked(api.getTenantConnections).mockResolvedValue({ items: [connectedAccount(connection)] })
+      expect(await screen.findByText('Google hesabı bağlandı: Ayşe Yılmaz (ayse@example.com)', {}, { timeout: 6_000 })).toBeInTheDocument()
+      await waitFor(() => expect(api.testTenantConnection).toHaveBeenCalledExactlyOnceWith('tenant-a', 'drive'))
+      expect(popup.close).toHaveBeenCalled()
+    }, 10_000)
+
+    it('detects a re-authorization of an already connected connection by its new secret time', async () => {
+      const popup = { close: vi.fn(), closed: false }
+      const { connection } = await reconnect({ hasSecret: true, secretUpdatedAt: '2026-10-01T08:00:00Z', configuration: { accountEmail: 'old@example.com', reauthorizationRequired: 'false' } }, popup)
+      vi.mocked(api.testTenantConnection).mockResolvedValue(testSucceeded(connectedAccount(connection)))
+      await new Promise((resolve) => setTimeout(resolve, 2_300))
+      expect(api.testTenantConnection).not.toHaveBeenCalled()
+      vi.mocked(api.getTenantConnections).mockResolvedValue({ items: [connectedAccount(connection)] })
+      expect(await screen.findByText('Google hesabı bağlandı: Ayşe Yılmaz (ayse@example.com)', {}, { timeout: 6_000 })).toBeInTheDocument()
+      expect(api.testTenantConnection).toHaveBeenCalledExactlyOnceWith('tenant-a', 'drive')
+    }, 12_000)
+
+    it('tells what to do when the popup closes without the connection becoming connected', async () => {
+      const popup = { close: vi.fn(), closed: false }
+      await reconnect({ hasSecret: false }, popup)
+      popup.closed = true
+      expect(await screen.findByText('Google yetkilendirmesi tamamlanmadı', {}, { timeout: 6_000 })).toBeInTheDocument()
+      expect(screen.getByText(/test kullanıcısı/)).toBeInTheDocument()
+      expect(screen.queryByText(/Google hesabı bağlandı/)).not.toBeInTheDocument()
+      expect(api.testTenantConnection).not.toHaveBeenCalled()
+    }, 10_000)
+  })
+
+  describe('reauthorization notice on the overview tab', () => {
+    const authorizationUrl = `https://accounts.google.com/o/oauth2/v2/auth?redirect_uri=${encodeURIComponent('http://localhost:5252/api/platform/google-drive/oauth/callback')}`
+    const reauthorize = { hasSecret: true, secretUpdatedAt: '2026-10-01T08:00:00Z', configuration: { accountEmail: 'old@example.com', reauthorizationRequired: 'true' } }
+    const notice = async () => within((await screen.findByText('Google hesabının yeniden yetkilendirilmesi gerekiyor')).closest('[role=status]') as HTMLElement)
+
+    it('offers the button only when a Google connection needs reauthorization and the caller manages credentials', async () => {
+      mount(reauthorize, 'overview')
+      expect((await notice()).getByRole('button', { name: 'Yeniden yetkilendir' })).toBeInTheDocument()
+    })
+
+    it.each([
+      ['a connected Google connection', { hasSecret: true, configuration: { reauthorizationRequired: 'false' } }],
+      ['a caller without credential permission', { ...reauthorize, permissions: { ...tenantAdminPermissions, canManageSecret: false } }],
+    ])('has no button for %s', async (_, overrides) => {
+      mount(overrides, 'overview')
+      await screen.findByRole('heading', { level: 1, name: 'Google Drive Yedekleri' })
+      expect(screen.queryByRole('button', { name: 'Yeniden yetkilendir' })).not.toBeInTheDocument()
+    })
+
+    it('does not send the person to another tab', async () => {
+      mount(reauthorize, 'overview')
+      expect((await notice()).queryByText(/sekme/)).not.toBeInTheDocument()
+    })
+
+    it('starts the Google flow from the notice', async () => {
+      vi.mocked(api.getGoogleDriveAuthorizeUrl).mockResolvedValue({ authorizationUrl })
+      const open = vi.spyOn(window, 'open').mockReturnValue({ close: vi.fn(), closed: false } as unknown as Window)
+      mount(reauthorize, 'overview')
+      await userEvent.click((await notice()).getByRole('button', { name: 'Yeniden yetkilendir' }))
+      await waitFor(() => expect(api.getGoogleDriveAuthorizeUrl).toHaveBeenCalledWith('tenant-a', 'drive'))
+      expect(open).toHaveBeenCalledWith(authorizationUrl, 'google_oauth', expect.any(String))
+    })
+
+    it('clears the warning and reports the account once the flow completes', async () => {
+      vi.mocked(api.getGoogleDriveAuthorizeUrl).mockResolvedValue({ authorizationUrl })
+      vi.spyOn(window, 'open').mockReturnValue({ close: vi.fn(), closed: false } as unknown as Window)
+      const { connection } = mount(reauthorize, 'overview')
+      vi.mocked(api.testTenantConnection).mockResolvedValue(testSucceeded(connectedAccount(connection)))
+      await userEvent.click((await notice()).getByRole('button', { name: 'Yeniden yetkilendir' }))
+      await waitFor(() => expect(window.open).toHaveBeenCalled())
+      vi.mocked(api.getTenantConnections).mockResolvedValue({ items: [connectedAccount(connection)] })
+      expect(await screen.findByText('Google hesabı bağlandı: Ayşe Yılmaz (ayse@example.com)', {}, { timeout: 6_000 })).toBeInTheDocument()
+      expect(screen.queryByText('Google hesabının yeniden yetkilendirilmesi gerekiyor')).not.toBeInTheDocument()
+      expect(api.testTenantConnection).toHaveBeenCalledExactlyOnceWith('tenant-a', 'drive')
+    }, 10_000)
+
+    it('keeps the warning and tells what to do when the popup closes unfinished', async () => {
+      const popup = { close: vi.fn(), closed: false }
+      vi.mocked(api.getGoogleDriveAuthorizeUrl).mockResolvedValue({ authorizationUrl })
+      vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window)
+      mount(reauthorize, 'overview')
+      await userEvent.click((await notice()).getByRole('button', { name: 'Yeniden yetkilendir' }))
+      await waitFor(() => expect(window.open).toHaveBeenCalled())
+      popup.closed = true
+      expect(await screen.findByText('Google yetkilendirmesi tamamlanmadı', {}, { timeout: 6_000 })).toBeInTheDocument()
+      expect(screen.getByText('Google hesabının yeniden yetkilendirilmesi gerekiyor')).toBeInTheDocument()
+    }, 10_000)
   })
 })

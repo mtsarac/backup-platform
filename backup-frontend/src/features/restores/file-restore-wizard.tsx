@@ -1,13 +1,14 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { restorePath } from '@/lib/routes'
 import { useNavigate } from 'react-router-dom'
 import { tx, useLanguage } from '@/lib/i18n'
 import { isUncertainError, useIdempotencyKey } from '@/lib/idempotency-key'
 import { Stepper } from '@/components/ui/stepper'
-import { validFilePath, validFilePaths } from '@/features/backup-jobs/file-path-list'
+import { validFilePath, validFilePaths } from '@/features/backup-jobs/file-path-validation'
 import type { BackupArtifact } from '@/features/artifacts/types'
 import { useRestore, useStartRestore, useStartRestorePrecheck } from './hooks'
 import { FileRestoreConfirmStep } from './file-restore-confirm-step'
-import { FileRestoreScopeStep } from './file-restore-scope-step'
+import { FileRestoreSourceStep } from './file-restore-source-step'
 import { FileRestoreTargetStep } from './file-restore-target-step'
 import { RestoreCheckStep } from './restore-check-step'
 import { RestoreSourceSummary } from './restore-source-summary'
@@ -99,7 +100,7 @@ export function FileRestoreWizard({ tenantId, artifact, targets }: { tenantId: s
     try {
       const data = await startRestore.mutateAsync(attempt.variables)
       executionKey.settle()
-      if (mounted.current) navigate(`/tenants/${tenantId}/restores/${data.id}`)
+      if (mounted.current) navigate(restorePath(tenantId, data.id))
     } catch (error) {
       executionKey.settle(error)
       if (mounted.current) setExecutionFailure({ fingerprint: attempt.fingerprint, error })
@@ -107,24 +108,25 @@ export function FileRestoreWizard({ tenantId, artifact, targets }: { tenantId: s
   }
 
   return <div className="space-y-6">
-    <Stepper steps={[tx('Nereye'), tx('Nasıl'), tx('Kontrol'), tx('Onay')]} current={shownStep - 1} />
+    <Stepper steps={[tx('Kaynak'), tx('Hedef'), tx('Ön kontrol'), tx('Onay')]} current={shownStep - 1} />
     <RestoreSourceSummary artifact={artifact} isPg={false} fileArchive />
 
-    {shownStep === 1 && <FileRestoreTargetStep
+    {shownStep === 1 && <FileRestoreSourceStep
       instancePrefix={id} targets={targets} agent={agent} agentId={agentId} originalAgent={originalAgent} original={original}
-      reference={reference} directory={directory} referenceValid={referenceValid} directoryValid={directoryValid} eligible={eligible}
-      onAgentChange={setAgentId}
+      scope={scope} paths={paths} pathsValid={pathsValid} eligible={eligible}
+      onAgentChange={setAgentId} onScopeChange={setScope} onPathsChange={setPaths} onContinue={() => setStep(2)}
+    />}
+
+    {shownStep === 2 && <FileRestoreTargetStep
+      instancePrefix={id} targets={targets} originalAgent={originalAgent} original={original}
+      reference={reference} directory={directory} referenceValid={referenceValid} directoryValid={directoryValid} overwrite={overwrite}
+      precheckError={precheckError} precheckRetryable={isUncertainError(precheckError)} precheckStarting={startPrecheck.isPending} restoreStarting={startRestore.isPending}
+      canCheck={valid}
       onLocationChange={(next) => {
         setLocation(next)
         if (next === 'original' && originalAgent) setAgentId(originalAgent.agentId)
       }}
-      onReferenceChange={setReference} onDirectoryChange={setDirectory} onContinue={() => setStep(2)}
-    />}
-
-    {shownStep === 2 && <FileRestoreScopeStep
-      instancePrefix={id} scope={scope} paths={paths} pathsValid={pathsValid} overwrite={overwrite}
-      precheckError={precheckError} precheckRetryable={isUncertainError(precheckError)} precheckStarting={startPrecheck.isPending} restoreStarting={startRestore.isPending}
-      canCheck={valid} onScopeChange={setScope} onPathsChange={setPaths} onOverwriteChange={setOverwrite}
+      onReferenceChange={setReference} onDirectoryChange={setDirectory} onOverwriteChange={setOverwrite}
       onBack={() => setStep(1)} onRunPrecheck={() => void check()}
     />}
 
@@ -136,7 +138,7 @@ export function FileRestoreWizard({ tenantId, artifact, targets }: { tenantId: s
     />}
 
     {shownStep === 4 && <FileRestoreConfirmStep
-      artifact={artifact} agent={agent} agentId={agentId} original={original} targetReference={targetReference} relativeDirectory={relativeDirectory}
+      agent={agent} agentId={agentId} original={original} targetReference={targetReference} relativeDirectory={relativeDirectory}
       scope={scope} paths={paths} overwrite={overwrite} precheckPassed={passed} precheckStarting={startPrecheck.isPending} restoreStarting={startRestore.isPending}
       executionError={executionError} executionRetryable={isUncertainError(executionError)} eligible={eligible}
       onBack={() => setStep(3)} onStart={() => void restore()}

@@ -1,7 +1,8 @@
 import { tx, useLanguage } from '@/lib/i18n'
+import { CheckField } from '@/components/ui/check-field'
+import { Select, TextInput } from '@/components/ui/text-input'
 import { useId } from 'react'
 import { SecretField as SecretInput } from '@/components/ui/secret-field'
-import { inputClass, selectClass } from '@/components/ui/form-styles'
 import { editableConfigFields, type FieldValues } from './descriptor-values'
 import type { ConfigField, SecretField } from './types'
 
@@ -22,22 +23,20 @@ export function ConfigFieldInputs({ fields, values, onChange, invalidName, provi
     const id = `${prefix}-${field.name}`
     const invalid = invalidName === field.name
     if (field.kind === 'Boolean') {
-      return <label key={field.name} htmlFor={id} className="flex items-center gap-2 text-sm text-text">
-        <input id={id} className="size-5 accent-primary" type="checkbox" checked={values[field.name] === true} aria-invalid={invalid} onChange={(event) => onChange(field.name, event.target.checked)} />{configLabel(field, providerType)}
-      </label>
+      return <CheckField key={field.name} id={id} label={configLabel(field, providerType)} checked={values[field.name] === true} aria-invalid={invalid} onChange={(event) => onChange(field.name, event.target.checked)} />
     }
     if (providerType === 'sftp' && field.name === 'authenticationType') {
       return <div key={field.name} className="space-y-1 text-sm">
         <label htmlFor={id} className="block font-medium text-text-heading">{configLabel(field, providerType)}</label>
-        <select id={id} className={`${selectClass} mt-0 w-full`} value={String(values[field.name] ?? 'password')} aria-invalid={invalid} onChange={(event) => onChange(field.name, event.target.value)}>
+        <Select id={id} value={String(values[field.name] ?? 'password')} aria-invalid={invalid} onChange={(event) => onChange(field.name, event.target.value)}>
           <option value="password">{tx("Parola")}</option>
           <option value="private-key">{tx("Özel anahtar")}</option>
-        </select>
+        </Select>
       </div>
     }
     return <div key={field.name} className="space-y-1 text-sm">
       <label htmlFor={id} className="block font-medium text-text-heading">{configLabel(field, providerType)}</label>
-      <input id={id} className={`${inputClass} mt-0`} type={field.kind === 'Number' ? 'number' : 'text'} value={String(values[field.name] ?? '')} maxLength={field.kind === 'Text' ? field.maxLength ?? undefined : undefined}
+      <TextInput id={id} type={field.kind === 'Number' ? 'number' : 'text'} value={String(values[field.name] ?? '')} maxLength={field.kind === 'Text' ? field.maxLength ?? undefined : undefined}
         required={field.required} aria-invalid={invalid} onChange={(event) => onChange(field.name, event.target.value)} />
       {field.required && <span className="block text-sm text-text-muted">{tx("Zorunlu alan.")}</span>}
       {providerType === 'sftp' && field.name === 'hostKeyFingerprint' && <span className="block text-sm text-text-muted">{tx("SHA256 sunucu anahtarı parmak izini güvenilir bir kanaldan alın ve doğrulayarak girin. Otomatik keşif veya ilk bağlantıda güven yoktur; uyuşmazlık bağlantıyı engeller.")}</span>}
@@ -49,7 +48,7 @@ export function ConfigFieldInputs({ fields, values, onChange, invalidName, provi
 export function SecretFieldInputs({ fields, values, onChange, invalidName, providerType, savedNames = [] }: { fields: readonly SecretField[]; values: Record<string, string>; onChange: (name: string, value: string) => void; invalidName?: string; providerType?: string; savedNames?: readonly string[] }) {
   useLanguage()
   const prefix = useId()
-  return <>{fields.map((field) => <SecretInput key={field.name} id={`${prefix}-${field.name}`} label={tx(field.label)} className={`${inputClass} mt-0`}
+  return <>{fields.map((field) => <SecretInput key={field.name} id={`${prefix}-${field.name}`} label={tx(field.label)}
     multiline={providerType === 'sftp' && field.name === 'privateKey'} saved={savedNames.includes(field.name)} invalid={invalidName === field.name}
     hint={(providerType === 'sftp' && field.name === 'passphrase') || field.required ? <>
       {providerType === 'sftp' && field.name === 'passphrase' && <span className="block">{tx("İsteğe bağlı; yalnızca şifreli özel anahtar için girin.")}</span>}

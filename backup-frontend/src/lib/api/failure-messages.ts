@@ -281,6 +281,8 @@ export function accessDenied(what: string): ErrorDescription {
   return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Yöneticinize danışın."), technical: [] }
 }
 
+export const platformOnlyMessage = () => tx('Platform Administration yalnızca PlatformAdmin yetkisi olan kullanıcılar içindir. Tenant Owner / Admin rolü platform erişimi vermez.')
+
 /** A record that is gone or not theirs: nothing changed, and the way forward is to pick again from the list. */
 export function notFound(what: string): ErrorDescription {
   return { what, dataImpact: tx("Bu işlem uygulanmadı; verileriniz değişmedi."), action: tx("Sayfayı yenileyip kaydı listeden yeniden seçin."), technical: [] }

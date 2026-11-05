@@ -1,19 +1,18 @@
 import type { ReactNode } from 'react'
 import { tx, useLanguage } from '@/lib/i18n'
 import { StatusPill } from '@/components/data/status-pill'
-import { Section } from '@/components/ui/section'
+import { Section, Fact, Facts } from '@/components/ui/section'
 import type { StatusLevel } from '@/lib/status'
-import { formatDateTime, formatRelativeTime } from '@/lib/format'
-import { artifactState, deletionInProgress } from './format'
+import { formatDateTime } from '@/lib/format'
+import { deletionInProgress } from './format'
 import { restoreIneligibility } from './restore-eligibility'
 import type { BackupArtifact } from './types'
 
 interface Answer { level: StatusLevel; label: string; text: ReactNode }
 
 function intact(artifact: BackupArtifact): Answer {
-  if (artifact.state === 'Deleted') return { level: 'neutral', label: tx('Silindi'), text: tx('Fiziksel dosyalar silindi; yalnızca geçmiş kaydı kaldı.') }
   const verified = artifact.replicas.filter(replica => replica.verificationState === 'Verified' && replica.usable).length
-  if (verified > 0) return { level: 'safe', label: tx('Sağlam'), text: tx('{0} kopyanın bütünlüğü doğrulandı.', { '0': verified }) }
+  if (verified > 0) return { level: 'safe', label: tx('Sağlam'), text: artifact.replication ? null : tx('{0} kopyanın bütünlüğü doğrulandı.', { '0': verified }) }
   return { level: 'attention', label: tx('Doğrulanmadı'), text: tx('Bütünlüğü doğrulanmış bir kopya yok. Bu dosyaya güvenmeyin; yeni bir yedek almayı düşünün.') }
 }
 
@@ -24,16 +23,6 @@ function restorable(artifact: BackupArtifact, canOperate: boolean): Answer {
 }
 
 function deletion(artifact: BackupArtifact, now: number): Answer {
-  const state = artifactState(artifact)
-  if (state === 'Deleted') return { level: 'neutral', label: tx('Silindi'), text: tx('Fiziksel dosyalar silindi.') }
-  if (state === 'DeleteFailed') return { level: 'urgent', label: tx('Silme başarısız'), text: tx('Silme tamamlanamadı; dosyalar depoda duruyor. Diğer kopyalar etkilenmedi.') }
-  if (deletionInProgress(artifact) || artifact.state === 'DeletePending') {
-    const deleteAfter = artifact.deleteAfter ? Date.parse(artifact.deleteAfter) : NaN
-    const text = Number.isNaN(deleteAfter) ? tx('Silme isteği alındı.')
-      : deleteAfter <= now ? tx('Bekleme süresi doldu; fiziksel silme başlamak üzere.')
-        : <span title={formatDateTime(artifact.deleteAfter)}>{tx('Dosyalar {0} silinir.', { '0': formatRelativeTime(artifact.deleteAfter, new Date(now)) })}</span>
-    return { level: 'attention', label: tx('Silme bekliyor'), text }
-  }
   if (artifact.retentionPinnedAt) return { level: 'safe', label: tx('Korumalı'), text: tx('Otomatik silme koruması etkin; saklama süresi dolsa bile şimdilik silinmez.') }
   if (artifact.retentionExpiresAt) {
     return Date.parse(artifact.retentionExpiresAt) <= now
@@ -46,17 +35,15 @@ function deletion(artifact: BackupArtifact, now: number): Answer {
 /** The three things a reader came for, before any data: is the file intact, can it be restored, when will it be deleted. */
 export function ArtifactAnswers({ artifact, canOperate, now }: { artifact: BackupArtifact; canOperate: boolean; now: number }) {
   useLanguage()
+  if (artifact.state === 'Deleted') return null
   const answers: [string, Answer][] = [
     [tx('Dosya sağlam mı?'), intact(artifact)],
     [tx('Geri yüklenebilir mi?'), restorable(artifact, canOperate)],
-    [tx('Ne zaman silinecek?'), deletion(artifact, now)],
   ]
+  if (!deletionInProgress(artifact) && artifact.state !== 'DeletePending') answers.push([tx('Ne zaman silinecek?'), deletion(artifact, now)])
   return <Section title={tx('Kısaca durum')}>
-    <dl className="grid gap-5 md:grid-cols-3">
-      {answers.map(([question, { level, label, text }]) => <div key={question} className="min-w-0 space-y-1.5">
-        <dt className="text-sm text-text-muted">{question}</dt>
-        <dd className="space-y-1.5"><StatusPill level={level}>{label}</StatusPill><p className="text-sm text-text">{text}</p></dd>
-      </div>)}
-    </dl>
+    <Facts columns={3}>
+      {answers.map(([question, { level, label, text }]) => <Fact key={question} label={question}><span className="block space-y-1.5"><StatusPill level={level}>{label}</StatusPill>{text && <span className="block text-sm text-text">{text}</span>}</span></Fact>)}
+    </Facts>
   </Section>
 }

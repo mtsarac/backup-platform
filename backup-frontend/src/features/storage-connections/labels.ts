@@ -85,6 +85,13 @@ export function executionLocationLabel(location: ExecutionLocation | null) {
   return location ? executionLocationLabels[location] : '—'
 }
 
+const providerLabels: Record<string, string> = { get local() { return tx("Agent yerel") }, get central() { return tx("Merkezi depolama") }, sftp: 'SFTP', 'google-drive': 'Google Drive', s3: 'S3', smb: 'SMB / NAS' }
+
+/** Short plain-language name of a storage provider id; an id this UI does not know is shown as is. */
+export function storageProviderLabel(providerType: string) {
+  return Object.hasOwn(providerLabels, providerType) ? providerLabels[providerType] : providerType
+}
+
 export function testModeLabel(mode: TestMode) {
   return testModeLabels[mode]
 }

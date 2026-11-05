@@ -17,7 +17,7 @@ describe('artifact encryption facts', () => {
     ] }} />)
     expect(screen.getByText('v2-bpe · şifreli (AES-256-GCM)')).toBeInTheDocument()
     expect(screen.getByText('Platform kurtarma alıcısı').nextSibling).toHaveTextContent('Var')
-    expect(screen.getByText(/Tenant anahtarı \(backend\) · v3/)).toBeInTheDocument()
+    expect(screen.getByText(/Şifreleme anahtarı \(arka uç\) · v3/)).toBeInTheDocument()
     expect(screen.getByText(/Platform kurtarma anahtarı · v1/)).toBeInTheDocument()
     expect(document.body.textContent).not.toContain(keyId)
     expect(screen.getAllByTitle(keyId).length).toBeGreaterThan(0)

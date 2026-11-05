@@ -7,7 +7,7 @@ import { Notice } from '@/components/ui/notice'
 import { Fact, Facts, Section } from '@/components/ui/section'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { FormDialog } from '@/components/ui/form-dialog'
-import { inputClass } from '@/components/ui/form-styles'
+import { TextArea } from '@/components/ui/text-input'
 import { useSupportCountdown } from '@/features/platform/support/use-support-countdown'
 import { BreakGlassDownload } from './break-glass-download'
 import { encryptionKeys, useBreakGlassDecision } from './hooks'
@@ -99,7 +99,7 @@ export function BreakGlassDetail({ request, receivedAt }: { request: BreakGlassR
       onConfirm={() => approve.mutate(undefined, { onSuccess: () => setApproving(false) })} />
     {denying && <FormDialog title={tx("İstek reddedilsin mi?")} description={tx("Ret gerekçesi audit kaydına yazılır.")} submitLabel={tx("Reddet")} pendingLabel={tx("Reddediliyor…")} pending={deny.isPending}
       error={deny.error} onSubmit={submitDeny} onClose={() => setDenying(false)}>
-      <Field label={tx("Ret gerekçesi")} error={denyError}>{control => <textarea {...control} className={inputClass} rows={3} maxLength={500} value={denyReason} onChange={event => { setDenyReason(event.target.value); setDenyError('') }} />}</Field>
+      <Field label={tx("Ret gerekçesi")} error={denyError}>{control => <TextArea {...control}  rows={3} maxLength={500} value={denyReason} onChange={event => { setDenyReason(event.target.value); setDenyError('') }} />}</Field>
     </FormDialog>}
   </div>
 }
