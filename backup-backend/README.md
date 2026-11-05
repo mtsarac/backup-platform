@@ -209,6 +209,23 @@ object is read back for independent verification. Failed uploads abort their
 multipart session. Give credentials access only to the intended bucket and
 `tenants/{tenantId:N}/connections/{connectionId:N}/` prefix.
 
+S3 traffic that leaves the API process (the connection test, downloads the API
+streams, retention deletes, verification and repair; agents upload directly) goes
+through an address rule: the endpoint host is resolved once, every
+answer must be public (loopback, private, link-local including `169.254.169.254`,
+carrier-grade NAT, multicast and reserved space are refused, also when hidden in
+an IPv4-mapped, NAT64 or 6to4 IPv6 address), and the connection is made to the
+checked address, so a changing DNS answer cannot reach a private host. Redirects
+and the environment proxy are not followed. A refused endpoint answers the test
+with `not_testable` / `agent_side_storage` whether or not the port is open, since
+the agent on the customer's network is the one that reaches a private endpoint.
+`Backups:S3:AllowedPrivateNetworks` (array of CIDR ranges, for example
+`Backups__S3__AllowedPrivateNetworks__0=192.168.0.0/16`) lets the API itself reach
+an on-prem S3 service such as MinIO; it is empty by default. The connect step
+ends after `Backups:S3:ConnectionTimeoutSeconds` (default 10) and a connection test
+after 30 seconds, each with a `timeout` code. Agent-executed S3 transfers are not
+restricted by this rule.
+
 For WORM, create a versioned bucket with Object Lock enabled, set
 `objectLockMode` to `COMPLIANCE` or `GOVERNANCE`, and `retentionDays` to 1–36500.
 The provider verifies bucket protection and the service's returned object
