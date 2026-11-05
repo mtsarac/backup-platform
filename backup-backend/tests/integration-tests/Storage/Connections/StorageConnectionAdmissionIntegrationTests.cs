@@ -188,7 +188,7 @@ public sealed class StorageConnectionAdmissionIntegrationTests(PostgreSqlFixture
         var root = Directory.CreateTempSubdirectory("admission-retention-").FullName;
         try
         {
-            var scenario = await BackupApiScenario.CreateAsync(fixture, RetentionApiSupport.WorkerConfiguration(root));
+            var scenario = await BackupApiScenario.CreateAsync(fixture, RetentionApiSupport.WorkerConfiguration(root), new MutableClock(BackupStoreHarness.T0));
             await using var _ = scenario;
             var jobId = await RetentionApiSupport.CreateJobAsync(scenario, null);
             string path = string.Empty;

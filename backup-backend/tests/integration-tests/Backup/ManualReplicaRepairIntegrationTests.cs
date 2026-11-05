@@ -52,7 +52,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
             .Where(r => r.Status == ReplicaRepairStatus.Pending || r.Status == ReplicaRepairStatus.InProgress)
             .ToListAsync();
         foreach (var operation in operations)
-            operation.CancelStale(DateTimeOffset.UtcNow);
+            operation.CancelStale(BackupStoreHarness.T0);
         await context.SaveChangesAsync();
     }
 
@@ -84,14 +84,14 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
                 var existingChecksum = Convert.ToHexString(SHA256.HashData(existing)).ToLowerInvariant();
                 if (existing.Length != options.ExpectedLength || existingChecksum != options.ExpectedChecksum?.Hex)
                     throw new StorageException(StorageFailureKind.AlreadyExists, "Conflicting target content");
-                return new StorageObjectMetadata(new StorageLocation(Id, key), existing.Length, options.ExpectedChecksum, DateTimeOffset.UtcNow);
+                return new StorageObjectMetadata(new StorageLocation(Id, key), existing.Length, options.ExpectedChecksum, BackupStoreHarness.T0);
             }
             using var ms = new MemoryStream();
             content.CopyTo(ms);
             var bytes = ms.ToArray();
             Storage[key.Value] = bytes;
             progress?.Report(bytes.Length);
-            return new StorageObjectMetadata(new StorageLocation(Id, key), bytes.Length, new ContentChecksum(ChecksumAlgorithm.Sha256, Checksum), DateTimeOffset.UtcNow);
+            return new StorageObjectMetadata(new StorageLocation(Id, key), bytes.Length, new ContentChecksum(ChecksumAlgorithm.Sha256, Checksum), BackupStoreHarness.T0);
         }
 
         public async Task<Stream> OpenReadAsync(StorageObjectKey key, CancellationToken cancellationToken)
@@ -235,7 +235,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         }
 
         var repairStore = new PostgreSqlReplicaRepairStore(World.Options());
-        var repairService = new ReplicaRepairService(repairStore, resolver, TimeProvider.System, NullLogger<ReplicaRepairService>.Instance);
+        var repairService = new ReplicaRepairService(repairStore, resolver, new MutableClock(BackupStoreHarness.T0), NullLogger<ReplicaRepairService>.Instance);
 
         return new MultiSetup(agent, job, central, sftp, drive, artifact, resolver, repairStore, repairService);
     }
@@ -482,7 +482,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         var reservationsBefore = await ReservationsAsync(fixture, setup.Agent.TenantId);
 
         var admission = await setup.RepairStore.AdmitRepairAsync(
-            setup.Agent.TenantId, setup.Artifact.Id, setup.Sftp.Id, null, DateTimeOffset.UtcNow, default);
+            setup.Agent.TenantId, setup.Artifact.Id, setup.Sftp.Id, null, BackupStoreHarness.T0, default);
 
         Assert.Equal(allowed, admission.Allowed);
         Assert.Equal(allowed ? null : ReplicaRepairFailureCodes.QuotaExceeded, admission.DenialCode);
@@ -606,13 +606,13 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         };
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<TimeProvider>(new MutableClock(BackupStoreHarness.T0));
         services.AddSingleton<IBackupStorageResolver>(setup.Resolver);
         services.AddScoped<IReplicaRepairStore>(_ => new PostgreSqlReplicaRepairStore(World.Options()));
         services.AddScoped<ReplicaRepairService>();
         await using var sp = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
         using var worker = new BackupPlatform.Api.Backups.AutomaticReplicaRepairWorker(
-            sp.GetRequiredService<IServiceScopeFactory>(), TimeProvider.System,
+            sp.GetRequiredService<IServiceScopeFactory>(), new MutableClock(BackupStoreHarness.T0),
             NullLogger<BackupPlatform.Api.Backups.AutomaticReplicaRepairWorker>.Instance);
         try
         {
@@ -656,7 +656,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
             setup.Agent.TenantId, artifact.Id, new StartReplicaRepairRequest(StorageConnectionId: setup.Sftp.Id), null, default, executeInBackground: false);
 
         var store = new PostgreSqlReplicaRepairStore(World.Options());
-        var now = DateTimeOffset.UtcNow;
+        var now = BackupStoreHarness.T0;
 
         var task1 = store.ClaimDueRepairAsync("node-1", now, TimeSpan.FromMinutes(5), default, setup.Agent.TenantId);
         var task2 = store.ClaimDueRepairAsync("node-2", now, TimeSpan.FromMinutes(5), default, setup.Agent.TenantId);
@@ -675,7 +675,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         var store = new PostgreSqlReplicaRepairStore(World.Options());
 
         var targetKey = $"{setup.Agent.TenantId.Value:N}/job/run/attempt/orphan.bak";
-        var now = DateTimeOffset.UtcNow;
+        var now = BackupStoreHarness.T0;
 
         await store.RecordRepairOrphanAsync(
             setup.Agent.TenantId,
@@ -702,6 +702,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
     public async Task DownloadFallsBackBeforeHeadersAndPinsTheBytesItServes(bool corruptPrimary)
     {
         var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp" });
+        // Live clock: the download-session trigger compares the row against the database clock, so a pinned past time reads as an expired hold.
         var clock = new MutableClock();
         var store = new PostgreSqlDownloadStore(World.Options(), clock);
         var user = new User(UserId.New(), "Fallback downloader");
@@ -745,6 +746,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
     {
         var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp", "google-drive" });
         var other = await SetupAsync(verified: new HashSet<string> { "central" });
+        // Live clock: the download-session trigger compares the row against the database clock, so a pinned past time reads as an expired hold.
         var clock = new MutableClock();
         var store = new PostgreSqlDownloadStore(World.Options(), clock);
         var user = new User(UserId.New(), "Source switch owner");
@@ -786,7 +788,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp" });
         var world = new RestoreWorld(fixture);
         await world.EnableRestoreAsync(setup.Agent);
-        var now = DateTimeOffset.UtcNow;
+        var now = BackupStoreHarness.T0;
         var store = new PostgreSqlRestoreStore(World.Options(), setup.Resolver);
         var operation = (await store.CreateAsync(RestoreWorld.Command(setup.Agent.TenantId, setup.Artifact.Id, setup.Agent.AgentId, now: now), default)).Operation!;
         var primary = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "central");
@@ -815,7 +817,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         var setup = await SetupAsync(sourceMetadataJson: """{"engine":"postgres"}""");
         var world = new RestoreWorld(fixture);
         await world.EnableRestoreAsync(setup.Agent);
-        var now = DateTimeOffset.UtcNow;
+        var now = BackupStoreHarness.T0;
         async Task EnablePostgresAsync()
         {
             await using var context = fixture.CreatePlatformContext();
@@ -854,7 +856,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         var setup = await SetupAsync(verified: new HashSet<string> { "central" });
         var world = new RestoreWorld(fixture);
         await world.EnableRestoreAsync(setup.Agent);
-        var now = DateTimeOffset.UtcNow;
+        var now = BackupStoreHarness.T0;
         var store = new PostgreSqlRestoreStore(World.Options(), setup.Resolver);
         var operation = (await store.CreateAsync(RestoreWorld.Command(setup.Agent.TenantId, setup.Artifact.Id, setup.Agent.AgentId, now: now), default)).Operation!;
         var primary = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "central");
@@ -901,7 +903,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         var setup = await SetupAsync(verified: new HashSet<string> { "central" });
         var world = new RestoreWorld(fixture);
         await world.EnableRestoreAsync(setup.Agent);
-        var now = DateTimeOffset.UtcNow;
+        var now = BackupStoreHarness.T0;
         var store = new PostgreSqlRestoreStore(World.Options(), setup.Resolver);
         var operation = (await store.CreateAsync(RestoreWorld.Command(setup.Agent.TenantId, setup.Artifact.Id, setup.Agent.AgentId, now: now), default)).Operation!;
         var primary = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "central");
@@ -940,11 +942,11 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         await using (var context = fixture.CreatePlatformContext())
         {
             var connection = await context.StorageConnections.SingleAsync(entity => entity.Id == setup.Sftp.Id);
-            connection.SetEnabled(false, DateTimeOffset.UtcNow);
+            connection.SetEnabled(false, BackupStoreHarness.T0);
             await context.SaveChangesAsync();
         }
         var store = new PostgreSqlRestoreStore(World.Options(), setup.Resolver);
-        var result = await store.CreateAsync(RestoreWorld.Command(setup.Agent.TenantId, setup.Artifact.Id, setup.Agent.AgentId, now: DateTimeOffset.UtcNow), default);
+        var result = await store.CreateAsync(RestoreWorld.Command(setup.Agent.TenantId, setup.Artifact.Id, setup.Agent.AgentId, now: BackupStoreHarness.T0), default);
         Assert.Equal(RestoreCreateOutcome.Created, result.Outcome);
         Assert.Equal(RestoreSourceAccess.AgentDirect, result.Operation!.SourceAccess);
     }
@@ -953,7 +955,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
     public async Task AdmissionPreservesExpiredTargetIntentAndQuotaUntilRecoveryRetriesIt()
     {
         var setup = await SetupAsync(QuotaAccountingMode.PhysicalReplicaBytes, new HashSet<string> { "central", "google-drive" });
-        var now = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        var now = DateTimeOffset.FromUnixTimeMilliseconds(BackupStoreHarness.T0.ToUnixTimeMilliseconds());
         var source = setup.Artifact.Replicas.Single(r => r.StorageProvider == "central");
         var token = Guid.NewGuid();
         var operation = new ReplicaRepairOperation(Guid.NewGuid(), setup.Agent.TenantId, setup.Artifact.Id, setup.Sftp.Id,
@@ -1002,7 +1004,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
     public async Task ConcurrentManualAdmissionAndRecoveryKeepOneRetryableOperation()
     {
         var setup = await SetupAsync(verified: new HashSet<string> { "central", "google-drive" });
-        var now = DateTimeOffset.FromUnixTimeMilliseconds(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        var now = DateTimeOffset.FromUnixTimeMilliseconds(BackupStoreHarness.T0.ToUnixTimeMilliseconds());
         var operation = new ReplicaRepairOperation(Guid.NewGuid(), setup.Agent.TenantId, setup.Artifact.Id, setup.Sftp.Id,
             "sftp", setup.Artifact.Replicas.First().Id, now.AddMinutes(-10), totalBytes: Content.Length);
         operation.Claim(Guid.NewGuid(), "crashed-worker", now.AddMinutes(-10), TimeSpan.FromMinutes(1));
@@ -1052,7 +1054,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
     public async Task DiscoveryNeverRestartsTerminalRepairHistory(string terminal)
     {
         var setup = await SetupAsync(verified: new HashSet<string> { "central", "google-drive" });
-        var now = DateTimeOffset.UtcNow;
+        var now = BackupStoreHarness.T0;
         var operation = new ReplicaRepairOperation(Guid.NewGuid(), setup.Agent.TenantId, setup.Artifact.Id, setup.Sftp.Id, "sftp", null, now.AddMinutes(-10),
             maxAttempts: terminal == "Exhausted" ? 1 : 5);
         var token = Guid.NewGuid();
@@ -1072,7 +1074,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
     {
         var first = await SetupAsync(verified: new HashSet<string> { "central", "google-drive" });
         var second = await SetupAsync(verified: new HashSet<string> { "central", "google-drive" });
-        var now = DateTimeOffset.UtcNow;
+        var now = BackupStoreHarness.T0;
         var discovered = await Task.WhenAll(
             first.RepairStore.DiscoverEligibleRepairsAsync(now, 10, default, first.Agent.TenantId),
             new PostgreSqlReplicaRepairStore(World.Options()).DiscoverEligibleRepairsAsync(now, 10, default, first.Agent.TenantId));
@@ -1092,7 +1094,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
     public async Task DiscoveryFindsOlderBrokenArtifactBehindThousandsOfHealthyArtifacts()
     {
         var setup = await SetupAsync(verified: new HashSet<string> { "central", "google-drive" });
-        var now = DateTimeOffset.UtcNow;
+        var now = BackupStoreHarness.T0;
         await SeedDiscoveryArtifactsAsync(setup, 2000, now.AddMinutes(1), ["central", "sftp", "google-drive"]);
         var repair = Assert.Single(await setup.RepairStore.DiscoverEligibleRepairsAsync(now, 10, default, setup.Agent.TenantId));
         Assert.Equal(setup.Artifact.Id, repair.ArtifactId);
@@ -1103,7 +1105,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
     public async Task DiscoveryBoundsDeniedWorkAndResumesAcrossNewScopedStores()
     {
         var setup = await SetupAsync(QuotaAccountingMode.PhysicalReplicaBytes, new HashSet<string> { "central", "sftp" });
-        var now = DateTimeOffset.UtcNow;
+        var now = BackupStoreHarness.T0;
         await SeedDiscoveryArtifactsAsync(setup, 55, now.AddMinutes(1), ["central", "sftp"]);
         var scopes = QuotaScopeRule.Create([new QuotaScopeSelector(QuotaScopeKind.ProviderType, ["google-drive"])]);
         var policy = await CreatePolicyAsync(World, QuotaEnforcementMode.BlockNewBackups, QuotaAccountingMode.PhysicalReplicaBytes, scopes);
@@ -1121,7 +1123,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
     public async Task DiscoveryDoesNotLockHealthyRowsWhileWaitingToReserveAnActionableRepair()
     {
         var setup = await SetupAsync(verified: new HashSet<string> { "central", "google-drive" });
-        var now = DateTimeOffset.UtcNow;
+        var now = BackupStoreHarness.T0;
         var healthyIds = await SeedDiscoveryArtifactsAsync(setup, 55, now.AddMinutes(1), ["central", "sftp", "google-drive"]);
         var name = $"repair-discovery-{Guid.NewGuid():N}";
         var connectionString = new NpgsqlConnectionStringBuilder(fixture.ConnectionString) { ApplicationName = name }.ConnectionString;
@@ -1158,7 +1160,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         var suite = new ManualReplicaRepairIntegrationTests(kit.Database);
         var denied = await suite.SetupAsync(QuotaAccountingMode.PhysicalReplicaBytes, new HashSet<string> { "central", "sftp" });
         var quiet = await suite.SetupAsync(verified: new HashSet<string> { "central", "sftp" });
-        var now = DateTimeOffset.UtcNow;
+        var now = BackupStoreHarness.T0;
         await suite.SeedDiscoveryArtifactsAsync(denied, 55, now.AddMinutes(1), ["central", "sftp"]);
         var scopes = QuotaScopeRule.Create([new QuotaScopeSelector(QuotaScopeKind.ProviderType, ["google-drive"])]);
         var policy = await CreatePolicyAsync(suite.World, QuotaEnforcementMode.BlockNewBackups, QuotaAccountingMode.PhysicalReplicaBytes, scopes);
@@ -1177,7 +1179,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
     {
         var suite = new ManualReplicaRepairIntegrationTests(kit.Database);
         var setup = await suite.SetupAsync(verified: new HashSet<string> { "central", "google-drive" });
-        var now = DateTimeOffset.UtcNow;
+        var now = BackupStoreHarness.T0;
         var name = $"repair-scope-discovery-{Guid.NewGuid():N}";
         var connectionString = new NpgsqlConnectionStringBuilder(kit.Database.ConnectionString) { ApplicationName = name }.ConnectionString;
         var options = new DbContextOptionsBuilder<BackupPlatform.Infrastructure.Persistence.PlatformDbContext>().UseNpgsql(connectionString).Options;
@@ -1254,7 +1256,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
     {
         var setup = await SetupAsync(verified: new HashSet<string> { "central", "google-drive" });
         var other = await SetupAsync(verified: new HashSet<string> { "central" });
-        var now = DateTimeOffset.UtcNow;
+        var now = BackupStoreHarness.T0;
         var created = Assert.Single(await setup.RepairStore.DiscoverEligibleRepairsAsync(now, 10, default, setup.Agent.TenantId));
         var claimed = (await setup.RepairStore.ClaimDueRepairAsync("source-switch", now, TimeSpan.FromMinutes(5), default, setup.Agent.TenantId))!;
         var alternate = setup.Artifact.Replicas.Single(replica => replica.StorageProvider == "google-drive");
@@ -1270,6 +1272,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
     public async Task DownloadCannotReadAlternativeWhenRetentionWinsItsPinRace()
     {
         var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp" });
+        // Live clock: the download-session trigger compares the row against the database clock, so a pinned past time reads as an expired hold.
         var clock = new MutableClock();
         var store = new PostgreSqlDownloadStore(World.Options(), clock);
         var user = new User(UserId.New(), "Retention race owner");
@@ -1314,7 +1317,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         var setup = await SetupAsync(verified: new HashSet<string> { "central" });
         var world = new RestoreWorld(fixture);
         await world.EnableRestoreAsync(setup.Agent);
-        var now = DateTimeOffset.UtcNow;
+        var now = BackupStoreHarness.T0;
         var store = new PostgreSqlRestoreStore(World.Options(), setup.Resolver);
         var operation = (await store.CreateAsync(RestoreWorld.Command(setup.Agent.TenantId, setup.Artifact.Id, setup.Agent.AgentId, now: now), default)).Operation!;
         foreach (var replica in setup.Artifact.Replicas)
@@ -1331,6 +1334,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
     public async Task HttpMidStreamFailureAbortsInsteadOfRetryingAnotherReplica()
     {
         var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp" });
+        // Live clock: the download-session trigger compares the row against the database clock, so a pinned past time reads as an expired hold.
         var clock = new MutableClock();
         var store = new PostgreSqlDownloadStore(World.Options(), clock);
         var user = new User(UserId.New(), "HTTP fallback owner");
@@ -1412,6 +1416,7 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
     {
         var content = Enumerable.Range(0, size).Select(index => (byte)(index % 251)).ToArray();
         var setup = await SetupAsync(verified: new HashSet<string> { "central", "sftp" }, content: content);
+        // Live clock: the download-session trigger compares the row against the database clock, so a pinned past time reads as an expired hold.
         var clock = new MutableClock();
         var store = new PostgreSqlDownloadStore(World.Options(), clock);
         var user = new User(UserId.New(), "Integrity stream downloader");
@@ -1522,11 +1527,11 @@ public sealed partial class ManualReplicaRepairIntegrationTests(PostgreSqlFixtur
         var conflict = await context.BackupReplicas.SingleAsync(r => r.TenantId == setup.Agent.TenantId && r.Key == result.TargetKey);
         Assert.Equal(BackupReplicaStatus.Quarantined, conflict.Status);
         Assert.Equal(target, conflict.StorageTarget);
-        Assert.False(conflict.IsRestorable(DateTimeOffset.UtcNow));
+        Assert.False(conflict.IsRestorable(BackupStoreHarness.T0));
         Assert.True(BackupReplicaStorage.Occupies(conflict.Status));
         var retention = new PostgreSqlBackupRetentionStore(World.Options());
-        await retention.RequestDeleteAsync(setup.Agent.TenantId, setup.Artifact.Id, null, DateTimeOffset.UtcNow, default);
-        var deletions = await retention.ClaimDueDeletionsAsync("quarantine-test", DateTimeOffset.UtcNow.AddYears(1), TimeSpan.FromMinutes(1), 500, default);
+        await retention.RequestDeleteAsync(setup.Agent.TenantId, setup.Artifact.Id, null, BackupStoreHarness.T0, default);
+        var deletions = await retention.ClaimDueDeletionsAsync("quarantine-test", BackupStoreHarness.T0.AddYears(1), TimeSpan.FromMinutes(1), 500, default);
         Assert.DoesNotContain(deletions, deletion => deletion.Key == conflict.Key);
         Assert.Equal(existing, destination.Storage[conflict.Key]);
     }
