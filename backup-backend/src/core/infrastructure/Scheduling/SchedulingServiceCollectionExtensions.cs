@@ -12,7 +12,7 @@ namespace BackupPlatform.Infrastructure.Scheduling;
 
 public static class SchedulingServiceCollectionExtensions
 {
-    /// <summary>Quartz's tables live in this PostgreSQL schema, apart from every domain table (created by the <c>QuartzSchedulerStore</c> migration).</summary>
+    /// <summary>Quartz's tables live in this PostgreSQL schema, apart from every domain table (created by the Baseline migration).</summary>
     public const string QuartzSchema = "quartz";
 
     /// <summary>
