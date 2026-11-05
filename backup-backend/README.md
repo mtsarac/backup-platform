@@ -102,11 +102,20 @@ connection's newest snapshot and its newest measured snapshot are always kept.
 Tenant administrators manage weekly profiles through
 `/api/tenants/{tenantId}/bandwidth-profiles` and assign them using the upload-bandwidth
 `tenant/profile`, `agents/{agentId}/profile`, or `jobs/{jobId}/profile` routes.
-The most specific assignment wins: job, then agent, then tenant. The selected
-profile replaces all static ceilings, including outside its windows (unlimited).
-Static job, agent and tenant ceilings apply together only without a profile.
-Only a selected tenant profile shares its rate among tenant uploads; job and
-agent profiles use their own scope without taking a tenant share.
+The most specific assignment wins: job, then agent, then tenant. A static ceiling
+is a hard cap that a profile never lifts. The selected profile's current window
+value is combined with the static ceiling of the same scope by taking the lower
+one (outside its windows the static ceiling alone applies, or no limit when there
+is none), and the static ceilings of the other scopes stay in force. A zero window
+pauses the transfer whatever the static ceilings are.
+
+Job and agent ceilings cap one transfer and the agent they belong to; the tenant
+ceiling (static, profile, or the lower of both) is an aggregate shared by all
+concurrent uploads of the tenant across its agents, split by the slice mechanism
+whichever scope the profile is on. An agent runs one backup attempt at a time and
+one run writes its destinations one after another, so the agent ceiling is also
+the aggregate of that agent's uploads; a test fails if destinations start to
+upload in parallel.
 
 Windows use the selected IANA time zone, include their start and exclude their
 end. An end earlier than its start means the following day; equal endpoints
