@@ -12,7 +12,7 @@ public sealed class DatabaseLoginRejectedException() : ArgumentException("The da
 /// it was entered for: two instances (or two jobs) on one host never share a login by name, and an agent can only ever resolve references minted for
 /// itself, so an agent of another tenant (or another agent of the same tenant) gets nothing even if it learns a reference.
 /// </summary>
-public sealed class DatabaseCredentialVault(ISecretStore secrets)
+public sealed class DatabaseCredentialVault(ISecretStore secrets, BackupPlatform.Application.Backups.IJobCredentialClaims claims, TimeProvider time)
 {
     private const int MaxUserName = 128;
     private const int MaxPassword = 1024;
@@ -21,12 +21,14 @@ public sealed class DatabaseCredentialVault(ISecretStore secrets)
         reference is { Length: 49 } && reference.StartsWith($"dbc-{agentId:N}-", StringComparison.Ordinal) && reference[37..].All(char.IsAsciiHexDigitLower);
 
     /// <exception cref="DatabaseLoginRejectedException">The user name or password is empty, too long or contains control characters.</exception>
-    public async Task<string> StoreAsync(Guid agentId, DatabaseLoginInput login, CancellationToken cancellationToken)
+    public async Task<string> StoreAsync(Guid agentId, DatabaseLoginInput login, CancellationToken cancellationToken, string? referenceSeed = null)
     {
         if (string.IsNullOrWhiteSpace(login.UserName) || login.UserName.Length > MaxUserName || login.UserName.Any(char.IsControl)
             || string.IsNullOrEmpty(login.Password) || login.Password.Length > MaxPassword)
             throw new DatabaseLoginRejectedException();
-        var reference = NewReference(agentId);
+        var reference = referenceSeed is null ? NewReference(agentId) : SeededReference(agentId, referenceSeed);
+        // Claimed BEFORE the secret exists: a crash after the write leaves a claim the sweep can act on, never an unrecorded credential.
+        if (referenceSeed is not null) await claims.ClaimAsync(reference, time.GetUtcNow(), cancellationToken);
         var payload = JsonSerializer.Serialize(new DatabaseCredentialResponse { UserName = login.UserName.Trim(), Password = login.Password });
         await secrets.SetAsync(new SecretReference(reference), new SecretValue(payload), cancellationToken);
         return reference;
@@ -42,10 +44,10 @@ public sealed class DatabaseCredentialVault(ISecretStore secrets)
     /// A reference is never accepted as free text.
     /// </summary>
     /// <exception cref="DatabaseLoginRejectedException">A password login has neither a usable typed login nor one of this agent's references.</exception>
-    public async Task<string?> PrepareAsync(Guid agentId, bool integratedSecurity, DatabaseLoginInput? login, string? requested, CancellationToken cancellationToken)
+    public async Task<string?> PrepareAsync(Guid agentId, bool integratedSecurity, DatabaseLoginInput? login, string? requested, CancellationToken cancellationToken, string? referenceSeed = null)
     {
         if (integratedSecurity) return null;
-        if (login is not null) return await StoreAsync(agentId, login, cancellationToken);
+        if (login is not null) return await StoreAsync(agentId, login, cancellationToken, referenceSeed);
         return BelongsTo(requested, agentId) ? requested : throw new DatabaseLoginRejectedException();
     }
 
@@ -63,6 +65,21 @@ public sealed class DatabaseCredentialVault(ISecretStore secrets)
             return null;
         }
     }
+
+    /// <summary>Same agent and seed, same reference: a retried creation rewrites the one credential it already wrote instead of minting another.</summary>
+    private static string SeededReference(Guid agentId, string seed) =>
+        $"dbc-{agentId:N}-{Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes("job-login-ref-v1:" + seed)))[..12]}";
+
+    /// <summary>Removes a credential minted for a request that then created nothing, and its claim.</summary>
+    public async Task<bool> DeleteAsync(string reference, CancellationToken cancellationToken)
+    {
+        var existed = await secrets.DeleteAsync(new SecretReference(reference), cancellationToken);
+        await claims.ReleaseAsync(reference, cancellationToken);
+        return existed;
+    }
+
+    /// <summary>Deletes the secret only. For the sweep, which holds the claim row locked and removes it itself.</summary>
+    public Task DeleteStoredAsync(string reference, CancellationToken cancellationToken) => secrets.DeleteAsync(new SecretReference(reference), cancellationToken);
 
     private static string NewReference(Guid agentId) => $"dbc-{agentId:N}-{Guid.NewGuid().ToString("N")[..12]}";
 }

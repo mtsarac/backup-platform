@@ -49,6 +49,21 @@ public sealed class BackupJob : ITenantOwned
     /// <summary>Whether the platform should wake up for this job: the job and its schedule are both enabled.</summary>
     public bool IsScheduled => Enabled && Schedule is { Enabled: true };
 
+    /// <summary>
+    /// The Idempotency-Key the job was created with and a digest of the normalised creation request (never a secret). Null for jobs created
+    /// without a key. A key stays reserved for the job's whole life: disabling the job never frees it.
+    /// </summary>
+    public string? IdempotencyKey { get; private set; }
+    public string? RequestFingerprint { get; private set; }
+
+    public void RecordCreationRequest(string idempotencyKey, string requestFingerprint)
+    {
+        BackupGuard.Text(idempotencyKey, 128);
+        if (requestFingerprint.Length != 64) throw new ArgumentException("A request fingerprint is a SHA-256 digest.", nameof(requestFingerprint));
+        IdempotencyKey = idempotencyKey;
+        RequestFingerprint = requestFingerprint;
+    }
+
     public void Disable() => Enabled = false;
 
     /// <summary>Re-enabling counts schedule occurrences from <paramref name="now"/> on: the time the job was off is never caught up.</summary>

@@ -78,7 +78,12 @@ public sealed record BackupJobUpdate(string Name, AgentId AgentId, BackupConfigu
 /// </summary>
 public interface IBackupRunStore
 {
+    /// <summary>
+    /// Creates the job. When the job carries an Idempotency-Key that the tenant already used, nothing is created or audited and the EXISTING job is
+    /// returned (compare <see cref="BackupJob.Id"/> and <see cref="BackupJob.RequestFingerprint"/> to tell a replay from a conflict). Null when the agent is not usable.
+    /// </summary>
     Task<BackupJob?> CreateJobAsync(BackupJob job, CancellationToken cancellationToken, UserId? actor = null);
+    Task<BackupJob?> FindJobByIdempotencyKeyAsync(TenantId tenantId, string idempotencyKey, CancellationToken cancellationToken);
     Task<BackupJob?> GetJobAsync(TenantId tenantId, Guid jobId, CancellationToken cancellationToken);
     Task<BackupJob?> UpdateJobAsync(TenantId tenantId, Guid jobId, BackupJobUpdate update, CancellationToken cancellationToken, UserId? actor = null, DateTimeOffset? now = null);
     /// <summary>Idempotent per (tenant, job, key). Applies the job's overlap policy: Skip refuses, Queue enqueues.</summary>

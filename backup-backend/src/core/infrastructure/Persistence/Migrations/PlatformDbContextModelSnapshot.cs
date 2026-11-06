@@ -776,6 +776,10 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.Property<bool>("Enabled")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -785,6 +789,10 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)");
+
+                    b.Property<string>("RequestFingerprint")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<Guid>("TenantId")
                         .IsConcurrencyToken()
@@ -876,6 +884,9 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId", "Id")
                         .HasDatabaseName("ix_backup_jobs_scheduled")
                         .HasFilter("\"Enabled\" AND \"ScheduleEnabled\"");
+
+                    b.HasIndex("TenantId", "IdempotencyKey")
+                        .IsUnique();
 
                     b.ToTable("backup_jobs", null, t =>
                         {
@@ -4205,6 +4216,25 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.HasIndex("ExpiresAt");
 
                     b.ToTable("backup_transfer_leases", (string)null);
+                });
+
+            modelBuilder.Entity("BackupPlatform.Infrastructure.Backups.JobCredentialClaimRecord", b =>
+                {
+                    b.Property<string>("Reference")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Reference");
+
+                    b.HasIndex("ClaimedAt");
+
+                    b.ToTable("job_credential_claims", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_job_credential_claims_reference", "length(\"Reference\") BETWEEN 1 AND 128");
+                        });
                 });
 
             modelBuilder.Entity("BackupPlatform.Infrastructure.Secrets.SecretCiphertextRecord", b =>

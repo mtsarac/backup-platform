@@ -74,6 +74,10 @@ internal sealed class BackupJobConfiguration : IEntityTypeConfiguration<BackupJo
         BackupMapping.Agent(builder);
         BackupMapping.Configuration(builder);
         builder.Property(job => job.Name).HasMaxLength(200).IsRequired();
+        builder.Property(job => job.IdempotencyKey).HasMaxLength(128);
+        builder.Property(job => job.RequestFingerprint).HasMaxLength(64);
+        // Unconditional: no filter on Enabled, so disabling a job never frees its key. Legacy jobs have NULL, which a unique index allows any number of times.
+        builder.HasIndex(job => new { job.TenantId, job.IdempotencyKey }).IsUnique();
         BackupMapping.RetryPolicy(builder, job => job.RetryPolicy);
         BackupMapping.RetentionPolicy(builder, job => job.RetentionPolicy);
         builder.Property(job => job.OverlapPolicy).HasConversion<string>().HasMaxLength(16).IsRequired();
@@ -453,5 +457,18 @@ internal sealed class ReplicaRepairOperationConfiguration : IEntityTypeConfigura
         builder.HasIndex(repair => new { repair.NextRetryAt, repair.Id })
             .HasDatabaseName("ix_replica_repair_due")
             .HasFilter("\"Status\" = 'Pending'");
+    }
+}
+
+/// <summary>Credentials minted for a job creation that has not saved its job yet; see <c>IJobCredentialClaims</c>.</summary>
+internal sealed class JobCredentialClaimConfiguration : IEntityTypeConfiguration<BackupPlatform.Infrastructure.Backups.JobCredentialClaimRecord>
+{
+    public void Configure(EntityTypeBuilder<BackupPlatform.Infrastructure.Backups.JobCredentialClaimRecord> builder)
+    {
+        builder.ToTable("job_credential_claims", table => table.HasCheckConstraint("ck_job_credential_claims_reference", "length(\"Reference\") BETWEEN 1 AND 128"));
+        builder.HasKey(claim => claim.Reference);
+        builder.Property(claim => claim.Reference).HasMaxLength(128).ValueGeneratedNever();
+        builder.Property(claim => claim.ClaimedAt).HasColumnType("timestamp with time zone").IsRequired();
+        builder.HasIndex(claim => claim.ClaimedAt);
     }
 }
