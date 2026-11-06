@@ -330,6 +330,8 @@ public sealed class BackupHealthApiTests(PostgreSqlFixture fixture) : IClassFixt
         await scenario.World.Factory.Services.GetRequiredService<BackupPlatform.Api.Storage.StorageCapacityPeriodicProbeWorker>().StopAsync(CancellationToken.None);
         var capabilities = AgentWorld.CapabilitySnapshot(
             AgentWorld.CapabilityReport(BackupTaskProtocol.MultiDestinationCapability),
+            AgentWorld.CapabilityReport("mssql.backup.full"),
+            AgentWorld.CapabilityReport("postgres.backup.full"),
             AgentWorld.CapabilityReport(BackupTaskProtocol.UploadBandwidthLimitCapability),
             AgentWorld.CapabilityReport(CapacityProbeProtocol.Capability));
         using (var sync = await scenario.World.SyncCapabilitiesAsync(scenario.Agent, capabilities)) Assert.Equal(HttpStatusCode.OK, sync.StatusCode);

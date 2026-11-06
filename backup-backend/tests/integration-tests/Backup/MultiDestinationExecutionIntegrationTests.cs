@@ -57,6 +57,8 @@ public sealed class MultiDestinationExecutionIntegrationTests(PostgreSqlFixture 
     {
         await using var context = fixture.CreatePlatformContext();
         await context.AgentCapabilities.Where(row => row.AgentId == agent.AgentId).ExecuteDeleteAsync();
+        foreach (var engine in new[] { "mssql", "postgres" })
+            context.AgentCapabilities.Add(new AgentCapabilityRecord(agent.AgentId, agent.TenantId, engine + ".backup.full", CapabilitySupport.Supported, null, "revision-1", T0));
         if (support is { } declared)
         {
             context.AgentCapabilities.Add(new AgentCapabilityRecord(agent.AgentId, agent.TenantId, BackupTaskProtocol.MultiDestinationCapability, declared, null, "revision-1", T0));

@@ -1066,6 +1066,8 @@ public sealed class BackupRetryPersistenceTests(PostgreSqlFixture fixture) : ICl
             context.Agents.Add(agent);
             context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(agentId, tenantId,
                 BackupPlatform.Contracts.Backups.BackupTaskProtocol.MultiDestinationCapability, BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, null, "fixture", Now));
+            context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(agentId, tenantId, "mssql.backup.full", BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, null, "fixture", Now));
+            context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(agentId, tenantId, "postgres.backup.full", BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, null, "fixture", Now));
             await context.SaveChangesAsync();
             return agentId;
         }

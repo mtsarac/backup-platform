@@ -83,6 +83,8 @@ internal sealed class BackupStoreHarness(PostgreSqlFixture database)
             BackupPlatform.Contracts.Backups.BackupTaskProtocol.MultiDestinationCapability, BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, null, "fixture", T0));
         context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(agentId, tenantId,
             BackupPlatform.Contracts.Backups.TaskStorageProtocol.DirectCapability, BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, null, "fixture", T0));
+        context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(agentId, tenantId, "mssql.backup.full", BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, null, "fixture", T0));
+        context.AgentCapabilities.Add(new BackupPlatform.Agents.Capabilities.AgentCapabilityRecord(agentId, tenantId, "postgres.backup.full", BackupPlatform.Domain.Capabilities.CapabilitySupport.Supported, null, "fixture", T0));
         await context.SaveChangesAsync();
         return agentId;
     }

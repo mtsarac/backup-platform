@@ -30,17 +30,26 @@ public sealed class AgentCapabilityCatalog
     /// <summary>Revision of <see cref="Capabilities"/>, shared with the backend's verification.</summary>
     public string Revision { get; }
 
-    public static AgentCapabilityCatalog CreateDefault() => new(
+    public static AgentCapabilityCatalog CreateDefault() => Create(sqlServer: true);
+
+    /// <summary>
+    /// <paramref name="sqlServer"/> is whether this agent's configuration can run SQL Server work at all (see <see cref="SqlServerEligibility"/>). When it cannot,
+    /// the SQL Server capabilities are reported Unsupported so the backend refuses SQL Server jobs for this agent up front.
+    /// </summary>
+    public static AgentCapabilityCatalog Create(bool sqlServer)
+    {
+        Func<string, AgentCapabilityReport> sql = sqlServer ? Supported : Unsupported;
+        return new(
     [
-        Supported(SqlServerCapabilityIds.FullBackup.Value),
-        Supported(SqlServerCapabilityIds.BackupChecksum.Value),
-        Supported(SqlServerCapabilityIds.BackupCompression.Value),
-        Supported(SqlServerCapabilityIds.CopyOnly.Value),
-        Supported(SqlServerCapabilityIds.RestoreVerifyOnly.Value),
-        Supported(SqlServerCapabilityIds.RestoreDatabase.Value),
+        sql(SqlServerCapabilityIds.FullBackup.Value),
+        sql(SqlServerCapabilityIds.BackupChecksum.Value),
+        sql(SqlServerCapabilityIds.BackupCompression.Value),
+        sql(SqlServerCapabilityIds.CopyOnly.Value),
+        sql(SqlServerCapabilityIds.RestoreVerifyOnly.Value),
+        sql(SqlServerCapabilityIds.RestoreDatabase.Value),
         Supported(RestoreTaskTypes.PrecheckCapability),
         Supported(RestoreTaskTypes.DiscoveryCapability),
-        Supported(RestoreTaskTypes.MssqlVerificationCapability),
+        sql(RestoreTaskTypes.MssqlVerificationCapability),
         Supported(RestoreTaskTypes.PostgresVerificationCapability),
         Supported("file-system.backup.full"),
         Supported("file-system.restore.full"),
@@ -73,6 +82,7 @@ public sealed class AgentCapabilityCatalog
         Unsupported(SqlServerCapabilityIds.DifferentialBackup.Value),
         Unsupported(SqlServerCapabilityIds.LogBackup.Value)
     ]);
+    }
 
     private static AgentCapabilityReport Supported(string identifier) => new()
     {

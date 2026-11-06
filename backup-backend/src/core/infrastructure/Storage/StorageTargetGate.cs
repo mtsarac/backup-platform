@@ -104,7 +104,9 @@ internal static class StorageTargetGate
         {
             return new(null, BackupAdmissionDenialCodes.AgentMultiDestinationUnsupported);
         }
-        if (configuration.Engine == "file-system" && !await SupportsCapabilityAsync(context, tenantId, agentId, "file-system.backup.full", cancellationToken))
+        // Every engine is admitted against what THIS agent reported for it (capability id "<engine>.backup.full"): an agent whose build or configuration
+        // cannot run the engine (SQL Server on a Linux agent without mapped staging) is refused here instead of being sent work it can never finish.
+        if (DatabaseEngines.IsValid(configuration.Engine) && !await SupportsCapabilityAsync(context, tenantId, agentId, configuration.Engine + ".backup.full", cancellationToken))
             return new(null, BackupAdmissionDenialCodes.AgentEngineUnsupported);
         if (configuration.EnforceThreeTwoOne && !await SupportsCapabilityAsync(context, tenantId, agentId, "backup.three-two-one", cancellationToken))
             return new(null, BackupAdmissionDenialCodes.DestinationCombinationUnsupported);

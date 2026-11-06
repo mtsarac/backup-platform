@@ -42,7 +42,9 @@ public static class AgentHostServiceCollectionExtensions
         services.AddSingleton<IAgentCredentialStore>(static provider =>
             AgentCredentialStoreFactory.Create(provider.GetRequiredService<IOptions<AgentHostOptions>>().Value.CredentialStoreDirectory));
         services.AddSingleton(static _ => AgentSoftwareInfo.Detect(typeof(AgentHostServiceCollectionExtensions).Assembly));
-        services.AddSingleton(static _ => AgentCapabilityCatalog.CreateDefault());
+        services.AddSingleton(static provider => AgentCapabilityCatalog.Create(SqlServerEligibility.IsEligible(
+            provider.GetRequiredService<IConfiguration>().GetSection(AgentHostOptions.SectionName).GetSection(AgentBackupOptions.SectionName).Get<AgentBackupOptions>()?.Staging,
+            OperatingSystem.IsWindows(), SqlServerEligibility.IsWritableDirectory)));
         services.AddSingleton<ICapabilityRevisionSource, CatalogCapabilityRevisionSource>();
 
 #if AGENT_PLATFORM_WINDOWS

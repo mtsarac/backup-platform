@@ -257,6 +257,34 @@ public sealed class BackupOrchestrationApiTests(PostgreSqlFixture fixture) : ICl
     }
 
     [Fact]
+    public async Task A_SQL_Server_job_is_refused_for_an_agent_that_did_not_report_the_engine_and_creates_no_run()
+    {
+        const string engine = "mssql";
+        await using var world = await AgentWorld.CreateAsync(fixture);
+        var setup = await world.CreateTenantAsync();
+        await world.EntitleAsync(setup.Tenant);
+        var agent = await world.EnrollAsync(setup);
+        var withoutEngine = AgentWorld.CapabilitySnapshot(AgentWorld.CapabilityReport(BackupTaskProtocol.MultiDestinationCapability));
+        using (var sync = await world.SyncCapabilitiesAsync(agent, withoutEngine)) Assert.Equal(HttpStatusCode.OK, sync.StatusCode);
+        var root = $"/api/tenants/{setup.Tenant.Id.Value}";
+        var job = Job(agent.AgentId);
+        using var created = await setup.Admin.SendAsync(HttpMethod.Post, root + "/backup-jobs", job with { Configuration = job.Configuration with { Engine = engine } });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var jobId = AgentWorld.ReadJson(created).GetProperty("id").GetGuid();
+
+        using var refused = await StartAsync(setup.Admin, root, jobId, "engine-unsupported");
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Equal("agent_engine_unsupported", AgentWorld.ReadJson(refused).GetProperty("code").GetString());
+        using var runs = await setup.Admin.SendAsync(HttpMethod.Get, root + $"/backup-jobs/{jobId}/runs");
+        Assert.Empty(AgentWorld.ReadJson(runs).GetProperty("items").EnumerateArray());
+
+        var reported = AgentWorld.CapabilitySnapshot(AgentWorld.CapabilityReport(BackupTaskProtocol.MultiDestinationCapability), AgentWorld.CapabilityReport(engine + ".backup.full"));
+        using (var sync = await world.SyncCapabilitiesAsync(agent, reported)) Assert.Equal(HttpStatusCode.OK, sync.StatusCode);
+        using var started = await StartAsync(setup.Admin, root, jobId, "engine-supported");
+        Assert.Equal(HttpStatusCode.OK, started.StatusCode);
+    }
+
+    [Fact]
     public async Task File_backups_require_engine_support_at_admission_and_again_when_claimed()
     {
         await using var world = await AgentWorld.CreateAsync(fixture);
