@@ -31,6 +31,9 @@ internal static class ProtectedLedger
         var info = new DirectoryInfo(directory);
         if ((info.Attributes & FileAttributes.ReparsePoint) != 0) throw new UnauthorizedAccessException("The VSS ownership ledger is a link.");
         var trusted = Trusted().Select(sid => sid.Value).ToHashSet(StringComparer.Ordinal);
+        // The owner can rewrite the ACL whatever it says, so a foreign owner makes the ACL meaningless.
+        if (info.GetAccessControl(AccessControlSections.Owner).GetOwner(typeof(SecurityIdentifier)) is not SecurityIdentifier owner || !trusted.Contains(owner.Value))
+            throw new UnauthorizedAccessException("The VSS ownership ledger is owned by an untrusted account.");
         foreach (FileSystemAccessRule rule in info.GetAccessControl(AccessControlSections.Access).GetAccessRules(true, true, typeof(SecurityIdentifier)))
             if (rule.AccessControlType == AccessControlType.Allow && (rule.FileSystemRights & Writes) != 0 && !trusted.Contains(rule.IdentityReference.Value))
                 throw new UnauthorizedAccessException("The VSS ownership ledger is writable by an untrusted account.");

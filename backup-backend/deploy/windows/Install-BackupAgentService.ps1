@@ -144,9 +144,10 @@ if ($EnableVss) {
     if ($already.Count -eq 0) {
         & net.exe localgroup $backupOperators $account /add | Out-Null
         if ($LASTEXITCODE -ne 0) { throw 'The service account could not be added to Backup Operators.' }
+        # Armed before anything else can fail, so the finally block always knows this installer owns the membership.
+        $addedBackupOperators = $true
         # Remembered so that uninstall removes only a membership this installer created.
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName" -Name BackupOperatorsAddedByInstaller -Type DWord -Value 1
-        $addedBackupOperators = $true
     }
 }
     # Existing store protection is checked by the service itself, not rewritten by the interactive installer.
@@ -223,7 +224,12 @@ finally {
     # A failed install must not leave the extra group membership behind; one that was already there (not added here) is never touched.
     if ($addedBackupOperators -and -not $completed) {
         & net.exe localgroup $backupOperators $account /delete | Out-Null
-        Remove-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName" -Name BackupOperatorsAddedByInstaller -ErrorAction SilentlyContinue
+        if ($LASTEXITCODE -ne 0) {
+            # Keep the marker so uninstall retries the removal; the operator must know the account is still privileged.
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName" -Name BackupOperatorsAddedByInstaller -Type DWord -Value 1 -ErrorAction SilentlyContinue
+            Write-Error "Install failed AND $account could not be removed from $backupOperators. Remove it manually (net localgroup `"$backupOperators`" `"$account`" /delete) or run Uninstall-BackupAgentService.ps1." -ErrorAction Continue
+        }
+        else { Remove-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName" -Name BackupOperatorsAddedByInstaller -ErrorAction SilentlyContinue }
     }
     # Remove the secret staging request even on failure; retain identity and the stopped service for diagnosis/reinstall.
     if ($registered -and (Test-Path -LiteralPath $stage)) {

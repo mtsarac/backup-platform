@@ -31,6 +31,9 @@ public sealed class SnapshotLease(string path, Func<Task> cleanup) : IAsyncDispo
     private readonly SemaphoreSlim gate = new(1, 1);
     private bool deleted;
     public string Path { get; } = path;
+
+    /// <summary>Set by the consumer once everything it needed from the snapshot was read; a lease disposed without it is reported to the snapshot system as aborted.</summary>
+    public bool Succeeded { get; set; }
     public async ValueTask DisposeAsync()
     {
         await gate.WaitAsync().ConfigureAwait(false);

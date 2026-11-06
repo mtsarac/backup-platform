@@ -38,7 +38,8 @@ public sealed class WindowsVssSnapshotProvider : ISnapshotProvider, ISnapshotSwe
         var session = new Session(request.Source.Replace('/', '\\'), Path.Combine(request.SnapshotDirectory, LedgerDirectory));
         using var cancellation = cancellationToken.Register(session.Cancel);
         var path = await session.StartAsync().ConfigureAwait(false);
-        var lease = new SnapshotLease(path, session.ReleaseAsync);
+        SnapshotLease? lease = null;
+        lease = new SnapshotLease(path, () => session.ReleaseAsync(lease!.Succeeded));
         if (!cancellationToken.IsCancellationRequested) return lease;
         await lease.DisposeAsync().ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
@@ -121,7 +122,7 @@ public sealed class WindowsVssSnapshotProvider : ISnapshotProvider, ISnapshotSwe
         }
 
         /// <summary>
-        /// Tells the writers the backup finished. This is a copy backup with no components selected, so it truncates nothing; it is the protocol's closing
+        /// Tells the writers the backup finished; only called when the consumer reported success. This is a copy backup with no components selected, so it truncates nothing; it is the protocol's closing
         /// notification and its failure never fails a backup that already read its data.
         /// </summary>
         public void Complete()
@@ -160,6 +161,7 @@ public sealed class WindowsVssSnapshotProvider : ISnapshotProvider, ISnapshotSwe
         private readonly TaskCompletionSource finished = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly ManualResetEventSlim release = new();
         private volatile bool cancelled;
+        private volatile bool succeeded;
 
         public void Cancel() => cancelled = true;
 
@@ -170,8 +172,9 @@ public sealed class WindowsVssSnapshotProvider : ISnapshotProvider, ISnapshotSwe
         }
 
         /// <summary>Deletes the snapshot and waits for the owning thread; a failed deletion is reported to the caller.</summary>
-        public Task ReleaseAsync()
+        public Task ReleaseAsync(bool succeeded)
         {
+            this.succeeded = succeeded;
             release.Set();
             return finished.Task;
         }
@@ -205,7 +208,7 @@ public sealed class WindowsVssSnapshotProvider : ISnapshotProvider, ISnapshotSwe
                 if (requester is not null)
                 {
                     // Explicit delete (not only the auto-release of the context): the result is reported to the caller and the ledger entry is dropped only once the snapshot is gone.
-                    try { if (failed) requester.Abort(); else requester.Complete(); if (snapshot != default) requester.Delete(snapshot); if (entry is not null) File.Delete(entry); }
+                    try { if (failed || !succeeded) requester.Abort(); else requester.Complete(); if (snapshot != default) requester.Delete(snapshot); if (entry is not null) File.Delete(entry); }
                     catch (Exception exception) { cleanupFailure = exception; }
                     finally { requester.Dispose(); }
                 }

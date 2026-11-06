@@ -134,6 +134,7 @@ public sealed class FileSystemBackupProvider(IEnumerable<ISnapshotProvider> snap
                 await output.FlushAsync(cancellationToken).ConfigureAwait(false);
                 output.Flush(flushToDisk: true);
                 succeeded = true;
+                if (lease is not null) lease.Succeeded = true;
                 return (manifest, archivePath);
             }
             finally { ArrayPool<byte>.Shared.Return(buffer); }

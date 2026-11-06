@@ -106,4 +106,20 @@ public sealed class VssSnapshotLifecycleTests
         }
         finally { Directory.Delete(directory, true); }
     }
+
+    [WindowsFact]
+    public void A_ledger_owned_by_an_untrusted_account_is_refused_even_with_a_clean_ACL()
+    {
+        var ledger = Path.Combine(Path.GetTempPath(), "bp-vss-owner-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            BackupPlatform.Agent.Platform.Windows.Vss.ProtectedLedger.Ensure(ledger);
+            var security = new DirectoryInfo(ledger).GetAccessControl();
+            security.SetOwner(new System.Security.Principal.SecurityIdentifier(System.Security.Principal.WellKnownSidType.WorldSid, null));
+            try { new DirectoryInfo(ledger).SetAccessControl(security); }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or InvalidOperationException) { return; } // the account lacks SeRestorePrivilege: it cannot assign that owner, nothing to test
+            Assert.Throws<UnauthorizedAccessException>(() => BackupPlatform.Agent.Platform.Windows.Vss.ProtectedLedger.Verify(ledger));
+        }
+        finally { try { Directory.Delete(ledger, true); } catch (UnauthorizedAccessException) { } }
+    }
 }
