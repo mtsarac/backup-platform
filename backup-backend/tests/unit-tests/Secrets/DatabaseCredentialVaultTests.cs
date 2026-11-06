@@ -14,7 +14,7 @@ public sealed class DatabaseCredentialVaultTests
         public List<string> Released { get; } = [];
         public Task ClaimAsync(string reference, DateTimeOffset now, CancellationToken cancellationToken) { Claimed.Add(reference); return Task.CompletedTask; }
         public Task ReleaseAsync(string reference, CancellationToken cancellationToken) { Released.Add(reference); return Task.CompletedTask; }
-        public Task<IReadOnlyList<string>> TakeStaleUnreferencedAsync(DateTimeOffset olderThan, int limit, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<string>>([]);
+        public Task<int> SweepStaleAsync(DateTimeOffset olderThan, int limit, Func<string, CancellationToken, Task> deleteCredential, CancellationToken cancellationToken) => Task.FromResult(0);
     }
 
     [Fact]

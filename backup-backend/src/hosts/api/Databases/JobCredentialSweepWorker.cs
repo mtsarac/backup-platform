@@ -25,12 +25,7 @@ public sealed class JobCredentialSweepWorker(IJobCredentialClaims claims, Databa
 
     public async Task<int> SweepAsync(CancellationToken cancellationToken)
     {
-        var removed = 0;
-        foreach (var reference in await claims.TakeStaleUnreferencedAsync(time.GetUtcNow() - Grace, Batch, cancellationToken))
-        {
-            await vault.DeleteAsync(reference, cancellationToken);
-            removed++;
-        }
+        var removed = await claims.SweepStaleAsync(time.GetUtcNow() - Grace, Batch, vault.DeleteStoredAsync, cancellationToken);
         if (removed > 0) logger.LogInformation("Removed unreferenced job credentials: Count={Count}", removed);
         return removed;
     }

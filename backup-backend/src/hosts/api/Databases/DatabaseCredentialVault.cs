@@ -78,5 +78,8 @@ public sealed class DatabaseCredentialVault(ISecretStore secrets, BackupPlatform
         return existed;
     }
 
+    /// <summary>Deletes the secret only. For the sweep, which holds the claim row locked and removes it itself.</summary>
+    public Task DeleteStoredAsync(string reference, CancellationToken cancellationToken) => secrets.DeleteAsync(new SecretReference(reference), cancellationToken);
+
     private static string NewReference(Guid agentId) => $"dbc-{agentId:N}-{Guid.NewGuid().ToString("N")[..12]}";
 }

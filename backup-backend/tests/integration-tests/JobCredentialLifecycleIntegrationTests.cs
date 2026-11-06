@@ -33,6 +33,13 @@ public sealed class JobCredentialLifecycleIntegrationTests(PostgreSqlFixture fix
         return await context.Database.SqlQuery<int>($"select count(*)::int as \"Value\" from platform_secrets where \"Name\" like {prefix}").SingleAsync();
     }
 
+    /// <summary>The fixture database is shared by every test of the class and claims are global: start from an empty ledger.</summary>
+    private async Task ClearClaimsAsync()
+    {
+        await using var context = fixture.CreatePlatformContext();
+        await context.Database.ExecuteSqlRawAsync("DELETE FROM job_credential_claims");
+    }
+
     private async Task<int> ClaimsAsync()
     {
         await using var context = fixture.CreatePlatformContext();
@@ -52,6 +59,7 @@ public sealed class JobCredentialLifecycleIntegrationTests(PostgreSqlFixture fix
     [Fact]
     public async Task An_interrupted_creation_leaves_its_credential_claimed_and_the_same_retry_completes_with_that_one_credential()
     {
+        await ClearClaimsAsync();
         await using var scenario = await BackupApiScenario.CreateAsync(fixture);
         var agent = scenario.Agent.AgentId;
         var locked = await LockAgentAsync(agent);
@@ -78,6 +86,7 @@ public sealed class JobCredentialLifecycleIntegrationTests(PostgreSqlFixture fix
     [Fact]
     public async Task A_creation_nobody_retries_loses_its_credential_to_the_sweep_after_the_grace_period_and_a_used_credential_never_does()
     {
+        await ClearClaimsAsync();
         await using var scenario = await BackupApiScenario.CreateAsync(fixture);
         var agent = scenario.Agent.AgentId;
         var locked = await LockAgentAsync(agent);
@@ -88,7 +97,7 @@ public sealed class JobCredentialLifecycleIntegrationTests(PostgreSqlFixture fix
         await locked.DisposeAsync();
         using var used = await scenario.Admin.SendAsync(HttpMethod.Post, scenario.Root + "/backup-jobs", Body(agent), headers: Key("used"));
         Assert.Equal(HttpStatusCode.Created, used.StatusCode);
-        Assert.Equal(2, await SecretsAsync(agent) - 0); // the orphan and the used one (distinct keys, distinct references)
+        Assert.Equal(2, await SecretsAsync(agent)); // the orphan and the used one (distinct keys, distinct references)
 
         var sweep = scenario.World.Factory.Services.GetRequiredService<JobCredentialSweepWorker>();
         Assert.Equal(0, await sweep.SweepAsync(default));
@@ -99,6 +108,58 @@ public sealed class JobCredentialLifecycleIntegrationTests(PostgreSqlFixture fix
         await using var context = fixture.CreatePlatformContext();
         var job = await context.BackupJobs.AsNoTracking().SingleAsync(row => row.IdempotencyKey == "used");
         Assert.True(await scenario.World.Factory.Services.GetRequiredService<ISecretStore>().ExistsAsync(new SecretReference(job.Configuration.DatabaseCredentialReference!), default));
+    }
+
+    [Fact]
+    public async Task A_retry_that_arrives_while_the_sweep_holds_a_stale_claim_waits_for_the_removal_then_rewrites_the_credential_and_the_job_resolves_it()
+    {
+        await ClearClaimsAsync();
+        await using var scenario = await BackupApiScenario.CreateAsync(fixture);
+        var services = scenario.World.Factory.Services;
+        var agent = scenario.Agent.AgentId;
+        var locked = await LockAgentAsync(agent);
+        using (var abort = new CancellationTokenSource(TimeSpan.FromSeconds(3)))
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => scenario.Admin.SendAsync(HttpMethod.Post, scenario.Root + "/backup-jobs", Body(agent), headers: Key("race"), cancellationToken: abort.Token));
+        await Task.Delay(500);
+        await new NpgsqlCommand("ROLLBACK", locked).ExecuteNonQueryAsync();
+        await locked.DisposeAsync();
+        Assert.Equal(1, await ClaimsAsync());
+        scenario.Clock.Advance(JobCredentialSweepWorker.Grace + TimeSpan.FromMinutes(1));
+
+        // Node A's sweep has selected the stale claim (row locked) and is about to delete the credential; the gate stands in for that window.
+        var claims = services.GetRequiredService<IJobCredentialClaims>();
+        var vault = services.GetRequiredService<DatabaseCredentialVault>();
+        var selected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sweep = Task.Run(() => claims.SweepStaleAsync(scenario.Clock.GetUtcNow() - JobCredentialSweepWorker.Grace, 10, async (reference, token) =>
+        {
+            selected.SetResult();
+            await gate.Task;
+            await vault.DeleteStoredAsync(reference, token);
+        }, default));
+        await selected.Task.WaitAsync(TimeSpan.FromSeconds(30));
+
+        // Node B: the retry of the same request arrives now. It must not get past its claim until the sweep is done with that row.
+        var retry = Task.Run(() => scenario.Admin.SendAsync(HttpMethod.Post, scenario.Root + "/backup-jobs", Body(agent), headers: Key("race")));
+        await Task.WhenAny(retry, Task.Delay(TimeSpan.FromSeconds(2)));
+        Assert.False(retry.IsCompleted, "the retry overtook the sweep's lock on the claim");
+
+        gate.SetResult();
+        Assert.Equal(1, await sweep);
+        using var response = await retry.WaitAsync(TimeSpan.FromSeconds(60));
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        await using var context = fixture.CreatePlatformContext();
+        var job = await context.BackupJobs.AsNoTracking().SingleAsync(row => row.IdempotencyKey == "race");
+        var resolved = await vault.ResolveAsync(agent, job.Configuration.DatabaseCredentialReference, default);
+        Assert.Equal(("sa", Password), (resolved!.UserName, resolved.Password));
+        Assert.Equal(1, await SecretsAsync(agent));
+
+        // The finished creation leaves only a claim a job references: the next sweep drops it and keeps the credential.
+        scenario.Clock.Advance(JobCredentialSweepWorker.Grace + TimeSpan.FromMinutes(1));
+        Assert.Equal(0, await services.GetRequiredService<JobCredentialSweepWorker>().SweepAsync(default));
+        Assert.Equal(0, await ClaimsAsync());
+        Assert.NotNull(await vault.ResolveAsync(agent, job.Configuration.DatabaseCredentialReference, default));
     }
 
     [Fact]

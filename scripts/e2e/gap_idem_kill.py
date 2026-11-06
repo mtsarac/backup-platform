@@ -66,10 +66,28 @@ def kill():
     gone = sql(f"select count(*) from platform_secrets where \"Name\"='{orphan}'")[0][0]; claim = sql(f"select count(*) from job_credential_claims where \"Reference\"='{orphan}'")[0][0]
     assert (gone, claim) == ('0', '0'), (gone, claim)
     assert sql(f"select count(*) from backup_jobs where \"IdempotencyKey\"='{key2}'")[0][0] == '0'
+    # 3. a retry arrives on the other node while a sweep (played by a psql session doing exactly the sweep's steps) holds the stale claim: it must wait, then rewrite the credential
+    key3 = 'gap-kill-' + uuid.uuid4().hex[:8]
+    kill_mid_creation(t1, agent, key3)
+    orphan3 = sql("select \"Reference\" from job_credential_claims order by \"ClaimedAt\" desc limit 1")[0][0]
+    psql = lambda q: gj.g.sh("docker", "exec", "bp-" + gj.PG, "sh", "-c", 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$0"', q)
+    psql(f"update job_credential_claims set \"ClaimedAt\" = now() - interval '2 hours' where \"Reference\"='{orphan3}'")
+    sweep = subprocess.Popen(["docker", "exec", "bp-" + gj.PG, "sh", "-c", 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "$0"',
+        f"BEGIN; SELECT 1 FROM job_credential_claims WHERE \"Reference\"='{orphan3}' FOR UPDATE; SELECT pg_sleep(20); DELETE FROM platform_secrets WHERE \"Name\"='{orphan3}'; DELETE FROM job_credential_claims WHERE \"Reference\"='{orphan3}'; COMMIT;"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    time.sleep(4)
+    started = time.time()
+    r3 = post(t2, body(agent, name=key3), key3)
+    waited = time.time() - started
+    sweep.wait(timeout=60)
+    assert r3.status_code == 201 and waited > 10, (r3.status_code, waited)
+    j3 = r3.json()['id']
+    ref3 = sql(f"select \"Configuration\"->>'DatabaseCredentialReference' from backup_jobs where \"Id\"='{j3}'")[0][0]
+    assert ref3 == orphan3 and sql(f"select count(*) from platform_secrets where \"Name\"='{ref3}'")[0][0] == '1', ref3
     # the used credential of part 1 is untouched
     assert sql(f"select count(*) from platform_secrets where \"Name\"='{ref}'")[0][0] == '1'
-    for j in (jid,): t1.s.post(t1.base + f'/backup-jobs/{j}/disable', json={})
-    return {'retryJob': jid, 'sameCredentialAfterRetry': True, 'orphanSwept': orphan, 'usedCredentialKept': True}
+    for j in (jid, j3): t1.s.post(t1.base + f'/backup-jobs/{j}/disable', json={})
+    return {'retryJob': jid, 'sameCredentialAfterRetry': True, 'orphanSwept': orphan, 'usedCredentialKept': True, 'retryWaitedForSweepLockSeconds': round(waited, 1), 'retryJob2': j3}
 
 
 if __name__ == '__main__': kill()
