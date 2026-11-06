@@ -154,16 +154,26 @@ public sealed class BackupJobIdempotencyApiTests(PostgreSqlFixture fixture) : IC
         Assert.Equal(HttpStatusCode.Created, good.StatusCode);
     }
 
-    [Fact]
-    public async Task A_request_without_a_key_keeps_the_previous_behaviour_and_a_malformed_key_is_refused()
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("two")]
+    [InlineData("empty")]
+    [InlineData("control")]
+    [InlineData("tooLong")]
+    public async Task A_missing_repeated_or_invalid_key_is_refused_with_400_before_anything_is_written(string kind)
     {
         await using var scenario = await BackupApiScenario.CreateAsync(fixture);
-        var body = BackupApiScenario.JobBody(scenario.Agent.AgentId);
-        using var one = await scenario.CreateJobRawAsync(body);
-        using var two = await scenario.CreateJobRawAsync(body);
-        Assert.Equal(HttpStatusCode.Created, one.StatusCode);
-        Assert.Equal(HttpStatusCode.Created, two.StatusCode);
-        using var malformed = await Post(scenario, body, "bad key with spaces\u00e9");
-        Assert.Equal(HttpStatusCode.BadRequest, malformed.StatusCode);
+        List<KeyValuePair<string, string>> headers = kind switch
+        {
+            "missing" => [],
+            "two" => [new("Idempotency-Key", "one"), new("Idempotency-Key", "two")],
+            "empty" => [new("Idempotency-Key", " ")],
+            "control" => [new("Idempotency-Key", "bad\u00e9key")],
+            _ => [new("Idempotency-Key", new string('k', 129))]
+        };
+        using var response = await scenario.Admin.SendAsync(HttpMethod.Post, scenario.Root + "/backup-jobs", LoginBody(scenario.Agent.AgentId), headers: headers);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("Idempotency-Key", AgentWorld.ReadJson(response).GetProperty("field").GetString());
+        Assert.Equal((0, 0, 0), await CountsAsync(scenario));
     }
 }

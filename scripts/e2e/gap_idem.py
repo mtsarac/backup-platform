@@ -43,6 +43,13 @@ def idem():
     fp = sql(f"select \"RequestFingerprint\" from backup_jobs where \"Id\"='{jid}'")[0][0]
     dump = sql(f"select row_to_json(j)::text from backup_jobs j where \"Id\"='{jid}'")[0][0]
     assert len(fp) == 64 and 'Gap-Idem-S3cret-pw' not in dump
+    # the key is mandatory: missing / malformed -> 400 on both nodes, nothing created
+    rows_before = sql("select count(*) from backup_jobs")[0][0]
+    for t in (t1, t2):
+        miss = t.s.post(t.base + '/backup-jobs', json=b)
+        bad = t.s.post(t.base + '/backup-jobs', json=b, headers={'Idempotency-Key': 'x' * 129})
+        assert miss.status_code == 400 and bad.status_code == 400 and miss.json()['field'] == 'Idempotency-Key', (miss.status_code, bad.status_code)
+    assert sql("select count(*) from backup_jobs")[0][0] == rows_before
     # different payload, either node -> 409; nothing new
     c1 = post(t1, body(agent, name=key + '-other'), key); c2 = post(t2, body(agent, name=key, password='another-pw'), key)
     assert c1.status_code == 409 and c2.status_code == 409 and c1.json()['error'] == 'idempotency_conflict', (c1.status_code, c2.status_code)

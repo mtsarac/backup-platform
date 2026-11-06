@@ -38,10 +38,12 @@ internal sealed class BrowserSession(HttpClient client)
 {
     public HttpClient Client { get; } = client;
 
-    public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, object? body = null, bool includeAntiforgery = true, IReadOnlyDictionary<string, string>? headers = null)
+    public async Task<HttpResponseMessage> SendAsync(HttpMethod method, string path, object? body = null, bool includeAntiforgery = true, IEnumerable<KeyValuePair<string, string>>? headers = null, CancellationToken cancellationToken = default)
     {
         using var request = new HttpRequestMessage(method, path);
-        foreach (var (name, value) in headers ?? new Dictionary<string, string>()) request.Headers.Add(name, value);
+        // Job creation requires an Idempotency-Key. A caller that passes its own header list (even an empty one) is in charge of it; every other caller gets a fresh key.
+        headers ??= method == HttpMethod.Post && path.EndsWith("/backup-jobs", StringComparison.Ordinal) ? [new("Idempotency-Key", Guid.NewGuid().ToString("N"))] : [];
+        foreach (var (name, value) in headers) request.Headers.Add(name, value);
         if (body is not null)
         {
             request.Content = JsonContent.Create(body);
@@ -52,7 +54,7 @@ internal sealed class BrowserSession(HttpClient client)
             var token = AgentWorld.ReadJson(tokenResponse).GetProperty("requestToken").GetString()!;
             request.Headers.Add("X-CSRF-TOKEN", token);
         }
-        return await Client.SendAsync(request);
+        return await Client.SendAsync(request, cancellationToken);
     }
 
     public Task<HttpResponseMessage> GetAsync(string path) => SendAsync(HttpMethod.Get, path);

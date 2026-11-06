@@ -12,7 +12,7 @@ public sealed class DatabaseLoginRejectedException() : ArgumentException("The da
 /// it was entered for: two instances (or two jobs) on one host never share a login by name, and an agent can only ever resolve references minted for
 /// itself, so an agent of another tenant (or another agent of the same tenant) gets nothing even if it learns a reference.
 /// </summary>
-public sealed class DatabaseCredentialVault(ISecretStore secrets)
+public sealed class DatabaseCredentialVault(ISecretStore secrets, BackupPlatform.Application.Backups.IJobCredentialClaims claims, TimeProvider time)
 {
     private const int MaxUserName = 128;
     private const int MaxPassword = 1024;
@@ -27,6 +27,8 @@ public sealed class DatabaseCredentialVault(ISecretStore secrets)
             || string.IsNullOrEmpty(login.Password) || login.Password.Length > MaxPassword)
             throw new DatabaseLoginRejectedException();
         var reference = referenceSeed is null ? NewReference(agentId) : SeededReference(agentId, referenceSeed);
+        // Claimed BEFORE the secret exists: a crash after the write leaves a claim the sweep can act on, never an unrecorded credential.
+        if (referenceSeed is not null) await claims.ClaimAsync(reference, time.GetUtcNow(), cancellationToken);
         var payload = JsonSerializer.Serialize(new DatabaseCredentialResponse { UserName = login.UserName.Trim(), Password = login.Password });
         await secrets.SetAsync(new SecretReference(reference), new SecretValue(payload), cancellationToken);
         return reference;
@@ -68,8 +70,13 @@ public sealed class DatabaseCredentialVault(ISecretStore secrets)
     private static string SeededReference(Guid agentId, string seed) =>
         $"dbc-{agentId:N}-{Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes("job-login-ref-v1:" + seed)))[..12]}";
 
-    /// <summary>Removes a credential this process minted for a request that then created nothing.</summary>
-    public Task<bool> DeleteAsync(string reference, CancellationToken cancellationToken) => secrets.DeleteAsync(new SecretReference(reference), cancellationToken);
+    /// <summary>Removes a credential minted for a request that then created nothing, and its claim.</summary>
+    public async Task<bool> DeleteAsync(string reference, CancellationToken cancellationToken)
+    {
+        var existed = await secrets.DeleteAsync(new SecretReference(reference), cancellationToken);
+        await claims.ReleaseAsync(reference, cancellationToken);
+        return existed;
+    }
 
     private static string NewReference(Guid agentId) => $"dbc-{agentId:N}-{Guid.NewGuid().ToString("N")[..12]}";
 }

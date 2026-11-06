@@ -40,28 +40,22 @@ public static class BackupEndpoints
     }
 
     private static async Task<IResult> CreateJobAsync(CreateBackupJobRequest request, HttpContext context, ITenantContext tenant, IAuthorizationService authorization,
-        BackupOrchestrator service, BackupScheduleService schedules, DatabaseCredentialVault vault, ICurrentUser currentUser, CancellationToken cancellationToken)
+        BackupOrchestrator service, BackupScheduleService schedules, DatabaseCredentialVault vault, IIdempotencyFingerprintKey fingerprintKey, ICurrentUser currentUser, CancellationToken cancellationToken)
     {
         if (request.Retention is not null && !await IsAdministratorAsync(authorization, context)) return RetentionForbidden();
+        // Exactly one valid key: a missing, repeated or malformed header is refused before anything is read or written.
         var keys = context.Request.Headers["Idempotency-Key"];
-        if (keys.Count > 1 || keys.Count == 1 && !BackupInputValidation.IsValidKey(keys[0])) return Invalid("The Idempotency-Key must be 1-128 printable ASCII characters.");
-        // Without a key the request is not deduplicated (the previous behaviour); with one, the whole creation below is idempotent per (tenant, key).
-        var idempotency = keys.Count == 1 && request.Configuration is not null ? BackupJobFingerprint.Compute(tenant.TenantId!, keys[0]!, request) : null;
+        if (keys.Count != 1 || !BackupInputValidation.IsValidKey(keys[0])) return Json400("Idempotency-Key", "A single valid Idempotency-Key header is required (1-128 printable ASCII characters).");
+        if (request.Configuration is null) return Invalid("Invalid backup job configuration.");
+        var idempotency = BackupJobFingerprint.Compute(await fingerprintKey.GetAsync(cancellationToken), tenant.TenantId!, keys[0]!, request);
         string? minted = null;
         try
         {
             // The replay answer comes BEFORE any side effect: no credential is exchanged, nothing is audited, no schedule is touched for a repeat.
-            if (idempotency is not null && await service.FindReplayAsync(tenant.TenantId!, idempotency, cancellationToken) is { } replay) return ReplayResult(replay);
-            var exchanged = await ExchangeLoginAsync(vault, request.AgentId, request.Configuration, cancellationToken, idempotency?.Fingerprint);
-            if (request.Configuration?.DatabaseLogin is not null) minted = exchanged.DatabaseCredentialReference;
+            if (await service.FindReplayAsync(tenant.TenantId!, idempotency, cancellationToken) is { } replay) return ReplayResult(replay);
+            var exchanged = await ExchangeLoginAsync(vault, request.AgentId, request.Configuration, cancellationToken, idempotency.Fingerprint);
+            if (request.Configuration.DatabaseLogin is not null) minted = exchanged.DatabaseCredentialReference;
             request = request with { Configuration = exchanged };
-            if (idempotency is null)
-            {
-                var plain = await service.CreateJobAsync(tenant.TenantId!, request, cancellationToken, currentUser.UserId!);
-                if (plain is null) { await DropMintedAsync(vault, minted); return Results.NotFound(); }
-                if (plain.Schedule is not null) await schedules.TrySynchronizeAsync(tenant.TenantId!, plain.Id, cancellationToken);
-                return Results.Created($"/api/tenants/{tenant.TenantId!.Value}/backup-jobs/{plain.Id}", plain);
-            }
             var created = await service.CreateJobAsync(tenant.TenantId!, request, idempotency, cancellationToken, currentUser.UserId!);
             switch (created.Outcome)
             {
@@ -84,6 +78,8 @@ public static class BackupEndpoints
         catch (InvalidBackupJobException exception) { await DropMintedAsync(vault, minted); return InvalidJob(exception); }
         catch (ArgumentException) { await DropMintedAsync(vault, minted); return Invalid("Invalid backup job configuration."); }
     }
+
+    private static IResult Json400(string field, string message) => Results.BadRequest(new { error = "invalid_request", field, code = "invalid_value", message });
 
     private static IResult ReplayResult(BackupJobCreation answer) => answer.Outcome == BackupJobCreateOutcome.Replayed
         ? Results.Ok(answer.Job)

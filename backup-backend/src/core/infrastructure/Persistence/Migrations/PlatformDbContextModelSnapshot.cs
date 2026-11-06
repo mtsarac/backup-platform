@@ -4218,6 +4218,25 @@ namespace BackupPlatform.Infrastructure.Persistence.Migrations
                     b.ToTable("backup_transfer_leases", (string)null);
                 });
 
+            modelBuilder.Entity("BackupPlatform.Infrastructure.Backups.JobCredentialClaimRecord", b =>
+                {
+                    b.Property<string>("Reference")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Reference");
+
+                    b.HasIndex("ClaimedAt");
+
+                    b.ToTable("job_credential_claims", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_job_credential_claims_reference", "length(\"Reference\") BETWEEN 1 AND 128");
+                        });
+                });
+
             modelBuilder.Entity("BackupPlatform.Infrastructure.Secrets.SecretCiphertextRecord", b =>
                 {
                     b.Property<string>("Name")

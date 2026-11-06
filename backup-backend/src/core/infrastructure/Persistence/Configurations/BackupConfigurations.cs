@@ -459,3 +459,16 @@ internal sealed class ReplicaRepairOperationConfiguration : IEntityTypeConfigura
             .HasFilter("\"Status\" = 'Pending'");
     }
 }
+
+/// <summary>Credentials minted for a job creation that has not saved its job yet; see <c>IJobCredentialClaims</c>.</summary>
+internal sealed class JobCredentialClaimConfiguration : IEntityTypeConfiguration<BackupPlatform.Infrastructure.Backups.JobCredentialClaimRecord>
+{
+    public void Configure(EntityTypeBuilder<BackupPlatform.Infrastructure.Backups.JobCredentialClaimRecord> builder)
+    {
+        builder.ToTable("job_credential_claims", table => table.HasCheckConstraint("ck_job_credential_claims_reference", "length(\"Reference\") BETWEEN 1 AND 128"));
+        builder.HasKey(claim => claim.Reference);
+        builder.Property(claim => claim.Reference).HasMaxLength(128).ValueGeneratedNever();
+        builder.Property(claim => claim.ClaimedAt).HasColumnType("timestamp with time zone").IsRequired();
+        builder.HasIndex(claim => claim.ClaimedAt);
+    }
+}
